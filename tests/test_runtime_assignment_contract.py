@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 
 from project_workflow.application.task import TaskService
 from project_workflow.application.workflow import WorkflowService
 from project_workflow.domain.exceptions import ConflictError
-from project_workflow.domain.runtime_assignment import canonical_json
+from project_workflow.domain.runtime_assignment import canonical_json, payload_sha256
 from project_workflow.infrastructure.db.models import TaskRuntimeAssignment as DBTaskRuntimeAssignment
 from project_workflow.interfaces.ui.schemas import RuntimeAssignmentRequest
 from tests._db_helpers import prepared_sqlite_uow
@@ -107,6 +108,196 @@ def _runtime_catalog(uow, *, role_key: str, scope: str, tech_policy: str) -> tup
         }
     )
     return project_id, mode_id
+
+
+@pytest.fixture
+def accepted_runtime_assignment(tmp_path):
+    with prepared_sqlite_uow(tmp_path, "runtime-negative.db") as uow:
+        project_id, _ = _runtime_catalog(uow, role_key="developer", scope="delivery", tech_policy="required")
+        assigned = TaskService(uow).assign_runtime_task(
+            project_id=project_id,
+            task_key="DEV-1",
+            mode_key="initial",
+            cycle_number=0,
+            operation_key="assign-negative-1",
+            expected_revision=0,
+            expected_status="missing",
+            **_binding(),
+        )
+        yield uow, project_id, assigned
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"assignment_revision": True},
+        {"assignment_revision": 0},
+        {"cycle_number": -1},
+        {"cycle_number": True},
+        {"attempt_number": 0},
+        {"attempt_number": "1"},
+        {"expected_binding_state": "bound"},
+        {"bind_operation_key": " "},
+        {"binding_ref": " "},
+        {"hermes_run_ref": " "},
+        {"task_key": "invalid"},
+        {"task_key": "DEV-999"},
+        {"assignment_operation_key": "foreign-assignment"},
+        {"assignment_revision": 2},
+        {"mode_key": "rework"},
+        {"cycle_number": 1},
+        {"assignment_ref": "assignment:foreign"},
+        {"role_key": "reviewer"},
+        {"attempt_number": 2},
+        {"expected_binding_state": "legacy_bound"},
+    ],
+)
+def test_bind_rejects_invalid_or_stale_identity_without_mutating_assignment(accepted_runtime_assignment, override):
+    uow, project_id, assigned = accepted_runtime_assignment
+    before = uow.tasks.get_assignment_by_operation_key(assigned["assignment_operation_key"]).to_dict()
+    with pytest.raises((ValueError, ConflictError)):
+        _bind(uow, project_id, assigned, **override)
+    assert uow.tasks.get_assignment_by_operation_key(assigned["assignment_operation_key"]).to_dict() == before
+    assert uow.tasks.get_by_key("DEV-1", project_id=project_id).to_dict()["assignment_revision"] == 1
+    bound = _bind(uow, project_id, assigned)
+    assert bound["binding_state"] == "bound"
+    assert _bind(uow, project_id, assigned) == bound
+    assert len(uow.tasks.list_assignments(assigned["id"])) == 1
+
+
+def _step_request(project_id, bound):
+    return {
+        "project_id": project_id,
+        "task_key": bound["task_key"],
+        "role_key": bound["role_key"],
+        "step_operation_key": "step:negative:1",
+        "request_sha256": payload_sha256({"report": "owned evidence"}),
+        "assignment_revision": bound["assignment_revision"],
+        "assignment_ref": bound["assignment_ref"],
+        "binding_ref": bound["binding_ref"],
+        "hermes_run_ref": bound["hermes_run_ref"],
+        "mode_key": bound["mode_key"],
+        "cycle_number": bound["cycle_number"],
+        "attempt_number": bound["attempt_number"],
+        "expected_phase_code": bound["current_phase_code"],
+        "expected_status": bound["status"],
+    }
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"request_sha256": "A" * 64},
+        {"request_sha256": "a" * 63},
+        {"request_sha256": None},
+        {"expected_status": "done"},
+        {"assignment_revision": 0},
+        {"cycle_number": -1},
+        {"attempt_number": True},
+        {"task_key": "DEV-999"},
+        {"role_key": "reviewer"},
+        {"assignment_revision": 2},
+        {"assignment_ref": "assignment:foreign"},
+        {"binding_ref": "binding:foreign"},
+        {"hermes_run_ref": "hermes-run:foreign"},
+        {"mode_key": "rework"},
+        {"cycle_number": 1},
+        {"attempt_number": 2},
+        {"expected_phase_code": "foreign-phase"},
+        {"expected_status": "blocked"},
+    ],
+)
+def test_step_validation_rejects_stale_fences_before_history_writes(accepted_runtime_assignment, override):
+    uow, project_id, assigned = accepted_runtime_assignment
+    bound = _bind(uow, project_id, assigned)
+    request = _step_request(project_id, bound)
+    before = uow.tasks.get_by_key("DEV-1", project_id=project_id).to_dict()
+    with pytest.raises((ValueError, ConflictError)):
+        TaskService(uow).validate_runtime_step(**{**request, **override})
+    assert uow.tasks.get_by_key("DEV-1", project_id=project_id).to_dict() == before
+    assert uow.list_step_history(task_key="DEV-1", project_id=project_id) == []
+    fence = TaskService(uow).validate_runtime_step(**request)
+    fence.assert_task(before)
+    with pytest.raises(ValueError, match="больше не существует"):
+        fence.assert_task(None)
+    with pytest.raises(ValueError, match="устаревшему"):
+        fence.assert_task({**before, "assignment_revision": 2})
+    with pytest.raises(ValueError, match="другого runtime step"):
+        fence.assert_history({})
+
+
+@pytest.mark.parametrize("failure", ["cas", "integrity"])
+@pytest.mark.parametrize("winner", ["none", "same", "different"])
+def test_bind_recovers_only_exact_durable_winner_after_write_conflict(
+    accepted_runtime_assignment, monkeypatch, failure, winner
+):
+    uow, project_id, assigned = accepted_runtime_assignment
+    original = uow.tasks.finalize_assignment_binding
+
+    def competing_writer(*args, **kwargs):
+        # Inject the durable winner at the repository CAS boundary. This tests
+        # recovery decisions; real PostgreSQL concurrency has separate tests.
+        if winner != "none":
+            if winner == "different":
+                kwargs = {**kwargs, "bind_operation_key": "bind:competing", "bind_request_sha256": "f" * 64}
+            assert original(*args, **kwargs) is True
+            uow.commit()
+        if failure == "integrity":
+            raise IntegrityError("injected binding uniqueness race", {}, Exception("conflict"))
+        return False
+
+    monkeypatch.setattr(uow.tasks, "finalize_assignment_binding", competing_writer)
+    if winner == "same":
+        result = _bind(uow, project_id, assigned)
+        assert result["binding_state"] == "bound"
+        assert _bind(uow, project_id, assigned) == result
+    else:
+        with pytest.raises(ConflictError, match="параллельно|другим bind"):
+            _bind(uow, project_id, assigned)
+    record = uow.tasks.get_assignment_by_operation_key(assigned["assignment_operation_key"])
+    assert record is not None
+    assert record.binding_ref is None if winner == "none" else record.binding_ref is not None
+    assert len(uow.tasks.list_assignments(assigned["id"])) == 1
+
+
+@pytest.mark.parametrize("preexisting", [False, True])
+@pytest.mark.parametrize("durable_winner", [False, True])
+def test_assignment_write_conflict_recovers_durable_owner_receipt_only(
+    tmp_path, monkeypatch, preexisting, durable_winner
+):
+    with prepared_sqlite_uow(tmp_path, "assignment-write-conflict.db") as uow:
+        project_id, mode_id = _runtime_catalog(uow, role_key="developer", scope="delivery", tech_policy="required")
+        if preexisting:
+            phase = list(uow.phases.list(mode_id=mode_id))[0]
+            uow.tasks.create({"project_id": project_id, "workflow_id": phase.workflow_id, "mode_id": mode_id,
+                              "task_key": "DEV-1", "current_phase_id": phase.id, "status": "active"})
+        uow.commit()
+        request = {"project_id": project_id, "task_key": "DEV-1", "mode_key": "initial", "cycle_number": 0,
+                   "operation_key": "assign:write-conflict", "expected_revision": 0,
+                   "expected_status": "active" if preexisting else "missing", **_binding()}
+        original = uow.tasks.create_assignment
+
+        def write_conflict(data):
+            if durable_winner:
+                original(data)
+                uow.commit()
+            raise IntegrityError("injected assignment uniqueness race", {}, Exception("conflict"))
+
+        monkeypatch.setattr(uow.tasks, "create_assignment", write_conflict)
+        if durable_winner:
+            result = TaskService(uow).assign_runtime_task(**request)
+            assert result["assignment_revision"] == 1
+            assert TaskService(uow).assign_runtime_task(**request) == result
+            assert len(uow.tasks.list_assignments(result["id"])) == 1
+        else:
+            with pytest.raises(ConflictError, match="конфликтует"):
+                TaskService(uow).assign_runtime_task(**request)
+            assert uow.tasks.get_assignment_by_operation_key(request["operation_key"]) is None
+            task = uow.tasks.get_by_key("DEV-1", project_id=project_id)
+            assert task is not None if preexisting else task is None
+            if task is not None:
+                assert task.assignment_revision == 0
+                assert task.assignment_operation_key is None
 
 
 def test_runtime_assignment_persists_replays_and_binds_exact_identity(tmp_path):

@@ -114,6 +114,13 @@ Canonical JSON всего replay payload хранится вместе с его
 перестановка refs и JSON keys сохраняет replay, изменение или добавление любого
 значимого значения даёт conflict.
 
+Первое принятое назначение может иметь любой положительный `attempt_number`,
+выданный Business: предыдущие попытки доставки могли завершиться до обращения
+к project-workflow. Локальная `assignment_revision` при этом начинается с 1.
+Номер попытки не сбрасывается и входит в неизменяемый payload и bind/step fences.
+Transport route `project-manager` не заменяет канонический `role_key=project_manager`:
+credential map, capabilities и assignment используют имя роли из managed registry.
+
 Записи из опубликованной migration `0002`, у которых уже есть реальные
 `binding_ref`/`hermes_run_ref`, но ещё нет bind metadata, читаются как
 `legacy_bound`. Точный bind с `expected_binding_state=legacy_bound` и теми же refs

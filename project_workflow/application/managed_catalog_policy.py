@@ -12,14 +12,15 @@ MANAGED_CATALOG_IMMUTABLE_ERROR = (
 
 
 def assert_catalog_mutation_allowed(uow: UnitOfWork) -> None:
-    """Serialize catalog writers and reject public mutations after managed install.
+    """Fence bootstrap and reject public mutations after managed install.
 
     The transaction lock is shared with managed bootstrap.  Consequently a
     mutation either completes while the database is still wholly unmanaged, or
     observes the installed marker and fails before its first write.
+    Independent unmanaged writers retain their entity-level concurrency.
     """
 
-    uow.lock_catalog_state()
+    uow.lock_catalog_state(shared=True)
     if any(
         getattr(workflow, "key", None) in MANAGED_WORKFLOW_KEYS
         for workflow in uow.workflows.list()

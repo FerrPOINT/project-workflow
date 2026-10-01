@@ -396,11 +396,12 @@ class UnitOfWork(ABC):
     @abstractmethod
     def rollback(self) -> None: ...
 
-    def lock_catalog_state(self) -> None:
-        """Serialize managed catalog bootstrap and public catalog mutations.
+    def lock_catalog_state(self, *, shared: bool = False) -> None:
+        """Fence managed bootstrap against catalog readers and public mutations.
 
         Non-SQL test doubles may keep the default no-op. Production persistence
-        overrides this with a transaction-scoped database lock.
+        overrides this with a transaction-scoped database lock. Public
+        mutations/readers share the lock; bootstrap acquires it exclusively.
         """
 
         return None

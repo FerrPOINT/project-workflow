@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import IntegrityError
 
@@ -383,9 +384,11 @@ def test_fleet_catalog_fails_closed_on_partial_managed_inventory(monkeypatch):
 def test_runtime_step_is_unavailable_for_malformed_or_duplicate_tokens(monkeypatch):
     for value in (
         "not-json",
+        "[]",
         json.dumps({"analyst": "short"}),
         json.dumps({"analyst.v2": "x" * 32}),
         json.dumps({"analyst": "x" * 32, "architect": "x" * 32}),
+        json.dumps({"analyst": "x" * 32, " analyst": "y" * 32}),
     ):
         monkeypatch.setenv("PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON", value)
         config.get_settings.cache_clear()
@@ -397,6 +400,38 @@ def test_runtime_step_is_unavailable_for_malformed_or_duplicate_tokens(monkeypat
             )
         assert response.status_code == 503
         assert response.json()["ok"] is False
+
+
+@pytest.mark.parametrize(
+    "catalog_token", ["short", "r" * 48, "a" * 48]
+)
+def test_invalid_or_colliding_catalog_credential_disables_every_runtime_surface(monkeypatch, catalog_token):
+    monkeypatch.setenv("PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON", json.dumps({"analyst": "r" * 48}))
+    monkeypatch.setenv("PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON", json.dumps({"analyst": "a" * 48}))
+    monkeypatch.setenv("PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN", catalog_token)
+    config.get_settings.cache_clear()
+    binding = {
+        "task_key": "ANA-1", "assignment_operation_key": "assign:ANA-1", "assignment_revision": 1,
+        "assignment_ref": "assignment:ANA-1", "mode_key": "assigned", "cycle_number": 0,
+        "attempt_number": 1,
+    }
+    with TestClient(create_app()) as client:
+        responses = [
+            client.get("/internal/runtime/capabilities", headers=_headers("r" * 48)),
+            client.get("/internal/runtime/catalog", headers=_headers(catalog_token)),
+            client.get("/internal/runtime/history", params={"task": "ANA-1"}, headers=_headers("r" * 48)),
+            client.post("/internal/runtime/step", json=_unknown_step_payload("ANA-1"), headers=_headers("r" * 48)),
+            client.post("/internal/runtime/assign", json=_assignment("ANA-1", "assign:ANA-1", "analyst"),
+                        headers=_headers("a" * 48)),
+            client.post("/internal/runtime/bind", json=_bind_payload(binding), headers=_headers("a" * 48)),
+        ]
+    for response in responses:
+        assert response.status_code == 503, response.text
+        assert response.json()["ok"] is False
+        assert "r" * 48 not in response.text
+        assert "a" * 48 not in response.text
+    with SAUnitOfWork() as uow:
+        assert uow.tasks.get_by_key("ANA-1") is None
 
 
 def test_runtime_token_is_bound_to_one_namespace(monkeypatch, supervisor_llm):

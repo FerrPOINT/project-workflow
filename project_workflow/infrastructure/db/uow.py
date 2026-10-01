@@ -81,15 +81,16 @@ class SAUnitOfWork(UnitOfWork):
     def rollback(self) -> None:
         self._session.rollback()
 
-    def lock_catalog_state(self) -> None:
+    def lock_catalog_state(self, *, shared: bool = False) -> None:
         """Hold the schema-scoped managed-catalog lock until transaction end."""
 
         bind = self._session.get_bind()
         if bind.dialect.name != "postgresql":
             return
+        lock_function = "pg_advisory_xact_lock_shared" if shared else "pg_advisory_xact_lock"
         self._session.execute(
             text(
-                "SELECT pg_advisory_xact_lock("
+                f"SELECT {lock_function}("
                 "hashtextextended(current_database() || ':' || :schema, 0))"
             ),
             {"schema": config.get_settings().DB_SCHEMA},

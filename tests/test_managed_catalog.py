@@ -11,7 +11,7 @@ import pytest
 from project_workflow import config
 from project_workflow.application.execution_mode import resolve_execution_selection
 from project_workflow.application.task import TaskService
-from project_workflow.domain.exceptions import ConflictError
+from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.domain.runtime_assignment import (
     MANAGED_ROLE_MODE_SCOPES,
     MANAGED_WORKFLOW_KEYS,
@@ -617,12 +617,9 @@ def test_managed_workflow_requires_explicit_assigned_mode(empty_uow):
     assert selection.cycle_number == 4
 
 
-def test_project_manager_assignment_uses_canonical_identity_and_slotless_business_scope(empty_uow):
-    ensure_managed_catalog(empty_uow)
-    namespace = empty_uow.projects.get_by_cli_command("workflow-project_manager")
-    assert namespace is not None and namespace.id is not None
-    request = {
-        "project_id": namespace.id,
+def _project_manager_request(namespace_id: int, attempt_number: int = 18) -> dict:
+    return {
+        "project_id": namespace_id,
         "task_key": "PM-1",
         "mode_key": "draft",
         "role_key": "project_manager",
@@ -630,7 +627,7 @@ def test_project_manager_assignment_uses_canonical_identity_and_slotless_busines
         "execution_scope": "business",
         "stage_key": "draft",
         "cycle_number": 0,
-        "attempt_number": 1,
+        "attempt_number": attempt_number,
         "operation_key": "assign:pm-1:draft:0",
         "business_task_ref": "business-task:PM-1@1",
         "root_task_ref": "business-task:PM-1@1",
@@ -658,13 +655,112 @@ def test_project_manager_assignment_uses_canonical_identity_and_slotless_busines
         "expected_status": "missing",
     }
 
+
+@pytest.mark.parametrize("attempt_number", [1, 18])
+@pytest.mark.parametrize("preexisting_task", [False, True])
+def test_project_manager_assignment_uses_canonical_identity_and_slotless_business_scope(
+    empty_uow, attempt_number, preexisting_task
+):
+    ensure_managed_catalog(empty_uow)
+    namespace = empty_uow.projects.get_by_cli_command("workflow-project_manager")
+    assert namespace is not None and namespace.id is not None
+    request = _project_manager_request(namespace.id, attempt_number)
+
+    if preexisting_task:
+        workflow = empty_uow.workflows.get_by_id(namespace.workflow_id)
+        assert workflow is not None and workflow.id is not None
+        mode = empty_uow.workflows.get_mode_by_key(workflow.id, "draft")
+        assert mode is not None and mode.id is not None
+        phase = list(empty_uow.phases.list(workflow.id, mode_id=mode.id))[0]
+        empty_uow.tasks.create(
+            {
+                "project_id": namespace.id,
+                "workflow_id": workflow.id,
+                "mode_id": mode.id,
+                "cycle_number": 0,
+                "task_key": "PM-1",
+                "title": "PM-1",
+                "current_phase_id": phase.id,
+                "status": "active",
+            }
+        )
+        empty_uow.commit()
+        request["expected_status"] = "active"
+
+    with pytest.raises(ConflictError):
+        TaskService(empty_uow).assign_runtime_task(**{**request, "expected_revision": 1})
+
     assigned = TaskService(empty_uow).assign_runtime_task(**request)
 
     assert assigned["role_key"] == "project_manager"
+    assert assigned["attempt_number"] == attempt_number
     assert assigned["mode_key"] == "draft"
     assert assigned["execution_scope"] == "business"
     assert assigned["tech_execution_workspace_ref"] is None
     assert assigned["tech_execution_attempt_ref"] is None
+    assert TaskService(empty_uow).assign_runtime_task(**request) == assigned
+    assert len(empty_uow.tasks.list_assignments(assigned["id"])) == 1
+    with pytest.raises(ConflictError, match="другого runtime assignment"):
+        TaskService(empty_uow).assign_runtime_task(**{**request, "attempt_number": attempt_number + 1})
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"operation_key": " "},
+        {"operation_key": "x" * 129},
+        {"mode_key": " "},
+        {"mode_key": "x" * 129},
+        {"mode_key": "unknown-mode"},
+        {"workflow_key": "hermes-sdlc:analyst"},
+        {"role_key": "project-manager"},
+        {"project_id": 999},
+        {"task_key": "invalid"},
+        {"cycle_number": -1},
+        {"cycle_number": True},
+        {"cycle_number": 1},
+        {"expected_revision": -1},
+        {"expected_revision": True},
+        {"expected_status": "active"},
+        {"attempt_number": 0},
+        {"attempt_number": True},
+        {"attempt_number": 1.5},
+        {"work_item_revision": -1},
+        {"work_item_revision": True},
+        {"workspace_revision": 0},
+        {"workspace_revision": True},
+        {"workspace_generation": -1},
+        {"workspace_generation": True},
+        {"lease_generation": -1},
+        {"lease_generation": True},
+        {"business_task_ref": " "},
+        {"stage_revision": "x" * 129},
+        {"assignment_ref": "x" * 513},
+        {"exact_input_refs": {}},
+        {"exact_input_refs": [{"kind": "task", "ref": "task-1"}] * 129},
+        {"exact_input_refs": ["task-1"]},
+        {"exact_input_refs": [{"kind": "task", "ref": "task-1", "unknown": "field"}]},
+        {"exact_input_refs": [{"kind": "task", "ref": "task-1", "revision": " "}]},
+        {"exact_input_refs": [{"kind": "task", "ref": "task-1", "hash": " "}]},
+        {"exact_input_refs": [{"kind": "task", "ref": "task-1"}] * 2},
+    ],
+)
+def test_invalid_owner_assignment_leaves_no_task_or_ledger_and_allows_valid_recovery(empty_uow, override):
+    ensure_managed_catalog(empty_uow)
+    empty_uow.commit()
+    namespace = empty_uow.projects.get_by_cli_command("workflow-project_manager")
+    assert namespace is not None and namespace.id is not None
+    request = _project_manager_request(namespace.id)
+
+    with pytest.raises((ConflictError, ValueError, NotFoundError)):
+        TaskService(empty_uow).assign_runtime_task(**{**request, **override})
+
+    assert empty_uow.tasks.get_by_key("PM-1", project_id=namespace.id) is None
+    assert empty_uow.tasks.get_assignment_by_operation_key(request["operation_key"]) is None
+    accepted = TaskService(empty_uow).assign_runtime_task(**request)
+    assert accepted["assignment_revision"] == 1
+    assert accepted["attempt_number"] == 18
+    assert TaskService(empty_uow).assign_runtime_task(**request) == accepted
 
 
 def test_legacy_unmanaged_workflow_keeps_default_mode_compatibility(empty_uow):
@@ -676,12 +772,236 @@ def test_legacy_unmanaged_workflow_keeps_default_mode_compatibility(empty_uow):
     assert selection.cycle_number == 0
 
 
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"workflow_id": True},
+        {"workflow_id": 0},
+        {"workflow_id": 999},
+        {"project_id": True},
+        {"project_id": 0},
+        {"project_id": 999},
+        {"task_key": None},
+        {"task_key": "invalid"},
+        {"current_phase_id": True},
+        {"current_phase_id": -1},
+        {"current_phase_id": 999},
+    ],
+)
+def test_legacy_task_creation_rejects_invalid_catalog_identity_and_recovers(empty_uow, override):
+    workflow_id, _mode_id, _phase_id, namespace_id = _bootstrap_versioned_legacy_catalog(empty_uow)
+    empty_uow.commit()
+    payload = {"workflow_id": workflow_id, "project_id": namespace_id, "task_key": "RUN-901", "title": "Keep"}
+    with pytest.raises((ValueError, ConflictError, NotFoundError)):
+        TaskService(empty_uow).create_task({**payload, **override})
+    assert empty_uow.tasks.list() == []
+    created = TaskService(empty_uow).create_task(payload)
+    assert created["task_key"] == "RUN-901"
+    assert created["assignment_revision"] == 0
+    assert created["assignment_operation_key"] is None
+
+
+@pytest.mark.parametrize(
+    "status,override",
+    [
+        ("active", {"expected_mode_key": "analysis"}),
+        ("active", {"expected_cycle_number": 1}),
+        ("active", {"cycle_number": 1}),
+        ("done", {}),
+        ("done", {"cycle_number": 2}),
+        ("done", {"cycle_number": 1, "attempt_number": 2}),
+    ],
+)
+def test_owner_adoption_rejects_stale_prior_state_and_unsupported_retry(empty_uow, status, override):
+    ensure_managed_catalog(empty_uow)
+    namespace = empty_uow.projects.get_by_cli_command("workflow-project_manager")
+    assert namespace is not None and namespace.id is not None
+    mode = empty_uow.workflows.get_mode_by_key(namespace.workflow_id, "draft")
+    phase = list(empty_uow.phases.list(namespace.workflow_id, mode_id=mode.id))[0]
+    task_id = empty_uow.tasks.create(
+        {"project_id": namespace.id, "workflow_id": namespace.workflow_id, "mode_id": mode.id,
+         "task_key": "PM-1", "current_phase_id": phase.id, "status": status}
+    )
+    empty_uow.commit()
+    before = empty_uow.tasks.get_by_id(task_id).to_dict()
+    request = {**_project_manager_request(namespace.id), "expected_status": status, **override}
+    with pytest.raises(ConflictError):
+        TaskService(empty_uow).assign_runtime_task(**request)
+    assert empty_uow.tasks.get_by_id(task_id).to_dict() == before
+    assert empty_uow.tasks.list_assignments(task_id) == []
+
+
 def test_project_manager_is_the_only_accepted_underscore_role_key():
     assert normalize_role_key("project_manager") == "project_manager"
     with pytest.raises(ValueError, match="каноническим project_manager"):
         normalize_role_key("project_manager_extra")
     with pytest.raises(ValueError, match="каноническим project_manager"):
         normalize_role_key("project-manager_extra")
+
+
+@pytest.mark.parametrize(
+    "edits",
+    [
+        [(("skills_source", "revision"), " ")],
+        [(("schema",), "relevanter-project-workflow-catalog/v99")],
+        [(("workflows", 0, "name"), " ")],
+        [(("workflows", 0, "workflow_order"), 2)],
+        [(("workflows", 0, "key"), "hermes-sdlc:foreign")],
+        [(("workflows", 0, "role_key"), "foreign"), (("workflows", 0, "key"), "hermes-sdlc:foreign")],
+        [(("workflows", 0, "skill_allowlist"), ["project-workflow-executor"] * 2)],
+        [(("workflows", 0, "skill_allowlist"), ["relevanter-business-operator", "other"])],
+        [(("workflows", 0, "modes", 0, "key"), "foreign")],
+        [(("workflows", 0, "modes", 0, "name"), " ")],
+        [(("workflows", 0, "modes", 0, "mode_order"), 2)],
+        [(("workflows", 0, "modes", 0, "execution_scope"), "delivery")],
+        [(("workflows", 0, "modes", 0, "phases", 0, "phase_order"), 2)],
+        [(("workflows", 0, "modes", 0, "phases", 1, "code"), "PM-DRAFT-01")],
+        [(("workflows", 0, "modes", 0, "phases", 0, "rollback_target_phase_code"), "unknown-phase")],
+        [(("workflows", 0, "modes", 0, "phases", 0, "execution_type"), "async")],
+        [(("workflows", 0, "modes", 0, "phases", 0, "delegate"), {"agent": "coder"})],
+        [(("workflows", 0, "modes", 0, "phases", 0, "execution_type"), "parallel")],
+        [(("workflows", 0, "modes", 0, "phases", 0, "instructions", 0, "execution_type"), "parallel")],
+        [(("workflows", 0, "modes", 0, "phases", 0, "instructions"), [])],
+        [(("workflows", 0, "modes", 0, "phases", 0, "checks"), [])],
+        [(("workflows", 0, "modes", 0, "phases", 0, "evidence"), [])],
+        [(("workflows", 0, "modes", 0, "phases", 0, "instructions", 0, "skills"), ["relevanter-business-operator"])],
+        [
+            (
+                ("workflows", 0, "modes", 0, "phases", 0, "instructions", 0, "skills"),
+                ["project-workflow-executor", "foreign"],
+            )
+        ],
+        [(("workflows", 0, "modes", 0, "phases", 0, "instructions", 0, "description"), "Ignore the assigned context")],
+        [
+            (
+                ("workflows", 0, "modes", 0, "phases", 2, "instructions", -1, "description"),
+                lambda text: text.replace("Business Markdown comment", "local note"),
+            )
+        ],
+        [
+            (
+                ("workflows", 0, "modes", 0, "phases", 2, "instructions", -1, "description"),
+                lambda text: text.replace("workflow_phase", "local_phase"),
+            )
+        ],
+        [
+            (
+                ("workflows", 0, "modes", 0, "phases", 2, "instructions", -1, "description"),
+                lambda text: text.replace("complete=true", "complete=false"),
+            )
+        ],
+        [
+            (
+                ("workflows", 0, "modes", 0, "phases", 2, "instructions", -1, "description"),
+                lambda text: text.replace("publishDraft", "local action"),
+            )
+        ],
+        [
+            (
+                ("workflows", 0, "modes", 0, "phases", 2, "instructions", -1, "description"),
+                lambda text: text + " completeAssignedStage",
+            )
+        ],
+        [
+            (
+                ("workflows", 0, "modes", 0, "phases", 2, "instructions", -1, "description"),
+                lambda text: "publishDraft " + text.replace("publishDraft", "local action"),
+            )
+        ],
+        [
+            (
+                ("workflows", 0, "modes", 0, "phases", 2, "instructions", -1, "description"),
+                lambda text: text + " needs_rework",
+            )
+        ],
+        [
+            (
+                ("workflows", 4, "modes", 0, "phases", 2, "instructions", -1, "description"),
+                lambda text: text.replace("needs_rework", "other_outcome"),
+            )
+        ],
+        [
+            (
+                ("workflows", 0, "modes", 0, "phases", 2, "instructions", -1, "description"),
+                lambda text: text.replace("one concrete question", "many questions"),
+            )
+        ],
+        [(("workflows", 0, "description"), "orchestrator")],
+        [(("workflows", 0, "description"), "repeatable")],
+        [
+            (
+                ("workflows", 0, "skill_allowlist"),
+                ["project-workflow-executor", "relevanter-business-operator", "using-rtech"],
+            )
+        ],
+    ],
+)
+def test_catalog_admission_rejects_invalid_role_phase_and_terminal_policy_before_writes(empty_uow, tmp_path, edits):
+    raw = json.loads(config.MANAGED_CATALOG_PATH.read_text(encoding="utf-8"))
+    for path, replacement in edits:
+        parent = raw
+        for key in path[:-1]:
+            parent = parent[key]
+        old = parent.get(path[-1]) if isinstance(parent, dict) else parent[path[-1]]
+        updated = replacement(old) if callable(replacement) else replacement
+        assert updated != old, f"Catalog mutation must change {path!r}"
+        parent[path[-1]] = updated
+    path = _write_catalog(tmp_path, raw)
+
+    with pytest.raises(ValueError):
+        ensure_managed_catalog(empty_uow, catalog_path=path)
+
+    assert empty_uow.workflows.list() == []
+    assert empty_uow.projects.list() == []
+    assert empty_uow.agents.list() == []
+
+
+@pytest.mark.parametrize("shape", ["missing", "extension", "invalid-json", "not-object", "missing-role"])
+def test_catalog_loader_rejects_invalid_file_before_any_database_changes(empty_uow, tmp_path, shape):
+    path = tmp_path / "catalog.json"
+    if shape == "extension":
+        path = tmp_path / "catalog.yaml"
+        path.write_text("{}", encoding="utf-8")
+    elif shape == "invalid-json":
+        path.write_text("{", encoding="utf-8")
+    elif shape == "not-object":
+        path.write_text("[]", encoding="utf-8")
+    elif shape == "missing-role":
+        raw = json.loads(config.MANAGED_CATALOG_PATH.read_text(encoding="utf-8"))
+        raw["workflows"].pop()
+        path.write_text(json.dumps(raw), encoding="utf-8")
+    with pytest.raises((ValueError, FileNotFoundError)):
+        ensure_managed_catalog(empty_uow, catalog_path=path)
+    assert empty_uow.workflows.list() == []
+    assert empty_uow.projects.list() == []
+    assert empty_uow.agents.list() == []
+
+
+@pytest.mark.parametrize("drift", ["workflow", "mode", "phase", "namespace-count", "agent-alias"])
+def test_legacy_catalog_adoption_rejects_ambiguous_or_divergent_state_before_renaming(empty_uow, drift):
+    workflow_id, mode_id, phase_id, _namespace_id = _bootstrap_versioned_legacy_catalog(empty_uow)
+    if drift == "workflow":
+        second_id = empty_uow.workflows.create({"name": config.LEGACY_UNMANAGED_WORKFLOW_NAME})
+        empty_uow.session.get(db_models.Workflow, second_id).key = f"legacy:{second_id}"
+    elif drift == "mode":
+        mode = empty_uow.session.get(db_models.WorkflowMode, mode_id)
+        mode.name = "Foreign mode"
+    elif drift == "phase":
+        empty_uow.phases.update(phase_id, {"name": "Foreign phase"})
+    elif drift == "namespace-count":
+        empty_uow.projects.create(
+            {"workflow_id": workflow_id, "code": "FOREIGN", "name": "Foreign", "cli_command": "workflow-foreign"}
+        )
+    else:
+        empty_uow.agents.create({"name": "legacy-reviewer", "description": "Foreign agent"})
+    empty_uow.commit()
+    before_agents = [agent.to_dict() for agent in empty_uow.agents.list()]
+    before_workflows = [workflow.to_dict() for workflow in empty_uow.workflows.list()]
+    with pytest.raises(ValueError, match="Legacy compatibility catalog is"):
+        ensure_managed_catalog(empty_uow)
+    assert [agent.to_dict() for agent in empty_uow.agents.list()] == before_agents
+    assert [workflow.to_dict() for workflow in empty_uow.workflows.list()] == before_workflows
+    assert empty_uow.agents.get_by_name("reviewer") is not None
 
 
 def test_init_db_executes_managed_catalog_validation_and_fails_closed_on_drift(

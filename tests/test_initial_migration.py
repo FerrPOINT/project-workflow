@@ -457,6 +457,34 @@ def test_sqlite_downgrade_refuses_lossy_runtime_history(tmp_path):
     assert schema_is_ready(engine) is True
 
 
+def test_empty_initial_schema_can_be_recreated_through_supported_migrations(tmp_path):
+    engine = _sqlite_engine(tmp_path, "initial-roundtrip.db")
+    run_alembic_command("upgrade", engine, "0001_initial")
+    initial_tables = set(inspect(engine).get_table_names())
+    assert "tasks" in initial_tables and "workflow_modes" not in initial_tables
+    run_alembic_command("downgrade", engine, "base")
+    assert set(inspect(engine).get_table_names()) == {"alembic_version"}
+    assert database_revisions(engine) == set()
+    run_alembic_command("upgrade", engine, "0001_initial")
+    assert set(inspect(engine).get_table_names()) == initial_tables
+    ensure_migrated(engine)
+    assert schema_is_ready(engine) is True
+
+
+def test_mode_schema_refuses_lossy_downgrade_before_bind_migration(tmp_path):
+    engine = _sqlite_engine(tmp_path, "mode-downgrade.db")
+    run_alembic_command("upgrade", engine, "0002_workflow_modes")
+    with engine.begin() as conn:
+        conn.execute(text("INSERT INTO workflows (key, name, is_default) VALUES ('legacy:1', 'Keep', 1)"))
+    before_tables = set(inspect(engine).get_table_names())
+    with pytest.raises(RuntimeError, match="Downgrade from workflow modes"):
+        run_alembic_command("downgrade", engine, "0001_initial")
+    assert database_revisions(engine) == {"0002_workflow_modes"}
+    assert set(inspect(engine).get_table_names()) == before_tables
+    with engine.connect() as conn:
+        assert conn.execute(text("SELECT name FROM workflows WHERE key='legacy:1'")).scalar_one() == "Keep"
+
+
 @pytest.mark.parametrize("legacy_revision", LEGACY_REVISIONS)
 def test_sqlite_legacy_revision_is_refused_without_mutation(tmp_path, legacy_revision):
     engine = _sqlite_engine(tmp_path)

@@ -17,7 +17,9 @@ from project_workflow.build_provenance import (
     BuildProvenanceError,
     docker_context_with_manifest,
     load_build_provenance,
+    runtime_bundle_sha256,
     runtime_bundle_sha256_from_archive,
+    validate_build_provenance,
     verify_build_manifest,
 )
 
@@ -319,3 +321,118 @@ def test_image_builder_passes_one_snapshot_to_docker(git_source: Path):
     assert command[-1] == "-"
     manifest = json.loads(_member_bytes(context, "runtime-build-manifest.json"))
     assert manifest == snapshot.provenance.to_dict()
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("schema_version", True),
+        ("schema_version", 1.0),
+        ("schema_version", 2),
+        ("source_revision", "a" * 39),
+        ("source_revision", 123),
+        ("source_archive_sha256", "A" * 64),
+        ("source_archive_sha256", None),
+        ("runtime_bundle_sha256", "b" * 63),
+        ("runtime_bundle_sha256", []),
+    ],
+)
+def test_build_manifest_rejects_malformed_identity(field, value):
+    raw = {
+        "schema_version": 1,
+        "source_revision": "a" * 40,
+        "source_archive_sha256": "b" * 64,
+        "runtime_bundle_sha256": "c" * 64,
+    }
+    raw[field] = value
+    with pytest.raises(BuildProvenanceError):
+        validate_build_provenance(raw)
+
+
+@pytest.mark.parametrize("content", [b"not-json", b"\xff", b"{}"])
+def test_build_manifest_rejects_unreadable_or_invalid_content(tmp_path, content):
+    manifest = tmp_path / "manifest.json"
+    manifest.write_bytes(content)
+    with pytest.raises(BuildProvenanceError):
+        load_build_provenance(manifest)
+
+
+def test_build_manifest_missing_file_fails_closed(tmp_path):
+    with pytest.raises(BuildProvenanceError, match="недоступен"):
+        load_build_provenance(tmp_path / "missing.json")
+
+
+@pytest.mark.parametrize("operation", [runtime_bundle_sha256_from_archive, docker_context_with_manifest])
+def test_corrupt_source_archive_is_rejected(operation):
+    args = [] if operation is runtime_bundle_sha256_from_archive else [None]
+    with pytest.raises(BuildProvenanceError, match="повреждён"):
+        operation(b"not a tar archive", *args)
+
+
+@pytest.mark.parametrize("name", ["../injected.py", "/absolute.py", "project_workflow\\injected.py", "."])
+def test_archive_paths_cannot_escape_context(name):
+    output = io.BytesIO()
+    with tarfile.open(fileobj=output, mode="w") as archive:
+        entry = tarfile.TarInfo(name)
+        archive.addfile(entry, io.BytesIO())
+    with pytest.raises(BuildProvenanceError, match="путь"):
+        runtime_bundle_sha256_from_archive(output.getvalue())
+
+
+def test_duplicate_archive_input_cannot_override_committed_file(git_source):
+    snapshot = _builder_module().immutable_git_snapshot(git_source, "HEAD")
+    output = io.BytesIO()
+    with (
+        tarfile.open(fileobj=io.BytesIO(snapshot.archive)) as source,
+        tarfile.open(fileobj=output, mode="w") as target,
+    ):
+        for member in source.getmembers():
+            target.addfile(member, source.extractfile(member) if member.isfile() else None)
+        entry = tarfile.TarInfo("project_workflow/source.py")
+        target.addfile(entry, io.BytesIO())
+    with pytest.raises(BuildProvenanceError, match="повторный путь"):
+        runtime_bundle_sha256_from_archive(output.getvalue())
+
+
+@pytest.mark.parametrize("relative", ["LICENSE", "project_workflow", "scripts/source.py"])
+def test_runtime_bundle_requires_all_packaged_source_inputs(git_source, relative):
+    missing = git_source / relative
+    if missing.is_dir():
+        for child in missing.iterdir():
+            child.unlink()
+        missing.rmdir()
+    else:
+        missing.unlink()
+    with pytest.raises(BuildProvenanceError, match="не содержит"):
+        runtime_bundle_sha256(git_source)
+
+
+@pytest.mark.parametrize("relative", ["LICENSE", "project_workflow"])
+def test_runtime_bundle_rejects_file_directory_type_substitution(git_source, relative):
+    target = git_source / relative
+    if target.is_dir():
+        for child in target.iterdir():
+            child.unlink()
+        target.rmdir()
+        target.write_text("substituted", encoding="utf-8")
+    else:
+        target.unlink()
+        target.mkdir()
+    with pytest.raises(BuildProvenanceError, match="не содержит"):
+        runtime_bundle_sha256(git_source)
+
+
+def test_generated_manifest_rejects_modified_extracted_inputs(git_source, tmp_path):
+    snapshot = _builder_module().immutable_git_snapshot(git_source, "HEAD")
+    extracted = tmp_path / "modified-context"
+    extracted.mkdir()
+    _extract_regular_context(docker_context_with_manifest(snapshot.archive, snapshot.provenance), extracted)
+    (extracted / "project_workflow/source.py").write_text("VALUE = 'injected'", encoding="utf-8")
+    with pytest.raises(BuildProvenanceError, match="digest"):
+        verify_build_manifest(
+            extracted / "runtime-build-manifest.json",
+            extracted,
+            expected_source_revision=snapshot.provenance.source_revision,
+            expected_source_archive_sha256=snapshot.provenance.source_archive_sha256,
+            expected_runtime_bundle_sha256=snapshot.provenance.runtime_bundle_sha256,
+        )

@@ -26,6 +26,7 @@ from alembic.migration import MigrationContext
 from fastapi.testclient import TestClient
 from sqlalchemy import inspect, text
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import close_all_sessions
 
 from project_workflow import config as config_module
 from project_workflow.application.agent import AgentService
@@ -110,6 +111,21 @@ def _bind_runtime_assignment(
     )
 
 
+def _fixture_default_mode(connection, workflow_id: int) -> int:
+    """Build a valid head-schema mode for tests exercising raw SQL constraints."""
+    return int(
+        connection.execute(
+            text(
+                "INSERT INTO project_workflow.workflow_modes "
+                "(workflow_id, key, name, mode_order) "
+                "VALUES (:workflow_id, 'default', 'Default', 1) RETURNING id"
+            ),
+            {"workflow_id": workflow_id},
+        ).scalar_one()
+    )
+
+
+
 @pytest.fixture(scope="function")
 def pg_url(monkeypatch):
     """Create a fresh PostgreSQL database and yield a SQLAlchemy URL for it."""
@@ -140,6 +156,9 @@ def pg_url(monkeypatch):
     reset_engine()
     yield base_url
 
+    # The autouse UoW tracker tears down after this fixture. Close active
+    # sessions before DROP DATABASE so its cleanup never sees AdminShutdown.
+    close_all_sessions()
     reset_engine()
     admin_conn = psycopg.connect(
         host=PG_HOST,
@@ -231,6 +250,61 @@ class TestPostgresInitialMigration:
                 workflow.name != "TEST TRASH WORKFLOW"
                 for workflow in uow.workflows.list()
             )
+
+    def test_public_catalog_mutation_blocks_managed_bootstrap_until_commit(self, pg_url):
+        engine = get_engine(pg_url)
+        ensure_migrated(engine)
+        mutation_locked = Event()
+        bootstrap_started = Event()
+        bootstrap_finished = Event()
+        release_mutation = Event()
+
+        def mutate() -> str:
+            with SAUnitOfWork(engine) as uow:
+                original_create = uow.workflows.create
+
+                def paused_create(data):
+                    workflow_id = original_create(data)
+                    mutation_locked.set()
+                    assert release_mutation.wait(timeout=10)
+                    return workflow_id
+
+                uow.workflows.create = paused_create
+                WorkflowService(uow).create_workflow({"name": "Existing unmanaged workflow"})
+            return "committed"
+
+        def bootstrap() -> str:
+            assert mutation_locked.wait(timeout=10)
+            with SAUnitOfWork(engine) as uow:
+                original_lock = uow.lock_catalog_state
+
+                def observed_lock(*, shared=False):
+                    bootstrap_started.set()
+                    return original_lock(shared=shared)
+
+                uow.lock_catalog_state = observed_lock
+                try:
+                    ensure_managed_catalog(uow)
+                except ValueError:
+                    return "foreign-catalog-rejected"
+                finally:
+                    bootstrap_finished.set()
+            return "unexpected-success"
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            mutation_future = pool.submit(mutate)
+            bootstrap_future = pool.submit(bootstrap)
+            try:
+                assert bootstrap_started.wait(timeout=10)
+                assert not bootstrap_finished.wait(timeout=0.2)
+            finally:
+                release_mutation.set()
+            assert mutation_future.result(timeout=20) == "committed"
+            assert bootstrap_future.result(timeout=20) == "foreign-catalog-rejected"
+
+        with SAUnitOfWork(engine) as uow:
+            assert [workflow.name for workflow in uow.workflows.list()] == ["Existing unmanaged workflow"]
+            assert validate_managed_catalog_state(uow) is False
 
     def test_downgrade_refuses_lossy_mode_collapse(self, pg_url):
         engine = get_engine(pg_url)
@@ -494,26 +568,28 @@ class TestPostgresInitialMigration:
             workflow_id = conn.execute(
                 text(
                     "INSERT INTO project_workflow.workflows "
-                    "(name, description, is_default) VALUES ('W', '', 1) RETURNING id"
+                    "(key, name, description, is_default) VALUES ('fixture:w', 'W', '', 1) RETURNING id"
                 )
             ).scalar_one()
+            mode_id = _fixture_default_mode(conn, workflow_id)
             project_id = conn.execute(
                 text(
                     "INSERT INTO project_workflow.projects "
                     "(workflow_id, code, name, description, key_prefixes, cli_command) "
                     "VALUES (:workflow_id, 'P', 'Project', 'persisted', '[\"P\"]', 'workflow-p') RETURNING id"
                 ),
-                {"workflow_id": workflow_id},
+                {"workflow_id": workflow_id, "mode_id": mode_id},
             ).scalar_one()
             phase_ids = [
                 conn.execute(
                     text(
                         "INSERT INTO project_workflow.phases "
-                        "(workflow_id, code, name, phase_order) "
-                        "VALUES (:workflow_id, :code, :name, :phase_order) RETURNING id"
+                        "(workflow_id, mode_id, code, name, phase_order) "
+                        "VALUES (:workflow_id, :mode_id, :code, :name, :phase_order) RETURNING id"
                     ),
                     {
                         "workflow_id": workflow_id,
+                        "mode_id": mode_id,
                         "code": str(order),
                         "name": f"Phase {order}",
                         "phase_order": order,
@@ -524,12 +600,13 @@ class TestPostgresInitialMigration:
             task_id = conn.execute(
                 text(
                     "INSERT INTO project_workflow.tasks "
-                    "(project_id, workflow_id, task_key, current_phase_id, status) "
-                    "VALUES (:project_id, :workflow_id, 'P-1', :phase_id, 'active') RETURNING id"
+                    "(project_id, workflow_id, mode_id, task_key, current_phase_id, status) "
+                    "VALUES (:project_id, :workflow_id, :mode_id, 'P-1', :phase_id, 'active') RETURNING id"
                 ),
                 {
                     "project_id": project_id,
                     "workflow_id": workflow_id,
+                    "mode_id": mode_id,
                     "phase_id": phase_ids[0],
                 },
             ).scalar_one()
@@ -537,10 +614,10 @@ class TestPostgresInitialMigration:
                 conn.execute(
                     text(
                         "INSERT INTO project_workflow.task_step_history "
-                        "(task_id, workflow_id, phase_id, verdict, replay_fingerprint) "
-                        "VALUES (:task_id, :workflow_id, :phase_id, 'partial', 'same')"
+                        "(task_id, workflow_id, mode_id, phase_id, verdict, replay_fingerprint) "
+                        "VALUES (:task_id, :workflow_id, :mode_id, :phase_id, 'partial', 'same')"
                     ),
-                    {"task_id": task_id, "workflow_id": workflow_id, "phase_id": phase_id},
+                    {"task_id": task_id, "workflow_id": workflow_id, "mode_id": mode_id, "phase_id": phase_id},
                 )
 
         with engine.connect() as conn:
@@ -550,17 +627,17 @@ class TestPostgresInitialMigration:
             ).scalar_one()
         assert description == "persisted"
 
-        with pytest.raises(IntegrityError):
+        with pytest.raises(IntegrityError, match="ck_phases_phase_order_positive"):
             with engine.begin() as conn:
                 conn.execute(
                     text(
                         "INSERT INTO project_workflow.phases "
-                        "(workflow_id, code, name, phase_order) "
-                        "VALUES (:workflow_id, 'bad', 'Bad', 0)"
+                        "(workflow_id, mode_id, code, name, phase_order) "
+                        "VALUES (:workflow_id, :mode_id, 'bad', 'Bad', 0)"
                     ),
-                    {"workflow_id": workflow_id},
+                    {"workflow_id": workflow_id, "mode_id": mode_id},
                 )
-        with pytest.raises(IntegrityError):
+        with pytest.raises(IntegrityError, match="ck_phase_instructions_step_num_positive"):
             with engine.begin() as conn:
                 conn.execute(
                     text(
@@ -569,17 +646,17 @@ class TestPostgresInitialMigration:
                     ),
                     {"phase_id": phase_ids[0]},
                 )
-        with pytest.raises(IntegrityError):
+        with pytest.raises(IntegrityError, match="uq_task_step_history_replay"):
             with engine.begin() as conn:
                 conn.execute(
                     text(
                         "INSERT INTO project_workflow.task_step_history "
-                        "(task_id, workflow_id, phase_id, verdict, replay_fingerprint) "
-                        "VALUES (:task_id, :workflow_id, :phase_id, 'partial', 'same')"
+                        "(task_id, workflow_id, mode_id, phase_id, verdict, replay_fingerprint) "
+                        "VALUES (:task_id, :workflow_id, :mode_id, :phase_id, 'partial', 'same')"
                     ),
-                    {"task_id": task_id, "workflow_id": workflow_id, "phase_id": phase_ids[0]},
+                    {"task_id": task_id, "workflow_id": workflow_id, "mode_id": mode_id, "phase_id": phase_ids[0]},
                 )
-        with pytest.raises(IntegrityError):
+        with pytest.raises(IntegrityError, match="fk_tasks_current_phase_workflow"):
             with engine.begin() as conn:
                 conn.execute(
                     text("DELETE FROM project_workflow.phases WHERE id = :phase_id"),
@@ -593,6 +670,7 @@ class TestPostgresInitialMigration:
         with engine.begin() as conn:
             workflow_ids: list[int] = []
             project_ids: list[int] = []
+            mode_ids: list[int] = []
             phase_ids: list[int] = []
             for suffix in ("A", "B"):
                 workflow_id = conn.execute(
@@ -602,6 +680,7 @@ class TestPostgresInitialMigration:
                     ),
                     {"key": f"workflow-{suffix.lower()}", "name": f"Workflow {suffix}"},
                 ).scalar_one()
+                mode_id = _fixture_default_mode(conn, workflow_id)
                 project_id = conn.execute(
                     text(
                         "INSERT INTO project_workflow.projects "
@@ -610,6 +689,7 @@ class TestPostgresInitialMigration:
                     ),
                     {
                         "workflow_id": workflow_id,
+                        "mode_id": mode_id,
                         "code": f"P{suffix}",
                         "name": f"Project {suffix}",
                         "prefixes": f'["P{suffix}"]',
@@ -619,26 +699,28 @@ class TestPostgresInitialMigration:
                 phase_id = conn.execute(
                     text(
                         "INSERT INTO project_workflow.phases "
-                        "(workflow_id, code, name, phase_order) "
-                        "VALUES (:workflow_id, :code, :name, 1) RETURNING id"
+                        "(workflow_id, mode_id, code, name, phase_order) "
+                        "VALUES (:workflow_id, :mode_id, :code, :name, 1) RETURNING id"
                     ),
-                    {"workflow_id": workflow_id, "code": suffix, "name": f"Phase {suffix}"},
+                    {"workflow_id": workflow_id, "mode_id": mode_id, "code": suffix, "name": f"Phase {suffix}"},
                 ).scalar_one()
                 workflow_ids.append(workflow_id)
+                mode_ids.append(mode_id)
                 project_ids.append(project_id)
                 phase_ids.append(phase_id)
 
-        with pytest.raises(IntegrityError):
+        with pytest.raises(IntegrityError, match="fk_tasks_project_workflow"):
             with engine.begin() as conn:
                 conn.execute(
                     text(
                         "INSERT INTO project_workflow.tasks "
-                        "(project_id, workflow_id, task_key, current_phase_id, status) "
-                        "VALUES (:project_id, :workflow_id, 'PA-BAD', :phase_id, 'active')"
+                        "(project_id, workflow_id, mode_id, task_key, current_phase_id, status) "
+                        "VALUES (:project_id, :workflow_id, :mode_id, 'PA-BAD', :phase_id, 'active')"
                     ),
                     {
                         "project_id": project_ids[0],
                         "workflow_id": workflow_ids[1],
+                        "mode_id": mode_ids[1],
                         "phase_id": phase_ids[1],
                     },
                 )
@@ -648,12 +730,13 @@ class TestPostgresInitialMigration:
                 conn.execute(
                     text(
                         "INSERT INTO project_workflow.tasks "
-                        "(project_id, workflow_id, task_key, current_phase_id, status) "
-                        "VALUES (:project_id, :workflow_id, :task_key, :phase_id, 'active') RETURNING id"
+                        "(project_id, workflow_id, mode_id, task_key, current_phase_id, status) "
+                        "VALUES (:project_id, :workflow_id, :mode_id, :task_key, :phase_id, 'active') RETURNING id"
                     ),
                     {
                         "project_id": project_ids[index],
                         "workflow_id": workflow_ids[index],
+                        "mode_id": mode_ids[index],
                         "task_key": f"P{suffix}-1",
                         "phase_id": phase_ids[index],
                     },
@@ -661,32 +744,34 @@ class TestPostgresInitialMigration:
                 for index, suffix in enumerate(("A", "B"))
             ]
 
-        with pytest.raises(IntegrityError):
+        with pytest.raises(IntegrityError, match="fk_task_step_history_phase_workflow"):
             with engine.begin() as conn:
                 conn.execute(
                     text(
                         "INSERT INTO project_workflow.task_step_history "
-                        "(task_id, workflow_id, phase_id, verdict) "
-                        "VALUES (:task_id, :workflow_id, :phase_id, 'partial')"
+                        "(task_id, workflow_id, mode_id, phase_id, verdict) "
+                        "VALUES (:task_id, :workflow_id, :mode_id, :phase_id, 'partial')"
                     ),
                     {
                         "task_id": task_ids[0],
                         "workflow_id": workflow_ids[0],
+                        "mode_id": mode_ids[0],
                         "phase_id": phase_ids[1],
                     },
                 )
 
-        with pytest.raises(IntegrityError):
+        with pytest.raises(IntegrityError, match="fk_task_phase_events_phase_workflow"):
             with engine.begin() as conn:
                 conn.execute(
                     text(
                         "INSERT INTO project_workflow.task_phase_events "
-                        "(task_id, workflow_id, phase_id, event_type) "
-                        "VALUES (:task_id, :workflow_id, :phase_id, 'entered')"
+                        "(task_id, workflow_id, mode_id, phase_id, event_type) "
+                        "VALUES (:task_id, :workflow_id, :mode_id, :phase_id, 'entered')"
                     ),
                     {
                         "task_id": task_ids[0],
                         "workflow_id": workflow_ids[0],
+                        "mode_id": mode_ids[0],
                         "phase_id": phase_ids[1],
                     },
                 )
@@ -695,45 +780,48 @@ class TestPostgresInitialMigration:
             step_history_id = conn.execute(
                 text(
                     "INSERT INTO project_workflow.task_step_history "
-                    "(task_id, workflow_id, phase_id, verdict) "
-                    "VALUES (:task_id, :workflow_id, :phase_id, 'partial') RETURNING id"
+                    "(task_id, workflow_id, mode_id, phase_id, verdict) "
+                    "VALUES (:task_id, :workflow_id, :mode_id, :phase_id, 'partial') RETURNING id"
                 ),
                 {
                     "task_id": task_ids[0],
                     "workflow_id": workflow_ids[0],
+                    "mode_id": mode_ids[0],
                     "phase_id": phase_ids[0],
                 },
             ).scalar_one()
             conn.execute(
                 text(
                     "INSERT INTO project_workflow.task_phase_events "
-                    "(task_id, workflow_id, phase_id, event_type) "
-                    "VALUES (:task_id, :workflow_id, :phase_id, 'entered')"
+                    "(task_id, workflow_id, mode_id, phase_id, event_type) "
+                    "VALUES (:task_id, :workflow_id, :mode_id, :phase_id, 'entered')"
                 ),
                 {
                     "task_id": task_ids[0],
                     "workflow_id": workflow_ids[0],
+                    "mode_id": mode_ids[0],
                     "phase_id": phase_ids[0],
                 },
             )
 
-        with pytest.raises(IntegrityError):
+        with pytest.raises(IntegrityError, match="fk_task_phase_events_step_task_execution"):
             with engine.begin() as conn:
                 conn.execute(
                     text(
                         "INSERT INTO project_workflow.task_phase_events "
-                        "(task_id, workflow_id, phase_id, step_history_id, event_type) "
-                        "VALUES (:task_id, :workflow_id, :phase_id, :step_history_id, 'entered')"
+                        "(task_id, workflow_id, mode_id, phase_id, step_history_id, event_type) "
+                        "VALUES (:task_id, :workflow_id, :mode_id, :phase_id, :step_history_id, 'entered')"
                     ),
                     {
                         "task_id": task_ids[1],
                         "workflow_id": workflow_ids[1],
+                        "mode_id": mode_ids[1],
                         "phase_id": phase_ids[1],
                         "step_history_id": step_history_id,
                     },
                 )
 
-        with pytest.raises(IntegrityError):
+        with pytest.raises(IntegrityError, match="fk_task_step_history_task_workflow"):
             with engine.begin() as conn:
                 conn.execute(
                     text("DELETE FROM project_workflow.tasks WHERE id = :task_id"),
@@ -1093,51 +1181,23 @@ class TestPostgresInitialMigration:
         config_module.get_settings.cache_clear()
 
         setup = SAUnitOfWork(pg_url)
-        workflow_id = setup.workflows.create(
-            {"key": "hermes-sdlc:developer", "name": "Runtime step race"}
-        )
-        mode_id = setup.workflows.create_mode(
-            {
-                "workflow_id": workflow_id,
-                "key": "assigned",
-                "name": "Assigned",
-                "mode_order": 2,
-                "role_key": "developer",
-                "execution_scope": "delivery",
-                "tech_workspace_policy": "required",
-            }
-        )
-        setup.phases.create(
-            {
-                "workflow_id": workflow_id,
-                "mode_id": mode_id,
-                "code": "assigned",
-                "name": "Assigned",
-                "phase_order": 1,
-            }
-        )
-        project_id = setup.projects.create(
-            {
-                "workflow_id": workflow_id,
-                "code": "RUNTIME-RACE",
-                "name": "Runtime race",
-                "cli_command": "workflow-developer",
-                "key_prefixes": ["RACE"],
-            }
-        )
+        ensure_managed_catalog(setup)
+        project = setup.projects.get_by_cli_command("workflow-developer")
+        assert project is not None and project.id is not None
+        project_id = project.id
         assignments = []
         for number in (1, 2):
             operation_key = f"assign-runtime-race-{number}"
             accepted = TaskService(setup).assign_runtime_task(
-                    project_id=project_id,
-                    task_key=f"RACE-{number}",
-                    mode_key="assigned",
-                    cycle_number=0,
-                    operation_key=operation_key,
-                    expected_revision=0,
-                    expected_status="missing",
-                    **_runtime_binding(operation_key),
-                )
+                project_id=project_id,
+                task_key=f"RACE-{number}",
+                mode_key="initial",
+                cycle_number=0,
+                operation_key=operation_key,
+                expected_revision=0,
+                expected_status="missing",
+                **_runtime_binding(operation_key),
+            )
             assignments.append(_bind_runtime_assignment(setup, project_id, accepted))
         setup.commit()
         setup.close()
@@ -1162,16 +1222,9 @@ class TestPostgresInitialMigration:
         ]
         provider_barrier = Barrier(2)
 
-        def pass_after_both_transactions_started(*_args, **_kwargs):
+        def pass_after_both_transactions_started(*_args, **kwargs):
             provider_barrier.wait(timeout=10)
-            return {
-                "verdict": "PASS",
-                "covered": [],
-                "missing": [],
-                "blockers": [],
-                "message": "concurrent pass",
-                "confidence": 1.0,
-            }
+            return _pass_response(kwargs["user_prompt"])
 
         def submit(payload: dict[str, object]) -> tuple[int, dict[str, object]]:
             with TestClient(create_app()) as client:
@@ -1196,11 +1249,7 @@ class TestPostgresInitialMigration:
             if status == 409
         )
         verify = SAUnitOfWork(pg_url)
-        rows = [
-            row
-            for row in verify.step_history.list(limit=None)
-            if row.step_operation_key == common_step_key
-        ]
+        rows = [row for row in verify.step_history.list(limit=None) if row.step_operation_key == common_step_key]
         assert len(rows) == 1
         verify.close()
 
@@ -1241,13 +1290,11 @@ class TestPostgresUoW:
             uow.commit()
 
     def test_repository_list_reads_have_deterministic_id_order(self, pg_url):
-        from scripts.init_db import main
-
-        assert main() == 0
+        _initialize_legacy_database(pg_url)
         uow = SAUnitOfWork(pg_url)
         workflow = uow.workflows.get_default()
         assert workflow is not None and workflow.id is not None
-        phase = uow.phases.get_by_code(int(workflow.id), "PM-DRAFT-01")
+        phase = uow.phases.get_by_code(int(workflow.id), "1.INTAKE")
         assert phase is not None and phase.id is not None
         project = uow.projects.list()[0]
         uow.projects.create(
@@ -1274,19 +1321,13 @@ class TestPostgresUoW:
             uow.tasks.record_phase_event(task_id, int(history_phase.id), "blocked")
 
         uow.session.execute(text("CREATE INDEX checks_desc_test_idx ON phase_checks (id DESC)"))
-        uow.session.execute(
-            text("CREATE INDEX evidence_desc_test_idx ON phase_evidence_requirements (id DESC)")
-        )
-        uow.session.execute(
-            text("CREATE INDEX phase_events_desc_test_idx ON task_phase_events (id DESC)")
-        )
+        uow.session.execute(text("CREATE INDEX evidence_desc_test_idx ON phase_evidence_requirements (id DESC)"))
+        uow.session.execute(text("CREATE INDEX phase_events_desc_test_idx ON task_phase_events (id DESC)"))
         uow.session.execute(text("CREATE INDEX agents_desc_test_idx ON agents (id DESC)"))
         uow.session.execute(text("CREATE INDEX projects_desc_test_idx ON projects (id DESC)"))
         uow.commit()
         uow.session.execute(text("CLUSTER phase_checks USING checks_desc_test_idx"))
-        uow.session.execute(
-            text("CLUSTER phase_evidence_requirements USING evidence_desc_test_idx")
-        )
+        uow.session.execute(text("CLUSTER phase_evidence_requirements USING evidence_desc_test_idx"))
         uow.session.execute(text("CLUSTER task_phase_events USING phase_events_desc_test_idx"))
         uow.session.execute(text("CLUSTER agents USING agents_desc_test_idx"))
         uow.session.execute(text("CLUSTER projects USING projects_desc_test_idx"))
@@ -1405,9 +1446,7 @@ class TestPostgresUoW:
         verify.close()
 
     def test_concurrent_project_creates_allow_same_legacy_prefix(self, pg_url):
-        from scripts.init_db import main
-
-        assert main() == 0
+        _initialize_legacy_database(pg_url)
         setup = SAUnitOfWork(pg_url)
         workflow_id = setup.workflows.get_default().id
         setup.close()
@@ -1465,10 +1504,10 @@ class TestPostgresUoW:
             uow = SAUnitOfWork(pg_url)
             original_list = uow.phases.list
 
-            def paused_list(workflow_id: int):
+            def paused_list(workflow_id: int, *, mode_id: int | None = None):
                 task_holds_workflow_lock.set()
                 assert release_task.wait(10)
-                return original_list(workflow_id)
+                return original_list(workflow_id, mode_id=mode_id)
 
             uow.phases.list = paused_list
             try:
@@ -1857,13 +1896,11 @@ class TestPostgresUoW:
 
     @pytest.mark.parametrize("field", ["checks", "evidence"])
     def test_phase_aggregate_swaps_nested_descriptions_without_replacing_ids(self, pg_url, field):
-        from scripts.init_db import main
-
-        assert main() == 0
+        _initialize_legacy_database(pg_url)
         uow = SAUnitOfWork(pg_url)
         workflow = uow.workflows.get_default()
         assert workflow is not None and workflow.id is not None
-        phase = uow.phases.get_by_code(int(workflow.id), "PM-DRAFT-02")
+        phase = uow.phases.get_by_code(int(workflow.id), "2.REQUIREMENTS")
         assert phase is not None and phase.id is not None
         service = PhaseService(uow)
         before = service.get_phase_detail(int(phase.id))[field]
@@ -1872,10 +1909,7 @@ class TestPostgresUoW:
         payload = [
             {"id": first["id"], "description": second["description"]},
             {"id": second["id"], "description": first["description"]},
-            *[
-                {"id": item["id"], "description": item["description"]}
-                for item in before[2:]
-            ],
+            *[{"id": item["id"], "description": item["description"]} for item in before[2:]],
         ]
 
         result = service.update_phase_detail(int(phase.id), {field: payload})

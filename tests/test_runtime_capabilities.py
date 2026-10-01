@@ -292,3 +292,20 @@ def test_runtime_capabilities_report_schema_not_ready_without_details(
         "schema": "not_ready",
         "catalog": "not_ready",
     }
+
+
+def test_runtime_capabilities_fail_closed_on_schema_probe_exception(monkeypatch, tmp_path):
+    credential = _token("developer-runtime")
+    _configure_tokens(monkeypatch, runtime={"developer": credential})
+    _install_manifest(monkeypatch, tmp_path, _valid_manifest())
+
+    def unavailable(_engine):
+        raise RuntimeError("private-connection-detail")
+
+    with TestClient(create_app()) as client:
+        monkeypatch.setattr(db_session, "schema_is_ready", unavailable)
+        response = client.get("/internal/runtime/capabilities", headers={"Authorization": f"Bearer {credential}"})
+    assert response.status_code == 503
+    assert response.json()["readiness"] == {"service": "not_ready", "schema": "not_ready", "catalog": "not_ready"}
+    assert "private-connection-detail" not in response.text
+    assert credential not in response.text

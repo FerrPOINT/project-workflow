@@ -171,6 +171,8 @@ class ManagedWorkflow(_CatalogModel):
                         f"Managed phase {phase.code!r} requires instructions, checks and evidence"
                     )
                 for instruction in phase.instructions:
+                    if instruction.execution_type != "sync":
+                        raise ValueError("Managed canonical instructions must be synchronous")
                     skills = set(instruction.skills)
                     if "project-workflow-executor" not in skills:
                         raise ValueError(
@@ -966,7 +968,7 @@ def validate_managed_catalog_state(
     """
 
     resolved_catalog = catalog or load_managed_catalog()
-    uow.lock_catalog_state()
+    uow.lock_catalog_state(shared=True)
     workflows = list(uow.workflows.list())
     expected_keys = {workflow.key for workflow in resolved_catalog.workflows}
     if not any(workflow.key in expected_keys for workflow in workflows):

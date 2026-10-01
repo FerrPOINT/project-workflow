@@ -56,7 +56,7 @@ def validate_build_provenance(value: Any) -> BuildProvenance:
     source_revision = value.get("source_revision")
     source_archive_sha256 = value.get("source_archive_sha256")
     runtime_bundle_sha256 = value.get("runtime_bundle_sha256")
-    if schema_version != MANIFEST_SCHEMA_VERSION:
+    if type(schema_version) is not int or schema_version != MANIFEST_SCHEMA_VERSION:
         raise BuildProvenanceError("Неподдерживаемая версия build provenance")
     if not isinstance(source_revision, str) or _REVISION_PATTERN.fullmatch(source_revision) is None:
         raise BuildProvenanceError("Некорректная source revision")

@@ -290,8 +290,9 @@ class TaskService:
                 raise ConflictError("Ожидаемое состояние отсутствующей задачи не совпадает")
             if cycle_number != 0:
                 raise ConflictError("Начальный Business assignment должен иметь cycle_number=0")
-            if attempt_number != 1:
-                raise ConflictError("Начальный Business assignment должен иметь attempt_number=1")
+            # Business may have retried dispatch before this sink saw any
+            # assignment. Its positive attempt number is authoritative;
+            # the sink's first assignment revision still starts at one.
             try:
                 tid = self._uow.tasks.create(
                     {
@@ -352,8 +353,6 @@ class TaskService:
                 raise ConflictError("Другой assignment уже активен")
             if locked.mode_id != mode.id or locked.cycle_number != cycle_number:
                 raise ConflictError("Нельзя сменить режим или цикл активной задачи")
-            if attempt_number != 1:
-                raise ConflictError("Первый owner assignment задачи должен иметь attempt_number=1")
         else:
             previous_assignments = list(self._uow.tasks.list_assignments(int(locked.id or 0)))
             previous = previous_assignments[-1].to_dict() if previous_assignments else None
