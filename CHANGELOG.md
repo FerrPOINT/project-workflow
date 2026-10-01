@@ -13,6 +13,9 @@
 - Standalone-режим: репозиторий собирается и запускается без соседнего `services-base` (убраны extra `cli-platform`, uv source, Docker additional_context и CI checkout). Token-режим CLI без `sdlc-cli-core` выдаёт понятную ошибку; запуск без `AUTH_ISSUER` работает без авторизации.
 
 ### Fixed
+- SSR-переключатель берёт текущий Workflow и его health из runtime-каталога,
+  без hardcoded healthy. Полный fallback из шести UI остаётся unknown при
+  сетевой ошибке, пустом или невалидном ответе; TTL cache разделён по URL.
 - Immutable image builder передаёт PAX-first tar через deterministic gzip;
   Docker распознаёт stdin как context, а не Dockerfile. Source/bundle digests
   и manifest contract не меняются.
