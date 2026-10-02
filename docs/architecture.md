@@ -49,11 +49,23 @@ introspection, а также сохраняет отдельный private runti
   обязательный OpenAI-compatible evaluator и сохраняет результат атомарно.
 - **Managed workflow catalog** — versioned source
   `project_workflow/references/hermes_sdlc_catalog_v1.json`. Он содержит ровно
-  семь role workflows и тринадцать modes, ordered phases, checks, evidence и
+  семь role workflows и одиннадцать modes в catalog v2, ordered phases, checks, evidence и
   instruction-level skills. Bootstrap создаёт каталог один раз и затем только
   сверяет identity/mode/phase registry; divergent live catalog не
   перезаписывается. Routing, stage/status, priority, workspace, cycle и next
   stage в каталог фаз не входят и поступают только из backend assignment.
+  Developer `initial|rework` допускают независимые scopes `delivery|aggregate`.
+  Additive adoption сохраняет exact v1 registry, assignments и историю;
+  несовместимый v1 dispatch блокируется, historical cleanup не допускает
+  новых effects. Canonical bundles экспортируются из exact Git archive и
+  проверяются вместе с native skills и capability descriptor.
+- **Continuation boundary** — owner-only `POST /internal/runtime/rebind`.
+  Он подготавливает новый immutable assignment с прежними cycle/attempt,
+  текущей фазой и входными refs, увеличивает runSequence и проверяет checkpoint
+  provenance. Старый run не получает новый cursor; bind нового run требует
+  отдельного owner confirmation. Operation ledger и CAS предотвращают двойное
+  продвижение при retry/crash. Business владеет вопросом, ответом и освобождением
+  slot после durable checkpoint и terminal acknowledgement.
 - **PostgreSQL** - единственный runtime data store. SQLite допустим только в
   изолированных тестах с явным test DSN.
 - **Внешний исполнитель** находится за границей приложения. Здесь хранится
@@ -159,8 +171,8 @@ evaluation items, transition routes и накопленное покрытие. 
 
 - [PM Continuation](pm-continuation-contract.md) — execution identity, persistent
   checkpoint/resume, Fleet UUID mapping and trusted runtime proof.
-- [PM Verification](pm-continuation-verification.md) — local evidence and missing
-  Fleet callback/orchestration and live acceptance.
+- [PM Verification](pm-continuation-verification.md) — local evidence and remaining
+  cross-service release and live acceptance.
 
 - [UI Shell Contract](ui-shell.md) — sidebar/header/work-area behavior and page width classes.
 - [README](../README.md) — deployment modes and local launch.

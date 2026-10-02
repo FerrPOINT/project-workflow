@@ -127,6 +127,7 @@ class RuntimeAssignmentRequest(StrictRequest):
     workspace_generation: int = Field(ge=0, strict=True)
     lease_generation: int = Field(ge=0, strict=True)
     exact_input_refs: list[ExactInputRef] = Field(max_length=128)
+    runtime_compatibility: dict[str, Any] | None = None
     expected_revision: int = Field(ge=0, strict=True)
     expected_status: Literal["missing", "active", "done", "blocked"]
     expected_mode_key: str | None = Field(default=None, min_length=1, max_length=128)
@@ -177,6 +178,43 @@ class RuntimeAssignmentRequest(StrictRequest):
         if len(identities) != len(set(identities)):
             raise ValueError("exact_input_refs не должен содержать дубликаты")
         return self
+
+
+class RuntimeRebindRequest(StrictRequest):
+    """CAS continuation; ordinary bind confirms the prepared immutable run."""
+
+    task: str = Field(min_length=1, max_length=128)
+    operation_key: str = Field(min_length=1, max_length=128)
+    expected_assignment_revision: int = Field(gt=0, strict=True)
+    expected_assignment_ref: str = Field(min_length=1, max_length=512)
+    expected_binding_ref: str = Field(min_length=1, max_length=512)
+    expected_hermes_run_ref: str = Field(min_length=1, max_length=512)
+    expected_phase_code: str = Field(min_length=1, max_length=128)
+    expected_status: Literal["active", "blocked"]
+    mode_key: str = Field(min_length=1, max_length=128)
+    execution_scope: Literal["business", "delivery", "aggregate"]
+    cycle_number: int = Field(ge=0, strict=True)
+    attempt_number: int = Field(gt=0, strict=True)
+    run_sequence: int = Field(gt=0, strict=True)
+    next_assignment_ref: str = Field(min_length=1, max_length=512)
+    next_binding_ref: str = Field(min_length=1, max_length=512)
+    next_hermes_run_ref: str = Field(min_length=1, max_length=512)
+    checkpoint_ref: str = Field(min_length=1, max_length=512)
+    checkpoint_revision: str = Field(min_length=1, max_length=128)
+    checkpoint_owner_assignment_ref: str = Field(min_length=1, max_length=512)
+    checkpoint_hermes_run_ref: str = Field(min_length=1, max_length=512)
+    expected_work_item_revision: int = Field(ge=0, le=MAX_WORK_ITEM_REVISION, strict=True)
+    work_item_revision: int = Field(ge=0, le=MAX_WORK_ITEM_REVISION, strict=True)
+    expected_workspace_revision: int = Field(ge=1, strict=True)
+    expected_decomposition_revision_ref: str = Field(min_length=1, max_length=512)
+    expected_stage_revision: str = Field(min_length=1, max_length=256)
+    expected_workspace_generation: int = Field(ge=0, strict=True)
+    expected_lease_generation: int = Field(ge=0, strict=True)
+    exact_input_refs: list[dict[str, Any]] = Field(min_length=1, max_length=256)
+    workspace_generation: int = Field(ge=0, strict=True)
+    lease_generation: int = Field(ge=0, strict=True)
+    tech_execution_workspace_ref: str | None = Field(default=None, max_length=512)
+    tech_execution_attempt_ref: str | None = Field(default=None, max_length=512)
 
 
 class RuntimeBindRequest(StrictRequest):

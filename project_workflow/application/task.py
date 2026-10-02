@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from sqlalchemy.exc import IntegrityError
@@ -62,9 +63,7 @@ class TaskService:
                     workflow_id=requested_workflow_id,
                 )
                 if resolved_project is None:
-                    raise ValueError(
-                        f"Для ключа задачи {payload.get('task_key', '')!r} нет подходящего неймспейса"
-                    )
+                    raise ValueError(f"Для ключа задачи {payload.get('task_key', '')!r} нет подходящего неймспейса")
                 payload["project_id"] = resolved_project["id"]
             raw_project_id = payload["project_id"]
             if not isinstance(raw_project_id, int) or isinstance(raw_project_id, bool) or raw_project_id <= 0:
@@ -117,9 +116,7 @@ class TaskService:
             else:
                 current_phase_id = raw_current_phase_id
             if current_phase_id is None or not any(phase.id == current_phase_id for phase in phases):
-                raise ValueError(
-                    f"Фаза {current_phase_id!r} не найдена в режиме {selection.mode_key!r}"
-                )
+                raise ValueError(f"Фаза {current_phase_id!r} не найдена в режиме {selection.mode_key!r}")
             payload["current_phase_id"] = current_phase_id
             if self._uow.tasks.get_by_key(task_key, project_id=locked_project.id) is not None:
                 raise ConflictError(f"Задача {task_key!r} уже существует")
@@ -165,6 +162,7 @@ class TaskService:
         expected_status: str,
         expected_mode_key: str | None = None,
         expected_cycle_number: int | None = None,
+        runtime_compatibility: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Persist one authorized Business assignment atomically and idempotently."""
         operation_key = operation_key.strip()
@@ -207,11 +205,7 @@ class TaskService:
             or expected_revision < 0
         ):
             raise ValueError("cycle_number и expected_revision должны быть неотрицательными")
-        if (
-            not isinstance(attempt_number, int)
-            or isinstance(attempt_number, bool)
-            or attempt_number <= 0
-        ):
+        if not isinstance(attempt_number, int) or isinstance(attempt_number, bool) or attempt_number <= 0:
             raise ValueError("attempt_number должен быть положительным целым числом")
         if (
             not isinstance(work_item_revision, int)
@@ -220,11 +214,7 @@ class TaskService:
             or work_item_revision > MAX_WORK_ITEM_REVISION
         ):
             raise ValueError("work_item_revision должен быть неотрицательным 64-битным целым числом")
-        if (
-            not isinstance(workspace_revision, int)
-            or isinstance(workspace_revision, bool)
-            or workspace_revision <= 0
-        ):
+        if not isinstance(workspace_revision, int) or isinstance(workspace_revision, bool) or workspace_revision <= 0:
             raise ValueError("workspace_revision должен быть положительным целым числом")
         if (
             not isinstance(workspace_generation, int)
@@ -260,6 +250,12 @@ class TaskService:
             else None
         )
         normalized_input_refs = self._normalize_exact_input_refs(exact_input_refs)
+        if getattr(mode, "catalog_version", 1) == 2:
+            from project_workflow.build_provenance import validate_runtime_compatibility
+
+            if runtime_compatibility is None:
+                raise ConflictError("Managed catalog v2 requires immutable runtime compatibility")
+            validate_runtime_compatibility(runtime_compatibility)
         payload = {
             "project_id": project_id,
             "task_key": task_key,
@@ -284,6 +280,7 @@ class TaskService:
             "expected_status": expected_status,
             "expected_mode_key": expected_mode_key,
             "expected_cycle_number": expected_cycle_number,
+            "runtime_compatibility": runtime_compatibility,
         }
         replay = self._uow.tasks.get_assignment_by_operation_key(operation_key)
         if replay is not None:
@@ -415,6 +412,161 @@ class TaskService:
             raise RuntimeError("Не удалось перечитать runtime assignment")
         return self._assignment_result(assigned.to_dict(), persisted.to_dict())
 
+    def rebind_runtime_assignment(self, *, project_id: int, role_key: str, request: dict[str, Any]) -> dict[str, Any]:
+        """Prepare a fresh immutable run without resetting its accepted phase history.
+
+        The returned assignment is unbound. Business must confirm its own CAS
+        before invoking ordinary bind; runtime step rejects it until then.
+        """
+        role_key = normalize_role_key(role_key)
+        payload = {**request, "project_id": project_id, "role_key": role_key}
+        operation_key = self._bounded_ref(request["operation_key"], "operation_key", 128)
+        replay = self._continuation_replay(operation_key, payload)
+        if replay is not None:
+            return replay
+        current = self._uow.tasks.get_by_key(request["task"], project_id=project_id)
+        if current is None or current.id is None:
+            raise ConflictError("Continuation task not found")
+        locked = self._uow.tasks.lock(current.id)
+        if locked is None:
+            raise ConflictError("Continuation task disappeared")
+        # Another request may have committed while this transaction waited for
+        # the owner row lock. Reconcile its immutable receipt before stale CAS.
+        replay = self._continuation_replay(operation_key, payload)
+        if replay is not None:
+            return replay
+        previous = self._uow.tasks.get_assignment_by_operation_key(locked.assignment_operation_key or "")
+        if previous is None or previous.id is None:
+            raise ConflictError("Continuation previous assignment not found")
+        if self._uow.tasks.assignment_has_pm_execution(current.id, previous.id):
+            raise ConflictError("Enrolled PM assignment requires PM resume/rebind")
+        before = self._assignment_result(locked.to_dict(), previous.to_dict())
+        expected = {
+            "assignment_revision": request["expected_assignment_revision"],
+            "assignment_ref": request["expected_assignment_ref"],
+            "binding_ref": request["expected_binding_ref"],
+            "hermes_run_ref": request["expected_hermes_run_ref"],
+            "current_phase_code": request["expected_phase_code"],
+            "status": request["expected_status"],
+            "mode_key": request["mode_key"],
+            "execution_scope": request["execution_scope"],
+            "cycle_number": request["cycle_number"],
+            "attempt_number": request["attempt_number"],
+            "role_key": role_key,
+            "binding_state": "bound",
+            "work_item_revision": request["expected_work_item_revision"],
+            "workspace_revision": request["expected_workspace_revision"],
+            "decomposition_revision_ref": request["expected_decomposition_revision_ref"],
+            "stage_revision": request["expected_stage_revision"],
+            "workspace_generation": request["expected_workspace_generation"],
+            "lease_generation": request["expected_lease_generation"],
+        }
+        if any(before.get(key) != value for key, value in expected.items()):
+            raise ConflictError("Continuation checkpoint or owner assignment is stale")
+        if (
+            request["checkpoint_owner_assignment_ref"] != before["assignment_ref"]
+            or request["checkpoint_hermes_run_ref"] != before["hermes_run_ref"]
+            or re.fullmatch(r"[a-f0-9]{64}", request["checkpoint_revision"]) is None
+            or request["work_item_revision"] < before["work_item_revision"]
+            or request["lease_generation"] <= before["lease_generation"]
+        ):
+            raise ConflictError("Continuation checkpoint provenance or revision is stale")
+        inputs = self._normalize_exact_input_refs(request["exact_input_refs"])
+        checkpoint_kinds = {"tech-execution-terminal-receipt", "business-phase-checkpoint"}
+        checkpoints = [value for value in inputs if value["kind"] in checkpoint_kinds]
+        expected_kind = (
+            "business-phase-checkpoint"
+            if before["execution_scope"] == "business"
+            else "tech-execution-terminal-receipt"
+        )
+        if (
+            len(checkpoints) != 1
+            or checkpoints[0]["kind"] != expected_kind
+            or checkpoints[0]["ref"] != request["checkpoint_ref"]
+            or checkpoints[0].get("hash") != request["checkpoint_revision"]
+            or [value for value in inputs if value["kind"] not in checkpoint_kinds]
+            != self._normalize_exact_input_refs(
+                [value for value in before["exact_input_refs"] if value["kind"] not in checkpoint_kinds]
+            )
+        ):
+            raise ConflictError("Continuation inputs must preserve scope and pin the exact checkpoint")
+        prior_sequence = previous.payload.get("run_sequence", 0)
+        if request["run_sequence"] != prior_sequence + 1:
+            raise ConflictError("Continuation run_sequence must increment exactly once")
+        if any(
+            request[next_key] == before[old_key]
+            for next_key, old_key in (
+                ("next_assignment_ref", "assignment_ref"),
+                ("next_binding_ref", "binding_ref"),
+                ("next_hermes_run_ref", "hermes_run_ref"),
+            )
+        ):
+            raise ConflictError("Continuation requires fresh immutable run identities")
+        mode = self._uow.workflows.get_mode(locked.mode_id)
+        self._validate_mode_policy(
+            mode=mode,
+            role_key=role_key,
+            execution_scope=request["execution_scope"],
+            tech_execution_workspace_ref=request["tech_execution_workspace_ref"],
+            tech_execution_attempt_ref=request["tech_execution_attempt_ref"],
+        )
+        record_payload = {
+            **previous.payload,
+            **payload,
+            "assignment_ref": request["next_assignment_ref"],
+            "run_sequence": request["run_sequence"],
+            "work_item_revision": request["work_item_revision"],
+            "exact_input_refs": inputs,
+        }
+        revision = locked.assignment_revision + 1
+        record = self._assignment_record(
+            record_payload,
+            operation_key=operation_key,
+            task_id=current.id,
+            project_id=project_id,
+            workflow_id=locked.workflow_id,
+            mode_id=locked.mode_id,
+            cycle_number=locked.cycle_number,
+            assignment_revision=revision,
+        )
+        # Replay hashes the explicit CAS request, while the stored payload also
+        # pins inherited owner inputs. Neither old assignment nor history changes.
+        record["payload_sha256"] = payload_sha256(payload)
+        try:
+            if not self._uow.tasks.update_if_state(
+                current.id,
+                locked.current_phase_id,
+                locked.status,
+                {"assignment_revision": revision, "assignment_operation_key": operation_key},
+                expected_assignment_revision=locked.assignment_revision,
+                expected_assignment_operation_key=locked.assignment_operation_key,
+            ):
+                raise ConflictError("Continuation CAS conflict")
+            self._uow.tasks.create_assignment(record)
+            self._uow.commit()
+        except IntegrityError as exc:
+            self._uow.rollback()
+            replay = self._continuation_replay(operation_key, payload)
+            if replay is not None:
+                return replay
+            raise ConflictError("Continuation conflicts with persisted owner state") from exc
+        assigned = self._uow.tasks.get_by_id(current.id)
+        persisted = self._uow.tasks.get_assignment_by_operation_key(operation_key)
+        if assigned is None or persisted is None:
+            raise RuntimeError("Continuation readback unavailable")
+        return self._assignment_result(assigned.to_dict(), persisted.to_dict())
+
+    def _continuation_replay(self, operation_key: str, payload: dict[str, Any]) -> dict[str, Any] | None:
+        replay = self._uow.tasks.get_assignment_by_operation_key(operation_key)
+        if replay is None:
+            return None
+        if replay.payload_sha256 != payload_sha256(payload):
+            raise ConflictError("Continuation operation key payload conflict")
+        current = self._uow.tasks.get_by_id(replay.task_id)
+        if current is None or current.assignment_operation_key != operation_key:
+            raise ConflictError("Continuation was superseded")
+        return self._assignment_result(current.to_dict(), replay.to_dict())
+
     def bind_runtime_assignment(
         self,
         *,
@@ -440,12 +592,8 @@ class TaskService:
         elif role_key == "project_manager":
             raise ConflictError("PM runtime binding requires a concrete Fleet agent UUID")
         refs = {
-            "bind_operation_key": self._bounded_ref(
-                bind_operation_key, "bind_operation_key", 128
-            ),
-            "assignment_operation_key": self._bounded_ref(
-                assignment_operation_key, "assignment_operation_key", 128
-            ),
+            "bind_operation_key": self._bounded_ref(bind_operation_key, "bind_operation_key", 128),
+            "assignment_operation_key": self._bounded_ref(assignment_operation_key, "assignment_operation_key", 128),
             "assignment_ref": self._bounded_ref(assignment_ref, "assignment_ref", 512),
             "binding_ref": self._bounded_ref(binding_ref, "binding_ref", 512),
             "hermes_run_ref": self._bounded_ref(hermes_run_ref, "hermes_run_ref", 512),
@@ -462,9 +610,7 @@ class TaskService:
             raise ConflictError("Недопустимое ожидаемое bind состояние")
         validated_key = TaskKeyValidator.from_projects([]).validate(task_key)
         if not validated_key.is_valid:
-            raise ConflictError(
-                validated_key.error_message or f"Недопустимый ключ задачи {task_key!r}"
-            )
+            raise ConflictError(validated_key.error_message or f"Недопустимый ключ задачи {task_key!r}")
         task_key = validated_key.normalized or task_key
         request = {
             "project_id": project_id,
@@ -480,9 +626,7 @@ class TaskService:
         if concrete_agent_ref is not None:
             request["concrete_agent_ref"] = concrete_agent_ref
         request_digest = payload_sha256(request)
-        replay = self._uow.tasks.get_assignment_by_bind_operation_key(
-            refs["bind_operation_key"]
-        )
+        replay = self._uow.tasks.get_assignment_by_bind_operation_key(refs["bind_operation_key"])
         if replay is not None:
             return self._reconcile_bind(replay.to_dict(), request, request_digest)
 
@@ -500,15 +644,24 @@ class TaskService:
             or task.get("assignment_revision") != assignment_revision
             or task.get("mode_key") != refs["mode_key"]
             or task.get("cycle_number") != cycle_number
-            or task.get("status") != "active"
+            or task.get("status") not in {"active", "blocked"}
         ):
             raise ConflictError("Runtime bind относится к устаревшему assignment")
-        assignment = self._uow.tasks.get_assignment_by_operation_key(
-            refs["assignment_operation_key"]
-        )
+        assignment = self._uow.tasks.get_assignment_by_operation_key(refs["assignment_operation_key"])
         if assignment is None or assignment.id is None:
             raise ConflictError("Принятый runtime assignment не найден")
         record = assignment.to_dict()
+        continuation = record.get("payload", {})
+        if continuation.get("runtime_compatibility") is not None:
+            from project_workflow.build_provenance import runtime_compatibility_descriptor
+
+            if continuation["runtime_compatibility"] != runtime_compatibility_descriptor():
+                raise ConflictError("Runtime compatibility changed before bind")
+        if continuation.get("next_binding_ref") is not None and (
+            continuation["next_binding_ref"] != refs["binding_ref"]
+            or continuation["next_hermes_run_ref"] != refs["hermes_run_ref"]
+        ):
+            raise ConflictError("Continuation bind differs from prepared immutable run")
         expected = {
             "task_id": current.id,
             "project_id": project_id,
@@ -521,9 +674,7 @@ class TaskService:
         }
         mismatched = [name for name, value in expected.items() if record.get(name) != value]
         if mismatched:
-            raise ConflictError(
-                "Runtime bind не совпадает с принятым assignment: " + ", ".join(mismatched)
-            )
+            raise ConflictError("Runtime bind не совпадает с принятым assignment: " + ", ".join(mismatched))
         stored_binding_ref = record.get("binding_ref")
         stored_hermes_run_ref = record.get("hermes_run_ref")
         stored_bind_operation_key = record.get("bind_operation_key")
@@ -532,14 +683,11 @@ class TaskService:
             return self._reconcile_bind(record, request, request_digest)
         if (stored_binding_ref is None) != (stored_hermes_run_ref is None):
             raise ConflictError("Runtime assignment содержит неполный legacy Hermes binding")
-        current_binding_state = (
-            "legacy_bound" if stored_binding_ref is not None else "unbound"
-        )
+        current_binding_state = "legacy_bound" if stored_binding_ref is not None else "unbound"
         if expected_binding_state != current_binding_state:
             raise ConflictError("Ожидаемое bind состояние устарело")
         if stored_binding_ref is not None and (
-            stored_binding_ref != refs["binding_ref"]
-            or stored_hermes_run_ref != refs["hermes_run_ref"]
+            stored_binding_ref != refs["binding_ref"] or stored_hermes_run_ref != refs["hermes_run_ref"]
         ):
             raise ConflictError("Legacy Hermes binding не совпадает с runtime bind")
         try:
@@ -552,14 +700,8 @@ class TaskService:
                 expected_cycle_number=cycle_number,
                 expected_attempt_number=attempt_number,
                 expected_assignment_ref=refs["assignment_ref"],
-                expected_binding_ref=(
-                    str(stored_binding_ref) if stored_binding_ref is not None else None
-                ),
-                expected_hermes_run_ref=(
-                    str(stored_hermes_run_ref)
-                    if stored_hermes_run_ref is not None
-                    else None
-                ),
+                expected_binding_ref=(str(stored_binding_ref) if stored_binding_ref is not None else None),
+                expected_hermes_run_ref=(str(stored_hermes_run_ref) if stored_hermes_run_ref is not None else None),
                 binding_ref=refs["binding_ref"],
                 hermes_run_ref=refs["hermes_run_ref"],
                 bind_operation_key=refs["bind_operation_key"],
@@ -576,9 +718,7 @@ class TaskService:
                 return self._reconcile_bind_after_race(request, request_digest)
             except ConflictError as conflict:
                 raise conflict from exc
-        persisted = self._uow.tasks.get_assignment_by_bind_operation_key(
-            refs["bind_operation_key"]
-        )
+        persisted = self._uow.tasks.get_assignment_by_bind_operation_key(refs["bind_operation_key"])
         if persisted is None:
             raise RuntimeError("Не удалось перечитать связанный runtime assignment")
         return self._assignment_result(task, persisted.to_dict())
@@ -603,9 +743,7 @@ class TaskService:
     ) -> RuntimeStepFence:
         """Lock and validate the exact immutable owner assignment for one step."""
         role_key = normalize_role_key(role_key)
-        step_operation_key = self._bounded_ref(
-            step_operation_key, "step_operation_key", 128
-        )
+        step_operation_key = self._bounded_ref(step_operation_key, "step_operation_key", 128)
         if (
             not isinstance(request_sha256, str)
             or len(request_sha256) != 64
@@ -613,9 +751,7 @@ class TaskService:
         ):
             raise ValueError("request_sha256 должен быть lowercase SHA-256")
         mode_key = self._bounded_ref(mode_key, "mode_key", 128)
-        expected_phase_code = self._bounded_ref(
-            expected_phase_code, "expected_phase_code", 128
-        )
+        expected_phase_code = self._bounded_ref(expected_phase_code, "expected_phase_code", 128)
         refs = {
             "assignment_ref": self._bounded_ref(assignment_ref, "assignment_ref", 512),
             "binding_ref": self._bounded_ref(binding_ref, "binding_ref", 512),
@@ -682,14 +818,9 @@ class TaskService:
             "attempt_number": attempt_number,
             **refs,
         }
-        mismatched = [
-            name for name, value in expected_assignment.items() if record.get(name) != value
-        ]
+        mismatched = [name for name, value in expected_assignment.items() if record.get(name) != value]
         if mismatched:
-            raise ConflictError(
-                "Runtime step не совпадает с immutable assignment/run: "
-                + ", ".join(mismatched)
-            )
+            raise ConflictError("Runtime step не совпадает с immutable assignment/run: " + ", ".join(mismatched))
         task_expected = {
             "assignment_revision": assignment_revision,
             "mode_key": mode_key,
@@ -699,9 +830,7 @@ class TaskService:
         }
         stale = [name for name, value in task_expected.items() if task.get(name) != value]
         if stale:
-            raise ConflictError(
-                "Runtime step относится к устаревшему assignment/run: " + ", ".join(stale)
-            )
+            raise ConflictError("Runtime step относится к устаревшему assignment/run: " + ", ".join(stale))
         mode_id = task.get("mode_id")
         phase_id = task.get("current_phase_id")
         if (
@@ -713,6 +842,18 @@ class TaskService:
             or phase_id <= 0
         ):
             raise ConflictError("Runtime task не содержит корректный mode/phase cursor")
+        pinned_mode = self._uow.workflows.get_mode(mode_id)
+        if pinned_mode is None:
+            raise ConflictError("Runtime assignment pinned mode missing")
+        if getattr(pinned_mode, "catalog_version", 1) == 1:
+            # Frozen legacy phases remain readable; a v2 image cannot execute their old tool contract.
+            raise ConflictError("RUNTIME_VERSION_INCOMPATIBLE: pinned legacy catalog requires legacy runtime")
+        descriptor = record.get("payload", {}).get("runtime_compatibility")
+        if descriptor is not None:
+            from project_workflow.build_provenance import runtime_compatibility_descriptor
+
+            if descriptor != runtime_compatibility_descriptor():
+                raise ConflictError("RUNTIME_VERSION_INCOMPATIBLE: frozen assignment descriptor mismatch")
         return RuntimeStepFence(
             step_operation_key=step_operation_key,
             request_sha256=request_sha256,
@@ -754,15 +895,9 @@ class TaskService:
         if attempt_number != previous_attempt + 1:
             raise ConflictError("Retry attempt_number должен быть строго следующим")
         candidate = {**payload, "mode_id": mode_id}
-        changed = [
-            field
-            for field in cls._RETRY_FROZEN_FIELDS
-            if previous.get(field) != candidate.get(field)
-        ]
+        changed = [field for field in cls._RETRY_FROZEN_FIELDS if previous.get(field) != candidate.get(field)]
         if changed:
-            raise ConflictError(
-                "Retry не может менять frozen assignment fields: " + ", ".join(changed)
-            )
+            raise ConflictError("Retry не может менять frozen assignment fields: " + ", ".join(changed))
 
     @classmethod
     def _normalize_exact_input_refs(cls, value: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -780,9 +915,7 @@ class TaskService:
                 revision = cls._bounded_ref(revision, "exact_input_refs.revision", 256)
             snapshot_hash = raw.get("hash")
             if snapshot_hash is not None:
-                snapshot_hash = cls._bounded_ref(
-                    snapshot_hash, "exact_input_refs.hash", 256
-                )
+                snapshot_hash = cls._bounded_ref(snapshot_hash, "exact_input_refs.hash", 256)
             identity = (kind, ref, revision or "", snapshot_hash or "")
             if identity in identities:
                 raise ValueError("exact_input_refs не должен содержать дубликаты")
@@ -812,11 +945,11 @@ class TaskService:
         tech_execution_workspace_ref: str | None,
         tech_execution_attempt_ref: str | None,
     ) -> None:
-        if not mode.role_key or not mode.execution_scope or not mode.tech_workspace_policy:
+        if not mode.role_key or not mode.execution_scopes or not mode.tech_workspace_policy:
             raise ConflictError("Режим не содержит полный backend-owned assignment policy")
         if mode.role_key != role_key:
             raise ConflictError("Backend-owned policy не разрешает указанную роль")
-        if mode.execution_scope != execution_scope:
+        if execution_scope not in mode.execution_scopes:
             raise ConflictError("Backend-owned mode policy не разрешает указанный execution scope")
         if mode.tech_workspace_policy == "required" and (
             tech_execution_workspace_ref is None or tech_execution_attempt_ref is None
@@ -891,32 +1024,20 @@ class TaskService:
             "exact_input_refs",
         ):
             result[key] = assignment.get(key)
-        has_real_refs = (
-            assignment.get("binding_ref") is not None
-            and assignment.get("hermes_run_ref") is not None
-        )
+        has_real_refs = assignment.get("binding_ref") is not None and assignment.get("hermes_run_ref") is not None
         has_bind_metadata = (
-            assignment.get("bind_operation_key") is not None
-            and assignment.get("bind_request_sha256") is not None
+            assignment.get("bind_operation_key") is not None and assignment.get("bind_request_sha256") is not None
         )
         result["binding_state"] = (
-            "bound" if has_real_refs and has_bind_metadata
-            else "legacy_bound" if has_real_refs
-            else "unbound"
+            "bound" if has_real_refs and has_bind_metadata else "legacy_bound" if has_real_refs else "unbound"
         )
         return result
 
-    def _reconcile_bind_after_race(
-        self, request: dict[str, Any], request_digest: str
-    ) -> dict[str, Any]:
-        replay = self._uow.tasks.get_assignment_by_bind_operation_key(
-            str(request["bind_operation_key"])
-        )
+    def _reconcile_bind_after_race(self, request: dict[str, Any], request_digest: str) -> dict[str, Any]:
+        replay = self._uow.tasks.get_assignment_by_bind_operation_key(str(request["bind_operation_key"]))
         if replay is not None:
             return self._reconcile_bind(replay.to_dict(), request, request_digest)
-        assignment = self._uow.tasks.get_assignment_by_operation_key(
-            str(request["assignment_operation_key"])
-        )
+        assignment = self._uow.tasks.get_assignment_by_operation_key(str(request["assignment_operation_key"]))
         if assignment is not None and assignment.binding_ref is not None:
             raise ConflictError("Runtime assignment уже связан другим bind operation")
         raise ConflictError("Runtime bind конфликтует с параллельно сохранённым состоянием")
@@ -944,9 +1065,7 @@ class TaskService:
         }
         mismatched = [name for name, value in expected.items() if assignment.get(name) != value]
         if mismatched:
-            raise ConflictError(
-                "bind_operation_key уже использован для другого runtime bind"
-            )
+            raise ConflictError("bind_operation_key уже использован для другого runtime bind")
         task = self._uow.tasks.get_by_id(int(assignment["task_id"]))
         if task is None:
             raise ConflictError("Runtime bind ссылается на отсутствующую задачу")
@@ -988,9 +1107,7 @@ class TaskService:
             raise ConflictError("operation_key уже использован для другой задачи") from cause
         result = self._assignment_result(task.to_dict(), assignment)
         phases = list(
-            self._uow.phases.list(
-                workflow_id=int(assignment["workflow_id"]), mode_id=int(assignment["mode_id"])
-            )
+            self._uow.phases.list(workflow_id=int(assignment["workflow_id"]), mode_id=int(assignment["mode_id"]))
         )
         first_phase = phases[0] if phases else None
         result.update(
@@ -1022,5 +1139,6 @@ class TaskService:
 
     def list_tasks(self) -> list[dict[str, Any]]:
         return [t.to_dict() for t in self._uow.tasks.list()]
+
 
 __all__ = ["TaskService"]

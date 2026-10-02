@@ -87,6 +87,13 @@ class PMExecutionService:
             or assignment.cycle_number != task.cycle_number
         ):
             raise ConflictError("Stale or foreign PM assignment identity")
+        from project_workflow.build_provenance import runtime_compatibility_descriptor
+
+        if (
+            assignment.mode.catalog_version != 2
+            or json.loads(assignment.payload).get("runtime_compatibility") != runtime_compatibility_descriptor()
+        ):
+            raise ConflictError("RUNTIME_VERSION_INCOMPATIBLE: frozen PM assignment descriptor mismatch")
         if self.concrete_agent_ref(assignment) != identity.agent_ref:
             raise ConflictError("PM identity does not match the persisted concrete Fleet agent")
         return task, assignment

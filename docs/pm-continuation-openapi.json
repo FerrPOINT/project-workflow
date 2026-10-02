@@ -1302,6 +1302,18 @@
             "title": "Root Task Ref",
             "type": "string"
           },
+          "runtime_compatibility": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runtime Compatibility"
+          },
           "stage_key": {
             "maxLength": 64,
             "minLength": 1,
@@ -1660,6 +1672,250 @@
         "title": "RuntimeObservation",
         "type": "object"
       },
+      "RuntimeRebindRequest": {
+        "additionalProperties": false,
+        "description": "CAS continuation; ordinary bind confirms the prepared immutable run.",
+        "properties": {
+          "attempt_number": {
+            "exclusiveMinimum": 0.0,
+            "title": "Attempt Number",
+            "type": "integer"
+          },
+          "checkpoint_hermes_run_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Checkpoint Hermes Run Ref",
+            "type": "string"
+          },
+          "checkpoint_owner_assignment_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Checkpoint Owner Assignment Ref",
+            "type": "string"
+          },
+          "checkpoint_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Checkpoint Ref",
+            "type": "string"
+          },
+          "checkpoint_revision": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Checkpoint Revision",
+            "type": "string"
+          },
+          "cycle_number": {
+            "minimum": 0.0,
+            "title": "Cycle Number",
+            "type": "integer"
+          },
+          "exact_input_refs": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "maxItems": 256,
+            "minItems": 1,
+            "title": "Exact Input Refs",
+            "type": "array"
+          },
+          "execution_scope": {
+            "enum": [
+              "business",
+              "delivery",
+              "aggregate"
+            ],
+            "title": "Execution Scope",
+            "type": "string"
+          },
+          "expected_assignment_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Expected Assignment Ref",
+            "type": "string"
+          },
+          "expected_assignment_revision": {
+            "exclusiveMinimum": 0.0,
+            "title": "Expected Assignment Revision",
+            "type": "integer"
+          },
+          "expected_binding_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Expected Binding Ref",
+            "type": "string"
+          },
+          "expected_decomposition_revision_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Expected Decomposition Revision Ref",
+            "type": "string"
+          },
+          "expected_hermes_run_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Expected Hermes Run Ref",
+            "type": "string"
+          },
+          "expected_lease_generation": {
+            "minimum": 0.0,
+            "title": "Expected Lease Generation",
+            "type": "integer"
+          },
+          "expected_phase_code": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Expected Phase Code",
+            "type": "string"
+          },
+          "expected_stage_revision": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Expected Stage Revision",
+            "type": "string"
+          },
+          "expected_status": {
+            "enum": [
+              "active",
+              "blocked"
+            ],
+            "title": "Expected Status",
+            "type": "string"
+          },
+          "expected_work_item_revision": {
+            "maximum": 9.223372036854776e+18,
+            "minimum": 0.0,
+            "title": "Expected Work Item Revision",
+            "type": "integer"
+          },
+          "expected_workspace_generation": {
+            "minimum": 0.0,
+            "title": "Expected Workspace Generation",
+            "type": "integer"
+          },
+          "expected_workspace_revision": {
+            "minimum": 1.0,
+            "title": "Expected Workspace Revision",
+            "type": "integer"
+          },
+          "lease_generation": {
+            "minimum": 0.0,
+            "title": "Lease Generation",
+            "type": "integer"
+          },
+          "mode_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Mode Key",
+            "type": "string"
+          },
+          "next_assignment_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Next Assignment Ref",
+            "type": "string"
+          },
+          "next_binding_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Next Binding Ref",
+            "type": "string"
+          },
+          "next_hermes_run_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Next Hermes Run Ref",
+            "type": "string"
+          },
+          "operation_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Operation Key",
+            "type": "string"
+          },
+          "run_sequence": {
+            "exclusiveMinimum": 0.0,
+            "title": "Run Sequence",
+            "type": "integer"
+          },
+          "task": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Task",
+            "type": "string"
+          },
+          "tech_execution_attempt_ref": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tech Execution Attempt Ref"
+          },
+          "tech_execution_workspace_ref": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tech Execution Workspace Ref"
+          },
+          "work_item_revision": {
+            "maximum": 9.223372036854776e+18,
+            "minimum": 0.0,
+            "title": "Work Item Revision",
+            "type": "integer"
+          },
+          "workspace_generation": {
+            "minimum": 0.0,
+            "title": "Workspace Generation",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "task",
+          "operation_key",
+          "expected_assignment_revision",
+          "expected_assignment_ref",
+          "expected_binding_ref",
+          "expected_hermes_run_ref",
+          "expected_phase_code",
+          "expected_status",
+          "mode_key",
+          "execution_scope",
+          "cycle_number",
+          "attempt_number",
+          "run_sequence",
+          "next_assignment_ref",
+          "next_binding_ref",
+          "next_hermes_run_ref",
+          "checkpoint_ref",
+          "checkpoint_revision",
+          "checkpoint_owner_assignment_ref",
+          "checkpoint_hermes_run_ref",
+          "expected_work_item_revision",
+          "work_item_revision",
+          "expected_workspace_revision",
+          "expected_decomposition_revision_ref",
+          "expected_stage_revision",
+          "expected_workspace_generation",
+          "expected_lease_generation",
+          "exact_input_refs",
+          "workspace_generation",
+          "lease_generation"
+        ],
+        "title": "RuntimeRebindRequest",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -1816,6 +2072,61 @@
           }
         },
         "summary": "Runtime Bind"
+      }
+    },
+    "/internal/runtime/rebind": {
+      "post": {
+        "description": "Role assignment credentials alone may prepare a fenced continuation.",
+        "operationId": "runtime_rebind_internal_runtime_rebind_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuntimeRebindRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Runtime Rebind"
       }
     },
     "/internal/runtime/v1/pm/bind": {

@@ -15,23 +15,51 @@ CANONICAL_UNDERSCORE_ROLE_KEYS = frozenset({"project_manager"})
 MAX_WORK_ITEM_REVISION = (1 << 63) - 1
 FLEET_AGENT_REF_PATTERN = r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
 NIL_FLEET_AGENT_REF = "00000000-0000-0000-0000-000000000000"
-MANAGED_ROLE_MODE_SCOPES: dict[str, dict[str, str]] = {
-    "project_manager": {"draft": "business"},
-    "analyst": {"analysis": "business"},
-    "architect": {"decomposition": "business"},
+MANAGED_ROLE_MODE_SCOPES: dict[str, dict[str, tuple[str, ...]]] = {
+    "project_manager": {"draft": ("business",)},
+    "analyst": {"analysis": ("business",)},
+    "architect": {"decomposition": ("business",)},
     "developer": {
-        "initial": "delivery",
-        "rework": "delivery",
-        "integration": "aggregate",
-        "integration_rework": "aggregate",
+        "initial": ("delivery", "aggregate"),
+        "rework": ("delivery", "aggregate"),
     },
-    "reviewer": {"delivery": "delivery", "integration": "aggregate"},
-    "tester": {"delivery": "delivery", "integration": "aggregate"},
-    "devops": {"delivery": "delivery", "integration": "aggregate"},
+    "reviewer": {"delivery": ("delivery",), "integration": ("aggregate",)},
+    "tester": {"delivery": ("delivery",), "integration": ("aggregate",)},
+    "devops": {"delivery": ("delivery",), "integration": ("aggregate",)},
 }
 MANAGED_WORKFLOW_KEYS = frozenset(
     f"hermes-sdlc:{role_key}" for role_key in MANAGED_ROLE_MODE_SCOPES
 )
+
+
+def phase_allowed_tools(role_key: str, phase_code: str) -> list[str]:
+    """Capabilities of exact canonical phase codes; unknown catalogs fail closed."""
+    prefixes = {
+        "project_manager": {"PM-DRAFT"}, "analyst": {"AN-ANALYSIS"},
+        "architect": {"AR-DECOMP"}, "developer": {"DV-INITIAL", "DV-REWORK"},
+        "reviewer": {"RV-REVIEW", "RV-INT"}, "tester": {"TS-TEST", "TS-INT"},
+        "devops": {"DO-DEPLOY", "DO-INT"},
+    }
+    prefix, _, number = phase_code.rpartition("-")
+    if prefix not in prefixes.get(role_key, set()) or number not in {"01", "02", "03"}:
+        return []
+    tools = ["workflow", "history", "context", "skills", "question"]
+    if role_key in {"developer", "reviewer", "tester"}:
+        tools.append("workspace_read")
+    if role_key == "developer":
+        tools.append("checkpoint")
+    if role_key == "project_manager":
+        tools.append("draft_update")
+    if number == "02":
+        tools.extend({
+            "developer": ["workspace_write"],
+            "tester": ["tester", "tester_browser"], "devops": ["release"],
+        }.get(role_key, []))
+    if number == "03":
+        tools.append("publish_draft" if role_key == "project_manager" else "terminal")
+        if role_key == "developer":
+            tools.append("candidate_publish")
+    return tools
 
 
 @dataclass(frozen=True)

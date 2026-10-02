@@ -1,5 +1,143 @@
 # PM Continuation Verification
 
+## Accepted Master Reconciliation (2026-10-02)
+
+The bounded reconciliation merges accepted master
+`ef66f165a5eb85895f43f67829273291f428850c` into `feat/pm-clarification`,
+not the feature into master. Accepted catalog v2, scope sets, compatibility
+pins, generic continuation and builder are preserved. Published migrations
+`0001` through `0006` are byte-for-byte unchanged relative to that master.
+Only this feature's pending migration was moved to `0007_pm_execution`, with
+`down_revision=0006_versioned_mode_catalog`. This PR owns one new migration.
+
+Generic continuation now checks immutable PM enrollment through the task
+repository's indexed EXISTS query, under the same owner task lock as PM bind.
+It rejects new continuation before mutations regardless of PM/task status.
+Exact historical generic replay remains read-only. PM resume/rebind preserves
+its original assignment identity and is the only continuation for enrolled PM.
+PM commands also revalidate catalog v2/frozen compatibility before runtime probes.
+The ten-field PM identity and existing eighteen-field Fleet callback are unchanged;
+canonical agent UUIDs still reject nil at both schema and service boundaries.
+
+Regression evidence includes active/waiting/resume-pending PM with active,
+blocked and done tasks; unchanged cursor/revision/history/ledger on generic 409;
+valid PM resume after denial; generic historical replay after enrollment;
+accepted non-PM generic continuation; descriptor missing/drift/v1 refusal;
+and both PostgreSQL owner-lock races. PM winning rejects generic continuation;
+generic winning makes the prior PM bind stale without partial PM records.
+
+Final runtime source is frozen in the owned Linux QA directory
+`/tmp/workflow-pm-reconcile-qa-source-20261002`, with pinned constraints and
+isolated uv runs. SQLite targets use owned `/dev/shm` directories; PostgreSQL 16
+uses only `workflow-pm-reconcile-qa-db`, port `55449`, and disposable test databases.
+
+| Gate | Reconciliation Result |
+| --- | --- |
+| Full unit, strict resource warnings and coverage | 2,029 passed, 65 integration tests deselected, 1838.66s; unit coverage 94.18%, threshold 94 enforced |
+| Canonical PostgreSQL integration gate | 65 passed, 690.13s, exit 0 |
+| PG coverage collection | 65 tests passed; subset coverage 63.18%, not a full-suite coverage gate |
+| Combined final unit/PG coverage | 94.79%, threshold 94 enforced |
+| Focused security/contracts + docs | 131 passed |
+| PM generic boundary module | 14 passed |
+| Ruff | All checks passed |
+| Mypy | Success, 98 source files |
+| Final docs/generated OpenAPI check | 14 passed |
+| QA development image/Compose | Build/readiness passed; HTTP 200, database/schema/catalog ok |
+| HTTP wire check | Callback 18 fields, PM identity 10 fields, explicit nil exclusion |
+| Authenticated development preflight | Expected 503 without immutable build/compatibility manifest |
+| Diff whitespace | Passed |
+
+Exact gate commands run from the owned Linux source directory, using prefix
+`uv run --isolated --with-requirements constraints.txt --all-extras`.
+The PostgreSQL gate additionally sets `PGHOST=127.0.0.1` and `PGPORT=55449`;
+credentials/database are the owned QA `project_workflow` fixture defaults.
+
+```text
+COVERAGE_FILE=.coverage.unit pytest -q --cov=project_workflow --cov-report=term --timeout=60 -W error::ResourceWarning -W error::pytest.PytestUnraisableExceptionWarning --basetemp=/dev/shm/workflow-pm-reconcile-unit-final-20261002
+pytest -q -m integration tests/test_postgres_integration.py --timeout=120 --basetemp=/dev/shm/workflow-pm-reconcile-pg-gate-20261002
+pytest -q tests/test_docs_quality.py tests/test_pm_generic_continuation.py tests/test_concrete_agent_mapping.py tests/test_runtime_assignment_contract.py --timeout=60 --basetemp=/dev/shm/workflow-pm-reconcile-security-final-20261002
+pytest -q tests/test_docs_quality.py tests/test_pm_execution.py::test_openapi_exposes_pm_wire_and_callback_schema --timeout=60 --basetemp=/dev/shm/workflow-pm-reconcile-docs-final-20261002
+ruff check .
+mypy project_workflow scripts
+COVERAGE_FILE=.coverage.merged coverage combine --keep .coverage.unit .coverage.pg
+COVERAGE_FILE=.coverage.merged coverage report --fail-under=94
+```
+
+The full unit run emitted two existing SQLAlchemy transaction/savepoint
+warnings in UI app tests; strict ResourceWarning/unraisable gates passed.
+Combined coverage contains only the final frozen runtime source, not the
+historical mapping run or the separate read-only admission probe below.
+
+The development smoke image was built from Git QA snapshot
+`e44efd2c224d445a29f5910bbd60dcfde925d05b`; its source archive SHA-256 is
+`30543cbf37a123370202faa0865669924a21e9f089b9de9b06c60d86c0df8597`.
+Later changes are documentation only, not runtime source. This is a standard
+development build, not a release-compatible image: the native skills checkout
+at accepted pin `46eb27f70b68cbefbf53903090f0c7f0fa68b748` was unavailable locally
+and GitLab denied non-interactive source access. No fixture manifest or guessed
+release provenance was substituted. The expected capabilities 503 is fail-closed,
+not proof of PM admission readiness. Owned Compose containers, network, volumes
+and image tag were removed after HTTP smoke.
+The standalone integration container was removed after the canonical gate;
+all test-created databases had already been dropped by fixture teardown.
+
+Reconciliation-specific files (accepted auto-merged files are not rewrites):
+
+```text
+project_workflow/application/pm_execution.py
+project_workflow/application/task.py
+project_workflow/domain/repositories.py
+project_workflow/domain/runtime_assignment.py
+project_workflow/infrastructure/db/repositories/task.py
+project_workflow/infrastructure/db/session.py
+project_workflow/infrastructure/db/migrations/versions/0007_pm_execution.py
+project_workflow/interfaces/ui/routes/runtime_api.py
+scripts/export_pm_openapi.py
+tests/test_pm_generic_continuation.py
+tests/test_pm_execution.py
+tests/test_initial_migration.py
+tests/test_postgres_integration.py
+tests/test_session_and_templates.py
+docs/architecture.md
+docs/pm-continuation-contract.md
+docs/pm-continuation-openapi.json
+docs/pm-continuation-verification.md
+docs/runtime-assignment-contract.md
+```
+
+Main retains cross-service security, migration rollout and release ownership.
+PMDraftAssignment admission, trusted Tracker input/owner CAS, authoritative
+namespace ownership, execution ordinal and live PM acceptance remain separate.
+No generic Delivery DTO was relaxed, no admission implemented, and no shared
+runtime, schema or pinned image was changed. Publication remains Draft only;
+new reconciliation commits deliberately do not skip GitHub CI.
+
+Read-only admission assessment: task `done` is not PM run quiescence.
+`supervisor/transitions.py` records `done` on the last PASS without closing PM
+execution/run. Existing `test_resumed_supervisor_report_is_persistent_and_replayable`
+in `tests/test_pm_execution_edges.py` exercises that normal terminal path.
+An owned, ignored QA probe reused that test and then observed task=done,
+PM execution=active, the resumed callback still running and no terminal receipt.
+The protected `/assign` accepted a fresh cycle/revision 2 while the old PM ledger
+remained attached to revision 1; old PM readback then became stale. The assessment
+probe passed (one test), with no runtime/committed-test changes or live dispatch.
+The `done` branch in `application/task.py` validates retry/cycle but does not check
+PM quiescence. Normal waiting/pending runtime steps are fenced; no public manual
+task-status UI mutation was found, so this assessment does not claim such a path.
+
+Future PMDraftAdmission must check prior enrolled execution/run under the owner
+lock before any new assignment/dispatch: exact trusted terminal readback plus
+durable owner CAS confirming no live or pending resume/dispatch/lease. Unknown
+status, task done, a workflow PASS or a submitted terminal claim are insufficient.
+A fresh cycle may allocate a new execution/ordinal only after that reconciliation;
+resume retains its identity/ordinal. The current unique PM task binding also needs
+an explicit replacement-history design, not moving the old ledger onto a new
+assignment. This remains a separate admission prerequisite; generic non-PM
+delivery and current assignment behavior were not rewritten in reconciliation.
+
+Everything below is historical evidence from before this reconciliation.
+Its old pending migration names and gate results do not describe the current tree.
+
 ## Concrete Fleet Agent Mapping Follow-up (2026-10-01)
 
 Authoritative starting state: clean `feat/pm-clarification`, source commit

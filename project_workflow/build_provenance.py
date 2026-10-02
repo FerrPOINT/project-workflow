@@ -60,15 +60,9 @@ def validate_build_provenance(value: Any) -> BuildProvenance:
         raise BuildProvenanceError("Неподдерживаемая версия build provenance")
     if not isinstance(source_revision, str) or _REVISION_PATTERN.fullmatch(source_revision) is None:
         raise BuildProvenanceError("Некорректная source revision")
-    if (
-        not isinstance(source_archive_sha256, str)
-        or _SHA256_PATTERN.fullmatch(source_archive_sha256) is None
-    ):
+    if not isinstance(source_archive_sha256, str) or _SHA256_PATTERN.fullmatch(source_archive_sha256) is None:
         raise BuildProvenanceError("Некорректный source archive digest")
-    if (
-        not isinstance(runtime_bundle_sha256, str)
-        or _SHA256_PATTERN.fullmatch(runtime_bundle_sha256) is None
-    ):
+    if not isinstance(runtime_bundle_sha256, str) or _SHA256_PATTERN.fullmatch(runtime_bundle_sha256) is None:
         raise BuildProvenanceError("Некорректный runtime bundle digest")
     return BuildProvenance(
         schema_version=schema_version,
@@ -89,6 +83,48 @@ def load_build_provenance(path: Path | None = None) -> BuildProvenance:
     return validate_build_provenance(value)
 
 
+def validate_runtime_compatibility(value: Any) -> dict[str, Any]:
+    """Validate immutable catalog, native skills and tool policy pins."""
+    keys = {
+        "catalogVersion",
+        "catalogRevision",
+        "catalogSha256",
+        "skillsRevision",
+        "skillsManifestSha256",
+        "capabilityRevision",
+        "capabilitySha256",
+    }
+    if not isinstance(value, dict) or set(value) != keys:
+        raise BuildProvenanceError("Runtime compatibility schema invalid")
+    if (
+        type(value["catalogVersion"]) is not int
+        or value["catalogVersion"] != 2
+        or value["capabilityRevision"] != "hermes-sdlc-runtime/v2"
+    ):
+        raise BuildProvenanceError("Runtime compatibility version invalid")
+    for name in ("catalogRevision", "skillsRevision"):
+        if not isinstance(value[name], str) or re.fullmatch(r"[a-f0-9]{40}", value[name]) is None:
+            raise BuildProvenanceError("Runtime compatibility revision invalid")
+    for name in ("catalogSha256", "skillsManifestSha256", "capabilitySha256"):
+        if not isinstance(value[name], str) or _SHA256_PATTERN.fullmatch(value[name]) is None:
+            raise BuildProvenanceError("Runtime compatibility hash invalid")
+    return dict(value)
+
+
+def runtime_compatibility_descriptor(
+    path: Path | None = None, provenance: BuildProvenance | None = None
+) -> dict[str, Any]:
+    """Read a packaged release descriptor, without an environment override."""
+    try:
+        value = json.loads((path or Path("/app/runtime-compatibility.json")).read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise BuildProvenanceError("Runtime compatibility unavailable") from exc
+    descriptor = validate_runtime_compatibility(value)
+    if descriptor["catalogRevision"] != (provenance or load_build_provenance()).source_revision:
+        raise BuildProvenanceError("Runtime compatibility source revision mismatch")
+    return descriptor
+
+
 def _canonical_digest(records: list[dict[str, str]]) -> str:
     canonical = json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(canonical).hexdigest()
@@ -105,9 +141,7 @@ def _safe_archive_path(name: str) -> str:
 
 
 def _is_bundle_path(path: str) -> bool:
-    return path in _BUNDLE_ROOT_FILES or any(
-        path.startswith(f"{directory}/") for directory in _BUNDLE_ROOT_DIRECTORIES
-    )
+    return path in _BUNDLE_ROOT_FILES or any(path.startswith(f"{directory}/") for directory in _BUNDLE_ROOT_DIRECTORIES)
 
 
 def runtime_bundle_sha256_from_archive(archive: bytes) -> str:
@@ -129,9 +163,7 @@ def runtime_bundle_sha256_from_archive(archive: bytes) -> str:
                     seen_directories.add(path)
                 continue
             if not member.isfile():
-                raise BuildProvenanceError(
-                    f"Runtime bundle содержит недопустимый тип entry: {path}"
-                )
+                raise BuildProvenanceError(f"Runtime bundle содержит недопустимый тип entry: {path}")
             if path in seen_files:
                 raise BuildProvenanceError(f"Runtime bundle содержит повторный путь: {path}")
             fileobj = source.extractfile(member)
@@ -256,9 +288,7 @@ def docker_context_with_manifest(archive: bytes, provenance: BuildProvenance) ->
                 continue
             fileobj = source.extractfile(member) if member.isfile() else None
             target.addfile(member, fileobj)
-        manifest = (
-            json.dumps(provenance.to_dict(), sort_keys=True, separators=(",", ":")) + "\n"
-        ).encode("utf-8")
+        manifest = (json.dumps(provenance.to_dict(), sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
         manifest_info = tarfile.TarInfo(_MANIFEST_CONTEXT_PATH)
         manifest_info.size = len(manifest)
         manifest_info.mode = 0o444

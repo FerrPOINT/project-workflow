@@ -24,7 +24,7 @@ import pytest
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
 from fastapi.testclient import TestClient
-from sqlalchemy import MetaData, Table, inspect, text
+from sqlalchemy import inspect, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import close_all_sessions
 
@@ -42,6 +42,7 @@ from project_workflow.infrastructure.db.managed_catalog import (
     validate_managed_catalog_state,
 )
 from project_workflow.infrastructure.db.session import (
+    database_revisions,
     ensure_migrated,
     ensure_schema,
     get_engine,
@@ -159,6 +160,77 @@ def test_pm_postgres_missing_or_tampered_mapping_fences_continuation(pm_postgres
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize("winner", ["pm", "generic"])
+def test_pm_enrollment_and_generic_continuation_share_owner_lock(pm_postgres, monkeypatch, winner):
+    from project_workflow.application.pm_execution import PMExecutionService
+    from project_workflow.infrastructure.db.repositories.task import SATaskRepository
+    from tests.test_pm_execution import ADAPTER, BASE
+    from tests.test_pm_generic_continuation import continuation, persisted_state
+
+    client = pm_postgres[0]
+    held, contender_started, release = Event(), Event(), Event()
+    original_proof = PMExecutionService._proof
+    original_enrollment = SATaskRepository.assignment_has_pm_execution
+    original_pm_lock = PMExecutionService._lock_identity
+    original_generic_lock = SATaskRepository.lock
+
+    def pause_proof(*args, **kwargs):
+        held.set()
+        assert release.wait(timeout=20)
+        return original_proof(*args, **kwargs)
+
+    def pause_enrollment(self, *args):
+        result = original_enrollment(self, *args)
+        held.set()
+        assert release.wait(timeout=20)
+        return result
+
+    def notify_pm_lock(self, *args):
+        contender_started.set()
+        return original_pm_lock(self, *args)
+
+    def notify_generic_lock(self, *args):
+        contender_started.set()
+        return original_generic_lock(self, *args)
+
+    if winner == "pm":
+        monkeypatch.setattr(PMExecutionService, "_proof", staticmethod(pause_proof))
+        monkeypatch.setattr(SATaskRepository, "lock", notify_generic_lock)
+    else:
+        monkeypatch.setattr(SATaskRepository, "assignment_has_pm_execution", pause_enrollment)
+        monkeypatch.setattr(PMExecutionService, "_lock_identity", notify_pm_lock)
+
+    def enroll():
+        return client.post(BASE + "/bind", headers=ADAPTER, json=pm_postgres[2])
+
+    def continue_generic():
+        return client.post("/internal/runtime/rebind", headers=ADAPTER, json=continuation(pm_postgres[4]))
+
+    before = persisted_state()
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(enroll if winner == "pm" else continue_generic)
+        try:
+            assert held.wait(timeout=10)
+            second = pool.submit(continue_generic if winner == "pm" else enroll)
+            assert contender_started.wait(timeout=10)
+        finally:
+            release.set()
+        accepted, rejected = first.result(timeout=20), second.result(timeout=20)
+    assert accepted.status_code == 200, accepted.text
+    assert rejected.status_code == 409, rejected.text
+    after = persisted_state()
+    assert after[2:5] == before[2:5]
+    if winner == "pm":
+        assert "Enrolled PM assignment requires PM resume/rebind" in rejected.text
+        assert after[:2] == before[:2]
+        assert after[5] == (1, 0, 1, 1, 1)
+    else:
+        assert rejected.json()["error_code"] == "conflict"
+        assert after[0] == before[0] + 1
+        assert after[5] == (2, 0, 0, 0, 0)
+
+
+@pytest.mark.integration
 def test_pm_postgres_actual_http_callback_and_new_run_binding(pm_postgres, monkeypatch):
     from project_workflow.infrastructure import pm_readback
     from tests.test_pm_execution import (
@@ -209,8 +281,17 @@ PG_ADMIN_DB = os.environ.get("PGDATABASE", "project_workflow")
 PG_CONNECT_TIMEOUT = int(os.environ.get("PGCONNECT_TIMEOUT", "10"))
 
 
+@pytest.fixture(autouse=True)
+def packaged_pg_test_runtime(monkeypatch):
+    from project_workflow import build_provenance
+    from tests.test_runtime_assignment_contract import TEST_RUNTIME_COMPATIBILITY
+    monkeypatch.setattr(build_provenance, "runtime_compatibility_descriptor", lambda: dict(TEST_RUNTIME_COMPATIBILITY))
+
+
 def _runtime_binding(operation_key: str) -> dict[str, object]:
+    from tests.test_runtime_assignment_contract import TEST_RUNTIME_COMPATIBILITY
     return {
+        "runtime_compatibility": dict(TEST_RUNTIME_COMPATIBILITY),
         "workflow_key": "hermes-sdlc:developer",
         "role_key": "developer",
         "stage_key": "development",
@@ -355,7 +436,7 @@ class TestPostgresInitialMigration:
             version = conn.execute(
                 text("SELECT version_num FROM project_workflow.alembic_version")
             ).scalar_one()
-        assert version == migration_head() == "0005_pm_execution"
+        assert version == migration_head() == "0007_pm_execution"
         assert schema_is_ready(engine) is True
 
     def test_managed_bootstrap_lock_closes_public_mutation_race(self, pg_url):
@@ -455,14 +536,15 @@ class TestPostgresInitialMigration:
     @pytest.mark.parametrize("revision,message", [
         ("0003_runtime_assignment_bind", "Downgrade from runtime assignment bind"),
         ("0004_wide_work_item_revision", "Downgrade from wide Business revisions"),
-        ("0005_pm_execution", "PM execution downgrade refused"),
+        ("0007_pm_execution", "PM execution downgrade refused"),
     ])
     def test_downgrade_refuses_lossy_mode_collapse(self, pg_url, revision, message):
         engine = get_engine(pg_url)
         run_alembic_command("upgrade", engine, revision)
         with pytest.raises(RuntimeError, match=message):
             run_alembic_command("downgrade", engine, "base")
-        assert schema_is_ready(engine) is (revision == "0005_pm_execution")
+        assert database_revisions(engine) == {revision}
+        assert schema_is_ready(engine) is (revision == "0007_pm_execution")
 
     def test_populated_0001_upgrade_preserves_rows_and_backfills_per_workflow(self, pg_url):
         engine = get_engine(pg_url)
@@ -993,7 +1075,7 @@ class TestPostgresInitialMigration:
                 ).scalar_one()
                 for table in ("workflows", "projects", "agents", "phases")
             }
-        assert counts == {"workflows": 7, "projects": 7, "agents": 7, "phases": 39}
+        assert counts == {"workflows": 7, "projects": 7, "agents": 7, "phases": 33}
 
     def test_two_concurrent_init_processes_are_idempotent(self, pg_url):
         env = os.environ.copy()
@@ -1059,16 +1141,18 @@ class TestPostgresInitialMigration:
         ensure_migrated(get_engine(pg_url))
         setup = SAUnitOfWork(pg_url)
         workflow_id = setup.workflows.create(
-            {"key": "hermes-sdlc:developer", "name": "Runtime assignment race"}
+            {"key": "hermes-sdlc:developer", "name": "Runtime assignment race",
+             "active_catalog_version": 2, "create_default_mode": False}
         )
         initial_mode = setup.workflows.create_mode(
             {
                 "workflow_id": workflow_id,
                 "key": "initial",
                 "name": "Initial",
-                "mode_order": 2,
+                "mode_order": 1,
                 "role_key": "developer",
-                "execution_scope": "delivery",
+                "catalog_version": 2,
+                "execution_scopes": ["delivery", "aggregate"],
                 "tech_workspace_policy": "required",
             }
         )
@@ -1127,16 +1211,18 @@ class TestPostgresInitialMigration:
         ensure_migrated(get_engine(pg_url))
         setup = SAUnitOfWork(pg_url)
         workflow_id = setup.workflows.create(
-            {"key": "hermes-sdlc:developer", "name": "Runtime bind race"}
+            {"key": "hermes-sdlc:developer", "name": "Runtime bind race",
+             "active_catalog_version": 2, "create_default_mode": False}
         )
         mode_id = setup.workflows.create_mode(
             {
                 "workflow_id": workflow_id,
                 "key": "initial",
                 "name": "Initial",
-                "mode_order": 2,
+                "mode_order": 1,
                 "role_key": "developer",
-                "execution_scope": "delivery",
+                "catalog_version": 2,
+                "execution_scopes": ["delivery", "aggregate"],
                 "tech_workspace_policy": "required",
             }
         )
@@ -1201,16 +1287,18 @@ class TestPostgresInitialMigration:
         ensure_migrated(get_engine(pg_url))
         setup = SAUnitOfWork(pg_url)
         workflow_id = setup.workflows.create(
-            {"key": "hermes-sdlc:developer", "name": "Existing assignment race"}
+            {"key": "hermes-sdlc:developer", "name": "Existing assignment race",
+             "active_catalog_version": 2, "create_default_mode": False}
         )
         initial_mode = setup.workflows.create_mode(
             {
                 "workflow_id": workflow_id,
                 "key": "initial",
                 "name": "Initial",
-                "mode_order": 2,
+                "mode_order": 1,
                 "role_key": "developer",
-                "execution_scope": "delivery",
+                "catalog_version": 2,
+                "execution_scopes": ["delivery", "aggregate"],
                 "tech_workspace_policy": "required",
             }
         )
@@ -1219,9 +1307,10 @@ class TestPostgresInitialMigration:
                 "workflow_id": workflow_id,
                 "key": "rework",
                 "name": "Rework",
-                "mode_order": 3,
+                "mode_order": 2,
                 "role_key": "developer",
-                "execution_scope": "delivery",
+                "catalog_version": 2,
+                "execution_scopes": ["delivery", "aggregate"],
                 "tech_workspace_policy": "required",
             }
         )
@@ -1414,32 +1503,46 @@ class TestPostgresInitialMigration:
     def test_upgrade_bound_assignment_preserves_rows_and_accepts_native_wide_revision(self, pg_url, work_item_revision):
         engine = get_engine(pg_url)
         run_alembic_command("upgrade", engine, "0003_runtime_assignment_bind")
-        with SAUnitOfWork(engine) as uow:
-            ensure_managed_catalog(uow)
-            namespace = uow.projects.get_by_cli_command("workflow-developer")
-            assert namespace is not None and namespace.id is not None
-            project_id = namespace.id
-            request = {"project_id": project_id, "task_key": "WIDE-1", "mode_key": "initial", "cycle_number": 0,
-                       "operation_key": "wide-old-assignment", "expected_revision": 0, "expected_status": "missing",
-                       **_runtime_binding("wide-old-assignment")}
-            mode = uow.workflows.get_mode_by_key(namespace.workflow_id, "initial")
-            phase = uow.phases.list(workflow_id=namespace.workflow_id, mode_id=mode.id)[0]
-            task_id = uow.tasks.create({
-                "project_id": project_id, "workflow_id": namespace.workflow_id, "mode_id": mode.id,
-                "task_key": "WIDE-1", "current_phase_id": phase.id, "status": "active",
-                "assignment_operation_key": request["operation_key"], "assignment_revision": 1,
-            })
-            uow.commit()
-        # Reflect the published old schema: current ORM columns must not seed old migrations.
-        old_table = Table("task_runtime_assignments", MetaData(), schema="project_workflow", autoload_with=engine)
+        # Seed the exact pre-0004 shape with SQL; current ORM includes later catalog columns.
         with engine.begin() as connection:
-            connection.execute(old_table.insert().values(
-                **_runtime_binding("wide-old-assignment"), operation_key="wide-old-assignment",
-                task_id=task_id, project_id=project_id, workflow_id=namespace.workflow_id, mode_id=mode.id,
-                cycle_number=0, assignment_revision=1, binding_ref="binding:wide-old-assignment",
-                hermes_run_ref="hermes-run:wide-old-assignment", bind_operation_key="bind:wide-old-assignment",
-                bind_request_sha256="b" * 64, payload_sha256="a" * 64, payload='{"legacy":true}',
-            ).values(exact_input_refs=json.dumps(_runtime_binding("wide-old-assignment")["exact_input_refs"])))
+            workflow_id = connection.execute(text(
+                "INSERT INTO project_workflow.workflows(key,name,is_default) "
+                "VALUES ('hermes-sdlc:developer','Legacy Developer',1) RETURNING id"
+            )).scalar_one()
+            mode_id = connection.execute(text(
+                "INSERT INTO project_workflow.workflow_modes "
+                "(workflow_id,key,name,mode_order,role_key,execution_scope,tech_workspace_policy) "
+                "VALUES (:workflow,'initial','Initial',1,'developer','delivery','required') RETURNING id"
+            ), {"workflow": workflow_id}).scalar_one()
+            phase_id = connection.execute(text(
+                "INSERT INTO project_workflow.phases(workflow_id,mode_id,code,name,phase_order) "
+                "VALUES (:workflow,:mode,'DV-WIDE-OLD-01','Legacy intake',1) RETURNING id"
+            ), {"workflow": workflow_id, "mode": mode_id}).scalar_one()
+            project_id = connection.execute(text(
+                "INSERT INTO project_workflow.projects(workflow_id,code,name,cli_command) "
+                "VALUES (:workflow,'DEV','Developer','workflow-developer') RETURNING id"
+            ), {"workflow": workflow_id}).scalar_one()
+            task_id = connection.execute(text(
+                "INSERT INTO project_workflow.tasks "
+                "(project_id,workflow_id,mode_id,task_key,current_phase_id,"
+                "assignment_revision,assignment_operation_key) "
+                "VALUES (:project,:workflow,:mode,'WIDE-1',:phase,1,'wide-old-assignment') RETURNING id"
+            ), {"project": project_id, "workflow": workflow_id, "mode": mode_id, "phase": phase_id}).scalar_one()
+            legacy = {**_runtime_binding("wide-old-assignment"), "task_id": task_id, "project_id": project_id,
+                "workflow_id": workflow_id, "mode_id": mode_id, "operation_key": "wide-old-assignment",
+                "cycle_number": 0, "assignment_revision": 1, "binding_ref": "legacy-binding",
+                "hermes_run_ref": "legacy-run", "bind_operation_key": "legacy-bind", "bind_request_sha256": "b" * 64,
+                "payload_sha256": "a" * 64, "payload": "{}"}
+            legacy.pop("runtime_compatibility")
+            legacy["exact_input_refs"] = json.dumps(legacy["exact_input_refs"])
+            columns = ",".join(legacy)
+            parameters = ",".join(f":{key}" for key in legacy)
+            connection.execute(text(
+                f"INSERT INTO project_workflow.task_runtime_assignments ({columns}) VALUES ({parameters})"
+            ), legacy)
+        request = {"project_id": project_id, "task_key": "WIDE-1", "mode_key": "initial", "cycle_number": 0,
+            "operation_key": "wide-old-assignment", "expected_revision": 0, "expected_status": "missing",
+            **_runtime_binding("wide-old-assignment")}
         with engine.connect() as connection:
             before = connection.execute(text(
                 "SELECT to_jsonb(t)::text FROM project_workflow.task_runtime_assignments t ORDER BY id"
@@ -1453,6 +1556,14 @@ class TestPostgresInitialMigration:
             {**json.loads(row), "concrete_agent_ref": None} for row in before
         ]
         with SAUnitOfWork(engine) as uow:
+            new_mode = uow.workflows.create_mode({"workflow_id": workflow_id, "key": "initial", "name": "Initial",
+                "mode_order": 1, "role_key": "developer", "execution_scope": "delivery",
+                "execution_scopes": ["delivery", "aggregate"], "tech_workspace_policy": "required",
+                "catalog_version": 2})
+            uow.phases.create({"workflow_id": workflow_id, "mode_id": new_mode, "code": "DV-WIDE-V2-01",
+                "name": "V2 intake", "phase_order": 1})
+            uow.workflows.update(workflow_id, {"active_catalog_version": 2})
+            uow.commit()
             request.update(task_key="WIDE-2", operation_key="wide-native-assignment",
                            **_runtime_binding("wide-native-assignment"))
             request["work_item_revision"] = work_item_revision
@@ -2932,3 +3043,191 @@ def test_cli_verdicts_replay_and_fail_closed_through_postgres_and_http(pg_url):
         "blocked",
     ]
     uow.close()
+
+
+@pytest.mark.integration
+class TestPostgresContinuationCatalogVersioning:
+    def test_concurrent_identical_rebind_reconciles_after_owner_row_lock(self, pg_url):
+        from tests.test_runtime_assignment_contract import _continuation
+
+        ensure_migrated(get_engine(pg_url))
+        with SAUnitOfWork(pg_url) as uow:
+            ensure_managed_catalog(uow)
+            project = uow.projects.get_by_cli_command("workflow-developer")
+            assigned = TaskService(uow).assign_runtime_task(
+                project_id=project.id,
+                task_key="DV-1001",
+                mode_key="initial",
+                cycle_number=0,
+                operation_key="pg-concurrent-initial",
+                expected_revision=0,
+                expected_status="missing",
+                **_runtime_binding("pg-concurrent-initial"),
+            )
+            bound = _bind_runtime_assignment(uow, project.id, assigned)
+            history = [item.to_dict() for item in uow.tasks.list_phase_events(bound["id"])]
+            project_id = project.id
+        request = _continuation(bound, operation_key="pg-concurrent-continuation")
+        both_missed_replay = Barrier(2)
+
+        def resume():
+            with SAUnitOfWork(pg_url) as uow:
+                lookup = uow.tasks.get_assignment_by_operation_key
+                initial_lookup = True
+
+                def overlapping_lookup(operation_key):
+                    nonlocal initial_lookup
+                    result = lookup(operation_key)
+                    if operation_key == request["operation_key"] and initial_lookup:
+                        initial_lookup = False
+                        assert result is None
+                        both_missed_replay.wait(timeout=10)
+                    return result
+
+                uow.tasks.get_assignment_by_operation_key = overlapping_lookup
+                return TaskService(uow).rebind_runtime_assignment(
+                    project_id=project_id, role_key="developer", request=request
+                )
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [pool.submit(resume) for _ in range(2)]
+            results = [future.result(timeout=30) for future in futures]
+        assert results[0] == results[1]
+        with SAUnitOfWork(pg_url) as uow:
+            assert uow.tasks.get_by_id(bound["id"]).assignment_revision == bound["assignment_revision"] + 1
+            assert [item.to_dict() for item in uow.tasks.list_phase_events(bound["id"])] == history
+            previous = uow.tasks.get_assignment_by_operation_key(bound["assignment_operation_key"])
+            assert previous.binding_ref == bound["binding_ref"]
+            assert results[0]["binding_state"] == "unbound"
+
+    def test_additive_0005_0006_preserve_legacy_policy_and_support_versioned_duplicates(self, pg_url):
+        engine = get_engine(pg_url)
+        run_alembic_command("upgrade", engine, "0004_wide_work_item_revision")
+        with engine.begin() as connection:
+            workflow_id = connection.execute(
+                text(
+                    "INSERT INTO project_workflow.workflows (key,name,is_default) "
+                    "VALUES ('hermes-sdlc:developer','Developer',1) RETURNING id"
+                )
+            ).scalar_one()
+            old_id = connection.execute(
+                text(
+                    "INSERT INTO project_workflow.workflow_modes "
+                    "(workflow_id,key,name,mode_order,role_key,execution_scope,tech_workspace_policy) "
+                    "VALUES (:workflow,'initial','Initial',1,'developer','delivery','required') RETURNING id"
+                ),
+                {"workflow": workflow_id},
+            ).scalar_one()
+        ensure_migrated(engine)
+        with engine.begin() as connection:
+            old = connection.execute(
+                text(
+                    "SELECT execution_scope,execution_scopes,catalog_version "
+                    "FROM project_workflow.workflow_modes WHERE id=:id"
+                ),
+                {"id": old_id},
+            ).one()
+            assert tuple(old) == ("delivery", None, 1)
+            connection.execute(
+                text(
+                    "INSERT INTO project_workflow.workflow_modes "
+                    "(workflow_id,key,name,mode_order,role_key,execution_scope,execution_scopes,"
+                    "tech_workspace_policy,catalog_version) "
+                    "VALUES (:workflow,'initial','Initial',1,'developer','delivery',:scopes,'required',2)"
+                ),
+                {"workflow": workflow_id, "scopes": json.dumps(["delivery", "aggregate"])},
+            )
+            assert (
+                connection.execute(
+                    text(
+                        "SELECT count(*) FROM project_workflow.workflow_modes "
+                        "WHERE workflow_id=:workflow AND key='initial'"
+                    ),
+                    {"workflow": workflow_id},
+                ).scalar_one()
+                == 2
+            )
+        assert schema_is_ready(engine)
+
+    @pytest.mark.parametrize(
+        "mode_key,scope", [(mode, scope) for mode in ("initial", "rework") for scope in ("delivery", "aggregate")]
+    )
+    def test_v2_developer_pins_mode_independently_of_scope(self, pg_url, mode_key, scope):
+        ensure_migrated(get_engine(pg_url))
+        with SAUnitOfWork(pg_url) as uow:
+            ensure_managed_catalog(uow)
+            project = uow.projects.get_by_cli_command("workflow-developer")
+            key = f"version2-{mode_key}-{scope}"
+            assigned = TaskService(uow).assign_runtime_task(
+                project_id=project.id,
+                task_key="DV-1002",
+                mode_key=mode_key,
+                cycle_number=0,
+                operation_key=key,
+                expected_revision=0,
+                expected_status="missing",
+                **{**_runtime_binding(key), "execution_scope": scope},
+            )
+            bound = _bind_runtime_assignment(uow, project.id, assigned)
+            assert bound["execution_scope"] == scope and bound["mode_key"] == mode_key
+            pinned = uow.workflows.get_mode(bound["mode_id"])
+            assert pinned.catalog_version == 2 and set(pinned.execution_scopes) == {"delivery", "aggregate"}
+
+    def test_v1_bound_integration_survives_v2_adoption_but_refuses_v2_step(self, pg_url):
+        from tests.test_managed_catalog import _install_frozen_v1
+        from tests.test_runtime_assignment_contract import _binding, _step_request
+
+        ensure_migrated(get_engine(pg_url))
+        with SAUnitOfWork(pg_url) as uow:
+            _install_frozen_v1(uow)
+            project = uow.projects.get_by_cli_command("workflow-developer")
+            mode = uow.workflows.get_mode_by_key(project.workflow_id, "integration")
+            phase = uow.phases.list(project.workflow_id, mode_id=mode.id)[0]
+            task_id = uow.tasks.create(
+                {
+                    "project_id": project.id,
+                    "workflow_id": project.workflow_id,
+                    "mode_id": mode.id,
+                    "task_key": "DV-LEGACY-1",
+                    "current_phase_id": phase.id,
+                    "status": "active",
+                    "assignment_revision": 1,
+                    "assignment_operation_key": "legacy-bound",
+                }
+            )
+            payload = {**_binding(execution_scope="aggregate"), "mode_key": "integration", "cycle_number": 0}
+            record = {
+                **payload,
+                "task_id": task_id,
+                "project_id": project.id,
+                "workflow_id": project.workflow_id,
+                "mode_id": mode.id,
+                "operation_key": "legacy-bound",
+                "assignment_revision": 1,
+                "payload_sha256": "a" * 64,
+                "payload": payload,
+                "binding_ref": "legacy-binding",
+                "hermes_run_ref": "legacy-run",
+                "bind_operation_key": "legacy-bind-op",
+                "bind_request_sha256": "b" * 64,
+            }
+            uow.tasks.create_assignment(record)
+            uow.commit()
+            before = uow.tasks.get_assignment_by_operation_key("legacy-bound").to_dict()
+            task_before = uow.tasks.get_by_id(task_id).to_dict()
+            ensure_managed_catalog(uow)
+            uow.commit()
+            assert uow.tasks.get_assignment_by_operation_key("legacy-bound").to_dict() == before
+            assert uow.tasks.get_by_id(task_id).to_dict() == task_before
+            bound = {
+                **task_before,
+                **before,
+                "task_key": "DV-LEGACY-1",
+                "current_phase_code": phase.code,
+                "status": "active",
+            }
+            with pytest.raises(ConflictError, match="RUNTIME_VERSION_INCOMPATIBLE"):
+                TaskService(uow).validate_runtime_step(**_step_request(project.id, bound))
+            assert uow.tasks.get_by_id(task_id).to_dict() == task_before
+            assert uow.workflows.get_mode(mode.id).key == "integration"
+            assert uow.workflows.get_mode_by_key(project.workflow_id, "integration") is None

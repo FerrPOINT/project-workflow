@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+from sqlalchemy import select
 
 from project_workflow import config
 from project_workflow.application.execution_mode import resolve_execution_selection
@@ -20,14 +23,131 @@ from project_workflow.domain.runtime_assignment import (
 from project_workflow.infrastructure.db import models as db_models
 from project_workflow.infrastructure.db import schema
 from project_workflow.infrastructure.db.managed_catalog import (
+    _ensure_agent,
+    _ensure_namespace,
+    _persist_mode,
     ensure_managed_catalog,
+    export_runtime_catalog,
     load_managed_catalog,
 )
 from project_workflow.infrastructure.db.session import ensure_schema
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.infrastructure.db.uow_bootstrap import bootstrap_default_project
+from tests.test_runtime_assignment_contract import TEST_RUNTIME_COMPATIBILITY
 
 pytestmark = [pytest.mark.unit]
+
+
+def test_runtime_export_freezes_exact_semantic_compatibility_and_canonical_capabilities():
+    catalog = load_managed_catalog()
+    manifest = {"roles": {item.role_key: {"physicalSkills": item.skill_allowlist} for item in catalog.workflows}}
+    revision = "a" * 40
+    skills_revision = catalog.skills_source.revision
+    runtime, phases = export_runtime_catalog(catalog, manifest=manifest, workflow_revision=revision,
+                                             skills_revision=skills_revision, source_artifacts={})
+    descriptor = runtime["runtimeCompatibility"]
+    assert descriptor["catalogVersion"] == 2
+    assert descriptor["catalogRevision"] == revision
+    assert descriptor["skillsRevision"] == skills_revision
+    def digest(value):
+        return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True,
+                                         separators=(",", ":")).encode()).hexdigest()
+    assert descriptor["catalogSha256"] == digest({"roles": runtime["roles"], "phase_sets": phases["phase_sets"]})
+    assert descriptor["capabilitySha256"] == digest(runtime["runtimeCapabilities"])
+    assert "candidate_publish" in runtime["runtimeCapabilities"]["phaseTools"]["DV-INITIAL-03"]
+    assert "candidate_publish" not in runtime["runtimeCapabilities"]["phaseTools"]["DV-INITIAL-01"]
+    assert "workspace_read" in runtime["runtimeCapabilities"]["phaseTools"]["TS-TEST-02"]
+    with pytest.raises(ValueError, match="exact committed"):
+        export_runtime_catalog(catalog, manifest=manifest, workflow_revision="moving-branch",
+                               skills_revision=skills_revision, source_artifacts={})
+    with pytest.raises(ValueError, match="canonical source pin"):
+        export_runtime_catalog(catalog, manifest=manifest, workflow_revision=revision,
+                               skills_revision="b" * 40, source_artifacts={})
+
+
+def _install_frozen_v1(uow):
+    source = config.MANAGED_CATALOG_PATH.with_name("hermes_sdlc_catalog_v1_legacy.json")
+    raw = json.loads(source.read_text(encoding="utf-8"))
+    for item in raw["workflows"]:
+        definition = SimpleNamespace(**item)
+        workflow_id = uow.workflows.create({"key": item["key"], "name": item["name"],
+                                           "description": item["description"], "create_default_mode": False,
+                                           "is_default": item["role_key"] == "project_manager",
+                                           "active_catalog_version": 1})
+        agent_id = _ensure_agent(uow, definition)
+        for entry in item["modes"]:
+            mode = SimpleNamespace(**{**entry, "execution_scopes": [entry["execution_scope"]],
+                                      "phases": [schema._SeedPhase.model_validate(p) for p in entry["phases"]]})
+            _persist_mode(uow, workflow_id=workflow_id, role_key=item["role_key"], agent_id=agent_id,
+                          mode=mode, catalog_version=1)
+        _ensure_namespace(uow, definition, workflow_id)
+    uow.commit()
+
+
+def test_v2_adoption_retains_bound_and_completed_v1_assignments_and_history(empty_uow):
+    _install_frozen_v1(empty_uow)
+    namespace = empty_uow.projects.get_by_cli_command("workflow-developer")
+    old_mode = empty_uow.workflows.get_mode_by_key(namespace.workflow_id, "integration")
+    old_phase = empty_uow.phases.list(namespace.workflow_id, mode_id=old_mode.id)[0]
+    task_ids = []
+    for number, status in enumerate(("active", "done"), start=1):
+        task_id = empty_uow.tasks.create({"project_id": namespace.id, "workflow_id": namespace.workflow_id,
+                                         "mode_id": old_mode.id, "task_key": f"DV-OLD-{number}",
+                                         "current_phase_id": old_phase.id, "status": status,
+                                         "assignment_revision": 1, "assignment_operation_key": f"old:{number}"})
+        request = _project_manager_request(namespace.id)
+        request.update(operation_key=f"old:{number}", task_id=task_id, project_id=namespace.id,
+                       workflow_id=namespace.workflow_id, workflow_key="hermes-sdlc:developer", mode_id=old_mode.id,
+                       role_key="developer", execution_scope="aggregate", stage_key="development",
+                       tech_execution_workspace_ref=f"tech-workspace:{number}",
+                       tech_execution_attempt_ref=f"tech-attempt:{number}", binding_ref=f"binding-old:{number}",
+                       hermes_run_ref=f"run-old:{number}", assignment_revision=1, payload_sha256="a" * 64,
+                       payload={"version": 1, "mode": "integration"})
+        empty_uow.tasks.create_assignment(request)
+        empty_uow.session.add(db_models.TaskStepHistoryEntry(task_id=task_id, workflow_id=namespace.workflow_id,
+                                                            mode_id=old_mode.id, phase_id=old_phase.id,
+                                                            verdict="pass", worker_report="frozen v1 report"))
+        task_ids.append(task_id)
+    empty_uow.commit()
+    def snapshot(model):
+        return [tuple(getattr(row, col.name) for col in model.__table__.columns)
+                for row in empty_uow.session.scalars(select(model).order_by(model.id))]
+    assignments = snapshot(db_models.TaskRuntimeAssignment)
+    history = snapshot(db_models.TaskStepHistoryEntry)
+    old_phases = snapshot(db_models.Phase)
+    ensure_managed_catalog(empty_uow)
+    empty_uow.commit()
+    assert snapshot(db_models.TaskRuntimeAssignment) == assignments
+    assert snapshot(db_models.TaskStepHistoryEntry) == history
+    assert snapshot(db_models.Phase)[:len(old_phases)] == old_phases
+    assert empty_uow.workflows.get_mode(old_mode.id).key == "integration"
+    assert empty_uow.workflows.get_mode_by_key(namespace.workflow_id, "integration") is None
+    assert [mode.key for mode in empty_uow.workflows.list_modes(namespace.workflow_id)] == ["initial", "rework"]
+    assert empty_uow.workflows.get_by_id(namespace.workflow_id).active_catalog_version == 2
+    for task_id in task_ids:
+        assert empty_uow.tasks.get_by_id(task_id).mode_id == old_mode.id
+    before = snapshot(db_models.WorkflowMode)
+    ensure_managed_catalog(empty_uow)
+    assert snapshot(db_models.WorkflowMode) == before
+
+
+@pytest.mark.parametrize("drift", ["phase_identity", "mode_scope"])
+def test_v2_adoption_rejects_drift_before_appending(empty_uow, drift):
+    _install_frozen_v1(empty_uow)
+    workflow = next(item for item in empty_uow.workflows.list() if item.key == "hermes-sdlc:developer")
+    mode = empty_uow.workflows.get_mode_by_key(workflow.id, "initial")
+    phase = empty_uow.phases.list(workflow.id, mode_id=mode.id)[0]
+    if drift == "phase_identity":
+        empty_uow.phases.update(phase.id, {"name": "tampered legacy phase"})
+    else:
+        stored_mode = empty_uow.session.get(db_models.WorkflowMode, mode.id)
+        stored_mode.execution_scopes = ["aggregate"]
+    empty_uow.commit()
+    with pytest.raises(ValueError, match="different identity|different mode registry"):
+        ensure_managed_catalog(empty_uow)
+    empty_uow.rollback()
+    assert not empty_uow.workflows.list_modes(workflow.id, catalog_version=2)
+    assert empty_uow.workflows.get_by_id(workflow.id).active_catalog_version == 1
 
 
 @pytest.fixture
@@ -71,21 +191,21 @@ def test_source_catalog_has_exact_canonical_inventory_and_phase_contracts():
     catalog = load_managed_catalog()
     raw_catalog = config.MANAGED_CATALOG_PATH.read_text(encoding="utf-8").casefold()
 
-    assert catalog.catalog_version == 1
+    assert catalog.catalog_version == 2
     assert [workflow.role_key for workflow in catalog.workflows] == list(
         MANAGED_ROLE_MODE_SCOPES
     )
     assert {workflow.key for workflow in catalog.workflows} == MANAGED_WORKFLOW_KEYS
-    assert sum(len(workflow.modes) for workflow in catalog.workflows) == 13
+    assert sum(len(workflow.modes) for workflow in catalog.workflows) == 11
     assert sum(
         len(mode.phases)
         for workflow in catalog.workflows
         for mode in workflow.modes
-    ) == 39
+    ) == 33
     assert '"repeatable"' not in raw_catalog
 
     for workflow in catalog.workflows:
-        assert {mode.key: mode.execution_scope for mode in workflow.modes} == (
+        assert {mode.key: tuple(mode.execution_scopes) for mode in workflow.modes} == (
             MANAGED_ROLE_MODE_SCOPES[workflow.role_key]
         )
         allowed_skills = set(workflow.skill_allowlist)
@@ -99,7 +219,7 @@ def test_source_catalog_has_exact_canonical_inventory_and_phase_contracts():
             assert "business markdown comment" in terminal
             assert all(
                 marker in terminal
-                for marker in ("workflow_phase", "complete=true", "outcome", "evidence")
+                for marker in ("project-workflow", "complete=true", "outcome", "evidence")
             )
             assert "one concrete question" in terminal
             if workflow.role_key == "project_manager":
@@ -153,7 +273,7 @@ def test_managed_bootstrap_persists_exact_catalog_and_is_idempotent(empty_uow):
     assert all(namespace.key_prefixes == [] for namespace in namespaces)
     assert all(namespace.theme_icon == "folder" for namespace in namespaces)
     assert all(namespace.theme_color == "#5E6AD2" for namespace in namespaces)
-    assert sum(len(empty_uow.workflows.list_modes(workflow.id)) for workflow in workflows) == 13
+    assert sum(len(empty_uow.workflows.list_modes(workflow.id)) for workflow in workflows) == 11
     assert all(
         mode.key != "default"
         for workflow in workflows
@@ -183,7 +303,7 @@ def test_managed_bootstrap_persists_exact_catalog_and_is_idempotent(empty_uow):
         for mode in empty_uow.workflows.list_modes(workflow.id)
         for phase in empty_uow.phases.list(workflow.id, mode_id=mode.id)
     ]
-    assert len(phases_after) == phase_count == 39
+    assert len(phases_after) == phase_count == 33
     assert sum(
         len(empty_uow.phase_instructions.list(phase.id))
         for phase in phases_after
@@ -585,16 +705,16 @@ def test_catalog_rejects_disallowed_terminal_action(tmp_path: Path):
         load_managed_catalog(_write_catalog(tmp_path, raw))
 
 
-def test_catalog_rejects_terminal_action_before_workflow_phase_completion(tmp_path: Path):
+def test_catalog_rejects_terminal_action_before_project_workflow_completion(tmp_path: Path):
     raw = json.loads(config.MANAGED_CATALOG_PATH.read_text(encoding="utf-8"))
     terminal = raw["workflows"][0]["modes"][0]["phases"][-1]["instructions"][-1]
     terminal["description"] = (
         "Prepare one precise final Business Markdown comment with outcome and evidence, "
-        "then call only publishDraft before workflow_phase returns complete=true. "
+        "then call only publishDraft before project-workflow returns complete=true. "
         "If input is insufficient, ask one concrete question and do not complete."
     )
 
-    with pytest.raises(ValueError, match="only after workflow_phase complete=true"):
+    with pytest.raises(ValueError, match="only after project-workflow complete=true"):
         load_managed_catalog(_write_catalog(tmp_path, raw))
 
 
@@ -619,6 +739,7 @@ def test_managed_workflow_requires_explicit_assigned_mode(empty_uow):
 
 def _project_manager_request(namespace_id: int, attempt_number: int = 18) -> dict:
     return {
+        "runtime_compatibility": dict(TEST_RUNTIME_COMPATIBILITY),
         "project_id": namespace_id,
         "task_key": "PM-1",
         "mode_key": "draft",
@@ -707,6 +828,9 @@ def test_project_manager_assignment_uses_canonical_identity_and_slotless_busines
 @pytest.mark.parametrize(
     "override",
     [
+        {"runtime_compatibility": None},
+        {"runtime_compatibility": {}},
+        {"runtime_compatibility": {**TEST_RUNTIME_COMPATIBILITY, "catalogVersion": 1}},
         {"operation_key": " "},
         {"operation_key": "x" * 129},
         {"mode_key": " "},
@@ -854,7 +978,7 @@ def test_project_manager_is_the_only_accepted_underscore_role_key():
         [(("workflows", 0, "modes", 0, "key"), "foreign")],
         [(("workflows", 0, "modes", 0, "name"), " ")],
         [(("workflows", 0, "modes", 0, "mode_order"), 2)],
-        [(("workflows", 0, "modes", 0, "execution_scope"), "delivery")],
+        [(("workflows", 0, "modes", 0, "execution_scopes"), ["delivery"])],
         [(("workflows", 0, "modes", 0, "phases", 0, "phase_order"), 2)],
         [(("workflows", 0, "modes", 0, "phases", 1, "code"), "PM-DRAFT-01")],
         [(("workflows", 0, "modes", 0, "phases", 0, "rollback_target_phase_code"), "unknown-phase")],
@@ -882,7 +1006,7 @@ def test_project_manager_is_the_only_accepted_underscore_role_key():
         [
             (
                 ("workflows", 0, "modes", 0, "phases", 2, "instructions", -1, "description"),
-                lambda text: text.replace("workflow_phase", "local_phase"),
+                lambda text: text.replace("project-workflow", "local_phase"),
             )
         ],
         [

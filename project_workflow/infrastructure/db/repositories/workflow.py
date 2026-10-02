@@ -49,6 +49,7 @@ class SAWorkflowRepository(WorkflowRepository):
             name=data["name"],
             description=data.get("description", ""),
             is_default=1 if data.get("is_default") else 0,
+            active_catalog_version=data.get("active_catalog_version", 1),
         )
         self._session.add(item)
         self._session.flush()
@@ -66,6 +67,12 @@ class SAWorkflowRepository(WorkflowRepository):
             row.description = data["description"]
         if "is_default" in data:
             row.is_default = 1 if data["is_default"] else 0
+        if "active_catalog_version" in data:
+            version = data["active_catalog_version"]
+            if not isinstance(version, int) or isinstance(version, bool) or version < 1:
+                raise ValueError("active_catalog_version must be positive")
+            row.active_catalog_version = version
+            self._session.flush()
 
     def delete(self, workflow_id: int) -> None:
         row = self._session.get(m.Workflow, workflow_id)
@@ -85,9 +92,14 @@ class SAWorkflowRepository(WorkflowRepository):
             raise RuntimeError(f"Не удалось создать воркфлоу по умолчанию {name}")
         return created
 
-    def list_modes(self, workflow_id: int) -> Sequence[WorkflowMode]:
+    def list_modes(self, workflow_id: int, catalog_version: int | None = None) -> Sequence[WorkflowMode]:
         rows = self._session.execute(
-            select(m.WorkflowMode).where(m.WorkflowMode.workflow_id == workflow_id).order_by(m.WorkflowMode.mode_order)
+            select(m.WorkflowMode).join(m.Workflow).where(
+                m.WorkflowMode.workflow_id == workflow_id,
+                m.WorkflowMode.catalog_version == (
+                    m.Workflow.active_catalog_version if catalog_version is None else catalog_version
+                ),
+            ).order_by(m.WorkflowMode.mode_order)
         ).scalars().all()
         return [_row_to_mode(row) for row in rows]
 
@@ -100,21 +112,27 @@ class SAWorkflowRepository(WorkflowRepository):
 
     def get_mode_by_key(self, workflow_id: int, key: str) -> WorkflowMode | None:
         row = self._session.execute(
-            select(m.WorkflowMode).where(m.WorkflowMode.workflow_id == workflow_id, m.WorkflowMode.key == key)
+            select(m.WorkflowMode).join(m.Workflow).where(
+                m.WorkflowMode.workflow_id == workflow_id, m.WorkflowMode.key == key,
+                m.WorkflowMode.catalog_version == m.Workflow.active_catalog_version,
+            )
         ).scalar_one_or_none()
         return _row_to_mode(row) if row else None
 
     def create_mode(self, data: dict[str, Any]) -> int:
         workflow_id = data["workflow_id"]
-        if self._session.get(m.Workflow, workflow_id) is None:
+        workflow = self._session.get(m.Workflow, workflow_id)
+        if workflow is None:
             raise NotFoundError(f"Воркфлоу {workflow_id} не найден")
         item = m.WorkflowMode(
             workflow_id=workflow_id,
             key=data["key"],
             name=data.get("name", data["key"]),
             mode_order=data["mode_order"],
+            catalog_version=data.get("catalog_version", workflow.active_catalog_version),
             role_key=data.get("role_key"),
             execution_scope=data.get("execution_scope"),
+            execution_scopes=data.get("execution_scopes"),
             tech_workspace_policy=data.get("tech_workspace_policy"),
         )
         self._session.add(item)

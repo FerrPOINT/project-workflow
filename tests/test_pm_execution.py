@@ -19,7 +19,7 @@ from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.ui.app import create_app
 from scripts.export_pm_openapi import OUTPUT, pm_openapi
-from tests.test_runtime_api import _assignment, _bind_payload, _namespace, _step_payload
+from tests.test_runtime_api import TEST_RUNTIME_COMPATIBILITY, _assignment, _bind_payload, _namespace, _step_payload
 
 BASE = "/internal/runtime/v1/pm"
 ADAPTER = {"Authorization": "Bearer " + "a" * 40}
@@ -36,6 +36,14 @@ def pm(monkeypatch):
 
 
 def prepare_pm(monkeypatch):
+    from project_workflow import build_provenance
+    from project_workflow.interfaces.ui.routes import runtime_api
+
+    def descriptor(**_kwargs):
+        return dict(TEST_RUNTIME_COMPATIBILITY)
+
+    monkeypatch.setattr(build_provenance, "runtime_compatibility_descriptor", descriptor)
+    monkeypatch.setattr(runtime_api, "runtime_compatibility_descriptor", descriptor)
     monkeypatch.setenv("PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON", json.dumps({"project_manager": "a" * 40}))
     monkeypatch.setenv("PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON", json.dumps({"project_manager": "r" * 40}))
     monkeypatch.setenv("PROJECT_WORKFLOW_PM_SCOPE_SECRET", "s" * 40)

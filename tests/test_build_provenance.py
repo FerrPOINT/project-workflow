@@ -162,8 +162,10 @@ def test_post_snapshot_worktree_mutation_cannot_change_docker_context(git_source
     with (
         patch.object(builder, "immutable_git_snapshot", side_effect=snapshot_then_mutate),
         patch.object(builder.subprocess, "run", docker_run),
+        patch.object(builder, "compatible_build_context",
+                     return_value=docker_context_with_manifest(snapshot.archive, snapshot.provenance)),
     ):
-        builder.build_image(git_source, "project-workflow:test", "docker")
+        builder.build_image(git_source, "project-workflow:test", "docker", skills_root=git_source)
 
     command = docker_run.call_args.args[0]
     context = docker_run.call_args.kwargs["input"]
@@ -289,7 +291,7 @@ def test_dockerfile_manifest_and_oci_labels_use_same_build_args():
     assert "org.opencontainers.image.revision=$SOURCE_REVISION" in dockerfile
     assert "io.relevanter.source.archive-sha256=$SOURCE_ARCHIVE_SHA256" in dockerfile
     assert "io.relevanter.runtime.bundle-sha256=$RUNTIME_BUNDLE_SHA256" in dockerfile
-    assert "COPY runtime-build-manifest.json ./runtime-build-manifest.json" in dockerfile
+    assert "COPY runtime-*.json ./" in dockerfile
 
 
 def test_image_builder_passes_one_snapshot_to_docker(git_source: Path):
@@ -299,8 +301,10 @@ def test_image_builder_passes_one_snapshot_to_docker(git_source: Path):
     with (
         patch.object(builder, "immutable_git_snapshot", return_value=snapshot),
         patch.object(builder.subprocess, "run", docker_run),
+        patch.object(builder, "compatible_build_context",
+                     return_value=docker_context_with_manifest(snapshot.archive, snapshot.provenance)),
     ):
-        builder.build_image(git_source, "project-workflow:test", "docker")
+        builder.build_image(git_source, "project-workflow:test", "docker", skills_root=git_source)
 
     command = docker_run.call_args.args[0]
     context = docker_run.call_args.kwargs["input"]
@@ -337,9 +341,11 @@ def test_pax_context_uses_deterministic_gzip_transport(git_source: Path):
     with (
         patch.object(builder, "immutable_git_snapshot", return_value=snapshot),
         patch.object(builder.subprocess, "run", docker_run),
+        patch.object(builder, "compatible_build_context",
+                     return_value=docker_context_with_manifest(snapshot.archive, snapshot.provenance)),
     ):
-        builder.build_image(git_source, "project-workflow:test", "docker")
-        builder.build_image(git_source, "project-workflow:test", "docker")
+        builder.build_image(git_source, "project-workflow:test", "docker", skills_root=git_source)
+        builder.build_image(git_source, "project-workflow:test", "docker", skills_root=git_source)
 
     first = docker_run.call_args_list[0].kwargs["input"]
     second = docker_run.call_args_list[1].kwargs["input"]
@@ -491,3 +497,127 @@ def test_dockerfile_verifies_manifest_before_package_install(git_source, tmp_pat
         cwd=extracted, env=environment, capture_output=True, text=True,
     )
     assert result.returncode == 0, result.stderr
+
+
+@pytest.fixture
+def compatible_sources(git_source, tmp_path):
+    root = Path(__file__).resolve().parents[1]
+    shutil.copytree(root / "project_workflow", git_source / "project_workflow",
+                    dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    shutil.copyfile(root / "scripts/build_runtime_image.py", git_source / "scripts/build_runtime_image.py")
+    catalog_path = git_source / "project_workflow/references/hermes_sdlc_catalog_v1.json"
+    catalog = json.loads(catalog_path.read_bytes())
+    skills = tmp_path / "skills"
+    skills.mkdir()
+    native = {"schema": catalog["skills_source"]["manifest_schema"], "roles": {
+        workflow["role_key"]: {"physicalSkills": workflow["skill_allowlist"]}
+        for workflow in catalog["workflows"]}}
+    manifest = skills / catalog["skills_source"]["manifest_path"]
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(json.dumps(native), encoding="utf-8")
+    _run_git(skills, "init")
+    _run_git(skills, "config", "user.email", "fixture@example.invalid")
+    _run_git(skills, "config", "user.name", "Fixture")
+    _run_git(skills, "add", ".")
+    _run_git(skills, "commit", "-m", "native skills")
+    catalog["skills_source"]["revision"] = _run_git(skills, "rev-parse", "HEAD").stdout.decode().strip()
+    catalog_path.write_text(json.dumps(catalog), encoding="utf-8")
+    _run_git(git_source, "add", ".")
+    _run_git(git_source, "commit", "-m", "compatible source")
+    return git_source, skills, manifest, catalog
+
+
+def test_compatible_context_uses_exact_commits_and_is_verified(compatible_sources, tmp_path):
+    source, skills, manifest, catalog = compatible_sources
+    builder = _builder_module()
+    snapshot = builder.immutable_git_snapshot(source, "HEAD")
+    context = builder.compatible_build_context(snapshot, skills)
+    (source / builder.CATALOG_PATH).write_text("dirty catalog", encoding="utf-8")
+    manifest.write_text("dirty skills", encoding="utf-8")
+    assert builder.compatible_build_context(snapshot, skills) == context
+    descriptor = json.loads(_member_bytes(context, builder.COMPATIBILITY_PATH))
+    assert descriptor["catalogRevision"] == snapshot.provenance.source_revision
+    assert descriptor["skillsRevision"] == catalog["skills_source"]["revision"]
+    assert descriptor["catalogVersion"] == 2
+    assert len(descriptor) == 7
+    assert runtime_bundle_sha256_from_archive(context) == snapshot.provenance.runtime_bundle_sha256
+    extracted = tmp_path / "compatible-context"
+    extracted.mkdir()
+    _extract_regular_context(context, extracted)
+    # Actual Docker verification command, with its source package on sys.path.
+    result = subprocess.run([sys.executable, "-m", "scripts.build_runtime_image",
+                             "verify-compatibility", "--root", str(extracted)],
+                            cwd=extracted, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    descriptor["catalogRevision"] = "f" * 40
+    # The release context deliberately carries read-only generated inputs.
+    # Permit the adversarial fixture edit on Windows as well as POSIX.
+    (extracted / builder.COMPATIBILITY_PATH).chmod(0o644)
+    (extracted / builder.COMPATIBILITY_PATH).write_text(json.dumps(descriptor), encoding="utf-8")
+    result = subprocess.run([sys.executable, "-m", "scripts.build_runtime_image",
+                             "verify-compatibility", "--root", str(extracted)],
+                            cwd=extracted, capture_output=True, text=True)
+    assert result.returncode == 2 and "immutable source inputs" in result.stderr
+
+
+def test_compatible_image_delivers_descriptor_to_docker(compatible_sources):
+    source, skills, _, _ = compatible_sources
+    builder = _builder_module()
+    actual_run = subprocess.run
+    docker_calls = []
+
+    def run(command, **kwargs):
+        if command[0] == "fixture-docker":
+            docker_calls.append((command, kwargs))
+            return subprocess.CompletedProcess(command, 0)
+        return actual_run(command, **kwargs)
+
+    with patch.object(builder.subprocess, "run", side_effect=run):
+        builder.build_image(source, "workflow:test", "fixture-docker", skills_root=skills)
+    assert len(docker_calls) == 1
+    command, kwargs = docker_calls[0]
+    descriptor = json.loads(_member_bytes(kwargs["input"], builder.COMPATIBILITY_PATH))
+    assert f"SOURCE_REVISION={descriptor['catalogRevision']}" in command
+    dockerfile = (Path(__file__).resolve().parents[1] / "Dockerfile").read_text()
+    assert "verify-compatibility --root /app" in dockerfile
+    assert "COPY --from=builder /app/runtime-compatibility.json /app/runtime-compatibility.json" in dockerfile
+
+
+def test_missing_pinned_skills_ref_fails_before_docker(compatible_sources):
+    source, skills, _, _ = compatible_sources
+    builder = _builder_module()
+    catalog_path = source / builder.CATALOG_PATH
+    catalog = json.loads(catalog_path.read_bytes())
+    catalog["skills_source"]["revision"] = "f" * 40
+    catalog_path.write_text(json.dumps(catalog), encoding="utf-8")
+    _run_git(source, "add", ".")
+    _run_git(source, "commit", "-m", "unavailable native pin")
+    with pytest.raises(subprocess.CalledProcessError):
+        builder.build_image(source, "workflow:test", "fixture-docker", skills_root=skills)
+
+
+def test_frozen_runtime_compatibility_rejects_missing_and_source_mismatch(tmp_path):
+    from types import SimpleNamespace
+
+    from project_workflow.build_provenance import (
+        BuildProvenanceError,
+        runtime_compatibility_descriptor,
+    )
+
+    path = tmp_path / "runtime-compatibility.json"
+    provenance = SimpleNamespace(source_revision="a" * 40)
+    with pytest.raises(BuildProvenanceError, match="unavailable"):
+        runtime_compatibility_descriptor(path, provenance)
+    descriptor = {
+        "catalogVersion": 2, "catalogRevision": "a" * 40, "catalogSha256": "b" * 64,
+        "skillsRevision": "c" * 40, "skillsManifestSha256": "d" * 64,
+        "capabilityRevision": "hermes-sdlc-runtime/v2", "capabilitySha256": "e" * 64,
+    }
+    path.write_text(json.dumps(descriptor), encoding="utf-8")
+    assert runtime_compatibility_descriptor(path, provenance) == descriptor
+    path.write_text(json.dumps({**descriptor, "catalogRevision": "f" * 40}), encoding="utf-8")
+    with pytest.raises(BuildProvenanceError, match="source revision mismatch"):
+        runtime_compatibility_descriptor(path, provenance)
+    path.write_text(json.dumps({**descriptor, "injected": True}), encoding="utf-8")
+    with pytest.raises(BuildProvenanceError, match="schema"):
+        runtime_compatibility_descriptor(path, provenance)

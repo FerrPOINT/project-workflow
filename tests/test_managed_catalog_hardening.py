@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from project_workflow import build_provenance, config
+from project_workflow import config
 from project_workflow.application.agent import AgentService
 from project_workflow.application.instruction_service import InstructionService
 from project_workflow.application.managed_catalog_policy import (
@@ -27,6 +27,7 @@ from project_workflow.infrastructure.db.managed_catalog import (
 from project_workflow.infrastructure.db.session import ensure_schema
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.ui.app import create_app
+from tests.test_runtime_capabilities import _install_manifest, _valid_compatibility, _valid_manifest
 
 pytestmark = [pytest.mark.unit]
 
@@ -225,19 +226,7 @@ def _install_runtime_credentials(monkeypatch, tmp_path: Path) -> tuple[str, str]
     )
     monkeypatch.setenv("PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN", catalog_token)
     config.get_settings.cache_clear()
-    manifest = tmp_path / "runtime-build-manifest.json"
-    manifest.write_text(
-        json.dumps(
-            {
-                "schema_version": 1,
-                "source_revision": "d9ebcff84068406ba4b09ae037dac53b5b6296ba",
-                "source_archive_sha256": "a" * 64,
-                "runtime_bundle_sha256": "b" * 64,
-            }
-        ),
-        encoding="utf-8",
-    )
-    monkeypatch.setattr(build_provenance, "DEFAULT_BUILD_MANIFEST_PATH", manifest)
+    _install_manifest(monkeypatch, tmp_path, _valid_manifest())
     return runtime_token, catalog_token
 
 
@@ -263,7 +252,8 @@ def test_runtime_capabilities_require_installed_managed_catalog(
     }
 
 
-def test_managed_catalog_keeps_runtime_step_and_history_available(monkeypatch):
+def test_managed_catalog_keeps_runtime_step_and_history_available(monkeypatch, tmp_path):
+    _install_manifest(monkeypatch, tmp_path, _valid_manifest())
     _bootstrap_global_managed_catalog()
     runtime_token = "r" * 48
     assignment_token = "a" * 48
@@ -277,6 +267,7 @@ def test_managed_catalog_keeps_runtime_step_and_history_available(monkeypatch):
     )
     config.get_settings.cache_clear()
     assignment_payload = {
+        "runtime_compatibility": _valid_compatibility(),
         "task": "PM-901",
         "workflow_key": "hermes-sdlc:project_manager",
         "role_key": "project_manager",

@@ -261,7 +261,7 @@ def _metadata_is_current(target: Engine | Connection) -> bool:
 
 
 def ensure_migrated(engine: Engine | Connection | None = None) -> None:
-    """Apply migrations to empty, legacy ``0001_initial``, or exact-head databases."""
+    """Apply migrations to empty databases or supported versioned predecessors."""
     target = engine or get_engine()
     bound_engine = target.engine if isinstance(target, Connection) else target
     schema = None if _is_sqlite(str(bound_engine.url)) else get_settings().DB_SCHEMA
@@ -274,6 +274,8 @@ def ensure_migrated(engine: Engine | Connection | None = None) -> None:
         "0002_workflow_modes",
         "0003_runtime_assignment_bind",
         "0004_wide_work_item_revision",
+        "0005_mode_execution_scopes",
+        "0006_versioned_mode_catalog",
     }
     incompatible_revision = bool(revisions) and not revisions.issubset(compatible_upgrade_revisions)
     exact_tables = existing_tables == expected_tables()

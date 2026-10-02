@@ -1,14 +1,14 @@
 # PM Continuation Machine Contract v1
 
 Status: Workflow backend implemented; local gate results are in
-[verification](pm-continuation-verification.md). Fleet's trusted runtime readback
-endpoint and continuation orchestration are not yet implemented. There is no
-live resume acceptance claim.
+[verification](pm-continuation-verification.md). Cross-service release and live
+Fleet/Hermes continuation acceptance remain separate owner gates. There is no
+live resume acceptance claim from this Workflow change.
 OpenAPI: `/openapi.json`, schemas `PMIdentity`, `PMBind`, `PMCheckpoint`,
 `PMResume`, `PMRebind`, `PMReadback`. Runtime callback schema is
 `RuntimeObservation` (also included in Workflow OpenAPI).
 The checked-in [generated OpenAPI](pm-continuation-openapi.json) contains these
-PM paths and the ordinary assignment/bind paths. Regenerate it with
+PM paths and the ordinary assignment/bind/continuation paths. Regenerate it with
 `python -m scripts.export_pm_openapi`; a contract test checks it against the
 application's generated schema.
 
@@ -38,10 +38,17 @@ Published historical rows are migrated with null mapping, with no guessed
 identity. An authorized `legacy_bound` adoption can set it once alongside bind
 metadata; a finalized binding cannot later be enriched or rebound. Existing PM
 records without mapping need an explicit owner-controlled rollout decision.
-The single pending `0005_pm_execution` migration adds the nullable column and
+The single pending `0007_pm_execution` migration, after accepted `0006`, adds the nullable column and
 constraint; no additional pending migration is introduced.
 
-## Fleet runtime callback (implement this first)
+An assignment enrolled in PMExecution cannot prepare generic
+`/internal/runtime/rebind`, regardless of execution/task status. The indexed
+enrollment check and PM bind share the owner task lock. Exact historical generic
+replay remains read-only. PM resume/rebind is its only continuation path and keeps
+the original assignment identity. Catalog v2 compatibility is revalidated before
+PM effects/probes; accepted generic continuation remains available for non-enrolled assignments.
+
+## Fleet runtime callback boundary
 
 Configure Workflow `PROJECT_WORKFLOW_PM_READBACK_URL` as a fixed collection
 URL, for example `http://fleet:8080/internal/runtime/v1/pm/runs`.
