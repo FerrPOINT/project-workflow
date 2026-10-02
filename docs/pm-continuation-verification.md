@@ -1,5 +1,91 @@
 # PM Continuation Verification
 
+## Enrolled PM New Assignment Guard (2026-10-02)
+
+Bounded follow-up on `014bb76`: the proven done-but-running generic `/assign`
+escape is closed. Any immutable PM enrollment of the task rejects a new generic
+assignment with service ConflictError / HTTP 409, regardless of current cursor,
+PM state or old terminal receipt. Task-wide indexed EXISTS uses the existing
+unique `pm_executions.task_id` index under the same authoritative task lock as
+PM bind, after exact historical replay and before assignment mutations.
+No migration, DTO/callback/identity change, runtime probe or replacement is added.
+
+Regressions exercise normal resumed scoped PASS to task=done while PM=active,
+callback=running and terminal receipt absent, then deny both a fresh cycle and
+retry without changing any task/assignment/event/history/PM table values.
+Historical same-key replay remains read-only; changed payload conflicts. A
+second replay read under the owner lock is preserved. Enrollment cannot be hidden
+by a missing current assignment pointer. A terminal readback alone remains denied.
+PostgreSQL additionally checks normal done denial, concurrent historical replay
+versus new assignment, and both owner-lock race orders. PM enrollment winning
+fences the waiting new assign; an unenrolled ordinary completed assignment winning
+creates its accepted generic cycle and makes the old PM bind stale without partial
+enrollment. Non-enrolled generic behavior also retains its existing full-suite tests.
+
+Own Linux QA source: `/tmp/workflow-pm-assign-guard-qa-source-20261002`.
+Test basetemp directories are owned `/dev/shm/workflow-pm-assign-guard-*` targets.
+PostgreSQL uses only `workflow-pm-assign-guard-qa-db` on loopback port `55449`.
+Final runtime/test sources match the worktree byte-for-byte. Final gates:
+
+| Gate | Assignment Guard Result |
+| --- | --- |
+| Full unit + coverage + strict resource warnings | 2,037 passed, 70 integration tests deselected, 813.67s; coverage 94.18%, threshold 94 enforced |
+| Canonical PostgreSQL integration | 70 passed, 204.89s, exit 0 |
+| Focused security/contracts/docs | 139 passed |
+| New PostgreSQL guard/replay/race cases | 5 passed |
+| Ruff | All checks passed |
+| Mypy | Success, 98 source files |
+| Development build / isolated Compose | Passed; HTTP 200, database/schema/catalog ok; built image includes guard |
+| HTTP wire / authenticated preflight | PM identity 10 fields, callback 18; expected 503 without release provenance |
+
+The unit run emitted only the two existing SQLAlchemy transaction/savepoint
+warnings in UI app tests; ResourceWarning/unraisable checks passed. Coverage
+here is the final standalone unit gate, not the previous reconciliation's merged
+coverage. Runtime, tests, schema and migration files did not change after these gates;
+only this verification record was completed. Final docs/generated OpenAPI are
+checked again before commit.
+
+Commands run from the owned Linux source, with prefix
+`uv run --isolated --with-requirements constraints.txt --all-extras`:
+
+```text
+COVERAGE_FILE=.coverage.guard-unit pytest -q --cov=project_workflow --cov-report=term --timeout=60 -W error::ResourceWarning -W error::pytest.PytestUnraisableExceptionWarning --basetemp=/dev/shm/workflow-pm-assign-guard-unit-final-20261002
+PGHOST=127.0.0.1 PGPORT=55449 pytest -q -m integration tests/test_postgres_integration.py --timeout=120 --basetemp=/dev/shm/workflow-pm-assign-guard-pg-final-20261002
+pytest -q tests/test_pm_assignment_guard.py tests/test_pm_generic_continuation.py tests/test_concrete_agent_mapping.py tests/test_runtime_assignment_contract.py tests/test_docs_quality.py --timeout=60 --basetemp=/dev/shm/workflow-pm-assign-guard-security-final-20261002
+pytest -q -m integration tests/test_postgres_integration.py -k "normal_done_rejects or done_assignment_replay or enrollment_and_new_assignment" --timeout=120 --basetemp=/dev/shm/workflow-pm-assign-guard-pg-focused-20261002
+pytest -q tests/test_docs_quality.py tests/test_pm_execution.py::test_openapi_exposes_pm_wire_and_callback_schema --timeout=60 --basetemp=/dev/shm/workflow-pm-assign-guard-docs-final-20261002
+ruff check .
+mypy project_workflow scripts
+```
+
+Follow-up files:
+
+```text
+project_workflow/application/task.py
+project_workflow/domain/repositories.py
+project_workflow/infrastructure/db/repositories/task.py
+tests/test_pm_assignment_guard.py
+tests/test_postgres_integration.py
+docs/pm-continuation-contract.md
+docs/runtime-assignment-contract.md
+docs/pm-continuation-verification.md
+```
+
+The owned development image digest was
+`sha256:976b37a4ab659fc4271034ae506760ec6c8eb4a44250f639ce8242ac2db74b22`.
+Its image tag, Compose containers/network/volumes and standalone PG container
+were removed after checks. PG fixture teardown left only the owned default
+postgres/project_workflow databases before removal. UI is unchanged; browser
+verification is not applicable. No shared runtime/schema or pinned image changed.
+
+Remaining GAP: PMDraftAdmission still needs trusted immutable input, real business
+workspace/lease provenance, owner-issued CAS, execution ordinal, authoritative
+namespace ownership and explicit replacement history. The current unique PM task
+binding cannot be moved to a new assignment. Unknown prior quiescence fails closed;
+the guard is containment, not implementation of replacement or live PM admission.
+Native immutable skills access/release provenance remains an external prerequisite;
+development readiness is not a release-compatible build or live PM proof.
+
 ## Accepted Master Reconciliation (2026-10-02)
 
 The bounded reconciliation merges accepted master
@@ -113,6 +199,8 @@ runtime, schema or pinned image was changed. Publication remains Draft only;
 new reconciliation commits deliberately do not skip GitHub CI.
 
 Read-only admission assessment: task `done` is not PM run quiescence.
+The following probe describes the pre-guard tree; the follow-up above now refuses
+its new generic assignment. The quiescent replacement/admission GAP remains open.
 `supervisor/transitions.py` records `done` on the last PASS without closing PM
 execution/run. Existing `test_resumed_supervisor_report_is_persistent_and_replayable`
 in `tests/test_pm_execution_edges.py` exercises that normal terminal path.

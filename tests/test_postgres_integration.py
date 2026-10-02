@@ -231,6 +231,119 @@ def test_pm_enrollment_and_generic_continuation_share_owner_lock(pm_postgres, mo
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize("cycle_number", [0, 1])
+def test_pm_postgres_normal_done_rejects_new_generic_assignment(pm_postgres, supervisor_llm, cycle_number):
+    from tests.test_pm_assignment_guard import (
+        test_normal_scoped_pass_cannot_replace_running_pm_assignment as verify_denial,
+    )
+
+    verify_denial(pm_postgres, supervisor_llm, cycle_number)
+
+
+@pytest.mark.integration
+def test_pm_postgres_done_assignment_replay_races_new_assignment(pm_postgres, supervisor_llm):
+    from tests.test_pm_assignment_guard import persisted_assignment_state, replacement
+    from tests.test_pm_execution import ADAPTER
+    from tests.test_pm_execution_edges import (
+        test_resumed_supervisor_report_is_persistent_and_replayable as verify_done,
+    )
+    from tests.test_runtime_api import _assignment
+
+    verify_done(pm_postgres, supervisor_llm)
+    client = pm_postgres[0]
+    barrier = Barrier(2)
+    before = persisted_assignment_state()
+
+    def assign(request):
+        barrier.wait(timeout=10)
+        return client.post("/internal/runtime/assign", headers=ADAPTER, json=request)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        replay = pool.submit(assign, _assignment("PM-1", "assign:pm:1", "project_manager"))
+        rejected = pool.submit(assign, replacement())
+        replay_response, rejected_response = replay.result(timeout=20), rejected.result(timeout=20)
+    assert replay_response.status_code == 200, replay_response.text
+    assert replay_response.json()["result"]["assignment_revision"] == 1
+    assert rejected_response.status_code == 409, rejected_response.text
+    assert rejected_response.json()["ok"] is False
+    assert "Enrolled PM task requires terminal/quiescent replacement admission" in rejected_response.text
+    assert persisted_assignment_state() == before
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("winner", ["pm", "generic"])
+def test_pm_enrollment_and_new_assignment_share_owner_lock(pm_postgres, supervisor_llm, monkeypatch, winner):
+    from project_workflow.application.pm_execution import PMExecutionService
+    from project_workflow.infrastructure.db.repositories.task import SATaskRepository
+    from tests.test_pm_assignment_guard import complete_unenrolled_assignment, persisted_assignment_state, replacement
+    from tests.test_pm_execution import ADAPTER, BASE
+
+    client = pm_postgres[0]
+    held, contender_started, release = Event(), Event(), Event()
+    original_proof = PMExecutionService._proof
+    original_lock = SATaskRepository.lock
+    original_enrollment = SATaskRepository.task_has_pm_execution
+    original_pm_lock = PMExecutionService._lock_identity
+
+    def pause_proof(*args, **kwargs):
+        held.set()
+        assert release.wait(timeout=20)
+        return original_proof(*args, **kwargs)
+
+    def notify_lock(self, task_id):
+        contender_started.set()
+        return original_lock(self, task_id)
+
+    def pause_enrollment(self, task_id):
+        enrolled = original_enrollment(self, task_id)
+        held.set()
+        assert release.wait(timeout=20)
+        return enrolled
+
+    def notify_pm_lock(self, *args):
+        contender_started.set()
+        return original_pm_lock(self, *args)
+
+    if winner == "pm":
+        monkeypatch.setattr(PMExecutionService, "_proof", staticmethod(pause_proof))
+        monkeypatch.setattr(SATaskRepository, "lock", notify_lock)
+    else:
+        complete_unenrolled_assignment(pm_postgres, supervisor_llm)
+        monkeypatch.setattr(SATaskRepository, "task_has_pm_execution", pause_enrollment)
+        monkeypatch.setattr(PMExecutionService, "_lock_identity", notify_pm_lock)
+
+    def enroll():
+        return client.post(BASE + "/bind", headers=ADAPTER, json=pm_postgres[2])
+
+    def assign():
+        return client.post("/internal/runtime/assign", headers=ADAPTER, json=replacement())
+
+    before = persisted_assignment_state()
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(enroll if winner == "pm" else assign)
+        try:
+            assert held.wait(timeout=10)
+            second = pool.submit(assign if winner == "pm" else enroll)
+            assert contender_started.wait(timeout=10)
+        finally:
+            release.set()
+        accepted, rejected = first.result(timeout=20), second.result(timeout=20)
+    assert accepted.status_code == 200, accepted.text
+    assert rejected.status_code == 409, rejected.text
+    after = persisted_assignment_state()
+    if winner == "pm":
+        assert "Enrolled PM task requires terminal/quiescent replacement admission" in rejected.text
+        assert after[:4] == before[:4]
+        assert tuple(len(rows) for rows in after[4:]) == (1, 1, 1)
+    else:
+        assert rejected.json()["error_code"] == "conflict"
+        assert accepted.json()["result"]["assignment_revision"] == 2
+        assert after[1][0] == before[1][0] and len(after[1]) == 2
+        assert after[3] == before[3]
+        assert tuple(len(rows) for rows in after[4:]) == (0, 0, 0)
+
+
+@pytest.mark.integration
 def test_pm_postgres_actual_http_callback_and_new_run_binding(pm_postgres, monkeypatch):
     from project_workflow.infrastructure import pm_readback
     from tests.test_pm_execution import (

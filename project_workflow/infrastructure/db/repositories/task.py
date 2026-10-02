@@ -162,6 +162,11 @@ class SATaskRepository(TaskRepository):
             ).scalar_one_or_none()
         return _row_to_runtime_assignment(row) if row else None
 
+    def task_has_pm_execution(self, task_id: int) -> bool:
+        return bool(self._session.scalar(select(
+            select(m.PMExecution.execution_ref).where(m.PMExecution.task_id == task_id).exists()
+        )))
+
     def assignment_has_pm_execution(self, task_id: int, assignment_id: int) -> bool:
         return bool(self._session.scalar(select(
             select(m.PMExecution.execution_ref).where(

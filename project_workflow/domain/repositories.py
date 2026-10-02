@@ -203,6 +203,11 @@ class TaskRepository(ABC):
     def lock(self, task_id: int) -> Task | None: ...
 
     @abstractmethod
+    def task_has_pm_execution(self, task_id: int) -> bool:
+        """Check any immutable PM enrollment while the caller holds the task lock."""
+        ...
+
+    @abstractmethod
     def assignment_has_pm_execution(self, task_id: int, assignment_id: int) -> bool:
         """Check immutable PM enrollment while the caller holds the task lock."""
         ...

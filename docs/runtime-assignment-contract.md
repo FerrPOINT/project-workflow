@@ -190,6 +190,14 @@ Assignment, enrolled в PMExecution, не может создать generic cont
 Exact historical replay без новых effects допустим. PM использует только свой
 resume/rebind; accepted generic flow для non-enrolled assignments сохраняется.
 
+Новая generic `/internal/runtime/assign` revision также запрещена для задачи
+с любым immutable PM enrollment, включая `done` и enrollment старой assignment.
+Task-wide indexed EXISTS выполняется под owner task lock после exact historical
+same-key replay и до мутаций. Service возвращает `ConflictError`, HTTP — прежний
+generic envelope `ok=false,error` со статусом 409. Workflow PASS и terminal
+readback не заменяют отсутствующий owner replacement/history CAS. Non-enrolled
+generic assignment/retry/cycle и PM-specific resume/rebind не изменены.
+
 `/internal/runtime/step` доступен только для `bound` assignment и сохраняет
 прежний полный fence. History может читаться в `unbound` состоянии, но не
 создаёт binding и не подставляет отсутствующие refs.

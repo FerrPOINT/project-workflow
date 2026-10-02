@@ -48,6 +48,16 @@ replay remains read-only. PM resume/rebind is its only continuation path and kee
 the original assignment identity. Catalog v2 compatibility is revalidated before
 PM effects/probes; accepted generic continuation remains available for non-enrolled assignments.
 
+New generic `/internal/runtime/assign` operations also fail closed for any task
+with immutable PM enrollment, including a done task and enrollment on an older
+assignment. A Workflow PASS does not prove runtime termination. The task-wide
+indexed EXISTS check runs under the same owner task lock, after exact historical
+assignment replay and before revision/cursor/history mutations. The service raises
+ConflictError; the existing generic HTTP envelope remains `ok=false,error` with 409.
+Even an old terminal readback does not authorize replacement: the owner-issued
+replacement/history CAS is not implemented. No runtime probe, fabricated receipt,
+new assignment or ledger relocation occurs. PM resume/rebind remains unchanged.
+
 ## Fleet runtime callback boundary
 
 Configure Workflow `PROJECT_WORKFLOW_PM_READBACK_URL` as a fixed collection
