@@ -1,0 +1,1716 @@
+{
+  "schema": "relevanter-project-workflow-catalog/v1",
+  "catalog_version": 3,
+  "skills_source": {
+    "repository": "https://github.com/FerrPOINT/fleet-control.git",
+    "revision": "b4fb4da965adafabd0c89f9d3299c99ebe83e63a",
+    "manifest_path": "agent-skills/manifest.json",
+    "manifest_schema": "base-hermes-role-skills/v1"
+  },
+  "workflows": [
+    {
+      "key": "hermes-sdlc:project_manager",
+      "name": "PM",
+      "description": "Base candidate: project_manager; назначение Tracker, исполнение Fleet, receipts Workflow/Forge; не установлен.",
+      "workflow_order": 1,
+      "role_key": "project_manager",
+      "hermes_namespace": "hermes-project-manager",
+      "hermes_profile": "hermes-sdlc-project-manager",
+      "skill_allowlist": [
+        "immutable-evidence-reporting",
+        "project-workflow-executor",
+        "requirements-analysis",
+        "tracker-operator"
+      ],
+      "modes": [
+        {
+          "key": "draft",
+          "name": "Draft",
+          "mode_order": 1,
+          "phases": [
+            {
+              "phase_order": 1,
+              "code": "PM-DRAFT-01",
+              "name": "Допуск и входы",
+              "description": "PM/draft: Допуск и входы; scope business, candidate Base.",
+              "instructions": [
+                {
+                  "description": "Первый вызов ровно project-workflow --json step --task <session>; admission проверяет backend assignment. Затем читать Task, все comments и attachments, links/history и frozen inputs текущей revision, не выбирая mode/scope/workspace из prompt.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Сверить Task/root/project/revisions, agent/role=project_manager, namespace/profile, workflow/mode=draft, scope=business, run/cycle/attempt, fencing/operation key, configuration hashes и owner-issued workspace lease. Missing/mismatch — fail-closed до модели.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Проверить pinned requirements/decomposition, predecessor receipts, доступ к каждому input и allowed skills/actions/paths; stale evidence, закрытый barrier или отсутствующая capability не подменяются manual action.",
+                  "skills": [
+                    "immutable-evidence-reporting",
+                    "project-workflow-executor"
+                  ]
+                }
+              ],
+              "checks": [
+                "Exact assignment, role/mode/scope/configuration совпадают; технические IDs не выбирает модель.",
+                "Все инструкции текущей фазы выполнены по порядку с фактическим evidence; blocker не PASS.",
+                "Requirements/input revisions, tenant permissions и operation key не устарели."
+              ],
+              "evidence": [
+                "Assignment/cursor и pinned input refs, requirement/decomposition revisions.",
+                "Принятый phase report с coverage, checks, safe evidence и ограничениями.",
+                "Owner receipt текущей операции либо конкретный blocker/awaiting-input checkpoint."
+              ]
+            },
+            {
+              "phase_order": 2,
+              "code": "PM-DRAFT-02",
+              "name": "Действия роли",
+              "description": "PM/draft: Действия роли; scope business, candidate Base.",
+              "instructions": [
+                {
+                  "description": "Выяснить бизнесовую цель, actors, желаемый результат, ограничения и общие требования; не проектировать архитектуру и технические children.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "requirements-analysis"
+                  ]
+                },
+                {
+                  "description": "Сформировать Draft/В работе из первого сообщения, временное название 3–4 слова; уточнять по одному значимому вопросу в том же чате, принимая свободный ответ и варианты.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Через guarded Draft capability и CAS уточнить title/description, priority, estimates/dates, component/milestone/labels, assignee, parent/dependencies/links, существующие attachment refs того же проекта. Project/kind/stage/status не входят в patch.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Проверить название: ровно 3–4 смысловых слова, максимум 80 символов; изложить scope/non-goals и измеримые acceptance criteria.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "requirements-analysis"
+                  ]
+                },
+                {
+                  "description": "Показать итог exact Draft revision и получить её явное пользовательское подтверждение. После изменения revision прежнее подтверждение недействительно. Backlog pickup выполняет backend автоматически; PM не запускает Analyst.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                }
+              ],
+              "checks": [
+                "Exact assignment, role/mode/scope/configuration совпадают; технические IDs не выбирает модель.",
+                "Все инструкции текущей фазы выполнены по порядку с фактическим evidence; blocker не PASS.",
+                "Requirements/input revisions, tenant permissions и operation key не устарели.",
+                "Confirmation не устарело; имя 3–4 слова до 80 символов; required business answers получены."
+              ],
+              "evidence": [
+                "Assignment/cursor и pinned input refs, requirement/decomposition revisions.",
+                "Принятый phase report с coverage, checks, safe evidence и ограничениями.",
+                "Owner receipt текущей операции либо конкретный blocker/awaiting-input checkpoint.",
+                "Exact confirmed Draft revision с business framing и полной допустимой metadata."
+              ]
+            },
+            {
+              "phase_order": 3,
+              "code": "PM-DRAFT-03",
+              "name": "Проверка и передача",
+              "description": "PM/draft: Проверка и передача; scope business, candidate Base.",
+              "instructions": [
+                {
+                  "description": "Перечитать результат и exact revisions/receipts, проверить requirement coverage, checks и ограничения. При Git changes обязательны permitted diff, commit/push, remote SHA и clean workspace; read-only роли не пушат reviewed branch. Не создавать пустые commits.",
+                  "skills": [
+                    "immutable-evidence-reporting",
+                    "project-workflow-executor"
+                  ]
+                },
+                {
+                  "description": "При неизвестном эффекте dispatch/push/deploy/comment сначала owner lookup/reconcile прежнего operation key. Durable terminal ACK либо безопасный awaiting-input checkpoint предшествует owner release; модель сама не освобождает slot.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Подготовить итоговый Business Markdown comment (только compatibility marker валидатора; в Base это Task Tracker comment): результат, coverage требований, проверки, evidence и ограничения; для Architect — реальные children/dependencies, Reviewer/Tester — решение/findings, DevOps — exact candidate/acceptance. Передать принятый report через project-workflow --json step --task <session> --report <report>; дождаться complete=true, сохранить и прочитать итоговый комментарий, затем запросить только publishDraft как owner capability, не выдуманную CLI-команду, с outcome passed. При недостаточных данных one concrete question и durable awaiting-input handshake с unfinished phase; terminal action запрещён.",
+                  "skills": [
+                    "immutable-evidence-reporting",
+                    "project-workflow-executor"
+                  ]
+                }
+              ],
+              "checks": [
+                "Exact assignment, role/mode/scope/configuration совпадают; технические IDs не выбирает модель.",
+                "Все инструкции текущей фазы выполнены по порядку с фактическим evidence; blocker не PASS.",
+                "Requirements/input revisions, tenant permissions и operation key не устарели.",
+                "Confirmation не устарело; имя 3–4 слова до 80 символов; required business answers получены.",
+                "Workflow complete=true receipt и итоговый comment readback получены; недостающий gate/approval сохраняет стадию незавершённой."
+              ],
+              "evidence": [
+                "Assignment/cursor и pinned input refs, requirement/decomposition revisions.",
+                "Принятый phase report с coverage, checks, safe evidence и ограничениями.",
+                "Owner receipt текущей операции либо конкретный blocker/awaiting-input checkpoint.",
+                "Exact confirmed Draft revision с business framing и полной допустимой metadata."
+              ]
+            }
+          ],
+          "execution_scopes": [
+            "business"
+          ]
+        }
+      ]
+    },
+    {
+      "key": "hermes-sdlc:analyst",
+      "name": "Analyst",
+      "description": "Base candidate: analyst; назначение Tracker, исполнение Fleet, receipts Workflow/Forge; не установлен.",
+      "workflow_order": 2,
+      "role_key": "analyst",
+      "hermes_namespace": "hermes-analyst",
+      "hermes_profile": "hermes-sdlc-analyst",
+      "skill_allowlist": [
+        "domain-modeling",
+        "immutable-evidence-reporting",
+        "project-workflow-executor",
+        "requirements-analysis",
+        "tracker-operator",
+        "workflow-writing-plans"
+      ],
+      "modes": [
+        {
+          "key": "analysis",
+          "name": "Analysis",
+          "mode_order": 1,
+          "phases": [
+            {
+              "phase_order": 1,
+              "code": "AN-ANALYSIS-01",
+              "name": "Допуск и входы",
+              "description": "Analyst/analysis: Допуск и входы; scope business, candidate Base.",
+              "instructions": [
+                {
+                  "description": "Первый вызов ровно project-workflow --json step --task <session>; admission проверяет backend assignment. Затем читать Task, все comments и attachments, links/history и frozen inputs текущей revision, не выбирая mode/scope/workspace из prompt.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Сверить Task/root/project/revisions, agent/role=analyst, namespace/profile, workflow/mode=analysis, scope=business, run/cycle/attempt, fencing/operation key, configuration hashes и owner-issued workspace lease. Missing/mismatch — fail-closed до модели.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Проверить pinned requirements/decomposition, predecessor receipts, доступ к каждому input и allowed skills/actions/paths; stale evidence, закрытый barrier или отсутствующая capability не подменяются manual action.",
+                  "skills": [
+                    "immutable-evidence-reporting",
+                    "project-workflow-executor"
+                  ]
+                }
+              ],
+              "checks": [
+                "Exact assignment, role/mode/scope/configuration совпадают; технические IDs не выбирает модель.",
+                "Все инструкции текущей фазы выполнены по порядку с фактическим evidence; blocker не PASS.",
+                "Requirements/input revisions, tenant permissions и operation key не устарели."
+              ],
+              "evidence": [
+                "Assignment/cursor и pinned input refs, requirement/decomposition revisions.",
+                "Принятый phase report с coverage, checks, safe evidence и ограничениями.",
+                "Owner receipt текущей операции либо конкретный blocker/awaiting-input checkpoint."
+              ]
+            },
+            {
+              "phase_order": 2,
+              "code": "AN-ANALYSIS-02",
+              "name": "Действия роли",
+              "description": "Analyst/analysis: Действия роли; scope business, candidate Base.",
+              "instructions": [
+                {
+                  "description": "Собрать разрешённые источники, PM framing, предметные факты и отвеченные вопросы; отделить неизвестное от фактов и не расширять scope.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "requirements-analysis"
+                  ]
+                },
+                {
+                  "description": "Описать glossary, actors, bounded contexts, source of truth, инварианты и project/tenant boundaries без выбора реализации.",
+                  "skills": [
+                    "domain-modeling",
+                    "project-workflow-executor"
+                  ]
+                },
+                {
+                  "description": "Создать versioned requirements со stable refs, источниками, scope/non-goals, acceptance criteria и positive/negative/boundary/permission/partial-failure cases.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "requirements-analysis"
+                  ]
+                },
+                {
+                  "description": "Построить coverage matrix requirement → источник → criterion → проверка; устранить противоречия или задать один конкретный вопрос с durable checkpoint.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "workflow-writing-plans"
+                  ]
+                },
+                {
+                  "description": "Сохранить анализ через owner capability и прочитать accepted revision/evidence refs; не создавать архитектурные подзадачи вместо Architect.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                }
+              ],
+              "checks": [
+                "Exact assignment, role/mode/scope/configuration совпадают; технические IDs не выбирает модель.",
+                "Все инструкции текущей фазы выполнены по порядку с фактическим evidence; blocker не PASS.",
+                "Requirements/input revisions, tenant permissions и operation key не устарели.",
+                "Каждое требование имеет источник и проверяемый criterion; неизвестное не выдано за факт."
+              ],
+              "evidence": [
+                "Assignment/cursor и pinned input refs, requirement/decomposition revisions.",
+                "Принятый phase report с coverage, checks, safe evidence и ограничениями.",
+                "Owner receipt текущей операции либо конкретный blocker/awaiting-input checkpoint.",
+                "Versioned requirements, glossary, source/criterion coverage и negative scenarios."
+              ]
+            },
+            {
+              "phase_order": 3,
+              "code": "AN-ANALYSIS-03",
+              "name": "Проверка и передача",
+              "description": "Analyst/analysis: Проверка и передача; scope business, candidate Base.",
+              "instructions": [
+                {
+                  "description": "Перечитать результат и exact revisions/receipts, проверить requirement coverage, checks и ограничения. При Git changes обязательны permitted diff, commit/push, remote SHA и clean workspace; read-only роли не пушат reviewed branch. Не создавать пустые commits.",
+                  "skills": [
+                    "immutable-evidence-reporting",
+                    "project-workflow-executor"
+                  ]
+                },
+                {
+                  "description": "При неизвестном эффекте dispatch/push/deploy/comment сначала owner lookup/reconcile прежнего operation key. Durable terminal ACK либо безопасный awaiting-input checkpoint предшествует owner release; модель сама не освобождает slot.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Подготовить итоговый Business Markdown comment (только compatibility marker валидатора; в Base это Task Tracker comment): результат, coverage требований, проверки, evidence и ограничения; для Architect — реальные children/dependencies, Reviewer/Tester — решение/findings, DevOps — exact candidate/acceptance. Передать принятый report через project-workflow --json step --task <session> --report <report>; дождаться complete=true, сохранить и прочитать итоговый комментарий, затем запросить только completeAssignedStage как owner capability, не выдуманную CLI-команду, с outcome passed. При недостаточных данных one concrete question и durable awaiting-input handshake с unfinished phase; terminal action запрещён.",
+                  "skills": [
+                    "immutable-evidence-reporting",
+                    "project-workflow-executor"
+                  ]
+                }
+              ],
+              "checks": [
+                "Exact assignment, role/mode/scope/configuration совпадают; технические IDs не выбирает модель.",
+                "Все инструкции текущей фазы выполнены по порядку с фактическим evidence; blocker не PASS.",
+                "Requirements/input revisions, tenant permissions и operation key не устарели.",
+                "Каждое требование имеет источник и проверяемый criterion; неизвестное не выдано за факт.",
+                "Workflow complete=true receipt и итоговый comment readback получены; недостающий gate/approval сохраняет стадию незавершённой."
+              ],
+              "evidence": [
+                "Assignment/cursor и pinned input refs, requirement/decomposition revisions.",
+                "Принятый phase report с coverage, checks, safe evidence и ограничениями.",
+                "Owner receipt текущей операции либо конкретный blocker/awaiting-input checkpoint.",
+                "Versioned requirements, glossary, source/criterion coverage и negative scenarios."
+              ]
+            }
+          ],
+          "execution_scopes": [
+            "business"
+          ]
+        }
+      ]
+    },
+    {
+      "key": "hermes-sdlc:architect",
+      "name": "Architect",
+      "description": "Base candidate: architect; назначение Tracker, исполнение Fleet, receipts Workflow/Forge; не установлен.",
+      "workflow_order": 3,
+      "role_key": "architect",
+      "hermes_namespace": "hermes-architect",
+      "hermes_profile": "hermes-sdlc-architect",
+      "skill_allowlist": [
+        "domain-modeling",
+        "immutable-evidence-reporting",
+        "project-workflow-executor",
+        "solution-architecture",
+        "tracker-operator",
+        "workflow-writing-plans"
+      ],
+      "modes": [
+        {
+          "key": "decomposition",
+          "name": "Decomposition",
+          "mode_order": 1,
+          "phases": [
+            {
+              "phase_order": 1,
+              "code": "AR-DECOMP-01",
+              "name": "Допуск и входы",
+              "description": "Architect/decomposition: Допуск и входы; scope business, candidate Base.",
+              "instructions": [
+                {
+                  "description": "Первый вызов ровно project-workflow --json step --task <session>; admission проверяет backend assignment. Затем читать Task, все comments и attachments, links/history и frozen inputs текущей revision, не выбирая mode/scope/workspace из prompt.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Сверить Task/root/project/revisions, agent/role=architect, namespace/profile, workflow/mode=decomposition, scope=business, run/cycle/attempt, fencing/operation key, configuration hashes и owner-issued workspace lease. Missing/mismatch — fail-closed до модели.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Проверить pinned requirements/decomposition, predecessor receipts, доступ к каждому input и allowed skills/actions/paths; stale evidence, закрытый barrier или отсутствующая capability не подменяются manual action.",
+                  "skills": [
+                    "immutable-evidence-reporting",
+                    "project-workflow-executor"
+                  ]
+                }
+              ],
+              "checks": [
+                "Exact assignment, role/mode/scope/configuration совпадают; технические IDs не выбирает модель.",
+                "Все инструкции текущей фазы выполнены по порядку с фактическим evidence; blocker не PASS.",
+                "Requirements/input revisions, tenant permissions и operation key не устарели."
+              ],
+              "evidence": [
+                "Assignment/cursor и pinned input refs, requirement/decomposition revisions.",
+                "Принятый phase report с coverage, checks, safe evidence и ограничениями.",
+                "Owner receipt текущей операции либо конкретный blocker/awaiting-input checkpoint."
+              ]
+            },
+            {
+              "phase_order": 2,
+              "code": "AR-DECOMP-02",
+              "name": "Действия роли",
+              "description": "Architect/decomposition: Действия роли; scope business, candidate Base.",
+              "instructions": [
+                {
+                  "description": "Проверить существующие capabilities и reuse до нового механизма; назначить owners и проследить producer/storage/API/consumer/failure/tests.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "solution-architecture"
+                  ]
+                },
+                {
+                  "description": "Зафиксировать решения, интерфейсы, compat/versioning, tenant/permission rules, pinned inputs и dataflow; изменения source of truth требуют принятого ADR.",
+                  "skills": [
+                    "domain-modeling",
+                    "project-workflow-executor"
+                  ]
+                },
+                {
+                  "description": "Декомпозировать по проверяемым результатам: каждому child дать scope, frozen requirements coverage, criteria, allowed paths, зависимости и integration contract.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "solution-architecture"
+                  ]
+                },
+                {
+                  "description": "Через требуемую capability materialize настоящие children и parent/dependency links в том же проекте; dependency направлена dependent → dependency. Проверить DAG зависимостей, orphan и coverage; пустой набор не открывает barrier.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Сохранить accepted decomposition revision и прочитать реальные IDs/links/coverage. Root ждёт successful DevOps всех обязательных children активной revision без активного Architect run; изменённая revision, reopened child и stale evidence закрывают barrier.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "workflow-writing-plans"
+                  ]
+                },
+                {
+                  "description": "Описать интеграцию root, риски, rollback и порядок готовых children; согласовать candidate source refs без ручного выполнения children.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "solution-architecture"
+                  ]
+                }
+              ],
+              "checks": [
+                "Exact assignment, role/mode/scope/configuration совпадают; технические IDs не выбирает модель.",
+                "Все инструкции текущей фазы выполнены по порядку с фактическим evidence; blocker не PASS.",
+                "Requirements/input revisions, tenant permissions и operation key не устарели.",
+                "Children непустые и same-project; dependency DAG валиден; requirements coverage полна."
+              ],
+              "evidence": [
+                "Assignment/cursor и pinned input refs, requirement/decomposition revisions.",
+                "Принятый phase report с coverage, checks, safe evidence и ограничениями.",
+                "Owner receipt текущей операции либо конкретный blocker/awaiting-input checkpoint.",
+                "Accepted decomposition revision, реальные child IDs/parent/dependency links и coverage matrix."
+              ]
+            },
+            {
+              "phase_order": 3,
+              "code": "AR-DECOMP-03",
+              "name": "Проверка и передача",
+              "description": "Architect/decomposition: Проверка и передача; scope business, candidate Base.",
+              "instructions": [
+                {
+                  "description": "Перечитать результат и exact revisions/receipts, проверить requirement coverage, checks и ограничения. При Git changes обязательны permitted diff, commit/push, remote SHA и clean workspace; read-only роли не пушат reviewed branch. Не создавать пустые commits.",
+                  "skills": [
+                    "immutable-evidence-reporting",
+                    "project-workflow-executor"
+                  ]
+                },
+                {
+                  "description": "При неизвестном эффекте dispatch/push/deploy/comment сначала owner lookup/reconcile прежнего operation key. Durable terminal ACK либо безопасный awaiting-input checkpoint предшествует owner release; модель сама не освобождает slot.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Подготовить итоговый Business Markdown comment (только compatibility marker валидатора; в Base это Task Tracker comment): результат, coverage требований, проверки, evidence и ограничения; для Architect — реальные children/dependencies, Reviewer/Tester — решение/findings, DevOps — exact candidate/acceptance. Передать принятый report через project-workflow --json step --task <session> --report <report>; дождаться complete=true, сохранить и прочитать итоговый комментарий, затем запросить только completeAssignedStage как owner capability, не выдуманную CLI-команду, с outcome passed. При недостаточных данных one concrete question и durable awaiting-input handshake с unfinished phase; terminal action запрещён.",
+                  "skills": [
+                    "immutable-evidence-reporting",
+                    "project-workflow-executor"
+                  ]
+                }
+              ],
+              "checks": [
+                "Exact assignment, role/mode/scope/configuration совпадают; технические IDs не выбирает модель.",
+                "Все инструкции текущей фазы выполнены по порядку с фактическим evidence; blocker не PASS.",
+                "Requirements/input revisions, tenant permissions и operation key не устарели.",
+                "Children непустые и same-project; dependency DAG валиден; requirements coverage полна.",
+                "Workflow complete=true receipt и итоговый comment readback получены; недостающий gate/approval сохраняет стадию незавершённой."
+              ],
+              "evidence": [
+                "Assignment/cursor и pinned input refs, requirement/decomposition revisions.",
+                "Принятый phase report с coverage, checks, safe evidence и ограничениями.",
+                "Owner receipt текущей операции либо конкретный blocker/awaiting-input checkpoint.",
+                "Accepted decomposition revision, реальные child IDs/parent/dependency links и coverage matrix."
+              ]
+            }
+          ],
+          "execution_scopes": [
+            "business"
+          ]
+        }
+      ]
+    },
+    {
+      "key": "hermes-sdlc:developer",
+      "name": "Developer",
+      "description": "Base candidate: developer; назначение Tracker, исполнение Fleet, receipts Workflow/Forge; не установлен.",
+      "workflow_order": 4,
+      "role_key": "developer",
+      "hermes_namespace": "hermes-developer",
+      "hermes_profile": "hermes-sdlc-developer",
+      "skill_allowlist": [
+        "forge-operator",
+        "immutable-evidence-reporting",
+        "project-workflow-executor",
+        "repo-workflow",
+        "test-driven-development",
+        "tracker-operator",
+        "workflow-systematic-debugging"
+      ],
+      "modes": [
+        {
+          "key": "initial",
+          "name": "Initial delivery",
+          "mode_order": 1,
+          "phases": [
+            {
+              "phase_order": 1,
+              "code": "DV-INITIAL-01",
+              "name": "Допуск и входы",
+              "description": "Developer/initial: Допуск и входы; scope delivery/aggregate, candidate Base.",
+              "instructions": [
+                {
+                  "description": "Первый вызов ровно project-workflow --json step --task <session>; admission проверяет backend assignment. Затем читать Task, все comments и attachments, links/history и frozen inputs текущей revision, не выбирая mode/scope/workspace из prompt.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Сверить Task/root/project/revisions, agent/role=developer, namespace/profile, workflow/mode=initial, scope=delivery/aggregate, run/cycle/attempt, fencing/operation key, configuration hashes и owner-issued workspace lease. Missing/mismatch — fail-closed до модели.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Проверить pinned requirements/decomposition, predecessor receipts, доступ к каждому input и allowed skills/actions/paths; stale evidence, закрытый barrier или отсутствующая capability не подменяются manual action.",
+                  "skills": [
+                    "immutable-evidence-reporting",
+                    "project-workflow-executor"
+                  ]
+                }
+              ],
+              "checks": [
+                "Exact assignment, role/mode/scope/configuration совпадают; технические IDs не выбирает модель.",
+                "Все инструкции текущей фазы выполнены по порядку с фактическим evidence; blocker не PASS.",
+                "Requirements/input revisions, tenant permissions и operation key не устарели."
+              ],
+              "evidence": [
+                "Assignment/cursor и pinned input refs, requirement/decomposition revisions.",
+                "Принятый phase report с coverage, checks, safe evidence и ограничениями.",
+                "Owner receipt текущей операции либо конкретный blocker/awaiting-input checkpoint."
+              ]
+            },
+            {
+              "phase_order": 2,
+              "code": "DV-INITIAL-02",
+              "name": "Действия роли",
+              "description": "Developer/initial: Действия роли; scope delivery/aggregate, candidate Base.",
+              "instructions": [
+                {
+                  "description": "Проверить issued attempt workspace, pinned source/branch, paths и fencing; не создавать checkout и не выбирать slot. Delivery реализует назначенный child; aggregate допустим только после Tracker barrier.",
+                  "skills": [
+                    "forge-operator",
+                    "project-workflow-executor"
+                  ]
+                },
+                {
+                  "description": "Связать production behavior с frozen criteria, получить воспроизводимый RED где практично и реализовать минимальный GREEN без ослабления checks.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "test-driven-development"
+                  ]
+                },
+                {
+                  "description": "Работать только в permitted paths. В aggregate состыковать outputs всех обязательных children активной decomposition revision и реализовать root integration criteria, не повторяя их delivery заново.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "repo-workflow"
+                  ]
+                },
+                {
+                  "description": "Проверить positive/negative, permissions, retry/stale и применимые regressions быстрыми package checks. Один общий gate выполняет назначенный Forge milestone, не каждый slice.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "test-driven-development"
+                  ]
+                },
+                {
+                  "description": "Проверить разрешённый diff и отсутствие secrets/cache/build мусора; commit/push только собственные изменения при наличии diff, readback exact remote SHA и clean workspace. Candidate receipt готовит Forge по build policy DevOps; Developer mode build отсутствует.",
+                  "skills": [
+                    "forge-operator",
+                    "project-workflow-executor"
+                  ]
+                }
+              ],
+              "checks": [
+                "Exact assignment, role/mode/scope/configuration совпадают; технические IDs не выбирает модель.",
+                "Все инструкции текущей фазы выполнены по порядку с фактическим evidence; blocker не PASS.",
+                "Requirements/input revisions, tenant permissions и operation key не устарели.",
+                "Все assigned criteria реализованы; aggregate barrier актуален; owned workspace clean."
+              ],
+              "evidence": [
+                "Assignment/cursor и pinned input refs, requirement/decomposition revisions.",
+                "Принятый phase report с coverage, checks, safe evidence и ограничениями.",
+                "Owner receipt текущей операции либо конкретный blocker/awaiting-input checkpoint.",
+                "Scoped implementation/regression checks, permitted diff, commit/push remote SHA и candidate refs."
+              ]
+            },
+            {
+              "phase_order": 3,
+              "code": "DV-INITIAL-03",
+              "name": "Проверка и передача",
+              "description": "Developer/initial: Проверка и передача; scope delivery/aggregate, candidate Base.",
+              "instructions": [
+                {
+                  "description": "Перечитать результат и exact revisions/receipts, проверить requirement coverage, checks и ограничения. При Git changes обязательны permitted diff, commit/push, remote SHA и clean workspace; read-only роли не пушат reviewed branch. Не создавать пустые commits.",
+                  "skills": [
+                    "immutable-evidence-reporting",
+                    "project-workflow-executor"
+                  ]
+                },
+                {
+                  "description": "При неизвестном эффекте dispatch/push/deploy/comment сначала owner lookup/reconcile прежнего operation key. Durable terminal ACK либо безопасный awaiting-input checkpoint предшествует owner release; модель сама не освобождает slot.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Подготовить итоговый Business Markdown comment (только compatibility marker валидатора; в Base это Task Tracker comment): результат, coverage требований, проверки, evidence и ограничения; для Architect — реальные children/dependencies, Reviewer/Tester — решение/findings, DevOps — exact candidate/acceptance. Передать принятый report через project-workflow --json step --task <session> --report <report>; дождаться complete=true, сохранить и прочитать итоговый комментарий, затем запросить только completeAssignedStage как owner capability, не выдуманную CLI-команду, с outcome passed. При недостаточных данных one concrete question и durable awaiting-input handshake с unfinished phase; terminal action запрещён.",
+                  "skills": [
+                    "immutable-evidence-reporting",
+                    "project-workflow-executor"
+                  ]
+                }
+              ],
+              "checks": [
+                "Exact assignment, role/mode/scope/configuration совпадают; технические IDs не выбирает модель.",
+                "Все инструкции текущей фазы выполнены по порядку с фактическим evidence; blocker не PASS.",
+                "Requirements/input revisions, tenant permissions и operation key не устарели.",
+                "Все assigned criteria реализованы; aggregate barrier актуален; owned workspace clean.",
+                "Workflow complete=true receipt и итоговый comment readback получены; недостающий gate/approval сохраняет стадию незавершённой."
+              ],
+              "evidence": [
+                "Assignment/cursor и pinned input refs, requirement/decomposition revisions.",
+                "Принятый phase report с coverage, checks, safe evidence и ограничениями.",
+                "Owner receipt текущей операции либо конкретный blocker/awaiting-input checkpoint.",
+                "Scoped implementation/regression checks, permitted diff, commit/push remote SHA и candidate refs."
+              ]
+            }
+          ],
+          "execution_scopes": [
+            "delivery",
+            "aggregate"
+          ]
+        },
+        {
+          "key": "rework",
+          "name": "Delivery rework",
+          "mode_order": 2,
+          "phases": [
+            {
+              "phase_order": 1,
+              "code": "DV-REWORK-01",
+              "name": "Допуск и входы",
+              "description": "Developer/rework: Допуск и входы; scope delivery/aggregate, candidate Base.",
+              "instructions": [
+                {
+                  "description": "Первый вызов ровно project-workflow --json step --task <session>; admission проверяет backend assignment. Затем читать Task, все comments и attachments, links/history и frozen inputs текущей revision, не выбирая mode/scope/workspace из prompt.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Сверить Task/root/project/revisions, agent/role=developer, namespace/profile, workflow/mode=rework, scope=delivery/aggregate, run/cycle/attempt, fencing/operation key, configuration hashes и owner-issued workspace lease. Missing/mismatch — fail-closed до модели.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Проверить pinned requirements/decomposition, predecessor receipts, доступ к каждому input и allowed skills/actions/paths; stale evidence, закрытый barrier или отсутствующая capability не подменяются manual action.",
+                  "skills": [
+                    "immutable-evidence-reporting",
+                    "project-workflow-executor"
+                  ]
+                }
+              ],
+              "checks": [
+                "Exact assignment, role/mode/scope/configuration совпадают; технические IDs не выбирает модель.",
+                "Все инструкции текущей фазы выполнены по порядку с фактическим evidence; blocker не PASS.",
+                "Requirements/input revisions, tenant permissions и operation key не устарели."
+              ],
+              "evidence": [
+                "Assignment/cursor и pinned input refs, requirement/decomposition revisions.",
+                "Принятый phase report с coverage, checks, safe evidence и ограничениями.",
+                "Owner receipt текущей операции либо конкретный blocker/awaiting-input checkpoint."
+              ]
+            },
+            {
+              "phase_order": 2,
+              "code": "DV-REWORK-02",
+              "name": "Действия роли",
+              "description": "Developer/rework: Действия роли; scope delivery/aggregate, candidate Base.",
+              "instructions": [
+                {
+                  "description": "Прочитать frozen ReworkRequest именно текущего cycle: source Review/Testing, reproduction, expected/actual и evidence. Не выбирать mode или менять findings.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Воспроизвести каждый finding на pinned candidate и локализовать первопричину; unknown infra issue вернуть как blocker, не скрытый workaround.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "workflow-systematic-debugging"
+                  ]
+                },
+                {
+                  "description": "Исправить все назначенные findings и добавить regression checks; delivery ограничен child, aggregate исправляет интеграцию root при сохранённом barrier.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "test-driven-development"
+                  ]
+                },
+                {
+                  "description": "Перепроверить requirement coverage и relevant regressions, не расширяя permitted paths и не переписывая предыдущие cycles/evidence.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "repo-workflow"
+                  ]
+                },
+                {
+                  "description": "После проверки diff выполнить commit/push при изменениях, remote SHA readback и clean workspace. Unknown push reconcile по исходному key. Retry увеличивает attempt, не cycle; backend после rework вернёт в Review, затем Testing.",
+                  "skills": [
+                    "forge-operator",
+                    "project-workflow-executor"
+                  ]
+                }
+              ],
+              "checks": [
+                "Exact assignment, role/mode/scope/configuration совпадают; технические IDs не выбирает модель.",
+                "Все инструкции текущей фазы выполнены по порядку с фактическим evidence; blocker не PASS.",
+                "Requirements/input revisions, tenant permissions и operation key не устарели.",
+                "Каждый frozen finding устранён и regression проверен; attempt не создал новый cycle."
+              ],
+              "evidence": [
+                "Assignment/cursor и pinned input refs, requirement/decomposition revisions.",
+                "Принятый phase report с coverage, checks, safe evidence и ограничениями.",
+                "Owner receipt текущей операции либо конкретный blocker/awaiting-input checkpoint.",
+                "Finding-to-fix regression matrix, frozen cycle refs, remote SHA и новый candidate."
+              ]
+            },
+            {
+              "phase_order": 3,
+              "code": "DV-REWORK-03",
+              "name": "Проверка и передача",
+              "description": "Developer/rework: Проверка и передача; scope delivery/aggregate, candidate Base.",
+              "instructions": [
+                {
+                  "description": "Перечитать результат и exact revisions/receipts, проверить requirement coverage, checks и ограничения. При Git changes обязательны permitted diff, commit/push, remote SHA и clean workspace; read-only роли не пушат reviewed branch. Не создавать пустые commits.",
+                  "skills": [
+                    "immutable-evidence-reporting",
+                    "project-workflow-executor"
+                  ]
+                },
+                {
+                  "description": "При неизвестном эффекте dispatch/push/deploy/comment сначала owner lookup/reconcile прежнего operation key. Durable terminal ACK либо безопасный awaiting-input checkpoint предшествует owner release; модель сама не освобождает slot.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Подготовить итоговый Business Markdown comment (только compatibility marker валидатора; в Base это Task Tracker comment): результат, coverage требований, проверки, evidence и ограничения; для Architect — реальные children/dependencies, Reviewer/Tester — решение/findings, DevOps — exact candidate/acceptance. Передать принятый report через project-workflow --json step --task <session> --report <report>; дождаться complete=true, сохранить и прочитать итоговый комментарий, затем запросить только completeAssignedStage как owner capability, не выдуманную CLI-команду, с outcome passed. При недостаточных данных one concrete question и durable awaiting-input handshake с unfinished phase; terminal action запрещён.",
+                  "skills": [
+                    "immutable-evidence-reporting",
+                    "project-workflow-executor"
+                  ]
+                }
+              ],
+              "checks": [
+                "Exact assignment, role/mode/scope/configuration совпадают; технические IDs не выбирает модель.",
+                "Все инструкции текущей фазы выполнены по порядку с фактическим evidence; blocker не PASS.",
+                "Requirements/input revisions, tenant permissions и operation key не устарели.",
+                "Каждый frozen finding устранён и regression проверен; attempt не создал новый cycle.",
+                "Workflow complete=true receipt и итоговый comment readback получены; недостающий gate/approval сохраняет стадию незавершённой."
+              ],
+              "evidence": [
+                "Assignment/cursor и pinned input refs, requirement/decomposition revisions.",
+                "Принятый phase report с coverage, checks, safe evidence и ограничениями.",
+                "Owner receipt текущей операции либо конкретный blocker/awaiting-input checkpoint.",
+                "Finding-to-fix regression matrix, frozen cycle refs, remote SHA и новый candidate."
+              ]
+            }
+          ],
+          "execution_scopes": [
+            "delivery",
+            "aggregate"
+          ]
+        }
+      ]
+    },
+    {
+      "key": "hermes-sdlc:reviewer",
+      "name": "Reviewer",
+      "description": "Base candidate: reviewer; назначение Tracker, исполнение Fleet, receipts Workflow/Forge; не установлен.",
+      "workflow_order": 5,
+      "role_key": "reviewer",
+      "hermes_namespace": "hermes-reviewer",
+      "hermes_profile": "hermes-sdlc-reviewer",
+      "skill_allowlist": [
+        "exact-code-review",
+        "forge-operator",
+        "immutable-evidence-reporting",
+        "project-workflow-executor",
+        "tracker-operator"
+      ],
+      "modes": [
+        {
+          "key": "delivery",
+          "name": "Delivery review",
+          "mode_order": 1,
+          "phases": [
+            {
+              "phase_order": 1,
+              "code": "RV-REVIEW-01",
+              "name": "Допуск и входы",
+              "description": "Reviewer/delivery: Допуск и входы; scope delivery, candidate Base.",
+              "instructions": [
+                {
+                  "description": "Первый вызов ровно project-workflow --json step --task <session>; admission проверяет backend assignment. Затем читать Task, все comments и attachments, links/history и frozen inputs текущей revision, не выбирая mode/scope/workspace из prompt.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Сверить Task/root/project/revisions, agent/role=reviewer, namespace/profile, workflow/mode=delivery, scope=delivery, run/cycle/attempt, fencing/operation key, configuration hashes и owner-issued workspace lease. Missing/mismatch — fail-closed до модели.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Проверить pinned requirements/decomposition, predecessor receipts, доступ к каждому input и allowed skills/actions/paths; stale evidence, закрытый barrier или отсутствующая capability не подменяются manual action.",
+                  "skills": [
+                    "immutable-evidence-reporting",
+                    "project-workflow-executor"
+                  ]
+                }
+              ],
+              "checks": [
+                "Exact assignment, role/mode/scope/configuration совпадают; технические IDs не выбирает модель.",
+                "Все инструкции текущей фазы выполнены по порядку с фактическим evidence; blocker не PASS.",
+                "Requirements/input revisions, tenant permissions и operation key не устарели."
+              ],
+              "evidence": [
+                "Assignment/cursor и pinned input refs, requirement/decomposition revisions.",
+                "Принятый phase report с coverage, checks, safe evidence и ограничениями.",
+                "Owner receipt текущей операции либо конкретный blocker/awaiting-input checkpoint."
+              ]
+            },
+            {
+              "phase_order": 2,
+              "code": "RV-REVIEW-02",
+              "name": "Действия роли",
+              "description": "Reviewer/delivery: Действия роли; scope delivery, candidate Base.",
+              "instructions": [
+                {
+                  "description": "Прочитать exact child base/head/candidate refs и принятые Forge gates; не подменять target свежей веткой или старым pipeline.",
+                  "skills": [
+                    "forge-operator",
+                    "project-workflow-executor"
+                  ]
+                },
+                {
+                  "description": "Независимо проверить diff, ownership/dataflow, frozen child criteria, интерфейсы/dependencies, persistence/migrations, tenant permissions и совместимость.",
+                  "skills": [
+                    "exact-code-review",
+                    "project-workflow-executor"
+                  ]
+                },
+                {
+                  "description": "Проверить production tests, retry/idempotency/stale/restart и hygiene; read-only роль не меняет код и не пушит reviewed branch.",
+                  "skills": [
+                    "exact-code-review",
+                    "project-workflow-executor"
+                  ]
+                },
+                {
+                  "description": "Если нужен implementation fix — сформировать needs_rework findings с severity, location/ref, reproduction, expected/actual и evidence. При полном соответствии решение passed; недостаток данных означает вопрос, не решение.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                }
+              ],
+              "checks": [
+                "Exact assignment, role/mode/scope/configuration совпадают; технические IDs не выбирает модель.",
+                "Все инструкции текущей фазы выполнены по порядку с фактическим evidence; blocker не PASS.",
+                "Requirements/input revisions, tenant permissions и operation key не устарели.",
+                "Review covers child criteria/contracts; reviewed branch неизменна; gates относятся к exact SHA."
+              ],
+              "evidence": [
+                "Assignment/cursor и pinned input refs, requirement/decomposition revisions.",
+                "Принятый phase report с coverage, checks, safe evidence и ограничениями.",
+                "Owner receipt текущей операции либо конкретный blocker/awaiting-input checkpoint.",
+                "Child exact candidate review report: passed либо воспроизводимые findings."
+              ]
+            },
+            {
+              "phase_order": 3,
+              "code": "RV-REVIEW-03",
+              "name": "Проверка и передача",
+              "description": "Reviewer/delivery: Проверка и передача; scope delivery, candidate Base.",
+              "instructions": [
+                {
+                  "description": "Перечитать результат и exact revisions/receipts, проверить requirement coverage, checks и ограничения. При Git changes обязательны permitted diff, commit/push, remote SHA и clean workspace; read-only роли не пушат reviewed branch. Не создавать пустые commits.",
+                  "skills": [
+                    "immutable-evidence-reporting",
+                    "project-workflow-executor"
+                  ]
+                },
+                {
+                  "description": "При неизвестном эффекте dispatch/push/deploy/comment сначала owner lookup/reconcile прежнего operation key. Durable terminal ACK либо безопасный awaiting-input checkpoint предшествует owner release; модель сама не освобождает slot.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Подготовить итоговый Business Markdown comment (только compatibility marker валидатора; в Base это Task Tracker comment): результат, coverage требований, проверки, evidence и ограничения; для Architect — реальные children/dependencies, Reviewer/Tester — решение/findings, DevOps — exact candidate/acceptance. Передать принятый report через project-workflow --json step --task <session> --report <report>; дождаться complete=true, сохранить и прочитать итоговый комментарий, затем запросить только completeAssignedStage как owner capability, не выдуманную CLI-команду, с outcome passed или needs_rework с непустыми frozen findings. При недостаточных данных one concrete question и durable awaiting-input handshake с unfinished phase; terminal action запрещён.",
+                  "skills": [
+                    "immutable-evidence-reporting",
+                    "project-workflow-executor"
+                  ]
+                }
+              ],
+              "checks": [
+                "Exact assignment, role/mode/scope/configuration совпадают; технические IDs не выбирает модель.",
+                "Все инструкции текущей фазы выполнены по порядку с фактическим evidence; blocker не PASS.",
+                "Requirements/input revisions, tenant permissions и operation key не устарели.",
+                "Review covers child criteria/contracts; reviewed branch неизменна; gates относятся к exact SHA.",
+                "Workflow complete=true receipt и итоговый comment readback получены; недостающий gate/approval сохраняет стадию незавершённой."
+              ],
+              "evidence": [
+                "Assignment/cursor и pinned input refs, requirement/decomposition revisions.",
+                "Принятый phase report с coverage, checks, safe evidence и ограничениями.",
+                "Owner receipt текущей операции либо конкретный blocker/awaiting-input checkpoint.",
+                "Child exact candidate review report: passed либо воспроизводимые findings."
+              ]
+            }
+          ],
+          "execution_scopes": [
+            "delivery"
+          ]
+        },
+        {
+          "key": "integration",
+          "name": "Integration review",
+          "mode_order": 2,
+          "phases": [
+            {
+              "phase_order": 1,
+              "code": "RV-INT-01",
+              "name": "Допуск и входы",
+              "description": "Reviewer/integration: Допуск и входы; scope aggregate, candidate Base.",
+              "instructions": [
+                {
+                  "description": "Первый вызов ровно project-workflow --json step --task <session>; admission проверяет backend assignment. Затем читать Task, все comments и attachments, links/history и frozen inputs текущей revision, не выбирая mode/scope/workspace из prompt.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Сверить Task/root/project/revisions, agent/role=reviewer, namespace/profile, workflow/mode=integration, scope=aggregate, run/cycle/attempt, fencing/operation key, configuration hashes и owner-issued workspace lease. Missing/mismatch — fail-closed до модели.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Проверить pinned requirements/decomposition, predecessor receipts, доступ к каждому input и allowed skills/actions/paths; stale evidence, закрытый barrier или отсутствующая capability не подменяются manual action.",
+                  "skills": [
+                    "immutable-evidence-reporting",
+                    "project-workflow-executor"
+                  ]
+                }
+              ],
+              "checks": [
+                "Exact assignment, role/mode/scope/configuration совпадают; технические IDs не выбирает модель.",
+                "Все инструкции текущей фазы выполнены по порядку с фактическим evidence; blocker не PASS.",
+                "Requirements/input revisions, tenant permissions и operation key не устарели."
+              ],
+              "evidence": [
+                "Assignment/cursor и pinned input refs, requirement/decomposition revisions.",
+                "Принятый phase report с coverage, checks, safe evidence и ограничениями.",
+                "Owner receipt текущей операции либо конкретный blocker/awaiting-input checkpoint."
+              ]
+            },
+            {
+              "phase_order": 2,
+              "code": "RV-INT-02",
+              "name": "Действия роли",
+              "description": "Reviewer/integration: Действия роли; scope aggregate, candidate Base.",
+              "instructions": [
+                {
+                  "description": "Прочитать exact root integration candidate и barrier receipt всех обязательных children активной decomposition revision; stale child закрывает gate.",
+                  "skills": [
+                    "forge-operator",
+                    "project-workflow-executor"
+                  ]
+                },
+                {
+                  "description": "Проверить совместимость children, общие contracts/dataflow и coverage root требований, aggregate diff, migration/permission boundaries.",
+                  "skills": [
+                    "exact-code-review",
+                    "project-workflow-executor"
+                  ]
+                },
+                {
+                  "description": "Проверить реальные integration/regression tests, idempotency/restart/stale и отсутствие degradation. Не исправлять реализацию и не пушить проверяемую ветку.",
+                  "skills": [
+                    "exact-code-review",
+                    "project-workflow-executor"
+                  ]
+                },
+                {
+                  "description": "Сформировать passed либо воспроизводимые frozen needs_rework findings общего root; не подменять root review суммой child reports.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                }
+              ],
+              "checks": [
+                "Exact assignment, role/mode/scope/configuration совпадают; технические IDs не выбирает модель.",
+                "Все инструкции текущей фазы выполнены по порядку с фактическим evidence; blocker не PASS.",
+                "Requirements/input revisions, tenant permissions и operation key не устарели.",
+                "Все active children и их стыки проверены; root review не сумма child reports."
+              ],
+              "evidence": [
+                "Assignment/cursor и pinned input refs, requirement/decomposition revisions.",
+                "Принятый phase report с coverage, checks, safe evidence и ограничениями.",
+                "Owner receipt текущей операции либо конкретный blocker/awaiting-input checkpoint.",
+                "Root integration review и cross-child requirement coverage/findings."
+              ]
+            },
+            {
+              "phase_order": 3,
+              "code": "RV-INT-03",
+              "name": "Проверка и передача",
+              "description": "Reviewer/integration: Проверка и передача; scope aggregate, candidate Base.",
+              "instructions": [
+                {
+                  "description": "Перечитать результат и exact revisions/receipts, проверить requirement coverage, checks и ограничения. При Git changes обязательны permitted diff, commit/push, remote SHA и clean workspace; read-only роли не пушат reviewed branch. Не создавать пустые commits.",
+                  "skills": [
+                    "immutable-evidence-reporting",
+                    "project-workflow-executor"
+                  ]
+                },
+                {
+                  "description": "При неизвестном эффекте dispatch/push/deploy/comment сначала owner lookup/reconcile прежнего operation key. Durable terminal ACK либо безопасный awaiting-input checkpoint предшествует owner release; модель сама не освобождает slot.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Подготовить итоговый Business Markdown comment (только compatibility marker валидатора; в Base это Task Tracker comment): результат, coverage требований, проверки, evidence и ограничения; для Architect — реальные children/dependencies, Reviewer/Tester — решение/findings, DevOps — exact candidate/acceptance. Передать принятый report через project-workflow --json step --task <session> --report <report>; дождаться complete=true, сохранить и прочитать итоговый комментарий, затем запросить только completeAssignedStage как owner capability, не выдуманную CLI-команду, с outcome passed или needs_rework с непустыми frozen findings. При недостаточных данных one concrete question и durable awaiting-input handshake с unfinished phase; terminal action запрещён.",
+                  "skills": [
+                    "immutable-evidence-reporting",
+                    "project-workflow-executor"
+                  ]
+                }
+              ],
+              "checks": [
+                "Exact assignment, role/mode/scope/configuration совпадают; технические IDs не выбирает модель.",
+                "Все инструкции текущей фазы выполнены по порядку с фактическим evidence; blocker не PASS.",
+                "Requirements/input revisions, tenant permissions и operation key не устарели.",
+                "Все active children и их стыки проверены; root review не сумма child reports.",
+                "Workflow complete=true receipt и итоговый comment readback получены; недостающий gate/approval сохраняет стадию незавершённой."
+              ],
+              "evidence": [
+                "Assignment/cursor и pinned input refs, requirement/decomposition revisions.",
+                "Принятый phase report с coverage, checks, safe evidence и ограничениями.",
+                "Owner receipt текущей операции либо конкретный blocker/awaiting-input checkpoint.",
+                "Root integration review и cross-child requirement coverage/findings."
+              ]
+            }
+          ],
+          "execution_scopes": [
+            "aggregate"
+          ]
+        }
+      ]
+    },
+    {
+      "key": "hermes-sdlc:tester",
+      "name": "Tester",
+      "description": "Base candidate: tester; назначение Tracker, исполнение Fleet, receipts Workflow/Forge; не установлен.",
+      "workflow_order": 6,
+      "role_key": "tester",
+      "hermes_namespace": "hermes-tester",
+      "hermes_profile": "hermes-sdlc-quality",
+      "skill_allowlist": [
+        "deployed-acceptance",
+        "forge-operator",
+        "immutable-evidence-reporting",
+        "project-workflow-executor",
+        "tracker-operator",
+        "workflow-systematic-debugging"
+      ],
+      "modes": [
+        {
+          "key": "delivery",
+          "name": "Delivery testing",
+          "mode_order": 1,
+          "phases": [
+            {
+              "phase_order": 1,
+              "code": "TS-TEST-01",
+              "name": "Допуск и входы",
+              "description": "Tester/delivery: Допуск и входы; scope delivery, candidate Base.",
+              "instructions": [
+                {
+                  "description": "Первый вызов ровно project-workflow --json step --task <session>; admission проверяет backend assignment. Затем читать Task, все comments и attachments, links/history и frozen inputs текущей revision, не выбирая mode/scope/workspace из prompt.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Сверить Task/root/project/revisions, agent/role=tester, namespace/profile, workflow/mode=delivery, scope=delivery, run/cycle/attempt, fencing/operation key, configuration hashes и owner-issued workspace lease. Missing/mismatch — fail-closed до модели.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Проверить pinned requirements/decomposition, predecessor receipts, доступ к каждому input и allowed skills/actions/paths; stale evidence, закрытый barrier или отсутствующая capability не подменяются manual action.",
+                  "skills": [
+                    "immutable-evidence-reporting",
+                    "project-workflow-executor"
+                  ]
+                }
+              ],
+              "checks": [
+                "Exact assignment, role/mode/scope/configuration совпадают; технические IDs не выбирает модель.",
+                "Все инструкции текущей фазы выполнены по порядку с фактическим evidence; blocker не PASS.",
+                "Requirements/input revisions, tenant permissions и operation key не устарели."
+              ],
+              "evidence": [
+                "Assignment/cursor и pinned input refs, requirement/decomposition revisions.",
+                "Принятый phase report с coverage, checks, safe evidence и ограничениями.",
+                "Owner receipt текущей операции либо конкретный blocker/awaiting-input checkpoint."
+              ]
+            },
+            {
+              "phase_order": 2,
+              "code": "TS-TEST-02",
+              "name": "Действия роли",
+              "description": "Tester/delivery: Действия роли; scope delivery, candidate Base.",
+              "instructions": [
+                {
+                  "description": "Получить assigned child verification target receipt; проверить source/artifact/config identity и доступность. ACTIVE/healthy ещё не PASS.",
+                  "skills": [
+                    "forge-operator",
+                    "project-workflow-executor"
+                  ]
+                },
+                {
+                  "description": "Проверить каждый frozen child criterion через разрешённые API/UI tools; positive/negative/boundary/empty/permission/tenant и dependency contracts.",
+                  "skills": [
+                    "deployed-acceptance",
+                    "project-workflow-executor"
+                  ]
+                },
+                {
+                  "description": "При дефекте сохранить reproducer, expected/actual, severity и exact runtime evidence; выполнить применимые retry/restart/regressions без исправления кода.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "workflow-systematic-debugging"
+                  ]
+                },
+                {
+                  "description": "Сохранить typed test report/coverage и screenshots/API refs. Tool/target unavailable — blocker, не иной runtime или фиктивный PASS. Owner закрывает target и подтверждает cleanup receipt.",
+                  "skills": [
+                    "deployed-acceptance",
+                    "project-workflow-executor"
+                  ]
+                }
+              ],
+              "checks": [
+                "Exact assignment, role/mode/scope/configuration совпадают; технические IDs не выбирает модель.",
+                "Все инструкции текущей фазы выполнены по порядку с фактическим evidence; blocker не PASS.",
+                "Requirements/input revisions, tenant permissions и operation key не устарели.",
+                "Child criteria реально проверены на assigned exact target; findings воспроизводимы."
+              ],
+              "evidence": [
+                "Assignment/cursor и pinned input refs, requirement/decomposition revisions.",
+                "Принятый phase report с coverage, checks, safe evidence и ограничениями.",
+                "Owner receipt текущей операции либо конкретный blocker/awaiting-input checkpoint.",
+                "Child TestReport: scenarios, expected/actual, safe API/UI evidence и cleanup receipt."
+              ]
+            },
+            {
+              "phase_order": 3,
+              "code": "TS-TEST-03",
+              "name": "Проверка и передача",
+              "description": "Tester/delivery: Проверка и передача; scope delivery, candidate Base.",
+              "instructions": [
+                {
+                  "description": "Перечитать результат и exact revisions/receipts, проверить requirement coverage, checks и ограничения. При Git changes обязательны permitted diff, commit/push, remote SHA и clean workspace; read-only роли не пушат reviewed branch. Не создавать пустые commits.",
+                  "skills": [
+                    "immutable-evidence-reporting",
+                    "project-workflow-executor"
+                  ]
+                },
+                {
+                  "description": "При неизвестном эффекте dispatch/push/deploy/comment сначала owner lookup/reconcile прежнего operation key. Durable terminal ACK либо безопасный awaiting-input checkpoint предшествует owner release; модель сама не освобождает slot.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Подготовить итоговый Business Markdown comment (только compatibility marker валидатора; в Base это Task Tracker comment): результат, coverage требований, проверки, evidence и ограничения; для Architect — реальные children/dependencies, Reviewer/Tester — решение/findings, DevOps — exact candidate/acceptance. Передать принятый report через project-workflow --json step --task <session> --report <report>; дождаться complete=true, сохранить и прочитать итоговый комментарий, затем запросить только completeAssignedStage как owner capability, не выдуманную CLI-команду, с outcome passed или needs_rework с непустыми frozen findings. При недостаточных данных one concrete question и durable awaiting-input handshake с unfinished phase; terminal action запрещён.",
+                  "skills": [
+                    "immutable-evidence-reporting",
+                    "project-workflow-executor"
+                  ]
+                }
+              ],
+              "checks": [
+                "Exact assignment, role/mode/scope/configuration совпадают; технические IDs не выбирает модель.",
+                "Все инструкции текущей фазы выполнены по порядку с фактическим evidence; blocker не PASS.",
+                "Requirements/input revisions, tenant permissions и operation key не устарели.",
+                "Child criteria реально проверены на assigned exact target; findings воспроизводимы.",
+                "Workflow complete=true receipt и итоговый comment readback получены; недостающий gate/approval сохраняет стадию незавершённой."
+              ],
+              "evidence": [
+                "Assignment/cursor и pinned input refs, requirement/decomposition revisions.",
+                "Принятый phase report с coverage, checks, safe evidence и ограничениями.",
+                "Owner receipt текущей операции либо конкретный blocker/awaiting-input checkpoint.",
+                "Child TestReport: scenarios, expected/actual, safe API/UI evidence и cleanup receipt."
+              ]
+            }
+          ],
+          "execution_scopes": [
+            "delivery"
+          ]
+        },
+        {
+          "key": "integration",
+          "name": "Integration testing",
+          "mode_order": 2,
+          "phases": [
+            {
+              "phase_order": 1,
+              "code": "TS-INT-01",
+              "name": "Допуск и входы",
+              "description": "Tester/integration: Допуск и входы; scope aggregate, candidate Base.",
+              "instructions": [
+                {
+                  "description": "Первый вызов ровно project-workflow --json step --task <session>; admission проверяет backend assignment. Затем читать Task, все comments и attachments, links/history и frozen inputs текущей revision, не выбирая mode/scope/workspace из prompt.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Сверить Task/root/project/revisions, agent/role=tester, namespace/profile, workflow/mode=integration, scope=aggregate, run/cycle/attempt, fencing/operation key, configuration hashes и owner-issued workspace lease. Missing/mismatch — fail-closed до модели.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Проверить pinned requirements/decomposition, predecessor receipts, доступ к каждому input и allowed skills/actions/paths; stale evidence, закрытый barrier или отсутствующая capability не подменяются manual action.",
+                  "skills": [
+                    "immutable-evidence-reporting",
+                    "project-workflow-executor"
+                  ]
+                }
+              ],
+              "checks": [
+                "Exact assignment, role/mode/scope/configuration совпадают; технические IDs не выбирает модель.",
+                "Все инструкции текущей фазы выполнены по порядку с фактическим evidence; blocker не PASS.",
+                "Requirements/input revisions, tenant permissions и operation key не устарели."
+              ],
+              "evidence": [
+                "Assignment/cursor и pinned input refs, requirement/decomposition revisions.",
+                "Принятый phase report с coverage, checks, safe evidence и ограничениями.",
+                "Owner receipt текущей операции либо конкретный blocker/awaiting-input checkpoint."
+              ]
+            },
+            {
+              "phase_order": 2,
+              "code": "TS-INT-02",
+              "name": "Действия роли",
+              "description": "Tester/integration: Действия роли; scope aggregate, candidate Base.",
+              "instructions": [
+                {
+                  "description": "Проверить assigned root verification target exact identity, candidate и активный child barrier; не использовать только child targets.",
+                  "skills": [
+                    "forge-operator",
+                    "project-workflow-executor"
+                  ]
+                },
+                {
+                  "description": "Пройти общий пользовательский сценарий root и стыки всех обязательных children, проверить end-to-end coverage requirements и regressions.",
+                  "skills": [
+                    "deployed-acceptance",
+                    "project-workflow-executor"
+                  ]
+                },
+                {
+                  "description": "Проверить negative/tenant/permissions, duplicate/stale/restart/partial failure, долгие сообщения и UI при применимости; записать воспроизводимые findings, не чинить реализацию.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "workflow-systematic-debugging"
+                  ]
+                },
+                {
+                  "description": "Сохранить root acceptance test report и exact evidence; passed либо needs_rework findings, не rollup children. Owner-issued cleanup receipt обязателен до освобождения target.",
+                  "skills": [
+                    "deployed-acceptance",
+                    "project-workflow-executor"
+                  ]
+                }
+              ],
+              "checks": [
+                "Exact assignment, role/mode/scope/configuration совпадают; технические IDs не выбирает модель.",
+                "Все инструкции текущей фазы выполнены по порядку с фактическим evidence; blocker не PASS.",
+                "Requirements/input revisions, tenant permissions и operation key не устарели.",
+                "Проверен общий root пользовательский сценарий и negative cases, а не только child targets."
+              ],
+              "evidence": [
+                "Assignment/cursor и pinned input refs, requirement/decomposition revisions.",
+                "Принятый phase report с coverage, checks, safe evidence и ограничениями.",
+                "Owner receipt текущей операции либо конкретный blocker/awaiting-input checkpoint.",
+                "Root end-to-end TestReport, integration/regression evidence и cleanup receipt."
+              ]
+            },
+            {
+              "phase_order": 3,
+              "code": "TS-INT-03",
+              "name": "Проверка и передача",
+              "description": "Tester/integration: Проверка и передача; scope aggregate, candidate Base.",
+              "instructions": [
+                {
+                  "description": "Перечитать результат и exact revisions/receipts, проверить requirement coverage, checks и ограничения. При Git changes обязательны permitted diff, commit/push, remote SHA и clean workspace; read-only роли не пушат reviewed branch. Не создавать пустые commits.",
+                  "skills": [
+                    "immutable-evidence-reporting",
+                    "project-workflow-executor"
+                  ]
+                },
+                {
+                  "description": "При неизвестном эффекте dispatch/push/deploy/comment сначала owner lookup/reconcile прежнего operation key. Durable terminal ACK либо безопасный awaiting-input checkpoint предшествует owner release; модель сама не освобождает slot.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Подготовить итоговый Business Markdown comment (только compatibility marker валидатора; в Base это Task Tracker comment): результат, coverage требований, проверки, evidence и ограничения; для Architect — реальные children/dependencies, Reviewer/Tester — решение/findings, DevOps — exact candidate/acceptance. Передать принятый report через project-workflow --json step --task <session> --report <report>; дождаться complete=true, сохранить и прочитать итоговый комментарий, затем запросить только completeAssignedStage как owner capability, не выдуманную CLI-команду, с outcome passed или needs_rework с непустыми frozen findings. При недостаточных данных one concrete question и durable awaiting-input handshake с unfinished phase; terminal action запрещён.",
+                  "skills": [
+                    "immutable-evidence-reporting",
+                    "project-workflow-executor"
+                  ]
+                }
+              ],
+              "checks": [
+                "Exact assignment, role/mode/scope/configuration совпадают; технические IDs не выбирает модель.",
+                "Все инструкции текущей фазы выполнены по порядку с фактическим evidence; blocker не PASS.",
+                "Requirements/input revisions, tenant permissions и operation key не устарели.",
+                "Проверен общий root пользовательский сценарий и negative cases, а не только child targets.",
+                "Workflow complete=true receipt и итоговый comment readback получены; недостающий gate/approval сохраняет стадию незавершённой."
+              ],
+              "evidence": [
+                "Assignment/cursor и pinned input refs, requirement/decomposition revisions.",
+                "Принятый phase report с coverage, checks, safe evidence и ограничениями.",
+                "Owner receipt текущей операции либо конкретный blocker/awaiting-input checkpoint.",
+                "Root end-to-end TestReport, integration/regression evidence и cleanup receipt."
+              ]
+            }
+          ],
+          "execution_scopes": [
+            "aggregate"
+          ]
+        }
+      ]
+    },
+    {
+      "key": "hermes-sdlc:devops",
+      "name": "DevOps",
+      "description": "Base candidate: devops; назначение Tracker, исполнение Fleet, receipts Workflow/Forge; не установлен.",
+      "workflow_order": 7,
+      "role_key": "devops",
+      "hermes_namespace": "hermes-devops",
+      "hermes_profile": "hermes-sdlc-operations",
+      "skill_allowlist": [
+        "exact-sha-deployment",
+        "forge-operator",
+        "immutable-evidence-reporting",
+        "project-workflow-executor",
+        "tracker-operator",
+        "workflow-systematic-debugging"
+      ],
+      "modes": [
+        {
+          "key": "delivery",
+          "name": "Delivery deploy",
+          "mode_order": 1,
+          "phases": [
+            {
+              "phase_order": 1,
+              "code": "DO-DEPLOY-01",
+              "name": "Допуск и входы",
+              "description": "DevOps/delivery: Допуск и входы; scope delivery, candidate Base.",
+              "instructions": [
+                {
+                  "description": "Первый вызов ровно project-workflow --json step --task <session>; admission проверяет backend assignment. Затем читать Task, все comments и attachments, links/history и frozen inputs текущей revision, не выбирая mode/scope/workspace из prompt.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Сверить Task/root/project/revisions, agent/role=devops, namespace/profile, workflow/mode=delivery, scope=delivery, run/cycle/attempt, fencing/operation key, configuration hashes и owner-issued workspace lease. Missing/mismatch — fail-closed до модели.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Проверить pinned requirements/decomposition, predecessor receipts, доступ к каждому input и allowed skills/actions/paths; stale evidence, закрытый barrier или отсутствующая capability не подменяются manual action.",
+                  "skills": [
+                    "immutable-evidence-reporting",
+                    "project-workflow-executor"
+                  ]
+                }
+              ],
+              "checks": [
+                "Exact assignment, role/mode/scope/configuration совпадают; технические IDs не выбирает модель.",
+                "Все инструкции текущей фазы выполнены по порядку с фактическим evidence; blocker не PASS.",
+                "Requirements/input revisions, tenant permissions и operation key не устарели."
+              ],
+              "evidence": [
+                "Assignment/cursor и pinned input refs, requirement/decomposition revisions.",
+                "Принятый phase report с coverage, checks, safe evidence и ограничениями.",
+                "Owner receipt текущей операции либо конкретный blocker/awaiting-input checkpoint."
+              ]
+            },
+            {
+              "phase_order": 2,
+              "code": "DO-DEPLOY-02",
+              "name": "Действия роли",
+              "description": "DevOps/delivery: Действия роли; scope delivery, candidate Base.",
+              "instructions": [
+                {
+                  "description": "Сверить child candidate source SHA с Review/Testing и existing mandatory Forge pipeline. Организовать build через Forge по назначенной milestone policy, не после каждого slice и не повторно для того же verified candidate.",
+                  "skills": [
+                    "forge-operator",
+                    "project-workflow-executor"
+                  ]
+                },
+                {
+                  "description": "Заморозить candidate manifest с source/artifact/image/config digests, permissions, target, accepted gates и rollback baseline; проверить data compatibility и required approvals.",
+                  "skills": [
+                    "exact-sha-deployment",
+                    "project-workflow-executor"
+                  ]
+                },
+                {
+                  "description": "Выпустить exact child candidate штатной Forge capability. При unknown сначала lookup/reconcile исходного operation key; не exploratory deploy и не feature write.",
+                  "skills": [
+                    "exact-sha-deployment",
+                    "project-workflow-executor"
+                  ]
+                },
+                {
+                  "description": "Проверить served identity, health, сохранность данных и child acceptance; сохранить trusted deployment/acceptance receipt. Этот receipt удовлетворяет child barrier, но не завершает root.",
+                  "skills": [
+                    "exact-sha-deployment",
+                    "project-workflow-executor"
+                  ]
+                }
+              ],
+              "checks": [
+                "Exact assignment, role/mode/scope/configuration совпадают; технические IDs не выбирает модель.",
+                "Все инструкции текущей фазы выполнены по порядку с фактическим evidence; blocker не PASS.",
+                "Requirements/input revisions, tenant permissions и operation key не устарели.",
+                "Exact candidate и required approvals совпали; child Deployment/acceptance verified."
+              ],
+              "evidence": [
+                "Assignment/cursor и pinned input refs, requirement/decomposition revisions.",
+                "Принятый phase report с coverage, checks, safe evidence и ограничениями.",
+                "Owner receipt текущей операции либо конкретный blocker/awaiting-input checkpoint.",
+                "Child candidate/pipeline manifest, served identity, deployment/acceptance и rollback refs."
+              ]
+            },
+            {
+              "phase_order": 3,
+              "code": "DO-DEPLOY-03",
+              "name": "Проверка и передача",
+              "description": "DevOps/delivery: Проверка и передача; scope delivery, candidate Base.",
+              "instructions": [
+                {
+                  "description": "Перечитать результат и exact revisions/receipts, проверить requirement coverage, checks и ограничения. При Git changes обязательны permitted diff, commit/push, remote SHA и clean workspace; read-only роли не пушат reviewed branch. Не создавать пустые commits.",
+                  "skills": [
+                    "immutable-evidence-reporting",
+                    "project-workflow-executor"
+                  ]
+                },
+                {
+                  "description": "При неизвестном эффекте dispatch/push/deploy/comment сначала owner lookup/reconcile прежнего operation key. Durable terminal ACK либо безопасный awaiting-input checkpoint предшествует owner release; модель сама не освобождает slot.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Подготовить итоговый Business Markdown comment (только compatibility marker валидатора; в Base это Task Tracker comment): результат, coverage требований, проверки, evidence и ограничения; для Architect — реальные children/dependencies, Reviewer/Tester — решение/findings, DevOps — exact candidate/acceptance. Передать принятый report через project-workflow --json step --task <session> --report <report>; дождаться complete=true, сохранить и прочитать итоговый комментарий, затем запросить только completeAssignedStage как owner capability, не выдуманную CLI-команду, с outcome passed. При недостаточных данных one concrete question и durable awaiting-input handshake с unfinished phase; terminal action запрещён.",
+                  "skills": [
+                    "immutable-evidence-reporting",
+                    "project-workflow-executor"
+                  ]
+                }
+              ],
+              "checks": [
+                "Exact assignment, role/mode/scope/configuration совпадают; технические IDs не выбирает модель.",
+                "Все инструкции текущей фазы выполнены по порядку с фактическим evidence; blocker не PASS.",
+                "Requirements/input revisions, tenant permissions и operation key не устарели.",
+                "Exact candidate и required approvals совпали; child Deployment/acceptance verified.",
+                "Workflow complete=true receipt и итоговый comment readback получены; недостающий gate/approval сохраняет стадию незавершённой."
+              ],
+              "evidence": [
+                "Assignment/cursor и pinned input refs, requirement/decomposition revisions.",
+                "Принятый phase report с coverage, checks, safe evidence и ограничениями.",
+                "Owner receipt текущей операции либо конкретный blocker/awaiting-input checkpoint.",
+                "Child candidate/pipeline manifest, served identity, deployment/acceptance и rollback refs."
+              ]
+            }
+          ],
+          "execution_scopes": [
+            "delivery"
+          ]
+        },
+        {
+          "key": "integration",
+          "name": "Integration deploy",
+          "mode_order": 2,
+          "phases": [
+            {
+              "phase_order": 1,
+              "code": "DO-INT-01",
+              "name": "Допуск и входы",
+              "description": "DevOps/integration: Допуск и входы; scope aggregate, candidate Base.",
+              "instructions": [
+                {
+                  "description": "Первый вызов ровно project-workflow --json step --task <session>; admission проверяет backend assignment. Затем читать Task, все comments и attachments, links/history и frozen inputs текущей revision, не выбирая mode/scope/workspace из prompt.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Сверить Task/root/project/revisions, agent/role=devops, namespace/profile, workflow/mode=integration, scope=aggregate, run/cycle/attempt, fencing/operation key, configuration hashes и owner-issued workspace lease. Missing/mismatch — fail-closed до модели.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Проверить pinned requirements/decomposition, predecessor receipts, доступ к каждому input и allowed skills/actions/paths; stale evidence, закрытый barrier или отсутствующая capability не подменяются manual action.",
+                  "skills": [
+                    "immutable-evidence-reporting",
+                    "project-workflow-executor"
+                  ]
+                }
+              ],
+              "checks": [
+                "Exact assignment, role/mode/scope/configuration совпадают; технические IDs не выбирает модель.",
+                "Все инструкции текущей фазы выполнены по порядку с фактическим evidence; blocker не PASS.",
+                "Requirements/input revisions, tenant permissions и operation key не устарели."
+              ],
+              "evidence": [
+                "Assignment/cursor и pinned input refs, requirement/decomposition revisions.",
+                "Принятый phase report с coverage, checks, safe evidence и ограничениями.",
+                "Owner receipt текущей операции либо конкретный blocker/awaiting-input checkpoint."
+              ]
+            },
+            {
+              "phase_order": 2,
+              "code": "DO-INT-02",
+              "name": "Действия роли",
+              "description": "DevOps/integration: Действия роли; scope aggregate, candidate Base.",
+              "instructions": [
+                {
+                  "description": "Сверить root integration candidate, active decomposition barrier, Review/Testing и mandatory exact-head Forge gates; не пересобирать другой SHA ради release.",
+                  "skills": [
+                    "forge-operator",
+                    "project-workflow-executor"
+                  ]
+                },
+                {
+                  "description": "Зафиксировать root candidate manifest, target/promotion policy, artifact/image/config digests, approvals, data compatibility и rollback baseline.",
+                  "skills": [
+                    "exact-sha-deployment",
+                    "project-workflow-executor"
+                  ]
+                },
+                {
+                  "description": "Выпустить только назначенный root candidate через Forge, reconcile unknown deploy; выполнять rollback только к заранее verified baseline и по owner policy.",
+                  "skills": [
+                    "exact-sha-deployment",
+                    "project-workflow-executor"
+                  ]
+                },
+                {
+                  "description": "Проверить served source/digests, health/data preservation и собственный root Deployment с business acceptance. Child rollup, зелёный build и healthy контейнер отдельно не завершают root.",
+                  "skills": [
+                    "exact-sha-deployment",
+                    "project-workflow-executor"
+                  ]
+                }
+              ],
+              "checks": [
+                "Exact assignment, role/mode/scope/configuration совпадают; технические IDs не выбирает модель.",
+                "Все инструкции текущей фазы выполнены по порядку с фактическим evidence; blocker не PASS.",
+                "Requirements/input revisions, tenant permissions и operation key не устарели.",
+                "Root served identity/health/data compatibility и business acceptance подтверждены отдельно."
+              ],
+              "evidence": [
+                "Assignment/cursor и pinned input refs, requirement/decomposition revisions.",
+                "Принятый phase report с coverage, checks, safe evidence и ограничениями.",
+                "Owner receipt текущей операции либо конкретный blocker/awaiting-input checkpoint.",
+                "Root exact candidate manifest и собственные Deployment/acceptance/rollback receipts."
+              ]
+            },
+            {
+              "phase_order": 3,
+              "code": "DO-INT-03",
+              "name": "Проверка и передача",
+              "description": "DevOps/integration: Проверка и передача; scope aggregate, candidate Base.",
+              "instructions": [
+                {
+                  "description": "Перечитать результат и exact revisions/receipts, проверить requirement coverage, checks и ограничения. При Git changes обязательны permitted diff, commit/push, remote SHA и clean workspace; read-only роли не пушат reviewed branch. Не создавать пустые commits.",
+                  "skills": [
+                    "immutable-evidence-reporting",
+                    "project-workflow-executor"
+                  ]
+                },
+                {
+                  "description": "При неизвестном эффекте dispatch/push/deploy/comment сначала owner lookup/reconcile прежнего operation key. Durable terminal ACK либо безопасный awaiting-input checkpoint предшествует owner release; модель сама не освобождает slot.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Подготовить итоговый Business Markdown comment (только compatibility marker валидатора; в Base это Task Tracker comment): результат, coverage требований, проверки, evidence и ограничения; для Architect — реальные children/dependencies, Reviewer/Tester — решение/findings, DevOps — exact candidate/acceptance. Передать принятый report через project-workflow --json step --task <session> --report <report>; дождаться complete=true, сохранить и прочитать итоговый комментарий, затем запросить только completeAssignedStage как owner capability, не выдуманную CLI-команду, с outcome passed. При недостаточных данных one concrete question и durable awaiting-input handshake с unfinished phase; terminal action запрещён.",
+                  "skills": [
+                    "immutable-evidence-reporting",
+                    "project-workflow-executor"
+                  ]
+                }
+              ],
+              "checks": [
+                "Exact assignment, role/mode/scope/configuration совпадают; технические IDs не выбирает модель.",
+                "Все инструкции текущей фазы выполнены по порядку с фактическим evidence; blocker не PASS.",
+                "Requirements/input revisions, tenant permissions и operation key не устарели.",
+                "Root served identity/health/data compatibility и business acceptance подтверждены отдельно.",
+                "Workflow complete=true receipt и итоговый comment readback получены; недостающий gate/approval сохраняет стадию незавершённой."
+              ],
+              "evidence": [
+                "Assignment/cursor и pinned input refs, requirement/decomposition revisions.",
+                "Принятый phase report с coverage, checks, safe evidence и ограничениями.",
+                "Owner receipt текущей операции либо конкретный blocker/awaiting-input checkpoint.",
+                "Root exact candidate manifest и собственные Deployment/acceptance/rollback receipts."
+              ]
+            }
+          ],
+          "execution_scopes": [
+            "aggregate"
+          ]
+        }
+      ]
+    }
+  ]
+}
