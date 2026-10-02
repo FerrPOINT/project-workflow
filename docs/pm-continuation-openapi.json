@@ -103,11 +103,13 @@
             "type": "string"
           },
           "tracker_instance_ref": {
+            "description": "Exact 1..128 UTF-8 bytes; no whitespace/control or normalization",
             "maxLength": 128,
             "minLength": 1,
             "pattern": "^[^\\s\\x00-\\x1f\\x7f-\\x9f]+$",
             "title": "Tracker Instance Ref",
-            "type": "string"
+            "type": "string",
+            "x-max-utf8-bytes": 128
           },
           "tracker_project_ref": {
             "not": {
@@ -140,11 +142,13 @@
             "type": "integer"
           },
           "tracker_instance_ref": {
+            "description": "Exact 1..128 UTF-8 bytes; no whitespace/control or normalization",
             "maxLength": 128,
             "minLength": 1,
             "pattern": "^[^\\s\\x00-\\x1f\\x7f-\\x9f]+$",
             "title": "Tracker Instance Ref",
-            "type": "string"
+            "type": "string",
+            "x-max-utf8-bytes": 128
           },
           "tracker_project_ref": {
             "not": {

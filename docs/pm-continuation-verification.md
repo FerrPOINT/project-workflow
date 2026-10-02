@@ -2,16 +2,25 @@
 
 ## Immutable PM Namespace Ownership (2026-10-02)
 
+This current foundation supersedes older namespace-ownership GAP entries below;
+older sections retain historical gate evidence, not current ownership status.
 This bounded follow-up adds write-once namespace -> Tracker instance/project
 authority, not PMDraft admission. Provision/readback independently require fresh
 bounded Base PAT introspection, standard scopes plus exact namespace grants;
 provisioning additionally requires the configured canonical central machine
 subject. These new grants/policies are configuration prerequisites, not issued
 by this PR. No cookie/local/runtime token fallback or caller issuer/actor claim
-is accepted. Instance refs are exact 1..128 strings without whitespace/control;
+is accepted. Instance refs are exact 1..128 UTF-8 bytes without whitespace/control;
 UUIDs are canonical lowercase and non-nil. Stored actor, issuer, UUID and time
 remain immutable on same-owner replay. SQL uniqueness and RESTRICT FK fence
 namespace and reverse Tracker instance/project ownership.
+
+Fleet `backend/domain/src/pm_execution.rs` uses Rust string byte length in
+`valid_ref(value, 128)`. Final review corrected Python character-count acceptance:
+an exact 128-byte Unicode scalar string is preserved, 129+ bytes and invalid
+surrogates are rejected before mutation. Generated OpenAPI exposes
+`x-max-utf8-bytes=128`; standard maxLength alone counts characters. No identity/
+callback fields, generic DTO or migration changed for this correction.
 
 Provision and new enrollment lock Catalog -> Project -> Task where applicable.
 The first full PG candidate exposed a real deadlock: generic continuation held
@@ -30,16 +39,17 @@ UPDATE/DELETE rejection. Fresh and 0006 upgrades pass; an old applied pending
 0007 without this table fails schema readiness and is not silently repaired.
 
 Own Linux QA source is `/tmp/workflow-pm-ownership-qa-source-20261002`.
-PostgreSQL 16 runs used only the owned `workflow-pm-ownership-qa-db`, loopback
-55450, with isolated per-test databases. Final gates:
+Final PostgreSQL 16 runs used only owned `workflow-pm-ownership-utf8-qa-db`,
+loopback 55451, with isolated per-test databases and auto-remove/tmpfs storage.
+Final gates:
 
 | Gate | Ownership Result |
 | --- | --- |
-| Full unit + coverage + strict resource warnings | 2,094 passed, 76 integration deselected, 676.97s; coverage 94.28%, threshold 94 enforced |
-| Full canonical PostgreSQL integration | 76 passed, 338.32s, exit 0 |
-| Focused ownership/auth/strict wire/legacy continuation | 57 passed, 16.83s |
-| Focused security/contracts/docs | 139 passed, 34.37s |
-| PostgreSQL ownership/catalog/generic lock races | 10 passed, 17.33s |
+| Full unit + coverage + strict resource warnings | 2,097 passed, 76 integration deselected, 916.04s; coverage 94.26%, threshold 94 enforced |
+| Full canonical PostgreSQL integration | 76 passed, 218.19s, exit 0 |
+| Focused ownership/auth/strict wire/legacy continuation | 60 passed, 16.78s |
+| Focused ownership/PM/security/contracts/docs | 237 passed, 87.03s |
+| PostgreSQL ownership/catalog/generic lock races | Included in full 76 pass; both race orders |
 | Ruff | All checks passed |
 | Mypy | Success, 102 source files |
 | Generated OpenAPI | Regenerated; identity 10 / Fleet callback 18 unchanged |
@@ -56,10 +66,10 @@ Commands used the canonical prefix
 `uv run --isolated --with-requirements constraints.txt --all-extras`:
 
 ```text
-COVERAGE_FILE=.coverage.ownership-unit-authority-final pytest -q --cov=project_workflow --cov-report=term --timeout=60 -W error::ResourceWarning -W error::pytest.PytestUnraisableExceptionWarning --basetemp=/dev/shm/workflow-pm-ownership-unit-authority-final-20261002
-PGHOST=127.0.0.1 PGPORT=55450 pytest -q -m integration tests/test_postgres_integration.py --timeout=120 --basetemp=/dev/shm/workflow-pm-ownership-pg-lock-full-20261002
+COVERAGE_FILE=.coverage.ownership-utf8-final pytest -q --cov=project_workflow --cov-report=term --timeout=60 -W error::ResourceWarning -W error::pytest.PytestUnraisableExceptionWarning --basetemp=/dev/shm/workflow-pm-ownership-utf8-unit-20261002
+PGHOST=127.0.0.1 PGPORT=55451 pytest -q -m integration tests/test_postgres_integration.py --timeout=120 --basetemp=/dev/shm/workflow-pm-ownership-utf8-pg-20261002
 pytest -q tests/test_namespace_ownership.py --timeout=60 -W error::ResourceWarning -W error::pytest.PytestUnraisableExceptionWarning
-pytest -q -m integration tests/test_postgres_integration.py -k "pm_ownership or enrollment_and_generic_continuation or enrollment_and_new_assignment" --timeout=120
+pytest -q tests/test_namespace_ownership.py tests/test_pm_execution.py tests/test_pm_assignment_guard.py tests/test_pm_generic_continuation.py tests/test_concrete_agent_mapping.py tests/test_runtime_assignment_contract.py tests/test_docs_quality.py --timeout=60
 ruff check .
 mypy project_workflow scripts
 python -m scripts.export_pm_openapi
@@ -96,7 +106,7 @@ docs/pm-continuation-verification.md
 ```
 
 Development image digest was
-`sha256:8012a2ef0e7540f6359ce7a985ef2523b9d1fd208f6ea40ff492212537604232`.
+`sha256:ea57a08d66b363c6b7ba5dce3ad1ae4a5352f716f47177a899d9031e82e6c6db`.
 The image tag and all owned QA Compose containers/network/volumes were removed.
 PG fixture teardown left only default postgres/project_workflow/template databases
 before the standalone PG container was removed. No shared runtime, pins, Base

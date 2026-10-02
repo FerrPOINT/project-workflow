@@ -16,6 +16,12 @@ def canonical_uuid(value: str) -> str:
 
 
 def exact_instance(value: str) -> str:
+    try:
+        size = len(value.encode("utf-8"))
+    except UnicodeEncodeError:
+        raise ValueError("Valid UTF-8 Tracker instance required") from None
+    if not 1 <= size <= 128:
+        raise ValueError("Tracker instance must be 1..128 UTF-8 bytes")
     if any(character.isspace() or ord(character) < 32 or 127 <= ord(character) <= 159 for character in value):
         raise ValueError("Tracker instance must not contain whitespace or controls")
     return value
@@ -28,6 +34,8 @@ UUIDRef = Annotated[str, StringConstraints(strict=True), AfterValidator(canonica
 InstanceRef = Annotated[
     str, StringConstraints(strict=True, min_length=1, max_length=128), AfterValidator(exact_instance),
     WithJsonSchema({"type": "string", "minLength": 1, "maxLength": 128,
+                    "description": "Exact 1..128 UTF-8 bytes; no whitespace/control or normalization",
+                    "x-max-utf8-bytes": 128,
                     "pattern": r"^[^\s\x00-\x1f\x7f-\x9f]+$"}),
 ]
 

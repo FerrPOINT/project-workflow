@@ -15,9 +15,13 @@ later admission must validate the real concrete Fleet agent, not its selector.
 ```
 
 The example is a wire example, not a receipt or deployed mapping. Instance refs
-are exact strings of 1..128 characters without whitespace, C0/C1 controls; no
+are exact strings of 1..128 UTF-8 bytes without whitespace, C0/C1 controls; no
 trimming, case folding or Unicode normalization. UUIDs are canonical lowercase
 and non-nil. Caller issuer/subject/receipt/timestamp fields are forbidden.
+The byte bound matches Fleet `PmExecutionIdentity` / `valid_ref`, not Python
+character count. Unicode scalar strings within that byte budget remain unchanged;
+invalid UTF-8/surrogates are rejected. Generated schema records `x-max-utf8-bytes`
+because standard JSON Schema maxLength counts characters, not UTF-8 bytes.
 
 First PUT returns 201; identical ownership returns 200 with the original result.
 Changed owner pair or authority issuer returns 409 without mutation. Mapping is

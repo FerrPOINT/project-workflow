@@ -1,5 +1,6 @@
 """Namespace authority is provisioned, not a caller admission claim."""
 
+import json
 from uuid import uuid4
 
 import httpx
@@ -116,6 +117,8 @@ def test_provision_readback_replay_restart_are_immutable(owned_namespace):
     ("tracker_instance_ref", "leading space"), ("tracker_instance_ref", "instance\n"),
     ("tracker_instance_ref", "x\x00"), ("tracker_instance_ref", "x\x85"),
     ("tracker_instance_ref", "x\u00a0"), ("tracker_instance_ref", 12),
+    ("tracker_instance_ref", "x" * 125 + "\u0416\u0301"),
+    ("tracker_instance_ref", "\u0416" * 65),
     ("tracker_project_ref", "00000000-0000-0000-0000-000000000000"),
     ("tracker_project_ref", PROJECT_REF.upper()), ("tracker_project_ref", " " + PROJECT_REF),
     ("contract_version", True), ("contract_version", "1"), ("contract_version", 2),
@@ -182,10 +185,25 @@ def test_configured_issuer_change_cannot_reown_existing_mapping(owned_namespace,
 def test_valid_instance_boundary_is_exact_without_normalization(owned_namespace):
     client, namespace_id, _, _ = owned_namespace
     url = f"/api/pm/namespace-ownership/{namespace_id}"
-    instance = "X" * 126 + "\u0416\u0301"
+    instance = "X" * 124 + "\u0416\u0301"
+    assert len(instance.encode("utf-8")) == 128
     response = client.put(url, headers=PAT, json={**PAYLOAD, "tracker_instance_ref": instance})
     assert response.status_code == 201
     assert response.json()["result"]["tracker_instance_ref"] == instance
+
+
+def test_invalid_utf8_scalar_is_rejected_without_mutation(owned_namespace):
+    client, namespace_id, calls, _ = owned_namespace
+    payload = {**PAYLOAD, "tracker_instance_ref": "\ud800"}
+    response = client.put(f"/api/pm/namespace-ownership/{namespace_id}",
+                          headers={**PAT, "Content-Type": "application/json"},
+                          content=json.dumps(payload).encode("ascii"))
+    assert response.status_code == 422, response.text
+    assert calls == []
+    with pytest.raises(ValidationError):
+        NamespaceOwnershipRequest.model_validate(payload)
+    with SAUnitOfWork() as uow:
+        assert uow.projects.get_pm_ownership(namespace_id) is None
 
 
 def test_timeout_and_compressed_dependency_are_sanitized(owned_namespace, monkeypatch):
@@ -344,4 +362,5 @@ def test_ownership_wire_is_generated_and_not_dispatch_admission(owned_namespace)
     assert set(request["required"]) == set(PAYLOAD)
     assert request["additionalProperties"] is False
     assert request["properties"]["tracker_project_ref"]["not"]["const"].startswith("00000000")
+    assert request["properties"]["tracker_instance_ref"]["x-max-utf8-bytes"] == 128
     assert not any("admit" in path or "prepare" in path for path in schema["paths"])

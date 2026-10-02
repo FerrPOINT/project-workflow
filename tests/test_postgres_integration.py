@@ -335,6 +335,12 @@ def test_pm_ownership_postgres_actual_bounded_auth_and_readback(pg_url, monkeypa
                "tracker_project_ref": "cccccccc-cccc-4ccc-8ccc-cccccccccccc"}
     url = f"/api/pm/namespace-ownership/{namespace_id}"
     try:
+        from project_workflow.infrastructure.db import models as m
+
+        rejected = client.put(url, headers=headers, json={**payload, "tracker_instance_ref": "\u0416" * 65})
+        assert rejected.status_code == 422 and probes == []
+        with SAUnitOfWork() as uow:
+            assert uow.session.query(m.PMNamespaceOwnership).count() == 0
         first = client.put(url, headers=headers, json=payload)
         assert first.status_code == 201, first.text
         assert first.json()["result"]["authority_issuer"] == root
