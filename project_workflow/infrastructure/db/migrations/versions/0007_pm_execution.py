@@ -10,6 +10,37 @@ depends_on = None
 
 
 def upgrade() -> None:
+    op.create_table(
+        "pm_namespace_ownership",
+        sa.Column("ownership_ref", sa.String(36), primary_key=True),
+        sa.Column("namespace_id", sa.Integer(), sa.ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False),
+        sa.Column("tracker_instance_ref", sa.String(128), nullable=False),
+        sa.Column("tracker_project_ref", sa.String(36), nullable=False),
+        sa.Column("authority_issuer", sa.String(512), nullable=False),
+        sa.Column("provisioner_subject", sa.String(36), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.UniqueConstraint("namespace_id"),
+        sa.UniqueConstraint("tracker_instance_ref", "tracker_project_ref", name="uq_pm_namespace_tracker_project"),
+        sa.CheckConstraint("length(tracker_instance_ref) BETWEEN 1 AND 128", name="ck_pm_namespace_instance_length"),
+    )
+    if op.get_bind().dialect.name == "postgresql":
+        op.execute("""
+            CREATE FUNCTION pm_namespace_ownership_immutable() RETURNS trigger LANGUAGE plpgsql AS $$
+            BEGIN RAISE EXCEPTION 'PM namespace ownership is immutable'; END;
+            $$
+        """)
+        op.execute("""
+            CREATE TRIGGER pm_namespace_ownership_immutable
+            BEFORE UPDATE OR DELETE ON pm_namespace_ownership
+            FOR EACH ROW EXECUTE FUNCTION pm_namespace_ownership_immutable()
+        """)
+    elif op.get_bind().dialect.name == "sqlite":
+        for action in ("UPDATE", "DELETE"):
+            op.execute(f"""
+                CREATE TRIGGER pm_namespace_ownership_no_{action.lower()}
+                BEFORE {action} ON pm_namespace_ownership
+                BEGIN SELECT RAISE(ABORT, 'PM namespace ownership is immutable'); END
+            """)
     with op.batch_alter_table("task_runtime_assignments") as batch:
         batch.add_column(sa.Column("concrete_agent_ref", sa.String(36), nullable=True))
         batch.create_check_constraint(

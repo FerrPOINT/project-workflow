@@ -27,6 +27,7 @@ RUNTIME = {"Authorization": "Bearer " + "r" * 40}
 OLD_RUN = "11111111-1111-4111-8111-111111111111"
 NEW_RUN = "22222222-2222-4222-8222-222222222222"
 AGENT_REF = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+PROJECT_REF = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
 OTHER_AGENT_REF = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 
 
@@ -35,7 +36,7 @@ def pm(monkeypatch):
     yield from prepare_pm(monkeypatch)
 
 
-def prepare_pm(monkeypatch):
+def prepare_pm(monkeypatch, *, ownership=True):
     from project_workflow import build_provenance
     from project_workflow.interfaces.ui.routes import runtime_api
 
@@ -52,6 +53,13 @@ def prepare_pm(monkeypatch):
     config.get_settings.cache_clear()
     _namespace("PM", "workflow-project_manager", "PM")
     with SAUnitOfWork() as uow:
+        namespace = uow.projects.get_by_cli_command("workflow-project_manager")
+        if ownership:
+            uow.projects.create_pm_ownership({
+                "contract_version": 1, "ownership_ref": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+                "namespace_id": namespace.id, "tracker_instance_ref": "tracker:one", "tracker_project_ref": PROJECT_REF,
+                "authority_issuer": "http://auth.test", "provisioner_subject": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+            })
         phase = uow.session.scalar(select(m.Phase).where(m.Phase.code == "assigned"))
         agent_id = uow.agents.create({"name": "project_manager", "description": ""})
         phase.agent_id = agent_id
@@ -65,7 +73,7 @@ def prepare_pm(monkeypatch):
     bound = result.json()["result"]
     identity = {
         "task": "PM-1", "execution_ref": "execution:pm:1", "tracker_instance_ref": "tracker:one",
-        "tracker_project_ref": "project:one", "task_ref": assignment["business_task_ref"],
+        "tracker_project_ref": PROJECT_REF, "task_ref": assignment["business_task_ref"],
         "root_ref": assignment["root_task_ref"], "agent_ref": AGENT_REF,
         "assignment_operation_key": assignment["assignment_operation_key"],
         "assignment_ref": assignment["assignment_ref"], "assignment_revision": assignment["assignment_revision"],

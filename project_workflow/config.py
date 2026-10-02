@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     AUTH_PUBLIC_ORIGIN: str = "http://localhost:8812"
     AUTH_SESSION_SECRET: str = ""
     AUTH_COOKIE_SECURE: bool = False
+    PROJECT_WORKFLOW_NAMESPACE_PROVISIONER_SUBJECT: str = ""
 
     # Private role-token map for isolated agent containers, not the browser UI.
     # Shape: {"analyst":"<token>", ...}. Empty keeps the bridge fail-closed.

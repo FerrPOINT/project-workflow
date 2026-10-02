@@ -20,7 +20,7 @@ from ... import __version__
 from ...infrastructure.db.managed_catalog import validate_managed_catalog_state
 from ...infrastructure.db.session import DatabaseUnavailable, get_engine, reset_engine
 from ...infrastructure.db.uow import SAUnitOfWork
-from .routes import api, cli_api, pages, pm_api, runtime_api
+from .routes import api, cli_api, namespace_ownership_api, pages, pm_api, runtime_api
 from .sso import install_sso
 
 logger = logging.getLogger(__name__)
@@ -264,6 +264,13 @@ def create_app() -> FastAPI:
              response_model_exclude_unset=True)(pm_api.rebind)
     app.post("/internal/runtime/v1/pm/readback", response_model=PMResponse,
              response_model_exclude_unset=True)(pm_api.readback)
+    from project_workflow.domain.namespace_ownership import NamespaceOwnershipResponse
+
+    app.put("/api/pm/namespace-ownership/{namespace_id}", response_model=NamespaceOwnershipResponse,
+            status_code=201)(namespace_ownership_api.provision)
+    app.get("/api/pm/namespace-ownership/{namespace_id}", response_model=NamespaceOwnershipResponse)(
+        namespace_ownership_api.readback
+    )
 
     # Pages
     app.get("/", response_class=HTMLResponse)(pages.index)

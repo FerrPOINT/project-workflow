@@ -1,5 +1,117 @@
 # PM Continuation Verification
 
+## Immutable PM Namespace Ownership (2026-10-02)
+
+This bounded follow-up adds write-once namespace -> Tracker instance/project
+authority, not PMDraft admission. Provision/readback independently require fresh
+bounded Base PAT introspection, standard scopes plus exact namespace grants;
+provisioning additionally requires the configured canonical central machine
+subject. These new grants/policies are configuration prerequisites, not issued
+by this PR. No cookie/local/runtime token fallback or caller issuer/actor claim
+is accepted. Instance refs are exact 1..128 strings without whitespace/control;
+UUIDs are canonical lowercase and non-nil. Stored actor, issuer, UUID and time
+remain immutable on same-owner replay. SQL uniqueness and RESTRICT FK fence
+namespace and reverse Tracker instance/project ownership.
+
+Provision and new enrollment lock Catalog -> Project -> Task where applicable.
+The first full PG candidate exposed a real deadlock: generic continuation held
+Task and needed Project FK KEY SHARE while PM bind held Project FOR UPDATE and
+waited for Task. The dedicated PM namespace lock now uses FOR NO KEY UPDATE,
+which serializes provisioning/enrollment without blocking that FK lock. Existing
+generic Project FOR UPDATE locks are unchanged. SQL compilation and both PG
+race orders protect this distinction; catalog bootstrap retains catalog-first
+locking. New enrollment requires matching persisted ownership, with no implicit
+backfill. Legacy exact bind replay, readback and checkpoint/resume remain valid
+without the new mapping; the old execution identity/assignment never moves.
+
+Only pending `0007_pm_execution` is extended, after accepted `0006`; published
+`0001`-`0006` are unchanged. It adds an initially empty ownership table and
+UPDATE/DELETE rejection. Fresh and 0006 upgrades pass; an old applied pending
+0007 without this table fails schema readiness and is not silently repaired.
+
+Own Linux QA source is `/tmp/workflow-pm-ownership-qa-source-20261002`.
+PostgreSQL 16 runs used only the owned `workflow-pm-ownership-qa-db`, loopback
+55450, with isolated per-test databases. Final gates:
+
+| Gate | Ownership Result |
+| --- | --- |
+| Full unit + coverage + strict resource warnings | 2,094 passed, 76 integration deselected, 676.97s; coverage 94.28%, threshold 94 enforced |
+| Full canonical PostgreSQL integration | 76 passed, 338.32s, exit 0 |
+| Focused ownership/auth/strict wire/legacy continuation | 57 passed, 16.83s |
+| Focused security/contracts/docs | 139 passed, 34.37s |
+| PostgreSQL ownership/catalog/generic lock races | 10 passed, 17.33s |
+| Ruff | All checks passed |
+| Mypy | Success, 102 source files |
+| Generated OpenAPI | Regenerated; identity 10 / Fleet callback 18 unchanged |
+| Development image / isolated Compose | Passed; health HTTP 200, database/schema/catalog ok |
+| Unconfigured authority / release preflight | Expected typed 503; no synthetic grants or provenance |
+
+The final unit gate emitted only the two existing SQLAlchemy transaction/savepoint
+warnings in UI app tests; strict ResourceWarning/unraisable checks passed. Runtime,
+test and migration sources matched the worktree byte-for-byte and did not change
+after these final gates. Only this verification record was completed afterwards;
+final docs/generated-contract checks are rerun before commit.
+
+Commands used the canonical prefix
+`uv run --isolated --with-requirements constraints.txt --all-extras`:
+
+```text
+COVERAGE_FILE=.coverage.ownership-unit-authority-final pytest -q --cov=project_workflow --cov-report=term --timeout=60 -W error::ResourceWarning -W error::pytest.PytestUnraisableExceptionWarning --basetemp=/dev/shm/workflow-pm-ownership-unit-authority-final-20261002
+PGHOST=127.0.0.1 PGPORT=55450 pytest -q -m integration tests/test_postgres_integration.py --timeout=120 --basetemp=/dev/shm/workflow-pm-ownership-pg-lock-full-20261002
+pytest -q tests/test_namespace_ownership.py --timeout=60 -W error::ResourceWarning -W error::pytest.PytestUnraisableExceptionWarning
+pytest -q -m integration tests/test_postgres_integration.py -k "pm_ownership or enrollment_and_generic_continuation or enrollment_and_new_assignment" --timeout=120
+ruff check .
+mypy project_workflow scripts
+python -m scripts.export_pm_openapi
+git diff --check
+```
+
+Implementation and contract files:
+
+```text
+project_workflow/domain/namespace_ownership.py
+project_workflow/domain/repositories.py
+project_workflow/infrastructure/namespace_auth.py
+project_workflow/infrastructure/db/models.py
+project_workflow/infrastructure/db/repositories/project.py
+project_workflow/infrastructure/db/migrations/versions/0007_pm_execution.py
+project_workflow/application/namespace_ownership.py
+project_workflow/application/pm_execution.py
+project_workflow/interfaces/ui/routes/namespace_ownership_api.py
+project_workflow/interfaces/ui/app.py
+project_workflow/interfaces/ui/sso.py
+project_workflow/config.py
+.env.example
+docker-compose.yml
+scripts/export_pm_openapi.py
+tests/test_namespace_ownership.py
+tests/test_pm_execution.py
+tests/test_postgres_integration.py
+tests/test_docs_quality.py
+docs/pm-namespace-ownership.md
+docs/pm-continuation-openapi.json
+docs/pm-continuation-contract.md
+docs/runtime-assignment-contract.md
+docs/pm-continuation-verification.md
+```
+
+Development image digest was
+`sha256:8012a2ef0e7540f6359ce7a985ef2523b9d1fd208f6ea40ff492212537604232`.
+The image tag and all owned QA Compose containers/network/volumes were removed.
+PG fixture teardown left only default postgres/project_workflow/template databases
+before the standalone PG container was removed. No shared runtime, pins, Base
+credentials/policy or UI changed; browser verification is not applicable.
+
+Remaining product GAP: the current catalog has ONE managed PM namespace, so
+this rollout supports only ONE explicitly mapped Tracker instance/project pair.
+Multi-project routing is not completed. Tracker reservation allocates authoritative
+UUID/version/ordinal and immutable input with dispatch_allowed=false; ownership
+does not enable dispatch. PMDraftAdmission/owner CAS, explicit replacement history
+and verified prior quiescence, real workspace/lease producer, actual concrete Fleet
+agent validation and source-pinned native skills/release remain separate work.
+Typed not-applicable may cover queue/decomposition/delivery, never input/workspace.
+General Delivery DTO, ten-field identity and eighteen-field callback are unchanged.
+
 ## Enrolled PM New Assignment Guard (2026-10-02)
 
 Bounded follow-up on `014bb76`: the proven done-but-running generic `/assign`

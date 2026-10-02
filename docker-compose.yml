@@ -55,6 +55,7 @@ services:
       AUTH_PUBLIC_ORIGIN: ${AUTH_PUBLIC_ORIGIN:-http://localhost:8812}
       AUTH_SESSION_SECRET: ${AUTH_SESSION_SECRET:-}
       AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
+      PROJECT_WORKFLOW_NAMESPACE_PROVISIONER_SUBJECT: ${PROJECT_WORKFLOW_NAMESPACE_PROVISIONER_SUBJECT:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:

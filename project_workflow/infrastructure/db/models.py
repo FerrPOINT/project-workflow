@@ -30,6 +30,22 @@ class Base(DeclarativeBase):
     pass
 
 
+class PMNamespaceOwnership(Base):
+    __tablename__ = "pm_namespace_ownership"
+
+    ownership_ref: Mapped[str] = mapped_column(String(36), primary_key=True)
+    namespace_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="RESTRICT"), unique=True)
+    tracker_instance_ref: Mapped[str] = mapped_column(String(128))
+    tracker_project_ref: Mapped[str] = mapped_column(String(36))
+    authority_issuer: Mapped[str] = mapped_column(String(512))
+    provisioner_subject: Mapped[str] = mapped_column(String(36))
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    __table_args__ = (
+        UniqueConstraint("tracker_instance_ref", "tracker_project_ref", name="uq_pm_namespace_tracker_project"),
+        CheckConstraint("length(tracker_instance_ref) BETWEEN 1 AND 128", name="ck_pm_namespace_instance_length"),
+    )
+
+
 class PMExecution(Base):
     __tablename__ = "pm_executions"
 

@@ -217,3 +217,10 @@ Tracker owns authorization, answer completeness and revision semantics.
 Workflow validates exact stored request/revision refs, not human answer text.
 Live multi-service acceptance and Fleet's actual Hermes probe remain required.
 This repository implements the callback consumer, not Fleet's callback server.
+
+New PM enrollment additionally requires the explicit immutable namespace owner
+mapping described in [PM Namespace Ownership](pm-namespace-ownership.md).
+Catalog -> Project -> Task locks serialize provisioning/enrollment. Exact legacy
+bind replay and PM continuation remain valid without retroactive mapping.
+This rollout maps only one Tracker project to the single managed PM namespace;
+multi-project admission/routing remains a product gap. Ownership is not admission.

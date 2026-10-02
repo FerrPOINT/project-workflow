@@ -181,11 +181,24 @@ class PMExecutionService:
         return proof
 
     def bind(self, command: PMBind, project_id: int) -> dict[str, Any]:
+        from project_workflow.application.namespace_ownership import NamespaceOwnershipService
+
+        ownership_service = NamespaceOwnershipService(self.uow)
+        ownership_service.lock_namespace(project_id)
         identity = self.identity(command)
         task, assignment = self._lock_identity(identity, project_id)
         replay = self._replay(command, "bind")
         if replay is not None:
             return replay
+        try:
+            ownership = ownership_service.get(project_id)
+        except NotFoundError:
+            raise ConflictError("PM namespace ownership is not provisioned") from None
+        if (
+            ownership.tracker_instance_ref != identity.tracker_instance_ref
+            or ownership.tracker_project_ref != identity.tracker_project_ref
+        ):
+            raise ConflictError("PM enrollment does not match namespace ownership")
         if self.session.get(m.PMExecution, command.execution_ref) is not None:
             raise ConflictError("Execution already bound; use command readback")
         phase = self.session.get(m.Phase, task.current_phase_id)

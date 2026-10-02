@@ -181,6 +181,12 @@ PM identity/callback используют тот же UUID в `agent_ref` и с�
 сохранённым mapping и bind provenance. PM без mapping закрывается fail-closed.
 Для non-PM поле optional/nullable; отсутствие или null сохраняет прежний
 canonical bind digest. Finalized bind нельзя дополнить UUID задним числом.
+
+New PM enrollment requires an explicitly provisioned namespace/Tracker project
+mapping; see [PM Namespace Ownership](pm-namespace-ownership.md). This separate
+authority table does not weaken generic binding completeness or fabricate any
+Business workspace/queue/decomposition provenance. Ordinary non-PM runs retain
+their existing contract; ownership alone never grants PMDraft dispatch.
 Pending migration `0007_pm_execution` после accepted `0006` оставляет mapping
 старых строк null, не меняя опубликованные `0001`–`0006` и не выдумывая Fleet identity.
 

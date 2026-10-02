@@ -113,6 +113,245 @@ def test_pm_postgres_concurrent_replay_and_restart_readback(pm_postgres):
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize("winner", ["provision", "bind"])
+def test_pm_ownership_enrollment_race_orders(pg_url, monkeypatch, winner):
+    from project_workflow.application.namespace_ownership import NamespaceOwnershipService
+    from project_workflow.application.pm_execution import PMExecutionService
+    from project_workflow.domain.namespace_ownership import NamespaceOwnershipRequest
+    from project_workflow.domain.pm_execution import PMIdentity
+    from project_workflow.infrastructure.db import models as m
+    from project_workflow.infrastructure.db.repositories.project import SAProjectRepository
+    from project_workflow.infrastructure.namespace_auth import NamespacePrincipal
+    from tests.test_pm_execution import ADAPTER, BASE, PROJECT_REF, prepare_pm
+
+    ensure_migrated(get_engine(pg_url))
+    fixture = prepare_pm(monkeypatch, ownership=False)
+    pm = next(fixture)
+    client = pm[0]
+    with SAUnitOfWork() as uow:
+        namespace_id = uow.projects.get_by_cli_command("workflow-project_manager").id
+    request = NamespaceOwnershipRequest(contract_version=1, tracker_instance_ref="tracker:one",
+                                        tracker_project_ref=PROJECT_REF)
+    principal = NamespacePrincipal("http://auth.test", "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee")
+    held, waiting, release = Event(), Event(), Event()
+    original_lock = SAProjectRepository.lock_pm_namespace
+    def pause_project_lock(self, project_id):
+        if held.is_set():
+            waiting.set()
+            return original_lock(self, project_id)
+        result = original_lock(self, project_id)
+        held.set()
+        assert release.wait(timeout=15)
+        return result
+
+    monkeypatch.setattr(SAProjectRepository, "lock_pm_namespace", pause_project_lock)
+
+    def provision():
+        with SAUnitOfWork() as uow:
+            return NamespaceOwnershipService(uow).provision(namespace_id, request, principal)
+
+    def bind():
+        return client.post(BASE + "/bind", headers=ADAPTER, json=pm[2])
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            first = pool.submit(provision if winner == "provision" else bind)
+            try:
+                assert held.wait(timeout=10)
+                second = pool.submit(bind if winner == "provision" else provision)
+                assert waiting.wait(timeout=10)
+            finally:
+                release.set()
+            first_result, second_result = first.result(timeout=20), second.result(timeout=20)
+        assert (second_result if winner == "provision" else first_result).status_code == (
+            200 if winner == "provision" else 409
+        )
+        monkeypatch.setattr(SAProjectRepository, "lock_pm_namespace", original_lock)
+        if winner == "bind":
+            with SAUnitOfWork() as uow:
+                assert uow.session.query(m.PMExecution).count() == 0
+            assert bind().status_code == 200
+        with SAUnitOfWork() as uow:
+            assert uow.session.query(m.PMExecution).count() == 1
+            assert uow.session.query(m.PMNamespaceOwnership).count() == 1
+            assert PMExecutionService(uow).readback(
+                PMIdentity.model_validate(pm[1]), namespace_id, None,
+            )["identity"]["tracker_project_ref"] == PROJECT_REF
+    finally:
+        fixture.close()
+
+
+@pytest.mark.integration
+def test_pm_ownership_concurrent_provision_replay_and_db_immutability(pm_postgres):
+    from sqlalchemy import select
+    from sqlalchemy.exc import DBAPIError
+
+    from project_workflow.application.namespace_ownership import NamespaceOwnershipService
+    from project_workflow.domain.namespace_ownership import NamespaceOwnershipRequest
+    from project_workflow.infrastructure.db import models as m
+    from project_workflow.infrastructure.namespace_auth import NamespacePrincipal
+    from tests.test_pm_execution import PROJECT_REF
+
+    with SAUnitOfWork() as uow:
+        namespace_id = uow.projects.get_by_cli_command("workflow-project_manager").id
+        before = dict(uow.projects.get_pm_ownership(namespace_id))
+    request = NamespaceOwnershipRequest(contract_version=1, tracker_instance_ref="tracker:one",
+                                        tracker_project_ref=PROJECT_REF)
+    principal = NamespacePrincipal("http://auth.test", "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee")
+    barrier = Barrier(2)
+
+    def provision(project_ref):
+        barrier.wait(timeout=10)
+        with SAUnitOfWork() as uow:
+            try:
+                return NamespaceOwnershipService(uow).provision(namespace_id, request.model_copy(update={
+                    "tracker_project_ref": project_ref,
+                }), principal)
+            except ConflictError:
+                return "conflict"
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        same, foreign = list(pool.map(provision, [PROJECT_REF, "ffffffff-ffff-4fff-8fff-ffffffffffff"]))
+    assert same[0].model_dump() == before and same[1] is False and foreign == "conflict"
+    with SAUnitOfWork() as uow:
+        assert dict(uow.projects.get_pm_ownership(namespace_id)) == before
+        row = uow.session.scalar(select(m.PMNamespaceOwnership))
+        for statement in [
+            "UPDATE pm_namespace_ownership SET tracker_instance_ref='other'",
+            "DELETE FROM pm_namespace_ownership",
+        ]:
+            with pytest.raises(DBAPIError, match="ownership is immutable"):
+                uow.session.execute(text(statement))
+            uow.rollback()
+        with pytest.raises(IntegrityError):
+            uow.projects.delete(namespace_id)
+            uow.session.flush()
+        uow.rollback()
+        assert uow.session.get(m.PMNamespaceOwnership, row.ownership_ref) is not None
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("winner", ["bootstrap", "provision"])
+def test_pm_ownership_catalog_lock_order_and_stale_0007(pg_url, winner):
+    from project_workflow.application.namespace_ownership import NamespaceOwnershipService
+    from project_workflow.domain.namespace_ownership import NamespaceOwnershipRequest
+    from project_workflow.infrastructure.db.session import DatabaseRecreateRequired
+    from project_workflow.infrastructure.namespace_auth import NamespacePrincipal
+
+    engine = get_engine(pg_url)
+    run_alembic_command("upgrade", engine, "0006_versioned_mode_catalog")
+    with SAUnitOfWork(engine) as uow:
+        ensure_managed_catalog(uow)
+        namespace_id = uow.projects.get_by_cli_command("workflow-project_manager").id
+    ensure_migrated(engine)
+    held, waiting, release = Event(), Event(), Event()
+
+    def bootstrap():
+        with SAUnitOfWork(engine) as uow:
+            if winner == "bootstrap":
+                uow.lock_catalog_state()
+                held.set()
+                assert release.wait(timeout=15)
+            else:
+                waiting.set()
+            ensure_managed_catalog(uow)
+
+    def provision():
+        with SAUnitOfWork(engine) as uow:
+            if winner == "provision":
+                uow.lock_catalog_state(shared=True)
+                uow.projects.lock_pm_namespace(namespace_id)
+                held.set()
+                assert release.wait(timeout=15)
+            else:
+                waiting.set()
+            return NamespaceOwnershipService(uow).provision(namespace_id, NamespaceOwnershipRequest(
+                contract_version=1, tracker_instance_ref="tracker:one",
+                tracker_project_ref="cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            ), NamespacePrincipal("http://auth.test", "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"))
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(bootstrap if winner == "bootstrap" else provision)
+        try:
+            assert held.wait(timeout=10)
+            second = pool.submit(provision if winner == "bootstrap" else bootstrap)
+            assert waiting.wait(timeout=10)
+        finally:
+            release.set()
+        first_result, second_result = first.result(timeout=20), second.result(timeout=20)
+        assert (second_result if winner == "bootstrap" else first_result)[1] is True
+    with SAUnitOfWork(engine) as uow:
+        assert validate_managed_catalog_state(uow) is True
+    assert schema_is_ready(engine)
+    # An old pending head is not silently repaired or stamped as the expanded head.
+    with engine.begin() as conn:
+        conn.execute(text("DROP TABLE pm_namespace_ownership"))
+    assert not schema_is_ready(engine)
+    with pytest.raises(DatabaseRecreateRequired):
+        ensure_migrated(engine)
+    assert database_revisions(engine) == {"0007_pm_execution"}
+
+
+@pytest.mark.integration
+def test_pm_ownership_postgres_actual_bounded_auth_and_readback(pg_url, monkeypatch):
+    from tests.test_namespace_ownership import SUBJECT
+    from tests.test_runtime_api import _namespace
+
+    ensure_migrated(get_engine(pg_url))
+    _namespace("PM", "workflow-project_manager", "PM")
+    with SAUnitOfWork() as uow:
+        namespace_id = uow.projects.get_by_cli_command("workflow-project_manager").id
+    probes = []
+    status = [200]
+
+    class Auth(BaseHTTPRequestHandler):
+        def do_GET(self):
+            probes.append((self.path, self.headers.get("Authorization"), self.headers.get("Accept-Encoding")))
+            body = json.dumps({"sub": SUBJECT, "email": "provisioner@test", "scopes": [
+                "project-workflow:read", "project-workflow:write",
+                f"project-workflow:namespace-owner:provision:{namespace_id}",
+                f"project-workflow:namespace-owner:read:{namespace_id}",
+            ]}).encode()
+            self.send_response(status[0])
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *_args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Auth)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    root = f"http://127.0.0.1:{server.server_port}"
+    monkeypatch.setenv("AUTH_ISSUER", root)
+    monkeypatch.setenv("AUTH_INTERNAL_BASE_URL", root)
+    monkeypatch.setenv("AUTH_SESSION_SECRET", "x" * 40)
+    monkeypatch.setenv("PROJECT_WORKFLOW_NAMESPACE_PROVISIONER_SUBJECT", SUBJECT)
+    config_module.get_settings.cache_clear()
+    client = TestClient(create_app())
+    headers = {"Authorization": "Bearer sdlc_pat_owned-qa-test-only"}
+    payload = {"contract_version": 1, "tracker_instance_ref": "tracker:one",
+               "tracker_project_ref": "cccccccc-cccc-4ccc-8ccc-cccccccccccc"}
+    url = f"/api/pm/namespace-ownership/{namespace_id}"
+    try:
+        first = client.put(url, headers=headers, json=payload)
+        assert first.status_code == 201, first.text
+        assert first.json()["result"]["authority_issuer"] == root
+        assert client.put(url, headers=headers, json=payload).json() == first.json()
+        assert client.get(url, headers=headers).json() == first.json()
+        status[0] = 401
+        denied = client.get(url, headers=headers)
+        assert denied.status_code == 401 and "sdlc_pat_" not in denied.text and root not in denied.text
+        assert probes == [("/auth/tokens/introspect", headers["Authorization"], "identity")] * 4
+    finally:
+        client.close()
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+@pytest.mark.integration
 def test_pm_postgres_concurrent_concrete_binding_has_one_immutable_winner(pm_postgres):
     from sqlalchemy import select
 
@@ -274,6 +513,7 @@ def test_pm_postgres_done_assignment_replay_races_new_assignment(pm_postgres, su
 @pytest.mark.parametrize("winner", ["pm", "generic"])
 def test_pm_enrollment_and_new_assignment_share_owner_lock(pm_postgres, supervisor_llm, monkeypatch, winner):
     from project_workflow.application.pm_execution import PMExecutionService
+    from project_workflow.infrastructure.db.repositories.project import SAProjectRepository
     from project_workflow.infrastructure.db.repositories.task import SATaskRepository
     from tests.test_pm_assignment_guard import complete_unenrolled_assignment, persisted_assignment_state, replacement
     from tests.test_pm_execution import ADAPTER, BASE
@@ -281,18 +521,24 @@ def test_pm_enrollment_and_new_assignment_share_owner_lock(pm_postgres, supervis
     client = pm_postgres[0]
     held, contender_started, release = Event(), Event(), Event()
     original_proof = PMExecutionService._proof
-    original_lock = SATaskRepository.lock
+    original_lock = SAProjectRepository.lock
+    original_pm_project_lock = SAProjectRepository.lock_pm_namespace
     original_enrollment = SATaskRepository.task_has_pm_execution
-    original_pm_lock = PMExecutionService._lock_identity
 
     def pause_proof(*args, **kwargs):
         held.set()
         assert release.wait(timeout=20)
         return original_proof(*args, **kwargs)
 
-    def notify_lock(self, task_id):
-        contender_started.set()
-        return original_lock(self, task_id)
+    def notify_lock(self, project_id):
+        if held.is_set():
+            contender_started.set()
+        return original_lock(self, project_id)
+
+    def notify_pm_project_lock(self, project_id):
+        if held.is_set():
+            contender_started.set()
+        return original_pm_project_lock(self, project_id)
 
     def pause_enrollment(self, task_id):
         enrolled = original_enrollment(self, task_id)
@@ -300,17 +546,13 @@ def test_pm_enrollment_and_new_assignment_share_owner_lock(pm_postgres, supervis
         assert release.wait(timeout=20)
         return enrolled
 
-    def notify_pm_lock(self, *args):
-        contender_started.set()
-        return original_pm_lock(self, *args)
-
+    monkeypatch.setattr(SAProjectRepository, "lock", notify_lock)
+    monkeypatch.setattr(SAProjectRepository, "lock_pm_namespace", notify_pm_project_lock)
     if winner == "pm":
         monkeypatch.setattr(PMExecutionService, "_proof", staticmethod(pause_proof))
-        monkeypatch.setattr(SATaskRepository, "lock", notify_lock)
     else:
         complete_unenrolled_assignment(pm_postgres, supervisor_llm)
         monkeypatch.setattr(SATaskRepository, "task_has_pm_execution", pause_enrollment)
-        monkeypatch.setattr(PMExecutionService, "_lock_identity", notify_pm_lock)
 
     def enroll():
         return client.post(BASE + "/bind", headers=ADAPTER, json=pm_postgres[2])

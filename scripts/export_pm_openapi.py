@@ -14,7 +14,7 @@ OUTPUT = Path(__file__).resolve().parents[1] / "docs" / "pm-continuation-openapi
 def pm_openapi() -> dict[str, Any]:
     schema = create_app().openapi()
     paths = {path: value for path, value in schema["paths"].items() if (
-        path.startswith("/internal/runtime/v1/pm/") or path in {
+        path.startswith(("/internal/runtime/v1/pm/", "/api/pm/namespace-ownership/")) or path in {
             "/internal/runtime/assign", "/internal/runtime/bind", "/internal/runtime/rebind",
         }
     )}

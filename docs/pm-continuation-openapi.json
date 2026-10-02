@@ -64,6 +64,124 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "NamespaceOwnershipReadback": {
+        "additionalProperties": false,
+        "properties": {
+          "authority_issuer": {
+            "title": "Authority Issuer",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": 1,
+            "title": "Contract Version",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "namespace_id": {
+            "exclusiveMinimum": 0.0,
+            "title": "Namespace Id",
+            "type": "integer"
+          },
+          "ownership_ref": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Ownership Ref",
+            "type": "string"
+          },
+          "provisioner_subject": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Provisioner Subject",
+            "type": "string"
+          },
+          "tracker_instance_ref": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[^\\s\\x00-\\x1f\\x7f-\\x9f]+$",
+            "title": "Tracker Instance Ref",
+            "type": "string"
+          },
+          "tracker_project_ref": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Tracker Project Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "contract_version",
+          "tracker_instance_ref",
+          "tracker_project_ref",
+          "ownership_ref",
+          "namespace_id",
+          "authority_issuer",
+          "provisioner_subject",
+          "created_at"
+        ],
+        "title": "NamespaceOwnershipReadback",
+        "type": "object"
+      },
+      "NamespaceOwnershipRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": 1,
+            "title": "Contract Version",
+            "type": "integer"
+          },
+          "tracker_instance_ref": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[^\\s\\x00-\\x1f\\x7f-\\x9f]+$",
+            "title": "Tracker Instance Ref",
+            "type": "string"
+          },
+          "tracker_project_ref": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Tracker Project Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "contract_version",
+          "tracker_instance_ref",
+          "tracker_project_ref"
+        ],
+        "title": "NamespaceOwnershipRequest",
+        "type": "object"
+      },
+      "NamespaceOwnershipResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "const": true,
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "result": {
+            "$ref": "#/components/schemas/NamespaceOwnershipReadback"
+          }
+        },
+        "required": [
+          "ok",
+          "result"
+        ],
+        "title": "NamespaceOwnershipResponse",
+        "type": "object"
+      },
       "PMBind": {
         "additionalProperties": false,
         "properties": {
@@ -1964,6 +2082,126 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/pm/namespace-ownership/{namespace_id}": {
+      "get": {
+        "operationId": "readback_api_pm_namespace_ownership__namespace_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "namespace_id",
+            "required": true,
+            "schema": {
+              "exclusiveMinimum": 0,
+              "title": "Namespace Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NamespaceOwnershipResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Readback"
+      },
+      "put": {
+        "operationId": "provision_api_pm_namespace_ownership__namespace_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "namespace_id",
+            "required": true,
+            "schema": {
+              "exclusiveMinimum": 0,
+              "title": "Namespace Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NamespaceOwnershipRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NamespaceOwnershipResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Provision"
+      }
+    },
     "/internal/runtime/assign": {
       "post": {
         "description": "Accept one authorized Business assignment and persist its technical cursor.",
