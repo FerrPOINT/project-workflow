@@ -59,6 +59,140 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture
+def business_postgres(pg_url, monkeypatch):
+    from project_workflow.interfaces.ui.routes import runtime_api
+    from tests.test_business_pre_decomposition import BUSINESS_PRE_DECOMPOSITION_MODES
+    from tests.test_runtime_api import TEST_RUNTIME_COMPATIBILITY
+
+    ensure_migrated(get_engine(pg_url))
+    monkeypatch.setattr(runtime_api, "runtime_compatibility_descriptor", lambda: dict(TEST_RUNTIME_COMPATIBILITY))
+    monkeypatch.setenv("PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON", json.dumps(
+        {role: "owner-" + role + "x" * 32 for role in BUSINESS_PRE_DECOMPOSITION_MODES}))
+    config_module.get_settings.cache_clear()
+    with SAUnitOfWork() as uow:
+        ensure_managed_catalog(uow)
+        uow.commit()
+    with TestClient(create_app()) as client:
+        yield client
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("role", ["project_manager", "analyst", "architect"])
+@pytest.mark.parametrize("logical_workspace", [False, True])
+@pytest.mark.parametrize("conflicting", [False, True])
+def test_business_postgres_persistence_and_concurrent_assignment_binding(
+    business_postgres, role, logical_workspace, conflicting,
+):
+    from project_workflow.domain.assignment_resources import PRE_DECOMPOSITION_ABSENT_FIELDS
+    from project_workflow.domain.runtime_assignment import payload_sha256
+    from tests.base_candidate.test_admission import AGENT
+    from tests.test_business_pre_decomposition import business_request, owner
+    from tests.test_runtime_api import _bind_payload
+
+    request = business_request(role, logical_workspace=logical_workspace)
+    requests = [request, {**request, "stage_revision": "changed:2"} if conflicting else request]
+    barrier = Barrier(2)
+
+    def assign(payload):
+        barrier.wait(timeout=10)
+        return business_postgres.post("/internal/runtime/assign", headers=owner(role), json=payload)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        responses = list(pool.map(assign, requests))
+    assert sorted(response.status_code for response in responses) == ([200, 409] if conflicting else [200, 200])
+    winner = next(index for index, response in enumerate(responses) if response.status_code == 200)
+    assigned = responses[winner].json()["result"]
+    if not conflicting:
+        assert responses[0].json() == responses[1].json()
+    bind = {**_bind_payload(assigned), "concrete_agent_ref": AGENT}
+    bindings = [bind, {**bind, "concrete_agent_ref": "33333333-3333-4333-8333-333333333333"}
+                if conflicting else bind]
+    barrier = Barrier(2)
+
+    def bind_assignment(payload):
+        barrier.wait(timeout=10)
+        return business_postgres.post("/internal/runtime/bind", headers=owner(role), json=payload)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        responses = list(pool.map(bind_assignment, bindings))
+    assert sorted(response.status_code for response in responses) == ([200, 409] if conflicting else [200, 200])
+    bind_winner = next(index for index, response in enumerate(responses) if response.status_code == 200)
+    bound = responses[bind_winner].json()["result"]
+    if not conflicting:
+        assert responses[0].json() == responses[1].json()
+    with SAUnitOfWork() as uow:
+        ledger = uow.tasks.get_assignment_by_operation_key(request["operation_key"])
+        assert len(uow.tasks.list_assignments(ledger.task_id)) == 1
+        assert ledger.assignment_shape == "business-pre-decomposition"
+        assert ledger.payload_sha256 == payload_sha256(ledger.payload)
+        assert ledger.payload["stage_revision"] == requests[winner]["stage_revision"]
+        assert ledger.role_key == role and ledger.mode_key == request["mode_key"]
+        assert ledger.execution_scope == "business"
+        assert ledger.cycle_number == request["cycle_number"] and ledger.attempt_number == request["attempt_number"]
+        assert all(getattr(ledger, field) is None for field in PRE_DECOMPOSITION_ABSENT_FIELDS)
+        assert ledger.task_workspace_ref == request.get("task_workspace_ref")
+        assert ledger.workspace_revision == request.get("workspace_revision")
+        assert ledger.concrete_agent_ref == bindings[bind_winner]["concrete_agent_ref"]
+        assert ledger.binding_ref == bound["binding_ref"]
+    with TestClient(create_app()) as restarted:
+        replay = restarted.post("/internal/runtime/assign", headers=owner(role), json=requests[winner])
+        assert replay.status_code == 200, replay.text
+        assert replay.json()["result"] == bound
+        replay = restarted.post("/internal/runtime/bind", headers=owner(role), json=bindings[bind_winner])
+        assert replay.status_code == 200, replay.text
+        assert replay.json()["result"] == bound
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("field,value", [
+    ("assignment_shape", None), ("role_key", None), ("role_key", "developer"),
+    ("lease_generation", 0), ("decomposition_revision_ref", "fabricated"),
+    ("task_workspace_ref", "unpaired"), ("binding_ref", "partial"),
+])
+def test_business_postgres_db_constraints_fail_closed(business_postgres, field, value):
+    from project_workflow.infrastructure.db.models import TaskRuntimeAssignment
+    from tests.test_business_pre_decomposition import business_request, owner
+
+    response = business_postgres.post("/internal/runtime/assign", headers=owner(), json=business_request())
+    assert response.status_code == 200, response.text
+    with SAUnitOfWork() as uow:
+        ledger = uow.tasks.get_assignment_by_operation_key("assign:business:1")
+        row = uow.session.get(TaskRuntimeAssignment, ledger.id)
+        setattr(row, field, value)
+        with pytest.raises(IntegrityError):
+            uow.session.flush()
+        uow.rollback()
+
+
+@pytest.mark.integration
+def test_postgres_0008_preserves_populated_pm_checkpoint_and_accepted_history(
+    pg_url, monkeypatch, supervisor_llm,
+):
+    from tests._pm_upgrade import (
+        assert_0008_preserves_records,
+        assert_upgraded_pm_readback,
+        capture_legacy_pm_records,
+        restore_0007_records,
+        snapshot_rows,
+    )
+
+    rows, identity, read, history = capture_legacy_pm_records(
+        monkeypatch, supervisor_llm, pg_url, source_schema="pm_fixture"
+    )
+    engine = get_engine(pg_url)
+    run_alembic_command("upgrade", engine, "0007_pm_execution")
+    restore_0007_records(engine, rows)
+    before = snapshot_rows(engine)
+    assert not schema_is_ready(engine)
+    ensure_migrated(engine)
+    ensure_migrated(engine)
+    assert database_revisions(engine) == {"0008_business_pre_decomposition"}
+    assert schema_is_ready(engine)
+    assert_0008_preserves_records(engine, before)
+    assert_upgraded_pm_readback(monkeypatch, identity, read, history)
+
+
+@pytest.fixture
 def pm_postgres(pg_url, monkeypatch):
     from tests.test_pm_execution import prepare_pm
 
@@ -289,7 +423,7 @@ def test_pm_ownership_catalog_lock_order_and_stale_0007(pg_url, winner):
     assert not schema_is_ready(engine)
     with pytest.raises(DatabaseRecreateRequired):
         ensure_migrated(engine)
-    assert database_revisions(engine) == {"0007_pm_execution"}
+    assert database_revisions(engine) == {"0008_business_pre_decomposition"}
 
 
 @pytest.mark.integration
@@ -797,7 +931,7 @@ class TestPostgresInitialMigration:
             version = conn.execute(
                 text("SELECT version_num FROM project_workflow.alembic_version")
             ).scalar_one()
-        assert version == migration_head() == "0007_pm_execution"
+        assert version == migration_head() == "0008_business_pre_decomposition"
         assert schema_is_ready(engine) is True
 
     def test_managed_bootstrap_lock_closes_public_mutation_race(self, pg_url):
@@ -898,6 +1032,7 @@ class TestPostgresInitialMigration:
         ("0003_runtime_assignment_bind", "Downgrade from runtime assignment bind"),
         ("0004_wide_work_item_revision", "Downgrade from wide Business revisions"),
         ("0007_pm_execution", "PM execution downgrade refused"),
+        ("0008_business_pre_decomposition", "Business pre-decomposition downgrade refused"),
     ])
     def test_downgrade_refuses_lossy_mode_collapse(self, pg_url, revision, message):
         engine = get_engine(pg_url)
@@ -905,7 +1040,7 @@ class TestPostgresInitialMigration:
         with pytest.raises(RuntimeError, match=message):
             run_alembic_command("downgrade", engine, "base")
         assert database_revisions(engine) == {revision}
-        assert schema_is_ready(engine) is (revision == "0007_pm_execution")
+        assert schema_is_ready(engine) is (revision == "0008_business_pre_decomposition")
 
     def test_populated_0001_upgrade_preserves_rows_and_backfills_per_workflow(self, pg_url):
         engine = get_engine(pg_url)

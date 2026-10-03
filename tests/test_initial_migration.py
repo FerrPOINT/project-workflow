@@ -91,6 +91,35 @@ def test_repository_has_one_linear_migration_head():
     assert migration_head() == "0008_business_pre_decomposition"
 
 
+def test_0008_preserves_populated_pm_checkpoint_and_accepted_history(tmp_path, monkeypatch, supervisor_llm):
+    from project_workflow.infrastructure.db.session import reset_engine
+    from tests._pm_upgrade import (
+        assert_0008_preserves_records,
+        assert_upgraded_pm_readback,
+        capture_legacy_pm_records,
+        restore_0007_records,
+        snapshot_rows,
+    )
+
+    rows, identity, read, history = capture_legacy_pm_records(
+        monkeypatch, supervisor_llm, f"sqlite:///{tmp_path / 'pm-source.db'}"
+    )
+    engine = _sqlite_engine(tmp_path, "pm-upgrade.db")
+    run_alembic_command("upgrade", engine, "0007_pm_execution")
+    restore_0007_records(engine, rows)
+    before = snapshot_rows(engine)
+    assert not schema_is_ready(engine)
+    ensure_migrated(engine)
+    ensure_migrated(engine)
+    assert database_revisions(engine) == {"0008_business_pre_decomposition"}
+    assert schema_is_ready(engine)
+    assert_0008_preserves_records(engine, before)
+    monkeypatch.setenv("DATABASE_URL", str(engine.url))
+    config.get_settings.cache_clear()
+    reset_engine()
+    assert_upgraded_pm_readback(monkeypatch, identity, read, history)
+
+
 def test_fresh_sqlite_migration_matches_orm_metadata(tmp_path):
     engine = _sqlite_engine(tmp_path)
     ensure_migrated(engine)

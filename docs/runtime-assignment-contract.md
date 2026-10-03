@@ -129,9 +129,36 @@ refs plus their exact revisions/generations. No role/mode/catalog was added.
 Source migration `0008_business_pre_decomposition` adds one nullable marker
 column and conditional checks to the existing ledger. It preserves old rows,
 payload bytes, pins, phase history and PM checkpoint records; it does not install
-a catalog. It was exercised only on disposable SQLite test databases, not
-installed in accepted runtime. Generated schema is included in
+a catalog. It is source-only and is not installed in accepted runtime.
+Generated schema is included in
 `pm-continuation-openapi.json` using `python -m scripts.export_pm_openapi`.
+
+Focused compatibility evidence (2026-10-03): disposable SQLite tests cover the
+business shape, unchanged legacy requirements, production Base proof rejection,
+fresh schema, additive upgrades and downgrade refusal. Real PostgreSQL 17.6
+tests cover all three business roles with and without the logical workspace
+pair: identical concurrent assign/bind requests replay the same result;
+conflicting requests have one immutable winner and one 409, followed by fresh
+application readback. Seven raw SQL cases reject a missing marker, NULL or
+forbidden role, fabricated decomposition/zero generation, unpaired workspace
+and partial binding. Head/readiness expectations include source revision 0008.
+
+The populated 0007-to-0008 tests on both databases restore records produced by
+the existing protected legacy PM API fixture into a fresh published 0007
+schema, then run the real additive migration twice. They compare every stored
+row (including payload/hash, ownership, checkpoint, two PM runs, four PM
+operations, accepted step and phase history) exactly, allowing only the new
+NULL marker, and verify identical authenticated PM readback and run-scoped
+history. PostgreSQL prepares its fixture records in a separate disposable
+schema, without cross-dialect timestamp normalization. Runtime metadata and
+the evaluator use explicit component fixtures; legacy PM route readback does
+not assert managed startup readiness. These checks do not establish live
+Tracker/Fleet/Forge execution, native Base admission or production crash recovery.
+QA PostgreSQL runs only in an owner/purpose-labelled temporary Compose project
+with disposable tmpfs data and cleanup in `finally`; accepted runtime is untouched.
+The selected verification scopes passed 94 SQLite/source cases and 28 PostgreSQL
+cases; changed test paths passed Ruff and five selected helper/source paths
+passed mypy. No full suite, coverage gate, application build or deployment ran.
 
 This is source assignment compatibility, not native dispatch readiness.
 Base v3 still requires package/admission validation and production
