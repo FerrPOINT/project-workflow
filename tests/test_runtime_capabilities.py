@@ -20,6 +20,34 @@ ARCHIVE_SHA256 = "a" * 64
 BUNDLE_SHA256 = "b" * 64
 
 
+@pytest.mark.parametrize("configured", [False, True])
+@pytest.mark.parametrize("kind", ["assignment", "runtime"])
+def test_pm_continuation_capabilities_require_truthful_configuration(monkeypatch, tmp_path, configured, kind):
+    token = _token("pm-" + kind)
+    _configure_tokens(
+        monkeypatch,
+        runtime={"project_manager": token} if kind == "runtime" else {},
+        assignment={"project_manager": token} if kind == "assignment" else {},
+    )
+    _install_manifest(monkeypatch, tmp_path, _valid_manifest())
+    monkeypatch.setenv("PROJECT_WORKFLOW_PM_READBACK_URL", "http://fleet.test/runs" if configured else "")
+    monkeypatch.setenv("PROJECT_WORKFLOW_PM_READBACK_TOKEN", "p" * 40)
+    monkeypatch.setenv("PROJECT_WORKFLOW_PM_SCOPE_SECRET", "s" * 40)
+    config.get_settings.cache_clear()
+    with TestClient(create_app()) as client:
+        response = client.get("/internal/runtime/capabilities", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+    if configured:
+        metadata = response.json()["pm_continuation"]
+        assert metadata["dispatch_owner"] == "fleet"
+        assert metadata["terminal_proof"] == "configured-runtime-readback"
+        assert metadata["commands"] == (
+            ["bind", "resume", "rebind", "readback"] if kind == "assignment" else ["checkpoint", "readback"]
+        )
+    else:
+        assert "pm_continuation" not in response.json()
+
+
 @pytest.fixture(autouse=True)
 def _ready_schema(monkeypatch):
     monkeypatch.setattr(db_session, "schema_is_ready", lambda _engine: True)

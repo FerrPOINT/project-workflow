@@ -546,6 +546,12 @@ class SupervisorEngine:
 
     def _assert_runtime_fence(self) -> None:
         """Fail closed when the current task no longer matches the owner-issued run."""
+        if isinstance(self._uow, SAUnitOfWork) and self.task is not None:
+            from project_workflow.application.pm_execution import PMExecutionService
+
+            pm_execution = PMExecutionService(self._uow).supervisor_binding(self.task["id"], self.runtime_fence)
+            if pm_execution is not None and self.runtime_fence is None:
+                raise ValueError("Bound PM execution requires the scoped runtime step API")
         if self.runtime_fence is not None:
             self.runtime_fence.assert_task(self.task)
 
@@ -560,6 +566,7 @@ class SupervisorEngine:
         locked_task = locked.to_dict() if locked is not None else None
         self.runtime_fence.assert_task(locked_task)
         self.task = locked_task
+        self._assert_runtime_fence()
 
     def evaluate(self, report: str) -> dict:
         phase = self._get_current_phase_obj()

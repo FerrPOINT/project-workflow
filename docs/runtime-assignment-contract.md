@@ -1,5 +1,10 @@
 # Runtime assignment binding contract
 
+The opt-in PM clarification continuation contract is documented separately in
+[PM continuation v1](pm-continuation-contract.md), with
+[verification limits](pm-continuation-verification.md). Ordinary assignment,
+bind, Supervisor step and history remain the default path.
+
 Project-workflow — технический sink и cursor. Он не определяет роль, workflow
 mode, execution scope, порядок очереди или следующий stage. Эти значения
 вычисляет Relevanter Business из persisted Task/stage/decomposition state и
@@ -106,7 +111,8 @@ token configuration: lowercase `[a-z][a-z0-9-]{1,31}` плюс единстве�
   `workspace_generation`, `lease_generation`;
 - provenance до запуска: `assignment_ref` и bounded `exact_input_refs`;
 - provenance после запуска: реальные `binding_ref`, `hermes_run_ref`,
-  `bind_operation_key` и digest bind-запроса;
+  `bind_operation_key` и digest bind-запроса; отдельный immutable
+  `concrete_agent_ref` (canonical non-nil lowercase Fleet UUID), обязательный для PM;
 - technical cursor: project/workflow/mode/cycle/assignment revision и
   idempotent `operation_key`.
 
@@ -168,6 +174,35 @@ Catalog v2, skills и capabilities закреплены в immutable assignment.
 исполнение. V1 catalog/history сохраняются без переименования mode/phase refs;
 legacy Developer `integration|integration_rework` не выдаются новым dispatch.
 Owner cleanup v1 ограничен GET/ACK `RECONCILE_ONLY`.
+
+`concrete_agent_ref` записывается только этим защищённым bind, вместе с refs и
+digest. Он не заменяет каталожное имя агента или `role_key=project_manager`.
+PM identity/callback используют тот же UUID в `agent_ref` и сверяются с
+сохранённым mapping и bind provenance. PM без mapping закрывается fail-closed.
+Для non-PM поле optional/nullable; отсутствие или null сохраняет прежний
+canonical bind digest. Finalized bind нельзя дополнить UUID задним числом.
+
+New PM enrollment requires an explicitly provisioned namespace/Tracker project
+mapping; see [PM Namespace Ownership](pm-namespace-ownership.md). This separate
+authority table does not weaken generic binding completeness or fabricate any
+Business workspace/queue/decomposition provenance. Ordinary non-PM runs retain
+their existing contract; ownership alone never grants PMDraft dispatch.
+Pending migration `0007_pm_execution` после accepted `0006` оставляет mapping
+старых строк null, не меняя опубликованные `0001`–`0006` и не выдумывая Fleet identity.
+
+Assignment, enrolled в PMExecution, не может создать generic continuation через
+`/internal/runtime/rebind`, независимо от статуса. Проверка enrollment выполняется
+под тем же owner task lock, что и PM bind, до изменения cursor/ledger/history.
+Exact historical replay без новых effects допустим. PM использует только свой
+resume/rebind; accepted generic flow для non-enrolled assignments сохраняется.
+
+Новая generic `/internal/runtime/assign` revision также запрещена для задачи
+с любым immutable PM enrollment, включая `done` и enrollment старой assignment.
+Task-wide indexed EXISTS выполняется под owner task lock после exact historical
+same-key replay и до мутаций. Service возвращает `ConflictError`, HTTP — прежний
+generic envelope `ok=false,error` со статусом 409. Workflow PASS и terminal
+readback не заменяют отсутствующий owner replacement/history CAS. Non-enrolled
+generic assignment/retry/cycle и PM-specific resume/rebind не изменены.
 
 `/internal/runtime/step` доступен только для `bound` assignment и сохраняет
 прежний полный fence. History может читаться в `unbound` состоянии, но не

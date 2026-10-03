@@ -42,6 +42,18 @@ def packaged_runtime_api_test_image(monkeypatch):
     monkeypatch.setattr(runtime_api, "runtime_compatibility_descriptor", descriptor)
 
 
+def test_optional_pm_uuid_preserves_ordinary_runtime_command_hash():
+    from project_workflow.domain.runtime_assignment import payload_sha256
+
+    legacy = {**_unknown_step_payload("DEV-25"), "report": "durable ordinary report"}
+    parsed = RuntimeStepRequest.model_validate(legacy)
+    assert payload_sha256(parsed.model_dump(mode="json")) == payload_sha256(legacy)
+    assert "session_run_id" not in parsed.model_dump()
+    pm_run_id = "11111111-1111-4111-8111-111111111111"
+    scoped = RuntimeStepRequest.model_validate({**legacy, "session_run_id": pm_run_id})
+    assert scoped.model_dump()["session_run_id"] == pm_run_id
+
+
 def _namespace(code: str, cli_command: str, prefix: str) -> None:
     role = cli_command.removeprefix("workflow-")
     scope = "delivery" if role == "developer" else "business"

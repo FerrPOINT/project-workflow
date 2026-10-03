@@ -6,11 +6,15 @@ import hashlib
 import json
 import re
 from dataclasses import dataclass
-from typing import Any
+from typing import Annotated, Any
+
+from pydantic import AfterValidator, Field, StringConstraints
 
 ROLE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9-]{1,31}$")
 CANONICAL_UNDERSCORE_ROLE_KEYS = frozenset({"project_manager"})
 MAX_WORK_ITEM_REVISION = (1 << 63) - 1
+FLEET_AGENT_REF_PATTERN = r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+NIL_FLEET_AGENT_REF = "00000000-0000-0000-0000-000000000000"
 MANAGED_ROLE_MODE_SCOPES: dict[str, dict[str, tuple[str, ...]]] = {
     "project_manager": {"draft": ("business",)},
     "analyst": {"analysis": ("business",)},
@@ -77,6 +81,8 @@ class RuntimeStepFence:
     expected_phase_id: int
     expected_phase_code: str
     expected_status: str
+    pm_version: int | None = None
+    pm_fence: int | None = None
 
     def assert_task(self, task: dict[str, Any] | None) -> None:
         """Reject a stale task projection before Supervisor can use or mutate it."""
@@ -137,6 +143,22 @@ def normalize_role_key(value: Any) -> str:
 def canonical_json(value: Any) -> str:
     """Serialize replay-significant data with one stable byte representation."""
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def validate_concrete_agent_ref(value: Any) -> str:
+    """Accept the canonical Fleet UUID without normalizing a different identity."""
+    if (
+        not isinstance(value, str) or re.fullmatch(FLEET_AGENT_REF_PATTERN, value) is None
+        or value == NIL_FLEET_AGENT_REF
+    ):
+        raise ValueError("concrete_agent_ref must be a canonical non-nil lowercase Fleet agent UUID")
+    return value
+
+
+FleetAgentRef = Annotated[
+    str, StringConstraints(strict=True, pattern=FLEET_AGENT_REF_PATTERN),
+    AfterValidator(validate_concrete_agent_ref), Field(json_schema_extra={"not": {"const": NIL_FLEET_AGENT_REF}}),
+]
 
 
 def payload_sha256(value: Any) -> str:

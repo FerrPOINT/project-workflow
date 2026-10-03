@@ -79,7 +79,7 @@ class _SsoMiddleware(BaseHTTPMiddleware):
         if not settings.AUTH_ISSUER:
             return await call_next(request)
         path = request.url.path
-        if path in _PUBLIC_PATHS or path.startswith("/internal/runtime/"):
+        if path in _PUBLIC_PATHS or path.startswith(("/internal/runtime/", "/api/pm/namespace-ownership/")):
             return await call_next(request)
         if request.url.hostname == "127.0.0.1":
             return RedirectResponse(settings.AUTH_PUBLIC_ORIGIN.rstrip("/") + path +

@@ -43,12 +43,16 @@ class Settings(BaseSettings):
     AUTH_PUBLIC_ORIGIN: str = "http://localhost:8812"
     AUTH_SESSION_SECRET: str = ""
     AUTH_COOKIE_SECURE: bool = False
+    PROJECT_WORKFLOW_NAMESPACE_PROVISIONER_SUBJECT: str = ""
 
     # Private role-token map for isolated agent containers, not the browser UI.
     # Shape: {"analyst":"<token>", ...}. Empty keeps the bridge fail-closed.
     PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON: str = ""
     PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON: str = ""
     PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN: str = ""
+    PROJECT_WORKFLOW_PM_READBACK_URL: str = ""
+    PROJECT_WORKFLOW_PM_READBACK_TOKEN: str = ""
+    PROJECT_WORKFLOW_PM_SCOPE_SECRET: str = ""
 
     @field_validator("DATABASE_URL", mode="before")
     @classmethod

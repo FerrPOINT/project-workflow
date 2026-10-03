@@ -162,8 +162,9 @@ evaluation items, transition routes и накопленное покрытие. 
 - startup распознаёт только точный versioned legacy unmanaged catalog,
   сохраняет его identifiers и audit references и атомарно добавляет managed
   registry; неоднозначный или изменённый legacy catalog остаётся fail-closed;
-- HTTP API не публикует OpenAPI/Swagger как внешний контракт: это private UI/CLI
-  surface, а не third-party integration API;
+- `/openapi.json` describes private machine contracts, including the opt-in PM
+  continuation request, response and trusted runtime observation schemas;
+  keep runtime endpoints inside the protected service network;
 - CORS не включается: browser UI и API работают с одного origin. Для cookie SSO
   unsafe requests дополнительно требуют точный `Origin == AUTH_PUBLIC_ORIGIN`;
   это CSRF boundary, а не замена security review для публичного доступа;
@@ -171,7 +172,20 @@ evaluation items, transition routes и накопленное покрытие. 
 - rate limits, CSP и metrics не добавляются, пока приложение не становится
   внешним многопользовательским сервисом.
 
+## PM operation history
+
+PM checkpoint uniqueness reads operation history by execution and kind.
+`pm_operations` has the matching `(execution_ref, kind)` index in both ORM
+metadata and the pending `0007_pm_execution` migration. The operation-key
+primary key still owns replay identity; the index adds no uniqueness rule
+and does not change execution fences, authorization or HTTP responses.
+
 ## References
+
+- [PM Continuation](pm-continuation-contract.md) — execution identity, persistent
+  checkpoint/resume, Fleet UUID mapping and trusted runtime proof.
+- [PM Verification](pm-continuation-verification.md) — local evidence and remaining
+  cross-service release and live acceptance.
 
 - [UI Shell Contract](ui-shell.md) — sidebar/header/work-area behavior and page width classes.
 - [README](../README.md) — deployment modes and local launch.

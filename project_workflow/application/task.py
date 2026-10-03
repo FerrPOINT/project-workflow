@@ -15,6 +15,7 @@ from project_workflow.domain.runtime_assignment import (
     RuntimeStepFence,
     normalize_role_key,
     payload_sha256,
+    validate_concrete_agent_ref,
 )
 from project_workflow.domain.validation import TaskKeyValidator, get_project_for_task_key
 
@@ -345,6 +346,9 @@ class TaskService:
         replay = self._uow.tasks.get_assignment_by_operation_key(operation_key)
         if replay is not None:
             return self._reconcile_assignment(replay.to_dict(), payload)
+        # No terminal/quiescent replacement-history CAS exists for enrolled PM.
+        if self._uow.tasks.task_has_pm_execution(int(locked.id or 0)):
+            raise ConflictError("Enrolled PM task requires terminal/quiescent replacement admission")
         if locked.assignment_revision != expected_revision or locked.status != expected_status:
             raise ConflictError("Ожидаемое prior state/revision задачи устарело")
         if expected_mode_key is not None and locked.mode_key != expected_mode_key:
@@ -435,8 +439,10 @@ class TaskService:
         if replay is not None:
             return replay
         previous = self._uow.tasks.get_assignment_by_operation_key(locked.assignment_operation_key or "")
-        if previous is None:
+        if previous is None or previous.id is None:
             raise ConflictError("Continuation previous assignment not found")
+        if self._uow.tasks.assignment_has_pm_execution(current.id, previous.id):
+            raise ConflictError("Enrolled PM assignment requires PM resume/rebind")
         before = self._assignment_result(locked.to_dict(), previous.to_dict())
         expected = {
             "assignment_revision": request["expected_assignment_revision"],
@@ -580,9 +586,14 @@ class TaskService:
         cycle_number: int,
         attempt_number: int,
         expected_binding_state: str,
+        concrete_agent_ref: str | None = None,
     ) -> dict[str, Any]:
         """Atomically attach one real Hermes binding to an accepted assignment."""
         role_key = normalize_role_key(role_key)
+        if concrete_agent_ref is not None:
+            concrete_agent_ref = validate_concrete_agent_ref(concrete_agent_ref)
+        elif role_key == "project_manager":
+            raise ConflictError("PM runtime binding requires a concrete Fleet agent UUID")
         refs = {
             "bind_operation_key": self._bounded_ref(bind_operation_key, "bind_operation_key", 128),
             "assignment_operation_key": self._bounded_ref(assignment_operation_key, "assignment_operation_key", 128),
@@ -614,6 +625,9 @@ class TaskService:
             "attempt_number": attempt_number,
             "expected_binding_state": expected_binding_state,
         }
+        # Omitted mappings keep the published non-PM bind replay digest unchanged.
+        if concrete_agent_ref is not None:
+            request["concrete_agent_ref"] = concrete_agent_ref
         request_digest = payload_sha256(request)
         replay = self._uow.tasks.get_assignment_by_bind_operation_key(refs["bind_operation_key"])
         if replay is not None:
@@ -695,6 +709,7 @@ class TaskService:
                 hermes_run_ref=refs["hermes_run_ref"],
                 bind_operation_key=refs["bind_operation_key"],
                 bind_request_sha256=request_digest,
+                concrete_agent_ref=concrete_agent_ref,
             )
             if not updated:
                 self._uow.rollback()
@@ -784,6 +799,16 @@ class TaskService:
             or not isinstance(record.get("bind_request_sha256"), str)
         ):
             raise ConflictError("Runtime assignment ещё не связан с Hermes run")
+        from project_workflow.application.pm_execution import PMExecutionService
+        from project_workflow.infrastructure.db.uow import SAUnitOfWork
+
+        pm_execution = None
+        if isinstance(self._uow, SAUnitOfWork):
+            pm_service = PMExecutionService(self._uow)
+            pm_execution = pm_service.supervisor_binding(int(current.id))
+            if pm_execution is not None:
+                pm_run = pm_service.run(pm_execution)
+                record = {**record, "binding_ref": pm_run.binding_ref, "hermes_run_ref": pm_run.run_ref}
         expected_assignment = {
             "task_id": current.id,
             "project_id": project_id,
@@ -848,6 +873,8 @@ class TaskService:
             expected_phase_id=phase_id,
             expected_phase_code=expected_phase_code,
             expected_status=expected_status,
+            pm_version=pm_execution.version if pm_execution is not None else None,
+            pm_fence=pm_execution.fence if pm_execution is not None else None,
         )
 
     @staticmethod
@@ -994,6 +1021,7 @@ class TaskService:
             "hermes_run_ref",
             "bind_operation_key",
             "bind_request_sha256",
+            "concrete_agent_ref",
             "workspace_generation",
             "lease_generation",
             "exact_input_refs",
@@ -1031,6 +1059,7 @@ class TaskService:
             "hermes_run_ref": request["hermes_run_ref"],
             "bind_operation_key": request["bind_operation_key"],
             "bind_request_sha256": request_digest,
+            "concrete_agent_ref": request.get("concrete_agent_ref"),
             "role_key": request["role_key"],
             "mode_key": request["mode_key"],
             "cycle_number": request["cycle_number"],

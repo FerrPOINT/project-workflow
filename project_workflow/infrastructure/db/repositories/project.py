@@ -84,6 +84,49 @@ class SAProjectRepository(ProjectRepository):
                 {"lock_suffix": ":project-prefixes"},
             )
 
+    @staticmethod
+    def _ownership(row: m.PMNamespaceOwnership | None) -> Mapping[str, Any] | None:
+        if row is None:
+            return None
+        return {"contract_version": 1, **{key: getattr(row, key) for key in (
+            "ownership_ref", "namespace_id", "tracker_instance_ref", "tracker_project_ref",
+            "authority_issuer", "provisioner_subject", "created_at",
+        )}}
+
+    def get_pm_ownership(self, namespace_id: int) -> Mapping[str, Any] | None:
+        row = self._session.scalar(select(m.PMNamespaceOwnership).where(
+            m.PMNamespaceOwnership.namespace_id == namespace_id,
+        ).execution_options(populate_existing=True))
+        return self._ownership(row)
+
+    def lock_pm_namespace(self, namespace_id: int) -> Project | None:
+        # Serialize ownership/enrollment without blocking the FK KEY SHARE of
+        # existing generic continuations that already hold the task owner lock.
+        row = self._session.scalar(select(m.Project).where(m.Project.id == namespace_id)
+                                   .with_for_update(key_share=True).execution_options(populate_existing=True))
+        return _row_to_project(row) if row else None
+
+    def get_pm_ownership_by_tracker(self, instance_ref: str, project_ref: str) -> Mapping[str, Any] | None:
+        row = self._session.scalar(select(m.PMNamespaceOwnership).where(
+            m.PMNamespaceOwnership.tracker_instance_ref == instance_ref,
+            m.PMNamespaceOwnership.tracker_project_ref == project_ref,
+        ).execution_options(populate_existing=True))
+        return self._ownership(row)
+
+    def create_pm_ownership(self, data: Mapping[str, Any]) -> None:
+        from project_workflow.domain.namespace_ownership import NamespaceOwnershipRequest, canonical_uuid
+
+        request = NamespaceOwnershipRequest.model_validate({key: data[key] for key in (
+            "contract_version", "tracker_instance_ref", "tracker_project_ref",
+        )})
+        row = m.PMNamespaceOwnership(
+            **request.model_dump(exclude={"contract_version"}), namespace_id=data["namespace_id"],
+            ownership_ref=canonical_uuid(data["ownership_ref"]), authority_issuer=data["authority_issuer"],
+            provisioner_subject=canonical_uuid(data["provisioner_subject"]),
+        )
+        self._session.add(row)
+        self._session.flush()
+
     def create(self, data: dict[str, Any]) -> int:
         item = m.Project(
             workflow_id=data["workflow_id"],

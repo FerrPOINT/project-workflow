@@ -99,6 +99,20 @@ def _runtime_assignment_cursor(engine: Any, fence: RuntimeStepFence) -> dict[str
         raise ConcurrentTransitionError("Runtime cursor исчез до commit")
     task = task_row.to_dict()
     assignment = assignment_row.to_dict()
+    pm_cursor: dict[str, Any] = {}
+    if fence.pm_version is not None:
+        from project_workflow.application.pm_execution import PMExecutionService
+
+        pm_service = PMExecutionService(engine.db)
+        execution = pm_service.supervisor_binding(int(engine.task["id"]), fence)
+        if execution is None:
+            raise ConcurrentTransitionError("PM execution disappeared before commit")
+        run = pm_service.run(execution)
+        assignment = {**assignment, "binding_ref": run.binding_ref, "hermes_run_ref": run.run_ref}
+        pm_cursor = {
+            "execution_ref": execution.execution_ref, "session_run_id": run.session_run_id,
+            "execution_version": execution.version, "execution_fence": execution.fence,
+        }
     expected_task = {
         "assignment_revision": fence.assignment_revision,
         "assignment_operation_key": fence.assignment_operation_key,
@@ -144,6 +158,7 @@ def _runtime_assignment_cursor(engine: Any, fence: RuntimeStepFence) -> dict[str
         "status": task.get("status"),
         "current_phase_code": phase.code,
         "current_phase_name": phase.name,
+        **pm_cursor,
     }
 
 

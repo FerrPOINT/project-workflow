@@ -170,6 +170,18 @@ class ProjectRepository(ABC):
     def lock_prefix_namespace(self) -> None: ...
 
     @abstractmethod
+    def get_pm_ownership(self, namespace_id: int) -> Mapping[str, Any] | None: ...
+
+    @abstractmethod
+    def lock_pm_namespace(self, namespace_id: int) -> Project | None: ...
+
+    @abstractmethod
+    def get_pm_ownership_by_tracker(self, instance_ref: str, project_ref: str) -> Mapping[str, Any] | None: ...
+
+    @abstractmethod
+    def create_pm_ownership(self, data: Mapping[str, Any]) -> None: ...
+
+    @abstractmethod
     def create(self, data: dict[str, Any]) -> int: ...
 
     @abstractmethod
@@ -201,6 +213,16 @@ class TaskRepository(ABC):
 
     @abstractmethod
     def lock(self, task_id: int) -> Task | None: ...
+
+    @abstractmethod
+    def task_has_pm_execution(self, task_id: int) -> bool:
+        """Check any immutable PM enrollment while the caller holds the task lock."""
+        ...
+
+    @abstractmethod
+    def assignment_has_pm_execution(self, task_id: int, assignment_id: int) -> bool:
+        """Check immutable PM enrollment while the caller holds the task lock."""
+        ...
 
     @abstractmethod
     def create(self, data: dict[str, Any]) -> int: ...
@@ -237,6 +259,7 @@ class TaskRepository(ABC):
         hermes_run_ref: str,
         bind_operation_key: str,
         bind_request_sha256: str,
+        concrete_agent_ref: str | None,
     ) -> bool: ...
 
     @abstractmethod
