@@ -69,8 +69,10 @@ Supervisor Engine перед commit выполнить следующие про
 - Для стандартного полного набора использовать `pytest -q --timeout=60`.
   `--forked` не требуется; при нём отчёт coverage некорректен.
 - `DATABASE_URL` обязателен в runtime. SQLite используется только в изолированных тестах.
-- `project-workflow` хранит только имена skills. Канонические файлы находятся в
-  `https://gt.wmtgroup.ru/relevanter/agent-skills` и загружаются исполнителем.
+- `project-workflow` хранит имена skills. Действующий legacy-каталог сохраняет
+  свой source; отдельный [Base candidate](docs/base-sdlc-candidate.md) закрепляет
+  commit пакета `services-base/agent-skills`. Candidate не установлен: не менять
+  default path, bootstrap, migrations и pinned history при подготовке документов.
 - `project-workflow` хранит уникальное имя агента и nullable уникальное имя
   профиля запуска, назначенного агенту. Профилем владеет внешний исполнитель;
   конкретный runtime выбирает его своей командой или настройкой.
