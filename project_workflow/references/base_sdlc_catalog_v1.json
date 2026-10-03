@@ -2,8 +2,8 @@
   "schema": "relevanter-project-workflow-catalog/v1",
   "catalog_version": 3,
   "skills_source": {
-    "repository": "https://github.com/FerrPOINT/fleet-control.git",
-    "revision": "b4fb4da965adafabd0c89f9d3299c99ebe83e63a",
+    "repository": "https://github.com/FerrPOINT/services-base.git",
+    "revision": "4b9b4c9297a13fb28a6ba2039af2f7cb719f2f58",
     "manifest_path": "agent-skills/manifest.json",
     "manifest_schema": "base-hermes-role-skills/v1"
   },

@@ -26,7 +26,7 @@ complete=true, итоговый комментарий и разрешённая
 
 ```bash
 python -c "from project_workflow.infrastructure.db.managed_catalog import load_managed_catalog; load_managed_catalog('project_workflow/references/base_sdlc_catalog_v1.json'); print('PASS')"
-python scripts/verify_base_sdlc_candidate.py --skills-root ../fleet-control/agent-skills
+python scripts/verify_base_sdlc_candidate.py --skills-root ../services-base/agent-skills
 python -m unittest discover -s tests/base_candidate -v
 ```
 
@@ -36,6 +36,14 @@ python -m unittest discover -s tests/base_candidate -v
 Ни marker, ни schema не возвращают ownership Relevanter Business.
 
 ## Assignment/receipt v1: оставшаяся адаптация
+
+Канонические role-инструкции и skills принадлежат приватному Base; Fleet —
+потребитель и владелец effective runtime config. Skills source закрепляет exact
+Base commit. Проверка читает Git blobs этого commit, а не текущий HEAD/filesystem:
+следующий docs commit Base не меняет pin. Неизвестный commit, неправильный source,
+schema/hash/allowlist — ошибка без Fleet/local fallback. Для чтения требуется
+авторизованный доступ к Base; credentials и копии пакета сюда не добавляются.
+Pin candidate не переключает SDK `.base-revision` и active legacy catalog.
 
 Workflow владеет каталогом и technical cursor, а не Task lifecycle. Admission
 сравнивает exact Tracker assignment, Fleet config и Forge workspace lease перед

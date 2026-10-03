@@ -71,7 +71,7 @@ Supervisor Engine перед commit выполнить следующие про
 - `DATABASE_URL` обязателен в runtime. SQLite используется только в изолированных тестах.
 - `project-workflow` хранит имена skills. Действующий legacy-каталог сохраняет
   свой source; отдельный [Base candidate](docs/base-sdlc-candidate.md) закрепляет
-  commit пакета `fleet-control/agent-skills`. Candidate не установлен: не менять
+  commit пакета `services-base/agent-skills`. Candidate не установлен: не менять
   default path, bootstrap, migrations и pinned history при подготовке документов.
 - `project-workflow` хранит уникальное имя агента и nullable уникальное имя
   профиля запуска, назначенного агенту. Профилем владеет внешний исполнитель;

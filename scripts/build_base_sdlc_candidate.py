@@ -5,6 +5,8 @@ import json
 import re
 from pathlib import Path
 
+from verify_base_sdlc_candidate import CatalogSource, load_pinned_package
+
 ROOT = Path(__file__).resolve().parents[1]
 CANDIDATE = ROOT / "project_workflow/references/base_sdlc_catalog_v1.json"
 
@@ -458,10 +460,16 @@ def render(skills_root: Path, skills_sha: str) -> dict:
     if not re.fullmatch(r"[0-9a-f]{40}", skills_sha):
         raise ValueError("exact skills commit SHA required")
     catalog = json.loads((ROOT / "project_workflow/references/hermes_sdlc_catalog_v1.json").read_text(encoding="utf-8"))
-    manifest = json.loads((skills_root / "manifest.json").read_text(encoding="utf-8"))
+    pin = CatalogSource(
+        repository="https://github.com/FerrPOINT/services-base.git",
+        revision=skills_sha,
+        manifest_path="agent-skills/manifest.json",
+        manifest_schema="base-hermes-role-skills/v1",
+    )
+    manifest = load_pinned_package(skills_root, pin)
     catalog["catalog_version"] = 3
     catalog["skills_source"] = {
-        "repository": "https://github.com/FerrPOINT/fleet-control.git",
+        "repository": "https://github.com/FerrPOINT/services-base.git",
         "revision": skills_sha,
         "manifest_path": "agent-skills/manifest.json",
         "manifest_schema": manifest["schema"],

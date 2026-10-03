@@ -1,56 +1,151 @@
-"""Validate explicit Base candidate and committed Fleet skills without runtime writes."""
+"""Validate the explicit candidate against immutable private Base Git blobs."""
 
 import argparse
 import hashlib
 import json
+import re
 import subprocess
 import sys
-from pathlib import Path
+from dataclasses import dataclass
+from pathlib import Path, PurePosixPath
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from project_workflow.infrastructure.db.managed_catalog import load_managed_catalog  # noqa: E402
+from project_workflow.infrastructure.db.managed_catalog import (  # noqa: E402
+    CatalogSource,
+    ManagedCatalog,
+    load_managed_catalog,
+)
+
+BASE_REPOSITORY = "https://github.com/FerrPOINT/services-base.git"
+MANIFEST_PATH = "agent-skills/manifest.json"
+MANIFEST_SCHEMA = "base-hermes-role-skills/v1"
 
 
-def normalized_hash(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+def git(root: Path, *args: str) -> bytes:
+    try:
+        return subprocess.check_output(["git", "-C", str(root), *args], stderr=subprocess.PIPE)
+    except subprocess.CalledProcessError as error:
+        raise ValueError("Pinned Base Git source is unavailable; no local/Fleet fallback") from error
 
 
-def verify(skills_root: Path) -> None:
-    skills_root = skills_root.resolve()
-    candidate = load_managed_catalog(ROOT / "project_workflow/references/base_sdlc_catalog_v1.json")
+def digest(content: bytes) -> str:
+    return hashlib.sha256(content.replace(b"\r\n", b"\n")).hexdigest()
+
+
+@dataclass(frozen=True)
+class GitPackage:
+    root: Path
+    revision: str
+
+    def read(self, relative: str) -> bytes:
+        path = PurePosixPath(relative)
+        if path.is_absolute() or ".." in path.parts or "\\" in relative or str(path) != relative:
+            raise ValueError("Invalid package path")
+        full_path = f"agent-skills/{relative}"
+        entry = git(self.root, "ls-tree", self.revision, "--", full_path).decode().strip()
+        if not entry.startswith(("100644 blob ", "100755 blob ")) or "\n" in entry:
+            raise ValueError("Pinned package file must be a regular Git blob")
+        return git(self.root, "show", f"{self.revision}:{full_path}")
+
+    def inventory(self, relative: str) -> set[str]:
+        prefix = f"agent-skills/{relative}/"
+        paths = git(self.root, "ls-tree", "-r", "--name-only", self.revision, "--", prefix).decode().splitlines()
+        return {path.removeprefix("agent-skills/") for path in paths}
+
+
+def load_pinned_package(skills_root: Path, pin: CatalogSource) -> dict[str, Any]:
+    if pin.repository != BASE_REPOSITORY or pin.manifest_path != MANIFEST_PATH:
+        raise ValueError("Candidate must pin the canonical private Base package")
+    if pin.manifest_schema != MANIFEST_SCHEMA or not re.fullmatch(r"[0-9a-f]{40}", pin.revision):
+        raise ValueError("Invalid exact Base pin/schema")
+    root = Path(git(skills_root.resolve(), "rev-parse", "--show-toplevel").decode().strip())
+    if skills_root.resolve() != root / "agent-skills":
+        raise ValueError("Expected Base agent-skills directory")
+    origin = git(root, "remote", "get-url", "origin").decode().strip().rstrip("/")
+    if origin not in (
+        BASE_REPOSITORY,
+        BASE_REPOSITORY.removesuffix(".git"),
+        "git@github.com:FerrPOINT/services-base.git",
+    ):
+        raise ValueError("Checkout origin is not canonical Base")
+    revision = git(root, "rev-parse", "--verify", f"{pin.revision}^{{commit}}").decode().strip()
+    if revision != pin.revision:
+        raise ValueError("Exact Base commit required")
+    package = GitPackage(root, revision)
+    manifest: dict[str, Any] = json.loads(package.read("manifest.json"))
+    native = manifest["sources"]["native"]
+    if (
+        manifest["schema"] != MANIFEST_SCHEMA
+        or native["repository"] != BASE_REPOSITORY
+        or native["revision"] != "SELF"
+        or native["hashAlgorithm"] != "sha256-normalized-lf-utf8"
+    ):
+        raise ValueError("Pinned manifest source/schema mismatch")
+    authority = manifest["catalogAuthority"]
+    if authority["selectionAuthority"] != "task-tracker-backend-assignment" or any(
+        authority[field] is not False
+        for field in ("ownsRouting", "ownsModeSelection", "ownsWorkspaceSelection", "ownsPrioritySelection")
+    ):
+        raise ValueError("Package cannot own runtime selection")
+    inventory = native["skills"]
+    expected_skills = {f"skills/{name}/SKILL.md" for name in inventory}
+    if package.inventory("skills") != expected_skills:
+        raise ValueError("Pinned physical skill inventory mismatch")
+    for name, expected_hash in inventory.items():
+        if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", name):
+            raise ValueError("Invalid skill name")
+        if digest(package.read(f"skills/{name}/SKILL.md")) != expected_hash:
+            raise ValueError("Pinned skill hash mismatch")
+    roles = manifest["roles"]
+    if len(roles) != 7 or sum(len(role["modes"]) for role in roles.values()) != 11:
+        raise ValueError("Pinned role/mode inventory mismatch")
+    if package.inventory("roles") != {f"roles/{name}.md" for name in roles}:
+        raise ValueError("Pinned role instruction inventory mismatch")
+    used = set()
+    for name, role in roles.items():
+        instruction = role["roleInstruction"]
+        if (
+            instruction["path"] != f"roles/{name}.md"
+            or digest(package.read(instruction["path"])) != instruction["sha256"]
+        ):
+            raise ValueError("Pinned role instruction hash/path mismatch")
+        allowed = role["physicalSkills"]
+        if len(set(allowed)) != len(allowed) or not set(allowed).issubset(inventory):
+            raise ValueError("Pinned physical allowlist mismatch")
+        used.update(allowed)
+    if used != set(inventory):
+        raise ValueError("Unused pinned skill")
+    return manifest
+
+
+def verify(skills_root: Path, candidate: ManagedCatalog | None = None) -> None:
+    candidate = candidate or load_managed_catalog(ROOT / "project_workflow/references/base_sdlc_catalog_v1.json")
     active = load_managed_catalog(ROOT / "project_workflow/references/hermes_sdlc_catalog_v1.json")
-    manifest = json.loads((skills_root / "manifest.json").read_text(encoding="utf-8"))
-    head = subprocess.check_output(["git", "-C", str(skills_root.parent), "rev-parse", "HEAD"], text=True).strip()
-    if candidate.skills_source.revision != head or candidate.skills_source.manifest_schema != manifest["schema"]:
-        raise ValueError("skills commit/schema mismatch")
-    if subprocess.check_output(
-        ["git", "-C", str(skills_root.parent), "status", "--porcelain", "--", "agent-skills"], text=True
-    ).strip():
-        raise ValueError("skills package not committed")
+    manifest = load_pinned_package(skills_root, candidate.skills_source)
+    if set(manifest["roles"]) != {workflow.role_key for workflow in candidate.workflows}:
+        raise ValueError("Role registry mismatch")
     for old, new in zip(active.workflows, candidate.workflows, strict=True):
         declaration = manifest["roles"][new.role_key]
-        if (old.key, old.hermes_namespace, old.hermes_profile) != (new.key, new.hermes_namespace, new.hermes_profile):
-            raise ValueError("technical workflow identity changed")
-        if new.skill_allowlist != declaration["physicalSkills"]:
-            raise ValueError("physical allowlist mismatch")
-        role_file = declaration["roleInstruction"]
-        if normalized_hash(skills_root / role_file["path"]) != role_file["sha256"]:
-            raise ValueError("role instruction hash mismatch")
+        identity = (new.key, new.hermes_namespace, new.hermes_profile)
+        if (old.key, old.hermes_namespace, old.hermes_profile) != identity:
+            raise ValueError("Technical workflow identity changed")
+        if (new.hermes_namespace, new.hermes_profile) != (declaration["namespace"], declaration["profile"]):
+            raise ValueError("Pinned namespace/profile mismatch")
+        if (
+            new.skill_allowlist != declaration["physicalSkills"]
+            or [mode.key for mode in new.modes] != declaration["modes"]
+        ):
+            raise ValueError("Pinned allowlist/modes mismatch")
         for old_mode, new_mode in zip(old.modes, new.modes, strict=True):
             if (old_mode.key, old_mode.execution_scopes) != (new_mode.key, new_mode.execution_scopes):
-                raise ValueError("mode/scope changed")
-            if [p.code for p in old_mode.phases] != [p.code for p in new_mode.phases]:
-                raise ValueError("phase identity changed")
-            for phase in new_mode.phases:
-                for instruction in phase.instructions:
-                    for name in instruction.skills:
-                        if (
-                            normalized_hash(skills_root / "skills" / name / "SKILL.md")
-                            != manifest["sources"]["native"]["skills"][name]
-                        ):
-                            raise ValueError("skill hash mismatch")
-    print("PASS: current validator; 7 workflows / 11 modes / 33 phases; preserved identities; exact skills SHA/hashes")
+                raise ValueError("Mode/scope changed")
+            if [phase.code for phase in old_mode.phases] != [phase.code for phase in new_mode.phases]:
+                raise ValueError("Phase identity changed")
+    print(
+        "PASS: current validator; 7 workflows / 11 modes / 33 phases; immutable Base SHA/hashes; preserved identities"
+    )
 
 
 if __name__ == "__main__":
