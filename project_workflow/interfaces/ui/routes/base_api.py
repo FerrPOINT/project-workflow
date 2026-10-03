@@ -5,17 +5,57 @@ from typing import Any
 from fastapi import Header
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 
+from project_workflow.application.base_binding import observe_base_namespace_binding
 from project_workflow.application.base_source import export_base_source, source_capability
 from project_workflow.application.base_terminal import read_terminal_receipt
 from project_workflow.domain.base_admission import BaseTerminalReadback
+from project_workflow.domain.base_binding import BaseNamespaceBindingError, BaseNamespaceBindingResponse, DatabaseId
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.infrastructure.base_auth import authorize_read
 from project_workflow.infrastructure.db.models import PMExecution
+from project_workflow.infrastructure.db.session import DatabaseUnavailable
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.infrastructure.namespace_auth import NamespaceAuthError
 
 from . import pm_api, runtime_api
+
+
+def _binding_error(code: str, message: str, status: int) -> JSONResponse:
+    error = BaseNamespaceBindingError.model_validate({"ok": False, "error_code": code, "error": message})
+    return JSONResponse(error.model_dump(), status_code=status, headers={"Cache-Control": "no-store"})
+
+
+def namespace_binding(
+    namespace_id: DatabaseId,
+    authorization: str | None = Header(default=None),
+) -> JSONResponse:
+    """Fresh registered catalog authority, then a non-mutating owner DB observation."""
+    try:
+        credential = authorize_read(authorization)
+        if credential.kind != "catalog":
+            return _binding_error("machine-access-denied", "Registered catalog reader required", 403)
+    except NamespaceAuthError as exc:
+        code = "authorization-unavailable" if exc.status == 503 else "machine-access-denied"
+        return _binding_error(code, "Base catalog reader authorization failed", exc.status)
+    try:
+        uow = SAUnitOfWork()
+        try:
+            binding = observe_base_namespace_binding(uow, int(namespace_id))
+            result = BaseNamespaceBindingResponse(ok=True, binding=binding)
+            return JSONResponse(result.model_dump(by_alias=True), headers={"Cache-Control": "no-store"})
+        finally:
+            try:
+                uow.rollback()
+            finally:
+                uow.close()
+    except ConflictError:
+        return _binding_error(
+            "binding-conflict", "Installed Base namespace/candidate missing, stale or mismatched", 409,
+        )
+    except (DatabaseUnavailable, SQLAlchemyError, RuntimeError, ValueError, KeyError, TypeError, OSError):
+        return _binding_error("binding-unavailable", "Pinned Base namespace observation unavailable", 503)
 
 
 def source_catalog(authorization: str | None = Header(default=None)) -> dict[str, Any] | JSONResponse:

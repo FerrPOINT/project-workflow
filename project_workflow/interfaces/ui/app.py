@@ -87,7 +87,7 @@ class _UoWMiddleware(BaseHTTPMiddleware):
         if request.url.path in {
             "/health", "/internal/runtime/capabilities",
             "/internal/runtime/base/source-catalog", "/internal/runtime/base/source-capabilities",
-        }:
+        } or request.url.path.startswith("/internal/runtime/base/namespace-bindings/"):
             return await call_next(request)
         try:
             uow = _app_state.create_uow()
@@ -255,8 +255,19 @@ def create_app() -> FastAPI:
     app.post("/internal/runtime/rebind", response_model=None)(runtime_api.runtime_rebind)
     app.get("/internal/runtime/history", response_model=None)(runtime_api.runtime_history)
     app.get("/internal/runtime/catalog", response_model=None)(runtime_api.runtime_catalog)
+    from project_workflow.domain.base_binding import (
+        BaseBindingInvalidRequest,
+        BaseNamespaceBindingError,
+        BaseNamespaceBindingResponse,
+    )
+
     from .routes import base_api
 
+    app.get(
+        "/internal/runtime/base/namespace-bindings/{namespace_id}", response_model=BaseNamespaceBindingResponse,
+        responses={**{status: {"model": BaseNamespaceBindingError} for status in (401, 403, 409, 503)},
+                   422: {"model": BaseBindingInvalidRequest}},
+    )(base_api.namespace_binding)
     app.post("/internal/runtime/base/terminal-receipt/readback", response_model=None)(base_api.terminal_readback)
     app.get("/internal/runtime/base/source-catalog", response_model=None)(base_api.source_catalog)
     app.get("/internal/runtime/base/source-capabilities", response_model=None)(base_api.source_capabilities)

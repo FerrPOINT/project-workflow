@@ -9,7 +9,7 @@ from project_workflow.application.base_admission import CANDIDATE_PATH
 from project_workflow.domain.base_admission import BASE_SKILLS_REVISION
 from project_workflow.domain.runtime_assignment import payload_sha256
 from project_workflow.infrastructure.base_package import GitPackage, digest, load_pinned_package
-from project_workflow.infrastructure.db.managed_catalog import export_runtime_catalog, load_managed_catalog
+from project_workflow.infrastructure.db.managed_catalog import ManagedCatalog, export_runtime_catalog
 
 CANDIDATE_REVISION = "674aab3f016255cf948b6e6e8b0ea92a8bf92557"
 CANDIDATE_BLOB = "5581b929c9e80bfba85684e98109944b2fb898ae"
@@ -17,13 +17,19 @@ CANDIDATE_BLOB = "5581b929c9e80bfba85684e98109944b2fb898ae"
 
 def export_base_source() -> dict[str, Any]:
     """Reuse the native catalog derivative, omitting legacy Business/runtime claims."""
+    return load_base_source()[1]
+
+
+def load_base_source() -> tuple[ManagedCatalog, dict[str, Any]]:
+    """Return the verified candidate and its matching export from one source read."""
     if CANDIDATE_PATH.is_symlink():
         raise ValueError("Candidate must be a regular source artifact")
     content = CANDIDATE_PATH.read_bytes().replace(b"\r\n", b"\n")
     blob = hashlib.sha1(b"blob " + str(len(content)).encode("ascii") + b"\0" + content).hexdigest()
     if blob != CANDIDATE_BLOB:
         raise ValueError("Candidate differs from the pinned source Git blob")
-    catalog = load_managed_catalog(CANDIDATE_PATH)
+    # Parse the verified bytes, not a second potentially changed filesystem read.
+    catalog = ManagedCatalog.model_validate_json(content)
     if catalog.catalog_version != 3 or catalog.skills_source.revision != BASE_SKILLS_REVISION:
         raise ValueError("Base candidate version/package mismatch")
     root = config.get_settings().PROJECT_WORKFLOW_BASE_SKILLS_ROOT
@@ -66,7 +72,7 @@ def export_base_source() -> dict[str, Any]:
         "roles": roles, "rolesSha256": payload_sha256(roles),
         "phaseSets": phases["phase_sets"], "phaseSetsSha256": derived["phaseSetsSha256"],
     }
-    return {**result, "sourceSha256": payload_sha256(result)}
+    return catalog, {**result, "sourceSha256": payload_sha256(result)}
 
 
 def source_capability(source: dict[str, Any], *, role_key: str, credential_kind: str) -> dict[str, Any]:

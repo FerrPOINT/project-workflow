@@ -261,15 +261,83 @@ namespace NAME against the canonical source definition. Fleet may represent an
 ID as an opaque string, but must preserve that value, never replace it with a
 label. Its separate `WorkflowBinding.namespace_name` is the symbol comparison.
 
-The installed directory does NOT return `hermes_profile`. The canonical profile
-comes from source role metadata; Workflow internally verifies the registered
-agent's stored `hermes_profile` when validating the managed catalog. A combined
-machine-readable actual namespace/workflow/profile/config binding readback is
-not implemented here. The directory validates accepted default v2, not candidate
-v3; the source-only exporter does not open a DB and cannot allocate or report
-installed namespace/workflow IDs. V3 adoption/readback is therefore a remaining
-dependency, not a reason to change pins, switch defaults or invent symbolic IDs.
-No Fleet code or fixture was changed for this owner mapping clarification.
+The legacy installed directory does NOT return `hermes_profile` and continues to
+validate accepted default v2. The source-only exporter does not open a DB and
+cannot allocate or report installed namespace/workflow IDs.
+
+### Read-Only V3 Owner Observation
+
+`GET /internal/runtime/base/namespace-bindings/{namespace_id}` requires fresh
+`authorize_read`, exactly the issuer-supported `project-workflow:read` grant,
+and a subject explicitly registered as `catalog`. Role readers, human subjects,
+legacy catalog/runtime credentials and extra/compound scopes are rejected.
+Authorization precedes opening the DB; there is no credential fallback or cache.
+The ID must be canonical ASCII positive decimal in `1..9223372036854775807`;
+leading zeros, signs, whitespace, labels and out-of-range values return 422.
+
+On success the exact response is:
+
+```json
+{
+  "ok": true,
+  "binding": {
+    "schema": "base-sdlc/workflow-binding/v1",
+    "namespace_id": "123",
+    "namespace_name": "hermes-developer",
+    "workflow_id": "456",
+    "workflow_key": "hermes-sdlc:developer",
+    "role_key": "developer",
+    "profile": "hermes-sdlc-developer",
+    "catalog_version": 3,
+    "catalog_sha256": "<lowercase SHA256 of LF-normalized canonical candidate bytes>",
+    "skills_revision": "4b9b4c9297a13fb28a6ba2039af2f7cb719f2f58",
+    "runtime_ready": false
+  }
+}
+```
+
+Example IDs are illustrative, never allocated by this endpoint. Both IDs are
+actual persisted numeric identities serialized as strings, not namespace labels.
+Workflow reads namespace `workflow_id` -> workflow `id`/`key` -> registered role
+agent/profile. The complete installed candidate must validate (all seven roles,
+11 modes, 33 phases, instructions/checks/evidence and namespace identities), with
+every canonical workflow actively selecting v3. The exact candidate Git blob,
+Base pin, full immutable package validation and all role namespace/profile/mode/
+allowlist agreements reuse the source exporter verifier. `catalog_sha256` equals
+its `workflowCatalogSourceArtifacts["project_workflow/references/base_sdlc_catalog_v1.json"]`,
+not `sourceSha256`, a DB hash or caller assertion. Parsing and hashing share the
+same verified source bytes. No private instruction/skill text is returned.
+
+The version check explicitly selects `list_modes(..., catalog_version=3)`;
+the canonical owner's full validator/inventory also selects active modes. It
+does not prohibit retained historical v2 modes/phases, assignment pins or history.
+A focused future-adoption fixture proves v3 readback with those v2 rows unchanged;
+the target must include the v3 workflow descriptions as well as appended modes
+and active version selection, per the canonical validator (v2 descriptions differ).
+This is not an implementation of the separately blocked adoption capability.
+
+The observation takes the existing shared catalog transaction lock, discards
+cached rows and revalidates/re-reads the mapping before returning. It performs no
+writes, commits or ledger creation; its UoW is rolled back and closed. Responses
+use `Cache-Control: no-store`; semantic binding fields contain no timestamp.
+Fleet can freeze these fields and compare a fresh authenticated readback.
+
+Errors are JSON `{ok:false,error_code,error}` with no binding: 401/403
+`machine-access-denied`, 503 `authorization-unavailable`, 409 `binding-conflict`
+for missing/partial/stale/mismatched installed mapping or candidate, 503
+`binding-unavailable` for source pin/config/DB dependencies. Source/DB errors are
+sanitized. Absence of v3 never causes installation, default switch or v2 fallback.
+FastAPI DTO-generated [OpenAPI](base-binding-openapi.json) is reproduced with
+`python -m scripts.export_base_binding_openapi`; PM OpenAPI/SDK pins are untouched.
+
+This is a namespace/catalog/profile owner observation, NOT frozen execution/config,
+assignment/run authority, native Fleet readiness, build attestation or terminal
+success. `require_owner_execution_evidence` remains unconditionally fail-closed.
+The default v2 startup validator, bootstrap and accepted runtime are unchanged;
+v3 runtime installation/adoption and startup compatibility remain a separate
+integrated milestone. The new observation is verified only against disposable
+pytest SQLite with explicit candidate installation and the authorized Git pin,
+not an accepted runtime DB. No Fleet code or fixtures were changed.
 
 Remaining B-SDLC-03 work: explicit v2-to-v3 installation/adoption and source
 build provenance, Fleet effective-config frozen-binding proof, Fleet/Tracker/Forge
@@ -278,6 +346,16 @@ acceptance. Existing PM enrollment checks v2 compatibility and is intentionally
 not broadened to v3 in this slice. Runtime scenarios remain NOT RUN.
 
 ## Scoped Evidence
+
+`test_namespace_binding.py` covers the fresh catalog-only auth boundary, actual
+persisted FK/profile and all seven role mappings, stable readback without writes,
+missing/default-v2/partial/stale/drifted candidate state, full source agreement,
+canonical IDs, typed dependency failures, generated OpenAPI and an opt-in actual
+private Git pin case. The opt-in case measures three complete HTTP observations
+with real pinned Git export plus two full DB validations each, checks the 5s Fleet
+readback budget and prints stage/aggregate timings. Its issuer HTTP is mocked and
+DB is isolated SQLite, not live authority, PostgreSQL or accepted-runtime latency.
+These tests never bypass the owner execution guard.
 
 Admission/terminal component fixtures explicitly bypass the production owner
 guard to test ledger derivation and corruption handling. `test_owner_evidence.py`
