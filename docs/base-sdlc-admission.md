@@ -50,6 +50,16 @@ workflow, role, mode, scope, cycle/attempt, workspace refs and generations,
 frozen inputs and assignment operation key. Their names are preserved, including
 legacy `business_task_ref`; that field does not transfer ownership to Business.
 
+The compatible opt-in `assignment_shape: "business-pre-decomposition"` is
+available only for PM/draft, Analyst/analysis and Architect/decomposition in
+business scope. It does not require a decomposition or Forge lease that the
+owner has not created. Those refs and physical generations must be absent/null;
+a real logical Tracker workspace may be included only as a ref/revision pair.
+See [runtime assignment contract](runtime-assignment-contract.md) for exact
+fields, legacy compatibility and additive source migration 0008. This marker
+is declaration-only: it cannot unblock Base first work, evaluator, replay or
+terminal receipts, nor upgrade Fleet's `runtime_ready:false` observation.
+
 `bind` must supply the same `concrete_agent_ref`. Existing binding/run refs and
 CAS/idempotency ledger are reused; this is not a Fleet native acceptance ACK.
 
@@ -83,7 +93,9 @@ mismatch or stale assignment rejects work before Supervisor. Generic CLI/human
 step cannot create or execute an unadmitted v3 cursor. Existing generic routes
 and v1/v2 handling retain their behavior.
 
-No default path, bootstrap, migration, SDK pin, image or deployment was changed.
+No default path, bootstrap, SDK pin, image or deployment was changed. The
+later business-only compatibility slice adds source migration 0008 without
+installing it in accepted runtime or adopting candidate v3.
 An explicit isolated candidate installation is still required. Existing
 startup/capability/exporter paths describe the accepted legacy runtime and
 must not be used as Base dispatch readiness evidence.

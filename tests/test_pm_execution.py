@@ -36,7 +36,7 @@ def pm(monkeypatch):
     yield from prepare_pm(monkeypatch)
 
 
-def prepare_pm(monkeypatch, *, ownership=True):
+def prepare_pm(monkeypatch, *, ownership=True, pre_decomposition=False):
     from project_workflow import build_provenance
     from project_workflow.interfaces.ui.routes import runtime_api
 
@@ -51,7 +51,14 @@ def prepare_pm(monkeypatch, *, ownership=True):
     monkeypatch.setenv("PROJECT_WORKFLOW_PM_READBACK_TOKEN", "p" * 40)
     monkeypatch.setenv("PROJECT_WORKFLOW_PM_READBACK_URL", "http://runtime.test/readback")
     config.get_settings.cache_clear()
-    _namespace("PM", "workflow-project_manager", "PM")
+    if pre_decomposition:
+        from project_workflow.infrastructure.db.managed_catalog import ensure_managed_catalog
+
+        with SAUnitOfWork() as uow:
+            ensure_managed_catalog(uow)
+            uow.commit()
+    else:
+        _namespace("PM", "workflow-project_manager", "PM")
     with SAUnitOfWork() as uow:
         namespace = uow.projects.get_by_cli_command("workflow-project_manager")
         if ownership:
@@ -60,12 +67,22 @@ def prepare_pm(monkeypatch, *, ownership=True):
                 "namespace_id": namespace.id, "tracker_instance_ref": "tracker:one", "tracker_project_ref": PROJECT_REF,
                 "authority_issuer": "http://auth.test", "provisioner_subject": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
             })
-        phase = uow.session.scalar(select(m.Phase).where(m.Phase.code == "assigned"))
-        agent_id = uow.agents.create({"name": "project_manager", "description": ""})
-        phase.agent_id = agent_id
+        if pre_decomposition:
+            mode = uow.workflows.get_mode_by_key(namespace.workflow_id, "draft")
+            phase = uow.session.scalar(select(m.Phase).where(m.Phase.mode_id == mode.id).order_by(m.Phase.phase_order))
+        else:
+            phase = uow.session.scalar(select(m.Phase).where(m.Phase.code == "assigned"))
+        if not pre_decomposition:
+            agent_id = uow.agents.create({"name": "project_manager", "description": ""})
+            phase.agent_id = agent_id
     client = TestClient(create_app())
-    assignment = client.post("/internal/runtime/assign", headers=ADAPTER,
-                             json=_assignment("PM-1", "assign:pm:1", "project_manager")).json()["result"]
+    request = _assignment("PM-1", "assign:pm:1", "project_manager")
+    if pre_decomposition:
+        request.update(assignment_shape="business-pre-decomposition", mode_key="draft")
+        for field in ("task_workspace_ref", "workspace_revision", "decomposition_revision_ref",
+                      "workspace_generation", "lease_generation"):
+            request.pop(field)
+    assignment = client.post("/internal/runtime/assign", headers=ADAPTER, json=request).json()["result"]
     binding = _bind_payload(assignment)
     binding["concrete_agent_ref"] = AGENT_REF
     result = client.post("/internal/runtime/bind", headers=ADAPTER, json=binding)
@@ -178,6 +195,23 @@ def test_wait_resume_new_run_survives_sessions_and_replays(pm):
     # Historic command replay cannot recreate a run or invalidate the current version.
     assert client.post(BASE + "/bind", headers=ADAPTER, json=pm[2]).status_code == 200
     assert client.post(BASE + "/checkpoint", headers=runtime, json=checkpoint).status_code == 200
+
+
+def test_business_only_pm_preserves_protected_checkpoint_resume_and_history(monkeypatch):
+    prepared = prepare_pm(monkeypatch, pre_decomposition=True)
+    context = next(prepared)
+    try:
+        # Reuse the complete native protocol regression, including old-token
+        # denial, readback, persisted operations and fresh effective run.
+        test_wait_resume_new_run_survives_sessions_and_replays(context)
+        with SAUnitOfWork() as uow:
+            assignment = uow.session.scalar(select(m.TaskRuntimeAssignment))
+            assert assignment.assignment_shape == "business-pre-decomposition"
+            assert assignment.decomposition_revision_ref is None
+            assert assignment.workspace_generation is None
+            assert assignment.lease_generation is None
+    finally:
+        prepared.close()
 
 
 @pytest.mark.parametrize("field,value", [

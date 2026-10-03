@@ -25,6 +25,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
+from .assignment_binding_schema import ASSIGNMENT_SHAPE_V1_SQL, PRE_DECOMPOSITION_BINDING_V1_SQL
+
 
 class Base(DeclarativeBase):
     pass
@@ -430,6 +432,7 @@ class TaskRuntimeAssignment(Base):
     attempt_number: Mapped[int | None] = mapped_column(nullable=True)
     assignment_revision: Mapped[int] = mapped_column(nullable=False)
     role_key: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    assignment_shape: Mapped[str | None] = mapped_column(String(32), nullable=True)
     execution_scope: Mapped[str | None] = mapped_column(String(16), nullable=True)
     stage_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
     business_task_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
@@ -516,28 +519,10 @@ class TaskRuntimeAssignment(Base):
             name="ck_task_runtime_assignments_lease_generation",
         ),
         CheckConstraint(
-            "(workflow_key IS NULL AND role_key IS NULL AND execution_scope IS NULL AND stage_key IS NULL AND "
-            "attempt_number IS NULL AND business_task_ref IS NULL AND root_task_ref IS NULL AND "
-            "work_item_ref IS NULL AND work_item_revision IS NULL AND queue_item_ref IS NULL AND "
-            "task_workspace_ref IS NULL AND workspace_revision IS NULL AND "
-            "tech_execution_workspace_ref IS NULL AND tech_execution_attempt_ref IS NULL AND "
-            "decomposition_revision_ref IS NULL AND stage_revision IS NULL AND assignment_ref IS NULL AND "
-            "binding_ref IS NULL AND hermes_run_ref IS NULL AND bind_operation_key IS NULL AND "
-            "bind_request_sha256 IS NULL AND workspace_generation IS NULL AND "
-            "lease_generation IS NULL AND exact_input_refs IS NULL AND payload_sha256 IS NULL) OR "
-            "(workflow_key IS NOT NULL AND role_key IS NOT NULL AND execution_scope IS NOT NULL AND "
-            "stage_key IS NOT NULL AND attempt_number IS NOT NULL AND business_task_ref IS NOT NULL AND "
-            "root_task_ref IS NOT NULL AND work_item_ref IS NOT NULL AND work_item_revision IS NOT NULL AND "
-            "queue_item_ref IS NOT NULL AND task_workspace_ref IS NOT NULL AND workspace_revision IS NOT NULL AND "
-            "decomposition_revision_ref IS NOT NULL AND stage_revision IS NOT NULL AND assignment_ref IS NOT NULL AND "
-            "workspace_generation IS NOT NULL AND lease_generation IS NOT NULL AND "
-            "exact_input_refs IS NOT NULL AND payload_sha256 IS NOT NULL AND "
-            "((binding_ref IS NULL AND hermes_run_ref IS NULL AND bind_operation_key IS NULL AND "
-            "bind_request_sha256 IS NULL) OR (binding_ref IS NOT NULL AND hermes_run_ref IS NOT NULL AND "
-            "((bind_operation_key IS NULL AND bind_request_sha256 IS NULL) OR "
-            "(bind_operation_key IS NOT NULL AND bind_request_sha256 IS NOT NULL)))))",
+            PRE_DECOMPOSITION_BINDING_V1_SQL,
             name="ck_task_runtime_assignments_binding_complete",
         ),
+        CheckConstraint(ASSIGNMENT_SHAPE_V1_SQL, name="ck_task_runtime_assignments_assignment_shape"),
         CheckConstraint(
             "execution_scope IS NULL OR "
             "(execution_scope = 'business' AND tech_execution_workspace_ref IS NULL AND "

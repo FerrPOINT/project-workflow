@@ -8,6 +8,7 @@ from typing import Any
 from sqlalchemy.exc import IntegrityError
 
 from project_workflow.application.execution_mode import resolve_execution_selection
+from project_workflow.domain.assignment_resources import validate_assignment_resources
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.domain.repositories import UnitOfWork
 from project_workflow.domain.runtime_assignment import (
@@ -24,6 +25,7 @@ class TaskService:
     """Use cases for tasks."""
 
     _RETRY_FROZEN_FIELDS = (
+        "assignment_shape",
         "workflow_id",
         "workflow_key",
         "mode_id",
@@ -151,15 +153,15 @@ class TaskService:
         work_item_ref: str,
         work_item_revision: int,
         queue_item_ref: str,
-        task_workspace_ref: str,
-        workspace_revision: int,
-        tech_execution_workspace_ref: str | None,
-        tech_execution_attempt_ref: str | None,
-        decomposition_revision_ref: str,
+        task_workspace_ref: str | None = None,
+        workspace_revision: int | None = None,
+        tech_execution_workspace_ref: str | None = None,
+        tech_execution_attempt_ref: str | None = None,
+        decomposition_revision_ref: str | None = None,
         stage_revision: str,
         assignment_ref: str,
-        workspace_generation: int,
-        lease_generation: int,
+        workspace_generation: int | None = None,
+        lease_generation: int | None = None,
         exact_input_refs: list[dict[str, Any]],
         expected_revision: int,
         expected_status: str,
@@ -167,6 +169,7 @@ class TaskService:
         expected_cycle_number: int | None = None,
         runtime_compatibility: dict[str, Any] | None = None,
         base_admission: dict[str, Any] | None = None,
+        assignment_shape: str | None = None,
     ) -> dict[str, Any]:
         """Persist one authorized Business assignment atomically and idempotently."""
         operation_key = operation_key.strip()
@@ -218,31 +221,31 @@ class TaskService:
             or work_item_revision > MAX_WORK_ITEM_REVISION
         ):
             raise ValueError("work_item_revision должен быть неотрицательным 64-битным целым числом")
-        if not isinstance(workspace_revision, int) or isinstance(workspace_revision, bool) or workspace_revision <= 0:
-            raise ValueError("workspace_revision должен быть положительным целым числом")
-        if (
-            not isinstance(workspace_generation, int)
-            or isinstance(workspace_generation, bool)
-            or workspace_generation < 0
-            or not isinstance(lease_generation, int)
-            or isinstance(lease_generation, bool)
-            or lease_generation < 0
-        ):
-            raise ValueError("workspace_generation и lease_generation должны быть неотрицательными")
+        validate_assignment_resources(
+            assignment_shape=assignment_shape, role_key=role_key, workflow_key=workflow_key,
+            mode_key=mode_key, execution_scope=execution_scope, task_workspace_ref=task_workspace_ref,
+            workspace_revision=workspace_revision, decomposition_revision_ref=decomposition_revision_ref,
+            tech_execution_workspace_ref=tech_execution_workspace_ref,
+            tech_execution_attempt_ref=tech_execution_attempt_ref,
+            workspace_generation=workspace_generation, lease_generation=lease_generation,
+        )
         external_refs = {
             "business_task_ref": business_task_ref,
             "root_task_ref": root_task_ref,
             "work_item_ref": work_item_ref,
             "queue_item_ref": queue_item_ref,
-            "task_workspace_ref": task_workspace_ref,
-            "decomposition_revision_ref": decomposition_revision_ref,
             "stage_revision": stage_revision,
             "assignment_ref": assignment_ref,
         }
-        normalized_refs = {
+        normalized_refs: dict[str, str | None] = {
             key: self._bounded_ref(value, key, 128 if key == "stage_revision" else 512)
             for key, value in external_refs.items()
         }
+        normalized_refs.update({
+            key: self._bounded_ref(value, key, 512) if value is not None else None
+            for key, value in {"task_workspace_ref": task_workspace_ref,
+                               "decomposition_revision_ref": decomposition_revision_ref}.items()
+        })
         normalized_tech_workspace_ref = (
             self._bounded_ref(tech_execution_workspace_ref, "tech_execution_workspace_ref", 512)
             if tech_execution_workspace_ref is not None
@@ -296,6 +299,8 @@ class TaskService:
             "runtime_compatibility": runtime_compatibility,
         }
         replay = self._uow.tasks.get_assignment_by_operation_key(operation_key)
+        if assignment_shape is not None:
+            payload["assignment_shape"] = assignment_shape
         if base_admission is not None:
             payload["base_admission"] = base_admission
         if replay is not None:
@@ -458,6 +463,8 @@ class TaskService:
             raise ConflictError("Continuation previous assignment not found")
         if previous.payload.get("base_admission") is not None:
             raise ConflictError("Base continuation requires trusted checkpoint ACK integration")
+        if previous.payload.get("assignment_shape") is not None:
+            raise ConflictError("Business pre-decomposition continuation requires trusted owner checkpoint integration")
         if self._uow.tasks.assignment_has_pm_execution(current.id, previous.id):
             raise ConflictError("Enrolled PM assignment requires PM resume/rebind")
         before = self._assignment_result(locked.to_dict(), previous.to_dict())
@@ -1028,12 +1035,15 @@ class TaskService:
                 )
             },
             "payload": payload,
+            "assignment_shape": payload.get("assignment_shape"),
             "payload_sha256": payload_sha256(payload),
         }
 
     @staticmethod
     def _assignment_result(task: dict[str, Any], assignment: dict[str, Any]) -> dict[str, Any]:
         result = dict(task)
+        if assignment.get("assignment_shape") is not None:
+            result["assignment_shape"] = assignment["assignment_shape"]
         for key in (
             "role_key",
             "workflow_key",

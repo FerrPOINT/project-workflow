@@ -1392,12 +1392,175 @@
       "RuntimeAssignmentRequest": {
         "additionalProperties": false,
         "description": "Business-owned persisted assignment accepted only on the role-token bridge.",
+        "oneOf": [
+          {
+            "not": {
+              "properties": {
+                "assignment_shape": {
+                  "const": "business-pre-decomposition"
+                }
+              },
+              "required": [
+                "assignment_shape"
+              ]
+            },
+            "properties": {
+              "decomposition_revision_ref": {
+                "not": {
+                  "type": "null"
+                }
+              },
+              "lease_generation": {
+                "not": {
+                  "type": "null"
+                }
+              },
+              "task_workspace_ref": {
+                "not": {
+                  "type": "null"
+                }
+              },
+              "workspace_generation": {
+                "not": {
+                  "type": "null"
+                }
+              },
+              "workspace_revision": {
+                "not": {
+                  "type": "null"
+                }
+              }
+            },
+            "required": [
+              "task_workspace_ref",
+              "workspace_revision",
+              "decomposition_revision_ref",
+              "workspace_generation",
+              "lease_generation"
+            ],
+            "title": "Legacy resource-bound assignment"
+          },
+          {
+            "allOf": [
+              {
+                "else": {
+                  "properties": {
+                    "workspace_revision": {
+                      "type": "null"
+                    }
+                  }
+                },
+                "if": {
+                  "properties": {
+                    "task_workspace_ref": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "task_workspace_ref"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "workspace_revision": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "workspace_revision"
+                  ]
+                }
+              }
+            ],
+            "oneOf": [
+              {
+                "properties": {
+                  "mode_key": {
+                    "const": "draft"
+                  },
+                  "role_key": {
+                    "const": "project_manager"
+                  },
+                  "workflow_key": {
+                    "const": "hermes-sdlc:project_manager"
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "mode_key": {
+                    "const": "analysis"
+                  },
+                  "role_key": {
+                    "const": "analyst"
+                  },
+                  "workflow_key": {
+                    "const": "hermes-sdlc:analyst"
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "mode_key": {
+                    "const": "decomposition"
+                  },
+                  "role_key": {
+                    "const": "architect"
+                  },
+                  "workflow_key": {
+                    "const": "hermes-sdlc:architect"
+                  }
+                }
+              }
+            ],
+            "properties": {
+              "assignment_shape": {
+                "const": "business-pre-decomposition"
+              },
+              "decomposition_revision_ref": {
+                "type": "null"
+              },
+              "execution_scope": {
+                "const": "business"
+              },
+              "lease_generation": {
+                "type": "null"
+              },
+              "tech_execution_attempt_ref": {
+                "type": "null"
+              },
+              "tech_execution_workspace_ref": {
+                "type": "null"
+              },
+              "workspace_generation": {
+                "type": "null"
+              }
+            },
+            "required": [
+              "assignment_shape"
+            ],
+            "title": "Business-only pre-decomposition assignment"
+          }
+        ],
         "properties": {
           "assignment_ref": {
             "maxLength": 512,
             "minLength": 1,
             "title": "Assignment Ref",
             "type": "string"
+          },
+          "assignment_shape": {
+            "anyOf": [
+              {
+                "const": "business-pre-decomposition",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Explicit business-only context before decomposition; omitted preserves the legacy resource shape",
+            "title": "Assignment Shape"
           },
           "attempt_number": {
             "exclusiveMinimum": 0.0,
@@ -1426,10 +1589,17 @@
             "type": "integer"
           },
           "decomposition_revision_ref": {
-            "maxLength": 512,
-            "minLength": 1,
-            "title": "Decomposition Revision Ref",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decomposition Revision Ref"
           },
           "exact_input_refs": {
             "items": {
@@ -1489,9 +1659,16 @@
             "type": "string"
           },
           "lease_generation": {
-            "minimum": 0.0,
-            "title": "Lease Generation",
-            "type": "integer"
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lease Generation"
           },
           "mode_key": {
             "maxLength": 128,
@@ -1554,10 +1731,17 @@
             "type": "string"
           },
           "task_workspace_ref": {
-            "maxLength": 512,
-            "minLength": 1,
-            "title": "Task Workspace Ref",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Workspace Ref"
           },
           "tech_execution_attempt_ref": {
             "anyOf": [
@@ -1604,14 +1788,28 @@
             "type": "string"
           },
           "workspace_generation": {
-            "minimum": 0.0,
-            "title": "Workspace Generation",
-            "type": "integer"
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Generation"
           },
           "workspace_revision": {
-            "exclusiveMinimum": 0.0,
-            "title": "Workspace Revision",
-            "type": "integer"
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Revision"
           }
         },
         "required": [
@@ -1629,13 +1827,8 @@
           "work_item_ref",
           "work_item_revision",
           "queue_item_ref",
-          "task_workspace_ref",
-          "workspace_revision",
-          "decomposition_revision_ref",
           "stage_revision",
           "assignment_ref",
-          "workspace_generation",
-          "lease_generation",
           "exact_input_refs",
           "expected_revision",
           "expected_status"

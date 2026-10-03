@@ -502,7 +502,8 @@ def _assignment_response(task: dict[str, Any]) -> dict[str, Any]:
     return {
         "ok": True,
         "exit_code": 0,
-        "result": {key: task.get(key) for key in keys},
+        "result": {**{key: task.get(key) for key in keys},
+                   **({"assignment_shape": task["assignment_shape"]} if task.get("assignment_shape") else {})},
         **({"base_admission_receipt": task["base_admission_receipt"]} if "base_admission_receipt" in task else {}),
     }
 
@@ -569,6 +570,7 @@ def runtime_assign(
                 expected_cycle_number=payload.expected_cycle_number,
                 runtime_compatibility=payload.runtime_compatibility,
                 base_admission=payload.base_admission.model_dump(mode="json") if payload.base_admission else None,
+                assignment_shape=payload.assignment_shape,
             )
             return _assignment_response(task)
     except (ConflictError, RuntimeError, ValueError) as exc:

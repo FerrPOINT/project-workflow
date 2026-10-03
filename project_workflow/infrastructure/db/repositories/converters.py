@@ -153,6 +153,7 @@ def _row_to_runtime_assignment(row: m.TaskRuntimeAssignment) -> TaskRuntimeAssig
         attempt_number=row.attempt_number,
         assignment_revision=row.assignment_revision,
         role_key=row.role_key,
+        assignment_shape=row.assignment_shape,
         execution_scope=row.execution_scope,
         stage_key=row.stage_key,
         business_task_ref=row.business_task_ref,

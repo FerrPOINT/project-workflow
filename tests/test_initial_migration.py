@@ -86,8 +86,9 @@ def test_repository_has_one_linear_migration_head():
         "0005_mode_execution_scopes.py",
         "0006_versioned_mode_catalog.py",
         "0007_pm_execution.py",
+        "0008_business_pre_decomposition.py",
     ]
-    assert migration_head() == "0007_pm_execution"
+    assert migration_head() == "0008_business_pre_decomposition"
 
 
 def test_fresh_sqlite_migration_matches_orm_metadata(tmp_path):
@@ -139,7 +140,7 @@ def test_fresh_sqlite_migration_matches_orm_metadata(tmp_path):
         }
         assert actual_fks == expected_fks, table_name
 
-    assert database_revisions(engine) == {"0007_pm_execution"}
+    assert database_revisions(engine) == {"0008_business_pre_decomposition"}
     assert schema_is_ready(engine) is True
     with engine.connect() as connection:
         context = MigrationContext.configure(
@@ -253,6 +254,7 @@ def test_sqlite_upgrade_populated_legacy_backfills_each_workflow_mode(tmp_path):
 
 @pytest.mark.parametrize("predecessor", [
     "0004_wide_work_item_revision", "0005_mode_execution_scopes", "0006_versioned_mode_catalog",
+    "0007_pm_execution",
 ])
 def test_sqlite_supported_additive_upgrade_preserves_legacy_catalog_and_assignment_history(tmp_path, predecessor):
     engine = _sqlite_engine(tmp_path, f"{predecessor}.db")
@@ -321,12 +323,12 @@ def test_sqlite_supported_additive_upgrade_preserves_legacy_catalog_and_assignme
     assert database_revisions(engine) == {predecessor}
     ensure_migrated(engine)
     ensure_migrated(engine)  # Restart is idempotent and cannot reinterpret historical payloads.
-    assert database_revisions(engine) == {"0007_pm_execution"}
+    assert database_revisions(engine) == {"0008_business_pre_decomposition"}
     assert schema_is_ready(engine)
     with engine.connect() as conn:
         for table, original in frozen.items():
             actual = conn.execute(text(f"SELECT * FROM {table} ORDER BY id")).mappings().all()
-            expected = [dict(row, concrete_agent_ref=None) for row in original] if (
+            expected = [dict(row, concrete_agent_ref=None, assignment_shape=None) for row in original] if (
                 table == "task_runtime_assignments"
             ) else original
             assert actual == expected, table
@@ -460,7 +462,7 @@ def test_sqlite_runtime_assignment_rejects_invalid_immutable_bindings(tmp_path, 
         )
 
     ensure_migrated(engine)
-    assert database_revisions(engine) == {"0007_pm_execution"}
+    assert database_revisions(engine) == {"0008_business_pre_decomposition"}
     with engine.connect() as conn:
         preserved = conn.execute(
             text(
@@ -566,6 +568,7 @@ def test_in_memory_sqlite_migration_keeps_the_schema_alive():
     ("0003_runtime_assignment_bind", "Downgrade from runtime assignment bind"),
     ("0004_wide_work_item_revision", "Downgrade from wide Business revisions"),
     ("0007_pm_execution", "PM execution downgrade refused"),
+    ("0008_business_pre_decomposition", "Business pre-decomposition downgrade refused"),
 ])
 def test_sqlite_downgrade_refuses_lossy_runtime_history(tmp_path, revision, message):
     engine = _sqlite_engine(tmp_path)
@@ -855,7 +858,7 @@ def test_head_with_damaged_or_polluted_schema_is_refused(tmp_path, mutation):
     assert schema_is_ready(engine) is False
     with pytest.raises(DatabaseRecreateRequired):
         ensure_migrated(engine)
-    assert database_revisions(engine) == {"0007_pm_execution"}
+    assert database_revisions(engine) == {"0008_business_pre_decomposition"}
     if mutation == "extra":
         with engine.connect() as connection:
             assert connection.execute(text("SELECT id FROM unexpected_table")).scalar_one() == 42

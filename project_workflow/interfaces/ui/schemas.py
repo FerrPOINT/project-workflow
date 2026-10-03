@@ -7,6 +7,7 @@ from typing import Annotated, Any, ClassVar, Literal
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from project_workflow.domain.assignment_resources import assignment_resource_schema, validate_assignment_resources
 from project_workflow.domain.base_admission import BaseAdmission, ExactRef, Sha256
 from project_workflow.domain.namespace import normalize_namespace_cli_command
 from project_workflow.domain.project_theme import (
@@ -106,6 +107,12 @@ class ExactInputRef(StrictRequest):
 class RuntimeAssignmentRequest(StrictRequest):
     """Business-owned persisted assignment accepted only on the role-token bridge."""
 
+    model_config = ConfigDict(extra="forbid", json_schema_extra=assignment_resource_schema)
+
+    assignment_shape: Literal["business-pre-decomposition"] | None = Field(
+        default=None, exclude_if=lambda value: value is None,
+        description="Explicit business-only context before decomposition; omitted preserves the legacy resource shape",
+    )
     task: str = Field(min_length=1, max_length=128)
     role_key: str = Field(min_length=2, max_length=32)
     workflow_key: str = Field(min_length=1, max_length=128)
@@ -120,15 +127,15 @@ class RuntimeAssignmentRequest(StrictRequest):
     work_item_ref: str = Field(min_length=1, max_length=512)
     work_item_revision: int = Field(ge=0, le=MAX_WORK_ITEM_REVISION, strict=True)
     queue_item_ref: str = Field(min_length=1, max_length=512)
-    task_workspace_ref: str = Field(min_length=1, max_length=512)
-    workspace_revision: int = Field(gt=0, strict=True)
+    task_workspace_ref: str | None = Field(default=None, min_length=1, max_length=512)
+    workspace_revision: int | None = Field(default=None, gt=0, strict=True)
     tech_execution_workspace_ref: str | None = Field(default=None, min_length=1, max_length=512)
     tech_execution_attempt_ref: str | None = Field(default=None, min_length=1, max_length=512)
-    decomposition_revision_ref: str = Field(min_length=1, max_length=512)
+    decomposition_revision_ref: str | None = Field(default=None, min_length=1, max_length=512)
     stage_revision: str = Field(min_length=1, max_length=128)
     assignment_ref: str = Field(min_length=1, max_length=512)
-    workspace_generation: int = Field(ge=0, strict=True)
-    lease_generation: int = Field(ge=0, strict=True)
+    workspace_generation: int | None = Field(default=None, ge=0, strict=True)
+    lease_generation: int | None = Field(default=None, ge=0, strict=True)
     exact_input_refs: list[ExactInputRef] = Field(max_length=128)
     runtime_compatibility: dict[str, Any] | None = None
     base_admission: BaseAdmission | None = Field(default=None, exclude_if=lambda value: value is None)
@@ -172,6 +179,15 @@ class RuntimeAssignmentRequest(StrictRequest):
         if re.fullmatch(r"[a-z0-9][a-z0-9._-]*", value) is None:
             raise ValueError("mode_key должен соответствовать [a-z0-9][a-z0-9._-]*")
         return value
+
+    @model_validator(mode="after")
+    def _resource_shape(self) -> RuntimeAssignmentRequest:
+        validate_assignment_resources(**{field: getattr(self, field) for field in (
+            "assignment_shape", "role_key", "workflow_key", "mode_key", "execution_scope", "task_workspace_ref",
+            "workspace_revision", "decomposition_revision_ref", "tech_execution_workspace_ref",
+            "tech_execution_attempt_ref", "workspace_generation", "lease_generation",
+        )})
+        return self
 
     @model_validator(mode="after")
     def _unique_input_refs(self) -> RuntimeAssignmentRequest:

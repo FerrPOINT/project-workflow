@@ -99,6 +99,48 @@ token configuration: lowercase `[a-z][a-z0-9-]{1,31}` плюс единстве�
 
 ## Immutable binding
 
+### Explicit business context before decomposition
+
+`POST /internal/runtime/assign` now accepts the opt-in marker
+`assignment_shape: "business-pre-decomposition"` only for these exact existing
+role/mode/scope tuples: `project_manager/draft/business`,
+`analyst/analysis/business`, `architect/decomposition/business`, with the
+corresponding canonical `hermes-sdlc:<role>` workflow key and persisted mode policy.
+It is not inferred from a missing resource or a caller-selected scope.
+
+This shape retains the required task/root/work-item refs and revision,
+queue item, stage key/revision, assignment ref/operation key, cycle, positive
+attempt and frozen input list. `decomposition_revision_ref`,
+`tech_execution_workspace_ref`, `tech_execution_attempt_ref`,
+`workspace_generation` and `lease_generation` must be absent or null.
+Zero generations are not a resource-free sentinel. The optional logical
+Tracker `task_workspace_ref` and positive `workspace_revision` must either
+both be present or both absent; they do not assert a Forge physical lease.
+Before Tracker has accepted that logical workspace, omit both.
+
+The marker is frozen in the existing assignment payload/hash and ledger,
+and included in assign/bind readback. Resource-free fields read back as null.
+Absent/null marker retains the legacy resource-bound requirements below;
+legacy serialized payloads, replay hashes and history are not rewritten.
+Developer `initial`/`rework` and all delivery/aggregate assignments still
+require real decomposition, logical workspace and physical workspace/attempt
+refs plus their exact revisions/generations. No role/mode/catalog was added.
+
+Source migration `0008_business_pre_decomposition` adds one nullable marker
+column and conditional checks to the existing ledger. It preserves old rows,
+payload bytes, pins, phase history and PM checkpoint records; it does not install
+a catalog. It was exercised only on disposable SQLite test databases, not
+installed in accepted runtime. Generated schema is included in
+`pm-continuation-openapi.json` using `python -m scripts.export_pm_openapi`.
+
+This is source assignment compatibility, not native dispatch readiness.
+Base v3 still requires package/admission validation and production
+`require_owner_execution_evidence` still rejects work/replay/terminal issuance.
+Source config/mapping declarations cannot prove a frozen Fleet binding or
+accepted Tracker/Forge execution. The existing protected PM checkpoint protocol
+is unchanged. Generic `rebind` of the new shape fails closed until trusted owner
+continuation integration exists; it cannot invent decomposition or generations.
+
 Каждая новая assignment revision хранит переданную Business execution identity:
 
 - routing identity: `workflow_key`, `mode_key`, `stage_key`, `role_key`,

@@ -198,6 +198,7 @@ class SATaskRepository(TaskRepository):
             attempt_number=data["attempt_number"],
             assignment_revision=data["assignment_revision"],
             role_key=data["role_key"],
+            assignment_shape=data.get("assignment_shape"),
             execution_scope=data["execution_scope"],
             stage_key=data["stage_key"],
             business_task_ref=data["business_task_ref"],

@@ -253,6 +253,7 @@ class TaskRuntimeAssignment:
     payload_sha256: str | None = None
     payload: dict[str, Any] = field(default_factory=dict)
     created_at: str | None = None
+    assignment_shape: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -293,6 +294,7 @@ class TaskRuntimeAssignment:
             "payload_sha256": self.payload_sha256,
             "payload": dict(self.payload),
             "created_at": self.created_at,
+            **({"assignment_shape": self.assignment_shape} if self.assignment_shape is not None else {}),
         }
 
 
