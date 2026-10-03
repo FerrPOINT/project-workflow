@@ -84,7 +84,10 @@ class _UoWMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         from ...application.state import _app_state, _uow_ctx
 
-        if request.url.path in {"/health", "/internal/runtime/capabilities"}:
+        if request.url.path in {
+            "/health", "/internal/runtime/capabilities",
+            "/internal/runtime/base/source-catalog", "/internal/runtime/base/source-capabilities",
+        }:
             return await call_next(request)
         try:
             uow = _app_state.create_uow()
@@ -252,6 +255,11 @@ def create_app() -> FastAPI:
     app.post("/internal/runtime/rebind", response_model=None)(runtime_api.runtime_rebind)
     app.get("/internal/runtime/history", response_model=None)(runtime_api.runtime_history)
     app.get("/internal/runtime/catalog", response_model=None)(runtime_api.runtime_catalog)
+    from .routes import base_api
+
+    app.post("/internal/runtime/base/terminal-receipt/readback", response_model=None)(base_api.terminal_readback)
+    app.get("/internal/runtime/base/source-catalog", response_model=None)(base_api.source_catalog)
+    app.get("/internal/runtime/base/source-capabilities", response_model=None)(base_api.source_capabilities)
     from project_workflow.domain.pm_execution import PMResponse
 
     app.post("/internal/runtime/v1/pm/bind", response_model=PMResponse,

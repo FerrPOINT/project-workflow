@@ -53,6 +53,10 @@ class Settings(BaseSettings):
     PROJECT_WORKFLOW_PM_READBACK_URL: str = ""
     PROJECT_WORKFLOW_PM_READBACK_TOKEN: str = ""
     PROJECT_WORKFLOW_PM_SCOPE_SECRET: str = ""
+    PROJECT_WORKFLOW_BASE_SKILLS_ROOT: str = ""
+    # Deployment-registered Base reader subject UUID -> canonical role or "catalog".
+    # A PAT scope/email or legacy shared token alone never registers a machine.
+    PROJECT_WORKFLOW_BASE_READER_SUBJECTS_JSON: str = ""
 
     @field_validator("DATABASE_URL", mode="before")
     @classmethod

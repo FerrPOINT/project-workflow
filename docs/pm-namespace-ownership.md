@@ -58,21 +58,22 @@ root, not by a caller `iss` claim. The recorded issuer comes from configuration.
 Introspection uses 5-second network timeouts/body deadline, at most 16 KiB,
 identity encoding, no redirects, retries, proxy-env routing or auth cache.
 
-PUT requires the pinned subject and both exact grants:
-`project-workflow:write` and
-`project-workflow:namespace-owner:provision:<namespace_id>`.
-GET requires `project-workflow:read` and
-`project-workflow:namespace-owner:read:<namespace_id>`.
-Namespace ID uses its canonical decimal value; wildcard or another namespace
-does not match. Cookie/session JWT, local/runtime/assignment/catalog tokens and
-ordinary read/write alone cannot provision or read this authority.
+PUT requires the pinned subject and `project-workflow:write`; GET requires the
+same registered subject and `project-workflow:read`. Only standard service
+read/write scopes are accepted, without duplicates, wildcard or compound grants.
+GET additionally checks the persisted issuer/provisioner identity; PUT cannot
+reown an existing mapping after subject/issuer configuration changes. The existing
+canonical PM namespace, Tracker binding, immutability and enrollment guards remain.
+Cookie/session JWT, local/runtime/assignment/catalog tokens, human admin status
+and a PAT scope alone cannot provision or read this authority.
 
-These are NEW configuration prerequisites, not already-issued Base grants.
-Base's existing limited delegation policy can authorize exact extra grants for
-the configured machine subject and service `project-workflow`; ordinary PAT
-creation only issues standard read/write. Provision the policy and credentials
-explicitly outside this change. No Base configuration or live credential is
-modified here, and no root PAT is handed to an agent.
+Issuer audit on 2026-10-03 corrected the earlier impossible extra-scope
+requirement: Base's actual PAT creation accepts ONLY registered `service:read`
+and `service:write`. No delegated compound namespace scopes are assumed. Issue
+the standard PAT for the explicitly registered machine subject outside this
+change. No Base configuration or live credential is modified here, and no root
+PAT is handed to an agent. This namespace ownership readback is not Base runtime
+execution or terminal receipt admission.
 
 ## Locks And Enrollment
 

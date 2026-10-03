@@ -40,12 +40,12 @@ def _root(value: str) -> str:
     return value.rstrip("/")
 
 
-def authorize(authorization: str | None, namespace_id: int, *, provision: bool) -> NamespacePrincipal:
+def introspect(authorization: str | None) -> tuple[NamespacePrincipal, list[str]]:
+    """Resolve a fresh principal only; callers must enforce registered subjects/scopes."""
     settings = config.get_settings()
     try:
         root = _root(settings.AUTH_INTERNAL_BASE_URL)
         issuer = _root(settings.AUTH_ISSUER)
-        provisioner = canonical_uuid(settings.PROJECT_WORKFLOW_NAMESPACE_PROVISIONER_SUBJECT)
     except ValueError:
         raise NamespaceAuthError(503) from None
     if not authorization or not authorization.startswith("Bearer sdlc_pat_"):
@@ -58,6 +58,7 @@ def authorize(authorization: str | None, namespace_id: int, *, provision: bool) 
             started = _monotonic()
             with client.stream("GET", root + "/auth/tokens/introspect", headers={
                 "Authorization": "Bearer " + token, "Accept-Encoding": "identity",
+                "Cache-Control": "no-cache, no-store",
             }) as response:
                 if response.status_code == 401:
                     raise NamespaceAuthError(401)
@@ -70,23 +71,43 @@ def authorize(authorization: str | None, namespace_id: int, *, provision: bool) 
                     body.extend(chunk)
                     if len(body) > MAX_BODY or _monotonic() - started > 5:
                         raise NamespaceAuthError(503)
-                value = json.loads(body)
+                value = json.loads(body, object_pairs_hook=unique_object)
         if not isinstance(value, dict) or set(value) != {"sub", "email", "scopes"}:
             raise ValueError("Invalid introspection")
         subject = canonical_uuid(value["sub"]) if isinstance(value["sub"], str) else ""
         scopes = value["scopes"]
-        if not subject or not isinstance(value["email"], str) or not isinstance(scopes, list) or any(
-            not isinstance(scope, str) for scope in scopes
+        if (
+            not subject or not isinstance(value["email"], str) or not value["email"].strip()
+            or not isinstance(scopes, list) or any(not isinstance(scope, str) for scope in scopes)
         ):
             raise ValueError("Invalid introspection")
     except (httpx.HTTPError, ValueError, TypeError):
         raise NamespaceAuthError(503) from None
-    action = "provision" if provision else "read"
+    return NamespacePrincipal(issuer=issuer, subject=subject), scopes
+
+
+def unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("Duplicate authority/config field")
+        result[key] = value
+    return result
+
+
+def authorize(authorization: str | None, namespace_id: int, *, provision: bool) -> NamespacePrincipal:
+    settings = config.get_settings()
+    try:
+        provisioner = canonical_uuid(settings.PROJECT_WORKFLOW_NAMESPACE_PROVISIONER_SUBJECT)
+    except ValueError:
+        raise NamespaceAuthError(503) from None
+    principal, scopes = introspect(authorization)
     standard = "write" if provision else "read"
     if (
         f"project-workflow:{standard}" not in scopes
-        or f"project-workflow:namespace-owner:{action}:{namespace_id}" not in scopes
-        or (provision and subject != provisioner)
+        or not set(scopes) <= {"project-workflow:read", "project-workflow:write"}
+        or len(scopes) != len(set(scopes))
+        or principal.subject != provisioner
     ):
         raise NamespaceAuthError(403)
-    return NamespacePrincipal(issuer=issuer, subject=subject)
+    return principal

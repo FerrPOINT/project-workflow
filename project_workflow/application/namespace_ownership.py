@@ -44,6 +44,7 @@ class NamespaceOwnershipService:
                 result.tracker_instance_ref != request.tracker_instance_ref
                 or result.tracker_project_ref != request.tracker_project_ref
                 or result.authority_issuer != principal.issuer
+                or result.provisioner_subject != principal.subject
             ):
                 raise ConflictError("PM namespace ownership is immutable")
             return result, False

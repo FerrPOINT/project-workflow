@@ -22,6 +22,8 @@ def _execute(namespace_id: int, authorization: str | None, payload: NamespaceOwn
             result, created = service.provision(namespace_id, payload, principal) if payload is not None else (
                 service.get(namespace_id), False,
             )
+            if result.authority_issuer != principal.issuer or result.provisioner_subject != principal.subject:
+                raise NamespaceAuthError(403)
         body = NamespaceOwnershipResponse(ok=True, result=result)
         return JSONResponse(body.model_dump(mode="json"), status_code=201 if created else 200,
                             headers={"Cache-Control": "no-store"})

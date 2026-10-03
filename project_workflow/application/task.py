@@ -74,8 +74,11 @@ class TaskService:
                 raise NotFoundError(f"Неймспейс {project_id} не найден")
             if requested_workflow_id is not None and project.workflow_id != requested_workflow_id:
                 raise ConflictError("Задача принадлежит другому воркфлоу")
-            if self._uow.workflows.lock(project.workflow_id) is None:
+            locked_workflow = self._uow.workflows.lock(project.workflow_id)
+            if locked_workflow is None:
                 raise NotFoundError(f"Воркфлоу {project.workflow_id} не найден")
+            if getattr(locked_workflow, "active_catalog_version", 1) == 3:
+                raise ConflictError("Base candidate tasks require owner-issued admission")
             locked_project = self._uow.projects.lock(project_id)
             if locked_project is None:
                 raise NotFoundError(f"Неймспейс {project_id} не найден")
@@ -163,6 +166,7 @@ class TaskService:
         expected_mode_key: str | None = None,
         expected_cycle_number: int | None = None,
         runtime_compatibility: dict[str, Any] | None = None,
+        base_admission: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Persist one authorized Business assignment atomically and idempotently."""
         operation_key = operation_key.strip()
@@ -250,6 +254,15 @@ class TaskService:
             else None
         )
         normalized_input_refs = self._normalize_exact_input_refs(exact_input_refs)
+        if base_admission is not None:
+            from project_workflow.application.base_admission import validate_base_admission
+
+            base_admission = validate_base_admission(
+                self._uow, base_admission, project_id=project_id, role_key=role_key,
+                workflow_key=workflow_key, mode_key=mode_key, execution_scope=execution_scope,
+            )
+        elif getattr(mode, "catalog_version", 1) == 3:
+            raise ConflictError("Base candidate requires opt-in admission")
         if getattr(mode, "catalog_version", 1) == 2:
             from project_workflow.build_provenance import validate_runtime_compatibility
 
@@ -283,6 +296,8 @@ class TaskService:
             "runtime_compatibility": runtime_compatibility,
         }
         replay = self._uow.tasks.get_assignment_by_operation_key(operation_key)
+        if base_admission is not None:
+            payload["base_admission"] = base_admission
         if replay is not None:
             return self._reconcile_assignment(replay.to_dict(), payload)
         phases = list(self._uow.phases.list(workflow_id=project.workflow_id, mode_id=mode.id))
@@ -441,6 +456,8 @@ class TaskService:
         previous = self._uow.tasks.get_assignment_by_operation_key(locked.assignment_operation_key or "")
         if previous is None or previous.id is None:
             raise ConflictError("Continuation previous assignment not found")
+        if previous.payload.get("base_admission") is not None:
+            raise ConflictError("Base continuation requires trusted checkpoint ACK integration")
         if self._uow.tasks.assignment_has_pm_execution(current.id, previous.id):
             raise ConflictError("Enrolled PM assignment requires PM resume/rebind")
         before = self._assignment_result(locked.to_dict(), previous.to_dict())
@@ -655,6 +672,16 @@ class TaskService:
             raise ConflictError("Принятый runtime assignment не найден")
         record = assignment.to_dict()
         continuation = record.get("payload", {})
+        if continuation.get("base_admission") is not None:
+            from project_workflow.application.base_admission import validate_base_admission
+
+            admission = validate_base_admission(
+                self._uow, continuation["base_admission"], project_id=project_id,
+                role_key=role_key, workflow_key=record["workflow_key"],
+                mode_key=record["mode_key"], execution_scope=record["execution_scope"],
+            )
+            if concrete_agent_ref != admission["concrete_agent_ref"]:
+                raise ConflictError("Base bind concrete agent mismatch")
         if continuation.get("runtime_compatibility") is not None:
             from project_workflow.build_provenance import runtime_compatibility_descriptor
 
@@ -743,6 +770,8 @@ class TaskService:
         attempt_number: int,
         expected_phase_code: str,
         expected_status: str,
+        base_config_ref: str | None = None,
+        base_config_sha256: str | None = None,
     ) -> RuntimeStepFence:
         """Lock and validate the exact immutable owner assignment for one step."""
         role_key = normalize_role_key(role_key)
@@ -852,6 +881,11 @@ class TaskService:
             # Frozen legacy phases remain readable; a v2 image cannot execute their old tool contract.
             raise ConflictError("RUNTIME_VERSION_INCOMPATIBLE: pinned legacy catalog requires legacy runtime")
         descriptor = record.get("payload", {}).get("runtime_compatibility")
+        from project_workflow.application.base_admission import assert_base_step
+
+        base_admission = assert_base_step(
+            self._uow, task, record, config_ref=base_config_ref, config_sha256=base_config_sha256,
+        )
         if descriptor is not None:
             from project_workflow.build_provenance import runtime_compatibility_descriptor
 
@@ -875,6 +909,7 @@ class TaskService:
             expected_status=expected_status,
             pm_version=pm_execution.version if pm_execution is not None else None,
             pm_fence=pm_execution.fence if pm_execution is not None else None,
+            base_admission_sha256=payload_sha256(base_admission) if base_admission is not None else None,
         )
 
     @staticmethod
@@ -1034,6 +1069,11 @@ class TaskService:
         result["binding_state"] = (
             "bound" if has_real_refs and has_bind_metadata else "legacy_bound" if has_real_refs else "unbound"
         )
+        from project_workflow.application.base_admission import admission_receipt
+
+        receipt = admission_receipt(assignment, task)
+        if receipt is not None:
+            result["base_admission_receipt"] = receipt
         return result
 
     def _reconcile_bind_after_race(self, request: dict[str, Any], request_digest: str) -> dict[str, Any]:
