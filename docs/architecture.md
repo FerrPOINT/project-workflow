@@ -1,5 +1,10 @@
 # Архитектура project-workflow
 
+Отдельный [Base SDLC candidate](base-sdlc-candidate.md) не изменяет описанный ниже
+runtime. В целевом Base Task lifecycle принадлежит Tracker, чаты/config/runs —
+Fleet, технические workspace/receipts — Forge. Business-привязки действующего
+exporter требуют отдельной адаптации, а не переименования фактов текущего runtime.
+
 `project-workflow` - внутренняя loopback/private утилита для пофазного ведения
 задач. Она не владеет human identity, browser sessions или personal tokens:
 ими управляет Central Auth. Приложение проверяет их через server-side OIDC и
