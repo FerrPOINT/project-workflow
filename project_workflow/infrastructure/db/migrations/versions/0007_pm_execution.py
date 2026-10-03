@@ -102,6 +102,7 @@ def upgrade() -> None:
         sa.CheckConstraint("kind IN ('bind', 'checkpoint', 'resume', 'rebind')", name="ck_pm_operation_kind"),
         sa.CheckConstraint("length(request_sha256) = 64", name="ck_pm_operation_hash"),
     )
+    op.create_index("ix_pm_operations_execution_kind", "pm_operations", ["execution_ref", "kind"])
 
 
 def downgrade() -> None:

@@ -172,6 +172,14 @@ evaluation items, transition routes и накопленное покрытие. 
 - rate limits, CSP и metrics не добавляются, пока приложение не становится
   внешним многопользовательским сервисом.
 
+## PM operation history
+
+PM checkpoint uniqueness reads operation history by execution and kind.
+`pm_operations` has the matching `(execution_ref, kind)` index in both ORM
+metadata and the pending `0007_pm_execution` migration. The operation-key
+primary key still owns replay identity; the index adds no uniqueness rule
+and does not change execution fences, authorization or HTTP responses.
+
 ## References
 
 - [PM Continuation](pm-continuation-contract.md) — execution identity, persistent
