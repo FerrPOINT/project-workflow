@@ -1,6 +1,14 @@
 # Base SDLC candidate v1
 
 Статус: configuration-only, не установлен, 2026-10-02.
+
+Дополнение 2026-10-03: read-only donor audit семи legacy DEV databases обнаружил
+managed 7/13/39 и total 8/14/58 (workflow/mode/phase); managed инструкции,
+checks и evidence совпадают с committed legacy catalog. Это не Base acceptance.
+Candidate остаётся 7/11/33: Developer только initial/rework с независимым scope.
+Не импортировать legacy DB/лишние modes и не объявлять candidate установленным.
+Исторические metadata/hashes находятся в приватном services-base donor package;
+effective config/materialization принадлежат Fleet, admission/exporter — B-SDLC-03.
 Отдельный файл: `project_workflow/references/base_sdlc_catalog_v1.json`.
 Сохранены technical schema `relevanter-project-workflow-catalog/v1`, workflow keys,
 namespace/profile, mode keys и 33 phase codes существующего каталога.
