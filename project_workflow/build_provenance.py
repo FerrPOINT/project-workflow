@@ -98,8 +98,10 @@ def validate_runtime_compatibility(value: Any) -> dict[str, Any]:
         raise BuildProvenanceError("Runtime compatibility schema invalid")
     if (
         type(value["catalogVersion"]) is not int
-        or value["catalogVersion"] != 2
-        or value["capabilityRevision"] != "hermes-sdlc-runtime/v2"
+        or not (
+            value["catalogVersion"] == 2 and value["capabilityRevision"] == "hermes-sdlc-runtime/v2"
+            or value["catalogVersion"] == 3 and value["capabilityRevision"] == "base-workflow-controlplane/v1"
+        )
     ):
         raise BuildProvenanceError("Runtime compatibility version invalid")
     for name in ("catalogRevision", "skillsRevision"):
