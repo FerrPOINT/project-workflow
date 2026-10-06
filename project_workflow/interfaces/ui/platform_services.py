@@ -20,7 +20,7 @@ _FALLBACK_SERVICES: list[dict[str, Any]] = [
     {"key": "task-tracker", "label": "Task Tracker", "url": "http://localhost:7722", "health": "unknown"},
     {"key": "wiki", "label": "Wiki", "url": "http://localhost:7732", "health": "unknown"},
     {"key": "fleet-control", "label": "Fleet Control", "url": "http://localhost:7742", "health": "unknown"},
-    {"key": "project-workflow", "label": "Project Workflow", "url": "http://localhost:7752", "health": "unknown"},
+    {"key": "project-workflow", "label": "Project Workflow", "url": "http://localhost:7751", "health": "unknown"},
 ]
 _CURRENT_KEY = "project-workflow"
 _CACHE_TTL_SECONDS = 60.0

@@ -175,7 +175,7 @@ def test_catalog_fallback_contains_six_ordered_ui_with_unknown_current_health():
         "admin-panel", "ci-cd", "task-tracker", "wiki", "fleet-control", "project-workflow",
     ]
     assert {service["health"] for service in catalog.services} == {"unknown"}
-    assert catalog.services[-1]["url"] == "http://localhost:7752"
+    assert catalog.services[-1]["url"] == "http://localhost:7751"
     assert len(load_other_services(None)) == 5
 
 
