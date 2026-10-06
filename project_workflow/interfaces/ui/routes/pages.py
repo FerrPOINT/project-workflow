@@ -105,7 +105,7 @@ def _template_response(
     selected_namespace = context.get("selected_namespace")
     selected_id = selected_namespace.get("id") if isinstance(selected_namespace, dict) else None
     if isinstance(selected_id, int):
-        response.set_cookie(NAMESPACE_COOKIE, str(selected_id), samesite="lax")
+        response.set_cookie(NAMESPACE_COOKIE, str(selected_id), path=get_settings().UI_BASE_PATH or "/", samesite="lax")
     return response
 
 

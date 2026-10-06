@@ -7,6 +7,7 @@ from typing import Any
 
 from fastapi.templating import Jinja2Templates
 
+from project_workflow.config import get_settings
 from project_workflow.domain.project_theme import (
     DEFAULT_PROJECT_COLOR,
     DEFAULT_PROJECT_ICON,
@@ -84,6 +85,7 @@ def _accent_foreground(color: str | None) -> str:
 
 
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+templates.env.globals["ui_base_path"] = lambda: get_settings().UI_BASE_PATH
 templates.env.filters["group_instructions"] = _group_instructions
 templates.env.filters["pluralize"] = _pluralize
 templates.env.filters["accent_foreground"] = _accent_foreground

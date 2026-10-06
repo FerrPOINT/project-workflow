@@ -112,7 +112,7 @@ async function saveAgent(event,form){
   var button=form.querySelector('[type="submit"]');
   button.disabled=true;
   try{
-    var response=await fetch('/api/agents/'+entry.dataset.id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,description:description,launch_profile:launchProfile||null})});
+    var response=await fetch(UI_BASE_PATH + '/api/agents/'+entry.dataset.id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,description:description,launch_profile:launchProfile||null})});
     var data=await response.json();
     if(!data.ok){showToast(data.error||'Ошибка','error');return;}
     [['name',name],['launch_profile',launchProfile],['description',description]].forEach(function(item){
@@ -135,7 +135,7 @@ async function deleteAgent(button){
   if(!await requestConfirmation({eyebrow:'Удаление агента',title:'Удалить агента «'+name+'»?',message:'Агент «'+name+'» будет удалён из списка.',confirmLabel:'Удалить'}))return;
   button.disabled=true;
   try{
-    var response=await fetch('/api/agents/'+entry.dataset.id,{method:'DELETE'});
+    var response=await fetch(UI_BASE_PATH + '/api/agents/'+entry.dataset.id,{method:'DELETE'});
     var data=await response.json();
     if(!data.ok){showToast(data.error||'Ошибка','error');return;}
     var next=entry.nextElementSibling;
@@ -160,7 +160,7 @@ async function addAgent(event){
   var button=event.target.querySelector('[type="submit"]');
   button.disabled=true;
   try{
-    var response=await fetch('/api/agents',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,description:description,launch_profile:launchProfile||null})});
+    var response=await fetch(UI_BASE_PATH + '/api/agents',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,description:description,launch_profile:launchProfile||null})});
     var data=await response.json();
     if(data.ok){showToast('Добавлено','success');location.reload()}else showToast(data.error||'Ошибка','error');
   }catch(error){showRequestError(error)}finally{button.disabled=false}

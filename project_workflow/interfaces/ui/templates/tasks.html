@@ -101,7 +101,7 @@
       {% for t in tasks %}
       <tr data-task-key="{{ t.task_key }}" data-status="{{ t.status }}" data-verdict="{{ t.latest_verdict or '' }}">
         <td>
-          <a href="/task/{{ t.task_key }}{% if t.namespace_id %}?namespace_id={{ t.namespace_id }}{% endif %}" class="task-key">{{ t.task_key }}</a>
+          <a href="{{ ui_base_path() }}/task/{{ t.task_key }}{% if t.namespace_id %}?namespace_id={{ t.namespace_id }}{% endif %}" class="task-key">{{ t.task_key }}</a>
           <span class="task-key-date" title="Создана: {{ t.created_at[:10] if t.created_at else '—' }}">{{ t.created_at[:10] if t.created_at else '—' }}</span>
         </td>
         <td>
@@ -154,7 +154,7 @@
   {% for t in tasks %}
   <div class="task-card" data-task-key="{{ t.task_key }}" data-status="{{ t.status }}" data-verdict="{{ t.latest_verdict or '' }}">
     <div class="row">
-      <a href="/task/{{ t.task_key }}{% if t.namespace_id %}?namespace_id={{ t.namespace_id }}{% endif %}" class="task-key">{{ t.task_key }}</a>
+      <a href="{{ ui_base_path() }}/task/{{ t.task_key }}{% if t.namespace_id %}?namespace_id={{ t.namespace_id }}{% endif %}" class="task-key">{{ t.task_key }}</a>
       {% if t.status == 'done' %}
       <span class="status-badge status-done">Завершена</span>
       {% elif t.status == 'blocked' %}

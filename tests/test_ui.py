@@ -147,6 +147,26 @@ def test_ui_templates_do_not_use_negative_letter_spacing():
     assert offenders == []
 
 
+def test_ui_prefix_preserves_navigation_api_and_error_links(monkeypatch):
+    prefixed_client = TestClient(app)
+    monkeypatch.setenv("UI_BASE_PATH", "/workflow")
+    config.get_settings.cache_clear()
+    try:
+        response = prefixed_client.get("/workflows")
+        assert response.status_code == 200
+        assert 'href="/workflow/phases' in response.text
+        assert 'href="/workflow/logout"' in response.text
+        assert 'const UI_BASE_PATH = "/workflow"' in response.text
+        assert "fetch(UI_BASE_PATH + '/api/workflows'" in response.text
+        assert 'href="/workflows' not in response.text
+        missing = prefixed_client.get("/task/not-found")
+        assert missing.status_code == 404
+        assert 'href="/workflow/tasks' in missing.text
+    finally:
+        prefixed_client.close()
+        config.get_settings.cache_clear()
+
+
 @pytest.fixture(autouse=True)
 def setup_db(isolate_ui_runtime_state, request):
     """Populate DB with seed.json + sample task before UI tests."""
@@ -443,11 +463,11 @@ class TestPhasesPage:
     def test_namespace_switch_resets_phase_workflow_scope(self):
         response = client.get("/phases")
         assert response.status_code == 200
-        assert "if(url.pathname === '/phases')" in response.text
+        assert "if(url.pathname === appUrl('/phases'))" in response.text
         assert "url.searchParams.delete('workflow_id');" in response.text
-        assert "if(url.pathname.startsWith('/phase/'))" in response.text
-        assert "url.pathname='/phases';" in response.text
-        assert "if(url.pathname === '/instructions'){" in response.text
+        assert "if(url.pathname.startsWith(appUrl('/phase/')))" in response.text
+        assert "url.pathname=appUrl('/phases');" in response.text
+        assert "if(url.pathname === appUrl('/instructions')){" in response.text
         assert "url.searchParams.delete('phase_id');" in response.text
 
     def test_phases_reject_unknown_query_namespace(self):
@@ -762,8 +782,8 @@ class TestPhasesPage:
         assert "movePhase(this,-1)" in response.text
         assert "movePhase(this,1)" in response.text
         assert "addPhaseAfter(this)" in response.text
-        assert "fetch('/api/phases/order'" in response.text
-        assert "fetch('/api/phases'," in response.text
+        assert "fetch(UI_BASE_PATH + '/api/phases/order'" in response.text
+        assert "fetch(UI_BASE_PATH + '/api/phases'," in response.text
 
     def test_phases_page_keeps_insertion_visible_and_groups_other_actions(self):
         response = client.get("/phases")
@@ -932,7 +952,7 @@ class TestPhasesPage:
             assert page.status_code == 200
             assert "phase-delete-btn" in page.text
             assert "deletePhase(this)" in page.text
-            assert "fetch('/api/phases/'" in page.text
+            assert "fetch(UI_BASE_PATH + '/api/phases/'" in page.text
 
             phases = [p.to_dict() for p in uow.phases.list(workflow_id=workflow_id)]
             assert len(phases) == 1
@@ -1305,8 +1325,8 @@ class TestPhaseDetail:
         phase = _phase_row("4.START")
 
         assert f"const phaseId = {phase['id']};" in response.text
-        assert "fetch(phaseApiUrl('/api/phases/' + phaseId)" in response.text
-        assert "fetch('/api/phases/4.START'" not in response.text
+        assert "fetch(phaseApiUrl(UI_BASE_PATH + '/api/phases/' + phaseId)" in response.text
+        assert "fetch(UI_BASE_PATH + '/api/phases/4.START'" not in response.text
 
     def test_phase_detail_has_responsive_structured_outline(self):
         response = client.get(_phase_detail_path("4.START"))
@@ -2234,8 +2254,8 @@ class TestProjectsPage:
         response = client.get("/namespaces/new")
         assert response.status_code == 200
 
-        assert "if(url.pathname === '/namespaces/new'){" in response.text
-        assert "url.pathname='/namespaces';" in response.text
+        assert "if(url.pathname === appUrl('/namespaces/new')){" in response.text
+        assert "url.pathname=appUrl('/namespaces');" in response.text
 
     def test_namespace_create_page_rejects_invalid_query_namespace_without_create_fallback(self):
         response = client.get("/namespaces/new?namespace_id=abc")
@@ -2256,11 +2276,12 @@ class TestProjectsPage:
         assert response.status_code == 200
         assert "function rememberNamespaceSelection(id, historyMode)" in response.text
         assert (
-            "document.cookie='workflow_namespace_id='+encodeURIComponent(id)+'; path=/; SameSite=Lax';"
+            "document.cookie='workflow_namespace_id='+encodeURIComponent(id)"
+            "+'; path='+(UI_BASE_PATH || '/')+'; SameSite=Lax';"
             in response.text
         )
         assert "if(selector){ selector.value = String(id); }" in response.text
-        assert "url.pathname = '/namespaces';" in response.text
+        assert "url.pathname = appUrl('/namespaces');" in response.text
         assert "var method = historyMode === 'push' ? 'pushState' : 'replaceState';" in response.text
         assert "window.history[method](null, '', url.toString());" in response.text
         assert re.search(
@@ -2284,7 +2305,7 @@ class TestProjectsPage:
         namespace_id = _as_dict(uow.projects.get_by_code("UITEST"))["id"]
         response = client.get(f"/namespaces/new?namespace_id={namespace_id}")
         assert response.status_code == 200
-        assert "if(url.pathname === '/namespaces/new'){" in response.text
+        assert "if(url.pathname === appUrl('/namespaces/new')){" in response.text
         assert "selectedNamespaceId = null;" in response.text
         assert "previousNamespaceId = contextId;" in response.text
         assert "setNamespaceFormMode('create');" in response.text
@@ -2316,7 +2337,7 @@ class TestProjectsPage:
         response = client.get("/namespaces/new")
         assert response.status_code == 200
         assert (
-            "window.location.href = '/namespaces?namespace_id=' + encodeURIComponent(d.namespace_id);"
+            "window.location.href = UI_BASE_PATH + '/namespaces?namespace_id=' + encodeURIComponent(d.namespace_id);"
             in response.text
         )
 

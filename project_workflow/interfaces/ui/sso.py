@@ -53,6 +53,7 @@ def _encode_cookie(settings: Settings, data: dict[str, object]) -> str:
 
 
 def _auth_error(request: Request, status: int, message: str) -> Response:
+    prefix = get_settings().UI_BASE_PATH
     if request.url.path.startswith("/api/"):
         return JSONResponse({"ok": False, "error": message}, status_code=status)
     if request.url.path == "/sso/callback":
@@ -60,11 +61,11 @@ def _auth_error(request: Request, status: int, message: str) -> Response:
             '<!doctype html><html lang="ru"><meta charset="utf-8"><title>Ошибка входа</title>'
             '<main style="max-width:32rem;margin:10vh auto;font:16px system-ui">'
             '<h1>Не удалось войти</h1><p>Повторите вход через Central Auth.</p>'
-            '<a href="/login">Повторить</a></main></html>', status_code=status,
+            f'<a href="{prefix}/login">Повторить</a></main></html>', status_code=status,
         )
     if status == 401:
         destination = _safe_next(request.url.path + (f"?{request.url.query}" if request.url.query else ""))
-        return RedirectResponse(f"/login?{urlencode({'next': destination})}", status_code=303)
+        return RedirectResponse(f"{prefix}/login?{urlencode({'next': destination})}", status_code=303)
     return HTMLResponse(
         '<!doctype html><html lang="ru"><meta charset="utf-8"><title>Вход недоступен</title>'
         '<main style="max-width:32rem;margin:10vh auto;font:16px system-ui"><h1>Central Auth недоступен</h1>'
@@ -82,7 +83,7 @@ class _SsoMiddleware(BaseHTTPMiddleware):
         if path in _PUBLIC_PATHS or path.startswith("/internal/runtime/"):
             return await call_next(request)
         if request.url.hostname == "127.0.0.1":
-            return RedirectResponse(settings.AUTH_PUBLIC_ORIGIN.rstrip("/") + path +
+            return RedirectResponse(settings.AUTH_PUBLIC_ORIGIN.rstrip("/") + settings.UI_BASE_PATH + path +
                                     (f"?{request.url.query}" if request.url.query else ""), status_code=307)
 
         bearer = request.headers.get("authorization", "").removeprefix("Bearer ")
@@ -140,14 +141,14 @@ def install_sso(app: FastAPI) -> None:
                                           "verifier": verifier, "next": _safe_next(next)}
         params = {
             "response_type": "code", "client_id": _CLIENT_ID,
-            "redirect_uri": settings.AUTH_PUBLIC_ORIGIN.rstrip("/") + "/sso/callback",
+            "redirect_uri": settings.AUTH_PUBLIC_ORIGIN.rstrip("/") + settings.UI_BASE_PATH + "/sso/callback",
             "scope": "openid email profile", "state": transaction["state"], "nonce": transaction["nonce"],
             "code_challenge": challenge, "code_challenge_method": "S256",
         }
         authorize_url = settings.AUTH_ISSUER.rstrip("/") + "/oidc/authorize?" + urlencode(params)
         response = RedirectResponse(authorize_url, status_code=303)
         response.set_cookie(_TRANSACTION_COOKIE, _encode_cookie(settings, transaction),
-                            max_age=600, path="/sso/callback", httponly=True, samesite="lax",
+                            max_age=600, path=settings.UI_BASE_PATH + "/sso/callback", httponly=True, samesite="lax",
                             secure=settings.AUTH_COOKIE_SECURE)
         response.headers["Cache-Control"] = "no-store"
         return response
@@ -161,7 +162,7 @@ def install_sso(app: FastAPI) -> None:
             async with httpx.AsyncClient(timeout=5) as client:
                 exchange = await client.post(settings.AUTH_INTERNAL_BASE_URL.rstrip("/") + "/oidc/token", data={
                     "grant_type": "authorization_code", "client_id": _CLIENT_ID,
-                    "redirect_uri": settings.AUTH_PUBLIC_ORIGIN.rstrip("/") + "/sso/callback",
+                    "redirect_uri": settings.AUTH_PUBLIC_ORIGIN.rstrip("/") + settings.UI_BASE_PATH + "/sso/callback",
                     "code": code, "code_verifier": transaction["verifier"],
                 })
                 if exchange.status_code != 200:
@@ -182,12 +183,13 @@ def install_sso(app: FastAPI) -> None:
                     return _auth_error(request, 401, "Центральная сессия недействительна")
         except (httpx.RequestError, jwt.PyJWTError, KeyError, ValueError, TypeError):
             return _auth_error(request, 503, "Не удалось завершить центральный вход")
-        response = RedirectResponse(_safe_next(str(transaction["next"])), status_code=303)
+        response = RedirectResponse(settings.UI_BASE_PATH + _safe_next(str(transaction["next"])), status_code=303)
         session = {"token": access_token, "sub": claims["sub"], "issued": int(time.time())}
         response.set_cookie(_SESSION_COOKIE, _encode_cookie(settings, session),
-                            max_age=int(tokens["expires_in"]), path="/", httponly=True, samesite="lax",
+                            max_age=int(tokens["expires_in"]), path=settings.UI_BASE_PATH or "/",
+                            httponly=True, samesite="lax",
                             secure=settings.AUTH_COOKIE_SECURE)
-        response.delete_cookie(_TRANSACTION_COOKIE, path="/sso/callback")
+        response.delete_cookie(_TRANSACTION_COOKIE, path=settings.UI_BASE_PATH + "/sso/callback")
         response.headers["Cache-Control"] = "no-store"
         return response
 
@@ -195,6 +197,6 @@ def install_sso(app: FastAPI) -> None:
     async def logout() -> Response:
         response = RedirectResponse(settings.AUTH_ISSUER.rstrip("/") + "/oidc/logout?client_id=" + _CLIENT_ID,
                                     status_code=303)
-        response.delete_cookie(_SESSION_COOKIE, path="/")
+        response.delete_cookie(_SESSION_COOKIE, path=settings.UI_BASE_PATH or "/")
         response.headers["Cache-Control"] = "no-store"
         return response

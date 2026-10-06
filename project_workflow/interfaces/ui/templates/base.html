@@ -322,7 +322,7 @@ textarea{resize:vertical;min-height:60px}
 <aside class="sidebar" id="sidebar">
   <div class="sidebar-header">
     <div class="sidebar-logo">
-      <a class="brand-link" href="/" aria-label="Workflow Engine">
+      <a class="brand-link" href="{{ ui_base_path() }}/" aria-label="Workflow Engine">
         <span class="brand-mark" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="{{ project_icon_path(active_namespace.theme_icon if active_namespace else default_project_icon) }}"></path>
@@ -337,33 +337,33 @@ textarea{resize:vertical;min-height:60px}
     <button class="sidebar-close" type="button" aria-label="Закрыть навигацию" onclick="closeSidebar()">×</button>
   </div>
   <nav class="sidebar-nav" aria-label="Основная навигация">
-    <a class="sidebar-link {% if page == 'namespace' %}active{% endif %}" href="/namespaces" aria-label="Неймспейсы" title="Неймспейсы" {% if page == 'namespace' %}aria-current="page"{% endif %}>
+    <a class="sidebar-link {% if page == 'namespace' %}active{% endif %}" href="{{ ui_base_path() }}/namespaces" aria-label="Неймспейсы" title="Неймспейсы" {% if page == 'namespace' %}aria-current="page"{% endif %}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h18"/><path d="M5 7V5a2 2 0 0 1 2-2h3"/><path d="M19 7v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7"/><path d="M9 12h6"/><path d="M9 16h4"/></svg>
       <span class="sidebar-label">Неймспейсы</span>
     </a>
     <div class="sidebar-section">ОБЗОР</div>
-    <a class="sidebar-link {% if page == 'dashboard' %}active{% endif %}" href="/" aria-label="Дашборд" title="Дашборд" {% if page == 'dashboard' %}aria-current="page"{% endif %}>
+    <a class="sidebar-link {% if page == 'dashboard' %}active{% endif %}" href="{{ ui_base_path() }}/" aria-label="Дашборд" title="Дашборд" {% if page == 'dashboard' %}aria-current="page"{% endif %}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
       <span class="sidebar-label">Дашборд</span>
     </a>
-    <a class="sidebar-link {% if page == 'workflows' %}active{% endif %}" href="/workflows" aria-label="Воркфлоу" title="Воркфлоу" {% if page == 'workflows' %}aria-current="page"{% endif %}>
+    <a class="sidebar-link {% if page == 'workflows' %}active{% endif %}" href="{{ ui_base_path() }}/workflows" aria-label="Воркфлоу" title="Воркфлоу" {% if page == 'workflows' %}aria-current="page"{% endif %}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><path d="M7 10v4"/><path d="M17 10v4"/></svg>
       <span class="sidebar-label">Воркфлоу</span>
     </a>
-    <a class="sidebar-link {% if page == 'phases' %}active{% endif %}" href="/phases" aria-label="Фазы" title="Фазы" {% if page == 'phases' %}aria-current="page"{% endif %}>
+    <a class="sidebar-link {% if page == 'phases' %}active{% endif %}" href="{{ ui_base_path() }}/phases" aria-label="Фазы" title="Фазы" {% if page == 'phases' %}aria-current="page"{% endif %}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
       <span class="sidebar-label">Фазы</span>
     </a>
-    <a class="sidebar-link {% if page == 'tasks' %}active{% endif %}" href="/tasks" aria-label="Задачи" title="Задачи" {% if page == 'tasks' %}aria-current="page"{% endif %}>
+    <a class="sidebar-link {% if page == 'tasks' %}active{% endif %}" href="{{ ui_base_path() }}/tasks" aria-label="Задачи" title="Задачи" {% if page == 'tasks' %}aria-current="page"{% endif %}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
       <span class="sidebar-label">Задачи</span>
     </a>
     <div class="sidebar-section">УПРАВЛЕНИЕ</div>
-    <a class="sidebar-link {% if page == 'agents' %}active{% endif %}" href="/agents" aria-label="Агенты" title="Агенты" {% if page == 'agents' %}aria-current="page"{% endif %}>
+    <a class="sidebar-link {% if page == 'agents' %}active{% endif %}" href="{{ ui_base_path() }}/agents" aria-label="Агенты" title="Агенты" {% if page == 'agents' %}aria-current="page"{% endif %}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4z"/><path d="M2 20c0-2.21 3.58-4 8-4s8 1.79 8 4"/></svg>
       <span class="sidebar-label">Агенты</span>
     </a>
-    <a class="sidebar-link {% if page == 'settings' %}active{% endif %}" href="/settings" aria-label="Команды CLI" title="Команды CLI" {% if page == 'settings' %}aria-current="page"{% endif %}>
+    <a class="sidebar-link {% if page == 'settings' %}active{% endif %}" href="{{ ui_base_path() }}/settings" aria-label="Команды CLI" title="Команды CLI" {% if page == 'settings' %}aria-current="page"{% endif %}>
       <span class="sidebar-cli-icon" aria-hidden="true">&gt;_</span>
       <span class="sidebar-label">Команды CLI</span>
     </a>
@@ -393,7 +393,7 @@ textarea{resize:vertical;min-height:60px}
     <div class="sidebar-footer">
     <span class="dot green"></span>
     <span class="sidebar-status-label">Сервис работает</span>
-    <a class="sidebar-logout" href="/logout">Выйти</a>
+    <a class="sidebar-logout" href="{{ ui_base_path() }}/logout">Выйти</a>
     </div>
 </aside>
 
@@ -433,12 +433,12 @@ textarea{resize:vertical;min-height:60px}
           <option value="{{ namespace.id }}" {% if active_namespace_id == namespace.id %}selected{% endif %}>{{ namespace.name }}</option>
           {% endfor %}
         </select>
-        <a class="namespace-icon-action" id="namespaceCreateLink" href="/namespaces/new{% if active_namespace_id %}?namespace_id={{ active_namespace_id }}{% endif %}" title="Создать пространство" aria-label="Создать пространство">+</a>
-        <a class="namespace-icon-action" id="namespaceEditLink" href="/namespaces{% if active_namespace_id %}?namespace_id={{ active_namespace_id }}{% endif %}" title="Редактировать пространство" aria-label="Редактировать пространство">✎</a>
+        <a class="namespace-icon-action" id="namespaceCreateLink" href="{{ ui_base_path() }}/namespaces/new{% if active_namespace_id %}?namespace_id={{ active_namespace_id }}{% endif %}" title="Создать пространство" aria-label="Создать пространство">+</a>
+        <a class="namespace-icon-action" id="namespaceEditLink" href="{{ ui_base_path() }}/namespaces{% if active_namespace_id %}?namespace_id={{ active_namespace_id }}{% endif %}" title="Редактировать пространство" aria-label="Редактировать пространство">✎</a>
       </div>
       {% endif %}
       {% block header_actions %}{% endblock %}
-      <a class="btn btn-secondary header-logout" href="/logout">Выйти</a>
+      <a class="btn btn-secondary header-logout" href="{{ ui_base_path() }}/logout">Выйти</a>
     </div>
   </header>
 
@@ -465,6 +465,8 @@ textarea{resize:vertical;min-height:60px}
 </div>
 
 <script>
+const UI_BASE_PATH = {{ ui_base_path() | tojson }};
+function appUrl(path){return path.startsWith(UI_BASE_PATH + '/') ? path : UI_BASE_PATH + path;}
 function syncSidebarLayout(){
   var sidebar=document.getElementById('sidebar');
   var main=document.querySelector('.main');
@@ -600,22 +602,22 @@ function requestConfirmation(options){
 }
 function switchNamespace(namespaceId){
   if(!namespaceId){return;}
-  document.cookie='workflow_namespace_id='+encodeURIComponent(namespaceId)+'; path=/; SameSite=Lax';
+  document.cookie='workflow_namespace_id='+encodeURIComponent(namespaceId)+'; path='+(UI_BASE_PATH || '/')+'; SameSite=Lax';
   var url=new URL(window.location.href);
-  if(url.pathname === '/phases'){
+  if(url.pathname === appUrl('/phases')){
     url.searchParams.delete('workflow_id');
   }
-  if(url.pathname.startsWith('/phase/')){
-    url.pathname='/phases';
+  if(url.pathname.startsWith(appUrl('/phase/'))){
+    url.pathname=appUrl('/phases');
     url.searchParams.delete('workflow_id');
   }
-  if(url.pathname === '/instructions'){
-    url.pathname='/phases';
+  if(url.pathname === appUrl('/instructions')){
+    url.pathname=appUrl('/phases');
     url.searchParams.delete('phase_id');
     url.searchParams.delete('workflow_id');
   }
-  if(url.pathname === '/namespaces/new'){
-    url.pathname='/namespaces';
+  if(url.pathname === appUrl('/namespaces/new')){
+    url.pathname=appUrl('/namespaces');
   }
   url.searchParams.set('namespace_id', namespaceId);
   window.location.href=url.toString();

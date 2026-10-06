@@ -9,13 +9,14 @@ from project_workflow.config import Settings
 from project_workflow.interfaces.ui import sso
 
 
-def _app(monkeypatch):
+def _app(monkeypatch, prefix=""):
     settings = Settings(
         DATABASE_URL="postgresql+psycopg://unused@localhost/unused",
         AUTH_ISSUER="http://localhost:7701",
         AUTH_INTERNAL_BASE_URL="http://auth:7701",
         AUTH_PUBLIC_ORIGIN="http://localhost:8812",
         AUTH_SESSION_SECRET="test-only-secret-with-at-least-thirty-two-bytes",
+        UI_BASE_PATH=prefix,
     )
     monkeypatch.setenv("AUTH_ISSUER", settings.AUTH_ISSUER)
     monkeypatch.setattr(sso, "get_settings", lambda: settings)
@@ -26,6 +27,31 @@ def _app(monkeypatch):
     app.post("/api/tasks")(lambda: {"ok": True})
     app.post("/internal/runtime/step")(lambda: {"ok": True})
     return app, settings
+
+
+def test_prefixed_sso_redirect_and_cookie_paths(monkeypatch):
+    from urllib.parse import parse_qs, urlparse
+
+    app, _ = _app(monkeypatch, "/workflow")
+    with TestClient(app, follow_redirects=False) as client:
+        page = client.get("/")
+        assert page.headers["location"] == "/workflow/login?next=%2F"
+        login = client.get("/login")
+        query = parse_qs(urlparse(login.headers["location"]).query)
+        assert query["redirect_uri"] == ["http://localhost:8812/workflow/sso/callback"]
+        assert "Path=/workflow/sso/callback" in login.headers["set-cookie"]
+        logout = client.get("/logout")
+        assert "Path=/workflow" in logout.headers["set-cookie"]
+        broken = client.get("/sso/callback?code=private-code&state=bad")
+        assert broken.status_code == 401
+        assert 'href="/workflow/login"' in broken.text
+        assert "private-code" not in broken.text
+
+
+@pytest.mark.parametrize("prefix", ["//evil.test", "/../auth", "https://evil.test", "/workflow?next=x"])
+def test_ui_prefix_rejects_external_or_ambiguous_paths(prefix):
+    with pytest.raises(ValueError, match="UI_BASE_PATH"):
+        Settings(DATABASE_URL="postgresql+psycopg://unused@localhost/unused", UI_BASE_PATH=prefix)
 
 
 def test_pages_redirect_to_sso_and_api_denies_anonymous(monkeypatch):

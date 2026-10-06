@@ -134,8 +134,8 @@ let namespaceFormMode = selectedNamespaceId == null ? 'create' : 'edit';
 function namespaceById(id){ return namespaceStore.find(function(namespace){ return namespace.id === id; }); }
 function workflowNameById(id){ var workflow = workflowStore.find(function(item){ return item.id === id; }); return workflow ? workflow.name : '—'; }
 function namespaceScopedPath(path, id){
-  if(id == null){ return path; }
-  return path + '?namespace_id=' + encodeURIComponent(id);
+  if(id == null){ return appUrl(path); }
+  return appUrl(path) + '?namespace_id=' + encodeURIComponent(id);
 }
 function updateNamespaceHeaderLinks(id){
   var createLink = document.getElementById('namespaceCreateLink');
@@ -216,8 +216,8 @@ function namespaceIdFromUrl(url){
 function syncNamespaceUrl(id, historyMode){
   if(id == null || historyMode === 'none'){ return; }
   var url = new URL(window.location.href);
-  if(url.pathname !== '/namespaces' && url.pathname !== '/namespaces/new'){ return; }
-  url.pathname = '/namespaces';
+  if(url.pathname !== appUrl('/namespaces') && url.pathname !== appUrl('/namespaces/new')){ return; }
+  url.pathname = appUrl('/namespaces');
   url.searchParams.set('namespace_id', id);
   if(url.toString() === window.location.href){ return; }
   var method = historyMode === 'push' ? 'pushState' : 'replaceState';
@@ -225,7 +225,7 @@ function syncNamespaceUrl(id, historyMode){
 }
 function rememberNamespaceSelection(id, historyMode){
   if(id == null){ return; }
-  document.cookie='workflow_namespace_id='+encodeURIComponent(id)+'; path=/; SameSite=Lax';
+  document.cookie='workflow_namespace_id='+encodeURIComponent(id)+'; path='+(UI_BASE_PATH || '/')+'; SameSite=Lax';
   var selector = document.getElementById('namespaceSelector');
   if(selector){ selector.value = String(id); }
   updateNamespaceHeaderLinks(id);
@@ -316,7 +316,7 @@ function restoreNamespaceLocation(){
   if(namespaceId != null){ selectNamespace(namespaceId, 'none'); }
 }
 function reloadNamespaces(nextId){
-  return fetch('/api/namespaces')
+  return fetch(UI_BASE_PATH + '/api/namespaces')
     .then(function(r){return r.json()})
     .then(function(d){
       if(!d.ok){showToast(d.error || 'Ошибка загрузки','error');return;}
@@ -432,7 +432,7 @@ function saveNamespace(){
   if(selectedNamespaceId == null){ showToast('Сначала выберите неймспейс','error'); return; }
   var namespaceId = selectedNamespaceId;
   var payload = currentPayload();
-  return fetch('/api/namespaces/' + namespaceId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+  return fetch(UI_BASE_PATH + '/api/namespaces/' + namespaceId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
     .then(function(r){return r.json()})
     .then(function(d){ if(d.ok){ showToast('Неймспейс сохранён','success'); return reloadNamespaces(namespaceId); } showToast(d.error || 'Ошибка','error'); })
     .catch(showRequestError);
@@ -448,7 +448,7 @@ async function deleteNamespace(){
   var button = document.getElementById('deleteNamespaceButton');
   button.disabled = true;
   button.textContent = 'Удаление…';
-  return fetch('/api/namespaces/' + namespaceId,{method:'DELETE'})
+  return fetch(UI_BASE_PATH + '/api/namespaces/' + namespaceId,{method:'DELETE'})
     .then(function(r){return r.json()})
     .then(function(d){ if(d.ok){ showToast('Неймспейс удалён','success'); return reloadNamespaces(null); } showToast(d.error || 'Ошибка','error'); })
     .catch(showRequestError)
@@ -456,12 +456,12 @@ async function deleteNamespace(){
 }
 function createNamespace(){
   var payload = currentPayload();
-  return fetch('/api/namespaces',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+  return fetch(UI_BASE_PATH + '/api/namespaces',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
     .then(function(r){return r.json()})
     .then(function(d){
       if(d.ok){
         showToast('Неймспейс создан','success');
-        window.location.href = '/namespaces?namespace_id=' + encodeURIComponent(d.namespace_id);
+        window.location.href = UI_BASE_PATH + '/namespaces?namespace_id=' + encodeURIComponent(d.namespace_id);
       } else {
         showToast(d.error || 'Ошибка','error');
       }

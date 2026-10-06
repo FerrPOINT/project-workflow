@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from functools import lru_cache
 from pathlib import Path
 
@@ -27,6 +28,7 @@ class Settings(BaseSettings):
 
     UI_HOST: str = "127.0.0.1"
     UI_PORT: int = 8811
+    UI_BASE_PATH: str = ""
 
     LOG_LEVEL: str = "INFO"
 
@@ -58,6 +60,14 @@ class Settings(BaseSettings):
         if not url:
             raise ValueError("Переменная DATABASE_URL обязательна")
         return url
+
+    @field_validator("UI_BASE_PATH")
+    @classmethod
+    def _validate_ui_base_path(cls, value: str) -> str:
+        normalized = value.rstrip("/")
+        if normalized and not re.fullmatch(r"/[a-z][a-z0-9-]*", normalized):
+            raise ValueError("UI_BASE_PATH must be empty or one local path segment")
+        return normalized
 
 
 @lru_cache

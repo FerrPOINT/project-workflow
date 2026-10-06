@@ -3,8 +3,8 @@
 {% block title %}Дашборд — Workflow Engine{% endblock %}
 {% block header_title %}Дашборд{% endblock %}
 {% block header_actions %}
-  <a href="/tasks" class="btn btn-secondary dashboard-action">Задачи</a>
-  <a href="/namespaces" class="btn btn-secondary dashboard-action">Неймспейсы</a>
+  <a href="{{ ui_base_path() }}/tasks" class="btn btn-secondary dashboard-action">Задачи</a>
+  <a href="{{ ui_base_path() }}/namespaces" class="btn btn-secondary dashboard-action">Неймспейсы</a>
 {% endblock %}
 
 {% block extra_style %}
@@ -49,12 +49,12 @@
   <section class="dashboard-section" data-dashboard-open-tasks aria-labelledby="dashboardTasksTitle">
     <div class="dashboard-section-heading">
       <h2 class="dashboard-section-title" id="dashboardTasksTitle">Незавершённые задачи · {{ open_tasks|length }}</h2>
-      <a class="dashboard-section-link" href="/tasks{% if active_namespace_id %}?namespace_id={{ active_namespace_id }}{% endif %}">Все задачи</a>
+      <a class="dashboard-section-link" href="{{ ui_base_path() }}/tasks{% if active_namespace_id %}?namespace_id={{ active_namespace_id }}{% endif %}">Все задачи</a>
     </div>
     {% if open_tasks %}
     <div class="dashboard-list">
       {% for task in open_tasks[:8] %}
-      <a href="/task/{{ task.task_key }}{% if task.namespace_id %}?namespace_id={{ task.namespace_id }}{% endif %}" class="dashboard-row" data-task-key="{{ task.task_key }}">
+      <a href="{{ ui_base_path() }}/task/{{ task.task_key }}{% if task.namespace_id %}?namespace_id={{ task.namespace_id }}{% endif %}" class="dashboard-row" data-task-key="{{ task.task_key }}">
         <div class="list-title"><span class="code">{{ task.task_key }}</span>{% if task.title %} — {{ task.title }}{% endif %}</div>
         <div class="list-meta">
           <span>{{ task.namespace_name }}</span>
@@ -73,12 +73,12 @@
   <section class="dashboard-section" data-dashboard-namespaces aria-labelledby="dashboardNamespacesTitle">
     <div class="dashboard-section-heading">
       <h2 class="dashboard-section-title" id="dashboardNamespacesTitle">Неймспейсы · {{ namespaces|length }}</h2>
-      <a class="dashboard-section-link" href="/namespaces">Все неймспейсы</a>
+      <a class="dashboard-section-link" href="{{ ui_base_path() }}/namespaces">Все неймспейсы</a>
     </div>
     {% if namespaces %}
     <div class="dashboard-list">
       {% for namespace in namespaces[:6] %}
-      <a href="/namespaces?namespace_id={{ namespace.id }}" class="dashboard-row" data-namespace-id="{{ namespace.id }}">
+      <a href="{{ ui_base_path() }}/namespaces?namespace_id={{ namespace.id }}" class="dashboard-row" data-namespace-id="{{ namespace.id }}">
         <div class="list-title">{{ namespace.name }}</div>
         <div class="list-meta">
           <span>{{ namespace.task_count | pluralize('задача,задачи,задач') }}</span>

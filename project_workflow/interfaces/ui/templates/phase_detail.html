@@ -126,7 +126,7 @@
 
   <!-- Header -->
   <div class="wiki-header phase-editor-section" id="phase-overview" data-phase-section tabindex="-1">
-    <div style="margin-bottom:10px"><a href="/phases?workflow_id={{ phase.workflow_id }}{% if phase.mode_id %}&mode_id={{ phase.mode_id }}{% endif %}{% if selected_namespace %}&namespace_id={{ selected_namespace.id }}{% endif %}" class="btn btn-secondary">← Назад к фазам</a></div>
+    <div style="margin-bottom:10px"><a href="{{ ui_base_path() }}/phases?workflow_id={{ phase.workflow_id }}{% if phase.mode_id %}&mode_id={{ phase.mode_id }}{% endif %}{% if selected_namespace %}&namespace_id={{ selected_namespace.id }}{% endif %}" class="btn btn-secondary">← Назад к фазам</a></div>
     <input type="text" class="inline-input" value="{{ phase.name }}" data-field="name" aria-label="Название фазы" onblur="scheduleSave()" style="font-size:26px;font-weight:600;margin:0 0 10px;width:100%">
     <textarea class="inline-input wiki-subtitle" rows="1" data-field="description" aria-label="Описание фазы" onblur="scheduleSave()">{{ phase.description or '' }}</textarea>
 
@@ -388,7 +388,7 @@ function resizeAllInlineTextareas() {
 }
 
 function phaseApiUrl(path) {
-  const url = new URL(path, window.location.origin);
+  const url = new URL(appUrl(path), window.location.origin);
   if (selectedNamespaceId !== null) {
     url.searchParams.set('namespace_id', String(selectedNamespaceId));
   }
@@ -494,7 +494,7 @@ function updateInstructionControls() {
 async function persistInstructionOrder() {
   const ids = getInstructionItems().map((item) => parseInt(item.dataset.instructionId, 10));
   try {
-    const resp = await fetch(phaseApiUrl(`/api/phases/${phaseId}/instructions/reorder`), {
+    const resp = await fetch(phaseApiUrl(`${UI_BASE_PATH}/api/phases/${phaseId}/instructions/reorder`), {
       method: 'PUT',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({instruction_ids: ids}),
@@ -547,7 +547,7 @@ async function addInstructionAfter(button) {
   const stepNum = currentStep > 0 ? currentStep + 1 : 1;
   button.disabled = true;
   try {
-    const result = await requestPhaseDetail(phaseApiUrl('/api/instructions'), {
+    const result = await requestPhaseDetail(phaseApiUrl(UI_BASE_PATH + '/api/instructions'), {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({phase_id: phaseId, description: 'Новая инструкция', step_num: stepNum}),
@@ -571,7 +571,7 @@ async function addInstructionLast() {
   const btn = timeline?.nextElementSibling;
   if (btn) btn.disabled = true;
   try {
-    const result = await requestPhaseDetail(phaseApiUrl('/api/instructions'), {
+    const result = await requestPhaseDetail(phaseApiUrl(UI_BASE_PATH + '/api/instructions'), {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({phase_id: phaseId, description: 'Новая инструкция', step_num: stepNum}),
@@ -595,7 +595,7 @@ async function deleteInstruction(button) {
   button.disabled = true;
   try {
     const id = item.dataset.instructionId;
-    const result = await requestPhaseDetail(phaseApiUrl('/api/instructions/' + id), {method: 'DELETE'});
+    const result = await requestPhaseDetail(phaseApiUrl(UI_BASE_PATH + '/api/instructions/' + id), {method: 'DELETE'});
     if (!result) return;
     const {resp, data} = result;
     if (!resp.ok || !data.ok) {
@@ -615,7 +615,7 @@ async function toggleInstructionType(badge) {
   const nextType = isSync ? 'parallel' : 'sync';
   badge.disabled = true;
   try {
-    const result = await requestPhaseDetail(phaseApiUrl('/api/instructions/' + id), {
+    const result = await requestPhaseDetail(phaseApiUrl(UI_BASE_PATH + '/api/instructions/' + id), {
       method: 'PUT',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({execution_type: nextType}),
@@ -645,7 +645,7 @@ async function saveInstructionDescription(input) {
   }
   input.disabled = true;
   try {
-    const result = await requestPhaseDetail(phaseApiUrl('/api/instructions/' + id), {
+    const result = await requestPhaseDetail(phaseApiUrl(UI_BASE_PATH + '/api/instructions/' + id), {
       method: 'PUT',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({description: description}),
@@ -680,7 +680,7 @@ async function addSkillToInstruction(input) {
   const skills = normalizeSkillNames([...existing, skill]);
   input.disabled = true;
   try {
-    const result = await requestPhaseDetail(phaseApiUrl('/api/instructions/' + id), {
+    const result = await requestPhaseDetail(phaseApiUrl(UI_BASE_PATH + '/api/instructions/' + id), {
       method: 'PUT',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({skills: skills}),
@@ -705,7 +705,7 @@ async function removeSkillFromInstruction(button) {
     .filter((b) => !b.classList.contains('badge-sync') && !b.classList.contains('badge-parallel'))
     .map((b) => b.textContent.replace('×', '').trim());
   const skills = normalizeSkillNames(existing.filter((s) => s !== skillName));
-  const result = await requestPhaseDetail(phaseApiUrl('/api/instructions/' + id), {
+  const result = await requestPhaseDetail(phaseApiUrl(UI_BASE_PATH + '/api/instructions/' + id), {
     method: 'PUT',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({skills: skills}),
@@ -844,7 +844,7 @@ async function persistPhase() {
   });
 
   try {
-    const resp = await fetch(phaseApiUrl('/api/phases/' + phaseId), {
+    const resp = await fetch(phaseApiUrl(UI_BASE_PATH + '/api/phases/' + phaseId), {
       method: 'PUT',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(data),

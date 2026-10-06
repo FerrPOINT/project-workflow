@@ -4,7 +4,7 @@
 {% block title %}{{ task.task_key }} — Workflow Engine{% endblock %}
 {% block header_title %}<span class="task-detail-desktop-title">{{ task.task_key }}</span><span class="task-detail-mobile-title">Задача</span>{% endblock %}
 {% block header_actions %}
-  <a href="/tasks{% if task.namespace_id %}?namespace_id={{ task.namespace_id }}{% endif %}" class="btn btn-secondary task-detail-header-action">← Задачи</a>
+  <a href="{{ ui_base_path() }}/tasks{% if task.namespace_id %}?namespace_id={{ task.namespace_id }}{% endif %}" class="btn btn-secondary task-detail-header-action">← Задачи</a>
 {% endblock %}
 
 {% block extra_style %}
@@ -156,7 +156,7 @@
 {%- endmacro %}
 
 {% block content %}
-<div class="task-detail-mobile-actions"><a href="/tasks{% if task.namespace_id %}?namespace_id={{ task.namespace_id }}{% endif %}" class="btn btn-secondary">← Задачи</a></div>
+<div class="task-detail-mobile-actions"><a href="{{ ui_base_path() }}/tasks{% if task.namespace_id %}?namespace_id={{ task.namespace_id }}{% endif %}" class="btn btn-secondary">← Задачи</a></div>
 <section class="detail-header">
   <h1>{{ task.task_key }}</h1>
   {% if task.title and task.title != task.task_key %}<div class="subtitle">{{ task.title }}</div>{% endif %}

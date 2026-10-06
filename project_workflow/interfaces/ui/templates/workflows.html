@@ -4,7 +4,7 @@
 {% block header_title %}Воркфлоу{% endblock %}
 {% block header_actions %}
   <button type="button" class="btn btn-primary workflow-header-action" id="newWorkflowButton" onclick="startCreateWorkflow()">+ Новый воркфлоу</button>
-  <a href="/phases{% if selected_namespace %}?namespace_id={{ selected_namespace.id }}{% endif %}" class="btn btn-secondary workflow-header-action">← К фазам</a>
+  <a href="{{ ui_base_path() }}/phases{% if selected_namespace %}?namespace_id={{ selected_namespace.id }}{% endif %}" class="btn btn-secondary workflow-header-action">← К фазам</a>
 {% endblock %}
 
 {% block extra_style %}
@@ -46,7 +46,7 @@
 {% block content %}
 <div class="workflow-mobile-actions">
   <button type="button" class="btn btn-primary" id="mobileNewWorkflowButton" onclick="startCreateWorkflow()">+ Новый воркфлоу</button>
-  <a href="/phases{% if selected_namespace %}?namespace_id={{ selected_namespace.id }}{% endif %}" class="btn btn-secondary">← К фазам</a>
+  <a href="{{ ui_base_path() }}/phases{% if selected_namespace %}?namespace_id={{ selected_namespace.id }}{% endif %}" class="btn btn-secondary">← К фазам</a>
 </div>
 <div class="workflow-crud {% if workflows|length <= 1 %}is-single{% endif %}" id="workflowCrud">
   <div class="workflow-picker" id="workflowPicker">
@@ -124,7 +124,7 @@ function workflowIdFromUrl(){
   return Number.isInteger(parsed) && parsed > 0 && workflowById(parsed) ? parsed : null;
 }
 function phaseUrlForWorkflow(workflowId){
-  var url = new URL('/phases', window.location.origin);
+  var url = new URL(appUrl('/phases'), window.location.origin);
   url.searchParams.set('workflow_id', String(workflowId));
   return url.pathname + url.search;
 }
@@ -245,7 +245,7 @@ function renderWorkflowNav(){
   });
 }
 function reloadWorkflows(nextId){
-  return fetch('/api/workflows')
+  return fetch(UI_BASE_PATH + '/api/workflows')
     .then(function(r){return r.json()})
     .then(function(d){
       if(!d.ok){showToast(d.error || 'Ошибка загрузки воркфлоу','error');return;}
@@ -275,14 +275,14 @@ function reloadWorkflows(nextId){
 function saveWorkflow(){
   if(selectedWorkflowId == null){ showToast('Воркфлоу не выбран','error'); return; }
   var payload = currentWorkflowPayload();
-  return fetch('/api/workflows/' + selectedWorkflowId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+  return fetch(UI_BASE_PATH + '/api/workflows/' + selectedWorkflowId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
     .then(function(r){return r.json()})
     .then(function(d){ if(d.ok){ showToast('Воркфлоу сохранён','success'); return reloadWorkflows(selectedWorkflowId); } showToast(d.error || 'Ошибка','error'); })
     .catch(showRequestError);
 }
 function createWorkflow(){
   var payload = currentWorkflowPayload();
-  return fetch('/api/workflows',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+  return fetch(UI_BASE_PATH + '/api/workflows',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
     .then(function(r){return r.json()})
     .then(function(d){
       if(d.ok){
@@ -307,7 +307,7 @@ async function deleteWorkflow(){
   var button = document.getElementById('deleteWorkflowButton');
   button.disabled = true;
   button.textContent = 'Удаление…';
-  return fetch('/api/workflows/' + workflowId,{method:'DELETE'})
+  return fetch(UI_BASE_PATH + '/api/workflows/' + workflowId,{method:'DELETE'})
     .then(function(r){return r.json()})
     .then(function(d){
       if(d.ok){
