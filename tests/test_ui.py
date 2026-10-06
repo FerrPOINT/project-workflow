@@ -156,6 +156,7 @@ def test_ui_prefix_preserves_navigation_api_and_error_links(monkeypatch):
         assert response.status_code == 200
         assert 'href="/workflow/phases' in response.text
         assert 'href="/workflow/logout"' in response.text
+        assert 'href="/workflow/" role="menuitem" aria-current="page"' in response.text
         assert 'const UI_BASE_PATH = "/workflow"' in response.text
         assert "fetch(UI_BASE_PATH + '/api/workflows'" in response.text
         assert 'href="/workflows' not in response.text
