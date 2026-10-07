@@ -7,6 +7,8 @@
 ## [Unreleased]
 
 ### Changed
+- Explicit immutable Base v3 image profile and installed catalog verification;
+  default source/v2 builds and trusted-owner execution guard remain unchanged.
 - Standalone Compose forwards optional `AUTH_*` settings without changing the empty-issuer default; Central Auth SSO has a documented deployment matrix, container-reachability requirement and browser acceptance path.
 - Documentation audit is clean: README has an H1; runtime/auth, quality, reset and historical plans have cross-links and explicit security/runtime boundaries.
 - Added regression coverage that proves an empty `AUTH_ISSUER` leaves UI/API open in standalone mode.

@@ -300,7 +300,9 @@ class ManagedCatalog(_CatalogModel):
 
 def load_managed_catalog(path: Path | str | None = None) -> ManagedCatalog:
     """Load and strictly validate the versioned managed catalog."""
-    catalog_path = Path(path) if path is not None else config.MANAGED_CATALOG_PATH
+    from project_workflow.image_catalog import packaged_catalog_path
+
+    catalog_path = Path(path) if path is not None else packaged_catalog_path(config.MANAGED_CATALOG_PATH)
     if not catalog_path.exists():
         raise FileNotFoundError(f"Managed workflow catalog not found: {catalog_path}")
     if catalog_path.suffix.casefold() != ".json":

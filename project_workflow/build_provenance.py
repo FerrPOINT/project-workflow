@@ -15,6 +15,7 @@ from typing import Any
 
 MANIFEST_SCHEMA_VERSION = 1
 DEFAULT_BUILD_MANIFEST_PATH = Path("/app/runtime-build-manifest.json")
+BASE_PENDING_CAPABILITY_REVISION = "base-sdlc/owner-admission-pending/v1"
 _REVISION_PATTERN = re.compile(r"[0-9a-f]{40}(?:[0-9a-f]{24})?\Z")
 _SHA256_PATTERN = re.compile(r"[0-9a-f]{64}\Z")
 _BUNDLE_ROOT_FILES = (
@@ -98,8 +99,10 @@ def validate_runtime_compatibility(value: Any) -> dict[str, Any]:
         raise BuildProvenanceError("Runtime compatibility schema invalid")
     if (
         type(value["catalogVersion"]) is not int
-        or value["catalogVersion"] != 2
-        or value["capabilityRevision"] != "hermes-sdlc-runtime/v2"
+        or not isinstance(value["capabilityRevision"], str)
+        or (value["catalogVersion"], value["capabilityRevision"]) not in {
+            (2, "hermes-sdlc-runtime/v2"), (3, BASE_PENDING_CAPABILITY_REVISION),
+        }
     ):
         raise BuildProvenanceError("Runtime compatibility version invalid")
     for name in ("catalogRevision", "skillsRevision"):

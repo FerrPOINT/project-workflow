@@ -106,6 +106,23 @@ def _valid_manifest() -> dict[str, str | int]:
     }
 
 
+@pytest.mark.parametrize("kind", ["assignment", "runtime"])
+def test_base_image_does_not_advertise_ready_legacy_execution(monkeypatch, tmp_path, kind):
+    token = _token("base-" + kind)
+    _configure_tokens(monkeypatch, runtime={"developer": token} if kind == "runtime" else {},
+                      assignment={"developer": token} if kind == "assignment" else {})
+    _install_manifest(monkeypatch, tmp_path, _valid_manifest())
+    descriptor = {**_valid_compatibility(), "catalogVersion": 3,
+                  "capabilityRevision": build_provenance.BASE_PENDING_CAPABILITY_REVISION}
+    (tmp_path / "runtime-compatibility.json").write_text(json.dumps(descriptor), encoding="utf-8")
+    with TestClient(create_app()) as client:
+        response = client.get("/internal/runtime/capabilities", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 503
+    assert response.json()["error_code"] == "runtime-capabilities-not-ready"
+    assert response.json()["readiness"]["service"] == "not_ready"
+    assert "capabilities" not in response.json()
+
+
 @pytest.mark.parametrize(
     "role",
     [

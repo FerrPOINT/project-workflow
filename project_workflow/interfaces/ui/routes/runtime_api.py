@@ -142,6 +142,8 @@ def runtime_capabilities(
     try:
         provenance = load_build_provenance()
         compatibility = runtime_compatibility_descriptor(provenance=provenance)
+        if compatibility["catalogVersion"] != 2:
+            raise BuildProvenanceError("Base owner admission is not a legacy executor capability")
         provenance_ready = True
     except BuildProvenanceError:
         provenance = None

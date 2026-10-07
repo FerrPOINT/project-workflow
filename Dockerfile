@@ -60,6 +60,8 @@ COPY --from=builder /app/scripts /app/scripts
 COPY --from=builder /app/project_workflow/infrastructure/db/migrations /app/project_workflow/infrastructure/db/migrations
 COPY --from=builder /app/runtime-build-manifest.json /app/runtime-build-manifest.json
 COPY --from=builder /app/runtime-compatibility.json /app/runtime-compatibility.json
+COPY --from=builder /app/runtime-skills-manifest.json /app/runtime-skills-manifest.json
+COPY --from=builder /app/runtime-catalog-selection.json /app/runtime-catalog-selection.json
 
 ENV PATH="/opt/venv/bin:$PATH"
 ENV PYTHONUNBUFFERED=1

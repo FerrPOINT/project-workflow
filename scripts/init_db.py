@@ -6,7 +6,7 @@ import sys
 from sqlalchemy.exc import SQLAlchemyError
 
 from project_workflow.config import get_settings
-from project_workflow.infrastructure.db.managed_catalog import ensure_managed_catalog
+from project_workflow.infrastructure.db.managed_catalog import ensure_managed_catalog, load_managed_catalog
 from project_workflow.infrastructure.db.session import (
     DatabaseRecreateRequired,
     DatabaseUnavailable,
@@ -30,6 +30,8 @@ def main() -> int:
     _configure_output_encoding()
     try:
         settings = get_settings()
+        # Reject invalid installed image selection before any database migration.
+        load_managed_catalog()
         engine = get_engine(settings.DATABASE_URL)
         with initialization_transaction(engine) as connection:
             ensure_migrated(connection)

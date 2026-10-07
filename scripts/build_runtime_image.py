@@ -78,23 +78,24 @@ def _json_bytes(value: object) -> bytes:
 
 def derive_compatibility(root: Path) -> dict[str, object]:
     # Imported only after package installation; verify-manifest stays stdlib-only.
-    from project_workflow.infrastructure.db.managed_catalog import (
-        export_runtime_catalog,
-        load_managed_catalog,
+    from project_workflow.image_catalog import (
+        CATALOG_PROFILES,
+        compatibility_for_catalog,
+        image_catalog_profile,
     )
+    from project_workflow.infrastructure.db.managed_catalog import load_managed_catalog
 
-    catalog = load_managed_catalog(root / CATALOG_PATH)
-    if catalog.catalog_version != 2:
-        raise BuildProvenanceError("Compatible image requires canonical catalog version 2")
-    manifest = json.loads((root / SKILLS_MANIFEST_PATH).read_bytes())
-    if manifest.get("schema") != catalog.skills_source.manifest_schema:
-        raise BuildProvenanceError("Native skills manifest schema differs from canonical pin")
     provenance = load_build_provenance(root / "runtime-build-manifest.json")
-    exported, _ = export_runtime_catalog(
-        catalog, manifest=manifest, workflow_revision=provenance.source_revision,
-        skills_revision=catalog.skills_source.revision, source_artifacts={},
+    version, filename = CATALOG_PROFILES[image_catalog_profile(root, provenance)]
+    catalog_path = root / "project_workflow/references" / filename
+    catalog = load_managed_catalog(catalog_path)
+    if catalog.catalog_version != version:
+        raise BuildProvenanceError("Compatible image catalog version differs from profile")
+    manifest = json.loads((root / SKILLS_MANIFEST_PATH).read_bytes())
+    return compatibility_for_catalog(
+        catalog, manifest, provenance, catalog_path=catalog_path,
+        guard_path=root / "project_workflow/application/base_admission.py",
     )
-    return exported["runtimeCompatibility"]
 
 
 def verify_compatibility(root: Path) -> None:
@@ -118,10 +119,16 @@ def _add_context_files(context: bytes, files: dict[str, bytes]) -> bytes:
     return output.getvalue()
 
 
-def compatible_build_context(snapshot: GitSourceSnapshot, skills_root: Path) -> bytes:
+def compatible_build_context(snapshot: GitSourceSnapshot, skills_root: Path,
+                             *, catalog_profile: str = "legacy-v2") -> bytes:
+    from project_workflow.image_catalog import CATALOG_PROFILES, SELECTION_PATH
+
+    if catalog_profile not in CATALOG_PROFILES:
+        raise BuildProvenanceError("Unknown immutable catalog profile")
     context = docker_context_with_manifest(snapshot.archive, snapshot.provenance)
+    catalog_path = "project_workflow/references/" + CATALOG_PROFILES[catalog_profile][1]
     with tarfile.open(fileobj=io.BytesIO(context)) as source:
-        catalog_file = source.extractfile(CATALOG_PATH)
+        catalog_file = source.extractfile(catalog_path)
         if catalog_file is None:
             raise BuildProvenanceError("Canonical catalog missing from immutable archive")
         catalog = json.load(catalog_file)
@@ -133,13 +140,22 @@ def compatible_build_context(snapshot: GitSourceSnapshot, skills_root: Path) -> 
             or path.is_absolute() or ".." in path.parts
             or str(path) != manifest_path or "\\" in manifest_path):
         raise BuildProvenanceError("Invalid canonical skills source pin")
-    entry = str(_run_git(skills_root, "ls-tree", revision, "--", manifest_path)).strip()
+    git_root = Path(str(_run_git(skills_root, "rev-parse", "--show-toplevel")).strip())
+    manifest: str | bytes
+    if catalog_profile == "base-v3":
+        from project_workflow.infrastructure.base_package import git as pinned_git
+
+        entry = pinned_git(git_root, "ls-tree", revision, "--", manifest_path).decode().strip()
+        manifest = pinned_git(git_root, "show", f"{revision}:{manifest_path}")
+    else:
+        entry = str(_run_git(git_root, "ls-tree", revision, "--", manifest_path)).strip()
+        manifest = _run_git(git_root, "show", f"{revision}:{manifest_path}", text=False)
     if not entry.startswith(("100644 blob ", "100755 blob ")) or "\n" in entry:
         raise BuildProvenanceError("Pinned native skills manifest must be a regular Git blob")
-    manifest = _run_git(skills_root, "show", f"{revision}:{manifest_path}", text=False)
     if not isinstance(manifest, bytes):
         raise BuildProvenanceError("Native skills manifest is unavailable")
-    context = _add_context_files(context, {SKILLS_MANIFEST_PATH: manifest})
+    selection = {"schema_version": 1, "profile": catalog_profile, "source_revision": snapshot.revision}
+    context = _add_context_files(context, {SKILLS_MANIFEST_PATH: manifest, SELECTION_PATH: _json_bytes(selection)})
     # Execute the exporter from the same archived source that Docker will install.
     # Neither a dirty builder checkout nor its installed policy can change pins.
     with tempfile.TemporaryDirectory(prefix="workflow-compatibility-") as directory:
@@ -159,6 +175,11 @@ def compatible_build_context(snapshot: GitSourceSnapshot, skills_root: Path) -> 
         environment = dict(os.environ)
         environment.pop("PYTHONPATH", None)
         environment["PYTHONDONTWRITEBYTECODE"] = "1"
+        if catalog_profile == "base-v3":
+            subprocess.run(
+                [sys.executable, "-m", "scripts.verify_base_sdlc_candidate", "--skills-root", str(skills_root)],
+                cwd=root, env=environment, check=True,
+            )
         subprocess.run(
             [sys.executable, "-m", "scripts.build_runtime_image", "derive-compatibility",
              "--root", str(root)], cwd=root, env=environment, check=True,
@@ -168,10 +189,10 @@ def compatible_build_context(snapshot: GitSourceSnapshot, skills_root: Path) -> 
 
 
 def build_image(root: Path, image: str, docker: str, revision: str = "HEAD",
-                *, skills_root: Path) -> None:
+                *, skills_root: Path, catalog_profile: str = "legacy-v2") -> None:
     snapshot = immutable_git_snapshot(root, revision)
     provenance = snapshot.provenance
-    context = compatible_build_context(snapshot, skills_root)
+    context = compatible_build_context(snapshot, skills_root, catalog_profile=catalog_profile)
     # A PAX-first plain tar can be mistaken for a Dockerfile on stdin.
     transport = gzip.compress(context, mtime=0)
     subprocess.run(
@@ -209,6 +230,7 @@ def main(argv: list[str] | None = None) -> int:
     build.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
     build.add_argument("--revision", default="HEAD")
     build.add_argument("--skills-root", type=Path, required=True)
+    build.add_argument("--catalog-profile", choices=("legacy-v2", "base-v3"), default="legacy-v2")
 
     for name in ("derive-compatibility", "verify-compatibility"):
         subparsers.add_parser(name).add_argument("--root", type=Path, required=True)
@@ -224,7 +246,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "build":
             build_image(args.root.resolve(), args.image, args.docker, args.revision,
-                        skills_root=args.skills_root.resolve())
+                        skills_root=args.skills_root.resolve(), catalog_profile=args.catalog_profile)
         elif args.command == "derive-compatibility":
             (args.root / COMPATIBILITY_PATH).write_bytes(_json_bytes(derive_compatibility(args.root)))
         elif args.command == "verify-compatibility":

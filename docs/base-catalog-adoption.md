@@ -28,9 +28,10 @@ A different version with identical mode/phase bodies cannot impersonate v2 or v3
 ## Remaining Native Work
 
 This source-level persistence path is not a production installer or admission ACK.
-Default startup still selects v2, and immutable image compatibility/build selection
-for v3 remains required. Running a default-v2 validator against a v3 installation
-fails closed rather than silently downgrading or accepting the wrong catalog.
+Default source startup still selects v2. Explicit immutable image selection is
+described in [Base Image Catalog Selection](base-image-selection.md); production
+rollout remains separate. A v2 image against a v3 installation fails closed rather
+than silently downgrading or accepting the wrong catalog.
 
 `require_owner_execution_evidence` remains unconditional: trusted Tracker binding,
 Fleet frozen execution/config ACK and Forge receipt lookup are still prerequisites.
