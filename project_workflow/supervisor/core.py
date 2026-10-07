@@ -547,6 +547,10 @@ class SupervisorEngine:
     def _assert_runtime_fence(self) -> None:
         """Fail closed when the current task no longer matches the owner-issued run."""
         if isinstance(self._uow, SAUnitOfWork) and self.task is not None:
+            from ..application.base_admission import assert_base_supervisor
+
+            assert_base_supervisor(self._uow, self.task, self.runtime_fence)
+        if isinstance(self._uow, SAUnitOfWork) and self.task is not None:
             from project_workflow.application.pm_execution import PMExecutionService
 
             pm_execution = PMExecutionService(self._uow).supervisor_binding(self.task["id"], self.runtime_fence)

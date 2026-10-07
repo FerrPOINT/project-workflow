@@ -1,6 +1,95 @@
 {
   "components": {
     "schemas": {
+      "BaseAdmission": {
+        "additionalProperties": false,
+        "description": "Source expectation; actual trusted frozen Fleet binding is still required.",
+        "properties": {
+          "catalog_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Catalog Sha256",
+            "type": "string"
+          },
+          "concrete_agent_ref": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Concrete Agent Ref",
+            "type": "string"
+          },
+          "config_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "pattern": "^\\S(?:.*\\S)?$",
+            "title": "Config Ref",
+            "type": "string"
+          },
+          "config_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Config Sha256",
+            "type": "string"
+          },
+          "contract": {
+            "const": "base-sdlc-admission/v1",
+            "title": "Contract",
+            "type": "string"
+          },
+          "namespace": {
+            "maxLength": 512,
+            "minLength": 1,
+            "pattern": "^\\S(?:.*\\S)?$",
+            "title": "Namespace",
+            "type": "string"
+          },
+          "physical_skills": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 14,
+            "minItems": 1,
+            "title": "Physical Skills",
+            "type": "array"
+          },
+          "profile": {
+            "maxLength": 512,
+            "minLength": 1,
+            "pattern": "^\\S(?:.*\\S)?$",
+            "title": "Profile",
+            "type": "string"
+          },
+          "role_instruction_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Role Instruction Sha256",
+            "type": "string"
+          },
+          "skills_manifest_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Skills Manifest Sha256",
+            "type": "string"
+          },
+          "skills_revision": {
+            "const": "4b9b4c9297a13fb28a6ba2039af2f7cb719f2f58",
+            "title": "Skills Revision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "contract",
+          "config_ref",
+          "config_sha256",
+          "concrete_agent_ref",
+          "namespace",
+          "profile",
+          "catalog_sha256",
+          "skills_revision",
+          "skills_manifest_sha256",
+          "role_instruction_sha256",
+          "physical_skills"
+        ],
+        "title": "BaseAdmission",
+        "type": "object"
+      },
       "ExactInputRef": {
         "additionalProperties": false,
         "description": "One immutable external input snapshot selected by Business.",
@@ -1314,6 +1403,16 @@
             "exclusiveMinimum": 0.0,
             "title": "Attempt Number",
             "type": "integer"
+          },
+          "base_admission": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BaseAdmission"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "business_task_ref": {
             "maxLength": 512,

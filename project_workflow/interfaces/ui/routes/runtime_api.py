@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from project_workflow import config, supervisor
+from project_workflow.application.base_admission import admission_receipt, assert_base_step
 from project_workflow.application.state import _app_state
 from project_workflow.application.task import TaskService
 from project_workflow.build_provenance import (
@@ -358,10 +359,28 @@ def _runtime_step_replay(
     )
     if mismatched or invalid_task or invalid_assignment:
         raise ConflictError("step_operation_key уже использован для другого runtime step")
+    if task is not None:
+        assert_base_step(
+            uow, task.to_dict(), assignment_data,
+            config_ref=payload.base_config_ref, config_sha256=payload.base_config_sha256,
+        )
     response = history.get("supervisor_response")
     if not isinstance(response, dict):
         raise ConflictError("Сохранённый runtime step не содержит корректный ответ")
-    return _step_response(dict(response))
+    if assignment_data.get("payload", {}).get("base_admission") is not None and (
+        response.get("status") == "done" or response.get("complete") is True
+        or "base_terminal_receipt" in response
+        or history.get("verdict") == "pass" and history.get("next_phase_id") is None
+        and history.get("rollback_phase_id") is None
+    ):
+        from project_workflow.application.base_terminal import read_terminal_receipt
+
+        read_terminal_receipt(uow, payload.step_operation_key)
+    result = _step_response(dict(response))
+    receipt = admission_receipt(assignment_data, task.to_dict() if task is not None else {})
+    if receipt is not None:
+        result["base_admission_receipt"] = receipt
+    return result
 
 
 def _read_committed_runtime_step(
@@ -434,6 +453,8 @@ def execute_namespace_step(
             "mode_key": engine.task.get("mode_key") if engine.task else None,
             "cycle_number": engine.task.get("cycle_number") if engine.task else None,
         }
+        if runtime_fence is not None and runtime_fence.base_admission_sha256 is not None:
+            result["complete"] = False
         return {"ok": True, "exit_code": 0, "output": result["instructions"], "result": result}
     result = engine.evaluate(report)
     return _step_response(result)
@@ -482,6 +503,7 @@ def _assignment_response(task: dict[str, Any]) -> dict[str, Any]:
         "ok": True,
         "exit_code": 0,
         "result": {key: task.get(key) for key in keys},
+        **({"base_admission_receipt": task["base_admission_receipt"]} if "base_admission_receipt" in task else {}),
     }
 
 
@@ -546,6 +568,7 @@ def runtime_assign(
                 expected_mode_key=payload.expected_mode_key,
                 expected_cycle_number=payload.expected_cycle_number,
                 runtime_compatibility=payload.runtime_compatibility,
+                base_admission=payload.base_admission.model_dump(mode="json") if payload.base_admission else None,
             )
             return _assignment_response(task)
     except (ConflictError, RuntimeError, ValueError) as exc:
@@ -686,6 +709,8 @@ def runtime_step(
                 attempt_number=payload.attempt_number,
                 expected_phase_code=payload.expected_phase_code,
                 expected_status=payload.expected_status,
+                base_config_ref=payload.base_config_ref,
+                base_config_sha256=payload.base_config_sha256,
             )
             try:
                 response = execute_namespace_step(
@@ -696,6 +721,13 @@ def runtime_step(
                     create_if_missing=False,
                     runtime_fence=fence,
                 )
+                if fence.base_admission_sha256 is not None:
+                    assignment = uow.tasks.get_assignment_by_operation_key(fence.assignment_operation_key)
+                    current = uow.tasks.get_by_key(task_key, project_id=namespace_id)
+                    if assignment is not None and current is not None:
+                        response["base_admission_receipt"] = admission_receipt(
+                            assignment.to_dict(), current.to_dict(),
+                        )
             except (ConflictError, RuntimeError, ValueError):
                 uow.rollback()
                 replay = _runtime_step_replay(

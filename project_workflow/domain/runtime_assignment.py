@@ -83,6 +83,7 @@ class RuntimeStepFence:
     expected_status: str
     pm_version: int | None = None
     pm_fence: int | None = None
+    base_admission_sha256: str | None = None
 
     def assert_task(self, task: dict[str, Any] | None) -> None:
         """Reject a stale task projection before Supervisor can use or mutate it."""

@@ -60,8 +60,6 @@ def install_auth(monkeypatch, namespace_id, *, status=200, value=None, response_
     calls = []
     identity = value if value is not None else {"sub": SUBJECT, "email": "machine@test", "scopes": [
         "project-workflow:write", "project-workflow:read",
-        f"project-workflow:namespace-owner:provision:{namespace_id}",
-        f"project-workflow:namespace-owner:read:{namespace_id}",
     ]}
 
     def handle(request):
@@ -142,11 +140,13 @@ def test_no_cookie_local_or_runtime_fallback(owned_namespace, headers):
 
 
 @pytest.mark.parametrize("scopes,subject", [
-    (["project-workflow:write"], SUBJECT),
+    (["project-workflow:read"], SUBJECT),
     (["project-workflow:namespace-owner:provision:1"], SUBJECT),
     (["project-workflow:write", "project-workflow:namespace-owner:provision:*"], SUBJECT),
     (["project-workflow:write", "project-workflow:namespace-owner:provision:9999"], SUBJECT),
     (["project-workflow:write", "project-workflow:namespace-owner:provision:1"], OTHER_SUBJECT),
+    (["project-workflow:write"], OTHER_SUBJECT),
+    (["project-workflow:write", "project-workflow:write"], SUBJECT),
 ])
 def test_exact_grants_and_pinned_machine_subject(owned_namespace, scopes, subject):
     client, namespace_id, _, identity = owned_namespace
@@ -154,12 +154,12 @@ def test_exact_grants_and_pinned_machine_subject(owned_namespace, scopes, subjec
     assert client.put(f"/api/pm/namespace-ownership/{namespace_id}", headers=PAT, json=PAYLOAD).status_code == 403
 
 
-def test_read_requires_both_exact_and_standard_grants_and_rechecks_revocation(owned_namespace):
+def test_read_requires_issuable_read_grant_pinned_subject_and_fresh_introspection(owned_namespace):
     client, namespace_id, calls, identity = owned_namespace
     url = f"/api/pm/namespace-ownership/{namespace_id}"
     assert client.put(url, headers=PAT, json=PAYLOAD).status_code == 201
     identity["scopes"] = ["project-workflow:read"]
-    assert client.get(url, headers=PAT).status_code == 403
+    assert client.get(url, headers=PAT).status_code == 200
     identity["scopes"] = [f"project-workflow:namespace-owner:read:{namespace_id}"]
     assert client.get(url, headers=PAT).status_code == 403
     assert len(calls) == 3
@@ -179,6 +179,9 @@ def test_configured_issuer_change_cannot_reown_existing_mapping(owned_namespace,
     monkeypatch.setenv("AUTH_ISSUER", "http://another-authority.test")
     config.get_settings.cache_clear()
     assert client.put(url, headers=PAT, json=PAYLOAD).status_code == 409
+    assert client.get(url, headers=PAT).status_code == 403
+    monkeypatch.setenv("AUTH_ISSUER", ISSUER)
+    config.get_settings.cache_clear()
     assert client.get(url, headers=PAT).json() == first.json()
 
 
@@ -296,13 +299,11 @@ def test_missing_and_non_pm_namespaces_cannot_be_provisioned(owned_namespace):
     url = f"/api/pm/namespace-ownership/{namespace_id}"
     assert client.get(url, headers=PAT).status_code == 404
     assert client.get("/api/pm/namespace-ownership/0", headers=PAT).status_code == 422
-    identity["scopes"] += ["project-workflow:namespace-owner:provision:9999"]
     assert client.put("/api/pm/namespace-ownership/9999", headers=PAT, json=PAYLOAD).status_code == 404
     with SAUnitOfWork() as uow:
         namespace = uow.projects.get_by_id(namespace_id)
         other = uow.projects.create({"code": "OTHER", "name": "OTHER", "workflow_id": namespace.workflow_id,
                                      "cli_command": "other"})
-    identity["scopes"] += [f"project-workflow:namespace-owner:provision:{other}"]
     assert client.put(f"/api/pm/namespace-ownership/{other}", headers=PAT, json=PAYLOAD).status_code == 409
 
 
