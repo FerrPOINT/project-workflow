@@ -19,7 +19,7 @@
 .chip.active,.verdict-delegate{color:var(--accent-readable);background:var(--accent-soft)}
 .chip.blocked{color:var(--red);background:var(--red-soft)}
 .verdict-blocked{color:var(--text);background:var(--red-soft)}
-.verdict-partial{color:var(--yellow);background:var(--yellow-soft)}
+.verdict-partial{color:var(--text);background:var(--yellow-soft)}
 .verdict-rollback{color:var(--orange);background:var(--orange-soft)}
 
 .summary-bar{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:28px}
@@ -83,6 +83,7 @@
 .activity-time{margin-left:auto;font-size:11px;color:var(--text-dim)}
 .verdict-chip{font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;border:1px solid currentColor;border-radius:999px;padding:2px 7px}
 .verdict-chip.verdict-blocked{border-color:var(--red)}
+.verdict-chip.verdict-partial{border-color:var(--yellow)}
 .dialog-part{padding:12px 0;border-top:1px solid var(--border);min-width:0}
 .dialog-part:first-of-type{border-top:0;padding-top:0}
 .dialog-label{font-size:11px;font-weight:650;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:7px}
