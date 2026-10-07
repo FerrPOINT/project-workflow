@@ -52,6 +52,7 @@
 .phase-card.done{border-left:3px solid var(--green)}
 .phase-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .phase-sequence{font-variant-numeric:tabular-nums;font-size:11px;font-weight:650;color:var(--text-secondary);background:var(--panel);border:1px solid var(--border);padding:2px 7px;border-radius:5px;min-width:27px;text-align:center}
+.phase-sequence-label{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .phase-code{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-secondary);background:var(--panel);border:1px solid var(--border);padding:2px 7px;border-radius:5px}
 .phase-name{font-weight:600;color:var(--text)}
 .phase-status{margin-left:auto;font-size:11px;color:var(--text-muted)}
@@ -208,7 +209,7 @@
           <div class="parallel-grid">
             {% for ph in block.phases %}
             <article class="phase-card {{ ph.status }}">
-              <div class="phase-top"><span class="phase-sequence" aria-label="Порядковый номер фазы">{{ ph.sequence_number }}</span><span class="phase-name">{{ ph.phase_name }}</span><span class="phase-status">{{ 'Завершена' if ph.status == 'done' else ('Текущая' if ph.status == 'current' else 'Ожидает') }}</span></div>
+              <div class="phase-top"><span class="phase-sequence"><span class="phase-sequence-label">Фаза </span>{{ ph.sequence_number }}</span><span class="phase-name">{{ ph.phase_name }}</span><span class="phase-status">{{ 'Завершена' if ph.status == 'done' else ('Текущая' if ph.status == 'current' else 'Ожидает') }}</span></div>
               {% if ph.phase_description %}<div class="phase-description">{{ ph.phase_description }}</div>{% endif %}
             </article>
             {% endfor %}
@@ -217,7 +218,7 @@
         {% else %}
           {% set ph = block.phases[0] %}
           <article class="phase-card {{ ph.status }}">
-            <div class="phase-top"><span class="phase-sequence" aria-label="Порядковый номер фазы">{{ ph.sequence_number }}</span><span class="phase-name">{{ ph.phase_name }}</span><span class="phase-status">{{ 'Завершена' if ph.status == 'done' else ('Текущая' if ph.status == 'current' else 'Ожидает') }}</span></div>
+            <div class="phase-top"><span class="phase-sequence"><span class="phase-sequence-label">Фаза </span>{{ ph.sequence_number }}</span><span class="phase-name">{{ ph.phase_name }}</span><span class="phase-status">{{ 'Завершена' if ph.status == 'done' else ('Текущая' if ph.status == 'current' else 'Ожидает') }}</span></div>
             {% if ph.phase_description %}<div class="phase-description">{{ ph.phase_description }}</div>{% endif %}
           </article>
         {% endif %}
