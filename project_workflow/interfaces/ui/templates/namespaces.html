@@ -225,7 +225,7 @@ function syncNamespaceUrl(id, historyMode){
 }
 function rememberNamespaceSelection(id, historyMode){
   if(id == null){ return; }
-  document.cookie='workflow_namespace_id='+encodeURIComponent(id)+'; path=/; SameSite=Lax';
+  document.cookie={{ namespace_cookie_name | tojson }}+'='+encodeURIComponent(id)+'; path=/; SameSite=Lax'{% if namespace_cookie_secure %}+'; Secure'{% endif %};
   var selector = document.getElementById('namespaceSelector');
   if(selector){ selector.value = String(id); }
   updateNamespaceHeaderLinks(id);
