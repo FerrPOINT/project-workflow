@@ -13,6 +13,9 @@
 - Standalone-режим: репозиторий собирается и запускается без соседнего `services-base` (убраны extra `cli-platform`, uv source, Docker additional_context и CI checkout). Token-режим CLI без `sdlc-cli-core` выдаёт понятную ошибку; запуск без `AUTH_ISSUER` работает без авторизации.
 
 ### Fixed
+- Explicit Base catalog adoption validates all v2 roles before appending v3,
+  preserves historical mode/phase IDs and assignments, and checks the exact
+  active version. Default startup and trusted-owner execution guards are unchanged.
 - Index PM operation history by execution and kind so checkpoint uniqueness
   checks do not scan other executions while holding the task lock. Keep the
   ORM and pending PM migration schema in sync.

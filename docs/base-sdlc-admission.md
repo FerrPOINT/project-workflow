@@ -326,7 +326,8 @@ does not prohibit retained historical v2 modes/phases, assignment pins or histor
 A focused future-adoption fixture proves v3 readback with those v2 rows unchanged;
 the target must include the v3 workflow descriptions as well as appended modes
 and active version selection, per the canonical validator (v2 descriptions differ).
-This is not an implementation of the separately blocked adoption capability.
+This readback does not itself install or adopt a catalog. The separate explicit
+append-only source path is described in [Base Catalog Adoption](base-catalog-adoption.md).
 
 The observation takes the existing shared catalog transaction lock, discards
 cached rows and revalidates/re-reads the mapping before returning. It performs no
@@ -351,7 +352,7 @@ integrated milestone. The new observation is verified only against disposable
 pytest SQLite with explicit candidate installation and the authorized Git pin,
 not an accepted runtime DB. No Fleet code or fixtures were changed.
 
-Remaining B-SDLC-03 work: explicit v2-to-v3 installation/adoption and source
+Remaining B-SDLC-03 work: production v3 installation/image selection and source
 build provenance, Fleet effective-config frozen-binding proof, Fleet/Tracker/Forge
 counterpart contract tests, trusted Base checkpoint/rebind and integrated
 acceptance. Existing PM enrollment checks v2 compatibility and is intentionally

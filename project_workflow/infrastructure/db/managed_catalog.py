@@ -1089,6 +1089,8 @@ def validate_managed_catalog_state(
         existing = workflows_by_key.get(definition.key)
         if existing is None or existing.id is None:
             raise ValueError(f"Managed workflow {definition.key!r} is missing")
+        if existing.active_catalog_version != resolved_catalog.catalog_version:
+            raise ValueError(f"Managed workflow {definition.key!r} has a different active catalog version")
         agent_id = _assert_existing_agent(uow, definition)
         _assert_existing_workflow(
             uow,
@@ -1114,10 +1116,11 @@ def ensure_managed_catalog(
     catalog = load_managed_catalog(catalog_path)
     uow.lock_catalog_state()
     legacy = _assert_no_foreign_catalog_objects(uow, catalog)
+    workflows_by_key = {workflow.key: workflow for workflow in uow.workflows.list()}
+    _assert_base_adoption_predecessor(uow, catalog, workflows_by_key)
     if legacy is not None:
         for agent_id, alias in legacy.agent_renames:
             uow.agents.update(agent_id, {"name": alias})
-    workflows_by_key = {workflow.key: workflow for workflow in uow.workflows.list()}
     has_default = uow.workflows.get_default() is not None
 
     for definition in catalog.workflows:
@@ -1129,9 +1132,10 @@ def ensure_managed_catalog(
             workflow_id = int(existing.id)
             active_version = existing.active_catalog_version
             if active_version < catalog.catalog_version:
-                if active_version != 1 or catalog.catalog_version != 2:
+                if (active_version, catalog.catalog_version) not in {(1, 2), (2, 3)}:
                     raise ValueError("Unsupported managed catalog adoption path")
-                _assert_frozen_legacy_workflow(uow, existing, agent_id=agent_id)
+                if active_version == 1:
+                    _assert_frozen_legacy_workflow(uow, existing, agent_id=agent_id)
                 if uow.workflows.list_modes(workflow_id, catalog_version=catalog.catalog_version):
                     raise ValueError("Partial managed catalog adoption; transaction was not committed")
                 for mode in definition.modes:
@@ -1139,7 +1143,10 @@ def ensure_managed_catalog(
                                   agent_id=agent_id, mode=mode, catalog_version=catalog.catalog_version)
                 # This is the sole dispatch switch. Pinned task/history mode IDs
                 # stay on the old rows, including active and completed bindings.
-                uow.workflows.update(workflow_id, {"active_catalog_version": catalog.catalog_version})
+                changes: dict[str, Any] = {"active_catalog_version": catalog.catalog_version}
+                if active_version == 2:
+                    changes["description"] = definition.description
+                uow.workflows.update(workflow_id, changes)
                 existing = uow.workflows.get_by_id(workflow_id)
                 assert existing is not None
             _assert_existing_workflow(
@@ -1175,6 +1182,29 @@ def ensure_managed_catalog(
         _ensure_namespace(uow, definition, workflow_id)
     validate_managed_catalog_state(uow, catalog)
     return catalog
+
+
+def _assert_base_adoption_predecessor(
+    uow: UnitOfWork, catalog: ManagedCatalog, workflows_by_key: dict[str | None, Workflow],
+) -> None:
+    """Validate every v2 role before appending or changing any dispatch pointer."""
+    if catalog.catalog_version != 3:
+        return
+    existing = [workflows_by_key[item.key] for item in catalog.workflows if item.key in workflows_by_key]
+    if not existing or all(item.active_catalog_version == 3 for item in existing):
+        return
+    if len(existing) != len(catalog.workflows) or {item.active_catalog_version for item in existing} != {2}:
+        raise ValueError("Unsupported managed catalog adoption path")
+    predecessor = load_managed_catalog(config.MANAGED_CATALOG_PATH)
+    if predecessor.catalog_version != 2 or not validate_managed_catalog_state(uow, predecessor):
+        raise ValueError("Canonical managed v2 predecessor is missing")
+    for definition in catalog.workflows:
+        workflow = workflows_by_key[definition.key]
+        workflow_id = int(workflow.id or 0)
+        _assert_existing_agent(uow, definition)
+        _assert_existing_namespace(uow, definition, workflow_id)
+        if uow.workflows.list_modes(workflow_id, catalog_version=3):
+            raise ValueError("Partial managed catalog adoption; transaction was not committed")
 
 
 def _assert_frozen_legacy_workflow(uow: UnitOfWork, workflow: Workflow, *, agent_id: int) -> None:

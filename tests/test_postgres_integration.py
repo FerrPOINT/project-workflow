@@ -427,6 +427,83 @@ def test_pm_ownership_catalog_lock_order_and_stale_0007(pg_url, winner):
 
 
 @pytest.mark.integration
+def test_base_catalog_postgres_adoption_preserves_bound_and_completed_history(pg_url):
+    from project_workflow.application.base_admission import CANDIDATE_PATH
+    from tests.base_candidate.test_adoption import assert_preserved, install_v2_history, snapshot
+
+    ensure_migrated(get_engine(pg_url))
+    with SAUnitOfWork(pg_url) as uow:
+        install_v2_history(uow)
+        before = snapshot(uow)
+        ensure_managed_catalog(uow, CANDIDATE_PATH)
+        uow.commit()
+        after = snapshot(uow)
+        assert_preserved(before, after)
+        ensure_managed_catalog(uow, CANDIDATE_PATH)
+        uow.commit()
+        assert snapshot(uow) == after
+        assert len(after["workflow_modes"]) == 22 and len(after["phases"]) == 66
+
+
+@pytest.mark.integration
+def test_base_catalog_postgres_concurrent_adoption_appends_one_version(pg_url):
+    from project_workflow.application.base_admission import CANDIDATE_PATH
+    from tests.base_candidate.test_adoption import assert_preserved, install_v2_history, snapshot
+
+    ensure_migrated(get_engine(pg_url))
+    with SAUnitOfWork(pg_url) as uow:
+        install_v2_history(uow)
+        before = snapshot(uow)
+    barrier = Barrier(2)
+
+    def adopt():
+        with SAUnitOfWork(pg_url) as uow:
+            barrier.wait(timeout=10)
+            ensure_managed_catalog(uow, CANDIDATE_PATH)
+            uow.commit()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = [pool.submit(adopt), pool.submit(adopt)]
+        for result in results:
+            result.result(timeout=30)
+    with SAUnitOfWork(pg_url) as uow:
+        after = snapshot(uow)
+        assert_preserved(before, after)
+        assert len(after["workflow_modes"]) == 22 and len(after["phases"]) == 66
+
+
+@pytest.mark.integration
+def test_base_catalog_postgres_failed_adoption_rolls_back_before_retry(pg_url, monkeypatch):
+    from project_workflow.application.base_admission import CANDIDATE_PATH
+    from project_workflow.infrastructure.db import managed_catalog
+    from tests.base_candidate.test_adoption import assert_preserved, install_v2_history, snapshot
+
+    ensure_migrated(get_engine(pg_url))
+    with SAUnitOfWork(pg_url) as uow:
+        install_v2_history(uow)
+        before = snapshot(uow)
+    persist = managed_catalog._persist_mode
+    calls = []
+
+    def interrupted(*args, **kwargs):
+        calls.append(kwargs["role_key"])
+        if len(calls) == 5:
+            raise RuntimeError("Interrupted append")
+        return persist(*args, **kwargs)
+
+    with monkeypatch.context() as fault:
+        fault.setattr(managed_catalog, "_persist_mode", interrupted)
+        with pytest.raises(RuntimeError, match="Interrupted append"), SAUnitOfWork(pg_url) as uow:
+            ensure_managed_catalog(uow, CANDIDATE_PATH)
+            uow.commit()
+    with SAUnitOfWork(pg_url) as uow:
+        assert snapshot(uow) == before
+        ensure_managed_catalog(uow, CANDIDATE_PATH)
+        uow.commit()
+        assert_preserved(before, snapshot(uow))
+
+
+@pytest.mark.integration
 def test_pm_ownership_postgres_actual_bounded_auth_and_readback(pg_url, monkeypatch):
     from tests.test_namespace_ownership import SUBJECT
     from tests.test_runtime_api import _namespace
