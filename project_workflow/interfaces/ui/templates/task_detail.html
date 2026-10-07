@@ -17,7 +17,7 @@
 .chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border-strong);background:var(--surface);border-radius:999px;padding:3px 9px;font-size:11px;font-weight:600;color:var(--text-secondary);white-space:nowrap}
 .chip.done,.verdict-pass{color:var(--green);background:var(--green-soft)}
 .chip.active,.verdict-delegate{color:var(--accent-readable);background:var(--accent-soft)}
-.chip.blocked{color:var(--red);background:var(--red-soft)}
+.chip.blocked{color:var(--text);background:var(--red-soft);border-color:var(--red)}
 .verdict-blocked{color:var(--text);background:var(--red-soft)}
 .verdict-partial{color:var(--text);background:var(--yellow-soft)}
 .verdict-rollback{color:var(--orange);background:var(--orange-soft)}
@@ -94,7 +94,7 @@
 .check-message{font-size:13px;line-height:1.55;color:var(--text-secondary)}
 .result-list{margin-top:10px}.result-list h4,.contract-section h4{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin:0 0 5px}
 .result-list ul,.contract-section ul{margin:0;padding-left:18px}.result-list li,.contract-section li{font-size:12px;line-height:1.55;color:var(--text-secondary);overflow-wrap:anywhere}
-.result-list.covered li{color:var(--text-secondary)}.result-list.missing li{color:var(--yellow)}.result-list.blockers li{color:var(--red)}
+.result-list.covered li{color:var(--text-secondary)}.result-list.missing li{color:var(--yellow)}.result-list.blockers li{color:var(--text-secondary)}
 .assignment-card{border-top:3px solid var(--accent);background:var(--accent-soft)}
 .assignment-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}.assignment-name{font-size:14px;font-weight:650;color:var(--text)}
 .assignment-description{font-size:12px;color:var(--text-muted);line-height:1.5;margin-bottom:10px}

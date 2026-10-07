@@ -2019,6 +2019,21 @@ class TestTaskDetail:
         assert ".verdict-chip.verdict-partial{border-color:var(--yellow)}" in response.text
         assert ".verdict-partial{color:var(--yellow)" not in response.text
 
+    def test_task_detail_blocked_status_uses_readable_text_and_semantic_border(self):
+        response = client.get(f"/task/RUN-247?namespace_id={self._default_namespace_id()}")
+
+        assert response.status_code == 200
+        assert ".chip.blocked{color:var(--text);background:var(--red-soft);border-color:var(--red)}" in response.text
+        assert ".chip.blocked{color:var(--red)" not in response.text
+
+    def test_task_detail_blockers_use_readable_text_and_keep_red_marker(self):
+        response = client.get(f"/task/RUN-247?namespace_id={self._default_namespace_id()}")
+
+        assert response.status_code == 200
+        assert ".result-list.blockers li{color:var(--text-secondary)}" in response.text
+        assert ".check-card.blocked{border-top-color:var(--red)}" in response.text
+        assert ".result-list.blockers li{color:var(--red)}" not in response.text
+
     def test_task_detail_mobile_navigation_keeps_links_accessible(self):
         namespace_id = self._default_namespace_id()
         response = client.get(f"/task/RUN-247?namespace_id={namespace_id}")
