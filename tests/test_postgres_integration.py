@@ -437,15 +437,16 @@ def test_pm_ownership_postgres_actual_bounded_auth_and_readback(pg_url, monkeypa
         namespace_id = uow.projects.get_by_cli_command("workflow-project_manager").id
     probes = []
     status = [200]
+    scopes = [
+        "project-workflow:read", "project-workflow:write",
+        f"project-workflow:namespace-owner:provision:{namespace_id}",
+        f"project-workflow:namespace-owner:read:{namespace_id}",
+    ]
 
     class Auth(BaseHTTPRequestHandler):
         def do_GET(self):
             probes.append((self.path, self.headers.get("Authorization"), self.headers.get("Accept-Encoding")))
-            body = json.dumps({"sub": SUBJECT, "email": "provisioner@test", "scopes": [
-                "project-workflow:read", "project-workflow:write",
-                f"project-workflow:namespace-owner:provision:{namespace_id}",
-                f"project-workflow:namespace-owner:read:{namespace_id}",
-            ]}).encode()
+            body = json.dumps({"sub": SUBJECT, "email": "provisioner@test", "scopes": scopes}).encode()
             self.send_response(status[0])
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
@@ -473,8 +474,11 @@ def test_pm_ownership_postgres_actual_bounded_auth_and_readback(pg_url, monkeypa
 
         rejected = client.put(url, headers=headers, json={**payload, "tracker_instance_ref": "\u0416" * 65})
         assert rejected.status_code == 422 and probes == []
+        unsupported = client.put(url, headers=headers, json=payload)
+        assert unsupported.status_code == 403
         with SAUnitOfWork() as uow:
             assert uow.session.query(m.PMNamespaceOwnership).count() == 0
+        scopes[:] = ["project-workflow:read", "project-workflow:write"]
         first = client.put(url, headers=headers, json=payload)
         assert first.status_code == 201, first.text
         assert first.json()["result"]["authority_issuer"] == root
@@ -483,7 +487,7 @@ def test_pm_ownership_postgres_actual_bounded_auth_and_readback(pg_url, monkeypa
         status[0] = 401
         denied = client.get(url, headers=headers)
         assert denied.status_code == 401 and "sdlc_pat_" not in denied.text and root not in denied.text
-        assert probes == [("/auth/tokens/introspect", headers["Authorization"], "identity")] * 4
+        assert probes == [("/auth/tokens/introspect", headers["Authorization"], "identity")] * 5
     finally:
         client.close()
         server.shutdown()
@@ -2049,7 +2053,7 @@ class TestPostgresInitialMigration:
                 "SELECT to_jsonb(t)::text FROM project_workflow.task_runtime_assignments t ORDER BY id"
             )).scalars().all()
         assert [json.loads(row) for row in after] == [
-            {**json.loads(row), "concrete_agent_ref": None} for row in before
+            {**json.loads(row), "concrete_agent_ref": None, "assignment_shape": None} for row in before
         ]
         with SAUnitOfWork(engine) as uow:
             new_mode = uow.workflows.create_mode({"workflow_id": workflow_id, "key": "initial", "name": "Initial",

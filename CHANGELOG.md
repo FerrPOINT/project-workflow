@@ -13,6 +13,9 @@
 - Standalone-режим: репозиторий собирается и запускается без соседнего `services-base` (убраны extra `cli-platform`, uv source, Docker additional_context и CI checkout). Token-режим CLI без `sdlc-cli-core` выдаёт понятную ошибку; запуск без `AUTH_ISSUER` работает без авторизации.
 
 ### Fixed
+- Index PM operation history by execution and kind so checkpoint uniqueness
+  checks do not scan other executions while holding the task lock. Keep the
+  ORM and pending PM migration schema in sync.
 - SSR-переключатель берёт текущий Workflow и его health из runtime-каталога,
   без hardcoded healthy. Полный fallback из шести UI остаётся unknown при
   сетевой ошибке, пустом или невалидном ответе; TTL cache разделён по URL.

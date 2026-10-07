@@ -1,5 +1,35 @@
 # PM Continuation Verification
 
+## Indexed operation history (2026-10-03)
+
+Checkpoint uniqueness reads now have an `(execution_ref, kind)` index in ORM
+metadata and the pending `0007_pm_execution` migration. Replay still uses the
+operation-key primary key; execution fences, authorization and HTTP contracts
+are unchanged. Accepted migrations `0001`–`0006` are unchanged. This is a fresh
+schema / pre-0007 upgrade change, not an automatic repair of already applied
+preview migrations or a migration of the accepted runtime.
+
+The current feature branch includes accepted master `6d9d54a`. Python 3.11.15
+and uv 0.11.19 ran the canonical isolated, constrained, all-extras commands with
+`--frozen`: 2,121 unit tests passed, 76 integration tests deselected, coverage
+94.26% (94% enforced), and strict ResourceWarning/unraisable checks passed.
+The two existing SQLAlchemy transaction warnings remain. Ruff and mypy passed.
+All 76 actual PostgreSQL integration cases passed, including migration/ORM
+parity and checkpoint/replay regressions. `uv.lock` remained unchanged.
+
+An isolated Compose build and real API readiness passed: HTTP 200, database,
+schema and catalog `ok`; the migrated PostgreSQL schema contained the index.
+The development image is QA evidence, not immutable release provenance or live
+SSO/native PM acceptance. Disposable Compose projects were removed afterwards.
+
+On 500,000 synthetic operations across 25,000 executions, the actual checkpoint
+projection/filter changed from a parallel sequential scan (29,412 shared blocks,
+45.657 ms) to a bitmap index/heap scan (23 blocks, 0.219 ms). The benchmark used
+the operation table's schema and migrated index; its adjacent execution table
+was reduced to the referenced primary key. These controlled query timings are
+not production endpoint latency. Existing native PM integration and release
+acceptance gaps below remain open.
+
 ## Immutable PM Namespace Ownership (2026-10-02)
 
 This current foundation supersedes older namespace-ownership GAP entries below;
