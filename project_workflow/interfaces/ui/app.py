@@ -266,7 +266,7 @@ def create_app() -> FastAPI:
     app.get(
         "/internal/runtime/base/namespace-bindings/{namespace_id}", response_model=BaseNamespaceBindingResponse,
         responses={**{status: {"model": BaseNamespaceBindingError} for status in (401, 403, 409, 503)},
-                   422: {"model": BaseBindingInvalidRequest}},
+                   422: {"model": BaseBindingInvalidRequest, "description": "Unprocessable Content"}},
     )(base_api.namespace_binding)
     app.post("/internal/runtime/base/terminal-receipt/readback", response_model=None)(base_api.terminal_readback)
     app.get("/internal/runtime/base/source-catalog", response_model=None)(base_api.source_catalog)
