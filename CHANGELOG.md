@@ -13,6 +13,9 @@
 - Standalone-режим: репозиторий собирается и запускается без соседнего `services-base` (убраны extra `cli-platform`, uv source, Docker additional_context и CI checkout). Token-режим CLI без `sdlc-cli-core` выдаёт понятную ошибку; запуск без `AUTH_ISSUER` работает без авторизации.
 
 ### Fixed
+- Immutable image builder закрепляет Git EOL-настройки только для archive:
+  один commit даёт одинаковые source/bundle digests независимо от пользовательских
+  `core.autocrlf` и `core.eol`; явные repository EOL rules и binary bytes сохранены.
 - SSR-переключатель берёт текущий Workflow и его health из runtime-каталога,
   без hardcoded healthy. Полный fallback из шести UI остаётся unknown при
   сетевой ошибке, пустом или невалидном ответе; TTL cache разделён по URL.

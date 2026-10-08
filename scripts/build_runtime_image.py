@@ -49,7 +49,10 @@ def immutable_git_snapshot(root: Path, revision: str) -> GitSourceSnapshot:
     exact_revision = str(
         _run_git(root, "rev-parse", "--verify", f"{revision}^{{commit}}")
     ).strip().lower()
-    archive = _run_git(root, "archive", "--format=tar", exact_revision, text=False)
+    archive = _run_git(
+        root, "-c", "core.autocrlf=false", "-c", "core.eol=lf",
+        "archive", "--format=tar", exact_revision, text=False,
+    )
     if not isinstance(archive, bytes):  # defensive typing guard
         raise BuildProvenanceError("Git archive не вернул бинарные данные")
     provenance = validate_build_provenance(

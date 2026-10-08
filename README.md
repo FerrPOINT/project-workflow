@@ -108,6 +108,10 @@ python scripts/build_runtime_image.py build \
 Скрипт один раз читает `git archive <exact-sha>`, из этих же bytes вычисляет
 SHA-256 source archive и канонический SHA-256 runtime bundle, добавляет manifest
 в копию archive и передаёт полученный immutable tar как Docker build context.
+Для команды archive закреплены `core.autocrlf=false` и `core.eol=lf`:
+пользовательские Git-настройки Windows/Linux не меняют bytes и digests одного
+commit. Явные правила EOL в committed `.gitattributes`, raw CRLF и бинарные
+файлы сохраняются; глобальная конфигурация Git не изменяется.
 Transport использует детерминированный gzip (`mtime=0`), чтобы Docker не
 принимал PAX-first tar на stdin за Dockerfile. Сжатие не меняет исходный
 archive digest, runtime bundle digest или содержимое immutable manifest.
