@@ -33,10 +33,10 @@ async def read_owner(owner: str, path: str, context: ExecutionContextV2) -> dict
     ):
         raise OwnerUnavailable("Context reader is not configured")
     try:
-        token = Path(os.environ[f"{prefix}_TOKEN_FILE"]).read_text().strip()
+        token = Path(os.environ[f"{prefix}_TOKEN_FILE"]).read_text(encoding="utf-8").strip()
     except (KeyError, OSError, UnicodeError):
         raise OwnerUnavailable("Context reader credential is unavailable") from None
-    if not token or "\r" in token or "\n" in token:
+    if not token or not token.isascii() or any(ord(char) < 33 or ord(char) > 126 for char in token):
         raise OwnerUnavailable("Context reader credential is invalid")
     params = {
         "registry_instance_id": str(context.namespace.registry_instance_id),

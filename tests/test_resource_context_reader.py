@@ -93,7 +93,7 @@ def test_invalid_reader_origin_and_credential_fail_before_network(monkeypatch, t
     monkeypatch.setenv("PROJECT_WORKFLOW_NAMESPACE__TRACKER_TOKEN_FILE", str(path))
     with pytest.raises(OwnerUnavailable, match="credential"):
         asyncio.run(read_owner("TRACKER", "valid", item))
-    for token in [b"", b"one\ntwo", b"\xff"]:
+    for token in [b"", b"one\ntwo", b"\xff", "я".encode(), b"one\x00two", b"one two"]:
         path.write_bytes(token)
         with pytest.raises(OwnerUnavailable, match="credential"):
             asyncio.run(read_owner("TRACKER", "valid", item))
