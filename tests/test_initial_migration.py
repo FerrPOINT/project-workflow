@@ -85,8 +85,9 @@ def test_repository_has_one_linear_migration_head():
         "0004_wide_work_item_revision.py",
         "0005_mode_execution_scopes.py",
         "0006_versioned_mode_catalog.py",
+        "0007_resource_execution_contexts.py",
     ]
-    assert migration_head() == "0006_versioned_mode_catalog"
+    assert migration_head() == "0007_resource_execution_contexts"
 
 
 def test_fresh_sqlite_migration_matches_orm_metadata(tmp_path):
@@ -138,7 +139,7 @@ def test_fresh_sqlite_migration_matches_orm_metadata(tmp_path):
         }
         assert actual_fks == expected_fks, table_name
 
-    assert database_revisions(engine) == {"0006_versioned_mode_catalog"}
+    assert database_revisions(engine) == {"0007_resource_execution_contexts"}
     assert schema_is_ready(engine) is True
     with engine.connect() as connection:
         context = MigrationContext.configure(
@@ -318,7 +319,7 @@ def test_sqlite_supported_additive_upgrade_preserves_legacy_catalog_and_assignme
     assert database_revisions(engine) == {predecessor}
     ensure_migrated(engine)
     ensure_migrated(engine)  # Restart is idempotent and cannot reinterpret historical payloads.
-    assert database_revisions(engine) == {"0006_versioned_mode_catalog"}
+    assert database_revisions(engine) == {"0007_resource_execution_contexts"}
     assert schema_is_ready(engine)
     with engine.connect() as conn:
         for table, original in frozen.items():
@@ -450,7 +451,7 @@ def test_sqlite_runtime_assignment_rejects_invalid_immutable_bindings(tmp_path):
         )
 
     ensure_migrated(engine)
-    assert database_revisions(engine) == {"0006_versioned_mode_catalog"}
+    assert database_revisions(engine) == {"0007_resource_execution_contexts"}
     with engine.connect() as conn:
         preserved = conn.execute(
             text(
@@ -834,7 +835,7 @@ def test_head_with_damaged_or_polluted_schema_is_refused(tmp_path, mutation):
     assert schema_is_ready(engine) is False
     with pytest.raises(DatabaseRecreateRequired):
         ensure_migrated(engine)
-    assert database_revisions(engine) == {"0006_versioned_mode_catalog"}
+    assert database_revisions(engine) == {"0007_resource_execution_contexts"}
     if mutation == "extra":
         with engine.connect() as connection:
             assert connection.execute(text("SELECT id FROM unexpected_table")).scalar_one() == 42

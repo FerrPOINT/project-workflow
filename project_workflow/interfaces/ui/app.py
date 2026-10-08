@@ -20,7 +20,7 @@ from ... import __version__
 from ...infrastructure.db.managed_catalog import validate_managed_catalog_state
 from ...infrastructure.db.session import DatabaseUnavailable, get_engine, reset_engine
 from ...infrastructure.db.uow import SAUnitOfWork
-from .routes import api, cli_api, pages, runtime_api
+from .routes import api, cli_api, pages, resource_context, runtime_api
 from .sso import install_sso
 
 logger = logging.getLogger(__name__)
@@ -267,6 +267,8 @@ def create_app() -> FastAPI:
     app.get("/agents", response_class=HTMLResponse)(pages.agents_page)
 
     # API
+    app.get("/api/v2/execution-contexts/{identity}")(resource_context.read)
+    app.put("/api/v2/execution-contexts/{identity}")(resource_context.bind)
     app.post("/api/cli/step", response_model=None)(cli_api.cli_step)
     app.get("/api/cli/history", response_model=None)(cli_api.cli_history)
     app.get("/api/settings", response_model=None)(api.api_settings_get)

@@ -30,6 +30,20 @@ class Base(DeclarativeBase):
     pass
 
 
+class ResourceExecutionContext(Base):
+    """Immutable verified PDLC context; global mode catalogs remain independent."""
+
+    __tablename__ = "resource_execution_contexts"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    operation_id: Mapped[str] = mapped_column(String(36), nullable=False, unique=True)
+    request: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    verified_projection: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    workflow_id: Mapped[int] = mapped_column(ForeignKey("workflows.id", ondelete="RESTRICT"), nullable=False)
+    mode_id: Mapped[int] = mapped_column(ForeignKey("workflow_modes.id", ondelete="RESTRICT"), nullable=False)
+    created_by_subject: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class Agent(Base):
     __tablename__ = "agents"
 
