@@ -7,6 +7,8 @@
 ## [Unreleased]
 
 ### Changed
+- Mobile service menu stays inside the viewport; namespace selection and history
+  update both desktop and drawer selectors.
 - Header matches the Base product/service/context/account order; page actions
   leave the global header. Account menu consumes the pinned Base SSR theme
   primitive and synchronizes the browser preference with React products.

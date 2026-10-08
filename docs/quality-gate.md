@@ -83,6 +83,12 @@ PostgreSQL, integration gate можно запускать с `PGPORT`, указ
 
 ## UI Smoke
 
+Регрессии общей шапки на отдельной smoke-базе проверяются командой
+`SMOKE_BASE_URL=http://127.0.0.1:8812 node scripts/check_ui_shell.mjs`.
+Это project-owned automated Playwright runner: два namespace selectors,
+history/reload, service popover на 320/375/767/768/1920/2560 и mobile drawer.
+Ручная визуальная приёмка использует Codex in-app Browser.
+
 После любых изменений UI/templates/static JS:
 
 Подготовить отдельную нейтральную smoke-базу, чтобы скриншоты не зависели от

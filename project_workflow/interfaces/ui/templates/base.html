@@ -323,7 +323,8 @@ textarea{resize:vertical;min-height:60px}
 .platform-header .service-menu summary>span:first-of-type{max-width:160px;overflow:hidden;text-overflow:ellipsis}
 .platform-header .namespace-select{max-width:220px;width:100%;min-width:0}
 .platform-header-context .namespace-switcher{min-width:0;width:min(220px,100%)}
-@media(max-width:767px){.sidebar{z-index:100;top:0;height:100dvh}.mobile-drawer-title{display:flex}.platform-header .platform-header-context{display:none}.sidebar-utilities{display:block;padding:12px 20px}.sidebar-utilities label{display:block;margin-bottom:8px}.sidebar-utilities .namespace-select{width:100%;max-width:none}.platform-header .service-menu summary>span:first-of-type{max-width:140px}.page-header h1{font-size:22px}}
+.service-menu-trigger-icon{display:none}
+@media(max-width:767px){.sidebar{z-index:100;top:0;height:100dvh}.mobile-drawer-title{display:flex}.platform-header .platform-header-context{display:none}.sidebar-utilities{display:block;padding:12px 20px}.sidebar-utilities label{display:block;margin-bottom:8px}.sidebar-utilities .namespace-select{width:100%;max-width:none}.platform-header-leading{flex-shrink:0}.platform-header .service-menu summary{min-width:44px;min-height:44px;justify-content:center}.platform-header .service-menu-trigger-label,.platform-header .service-menu-chevron{display:none}.platform-header .service-menu-trigger-icon{display:block}.platform-header .service-menu-popover{position:fixed;left:12px;right:12px;top:calc(var(--header-height) + 8px);width:auto;max-width:none}.page-header h1{font-size:22px}}
 
 {% block extra_style %}{% endblock %}
 </style>
@@ -371,7 +372,7 @@ textarea{resize:vertical;min-height:60px}
     <div class="sidebar-utilities">
       {% if namespaces is defined and namespaces %}
       <label for="mobileNamespaceSelector">Пространство</label>
-      <select id="mobileNamespaceSelector" class="namespace-select" onchange="switchNamespace(this.value)">
+      <select id="mobileNamespaceSelector" data-namespace-selector class="namespace-select" onchange="switchNamespace(this.value)">
         {% for namespace in namespaces %}<option value="{{ namespace.id }}" {% if active_namespace_id == namespace.id %}selected{% endif %}>{{ namespace.name }}</option>{% endfor %}
       </select>
       {% endif %}
@@ -393,7 +394,7 @@ textarea{resize:vertical;min-height:60px}
   <div class="platform-header-services" data-platform-header-slot="services">
       <details class="service-menu" id="serviceMenu">
         {% set current_service = other_services | selectattr('key', 'equalto', 'project-workflow') | first %}
-        <summary aria-label="Открыть список сервисов платформы"><span>{{ current_service.label if current_service else 'Project Workflow' }}</span><span class="service-menu-chevron" aria-hidden="true">▾</span></summary>
+        <summary aria-label="Открыть список сервисов платформы"><svg class="service-menu-trigger-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span class="service-menu-trigger-label">{{ current_service.label if current_service else 'Project Workflow' }}</span><span class="service-menu-chevron" aria-hidden="true">▾</span></summary>
         <div class="service-menu-popover">
           <div role="menu" aria-label="Сервисы платформы">
         {% for service in other_services %}
@@ -412,7 +413,7 @@ textarea{resize:vertical;min-height:60px}
   <div class="platform-header-context" data-platform-header-slot="context">
       {% if namespaces is defined and namespaces %}
       <div class="namespace-switcher">
-        <select class="namespace-select" id="namespaceSelector" aria-label="Выбор пространства" onchange="switchNamespace(this.value)">
+        <select class="namespace-select" id="namespaceSelector" data-namespace-selector aria-label="Выбор пространства" onchange="switchNamespace(this.value)">
           {% for namespace in namespaces %}
           <option value="{{ namespace.id }}" {% if active_namespace_id == namespace.id %}selected{% endif %}>{{ namespace.name }}</option>
           {% endfor %}

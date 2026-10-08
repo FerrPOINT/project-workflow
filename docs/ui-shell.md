@@ -38,6 +38,9 @@ events synchronize open documents and focus/visibility refreshes restore it.
   context on every private route.
 - The mobile drawer is the same navigation, not a second route menu. It opens
   from the header, traps focus, closes with Escape and restores trigger focus.
+- Mobile service popover is bounded by viewport gutters; desktop and drawer
+  namespace selectors share the selected namespace and refresh their options
+  together after edits, browser history and reload.
 - Services, namespace context and account are global header/drawer controls.
   Theme and logout live only in the account menu. Route title, breadcrumbs, filters and CRUD actions are page-owned
   content below the header; page actions must not make the global header wrap.

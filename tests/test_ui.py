@@ -530,6 +530,9 @@ class TestPhasesPage:
         assert 'id="sidebarThemeSelector"' not in response.text
         assert response.text.count('data-base-theme-option') >= 3
         assert 'window.SdlcThemePreference.read("workflow-theme")' in response.text
+        assert response.text.count('data-namespace-selector class="namespace-select"') == 1
+        assert 'id="namespaceSelector" data-namespace-selector' in response.text
+        assert '.platform-header .service-menu-popover{position:fixed;left:12px;right:12px;' in response.text
 
     def test_sidebar_places_namespaces_first(self):
         response = client.get("/phases")
@@ -2320,7 +2323,10 @@ class TestProjectsPage:
             'document.cookie="workflow_namespace_id"+\'=\'+encodeURIComponent(id)+\'; path=/; SameSite=Lax\';'
             in response.text
         )
-        assert "if(selector){ selector.value = String(id); }" in response.text
+        assert (
+            "document.querySelectorAll('[data-namespace-selector]')"
+            ".forEach(function(selector){ selector.value = String(id); });" in response.text
+        )
         assert "url.pathname = '/namespaces';" in response.text
         assert "var method = historyMode === 'push' ? 'pushState' : 'replaceState';" in response.text
         assert "window.history[method](null, '', url.toString());" in response.text
@@ -2372,6 +2378,7 @@ class TestProjectsPage:
         assert "selector.replaceChildren();" in response.text
         assert "option.textContent = namespace.name;" in response.text
         assert "renderNamespaceSelector();" in response.text
+        assert "document.querySelectorAll('[data-namespace-selector]').forEach(function(selector)" in response.text
 
     def test_namespace_create_redirects_to_edit_page_after_success(self):
         response = client.get("/namespaces/new")
