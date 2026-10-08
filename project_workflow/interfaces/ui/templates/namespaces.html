@@ -2,7 +2,7 @@
 
 {% block title %}Неймспейсы — Workflow Engine{% endblock %}
 {% block header_title %}Неймспейсы{% endblock %}
-{% block header_actions %}{% endblock %}
+{% block header_actions %}{% if not create_mode %}<a class="btn btn-primary" id="namespaceCreateLink" href="/namespaces/new{% if selected_namespace %}?namespace_id={{ selected_namespace.id }}{% endif %}" title="Создать пространство" aria-label="Создать пространство">+ Новое пространство</a>{% endif %}{% endblock %}
 
 {% block extra_style %}
 .namespace-crud{display:grid;grid-template-columns:320px minmax(0,1fr);gap:16px;align-items:start}

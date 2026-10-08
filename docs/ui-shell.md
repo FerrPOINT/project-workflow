@@ -7,9 +7,16 @@ and full-width right work area across authenticated routes. Jinja templates must
 preserve this DOM and behavior contract rather than create route-local shell
 variants or project-local content-width classes.
 
-**Implementation status (2026-09-21):** `base.html` implements the contract at
-desktop, tablet and mobile breakpoints; regression tests pin its geometry,
-drawer semantics and keyboard behavior.
+**Implementation status (2026-10-08):** the global header uses the Base slot
+order: product mark, current service switcher, namespace context, account.
+Page titles and local actions are below it. Theme selection lives in the account
+menu. Mobile namespace selection remains in the navigation drawer.
+
+The browser theme runtime and SSR account primitives are exported from the exact
+Base UI commit in `.base-ui-revision`; `templates/base/fingerprint.json` attests
+the generated assets. The same preference script is consumed by React products.
+`sdlc-ui-theme` is a host-only browser preference, not account data; Cookie Store
+events synchronize open documents and focus/visibility refreshes restore it.
 
 ## Page Geometry
 
@@ -31,8 +38,8 @@ drawer semantics and keyboard behavior.
   context on every private route.
 - The mobile drawer is the same navigation, not a second route menu. It opens
   from the header, traps focus, closes with Escape and restores trigger focus.
-- Theme, services, namespace selection and logout are global header/drawer
-  controls. Route title, breadcrumbs, filters and CRUD actions are page-owned
+- Services, namespace context and account are global header/drawer controls.
+  Theme and logout live only in the account menu. Route title, breadcrumbs, filters and CRUD actions are page-owned
   content below the header; page actions must not make the global header wrap.
 - At narrow widths actions move to a labelled local row below the page header.
 
