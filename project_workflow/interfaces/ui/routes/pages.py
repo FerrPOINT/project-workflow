@@ -11,6 +11,7 @@ from fastapi.responses import HTMLResponse
 from project_workflow.application.phase_service import PhaseService
 from project_workflow.config import get_settings
 from project_workflow.domain.exceptions import ConflictError
+from project_workflow.interfaces.ui.cookies import cookie_name
 from project_workflow.interfaces.ui.helpers import _select_workflow_mode
 from project_workflow.interfaces.ui.platform_services import load_service_catalog
 from project_workflow.interfaces.ui.services import (
@@ -58,7 +59,9 @@ def _namespace_context(
     query_namespace_id, invalid_query_namespace_id = _parse_query_namespace_id(
         request.query_params.get("namespace_id")
     )
-    cookie_namespace_id = _parse_positive_int(request.cookies.get(NAMESPACE_COOKIE))
+    settings = get_settings()
+    namespace_cookie_name = cookie_name(settings, NAMESPACE_COOKIE)
+    cookie_namespace_id = _parse_positive_int(request.cookies.get(namespace_cookie_name))
     explicit_namespace_id = preferred_namespace_id if preferred_namespace_id is not None else query_namespace_id
     selected_id = (
         None
@@ -80,6 +83,8 @@ def _namespace_context(
         "page": page,
         "ui_port": get_settings().UI_PORT,
         "namespaces": namespaces,
+        "namespace_cookie_name": namespace_cookie_name,
+        "namespace_cookie_secure": settings.AUTH_COOKIE_SECURE,
         "selected_namespace": selected_namespace,
         "invalid_query_namespace_id": invalid_query_namespace_id,
         "missing_namespace_id": missing_namespace_id,
@@ -105,7 +110,8 @@ def _template_response(
     selected_namespace = context.get("selected_namespace")
     selected_id = selected_namespace.get("id") if isinstance(selected_namespace, dict) else None
     if isinstance(selected_id, int):
-        response.set_cookie(NAMESPACE_COOKIE, str(selected_id), samesite="lax")
+        response.set_cookie(context["namespace_cookie_name"], str(selected_id), samesite="lax",
+                            secure=context["namespace_cookie_secure"])
     return response
 
 
@@ -440,7 +446,7 @@ async def phases_page(request: Request) -> HTMLResponse:
         selected_namespace.get("workflow_id") if isinstance(selected_namespace, dict) else None
     )
     has_explicit_namespace = request.query_params.get("namespace_id") is not None
-    cookie_namespace_id = _parse_positive_int(request.cookies.get(NAMESPACE_COOKIE))
+    cookie_namespace_id = _parse_positive_int(request.cookies.get(context["namespace_cookie_name"]))
     has_cookie_namespace = (
         request.query_params.get("namespace_id") is None
         and isinstance(cookie_namespace_id, int)

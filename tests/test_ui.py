@@ -2256,7 +2256,7 @@ class TestProjectsPage:
         assert response.status_code == 200
         assert "function rememberNamespaceSelection(id, historyMode)" in response.text
         assert (
-            "document.cookie='workflow_namespace_id='+encodeURIComponent(id)+'; path=/; SameSite=Lax';"
+            'document.cookie="workflow_namespace_id"+\'=\'+encodeURIComponent(id)+\'; path=/; SameSite=Lax\';'
             in response.text
         )
         assert "if(selector){ selector.value = String(id); }" in response.text

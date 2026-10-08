@@ -198,6 +198,23 @@ Compose перезапускайте API с тем же набором `-f`, с 
 bridge `/internal/runtime/*` не использует browser SSO и защищается только
 собственными role tokens.
 
+В центральном режиме cookie с префиксами `workflow_sso`, `workflow_oidc_state`
+и `workflow_namespace_id` получают SHA-256-суффикс из настроенных публичных
+`AUTH_ISSUER` и `AUTH_PUBLIC_ORIGIN`. Cookie не разделяются по портам браузером,
+поэтому это сохраняет независимые входы и выбранные неймспейсы двух локальных
+стендов. Внутренний адрес Auth и заголовок `Host` не меняют суффикс.
+Чтение, серверная запись, JS-selector и очистка используют одно имя; cookie
+SSO остаются HttpOnly, а namespace-cookie доступна selector JS. `Secure` и
+`SameSite=Lax` сохраняются при записи и удалении.
+
+После обновления старые cookie без суффикса в центральном режиме не читаются
+и не удаляются: пользователь повторяет переход через Central Auth, используя
+свою действующую центральную сессию. Незавершённый старый callback надо начать
+заново. При изменении issuer/origin также требуется новый переход SSO.
+В standalone-режиме без issuer имя namespace-cookie остаётся прежним.
+Это разделение состояния, не изоляция недоверенных приложений на одном host:
+для такого контура нужны отдельные домены.
+
 ## 📌 Snapshot
 
 | Поле | Значение |
@@ -207,7 +224,7 @@ bridge `/internal/runtime/*` не использует browser SSO и защищ
 | Docker UI/API | `http://127.0.0.1:8812` |
 | App/systemd port | `8811` внутри приложения |
 | CLI selector | `PROJECT_WORKFLOW_NAMESPACE_ID` |
-| UI selector | cookie `workflow_namespace_id`, query override `?namespace_id=` |
+| UI selector | cookie с префиксом `workflow_namespace_id` (в SSO с суффиксом), query override `?namespace_id=` |
 | License | FerrPOINT Proprietary Source-Available Evaluation License v1.0 |
 
 <a name="capabilities"></a>
@@ -252,7 +269,7 @@ bridge `/internal/runtime/*` не использует browser SSO и защищ
 | Icon и theme color | Стилизация header, dashboard и task-detail |
 | Custom CLI command | Пользовательская wrapper-команда, например `workflow-qa` |
 
-Верхний UI selector переключает logo/name, accent color, dashboard, task list, task detail и `/phases`. Выбранный entrypoint хранится в cookie `workflow_namespace_id`; `?namespace_id=` имеет приоритет над cookie.
+Верхний UI selector переключает logo/name, accent color, dashboard, task list, task detail и `/phases`. Выбранный entrypoint хранится в cookie с префиксом `workflow_namespace_id` (в SSO с суффиксом issuer/origin); `?namespace_id=` имеет приоритет над cookie.
 
 Канонический API: `/api/namespaces`; старые UI/API alias-роуты не входят в публичную поверхность.
 
