@@ -15,6 +15,8 @@
 - Standalone-режим: репозиторий собирается и запускается без соседнего `services-base` (убраны extra `cli-platform`, uv source, Docker additional_context и CI checkout). Token-режим CLI без `sdlc-cli-core` выдаёт понятную ошибку; запуск без `AUTH_ISSUER` работает без авторизации.
 
 ### Fixed
+- Base binding OpenAPI keeps its published 422 description independent of the
+  Python standard library status phrase; validation status and DTO are unchanged.
 - Explicit Base catalog adoption validates all v2 roles before appending v3,
   preserves historical mode/phase IDs and assignments, and checks the exact
   active version. Default startup and trusted-owner execution guards are unchanged.

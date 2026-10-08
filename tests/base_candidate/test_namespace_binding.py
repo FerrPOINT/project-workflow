@@ -1,6 +1,7 @@
 """Actual persisted namespace/profile observation, not source symbols or execution ACK."""
 
 import hashlib
+import http.client
 import json
 import os
 import time
@@ -356,6 +357,12 @@ def test_generated_binding_openapi_matches_snapshot_and_exact_dto():
     assert set(generated["paths"]) == {f"{PATH}/{{namespace_id}}"}
     assert generated["paths"][f"{PATH}/{{namespace_id}}"]['get']["responses"]["422"]["content"][
         "application/json"]["schema"] == {"$ref": "#/components/schemas/BaseBindingInvalidRequest"}
+
+
+@pytest.mark.parametrize("phrase", ["Unprocessable Entity", "Unprocessable Content"])
+def test_binding_openapi_does_not_depend_on_python_status_phrase(monkeypatch, phrase):
+    monkeypatch.setitem(http.client.responses, 422, phrase)
+    assert base_binding_openapi() == json.loads(OUTPUT.read_text(encoding="utf-8"))
 
 
 @pytest.mark.skipif(not os.environ.get("WORKFLOW_BASE_PACKAGE_TEST_ROOT"), reason="Private package is explicit opt-in")
