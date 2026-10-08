@@ -37,6 +37,27 @@ try {
       assert.equal(await page.locator('#burgerBtn').getAttribute('aria-expanded'), 'false');
     }
   }
+  if (process.argv.includes('--owned-fixture')) {
+    const initial = await (await page.request.get(`${baseUrl}/api/namespaces`)).json();
+    assert.deepEqual(initial.namespaces.map(item => item.cli_command).sort(), ['workflow-dev', 'workflow-qa'], 'Mutation tests require the neutral smoke database');
+    const response = await page.request.post(`${baseUrl}/api/namespaces`, { data: {
+      name: 'UI shell owned fixture', cli_command: `workflow-shell-${Date.now()}`, workflow_id: initial.namespaces[0].workflow_id,
+    } });
+    const created = await response.json();
+    assert.ok(response.ok() && created.ok);
+    const id = String(created.namespace_id);
+    await page.goto(`${baseUrl}/namespaces?namespace_id=${id}`);
+    assert.deepEqual(await selectedIds(), [id, id]);
+    await page.locator('#deleteNamespaceButton').click();
+    await page.locator('#confirmDialogAccept').click();
+    await page.waitForFunction(deleted => {
+      const selectors = [...document.querySelectorAll('[data-namespace-selector]')];
+      return selectors.length === 2 && selectors.every(node => node.value !== deleted && ![...node.options].some(option => option.value === deleted));
+    }, id);
+    const remaining = await (await page.request.get(`${baseUrl}/api/namespaces`)).json();
+    assert.deepEqual(remaining.namespaces.map(item => item.id).sort(), initial.namespaces.map(item => item.id).sort());
+    console.log('PASS: owned empty-namespace deletion removes both selector options and preserves neighboring fixtures');
+  }
   console.log('PASS: namespace selection/history/reload and service menu 320/375/767/768/1920/2560');
 } finally {
   await browser.close();

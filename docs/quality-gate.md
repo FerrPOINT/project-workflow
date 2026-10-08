@@ -88,6 +88,9 @@ PostgreSQL, integration gate можно запускать с `PGPORT`, указ
 Это project-owned automated Playwright runner: два namespace selectors,
 history/reload, service popover на 320/375/767/768/1920/2560 и mobile drawer.
 Ручная визуальная приёмка использует Codex in-app Browser.
+На нейтральном smoke-каталоге `workflow-dev` / `workflow-qa` флаг
+`--owned-fixture` дополнительно создаёт и удаляет только собственное пустое
+пространство и проверяет оба selector после удаления; исходные записи сохраняются.
 
 После любых изменений UI/templates/static JS:
 
