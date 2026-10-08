@@ -1,13 +1,15 @@
+{% import "base/macros.html" as base_ui %}
 {% set active_namespace = theme_namespace if theme_namespace is defined else none %}
 {% set active_namespace_id = active_namespace.id if active_namespace else none %}
 {% set accent_text = active_namespace.theme_color | accent_foreground if active_namespace else none %}
 <!DOCTYPE html>
-<html lang="ru" data-theme="dark"{% if active_namespace %} style="--accent:{{ active_namespace.theme_color }};--accent-hover:{{ active_namespace.theme_color }};--accent-soft:{{ active_namespace.theme_color }}26;--accent-foreground:{{ accent_text }};--accent-hover-foreground:{{ accent_text }}"{% endif %}>
+<html lang="ru" data-theme="dark" data-theme-storage-key="workflow-theme"{% if active_namespace %} style="--accent:{{ active_namespace.theme_color }};--accent-hover:{{ active_namespace.theme_color }};--accent-soft:{{ active_namespace.theme_color }}26;--accent-foreground:{{ accent_text }};--accent-hover-foreground:{{ accent_text }}"{% endif %}>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{% block title %}Workflow Engine{% endblock %}</title>
-<script>try{var savedTheme=localStorage.getItem('workflow-theme');if(['dark','gray','light'].includes(savedTheme)){document.documentElement.dataset.theme=savedTheme}}catch(_error){}</script>
+<script>{% include "base/theme-preference.js" %}
+document.documentElement.dataset.theme=window.SdlcThemePreference.read("workflow-theme");</script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 :root{
@@ -49,14 +51,14 @@ html{scrollbar-width:thin;scrollbar-color:var(--surface-active) transparent}
 ::-webkit-scrollbar-corner{background:transparent}
 /* Скроллящиеся области приложения наследуют тот же стиль */
 *{scrollbar-width:thin;scrollbar-color:var(--surface-active) transparent}
-body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,-apple-system,sans-serif;line-height:1.5;font-size:14px;min-height:100vh;display:flex;overflow-x:hidden}
+body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,-apple-system,sans-serif;line-height:1.5;font-size:14px;min-height:100vh;overflow-x:hidden}
 a{color:var(--accent-readable);text-decoration:none}a:hover{text-decoration:underline}
 button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid var(--accent-hover);outline-offset:2px}
 
 /* ── Sidebar (desktop fixed) ────────────────────────────────────────── */
 .sidebar{
   width:var(--sidebar-width);background:var(--panel);border-right:1px solid var(--border);
-  display:flex;flex-direction:column;position:fixed;height:100vh;z-index:100;
+  display:flex;flex-direction:column;position:fixed;top:var(--header-height);height:calc(100dvh - var(--header-height));z-index:20;
   transition:transform .25s ease;
 }
 .sidebar-header{height:var(--header-height);padding:0 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex:0 0 auto}
@@ -284,7 +286,7 @@ textarea{resize:vertical;min-height:60px}
   .header .header-logout{display:none}
 }
 @media(max-width:767px){
-  .header{flex-wrap:wrap;align-items:flex-start;height:auto;min-height:var(--header-height);row-gap:8px;padding-block:8px}
+  .header{flex-wrap:nowrap;align-items:center;height:var(--header-height)}
   .header-actions{width:auto;flex:1;min-width:0;gap:6px;flex-wrap:wrap;justify-content:flex-end}
   .namespace-select{width:150px;max-width:42vw}
 }
@@ -310,8 +312,22 @@ textarea{resize:vertical;min-height:60px}
 .side-nav-scroll > *{scroll-snap-align:start}
 
 /* ── Kanban ───────────────────────────────────────────────────────── */
+
+.mobile-drawer-title{display:none}
+.main{min-height:calc(100dvh - var(--header-height))}
+.page-header{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:20px}
+.page-header h1{font-size:24px;font-weight:650;line-height:1.3}
+.page-actions:empty,.page-header:has(.page-actions:empty):has(h1:empty){display:none}
+.page-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.platform-header .service-menu summary{border:0;background:transparent;font-size:14px;padding-inline:8px}
+.platform-header .service-menu summary>span:first-of-type{max-width:160px;overflow:hidden;text-overflow:ellipsis}
+.platform-header .namespace-select{max-width:220px;width:100%;min-width:0}
+.platform-header-context .namespace-switcher{min-width:0;width:min(220px,100%)}
+@media(max-width:767px){.sidebar{z-index:100;top:0;height:100dvh}.mobile-drawer-title{display:flex}.platform-header .platform-header-context{display:none}.sidebar-utilities{display:block;padding:12px 20px}.sidebar-utilities label{display:block;margin-bottom:8px}.sidebar-utilities .namespace-select{width:100%;max-width:none}.platform-header .service-menu summary>span:first-of-type{max-width:140px}.page-header h1{font-size:22px}}
+
 {% block extra_style %}{% endblock %}
 </style>
+<style>{% include "base/base-ui.css" %}</style>
 </head>
 <body>
 
@@ -320,22 +336,7 @@ textarea{resize:vertical;min-height:60px}
 
 <!-- Sidebar -->
 <aside class="sidebar" id="sidebar">
-  <div class="sidebar-header">
-    <div class="sidebar-logo">
-      <a class="brand-link" href="/" aria-label="Workflow Engine">
-        <span class="brand-mark" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="{{ project_icon_path(active_namespace.theme_icon if active_namespace else default_project_icon) }}"></path>
-          </svg>
-        </span>
-        <span class="brand-text">
-          <span class="brand-name">{{ active_namespace.name if active_namespace else 'workflow' }}</span>
-          <span class="brand-subname">{{ active_namespace.cli_command if active_namespace and active_namespace.cli_command else 'engine' }}</span>
-        </span>
-      </a>
-    </div>
-    <button class="sidebar-close" type="button" aria-label="Закрыть навигацию" onclick="closeSidebar()">×</button>
-  </div>
+  <div class="sidebar-header mobile-drawer-title"><strong>Project Workflow</strong><button class="sidebar-close" onclick="closeSidebar()" aria-label="Закрыть навигацию">&times;</button></div>
   <nav class="sidebar-nav" aria-label="Основная навигация">
     <a class="sidebar-link {% if page == 'namespace' %}active{% endif %}" href="/namespaces" aria-label="Неймспейсы" title="Неймспейсы" {% if page == 'namespace' %}aria-current="page"{% endif %}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h18"/><path d="M5 7V5a2 2 0 0 1 2-2h3"/><path d="M19 7v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7"/><path d="M9 12h6"/><path d="M9 16h4"/></svg>
@@ -368,50 +369,31 @@ textarea{resize:vertical;min-height:60px}
       <span class="sidebar-label">Команды CLI</span>
     </a>
     <div class="sidebar-utilities">
-      <div class="sidebar-section">ПЛАТФОРМА</div>
-      <div class="sidebar-theme">
-        <label for="sidebarThemeSelector">Тема</label>
-        <select class="theme-select" id="sidebarThemeSelector" onchange="setPlatformTheme(this.value)">
-          <option value="dark">Тёмная</option>
-          <option value="gray">Серая</option>
-          <option value="light">Светлая</option>
-        </select>
-      </div>
-      <details class="sidebar-service-menu">
-        <summary class="sidebar-link"><span class="sidebar-label">Сервисы</span></summary>
-        <div class="sidebar-service-links">
-          {% for service in other_services %}
-          <a class="sidebar-service-link" href="{{ '/' if service.key == 'project-workflow' else service.url }}" {% if service.key == 'project-workflow' %}aria-current="page"{% endif %}>
-            <span class="service-health {{ service.health }}" role="img" aria-label="{% if service.health == 'healthy' %}Работает{% elif service.health == 'unreachable' %}Недоступен{% else %}Состояние неизвестно{% endif %}"></span>
-            <span>{{ service.label }}</span>
-          </a>
-          {% endfor %}
-        </div>
-      </details>
+      {% if namespaces is defined and namespaces %}
+      <label for="mobileNamespaceSelector">Пространство</label>
+      <select id="mobileNamespaceSelector" class="namespace-select" onchange="switchNamespace(this.value)">
+        {% for namespace in namespaces %}<option value="{{ namespace.id }}" {% if active_namespace_id == namespace.id %}selected{% endif %}>{{ namespace.name }}</option>{% endfor %}
+      </select>
+      {% endif %}
     </div>
     </nav>
     <div class="sidebar-footer">
     <span class="dot green"></span>
     <span class="sidebar-status-label">Сервис работает</span>
-    <a class="sidebar-logout" href="/logout">Выйти</a>
+
     </div>
 </aside>
 
 <!-- Main -->
-<main class="main">
-  <header class="header">
-    <div class="header-title-group">
-      <button class="burger" id="burgerBtn" type="button" aria-label="Открыть навигацию" aria-controls="sidebar" aria-expanded="false" onclick="openSidebar()">☰</button>
-      <h1 class="header-title">{% block header_title %}{% endblock %}</h1>
-    </div>
-    <div class="header-actions">
-      <select class="theme-select" id="themeSelector" aria-label="Тема" onchange="setPlatformTheme(this.value)">
-        <option value="dark">Тёмная</option>
-        <option value="gray">Серая</option>
-        <option value="light">Светлая</option>
-      </select>
+<header class="platform-header" data-platform-header>
+  <div class="platform-header-leading" data-platform-header-slot="leading">
+    <button class="burger" id="burgerBtn" onclick="openSidebar()" aria-label="Открыть навигацию" aria-controls="sidebar" aria-expanded="false">☰</button>
+    <a class="brand-link" href="/" aria-label="Project Workflow" title="Project Workflow"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="{{ project_icon_path(default_project_icon) }}"></path></svg></span></a>
+  </div>
+  <div class="platform-header-services" data-platform-header-slot="services">
       <details class="service-menu" id="serviceMenu">
-        <summary aria-label="Открыть список сервисов платформы">Сервисы <span class="service-menu-chevron" aria-hidden="true">▾</span></summary>
+        {% set current_service = other_services | selectattr('key', 'equalto', 'project-workflow') | first %}
+        <summary aria-label="Открыть список сервисов платформы"><span>{{ current_service.label if current_service else 'Project Workflow' }}</span><span class="service-menu-chevron" aria-hidden="true">▾</span></summary>
         <div class="service-menu-popover">
           <div role="menu" aria-label="Сервисы платформы">
         {% for service in other_services %}
@@ -426,6 +408,8 @@ textarea{resize:vertical;min-height:60px}
           <div class="service-menu-source" role="status">Источник: {{ 'каталог' if catalog_source == 'runtime' else 'резервный список' if catalog_source.startswith('fallback') else 'сохранённый каталог' }}</div>
         </div>
       </details>
+  </div>
+  <div class="platform-header-context" data-platform-header-slot="context">
       {% if namespaces is defined and namespaces %}
       <div class="namespace-switcher">
         <select class="namespace-select" id="namespaceSelector" aria-label="Выбор пространства" onchange="switchNamespace(this.value)">
@@ -433,19 +417,22 @@ textarea{resize:vertical;min-height:60px}
           <option value="{{ namespace.id }}" {% if active_namespace_id == namespace.id %}selected{% endif %}>{{ namespace.name }}</option>
           {% endfor %}
         </select>
-        <a class="namespace-icon-action" id="namespaceCreateLink" href="/namespaces/new{% if active_namespace_id %}?namespace_id={{ active_namespace_id }}{% endif %}" title="Создать пространство" aria-label="Создать пространство">+</a>
-        <a class="namespace-icon-action" id="namespaceEditLink" href="/namespaces{% if active_namespace_id %}?namespace_id={{ active_namespace_id }}{% endif %}" title="Редактировать пространство" aria-label="Редактировать пространство">✎</a>
       </div>
       {% endif %}
-      {% block header_actions %}{% endblock %}
-      <a class="btn btn-secondary header-logout" href="/logout">Выйти</a>
-    </div>
-  </header>
+  </div>
+  <div class="platform-header-actions" data-platform-header-slot="actions">{{ base_ui.account() }}</div>
+</header>
+<main class="main">
+
 
   {% set layout_mode %}{% block page_layout %}wide{% endblock %}{% endset %}
   {% set layout_mode = layout_mode | trim %}
   <div class="container page-frame">
     <div class="{% if layout_mode == 'reading' %}page-readable{% elif layout_mode == 'detail-with-aside' %}page-detail{% else %}page-wide{% endif %}" data-page-layout="{{ layout_mode }}">
+      <div class="page-header">
+        {% block page_heading %}<h1 class="header-title">{% block header_title %}{% endblock %}</h1>{% endblock %}
+        <div class="page-actions">{% block header_actions %}{% endblock %}</div>
+      </div>
       {% block content %}{% endblock %}
     </div>
   </div>
@@ -490,6 +477,7 @@ function syncSidebarLayout(){
   }
   sidebar.inert=dialogOpen||(mobile&&!sidebar.classList.contains('open'));
   main.inert=dialogOpen||(mobile&&sidebar.classList.contains('open'));
+  document.querySelector('[data-platform-header]').inert=main.inert;
 }
 function openSidebar(){
   document.getElementById('sidebar').classList.add('open');
@@ -554,7 +542,7 @@ function requestConfirmation(options){
   var cancel = document.getElementById('confirmDialogCancel');
   var accept = document.getElementById('confirmDialogAccept');
   var trigger = document.activeElement;
-  var background = [document.querySelector('.sidebar'), document.querySelector('.main')];
+  var background = [document.querySelector('.sidebar'), document.querySelector('.main'), document.querySelector('[data-platform-header]')];
   var previousInert = background.map(function(element){ return element.inert; });
   document.getElementById('confirmDialogEyebrow').textContent = options.eyebrow || 'Подтверждение';
   document.getElementById('confirmDialogTitle').textContent = options.title || 'Подтвердите действие';
@@ -600,7 +588,7 @@ function requestConfirmation(options){
 }
 function switchNamespace(namespaceId){
   if(!namespaceId){return;}
-  document.cookie='workflow_namespace_id='+encodeURIComponent(namespaceId)+'; path=/; SameSite=Lax';
+  document.cookie={{ namespace_cookie_name | tojson }}+'='+encodeURIComponent(namespaceId)+'; path=/; SameSite=Lax'{% if namespace_cookie_secure %}+'; Secure'{% endif %};
   var url=new URL(window.location.href);
   if(url.pathname === '/phases'){
     url.searchParams.delete('workflow_id');
@@ -620,18 +608,6 @@ function switchNamespace(namespaceId){
   url.searchParams.set('namespace_id', namespaceId);
   window.location.href=url.toString();
 }
-function setPlatformTheme(theme){
-  if(!['dark','gray','light'].includes(theme)){return;}
-  document.documentElement.dataset.theme=theme;
-  document.querySelectorAll('.theme-select').forEach(function(select){select.value=theme;});
-  try{localStorage.setItem('workflow-theme',theme)}catch(_error){}
-}
-try{
-  var savedTheme=localStorage.getItem('workflow-theme');
-  if(['dark','gray','light'].includes(savedTheme)){
-    document.querySelectorAll('.theme-select').forEach(function(select){select.value=savedTheme;});
-  }
-}catch(_error){}
 function pluralizeRu(n, one, few, many){
   if(n % 10 === 1 && n % 100 !== 11){ return n + ' ' + one; }
   if(n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20)){ return n + ' ' + few; }
@@ -639,5 +615,6 @@ function pluralizeRu(n, one, few, many){
 }
 {% block extra_script %}{% endblock %}
 </script>
+<script>{% include "base/base-ui.js" %}</script>
 </body>
 </html>

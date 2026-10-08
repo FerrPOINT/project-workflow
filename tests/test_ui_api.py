@@ -192,7 +192,8 @@ class TestIndex:
         resp = client.get("/")
         assert resp.status_code == 200
         assert 'id="namespaceSelector"' in resp.text
-        assert 'href="/namespaces/new' in resp.text
+        assert 'href="/namespaces/new' not in resp.text
+        assert 'class="base-ssr-account"' in resp.text
         assert 'href="/namespaces' in resp.text
         assert "Неймспейсы" in resp.text
 

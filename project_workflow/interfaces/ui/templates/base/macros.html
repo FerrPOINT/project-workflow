@@ -1,0 +1,55 @@
+{% macro page_header(title, context=none, actions=none) -%}
+<div class="base-page-header"><div><h1 class="base-page-title">{{ title }}</h1>{% if context %}<p>{{ context }}</p>{% endif %}</div>{% if actions %}<div class="base-page-actions">{{ actions }}</div>{% endif %}</div>
+{%- endmacro %}
+
+{% macro frame(mode='wide') -%}
+<div class="page-frame"><div class="{% if mode == 'reading' %}page-readable{% elif mode == 'detail-with-aside' %}page-detail{% else %}page-wide{% endif %}" data-page-layout="{{ mode }}">{{ caller() }}</div></div>
+{%- endmacro %}
+
+{% macro sidebar() -%}
+<aside class="sidebar base-shell-sidebar" id="sidebar">{{ caller() }}</aside>
+{%- endmacro %}
+
+{% macro header() -%}
+<header class="header base-ssr-header">{{ caller() }}</header>
+{%- endmacro %}
+
+{% macro account(logout='/logout') -%}
+<details class="base-ssr-account"><summary aria-label="Аккаунт" title="Аккаунт"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 22v-2a8 8 0 0 1 16 0v2"/></svg></summary><div class="base-ssr-account-menu"><fieldset class="base-ssr-theme"><legend>Тема</legend>{% for value, label in [('light', 'Светлая'), ('dark', 'Тёмная'), ('gray', 'Серая')] %}<label><input type="radio" name="platform-theme" value="{{ value }}" data-base-theme-option> {{ label }}</label>{% endfor %}</fieldset><a href="{{ logout }}">Выйти</a></div></details>
+{%- endmacro %}
+
+{% macro navigation_drawer(title) -%}
+<dialog id="base-mobile-navigation" class="base-shell-drawer" data-base-drawer aria-labelledby="base-drawer-title"><div class="base-shell-drawer-title"><h2 id="base-drawer-title">{{ title }}</h2><button type="button" class="base-control base-icon-control base-drawer-close" data-base-drawer-close aria-label="Закрыть навигацию" title="Закрыть навигацию">&times;</button></div><div class="base-shell-navigation-scroll">{{ caller() }}</div></dialog>
+{%- endmacro %}
+
+{% macro field(id, label, hint=none, error=none, required=false) -%}
+<div class="base-form-field"><label for="{{ id }}">{{ label }}{% if required %}<span aria-hidden="true"> *</span>{% endif %}</label>{{ caller() }}{% if hint %}<p id="{{ id }}-hint">{{ hint }}</p>{% endif %}{% if error %}<p role="alert" id="{{ id }}-error">{{ error }}</p>{% endif %}</div>
+{%- endmacro %}
+
+{% macro input_control(id, name, value='', type='text', required=false, hint=none, error=none, disabled=false, min=none, max=none, step=none, autocomplete=none) -%}
+<input class="base-control" id="{{ id }}" name="{{ name }}" type="{{ type }}" value="{{ value }}"{% if required %} required{% endif %}{% if disabled %} disabled{% endif %}{% if error %} aria-invalid="true"{% endif %}{% if hint or error %} aria-describedby="{% if hint %}{{ id }}-hint{% endif %}{% if hint and error %} {% endif %}{% if error %}{{ id }}-error{% endif %}"{% endif %}{% if min is not none %} min="{{ min }}"{% endif %}{% if max is not none %} max="{{ max }}"{% endif %}{% if step is not none %} step="{{ step }}"{% endif %}{% if autocomplete %} autocomplete="{{ autocomplete }}"{% endif %}>
+{%- endmacro %}
+
+{% macro select_control(id, name, required=false, hint=none, error=none, disabled=false) -%}
+<select class="base-control" id="{{ id }}" name="{{ name }}"{% if required %} required{% endif %}{% if disabled %} disabled{% endif %}{% if error %} aria-invalid="true"{% endif %}{% if hint or error %} aria-describedby="{% if hint %}{{ id }}-hint{% endif %}{% if hint and error %} {% endif %}{% if error %}{{ id }}-error{% endif %}"{% endif %}>{{ caller() }}</select>
+{%- endmacro %}
+
+{% macro textarea_control(id, name, value='', required=false, hint=none, error=none, disabled=false, rows=4) -%}
+<textarea class="base-control" id="{{ id }}" name="{{ name }}" rows="{{ rows }}"{% if required %} required{% endif %}{% if disabled %} disabled{% endif %}{% if error %} aria-invalid="true"{% endif %}{% if hint or error %} aria-describedby="{% if hint %}{{ id }}-hint{% endif %}{% if hint and error %} {% endif %}{% if error %}{{ id }}-error{% endif %}"{% endif %}>{{ value }}</textarea>
+{%- endmacro %}
+
+{% macro button(label, id=none, type='button', variant='secondary', disabled=false, pending=false) -%}
+<button class="base-control base-button base-button-{{ variant }}" type="{{ type }}"{% if id %} id="{{ id }}"{% endif %}{% if disabled or pending %} disabled{% endif %}{% if pending %} aria-busy="true"{% endif %}>{{ label }}</button>
+{%- endmacro %}
+
+{% macro state(kind, message, retry_url=none, retry_label='Повторить') -%}
+<section class="base-resource-state" data-page-state="{{ kind }}" {% if kind in ['error', 'partial-error'] %}role="alert"{% else %}role="status"{% endif %}{% if kind == 'loading' %} aria-busy="true"{% endif %}><p>{{ message }}</p>{% if retry_url and kind in ['error', 'partial-error'] %}<a class="base-control base-button base-button-secondary" href="{{ retry_url }}">{{ retry_label }}</a>{% endif %}</section>
+{%- endmacro %}
+
+{% macro nav(items, current_path) -%}
+<nav aria-label="Основная навигация" class="base-shell-navigation">{% for item in items %}<a class="base-shell-link{% if current_path == item.href %} is-active{% endif %}" href="{{ item.href }}"{% if current_path == item.href %} aria-current="page"{% endif %}>{{ item.label }}</a>{% endfor %}</nav>
+{%- endmacro %}
+
+{% macro drawer(title, items, current_path) -%}
+<button type="button" class="base-control base-icon-control base-shell-drawer-trigger" data-base-drawer-trigger aria-expanded="false" aria-controls="base-mobile-navigation">Меню</button><dialog id="base-mobile-navigation" class="base-shell-drawer" data-base-drawer aria-labelledby="base-drawer-title"><div class="base-shell-drawer-title"><h2 id="base-drawer-title">{{ title }}</h2><button type="button" class="base-control" data-base-drawer-close aria-label="Закрыть навигацию">Закрыть</button></div><div class="base-shell-navigation-scroll">{{ nav(items, current_path) }}</div></dialog>
+{%- endmacro %}

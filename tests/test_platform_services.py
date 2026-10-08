@@ -264,6 +264,7 @@ def test_rendered_switcher_uses_current_runtime_health_without_duplicate(monkeyp
     catalog = load_service_catalog("http://admin/api")
     html = templates.get_template("base.html").render(
         page="tasks", other_services=catalog.services, services_source=catalog.source,
+        namespace_cookie_name="workflow_namespace_id", namespace_cookie_secure=False,
     )
     menu = html.split('id="serviceMenu"', 1)[1].split("</details>", 1)[0]
     assert menu.count('aria-current="page"') == 1
