@@ -39,3 +39,6 @@
 
 ### Removed
 - Мобильные галереи и auth-скриншоты из README — desktop-only evidence standard.
+- Explicit Base control-plane image variant закрепляет private Base package
+  и candidate 7/11/33 без подключения legacy execution bridge. Default каталог
+  прежних installations остаётся неизменным; автономное исполнение не включено.
