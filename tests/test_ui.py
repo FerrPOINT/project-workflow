@@ -4,6 +4,7 @@ import json
 import re
 import sqlite3
 import uuid
+from html.parser import HTMLParser
 from pathlib import Path
 from unittest.mock import patch
 
@@ -1942,6 +1943,44 @@ class TestTaskDetail:
         assert response.status_code == 200
         assert "История фаз" in response.text
 
+    def test_task_detail_phase_numbers_have_accessible_text_without_prohibited_labels(self):
+        class PhaseNumbers(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.numbers = []
+                self.depth = 0
+                self.text = ""
+
+            def handle_starttag(self, tag, attrs):
+                if tag != "span":
+                    return
+                if self.depth:
+                    self.depth += 1
+                elif "phase-sequence" in dict(attrs).get("class", "").split():
+                    assert "aria-label" not in dict(attrs)
+                    assert "aria-hidden" not in dict(attrs)
+                    self.depth = 1
+                    self.text = ""
+
+            def handle_data(self, data):
+                if self.depth:
+                    self.text += data
+
+            def handle_endtag(self, tag):
+                if tag == "span" and self.depth:
+                    self.depth -= 1
+                    if not self.depth:
+                        self.numbers.append(self.text.strip())
+
+        response = client.get(f"/task/RUN-247?namespace_id={self._default_namespace_id()}")
+        assert response.status_code == 200
+        parser = PhaseNumbers()
+        parser.feed(response.text)
+        assert parser.numbers
+        assert all(re.fullmatch(r"Фаза \d+", number) for number in parser.numbers)
+        template = (TEMPLATES_DIR / "task_detail.html").read_text(encoding="utf-8")
+        assert template.count('<span class="phase-sequence-label">Фаза </span>') == 2
+
     def test_task_detail_rejects_unknown_query_namespace_without_fallback(self):
         response = client.get(f"/task/RUN-247?namespace_id={UNKNOWN_NAMESPACE_ID}")
         assert response.status_code == 404
@@ -2010,6 +2049,29 @@ class TestTaskDetail:
         assert ".verdict-blocked{color:var(--text);background:var(--red-soft)}" in response.text
         assert ".verdict-chip.verdict-blocked{border-color:var(--red)}" in response.text
         assert ".chip.blocked,.verdict-blocked{color:var(--red)" not in response.text
+
+    def test_task_detail_partial_verdict_uses_readable_text_and_semantic_border(self):
+        response = client.get(f"/task/RUN-247?namespace_id={self._default_namespace_id()}")
+
+        assert response.status_code == 200
+        assert ".verdict-partial{color:var(--text);background:var(--yellow-soft)}" in response.text
+        assert ".verdict-chip.verdict-partial{border-color:var(--yellow)}" in response.text
+        assert ".verdict-partial{color:var(--yellow)" not in response.text
+
+    def test_task_detail_blocked_status_uses_readable_text_and_semantic_border(self):
+        response = client.get(f"/task/RUN-247?namespace_id={self._default_namespace_id()}")
+
+        assert response.status_code == 200
+        assert ".chip.blocked{color:var(--text);background:var(--red-soft);border-color:var(--red)}" in response.text
+        assert ".chip.blocked{color:var(--red)" not in response.text
+
+    def test_task_detail_blockers_use_readable_text_and_keep_red_marker(self):
+        response = client.get(f"/task/RUN-247?namespace_id={self._default_namespace_id()}")
+
+        assert response.status_code == 200
+        assert ".result-list.blockers li{color:var(--text-secondary)}" in response.text
+        assert ".check-card.blocked{border-top-color:var(--red)}" in response.text
+        assert ".result-list.blockers li{color:var(--red)}" not in response.text
 
     def test_task_detail_mobile_navigation_keeps_links_accessible(self):
         namespace_id = self._default_namespace_id()
