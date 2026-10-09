@@ -2,7 +2,7 @@
 
 {% block title %}Неймспейсы — Workflow Engine{% endblock %}
 {% block header_title %}Неймспейсы{% endblock %}
-{% block header_actions %}{% endblock %}
+{% block header_actions %}{% if not create_mode %}<a class="btn btn-primary" id="namespaceCreateLink" href="/namespaces/new{% if selected_namespace %}?namespace_id={{ selected_namespace.id }}{% endif %}" title="Создать пространство" aria-label="Создать пространство">+ Новое пространство</a>{% endif %}{% endblock %}
 
 {% block extra_style %}
 .namespace-crud{display:grid;grid-template-columns:320px minmax(0,1fr);gap:16px;align-items:start}
@@ -132,6 +132,7 @@ let previousNamespaceId = {% if create_mode and selected_namespace %}{{ selected
 let namespaceFormMode = selectedNamespaceId == null ? 'create' : 'edit';
 
 function namespaceById(id){ return namespaceStore.find(function(namespace){ return namespace.id === id; }); }
+function namespaceContextLabel(namespace){ return namespace.name + (namespace.workflow_name ? ' · ' + namespace.workflow_name : ''); }
 function workflowNameById(id){ var workflow = workflowStore.find(function(item){ return item.id === id; }); return workflow ? workflow.name : '—'; }
 function namespaceScopedPath(path, id){
   if(id == null){ return path; }
@@ -226,8 +227,7 @@ function syncNamespaceUrl(id, historyMode){
 function rememberNamespaceSelection(id, historyMode){
   if(id == null){ return; }
   document.cookie={{ namespace_cookie_name | tojson }}+'='+encodeURIComponent(id)+'; path=/; SameSite=Lax'{% if namespace_cookie_secure %}+'; Secure'{% endif %};
-  var selector = document.getElementById('namespaceSelector');
-  if(selector){ selector.value = String(id); }
+  document.querySelectorAll('[data-namespace-selector]').forEach(function(selector){ selector.value = String(id); });
   updateNamespaceHeaderLinks(id);
   syncNamespaceUrl(id, historyMode || 'replace');
 }
@@ -410,22 +410,22 @@ function renderNamespacePagePicker(){
   namespaceStore.forEach(function(namespace){
     var option = document.createElement('option');
     option.value = String(namespace.id);
-    option.textContent = namespace.name;
+    option.textContent = namespaceContextLabel(namespace);
     picker.appendChild(option);
   });
 }
 function renderNamespaceSelector(){
-  var selector = document.getElementById('namespaceSelector');
-  if(!selector){ return; }
   var selectorNamespaceId = selectedNamespaceId == null ? previousNamespaceId : selectedNamespaceId;
   updateNamespaceHeaderLinks(selectorNamespaceId);
-  selector.replaceChildren();
-  namespaceStore.forEach(function(namespace){
-    var option = document.createElement('option');
-    option.value = String(namespace.id);
-    option.textContent = namespace.name;
-    option.selected = namespace.id === selectorNamespaceId;
-    selector.appendChild(option);
+  document.querySelectorAll('[data-namespace-selector]').forEach(function(selector){
+    selector.replaceChildren();
+    namespaceStore.forEach(function(namespace){
+      var option = document.createElement('option');
+      option.value = String(namespace.id);
+      option.textContent = namespaceContextLabel(namespace);
+      option.selected = namespace.id === selectorNamespaceId;
+      selector.appendChild(option);
+    });
   });
 }
 function saveNamespace(){

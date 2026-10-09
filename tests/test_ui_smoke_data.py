@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -274,6 +275,10 @@ def test_ui_smoke_pages_render_neutral_screenshot_fixture(tmp_path, monkeypatch)
         config.get_settings.cache_clear()
 
     rendered = "\n".join(rendered_pages)
+    # Framework assets contain platform identifiers, never smoke business data.
+    assets = Path(__file__).parents[1] / "project_workflow/interfaces/ui/templates/base"
+    for asset in ("base-ui.css", "base-ui.js", "theme-preference.js"):
+        rendered = rendered.replace((assets / asset).read_text(encoding="utf-8"), "")
     assert "hermes" not in rendered.casefold()
     assert "project-workflow" not in rendered.casefold()
     assert "relevanter" not in rendered.casefold()

@@ -329,6 +329,11 @@ Wrapper выставляет `PROJECT_WORKFLOW_NAMESPACE_ID=<id>` и вызыв�
 
 ## 🌐 Web UI
 
+Глобальная шапка следует Base: знак продукта и service switcher слева,
+namespace context рядом, меню аккаунта справа. Выбор темы находится внутри
+аккаунта и синхронизируется с другими localhost frontends. SSR artifacts
+закреплены отдельным `.base-ui-revision`; runtime skills pin не меняется.
+
 Docker Compose mode:
 
 ```bash
