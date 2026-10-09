@@ -71,13 +71,14 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .brand-name{font-size:14px;font-weight:700;color:var(--text);max-width:148px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .brand-subname{font-size:11px;font-weight:600;color:var(--text-secondary);max-width:148px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sidebar-close{display:none;background:none;border:none;color:var(--text-muted);font-size:20px;cursor:pointer;padding:0;width:40px;height:40px;align-items:center;justify-content:center}
-.sidebar-nav{flex:1;padding:12px 0;overflow-y:auto;overscroll-behavior:contain}
+.sidebar-nav{flex:1;padding:12px;overflow-y:auto;overscroll-behavior:contain}
 .sidebar-nav:focus-visible{outline:2px solid var(--accent-hover);outline-offset:-2px}
-.sidebar-section{padding:8px 20px;font-size:10px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;margin-top:8px}
-.sidebar-link{display:flex;min-height:44px;align-items:center;gap:10px;padding:8px 20px;color:var(--text-muted);font-size:13px;font-weight:500;transition:all .12s;text-decoration:none;border-left:2px solid transparent}
-.sidebar-cli-icon{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;flex:0 0 16px;font:700 12px/1 'JetBrains Mono',monospace}
+.sidebar-section{padding:8px 12px;font-size:12px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;margin-top:8px}
+.sidebar-link{display:flex;min-height:var(--shell-control-min);align-items:center;gap:12px;padding:8px 12px;color:var(--text-muted);font-size:var(--base-font-body);font-weight:500;transition:background .12s,color .12s;text-decoration:none;border-radius:var(--base-radius)}
+.sidebar-link svg{width:20px;height:20px;flex:0 0 20px}
+.sidebar-cli-icon{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;flex:0 0 20px;font:700 14px/1 'JetBrains Mono',monospace}
 .sidebar-link:hover{color:var(--text);background:var(--surface)}
-.sidebar-link.active{color:var(--text);background:var(--surface-active);border-left-color:var(--accent)}
+.sidebar-link.active{color:var(--text);background:var(--surface-active)}
 .sidebar-link .badge{margin-left:auto;font-size:11px;font-weight:600;padding:1px 6px;border-radius:4px;background:var(--accent-soft);color:var(--accent-readable)}
 .sidebar-footer{min-height:52px;padding:8px 20px;border-top:1px solid var(--border);font-size:12px;color:var(--text-dim);display:flex;align-items:center;gap:8px}
 .sidebar-logout{display:none;min-width:40px;min-height:40px;margin-left:auto;align-items:center;justify-content:center;color:var(--text-secondary);font-weight:600}
@@ -323,13 +324,20 @@ textarea{resize:vertical;min-height:60px}
 .platform-header .service-menu summary>span:first-of-type{max-width:160px;overflow:hidden;text-overflow:ellipsis}
 .platform-header .namespace-select{max-width:220px;width:100%;min-width:0}
 .platform-header-context .namespace-switcher{min-width:0;width:min(220px,100%)}
-@media(max-width:767px){.sidebar{z-index:100;top:0;height:100dvh}.mobile-drawer-title{display:flex}.platform-header .platform-header-context{display:none}.sidebar-utilities{display:block;padding:12px 20px}.sidebar-utilities label{display:block;margin-bottom:8px}.sidebar-utilities .namespace-select{width:100%;max-width:none}.platform-header .service-menu summary>span:first-of-type{max-width:140px}.page-header h1{font-size:22px}}
+.platform-header-context{justify-content:flex-end}
+.service-menu-trigger-icon{display:none}
+@media(max-width:767px){.sidebar{z-index:100;top:0;height:100dvh}.mobile-drawer-title{display:flex}.platform-header .platform-header-context{display:none}.sidebar-utilities{display:block;padding:12px 20px}.sidebar-utilities label{display:block;margin-bottom:8px}.sidebar-utilities .namespace-select{width:100%;max-width:none}.platform-header-leading{flex-shrink:0}.platform-header .service-menu summary{min-width:44px;min-height:44px;justify-content:center}.platform-header .service-menu-trigger-label,.platform-header .service-menu-chevron{display:none}.platform-header .service-menu-trigger-icon{display:block}.platform-header .service-menu-popover{position:fixed;left:12px;right:12px;top:calc(var(--header-height) + 8px);width:auto;max-width:none}.page-header h1{font-size:22px}}
 
 {% block extra_style %}{% endblock %}
 </style>
 <style>{% include "base/base-ui.css" %}</style>
+<style>
+.base-ssr-shell .main{min-height:calc(100dvh - var(--header-height))}
+.base-ssr-shell .mobile-drawer-title{display:none}
+@media(max-width:767px){.base-ssr-shell .mobile-drawer-title{display:flex}}
+</style>
 </head>
-<body>
+<body class="base-ssr-shell">
 
 <!-- Sidebar overlay (mobile) -->
 <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
@@ -371,8 +379,8 @@ textarea{resize:vertical;min-height:60px}
     <div class="sidebar-utilities">
       {% if namespaces is defined and namespaces %}
       <label for="mobileNamespaceSelector">Пространство</label>
-      <select id="mobileNamespaceSelector" class="namespace-select" onchange="switchNamespace(this.value)">
-        {% for namespace in namespaces %}<option value="{{ namespace.id }}" {% if active_namespace_id == namespace.id %}selected{% endif %}>{{ namespace.name }}</option>{% endfor %}
+      <select id="mobileNamespaceSelector" data-namespace-selector class="namespace-select" onchange="switchNamespace(this.value)">
+        {% for namespace in namespaces %}<option value="{{ namespace.id }}" {% if active_namespace_id == namespace.id %}selected{% endif %}>{{ namespace.name }}{% if namespace.workflow_name %} · {{ namespace.workflow_name }}{% endif %}</option>{% endfor %}
       </select>
       {% endif %}
     </div>
@@ -393,7 +401,7 @@ textarea{resize:vertical;min-height:60px}
   <div class="platform-header-services" data-platform-header-slot="services">
       <details class="service-menu" id="serviceMenu">
         {% set current_service = other_services | selectattr('key', 'equalto', 'project-workflow') | first %}
-        <summary aria-label="Открыть список сервисов платформы"><span>{{ current_service.label if current_service else 'Project Workflow' }}</span><span class="service-menu-chevron" aria-hidden="true">▾</span></summary>
+        <summary aria-label="Открыть список сервисов платформы"><svg class="service-menu-trigger-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span class="service-menu-trigger-label">{{ current_service.label if current_service else 'Project Workflow' }}</span><span class="service-menu-chevron" aria-hidden="true">▾</span></summary>
         <div class="service-menu-popover">
           <div role="menu" aria-label="Сервисы платформы">
         {% for service in other_services %}
@@ -412,9 +420,9 @@ textarea{resize:vertical;min-height:60px}
   <div class="platform-header-context" data-platform-header-slot="context">
       {% if namespaces is defined and namespaces %}
       <div class="namespace-switcher">
-        <select class="namespace-select" id="namespaceSelector" aria-label="Выбор пространства" onchange="switchNamespace(this.value)">
+        <select class="namespace-select" id="namespaceSelector" data-namespace-selector aria-label="Выбор пространства" onchange="switchNamespace(this.value)">
           {% for namespace in namespaces %}
-          <option value="{{ namespace.id }}" {% if active_namespace_id == namespace.id %}selected{% endif %}>{{ namespace.name }}</option>
+          <option value="{{ namespace.id }}" {% if active_namespace_id == namespace.id %}selected{% endif %}>{{ namespace.name }}{% if namespace.workflow_name %} · {{ namespace.workflow_name }}{% endif %}</option>
           {% endfor %}
         </select>
       </div>
