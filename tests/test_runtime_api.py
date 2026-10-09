@@ -307,7 +307,7 @@ def test_fleet_catalog_token_cannot_execute_steps_or_read_history(monkeypatch):
     with SAUnitOfWork() as uow:
         ensure_managed_catalog(uow)
 
-    with patch(
+    with TestClient(create_app()) as client, patch(
         "project_workflow.interfaces.ui.routes.api.api_namespaces",
         new=AsyncMock(
             return_value={
@@ -326,7 +326,7 @@ def test_fleet_catalog_token_cannot_execute_steps_or_read_history(monkeypatch):
                 "workflows": [{"key": "legacy:1"}, *managed_workflows],
             }
         ),
-    ), TestClient(create_app()) as client:
+    ):
         catalog = client.get("/internal/runtime/catalog", headers=_headers(catalog_token))
         missing = client.get("/internal/runtime/catalog")
         wrong_role = client.get("/internal/runtime/catalog", headers=_headers(worker_token))
@@ -376,7 +376,7 @@ def test_fleet_catalog_fails_closed_on_partial_managed_inventory(monkeypatch):
     monkeypatch.setenv("PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN", control_token)
     config.get_settings.cache_clear()
 
-    with patch(
+    with TestClient(create_app()) as client, patch(
         "project_workflow.interfaces.ui.routes.api.api_namespaces",
         new=AsyncMock(
             return_value={
@@ -394,7 +394,7 @@ def test_fleet_catalog_fails_closed_on_partial_managed_inventory(monkeypatch):
                 "workflows": [{"key": "hermes-sdlc:project_manager"}],
             }
         ),
-    ), TestClient(create_app()) as client:
+    ):
         response = client.get(
             "/internal/runtime/catalog", headers=_headers(control_token)
         )
