@@ -110,6 +110,8 @@ def _authorized_service_credential(
         return None
     supplied = authorization[len(prefix) :]
     runtime_tokens, assignment_tokens, catalog_token = _token_configuration()
+    if config.CATALOG_VARIANT == "base" and (runtime_tokens or assignment_tokens):
+        raise RuntimeError("Base assigned execution is not enabled; catalog credentials only")
     matches: list[_ServiceCredential] = []
     for role, expected in runtime_tokens.items():
         if hmac.compare_digest(supplied, expected):

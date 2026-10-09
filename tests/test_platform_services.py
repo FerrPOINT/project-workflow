@@ -90,7 +90,8 @@ def test_shell_controls_have_mobile_touch_targets_and_sidebar_focus_management()
 
     assert ".service-menu summary{height:40px" in template
     assert ".namespace-icon-action{width:40px;height:40px" in template
-    assert ".sidebar-link{display:flex;min-height:44px" in template
+    assert ".sidebar-link{display:flex;min-height:var(--shell-control-min)" in template
+    assert '<body class="base-ssr-shell">' in template
     assert ".sidebar-logout{display:none;min-width:40px;min-height:40px" in template
     assert 'aria-label="Открыть навигацию" aria-controls="sidebar" aria-expanded="false"' in template
     assert 'aria-label="Закрыть навигацию"' in template
@@ -264,6 +265,7 @@ def test_rendered_switcher_uses_current_runtime_health_without_duplicate(monkeyp
     catalog = load_service_catalog("http://admin/api")
     html = templates.get_template("base.html").render(
         page="tasks", other_services=catalog.services, services_source=catalog.source,
+        namespace_cookie_name="workflow_namespace_id", namespace_cookie_secure=False,
     )
     menu = html.split('id="serviceMenu"', 1)[1].split("</details>", 1)[0]
     assert menu.count('aria-current="page"') == 1

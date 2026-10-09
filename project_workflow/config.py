@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 from pathlib import Path
 
@@ -75,7 +76,12 @@ def get_settings() -> Settings:
 # Bootstrap-only constants.  The managed Hermes catalog is the only source used
 # by application startup.  The legacy single-workflow seed is retained solely
 # for explicit unmanaged compatibility/tests and is never an automatic fallback.
-MANAGED_CATALOG_PATH = _pkg_dir / "references" / "hermes_sdlc_catalog_v1.json"
+CATALOG_VARIANT = os.environ.get("PROJECT_WORKFLOW_CATALOG_VARIANT", "legacy")
+if CATALOG_VARIANT not in {"legacy", "base"}:
+    raise ValueError("Unknown managed catalog variant")
+MANAGED_CATALOG_PATH = _pkg_dir / "references" / (
+    "base_sdlc_catalog_v1.json" if CATALOG_VARIANT == "base" else "hermes_sdlc_catalog_v1.json"
+)
 LEGACY_UNMANAGED_SEED_PATH = _pkg_dir / "references" / "legacy_unmanaged_seed.json"
 LEGACY_UNMANAGED_WORKFLOW_NAME = "sdlc-business-tech-v1"
 # Compatibility alias for legacy unmanaged editor/tests. Managed startup does

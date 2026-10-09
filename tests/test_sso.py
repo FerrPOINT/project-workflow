@@ -9,7 +9,7 @@ from project_workflow.config import Settings
 from project_workflow.interfaces.ui import sso
 
 
-def _app(monkeypatch):
+def _app(monkeypatch, **overrides):
     settings = Settings(
         DATABASE_URL="postgresql+psycopg://unused@localhost/unused",
         AUTH_ISSUER="http://localhost:7701",
@@ -17,6 +17,7 @@ def _app(monkeypatch):
         AUTH_PUBLIC_ORIGIN="http://localhost:8812",
         AUTH_SESSION_SECRET="test-only-secret-with-at-least-thirty-two-bytes",
     )
+    settings = settings.model_copy(update=overrides)
     monkeypatch.setenv("AUTH_ISSUER", settings.AUTH_ISSUER)
     monkeypatch.setattr(sso, "get_settings", lambda: settings)
     app = FastAPI()
@@ -59,7 +60,9 @@ def test_central_outage_rejects_existing_session(monkeypatch):
         transport=httpx.MockTransport(unavailable), **kwargs,
     ))
     with TestClient(app, follow_redirects=False) as client:
-        client.cookies.set("workflow_sso", sso._encode_cookie(settings, {"token": "sso-jwt"}))
+        client.cookies.set(
+            sso.cookie_name(settings, "workflow_sso"), sso._encode_cookie(settings, {"token": "sso-jwt"}),
+        )
         response = client.get("/api/tasks")
         assert response.status_code == 503
         assert "временно недоступен" in response.json()["error"]
@@ -71,15 +74,16 @@ def test_login_logout_and_canonical_origin(monkeypatch):
         login = client.get("/login?next=//outside.example")
         assert login.status_code == 303
         assert login.headers["location"].startswith("http://localhost:7701/oidc/authorize?")
-        assert "workflow_oidc_state=" in login.headers["set-cookie"]
-        transaction = sso._decode_cookie(settings, client.cookies.get("workflow_oidc_state"), 600)
+        transaction_name = sso.cookie_name(settings, "workflow_oidc_state")
+        assert transaction_name + "=" in login.headers["set-cookie"]
+        transaction = sso._decode_cookie(settings, client.cookies.get(transaction_name), 600)
         assert transaction is not None
         assert transaction["next"] == "/"
 
         logout = client.get("/logout")
         assert logout.status_code == 303
         assert logout.headers["location"] == "http://localhost:7701/oidc/logout?client_id=project-workflow"
-        assert "workflow_sso=" in logout.headers["set-cookie"]
+        assert sso.cookie_name(settings, "workflow_sso") + "=" in logout.headers["set-cookie"]
 
     with TestClient(app, base_url="http://127.0.0.1:8812", follow_redirects=False) as client:
         canonical = client.get("/api/tasks?state=open")
@@ -102,7 +106,7 @@ def test_cookie_session_checks_identity_and_csrf(monkeypatch):
     )
     with TestClient(app, follow_redirects=False) as client:
         client.cookies.set(
-            "workflow_sso",
+            sso.cookie_name(settings, "workflow_sso"),
             sso._encode_cookie(settings, {"token": "sso-jwt"}),
         )
         assert client.get("/").status_code == 200
@@ -186,11 +190,11 @@ def test_callback_exchanges_code_and_sets_encrypted_session(monkeypatch):
         {"state": "state-1", "nonce": "nonce-1", "verifier": "verifier-1", "next": "/workflows"},
     )
     with TestClient(app, follow_redirects=False) as client:
-        client.cookies.set("workflow_oidc_state", transaction, path="/sso/callback")
+        client.cookies.set(sso.cookie_name(settings, "workflow_oidc_state"), transaction, path="/sso/callback")
         callback = client.get("/sso/callback?code=code-1&state=state-1")
         assert callback.status_code == 303
         assert callback.headers["location"] == "/workflows"
-        session = sso._decode_cookie(settings, client.cookies.get("workflow_sso"), 900)
+        session = sso._decode_cookie(settings, client.cookies.get(sso.cookie_name(settings, "workflow_sso")), 900)
         assert session is not None
         assert session["token"] == "access-token"
         assert session["sub"] == "central-sub"

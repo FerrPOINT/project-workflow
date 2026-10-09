@@ -73,6 +73,7 @@ def test_task_detail_renders_group_markers_and_chronological_supervisor_dialog()
     ]
     html = template.render(
         page="tasks",
+        namespace_cookie_name="workflow_namespace_id", namespace_cookie_secure=False,
         task={
             "task_key": "RUN-1",
             "title": "RUN-1",

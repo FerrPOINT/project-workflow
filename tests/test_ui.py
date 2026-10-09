@@ -4,6 +4,7 @@ import json
 import re
 import sqlite3
 import uuid
+from html.parser import HTMLParser
 from pathlib import Path
 from unittest.mock import patch
 
@@ -291,9 +292,8 @@ class TestIndexPage:
     def test_dashboard_mobile_hides_duplicate_header_shortcuts(self):
         response = client.get("/")
         assert response.status_code == 200
-        assert 'class="btn btn-secondary dashboard-action">Задачи</a>' in response.text
-        assert 'class="btn btn-secondary dashboard-action">Неймспейсы</a>' in response.text
-        assert "@media(max-width:930px){.header .dashboard-action{display:none}" in response.text
+        assert 'class="btn btn-secondary dashboard-action"' not in response.text
+        assert 'data-platform-header-slot="services"' in response.text
         assert 'class="dashboard-section-link" href="/namespaces">Все неймспейсы</a>' in response.text
 
     def test_dashboard_previews_recent_items_and_links_to_full_lists(self):
@@ -508,9 +508,9 @@ class TestPhasesPage:
         assert ":root{--sidebar-width:var(--shell-sidebar-compact)}" in response.text
         assert "@media(max-width:767px)" in response.text
         assert "window.matchMedia('(max-width: 767px)')" in response.text
-        assert 'class="sidebar-logout" href="/logout"' in response.text
-        assert 'class="btn btn-secondary header-logout" href="/logout"' in response.text
-        assert ".header .header-logout{display:none}" in response.text
+        assert 'class="base-ssr-account"' in response.text
+        assert response.text.count('href="/logout"') == 1
+        assert 'data-platform-header-slot="services"' in response.text
         assert "sidebar.setAttribute('role','dialog')" in response.text
         assert "sidebar.setAttribute('aria-modal','true')" in response.text
         assert "color:var(--accent-foreground);border-color:var(--accent)" in response.text
@@ -518,18 +518,23 @@ class TestPhasesPage:
         assert "--accent-foreground:" in response.text
         assert "--shell-page-gutter:clamp(16px,2vw,32px)" in response.text
         assert 'data-page-layout="wide"' in response.text
+        assert '<body class="base-ssr-shell">' in response.text
+        assert '.platform-header-context{justify-content:flex-end}' in response.text
 
-    def test_mobile_shell_keeps_theme_and_services_in_drawer(self):
+    def test_shell_has_one_service_switcher_and_account_theme_with_mobile_namespace(self):
         response = client.get("/agents")
 
         assert response.status_code == 200
         assert 'class="sidebar-utilities"' in response.text
-        assert 'class="sidebar-service-menu"' in response.text
-        assert 'id="sidebarThemeSelector"' in response.text
-        assert 'id="themeSelector"' in response.text
-        assert ".header-actions > .theme-select,.header-actions > .service-menu{display:none}" in response.text
-        assert ".header-actions{width:auto;flex:1;min-width:0" in response.text
-        assert response.text.count("document.querySelectorAll('.theme-select').forEach") == 2
+        assert 'id="mobileNamespaceSelector"' in response.text
+        assert response.text.count('id="serviceMenu"') == 1
+        assert 'id="themeSelector"' not in response.text
+        assert 'id="sidebarThemeSelector"' not in response.text
+        assert response.text.count('data-base-theme-option') >= 3
+        assert 'window.SdlcThemePreference.read("workflow-theme")' in response.text
+        assert response.text.count('data-namespace-selector class="namespace-select"') == 1
+        assert 'id="namespaceSelector" data-namespace-selector' in response.text
+        assert '.platform-header .service-menu-popover{position:fixed;left:12px;right:12px;' in response.text
 
     def test_sidebar_places_namespaces_first(self):
         response = client.get("/phases")
@@ -545,7 +550,7 @@ class TestPhasesPage:
             r'<a class="sidebar-link active" href="/phases"[^>]*aria-current="page">',
             response.text,
         )
-        assert sidebar_nav.group(1).count('aria-current="page"') == 2
+        assert sidebar_nav.group(1).count('aria-current="page"') == 1
 
     def test_phases_page_hides_duplicate_nav_for_single_workflow(self):
         response = client.get("/phases")
@@ -1942,6 +1947,44 @@ class TestTaskDetail:
         assert response.status_code == 200
         assert "История фаз" in response.text
 
+    def test_task_detail_phase_numbers_have_accessible_text_without_prohibited_labels(self):
+        class PhaseNumbers(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.numbers = []
+                self.depth = 0
+                self.text = ""
+
+            def handle_starttag(self, tag, attrs):
+                if tag != "span":
+                    return
+                if self.depth:
+                    self.depth += 1
+                elif "phase-sequence" in dict(attrs).get("class", "").split():
+                    assert "aria-label" not in dict(attrs)
+                    assert "aria-hidden" not in dict(attrs)
+                    self.depth = 1
+                    self.text = ""
+
+            def handle_data(self, data):
+                if self.depth:
+                    self.text += data
+
+            def handle_endtag(self, tag):
+                if tag == "span" and self.depth:
+                    self.depth -= 1
+                    if not self.depth:
+                        self.numbers.append(self.text.strip())
+
+        response = client.get(f"/task/RUN-247?namespace_id={self._default_namespace_id()}")
+        assert response.status_code == 200
+        parser = PhaseNumbers()
+        parser.feed(response.text)
+        assert parser.numbers
+        assert all(re.fullmatch(r"Фаза \d+", number) for number in parser.numbers)
+        template = (TEMPLATES_DIR / "task_detail.html").read_text(encoding="utf-8")
+        assert template.count('<span class="phase-sequence-label">Фаза </span>') == 2
+
     def test_task_detail_rejects_unknown_query_namespace_without_fallback(self):
         response = client.get(f"/task/RUN-247?namespace_id={UNKNOWN_NAMESPACE_ID}")
         assert response.status_code == 404
@@ -2011,13 +2054,36 @@ class TestTaskDetail:
         assert ".verdict-chip.verdict-blocked{border-color:var(--red)}" in response.text
         assert ".chip.blocked,.verdict-blocked{color:var(--red)" not in response.text
 
+    def test_task_detail_partial_verdict_uses_readable_text_and_semantic_border(self):
+        response = client.get(f"/task/RUN-247?namespace_id={self._default_namespace_id()}")
+
+        assert response.status_code == 200
+        assert ".verdict-partial{color:var(--text);background:var(--yellow-soft)}" in response.text
+        assert ".verdict-chip.verdict-partial{border-color:var(--yellow)}" in response.text
+        assert ".verdict-partial{color:var(--yellow)" not in response.text
+
+    def test_task_detail_blocked_status_uses_readable_text_and_semantic_border(self):
+        response = client.get(f"/task/RUN-247?namespace_id={self._default_namespace_id()}")
+
+        assert response.status_code == 200
+        assert ".chip.blocked{color:var(--text);background:var(--red-soft);border-color:var(--red)}" in response.text
+        assert ".chip.blocked{color:var(--red)" not in response.text
+
+    def test_task_detail_blockers_use_readable_text_and_keep_red_marker(self):
+        response = client.get(f"/task/RUN-247?namespace_id={self._default_namespace_id()}")
+
+        assert response.status_code == 200
+        assert ".result-list.blockers li{color:var(--text-secondary)}" in response.text
+        assert ".check-card.blocked{border-top-color:var(--red)}" in response.text
+        assert ".result-list.blockers li{color:var(--red)}" not in response.text
+
     def test_task_detail_mobile_navigation_keeps_links_accessible(self):
         namespace_id = self._default_namespace_id()
         response = client.get(f"/task/RUN-247?namespace_id={namespace_id}")
 
         assert response.status_code == 200
         assert response.text.count(f'href="/tasks?namespace_id={namespace_id}"') == 2
-        assert '<span class="task-detail-mobile-title">Задача</span>' in response.text
+        assert '<h1>RUN-247</h1>' in response.text
         assert 'class="task-detail-mobile-actions"' in response.text
         assert "@media(max-width:350px){.detail-jump-nav{top:105px}" in response.text
         assert (
@@ -2047,7 +2113,7 @@ class TestTaskDetail:
         response = client.get(f"/task/RUN-247?namespace_id={self._default_namespace_id()}")
         assert response.status_code == 200
         assert "Приём задачи" in response.text
-        progress_match = re.search(r"(\d+)\s*/\s*(\d+)", response.text)
+        progress_match = re.search(r'<div class="summary-value">(\d+)\s*/\s*(\d+)', response.text)
         assert progress_match is not None
         current, total = map(int, progress_match.groups())
         assert current == 0
@@ -2211,8 +2277,8 @@ class TestProjectsPage:
         response = client.get("/namespaces/new")
         assert response.status_code == 200
         assert '<h1 class="header-title">Неймспейсы</h1>' in response.text
-        assert 'href="/namespaces/new' in response.text
-        assert 'title="Создать пространство" aria-label="Создать пространство">+</a>' in response.text
+        assert 'href="/namespaces/new' not in response.text
+        assert 'id="namespaceCreateLink"' not in response.text
         assert '<div class="card-title" id="namespaceFormMode">Создание</div>' in response.text
         assert 'id="deleteNamespaceButton" onclick="deleteNamespace()" style="display:none"' in response.text
         assert "Добавить" not in response.text
@@ -2256,10 +2322,13 @@ class TestProjectsPage:
         assert response.status_code == 200
         assert "function rememberNamespaceSelection(id, historyMode)" in response.text
         assert (
-            "document.cookie='workflow_namespace_id='+encodeURIComponent(id)+'; path=/; SameSite=Lax';"
+            'document.cookie="workflow_namespace_id"+\'=\'+encodeURIComponent(id)+\'; path=/; SameSite=Lax\';'
             in response.text
         )
-        assert "if(selector){ selector.value = String(id); }" in response.text
+        assert (
+            "document.querySelectorAll('[data-namespace-selector]')"
+            ".forEach(function(selector){ selector.value = String(id); });" in response.text
+        )
         assert "url.pathname = '/namespaces';" in response.text
         assert "var method = historyMode === 'push' ? 'pushState' : 'replaceState';" in response.text
         assert "window.history[method](null, '', url.toString());" in response.text
@@ -2294,7 +2363,7 @@ class TestProjectsPage:
         response = client.get("/namespaces")
         assert response.status_code == 200
         assert 'id="namespaceCreateLink"' in response.text
-        assert 'id="namespaceEditLink"' in response.text
+        assert 'id="namespaceEditLink"' not in response.text
         assert "function updateNamespaceHeaderLinks(id)" in response.text
         assert "createLink.href = namespaceScopedPath('/namespaces/new', id);" in response.text
         assert "editLink.href = namespaceScopedPath('/namespaces', id);" in response.text
@@ -2309,8 +2378,9 @@ class TestProjectsPage:
         assert "brandSubname.textContent = command;" in response.text
         assert "function renderNamespaceSelector()" in response.text
         assert "selector.replaceChildren();" in response.text
-        assert "option.textContent = namespace.name;" in response.text
+        assert "option.textContent = namespaceContextLabel(namespace);" in response.text
         assert "renderNamespaceSelector();" in response.text
+        assert "document.querySelectorAll('[data-namespace-selector]').forEach(function(selector)" in response.text
 
     def test_namespace_create_redirects_to_edit_page_after_success(self):
         response = client.get("/namespaces/new")

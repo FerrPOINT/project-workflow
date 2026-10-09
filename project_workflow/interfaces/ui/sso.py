@@ -17,8 +17,10 @@ from cryptography.fernet import Fernet, InvalidToken
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.types import ASGIApp
 
 from project_workflow.config import Settings, get_settings
+from project_workflow.interfaces.ui.cookies import cookie_name
 
 _CLIENT_ID = "project-workflow"
 _SESSION_COOKIE = "workflow_sso"
@@ -74,10 +76,12 @@ def _auth_error(request: Request, status: int, message: str) -> Response:
 
 
 class _SsoMiddleware(BaseHTTPMiddleware):
+    def __init__(self, app: ASGIApp, settings: Settings):
+        super().__init__(app)
+        self.settings = settings
+
     async def dispatch(self, request: Request, call_next):
-        settings = get_settings()
-        if not settings.AUTH_ISSUER:
-            return await call_next(request)
+        settings = self.settings
         path = request.url.path
         if path in _PUBLIC_PATHS or path.startswith(("/internal/runtime/", "/api/pm/namespace-ownership/")):
             return await call_next(request)
@@ -86,7 +90,7 @@ class _SsoMiddleware(BaseHTTPMiddleware):
                                     (f"?{request.url.query}" if request.url.query else ""), status_code=307)
 
         bearer = request.headers.get("authorization", "").removeprefix("Bearer ")
-        cookie = _decode_cookie(settings, request.cookies.get(_SESSION_COOKIE), 24 * 3600)
+        cookie = _decode_cookie(settings, request.cookies.get(cookie_name(settings, _SESSION_COOKIE)), 24 * 3600)
         token = bearer or (str(cookie.get("token")) if cookie else "")
         if not token:
             return _auth_error(request, 401, "Требуется вход через Central Auth")
@@ -130,7 +134,7 @@ def install_sso(app: FastAPI) -> None:
     _cipher(settings)
     if not settings.AUTH_INTERNAL_BASE_URL:
         raise RuntimeError("AUTH_INTERNAL_BASE_URL is required for SSO")
-    app.add_middleware(_SsoMiddleware)
+    app.add_middleware(_SsoMiddleware, settings=settings)
 
     @app.get("/login", include_in_schema=False)
     async def login(request: Request, next: str = "/") -> Response:
@@ -146,7 +150,7 @@ def install_sso(app: FastAPI) -> None:
         }
         authorize_url = settings.AUTH_ISSUER.rstrip("/") + "/oidc/authorize?" + urlencode(params)
         response = RedirectResponse(authorize_url, status_code=303)
-        response.set_cookie(_TRANSACTION_COOKIE, _encode_cookie(settings, transaction),
+        response.set_cookie(cookie_name(settings, _TRANSACTION_COOKIE), _encode_cookie(settings, transaction),
                             max_age=600, path="/sso/callback", httponly=True, samesite="lax",
                             secure=settings.AUTH_COOKIE_SECURE)
         response.headers["Cache-Control"] = "no-store"
@@ -154,7 +158,7 @@ def install_sso(app: FastAPI) -> None:
 
     @app.get("/sso/callback", include_in_schema=False)
     async def callback(request: Request, code: str = "", state: str = "") -> Response:
-        transaction = _decode_cookie(settings, request.cookies.get(_TRANSACTION_COOKIE), 600)
+        transaction = _decode_cookie(settings, request.cookies.get(cookie_name(settings, _TRANSACTION_COOKIE)), 600)
         if not transaction or not code or not state or not secrets.compare_digest(str(transaction.get("state")), state):
             return _auth_error(request, 401, "Вход не подтверждён")
         try:
@@ -184,10 +188,11 @@ def install_sso(app: FastAPI) -> None:
             return _auth_error(request, 503, "Не удалось завершить центральный вход")
         response = RedirectResponse(_safe_next(str(transaction["next"])), status_code=303)
         session = {"token": access_token, "sub": claims["sub"], "issued": int(time.time())}
-        response.set_cookie(_SESSION_COOKIE, _encode_cookie(settings, session),
+        response.set_cookie(cookie_name(settings, _SESSION_COOKIE), _encode_cookie(settings, session),
                             max_age=int(tokens["expires_in"]), path="/", httponly=True, samesite="lax",
                             secure=settings.AUTH_COOKIE_SECURE)
-        response.delete_cookie(_TRANSACTION_COOKIE, path="/sso/callback")
+        response.delete_cookie(cookie_name(settings, _TRANSACTION_COOKIE), path="/sso/callback",
+                               httponly=True, samesite="lax", secure=settings.AUTH_COOKIE_SECURE)
         response.headers["Cache-Control"] = "no-store"
         return response
 
@@ -195,6 +200,9 @@ def install_sso(app: FastAPI) -> None:
     async def logout() -> Response:
         response = RedirectResponse(settings.AUTH_ISSUER.rstrip("/") + "/oidc/logout?client_id=" + _CLIENT_ID,
                                     status_code=303)
-        response.delete_cookie(_SESSION_COOKIE, path="/")
+        response.delete_cookie(cookie_name(settings, _SESSION_COOKIE), path="/",
+                               httponly=True, samesite="lax", secure=settings.AUTH_COOKIE_SECURE)
+        response.delete_cookie(cookie_name(settings, _TRANSACTION_COOKIE), path="/sso/callback",
+                               httponly=True, samesite="lax", secure=settings.AUTH_COOKIE_SECURE)
         response.headers["Cache-Control"] = "no-store"
         return response

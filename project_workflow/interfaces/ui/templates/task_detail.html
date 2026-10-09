@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% block page_heading %}{% endblock %}
 {% block page_layout %}detail-with-aside{% endblock %}
 
 {% block title %}{{ task.task_key }} — Workflow Engine{% endblock %}
@@ -17,9 +18,9 @@
 .chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border-strong);background:var(--surface);border-radius:999px;padding:3px 9px;font-size:11px;font-weight:600;color:var(--text-secondary);white-space:nowrap}
 .chip.done,.verdict-pass{color:var(--green);background:var(--green-soft)}
 .chip.active,.verdict-delegate{color:var(--accent-readable);background:var(--accent-soft)}
-.chip.blocked{color:var(--red);background:var(--red-soft)}
+.chip.blocked{color:var(--text);background:var(--red-soft);border-color:var(--red)}
 .verdict-blocked{color:var(--text);background:var(--red-soft)}
-.verdict-partial{color:var(--yellow);background:var(--yellow-soft)}
+.verdict-partial{color:var(--text);background:var(--yellow-soft)}
 .verdict-rollback{color:var(--orange);background:var(--orange-soft)}
 
 .summary-bar{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:28px}
@@ -52,6 +53,7 @@
 .phase-card.done{border-left:3px solid var(--green)}
 .phase-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .phase-sequence{font-variant-numeric:tabular-nums;font-size:11px;font-weight:650;color:var(--text-secondary);background:var(--panel);border:1px solid var(--border);padding:2px 7px;border-radius:5px;min-width:27px;text-align:center}
+.phase-sequence-label{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .phase-code{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-secondary);background:var(--panel);border:1px solid var(--border);padding:2px 7px;border-radius:5px}
 .phase-name{font-weight:600;color:var(--text)}
 .phase-status{margin-left:auto;font-size:11px;color:var(--text-muted)}
@@ -83,6 +85,7 @@
 .activity-time{margin-left:auto;font-size:11px;color:var(--text-dim)}
 .verdict-chip{font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;border:1px solid currentColor;border-radius:999px;padding:2px 7px}
 .verdict-chip.verdict-blocked{border-color:var(--red)}
+.verdict-chip.verdict-partial{border-color:var(--yellow)}
 .dialog-part{padding:12px 0;border-top:1px solid var(--border);min-width:0}
 .dialog-part:first-of-type{border-top:0;padding-top:0}
 .dialog-label{font-size:11px;font-weight:650;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:7px}
@@ -93,7 +96,7 @@
 .check-message{font-size:13px;line-height:1.55;color:var(--text-secondary)}
 .result-list{margin-top:10px}.result-list h4,.contract-section h4{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin:0 0 5px}
 .result-list ul,.contract-section ul{margin:0;padding-left:18px}.result-list li,.contract-section li{font-size:12px;line-height:1.55;color:var(--text-secondary);overflow-wrap:anywhere}
-.result-list.covered li{color:var(--text-secondary)}.result-list.missing li{color:var(--yellow)}.result-list.blockers li{color:var(--red)}
+.result-list.covered li{color:var(--text-secondary)}.result-list.missing li{color:var(--yellow)}.result-list.blockers li{color:var(--text-secondary)}
 .assignment-card{border-top:3px solid var(--accent);background:var(--accent-soft)}
 .assignment-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}.assignment-name{font-size:14px;font-weight:650;color:var(--text)}
 .assignment-description{font-size:12px;color:var(--text-muted);line-height:1.5;margin-bottom:10px}
@@ -207,7 +210,7 @@
           <div class="parallel-grid">
             {% for ph in block.phases %}
             <article class="phase-card {{ ph.status }}">
-              <div class="phase-top"><span class="phase-sequence" aria-label="Порядковый номер фазы">{{ ph.sequence_number }}</span><span class="phase-name">{{ ph.phase_name }}</span><span class="phase-status">{{ 'Завершена' if ph.status == 'done' else ('Текущая' if ph.status == 'current' else 'Ожидает') }}</span></div>
+              <div class="phase-top"><span class="phase-sequence"><span class="phase-sequence-label">Фаза </span>{{ ph.sequence_number }}</span><span class="phase-name">{{ ph.phase_name }}</span><span class="phase-status">{{ 'Завершена' if ph.status == 'done' else ('Текущая' if ph.status == 'current' else 'Ожидает') }}</span></div>
               {% if ph.phase_description %}<div class="phase-description">{{ ph.phase_description }}</div>{% endif %}
             </article>
             {% endfor %}
@@ -216,7 +219,7 @@
         {% else %}
           {% set ph = block.phases[0] %}
           <article class="phase-card {{ ph.status }}">
-            <div class="phase-top"><span class="phase-sequence" aria-label="Порядковый номер фазы">{{ ph.sequence_number }}</span><span class="phase-name">{{ ph.phase_name }}</span><span class="phase-status">{{ 'Завершена' if ph.status == 'done' else ('Текущая' if ph.status == 'current' else 'Ожидает') }}</span></div>
+            <div class="phase-top"><span class="phase-sequence"><span class="phase-sequence-label">Фаза </span>{{ ph.sequence_number }}</span><span class="phase-name">{{ ph.phase_name }}</span><span class="phase-status">{{ 'Завершена' if ph.status == 'done' else ('Текущая' if ph.status == 'current' else 'Ожидает') }}</span></div>
             {% if ph.phase_description %}<div class="phase-description">{{ ph.phase_description }}</div>{% endif %}
           </article>
         {% endif %}
