@@ -600,7 +600,7 @@ function requestConfirmation(options){
 }
 function switchNamespace(namespaceId){
   if(!namespaceId){return;}
-  document.cookie='workflow_namespace_id='+encodeURIComponent(namespaceId)+'; path=/; SameSite=Lax';
+  document.cookie={{ namespace_cookie_name | tojson }}+'='+encodeURIComponent(namespaceId)+'; path=/; SameSite=Lax'{% if namespace_cookie_secure %}+'; Secure'{% endif %};
   var url=new URL(window.location.href);
   if(url.pathname === '/phases'){
     url.searchParams.delete('workflow_id');

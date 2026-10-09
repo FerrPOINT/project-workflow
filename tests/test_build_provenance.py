@@ -119,6 +119,41 @@ def test_same_commit_snapshot_is_deterministic(git_source: Path):
     assert len(first.provenance.runtime_bundle_sha256) == 64
 
 
+@pytest.mark.parametrize("autocrlf,eol", [("false", "crlf"), ("true", "crlf"), ("input", "native")])
+def test_git_eol_configuration_does_not_change_snapshot(git_source: Path, autocrlf: str, eol: str):
+    builder = _builder_module()
+    (git_source / ".gitattributes").write_bytes(b"* text=auto\n")
+    _run_git(git_source, "add", ".gitattributes")
+    _run_git(git_source, "commit", "-m", "declare automatic text handling")
+    _run_git(git_source, "config", "core.autocrlf", "false")
+    _run_git(git_source, "config", "core.eol", "lf")
+    canonical = builder.immutable_git_snapshot(git_source, "HEAD")
+
+    _run_git(git_source, "config", "core.autocrlf", autocrlf)
+    _run_git(git_source, "config", "core.eol", eol)
+
+    assert builder.immutable_git_snapshot(git_source, "HEAD") == canonical
+
+
+def test_snapshot_preserves_explicit_repository_eol_and_binary_bytes(git_source: Path):
+    builder = _builder_module()
+    (git_source / ".gitattributes").write_bytes(
+        b"project_workflow/source.py -text\nproject_workflow/fixture.bin -text\nscripts/source.py text eol=crlf\n"
+    )
+    committed_crlf = b"VALUE = 2\r\n"
+    binary = b"\x00\xff\r\n\x01\n"
+    (git_source / "project_workflow/source.py").write_bytes(committed_crlf)
+    (git_source / "project_workflow/fixture.bin").write_bytes(binary)
+    _run_git(git_source, "add", ".")
+    _run_git(git_source, "commit", "-m", "retain repository byte policies")
+
+    snapshot = builder.immutable_git_snapshot(git_source, "HEAD")
+
+    assert _member_bytes(snapshot.archive, "project_workflow/source.py") == committed_crlf
+    assert _member_bytes(snapshot.archive, "project_workflow/fixture.bin") == binary
+    assert _member_bytes(snapshot.archive, "scripts/source.py") == b"print('source')\r\n"
+
+
 def test_dirty_and_ignored_worktree_files_cannot_change_snapshot(git_source: Path):
     builder = _builder_module()
     committed = builder.immutable_git_snapshot(git_source, "HEAD")

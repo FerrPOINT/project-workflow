@@ -13,6 +13,13 @@
 - Standalone-режим: репозиторий собирается и запускается без соседнего `services-base` (убраны extra `cli-platform`, uv source, Docker additional_context и CI checkout). Token-режим CLI без `sdlc-cli-core` выдаёт понятную ошибку; запуск без `AUTH_ISSUER` работает без авторизации.
 
 ### Fixed
+- Immutable image builder закрепляет Git EOL-настройки только для archive:
+  один commit даёт одинаковые source/bundle digests независимо от пользовательских
+  `core.autocrlf` и `core.eol`; явные repository EOL rules и binary bytes сохранены.
+- Central-mode SSO session, OIDC transaction and namespace selector cookies are scoped to the configured public issuer and Workflow origin, preventing collisions between local ports. Middleware retains its installation-time settings; logout clears only its own session and pending transaction with the configured cookie attributes. Standalone mode and machine-token APIs are unchanged; legacy central-mode cookies require a fresh SSO redirect.
+- Task detail partial-verdict использует читаемый основной текст, сохраняя жёлтые фон и рамку: summary и activity badges проходят контраст светлой темы без изменения других verdict-типов (#93).
+- Заблокированный статус и список блокеров на task detail используют читаемые цвета текста во всех темах; красные фон и рамки сохранены, включая рамку статуса (#94).
+- Номера фаз на task detail читаются как «Фаза N» без недопустимого `aria-label` на generic spans; последовательные и параллельные карточки сохраняют компактные индикаторы.
 - SSR-переключатель берёт текущий Workflow и его health из runtime-каталога,
   без hardcoded healthy. Полный fallback из шести UI остаётся unknown при
   сетевой ошибке, пустом или невалидном ответе; TTL cache разделён по URL.
@@ -39,3 +46,6 @@
 
 ### Removed
 - Мобильные галереи и auth-скриншоты из README — desktop-only evidence standard.
+- Explicit Base control-plane image variant закрепляет private Base package
+  и candidate 7/11/33 без подключения legacy execution bridge. Default каталог
+  прежних installations остаётся неизменным; автономное исполнение не включено.

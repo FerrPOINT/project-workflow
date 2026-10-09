@@ -108,6 +108,10 @@ python scripts/build_runtime_image.py build \
 Скрипт один раз читает `git archive <exact-sha>`, из этих же bytes вычисляет
 SHA-256 source archive и канонический SHA-256 runtime bundle, добавляет manifest
 в копию archive и передаёт полученный immutable tar как Docker build context.
+Для команды archive закреплены `core.autocrlf=false` и `core.eol=lf`:
+пользовательские Git-настройки Windows/Linux не меняют bytes и digests одного
+commit. Явные правила EOL в committed `.gitattributes`, raw CRLF и бинарные
+файлы сохраняются; глобальная конфигурация Git не изменяется.
 Transport использует детерминированный gzip (`mtime=0`), чтобы Docker не
 принимал PAX-first tar на stdin за Dockerfile. Сжатие не меняет исходный
 archive digest, runtime bundle digest или содержимое immutable manifest.
@@ -194,6 +198,23 @@ Compose перезапускайте API с тем же набором `-f`, с 
 bridge `/internal/runtime/*` не использует browser SSO и защищается только
 собственными role tokens.
 
+В центральном режиме cookie с префиксами `workflow_sso`, `workflow_oidc_state`
+и `workflow_namespace_id` получают SHA-256-суффикс из настроенных публичных
+`AUTH_ISSUER` и `AUTH_PUBLIC_ORIGIN`. Cookie не разделяются по портам браузером,
+поэтому это сохраняет независимые входы и выбранные неймспейсы двух локальных
+стендов. Внутренний адрес Auth и заголовок `Host` не меняют суффикс.
+Чтение, серверная запись, JS-selector и очистка используют одно имя; cookie
+SSO остаются HttpOnly, а namespace-cookie доступна selector JS. `Secure` и
+`SameSite=Lax` сохраняются при записи и удалении.
+
+После обновления старые cookie без суффикса в центральном режиме не читаются
+и не удаляются: пользователь повторяет переход через Central Auth, используя
+свою действующую центральную сессию. Незавершённый старый callback надо начать
+заново. При изменении issuer/origin также требуется новый переход SSO.
+В standalone-режиме без issuer имя namespace-cookie остаётся прежним.
+Это разделение состояния, не изоляция недоверенных приложений на одном host:
+для такого контура нужны отдельные домены.
+
 ## 📌 Snapshot
 
 | Поле | Значение |
@@ -203,7 +224,7 @@ bridge `/internal/runtime/*` не использует browser SSO и защищ
 | Docker UI/API | `http://127.0.0.1:8812` |
 | App/systemd port | `8811` внутри приложения |
 | CLI selector | `PROJECT_WORKFLOW_NAMESPACE_ID` |
-| UI selector | cookie `workflow_namespace_id`, query override `?namespace_id=` |
+| UI selector | cookie с префиксом `workflow_namespace_id` (в SSO с суффиксом), query override `?namespace_id=` |
 | License | FerrPOINT Proprietary Source-Available Evaluation License v1.0 |
 
 <a name="capabilities"></a>
@@ -248,7 +269,7 @@ bridge `/internal/runtime/*` не использует browser SSO и защищ
 | Icon и theme color | Стилизация header, dashboard и task-detail |
 | Custom CLI command | Пользовательская wrapper-команда, например `workflow-qa` |
 
-Верхний UI selector переключает logo/name, accent color, dashboard, task list, task detail и `/phases`. Выбранный entrypoint хранится в cookie `workflow_namespace_id`; `?namespace_id=` имеет приоритет над cookie.
+Верхний UI selector переключает logo/name, accent color, dashboard, task list, task detail и `/phases`. Выбранный entrypoint хранится в cookie с префиксом `workflow_namespace_id` (в SSO с суффиксом issuer/origin); `?namespace_id=` имеет приоритет над cookie.
 
 Канонический API: `/api/namespaces`; старые UI/API alias-роуты не входят в публичную поверхность.
 
@@ -363,6 +384,12 @@ Responsive QA, включая `375px`, ведётся отдельно; дета
 ![CLI-настройки](docs/screenshots/settings.png)
 
 ### Одна задача / Разработка (`detail-with-aside`)
+
+Partial-verdict в сводке задачи и истории проверок использует основной цвет
+текста; жёлтые фон и рамка сохраняют семантику частичного результата во всех темах.
+Статус заблокированной задачи и список блокеров также используют читаемый текст;
+красные фон и рамки сохраняют обозначение блокировки без низкоконтрастных надписей.
+Номер каждой фазы имеет текстовую подпись для screen reader без изменения компактного индикатора.
 
 ![Одна задача / Разработка](docs/screenshots/task-detail-dev.png)
 

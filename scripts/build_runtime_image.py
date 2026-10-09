@@ -49,7 +49,10 @@ def immutable_git_snapshot(root: Path, revision: str) -> GitSourceSnapshot:
     exact_revision = str(
         _run_git(root, "rev-parse", "--verify", f"{revision}^{{commit}}")
     ).strip().lower()
-    archive = _run_git(root, "archive", "--format=tar", exact_revision, text=False)
+    archive = _run_git(
+        root, "-c", "core.autocrlf=false", "-c", "core.eol=lf",
+        "archive", "--format=tar", exact_revision, text=False,
+    )
     if not isinstance(archive, bytes):  # defensive typing guard
         raise BuildProvenanceError("Git archive не вернул бинарные данные")
     provenance = validate_build_provenance(
@@ -68,6 +71,7 @@ def immutable_git_snapshot(root: Path, revision: str) -> GitSourceSnapshot:
 
 
 CATALOG_PATH = "project_workflow/references/hermes_sdlc_catalog_v1.json"
+BASE_CATALOG_PATH = "project_workflow/references/base_sdlc_catalog_v1.json"
 COMPATIBILITY_PATH = "runtime-compatibility.json"
 SKILLS_MANIFEST_PATH = "runtime-skills-manifest.json"
 
@@ -83,13 +87,32 @@ def derive_compatibility(root: Path) -> dict[str, object]:
         load_managed_catalog,
     )
 
-    catalog = load_managed_catalog(root / CATALOG_PATH)
-    if catalog.catalog_version != 2:
+    variant = os.environ.get("PROJECT_WORKFLOW_CATALOG_VARIANT", "legacy")
+    catalog_path = BASE_CATALOG_PATH if variant == "base" else CATALOG_PATH
+    catalog = load_managed_catalog(root / catalog_path)
+    if variant not in {"legacy", "base"} or catalog.catalog_version != (3 if variant == "base" else 2):
         raise BuildProvenanceError("Compatible image requires canonical catalog version 2")
     manifest = json.loads((root / SKILLS_MANIFEST_PATH).read_bytes())
     if manifest.get("schema") != catalog.skills_source.manifest_schema:
         raise BuildProvenanceError("Native skills manifest schema differs from canonical pin")
     provenance = load_build_provenance(root / "runtime-build-manifest.json")
+    if variant == "base":
+        if catalog.skills_source.repository != "https://github.com/FerrPOINT/services-base.git":
+            raise BuildProvenanceError("Base catalog requires the canonical Base package")
+        for workflow in catalog.workflows:
+            if set(manifest["roles"][workflow.role_key]["physicalSkills"]) != set(workflow.skill_allowlist):
+                raise BuildProvenanceError("Base physical allowlist differs from catalog")
+        def digest(value: object) -> str:
+            return hashlib.sha256(_json_bytes(value)).hexdigest()
+        return {
+            "catalogVersion": 3,
+            "catalogRevision": provenance.source_revision,
+            "catalogSha256": digest(catalog.model_dump(mode="json", by_alias=True)),
+            "skillsRevision": catalog.skills_source.revision,
+            "skillsManifestSha256": digest(manifest),
+            "capabilityRevision": "base-workflow-controlplane/v1",
+            "capabilitySha256": digest({"catalogRead": True, "assignedExecution": False}),
+        }
     exported, _ = export_runtime_catalog(
         catalog, manifest=manifest, workflow_revision=provenance.source_revision,
         skills_revision=catalog.skills_source.revision, source_artifacts={},
@@ -118,14 +141,22 @@ def _add_context_files(context: bytes, files: dict[str, bytes]) -> bytes:
     return output.getvalue()
 
 
-def compatible_build_context(snapshot: GitSourceSnapshot, skills_root: Path) -> bytes:
+def compatible_build_context(snapshot: GitSourceSnapshot, skills_root: Path,
+                             catalog_variant: str = "legacy") -> bytes:
+    if catalog_variant not in {"legacy", "base"}:
+        raise BuildProvenanceError("Unknown catalog variant")
+    catalog_path = BASE_CATALOG_PATH if catalog_variant == "base" else CATALOG_PATH
     context = docker_context_with_manifest(snapshot.archive, snapshot.provenance)
     with tarfile.open(fileobj=io.BytesIO(context)) as source:
-        catalog_file = source.extractfile(CATALOG_PATH)
+        catalog_file = source.extractfile(catalog_path)
         if catalog_file is None:
             raise BuildProvenanceError("Canonical catalog missing from immutable archive")
         catalog = json.load(catalog_file)
     pin = catalog["skills_source"]
+    if catalog_variant == "base":
+        from project_workflow.infrastructure.db.managed_catalog import CatalogSource
+        from scripts.verify_base_sdlc_candidate import load_pinned_package
+        load_pinned_package(skills_root / "agent-skills", CatalogSource.model_validate(pin))
     revision = pin["revision"]
     manifest_path = pin["manifest_path"]
     path = PurePosixPath(manifest_path)
@@ -159,6 +190,7 @@ def compatible_build_context(snapshot: GitSourceSnapshot, skills_root: Path) -> 
         environment = dict(os.environ)
         environment.pop("PYTHONPATH", None)
         environment["PYTHONDONTWRITEBYTECODE"] = "1"
+        environment["PROJECT_WORKFLOW_CATALOG_VARIANT"] = catalog_variant
         subprocess.run(
             [sys.executable, "-m", "scripts.build_runtime_image", "derive-compatibility",
              "--root", str(root)], cwd=root, env=environment, check=True,
@@ -168,16 +200,19 @@ def compatible_build_context(snapshot: GitSourceSnapshot, skills_root: Path) -> 
 
 
 def build_image(root: Path, image: str, docker: str, revision: str = "HEAD",
-                *, skills_root: Path) -> None:
+                *, skills_root: Path, catalog_variant: str = "legacy") -> None:
     snapshot = immutable_git_snapshot(root, revision)
     provenance = snapshot.provenance
-    context = compatible_build_context(snapshot, skills_root)
+    context = (compatible_build_context(snapshot, skills_root, catalog_variant)
+               if catalog_variant != "legacy" else compatible_build_context(snapshot, skills_root))
     # A PAX-first plain tar can be mistaken for a Dockerfile on stdin.
     transport = gzip.compress(context, mtime=0)
     subprocess.run(
         [
             docker,
             "build",
+            "--build-arg",
+            f"CATALOG_VARIANT={catalog_variant}",
             "--build-arg",
             f"SOURCE_REVISION={provenance.source_revision}",
             "--build-arg",
@@ -209,6 +244,7 @@ def main(argv: list[str] | None = None) -> int:
     build.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
     build.add_argument("--revision", default="HEAD")
     build.add_argument("--skills-root", type=Path, required=True)
+    build.add_argument("--catalog-variant", choices=("legacy", "base"), default="legacy")
 
     for name in ("derive-compatibility", "verify-compatibility"):
         subparsers.add_parser(name).add_argument("--root", type=Path, required=True)
@@ -224,7 +260,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "build":
             build_image(args.root.resolve(), args.image, args.docker, args.revision,
-                        skills_root=args.skills_root.resolve())
+                        skills_root=args.skills_root.resolve(), catalog_variant=args.catalog_variant)
         elif args.command == "derive-compatibility":
             (args.root / COMPATIBILITY_PATH).write_bytes(_json_bytes(derive_compatibility(args.root)))
         elif args.command == "verify-compatibility":
