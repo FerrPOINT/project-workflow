@@ -7,8 +7,10 @@ and full-width right work area across authenticated routes. Jinja templates must
 preserve this DOM and behavior contract rather than create route-local shell
 variants or project-local content-width classes.
 
-**Implementation status (2026-10-08):** the global header uses the Base slot
-order: product mark, current service switcher, namespace context, account.
+**Implementation status (2026-10-09):** the global header uses the Base slot
+order: product mark and service switcher on the left, namespace/workflow
+context beside account on the right. The selector changes namespace context;
+the workflow label describes its existing binding and never changes that binding.
 Page titles and local actions are below it. Theme selection lives in the account
 menu. Mobile namespace selection remains in the navigation drawer.
 
@@ -36,6 +38,9 @@ events synchronize open documents and focus/visibility refreshes restore it.
 
 - Desktop uses the same expanded sidebar order, active route state and global
   context on every private route.
+- Base SSR scope owns sidebar sizing: 72px with accessible hidden labels on
+  768–1279px, 264px with visible labels from 1280px. Text and icons use the
+  shared 14px/20px rhythm; hidden labels never leave an expanded-width rail.
 - The mobile drawer is the same navigation, not a second route menu. It opens
   from the header, traps focus, closes with Escape and restores trigger focus.
 - Mobile service popover is bounded by viewport gutters; desktop and drawer

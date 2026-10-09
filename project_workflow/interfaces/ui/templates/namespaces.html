@@ -132,6 +132,7 @@ let previousNamespaceId = {% if create_mode and selected_namespace %}{{ selected
 let namespaceFormMode = selectedNamespaceId == null ? 'create' : 'edit';
 
 function namespaceById(id){ return namespaceStore.find(function(namespace){ return namespace.id === id; }); }
+function namespaceContextLabel(namespace){ return namespace.name + (namespace.workflow_name ? ' · ' + namespace.workflow_name : ''); }
 function workflowNameById(id){ var workflow = workflowStore.find(function(item){ return item.id === id; }); return workflow ? workflow.name : '—'; }
 function namespaceScopedPath(path, id){
   if(id == null){ return path; }
@@ -409,7 +410,7 @@ function renderNamespacePagePicker(){
   namespaceStore.forEach(function(namespace){
     var option = document.createElement('option');
     option.value = String(namespace.id);
-    option.textContent = namespace.name;
+    option.textContent = namespaceContextLabel(namespace);
     picker.appendChild(option);
   });
 }
@@ -421,7 +422,7 @@ function renderNamespaceSelector(){
     namespaceStore.forEach(function(namespace){
       var option = document.createElement('option');
       option.value = String(namespace.id);
-      option.textContent = namespace.name;
+      option.textContent = namespaceContextLabel(namespace);
       option.selected = namespace.id === selectorNamespaceId;
       selector.appendChild(option);
     });

@@ -518,6 +518,8 @@ class TestPhasesPage:
         assert "--accent-foreground:" in response.text
         assert "--shell-page-gutter:clamp(16px,2vw,32px)" in response.text
         assert 'data-page-layout="wide"' in response.text
+        assert '<body class="base-ssr-shell">' in response.text
+        assert '.platform-header-context{justify-content:flex-end}' in response.text
 
     def test_shell_has_one_service_switcher_and_account_theme_with_mobile_namespace(self):
         response = client.get("/agents")
@@ -2376,7 +2378,7 @@ class TestProjectsPage:
         assert "brandSubname.textContent = command;" in response.text
         assert "function renderNamespaceSelector()" in response.text
         assert "selector.replaceChildren();" in response.text
-        assert "option.textContent = namespace.name;" in response.text
+        assert "option.textContent = namespaceContextLabel(namespace);" in response.text
         assert "renderNamespaceSelector();" in response.text
         assert "document.querySelectorAll('[data-namespace-selector]').forEach(function(selector)" in response.text
 

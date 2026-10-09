@@ -24,8 +24,23 @@ try {
   assert.deepEqual(await selectedIds(), [ids[1], ids[1]]);
   await page.reload();
   assert.deepEqual(await selectedIds(), [ids[1], ids[1]], 'Both selectors restore after reload');
-  for (const width of [320, 375, 767, 768, 1920, 2560]) {
+  for (const width of [320, 375, 767, 768, 1000, 1279, 1280, 1920, 2560]) {
     await page.setViewportSize({ width, height: 812 });
+    const shell = await page.evaluate(() => {
+      const sidebar = document.querySelector('#sidebar').getBoundingClientRect();
+      const main = document.querySelector('.main').getBoundingClientRect();
+      const label = document.querySelector('.sidebar-label').getBoundingClientRect();
+      const context = document.querySelector('#namespaceSelector').getBoundingClientRect();
+      const account = document.querySelector('.base-ssr-account').getBoundingClientRect();
+      return { sidebarWidth: sidebar.width, mainLeft: main.left, labelWidth: label.width, contextRight: context.right, accountLeft: account.left };
+    });
+    if (width >= 768) {
+      const expectedWidth = width < 1280 ? 72 : 264;
+      assert.equal(shell.sidebarWidth, expectedWidth, `Sidebar width at ${width}`);
+      assert.equal(shell.mainLeft, expectedWidth, `Content offset at ${width}`);
+      assert.equal(shell.labelWidth > 1, width >= 1280, `Sidebar labels at ${width}`);
+      assert.ok(shell.contextRight <= shell.accountLeft && shell.accountLeft - shell.contextRight < 24, `Namespace context must sit beside account at ${width}`);
+    }
     await page.locator('#serviceMenu summary').click();
     const box = await page.locator('.service-menu-popover').boundingBox();
     assert.ok(box && box.x >= 0 && box.x + box.width <= width, `Service menu escapes viewport ${width}`);
@@ -33,6 +48,8 @@ try {
     if (width < 768) {
       await page.locator('#burgerBtn').click();
       assert.equal(await page.locator('#mobileNamespaceSelector').inputValue(), ids[1]);
+      const targets = await page.locator('#sidebar .sidebar-link').evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().height));
+      assert.ok(targets.every(height => height >= 44), `Mobile navigation targets at ${width}`);
       await page.locator('.sidebar-close').press('Escape');
       assert.equal(await page.locator('#burgerBtn').getAttribute('aria-expanded'), 'false');
     }
@@ -58,7 +75,7 @@ try {
     assert.deepEqual(remaining.namespaces.map(item => item.id).sort(), initial.namespaces.map(item => item.id).sort());
     console.log('PASS: owned empty-namespace deletion removes both selector options and preserves neighboring fixtures');
   }
-  console.log('PASS: namespace selection/history/reload and service menu 320/375/767/768/1920/2560');
+  console.log('PASS: namespace context beside account; sidebar72/264 with matching labels/content offset; menu320/375/767/768/1000/1279/1280/1920/2560');
 } finally {
   await browser.close();
 }
