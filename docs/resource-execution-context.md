@@ -18,7 +18,10 @@ adapter — `namespace-context-v2/foundation-v1-disabled`.
 
 Readers задаются `PROJECT_WORKFLOW_NAMESPACE__TRACKER_URL/TRACKER_TOKEN_FILE`
 и `FORGE_URL/FORGE_TOKEN_FILE`. Они не пересылают human PAT, не принимают origin
-из запроса, отключают redirects, ограничены 10 s и 64 KiB.
+из запроса, отключают redirects, ограничены общим deadline 10 s и 64 KiB.
+Проверка всех ресурсов одной команды также имеет общий deadline 10 s;
+один request-owned HTTP pool переиспользуется для всех owner reads и закрывается
+при успехе, ошибке и отмене. Timeout не сохраняет частично проверенный контекст.
 `PROJECT_WORKFLOW_NAMESPACE__MACHINE_SUBJECTS` классифицируется до human routes.
 
 Этот API не активирует installer/PM foundation и не меняет Base-v3 catalog,

@@ -1,7 +1,9 @@
 """HTTP/persistence boundary checks. Installed acceptance uses actual owner services."""
 
+import asyncio
 from uuid import UUID, uuid4
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -22,6 +24,48 @@ def profile_request():
         )
 
 
+@pytest.mark.parametrize("delay, succeeds", [(0.01, True), (0.08, False)])
+def test_owner_verification_shares_command_deadline_and_closes_its_pool(monkeypatch, delay, succeeds):
+    monkeypatch.setattr(service, "CONTEXT_TIMEOUT_SECONDS", 0.16)
+    request = profile_request()
+    repositories = [
+        {"forge_instance_id": uuid4(), "repository_id": uuid4()},
+        {"forge_instance_id": uuid4(), "repository_id": uuid4()},
+    ]
+    request = CreateExecutionContext.model_validate(
+        {**request.model_dump(), "context": {**request.context.model_dump(), "repositories": repositories}}
+    )
+    clients = []
+
+    async def reader(owner, path, value, *, client):
+        clients.append(client)
+        await asyncio.sleep(delay)
+        common = {"namespace": value.namespace.model_dump(mode="json")}
+        if owner == "TRACKER":
+            return {**common, "task_id": str(value.task.task_id),
+                    "tracker_instance_id": str(value.task.tracker_instance_id),
+                    "project_id": str(uuid4()), "generation": 1, "state": "active"}
+        repository = next(item for item in value.repositories if path.endswith(str(item.repository_id)))
+        return {**common, "repository_id": str(repository.repository_id),
+                "forge_instance_id": str(repository.forge_instance_id)}
+
+    monkeypatch.setattr(service, "read_owner", reader)
+    identity = uuid4()
+    if succeeds:
+        result = asyncio.run(service.create_context(identity, "verified-human", request))
+        assert result.id == identity and result.dispatch_allowed is False
+        assert len(clients) == 3
+    else:
+        with pytest.raises(service.OwnerUnavailable, match="deadline"):
+            asyncio.run(service.create_context(identity, "verified-human", request))
+        from project_workflow.domain.exceptions import NotFoundError
+
+        with pytest.raises(NotFoundError):
+            service.get_context(identity)
+    assert len({id(client) for client in clients}) == 1
+    assert all(client.is_closed for client in clients)
+
+
 def test_context_http_statuses_original_readback_and_foreign_actor(monkeypatch):
     app = FastAPI()
     actor = {"subject": "human"}
@@ -36,7 +80,7 @@ def test_context_http_statuses_original_readback_and_foreign_actor(monkeypatch):
     app.put("/contexts/{identity}")(routes.bind)
     state = {"kind": "valid"}
 
-    async def reader(owner, path, item):
+    async def reader(owner, path, item, *, client):
         if state["kind"] == "outage":
             raise service.OwnerUnavailable()
         if state["kind"] == "foreign":
@@ -93,7 +137,7 @@ def test_repository_verification_profile_version_and_operation_uniqueness(monkey
         {**item.model_dump(), "context": {**item.context.model_dump(), "repositories": [repository]}}
     )
 
-    async def reader(owner, path, value):
+    async def reader(owner, path, value, *, client):
         calls.append(owner)
         if owner == "FORGE":
             return {

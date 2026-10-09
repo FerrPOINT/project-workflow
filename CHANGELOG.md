@@ -10,6 +10,10 @@
 
 
 ### Changed
+- Namespace/workflow context sits beside account on the right; compact sidebar
+  applies the Base SSR scope and shrinks with its labels and content offset.
+- Mobile service menu stays inside the viewport; namespace selection and history
+  update both desktop and drawer selectors.
 - Header matches the Base product/service/context/account order; page actions
   leave the global header. Account menu consumes the pinned Base SSR theme
   primitive and synchronizes the browser preference with React products.
@@ -19,6 +23,8 @@
 - Standalone-режим: репозиторий собирается и запускается без соседнего `services-base` (убраны extra `cli-platform`, uv source, Docker additional_context и CI checkout). Token-режим CLI без `sdlc-cli-core` выдаёт понятную ошибку; запуск без `AUTH_ISSUER` работает без авторизации.
 
 ### Fixed
+- Namespace owner verification bounds streamed responses and the complete
+  command with a total deadline, sharing one request-owned HTTP pool.
 - Immutable image builder закрепляет Git EOL-настройки только для archive:
   один commit даёт одинаковые source/bundle digests независимо от пользовательских
   `core.autocrlf` и `core.eol`; явные repository EOL rules и binary bytes сохранены.

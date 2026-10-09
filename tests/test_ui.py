@@ -518,6 +518,8 @@ class TestPhasesPage:
         assert "--accent-foreground:" in response.text
         assert "--shell-page-gutter:clamp(16px,2vw,32px)" in response.text
         assert 'data-page-layout="wide"' in response.text
+        assert '<body class="base-ssr-shell">' in response.text
+        assert '.platform-header-context{justify-content:flex-end}' in response.text
 
     def test_shell_has_one_service_switcher_and_account_theme_with_mobile_namespace(self):
         response = client.get("/agents")
@@ -530,6 +532,9 @@ class TestPhasesPage:
         assert 'id="sidebarThemeSelector"' not in response.text
         assert response.text.count('data-base-theme-option') >= 3
         assert 'window.SdlcThemePreference.read("workflow-theme")' in response.text
+        assert response.text.count('data-namespace-selector class="namespace-select"') == 1
+        assert 'id="namespaceSelector" data-namespace-selector' in response.text
+        assert '.platform-header .service-menu-popover{position:fixed;left:12px;right:12px;' in response.text
 
     def test_sidebar_places_namespaces_first(self):
         response = client.get("/phases")
@@ -2320,7 +2325,10 @@ class TestProjectsPage:
             'document.cookie="workflow_namespace_id"+\'=\'+encodeURIComponent(id)+\'; path=/; SameSite=Lax\';'
             in response.text
         )
-        assert "if(selector){ selector.value = String(id); }" in response.text
+        assert (
+            "document.querySelectorAll('[data-namespace-selector]')"
+            ".forEach(function(selector){ selector.value = String(id); });" in response.text
+        )
         assert "url.pathname = '/namespaces';" in response.text
         assert "var method = historyMode === 'push' ? 'pushState' : 'replaceState';" in response.text
         assert "window.history[method](null, '', url.toString());" in response.text
@@ -2370,8 +2378,9 @@ class TestProjectsPage:
         assert "brandSubname.textContent = command;" in response.text
         assert "function renderNamespaceSelector()" in response.text
         assert "selector.replaceChildren();" in response.text
-        assert "option.textContent = namespace.name;" in response.text
+        assert "option.textContent = namespaceContextLabel(namespace);" in response.text
         assert "renderNamespaceSelector();" in response.text
+        assert "document.querySelectorAll('[data-namespace-selector]').forEach(function(selector)" in response.text
 
     def test_namespace_create_redirects_to_edit_page_after_success(self):
         response = client.get("/namespaces/new")

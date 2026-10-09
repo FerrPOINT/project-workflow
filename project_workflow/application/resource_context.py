@@ -1,16 +1,24 @@
 """Create verified context with immutable identity and original-command readback."""
 
+import asyncio
 from uuid import UUID
 
+import httpx
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
-from project_workflow.domain.resource_context import CreateExecutionContext, ExecutionContextReadback
+from project_workflow.domain.resource_context import (
+    CreateExecutionContext,
+    ExecutionContextReadback,
+    ExecutionContextV2,
+)
 from project_workflow.infrastructure.db.models import ResourceExecutionContext, Workflow, WorkflowMode
 from project_workflow.infrastructure.db.session import get_session
 from project_workflow.infrastructure.resource_context_reader import OwnerUnavailable, read_owner
+
+CONTEXT_TIMEOUT_SECONDS = 10
 
 
 def _readback(row: ResourceExecutionContext, identity: UUID) -> ExecutionContextReadback:
@@ -45,14 +53,8 @@ def _replay(identity: UUID, actor: str, request: CreateExecutionContext) -> Exec
         return _readback(row, identity)
 
 
-async def create_context(identity: UUID, actor: str, request: CreateExecutionContext) -> ExecutionContextReadback:
-    if identity.int == 0:
-        raise ValueError("Nil execution context identity")
-    original = _replay(identity, actor, request)
-    if original:
-        return original
-    context = request.context
-    task = await read_owner("TRACKER", f"api/v1/namespace-tasks/{context.task.task_id}", context)
+async def _verify_resources(context: ExecutionContextV2, client: httpx.AsyncClient) -> tuple[UUID, int]:
+    task = await read_owner("TRACKER", f"api/v1/namespace-tasks/{context.task.task_id}", context, client=client)
     if (
         task.get("namespace") != context.namespace.model_dump(mode="json")
         or task.get("task_id") != str(context.task.task_id)
@@ -68,13 +70,33 @@ async def create_context(identity: UUID, actor: str, request: CreateExecutionCon
     except (KeyError, TypeError, ValueError):
         raise OwnerUnavailable("Invalid Tracker readback") from None
     for repository in context.repositories:
-        readback = await read_owner("FORGE", f"api/v1/namespace-repositories/{repository.repository_id}", context)
+        readback = await read_owner(
+            "FORGE", f"api/v1/namespace-repositories/{repository.repository_id}", context, client=client
+        )
         if (
             readback.get("namespace") != context.namespace.model_dump(mode="json")
             or readback.get("repository_id") != str(repository.repository_id)
             or readback.get("forge_instance_id") != str(repository.forge_instance_id)
         ):
             raise ConflictError("Invalid repository context")
+    return project, generation
+
+
+async def create_context(identity: UUID, actor: str, request: CreateExecutionContext) -> ExecutionContextReadback:
+    if identity.int == 0:
+        raise ValueError("Nil execution context identity")
+    original = _replay(identity, actor, request)
+    if original:
+        return original
+    context = request.context
+    try:
+        # One command owns its pool; all owner checks share one bounded verification budget.
+        async with httpx.AsyncClient(timeout=CONTEXT_TIMEOUT_SECONDS, follow_redirects=False) as client:
+            project, generation = await asyncio.wait_for(
+                _verify_resources(context, client), CONTEXT_TIMEOUT_SECONDS
+            )
+    except asyncio.TimeoutError:
+        raise OwnerUnavailable("Execution context verification deadline exceeded") from None
     result = ExecutionContextReadback(
         id=identity, request=request, tracker_project_id=project, binding_generation=generation
     )

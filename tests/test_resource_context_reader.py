@@ -4,8 +4,10 @@ import asyncio
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
+from time import sleep
 from urllib.parse import parse_qs, urlsplit
 
+import httpx
 import pytest
 
 from project_workflow.infrastructure.resource_context_reader import OwnerUnavailable, read_owner
@@ -54,6 +56,13 @@ def test_owner_reader_uses_private_credential_and_bounded_nonredirecting_http(mo
             "registry_instance_id": [str(item.namespace.registry_instance_id)],
             "namespace_id": [str(item.namespace.namespace_id)],
         }
+        async def shared_client():
+            async with httpx.AsyncClient(follow_redirects=True) as client:
+                assert await read_owner("TRACKER", "valid", item, client=client) == payload
+                with pytest.raises(OwnerUnavailable):
+                    await read_owner("TRACKER", "redirect", item, client=client)
+
+        asyncio.run(shared_client())
         for path in ["redirect", "500", "401", "large", "array", "invalid"]:
             with pytest.raises(OwnerUnavailable):
                 asyncio.run(read_owner("TRACKER", path, item))
@@ -97,3 +106,43 @@ def test_invalid_reader_origin_and_credential_fail_before_network(monkeypatch, t
         path.write_bytes(token)
         with pytest.raises(OwnerUnavailable, match="credential"):
             asyncio.run(read_owner("TRACKER", "valid", item))
+
+
+def test_streaming_reader_has_total_deadline_and_accepts_fast_response(monkeypatch, tmp_path):
+    from project_workflow.infrastructure import resource_context_reader as reader
+
+    monkeypatch.setattr(reader, "READER_TIMEOUT_SECONDS", 0.12, raising=False)
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            payload = b'{"state":"active"}'
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            delay = 0.08 if urlsplit(self.path).path == "/slow" else 0.01
+            try:
+                for part in (payload[:5], payload[5:]):
+                    sleep(delay)
+                    self.wfile.write(part)
+                    self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+
+        def log_message(self, *args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    token = tmp_path / "reader-token"
+    token.write_text("owned-reader")
+    monkeypatch.setenv("PROJECT_WORKFLOW_NAMESPACE__TRACKER_URL", f"http://127.0.0.1:{server.server_port}")
+    monkeypatch.setenv("PROJECT_WORKFLOW_NAMESPACE__TRACKER_TOKEN_FILE", str(token))
+    try:
+        assert asyncio.run(read_owner("TRACKER", "fast", context())) == {"state": "active"}
+        with pytest.raises(OwnerUnavailable, match="deadline"):
+            asyncio.run(read_owner("TRACKER", "slow", context()))
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
