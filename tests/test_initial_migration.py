@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from alembic.autogenerate import compare_metadata
@@ -85,9 +86,48 @@ def test_repository_has_one_linear_migration_head():
         "0004_wide_work_item_revision.py",
         "0005_mode_execution_scopes.py",
         "0006_versioned_mode_catalog.py",
-        "0007_pm_execution.py",
+        "0007_resource_execution_contexts.py",
+        "0008_pm_execution.py",
     ]
-    assert migration_head() == "0007_pm_execution"
+    assert migration_head() == "0008_pm_execution"
+
+
+def test_pm_upgrade_preserves_existing_resource_contexts(tmp_path):
+    from project_workflow.domain.resource_context import CreateExecutionContext, ExecutionContextReadback
+
+    engine = _sqlite_engine(tmp_path, "resource-context-upgrade.db")
+    run_alembic_command("upgrade", engine, "0007_resource_execution_contexts")
+    with engine.begin() as connection:
+        workflow_id = connection.execute(text(
+            "INSERT INTO workflows (key,name,description,is_default) "
+            "VALUES ('existing-profile','Existing profile','',0) RETURNING id"
+        )).scalar_one()
+        mode_id = connection.execute(text(
+            "INSERT INTO workflow_modes (workflow_id,key,name,mode_order) "
+            "VALUES (:workflow,'default','Default',1) RETURNING id"
+        ), {"workflow": workflow_id}).scalar_one()
+        request = CreateExecutionContext.model_validate({
+            "workflow_id": workflow_id, "catalog_version": 1, "mode_key": "default",
+            "context": {"schema_version": 2, "operation_id": str(uuid4()),
+                        "namespace": {"registry_instance_id": str(uuid4()), "namespace_id": str(uuid4())},
+                        "task": {"tracker_instance_id": str(uuid4()), "task_id": str(uuid4())},
+                        "repositories": []},
+        })
+        projection = ExecutionContextReadback(
+            id=uuid4(), request=request, tracker_project_id=uuid4(), binding_generation=2,
+        )
+        connection.execute(db_models.ResourceExecutionContext.__table__.insert().values(
+            id=str(projection.id), operation_id=str(request.context.operation_id),
+            request=request.model_dump(mode="json"), verified_projection=projection.model_dump(mode="json"),
+            workflow_id=workflow_id, mode_id=mode_id, created_by_subject="original-human",
+        ))
+        original = connection.execute(text("SELECT * FROM resource_execution_contexts")).mappings().all()
+    ensure_migrated(engine)
+    ensure_migrated(engine)
+    assert database_revisions(engine) == {"0008_pm_execution"}
+    assert schema_is_ready(engine)
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT * FROM resource_execution_contexts")).mappings().all() == original
 
 
 def test_fresh_sqlite_migration_matches_orm_metadata(tmp_path):
@@ -139,7 +179,7 @@ def test_fresh_sqlite_migration_matches_orm_metadata(tmp_path):
         }
         assert actual_fks == expected_fks, table_name
 
-    assert database_revisions(engine) == {"0007_pm_execution"}
+    assert database_revisions(engine) == {"0008_pm_execution"}
     assert schema_is_ready(engine) is True
     with engine.connect() as connection:
         context = MigrationContext.configure(
@@ -321,7 +361,7 @@ def test_sqlite_supported_additive_upgrade_preserves_legacy_catalog_and_assignme
     assert database_revisions(engine) == {predecessor}
     ensure_migrated(engine)
     ensure_migrated(engine)  # Restart is idempotent and cannot reinterpret historical payloads.
-    assert database_revisions(engine) == {"0007_pm_execution"}
+    assert database_revisions(engine) == {"0008_pm_execution"}
     assert schema_is_ready(engine)
     with engine.connect() as conn:
         for table, original in frozen.items():
@@ -460,7 +500,7 @@ def test_sqlite_runtime_assignment_rejects_invalid_immutable_bindings(tmp_path, 
         )
 
     ensure_migrated(engine)
-    assert database_revisions(engine) == {"0007_pm_execution"}
+    assert database_revisions(engine) == {"0008_pm_execution"}
     with engine.connect() as conn:
         preserved = conn.execute(
             text(
@@ -565,7 +605,8 @@ def test_in_memory_sqlite_migration_keeps_the_schema_alive():
 @pytest.mark.parametrize("revision,message", [
     ("0003_runtime_assignment_bind", "Downgrade from runtime assignment bind"),
     ("0004_wide_work_item_revision", "Downgrade from wide Business revisions"),
-    ("0007_pm_execution", "PM execution downgrade refused"),
+    ("0007_resource_execution_contexts", "Execution context history requires"),
+    ("0008_pm_execution", "PM execution downgrade refused"),
 ])
 def test_sqlite_downgrade_refuses_lossy_runtime_history(tmp_path, revision, message):
     engine = _sqlite_engine(tmp_path)
@@ -855,7 +896,7 @@ def test_head_with_damaged_or_polluted_schema_is_refused(tmp_path, mutation):
     assert schema_is_ready(engine) is False
     with pytest.raises(DatabaseRecreateRequired):
         ensure_migrated(engine)
-    assert database_revisions(engine) == {"0007_pm_execution"}
+    assert database_revisions(engine) == {"0008_pm_execution"}
     if mutation == "extra":
         with engine.connect() as connection:
             assert connection.execute(text("SELECT id FROM unexpected_table")).scalar_one() == 42

@@ -115,6 +115,10 @@ class _SsoMiddleware(BaseHTTPMiddleware):
             subject = identity["sub" if is_personal_token else "id"]
             if not isinstance(subject, str) or not subject:
                 raise ValueError("invalid identity")
+            machines = os.environ.get("PROJECT_WORKFLOW_NAMESPACE__MACHINE_SUBJECTS", "").split(",")
+            machine_subjects = [item.strip() for item in machines if item.strip()]
+            if identity.get("role") == "service_account" or subject in machine_subjects:
+                return _auth_error(request, 403, "Машинный credential не разрешён на human routes")
             if is_personal_token:
                 action = "read" if request.method in {"GET", "HEAD", "OPTIONS"} else "write"
                 if f"project-workflow:{action}" not in identity["scopes"]:

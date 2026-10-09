@@ -3,8 +3,8 @@
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0007_pm_execution"
-down_revision = "0006_versioned_mode_catalog"
+revision = "0008_pm_execution"
+down_revision = "0007_resource_execution_contexts"
 branch_labels = None
 depends_on = None
 

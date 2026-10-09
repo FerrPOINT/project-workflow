@@ -20,7 +20,11 @@ COPY scripts/ ./scripts/
 COPY project_workflow/ ./project_workflow/
 COPY runtime-*.json ./
 
-RUN if [ -n "$SOURCE_REVISION" ] || [ -n "$SOURCE_ARCHIVE_SHA256" ] || [ -n "$RUNTIME_BUNDLE_SHA256" ]; then \
+# Runtime inputs are non-executable Git files; normalize NTFS transport modes
+# without removing directory search permissions or relaxing digest verification.
+RUN find scripts project_workflow -type f -exec chmod 0644 {} + \
+    && chmod 0644 pyproject.toml constraints.txt README.md LICENSE alembic.ini \
+    && if [ -n "$SOURCE_REVISION" ] || [ -n "$SOURCE_ARCHIVE_SHA256" ] || [ -n "$RUNTIME_BUNDLE_SHA256" ]; then \
         python -m scripts.build_runtime_image verify-manifest \
             --root /app \
             --manifest /app/runtime-build-manifest.json \

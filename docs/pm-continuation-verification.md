@@ -1,5 +1,16 @@
 # PM Continuation Verification
 
+## Namespace-cohort reconciliation (2026-10-09)
+
+The PM branch incorporates the accepted UI and namespace execution-context v2.
+The already-installed `0007_resource_execution_contexts` migration is unchanged.
+The still-pending PM migration is now `0008_pm_execution`, directly after it,
+with one linear head. A populated-resource upgrade and restart regression checks
+that existing context IDs, requests, projections and original actors survive.
+Earlier sections below document historical verification, not this new head's
+full qualification. Actual owner integration and native PM acceptance remain
+required before release; production admission guards are preserved.
+
 ## Indexed operation history (2026-10-03)
 
 Checkpoint uniqueness reads now have an `(execution_ref, kind)` index in ORM

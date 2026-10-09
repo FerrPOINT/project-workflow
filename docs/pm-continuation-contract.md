@@ -38,8 +38,10 @@ Published historical rows are migrated with null mapping, with no guessed
 identity. An authorized `legacy_bound` adoption can set it once alongside bind
 metadata; a finalized binding cannot later be enriched or rebound. Existing PM
 records without mapping need an explicit owner-controlled rollout decision.
-The single pending `0007_pm_execution` migration, after accepted `0006`, adds the nullable column and
-constraint; no additional pending migration is introduced.
+The single pending `0008_pm_execution` migration follows the installed
+`0007_resource_execution_contexts` and adds the nullable column and constraint.
+Resource-context migration bytes and persisted contexts are preserved; the PM
+revision remains pending and has not been applied to the installed workspace.
 
 An assignment enrolled in PMExecution cannot prepare generic
 `/internal/runtime/rebind`, regardless of execution/task status. The indexed

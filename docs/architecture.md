@@ -5,6 +5,11 @@ runtime. В целевом Base Task lifecycle принадлежит Tracker, �
 Fleet, технические workspace/receipts — Forge. Business-привязки действующего
 exporter требуют отдельной адаптации, а не переименования фактов текущего runtime.
 
+Сквозной бизнес-Namespace получает отдельный
+[execution context v2](resource-execution-context.md). Он сохраняет instance-qualified
+Task/Repository refs и выбранную версию profile/mode; legacy CLI namespaces и
+общий каталог profiles сохраняются. Контекст не открывает runtime/dispatch gates.
+
 `project-workflow` - внутренняя loopback/private утилита для пофазного ведения
 задач. Она не владеет human identity, browser sessions или personal tokens:
 ими управляет Central Auth. Приложение проверяет их через server-side OIDC и

@@ -6,6 +6,9 @@
 
 ## [Unreleased]
 
+- Namespace cohort: стабильные refs, локальные binding projections и lifecycle guards; аддитивные migrations, совместимый rollback и отдельные execution v2 gates. Runtime-приёмка ещё не завершена.
+
+
 ### Changed
 - Namespace/workflow context sits beside account on the right; compact sidebar
   applies the Base SSR scope and shrinks with its labels and content offset.
@@ -25,6 +28,9 @@
 - Index PM operation history by execution and kind so checkpoint uniqueness
   checks do not scan other executions while holding the task lock. Keep the
   ORM and pending PM migration schema in sync.
+
+- Namespace owner verification bounds streamed responses and the complete
+  command with a total deadline, sharing one request-owned HTTP pool.
 - Immutable image builder закрепляет Git EOL-настройки только для archive:
   один commit даёт одинаковые source/bundle digests независимо от пользовательских
   `core.autocrlf` и `core.eol`; явные repository EOL rules и binary bytes сохранены.
