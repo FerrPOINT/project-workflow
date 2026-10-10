@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from alembic.autogenerate import compare_metadata
@@ -85,8 +85,49 @@ def test_repository_has_one_linear_migration_head():
         "0004_wide_work_item_revision.py",
         "0005_mode_execution_scopes.py",
         "0006_versioned_mode_catalog.py",
+        "0007_resource_execution_contexts.py",
+        "0008_pm_execution.py",
+        "0009_pm_draft_assignment.py",
     ]
-    assert migration_head() == "0006_versioned_mode_catalog"
+    assert migration_head() == "0009_pm_draft_assignment"
+
+
+def test_pm_upgrade_preserves_existing_resource_contexts(tmp_path):
+    from project_workflow.domain.resource_context import CreateExecutionContext, ExecutionContextReadback
+
+    engine = _sqlite_engine(tmp_path, "resource-context-upgrade.db")
+    run_alembic_command("upgrade", engine, "0007_resource_execution_contexts")
+    with engine.begin() as connection:
+        workflow_id = connection.execute(text(
+            "INSERT INTO workflows (key,name,description,is_default) "
+            "VALUES ('existing-profile','Existing profile','',0) RETURNING id"
+        )).scalar_one()
+        mode_id = connection.execute(text(
+            "INSERT INTO workflow_modes (workflow_id,key,name,mode_order) "
+            "VALUES (:workflow,'default','Default',1) RETURNING id"
+        ), {"workflow": workflow_id}).scalar_one()
+        request = CreateExecutionContext.model_validate({
+            "workflow_id": workflow_id, "catalog_version": 1, "mode_key": "default",
+            "context": {"schema_version": 2, "operation_id": str(uuid4()),
+                        "namespace": {"registry_instance_id": str(uuid4()), "namespace_id": str(uuid4())},
+                        "task": {"tracker_instance_id": str(uuid4()), "task_id": str(uuid4())},
+                        "repositories": []},
+        })
+        projection = ExecutionContextReadback(
+            id=uuid4(), request=request, tracker_project_id=uuid4(), binding_generation=2,
+        )
+        connection.execute(db_models.ResourceExecutionContext.__table__.insert().values(
+            id=str(projection.id), operation_id=str(request.context.operation_id),
+            request=request.model_dump(mode="json"), verified_projection=projection.model_dump(mode="json"),
+            workflow_id=workflow_id, mode_id=mode_id, created_by_subject="original-human",
+        ))
+        original = connection.execute(text("SELECT * FROM resource_execution_contexts")).mappings().all()
+    ensure_migrated(engine)
+    ensure_migrated(engine)
+    assert database_revisions(engine) == {"0009_pm_draft_assignment"}
+    assert schema_is_ready(engine)
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT * FROM resource_execution_contexts")).mappings().all() == original
 
 
 def test_fresh_sqlite_migration_matches_orm_metadata(tmp_path):
@@ -138,7 +179,7 @@ def test_fresh_sqlite_migration_matches_orm_metadata(tmp_path):
         }
         assert actual_fks == expected_fks, table_name
 
-    assert database_revisions(engine) == {"0006_versioned_mode_catalog"}
+    assert database_revisions(engine) == {"0009_pm_draft_assignment"}
     assert schema_is_ready(engine) is True
     with engine.connect() as connection:
         context = MigrationContext.configure(
@@ -250,7 +291,10 @@ def test_sqlite_upgrade_populated_legacy_backfills_each_workflow_mode(tmp_path):
             )
 
 
-@pytest.mark.parametrize("predecessor", ["0004_wide_work_item_revision", "0005_mode_execution_scopes"])
+@pytest.mark.parametrize("predecessor", [
+    "0004_wide_work_item_revision", "0005_mode_execution_scopes", "0006_versioned_mode_catalog",
+    "0008_pm_execution",
+])
 def test_sqlite_supported_additive_upgrade_preserves_legacy_catalog_and_assignment_history(tmp_path, predecessor):
     engine = _sqlite_engine(tmp_path, f"{predecessor}.db")
     run_alembic_command("upgrade", engine, predecessor)
@@ -312,17 +356,21 @@ def test_sqlite_supported_additive_upgrade_preserves_legacy_catalog_and_assignme
                 f"INSERT INTO task_runtime_assignments ({', '.join(assignment)}) "
                 f"VALUES ({', '.join(f':{column}' for column in assignment)})"
             ), assignment)
-        frozen = {table: conn.execute(text(f"SELECT * FROM {table} ORDER BY id")).all()
+        frozen = {table: conn.execute(text(f"SELECT * FROM {table} ORDER BY id")).mappings().all()
             for table in ("tasks", "task_runtime_assignments", "task_step_history", "task_phase_events")}
 
     assert database_revisions(engine) == {predecessor}
     ensure_migrated(engine)
     ensure_migrated(engine)  # Restart is idempotent and cannot reinterpret historical payloads.
-    assert database_revisions(engine) == {"0006_versioned_mode_catalog"}
+    assert database_revisions(engine) == {"0009_pm_draft_assignment"}
     assert schema_is_ready(engine)
     with engine.connect() as conn:
         for table, original in frozen.items():
-            assert conn.execute(text(f"SELECT * FROM {table} ORDER BY id")).all() == original, table
+            actual = conn.execute(text(f"SELECT * FROM {table} ORDER BY id")).mappings().all()
+            expected = [dict(row, concrete_agent_ref=None) for row in original] if (
+                table == "task_runtime_assignments"
+            ) else original
+            assert actual == expected, table
         assert conn.execute(text("SELECT active_catalog_version FROM workflows WHERE id = :id"),
                             {"id": workflow_id}).scalar_one() == 1
     with SAUnitOfWork(engine) as uow:
@@ -341,9 +389,12 @@ def test_sqlite_supported_additive_upgrade_preserves_legacy_catalog_and_assignme
         assert uow.tasks.get_assignment_by_operation_key("legacy-catalog-1").hermes_run_ref == "run:1"
 
 
-def test_sqlite_runtime_assignment_rejects_invalid_immutable_bindings(tmp_path):
+@pytest.mark.parametrize("prior_revision", [
+    "0002_workflow_modes", "0004_wide_work_item_revision", "0006_versioned_mode_catalog",
+])
+def test_sqlite_runtime_assignment_rejects_invalid_immutable_bindings(tmp_path, prior_revision):
     engine = _sqlite_engine(tmp_path, "binding-constraints.db")
-    run_alembic_command("upgrade", engine, "0002_workflow_modes")
+    run_alembic_command("upgrade", engine, prior_revision)
     with engine.begin() as conn:
         workflow_id = conn.execute(
             text(
@@ -450,18 +501,18 @@ def test_sqlite_runtime_assignment_rejects_invalid_immutable_bindings(tmp_path):
         )
 
     ensure_migrated(engine)
-    assert database_revisions(engine) == {"0006_versioned_mode_catalog"}
+    assert database_revisions(engine) == {"0009_pm_draft_assignment"}
     with engine.connect() as conn:
         preserved = conn.execute(
             text(
                 "SELECT operation_key, binding_ref, hermes_run_ref, bind_operation_key, "
-                "bind_request_sha256, payload FROM task_runtime_assignments "
+                "bind_request_sha256, payload, concrete_agent_ref FROM task_runtime_assignments "
                 "WHERE operation_key IN ('legacy-bound', 'legacy-unbound') ORDER BY operation_key"
             )
         ).all()
     assert preserved == [
-        ("legacy-bound", "binding:1", "run:1", None, None, "{}"),
-        ("legacy-unbound", None, None, None, None, '{"legacy":true}'),
+        ("legacy-bound", "binding:1", "run:1", None, None, "{}", None),
+        ("legacy-unbound", None, None, None, None, '{"legacy":true}', None),
     ]
 
     base = {
@@ -470,6 +521,7 @@ def test_sqlite_runtime_assignment_rejects_invalid_immutable_bindings(tmp_path):
         "assignment_revision": 3,
         "bind_operation_key": "bind:1",
         "bind_request_sha256": "b" * 64,
+        "concrete_agent_ref": None,
     }
     columns = ", ".join(base)
     values = ", ".join(f":{column}" for column in base)
@@ -490,6 +542,15 @@ def test_sqlite_runtime_assignment_rejects_invalid_immutable_bindings(tmp_path):
         )
 
     invalid_rows = [
+        {
+            **base, "operation_key": "mapping-without-binding", "assignment_revision": 5,
+            "binding_ref": None, "hermes_run_ref": None, "bind_operation_key": None,
+            "bind_request_sha256": None, "concrete_agent_ref": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        },
+        {
+            **base, "operation_key": "mapping-role-name", "assignment_revision": 5,
+            "bind_operation_key": "bind:mapping-role-name", "concrete_agent_ref": "project_manager",
+        },
         {
             **base,
             "operation_key": "cross-project",
@@ -545,6 +606,9 @@ def test_in_memory_sqlite_migration_keeps_the_schema_alive():
 @pytest.mark.parametrize("revision,message", [
     ("0003_runtime_assignment_bind", "Downgrade from runtime assignment bind"),
     ("0004_wide_work_item_revision", "Downgrade from wide Business revisions"),
+    ("0007_resource_execution_contexts", "Execution context history requires"),
+    ("0008_pm_execution", "PM execution downgrade refused"),
+    ("0009_pm_draft_assignment", "PM Draft assignment downgrade refused"),
 ])
 def test_sqlite_downgrade_refuses_lossy_runtime_history(tmp_path, revision, message):
     engine = _sqlite_engine(tmp_path)
@@ -834,7 +898,7 @@ def test_head_with_damaged_or_polluted_schema_is_refused(tmp_path, mutation):
     assert schema_is_ready(engine) is False
     with pytest.raises(DatabaseRecreateRequired):
         ensure_migrated(engine)
-    assert database_revisions(engine) == {"0006_versioned_mode_catalog"}
+    assert database_revisions(engine) == {"0009_pm_draft_assignment"}
     if mutation == "extra":
         with engine.connect() as connection:
             assert connection.execute(text("SELECT id FROM unexpected_table")).scalar_one() == 42
@@ -982,13 +1046,13 @@ def test_health_requires_migrated_schema_and_hides_internal_details(tmp_path, mo
 
     engine = _sqlite_engine(tmp_path)
     monkeypatch.setattr(session, "get_engine", lambda: engine)
-    unavailable = asyncio.run(_health())
+    unavailable = _health()
     assert unavailable.status_code == 503
     assert b'"error_code":"schema-not-ready"' in unavailable.body
     assert b"sqlite" not in unavailable.body.lower()
 
     ensure_migrated(engine)
-    ready = asyncio.run(_health())
+    ready = _health()
     assert ready.status_code == 200
     assert b'"database":"ok"' in ready.body
     assert b'"schema":"ok"' in ready.body

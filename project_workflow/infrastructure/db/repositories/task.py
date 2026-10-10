@@ -162,6 +162,29 @@ class SATaskRepository(TaskRepository):
             ).scalar_one_or_none()
         return _row_to_runtime_assignment(row) if row else None
 
+    def task_has_pm_execution(self, task_id: int) -> bool:
+        return bool(self._session.scalar(select(
+            select(m.PMExecution.execution_ref).where(m.PMExecution.task_id == task_id).exists()
+        )))
+
+    def assignment_has_pm_execution(self, task_id: int, assignment_id: int) -> bool:
+        return bool(self._session.scalar(select(
+            select(m.PMExecution.execution_ref).where(
+                m.PMExecution.task_id == task_id,
+                m.PMExecution.assignment_id == assignment_id,
+            ).exists()
+        )))
+
+    def task_has_pm_draft_assignment(self, task_id: int) -> bool:
+        return bool(self._session.scalar(select(
+            select(m.TaskRuntimeAssignment.id).where(
+                m.TaskRuntimeAssignment.task_id == task_id,
+                m.TaskRuntimeAssignment.role_key == "project_manager",
+                m.TaskRuntimeAssignment.stage_key == "draft",
+                m.TaskRuntimeAssignment.queue_item_ref.is_(None),
+            ).exists()
+        )))
+
     def get_assignment_by_bind_operation_key(
         self, bind_operation_key: str
     ) -> TaskRuntimeAssignment | None:
@@ -230,6 +253,7 @@ class SATaskRepository(TaskRepository):
         hermes_run_ref: str,
         bind_operation_key: str,
         bind_request_sha256: str,
+        concrete_agent_ref: str | None,
     ) -> bool:
         result = self._session.execute(
             update(m.TaskRuntimeAssignment)
@@ -250,12 +274,14 @@ class SATaskRepository(TaskRepository):
                 else m.TaskRuntimeAssignment.hermes_run_ref == expected_hermes_run_ref,
                 m.TaskRuntimeAssignment.bind_operation_key.is_(None),
                 m.TaskRuntimeAssignment.bind_request_sha256.is_(None),
+                m.TaskRuntimeAssignment.concrete_agent_ref.is_(None),
             )
             .values(
                 binding_ref=binding_ref,
                 hermes_run_ref=hermes_run_ref,
                 bind_operation_key=bind_operation_key,
                 bind_request_sha256=bind_request_sha256,
+                concrete_agent_ref=concrete_agent_ref,
             )
         )
         return getattr(result, "rowcount", 0) == 1

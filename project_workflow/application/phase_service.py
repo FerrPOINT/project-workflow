@@ -6,9 +6,7 @@ from typing import Any
 from uuid import uuid4
 
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
-from project_workflow.domain.repositories import UnitOfWork
-
-from .managed_catalog_policy import assert_catalog_mutation_allowed
+from project_workflow.domain.repositories import PhaseCheckRepository, PhaseEvidenceRequirementRepository, UnitOfWork
 
 
 class PhaseService:
@@ -107,49 +105,32 @@ class PhaseService:
             )
         return final_ids
 
-    def _save_checks(self, phase_id: int, items: list[dict[str, Any]]) -> list[int]:
-        existing = list(self._uow.phase_checks.list(phase_id))
-        existing_by_id = self._validate_nested_ids(phase_id, items, existing, "проверки")
-        self._validate_unique_descriptions(items, "проверки")
+    def _save_text_items(
+        self,
+        phase_id: int,
+        items: list[dict[str, Any]],
+        repository: PhaseCheckRepository | PhaseEvidenceRequirementRepository,
+        label: str,
+    ) -> list[int]:
+        existing = list(repository.list(phase_id))
+        existing_by_id = self._validate_nested_ids(phase_id, items, existing, label)
+        self._validate_unique_descriptions(items, label)
         submitted_existing_ids = {item["id"] for item in items if item["id"] is not None}
         for item_id in set(existing_by_id) - submitted_existing_ids:
-            self._uow.phase_checks.delete(item_id)
+            repository.delete(item_id)
         update_token = uuid4().hex
         for item_id in submitted_existing_ids:
-            self._uow.phase_checks.update(
+            repository.update(
                 item_id,
-                {"description": f"__phase_check_update_{update_token}_{item_id}__"},
+                {"description": f"__phase_text_update_{update_token}_{item_id}__"},
             )
         final_ids: list[int] = []
         for item in items:
             item_id = item["id"]
             if item_id is None:
-                item_id = self._uow.phase_checks.create(phase_id, item)
+                item_id = repository.create(phase_id, item)
             else:
-                self._uow.phase_checks.update(item_id, item)
-            final_ids.append(item_id)
-        return final_ids
-
-    def _save_evidence(self, phase_id: int, items: list[dict[str, Any]]) -> list[int]:
-        existing = list(self._uow.phase_evidence_requirements.list(phase_id))
-        existing_by_id = self._validate_nested_ids(phase_id, items, existing, "требования подтверждений")
-        self._validate_unique_descriptions(items, "требования подтверждений")
-        submitted_existing_ids = {item["id"] for item in items if item["id"] is not None}
-        for item_id in set(existing_by_id) - submitted_existing_ids:
-            self._uow.phase_evidence_requirements.delete(item_id)
-        update_token = uuid4().hex
-        for item_id in submitted_existing_ids:
-            self._uow.phase_evidence_requirements.update(
-                item_id,
-                {"description": f"__phase_evidence_update_{update_token}_{item_id}__"},
-            )
-        final_ids: list[int] = []
-        for item in items:
-            item_id = item["id"]
-            if item_id is None:
-                item_id = self._uow.phase_evidence_requirements.create(phase_id, item)
-            else:
-                self._uow.phase_evidence_requirements.update(item_id, item)
+                repository.update(item_id, item)
             final_ids.append(item_id)
         return final_ids
 
@@ -195,7 +176,7 @@ class PhaseService:
         """Update the complete phase aggregate in one locked transaction."""
         from project_workflow.application.phase import PhaseServiceApp
 
-        assert_catalog_mutation_allowed(self._uow)
+        self._uow.lock_catalog_state(shared=True)
         nested_fields = {"instructions", "checks", "evidence"}
         scalar = {key: value for key, value in data.items() if key not in nested_fields}
         try:
@@ -208,9 +189,11 @@ class PhaseService:
             if "instructions" in data:
                 result["instructions"] = self._save_instructions(resolved, data["instructions"])
             if "checks" in data:
-                result["checks"] = self._save_checks(resolved, data["checks"])
+                result["checks"] = self._save_text_items(resolved, data["checks"], self._uow.phase_checks, "проверки")
             if "evidence" in data:
-                result["evidence"] = self._save_evidence(resolved, data["evidence"])
+                result["evidence"] = self._save_text_items(
+                    resolved, data["evidence"], self._uow.phase_evidence_requirements, "требования подтверждений",
+                )
             self._uow.commit()
             return result
         except Exception:

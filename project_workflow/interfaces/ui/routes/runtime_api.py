@@ -9,10 +9,11 @@ from typing import Any
 
 from fastapi import Header, Query
 from fastapi.responses import JSONResponse
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from project_workflow import config, supervisor
-from project_workflow.application.state import _app_state
+from project_workflow.application.base_admission import admission_receipt, assert_base_step
 from project_workflow.application.task import TaskService
 from project_workflow.build_provenance import (
     BuildProvenanceError,
@@ -29,6 +30,7 @@ from project_workflow.domain.runtime_assignment import (
     phase_allowed_tools,
 )
 from project_workflow.infrastructure.db.managed_catalog import validate_managed_catalog_state
+from project_workflow.infrastructure.db.models import PMExecution, PMRun
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.cli.core import _require_valid_key, _resolve_namespace_id
 from project_workflow.interfaces.ui.schemas import (
@@ -160,7 +162,10 @@ def runtime_capabilities(
     if schema_ready:
         try:
             with SAUnitOfWork(engine) as uow:
-                catalog_ready = validate_managed_catalog_state(uow)
+                catalog_ready = validate_managed_catalog_state(
+                    uow,
+                    role_key=credential.role_key if credential.role_key in MANAGED_ROLE_MODE_SCOPES else None,
+                )
         except Exception:
             catalog_ready = False
 
@@ -180,7 +185,7 @@ def runtime_capabilities(
         )
 
     capabilities = ["assign", "bind", "rebind"] if credential.kind == "assignment" else ["step", "history"]
-    return {
+    response: dict[str, Any] = {
         "ok": True,
         "role_key": credential.role_key,
         "credential_kind": credential.kind,
@@ -189,6 +194,19 @@ def runtime_capabilities(
         "source_provenance": provenance.to_dict() if provenance is not None else {},
         "runtimeCompatibility": compatibility,
     }
+    from . import pm_api
+
+    if credential.role_key == "project_manager" and pm_api.configured():
+        response["pm_continuation"] = {
+            "contract_version": 1,
+            "base_path": "/internal/runtime/v1/pm",
+            "commands": ["assign", "bind", "resume", "rebind", "readback"]
+            if credential.kind == "assignment" else ["checkpoint", "readback"],
+            "terminal_proof": "configured-runtime-readback",
+            "dispatch_owner": "fleet",
+            "execution_token_header": "X-Workflow-Execution-Token",
+        }
+    return response
 
 
 def _namespace_id(uow: SAUnitOfWork, role: str) -> int:
@@ -252,6 +270,11 @@ def _history_rows(uow: SAUnitOfWork, task_key: str, namespace_id: int, limit: in
                 "cycle_number": item.get("cycle_number"),
             }
         )
+        if "execution_ref" in supervisor_response:
+            rows[-1].update({key: supervisor_response.get(key) for key in (
+                "execution_ref", "session_run_id", "execution_version", "execution_fence",
+                "binding_ref", "hermes_run_ref", "assignment_ref", "assignment_revision",
+            )})
     return rows
 
 
@@ -287,6 +310,15 @@ def _runtime_step_replay(
         else None
     )
     assignment_data = assignment.to_dict() if assignment is not None else {}
+    if role_key == "project_manager" and payload.session_run_id is not None and assignment is not None:
+        pm_run = uow.session.get(PMRun, payload.session_run_id)
+        pm_execution = uow.session.get(PMExecution, pm_run.execution_ref) if pm_run is not None else None
+        if (
+            pm_run is None or pm_execution is None or pm_execution.task_id != history.get("task_id")
+            or pm_execution.assignment_id != assignment.id
+        ):
+            raise ConflictError("PM history run does not belong to this execution/assignment")
+        assignment_data = {**assignment_data, "binding_ref": pm_run.binding_ref, "hermes_run_ref": pm_run.run_ref}
     expected_history = {
         "step_operation_key": payload.step_operation_key,
         "request_sha256": request_sha256,
@@ -331,10 +363,28 @@ def _runtime_step_replay(
     )
     if mismatched or invalid_task or invalid_assignment:
         raise ConflictError("step_operation_key уже использован для другого runtime step")
+    if task is not None:
+        assert_base_step(
+            uow, task.to_dict(), assignment_data,
+            config_ref=payload.base_config_ref, config_sha256=payload.base_config_sha256,
+        )
     response = history.get("supervisor_response")
     if not isinstance(response, dict):
         raise ConflictError("Сохранённый runtime step не содержит корректный ответ")
-    return _step_response(dict(response))
+    if assignment_data.get("payload", {}).get("base_admission") is not None and (
+        response.get("status") == "done" or response.get("complete") is True
+        or "base_terminal_receipt" in response
+        or history.get("verdict") == "pass" and history.get("next_phase_id") is None
+        and history.get("rollback_phase_id") is None
+    ):
+        from project_workflow.application.base_terminal import read_terminal_receipt
+
+        read_terminal_receipt(uow, payload.step_operation_key)
+    result = _step_response(dict(response))
+    receipt = admission_receipt(assignment_data, task.to_dict() if task is not None else {})
+    if receipt is not None:
+        result["base_admission_receipt"] = receipt
+    return result
 
 
 def _read_committed_runtime_step(
@@ -407,6 +457,8 @@ def execute_namespace_step(
             "mode_key": engine.task.get("mode_key") if engine.task else None,
             "cycle_number": engine.task.get("cycle_number") if engine.task else None,
         }
+        if runtime_fence is not None and runtime_fence.base_admission_sha256 is not None:
+            result["complete"] = False
         return {"ok": True, "exit_code": 0, "output": result["instructions"], "result": result}
     result = engine.evaluate(report)
     return _step_response(result)
@@ -441,6 +493,7 @@ def _assignment_response(task: dict[str, Any]) -> dict[str, Any]:
         "binding_ref",
         "hermes_run_ref",
         "bind_operation_key",
+        "concrete_agent_ref",
         "workspace_generation",
         "lease_generation",
         "exact_input_refs",
@@ -454,6 +507,7 @@ def _assignment_response(task: dict[str, Any]) -> dict[str, Any]:
         "ok": True,
         "exit_code": 0,
         "result": {key: task.get(key) for key in keys},
+        **({"base_admission_receipt": task["base_admission_receipt"]} if "base_admission_receipt" in task else {}),
     }
 
 
@@ -518,6 +572,7 @@ def runtime_assign(
                 expected_mode_key=payload.expected_mode_key,
                 expected_cycle_number=payload.expected_cycle_number,
                 runtime_compatibility=payload.runtime_compatibility,
+                base_admission=payload.base_admission.model_dump(mode="json") if payload.base_admission else None,
             )
             return _assignment_response(task)
     except (ConflictError, RuntimeError, ValueError) as exc:
@@ -586,6 +641,7 @@ def runtime_bind(
                 cycle_number=payload.cycle_number,
                 attempt_number=payload.attempt_number,
                 expected_binding_state=payload.expected_binding_state,
+                concrete_agent_ref=payload.concrete_agent_ref,
             )
             return _assignment_response(task)
     except (ConflictError, RuntimeError, ValueError) as exc:
@@ -595,6 +651,7 @@ def runtime_bind(
 def runtime_step(
     payload: RuntimeStepRequest,
     authorization: str | None = Header(default=None),
+    x_workflow_execution_token: str | None = Header(default=None),
 ) -> dict[str, Any] | JSONResponse:
     """Execute one role-scoped step in the trusted workflow service."""
     try:
@@ -613,6 +670,24 @@ def runtime_step(
             namespace_id = _namespace_id(uow, role)
             task_key = _require_valid_key(payload.task, uow, project_id=namespace_id)
             _assert_task_key_in_namespace(uow, namespace_id, task_key)
+            from project_workflow.application.pm_execution import PMExecutionService
+
+            from . import pm_api
+
+            task_row = uow.tasks.get_by_key(task_key, project_id=namespace_id)
+            if role == "project_manager" and task_row is not None:
+                execution = uow.session.scalar(select(PMExecution).where(PMExecution.task_id == task_row.id))
+                if execution is not None:
+                    snapshot = PMExecutionService(uow).snapshot(execution)
+                    if not pm_api.scope_matches(
+                        snapshot["identity"], snapshot["hermes_run_ref"], snapshot["binding_ref"],
+                        snapshot["fence"], snapshot["session_run_id"], x_workflow_execution_token,
+                    ):
+                        return _error("Current PM execution/run credential required", 403)
+                    if payload.session_run_id != snapshot["session_run_id"]:
+                        return _error("Current Fleet session_run_id required", 409)
+                else:
+                    PMExecutionService(uow).supervisor_binding(int(task_row.id or 0))
             replay = _runtime_step_replay(
                 uow,
                 payload=payload,
@@ -638,6 +713,8 @@ def runtime_step(
                 attempt_number=payload.attempt_number,
                 expected_phase_code=payload.expected_phase_code,
                 expected_status=payload.expected_status,
+                base_config_ref=payload.base_config_ref,
+                base_config_sha256=payload.base_config_sha256,
             )
             try:
                 response = execute_namespace_step(
@@ -648,6 +725,13 @@ def runtime_step(
                     create_if_missing=False,
                     runtime_fence=fence,
                 )
+                if fence.base_admission_sha256 is not None:
+                    assignment = uow.tasks.get_assignment_by_operation_key(fence.assignment_operation_key)
+                    current = uow.tasks.get_by_key(task_key, project_id=namespace_id)
+                    if assignment is not None and current is not None:
+                        response["base_admission_receipt"] = admission_receipt(
+                            assignment.to_dict(), current.to_dict(),
+                        )
             except (ConflictError, RuntimeError, ValueError):
                 uow.rollback()
                 replay = _runtime_step_replay(
@@ -687,6 +771,8 @@ def runtime_history(
     task: str = Query(...),
     n: int = Query(default=200, ge=1, le=200),
     authorization: str | None = Header(default=None),
+    x_workflow_execution_token: str | None = Header(default=None),
+    session_run_id: str | None = Query(default=None),
 ) -> dict[str, Any] | JSONResponse:
     """Return history only from the namespace bound to the supplied role token."""
     try:
@@ -703,6 +789,26 @@ def runtime_history(
             namespace_id = _namespace_id(uow, role)
             task_key = _require_valid_key(task, uow, project_id=namespace_id)
             _assert_task_key_in_namespace(uow, namespace_id, task_key)
+            if role == "project_manager":
+                from project_workflow.application.pm_execution import PMExecutionService
+
+                from . import pm_api
+
+                task_row = uow.tasks.get_by_key(task_key, project_id=namespace_id)
+                execution = uow.session.scalar(select(PMExecution).where(
+                    PMExecution.task_id == task_row.id,
+                )) if task_row is not None else None
+                if execution is not None:
+                    snapshot = PMExecutionService(uow).snapshot(execution)
+                    if not pm_api.scope_matches(
+                        snapshot["identity"], snapshot["hermes_run_ref"], snapshot["binding_ref"],
+                        snapshot["fence"], snapshot["session_run_id"], x_workflow_execution_token,
+                    ):
+                        return _error("Current PM execution/run credential required", 403)
+                    if session_run_id != snapshot["session_run_id"]:
+                        return _error("Current Fleet session_run_id required", 409)
+                elif task_row is not None:
+                    PMExecutionService(uow).supervisor_binding(int(task_row.id or 0))
             rows = _history_rows(uow, task_key, namespace_id, n)
             return {
                 "ok": True,
@@ -714,7 +820,7 @@ def runtime_history(
         return _error(str(exc), 409)
 
 
-async def runtime_catalog(
+def runtime_catalog(
     authorization: str | None = Header(default=None),
 ) -> dict[str, Any] | JSONResponse:
     """Expose only the namespace/workflow directory to Fleet Control."""
@@ -726,15 +832,10 @@ async def runtime_catalog(
         return _error("Недействительный runtime token", 401)
     if credential.kind != "catalog" or credential.role_key != _CATALOG_ROLE:
         return _error("Токен не разрешает чтение каталога", 403)
-    try:
-        if not validate_managed_catalog_state(_app_state.get_uow()):
-            return _error("Managed каталог временно недоступен", 503)
-    except (FileNotFoundError, ValueError):
-        return _error("Managed каталог временно недоступен", 503)
     from . import api
 
-    namespaces = await api.api_namespaces()
-    workflows = await api.api_workflows()
+    namespaces = api.api_namespaces()
+    workflows = api.api_workflows()
     namespace_items = namespaces.get("namespaces") if isinstance(namespaces, dict) else None
     workflow_items = workflows.get("workflows") if isinstance(workflows, dict) else None
     if not isinstance(namespace_items, list) or not isinstance(workflow_items, list):
@@ -753,6 +854,12 @@ async def runtime_catalog(
         or {item.get("cli_command") for item in managed_namespaces} != managed_namespace_commands
         or len(managed_workflows) != len(MANAGED_WORKFLOW_KEYS)
         or {item.get("key") for item in managed_workflows} != MANAGED_WORKFLOW_KEYS
+    ):
+        return _error("Managed каталог временно недоступен", 503)
+    keys_by_id = {item.get("id"): item.get("key") for item in managed_workflows}
+    if any(
+        keys_by_id.get(item.get("workflow_id")) != f"hermes-sdlc:{item['cli_command'].removeprefix('workflow-')}"
+        for item in managed_namespaces
     ):
         return _error("Managed каталог временно недоступен", 503)
     return {

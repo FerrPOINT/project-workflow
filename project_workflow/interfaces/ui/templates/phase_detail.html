@@ -481,13 +481,15 @@ function renderInstructionTimeline(items) {
   }
 }
 
+let instructionOrderSaving = false;
+
 function updateInstructionControls() {
   const items = getInstructionItems();
   items.forEach((item, idx) => {
     const up = item.querySelector('.move-up-btn');
     const down = item.querySelector('.move-down-btn');
-    if (up) up.disabled = idx === 0;
-    if (down) down.disabled = idx === items.length - 1;
+    if (up) up.disabled = instructionOrderSaving || idx === 0;
+    if (down) down.disabled = instructionOrderSaving || idx === items.length - 1;
   });
 }
 
@@ -512,6 +514,7 @@ async function persistInstructionOrder() {
 }
 
 async function moveInstruction(button, direction) {
+  if (instructionOrderSaving) return;
   const item = button.closest('.timeline-item');
   if (!item) return;
   const items = getInstructionItems();
@@ -521,10 +524,15 @@ async function moveInstruction(button, direction) {
   const reordered = [...items];
   const [moved] = reordered.splice(currentIndex, 1);
   reordered.splice(targetIndex, 0, moved);
-  renderInstructionTimeline(reordered);
-  updateInstructionControls();
-  if (!await persistInstructionOrder()) {
-    renderInstructionTimeline(items);
+  instructionOrderSaving = true;
+  try {
+    renderInstructionTimeline(reordered);
+    updateInstructionControls();
+    if (!await persistInstructionOrder()) {
+      renderInstructionTimeline(items);
+    }
+  } finally {
+    instructionOrderSaving = false;
     updateInstructionControls();
   }
 }
@@ -543,8 +551,7 @@ async function requestPhaseDetail(url, options) {
 async function addInstructionAfter(button) {
   const item = button.closest('.timeline-item');
   if (!item) return;
-  const currentStep = parseInt(item.dataset.stepNum || '0', 10);
-  const stepNum = currentStep > 0 ? currentStep + 1 : 1;
+  const stepNum = getInstructionItems().indexOf(item) + 2;
   button.disabled = true;
   try {
     const result = await requestPhaseDetail(phaseApiUrl('/api/instructions'), {
@@ -635,10 +642,8 @@ async function toggleInstructionType(badge) {
 async function saveInstructionDescription(input) {
   const card = input.closest('.timeline-card');
   const id = card.dataset.instructionId;
-  const previousDescription = input.dataset.originalDescription || '';
   const description = input.value.trim();
   if (!description) {
-    input.value = previousDescription;
     resizeInlineTextarea(input);
     showToast('Описание инструкции обязательно', 'error');
     return;
@@ -651,12 +656,10 @@ async function saveInstructionDescription(input) {
       body: JSON.stringify({description: description}),
     });
     if (!result) {
-      input.value = previousDescription;
       return;
     }
     const {resp, data} = result;
     if (!resp.ok || !data.ok) {
-      input.value = previousDescription;
       showToast(data.error || 'Не удалось сохранить описание', 'error');
       return;
     }
@@ -825,23 +828,21 @@ async function persistPhase() {
       : null,
   };
 
-  document.querySelectorAll('#checks-list li').forEach((li) => {
-    if (li.classList.contains('empty-state')) return;
-    const inp = li.querySelector('[data-field="description"]');
-    if (inp && inp.value.trim()) data.checks.push({
-      id: li.dataset.id ? Number(li.dataset.id) : null,
-      description: inp.value.trim(),
-    });
-  });
-
-  document.querySelectorAll('#evidence-list li').forEach((li) => {
-    if (li.classList.contains('empty-state')) return;
-    const inp = li.querySelector('[data-field="description"]');
-    if (inp && inp.value.trim()) data.evidence.push({
-      id: li.dataset.id ? Number(li.dataset.id) : null,
-      description: inp.value.trim(),
-    });
-  });
+  const submittedRows = {checks: [], evidence: []};
+  for (const field of ['checks', 'evidence']) {
+    for (const li of document.querySelectorAll('#' + field + '-list li:not(.empty-state)')) {
+      const description = li.querySelector('[data-field="description"]')?.value.trim();
+      if (!description) {
+        if (li.dataset.id) {
+          showToast('Заполните описание или удалите строку кнопкой ×', 'error');
+          return false;
+        }
+        continue;
+      }
+      data[field].push({id: li.dataset.id ? Number(li.dataset.id) : null, description});
+      submittedRows[field].push(li);
+    }
+  }
 
   try {
     const resp = await fetch(phaseApiUrl('/api/phases/' + phaseId), {
@@ -851,17 +852,20 @@ async function persistPhase() {
     });
     if (!resp.ok) { showToast('Ошибка сохранения', 'error'); return false; }
     const result = await resp.json();
-    showToast('Сохранено', 'success');
-    if (result.ids) {
-      const checks = document.querySelectorAll('#checks-list li:not(.empty-state)');
-      (result.ids.checks || []).forEach((id, i) => {
-        if (checks[i]) checks[i].setAttribute('data-id', String(id));
-      });
-      const evs = document.querySelectorAll('#evidence-list li:not(.empty-state)');
-      (result.ids.evidence || []).forEach((id, i) => {
-        if (evs[i]) evs[i].setAttribute('data-id', String(id));
+    if (!result.ok) { showToast(result.error || 'Ошибка сохранения', 'error'); return false; }
+    for (const field of ['checks', 'evidence']) {
+      const ids = result.ids?.[field];
+      if (!Array.isArray(ids) || ids.length !== submittedRows[field].length) {
+        showToast('Не удалось подтвердить сохранённые строки', 'error');
+        return false;
+      }
+    }
+    for (const field of ['checks', 'evidence']) {
+      result.ids[field].forEach((id, i) => {
+        submittedRows[field][i].setAttribute('data-id', String(id));
       });
     }
+    showToast('Сохранено', 'success');
     return true;
   } catch (_error) {
     showToast('Ошибка сохранения', 'error');

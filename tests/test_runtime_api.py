@@ -4,7 +4,7 @@ import hashlib
 import json
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -40,6 +40,18 @@ def packaged_runtime_api_test_image(monkeypatch):
 
     monkeypatch.setattr(build_provenance, "runtime_compatibility_descriptor", descriptor)
     monkeypatch.setattr(runtime_api, "runtime_compatibility_descriptor", descriptor)
+
+
+def test_optional_pm_uuid_preserves_ordinary_runtime_command_hash():
+    from project_workflow.domain.runtime_assignment import payload_sha256
+
+    legacy = {**_unknown_step_payload("DEV-25"), "report": "durable ordinary report"}
+    parsed = RuntimeStepRequest.model_validate(legacy)
+    assert payload_sha256(parsed.model_dump(mode="json")) == payload_sha256(legacy)
+    assert "session_run_id" not in parsed.model_dump()
+    pm_run_id = "11111111-1111-4111-8111-111111111111"
+    scoped = RuntimeStepRequest.model_validate({**legacy, "session_run_id": pm_run_id})
+    assert scoped.model_dump()["session_run_id"] == pm_run_id
 
 
 def _namespace(code: str, cli_command: str, prefix: str) -> None:
@@ -281,8 +293,8 @@ def test_fleet_catalog_token_cannot_execute_steps_or_read_history(monkeypatch):
     monkeypatch.setenv("PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN", catalog_token)
     config.get_settings.cache_clear()
     managed_namespaces = [
-        {"name": role.upper(), "cli_command": f"workflow-{role}"}
-        for role in (
+        {"name": role.upper(), "cli_command": f"workflow-{role}", "workflow_id": index}
+        for index, role in enumerate((
             "project_manager",
             "analyst",
             "architect",
@@ -290,11 +302,11 @@ def test_fleet_catalog_token_cannot_execute_steps_or_read_history(monkeypatch):
             "reviewer",
             "tester",
             "devops",
-        )
+        ), 1)
     ]
     managed_workflows = [
-        {"key": f"hermes-sdlc:{role}"}
-        for role in (
+        {"key": f"hermes-sdlc:{role}", "id": index}
+        for index, role in enumerate((
             "project_manager",
             "analyst",
             "architect",
@@ -302,14 +314,14 @@ def test_fleet_catalog_token_cannot_execute_steps_or_read_history(monkeypatch):
             "reviewer",
             "tester",
             "devops",
-        )
+        ), 1)
     ]
     with SAUnitOfWork() as uow:
         ensure_managed_catalog(uow)
 
-    with patch(
+    with TestClient(create_app()) as client, patch(
         "project_workflow.interfaces.ui.routes.api.api_namespaces",
-        new=AsyncMock(
+        new=MagicMock(
             return_value={
                 "ok": True,
                 "namespaces": [
@@ -320,13 +332,13 @@ def test_fleet_catalog_token_cannot_execute_steps_or_read_history(monkeypatch):
         ),
     ), patch(
         "project_workflow.interfaces.ui.routes.api.api_workflows",
-        new=AsyncMock(
+        new=MagicMock(
             return_value={
                 "ok": True,
                 "workflows": [{"key": "legacy:1"}, *managed_workflows],
             }
         ),
-    ), TestClient(create_app()) as client:
+    ):
         catalog = client.get("/internal/runtime/catalog", headers=_headers(catalog_token))
         missing = client.get("/internal/runtime/catalog")
         wrong_role = client.get("/internal/runtime/catalog", headers=_headers(worker_token))
@@ -376,9 +388,9 @@ def test_fleet_catalog_fails_closed_on_partial_managed_inventory(monkeypatch):
     monkeypatch.setenv("PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN", control_token)
     config.get_settings.cache_clear()
 
-    with patch(
+    with TestClient(create_app()) as client, patch(
         "project_workflow.interfaces.ui.routes.api.api_namespaces",
-        new=AsyncMock(
+        new=MagicMock(
             return_value={
                 "ok": True,
                 "namespaces": [
@@ -388,13 +400,13 @@ def test_fleet_catalog_fails_closed_on_partial_managed_inventory(monkeypatch):
         ),
     ), patch(
         "project_workflow.interfaces.ui.routes.api.api_workflows",
-        new=AsyncMock(
+        new=MagicMock(
             return_value={
                 "ok": True,
                 "workflows": [{"key": "hermes-sdlc:project_manager"}],
             }
         ),
-    ), TestClient(create_app()) as client:
+    ):
         response = client.get(
             "/internal/runtime/catalog", headers=_headers(control_token)
         )

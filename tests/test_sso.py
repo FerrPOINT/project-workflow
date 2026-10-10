@@ -231,3 +231,27 @@ def test_sso_configuration_and_cookie_validation_fail_closed(monkeypatch):
     with pytest.raises(RuntimeError, match="AUTH_INTERNAL_BASE_URL"):
         sso.install_sso(app)
     assert sso._decode_cookie(settings, "not-a-cookie", 60) is None
+
+
+def test_machine_principal_cannot_enter_human_routes_even_with_write_scope(monkeypatch):
+    app, _ = _app(monkeypatch)
+    original_client = httpx.AsyncClient
+    identity = {
+        "sub": "registered-reader", "role": "admin",
+        "scopes": ["project-workflow:read", "project-workflow:write"],
+    }
+    monkeypatch.setenv("PROJECT_WORKFLOW_NAMESPACE__MACHINE_SUBJECTS", "registered-reader")
+    monkeypatch.setattr(
+        sso.httpx, "AsyncClient",
+        lambda **kwargs: original_client(
+            transport=httpx.MockTransport(lambda request: httpx.Response(200, json=identity)), **kwargs,
+        ),
+    )
+    with TestClient(app) as client:
+        headers = {"Authorization": "Bearer sdlc_pat_test"}
+        assert client.get("/api/tasks", headers=headers).status_code == 403
+        assert client.post("/api/tasks", headers=headers).status_code == 403
+        identity["sub"] = "human"
+        assert client.get("/api/tasks", headers=headers).status_code == 200
+        identity["role"] = "service_account"
+        assert client.get("/api/tasks", headers=headers).status_code == 403

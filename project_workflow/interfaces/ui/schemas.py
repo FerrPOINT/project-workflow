@@ -7,6 +7,7 @@ from typing import Annotated, Any, ClassVar, Literal
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from project_workflow.domain.base_admission import BaseAdmission, ExactRef, Sha256
 from project_workflow.domain.namespace import normalize_namespace_cli_command
 from project_workflow.domain.project_theme import (
     DEFAULT_PROJECT_COLOR,
@@ -14,7 +15,7 @@ from project_workflow.domain.project_theme import (
     normalize_theme_color,
     normalize_theme_icon,
 )
-from project_workflow.domain.runtime_assignment import MAX_WORK_ITEM_REVISION, normalize_role_key
+from project_workflow.domain.runtime_assignment import MAX_WORK_ITEM_REVISION, FleetAgentRef, normalize_role_key
 
 
 class StrictRequest(BaseModel):
@@ -69,6 +70,11 @@ class RuntimeStepRequest(StepRequest):
     attempt_number: int = Field(gt=0, strict=True)
     expected_phase_code: str = Field(min_length=1, max_length=128)
     expected_status: Literal["active", "blocked"]
+    base_config_ref: ExactRef | None = Field(default=None, exclude_if=lambda value: value is None)
+    base_config_sha256: Sha256 | None = Field(default=None, exclude_if=lambda value: value is None)
+    session_run_id: str | None = Field(
+        default=None, strict=True, min_length=36, max_length=36, exclude_if=lambda value: value is None,
+    )
 
     @field_validator(
         "assignment_ref",
@@ -125,6 +131,7 @@ class RuntimeAssignmentRequest(StrictRequest):
     lease_generation: int = Field(ge=0, strict=True)
     exact_input_refs: list[ExactInputRef] = Field(max_length=128)
     runtime_compatibility: dict[str, Any] | None = None
+    base_admission: BaseAdmission | None = Field(default=None, exclude_if=lambda value: value is None)
     expected_revision: int = Field(ge=0, strict=True)
     expected_status: Literal["missing", "active", "done", "blocked"]
     expected_mode_key: str | None = Field(default=None, min_length=1, max_length=128)
@@ -228,6 +235,9 @@ class RuntimeBindRequest(StrictRequest):
     cycle_number: int = Field(ge=0, strict=True)
     attempt_number: int = Field(gt=0, strict=True)
     expected_binding_state: Literal["unbound", "legacy_bound"]
+    concrete_agent_ref: FleetAgentRef | None = Field(
+        default=None, description="Immutable Fleet agent UUID; required for project_manager bindings",
+    )
 
     @field_validator(
         "task",

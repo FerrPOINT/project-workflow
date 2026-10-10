@@ -49,20 +49,27 @@ class PinnedSkillsTests(unittest.TestCase):
                 inventory[skill] = digest(text)
         self.manifest = {
             "schema": "base-hermes-role-skills/v1",
+            "status": "candidate-not-installed",
             "sources": {
                 "native": {
                     "repository": BASE_REPOSITORY,
                     "revision": "SELF",
+                    "revisionMeaning": "Synthetic immutable package metadata.",
                     "hashAlgorithm": "sha256-normalized-lf-utf8",
                     "skills": inventory,
                 }
             },
             "catalogAuthority": {
+                "purpose": "physical-skill-and-profile-validation-only",
                 "selectionAuthority": "task-tracker-backend-assignment",
                 "ownsRouting": False,
                 "ownsModeSelection": False,
                 "ownsWorkspaceSelection": False,
                 "ownsPrioritySelection": False,
+            },
+            "provenance": {
+                "adaptation": "Synthetic fixture only.", "donorSkillsRevision": "a" * 40,
+                "skillsHubRevision": "b" * 40, "runtimeDependencyOnDonor": False,
             },
             "roles": roles,
         }
@@ -115,6 +122,20 @@ class PinnedSkillsTests(unittest.TestCase):
         self.commit()
         self.check()
 
+    def test_git_replace_cannot_override_pin(self):
+        self.write("manifest.json", "Synthetic invalid replacement manifest")
+        replacement = self.commit()
+        self.git("replace", self.pin, replacement)
+        self.check()
+
+    def test_oversized_regular_blob_before_content_validation(self):
+        raw = b"x" * 262_145
+        (self.skills / "roles/developer.md").write_bytes(raw)
+        self.manifest["roles"]["developer"]["roleInstruction"]["sha256"] = hashlib.sha256(raw).hexdigest()
+        self.save_manifest()
+        self.data["skills_source"]["revision"] = self.commit()
+        with self.assertRaises(ValueError):
+            self.check()
     def test_wrong_repository(self):
         self.data["skills_source"]["repository"] = "https://github.com/FerrPOINT/fleet-control.git"
         with self.assertRaises(ValueError):
@@ -138,6 +159,78 @@ class PinnedSkillsTests(unittest.TestCase):
     def test_wrong_schema(self):
         self.reject_manifest(lambda value: value.update(schema="untrusted/v1"))
 
+    def test_installed_status_rejected(self):
+        self.reject_manifest(lambda value: value.update(status="installed"))
+
+    def test_unknown_manifest_field(self):
+        self.reject_manifest(lambda value: value.update(untrusted="unknown source"))
+
+    def test_missing_provenance(self):
+        self.reject_manifest(lambda value: value.pop("provenance"))
+
+    def test_bad_provenance_revision(self):
+        self.reject_manifest(lambda value: value["provenance"].update(donorSkillsRevision="HEAD"))
+
+    def test_donor_runtime_dependency(self):
+        self.reject_manifest(lambda value: value["provenance"].update(runtimeDependencyOnDonor=True))
+
+    def test_provenance_boolean_is_strict(self):
+        self.reject_manifest(lambda value: value["provenance"].update(runtimeDependencyOnDonor=0))
+
+    def test_blank_revision_meaning(self):
+        self.reject_manifest(lambda value: value["sources"]["native"].update(revisionMeaning=" "))
+
+    def test_unknown_native_source_field(self):
+        self.reject_manifest(lambda value: value["sources"]["native"].update(localFallback=True))
+
+    def test_runtime_selection_authority(self):
+        self.reject_manifest(lambda value: value["catalogAuthority"].update(ownsRouting=True))
+
+    def test_duplicate_manifest_key(self):
+        self.write("manifest.json", json.dumps(self.manifest).replace(
+            '"schema":', '"schema": "base-hermes-role-skills/v1", "schema":', 1,
+        ))
+        self.data["skills_source"]["revision"] = self.commit()
+        with self.assertRaises(ValueError):
+            self.check()
+
+    def test_non_utf8_role_even_with_matching_hash(self):
+        raw = b"Synthetic invalid UTF-8: \xff\n"
+        (self.skills / "roles/developer.md").write_bytes(raw)
+        self.manifest["roles"]["developer"]["roleInstruction"]["sha256"] = hashlib.sha256(raw).hexdigest()
+        self.save_manifest()
+        self.data["skills_source"]["revision"] = self.commit()
+        with self.assertRaises(ValueError):
+            self.check()
+
+    def test_non_utf8_skill_even_with_matching_hash(self):
+        raw = b"---\nname: tracker-operator\ndescription: Synthetic \xff\n---\n"
+        (self.skills / "skills/tracker-operator/SKILL.md").write_bytes(raw)
+        self.manifest["sources"]["native"]["skills"]["tracker-operator"] = hashlib.sha256(raw).hexdigest()
+        self.save_manifest()
+        self.data["skills_source"]["revision"] = self.commit()
+        with self.assertRaises(ValueError):
+            self.check()
+
+    def test_skill_header_with_matching_hash(self):
+        text = "Synthetic text with no skill header.\n"
+        self.write("skills/tracker-operator/SKILL.md", text)
+        self.manifest["sources"]["native"]["skills"]["tracker-operator"] = digest(text)
+        self.save_manifest()
+        self.data["skills_source"]["revision"] = self.commit()
+        with self.assertRaises(ValueError):
+            self.check()
+
+    def test_required_executor_allowlist(self):
+        self.reject_manifest(lambda value: value["roles"]["developer"]["physicalSkills"].remove(
+            "project-workflow-executor",
+        ))
+
+    def test_crlf_normalized_package(self):
+        text = "Synthetic developer instruction, not a production prompt.\r\n"
+        self.write("roles/developer.md", text)
+        self.data["skills_source"]["revision"] = self.commit()
+        self.check()
     def test_wrong_hash(self):
         self.reject_manifest(lambda value: value["sources"]["native"]["skills"].update({"tracker-operator": "0" * 64}))
 

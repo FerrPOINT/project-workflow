@@ -9,12 +9,14 @@ from sqlalchemy.exc import IntegrityError
 
 from project_workflow.application.execution_mode import resolve_execution_selection
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
+from project_workflow.domain.pm_execution import PMDraftAssignment
 from project_workflow.domain.repositories import UnitOfWork
 from project_workflow.domain.runtime_assignment import (
     MAX_WORK_ITEM_REVISION,
     RuntimeStepFence,
     normalize_role_key,
     payload_sha256,
+    validate_concrete_agent_ref,
 )
 from project_workflow.domain.validation import TaskKeyValidator, get_project_for_task_key
 
@@ -73,8 +75,11 @@ class TaskService:
                 raise NotFoundError(f"Неймспейс {project_id} не найден")
             if requested_workflow_id is not None and project.workflow_id != requested_workflow_id:
                 raise ConflictError("Задача принадлежит другому воркфлоу")
-            if self._uow.workflows.lock(project.workflow_id) is None:
+            locked_workflow = self._uow.workflows.lock(project.workflow_id)
+            if locked_workflow is None:
                 raise NotFoundError(f"Воркфлоу {project.workflow_id} не найден")
+            if getattr(locked_workflow, "active_catalog_version", 1) == 3:
+                raise ConflictError("Base candidate tasks require owner-issued admission")
             locked_project = self._uow.projects.lock(project_id)
             if locked_project is None:
                 raise NotFoundError(f"Неймспейс {project_id} не найден")
@@ -129,6 +134,24 @@ class TaskService:
             self._uow.rollback()
             raise
 
+    def assign_pm_draft(self, project_id: int, request: PMDraftAssignment) -> dict[str, Any]:
+        """Reuse assignment CAS without fabricating resources belonging to later stages."""
+        return self.assign_runtime_task(
+            project_id=project_id, task_key=request.task, mode_key="draft", role_key="project_manager",
+            workflow_key="hermes-sdlc:project_manager", execution_scope="business", stage_key="draft",
+            cycle_number=0, attempt_number=1, operation_key=request.assignment_operation_key,
+            business_task_ref=request.task_ref, root_task_ref=request.root_ref,
+            work_item_ref=None, work_item_revision=None, queue_item_ref=None, task_workspace_ref=None,
+            workspace_revision=None, tech_execution_workspace_ref=None, tech_execution_attempt_ref=None,
+            decomposition_revision_ref=None, stage_revision=str(request.owner_version),
+            assignment_ref=request.assignment_ref, workspace_generation=None, lease_generation=1,
+            exact_input_refs=[{
+                "kind": "pm_draft_input", "ref": request.input_snapshot_ref, "hash": request.input_sha256,
+            }],
+            expected_revision=0, expected_status="missing", runtime_compatibility=request.runtime_compatibility,
+            pm_draft_context=request,
+        )
+
     def assign_runtime_task(
         self,
         *,
@@ -144,17 +167,17 @@ class TaskService:
         operation_key: str,
         business_task_ref: str,
         root_task_ref: str,
-        work_item_ref: str,
-        work_item_revision: int,
-        queue_item_ref: str,
-        task_workspace_ref: str,
-        workspace_revision: int,
+        work_item_ref: str | None,
+        work_item_revision: int | None,
+        queue_item_ref: str | None,
+        task_workspace_ref: str | None,
+        workspace_revision: int | None,
         tech_execution_workspace_ref: str | None,
         tech_execution_attempt_ref: str | None,
-        decomposition_revision_ref: str,
+        decomposition_revision_ref: str | None,
         stage_revision: str,
         assignment_ref: str,
-        workspace_generation: int,
+        workspace_generation: int | None,
         lease_generation: int,
         exact_input_refs: list[dict[str, Any]],
         expected_revision: int,
@@ -162,6 +185,8 @@ class TaskService:
         expected_mode_key: str | None = None,
         expected_cycle_number: int | None = None,
         runtime_compatibility: dict[str, Any] | None = None,
+        base_admission: dict[str, Any] | None = None,
+        pm_draft_context: PMDraftAssignment | None = None,
     ) -> dict[str, Any]:
         """Persist one authorized Business assignment atomically and idempotently."""
         operation_key = operation_key.strip()
@@ -177,7 +202,10 @@ class TaskService:
         if not validated_key.is_valid:
             raise ConflictError(validated_key.error_message or f"Недопустимый ключ задачи {task_key!r}")
         task_key = validated_key.normalized or task_key
-        project = self._uow.projects.lock(project_id)
+        project = (
+            self._uow.projects.lock_pm_namespace(project_id) if pm_draft_context is not None
+            else self._uow.projects.lock(project_id)
+        )
         if project is None or project.workflow_id is None:
             raise NotFoundError(f"Неймспейс {project_id} не найден")
         workflow = self._uow.workflows.get_by_id(project.workflow_id)
@@ -206,19 +234,36 @@ class TaskService:
             raise ValueError("cycle_number и expected_revision должны быть неотрицательными")
         if not isinstance(attempt_number, int) or isinstance(attempt_number, bool) or attempt_number <= 0:
             raise ValueError("attempt_number должен быть положительным целым числом")
-        if (
+        if pm_draft_context is not None:
+            if (
+                role_key != "project_manager" or mode.key != "draft" or mode.catalog_version != 2
+                or execution_scope != "business" or stage_key != "draft" or cycle_number != 0
+                or attempt_number != 1 or expected_revision != 0 or expected_status != "missing"
+                or task_key != pm_draft_context.task or operation_key != pm_draft_context.assignment_operation_key
+                or business_task_ref != pm_draft_context.task_ref or root_task_ref != pm_draft_context.root_ref
+                or assignment_ref != pm_draft_context.assignment_ref or base_admission is not None
+                or any(value is not None for value in (
+                    work_item_ref, work_item_revision, queue_item_ref, task_workspace_ref, workspace_revision,
+                    decomposition_revision_ref, workspace_generation,
+                ))
+            ):
+                raise ConflictError("PM Draft context differs from its initial reservation")
+        if pm_draft_context is None and (
             not isinstance(work_item_revision, int)
             or isinstance(work_item_revision, bool)
             or work_item_revision < 0
             or work_item_revision > MAX_WORK_ITEM_REVISION
         ):
             raise ValueError("work_item_revision должен быть неотрицательным 64-битным целым числом")
-        if not isinstance(workspace_revision, int) or isinstance(workspace_revision, bool) or workspace_revision <= 0:
+        if pm_draft_context is None and (
+            not isinstance(workspace_revision, int) or isinstance(workspace_revision, bool) or workspace_revision <= 0
+        ):
             raise ValueError("workspace_revision должен быть положительным целым числом")
         if (
-            not isinstance(workspace_generation, int)
-            or isinstance(workspace_generation, bool)
-            or workspace_generation < 0
+            (pm_draft_context is None and (
+                not isinstance(workspace_generation, int) or isinstance(workspace_generation, bool)
+                or workspace_generation < 0
+            ))
             or not isinstance(lease_generation, int)
             or isinstance(lease_generation, bool)
             or lease_generation < 0
@@ -235,7 +280,9 @@ class TaskService:
             "assignment_ref": assignment_ref,
         }
         normalized_refs = {
-            key: self._bounded_ref(value, key, 128 if key == "stage_revision" else 512)
+            key: None if pm_draft_context is not None and value is None else self._bounded_ref(
+                value, key, 128 if key == "stage_revision" else 512,
+            )
             for key, value in external_refs.items()
         }
         normalized_tech_workspace_ref = (
@@ -249,6 +296,15 @@ class TaskService:
             else None
         )
         normalized_input_refs = self._normalize_exact_input_refs(exact_input_refs)
+        if base_admission is not None:
+            from project_workflow.application.base_admission import validate_base_admission
+
+            base_admission = validate_base_admission(
+                self._uow, base_admission, project_id=project_id, role_key=role_key,
+                workflow_key=workflow_key, mode_key=mode_key, execution_scope=execution_scope,
+            )
+        elif getattr(mode, "catalog_version", 1) == 3:
+            raise ConflictError("Base candidate requires opt-in admission")
         if getattr(mode, "catalog_version", 1) == 2:
             from project_workflow.build_provenance import validate_runtime_compatibility
 
@@ -282,6 +338,10 @@ class TaskService:
             "runtime_compatibility": runtime_compatibility,
         }
         replay = self._uow.tasks.get_assignment_by_operation_key(operation_key)
+        if pm_draft_context is not None:
+            payload["pm_draft_context"] = pm_draft_context.model_dump(exclude={"runtime_compatibility"})
+        if base_admission is not None:
+            payload["base_admission"] = base_admission
         if replay is not None:
             return self._reconcile_assignment(replay.to_dict(), payload)
         phases = list(self._uow.phases.list(workflow_id=project.workflow_id, mode_id=mode.id))
@@ -345,6 +405,12 @@ class TaskService:
         replay = self._uow.tasks.get_assignment_by_operation_key(operation_key)
         if replay is not None:
             return self._reconcile_assignment(replay.to_dict(), payload)
+        # No terminal/quiescent replacement-history CAS exists for enrolled PM.
+        if (
+            self._uow.tasks.task_has_pm_execution(int(locked.id or 0))
+            or self._uow.tasks.task_has_pm_draft_assignment(int(locked.id or 0))
+        ):
+            raise ConflictError("Enrolled PM task requires terminal/quiescent replacement admission")
         if locked.assignment_revision != expected_revision or locked.status != expected_status:
             raise ConflictError("Ожидаемое prior state/revision задачи устарело")
         if expected_mode_key is not None and locked.mode_key != expected_mode_key:
@@ -435,8 +501,15 @@ class TaskService:
         if replay is not None:
             return replay
         previous = self._uow.tasks.get_assignment_by_operation_key(locked.assignment_operation_key or "")
-        if previous is None:
+        if previous is None or previous.id is None:
             raise ConflictError("Continuation previous assignment not found")
+        if previous.payload.get("base_admission") is not None:
+            raise ConflictError("Base continuation requires trusted checkpoint ACK integration")
+        if (
+            self._uow.tasks.assignment_has_pm_execution(current.id, previous.id)
+            or previous.payload.get("pm_draft_context") is not None
+        ):
+            raise ConflictError("Enrolled PM assignment requires PM resume/rebind")
         before = self._assignment_result(locked.to_dict(), previous.to_dict())
         expected = {
             "assignment_revision": request["expected_assignment_revision"],
@@ -580,9 +653,14 @@ class TaskService:
         cycle_number: int,
         attempt_number: int,
         expected_binding_state: str,
+        concrete_agent_ref: str | None = None,
     ) -> dict[str, Any]:
         """Atomically attach one real Hermes binding to an accepted assignment."""
         role_key = normalize_role_key(role_key)
+        if concrete_agent_ref is not None:
+            concrete_agent_ref = validate_concrete_agent_ref(concrete_agent_ref)
+        elif role_key == "project_manager":
+            raise ConflictError("PM runtime binding requires a concrete Fleet agent UUID")
         refs = {
             "bind_operation_key": self._bounded_ref(bind_operation_key, "bind_operation_key", 128),
             "assignment_operation_key": self._bounded_ref(assignment_operation_key, "assignment_operation_key", 128),
@@ -614,6 +692,9 @@ class TaskService:
             "attempt_number": attempt_number,
             "expected_binding_state": expected_binding_state,
         }
+        # Omitted mappings keep the published non-PM bind replay digest unchanged.
+        if concrete_agent_ref is not None:
+            request["concrete_agent_ref"] = concrete_agent_ref
         request_digest = payload_sha256(request)
         replay = self._uow.tasks.get_assignment_by_bind_operation_key(refs["bind_operation_key"])
         if replay is not None:
@@ -641,6 +722,19 @@ class TaskService:
             raise ConflictError("Принятый runtime assignment не найден")
         record = assignment.to_dict()
         continuation = record.get("payload", {})
+        if continuation.get("pm_draft_context") is not None:
+            if concrete_agent_ref != continuation["pm_draft_context"]["agent_ref"]:
+                raise ConflictError("PM bind concrete agent differs from the Draft reservation")
+        if continuation.get("base_admission") is not None:
+            from project_workflow.application.base_admission import validate_base_admission
+
+            admission = validate_base_admission(
+                self._uow, continuation["base_admission"], project_id=project_id,
+                role_key=role_key, workflow_key=record["workflow_key"],
+                mode_key=record["mode_key"], execution_scope=record["execution_scope"],
+            )
+            if concrete_agent_ref != admission["concrete_agent_ref"]:
+                raise ConflictError("Base bind concrete agent mismatch")
         if continuation.get("runtime_compatibility") is not None:
             from project_workflow.build_provenance import runtime_compatibility_descriptor
 
@@ -695,6 +789,7 @@ class TaskService:
                 hermes_run_ref=refs["hermes_run_ref"],
                 bind_operation_key=refs["bind_operation_key"],
                 bind_request_sha256=request_digest,
+                concrete_agent_ref=concrete_agent_ref,
             )
             if not updated:
                 self._uow.rollback()
@@ -728,6 +823,8 @@ class TaskService:
         attempt_number: int,
         expected_phase_code: str,
         expected_status: str,
+        base_config_ref: str | None = None,
+        base_config_sha256: str | None = None,
     ) -> RuntimeStepFence:
         """Lock and validate the exact immutable owner assignment for one step."""
         role_key = normalize_role_key(role_key)
@@ -784,6 +881,16 @@ class TaskService:
             or not isinstance(record.get("bind_request_sha256"), str)
         ):
             raise ConflictError("Runtime assignment ещё не связан с Hermes run")
+        from project_workflow.application.pm_execution import PMExecutionService
+        from project_workflow.infrastructure.db.uow import SAUnitOfWork
+
+        pm_execution = None
+        if isinstance(self._uow, SAUnitOfWork):
+            pm_service = PMExecutionService(self._uow)
+            pm_execution = pm_service.supervisor_binding(int(current.id))
+            if pm_execution is not None:
+                pm_run = pm_service.run(pm_execution)
+                record = {**record, "binding_ref": pm_run.binding_ref, "hermes_run_ref": pm_run.run_ref}
         expected_assignment = {
             "task_id": current.id,
             "project_id": project_id,
@@ -827,6 +934,11 @@ class TaskService:
             # Frozen legacy phases remain readable; a v2 image cannot execute their old tool contract.
             raise ConflictError("RUNTIME_VERSION_INCOMPATIBLE: pinned legacy catalog requires legacy runtime")
         descriptor = record.get("payload", {}).get("runtime_compatibility")
+        from project_workflow.application.base_admission import assert_base_step
+
+        base_admission = assert_base_step(
+            self._uow, task, record, config_ref=base_config_ref, config_sha256=base_config_sha256,
+        )
         if descriptor is not None:
             from project_workflow.build_provenance import runtime_compatibility_descriptor
 
@@ -848,6 +960,9 @@ class TaskService:
             expected_phase_id=phase_id,
             expected_phase_code=expected_phase_code,
             expected_status=expected_status,
+            pm_version=pm_execution.version if pm_execution is not None else None,
+            pm_fence=pm_execution.fence if pm_execution is not None else None,
+            base_admission_sha256=payload_sha256(base_admission) if base_admission is not None else None,
         )
 
     @staticmethod
@@ -994,6 +1109,7 @@ class TaskService:
             "hermes_run_ref",
             "bind_operation_key",
             "bind_request_sha256",
+            "concrete_agent_ref",
             "workspace_generation",
             "lease_generation",
             "exact_input_refs",
@@ -1006,6 +1122,11 @@ class TaskService:
         result["binding_state"] = (
             "bound" if has_real_refs and has_bind_metadata else "legacy_bound" if has_real_refs else "unbound"
         )
+        from project_workflow.application.base_admission import admission_receipt
+
+        receipt = admission_receipt(assignment, task)
+        if receipt is not None:
+            result["base_admission_receipt"] = receipt
         return result
 
     def _reconcile_bind_after_race(self, request: dict[str, Any], request_digest: str) -> dict[str, Any]:
@@ -1031,6 +1152,7 @@ class TaskService:
             "hermes_run_ref": request["hermes_run_ref"],
             "bind_operation_key": request["bind_operation_key"],
             "bind_request_sha256": request_digest,
+            "concrete_agent_ref": request.get("concrete_agent_ref"),
             "role_key": request["role_key"],
             "mode_key": request["mode_key"],
             "cycle_number": request["cycle_number"],

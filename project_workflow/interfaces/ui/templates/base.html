@@ -380,6 +380,7 @@ textarea{resize:vertical;min-height:60px}
       {% if namespaces is defined and namespaces %}
       <label for="mobileNamespaceSelector">Пространство</label>
       <select id="mobileNamespaceSelector" data-namespace-selector class="namespace-select" onchange="switchNamespace(this.value)">
+        {% if active_namespace_id is none %}<option value="" disabled selected>Каталог воркфлоу</option>{% endif %}
         {% for namespace in namespaces %}<option value="{{ namespace.id }}" {% if active_namespace_id == namespace.id %}selected{% endif %}>{{ namespace.name }}{% if namespace.workflow_name %} · {{ namespace.workflow_name }}{% endif %}</option>{% endfor %}
       </select>
       {% endif %}
@@ -421,6 +422,7 @@ textarea{resize:vertical;min-height:60px}
       {% if namespaces is defined and namespaces %}
       <div class="namespace-switcher">
         <select class="namespace-select" id="namespaceSelector" data-namespace-selector aria-label="Выбор пространства" onchange="switchNamespace(this.value)">
+          {% if active_namespace_id is none %}<option value="" disabled selected>Каталог воркфлоу</option>{% endif %}
           {% for namespace in namespaces %}
           <option value="{{ namespace.id }}" {% if active_namespace_id == namespace.id %}selected{% endif %}>{{ namespace.name }}{% if namespace.workflow_name %} · {{ namespace.workflow_name }}{% endif %}</option>
           {% endfor %}

@@ -484,6 +484,9 @@ project-workflow/
 ## 📚 Документы
 
 - [docs/architecture.md](docs/architecture.md) — CLI/UI/Supervisor boundaries, state/audit model и runtime scope.
+- [PM continuation contract](docs/pm-continuation-contract.md) and [verification](docs/pm-continuation-verification.md) describe the opt-in persistent PM checkpoint/resume API and its remaining Fleet integration gaps.
+
+- [docs/resource-execution-context.md](docs/resource-execution-context.md) — отдельный Namespace execution context v2, owner readers и совместимость без активации исполнения.
 - [docs/quality-gate.md](docs/quality-gate.md) — local gate, PostgreSQL integration, Compose readiness и browser smoke.
 - [docs/bug-audit.md](docs/bug-audit.md) — defect audit notes.
 - [docs/database-reset.md](docs/database-reset.md) — безопасный reset старых локальных Compose-томов.

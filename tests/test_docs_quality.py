@@ -105,6 +105,9 @@ def test_compose_and_env_example_forward_runtime_settings() -> None:
     assert "PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON: ${PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON:-}" in compose
     assert "AUTH_ISSUER: ${AUTH_ISSUER:-}" in compose
     assert "AUTH_INTERNAL_BASE_URL: ${AUTH_INTERNAL_BASE_URL:-}" in compose
+    assert (
+        "PROJECT_WORKFLOW_NAMESPACE_PROVISIONER_SUBJECT: ${PROJECT_WORKFLOW_NAMESPACE_PROVISIONER_SUBJECT:-}"
+    ) in compose
     assert "AUTH_PUBLIC_ORIGIN: ${AUTH_PUBLIC_ORIGIN:-http://localhost:8812}" in compose
     assert "AUTH_SESSION_SECRET: ${AUTH_SESSION_SECRET:-}" in compose
     assert "AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}" in compose
@@ -113,6 +116,7 @@ def test_compose_and_env_example_forward_runtime_settings() -> None:
     assert "PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON=" in env_example
     assert "AUTH_ISSUER=" in env_example
     assert "AUTH_INTERNAL_BASE_URL=" in env_example
+    assert "PROJECT_WORKFLOW_NAMESPACE_PROVISIONER_SUBJECT=" in env_example
     assert "AUTH_PUBLIC_ORIGIN=http://localhost:8812" in env_example
     assert "AUTH_SESSION_SECRET=" in env_example
     assert "AUTH_COOKIE_SECURE=false" in env_example

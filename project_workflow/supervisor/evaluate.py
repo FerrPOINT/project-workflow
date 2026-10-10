@@ -25,7 +25,7 @@ from .types import VERDICT_LABELS
 _MAX_EVALUATOR_RESPONSE_ATTEMPTS = 3
 
 
-def _contract_fingerprint(
+def _contract_fingerprint_state(
     *,
     builder: Any,
     phase: Phase,
@@ -34,9 +34,9 @@ def _contract_fingerprint(
     evaluation_items: list[tuple[str, str]],
     previously_covered_ids: set[str],
     transition_routes: dict[str, tuple[str | None, str | None, str | None]],
-) -> str:
+) -> dict[str, Any]:
     contract_data = contract.to_dict()
-    state = {
+    return {
         "prompt_version": PromptBuilder.PROMPT_VERSION,
         "contract": contract_data,
         "evaluation_items": [{"id": item_id, "text": text} for item_id, text in evaluation_items],
@@ -79,8 +79,22 @@ def _contract_fingerprint(
             for item in builder.all_phases
         ],
     }
+
+
+def _fingerprint_contract_state(state: dict[str, Any]) -> str:
     serialized = json.dumps(state, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(serialized.encode()).hexdigest()
+
+
+def _contract_fingerprint(
+    *, builder: Any, phase: Phase, group: list[Phase], contract: Any,
+    evaluation_items: list[tuple[str, str]], previously_covered_ids: set[str],
+    transition_routes: dict[str, tuple[str | None, str | None, str | None]],
+) -> str:
+    return _fingerprint_contract_state(_contract_fingerprint_state(
+        builder=builder, phase=phase, group=group, contract=contract, evaluation_items=evaluation_items,
+        previously_covered_ids=previously_covered_ids, transition_routes=transition_routes,
+    ))
 
 
 def _report_fingerprint(task_id: int, report: str, contract_fingerprint: str) -> str:
@@ -99,6 +113,20 @@ def _runtime_assignment_cursor(engine: Any, fence: RuntimeStepFence) -> dict[str
         raise ConcurrentTransitionError("Runtime cursor исчез до commit")
     task = task_row.to_dict()
     assignment = assignment_row.to_dict()
+    pm_cursor: dict[str, Any] = {}
+    if fence.pm_version is not None:
+        from project_workflow.application.pm_execution import PMExecutionService
+
+        pm_service = PMExecutionService(engine.db)
+        execution = pm_service.supervisor_binding(int(engine.task["id"]), fence)
+        if execution is None:
+            raise ConcurrentTransitionError("PM execution disappeared before commit")
+        run = pm_service.run(execution)
+        assignment = {**assignment, "binding_ref": run.binding_ref, "hermes_run_ref": run.run_ref}
+        pm_cursor = {
+            "execution_ref": execution.execution_ref, "session_run_id": run.session_run_id,
+            "execution_version": execution.version, "execution_fence": execution.fence,
+        }
     expected_task = {
         "assignment_revision": fence.assignment_revision,
         "assignment_operation_key": fence.assignment_operation_key,
@@ -144,6 +172,7 @@ def _runtime_assignment_cursor(engine: Any, fence: RuntimeStepFence) -> dict[str
         "status": task.get("status"),
         "current_phase_code": phase.code,
         "current_phase_name": phase.name,
+        **pm_cursor,
     }
 
 
@@ -588,7 +617,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         engine.phase_map.get(rollback_phase_code) if rollback_phase_code else None
     )
     raw_evaluator = llm.raw if technical_error else (raw if raw is not None else llm.raw)
-    run_data = {
+    run_data: dict[str, Any] = {
         "task_id": task_id,
         "mode_id": int(engine.task.get("mode_id") or 0),
         "cycle_number": int(engine.task.get("cycle_number") or 0),
@@ -620,6 +649,14 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
     }
     runtime_fence = getattr(engine, "runtime_fence", None)
     if isinstance(runtime_fence, RuntimeStepFence):
+        if runtime_fence.base_admission_sha256 is not None:
+            # Persist the exact accepted hash inputs, not a partial/public contract
+            # or a reconstruction using future catalog/history state.
+            run_data["evaluation_snapshot"]["contract_fingerprint_state"] = _contract_fingerprint_state(
+                builder=builder, phase=phase, group=group, contract=current_contract,
+                evaluation_items=evaluation_items, previously_covered_ids=previously_ids,
+                transition_routes=transition_routes,
+            )
         run_data.update(
             {
                 "step_operation_key": runtime_fence.step_operation_key,
@@ -646,7 +683,17 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         )
         if isinstance(runtime_fence, RuntimeStepFence):
             result.update(_runtime_assignment_cursor(engine, runtime_fence))
+            if runtime_fence.base_admission_sha256 is not None:
+                result["complete"] = False
             engine.db.step_history.update_supervisor_response(step_history_id, result)
+            if runtime_fence.base_admission_sha256 is not None and result.get("status") == "done":
+                from ..application.base_terminal import build_terminal_receipt
+
+                result["base_terminal_receipt"] = build_terminal_receipt(
+                    engine.db, runtime_fence.step_operation_key, fence=runtime_fence,
+                )
+                result["complete"] = True
+                engine.db.step_history.update_supervisor_response(step_history_id, result)
         engine.db.commit()
     except IntegrityError:
         engine.db.rollback()

@@ -5,6 +5,11 @@ runtime. В целевом Base Task lifecycle принадлежит Tracker, �
 Fleet, технические workspace/receipts — Forge. Business-привязки действующего
 exporter требуют отдельной адаптации, а не переименования фактов текущего runtime.
 
+Сквозной бизнес-Namespace получает отдельный
+[execution context v2](resource-execution-context.md). Он сохраняет instance-qualified
+Task/Repository refs и выбранную версию profile/mode; legacy CLI namespaces и
+общий каталог profiles сохраняются. Контекст не открывает runtime/dispatch gates.
+
 `project-workflow` - внутренняя loopback/private утилита для пофазного ведения
 задач. Она не владеет human identity, browser sessions или personal tokens:
 ими управляет Central Auth. Приложение проверяет их через server-side OIDC и
@@ -55,15 +60,26 @@ introspection, а также сохраняет отдельный private runti
 - **Managed workflow catalog** — versioned source
   `project_workflow/references/hermes_sdlc_catalog_v1.json`. Он содержит ровно
   семь role workflows и одиннадцать modes в catalog v2, ordered phases, checks, evidence и
-  instruction-level skills. Bootstrap создаёт каталог один раз и затем только
-  сверяет identity/mode/phase registry; divergent live catalog не
-  перезаписывается. Routing, stage/status, priority, workspace, cycle и next
+  instruction-level skills. Bootstrap создаёт начальные данные; после установки
+  UI/API редактируют сохранённый каталог. Повторная migration-инициализация
+  сохраняет эти правки. Startup и health проверяют доступность БД и schema,
+  а соответствие закреплённому executor-каталогу проверяется отдельно для роли
+  вызывающего сервиса в runtime API. Оформление и посторонние пользовательские
+  workflow не меняют readiness роли. Directory проверяет связи namespace/workflow,
+  без проверки инструкций всех ролей. Routing, stage/status, priority, workspace, cycle и next
   stage в каталог фаз не входят и поступают только из backend assignment.
   Developer `initial|rework` допускают независимые scopes `delivery|aggregate`.
   Additive adoption сохраняет exact v1 registry, assignments и историю;
   несовместимый v1 dispatch блокируется, historical cleanup не допускает
   новых effects. Canonical bundles экспортируются из exact Git archive и
   проверяются вместе с native skills и capability descriptor.
+  В действующем v2 исполнении текст фаз, инструкций, checks и evidence читается
+  из БД через `step`; редактор сохраняет его без отдельного выбора версии.
+  Runtime проверяет сохранённый граф, принадлежность агентов роли и наличие skills в разрешённом
+  пакете роли. Текст seed не используется как запрет редактирования. Exact source
+  verification при bootstrap и отдельном Base candidate admission сохраняется.
+  Изменение графа не расширяет machine tool permissions: они определяются
+  действующей политикой роли/кода фазы, а не порядком, названием или текстом.
 - **Continuation boundary** — owner-only `POST /internal/runtime/rebind`.
   Он подготавливает новый immutable assignment с прежними cycle/attempt,
   текущей фазой и входными refs, увеличивает runSequence и проверяет checkpoint
@@ -162,8 +178,9 @@ evaluation items, transition routes и накопленное покрытие. 
 - startup распознаёт только точный versioned legacy unmanaged catalog,
   сохраняет его identifiers и audit references и атомарно добавляет managed
   registry; неоднозначный или изменённый legacy catalog остаётся fail-closed;
-- HTTP API не публикует OpenAPI/Swagger как внешний контракт: это private UI/CLI
-  surface, а не third-party integration API;
+- `/openapi.json` describes private machine contracts, including the opt-in PM
+  continuation request, response and trusted runtime observation schemas;
+  keep runtime endpoints inside the protected service network;
 - CORS не включается: browser UI и API работают с одного origin. Для cookie SSO
   unsafe requests дополнительно требуют точный `Origin == AUTH_PUBLIC_ORIGIN`;
   это CSRF boundary, а не замена security review для публичного доступа;
@@ -171,7 +188,20 @@ evaluation items, transition routes и накопленное покрытие. 
 - rate limits, CSP и metrics не добавляются, пока приложение не становится
   внешним многопользовательским сервисом.
 
+## PM operation history
+
+PM checkpoint uniqueness reads operation history by execution and kind.
+`pm_operations` has the matching `(execution_ref, kind)` index in both ORM
+metadata and the pending `0007_pm_execution` migration. The operation-key
+primary key still owns replay identity; the index adds no uniqueness rule
+and does not change execution fences, authorization or HTTP responses.
+
 ## References
+
+- [PM Continuation](pm-continuation-contract.md) — execution identity, persistent
+  checkpoint/resume, Fleet UUID mapping and trusted runtime proof.
+- [PM Verification](pm-continuation-verification.md) — local evidence and remaining
+  cross-service release and live acceptance.
 
 - [UI Shell Contract](ui-shell.md) — sidebar/header/work-area behavior and page width classes.
 - [README](../README.md) — deployment modes and local launch.
