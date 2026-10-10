@@ -7,7 +7,7 @@ import hmac
 import json
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.domain.pm_execution import (
@@ -124,6 +124,25 @@ class PMExecutionService:
             raise ConflictError("Execution run binding is incomplete")
         return run
 
+    def _lock_run_id(self, session_run_id: str) -> None:
+        """Serialize run-ID admission across live runs and pending resume reservations."""
+        if self.session.get_bind().dialect.name == "postgresql":
+            self.session.execute(
+                text("SELECT pg_advisory_xact_lock(hashtext(:session_run_id))"),
+                {"session_run_id": session_run_id},
+            )
+
+    def _assert_run_id_unused(self, session_run_id: str) -> None:
+        self._lock_run_id(session_run_id)
+        if (
+            self.session.get(m.PMRun, session_run_id) is not None
+            or self.session.scalar(select(m.PMExecution.execution_ref).where(
+                m.PMExecution.resume_session_run_id == session_run_id,
+                m.PMExecution.state == "resume_pending",
+            )) is not None
+        ):
+            raise ConflictError("Fleet session-run UUID is already used or reserved")
+
     @staticmethod
     def identity(command: PMIdentity) -> PMIdentity:
         return PMIdentity.model_validate(command.model_dump(include=set(PMIdentity.model_fields)))
@@ -195,6 +214,7 @@ class PMExecutionService:
         replay = self._replay(command, "bind")
         if replay is not None:
             return replay
+        self._assert_run_id_unused(command.session_run_id)
         try:
             ownership = ownership_service.get(project_id)
         except NotFoundError:
@@ -281,6 +301,7 @@ class PMExecutionService:
         if replay is not None:
             return replay
         run = self._validate(command, execution, task, "waiting")
+        self._lock_run_id(command.new_session_run_id)
         if (
             command.new_session_run_id == run.session_run_id
             or self.session.get(m.PMRun, command.new_session_run_id) is not None
@@ -314,6 +335,7 @@ class PMExecutionService:
         replay = self._replay(command, "rebind")
         if replay is not None:
             return replay
+        self._lock_run_id(command.new_session_run_id)
         run = self._validate(command, execution, task, "resume_pending")
         checkpoint = json.loads(execution.checkpoint_json or "{}")
         if (

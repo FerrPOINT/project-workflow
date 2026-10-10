@@ -262,18 +262,59 @@ def test_runtime_readback_network_contract(monkeypatch):
     monkeypatch.setenv("PROJECT_WORKFLOW_PM_READBACK_URL", "http://runtime.test/readback")
     monkeypatch.setenv("PROJECT_WORKFLOW_PM_READBACK_TOKEN", "p" * 40)
     config.get_settings.cache_clear()
-    with patch.object(pm_readback.requests, "get") as get:
-        get.return_value.status_code = 302
-        with pytest.raises(pm_readback.ReadbackUnavailable):
-            pm_readback.observe_run(OLD_RUN)
-        assert get.call_args.kwargs["allow_redirects"] is False
-        assert get.call_args.kwargs["timeout"] == (3, 10)
-        assert get.call_args.args[0] == "http://runtime.test/readback/" + OLD_RUN
-        assert "params" not in get.call_args.kwargs
-        get.return_value.status_code = 200
-        get.return_value.json.return_value = {"status": "stopped"}
-        with pytest.raises(pm_readback.ReadbackUnavailable):
-            pm_readback.observe_run(OLD_RUN)
+    with patch.object(pm_readback.requests, "Session") as session_factory:
+        client = session_factory.return_value.__enter__.return_value
+        with patch.object(client, "get") as get:
+            client.trust_env = True
+            get.return_value.status_code = 302
+            with pytest.raises(pm_readback.ReadbackUnavailable):
+                pm_readback.observe_run(OLD_RUN)
+            assert client.trust_env is False
+            assert get.call_args.kwargs["allow_redirects"] is False
+            assert get.call_args.kwargs["timeout"] == (3, 10)
+            assert get.call_args.args[0] == "http://runtime.test/readback/" + OLD_RUN
+            assert "params" not in get.call_args.kwargs
+            get.return_value.status_code = 200
+            get.return_value.json.return_value = {"status": "stopped"}
+            with pytest.raises(pm_readback.ReadbackUnavailable):
+                pm_readback.observe_run(OLD_RUN)
+
+
+def test_initial_bind_rejects_session_run_id_reserved_by_pending_resume(pm):
+    from tests.test_runtime_api import _assignment, _bind_payload
+
+    client, _, _, resume, observations, _ = waiting_pm(pm)
+    observations[OLD_RUN]["status"] = "stopped"
+    reserved = client.post(BASE + "/resume", headers=ADAPTER, json=resume)
+    assert reserved.status_code == 200, reserved.text
+
+    assignment = client.post(
+        "/internal/runtime/assign", headers=ADAPTER,
+        json=_assignment("PM-2", "assign:pm:2", "project_manager"),
+    ).json()["result"]
+    runtime_binding = _bind_payload(assignment)
+    runtime_binding["concrete_agent_ref"] = AGENT_REF
+    binding_response = client.post("/internal/runtime/bind", headers=ADAPTER, json=runtime_binding)
+    assert binding_response.status_code == 200, binding_response.text
+    binding = binding_response.json()["result"]
+    identity = {
+        **pm[1], "task": "PM-2", "execution_ref": "execution:pm:2",
+        "task_ref": assignment["business_task_ref"], "root_ref": assignment["root_task_ref"],
+        "assignment_operation_key": assignment["assignment_operation_key"],
+        "assignment_ref": assignment["assignment_ref"],
+        "assignment_revision": assignment["assignment_revision"],
+    }
+    observations[NEW_RUN] = {
+        **identity, "observation_ref": "observation:pm:2", "status": "running",
+        "binding_ref": binding["binding_ref"], "hermes_run_ref": binding["hermes_run_ref"],
+        "dispatch_operation_key": "pm-bind:2", "fence": 1, "session_run_id": NEW_RUN,
+    }
+    collision = client.post(BASE + "/bind", headers=ADAPTER, json={
+        **identity, "operation_key": "pm-bind:2", "expected_version": 0,
+        "binding_ref": binding["binding_ref"], "hermes_run_ref": binding["hermes_run_ref"],
+        "session_run_id": NEW_RUN,
+    })
+    assert collision.status_code == 409, collision.text
 
 
 def test_openapi_exposes_pm_wire_and_callback_schema(pm):

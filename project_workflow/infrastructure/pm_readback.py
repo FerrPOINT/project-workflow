@@ -27,11 +27,13 @@ def observe_run(session_run_id: str) -> RuntimeObservation:
         raise ReadbackUnavailable("PM runtime readback capability is unavailable")
     settings = config.get_settings()
     try:
-        response = requests.get(
-            settings.PROJECT_WORKFLOW_PM_READBACK_URL.rstrip("/") + "/" + quote(session_run_id, safe=""),
-            headers={"Authorization": f"Bearer {settings.PROJECT_WORKFLOW_PM_READBACK_TOKEN}"},
-            timeout=(3, 10), allow_redirects=False,
-        )
+        with requests.Session() as client:
+            client.trust_env = False
+            response = client.get(
+                settings.PROJECT_WORKFLOW_PM_READBACK_URL.rstrip("/") + "/" + quote(session_run_id, safe=""),
+                headers={"Authorization": f"Bearer {settings.PROJECT_WORKFLOW_PM_READBACK_TOKEN}"},
+                timeout=(3, 10), allow_redirects=False,
+            )
         if response.status_code != 200:
             raise ReadbackUnavailable("Runtime acceptance is unknown; read back the same run before retry")
         return RuntimeObservation.model_validate(response.json())
