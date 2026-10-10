@@ -34,7 +34,7 @@ cases are included in the PostgreSQL gate.
 
 The isolated QA roundtrip used canonical Workflow source above, merged Fleet
 `91f64808e303c90a0d819bfdb70940b8d7133da2`, Tracker
-`503f064e4f5adc530ec3418b6f237757c24571c4`, and compiler SDK
+`e289a885892b76e933ed804ef055164b52fbe11d`, and compiler SDK
 `913370b487ceadd408f975ea7f8ca96bfcb99484`. The Fleet UI-only follow-up changes
 neither its backend nor embedded runtime inputs.
 
@@ -82,5 +82,6 @@ Workflow and real resource owners. Follow
 [the continuation contract](pm-continuation-contract.md) and
 [the resource context configuration](resource-execution-context.md). Private QA
 credentials, snapshots, raw logs and host-specific paths stay outside this repo.
-Each dependency update needs its own current acceptance; the Tracker #127
-state-write-permit follow-up is not covered by the earlier roundtrip above.
+The Tracker state-write-permit follow-up was included in the fresh native
+roundtrip: owner answer, revision 2, verifier evidence, confirmation and the six
+live refusals passed without leaving a pending permit.
