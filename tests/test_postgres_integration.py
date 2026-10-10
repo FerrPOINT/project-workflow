@@ -24,7 +24,7 @@ import pytest
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
 from fastapi.testclient import TestClient
-from sqlalchemy import inspect, text
+from sqlalchemy import inspect, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import close_all_sessions
 
@@ -144,6 +144,72 @@ def test_pm_postgres_concurrent_replay_and_restart_readback(pm_postgres):
     with SAUnitOfWork() as uow:
         assert len(list(uow.session.query(m.PMOperation))) == 3
         assert len(list(uow.session.query(m.PMRun))) == 1
+
+
+@pytest.mark.integration
+def test_pm_postgres_pending_resume_uuid_serializes_initial_bind(pm_postgres):
+    from project_workflow.infrastructure.db import models as m
+    from tests.test_pm_execution import (
+        ADAPTER,
+        AGENT_REF,
+        BASE,
+        NEW_RUN,
+        OLD_RUN,
+        waiting_pm,
+    )
+    from tests.test_runtime_api import _assignment, _bind_payload
+
+    client, _, _, resume, observations, _ = waiting_pm(pm_postgres)
+    observations[OLD_RUN]["status"] = "stopped"
+    assignment = client.post(
+        "/internal/runtime/assign", headers=ADAPTER,
+        json=_assignment("PM-2", "assign:pm:2", "project_manager"),
+    ).json()["result"]
+    runtime_binding = _bind_payload(assignment)
+    runtime_binding["concrete_agent_ref"] = AGENT_REF
+    binding_response = client.post("/internal/runtime/bind", headers=ADAPTER, json=runtime_binding)
+    assert binding_response.status_code == 200, binding_response.text
+    binding = binding_response.json()["result"]
+    identity = {
+        **pm_postgres[1], "task": "PM-2", "execution_ref": "execution:pm:2",
+        "task_ref": assignment["business_task_ref"], "root_ref": assignment["root_task_ref"],
+        "assignment_operation_key": assignment["assignment_operation_key"],
+        "assignment_ref": assignment["assignment_ref"],
+        "assignment_revision": assignment["assignment_revision"],
+    }
+    observations[NEW_RUN] = {
+        **identity, "observation_ref": "observation:pm:2", "status": "running",
+        "binding_ref": binding["binding_ref"], "hermes_run_ref": binding["hermes_run_ref"],
+        "dispatch_operation_key": "pm-bind:2", "fence": 1, "session_run_id": NEW_RUN,
+    }
+    bind = {
+        **identity, "operation_key": "pm-bind:2", "expected_version": 0,
+        "binding_ref": binding["binding_ref"], "hermes_run_ref": binding["hermes_run_ref"],
+        "session_run_id": NEW_RUN,
+    }
+    barrier = Barrier(2)
+
+    def request(path, payload):
+        barrier.wait(timeout=10)
+        return client.post(BASE + path, headers=ADAPTER, json=payload)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        resume_future = pool.submit(request, "/resume", resume)
+        bind_future = pool.submit(request, "/bind", bind)
+        resume_response = resume_future.result(timeout=30)
+        bind_response = bind_future.result(timeout=30)
+    assert sorted([resume_response.status_code, bind_response.status_code]) == [200, 409]
+    with SAUnitOfWork() as uow:
+        run = uow.session.get(m.PMRun, NEW_RUN)
+        reservation = uow.session.scalar(select(m.PMExecution).where(
+            m.PMExecution.resume_session_run_id == NEW_RUN,
+            m.PMExecution.state == "resume_pending",
+        ))
+        assert (run is not None) != (reservation is not None)
+        if resume_response.status_code == 200:
+            assert reservation is not None and reservation.execution_ref == resume["execution_ref"]
+        else:
+            assert run is not None and run.execution_ref == bind["execution_ref"]
 
 
 @pytest.mark.integration
