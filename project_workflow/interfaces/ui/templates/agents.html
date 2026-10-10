@@ -61,7 +61,7 @@ html[data-theme='dark'] .agent-delete,html[data-theme='dark'] .agent-delete:hove
           <span class="agent-profile">{{ a.launch_profile or 'Без ключа' }}</span>
           <span class="agent-description">{{ a.description or 'Без описания' }}</span>
         </summary>
-        <form class="agent-editor" onsubmit="saveAgent(event,this)">
+        <form class="agent-editor" data-platform-draft onsubmit="saveAgent(event,this)">
           <div class="agent-fields">
             <label><span class="agent-field-label">Имя</span><input type="text" name="name" value="{{ a.name }}" required></label>
             <label><span class="agent-field-label">Ключ запуска</span><input type="text" name="launch_profile" value="{{ a.launch_profile or '' }}" pattern="[a-z0-9][a-z0-9_-]*" maxlength="251"></label>
@@ -82,7 +82,7 @@ html[data-theme='dark'] .agent-delete,html[data-theme='dark'] .agent-delete:hove
   <section aria-label="Добавить агента">
     <details class="agent-create" id="agentCreatePanel">
       <summary>+ Добавить агента</summary>
-      <form class="agent-editor" onsubmit="addAgent(event)">
+      <form class="agent-editor" data-platform-draft onsubmit="addAgent(event)">
         <div class="agent-fields">
           <label><span class="agent-field-label">Имя</span><input type="text" id="newName" required></label>
           <label><span class="agent-field-label">Ключ запуска</span><input type="text" id="newLaunchProfile" pattern="[a-z0-9][a-z0-9_-]*" maxlength="251"></label>
@@ -127,6 +127,7 @@ async function saveAgent(event,form){
     entry.open=false;
     entry.querySelector('summary').focus();
     showToast('Сохранено','success');
+    window.SdlcPlatformNavigation.saved(form);
   }catch(error){showRequestError(error)}finally{button.disabled=false}
 }
 async function deleteAgent(button){
@@ -162,7 +163,7 @@ async function addAgent(event){
   try{
     var response=await fetch('/api/agents',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,description:description,launch_profile:launchProfile||null})});
     var data=await response.json();
-    if(data.ok){showToast('Добавлено','success');location.reload()}else showToast(data.error||'Ошибка','error');
+    if(data.ok){window.SdlcPlatformNavigation.saved(event.target);showToast('Добавлено','success');window.SdlcPlatformNavigation.reload()}else showToast(data.error||'Ошибка','error');
   }catch(error){showRequestError(error)}finally{button.disabled=false}
 }
 {% endblock %}

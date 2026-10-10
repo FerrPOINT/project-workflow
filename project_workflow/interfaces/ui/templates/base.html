@@ -7,6 +7,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>document.documentElement.dataset.platformOrigin={{ platform_origin|default('')|tojson }};{% include 'base/platform-navigation.js' %}</script>
 <title>{% block title %}Workflow Engine{% endblock %}</title>
 <script>{% include "base/theme-preference.js" %}
 document.documentElement.dataset.theme=window.SdlcThemePreference.read("workflow-theme");</script>
@@ -405,7 +406,7 @@ textarea{resize:vertical;min-height:60px}
         <div class="service-menu-popover">
           <div role="menu" aria-label="Сервисы платформы">
         {% for service in other_services %}
-          <a class="service-menu-item" href="{{ '/' if service.key == 'project-workflow' else service.url }}" role="menuitem" {% if service.key == 'project-workflow' %}aria-current="page"{% endif %}>
+          <a class="service-menu-item" data-platform-service="{{ service.key }}" href="{{ '/' if service.key == 'project-workflow' else service.url }}" role="menuitem" {% if service.key == 'project-workflow' %}aria-current="page"{% endif %}>
             <span class="service-health {{ service.health }}" role="img" aria-label="{% if service.health == 'healthy' %}Работает{% elif service.health == 'unreachable' %}Недоступен{% else %}Состояние неизвестно{% endif %}"></span>
             <span>{{ service.label }}</span>
             {% if service.key == 'project-workflow' %}<span class="service-menu-current">Текущий</span>{% endif %}
@@ -596,7 +597,7 @@ function requestConfirmation(options){
 }
 function switchNamespace(namespaceId){
   if(!namespaceId){return;}
-  document.cookie={{ namespace_cookie_name | tojson }}+'='+encodeURIComponent(namespaceId)+'; path=/; SameSite=Lax'{% if namespace_cookie_secure %}+'; Secure'{% endif %};
+  if(!window.SdlcPlatformNavigation.embedded) document.cookie={{ namespace_cookie_name | tojson }}+'='+encodeURIComponent(namespaceId)+'; path=/; SameSite=Lax'{% if namespace_cookie_secure %}+'; Secure'{% endif %};
   var url=new URL(window.location.href);
   if(url.pathname === '/phases'){
     url.searchParams.delete('workflow_id');
@@ -614,7 +615,7 @@ function switchNamespace(namespaceId){
     url.pathname='/namespaces';
   }
   url.searchParams.set('namespace_id', namespaceId);
-  window.location.href=url.toString();
+  window.SdlcPlatformNavigation.navigate(url.toString());
 }
 function pluralizeRu(n, one, few, many){
   if(n % 10 === 1 && n % 100 !== 11){ return n + ' ' + one; }
@@ -624,5 +625,21 @@ function pluralizeRu(n, one, few, many){
 {% block extra_script %}{% endblock %}
 </script>
 <script>{% include "base/base-ui.js" %}</script>
+<script type="module">
+{% include "base/platform-bridge.js" %}
+{% include "base/platform-ssr.js" %}
+installServerProduct({connectPlatformProduct, platformNavigate, platformReload, transportNamespaceLocation}, {
+  serviceKey: 'project-workflow', portalOrigin: {{ platform_origin|default('')|tojson }},
+  logoutUrl: {{ platform_logout_url|default('')|tojson }},
+  error: {{ (message if status_code is defined and status_code >= 400 else none)|tojson }},
+  onCommitted: () => {
+    {% if selected_namespace is defined and selected_namespace %}
+    document.cookie={{ namespace_cookie_name|tojson }}+'='+encodeURIComponent({{ selected_namespace.id|tojson }})+'; Path=/; SameSite=Lax'{% if namespace_cookie_secure %}+'; Secure'{% endif %};
+    {% endif %}
+  },
+  confirmLeave: () => requestConfirmation({title:'Покинуть страницу?',message:'Есть несохранённые изменения.',confirmLabel:'Покинуть'}),
+  cancelLeave: () => { const dialog=document.getElementById('confirmDialog'); if(dialog && !dialog.hidden) document.getElementById('confirmDialogCancel').click(); }
+});
+</script>
 </body>
 </html>

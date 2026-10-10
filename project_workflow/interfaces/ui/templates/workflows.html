@@ -73,7 +73,7 @@
   </section>
 
   <section class="workflow-panel">
-    <form id="workflowForm" class="card form-stack" aria-labelledby="workflowFormMode" onsubmit="event.preventDefault(); submitWorkflow();">
+    <form id="workflowForm" data-platform-draft class="card form-stack" aria-labelledby="workflowFormMode" onsubmit="event.preventDefault(); submitWorkflow();">
       <div class="card-title" id="workflowFormMode">Редактирование воркфлоу</div>
       <div>
         <label class="label" for="workflowName">Название</label>
@@ -113,7 +113,7 @@ function syncWorkflowUrl(workflowId, mode){
   var nextUrl = workflowSelectionUrl(workflowId);
   var currentUrl = window.location.pathname + window.location.search + window.location.hash;
   if(nextUrl === currentUrl)return;
-  window.history[mode === 'replace' ? 'replaceState' : 'pushState']({workflowId:workflowId},'',nextUrl);
+  window.SdlcPlatformNavigation.syncRoute(nextUrl, mode === 'replace', {workflowId:workflowId});
 }
 function workflowIdFromUrl(){
   var raw = new URL(window.location.href).searchParams.get('workflow_id');
@@ -277,7 +277,7 @@ function saveWorkflow(){
   var payload = currentWorkflowPayload();
   return fetch('/api/workflows/' + selectedWorkflowId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
     .then(function(r){return r.json()})
-    .then(function(d){ if(d.ok){ showToast('Воркфлоу сохранён','success'); return reloadWorkflows(selectedWorkflowId); } showToast(d.error || 'Ошибка','error'); })
+    .then(function(d){ if(d.ok){ window.SdlcPlatformNavigation.saved(document.getElementById('workflowForm')); showToast('Воркфлоу сохранён','success'); return reloadWorkflows(selectedWorkflowId); } showToast(d.error || 'Ошибка','error'); })
     .catch(showRequestError);
 }
 function createWorkflow(){
@@ -287,8 +287,9 @@ function createWorkflow(){
     .then(function(d){
       if(d.ok){
         showToast('Воркфлоу создан','success');
+        window.SdlcPlatformNavigation.saved(document.getElementById('workflowForm'));
         reloadWorkflows(d.workflow_id);
-        window.location.href = phaseUrlForWorkflow(d.workflow_id);
+        window.SdlcPlatformNavigation.navigate(phaseUrlForWorkflow(d.workflow_id));
       } else {
         showToast(d.error || 'Ошибка','error');
       }

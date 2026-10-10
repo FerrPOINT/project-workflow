@@ -34,7 +34,7 @@ def test_pages_redirect_to_sso_and_api_denies_anonymous(monkeypatch):
     with TestClient(app, follow_redirects=False) as client:
         page = client.get("/")
         assert page.status_code == 303
-        assert page.headers["location"] == "/login?next=%2F"
+        assert page.headers["location"] == "/login?next=%2F&silent=1"
         api = client.get("/api/tasks")
         assert api.status_code == 401
         assert client.post("/internal/runtime/step").status_code == 200
@@ -149,8 +149,14 @@ def test_personal_token_scopes_and_invalid_central_responses(monkeypatch):
         assert "некорректный ответ" in invalid.json()["error"]
 
 
-def test_callback_exchanges_code_and_sets_encrypted_session(monkeypatch):
-    app, settings = _app(monkeypatch)
+@pytest.mark.parametrize("platform_origin,platform_return,expected", [
+    ("", "", "/workflows"),
+    ("http://localhost:7990", "/workflow/phases?namespace_id=7", "http://localhost:7990/workflow/phases?namespace_id=7"),
+    ("http://localhost:7990", "//external.test/path", "http://localhost:7990/"),
+    ("", "/workflow/phases", "/workflows"),
+])
+def test_callback_exchanges_code_and_sets_encrypted_session(monkeypatch, platform_origin, platform_return, expected):
+    app, settings = _app(monkeypatch, UI_PLATFORM_ORIGIN=platform_origin)
     original_client = httpx.AsyncClient
 
     def oidc(request: httpx.Request) -> httpx.Response:
@@ -187,13 +193,14 @@ def test_callback_exchanges_code_and_sets_encrypted_session(monkeypatch):
 
     transaction = sso._encode_cookie(
         settings,
-        {"state": "state-1", "nonce": "nonce-1", "verifier": "verifier-1", "next": "/workflows"},
+        {"state": "state-1", "nonce": "nonce-1", "verifier": "verifier-1", "next": "/workflows",
+         "platform_return": platform_return},
     )
     with TestClient(app, follow_redirects=False) as client:
         client.cookies.set(sso.cookie_name(settings, "workflow_oidc_state"), transaction, path="/sso/callback")
         callback = client.get("/sso/callback?code=code-1&state=state-1")
         assert callback.status_code == 303
-        assert callback.headers["location"] == "/workflows"
+        assert callback.headers["location"] == expected
         session = sso._decode_cookie(settings, client.cookies.get(sso.cookie_name(settings, "workflow_sso")), 900)
         assert session is not None
         assert session["token"] == "access-token"
@@ -255,3 +262,53 @@ def test_machine_principal_cannot_enter_human_routes_even_with_write_scope(monke
         assert client.get("/api/tasks", headers=headers).status_code == 200
         identity["role"] = "service_account"
         assert client.get("/api/tasks", headers=headers).status_code == 403
+def test_silent_login_requests_none_and_handles_matching_missing_session(monkeypatch):
+    from urllib.parse import parse_qs, urlparse
+
+    app, settings = _app(monkeypatch, UI_PLATFORM_ORIGIN="http://localhost:7990")
+    with TestClient(app, follow_redirects=False) as client:
+        response = client.get("/login?next=/phases&silent=1")
+        params = parse_qs(urlparse(response.headers["location"]).query)
+        assert params["prompt"] == ["none"]
+        callback = client.get("/sso/callback", params={"error": "login_required", "state": params["state"][0]})
+        assert callback.status_code == 401
+        assert "Войти через SSO" in callback.text
+        assert "data-platform-login-required" in callback.text.partition("<head>")[0]
+        assert client.cookies.get(sso.cookie_name(settings, "workflow_sso")) is None
+        assert client.cookies.get(sso.cookie_name(settings, "workflow_oidc_state")) is None
+
+
+def test_silent_error_cannot_bypass_oidc_state(monkeypatch):
+    app, _ = _app(monkeypatch)
+    with TestClient(app, follow_redirects=False) as client:
+        client.get("/login?silent=1")
+        response = client.get("/sso/callback?error=login_required&state=foreign")
+        assert response.status_code == 401
+        assert "Вход не подтверждён" in response.text
+        assert "data-platform-login-required" not in response.text.partition("<head>")[0]
+
+
+@pytest.mark.parametrize("code,error", [("", "access_denied"), ("unexpected-code", "login_required"), ("", "")])
+def test_matching_silent_state_does_not_admit_invalid_callback_payload(monkeypatch, code, error):
+    from urllib.parse import parse_qs, urlparse
+
+    app, settings = _app(monkeypatch)
+    with TestClient(app, follow_redirects=False) as client:
+        response = client.get("/login?silent=1")
+        state = parse_qs(urlparse(response.headers["location"]).query)["state"][0]
+        response = client.get("/sso/callback", params={"state": state, "code": code, "error": error})
+        assert response.status_code == 401
+        assert client.cookies.get(sso.cookie_name(settings, "workflow_sso")) is None
+        assert "data-platform-login-required" not in response.text.partition("<head>")[0]
+
+
+def test_canonical_loopback_does_not_redirect_to_itself(monkeypatch):
+    app, _ = _app(monkeypatch, AUTH_PUBLIC_ORIGIN="http://127.0.0.1:8812")
+    with TestClient(app, base_url="http://127.0.0.1:8812", follow_redirects=False) as client:
+        response = client.get("/phases?namespace_id=7")
+        assert response.status_code == 303
+        assert response.headers["location"].startswith("/login?")
+    with TestClient(app, base_url="http://localhost:8812", follow_redirects=False) as client:
+        response = client.get("/phases?namespace_id=7")
+        assert response.status_code == 307
+        assert response.headers["location"] == "http://127.0.0.1:8812/phases?namespace_id=7"

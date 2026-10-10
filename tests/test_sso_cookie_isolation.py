@@ -160,6 +160,6 @@ def test_namespace_cookie_and_template_writes_use_the_same_scope(monkeypatch):
     assert "Secure" in response.headers["set-cookie"]
     assert "HttpOnly" not in response.headers["set-cookie"]
     html = bytes(response.body).decode()
-    assert html.count(f'document.cookie="{own_name}"') == 2
+    assert html.count(f'document.cookie="{own_name}"') == 3
     assert "+'; Secure'" in html
     assert "document.cookie='workflow_namespace_id='" not in html

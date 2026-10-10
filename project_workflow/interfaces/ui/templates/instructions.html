@@ -303,7 +303,7 @@ async function addInstruction() {
     showToast(data.error || 'Ошибка добавления', 'error');
     return;
   }
-  window.location.reload();
+  window.SdlcPlatformNavigation.reload();
 }
 
 async function updateSkills(input) {
@@ -321,7 +321,7 @@ async function updateSkills(input) {
     showToast(data.error || 'Ошибка сохранения', 'error');
     return;
   }
-  window.location.reload();
+  window.SdlcPlatformNavigation.reload();
 }
 
 document.addEventListener('DOMContentLoaded', () => {
