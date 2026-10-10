@@ -9,18 +9,19 @@ import json
 import os
 import secrets
 import time
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 
 import httpx
 import jwt
 from cryptography.fernet import Fernet, InvalidToken
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
 from project_workflow.config import Settings, get_settings
 from project_workflow.interfaces.ui.cookies import cookie_name
+from project_workflow.interfaces.ui.templates import templates
 
 _CLIENT_ID = "project-workflow"
 _SESSION_COOKIE = "workflow_sso"
@@ -36,7 +37,16 @@ def _cipher(settings: Settings) -> Fernet:
 
 
 def _safe_next(value: str | None) -> str:
-    return value if value and value.startswith("/") and not value.startswith("//") else "/"
+    return value if value and value.startswith("/") and not value.startswith("//") and "\\" not in value else "/"
+
+
+def _sso_entry(request: Request, *, message: str, next_path: str = "/", login_required: bool = False,
+               status_code: int = 401) -> Response:
+    return templates.TemplateResponse(request=request, name="sso_entry.html", status_code=status_code, context={
+        "message": message, "login_required": login_required,
+        "login_url": "/login?" + urlencode({"next": _safe_next(next_path)}),
+        "platform_origin": get_settings().UI_PLATFORM_ORIGIN,
+    })
 
 
 def _decode_cookie(settings: Settings, value: str | None, max_age: int) -> dict[str, object] | None:
@@ -58,21 +68,11 @@ def _auth_error(request: Request, status: int, message: str) -> Response:
     if request.url.path.startswith("/api/"):
         return JSONResponse({"ok": False, "error": message}, status_code=status)
     if request.url.path == "/sso/callback":
-        return HTMLResponse(
-            '<!doctype html><html lang="ru"><meta charset="utf-8"><title>Ошибка входа</title>'
-            '<main style="max-width:32rem;margin:10vh auto;font:16px system-ui">'
-            '<h1>Не удалось войти</h1><p>Повторите вход через Central Auth.</p>'
-            '<a href="/login">Повторить</a></main></html>', status_code=status,
-        )
+        return _sso_entry(request, message=message, status_code=status)
     if status == 401:
         destination = _safe_next(request.url.path + (f"?{request.url.query}" if request.url.query else ""))
-        return RedirectResponse(f"/login?{urlencode({'next': destination})}", status_code=303)
-    return HTMLResponse(
-        '<!doctype html><html lang="ru"><meta charset="utf-8"><title>Вход недоступен</title>'
-        '<main style="max-width:32rem;margin:10vh auto;font:16px system-ui"><h1>Central Auth недоступен</h1>'
-        '<p>Попробуйте позже. Локальный вход не используется.</p></main></html>',
-        status_code=status,
-    )
+        return RedirectResponse(f"/login?{urlencode({'next': destination, 'silent': '1'})}", status_code=303)
+    return _sso_entry(request, message=message, status_code=status)
 
 
 class _SsoMiddleware(BaseHTTPMiddleware):
@@ -85,7 +85,9 @@ class _SsoMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         if path in _PUBLIC_PATHS or path.startswith("/internal/runtime/"):
             return await call_next(request)
-        if request.url.hostname == "127.0.0.1":
+        canonical_hostname = urlparse(settings.AUTH_PUBLIC_ORIGIN).hostname
+        if request.url.hostname in {"127.0.0.1", "localhost"} and canonical_hostname in {"127.0.0.1", "localhost"} \
+                and request.url.hostname != canonical_hostname:
             return RedirectResponse(settings.AUTH_PUBLIC_ORIGIN.rstrip("/") + path +
                                     (f"?{request.url.query}" if request.url.query else ""), status_code=307)
 
@@ -137,17 +139,20 @@ def install_sso(app: FastAPI) -> None:
     app.add_middleware(_SsoMiddleware, settings=settings)
 
     @app.get("/login", include_in_schema=False)
-    async def login(request: Request, next: str = "/") -> Response:
+    async def login(request: Request, next: str = "/", silent: bool = False, platform_return: str = "") -> Response:
         verifier = secrets.token_urlsafe(48)
         challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
         transaction: dict[str, object] = {"state": secrets.token_urlsafe(32), "nonce": secrets.token_urlsafe(32),
-                                          "verifier": verifier, "next": _safe_next(next)}
+                                          "verifier": verifier, "next": _safe_next(next), "silent": silent,
+                                          "platform_return": _safe_next(platform_return) if platform_return else ""}
         params = {
             "response_type": "code", "client_id": _CLIENT_ID,
             "redirect_uri": settings.AUTH_PUBLIC_ORIGIN.rstrip("/") + "/sso/callback",
             "scope": "openid email profile", "state": transaction["state"], "nonce": transaction["nonce"],
             "code_challenge": challenge, "code_challenge_method": "S256",
         }
+        if silent:
+            params["prompt"] = "none"
         authorize_url = settings.AUTH_ISSUER.rstrip("/") + "/oidc/authorize?" + urlencode(params)
         response = RedirectResponse(authorize_url, status_code=303)
         response.set_cookie(cookie_name(settings, _TRANSACTION_COOKIE), _encode_cookie(settings, transaction),
@@ -157,9 +162,19 @@ def install_sso(app: FastAPI) -> None:
         return response
 
     @app.get("/sso/callback", include_in_schema=False)
-    async def callback(request: Request, code: str = "", state: str = "") -> Response:
+    async def callback(request: Request, code: str = "", state: str = "", error: str = "") -> Response:
         transaction = _decode_cookie(settings, request.cookies.get(cookie_name(settings, _TRANSACTION_COOKIE)), 600)
-        if not transaction or not code or not state or not secrets.compare_digest(str(transaction.get("state")), state):
+        if not transaction or not state or not secrets.compare_digest(str(transaction.get("state")), state):
+            return _auth_error(request, 401, "Вход не подтверждён")
+        if error:
+            if error == "login_required" and transaction.get("silent") is True and not code:
+                response = _sso_entry(request, message="Требуется вход через SSO.",
+                                      next_path=str(transaction["next"]), login_required=True)
+                response.delete_cookie(cookie_name(settings, _TRANSACTION_COOKIE), path="/sso/callback",
+                                       httponly=True, samesite="lax", secure=settings.AUTH_COOKIE_SECURE)
+                return response
+            return _auth_error(request, 401, "Central Auth не подтвердил вход")
+        if not code:
             return _auth_error(request, 401, "Вход не подтверждён")
         try:
             async with httpx.AsyncClient(timeout=5) as client:
@@ -186,7 +201,11 @@ def install_sso(app: FastAPI) -> None:
                     return _auth_error(request, 401, "Центральная сессия недействительна")
         except (httpx.RequestError, jwt.PyJWTError, KeyError, ValueError, TypeError):
             return _auth_error(request, 503, "Не удалось завершить центральный вход")
-        response = RedirectResponse(_safe_next(str(transaction["next"])), status_code=303)
+        destination = _safe_next(str(transaction["next"]))
+        platform_return = transaction.get("platform_return")
+        if isinstance(platform_return, str) and platform_return and settings.UI_PLATFORM_ORIGIN:
+            destination = settings.UI_PLATFORM_ORIGIN.rstrip("/") + _safe_next(platform_return)
+        response = RedirectResponse(destination, status_code=303)
         session = {"token": access_token, "sub": claims["sub"], "issued": int(time.time())}
         response.set_cookie(cookie_name(settings, _SESSION_COOKIE), _encode_cookie(settings, session),
                             max_age=int(tokens["expires_in"]), path="/", httponly=True, samesite="lax",
