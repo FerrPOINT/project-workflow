@@ -481,13 +481,15 @@ function renderInstructionTimeline(items) {
   }
 }
 
+let instructionOrderSaving = false;
+
 function updateInstructionControls() {
   const items = getInstructionItems();
   items.forEach((item, idx) => {
     const up = item.querySelector('.move-up-btn');
     const down = item.querySelector('.move-down-btn');
-    if (up) up.disabled = idx === 0;
-    if (down) down.disabled = idx === items.length - 1;
+    if (up) up.disabled = instructionOrderSaving || idx === 0;
+    if (down) down.disabled = instructionOrderSaving || idx === items.length - 1;
   });
 }
 
@@ -512,6 +514,7 @@ async function persistInstructionOrder() {
 }
 
 async function moveInstruction(button, direction) {
+  if (instructionOrderSaving) return;
   const item = button.closest('.timeline-item');
   if (!item) return;
   const items = getInstructionItems();
@@ -521,10 +524,15 @@ async function moveInstruction(button, direction) {
   const reordered = [...items];
   const [moved] = reordered.splice(currentIndex, 1);
   reordered.splice(targetIndex, 0, moved);
-  renderInstructionTimeline(reordered);
-  updateInstructionControls();
-  if (!await persistInstructionOrder()) {
-    renderInstructionTimeline(items);
+  instructionOrderSaving = true;
+  try {
+    renderInstructionTimeline(reordered);
+    updateInstructionControls();
+    if (!await persistInstructionOrder()) {
+      renderInstructionTimeline(items);
+    }
+  } finally {
+    instructionOrderSaving = false;
     updateInstructionControls();
   }
 }

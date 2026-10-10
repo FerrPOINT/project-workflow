@@ -85,7 +85,7 @@ async def _verify_resources(context: ExecutionContextV2, client: httpx.AsyncClie
 async def create_context(identity: UUID, actor: str, request: CreateExecutionContext) -> ExecutionContextReadback:
     if identity.int == 0:
         raise ValueError("Nil execution context identity")
-    original = _replay(identity, actor, request)
+    original = await asyncio.to_thread(_replay, identity, actor, request)
     if original:
         return original
     context = request.context
@@ -100,6 +100,12 @@ async def create_context(identity: UUID, actor: str, request: CreateExecutionCon
     result = ExecutionContextReadback(
         id=identity, request=request, tracker_project_id=project, binding_generation=generation
     )
+    return await asyncio.to_thread(_persist_context, identity, actor, request, result)
+
+
+def _persist_context(
+    identity: UUID, actor: str, request: CreateExecutionContext, result: ExecutionContextReadback,
+) -> ExecutionContextReadback:
     try:
         with get_session() as session, session.begin():
             profile = session.get(Workflow, request.workflow_id, with_for_update=True)
@@ -115,7 +121,7 @@ async def create_context(identity: UUID, actor: str, request: CreateExecutionCon
             session.add(
                 ResourceExecutionContext(
                     id=str(identity),
-                    operation_id=str(context.operation_id),
+                    operation_id=str(request.context.operation_id),
                     request=request.model_dump(mode="json"),
                     verified_projection=result.model_dump(mode="json"),
                     workflow_id=profile.id,

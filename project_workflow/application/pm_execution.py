@@ -296,7 +296,7 @@ class PMExecutionService:
         observed = RuntimeObservation.model_validate_json(run.observation_json)
         proof = self._proof(
             self.identity(command), run.run_ref, run.binding_ref, run.fence,
-            observed.dispatch_operation_key, observed.checkpoint_ref,
+            observed.dispatch_operation_key, command.checkpoint_ref,
             run.session_run_id,
         )
         if proof.status not in {"completed", "failed", "cancelled", "stopped"}:

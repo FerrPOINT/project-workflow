@@ -119,6 +119,7 @@ def waiting_pm(pm):
     client, runtime, checkpoint, observations, bound = bind_pm(pm)
     response = client.post(BASE + "/checkpoint", headers=runtime, json=checkpoint)
     assert response.status_code == 200, response.text
+    observations[OLD_RUN]["checkpoint_ref"] = checkpoint["checkpoint_ref"]
     resume = {
         **checkpoint, "operation_key": "resume:1", "expected_version": 2,
         "answer_event_ref": "answer:one", "new_session_run_id": NEW_RUN,
@@ -128,6 +129,9 @@ def waiting_pm(pm):
 
 def test_wait_resume_new_run_survives_sessions_and_replays(pm):
     client, runtime, checkpoint, resume, observations, bound = waiting_pm(pm)
+    with SAUnitOfWork() as uow:
+        initial = json.loads(uow.session.get(m.PMRun, OLD_RUN).observation_json)
+        assert initial.get("checkpoint_ref") is None
     replay = client.post(BASE + "/checkpoint", headers=runtime, json=checkpoint)
     assert replay.json()["result"]["state"] == "waiting"
     assert replay.json()["result"]["workflow_step_allowed"] is False

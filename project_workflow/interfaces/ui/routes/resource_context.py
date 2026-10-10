@@ -10,7 +10,7 @@ from project_workflow.domain.resource_context import CreateExecutionContext, Exe
 from project_workflow.infrastructure.resource_context_reader import OwnerUnavailable
 
 
-async def read(identity: UUID, request: Request) -> ExecutionContextReadback:
+def read(identity: UUID, request: Request) -> ExecutionContextReadback:
     _actor(request)
     try:
         return get_context(identity)

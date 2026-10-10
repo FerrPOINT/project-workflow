@@ -24,6 +24,70 @@ def profile_request():
         )
 
 
+@pytest.mark.parametrize("operation", ["read", "replay", "persist"])
+def test_context_storage_does_not_hold_the_http_event_loop(monkeypatch, operation):
+    from threading import Event
+
+    import httpx
+    from sqlalchemy.orm import Session
+
+    from project_workflow.infrastructure.db.models import Workflow
+
+    request = profile_request()
+    identity = uuid4()
+    project_id = uuid4()
+
+    async def reader(owner, path, value, *, client):
+        return {"namespace": value.namespace.model_dump(mode="json"),
+                "task_id": str(value.task.task_id), "tracker_instance_id": str(value.task.tracker_instance_id),
+                "project_id": str(project_id), "generation": 1, "state": "active"}
+
+    monkeypatch.setattr(service, "read_owner", reader)
+    if operation != "persist":
+        asyncio.run(service.create_context(identity, "human", request))
+    entered, release, expired = Event(), Event(), Event()
+    original_get = Session.get
+
+    def held_get(self, entity, *args, **kwargs):
+        held_entity = Workflow if operation == "persist" else ResourceExecutionContext
+        if entity is held_entity:
+            entered.set()
+            if not release.wait(2):
+                expired.set()
+        return original_get(self, entity, *args, **kwargs)
+
+    monkeypatch.setattr(Session, "get", held_get)
+    app = FastAPI()
+
+    @app.middleware("http")
+    async def verified_actor(http_request, call_next):
+        http_request.state.central_subject = "human"
+        return await call_next(http_request)
+
+    app.get("/contexts/{identity}")(routes.read)
+    app.put("/contexts/{identity}")(routes.bind)
+
+    @app.get("/probe")
+    async def probe():
+        return {"ok": True}
+
+    async def exercise():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            path = f"/contexts/{identity}"
+            pending = asyncio.create_task(client.get(path) if operation == "read" else
+                                          client.put(path, json=request.model_dump(mode="json")))
+            try:
+                assert await asyncio.to_thread(entered.wait, 3)
+                assert not expired.is_set(), "Synchronous storage held the HTTP event loop"
+                assert (await asyncio.wait_for(client.get("/probe"), 1)).status_code == 200
+            finally:
+                release.set()
+                response = await pending
+            assert response.status_code == 200, response.text
+
+    asyncio.run(exercise())
+
+
 @pytest.mark.parametrize("delay, succeeds", [(0.01, True), (0.08, False)])
 def test_owner_verification_shares_command_deadline_and_closes_its_pool(monkeypatch, delay, succeeds):
     monkeypatch.setattr(service, "CONTEXT_TIMEOUT_SECONDS", 0.16)

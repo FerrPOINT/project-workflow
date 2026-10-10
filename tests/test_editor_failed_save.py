@@ -9,6 +9,37 @@ import pytest
 pytestmark = pytest.mark.ui
 
 
+def test_reorder_waits_for_original_ack_before_another_move():
+    template = (Path(__file__).parents[1] / "project_workflow/interfaces/ui/templates/phase_detail.html").read_text(
+        encoding="utf-8",
+    )
+    start = template.index("async function moveInstruction(")
+    end = template.index("async function requestPhaseDetail(", start)
+    declaration = next((line for line in template.splitlines() if line.startswith("let instructionOrderSaving")), "")
+    script = "\n".join([
+        declaration,
+        "let items=[1,2,3].map(id=>({id}));const original=[...items];let saves=0,ack;",
+        "const getInstructionItems=()=>items;const renderInstructionTimeline=value=>{items=value;};",
+        "const updateInstructionControls=()=>{};",
+        "const persistInstructionOrder=()=>{saves++;return new Promise(resolve=>{ack=resolve;});};",
+        template[start:end],
+        "const first=moveInstruction({closest:()=>original[1]},-1);",
+        "const second=moveInstruction({closest:()=>original[2]},-1);",
+        "console.log(JSON.stringify({saves,order:items.map(i=>i.id)}));ack(false);await first;await second;",
+        "console.log(JSON.stringify({order:items.map(i=>i.id)}));",
+        "const retry=moveInstruction({closest:()=>original[2]},-1);ack(true);await retry;",
+        "console.log(JSON.stringify({saves,order:items.map(i=>i.id)}));",
+    ])
+    completed = subprocess.run(
+        ["node", "--input-type=module", "-"], input=script, text=True, capture_output=True, timeout=10,
+    )
+    rows = [json.loads(line) for line in completed.stdout.splitlines()]
+    assert rows and rows[0] == {"saves": 1, "order": [2, 1, 3]}, completed.stderr
+    assert completed.returncode == 0, completed.stderr
+    assert rows[1] == {"order": [1, 2, 3]}
+    assert rows[2] == {"saves": 2, "order": [1, 3, 2]}
+
+
 @pytest.mark.parametrize("position", [0, 1, 2])
 def test_add_instruction_uses_visible_position_after_reorder(position):
     template = (Path(__file__).parents[1] / "project_workflow/interfaces/ui/templates/phase_detail.html").read_text(

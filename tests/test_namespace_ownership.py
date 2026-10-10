@@ -345,6 +345,7 @@ def test_new_enrollment_requires_mapping_but_legacy_replay_and_resume_remain(pm)
     assert client.post(BASE + "/bind", headers=ADAPTER, json=changed).status_code == 409
     assert client.post(BASE + "/checkpoint", headers=runtime, json=checkpoint).status_code == 200
     observations[OLD_RUN]["status"] = "stopped"
+    observations[OLD_RUN]["checkpoint_ref"] = checkpoint["checkpoint_ref"]
     resume = {**checkpoint, "operation_key": "resume:1", "expected_version": 2,
               "answer_event_ref": "answer:one", "new_session_run_id": NEW_RUN}
     resumed = client.post(BASE + "/resume", headers=ADAPTER, json=resume)

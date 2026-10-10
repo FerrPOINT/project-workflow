@@ -120,6 +120,7 @@ def test_pm_postgres_concurrent_replay_and_restart_readback(pm_postgres):
         "answer_event_ref": "answer:one", "new_session_run_id": NEW_RUN,
     }
     observations[OLD_RUN]["status"] = "stopped"
+    observations[OLD_RUN]["checkpoint_ref"] = checkpoint["checkpoint_ref"]
     barrier = Barrier(2)
 
     def send_resume():
