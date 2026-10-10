@@ -72,7 +72,8 @@ def introspect(authorization: str | None) -> tuple[NamespacePrincipal, list[str]
                     if len(body) > MAX_BODY or _monotonic() - started > 5:
                         raise NamespaceAuthError(503)
                 value = json.loads(body, object_pairs_hook=unique_object)
-        if not isinstance(value, dict) or set(value) != {"sub", "email", "scopes"}:
+        required_fields = {"sub", "email", "scopes"}
+        if not isinstance(value, dict) or not required_fields <= set(value) <= required_fields | {"display_name"}:
             raise ValueError("Invalid introspection")
         subject = canonical_uuid(value["sub"]) if isinstance(value["sub"], str) else ""
         scopes = value["scopes"]

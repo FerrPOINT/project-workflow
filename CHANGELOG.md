@@ -27,6 +27,9 @@
 - Standalone-режим: репозиторий собирается и запускается без соседнего `services-base` (убраны extra `cli-platform`, uv source, Docker additional_context и CI checkout). Token-режим CLI без `sdlc-cli-core` выдаёт понятную ошибку; запуск без `AUTH_ISSUER` работает без авторизации.
 
 ### Fixed
+- Machine namespace authorization accepts Base's optional `display_name`
+  introspection metadata while preserving required identity/grants, registered
+  subjects and rejection of unknown claims.
 - Phase saves bind returned check/evidence IDs to the submitted rows, even when
   the list changes during the request. A temporarily blank saved row is not
   silently deleted by saving another field. Health SQL runs in FastAPI's thread

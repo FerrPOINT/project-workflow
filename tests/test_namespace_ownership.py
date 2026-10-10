@@ -165,6 +165,25 @@ def test_read_requires_issuable_read_grant_pinned_subject_and_fresh_introspectio
     assert len(calls) == 3
 
 
+@pytest.mark.parametrize("display_name", ["QA machine", ""])
+def test_base_profile_metadata_preserves_namespace_authorization(owned_namespace, display_name):
+    client, namespace_id, _, identity = owned_namespace
+    identity["display_name"] = display_name
+    url = f"/api/pm/namespace-ownership/{namespace_id}"
+    created = client.put(url, headers=PAT, json=PAYLOAD)
+    assert created.status_code == 201, created.text
+    assert client.get(url, headers=PAT).status_code == 200
+    identity["sub"] = str(uuid4())
+    assert client.get(url, headers=PAT).status_code == 403
+
+
+def test_unknown_introspection_claims_do_not_authorize_namespace_access(owned_namespace):
+    client, namespace_id, _, identity = owned_namespace
+    identity.update(display_name="QA machine", is_admin=True)
+    response = client.put(f"/api/pm/namespace-ownership/{namespace_id}", headers=PAT, json=PAYLOAD)
+    assert response.status_code == 503
+
+
 def test_foreign_subject_with_all_correct_grants_cannot_provision(owned_namespace):
     client, namespace_id, _, identity = owned_namespace
     identity["sub"] = OTHER_SUBJECT
