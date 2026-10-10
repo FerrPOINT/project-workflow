@@ -1129,7 +1129,7 @@ def test_legacy_catalog_adoption_rejects_ambiguous_or_divergent_state_before_ren
     assert empty_uow.agents.get_by_name("reviewer") is not None
 
 
-def test_init_db_executes_managed_catalog_validation_and_fails_closed_on_drift(
+def test_init_db_keeps_installed_catalog_presentation_edits(
     tmp_path, monkeypatch
 ):
     from project_workflow.config import get_settings
@@ -1147,7 +1147,7 @@ def test_init_db_executes_managed_catalog_validation_and_fails_closed_on_drift(
             assert namespace is not None and namespace.id is not None
             uow.projects.update(namespace.id, {"theme_color": "#22C55E"})
 
-        assert main() == 1
+        assert main() == 0
         with SAUnitOfWork(database_url) as uow:
             namespace = uow.projects.get_by_cli_command("workflow-project_manager")
             assert namespace is not None

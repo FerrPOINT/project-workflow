@@ -10,6 +10,10 @@
 
 
 ### Changed
+- PM Draft assignments accept the actual Tracker reservation and input snapshot
+  without inventing future queue/workspace refs. Additive migration 0009 preserves
+  existing assignment history; bind keeps the original agent and generic steps,
+  replacement and rebind cannot bypass verified PM enrollment.
 - Namespace/workflow context sits beside account on the right; compact sidebar
   applies the Base SSR scope and shrinks with its labels and content offset.
 - Mobile service menu stays inside the viewport; namespace selection and history
@@ -23,6 +27,21 @@
 - Standalone-режим: репозиторий собирается и запускается без соседнего `services-base` (убраны extra `cli-platform`, uv source, Docker additional_context и CI checkout). Token-режим CLI без `sdlc-cli-core` выдаёт понятную ошибку; запуск без `AUTH_ISSUER` работает без авторизации.
 
 ### Fixed
+- Phase saves bind returned check/evidence IDs to the submitted rows, even when
+  the list changes during the request. A temporarily blank saved row is not
+  silently deleted by saving another field. Health SQL runs in FastAPI's thread
+  pool so a slow probe does not stall unrelated requests.
+- Legacy v2 runtime steps consume saved instruction/check/evidence text from the
+  database; readiness validates the saved phase graph, role ownership and skill
+  limits. Valid reordering, parallel execution and added phases do not disable
+  the role merely because the graph differs from the seed catalog.
+- Runtime discovery ignores presentation changes and unrelated workflows;
+  readiness checks the calling managed role. Synchronous human API and HTML
+  routes use FastAPI's thread pool. Rejected instruction saves retain entered text.
+- Installed catalogs allow normal phase, instruction, agent and namespace edits.
+  Saving and reopening retain the new values; startup and migration reruns keep
+  saved edits. Packaged executor compatibility is checked at the runtime API,
+  independently of editor availability.
 - Base binding OpenAPI keeps its published 422 description independent of the
   Python standard library status phrase; validation status and DTO are unchanged.
 - Index PM operation history by execution and kind so checkpoint uniqueness

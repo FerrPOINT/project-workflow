@@ -786,12 +786,10 @@ def _assert_exact_persisted_inventory(
 def _assert_existing_agent(
     uow: UnitOfWork, workflow: ManagedWorkflow
 ) -> int:
-    expected_description = f"Managed Hermes role: {workflow.name}"
     existing = uow.agents.get_by_name(workflow.role_key)
     if (
         existing is None
         or existing.id is None
-        or existing.description != expected_description
         or existing.hermes_profile != workflow.hermes_profile
     ):
         raise ValueError(
@@ -932,21 +930,16 @@ def _assert_existing_namespace(
     uow: UnitOfWork, workflow: ManagedWorkflow, workflow_id: int
 ) -> None:
     cli_command = f"workflow-{workflow.role_key}"
-    code = legacy_code_from_cli_command(cli_command)
-    description = f"Managed namespace for {workflow.key}"
     existing = uow.projects.get_by_cli_command(cli_command)
-    if existing is None or not _namespace_has_identity(
-        uow.projects.get_persisted_identity(int(existing.id or 0)),
-        workflow_id=workflow_id,
-        code=code,
-        name=workflow.hermes_namespace,
-        description=description,
-        cli_command=cli_command,
-        key_prefixes=[],
+    identity = uow.projects.get_persisted_identity(int(existing.id or 0)) if existing is not None else None
+    if (
+        identity is None
+        or identity.get("workflow_id") != workflow_id
+        or identity.get("code") != legacy_code_from_cli_command(cli_command)
+        or identity.get("cli_command") != cli_command
+        or _normalized_key_prefixes(identity.get("key_prefixes")) != ()
     ):
-        raise ValueError(
-            f"Managed namespace {workflow.hermes_namespace!r} is missing or has another identity"
-        )
+        raise ValueError(f"Managed namespace {cli_command!r} is missing or has another execution identity")
 
 
 def _assert_existing_workflow(
@@ -956,15 +949,12 @@ def _assert_existing_workflow(
     *,
     agent_id: int,
     catalog_version: int | None = None,
+    allow_editor_changes: bool = False,
 ) -> None:
     if actual_workflow.id is None:
         raise ValueError(f"Managed workflow {expected.key!r} has no id")
     workflow_id = int(actual_workflow.id)
-    if (
-        actual_workflow.key != expected.key
-        or actual_workflow.name != expected.name
-        or actual_workflow.description != expected.description
-    ):
+    if actual_workflow.key != expected.key:
         raise ValueError(
             f"Managed workflow {expected.key!r} already exists with a different identity"
         )
@@ -972,7 +962,6 @@ def _assert_existing_workflow(
     actual_modes = [
         (
             mode.key,
-            mode.name,
             mode.mode_order,
             mode.role_key,
             tuple(mode.execution_scopes or ([mode.execution_scope] if mode.execution_scope else [])),
@@ -983,7 +972,6 @@ def _assert_existing_workflow(
     expected_modes = [
         (
             mode.key,
-            mode.name,
             mode.mode_order,
             expected.role_key,
             tuple(mode.execution_scopes or []),
@@ -999,6 +987,26 @@ def _assert_existing_workflow(
         if actual_mode.id is None:
             raise ValueError(f"Managed workflow {expected.key!r} has a mode without id")
         phases = list(uow.phases.list(workflow_id, mode_id=actual_mode.id))
+        if allow_editor_changes and isinstance(expected, ManagedWorkflow):
+            if not phases or any(phase.id is None or phase.agent_id not in {None, agent_id} for phase in phases):
+                raise ValueError(f"Managed mode {actual_mode.key!r} requires phases owned by its role")
+            validate_phase_graph([
+                PhaseGraphNode(
+                    code=phase.code, graph_id=phase.id, phase_order=phase.phase_order,
+                    execution_type=phase.execution_type,
+                    parallel_with_phase_id=phase.parallel_with_phase_id,
+                    rollback_target_phase_id=phase.rollback_target_phase_id,
+                )
+                for phase in phases
+            ])
+            for phase in phases:
+                assert phase.id is not None
+                if any(
+                    not set(item.get("skills") or []).issubset(expected.skill_allowlist)
+                    for item in uow.phase_instructions.list(phase.id)
+                ):
+                    raise ValueError(f"Managed phase {phase.code!r} requests an unavailable role skill")
+            continue
         expected_phases = expected_mode.phases
         expected_phase_codes = [phase.code for phase in expected_phases]
         if [phase.code for phase in phases] != expected_phase_codes:
@@ -1009,8 +1017,6 @@ def _assert_existing_workflow(
             if phase.id is None:
                 raise ValueError(f"Managed phase {expected_phase.code!r} has no id")
             actual_identity = (
-                phase.name,
-                phase.description or "",
                 phase.phase_order,
                 phase.execution_type,
                 phase.agent_id,
@@ -1018,15 +1024,17 @@ def _assert_existing_workflow(
                 phase.rollback_target_phase_id,
             )
             expected_identity = (
-                expected_phase.name,
-                expected_phase.description,
                 expected_phase.phase_order,
                 "sync",
                 agent_id,
                 None,
                 None,
             )
-            if actual_identity != expected_identity:
+            if (
+                actual_identity != expected_identity
+                or phase.name != expected_phase.name
+                or (phase.description or "") != expected_phase.description
+            ):
                 raise ValueError(
                     f"Managed phase {expected.key!r}/{expected_mode.key!r}/{expected_phase.code!r} "
                     "has a different identity"
@@ -1068,24 +1076,28 @@ def _assert_existing_workflow(
 def validate_managed_catalog_state(
     uow: UnitOfWork,
     catalog: ManagedCatalog | None = None,
+    *,
+    role_key: str | None = None,
 ) -> bool:
     """Read and validate the complete installed managed catalog.
 
     ``False`` means the database is an unmanaged compatibility database.  Once
-    any managed workflow key exists, partial, foreign, or drifted state raises
+    any managed workflow key exists, missing or incompatible execution state raises
     instead of being treated as an unmanaged fallback.
     """
 
     resolved_catalog = catalog or load_managed_catalog()
+    definitions = [item for item in resolved_catalog.workflows if role_key is None or item.role_key == role_key]
+    if not definitions:
+        return False
     uow.lock_catalog_state(shared=True)
     workflows = list(uow.workflows.list())
-    expected_keys = {workflow.key for workflow in resolved_catalog.workflows}
+    expected_keys = {workflow.key for workflow in definitions}
     if not any(workflow.key in expected_keys for workflow in workflows):
         return False
 
-    _assert_no_foreign_catalog_objects(uow, resolved_catalog)
     workflows_by_key = {workflow.key: workflow for workflow in workflows}
-    for definition in resolved_catalog.workflows:
+    for definition in definitions:
         existing = workflows_by_key.get(definition.key)
         if existing is None or existing.id is None:
             raise ValueError(f"Managed workflow {definition.key!r} is missing")
@@ -1095,9 +1107,11 @@ def validate_managed_catalog_state(
             existing,
             definition,
             agent_id=agent_id,
+            allow_editor_changes=role_key is not None and resolved_catalog.catalog_version == 2,
         )
         _assert_existing_namespace(uow, definition, int(existing.id))
-    _assert_exact_persisted_inventory(uow, resolved_catalog)
+    if role_key is None:
+        _assert_exact_persisted_inventory(uow, resolved_catalog)
     return True
 
 
@@ -1127,6 +1141,8 @@ def ensure_managed_catalog(
             if existing.id is None:
                 raise ValueError(f"Managed workflow {definition.key!r} has no id")
             workflow_id = int(existing.id)
+            if existing.name != definition.name or existing.description != definition.description:
+                raise ValueError(f"Managed workflow {definition.key!r} already exists with a different identity")
             active_version = existing.active_catalog_version
             if active_version < catalog.catalog_version:
                 if active_version != 1 or catalog.catalog_version != 2:

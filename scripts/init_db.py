@@ -6,7 +6,7 @@ import sys
 from sqlalchemy.exc import SQLAlchemyError
 
 from project_workflow.config import get_settings
-from project_workflow.infrastructure.db.managed_catalog import ensure_managed_catalog
+from project_workflow.infrastructure.db.managed_catalog import ensure_managed_catalog, load_managed_catalog
 from project_workflow.infrastructure.db.session import (
     DatabaseRecreateRequired,
     DatabaseUnavailable,
@@ -34,7 +34,14 @@ def main() -> int:
         with initialization_transaction(engine) as connection:
             ensure_migrated(connection)
             with SAUnitOfWork(connection) as uow:
-                ensure_managed_catalog(uow)
+                uow.lock_catalog_state()
+                catalog = load_managed_catalog()
+                managed_keys = {workflow.key for workflow in catalog.workflows}
+                if not any(
+                    workflow.key in managed_keys and workflow.active_catalog_version >= catalog.catalog_version
+                    for workflow in uow.workflows.list()
+                ):
+                    ensure_managed_catalog(uow)
     except DatabaseRecreateRequired as exc:
         print(str(exc), file=sys.stderr)
         return exc.exit_code

@@ -10,7 +10,33 @@ OpenAPI: `/openapi.json`, schemas `PMIdentity`, `PMBind`, `PMCheckpoint`,
 The checked-in [generated OpenAPI](pm-continuation-openapi.json) contains these
 PM paths and the ordinary assignment/bind/continuation paths. Regenerate it with
 `python -m scripts.export_pm_openapi`; a contract test checks it against the
-application's generated schema.
+application’s generated schema.
+
+## Initial Draft assignment
+
+`POST /internal/runtime/v1/pm/assign` accepts the trusted Fleet adapter's actual
+Tracker PM reservation before a queue item, decomposition or workspace exists.
+The closed `PMDraftAssignment` carries the ten execution identity fields plus
+`owner_version`, `input_snapshot_ref`, `input_sha256` and the exact packaged v2
+`runtime_compatibility`. UUIDs are canonical and non-nil; the ordinal is `SDLC-n`,
+initial assignment/owner versions are 1 and the key is `pm-draft:{assignment_ref}`.
+Root and Draft task are identical. Role/workflow/mode/scope are server-owned.
+
+Only the PM assignment credential may use this route. Namespace ownership must
+already match the exact Tracker instance/project. Existing assignment CAS,
+original-command digest and task lock persist the reservation and its actual
+input snapshot; replay cannot change execution, agent or input. Later-stage refs
+remain null. This is preparation, not a lease, native admission or run ACK.
+The ordinary assignment endpoint still requires its complete work context.
+
+Additive migration `0009_pm_draft_assignment` follows `0008_pm_execution` and
+adds this exact PM Draft branch to the assignment completeness constraint.
+Historical migrations and existing rows are preserved; lossy downgrade is
+refused. Generic replacement/rebind cannot consume a reserved PM Draft, even
+after a manually changed task status. The ordinary bind must use the originally
+reserved concrete agent; steps require verified PM execution enrollment. New
+enrollment must retain the reservation's full immutable execution identity.
+This route remains catalog v2; Base-v3 admission guards are unchanged.
 
 ## Concrete agent boundary
 
@@ -127,10 +153,11 @@ Fleet's persisted dispatch binding, not be echoed from callback query input.
 
 ## Workflow endpoints and authorization
 
-All five endpoints are POST JSON below `/internal/runtime/v1/pm`:
+All PM endpoints are POST JSON below `/internal/runtime/v1/pm`:
 
 | Route | Credential | Additional payload beyond identity |
 | --- | --- | --- |
+| `/assign` | PM assignment adapter | identity, owner_version=1, original input snapshot/hash, packaged v2 compatibility |
 | `/bind` | PM assignment adapter | operation_key, expected_version=0, session_run_id, binding_ref, hermes_run_ref |
 | `/checkpoint` | PM runtime + execution token | command cursor, checkpoint_ref, clarification_request_ref, clarification_version, requirements_revision |
 | `/resume` | PM assignment adapter | checkpoint payload + answer_event_ref, new_session_run_id |
@@ -157,7 +184,8 @@ its display/runtime role to the canonical role at the adapter boundary.
 ## Minimal handshake
 
 1. Persist Fleet session, task/root/concrete-agent binding and execution ref.
-   Accept the ordinary `/internal/runtime/assign` assignment, then persist a
+   Accept `/internal/runtime/v1/pm/assign` from the verified Tracker Draft
+   reservation (ordinary `/internal/runtime/assign` remains for existing complete assignments), then persist a
    Fleet session-run UUID and PM bind operation key before initial dispatch.
 2. Dispatch initial run using that stable key; persist real runtime mapping.
    Finalize ordinary `/internal/runtime/bind` with actual binding/raw run refs

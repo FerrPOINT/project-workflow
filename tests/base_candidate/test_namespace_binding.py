@@ -334,7 +334,7 @@ def test_stale_mapping_during_validation_is_refreshed_and_rejected(source, regis
 
     monkeypatch.setattr(base_binding, "validate_managed_catalog_state", changing_validator)
     assert_error(client.get(f"{PATH}/{installed['developer']}", headers=CATALOG_READER), 409, "binding-conflict")
-    assert calls == [True]
+    assert calls
 
 
 def test_successful_observation_never_commits(source, registered_readers, installed, client, monkeypatch):

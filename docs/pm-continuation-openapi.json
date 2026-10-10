@@ -577,6 +577,129 @@
         "title": "PMCheckpointData",
         "type": "object"
       },
+      "PMDraftAssignment": {
+        "additionalProperties": false,
+        "description": "Initial Tracker reservation; later-stage resources do not exist for a Draft.",
+        "properties": {
+          "agent_ref": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Agent Ref",
+            "type": "string"
+          },
+          "assignment_operation_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Assignment Operation Key",
+            "type": "string"
+          },
+          "assignment_ref": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Assignment Ref",
+            "type": "string"
+          },
+          "assignment_revision": {
+            "maximum": 1.0,
+            "minimum": 1.0,
+            "title": "Assignment Revision",
+            "type": "integer"
+          },
+          "execution_ref": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Execution Ref",
+            "type": "string"
+          },
+          "input_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Input Sha256",
+            "type": "string"
+          },
+          "input_snapshot_ref": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Input Snapshot Ref",
+            "type": "string"
+          },
+          "owner_version": {
+            "maximum": 1.0,
+            "minimum": 1.0,
+            "title": "Owner Version",
+            "type": "integer"
+          },
+          "root_ref": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Root Ref",
+            "type": "string"
+          },
+          "runtime_compatibility": {
+            "additionalProperties": true,
+            "title": "Runtime Compatibility",
+            "type": "object"
+          },
+          "task": {
+            "maxLength": 128,
+            "pattern": "^SDLC-[1-9][0-9]*$",
+            "title": "Task",
+            "type": "string"
+          },
+          "task_ref": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Task Ref",
+            "type": "string"
+          },
+          "tracker_instance_ref": {
+            "description": "Exact 1..128 UTF-8 bytes; no whitespace/control or normalization",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[^\\s\\x00-\\x1f\\x7f-\\x9f]+$",
+            "title": "Tracker Instance Ref",
+            "type": "string",
+            "x-max-utf8-bytes": 128
+          },
+          "tracker_project_ref": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Tracker Project Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task",
+          "execution_ref",
+          "tracker_instance_ref",
+          "tracker_project_ref",
+          "task_ref",
+          "root_ref",
+          "agent_ref",
+          "assignment_operation_key",
+          "assignment_ref",
+          "assignment_revision",
+          "input_snapshot_ref",
+          "input_sha256",
+          "owner_version",
+          "runtime_compatibility"
+        ],
+        "title": "PMDraftAssignment",
+        "type": "object"
+      },
       "PMExecutionSnapshot": {
         "additionalProperties": false,
         "properties": {
@@ -2468,6 +2591,61 @@
           }
         },
         "summary": "Runtime Rebind"
+      }
+    },
+    "/internal/runtime/v1/pm/assign": {
+      "post": {
+        "description": "The trusted Fleet adapter projects an initial Tracker Draft reservation.",
+        "operationId": "assign_internal_runtime_v1_pm_assign_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PMDraftAssignment"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Assign"
       }
     },
     "/internal/runtime/v1/pm/bind": {

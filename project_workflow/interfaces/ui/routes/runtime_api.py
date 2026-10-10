@@ -14,7 +14,6 @@ from sqlalchemy.exc import IntegrityError
 
 from project_workflow import config, supervisor
 from project_workflow.application.base_admission import admission_receipt, assert_base_step
-from project_workflow.application.state import _app_state
 from project_workflow.application.task import TaskService
 from project_workflow.build_provenance import (
     BuildProvenanceError,
@@ -163,7 +162,10 @@ def runtime_capabilities(
     if schema_ready:
         try:
             with SAUnitOfWork(engine) as uow:
-                catalog_ready = validate_managed_catalog_state(uow)
+                catalog_ready = validate_managed_catalog_state(
+                    uow,
+                    role_key=credential.role_key if credential.role_key in MANAGED_ROLE_MODE_SCOPES else None,
+                )
         except Exception:
             catalog_ready = False
 
@@ -198,7 +200,7 @@ def runtime_capabilities(
         response["pm_continuation"] = {
             "contract_version": 1,
             "base_path": "/internal/runtime/v1/pm",
-            "commands": ["bind", "resume", "rebind", "readback"]
+            "commands": ["assign", "bind", "resume", "rebind", "readback"]
             if credential.kind == "assignment" else ["checkpoint", "readback"],
             "terminal_proof": "configured-runtime-readback",
             "dispatch_owner": "fleet",
@@ -818,7 +820,7 @@ def runtime_history(
         return _error(str(exc), 409)
 
 
-async def runtime_catalog(
+def runtime_catalog(
     authorization: str | None = Header(default=None),
 ) -> dict[str, Any] | JSONResponse:
     """Expose only the namespace/workflow directory to Fleet Control."""
@@ -830,15 +832,10 @@ async def runtime_catalog(
         return _error("Недействительный runtime token", 401)
     if credential.kind != "catalog" or credential.role_key != _CATALOG_ROLE:
         return _error("Токен не разрешает чтение каталога", 403)
-    try:
-        if not validate_managed_catalog_state(_app_state.get_uow()):
-            return _error("Managed каталог временно недоступен", 503)
-    except (FileNotFoundError, ValueError):
-        return _error("Managed каталог временно недоступен", 503)
     from . import api
 
-    namespaces = await api.api_namespaces()
-    workflows = await api.api_workflows()
+    namespaces = api.api_namespaces()
+    workflows = api.api_workflows()
     namespace_items = namespaces.get("namespaces") if isinstance(namespaces, dict) else None
     workflow_items = workflows.get("workflows") if isinstance(workflows, dict) else None
     if not isinstance(namespace_items, list) or not isinstance(workflow_items, list):
@@ -857,6 +854,12 @@ async def runtime_catalog(
         or {item.get("cli_command") for item in managed_namespaces} != managed_namespace_commands
         or len(managed_workflows) != len(MANAGED_WORKFLOW_KEYS)
         or {item.get("key") for item in managed_workflows} != MANAGED_WORKFLOW_KEYS
+    ):
+        return _error("Managed каталог временно недоступен", 503)
+    keys_by_id = {item.get("id"): item.get("key") for item in managed_workflows}
+    if any(
+        keys_by_id.get(item.get("workflow_id")) != f"hermes-sdlc:{item['cli_command'].removeprefix('workflow-')}"
+        for item in managed_namespaces
     ):
         return _error("Managed каталог временно недоступен", 503)
     return {

@@ -277,6 +277,7 @@ def ensure_migrated(engine: Engine | Connection | None = None) -> None:
         "0005_mode_execution_scopes",
         "0006_versioned_mode_catalog",
         "0007_resource_execution_contexts",
+        "0008_pm_execution",
     }
     incompatible_revision = bool(revisions) and not revisions.issubset(compatible_upgrade_revisions)
     exact_tables = existing_tables == expected_tables()

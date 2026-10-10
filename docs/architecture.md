@@ -60,15 +60,26 @@ introspection, а также сохраняет отдельный private runti
 - **Managed workflow catalog** — versioned source
   `project_workflow/references/hermes_sdlc_catalog_v1.json`. Он содержит ровно
   семь role workflows и одиннадцать modes в catalog v2, ordered phases, checks, evidence и
-  instruction-level skills. Bootstrap создаёт каталог один раз и затем только
-  сверяет identity/mode/phase registry; divergent live catalog не
-  перезаписывается. Routing, stage/status, priority, workspace, cycle и next
+  instruction-level skills. Bootstrap создаёт начальные данные; после установки
+  UI/API редактируют сохранённый каталог. Повторная migration-инициализация
+  сохраняет эти правки. Startup и health проверяют доступность БД и schema,
+  а соответствие закреплённому executor-каталогу проверяется отдельно для роли
+  вызывающего сервиса в runtime API. Оформление и посторонние пользовательские
+  workflow не меняют readiness роли. Directory проверяет связи namespace/workflow,
+  без проверки инструкций всех ролей. Routing, stage/status, priority, workspace, cycle и next
   stage в каталог фаз не входят и поступают только из backend assignment.
   Developer `initial|rework` допускают независимые scopes `delivery|aggregate`.
   Additive adoption сохраняет exact v1 registry, assignments и историю;
   несовместимый v1 dispatch блокируется, historical cleanup не допускает
   новых effects. Canonical bundles экспортируются из exact Git archive и
   проверяются вместе с native skills и capability descriptor.
+  В действующем v2 исполнении текст фаз, инструкций, checks и evidence читается
+  из БД через `step`; редактор сохраняет его без отдельного выбора версии.
+  Runtime проверяет сохранённый граф, принадлежность агентов роли и наличие skills в разрешённом
+  пакете роли. Текст seed не используется как запрет редактирования. Exact source
+  verification при bootstrap и отдельном Base candidate admission сохраняется.
+  Изменение графа не расширяет machine tool permissions: они определяются
+  действующей политикой роли/кода фазы, а не порядком, названием или текстом.
 - **Continuation boundary** — owner-only `POST /internal/runtime/rebind`.
   Он подготавливает новый immutable assignment с прежними cycle/attempt,
   текущей фазой и входными refs, увеличивает runSequence и проверяет checkpoint

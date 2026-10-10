@@ -32,10 +32,6 @@ def _ui_verdict_label(verdict: Any) -> str:
     return _UI_VERDICT_LABELS.get(value.lower(), value.upper())
 
 
-def _task_progress_counts(*, completed: int, workflow_total: int) -> tuple[int, int]:
-    return completed, workflow_total
-
-
 def _task_execution_identity(task: Mapping[str, Any]) -> tuple[int, int, int]:
     """Return the persisted workflow execution identity without default fallbacks."""
     workflow_id = task.get("workflow_id")
@@ -241,10 +237,7 @@ class UIDataService:
             namespace_theme_color = normalize_theme_color(task_namespace.get("theme_color"))
             task_workflow = workflows_by_id[workflow_id]
             workflow_phase_count = len(workflow_phases)
-            completed, total_phases = _task_progress_counts(
-                completed=completed,
-                workflow_total=workflow_phase_count,
-            )
+            total_phases = workflow_phase_count
 
             _resolve_task_phase_id(t["current_phase_id"], workflow_phases)
 
@@ -537,10 +530,8 @@ class UIDataService:
         )
         if task.get("status") == "done":
             task["completed_cycles"] = task["workflow_cycle_count"]
-        task["progress_done"], task["progress_total"] = _task_progress_counts(
-            completed=task["completed"],
-            workflow_total=task["workflow_phase_count"],
-        )
+        task["progress_done"] = task["completed"]
+        task["progress_total"] = task["workflow_phase_count"]
         task["total_phases"] = task["progress_total"]
 
         step_history = self._decorate_step_history(

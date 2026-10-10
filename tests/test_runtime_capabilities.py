@@ -42,7 +42,7 @@ def test_pm_continuation_capabilities_require_truthful_configuration(monkeypatch
         assert metadata["dispatch_owner"] == "fleet"
         assert metadata["terminal_proof"] == "configured-runtime-readback"
         assert metadata["commands"] == (
-            ["bind", "resume", "rebind", "readback"] if kind == "assignment" else ["checkpoint", "readback"]
+            ["assign", "bind", "resume", "rebind", "readback"] if kind == "assignment" else ["checkpoint", "readback"]
         )
     else:
         assert "pm_continuation" not in response.json()

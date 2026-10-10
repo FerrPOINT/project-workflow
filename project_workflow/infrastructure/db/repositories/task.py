@@ -175,6 +175,16 @@ class SATaskRepository(TaskRepository):
             ).exists()
         )))
 
+    def task_has_pm_draft_assignment(self, task_id: int) -> bool:
+        return bool(self._session.scalar(select(
+            select(m.TaskRuntimeAssignment.id).where(
+                m.TaskRuntimeAssignment.task_id == task_id,
+                m.TaskRuntimeAssignment.role_key == "project_manager",
+                m.TaskRuntimeAssignment.stage_key == "draft",
+                m.TaskRuntimeAssignment.queue_item_ref.is_(None),
+            ).exists()
+        )))
+
     def get_assignment_by_bind_operation_key(
         self, bind_operation_key: str
     ) -> TaskRuntimeAssignment | None:

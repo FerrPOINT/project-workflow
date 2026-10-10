@@ -10,15 +10,9 @@ from fastapi.testclient import TestClient
 
 from project_workflow import config
 from project_workflow.application.agent import AgentService
-from project_workflow.application.instruction_service import InstructionService
-from project_workflow.application.managed_catalog_policy import (
-    MANAGED_CATALOG_IMMUTABLE_ERROR,
-)
 from project_workflow.application.phase import PhaseServiceApp
-from project_workflow.application.phase_service import PhaseService
 from project_workflow.application.project import ProjectService
 from project_workflow.application.workflow import WorkflowService
-from project_workflow.domain.exceptions import ConflictError
 from project_workflow.infrastructure.db import models as db_models
 from project_workflow.infrastructure.db.managed_catalog import (
     ensure_managed_catalog,
@@ -65,99 +59,6 @@ def _managed_objects(uow: SAUnitOfWork):
     return workflow, mode, phases, phase, instruction, agent, namespace
 
 
-def _managed_snapshot(uow: SAUnitOfWork) -> tuple[object, ...]:
-    workflows = list(uow.workflows.list())
-    modes = [
-        mode.to_dict()
-        for workflow in workflows
-        if workflow.id is not None
-        for mode in uow.workflows.list_modes(workflow.id)
-    ]
-    phases = [phase.to_dict() for phase in uow.phases.list()]
-    phase_ids = [int(phase["id"]) for phase in phases]
-    return (
-        tuple(json.dumps(item.to_dict(), sort_keys=True) for item in workflows),
-        tuple(json.dumps(item, sort_keys=True) for item in modes),
-        tuple(json.dumps(item, sort_keys=True) for item in phases),
-        tuple(
-            json.dumps(item, sort_keys=True)
-            for phase_id in phase_ids
-            for item in uow.phase_instructions.list(phase_id)
-        ),
-        tuple(
-            json.dumps(item, sort_keys=True)
-            for phase_id in phase_ids
-            for item in uow.phase_checks.list(phase_id)
-        ),
-        tuple(
-            json.dumps(item, sort_keys=True)
-            for phase_id in phase_ids
-            for item in uow.phase_evidence_requirements.list(phase_id)
-        ),
-        tuple(json.dumps(item.to_dict(), sort_keys=True) for item in uow.agents.list()),
-        tuple(json.dumps(item.to_dict(), sort_keys=True) for item in uow.projects.list()),
-    )
-
-
-def test_all_public_catalog_mutations_are_rejected_before_write(empty_uow):
-    ensure_managed_catalog(empty_uow)
-    empty_uow.commit()
-    workflow, mode, phases, phase, instruction, agent, namespace = _managed_objects(empty_uow)
-    before = _managed_snapshot(empty_uow)
-    phase_ids = [int(item.id) for item in phases if item.id is not None]
-
-    operations = [
-        lambda: WorkflowService(empty_uow).create_workflow({"name": "TEST TRASH WORKFLOW"}),
-        lambda: WorkflowService(empty_uow).update_workflow(int(workflow.id), {"name": "drift"}),
-        lambda: WorkflowService(empty_uow).delete_workflow(int(workflow.id)),
-        lambda: WorkflowService(empty_uow).create_mode(
-            int(workflow.id), {"key": "trash", "name": "Trash"}
-        ),
-        lambda: PhaseServiceApp(empty_uow).create_phase(
-            {"workflow_id": int(workflow.id), "mode_id": int(mode.id), "name": "trash"}
-        ),
-        lambda: PhaseServiceApp(empty_uow).update_phase(int(phase.id), {"name": "drift"}),
-        lambda: PhaseServiceApp(empty_uow).delete_phase(int(phase.id)),
-        lambda: PhaseServiceApp(empty_uow).reorder_phases(
-            [(phase_id, index) for index, phase_id in enumerate(reversed(phase_ids), 1)]
-        ),
-        lambda: InstructionService(empty_uow).create_instruction(
-            int(phase.id), {"description": "trash"}
-        ),
-        lambda: InstructionService(empty_uow).update_instruction(
-            int(instruction["id"]), {"description": "drift"}
-        ),
-        lambda: InstructionService(empty_uow).delete_instruction(int(instruction["id"])),
-        lambda: InstructionService(empty_uow).reorder_instructions(
-            int(phase.id),
-            [
-                int(item["id"])
-                for item in reversed(list(empty_uow.phase_instructions.list(int(phase.id))))
-            ],
-        ),
-        lambda: PhaseService(empty_uow).update_phase_detail(
-            int(phase.id), {"instructions": [], "checks": [], "evidence": []}
-        ),
-        lambda: AgentService(empty_uow).create_agent({"name": "test-trash-agent"}),
-        lambda: AgentService(empty_uow).update_agent(int(agent.id), {"name": "drift"}),
-        lambda: AgentService(empty_uow).delete_agent(int(agent.id)),
-        lambda: ProjectService(empty_uow).create_project(
-            {"code": "TMP", "name": "trash", "workflow_id": int(workflow.id)}
-        ),
-        lambda: ProjectService(empty_uow).update_project(int(namespace.id), {"name": "drift"}),
-        lambda: ProjectService(empty_uow).update_project(
-            int(namespace.id), {"workflow_id": int(workflow.id)}
-        ),
-        lambda: ProjectService(empty_uow).delete_project(int(namespace.id)),
-    ]
-
-    for operation in operations:
-        with pytest.raises(ConflictError, match=MANAGED_CATALOG_IMMUTABLE_ERROR):
-            operation()
-        assert _managed_snapshot(empty_uow) == before
-        assert validate_managed_catalog_state(empty_uow) is True
-
-
 def test_unmanaged_database_keeps_crud_and_default_mode_compatibility(empty_uow):
     workflow = WorkflowService(empty_uow).create_workflow({"name": "Local workflow"})
     workflow_id = int(workflow["id"])
@@ -192,7 +93,7 @@ def test_validator_rejects_full_managed_content_drift(empty_uow, drift_kind: str
     if drift_kind == "mode":
         row = empty_uow.session.get(db_models.WorkflowMode, int(mode.id))
         assert row is not None
-        row.name = "Drifted mode"
+        row.role_key = "architect"
     elif drift_kind == "instruction":
         empty_uow.phase_instructions.update(
             int(instruction["id"]), {"description": "drifted instruction"}
@@ -252,9 +153,31 @@ def test_runtime_capabilities_require_installed_managed_catalog(
     }
 
 
-def test_managed_catalog_keeps_runtime_step_and_history_available(monkeypatch, tmp_path):
+@pytest.mark.parametrize("edit", ["text", "order", "parallel", "new_phase"])
+def test_managed_catalog_keeps_runtime_step_and_history_available(monkeypatch, tmp_path, edit):
     _install_manifest(monkeypatch, tmp_path, _valid_manifest())
     _bootstrap_global_managed_catalog()
+    from project_workflow.application.instruction_service import InstructionService
+    from project_workflow.application.phase import PhaseServiceApp
+
+    with SAUnitOfWork() as editing:
+        namespace = editing.projects.get_by_cli_command("workflow-project_manager")
+        mode = editing.workflows.get_mode_by_key(namespace.workflow_id, "draft")
+        phases = editing.phases.list(namespace.workflow_id, mode_id=mode.id)
+        phase_service = PhaseServiceApp(editing)
+        if edit == "order":
+            phase_service.reorder_phases([(phase.id, position) for position, phase in enumerate(reversed(phases), 1)])
+        elif edit == "parallel":
+            phase_service.update_phase(phases[0].id, {"execution_type": "parallel"})
+        elif edit == "new_phase":
+            phase_service.create_phase({"workflow_id": namespace.workflow_id, "mode_id": mode.id, "phase_order": 1})
+        phase = editing.phases.list(namespace.workflow_id, mode_id=mode.id)[0]
+        instructions = editing.phase_instructions.list(phase.id)
+        instruction_service = InstructionService(editing)
+        if instructions:
+            instruction_service.update_instruction(instructions[0]["id"], {"description": "Saved runtime instruction"})
+        else:
+            instruction_service.create_instruction(phase.id, {"description": "Saved runtime instruction"})
     runtime_token = "r" * 48
     assignment_token = "a" * 48
     monkeypatch.setenv(
@@ -349,11 +272,12 @@ def test_managed_catalog_keeps_runtime_step_and_history_available(monkeypatch, t
 
     assert step.status_code == 200, step.text
     assert step.json()["result"]["mode_key"] == "draft"
+    assert "Saved runtime instruction" in "\n".join(step.json()["result"]["phase_contract"]["instructions"])
     assert history.status_code == 200, history.text
     assert history.json()["result"]["count"] == 0
 
 
-def test_live_catalog_drift_closes_health_capabilities_and_catalog(
+def test_namespace_theme_edits_keep_editor_and_executor_available(
     monkeypatch, tmp_path: Path
 ):
     _bootstrap_global_managed_catalog()
@@ -381,16 +305,14 @@ def test_live_catalog_drift_closes_health_capabilities_and_catalog(
             headers={"Authorization": f"Bearer {catalog_token}"},
         )
 
-    assert health.status_code == 503
-    assert health.json()["catalog"] == "error"
-    assert capabilities.status_code == 503
-    assert capabilities.json()["error_code"] == "runtime-capabilities-not-ready"
-    assert capabilities.json()["readiness"]["catalog"] == "not_ready"
-    assert catalog.status_code == 503
-    assert catalog.json() == {"ok": False, "error": "Managed каталог временно недоступен"}
+    assert health.status_code == 200
+    assert health.json()["catalog"] == "ok"
+    assert capabilities.status_code == 200, capabilities.text
+    assert capabilities.json()["readiness"]["catalog"] == "ready"
+    assert catalog.status_code == 200, catalog.text
 
 
-def test_startup_fails_closed_when_managed_catalog_drifted(monkeypatch):
+def test_startup_keeps_saved_namespace_theme(monkeypatch):
     _bootstrap_global_managed_catalog()
     monkeypatch.setattr(
         "project_workflow.infrastructure.db.session.schema_is_ready", lambda _engine: True
@@ -403,6 +325,7 @@ def test_startup_fails_closed_when_managed_catalog_drifted(monkeypatch):
         assert row is not None
         row.theme_icon = "rocket"
 
-    with pytest.raises(RuntimeError, match="Managed catalog is not ready"):
-        with TestClient(create_app()):
-            pass
+    with TestClient(create_app()) as client:
+        assert client.get("/namespaces").status_code == 200
+    with SAUnitOfWork() as readback:
+        assert readback.projects.get_by_id(int(namespace.id)).theme_icon == "rocket"

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
 from uuid import uuid4
 
@@ -88,8 +87,9 @@ def test_repository_has_one_linear_migration_head():
         "0006_versioned_mode_catalog.py",
         "0007_resource_execution_contexts.py",
         "0008_pm_execution.py",
+        "0009_pm_draft_assignment.py",
     ]
-    assert migration_head() == "0008_pm_execution"
+    assert migration_head() == "0009_pm_draft_assignment"
 
 
 def test_pm_upgrade_preserves_existing_resource_contexts(tmp_path):
@@ -124,7 +124,7 @@ def test_pm_upgrade_preserves_existing_resource_contexts(tmp_path):
         original = connection.execute(text("SELECT * FROM resource_execution_contexts")).mappings().all()
     ensure_migrated(engine)
     ensure_migrated(engine)
-    assert database_revisions(engine) == {"0008_pm_execution"}
+    assert database_revisions(engine) == {"0009_pm_draft_assignment"}
     assert schema_is_ready(engine)
     with engine.connect() as connection:
         assert connection.execute(text("SELECT * FROM resource_execution_contexts")).mappings().all() == original
@@ -179,7 +179,7 @@ def test_fresh_sqlite_migration_matches_orm_metadata(tmp_path):
         }
         assert actual_fks == expected_fks, table_name
 
-    assert database_revisions(engine) == {"0008_pm_execution"}
+    assert database_revisions(engine) == {"0009_pm_draft_assignment"}
     assert schema_is_ready(engine) is True
     with engine.connect() as connection:
         context = MigrationContext.configure(
@@ -293,6 +293,7 @@ def test_sqlite_upgrade_populated_legacy_backfills_each_workflow_mode(tmp_path):
 
 @pytest.mark.parametrize("predecessor", [
     "0004_wide_work_item_revision", "0005_mode_execution_scopes", "0006_versioned_mode_catalog",
+    "0008_pm_execution",
 ])
 def test_sqlite_supported_additive_upgrade_preserves_legacy_catalog_and_assignment_history(tmp_path, predecessor):
     engine = _sqlite_engine(tmp_path, f"{predecessor}.db")
@@ -361,7 +362,7 @@ def test_sqlite_supported_additive_upgrade_preserves_legacy_catalog_and_assignme
     assert database_revisions(engine) == {predecessor}
     ensure_migrated(engine)
     ensure_migrated(engine)  # Restart is idempotent and cannot reinterpret historical payloads.
-    assert database_revisions(engine) == {"0008_pm_execution"}
+    assert database_revisions(engine) == {"0009_pm_draft_assignment"}
     assert schema_is_ready(engine)
     with engine.connect() as conn:
         for table, original in frozen.items():
@@ -500,7 +501,7 @@ def test_sqlite_runtime_assignment_rejects_invalid_immutable_bindings(tmp_path, 
         )
 
     ensure_migrated(engine)
-    assert database_revisions(engine) == {"0008_pm_execution"}
+    assert database_revisions(engine) == {"0009_pm_draft_assignment"}
     with engine.connect() as conn:
         preserved = conn.execute(
             text(
@@ -607,6 +608,7 @@ def test_in_memory_sqlite_migration_keeps_the_schema_alive():
     ("0004_wide_work_item_revision", "Downgrade from wide Business revisions"),
     ("0007_resource_execution_contexts", "Execution context history requires"),
     ("0008_pm_execution", "PM execution downgrade refused"),
+    ("0009_pm_draft_assignment", "PM Draft assignment downgrade refused"),
 ])
 def test_sqlite_downgrade_refuses_lossy_runtime_history(tmp_path, revision, message):
     engine = _sqlite_engine(tmp_path)
@@ -896,7 +898,7 @@ def test_head_with_damaged_or_polluted_schema_is_refused(tmp_path, mutation):
     assert schema_is_ready(engine) is False
     with pytest.raises(DatabaseRecreateRequired):
         ensure_migrated(engine)
-    assert database_revisions(engine) == {"0008_pm_execution"}
+    assert database_revisions(engine) == {"0009_pm_draft_assignment"}
     if mutation == "extra":
         with engine.connect() as connection:
             assert connection.execute(text("SELECT id FROM unexpected_table")).scalar_one() == 42
@@ -1044,13 +1046,13 @@ def test_health_requires_migrated_schema_and_hides_internal_details(tmp_path, mo
 
     engine = _sqlite_engine(tmp_path)
     monkeypatch.setattr(session, "get_engine", lambda: engine)
-    unavailable = asyncio.run(_health())
+    unavailable = _health()
     assert unavailable.status_code == 503
     assert b'"error_code":"schema-not-ready"' in unavailable.body
     assert b"sqlite" not in unavailable.body.lower()
 
     ensure_migrated(engine)
-    ready = asyncio.run(_health())
+    ready = _health()
     assert ready.status_code == 200
     assert b'"database":"ok"' in ready.body
     assert b'"schema":"ok"' in ready.body

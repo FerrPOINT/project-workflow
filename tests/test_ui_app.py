@@ -22,7 +22,7 @@ def test_health_ok():
     ):
         conn = MagicMock()
         mock_engine.return_value.connect.return_value.__enter__.return_value = conn
-        response = asyncio.run(_health())
+        response = _health()
         assert response.status_code == 200
         body = response.body
         assert b'"ok":true' in body

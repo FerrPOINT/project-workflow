@@ -220,6 +220,11 @@ class TaskRepository(ABC):
         ...
 
     @abstractmethod
+    def task_has_pm_draft_assignment(self, task_id: int) -> bool:
+        """Whether immutable initial PM reservation history prevents generic replacement."""
+        ...
+
+    @abstractmethod
     def assignment_has_pm_execution(self, task_id: int, assignment_id: int) -> bool:
         """Check immutable PM enrollment while the caller holds the task lock."""
         ...

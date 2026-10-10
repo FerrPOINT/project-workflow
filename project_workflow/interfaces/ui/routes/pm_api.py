@@ -8,9 +8,19 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
 
 from project_workflow import config
+from project_workflow.application.namespace_ownership import NamespaceOwnershipService
 from project_workflow.application.pm_execution import PMExecutionService
+from project_workflow.application.task import TaskService
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
-from project_workflow.domain.pm_execution import PMBind, PMCheckpoint, PMCommand, PMReadback, PMRebind, PMResume
+from project_workflow.domain.pm_execution import (
+    PMBind,
+    PMCheckpoint,
+    PMCommand,
+    PMDraftAssignment,
+    PMReadback,
+    PMRebind,
+    PMResume,
+)
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.infrastructure.pm_readback import ReadbackUnavailable, readback_configured
 
@@ -108,6 +118,38 @@ def _execute(
 
 def bind(payload: PMBind, authorization: str | None = Header(default=None)) -> dict[str, Any] | JSONResponse:
     return _execute(payload, "bind", authorization)
+
+
+def assign(
+    payload: PMDraftAssignment, authorization: str | None = Header(default=None),
+) -> dict[str, Any] | JSONResponse:
+    """The trusted Fleet adapter projects an initial Tracker Draft reservation."""
+    try:
+        credential = runtime_api._authorized_service_credential(authorization)
+        if credential is None:
+            return error("unauthorized", "Invalid machine credential", 401)
+        if credential.role_key != "project_manager" or credential.kind != "assignment":
+            return error("forbidden", "PM adapter assignment credential required", 403)
+        if payload.runtime_compatibility != runtime_api.runtime_compatibility_descriptor():
+            return error("conflict", "Runtime compatibility mismatch", 409)
+        with SAUnitOfWork() as uow:
+            project_id = runtime_api._namespace_id(uow, credential.role_key)
+            ownership = NamespaceOwnershipService(uow)
+            ownership.lock_namespace(project_id)
+            owner = ownership.get(project_id)
+            if (
+                owner.tracker_instance_ref != payload.tracker_instance_ref
+                or owner.tracker_project_ref != payload.tracker_project_ref
+            ):
+                raise ConflictError("PM Draft reservation belongs to another namespace owner")
+            runtime_api._assert_task_key_in_namespace(uow, project_id, payload.task)
+            return runtime_api._assignment_response(TaskService(uow).assign_pm_draft(project_id, payload))
+    except (ConflictError, IntegrityError, ValueError):
+        return error("conflict", "PM Draft reservation or original command conflict", 409)
+    except NotFoundError:
+        return error("capability-unavailable", "PM namespace owner is not provisioned", 503)
+    except RuntimeError:
+        return error("capability-unavailable", "PM namespace or credential configuration unavailable", 503)
 
 
 def checkpoint(

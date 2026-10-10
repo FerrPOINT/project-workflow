@@ -94,6 +94,11 @@ class PMExecutionService:
             or json.loads(assignment.payload).get("runtime_compatibility") != runtime_compatibility_descriptor()
         ):
             raise ConflictError("RUNTIME_VERSION_INCOMPATIBLE: frozen PM assignment descriptor mismatch")
+        draft_context = json.loads(assignment.payload).get("pm_draft_context")
+        if draft_context is not None and {
+            key: draft_context.get(key) for key in PMIdentity.model_fields
+        } != identity.model_dump():
+            raise ConflictError("PM execution differs from its original Draft reservation")
         if self.concrete_agent_ref(assignment) != identity.agent_ref:
             raise ConflictError("PM identity does not match the persisted concrete Fleet agent")
         return task, assignment
@@ -387,5 +392,7 @@ class PMExecutionService:
                     m.TaskRuntimeAssignment.task_id == task.id,
                 ).execution_options(populate_existing=True))
                 if assignment is not None and assignment.role_key == "project_manager":
+                    if json.loads(assignment.payload).get("pm_draft_context") is not None:
+                        raise ConflictError("PM Draft requires verified execution enrollment before a step")
                     self.concrete_agent_ref(assignment)
         return execution

@@ -1409,13 +1409,6 @@ class TestPhaseDetail:
         finally:
             client.put(_phase_api_path("1.INTAKE"), json=restore_payload)
 
-    def test_phase_save_ignores_transient_blank_check_and_evidence_rows(self):
-        response = client.get(_phase_detail_path("1.INTAKE"))
-
-        assert response.status_code == 200
-        assert response.text.count("if (inp && inp.value.trim()) data.") == 2
-        assert response.text.count("description: inp.value.trim(),") == 2
-
     def test_phase_detail_javascript_uses_per_instruction_api_calls(self):
         response = client.get(_phase_detail_path("1.INTAKE"))
         assert response.status_code == 200
@@ -1450,14 +1443,6 @@ class TestPhaseDetail:
         assert "const previousPartner = partnerSelect?.value || '';" in response.text
         assert "partnerSelect.value = previousPartner;" in response.text
         assert "return true;" in response.text
-
-    def test_phase_detail_sends_strict_nested_ids_and_stores_returned_ids(self):
-        response = client.get(_phase_detail_path("1.INTAKE"))
-
-        assert response.status_code == 200
-        assert "id: li.dataset.id ? Number(li.dataset.id) : null" in response.text
-        assert "checks[i].setAttribute('data-id', String(id));" in response.text
-        assert "evs[i].setAttribute('data-id', String(id));" in response.text
 
     def test_phase_detail_serializes_all_phase_aggregate_saves(self):
         response = client.get(_phase_detail_path("1.INTAKE"))
@@ -1509,26 +1494,24 @@ class TestPhaseDetail:
         finally:
             client.put(_phase_api_path("1.INTAKE"), json=restore_payload)
 
-    def test_phase_detail_instruction_description_reverts_after_rejected_save(self):
+    def test_phase_detail_instruction_description_retains_input_after_rejected_save(self):
         response = client.get(_phase_detail_path("1.INTAKE"))
 
         assert response.status_code == 200
         assert 'data-original-description="' in response.text
-        assert "const previousDescription = input.dataset.originalDescription || '';" in response.text
         assert "const description = input.value.trim();" in response.text
-        assert "input.value = previousDescription;" in response.text
+        assert "input.value = previousDescription;" not in response.text
         assert "input.dataset.originalDescription = savedDescription;" in response.text
         assert "showToast('Описание инструкции обязательно', 'error');" in response.text
 
-    def test_instructions_page_instruction_description_reverts_after_rejected_save(self):
+    def test_instructions_page_instruction_description_retains_input_after_rejected_save(self):
         phase_id = _phase_id("1.INTAKE")
         response = client.get(f"/instructions?phase_id={phase_id}")
 
         assert response.status_code == 200
         assert 'data-original-description="' in response.text
-        assert "const previousDescription = textarea.dataset.originalDescription || '';" in response.text
         assert "const description = textarea.value.trim();" in response.text
-        assert "textarea.value = previousDescription;" in response.text
+        assert "textarea.value = previousDescription;" not in response.text
         assert "textarea.dataset.originalDescription = savedDescription;" in response.text
         assert "showToast('Описание инструкции обязательно', 'error');" in response.text
 

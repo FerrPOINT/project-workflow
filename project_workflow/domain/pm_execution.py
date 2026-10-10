@@ -2,8 +2,9 @@
 
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
+from project_workflow.domain.namespace_ownership import InstanceRef, UUIDRef
 from project_workflow.domain.runtime_assignment import FleetAgentRef
 
 Ref = Annotated[str, StringConstraints(strict=True, strip_whitespace=True, min_length=1, max_length=512)]
@@ -35,6 +36,34 @@ class PMBind(PMIdentity):
     binding_ref: Ref
     hermes_run_ref: Ref
     session_run_id: FleetRunId
+
+
+class PMDraftAssignment(PMIdentity):
+    """Initial Tracker reservation; later-stage resources do not exist for a Draft."""
+
+    task: Annotated[str, StringConstraints(strict=True, pattern=r"^SDLC-[1-9][0-9]*$", max_length=128)]
+    tracker_instance_ref: InstanceRef
+    tracker_project_ref: UUIDRef
+    task_ref: UUIDRef
+    root_ref: UUIDRef
+    execution_ref: UUIDRef
+    assignment_ref: UUIDRef
+    assignment_operation_key: Annotated[str, StringConstraints(strict=True, min_length=1, max_length=128)]
+    assignment_revision: Annotated[int, Field(strict=True, ge=1, le=1)]
+    input_snapshot_ref: UUIDRef
+    input_sha256: Annotated[str, StringConstraints(strict=True, pattern=r"^[0-9a-f]{64}$")]
+    owner_version: Annotated[int, Field(strict=True, ge=1, le=1)]
+    runtime_compatibility: dict[str, object]
+
+    @model_validator(mode="after")
+    def initial_reservation(self) -> "PMDraftAssignment":
+        if (
+            self.assignment_revision != 1 or self.owner_version != 1 or self.root_ref != self.task_ref
+            or int(self.task.removeprefix("SDLC-")) > (1 << 63) - 1
+            or self.assignment_operation_key != f"pm-draft:{self.assignment_ref}"
+        ):
+            raise ValueError("Initial PM Draft reservation identity required")
+        return self
 
 
 class PMCommand(PMIdentity):

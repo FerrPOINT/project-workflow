@@ -8,8 +8,6 @@ from uuid import uuid4
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.domain.repositories import UnitOfWork
 
-from .managed_catalog_policy import assert_catalog_mutation_allowed
-
 
 class PhaseService:
     """CRUD operations for phases, instructions, checks, evidence."""
@@ -195,7 +193,7 @@ class PhaseService:
         """Update the complete phase aggregate in one locked transaction."""
         from project_workflow.application.phase import PhaseServiceApp
 
-        assert_catalog_mutation_allowed(self._uow)
+        self._uow.lock_catalog_state(shared=True)
         nested_fields = {"instructions", "checks", "evidence"}
         scalar = {key: value for key, value in data.items() if key not in nested_fields}
         try:

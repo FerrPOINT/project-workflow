@@ -391,7 +391,7 @@ def validation_error_page(request: Request, errors: Sequence[Any]) -> HTMLRespon
     return None
 
 
-async def index(request: Request) -> HTMLResponse:
+def index(request: Request) -> HTMLResponse:
     """Минимальный dashboard без заглушек."""
     context = _namespace_context(request, page="dashboard")
     if error_response := _namespace_error_page(request, context, page="dashboard"):
@@ -415,7 +415,7 @@ async def index(request: Request) -> HTMLResponse:
     )
 
 
-async def phases_page(request: Request) -> HTMLResponse:
+def phases_page(request: Request) -> HTMLResponse:
     context = _namespace_context(request, page="phases")
     if error_response := _namespace_error_page(request, context, page="phases"):
         return error_response
@@ -506,7 +506,7 @@ async def phases_page(request: Request) -> HTMLResponse:
     )
 
 
-async def phase_detail(request: Request, phase_id: PositivePathId) -> HTMLResponse:
+def phase_detail(request: Request, phase_id: PositivePathId) -> HTMLResponse:
     context = _namespace_context(request, page="phases")
     if error_response := _namespace_error_page(request, context, page="phases"):
         return error_response
@@ -572,7 +572,7 @@ async def phase_detail(request: Request, phase_id: PositivePathId) -> HTMLRespon
     )
 
 
-async def tasks_page(request: Request) -> HTMLResponse:
+def tasks_page(request: Request) -> HTMLResponse:
     """Список задач workflow."""
     context = _namespace_context(request, page="tasks")
     if error_response := _namespace_error_page(request, context, page="tasks"):
@@ -596,7 +596,7 @@ async def tasks_page(request: Request) -> HTMLResponse:
     )
 
 
-async def namespace_page(request: Request) -> HTMLResponse:
+def namespace_page(request: Request) -> HTMLResponse:
     """CRUD page for namespaces and style."""
     context = _namespace_context(request, page="namespace")
     if error_response := _namespace_error_page(request, context, page="namespace"):
@@ -617,7 +617,7 @@ async def namespace_page(request: Request) -> HTMLResponse:
     )
 
 
-async def namespace_new_page(request: Request) -> HTMLResponse:
+def namespace_new_page(request: Request) -> HTMLResponse:
     """Create page for a new namespace."""
     context = _namespace_context(request, page="namespace")
     if error_response := _namespace_error_page(request, context, page="namespace"):
@@ -632,7 +632,7 @@ async def namespace_new_page(request: Request) -> HTMLResponse:
     return _template_response(request=request, name="namespaces.html", context=context)
 
 
-async def workflows_page(request: Request) -> HTMLResponse:
+def workflows_page(request: Request) -> HTMLResponse:
     context = _namespace_context(request, page="workflows")
     if error_response := _namespace_error_page(request, context, page="workflows"):
         return error_response
@@ -675,7 +675,7 @@ async def workflows_page(request: Request) -> HTMLResponse:
     )
 
 
-async def task_detail_page(
+def task_detail_page(
     request: Request,
     task_key: str,
 ) -> HTMLResponse:
@@ -737,7 +737,7 @@ async def task_detail_page(
     )
 
 
-async def settings_page(request: Request) -> HTMLResponse:
+def settings_page(request: Request) -> HTMLResponse:
     """Read-only справка по реальным CLI-командам workflow."""
     context = _namespace_context(request, page="settings")
     if error_response := _namespace_error_page(request, context, page="settings"):
@@ -752,7 +752,7 @@ async def settings_page(request: Request) -> HTMLResponse:
     )
 
 
-async def agents_page(request: Request) -> HTMLResponse:
+def agents_page(request: Request) -> HTMLResponse:
     """Список агентов."""
     context = _namespace_context(request, page="agents")
     if error_response := _namespace_error_page(request, context, page="agents"):
@@ -769,7 +769,7 @@ async def agents_page(request: Request) -> HTMLResponse:
     )
 
 
-async def instructions_page(request: Request) -> HTMLResponse:
+def instructions_page(request: Request) -> HTMLResponse:
     """Dedicated instructions editor page for a phase."""
     context = _namespace_context(request, page="phases")
     if error_response := _namespace_error_page(request, context, page="phases"):

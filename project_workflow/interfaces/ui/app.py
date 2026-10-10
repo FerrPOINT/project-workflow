@@ -17,9 +17,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from ... import __version__
-from ...infrastructure.db.managed_catalog import validate_managed_catalog_state
 from ...infrastructure.db.session import DatabaseUnavailable, get_engine, reset_engine
-from ...infrastructure.db.uow import SAUnitOfWork
 from .routes import api, cli_api, namespace_ownership_api, pages, pm_api, resource_context, runtime_api
 from .sso import install_sso
 
@@ -122,7 +120,7 @@ class _RequestLoggingMiddleware(BaseHTTPMiddleware):
         return response
 
 
-async def _health() -> JSONResponse:
+def _health() -> JSONResponse:
     """Readiness probe for connectivity, schema presence, and migration head."""
     from ...infrastructure.db import session as _session
 
@@ -143,8 +141,6 @@ async def _health() -> JSONResponse:
         if not _session.schema_is_ready(engine):
             raise RuntimeError("schema-not-ready")
         health["schema"] = "ok"
-        with SAUnitOfWork(engine) as uow:
-            validate_managed_catalog_state(uow)
         health["catalog"] = "ok"
     except Exception:
         logger.error("Health readiness check failed")
@@ -165,22 +161,13 @@ async def _health() -> JSONResponse:
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Verify reachable managed state before accepting traffic."""
+    """Check database connectivity before accepting traffic."""
     try:
         engine = get_engine()
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
     except Exception:
         logger.warning("База данных недоступна при запуске приложения")
-    else:
-        from ...infrastructure.db import session as _session
-
-        if _session.schema_is_ready(engine):
-            try:
-                with SAUnitOfWork(engine) as uow:
-                    validate_managed_catalog_state(uow)
-            except (FileNotFoundError, ValueError) as exc:
-                raise RuntimeError("Managed catalog is not ready") from exc
     yield
     # Shutdown: dispose and clear the cached engine pool.
     try:
@@ -273,6 +260,7 @@ def create_app() -> FastAPI:
     app.get("/internal/runtime/base/source-capabilities", response_model=None)(base_api.source_capabilities)
     from project_workflow.domain.pm_execution import PMResponse
 
+    app.post("/internal/runtime/v1/pm/assign", response_model=None)(pm_api.assign)
     app.post("/internal/runtime/v1/pm/bind", response_model=PMResponse,
              response_model_exclude_unset=True)(pm_api.bind)
     app.post("/internal/runtime/v1/pm/checkpoint", response_model=PMResponse,

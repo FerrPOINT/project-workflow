@@ -67,6 +67,39 @@ def pm_postgres(pg_url, monkeypatch):
 
 
 @pytest.mark.integration
+def test_pm_draft_postgres_concurrent_original_assignment_and_restart(pg_url, monkeypatch):
+    from tests.test_pm_draft_assignment import ADAPTER, PATH, prepare_pm_draft
+
+    ensure_migrated(get_engine(pg_url))
+    fixture = prepare_pm_draft(monkeypatch)
+    client, request = next(fixture)
+    try:
+        barrier = Barrier(2)
+
+        def assign():
+            barrier.wait(timeout=10)
+            return client.post(PATH, headers=ADAPTER, json=request)
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(lambda _: assign(), range(2)))
+        assert [r.status_code for r in results] == [200, 200]
+        assert results[0].json() == results[1].json()
+        result = results[0].json()["result"]
+        assert result["queue_item_ref"] is None and result["task_workspace_ref"] is None
+        with SAUnitOfWork() as uow:
+            saved = uow.tasks.get_assignment_by_operation_key(request["assignment_operation_key"])
+            assert saved.payload["pm_draft_context"]["execution_ref"] == request["execution_ref"]
+            before = saved.to_dict()
+        reset_engine()
+        with TestClient(create_app()) as restarted:
+            assert restarted.post(PATH, headers=ADAPTER, json=request).json() == results[0].json()
+        with SAUnitOfWork() as uow:
+            assert uow.tasks.get_assignment_by_operation_key(request["assignment_operation_key"]).to_dict() == before
+    finally:
+        fixture.close()
+
+
+@pytest.mark.integration
 def test_pm_postgres_concurrent_replay_and_restart_readback(pm_postgres):
     from project_workflow.infrastructure.db import models as m
     from tests.test_pm_execution import ADAPTER, BASE, NEW_RUN, OLD_RUN, bind_pm
@@ -289,7 +322,7 @@ def test_pm_ownership_catalog_lock_order_and_stale_0007(pg_url, winner):
     assert not schema_is_ready(engine)
     with pytest.raises(DatabaseRecreateRequired):
         ensure_migrated(engine)
-    assert database_revisions(engine) == {"0008_pm_execution"}
+    assert database_revisions(engine) == {"0009_pm_draft_assignment"}
 
 
 @pytest.mark.integration
@@ -801,10 +834,10 @@ class TestPostgresInitialMigration:
             version = conn.execute(
                 text("SELECT version_num FROM project_workflow.alembic_version")
             ).scalar_one()
-        assert version == migration_head() == "0008_pm_execution"
+        assert version == migration_head() == "0009_pm_draft_assignment"
         assert schema_is_ready(engine) is True
 
-    def test_managed_bootstrap_lock_closes_public_mutation_race(self, pg_url):
+    def test_managed_bootstrap_serializes_with_public_catalog_creation(self, pg_url):
         engine = get_engine(pg_url)
         ensure_migrated(engine)
         bootstrap_locked = Event()
@@ -817,31 +850,43 @@ class TestPostgresInitialMigration:
                 assert mutation_started.wait(timeout=10)
                 ensure_managed_catalog(uow)
 
-        def create_foreign_workflow() -> str:
+        def create_user_workflow() -> str:
             assert bootstrap_locked.wait(timeout=10)
             mutation_started.set()
             with SAUnitOfWork(engine) as uow:
-                try:
-                    WorkflowService(uow).create_workflow(
-                        {"name": "TEST TRASH WORKFLOW"}
-                    )
-                except ConflictError as exc:
-                    return str(exc)
-            return "unexpected-success"
+                WorkflowService(uow).create_workflow({"name": "User workflow"})
+            return "saved"
 
         with ThreadPoolExecutor(max_workers=2) as pool:
             bootstrap_future = pool.submit(bootstrap)
-            mutation_future = pool.submit(create_foreign_workflow)
+            mutation_future = pool.submit(create_user_workflow)
             bootstrap_future.result(timeout=30)
             mutation_result = mutation_future.result(timeout=30)
 
-        assert "Managed workflow catalog is immutable" in mutation_result
+        assert mutation_result == "saved"
         with SAUnitOfWork(engine) as uow:
-            assert validate_managed_catalog_state(uow) is True
-            assert all(
-                workflow.name != "TEST TRASH WORKFLOW"
-                for workflow in uow.workflows.list()
-            )
+            assert len(uow.workflows.list()) == 8
+            assert any(workflow.name == "User workflow" for workflow in uow.workflows.list())
+            assert uow.projects.get_by_cli_command("workflow-project_manager") is not None
+
+    def test_installed_instruction_edit_survives_migration_restart(self, pg_url, monkeypatch):
+        from scripts import init_db
+
+        ensure_migrated(get_engine(pg_url))
+        with SAUnitOfWork(pg_url) as uow:
+            ensure_managed_catalog(uow)
+            workflow = next(item for item in uow.workflows.list() if item.key == "hermes-sdlc:architect")
+            mode = uow.workflows.list_modes(workflow.id)[0]
+            phase = uow.phases.list(workflow.id, mode_id=mode.id)[0]
+            instruction = uow.phase_instructions.list(phase.id)[0]
+            instruction_id = instruction["id"]
+            InstructionService(uow).update_instruction(instruction_id, {"description": "Saved on PostgreSQL"})
+
+        monkeypatch.setenv("DATABASE_URL", pg_url)
+        config_module.get_settings.cache_clear()
+        assert init_db.main() == 0
+        with SAUnitOfWork(pg_url) as readback:
+            assert readback.phase_instructions.get_by_id(instruction_id)["description"] == "Saved on PostgreSQL"
 
     def test_public_catalog_mutation_blocks_managed_bootstrap_until_commit(self, pg_url):
         engine = get_engine(pg_url)
@@ -902,6 +947,7 @@ class TestPostgresInitialMigration:
         ("0003_runtime_assignment_bind", "Downgrade from runtime assignment bind"),
         ("0004_wide_work_item_revision", "Downgrade from wide Business revisions"),
         ("0008_pm_execution", "PM execution downgrade refused"),
+        ("0009_pm_draft_assignment", "PM Draft assignment downgrade refused"),
     ])
     def test_downgrade_refuses_lossy_mode_collapse(self, pg_url, revision, message):
         engine = get_engine(pg_url)
@@ -909,7 +955,7 @@ class TestPostgresInitialMigration:
         with pytest.raises(RuntimeError, match=message):
             run_alembic_command("downgrade", engine, "base")
         assert database_revisions(engine) == {revision}
-        assert schema_is_ready(engine) is (revision == "0008_pm_execution")
+        assert schema_is_ready(engine) is (revision == "0009_pm_draft_assignment")
 
     def test_populated_0001_upgrade_preserves_rows_and_backfills_per_workflow(self, pg_url):
         engine = get_engine(pg_url)

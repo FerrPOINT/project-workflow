@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 from types import SimpleNamespace
 from typing import Any
@@ -28,10 +27,6 @@ from project_workflow.interfaces.ui.schemas import (
 )
 
 pytestmark = [pytest.mark.ui]
-
-
-def _run(coro: Any) -> Any:
-    return asyncio.run(coro)
 
 
 def _raise(exc: Exception) -> None:
@@ -80,9 +75,7 @@ def test_phase_create_maps_service_errors(monkeypatch, exc, status):
         _State(phase_service=SimpleNamespace(create_phase=lambda _data: _raise(exc))),
     )
 
-    response = _run(
-        api.api_phase_create(PhaseCreate(workflow_id=1, phase_order=1, name="Новая фаза"))
-    )
+    response = api.api_phase_create(PhaseCreate(workflow_id=1, phase_order=1, name="Новая фаза"))
 
     assert response.status_code == status
     assert _json(response)["error"] == str(exc)
@@ -99,15 +92,13 @@ def test_phase_update_maps_aggregate_value_error(monkeypatch):
         ),
     )
 
-    response = _run(
-        api.api_phase_update(
+    response = api.api_phase_update(
             7,
             PhaseUpdate(
                 description="Новая формулировка",
                 checks=[{"id": None, "description": "Новая проверка"}],
             ),
         )
-    )
 
     assert response.status_code == 422
     assert _json(response)["error"] == "bad nested item"
@@ -120,11 +111,9 @@ def test_phase_batch_order_rejects_workflow_owner_mismatch(monkeypatch):
         _State(phase_service=SimpleNamespace(get_phase=lambda _phase_id: {"workflow_id": 2})),
     )
 
-    response = _run(
-        api.api_phase_batch_order(
+    response = api.api_phase_batch_order(
             PhaseOrderUpdate(orders=[{"phase_id": 1, "phase_order": 1, "workflow_id": 1}])
         )
-    )
 
     assert response.status_code == 409
     assert _json(response)["error"] == "workflow_id не совпадает с владельцем фазы"
@@ -144,15 +133,14 @@ def test_workflow_create_maps_service_errors(monkeypatch, exc, status):
         _State(workflow_service=SimpleNamespace(create_workflow=lambda _data: _raise(exc))),
     )
 
-    response = _run(api.api_workflow_create(WorkflowCreate(name="Flow")))
+    response = api.api_workflow_create(WorkflowCreate(name="Flow"))
 
     assert response.status_code == status
     assert _json(response)["error"] == str(exc)
 
 
 def test_namespace_create_rejects_explicit_null_description():
-    response = _run(
-        api.api_namespace_create(
+    response = api.api_namespace_create(
             NamespaceCreate(
                 name="Namespace",
                 description=None,
@@ -160,7 +148,6 @@ def test_namespace_create_rejects_explicit_null_description():
                 cli_command="workflow-prj",
             )
         )
-    )
 
     assert response.status_code == 422
     assert _json(response)["error"] == "description не может быть null"
@@ -173,7 +160,7 @@ def test_namespace_update_maps_value_error_before_readback(monkeypatch):
     )
     monkeypatch.setattr(api, "_app_state", _State(project_service=service))
 
-    response = _run(api.api_namespace_update(5, NamespaceUpdate(name="PX")))
+    response = api.api_namespace_update(5, NamespaceUpdate(name="PX"))
 
     assert response.status_code == 422
     assert _json(response)["error"] == "bad namespace"
@@ -207,7 +194,7 @@ def test_update_routes_map_service_errors(monkeypatch, route, payload, service_m
     state_method = "workflow_service" if service_method == "update_workflow" else "agent_service"
     monkeypatch.setattr(api, "_app_state", _State(**{state_method: service}))
 
-    response = _run(route(1, payload))
+    response = route(1, payload)
 
     assert response.status_code == status
     assert _json(response)["error"] == str(exc)
@@ -227,7 +214,7 @@ def test_delete_routes_map_service_errors(monkeypatch, route, service_method, ex
     state_method = "project_service" if service_method == "delete_project" else "agent_service"
     monkeypatch.setattr(api, "_app_state", _State(**{state_method: service}))
 
-    response = _run(route(1))
+    response = route(1)
 
     assert response.status_code == status
     assert _json(response)["error"] == str(exc)
@@ -247,7 +234,7 @@ def test_agent_create_maps_service_errors(monkeypatch, exc, status):
         _State(agent_service=SimpleNamespace(create_agent=lambda _data: _raise(exc))),
     )
 
-    response = _run(api.api_agent_create(AgentCreate(name="Agent")))
+    response = api.api_agent_create(AgentCreate(name="Agent"))
 
     assert response.status_code == status
     assert _json(response)["error"] == str(exc)
@@ -260,7 +247,7 @@ def test_instructions_list_rejects_unknown_phase(monkeypatch):
         _State(phase_service=SimpleNamespace(get_phase=lambda _phase_id: None)),
     )
 
-    response = _run(api.api_instructions_list(44))
+    response = api.api_instructions_list(44)
 
     assert response.status_code == 404
     assert _json(response)["error"] == "Фаза 44 не найдена"
@@ -269,7 +256,7 @@ def test_instructions_list_rejects_unknown_phase(monkeypatch):
 def test_tasks_api_maps_data_consistency_error(monkeypatch):
     monkeypatch.setattr(api, "_load_tasks", lambda namespace_id=None: _raise(ValueError("Журнал задач повреждён")))
 
-    response = _run(api.api_tasks(workflow_id=None, namespace_id=None))
+    response = api.api_tasks(workflow_id=None, namespace_id=None)
 
     assert response.status_code == 409
     assert _json(response)["error"] == "Журнал задач повреждён"
@@ -355,7 +342,7 @@ def test_instruction_routes_map_service_errors(monkeypatch, route, args, service
     )
     monkeypatch.setattr(api, "_app_state", _State(instruction_service=service))
 
-    response = _run(route(*args))
+    response = route(*args)
 
     assert response.status_code == status
     assert _json(response)["error"] == str(exc)
