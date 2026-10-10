@@ -9,6 +9,28 @@ import pytest
 pytestmark = pytest.mark.ui
 
 
+@pytest.mark.parametrize("position", [0, 1, 2])
+def test_add_instruction_uses_visible_position_after_reorder(position):
+    template = (Path(__file__).parents[1] / "project_workflow/interfaces/ui/templates/phase_detail.html").read_text(
+        encoding="utf-8",
+    )
+    start = template.index("async function addInstructionAfter(")
+    end = template.index("async function addInstructionLast(", start)
+    script = "\n".join([
+        "const items=[3,1,2].map(n=>({dataset:{stepNum:String(n)}}));let payload;",
+        f"const button={{disabled:false,closest:()=>items[{position}]}};",
+        "const getInstructionItems=()=>items;const phaseId=7;const phaseApiUrl=u=>u;",
+        "const requestPhaseDetail=async(u,o)=>{payload=JSON.parse(o.body);return {resp:{ok:true},data:{ok:true}};};",
+        "const window={location:{reload(){}}};",
+        template[start:end],
+        "await addInstructionAfter(button);console.log(JSON.stringify(payload));",
+    ])
+    completed = subprocess.run(
+        ["node", "--input-type=module", "-"], input=script, text=True, capture_output=True, check=True, timeout=10,
+    )
+    assert json.loads(completed.stdout)["step_num"] == position + 2
+
+
 @pytest.mark.parametrize("result", [None, {"resp": {"ok": False}, "data": {"ok": False, "error": "Conflict"}}])
 @pytest.mark.parametrize("page,fn,next_fn", [
     ("phase_detail", "saveInstructionDescription", "addSkillToInstruction"),

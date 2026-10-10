@@ -543,8 +543,7 @@ async function requestPhaseDetail(url, options) {
 async function addInstructionAfter(button) {
   const item = button.closest('.timeline-item');
   if (!item) return;
-  const currentStep = parseInt(item.dataset.stepNum || '0', 10);
-  const stepNum = currentStep > 0 ? currentStep + 1 : 1;
+  const stepNum = getInstructionItems().indexOf(item) + 2;
   button.disabled = true;
   try {
     const result = await requestPhaseDetail(phaseApiUrl('/api/instructions'), {

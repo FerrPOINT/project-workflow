@@ -351,27 +351,17 @@ def _task_data_error_page(
     )
 
 
-def _workflow_is_unassigned(workflow_id: Any) -> bool:
-    if not isinstance(workflow_id, int):
-        return False
-    workflow = next((item for item in _load_workflows() if item.get("id") == workflow_id), None)
-    if workflow is None:
-        return False
-    try:
-        return int(workflow.get("namespace_count") or 0) == 0
-    except (TypeError, ValueError):
-        return False
-
-
-def _phase_matches_selected_namespace(phase: dict[str, Any], context: dict[str, Any]) -> bool:
+def _workflow_matches_selected_namespace(workflow_id: int | None, context: dict[str, Any]) -> bool:
+    """A remembered selection is a UI preference; only an explicit scope constrains navigation."""
     selected_namespace = context.get("selected_namespace")
     selected_workflow_id = selected_namespace.get("workflow_id") if isinstance(selected_namespace, dict) else None
-    phase_workflow_id = phase.get("workflow_id")
-    return (
-        not isinstance(selected_workflow_id, int)
-        or phase_workflow_id == selected_workflow_id
-        or _workflow_is_unassigned(phase_workflow_id)
-    )
+    if not isinstance(selected_workflow_id, int) or workflow_id == selected_workflow_id:
+        return True
+    if context["request"].query_params.get("namespace_id") is not None:
+        return False
+    # Global catalog links must not acquire the remembered namespace's scope.
+    context.update(selected_namespace=None, theme_namespace=None)
+    return True
 
 
 def validation_error_page(request: Request, errors: Sequence[Any]) -> HTMLResponse | None:
@@ -446,26 +436,13 @@ def phases_page(request: Request) -> HTMLResponse:
         selected_namespace.get("workflow_id") if isinstance(selected_namespace, dict) else None
     )
     has_explicit_namespace = request.query_params.get("namespace_id") is not None
-    cookie_namespace_id = _parse_positive_int(request.cookies.get(context["namespace_cookie_name"]))
-    has_cookie_namespace = (
-        request.query_params.get("namespace_id") is None
-        and isinstance(cookie_namespace_id, int)
-        and isinstance(selected_namespace, dict)
-        and selected_namespace.get("id") == cookie_namespace_id
-    )
     if workflow_id is None and isinstance(selected_namespace_workflow_id, int):
         workflow_id = selected_namespace_workflow_id
     workflows = _load_workflows()
     selected_workflow = next((item for item in workflows if item["id"] == workflow_id), None)
     if workflow_id is not None and selected_workflow is None:
         return _workflow_error_page(request, context, int(workflow_id), page="phases")
-    selected_workflow_has_namespace = bool((selected_workflow or {}).get("namespace_count"))
-    if (
-        (has_explicit_namespace or (has_cookie_namespace and selected_workflow_has_namespace))
-        and isinstance(selected_namespace_workflow_id, int)
-        and workflow_id is not None
-        and workflow_id != selected_namespace_workflow_id
-    ):
+    if not _workflow_matches_selected_namespace(workflow_id, context):
         return _workflow_not_in_selected_namespace_page(request, context)
     if selected_workflow is None and workflows:
         selected_workflow = workflows[0]
@@ -476,8 +453,8 @@ def phases_page(request: Request) -> HTMLResponse:
     if selected_workflow_id is not None and selected_mode is None:
         return _workflow_mode_error_page(request, context, int(selected_workflow_id), None)
     selected_mode_id = selected_mode.get("id") if selected_mode else None
-    namespace_scoped_view = isinstance(selected_namespace, dict) and (
-        raw_workflow_id is None or has_explicit_namespace or has_cookie_namespace
+    namespace_scoped_view = isinstance(context.get("selected_namespace"), dict) and (
+        raw_workflow_id is None or has_explicit_namespace
     )
     visible_workflows = [selected_workflow] if namespace_scoped_view and selected_workflow else workflows
     phases = (
@@ -521,7 +498,7 @@ def phase_detail(request: Request, phase_id: PositivePathId) -> HTMLResponse:
             back_label="К фазам",
             page="phases",
         )
-    if not _phase_matches_selected_namespace(phase, context):
+    if not _workflow_matches_selected_namespace(phase.get("workflow_id"), context):
         return _phase_not_in_selected_namespace_page(request, context)
     agents = _app_state.agent_service().list_agents()
     workflow_phases = _app_state.phase_service().list_phases(
@@ -808,7 +785,7 @@ def instructions_page(request: Request) -> HTMLResponse:
             }
         )
         return _template_response(request=request, name="error.html", status_code=404, context=context)
-    if not _phase_matches_selected_namespace(phase, context):
+    if not _workflow_matches_selected_namespace(phase.get("workflow_id"), context):
         return _phase_not_in_selected_namespace_page(request, context)
     instructions = phase.get("instructions", [])
     for instruction in instructions:
