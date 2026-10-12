@@ -7,16 +7,14 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-CONTENT = ROOT / "project_workflow/references/pm_mcp_draft_mode_v1.json"
+CONTENT = ROOT / "project_workflow/references/pm_cli_draft_mode_v1.json"
 LEGACY = ROOT / "project_workflow/references/hermes_sdlc_catalog_v1.json"
 CONTENT_FIELDS = {"instructions", "checks", "evidence"}
-TOOLS = {
-    "workflow_step", "tracker_context", "tracker_requirements", "tracker_clarifications",
-    "tracker_publish_revision", "tracker_publish_question",
-}
+READ_PHASE = "project-workflow --json step --task <workflow-task-key>"
+READ_ISSUE = "task-tracker --output json issue get <issue-id>"
 
 
-class PmV2McpContentTests(unittest.TestCase):
+class PmV2CliContentTests(unittest.TestCase):
     def setUp(self):
         self.mode = json.loads(CONTENT.read_text(encoding="utf-8"))
         catalog = json.loads(LEGACY.read_text(encoding="utf-8"))
@@ -26,9 +24,18 @@ class PmV2McpContentTests(unittest.TestCase):
 
     def assert_supported_content(self, mode):
         text = json.dumps(mode).lower()
-        for forbidden in ("publishdraft", "publish_draft", "comment", "attachment", "--json", "--task"):
+        for forbidden in ("publishdraft", "publish_draft", "workflow_step", "tracker_context", "tracker_requirements",
+                          "tracker_clarifications", "tracker_publish_revision", "tracker_publish_question",
+                          "step_operation_key", "call tracker_confirm", "call workflow_publish"):
             self.assertNotIn(forbidden, text)
-        self.assertEqual(set(re.findall(r"\b(?:tracker|workflow)_\w+\b", text)), TOOLS)
+        self.assertFalse(re.findall(r"\b(?:tracker|workflow)_\w+\b", text))
+        commands = re.findall(r"(?:project-workflow|task-tracker)(?:(?: --[a-z-]+)|(?: <[^>]+>)|"
+                              r"(?: (?:json|step|history|issue|get|[0-9]+))\b)+", text)
+        self.assertTrue(commands)
+        allowed = {READ_PHASE, READ_PHASE + " --report <report-text>", READ_ISSUE,
+                   "project-workflow --json history --task <workflow-task-key> --n 20"}
+        for command in commands:
+            self.assertIn(command, allowed)
         for phase in mode["phases"]:
             criteria = " ".join(phase["checks"] + phase["evidence"]).lower()
             for future in ("complete=true", "confirmation receipt", "owner confirmed", "human approved"):
@@ -48,20 +55,22 @@ class PmV2McpContentTests(unittest.TestCase):
                 self.assertEqual(instruction["skills"], old_instruction["skills"])
                 self.assertEqual(set(instruction), set(old_instruction))
 
-    def test_only_real_tools_and_no_unavailable_or_future_evidence(self):
+    def test_only_existing_cli_and_no_unavailable_or_future_evidence(self):
         self.assert_supported_content(self.mode)
 
     def test_first_call_and_each_phase_read_instructions_without_report(self):
         first = self.mode["phases"][0]["instructions"][0]["description"]
-        self.assertTrue(first.startswith("First call workflow_step with report=null"))
+        self.assertTrue(first.startswith("First run " + READ_PHASE))
         for phase in self.mode["phases"]:
-            self.assertIn("report=null", phase["instructions"][0]["description"])
-        self.assertIn("stable step_operation_key", first)
+            self.assertIn(READ_PHASE + " without --report", phase["instructions"][0]["description"])
+        self.assertIn("SDLC_API_TOKEN API transport", first)
+        self.assertIn("never fall back to local database mode", first)
 
     def test_final_submission_precedes_receipt_and_exact_human_confirmation(self):
         final = self.mode["phases"][-1]["instructions"][-1]["description"]
-        self.assertLess(final.index("Submit the final business report"), final.index("complete=true"))
-        self.assertLess(final.index("complete=true"), final.index("wait for exact human owner confirmation"))
+        self.assertLess(final.index("Submit the final business report"), final.index("actual returned verdict/status"))
+        self.assertLess(final.index("actual returned verdict/status"),
+                        final.index("wait for exact human owner confirmation"))
         for required in ("same requirements revision/hash", "PM must never confirm for the owner",
                          "Only the owner/server validates", "Backlog", "Analysis/Ready", "Do not launch Analyst",
                          "existing trusted verifier's responsibility", "do not fabricate it or bypass"):
@@ -70,8 +79,9 @@ class PmV2McpContentTests(unittest.TestCase):
     def test_unknown_acceptance_and_question_do_not_create_authority(self):
         refinement = self.mode["phases"][1]["instructions"][-1]["description"]
         for required in ("expected_requirement_revision", "original idempotency_key",
-                         "read back the original intent", "never create a fresh key",
-                         "keep this phase unfinished", "answer/terminal-proof/rebind"):
+                         "original-intent readback", "never create a fresh key",
+                         "Keep this phase unfinished", "answer/terminal-proof/rebind",
+                         "stop instead of claiming persistence", "no PM SDLC revision, question"):
             self.assertIn(required, refinement)
         self.assertIn("not human approval or a status transition", refinement)
 
@@ -105,8 +115,8 @@ class PmV2McpContentTests(unittest.TestCase):
 
     def test_rejects_unavailable_operation_in_instruction_check_or_evidence(self):
         for field in CONTENT_FIELDS:
-            for bad in ("Call publishDraft", "Write a comment", "Run project-workflow --json step --task x",
-                        "Call tracker_confirm", "Call workflow_publish"):
+            for bad in ("Call publishDraft", "Call workflow_step", "Run task-tracker --output json sdlc publish",
+                        READ_PHASE + " --step-operation-key <key>", "Call tracker_confirm", "Call workflow_publish"):
                 with self.subTest(field=field, bad=bad):
                     mode = copy.deepcopy(self.mode)
                     if field == "instructions":
@@ -115,6 +125,18 @@ class PmV2McpContentTests(unittest.TestCase):
                         mode["phases"][0][field][0] = bad
                     with self.assertRaises(AssertionError):
                         self.assert_supported_content(mode)
+
+    def test_cli_inventory_and_gap_rules_are_source_attested(self):
+        source = (ROOT / "project_workflow/interfaces/cli/ui.py").read_text(encoding="utf-8")
+        self.assertEqual(source.count("@cli.command()\n"), 2)
+        self.assertIn('"POST", "api/cli/step"', source)
+        self.assertIn('"GET", "api/cli/history"', source)
+        self.assertNotIn('click.option("--step-operation-key"', source)
+        text = json.dumps(self.mode)
+        for required in ("no PM SDLC context/readback commands", "no original-operation key/readback",
+                         "history alone does not authorize a resend", "no PM SDLC confirmation/handoff CLI",
+                         "do not use generic issue transition, board move or status edit as a substitute"):
+            self.assertIn(required, text)
 
     def test_rejects_future_receipt_as_submission_criterion(self):
         for field in ("checks", "evidence"):
