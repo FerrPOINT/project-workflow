@@ -63,7 +63,8 @@ class PmV2McpContentTests(unittest.TestCase):
         self.assertLess(final.index("Submit the final business report"), final.index("complete=true"))
         self.assertLess(final.index("complete=true"), final.index("wait for exact human owner confirmation"))
         for required in ("same requirements revision/hash", "PM must never confirm for the owner",
-                         "Only the owner/server validates", "Backlog", "Analysis/Ready", "Do not launch Analyst"):
+                         "Only the owner/server validates", "Backlog", "Analysis/Ready", "Do not launch Analyst",
+                         "existing trusted verifier's responsibility", "do not fabricate it or bypass"):
             self.assertIn(required, final)
 
     def test_unknown_acceptance_and_question_do_not_create_authority(self):
