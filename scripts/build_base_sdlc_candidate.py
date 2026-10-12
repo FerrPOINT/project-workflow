@@ -456,6 +456,46 @@ OUTPUTS = {
 }
 
 
+def handoff_instruction(role: str) -> str:
+    if role == "project_manager":
+        return (
+            "Последний шаг профессии проверяет статус И стадию через реальный Tracker readback. "
+            "Только подтверждение владельцем exact revision/hash переводит Draft в Backlog и создаёт "
+            "Analysis/Готово intent у Tracker. PM не подтверждает требования за человека, не вызывает "
+            "несуществующую terminal Tracker tool и не запускает Analyst. До owner receipt ждать "
+            "владельца; после него сверить transition receipt, revision/hash и server-issued status/stage. "
+            "Unknown ACK требует readback исходного operation key; generic Task patch запрещён."
+        )
+    targets = {
+        "analyst": "После принятого анализа запросить Architecture/Готово.",
+        "architect": (
+            "После принятой декомпозиции запросить Development/Готово для разрешённых "
+            "Tracker задач; root с children остаётся на установленном backend barrier."
+        ),
+        "developer": "После initial или rework запросить Review/Готово того же task.",
+        "reviewer": (
+            "При passed запросить Testing/Готово; при needs_rework передать frozen findings "
+            "и запросить Rework/Готово для Developer того же task."
+        ),
+        "tester": (
+            "При passed запросить Deployment/Готово; при needs_rework передать frozen findings "
+            "и запросить Rework/Готово для Developer того же task."
+        ),
+        "devops": (
+            "После deployment, health и acceptance запросить Deployment/Завершено текущего "
+            "task. Child success не завершает root без его собственной integration-приёмки."
+        ),
+    }
+    return (
+        "Последнее действие профессии — через настроенную Tracker tool запросить следующий "
+        "статус И стадию текущей задачи по разрешённому backend transition, а не только написать итог. "
+        + targets[role]
+        + " Передать assignment/execution, версии, исходный operation key, Workflow receipt и evidence; "
+        "прочитать transition receipt и сверить фактические status/stage. Unknown ACK сначала readback "
+        "того же ключа; generic Task patch и выдуманные IDs запрещены. Недоступная tool — blocker, не PASS."
+    )
+
+
 def render(skills_root: Path, skills_sha: str) -> dict:
     if not re.fullmatch(r"[0-9a-f]{40}", skills_sha):
         raise ValueError("exact skills commit SHA required")
@@ -491,8 +531,11 @@ def render(skills_root: Path, skills_sha: str) -> dict:
                 (
                     "tracker-operator",
                     (
-                        "Первый вызов ровно project-workflow --json step --task <session>; admission "
-                        "проверяет backend assignment. Затем читать Task, все comments и attachments, "
+                        "Первое действие — получить step Project Workflow через настроенную runtime tool. "
+                        "Для Fleet PM это MCP workflow_step без report; session/run и binding предоставляет "
+                        "Fleet. CLI project-workflow --json step --task <session> использовать только когда "
+                        "он действительно установлен и настроен вместо MCP, не как fallback. "
+                        "Затем читать Task, все comments и attachments, "
                         "links/history и frozen inputs текущей revision, не выбирая mode/scope/workspace из "
                         "prompt."
                     ),
@@ -513,6 +556,12 @@ def render(skills_root: Path, skills_sha: str) -> dict:
                 ),
             ]
             terminal = "publishDraft" if role == "project_manager" else "completeAssignedStage"
+            terminal_action = (
+                "publishDraft здесь compatibility marker owner publication, не machine tool: "
+                "ожидать exact confirmation владельца и проверить её receipt. "
+                if role == "project_manager"
+                else f"Запросить {terminal} как owner capability, не выдуманную CLI-команду. "
+            )
             outcome = (
                 "outcome passed или needs_rework с непустыми frozen findings"
                 if role in {"reviewer", "tester"}
@@ -542,11 +591,13 @@ def render(skills_root: Path, skills_sha: str) -> dict:
                     "в Base это Task Tracker comment): результат, coverage требований, проверки, evidence "
                     "и ограничения; для Architect — реальные children/dependencies, Reviewer/Tester — "
                     "решение/findings, DevOps — exact candidate/acceptance. Передать принятый report через "
-                    "project-workflow --json step --task <session> --report <report>; дождаться complete=true, "
-                    "сохранить и прочитать итоговый комментарий, затем запросить только "
-                    f"{terminal} как owner capability, не выдуманную CLI-команду, с {outcome}. "
+                    "настроенную Project Workflow (project-workflow) step tool с report (Fleet PM: MCP workflow_step); "
+                    "дождаться complete=true, "
+                    "сохранить и прочитать итоговый комментарий. "
+                    + terminal_action
+                    + f"Передать {outcome}. "
                     "При недостаточных данных one concrete question и durable awaiting-input handshake "
-                    "с unfinished phase; terminal action запрещён.",
+                    "с unfinished phase; terminal action запрещён. " + handoff_instruction(role),
                 ),
             ]
             for index, instructions in enumerate((admission, actions, ending)):

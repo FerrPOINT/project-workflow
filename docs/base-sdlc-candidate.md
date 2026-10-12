@@ -36,8 +36,38 @@ candidate, не переключение default catalog version 2.
 
 Фазы: exact step admission → полный порядок действий роли → accepted report,
 complete=true, итоговый комментарий и разрешённая owner terminal capability.
-Количество инструкций не ограничено тремя. Публичный CLI остаётся step/history;
-его --task/--report/--json сверены с interfaces/cli/ui.py и core.py.
+Количество инструкций не ограничено тремя. Первый шаг получают через реально
+настроенную Workflow tool: Fleet PM использует MCP `workflow_step` с `report=null`.
+CLI step/history допустим только при установленной и настроенной интеграции,
+не как запасной способ обойти недоступный MCP.
+
+## Передача задачи после последнего шага
+
+Уточнение инструкций от 2026-10-12 не устанавливает candidate и не добавляет
+несуществующие tools. После `complete=true` и сохранения результата агент должен
+запросить через разрешённую Tracker capability следующий **статус и стадию**, затем
+прочитать transition receipt. Tracker проверяет переход и остаётся владельцем
+бизнес-состояния. Обычный patch карточки не заменяет эту операцию.
+
+| Завершённая роль | Запрашиваемая передача |
+| --- | --- |
+| PM | После подтверждения владельцем exact revision/hash: Draft → Backlog; Tracker ставит Analysis/Готово в очередь |
+| Analyst | Architecture/Готово |
+| Architect | Development/Готово разрешённых задач с сохранением root barrier |
+| Developer initial/rework | Review/Готово той же задачи |
+| Reviewer | Testing/Готово; при needs_rework — Rework/Готово с frozen findings |
+| Tester | Deployment/Готово; при needs_rework — Rework/Готово с frozen findings |
+| DevOps | Deployment/Завершено только проверенной задачи; child не завершает root |
+
+Assignment/execution, версии, исходный operation key, Workflow receipt и evidence
+передаются вместе с запросом. Неизвестный ACK сначала сверяется по тому же ключу;
+недоступная capability остаётся конкретным blocker, а не успешным завершением.
+PM не подтверждает требования за человека и не запускает Analyst вручную.
+Набор Fleet PM MCP не содержит отдельной terminal transition tool и не нуждается
+в ней для дублирования owner confirmation. PM проверяет именно её Backlog receipt
+и server-created Analysis intent; новый machine publish вместо человека запрещён.
+Pin Base, default catalog, bootstrap и существующая история здесь не изменяются;
+обновлённый пакет role/skill-инструкций требует отдельной совместимой активации.
 
 ## Проверка без установки
 

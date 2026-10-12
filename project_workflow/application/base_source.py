@@ -11,8 +11,8 @@ from project_workflow.domain.runtime_assignment import payload_sha256
 from project_workflow.infrastructure.base_package import GitPackage, digest, load_pinned_package
 from project_workflow.infrastructure.db.managed_catalog import ManagedCatalog, export_runtime_catalog
 
-CANDIDATE_REVISION = "674aab3f016255cf948b6e6e8b0ea92a8bf92557"
-CANDIDATE_BLOB = "5581b929c9e80bfba85684e98109944b2fb898ae"
+CANDIDATE_REVISION = "b01fc3c9b017b81a178ef678754d8f23f9943af7"
+CANDIDATE_BLOB = "71560ee37de8acfd020630d58a036618f007b94b"
 
 
 def export_base_source() -> dict[str, Any]:
