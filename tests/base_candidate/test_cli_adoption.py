@@ -22,7 +22,10 @@ from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.ui.app import create_app
 from scripts.build_runtime_image import derive_compatibility
 from tests.base_candidate.test_source import source as source
-from tests.test_managed_catalog import _project_manager_request
+from tests.test_managed_catalog import _bootstrap_versioned_legacy_catalog, _project_manager_request
+from tests.test_managed_catalog import (
+    test_managed_bootstrap_preserves_exact_legacy_catalog_task_and_history as assert_legacy_bootstrap,
+)
 from tests.test_pm_draft_assignment import (
     prepare_pm_draft,
 )
@@ -50,6 +53,39 @@ def cli(source, monkeypatch):
 
 def rows(uow, model):
     return [dict(row) for row in uow.session.execute(select(model.__table__)).mappings()]
+
+
+@pytest.mark.parametrize("migrated_key", [True, False])
+def test_cli_adoption_preserves_frozen_legacy_ids_tasks_and_history(cli, migrated_key):
+    with SAUnitOfWork() as uow:
+        assert_legacy_bootstrap(uow, migrated_key)
+        managed = [workflow for workflow in uow.workflows.list() if workflow.key.startswith("hermes-sdlc:")]
+        assert len(managed) == 7
+        assert all(workflow.active_catalog_version == 4 for workflow in managed)
+        assert {row["catalog_version"] for row in rows(uow, m.WorkflowMode)} == {1, 4}
+        assert sum(len(uow.workflows.list_modes(workflow.id, catalog_version=4)) for workflow in managed) == 11
+        assert uow.workflows.get_default().name == config.LEGACY_UNMANAGED_WORKFLOW_NAME
+
+
+@pytest.mark.parametrize("drift", ["phase", "namespace", "agent-alias"])
+def test_cli_adoption_rejects_divergent_legacy_before_any_catalog_changes(cli, drift):
+    with SAUnitOfWork() as uow:
+        _, _, phase_id, namespace_id = _bootstrap_versioned_legacy_catalog(uow)
+        if drift == "phase":
+            uow.phases.update(phase_id, {"name": "Foreign phase"})
+        elif drift == "namespace":
+            uow.projects.update(namespace_id, {"cli_command": "workflow-foreign"})
+        else:
+            uow.agents.create({"name": "legacy-reviewer", "description": "Foreign agent"})
+        uow.session.flush()
+        models = (
+            m.Agent, m.Workflow, m.WorkflowMode, m.Project, m.Phase, m.PhaseInstruction,
+            m.PhaseCheck, m.PhaseEvidenceRequirement, m.Task, m.TaskStepHistoryEntry, m.TaskPhaseEvent,
+        )
+        before = {model: rows(uow, model) for model in models}
+        with pytest.raises(ValueError, match="Legacy compatibility catalog is"):
+            ensure_managed_catalog(uow, base_source.CLI_CANDIDATE_PATH)
+        assert {model: rows(uow, model) for model in models} == before
 
 
 def test_adoption_retains_v3_modes_tasks_and_history_and_is_idempotent(cli):

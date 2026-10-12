@@ -79,6 +79,13 @@ state отвергается. Повторная установка идемпо
 пустая managed DB; legacy v2→v4 не является этим adoption path и отвергается,
 а не заменяется сбросом БД или relabel старых rows.
 
+Для старой unmanaged schema сначала применяются существующие canonical migrations.
+Затем existing frozen legacy recognition проверяет полный seed/namespace/delegate
+contract и сохраняет legacy IDs, tasks и history при добавлении семи v4 workflows;
+промежуточный managed v3 не требуется. Divergent legacy отвергается до catalog writes.
+Focused SQLite regression покрывает этот путь после schema migration, но не
+подтверждает PostgreSQL upgrade или активацию установленного runtime.
+
 Для pin verification нужен существующий `PROJECT_WORKFLOW_BASE_SKILLS_ROOT`
 на авторизованный canonical Git package с exact v4/4e object. Для отдельного
 исторического v3 source readback по-прежнему требуется v3/4b9 object.
