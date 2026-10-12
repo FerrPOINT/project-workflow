@@ -461,38 +461,55 @@ def handoff_instruction(role: str) -> str:
         return (
             "Последний шаг профессии проверяет статус И стадию через реальный Tracker readback. "
             "Только подтверждение владельцем exact revision/hash переводит Draft в Backlog и создаёт "
-            "Analysis/Готово intent у Tracker. PM не подтверждает требования за человека, не вызывает "
-            "несуществующую terminal Tracker tool и не запускает Analyst. До owner receipt ждать "
+            "следующий Analysis intent у Tracker. PM не подтверждает требования за человека, не вызывает "
+            "несуществующую terminal Tracker CLI и не запускает Analyst. До owner receipt ждать "
             "владельца; после него сверить transition receipt, revision/hash и server-issued status/stage. "
             "Unknown ACK требует readback исходного operation key; generic Task patch запрещён."
         )
-    targets = {
-        "analyst": "После принятого анализа запросить Architecture/Готово.",
+    if role == "analyst":
+        return (
+            "Подготовить typed SubmitAnalysisResult и передать анализ/evidence через Workflow report; "
+            "Workflow complete не является Tracker transition receipt. Реальные scoped команды "
+            "task-tracker sdlc analysis result submit --task <UUID> --from-file <result.json> и "
+            "task-tracker sdlc analysis result operation --task <UUID> --key <original-key> "
+            "допустимы только при явно разрешённой текущему исполнителю identity. Сейчас producer "
+            "требует scheduler identity: не выдавать scheduler credential Hermes и не менять identity "
+            "ради вызова. Без разрешённого producer caller передать подготовленный результат владельцу "
+            "и указать конкретную credential dependency; handoff не завершён. Assignment/execution, "
+            "lease/version/fence, revisions и operation key предоставляет владелец; terminal receipt "
+            "и architecture_input_sha256 не выдумывать. По matching transition receipt/readback сверить "
+            "статус И стадию: сервер возвращает Architecture / SDLC Architecture. Unknown ACK сначала "
+            "authorized readback того же operation key/body, не новый submit; generic Task patch запрещён."
+        )
+    results = {
         "architect": (
-            "После принятой декомпозиции запросить Development/Готово для разрешённых "
-            "Tracker задач; root с children остаётся на установленном backend barrier."
+            "Typed decomposition result: accepted revision, coverage, реальные children/dependencies; "
+            "root с children остаётся на установленном backend barrier."
         ),
-        "developer": "После initial или rework запросить Review/Готово того же task.",
+        "developer": "Typed initial/rework result: exact candidate/commit, scoped checks и CI evidence того же task.",
         "reviewer": (
-            "При passed запросить Testing/Готово; при needs_rework передать frozen findings "
-            "и запросить Rework/Готово для Developer того же task."
+            "Typed passed/needs_rework result: reviewed candidate, coverage и frozen findings "
+            "с reproduction/expected/actual."
         ),
         "tester": (
-            "При passed запросить Deployment/Готово; при needs_rework передать frozen findings "
-            "и запросить Rework/Готово для Developer того же task."
+            "Typed passed/needs_rework result: verification target, criteria coverage, "
+            "evidence и frozen findings."
         ),
         "devops": (
-            "После deployment, health и acceptance запросить Deployment/Завершено текущего "
-            "task. Child success не завершает root без его собственной integration-приёмки."
+            "Typed deployment result: exact deployment/health/acceptance/rollback receipts. "
+            "Child success не завершает root без его собственной integration-приёмки."
         ),
     }
     return (
-        "Последнее действие профессии — через настроенную Tracker tool запросить следующий "
-        "статус И стадию текущей задачи по разрешённому backend transition, а не только написать итог. "
-        + targets[role]
-        + " Передать assignment/execution, версии, исходный operation key, Workflow receipt и evidence; "
-        "прочитать transition receipt и сверить фактические status/stage. Unknown ACK сначала readback "
-        "того же ключа; generic Task patch и выдуманные IDs запрещены. Недоступная tool — blocker, не PASS."
+        results[role]
+        + " После accepted Workflow report последний business шаг требует guarded Tracker completion "
+        "и readback: статус И стадию выбирает сервер. В проверенном CLI нет role-specific guarded "
+        "completion/readback для этой профессии; конкретная dependency — producer API и authorized "
+        "CLI binding этого typed result. До их появления handoff не завершён. Не выдумывать "
+        "terminal CLI или название целевого статуса; generic Task patch/issue transition/board move "
+        "не заменяют guarded переход. Assignment/execution, версии, исходный operation key, Workflow "
+        "receipt и evidence сохраняются; unknown ACK требует authorized readback той же операции, "
+        "не новый key и не повтор вслепую."
     )
 
 
@@ -531,10 +548,12 @@ def render(skills_root: Path, skills_sha: str) -> dict:
                 (
                     "tracker-operator",
                     (
-                        "Первое действие — получить step Project Workflow через настроенную runtime tool. "
-                        "Для Fleet PM это MCP workflow_step без report; session/run и binding предоставляет "
-                        "Fleet. CLI project-workflow --json step --task <session> использовать только когда "
-                        "он действительно установлен и настроен вместо MCP, не как fallback. "
+                        "Первое действие — через terminal вызвать настроенный existing CLI: "
+                        "project-workflow --json step --task <session> --operation-key <original-key> "
+                        "--runtime-request <private-request-json> --execution-token-file <private-token-file> "
+                        "без --report (report=null). Нужны PROJECT_WORKFLOW_URL и SDLC_API_TOKEN; "
+                        "session/run, assignment/fence, request и scoped token предоставляет Fleet. "
+                        "Без полного authorized context — stop; legacy human step и DB mode не fallback. "
                         "Затем читать Task, все comments и attachments, "
                         "links/history и frozen inputs текущей revision, не выбирая mode/scope/workspace из "
                         "prompt."
@@ -557,10 +576,10 @@ def render(skills_root: Path, skills_sha: str) -> dict:
             ]
             terminal = "publishDraft" if role == "project_manager" else "completeAssignedStage"
             terminal_action = (
-                "publishDraft здесь compatibility marker owner publication, не machine tool: "
+                "publishDraft здесь compatibility marker owner publication, не CLI-команда: "
                 "ожидать exact confirmation владельца и проверить её receipt. "
                 if role == "project_manager"
-                else f"Запросить {terminal} как owner capability, не выдуманную CLI-команду. "
+                else f"{terminal} — compatibility marker целевого owner contract, не CLI-команда. "
             )
             outcome = (
                 "outcome passed или needs_rework с непустыми frozen findings"
@@ -588,12 +607,18 @@ def render(skills_root: Path, skills_sha: str) -> dict:
                 (
                     "immutable-evidence-reporting",
                     "Подготовить итоговый Business Markdown comment (только compatibility marker валидатора; "
-                    "в Base это Task Tracker comment): результат, coverage требований, проверки, evidence "
+                    "текст передаётся как Workflow report, отдельная comment mutation не требуется): "
+                    "результат, coverage требований, проверки, evidence "
                     "и ограничения; для Architect — реальные children/dependencies, Reviewer/Tester — "
                     "решение/findings, DevOps — exact candidate/acceptance. Передать принятый report через "
-                    "настроенную Project Workflow (project-workflow) step tool с report (Fleet PM: MCP workflow_step); "
-                    "дождаться complete=true, "
-                    "сохранить и прочитать итоговый комментарий. "
+                    "existing CLI project-workflow --json step --task <session> --operation-key <original-key> "
+                    "--runtime-request <private-request-json> --execution-token-file <private-token-file> "
+                    "--report <report-text>; body.report должен совпадать с --report. Текущую операцию "
+                    "готовить из supplied assignment и server cursor со своим report; authority fields "
+                    "не выдумывать, для retry сохранить exact key/body/token. Чтение и report имеют разные "
+                    "operation keys. Дождаться accepted complete=true, проверить matching Workflow receipt. "
+                    "History не доказывает acceptance original body; checkpoint/readback CLI этим пакетом "
+                    "не добавляются. Unknown acceptance требует existing authorized readback, не blind retry. "
                     + terminal_action
                     + f"Передать {outcome}. "
                     "При недостаточных данных one concrete question и durable awaiting-input handshake "
@@ -624,8 +649,9 @@ def render(skills_root: Path, skills_sha: str) -> dict:
                     phase["evidence"].append(output)
                 if index == 2:
                     phase["checks"].append(
-                        "Workflow complete=true receipt и итоговый comment readback получены; "
-                        "недостающий gate/approval сохраняет стадию незавершённой."
+                        "Workflow complete=true receipt и authorized Tracker transition/readback получены; "
+                        "PM требует exact owner confirmation; недостающий producer/gate/approval "
+                        "сохраняет handoff незавершённым."
                     )
     return catalog
 

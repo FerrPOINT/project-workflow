@@ -43,6 +43,21 @@ CLI step/history допустим только при установленной
 
 ## Передача задачи после последнего шага
 
+Source-only уточнение генератора `scripts/build_base_sdlc_candidate.py`:
+будущие first/final instructions используют только existing runtime CLI `step`
+с operation key, request JSON и scoped execution token; report идёт тем же CLI.
+Ни frozen JSON ниже, ни pins/default/history этим изменением не обновляются;
+описанная ниже таблица сохраняет исторический content, не новые CLI-команды.
+Генератор готовит Analyst typed result через Workflow report; Tracker
+`sdlc analysis result submit/operation` допустим только authorized caller.
+Текущую scheduler identity нельзя выдавать Hermes. Для остальных non-PM ролей
+guarded completion/readback CLI остаётся конкретной producer dependency;
+target status/stage не угадываются и generic CRUD не является обходом.
+PM по-прежнему ждёт exact owner confirmation, не подтверждает за человека.
+Отдельные comment mutation и checkpoint/readback CLI здесь не добавляются.
+Base skill content с прежними MCP references требует отдельного owner update;
+этот пакет не квалифицирует установленный CLI, role execution или handoff.
+
 Уточнение инструкций от 2026-10-12 не устанавливает candidate и не добавляет
 несуществующие tools. После `complete=true` и сохранения результата агент должен
 запросить через разрешённую Tracker capability следующий **статус и стадию**, затем
