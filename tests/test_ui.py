@@ -2566,7 +2566,7 @@ class TestWorkflowsPage:
         assert created.status_code == 200
         workflow_id = created.json()["workflow_id"]
         try:
-            response = client.get(f"/workflows?workflow_id={workflow_id}")
+            response = client.get(f"/workflows?namespace_id={profession_id}&workflow_id={workflow_id}")
             assert response.status_code == 200
             assert 'class="workflow-crud "' in response.text
             assert f'<option value="{workflow_id}" selected' in response.text
@@ -2800,8 +2800,8 @@ class TestAgentsPage:
             response = client.get(path)
             assert response.status_code == 200
             assert rule in response.text
-            if path == "/agents":
-                assert "html[data-theme='dark'] .agent-delete" in response.text
+            assert "delete:hover{" not in response.text
+            assert "html[data-theme='dark'] .agent-delete" not in response.text
 
     def test_agents_page_shows_name_and_description_without_sort_field(self):
         response = client.get("/agents")
