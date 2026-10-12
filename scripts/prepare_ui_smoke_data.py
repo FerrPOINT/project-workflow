@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from pydantic import ValidationError
-from sqlalchemy import delete, select
+from sqlalchemy import delete
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -381,48 +381,6 @@ VISIBLE_TEXT_REPLACEMENTS = (
     ("In Progress", "в работе"),
     ("Open", "начальное состояние"),
 )
-DEMO_AGENT_PROFILES: dict[str, dict[str, Any]] = {
-    "orchestrator": {
-        "name": "Координатор",
-        "description": "Ведёт постановку задачи, синхронизирует переходы и фиксирует решения.",
-        "hermes_profile": "run-coord",
-    },
-    "codex-operator": {
-        "name": "Оператор",
-        "description": "Проверяет план, слияние и ручные решения перед переходом дальше.",
-        "hermes_profile": "run-operator",
-    },
-    "ops": {
-        "name": "Инженер запуска",
-        "description": "Отвечает за окружение, миграции, контрольные проверки и готовность приложения.",
-        "hermes_profile": "run-runtime",
-    },
-    "researcher": {
-        "name": "Аналитик",
-        "description": "Разбирает поток данных, зависимости и фактическое поведение системы.",
-        "hermes_profile": "run-analysis",
-    },
-    "critic": {
-        "name": "Контролёр качества",
-        "description": "Ищет риски, пропуски в плане и слабые места регрессионного покрытия.",
-        "hermes_profile": "run-quality",
-    },
-    "coder": {
-        "name": "Разработчик",
-        "description": "Вносит минимальные изменения, добавляет тесты и готовит проверяемый результат.",
-        "hermes_profile": "run-dev",
-    },
-    "reviewer": {
-        "name": "Ревьюер",
-        "description": "Проверяет реализацию, архитектурные границы и отсутствие лишней сложности.",
-        "hermes_profile": "run-review",
-    },
-}
-DEMO_AGENT_PROFILES_BY_DISPLAY_NAME = {
-    str(profile["name"]): profile for profile in DEMO_AGENT_PROFILES.values()
-}
-
-
 def _assert_smoke_database_url(database_url: str) -> None:
     url = make_url(database_url)
     if not url.drivername.startswith("sqlite"):
@@ -479,15 +437,6 @@ def _reset_smoke_rows(uow: SAUnitOfWork) -> None:
     uow.session.execute(delete(m.Task))
     uow.session.execute(delete(m.Project).where(m.Project.code != DEFAULT_PROJECT_CODE))
     uow.session.execute(delete(m.Workflow).where(m.Workflow.is_default == 0))
-    referenced_agent_ids = [
-        int(agent_id)
-        for (agent_id,) in uow.session.execute(select(m.Phase.agent_id).where(m.Phase.agent_id.is_not(None)))
-        if agent_id is not None
-    ]
-    if referenced_agent_ids:
-        uow.session.execute(delete(m.Agent).where(m.Agent.id.not_in(referenced_agent_ids)))
-    else:
-        uow.session.execute(delete(m.Agent))
     uow.commit()
 
 
@@ -598,20 +547,6 @@ def _ensure_default_demo_workflow(uow: SAUnitOfWork) -> dict[str, Any]:
     return workflow
 
 
-def _neutralize_agents(uow: SAUnitOfWork) -> None:
-    for agent in uow.agents.list():
-        if agent.id is None:
-            continue
-        demo_agent = DEMO_AGENT_PROFILES.get(agent.name) or DEMO_AGENT_PROFILES_BY_DISPLAY_NAME.get(agent.name)
-        if demo_agent is None:
-            if agent.hermes_profile is None:
-                continue
-            uow.agents.update(int(agent.id), {"hermes_profile": None})
-            continue
-        uow.agents.update(int(agent.id), demo_agent)
-    uow.commit()
-
-
 def _ensure_namespace(
     uow: SAUnitOfWork,
     *,
@@ -634,6 +569,9 @@ def _ensure_namespace(
         "theme_icon": theme_icon,
         "theme_color": theme_color,
         "cli_command": command,
+        "role_key": "developer" if command == "workflow-dev" else "tester",
+        "launch_profile": "run-dev" if command == "workflow-dev" else "run-quality",
+        "execution_description": "Выполнение сценариев проверки интерфейса.",
     }
     if namespace is None:
         namespace = service.create_project({**payload, "code": code, "key_prefixes": []})
@@ -826,7 +764,6 @@ def prepare_smoke_data() -> None:
     _ensure_bootstrap()
     with SAUnitOfWork() as uow:
         _reset_smoke_rows(uow)
-        _neutralize_agents(uow)
         default_workflow = _ensure_default_demo_workflow(uow)
         qa_workflow_id = _ensure_qa_workflow(uow)
         dev_namespace = _ensure_namespace(

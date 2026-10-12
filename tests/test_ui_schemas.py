@@ -5,8 +5,6 @@ from __future__ import annotations
 import pytest
 
 from project_workflow.interfaces.ui.schemas import (
-    AgentCreate,
-    AgentUpdate,
     InstructionCreate,
     InstructionUpdate,
     NamespaceCreate,
@@ -136,30 +134,6 @@ def test_namespace_workflow_id_rejects_invalid_explicit_values(value):
         NamespaceUpdate(workflow_id=value)
 
 
-def test_agent_create_update():
-    a = AgentCreate(name="Coder", hermes_profile=" code_profile ")
-    assert a.name == "Coder"
-    assert a.hermes_profile == "code_profile"
-    alias = AgentCreate.model_validate({"name": "Coder", "launch_profile": "ui_profile"})
-    assert alias.hermes_profile == "ui_profile"
-    au = AgentUpdate(name="New", hermes_profile=None)
-    assert au.name == "New"
-    assert au.hermes_profile is None
-    alias_update = AgentUpdate.model_validate({"launch_profile": None})
-    assert alias_update.hermes_profile is None
-    with pytest.raises(ValueError, match="для очистки используйте null"):
-        AgentUpdate(name="New", hermes_profile="")
-    for invalid in (1, {}, []):
-        with pytest.raises(ValueError):
-            AgentUpdate.model_validate({"hermes_profile": invalid})
-
-
-@pytest.mark.parametrize("profile", ["UPPER", "space profile", "-leading", "profile.dot"])
-def test_agent_rejects_invalid_hermes_profile(profile):
-    with pytest.raises(ValueError, match="Ключ запуска"):
-        AgentCreate(name="Coder", hermes_profile=profile)
-
-
 def test_phase_order_update():
     po = PhaseOrderUpdate(orders=[{"phase_id": 1, "phase_order": 2}])
     assert len(po.orders) == 1
@@ -237,7 +211,6 @@ def test_phase_update_requires_nested_id_and_rejects_duplicates():
         (NamespaceUpdate, "workflow_id"),
         (NamespaceUpdate, "theme_icon"),
         (NamespaceUpdate, "theme_color"),
-        (AgentUpdate, "description"),
         (InstructionUpdate, "description"),
         (InstructionUpdate, "execution_type"),
     ],
@@ -248,8 +221,8 @@ def test_nonnullable_update_fields_reject_explicit_null(schema, field):
 
 
 def test_nullable_update_fields_distinguish_omitted_and_null():
-    phase = PhaseUpdate.model_validate({"description": None, "agent_id": None})
-    assert phase.model_fields_set == {"description", "agent_id"}
+    phase = PhaseUpdate.model_validate({"description": None})
+    assert phase.model_fields_set == {"description"}
     assert phase.description is None
     assert PhaseUpdate().model_fields_set == set()
 

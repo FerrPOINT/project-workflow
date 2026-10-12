@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from project_workflow.domain import (
-    Agent,
     Phase,
     PhaseCode,
     Project,
@@ -28,11 +27,6 @@ def test_phase_to_dict():
     d = p.to_dict()
     assert d["code"] == "p1"
     assert d["name"] == "P1"
-
-
-def test_agent_to_dict():
-    a = Agent(id=2, name="Coder")
-    assert a.to_dict() == {"id": 2, "name": "Coder", "description": "", "hermes_profile": None}
 
 
 def test_workflow_to_dict():

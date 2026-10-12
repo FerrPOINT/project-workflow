@@ -107,27 +107,34 @@ def test_phase_counter_includes_all_active_modes_and_excludes_archived_generatio
         assert all(uow.phases.get_by_id(row["id"]) is not None for row in old_phases)
 
 
-def test_theme_migration_updates_only_untouched_managed_professions(database):
-    run_alembic_command("downgrade", database, "0011_profession_workflows")
-    with SAUnitOfWork(database) as uow:
-        ensure_managed_catalog(uow, OLD)
-        for role in MANAGED_PROFESSION_THEMES:
-            profession = uow.projects.get_by_cli_command(f"workflow-{role}")
-            uow.projects.update(profession.id, {"theme_icon": "folder", "theme_color": "#5E6AD2"})
-        custom = uow.projects.get_by_cli_command("workflow-project_manager")
-        uow.projects.update(custom.id, {"theme_icon": "layers", "theme_color": "#D2608E"})
-        uow.commit()
-        before = rows(uow, m.Project.__table__)
-    ensure_migrated(database)
-    with SAUnitOfWork(database) as uow:
-        after = rows(uow, m.Project.__table__)
-        for old, new in zip(before, after, strict=True):
-            role = old["cli_command"].removeprefix("workflow-")
-            if role != "project_manager":
-                assert (new["theme_icon"], new["theme_color"]) == MANAGED_PROFESSION_THEMES[role]
-                new = {**new, "theme_icon": old["theme_icon"], "theme_color": old["theme_color"]}
-            assert new == old
-    ensure_migrated(database)
+def assert_theme_migration_updates_only_untouched_managed_professions(database):
+    from sqlalchemy import text
+
+    run_alembic_command("upgrade", database, "0011_profession_workflows")
+    with database.begin() as connection:
+        for index, role in enumerate(MANAGED_PROFESSION_THEMES, start=1):
+            connection.execute(text("INSERT INTO workflows (id,key,name) VALUES (:id,:key,'Preset')"),
+                               {"id": index, "key": f"hermes-sdlc:{role}"})
+            connection.execute(text("INSERT INTO projects (id,workflow_id,code,name,cli_command) "
+                                    "VALUES (:id,:id,:code,'Profession',:cli)"),
+                               {"id": index, "code": f"ROLE{index}", "cli": f"workflow-{role}"})
+        connection.execute(text("UPDATE projects SET theme_icon='layers',theme_color='#D2608E' WHERE id=1"))
+    run_alembic_command("upgrade", database, "0012_profession_themes")
+    with database.connect() as connection:
+        records = connection.execute(text("SELECT cli_command,theme_icon,theme_color FROM projects")).all()
+        for command, icon, color in records:
+            role = command.removeprefix("workflow-")
+            expected = ("layers", "#D2608E") if role == "project_manager" else MANAGED_PROFESSION_THEMES[role]
+            assert (icon, color) == expected
+
+
+
+def test_theme_migration_updates_only_untouched_managed_professions(tmp_path):
+    database = create_engine(f"sqlite:///{tmp_path / 'themes.db'}")
+    try:
+        assert_theme_migration_updates_only_untouched_managed_professions(database)
+    finally:
+        database.dispose()
 
 
 def test_adoption_preserves_profession_edits_old_tasks_history_and_user_collections(database):

@@ -1013,93 +1013,6 @@ class TestApiNamespaces:
         assert "RUN-1" not in response.text
 
 
-class TestApiAgents:
-    def test_agents_page_uses_launch_profile_ui_alias(self, client):
-        html = client.get("/agents").text
-        assert 'name="launch_profile"' in html
-        assert "form.elements.namedItem('launch_profile')" in html
-        assert "launch_profile:launchProfile||null" in html
-        assert "hermes" not in html.casefold()
-
-    def test_list_agents(self, client):
-        resp = client.get("/api/agents")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["ok"] is True
-        assert "agents" in data
-
-    def test_create_and_update_agent(self, client):
-        name = _unique("Agent")
-        profile = f"profile_{uuid.uuid4().hex[:8]}"
-        resp = client.post(
-            "/api/agents",
-            json={"name": name, "description": "desc", "hermes_profile": profile},
-        )
-        assert resp.status_code == 200
-        data = resp.json()
-        agent_id = data["agent_id"]
-        assert data["agent"]["hermes_profile"] == profile
-
-        resp = client.put(
-            f"/api/agents/{agent_id}",
-            json={"name": name + "2", "description": "updated", "hermes_profile": None},
-        )
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["agent"]["description"] == "updated"
-        assert data["agent"]["hermes_profile"] is None
-        assert client.put(f"/api/agents/{agent_id}", json={"description": None}).status_code == 422
-
-    def test_create_and_update_agent_accepts_launch_profile_alias(self, client):
-        name = _unique("Agent")
-        profile = f"profile_{uuid.uuid4().hex[:8]}"
-        resp = client.post("/api/agents", json={"name": name, "launch_profile": profile})
-        assert resp.status_code == 200
-        data = resp.json()
-        agent_id = data["agent_id"]
-        assert data["agent"]["hermes_profile"] == profile
-
-        resp = client.put(f"/api/agents/{agent_id}", json={"launch_profile": None})
-        assert resp.status_code == 200
-        assert resp.json()["agent"]["hermes_profile"] is None
-
-    def test_hermes_profile_cannot_be_shared(self, client):
-        profile = f"profile_{uuid.uuid4().hex[:8]}"
-        first = client.post("/api/agents", json={"name": _unique("Agent"), "hermes_profile": profile})
-        assert first.status_code == 200
-
-        second = client.post("/api/agents", json={"name": _unique("Agent"), "hermes_profile": profile})
-        assert second.status_code == 409
-        assert "уже назначен" in second.json()["error"]
-
-    def test_agent_name_cannot_be_shared(self, client):
-        name = _unique("Agent")
-        first = client.post("/api/agents", json={"name": name})
-        assert first.status_code == 200
-
-        second = client.post("/api/agents", json={"name": name})
-        assert second.status_code == 409
-        assert "уже существует" in second.json()["error"]
-
-    def test_invalid_hermes_profile_is_rejected(self, client):
-        response = client.post("/api/agents", json={"name": _unique("Agent"), "hermes_profile": "Bad Profile"})
-        assert response.status_code == 422
-        for invalid in ("", 1, {}, []):
-            response = client.post("/api/agents", json={"name": _unique("Agent"), "hermes_profile": invalid})
-            assert response.status_code == 422
-
-    def test_delete_agent_assigned_to_phase_forbidden(self, client):
-        from project_workflow.interfaces.ui import _app_state
-
-        name = _unique("Agent")
-        resp = client.post("/api/agents", json={"name": name})
-        agent_id = resp.json()["agent_id"]
-        phase_id = _phase_id(client, "1.INTAKE")
-        _app_state.phase_service().update_phase(phase_id, {"agent_id": agent_id})
-        resp = client.delete(f"/api/agents/{agent_id}")
-        assert resp.status_code == 409
-
-
 class TestApiInstructions:
     def test_list_create_update_delete_instructions(self, client):
         from project_workflow.interfaces.ui import _app_state
@@ -1359,8 +1272,6 @@ class TestApiPathIds:
             ("get", "/api/namespaces/0", "namespace_id", None),
             ("put", "/api/namespaces/0", "namespace_id", {"name": "Новая настройка"}),
             ("delete", "/api/namespaces/0", "namespace_id", None),
-            ("put", "/api/agents/0", "agent_id", {"name": "Новый агент"}),
-            ("delete", "/api/agents/0", "agent_id", None),
             ("put", "/api/instructions/0", "instruction_id", {"description": "Новый шаг"}),
             ("delete", "/api/instructions/0", "instruction_id", None),
         ],
@@ -1619,9 +1530,9 @@ class TestPageRoutes:
         assert resp.status_code == 200
         assert "html" in resp.headers.get("content-type", "")
 
-    def test_agents_page(self, client):
+    def test_agents_page_is_removed(self, client):
         resp = client.get("/agents")
-        assert resp.status_code == 200
+        assert resp.status_code == 404
 
     def test_task_detail_page(self, client):
         resp = client.get("/task/RUN-1")

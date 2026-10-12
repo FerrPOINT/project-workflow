@@ -38,7 +38,6 @@ class WorkflowService:
                 "name": self.DEFAULT_PHASE_NAME,
                 "description": "",
                 "phase_order": 1,
-                "agent_id": None,
                 "parallel_with_phase_id": None,
                 "rollback_target_phase_id": None,
                 "execution_type": "sync",

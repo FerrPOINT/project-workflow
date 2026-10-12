@@ -25,7 +25,6 @@ SCREENSHOTS = {
     "tasks-qa.png": (1900, 1080),
     "workflows.png": (1900, 1000),
     "instructions.png": (1900, 1000),
-    "agents.png": (1900, 1000),
     "phases.png": (1900, 3000),
     "task-detail-dev.png": (1900, 2500),
     "task-detail-qa.png": (1900, 1500),

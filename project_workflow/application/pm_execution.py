@@ -226,10 +226,9 @@ class PMExecutionService:
             raise ConflictError("PM enrollment does not match namespace ownership")
         if self.session.get(m.PMExecution, command.execution_ref) is not None:
             raise ConflictError("Execution already bound; use command readback")
-        phase = self.session.get(m.Phase, task.current_phase_id)
-        agent = self.session.get(m.Agent, phase.agent_id) if phase and phase.agent_id else None
+        profession = self.session.get(m.Project, task.project_id)
         if (
-            agent is None or agent.name != assignment.role_key or task.status != "active"
+            profession is None or profession.role_key != assignment.role_key or task.status != "active"
             or assignment.binding_ref != command.binding_ref or assignment.hermes_run_ref != command.hermes_run_ref
             or not assignment.bind_operation_key or not assignment.bind_request_sha256
         ):
@@ -242,7 +241,7 @@ class PMExecutionService:
             raise ConflictError("Initial PM run is not running")
         execution = m.PMExecution(
             execution_ref=command.execution_ref, task_id=task.id, assignment_id=assignment.id,
-            agent_id=agent.id, tracker_instance_ref=identity.tracker_instance_ref,
+            role_key=profession.role_key, tracker_instance_ref=identity.tracker_instance_ref,
             tracker_project_ref=identity.tracker_project_ref, task_ref=identity.task_ref,
             root_ref=identity.root_ref, agent_ref=identity.agent_ref,
             identity_json=canonical_json(identity.model_dump()),
@@ -276,8 +275,9 @@ class PMExecutionService:
             return replay
         self._validate(command, execution, task, "active")
         phase = self.session.get(m.Phase, task.current_phase_id)
-        if phase is None or phase.agent_id != execution.agent_id:
-            raise ConflictError("Checkpoint no longer belongs to the bound catalog agent")
+        profession = self.session.get(m.Project, task.project_id)
+        if phase is None or profession is None or profession.role_key != execution.role_key:
+            raise ConflictError("Checkpoint no longer belongs to the bound profession")
         checkpoint = command.model_dump(include={
             "checkpoint_ref", "clarification_request_ref", "clarification_version", "requirements_revision",
         })

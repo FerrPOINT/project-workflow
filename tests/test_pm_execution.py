@@ -60,12 +60,12 @@ def prepare_pm(monkeypatch, *, ownership=True):
                 "namespace_id": namespace.id, "tracker_instance_ref": "tracker:one", "tracker_project_ref": PROJECT_REF,
                 "authority_issuer": "http://auth.test", "provisioner_subject": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
             })
-        phase = uow.session.scalar(select(m.Phase).where(m.Phase.code == "assigned"))
-        agent_id = uow.agents.create({"name": "project_manager", "description": ""})
-        phase.agent_id = agent_id
+        uow.projects.update(namespace.id, {"role_key": "project_manager"})
     client = TestClient(create_app())
-    assignment = client.post("/internal/runtime/assign", headers=ADAPTER,
-                             json=_assignment("PM-1", "assign:pm:1", "project_manager")).json()["result"]
+    assigned = client.post("/internal/runtime/assign", headers=ADAPTER,
+                           json=_assignment("PM-1", "assign:pm:1", "project_manager"))
+    assert assigned.status_code == 200, assigned.text
+    assignment = assigned.json()["result"]
     binding = _bind_payload(assignment)
     binding["concrete_agent_ref"] = AGENT_REF
     result = client.post("/internal/runtime/bind", headers=ADAPTER, json=binding)

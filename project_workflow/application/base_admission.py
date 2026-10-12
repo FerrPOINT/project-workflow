@@ -41,13 +41,13 @@ def validate_base_admission(
     workflow = next((item for item in candidate.workflows if item.role_key == role_key), None)
     mode = next((item for item in workflow.modes if item.key == mode_key), None) if workflow else None
     project = uow.projects.get_by_id(project_id)
-    agent = uow.agents.get_by_name(role_key)
     if (
         workflow is None or mode is None or workflow.key != workflow_key
         or execution_scope not in mode.execution_scopes
         or project is None or project.cli_command != f"workflow-{role_key}"
         or (version == 3 and historical_mode_id is None and project.name != workflow.hermes_namespace)
-        or agent is None or agent.hermes_profile != workflow.hermes_profile
+        or (historical_mode_id is None and (project.role_key != role_key
+                                           or project.launch_profile != workflow.hermes_profile))
     ):
         raise ConflictError("Base role/mode/scope/namespace/profile mismatch")
     if not validate_managed_catalog_state(uow, candidate, historical=historical_mode_id is not None):

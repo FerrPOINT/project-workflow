@@ -268,7 +268,7 @@ class TestSessionHelpers:
 
         monkeypatch.chdir(tmp_path)
 
-        assert migration_head() == "0012_profession_themes"
+        assert migration_head() == "0013_profession_execution"
 
     def test_ensure_migrated_postgresql_branch(self, tmp_path):
         from unittest.mock import MagicMock, patch

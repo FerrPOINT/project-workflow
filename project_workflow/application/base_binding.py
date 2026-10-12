@@ -35,17 +35,18 @@ def _persisted_binding(
     definition = next((item for item in catalog.workflows if workflow is not None and item.key == workflow.key), None)
     if workflow is None or workflow.id is None or definition is None:
         raise ConflictError("Persisted workflow is not a Base candidate role")
-    agent = uow.agents.get_by_name(definition.role_key)
     if (
         (catalog.catalog_version == 3 and namespace["name"] != definition.hermes_namespace)
         or namespace["cli_command"] != f"workflow-{definition.role_key}"
-        or agent is None or agent.id is None or agent.hermes_profile != definition.hermes_profile
+        or namespace.get("role_key") != definition.role_key
+        or namespace.get("launch_profile") != definition.hermes_profile
     ):
         raise ConflictError("Persisted Base namespace/role/profile mismatch")
     return BaseNamespaceBinding.model_validate({
         "schema": "base-sdlc/workflow-binding/v1", "namespace_id": str(namespace_id),
         "namespace_name": definition.hermes_namespace, "workflow_id": str(workflow.id), "workflow_key": workflow.key,
-        "role_key": agent.name, "profile": agent.hermes_profile, "catalog_version": catalog.catalog_version,
+        "role_key": namespace["role_key"], "profile": namespace["launch_profile"],
+        "catalog_version": catalog.catalog_version,
         "catalog_sha256": catalog_sha256, "skills_revision": catalog.skills_source.revision, "runtime_ready": False,
     })
 

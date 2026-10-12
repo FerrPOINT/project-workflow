@@ -7,7 +7,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from project_workflow.application.agent import AgentService
 from project_workflow.application.instruction_service import InstructionService
 from project_workflow.application.phase import PhaseServiceApp
 from project_workflow.application.project import ProjectService
@@ -16,26 +15,6 @@ from project_workflow.application.workflow import WorkflowService
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
 
 pytestmark = [pytest.mark.unit]
-
-
-@pytest.mark.parametrize("profile", [42, "", "UPPER", "bad profile"])
-def test_agent_profile_validation_rejects_invalid_values(profile):
-    with pytest.raises(ValueError):
-        AgentService._normalize_profile(profile)
-
-
-def test_agent_create_rolls_back_when_created_row_cannot_be_read():
-    uow = MagicMock()
-    uow.agents.get_by_name.return_value = None
-    uow.agents.get_by_hermes_profile.return_value = None
-    uow.agents.create.return_value = 10
-    uow.agents.get_by_id.return_value = None
-
-    with pytest.raises(RuntimeError, match="Не удалось создать агента"):
-        AgentService(uow).create_agent({"name": "Review"})
-
-    uow.rollback.assert_called_once_with()
-    uow.commit.assert_not_called()
 
 
 def test_workflow_create_rolls_back_when_default_phase_fails():
@@ -274,20 +253,6 @@ def test_phase_reorder_rolls_back_when_direct_reorder_fails():
     uow.commit.assert_not_called()
 
 
-def test_agent_update_locks_assigned_workflows_before_write():
-    owner = SimpleNamespace(id=7, name="Reviewer")
-    uow = MagicMock()
-    uow.agents.lock.return_value = owner
-    uow.phases.workflow_ids_for_agent.return_value = [3, 3, 2]
-    uow.workflows.lock.side_effect = lambda workflow_id: SimpleNamespace(id=workflow_id)
-    uow.agents.get_by_hermes_profile.return_value = owner
-
-    AgentService(uow).update_agent(7, {"hermes_profile": "review_profile"})
-
-    assert [call.args[0] for call in uow.workflows.lock.call_args_list] == [2, 3]
-    uow.agents.update.assert_called_once_with(7, {"hermes_profile": "review_profile"})
-
-
 @pytest.mark.parametrize("raw", ["bad", [""]])
 def test_project_prefix_normalization_rejects_invalid_shapes(raw):
     with pytest.raises(ValueError):
@@ -383,9 +348,7 @@ def test_phase_agent_validation_rejects_non_positive_or_non_integer_values(agent
     uow = MagicMock()
 
     with pytest.raises(ValueError, match="agent_id"):
-        PhaseServiceApp(uow)._validate_agent(agent_id)
-
-    uow.agents.lock.assert_not_called()
+        PhaseServiceApp(uow).create_phase({"workflow_id": 1, "name": "Start", "agent_id": agent_id})
 
 
 def _phase_create_uow() -> MagicMock:

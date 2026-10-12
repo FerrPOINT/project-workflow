@@ -9,6 +9,7 @@ from project_workflow.domain.namespace import (
     default_cli_command_from_code,
     normalize_namespace_cli_command,
 )
+from project_workflow.domain.profession_settings import normalize_launch_profile, normalize_role_key
 from project_workflow.domain.project_theme import normalize_theme_color, normalize_theme_icon
 from project_workflow.domain.repositories import UnitOfWork
 
@@ -57,9 +58,20 @@ class ProjectService:
             return project_id
         return None
 
+    @staticmethod
+    def _normalize_execution_payload(data: dict[str, Any]) -> dict[str, Any]:
+        payload = dict(data)
+        if "role_key" in payload:
+            payload["role_key"] = normalize_role_key(payload["role_key"])
+        if "launch_profile" in payload:
+            payload["launch_profile"] = normalize_launch_profile(payload["launch_profile"])
+        if "execution_description" in payload and not isinstance(payload["execution_description"], str):
+            raise ValueError("Описание выполнения должно быть строкой")
+        return payload
+
     def create_project(self, data: dict[str, Any]) -> dict[str, Any]:
         self._uow.lock_catalog_state(shared=True)
-        payload = self._normalize_cli_payload(self._normalize_theme_payload(data))
+        payload = self._normalize_execution_payload(self._normalize_cli_payload(self._normalize_theme_payload(data)))
         try:
             self._uow.projects.lock_prefix_namespace()
             workflow_id_raw = payload.get("workflow_id")
@@ -114,13 +126,20 @@ class ProjectService:
 
     def update_project(self, project_id: int, data: dict[str, Any]) -> None:
         self._uow.lock_catalog_state(shared=True)
-        payload = self._normalize_cli_payload(self._normalize_theme_payload(data, partial=True), partial=True)
+        payload = self._normalize_execution_payload(
+            self._normalize_cli_payload(self._normalize_theme_payload(data, partial=True), partial=True),
+        )
         try:
             self._uow.projects.lock_prefix_namespace()
             snapshot = self._uow.projects.get_by_id(project_id)
             if snapshot is None:
                 raise NotFoundError(f"Неймспейс {project_id} не найден")
             workflow_ids = {snapshot.workflow_id}
+            if any(field in payload for field in ("role_key", "launch_profile")):
+                workflow_ids.update(
+                    workflow.id for workflow in self._uow.workflows.list_by_profession(project_id)
+                    if workflow.id is not None
+                )
             target_workflow_id = snapshot.workflow_id
             if "workflow_id" in payload:
                 workflow_id_raw = payload["workflow_id"]
@@ -153,6 +172,12 @@ class ProjectService:
                 if same_namespace_id is not None and same_namespace_id != project_id:
                     raise ConflictError(f"CLI-команда {payload['cli_command']!r} уже существует")
             project_tasks = list(self._uow.tasks.list_by_project(project_id))
+            settings_changed = any(
+                field in payload and payload[field] != getattr(existing, field)
+                for field in ("role_key", "launch_profile")
+            )
+            if settings_changed and any(task.status != "done" for task in project_tasks):
+                raise ConflictError("Нельзя менять настройки запуска, пока у профессии есть незавершённые задачи")
             if "workflow_id" in payload and int(payload["workflow_id"]) != existing.workflow_id:
                 if project_tasks:
                     raise ConflictError("Нельзя сменить воркфлоу, пока есть задачи")

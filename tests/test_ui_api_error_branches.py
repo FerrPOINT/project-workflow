@@ -12,8 +12,6 @@ from fastapi.responses import JSONResponse
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.interfaces.ui.routes import api
 from project_workflow.interfaces.ui.schemas import (
-    AgentCreate,
-    AgentUpdate,
     InstructionCreate,
     InstructionReorder,
     InstructionUpdate,
@@ -52,9 +50,6 @@ class _State:
 
     def project_service(self) -> Any:
         return self._services["project_service"]
-
-    def agent_service(self) -> Any:
-        return self._services["agent_service"]
 
     def instruction_service(self) -> Any:
         return self._services["instruction_service"]
@@ -178,9 +173,6 @@ def test_namespace_update_maps_value_error_before_readback(monkeypatch):
         ),
         (api.api_workflow_update, WorkflowUpdate(name="W"), "update_workflow", ConflictError("Workflow conflict"), 409),
         (api.api_workflow_update, WorkflowUpdate(name="W"), "update_workflow", ValueError("Workflow value"), 422),
-        (api.api_agent_update, AgentUpdate(name="A"), "update_agent", NotFoundError("Агент 1 не найден"), 404),
-        (api.api_agent_update, AgentUpdate(name="A"), "update_agent", ConflictError("Agent conflict"), 409),
-        (api.api_agent_update, AgentUpdate(name="A"), "update_agent", ValueError("Agent value"), 422),
     ],
 )
 def test_update_routes_map_service_errors(monkeypatch, route, payload, service_method, exc, status):
@@ -188,10 +180,9 @@ def test_update_routes_map_service_errors(monkeypatch, route, payload, service_m
         **{
             service_method: lambda _entity_id, _updates: _raise(exc),
             "get_workflow": lambda _entity_id: {"id": _entity_id},
-            "get_agent": lambda _entity_id: {"id": _entity_id},
         }
     )
-    state_method = "workflow_service" if service_method == "update_workflow" else "agent_service"
+    state_method = "workflow_service"
     monkeypatch.setattr(api, "_app_state", _State(**{state_method: service}))
 
     response = route(1, payload)
@@ -205,36 +196,14 @@ def test_update_routes_map_service_errors(monkeypatch, route, payload, service_m
     [
         (api.api_namespace_delete, "delete_project", NotFoundError("Неймспейс 1 не найден"), 404),
         (api.api_namespace_delete, "delete_project", ConflictError("Namespace conflict"), 409),
-        (api.api_agent_delete, "delete_agent", NotFoundError("Агент 1 не найден"), 404),
-        (api.api_agent_delete, "delete_agent", ConflictError("Agent conflict"), 409),
     ],
 )
 def test_delete_routes_map_service_errors(monkeypatch, route, service_method, exc, status):
     service = SimpleNamespace(**{service_method: lambda _entity_id: _raise(exc)})
-    state_method = "project_service" if service_method == "delete_project" else "agent_service"
+    state_method = "project_service"
     monkeypatch.setattr(api, "_app_state", _State(**{state_method: service}))
 
     response = route(1)
-
-    assert response.status_code == status
-    assert _json(response)["error"] == str(exc)
-
-
-@pytest.mark.parametrize(
-    ("exc", "status"),
-    [
-        (ConflictError("Agent profile conflict"), 409),
-        (ValueError("Agent profile bad"), 422),
-    ],
-)
-def test_agent_create_maps_service_errors(monkeypatch, exc, status):
-    monkeypatch.setattr(
-        api,
-        "_app_state",
-        _State(agent_service=SimpleNamespace(create_agent=lambda _data: _raise(exc))),
-    )
-
-    response = api.api_agent_create(AgentCreate(name="Agent"))
 
     assert response.status_code == status
     assert _json(response)["error"] == str(exc)
