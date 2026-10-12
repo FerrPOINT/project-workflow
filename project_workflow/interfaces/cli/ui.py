@@ -12,10 +12,14 @@
 
 from __future__ import annotations
 
+import json
 import os
+import re
+from pathlib import Path
 from typing import Any
 
 import click
+import requests
 
 from ... import supervisor
 from ...domain.exceptions import ConflictError
@@ -52,31 +56,93 @@ def _token_namespace_id() -> int | None:
 # ═══════════════════════════════════════════════════════════════════════
 
 
-def _platform_request(method: str, path: str, *, body: dict | None = None, params: dict | None = None) -> dict:
+def _platform_request(
+    method: str, path: str, *, body: dict | None = None, params: dict | None = None,
+    execution_token: str | None = None,
+) -> dict:
     try:
         from sdlc_cli_core import ApiClient, ApiError
     except ImportError as exc:  # pragma: no cover - exercised via test_token_step_explains_missing_transport
+        if execution_token is not None:
+            raise ValueError("Runtime CLI требует sdlc-cli-core; DB fallback запрещён") from exc
         raise ValueError(
             "Токен-режим требует пакет sdlc-cli-core (services-base/python/cli-core); "
             "без него используйте локальный режим с DATABASE_URL"
         ) from exc
 
     try:
-        return ApiClient(os.environ.get("PROJECT_WORKFLOW_URL", "http://localhost:8812")).request_json(
-            method, path, body=body, params=params,
-        )
+        client = ApiClient(os.environ.get("PROJECT_WORKFLOW_URL", "http://localhost:8812"))
+        if execution_token is None:
+            return client.request_json(method, path, body=body, params=params)
+        # The shared PAT client cannot send the existing PM execution-scoped header.
+        if method != "POST" or path != "internal/runtime/step" or params is not None:
+            raise ValueError("Неподдерживаемый runtime CLI запрос")
+        try:
+            response = requests.request(
+                method, client.base_url + path, json=body, timeout=client.timeout, allow_redirects=False,
+                headers={"Authorization": f"Bearer {client.token}", "Accept": "application/json",
+                         "X-Workflow-Execution-Token": execution_token},
+            )
+            if not 200 <= response.status_code < 300:
+                raise ValueError(f"Runtime step отклонён (HTTP {response.status_code}); не повторять вслепую")
+            value = response.json()
+        except (requests.RequestException, ValueError) as exc:
+            # Never print a private response body, request or credential.
+            if isinstance(exc, requests.RequestException):
+                raise ValueError("Runtime step недоступен; принятие неизвестно, автоматического повтора нет") from exc
+            raise ValueError("Runtime step не подтвердил результат; автоматического повтора нет") from exc
+        if (not isinstance(value, dict) or type(value.get("ok")) is not bool
+                or type(value.get("exit_code")) is not int or value["exit_code"] not in {0, 1}
+                or value["ok"] != (value["exit_code"] == 0) or not isinstance(value.get("result"), dict)):
+            raise ValueError("Runtime step вернул некорректный ответ")
+        return value
     except ApiError as exc:
         raise ValueError(str(exc)) from exc
+
+
+def _runtime_step_inputs(
+    task: str, report: str | None, operation_key: str | None,
+    runtime_request: Path | None, execution_token_file: Path | None,
+) -> tuple[dict, str]:
+    if not os.environ.get("SDLC_API_TOKEN", "").strip():
+        raise ValueError("Runtime step требует SDLC_API_TOKEN; локальный DB fallback запрещён")
+    if (not operation_key or operation_key != operation_key.strip() or len(operation_key) > 128
+            or runtime_request is None or execution_token_file is None):
+        raise ValueError("Runtime step требует --operation-key, --runtime-request и --execution-token-file")
+    try:
+        with runtime_request.open("rb") as source:
+            raw = source.read(262_145)
+        with execution_token_file.open("rb") as source:
+            token_bytes = source.read(129)
+        if len(raw) > 262_144 or len(token_bytes) > 128:
+            raise ValueError
+        body = json.loads(raw)
+        token = token_bytes.decode("ascii").strip()
+    except (OSError, UnicodeError, ValueError, RecursionError) as exc:
+        raise ValueError("Некорректные runtime request/token inputs") from exc
+    if (not isinstance(body, dict) or body.get("task") != task or body.get("report") != report
+            or body.get("step_operation_key") != operation_key or re.fullmatch(r"[0-9a-f]{64}", token) is None):
+        raise ValueError("Runtime request не совпадает с task/report/operation key или scoped token некорректен")
+    # Forward the existing RuntimeStepRequest unchanged; the server validates its full fence.
+    return body, token
 
 
 @cli.command()
 @click.option("--task", required=True, help="Ключ задачи (например, RUN-42)")
 @click.option("--report", default=None, help="Отчёт исполнителя CLI (оценить и перейти)")
+@click.option("--operation-key", default=None, help="Исходный step_operation_key назначенного runtime step")
+@click.option("--runtime-request", type=click.Path(exists=True, dir_okay=False, path_type=Path),
+              default=None, help="Замороженный JSON существующего RuntimeStepRequest, включая полный fence")
+@click.option("--execution-token-file", type=click.Path(exists=True, dir_okay=False, path_type=Path),
+              default=None, help="Приватный файл scoped token из actual PM bind/resume receipt")
 @click.pass_context
 def step_cmd(
     ctx: click.Context,
     task: str,
     report: str | None,
+    operation_key: str | None,
+    runtime_request: Path | None,
+    execution_token_file: Path | None,
 ) -> None:
     """Движение по workflow: показать текущую фазу или отчитаться и перейти.
 
@@ -92,13 +158,22 @@ def step_cmd(
             return
         console.print(format_result(result))
         raise click.exceptions.Exit(1)
-    if os.environ.get("SDLC_API_TOKEN"):
+    machine = any(value is not None for value in (operation_key, runtime_request, execution_token_file))
+    if machine or os.environ.get("SDLC_API_TOKEN"):
         try:
-            body: dict[str, Any] = {"task": task, "report": report}
-            namespace_id = _token_namespace_id()
-            if namespace_id is not None:
-                body["namespace_id"] = namespace_id
-            response = _platform_request("POST", "api/cli/step", body=body)
+            if machine:
+                body, execution_token = _runtime_step_inputs(
+                    task, report, operation_key, runtime_request, execution_token_file,
+                )
+                response = _platform_request(
+                    "POST", "internal/runtime/step", body=body, execution_token=execution_token,
+                )
+            else:
+                body = {"task": task, "report": report}
+                namespace_id = _token_namespace_id()
+                if namespace_id is not None:
+                    body["namespace_id"] = namespace_id
+                response = _platform_request("POST", "api/cli/step", body=body)
         except ValueError as exc:
             response = {"ok": False, "exit_code": 1, "output": str(exc), "result": blocked_result(task, str(exc))}
         result = response.get("result", response)
