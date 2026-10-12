@@ -329,6 +329,7 @@ textarea{resize:vertical;min-height:60px}
 @media(max-width:767px){.sidebar{z-index:100;top:0;height:100dvh}.mobile-drawer-title{display:flex}.platform-header .platform-header-context{display:none}.sidebar-utilities{display:block;padding:12px 20px}.sidebar-utilities label{display:block;margin-bottom:8px}.sidebar-utilities .namespace-select{width:100%;max-width:none}.platform-header-leading{flex-shrink:0}.platform-header .service-menu summary{min-width:44px;min-height:44px;justify-content:center}.platform-header .service-menu-trigger-label,.platform-header .service-menu-chevron{display:none}.platform-header .service-menu-trigger-icon{display:block}.platform-header .service-menu-popover{position:fixed;left:12px;right:12px;top:calc(var(--header-height) + 8px);width:auto;max-width:none}.page-header h1{font-size:22px}}
 
 {% block extra_style %}{% endblock %}
+.sidebar-service-group{border-top:1px solid var(--border);margin-top:12px;padding-top:12px}
 </style>
 <style>{% include "base/base-ui.css" %}</style>
 <style>
@@ -355,27 +356,29 @@ textarea{resize:vertical;min-height:60px}
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
       <span class="sidebar-label">Дашборд</span>
     </a>
-    <a class="sidebar-link {% if page == 'workflows' %}active{% endif %}" href="/workflows" aria-label="Воркфлоу" title="Воркфлоу" {% if page == 'workflows' %}aria-current="page"{% endif %}>
+    <a class="sidebar-link {% if page in ['workflows', 'phases'] %}active{% endif %}" href="/workflows" aria-label="Процессы" title="Процессы" {% if page in ['workflows', 'phases'] %}aria-current="page"{% endif %}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><path d="M7 10v4"/><path d="M17 10v4"/></svg>
-      <span class="sidebar-label">Воркфлоу</span>
+      <span class="sidebar-label">Процессы</span>
     </a>
-    <a class="sidebar-link {% if page == 'phases' %}active{% endif %}" href="/phases" aria-label="Фазы" title="Фазы" {% if page == 'phases' %}aria-current="page"{% endif %}>
+    <a class="sidebar-link {% if page == 'tasks' %}active{% endif %}" href="/tasks" aria-label="Выполнения задач" title="Выполнения задач" {% if page == 'tasks' %}aria-current="page"{% endif %}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
-      <span class="sidebar-label">Фазы</span>
-    </a>
-    <a class="sidebar-link {% if page == 'tasks' %}active{% endif %}" href="/tasks" aria-label="Задачи" title="Задачи" {% if page == 'tasks' %}aria-current="page"{% endif %}>
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
-      <span class="sidebar-label">Задачи</span>
+      <span class="sidebar-label">Выполнения задач</span>
     </a>
     <div class="sidebar-section">УПРАВЛЕНИЕ</div>
-    <a class="sidebar-link {% if page == 'agents' %}active{% endif %}" href="/agents" aria-label="Агенты" title="Агенты" {% if page == 'agents' %}aria-current="page"{% endif %}>
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4z"/><path d="M2 20c0-2.21 3.58-4 8-4s8 1.79 8 4"/></svg>
-      <span class="sidebar-label">Агенты</span>
-    </a>
     <a class="sidebar-link {% if page == 'settings' %}active{% endif %}" href="/settings" aria-label="Команды CLI" title="Команды CLI" {% if page == 'settings' %}aria-current="page"{% endif %}>
       <span class="sidebar-cli-icon" aria-hidden="true">&gt;_</span>
       <span class="sidebar-label">Команды CLI</span>
     </a>
+    <details class="sidebar-service-group sidebar-service-menu" {% if page == 'agents' %}open{% endif %}>
+      <summary class="sidebar-link {% if page == 'agents' %}active{% endif %}" aria-label="Служебное" title="Служебное">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        <span class="sidebar-label">Служебное</span>
+      </summary>
+    <a class="sidebar-link {% if page == 'agents' %}active{% endif %}" href="/agents" aria-label="Роли и профили" title="Роли и профили" {% if page == 'agents' %}aria-current="page"{% endif %}>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4z"/><path d="M2 20c0-2.21 3.58-4 8-4s8 1.79 8 4"/></svg>
+      <span class="sidebar-label">Роли и профили</span>
+    </a>
+    </details>
     <div class="sidebar-utilities">
       {% if namespaces is defined and namespaces %}
       <label for="mobileNamespaceSelector">Пространство</label>
@@ -386,11 +389,6 @@ textarea{resize:vertical;min-height:60px}
       {% endif %}
     </div>
     </nav>
-    <div class="sidebar-footer">
-    <span class="dot green"></span>
-    <span class="sidebar-status-label">Сервис работает</span>
-
-    </div>
 </aside>
 
 <!-- Main -->
