@@ -202,6 +202,29 @@ class RenderedCliInstructionsTests(unittest.TestCase):
             self.assertIn("authorized Tracker transition/readback", check)
             self.assertNotIn("comment readback", check)
 
+    def test_all_eleven_modes_distinguish_pm_clarification_from_critical_role_escalation(self):
+        modes = list(self.modes())
+        self.assertEqual(11, len(modes))
+        for role, mode in modes:
+            with self.subTest(role=role, mode=mode["key"]):
+                final = mode["phases"][2]["instructions"][-1]["description"]
+                self.assertNotIn("При недостаточных данных one concrete question", final)
+                if role == "project_manager":
+                    self.assertIn("обычные структурированные clarification", final)
+                    self.assertIn("one concrete question владельцу и durable owner checkpoint", final)
+                    self.assertIn("Exact owner confirmation остаётся отдельным действием", final)
+                    self.assertNotIn("через PM/root", final)
+                else:
+                    self.assertIn("Обычные технические решения принимать самостоятельно", final)
+                    self.assertIn("в рамках approved requirements", final)
+                    self.assertIn("не запрашивать обычное human clarification для каждого mode", final)
+                    self.assertIn("Только критическая бизнес-неопределённость требует one concrete question", final)
+                    self.assertIn("через PM/root и linked checkpoint", final)
+                    self.assertIn("до её разрешения terminal action запрещён", final)
+                    self.assertIn("Инфраструктурный blocker направлять оператору", final)
+                    self.assertIn("tool approval — отдельное разрешение, не бизнес-ответ и не owner consent", final)
+                    self.assertNotIn("one concrete question владельцу", final)
+
 
 if __name__ == "__main__":
     unittest.main()

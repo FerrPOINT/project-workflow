@@ -54,6 +54,11 @@ Source-only уточнение генератора `scripts/build_base_sdlc_can
 guarded completion/readback CLI остаётся конкретной producer dependency;
 target status/stage не угадываются и generic CRUD не является обходом.
 PM по-прежнему ждёт exact owner confirmation, не подтверждает за человека.
+Обычные структурированные clarification и owner checkpoint ведёт PM. Остальные
+профессии принимают обычные технические решения в рамках approved requirements;
+только критическая бизнес-неопределённость передаётся через PM/root с linked
+checkpoint. Инфраструктурные blockers адресованы оператору, а tool approval
+не заменяет бизнес-ответ или owner consent.
 Отдельные comment mutation и checkpoint/readback CLI здесь не добавляются.
 Base skill content с прежними MCP references требует отдельного owner update;
 этот пакет не квалифицирует установленный CLI, role execution или handoff.

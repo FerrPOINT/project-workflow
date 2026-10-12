@@ -586,6 +586,17 @@ def render(skills_root: Path, skills_sha: str) -> dict:
                 if role in {"reviewer", "tester"}
                 else "outcome passed"
             )
+            clarification = (
+                "PM ведёт обычные структурированные clarification: при недостаточных бизнес-данных "
+                "one concrete question владельцу и durable owner checkpoint с unfinished phase; "
+                "до ответа terminal action запрещён. Exact owner confirmation остаётся отдельным действием. "
+                if role == "project_manager"
+                else "Обычные технические решения принимать самостоятельно в рамках approved requirements; "
+                "не запрашивать обычное human clarification для каждого mode. Только критическая бизнес-"
+                "неопределённость требует one concrete question через PM/root и linked checkpoint "
+                "с unfinished phase; до её разрешения terminal action запрещён. Инфраструктурный blocker "
+                "направлять оператору; tool approval — отдельное разрешение, не бизнес-ответ и не owner consent. "
+            )
             ending = [
                 (
                     "immutable-evidence-reporting",
@@ -621,8 +632,7 @@ def render(skills_root: Path, skills_sha: str) -> dict:
                     "не добавляются. Unknown acceptance требует existing authorized readback, не blind retry. "
                     + terminal_action
                     + f"Передать {outcome}. "
-                    "При недостаточных данных one concrete question и durable awaiting-input handshake "
-                    "с unfinished phase; terminal action запрещён. " + handoff_instruction(role),
+                    + clarification + handoff_instruction(role),
                 ),
             ]
             for index, instructions in enumerate((admission, actions, ending)):
