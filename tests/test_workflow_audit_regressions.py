@@ -84,7 +84,7 @@ def test_blocked_catalog_read_does_not_block_other_http_requests(monkeypatch, pa
 
     entered, release, timed_out = Event(), Event(), Event()
 
-    def blocked_read():
+    def blocked_read(profession_id=None):
         entered.set()
         if not release.wait(5):
             timed_out.set()

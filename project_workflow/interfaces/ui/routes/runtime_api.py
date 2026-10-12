@@ -230,7 +230,7 @@ def _assert_task_key_in_namespace(uow: SAUnitOfWork, namespace_id: int, task_key
     if not prefixes:
         return
     if not any(task_key == prefix or task_key.startswith(f"{prefix}-") for prefix in prefixes):
-        raise ValueError(f"Ключ задачи {task_key!r} не соответствует префиксам неймспейса роли")
+        raise ValueError(f"Ключ задачи {task_key!r} не соответствует префиксам профессии роли")
 
 
 def _history_rows(uow: SAUnitOfWork, task_key: str, namespace_id: int, limit: int | None) -> list[dict[str, Any]]:

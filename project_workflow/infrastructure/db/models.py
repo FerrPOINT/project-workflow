@@ -169,6 +169,18 @@ class Workflow(Base):
     tasks: Mapped[list[Task]] = relationship("Task", back_populates="workflow")
 
 
+class ProfessionWorkflow(Base):
+    """Membership in a profession's collection, independent of legacy task defaults."""
+
+    __tablename__ = "profession_workflows"
+    workflow_id: Mapped[int] = mapped_column(
+        ForeignKey("workflows.id", ondelete="CASCADE"), primary_key=True
+    )
+    profession_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE", onupdate="CASCADE"), primary_key=True, index=True
+    )
+
+
 class WorkflowMode(Base):
     """A versioned execution catalog owned by a workflow.
 

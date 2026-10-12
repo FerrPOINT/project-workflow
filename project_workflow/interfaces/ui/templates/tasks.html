@@ -87,7 +87,7 @@
     <thead>
       <tr>
         <th>Ключ</th>
-        <th>Неймспейс</th>
+        <th>Профессия</th>
         <th>Флоу</th>
         <th>Название</th>
         <th>Фаза</th>
@@ -170,7 +170,7 @@
     <div class="task-card-title">{{ t.title }}</div>
     {% endif %}
     <div class="task-card-context">
-      <div class="task-card-context-item"><strong>Неймспейс:</strong> {{ t.namespace_cli_command or t.namespace_name }}</div>
+      <div class="task-card-context-item"><strong>Профессия:</strong> {{ t.namespace_cli_command or t.namespace_name }}</div>
       <div class="task-card-context-item"><strong>Флоу:</strong> {{ t.workflow_name or '—' }}</div>
       <div class="task-card-context-item"><strong>Фаза:</strong> {{ t.current_phase_name or '—' }}</div>
       <div class="task-card-context-item"><strong>Прогресс:</strong> {{ t.completed }}/{{ t.total_phases }}</div>

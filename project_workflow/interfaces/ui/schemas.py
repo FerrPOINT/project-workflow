@@ -408,10 +408,17 @@ class WorkflowUpdate(StrictUpdateRequest):
 class NamespaceCreate(StrictRequest):
     name: str
     description: str | None = Field(default="")
-    workflow_id: int = Field(gt=0, strict=True)
+    workflow_id: int | None = Field(default=None, gt=0, strict=True)
     theme_icon: str = Field(default=DEFAULT_PROJECT_ICON)
     theme_color: str = Field(default=DEFAULT_PROJECT_COLOR)
     cli_command: str = Field(..., min_length=1, max_length=64)
+
+    @field_validator("workflow_id")
+    @classmethod
+    def _provided_workflow_id(cls, value: int | None) -> int:
+        if value is None:
+            raise ValueError("workflow_id не может быть null")
+        return value
 
     @field_validator("name")
     @classmethod

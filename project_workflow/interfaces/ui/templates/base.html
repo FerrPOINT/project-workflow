@@ -346,9 +346,9 @@ textarea{resize:vertical;min-height:60px}
 <aside class="sidebar" id="sidebar">
   <div class="sidebar-header mobile-drawer-title"><strong>Project Workflow</strong><button class="sidebar-close" onclick="closeSidebar()" aria-label="Закрыть навигацию">&times;</button></div>
   <nav class="sidebar-nav" aria-label="Основная навигация">
-    <a class="sidebar-link {% if page == 'namespace' %}active{% endif %}" href="/namespaces" aria-label="Неймспейсы" title="Неймспейсы" {% if page == 'namespace' %}aria-current="page"{% endif %}>
+    <a class="sidebar-link {% if page == 'namespace' %}active{% endif %}" href="/namespaces" aria-label="Профессии" title="Профессии" {% if page == 'namespace' %}aria-current="page"{% endif %}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h18"/><path d="M5 7V5a2 2 0 0 1 2-2h3"/><path d="M19 7v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7"/><path d="M9 12h6"/><path d="M9 16h4"/></svg>
-      <span class="sidebar-label">Неймспейсы</span>
+      <span class="sidebar-label">Профессии</span>
     </a>
     <div class="sidebar-section">ОБЗОР</div>
     <a class="sidebar-link {% if page == 'dashboard' %}active{% endif %}" href="/" aria-label="Дашборд" title="Дашборд" {% if page == 'dashboard' %}aria-current="page"{% endif %}>
@@ -378,10 +378,10 @@ textarea{resize:vertical;min-height:60px}
     </a>
     <div class="sidebar-utilities">
       {% if namespaces is defined and namespaces %}
-      <label for="mobileNamespaceSelector">Пространство</label>
+      <label for="mobileNamespaceSelector">Профессия</label>
       <select id="mobileNamespaceSelector" data-namespace-selector class="namespace-select" onchange="switchNamespace(this.value)">
         {% if active_namespace_id is none %}<option value="" disabled selected>Каталог воркфлоу</option>{% endif %}
-        {% for namespace in namespaces %}<option value="{{ namespace.id }}" {% if active_namespace_id == namespace.id %}selected{% endif %}>{{ namespace.name }}{% if namespace.workflow_name %} · {{ namespace.workflow_name }}{% endif %}</option>{% endfor %}
+        {% for namespace in namespaces %}<option value="{{ namespace.id }}" {% if active_namespace_id == namespace.id %}selected{% endif %}>{{ namespace.name }}</option>{% endfor %}
       </select>
       {% endif %}
     </div>
@@ -421,10 +421,10 @@ textarea{resize:vertical;min-height:60px}
   <div class="platform-header-context" data-platform-header-slot="context">
       {% if namespaces is defined and namespaces %}
       <div class="namespace-switcher">
-        <select class="namespace-select" id="namespaceSelector" data-namespace-selector aria-label="Выбор пространства" onchange="switchNamespace(this.value)">
+        <select class="namespace-select" id="namespaceSelector" data-namespace-selector aria-label="Выбор профессии" onchange="switchNamespace(this.value)">
           {% if active_namespace_id is none %}<option value="" disabled selected>Каталог воркфлоу</option>{% endif %}
           {% for namespace in namespaces %}
-          <option value="{{ namespace.id }}" {% if active_namespace_id == namespace.id %}selected{% endif %}>{{ namespace.name }}{% if namespace.workflow_name %} · {{ namespace.workflow_name }}{% endif %}</option>
+          <option value="{{ namespace.id }}" {% if active_namespace_id == namespace.id %}selected{% endif %}>{{ namespace.name }}</option>
           {% endfor %}
         </select>
       </div>
@@ -600,7 +600,7 @@ function switchNamespace(namespaceId){
   if(!namespaceId){return;}
   document.cookie={{ namespace_cookie_name | tojson }}+'='+encodeURIComponent(namespaceId)+'; path=/; SameSite=Lax'{% if namespace_cookie_secure %}+'; Secure'{% endif %};
   var url=new URL(window.location.href);
-  if(url.pathname === '/phases'){
+  if(url.pathname === '/phases' || url.pathname === '/workflows'){
     url.searchParams.delete('workflow_id');
   }
   if(url.pathname.startsWith('/phase/')){

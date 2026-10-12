@@ -124,7 +124,7 @@
     <a class="workflow-nav-item {% if selected_workflow_id == workflow.id %}active{% endif %}" href="/phases?workflow_id={{ workflow.id }}{% if selected_namespace %}&namespace_id={{ selected_namespace.id }}{% endif %}" data-workflow-id="{{ workflow.id }}">
       <div class="workflow-name">{{ workflow.name }}</div>
       <div class="workflow-meta">
-        <span class="workflow-chip">{{ workflow.namespace_count | pluralize('неймспейс,неймспейса,неймспейсов') }}</span>
+        <span class="workflow-chip">{{ workflow.namespace_count | pluralize('профессия,профессии,профессий') }}</span>
         <span class="workflow-chip">{{ workflow.phase_count | pluralize('фаза,фазы,фаз') }}</span>
       </div>
     </a>
