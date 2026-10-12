@@ -31,7 +31,8 @@ project-workflow --json history --task <workflow-task-key> --n 20
 task-tracker --output json issue get <issue-id>
 ```
 
-Workflow machine `step` с тремя flags использует `PROJECT_WORKFLOW_URL` и
+Workflow machine `step` с тремя flags требует явно заданный непустой
+`PROJECT_WORKFLOW_URL` (без адреса по умолчанию) и использует
 `POST /internal/runtime/step` без `/api` prefix. Нужны actual role runtime bearer
 в `SDLC_API_TOKEN`, supplied scoped token в приватном файле и полный существующий
 `RuntimeStepRequest`: assignment revision/ref, binding/run refs, mode/cycle/attempt,

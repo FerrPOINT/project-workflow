@@ -1,6 +1,8 @@
 """Token mode reaches HTTP and never opens a local database session."""
 
 import json
+import os
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -109,6 +111,18 @@ def runtime_inputs(tmp_path, monkeypatch):
     monkeypatch.setenv("SDLC_API_TOKEN", "role-runtime-test")
     monkeypatch.setenv("PROJECT_WORKFLOW_URL", "https://workflow.example/")
     monkeypatch.setattr(ui, "SAUnitOfWork", lambda: (_ for _ in ()).throw(AssertionError("DB opened")))
+    # Unit-test the Workflow transport against its optional shared-client boundary.
+    # The standalone Workflow test environment does not install the Base package.
+    class SharedClientError(Exception):
+        pass
+
+    def shared_client(service_url):
+        return SimpleNamespace(base_url=service_url.rstrip("/") + "/",
+                               token=os.environ["SDLC_API_TOKEN"], timeout=10)
+
+    monkeypatch.setitem(sys.modules, "sdlc_cli_core", SimpleNamespace(
+        ApiClient=shared_client, ApiError=SharedClientError,
+    ))
     body = {
         "task": "SDLC-7", "report": None, "step_operation_key": "step-original-1",
         "assignment_revision": 1, "assignment_ref": "assignment-original", "binding_ref": "binding-original",
@@ -198,6 +212,37 @@ def test_runtime_http_transport_uses_existing_scope_header_and_no_redirects(runt
     assert kwargs == {"json": body, "timeout": 10, "allow_redirects": False,
                       "headers": {"Authorization": "Bearer role-runtime-test", "Accept": "application/json",
                                   "X-Workflow-Execution-Token": "b" * 64}}
+
+
+@pytest.mark.parametrize("service_url", [None, "", "   "])
+def test_runtime_requires_explicit_service_url_before_sending_credentials(runtime_inputs, monkeypatch, service_url):
+    _, _, _, args = runtime_inputs
+    if service_url is None:
+        monkeypatch.delenv("PROJECT_WORKFLOW_URL")
+    else:
+        monkeypatch.setenv("PROJECT_WORKFLOW_URL", service_url)
+    calls = []
+
+    def request(*_args, **_kwargs):
+        calls.append(1)
+        return SimpleNamespace(status_code=200, json=lambda: {"ok": True, "exit_code": 0, "result": {}})
+
+    monkeypatch.setattr(ui.requests, "request", request)
+    result = CliRunner().invoke(cli, args)
+    assert result.exit_code != 0
+    assert calls == []
+    assert "PROJECT_WORKFLOW_URL" in result.output
+    assert "role-runtime-test" not in result.output and "b" * 64 not in result.output
+
+
+def test_runtime_missing_shared_transport_stops_without_http_or_database(runtime_inputs, monkeypatch):
+    _, _, _, args = runtime_inputs
+    monkeypatch.setitem(sys.modules, "sdlc_cli_core", None)
+    monkeypatch.setattr(ui.requests, "request", lambda *_args, **_kwargs: pytest.fail("HTTP called"))
+    result = CliRunner().invoke(cli, args)
+    assert result.exit_code != 0
+    assert "sdlc-cli-core" in result.output and "DB fallback запрещён" in result.output
+    assert "role-runtime-test" not in result.output and "b" * 64 not in result.output
 
 
 @pytest.mark.parametrize("status", [302, 401, 403, 409, 422, 503])

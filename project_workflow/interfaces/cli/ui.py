@@ -71,7 +71,12 @@ def _platform_request(
         ) from exc
 
     try:
-        client = ApiClient(os.environ.get("PROJECT_WORKFLOW_URL", "http://localhost:8812"))
+        service_url = os.environ.get("PROJECT_WORKFLOW_URL", "http://localhost:8812")
+        if execution_token is not None:
+            service_url = os.environ.get("PROJECT_WORKFLOW_URL", "").strip()
+            if not service_url:
+                raise ValueError("Runtime step требует явный PROJECT_WORKFLOW_URL; адрес по умолчанию запрещён")
+        client = ApiClient(service_url)
         if execution_token is None:
             return client.request_json(method, path, body=body, params=params)
         # The shared PAT client cannot send the existing PM execution-scoped header.
