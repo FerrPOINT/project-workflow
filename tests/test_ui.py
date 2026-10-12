@@ -1767,7 +1767,7 @@ class TestTimelineHTML:
         assert response.status_code == 200
         assert 'href="/phase/' in response.text
 
-    def test_phase_controls_keep_namespace_accent_with_readable_text(self):
+    def test_phase_controls_keep_interface_accent_with_readable_text(self):
         response = client.get("/phases")
         assert response.status_code == 200
         assert ".badge-agent{background:var(--accent-soft);color:var(--accent-readable)}" in response.text
@@ -2252,12 +2252,12 @@ class TestProjectsPage:
         assert "button.textContent = namespaceFormMode === 'create' ? 'Создание…' : 'Сохранение…';" in response.text
         assert "'Удалить профессию «' + namespace.name + '»?'" in response.text
 
-    def test_namespace_theme_preview_keeps_primary_action_text_readable(self):
+    def test_namespace_theme_preview_does_not_change_interface_accent(self):
         response = client.get("/namespaces")
         assert response.status_code == 200
-        assert "function accentForeground(color)" in response.text
-        assert "document.documentElement.style.setProperty('--accent-foreground', foreground);" in response.text
-        assert "document.documentElement.style.setProperty('--accent-hover-foreground', foreground);" in response.text
+        assert "function applyPageTheme(" not in response.text
+        assert "document.documentElement.style.setProperty('--accent" not in response.text
+        assert "brandMark.style.setProperty('--namespace-color', color || defaultNamespaceThemeColor)" in response.text
 
     def test_namespace_create_page_uses_plus_without_duplicate_add_label(self):
         response = client.get("/namespaces/new")
