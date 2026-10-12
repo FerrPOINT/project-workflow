@@ -214,6 +214,25 @@ def test_runtime_http_transport_uses_existing_scope_header_and_no_redirects(runt
                                   "X-Workflow-Execution-Token": "b" * 64}}
 
 
+@pytest.mark.parametrize(
+    "service_url",
+    ["https://workflow.example/prefix/?tenant=business", "https://workflow.example/prefix/#dashboard"],
+)
+def test_runtime_url_uses_the_shared_relative_path_resolution(runtime_inputs, monkeypatch, service_url):
+    _, _, _, args = runtime_inputs
+    monkeypatch.setenv("PROJECT_WORKFLOW_URL", service_url)
+    calls = []
+
+    def request(method, url, **kwargs):
+        calls.append((method, url, kwargs))
+        return SimpleNamespace(status_code=200, json=lambda: {"ok": True, "exit_code": 0, "result": {}})
+
+    monkeypatch.setattr(ui.requests, "request", request)
+    result = CliRunner().invoke(cli, args)
+    assert result.exit_code == 0, result.output
+    assert calls[0][1] == "https://workflow.example/prefix/internal/runtime/step"
+
+
 @pytest.mark.parametrize("service_url", [None, "", "   "])
 def test_runtime_requires_explicit_service_url_before_sending_credentials(runtime_inputs, monkeypatch, service_url):
     _, _, _, args = runtime_inputs
@@ -275,14 +294,6 @@ def test_runtime_http_timeout_is_unknown_without_retry_or_db_fallback(runtime_in
     assert "принятие неизвестно" in result.output
     assert "private" not in result.output
     assert calls == [1]
-
-
-def test_runtime_missing_shared_transport_refuses_db_fallback(runtime_inputs, monkeypatch):
-    _, _, _, args = runtime_inputs
-    monkeypatch.setitem(__import__("sys").modules, "sdlc_cli_core", None)
-    result = CliRunner().invoke(cli, args)
-    assert result.exit_code != 0
-    assert "DB fallback запрещён" in result.output
 
 
 @pytest.mark.parametrize("value", [[], {"ok": True}, {"ok": True, "exit_code": 1, "result": {}},

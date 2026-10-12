@@ -17,6 +17,7 @@ import os
 import re
 from pathlib import Path
 from typing import Any
+from urllib.parse import urljoin
 
 import click
 import requests
@@ -84,7 +85,7 @@ def _platform_request(
             raise ValueError("Неподдерживаемый runtime CLI запрос")
         try:
             response = requests.request(
-                method, client.base_url + path, json=body, timeout=client.timeout, allow_redirects=False,
+                method, urljoin(client.base_url, path), json=body, timeout=client.timeout, allow_redirects=False,
                 headers={"Authorization": f"Bearer {client.token}", "Accept": "application/json",
                          "X-Workflow-Execution-Token": execution_token},
             )
