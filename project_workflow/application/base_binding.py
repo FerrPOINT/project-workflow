@@ -1,7 +1,6 @@
 """Read-only namespace binding on the existing managed catalog, without adoption."""
 
 from project_workflow.application.base_source import load_base_source
-from project_workflow.domain.base_admission import BASE_SKILLS_REVISION
 from project_workflow.domain.base_binding import BaseNamespaceBinding
 from project_workflow.domain.exceptions import ConflictError
 from project_workflow.infrastructure.db.managed_catalog import ManagedCatalog, validate_managed_catalog_state
@@ -12,9 +11,11 @@ def _installed_candidate(uow: SAUnitOfWork, catalog: ManagedCatalog) -> None:
     workflows = {workflow.key: workflow for workflow in uow.workflows.list()}
     for definition in catalog.workflows:
         actual = workflows.get(definition.key)
-        if actual is None or actual.id is None or actual.active_catalog_version != 3:
-            raise ConflictError("Complete active Base candidate v3 required")
-        if any(mode.catalog_version != 3 for mode in uow.workflows.list_modes(actual.id, catalog_version=3)):
+        if actual is None or actual.id is None or actual.active_catalog_version != catalog.catalog_version:
+            raise ConflictError(f"Complete active Base candidate v{catalog.catalog_version} required")
+        if any(mode.catalog_version != catalog.catalog_version for mode in uow.workflows.list_modes(
+            actual.id, catalog_version=catalog.catalog_version,
+        )):
             raise ConflictError("Active Base mode version mismatch")
     try:
         if not validate_managed_catalog_state(uow, catalog):
@@ -43,8 +44,8 @@ def _persisted_binding(
     return BaseNamespaceBinding.model_validate({
         "schema": "base-sdlc/workflow-binding/v1", "namespace_id": str(namespace_id),
         "namespace_name": namespace["name"], "workflow_id": str(workflow.id), "workflow_key": workflow.key,
-        "role_key": agent.name, "profile": agent.hermes_profile, "catalog_version": 3,
-        "catalog_sha256": catalog_sha256, "skills_revision": BASE_SKILLS_REVISION, "runtime_ready": False,
+        "role_key": agent.name, "profile": agent.hermes_profile, "catalog_version": catalog.catalog_version,
+        "catalog_sha256": catalog_sha256, "skills_revision": catalog.skills_source.revision, "runtime_ready": False,
     })
 
 
@@ -53,7 +54,7 @@ def observe_base_namespace_binding(uow: SAUnitOfWork, namespace_id: int) -> Base
     if type(namespace_id) is not int or not 0 < namespace_id <= 2**63 - 1:
         raise ValueError("Positive canonical database ID required")
     catalog, source = load_base_source()
-    catalog_sha256 = source["workflowCatalogSourceArtifacts"]["project_workflow/references/base_sdlc_catalog_v1.json"]
+    catalog_sha256, = source["workflowCatalogSourceArtifacts"].values()
     uow.lock_catalog_state(shared=True)
     uow.refresh()
     before = _persisted_binding(uow, catalog, namespace_id, catalog_sha256)

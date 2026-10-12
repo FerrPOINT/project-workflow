@@ -90,7 +90,7 @@ class PMExecutionService:
         from project_workflow.build_provenance import runtime_compatibility_descriptor
 
         if (
-            assignment.mode.catalog_version != 2
+            assignment.mode.catalog_version not in {2, 4}
             or json.loads(assignment.payload).get("runtime_compatibility") != runtime_compatibility_descriptor()
         ):
             raise ConflictError("RUNTIME_VERSION_INCOMPATIBLE: frozen PM assignment descriptor mismatch")

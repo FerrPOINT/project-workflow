@@ -99,7 +99,7 @@ def validate_runtime_compatibility(value: Any) -> dict[str, Any]:
     if (
         type(value["catalogVersion"]) is not int
         or not (
-            value["catalogVersion"] == 2 and value["capabilityRevision"] == "hermes-sdlc-runtime/v2"
+            value["catalogVersion"] in {2, 4} and value["capabilityRevision"] == "hermes-sdlc-runtime/v2"
             or value["catalogVersion"] == 3 and value["capabilityRevision"] == "base-workflow-controlplane/v1"
         )
     ):
@@ -107,6 +107,8 @@ def validate_runtime_compatibility(value: Any) -> dict[str, Any]:
     for name in ("catalogRevision", "skillsRevision"):
         if not isinstance(value[name], str) or re.fullmatch(r"[a-f0-9]{40}", value[name]) is None:
             raise BuildProvenanceError("Runtime compatibility revision invalid")
+    if value["catalogVersion"] == 4 and value["skillsRevision"] != "4e5647d3a3015c26be8f5a390c4d5537d1d10d02":
+        raise BuildProvenanceError("Runtime CLI catalog package mismatch")
     for name in ("catalogSha256", "skillsManifestSha256", "capabilitySha256"):
         if not isinstance(value[name], str) or _SHA256_PATTERN.fullmatch(value[name]) is None:
             raise BuildProvenanceError("Runtime compatibility hash invalid")

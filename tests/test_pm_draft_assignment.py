@@ -22,15 +22,16 @@ def draft(monkeypatch):
     yield from prepare_pm_draft(monkeypatch)
 
 
-def prepare_pm_draft(monkeypatch):
+def prepare_pm_draft(monkeypatch, *, catalog_path=None, compatibility=None):
+    compatibility = compatibility or TEST_RUNTIME_COMPATIBILITY
     monkeypatch.setenv("PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON", json.dumps({"project_manager": "a" * 40}))
     monkeypatch.setenv("PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON", json.dumps({"project_manager": "r" * 40}))
-    monkeypatch.setattr(build_provenance, "runtime_compatibility_descriptor", lambda **_: TEST_RUNTIME_COMPATIBILITY)
-    monkeypatch.setattr(runtime_api, "runtime_compatibility_descriptor", lambda **_: TEST_RUNTIME_COMPATIBILITY)
+    monkeypatch.setattr(build_provenance, "runtime_compatibility_descriptor", lambda **_: compatibility)
+    monkeypatch.setattr(runtime_api, "runtime_compatibility_descriptor", lambda **_: compatibility)
     config.get_settings.cache_clear()
     project_ref, task_ref, assignment_ref = (str(uuid4()) for _ in range(3))
     with SAUnitOfWork() as uow:
-        ensure_managed_catalog(uow)
+        ensure_managed_catalog(uow, catalog_path)
         project = uow.projects.get_by_cli_command("workflow-project_manager")
         uow.projects.create_pm_ownership(
             {
@@ -57,7 +58,7 @@ def prepare_pm_draft(monkeypatch):
         "owner_version": 1,
         "input_snapshot_ref": str(uuid4()),
         "input_sha256": "a" * 64,
-        "runtime_compatibility": TEST_RUNTIME_COMPATIBILITY,
+        "runtime_compatibility": compatibility,
     }
     with TestClient(create_app()) as client:
         yield client, request

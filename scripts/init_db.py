@@ -37,7 +37,7 @@ def main() -> int:
                 uow.lock_catalog_state()
                 catalog = load_managed_catalog()
                 managed_keys = {workflow.key for workflow in catalog.workflows}
-                if not any(
+                if catalog.catalog_version == 4 or not any(
                     workflow.key in managed_keys and workflow.active_catalog_version >= catalog.catalog_version
                     for workflow in uow.workflows.list()
                 ):

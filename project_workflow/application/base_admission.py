@@ -116,6 +116,11 @@ def assert_base_supervisor(
     admission = record.get("payload", {}).get("base_admission")
     mode_id = task.get("mode_id")
     mode = uow.workflows.get_mode(mode_id) if isinstance(mode_id, int) else None
+    if mode is not None and mode.catalog_version == 4:
+        if admission is not None or fence is None:
+            raise ConflictError("CLI catalog requires an owner-bound runtime step")
+        fence.assert_task(task)
+        return
     if admission is None and (mode is None or mode.catalog_version != 3):
         return
     if admission is None or fence is None or fence.base_admission_sha256 != payload_sha256(admission):

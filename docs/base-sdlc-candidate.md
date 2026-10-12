@@ -58,13 +58,49 @@ python scripts/verify_base_sdlc_candidate.py --candidate project_workflow/refere
 
 Флаг `--cli-v4` пишет только новый v4 artifact; verifier без `--candidate`
 по-прежнему проверяет v3. Проверка читает immutable Git package, не заменяет
-runtime admission или deployment. Existing source exporter пока закреплён на
-v3/4b9; version-aware exporter/admission и Fleet catalog4 compatibility требуют
-отдельной согласованной интеграции. Старые receipts не квалифицируют v4.
-Runtime compatibility v2 — отдельный контракт, не номер этого source catalog.
-Этот пакет не подтверждает install/readback/runtime compatibility: binding и
-admission сохраняют v3, а текущий PM execution требует v2. Простая установка v4
-или принятие номера 4 потребителем не заменяет producer-side совместимость.
+runtime admission или deployment. Старые receipts не квалифицируют v4.
+Runtime protocol v2 — отдельный контракт, не номер source catalog.
+
+### Explicit CLI V4 Adoption
+
+Producer поддерживает opt-in `PROJECT_WORKFLOW_CATALOG_VARIANT=base-cli`; default
+`legacy` и source-only `base` (v3) не изменены. Существующий image builder принимает
+`--catalog-variant base-cli` и формирует тот же семиполевой runtime compatibility
+descriptor: `catalogVersion=4`, Base `4e5647d3a3015c26be8f5a390c4d5537d1d10d02`,
+`capabilityRevision=hermes-sdlc-runtime/v2`. Revision/hashes descriptor вычисляются
+из immutable image source и exact Git package, а не задаются агентом.
+
+После отдельного operator review/build deployment с этим variant может вызвать
+существующий `python -m scripts.init_db`. В одной catalog-locked транзакции v3→v4
+добавляются новые mode/phase rows и переключается active version для новых
+assignments. Полный frozen v3 проверяется до первого изменения; divergent/partial
+state отвергается. Повторная установка идемпотентна. Workflow/namespace/role IDs,
+старые mode/phase IDs, tasks и history не переписываются. Поддерживается также
+пустая managed DB; legacy v2→v4 не является этим adoption path и отвергается,
+а не заменяется сбросом БД или relabel старых rows.
+
+Для pin verification нужен существующий `PROJECT_WORKFLOW_BASE_SKILLS_ROOT`
+на авторизованный canonical Git package с exact v4/4e object. Для отдельного
+исторического v3 source readback по-прежнему требуется v3/4b9 object.
+Source export и namespace binding readback сохраняют schema и поля, но допускают
+только согласованные пары v3/4b9 либо v4/4e. `sourceOnly=true`/`runtimeReady=false`
+остаются границей этих read-only observations, не execution acceptance.
+Fleet должен отдельно поддержать v4 tuple; этот пакет не меняет Fleet pin/default.
+
+V4 исполняется через существующие machine assign/bind/step и PM
+assign/checkpoint/resume/rebind/readback, с текущими role credentials, namespace
+ownership, immutable descriptor, CAS/run fences и execution token. Legacy human
+step и обычное создание задачи не обходят owner assignment. V3 admission/HOLD
+сохраняется; v4 не использует этот source-only receipt как новый runtime protocol.
+Первый agent terminal command получает reportless Workflow step через настроенный
+HTTP CLI. Это не Hermes hook и не требование доказательства до обращения к модели.
+
+Final instructions остаются exact role/mode content: typed result, разрешённый
+Tracker transition и его readback. PM ждёт подтверждения человеком exact revision,
+не подтверждает за владельца. Workflow technical completion не является Tracker
+business completion: недоступный scoped Tracker CLI/producer transition остаётся
+blocker, не подменяется CRUD patch, новым tool или выдуманным receipt. Здесь не
+активированы runtime/config, не выполнены PG/native/live acceptance.
 
 Source-only уточнение генератора `scripts/build_base_sdlc_candidate.py`:
 будущие first/final instructions используют только existing runtime CLI `step`
@@ -139,9 +175,10 @@ schema/hash/allowlist — ошибка без Fleet/local fallback. Для чт�
 авторизованный доступ к Base; credentials и копии пакета сюда не добавляются.
 Pin candidate не переключает SDK `.base-revision` и active legacy catalog.
 
-Workflow владеет каталогом и technical cursor, а не Task lifecycle. Target admission
-должен сравнивать exact Tracker assignment, Fleet config и Forge workspace lease перед
-моделью. Report/history keyed task+mode+scope+cycle+phase+assignment/run fence.
+Workflow владеет каталогом и technical cursor, а не Task lifecycle. Исторический v3
+admission остаётся source-only: рабочие действия требуют совместимых exact Tracker
+assignment, Fleet config и Forge workspace lease; это не Hermes pre-model hook.
+Report/history keyed task+mode+scope+cycle+phase+assignment/run fence.
 Accepted terminal receipt фиксирует complete=true, assignment/result hash,
 catalog/config/skills hashes и cursor revision. Task completion остаётся Tracker.
 Повтор key/payload возвращает receipt; иной payload conflict; stale run/revision
@@ -152,5 +189,6 @@ Legacy runtime exporter по-прежнему содержит Business-routing/
 Отдельный `/internal/runtime/base/source-catalog` использует native derivative,
 но содержит Tracker/Fleet/Forge ownership и `sourceOnly=true`, `runtimeReady=false`;
 экспорт этого candidate нельзя считать готовой runtime конфигурацией Base.
-Default catalog, migrations, bootstrap, runtime token config и pinned history
-не изменяются. Установка требует интеграционной вехи с verified capabilities.
+Default catalog, migrations, runtime token config и pinned history не изменяются.
+Explicit v4 adoption описан выше; его наличие в source не подтверждает deployment
+или business/runtime acceptance.

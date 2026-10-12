@@ -2,7 +2,7 @@
 
 from typing import Annotated, Literal
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from project_workflow.domain.base_admission import ExactRef, Sha256
 
@@ -30,10 +30,22 @@ class BaseNamespaceBinding(BaseModel):
     workflow_key: ExactRef
     role_key: ExactRef
     profile: ExactRef
-    catalog_version: Literal[3]
+    catalog_version: Literal[3, 4]
     catalog_sha256: Sha256
-    skills_revision: Literal["4b9b4c9297a13fb28a6ba2039af2f7cb719f2f58"]
+    skills_revision: Literal[
+        "4b9b4c9297a13fb28a6ba2039af2f7cb719f2f58", "4e5647d3a3015c26be8f5a390c4d5537d1d10d02",
+    ]
     runtime_ready: Literal[False]
+
+    @model_validator(mode="after")
+    def _versioned_package(self) -> "BaseNamespaceBinding":
+        expected = {
+            3: "4b9b4c9297a13fb28a6ba2039af2f7cb719f2f58",
+            4: "4e5647d3a3015c26be8f5a390c4d5537d1d10d02",
+        }
+        if self.skills_revision != expected[self.catalog_version]:
+            raise ValueError("Catalog version/package mismatch")
+        return self
 
 
 class BaseNamespaceBindingResponse(BaseModel):

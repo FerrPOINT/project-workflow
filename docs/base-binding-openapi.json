@@ -56,7 +56,10 @@
             "type": "string"
           },
           "catalog_version": {
-            "const": 3,
+            "enum": [
+              3,
+              4
+            ],
             "title": "Catalog Version",
             "type": "integer"
           },
@@ -99,7 +102,10 @@
             "type": "string"
           },
           "skills_revision": {
-            "const": "4b9b4c9297a13fb28a6ba2039af2f7cb719f2f58",
+            "enum": [
+              "4b9b4c9297a13fb28a6ba2039af2f7cb719f2f58",
+              "4e5647d3a3015c26be8f5a390c4d5537d1d10d02"
+            ],
             "title": "Skills Revision",
             "type": "string"
           },

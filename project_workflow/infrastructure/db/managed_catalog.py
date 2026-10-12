@@ -1126,12 +1126,47 @@ def ensure_managed_catalog(
     legacy catalog is rejected before any append; no existing phase is edited.
     """
     catalog = load_managed_catalog(catalog_path)
+    if catalog.catalog_version == 4:
+        from project_workflow.infrastructure.base_package import load_pinned_package
+
+        source = Path(__file__).resolve().parents[2] / "references/base_sdlc_catalog_cli_v4.json"
+        if source.is_symlink():
+            raise ValueError("CLI adoption requires a regular frozen source")
+        content = source.read_bytes().replace(b"\r\n", b"\n")
+        if (hashlib.sha256(content).hexdigest()
+                != "d6d18f98b55f14210a3f0e12404074705495d535aa8ba29ae449624b845668c9"
+                or catalog != ManagedCatalog.model_validate_json(content)):
+            raise ValueError("CLI adoption requires the exact frozen v4 source")
+        skills_root = config.get_settings().PROJECT_WORKFLOW_BASE_SKILLS_ROOT
+        if not skills_root:
+            raise ValueError("CLI adoption requires the pinned Base Git package")
+        load_pinned_package(Path(skills_root), catalog.skills_source)
     uow.lock_catalog_state()
     legacy = _assert_no_foreign_catalog_objects(uow, catalog)
     if legacy is not None:
         for agent_id, alias in legacy.agent_renames:
             uow.agents.update(agent_id, {"name": alias})
     workflows_by_key = {workflow.key: workflow for workflow in uow.workflows.list()}
+    if catalog.catalog_version == 4:
+        versions = {workflow.active_catalog_version for workflow in workflows_by_key.values()
+                    if workflow.key in {definition.key for definition in catalog.workflows}}
+        if versions == {3}:
+            source = Path(__file__).resolve().parents[2] / "references/base_sdlc_catalog_v1.json"
+            if source.is_symlink():
+                raise ValueError("Frozen managed v3 source must be regular")
+            content = source.read_bytes().replace(b"\r\n", b"\n")
+            if (hashlib.sha256(content).hexdigest()
+                    != "a778e18d5d02a58caef0a12ccabdd9eaeb61efed1e71f2a9f3e402358458a7ed"):
+                raise ValueError("Frozen managed v3 source differs")
+            previous_catalog = ManagedCatalog.model_validate_json(content)
+            validate_managed_catalog_state(uow, previous_catalog)
+            if any(uow.workflows.list_modes(workflow.id, catalog_version=4)
+                   for workflow in workflows_by_key.values() if workflow.key in {
+                       definition.key for definition in catalog.workflows
+                   } and workflow.id is not None):
+                raise ValueError("Partial CLI catalog adoption; target rows already exist")
+        elif versions and versions != {4}:
+            raise ValueError("Unsupported or partial CLI catalog adoption")
     has_default = uow.workflows.get_default() is not None
 
     for definition in catalog.workflows:
@@ -1145,9 +1180,10 @@ def ensure_managed_catalog(
                 raise ValueError(f"Managed workflow {definition.key!r} already exists with a different identity")
             active_version = existing.active_catalog_version
             if active_version < catalog.catalog_version:
-                if active_version != 1 or catalog.catalog_version != 2:
+                if (active_version, catalog.catalog_version) == (1, 2):
+                    _assert_frozen_legacy_workflow(uow, existing, agent_id=agent_id)
+                elif (active_version, catalog.catalog_version) != (3, 4):
                     raise ValueError("Unsupported managed catalog adoption path")
-                _assert_frozen_legacy_workflow(uow, existing, agent_id=agent_id)
                 if uow.workflows.list_modes(workflow_id, catalog_version=catalog.catalog_version):
                     raise ValueError("Partial managed catalog adoption; transaction was not committed")
                 for mode in definition.modes:

@@ -77,11 +77,13 @@ def get_settings() -> Settings:
 # by application startup.  The legacy single-workflow seed is retained solely
 # for explicit unmanaged compatibility/tests and is never an automatic fallback.
 CATALOG_VARIANT = os.environ.get("PROJECT_WORKFLOW_CATALOG_VARIANT", "legacy")
-if CATALOG_VARIANT not in {"legacy", "base"}:
+if CATALOG_VARIANT not in {"legacy", "base", "base-cli"}:
     raise ValueError("Unknown managed catalog variant")
-MANAGED_CATALOG_PATH = _pkg_dir / "references" / (
-    "base_sdlc_catalog_v1.json" if CATALOG_VARIANT == "base" else "hermes_sdlc_catalog_v1.json"
-)
+MANAGED_CATALOG_PATH = _pkg_dir / "references" / {
+    "legacy": "hermes_sdlc_catalog_v1.json",
+    "base": "base_sdlc_catalog_v1.json",
+    "base-cli": "base_sdlc_catalog_cli_v4.json",
+}[CATALOG_VARIANT]
 LEGACY_UNMANAGED_SEED_PATH = _pkg_dir / "references" / "legacy_unmanaged_seed.json"
 LEGACY_UNMANAGED_WORKFLOW_NAME = "sdlc-business-tech-v1"
 # Compatibility alias for legacy unmanaged editor/tests. Managed startup does

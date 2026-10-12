@@ -36,12 +36,12 @@ def pm(monkeypatch):
     yield from prepare_pm(monkeypatch)
 
 
-def prepare_pm(monkeypatch, *, ownership=True):
+def prepare_pm(monkeypatch, *, ownership=True, catalog_path=None, compatibility=None):
     from project_workflow import build_provenance
     from project_workflow.interfaces.ui.routes import runtime_api
 
     def descriptor(**_kwargs):
-        return dict(TEST_RUNTIME_COMPATIBILITY)
+        return dict(compatibility or TEST_RUNTIME_COMPATIBILITY)
 
     monkeypatch.setattr(build_provenance, "runtime_compatibility_descriptor", descriptor)
     monkeypatch.setattr(runtime_api, "runtime_compatibility_descriptor", descriptor)
@@ -51,8 +51,13 @@ def prepare_pm(monkeypatch, *, ownership=True):
     monkeypatch.setenv("PROJECT_WORKFLOW_PM_READBACK_TOKEN", "p" * 40)
     monkeypatch.setenv("PROJECT_WORKFLOW_PM_READBACK_URL", "http://runtime.test/readback")
     config.get_settings.cache_clear()
-    _namespace("PM", "workflow-project_manager", "PM")
+    if catalog_path is None:
+        _namespace("PM", "workflow-project_manager", "PM")
     with SAUnitOfWork() as uow:
+        if catalog_path is not None:
+            from project_workflow.infrastructure.db.managed_catalog import ensure_managed_catalog
+
+            ensure_managed_catalog(uow, catalog_path)
         namespace = uow.projects.get_by_cli_command("workflow-project_manager")
         if ownership:
             uow.projects.create_pm_ownership({
@@ -60,12 +65,17 @@ def prepare_pm(monkeypatch, *, ownership=True):
                 "namespace_id": namespace.id, "tracker_instance_ref": "tracker:one", "tracker_project_ref": PROJECT_REF,
                 "authority_issuer": "http://auth.test", "provisioner_subject": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
             })
-        phase = uow.session.scalar(select(m.Phase).where(m.Phase.code == "assigned"))
-        agent_id = uow.agents.create({"name": "project_manager", "description": ""})
-        phase.agent_id = agent_id
+        if catalog_path is None:
+            phase = uow.session.scalar(select(m.Phase).where(m.Phase.code == "assigned"))
+            agent_id = uow.agents.create({"name": "project_manager", "description": ""})
+            phase.agent_id = agent_id
     client = TestClient(create_app())
+    request = _assignment("PM-1", "assign:pm:1", "project_manager")
+    request["runtime_compatibility"] = descriptor()
+    if catalog_path is not None:
+        request["mode_key"] = "draft"
     assignment = client.post("/internal/runtime/assign", headers=ADAPTER,
-                             json=_assignment("PM-1", "assign:pm:1", "project_manager")).json()["result"]
+                             json=request).json()["result"]
     binding = _bind_payload(assignment)
     binding["concrete_agent_ref"] = AGENT_REF
     result = client.post("/internal/runtime/bind", headers=ADAPTER, json=binding)

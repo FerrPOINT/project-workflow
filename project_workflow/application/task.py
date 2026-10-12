@@ -80,6 +80,8 @@ class TaskService:
                 raise NotFoundError(f"Воркфлоу {project.workflow_id} не найден")
             if getattr(locked_workflow, "active_catalog_version", 1) == 3:
                 raise ConflictError("Base candidate tasks require owner-issued admission")
+            if getattr(locked_workflow, "active_catalog_version", 1) == 4:
+                raise ConflictError("CLI catalog tasks require owner-issued assignment")
             locked_project = self._uow.projects.lock(project_id)
             if locked_project is None:
                 raise NotFoundError(f"Неймспейс {project_id} не найден")
@@ -236,7 +238,7 @@ class TaskService:
             raise ValueError("attempt_number должен быть положительным целым числом")
         if pm_draft_context is not None:
             if (
-                role_key != "project_manager" or mode.key != "draft" or mode.catalog_version != 2
+                role_key != "project_manager" or mode.key != "draft" or mode.catalog_version not in {2, 4}
                 or execution_scope != "business" or stage_key != "draft" or cycle_number != 0
                 or attempt_number != 1 or expected_revision != 0 or expected_status != "missing"
                 or task_key != pm_draft_context.task or operation_key != pm_draft_context.assignment_operation_key
@@ -305,12 +307,14 @@ class TaskService:
             )
         elif getattr(mode, "catalog_version", 1) == 3:
             raise ConflictError("Base candidate requires opt-in admission")
-        if getattr(mode, "catalog_version", 1) == 2:
+        if getattr(mode, "catalog_version", 1) in {2, 4}:
             from project_workflow.build_provenance import validate_runtime_compatibility
 
             if runtime_compatibility is None:
-                raise ConflictError("Managed catalog v2 requires immutable runtime compatibility")
+                raise ConflictError(f"Managed catalog v{mode.catalog_version} requires immutable runtime compatibility")
             validate_runtime_compatibility(runtime_compatibility)
+            if runtime_compatibility["catalogVersion"] != mode.catalog_version:
+                raise ConflictError("Runtime compatibility differs from assigned catalog version")
         payload = {
             "project_id": project_id,
             "task_key": task_key,

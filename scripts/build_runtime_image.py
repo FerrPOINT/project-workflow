@@ -72,6 +72,7 @@ def immutable_git_snapshot(root: Path, revision: str) -> GitSourceSnapshot:
 
 CATALOG_PATH = "project_workflow/references/hermes_sdlc_catalog_v1.json"
 BASE_CATALOG_PATH = "project_workflow/references/base_sdlc_catalog_v1.json"
+CLI_CATALOG_PATH = "project_workflow/references/base_sdlc_catalog_cli_v4.json"
 COMPATIBILITY_PATH = "runtime-compatibility.json"
 SKILLS_MANIFEST_PATH = "runtime-skills-manifest.json"
 
@@ -88,10 +89,14 @@ def derive_compatibility(root: Path) -> dict[str, object]:
     )
 
     variant = os.environ.get("PROJECT_WORKFLOW_CATALOG_VARIANT", "legacy")
-    catalog_path = BASE_CATALOG_PATH if variant == "base" else CATALOG_PATH
+    catalog_path = {"legacy": CATALOG_PATH, "base": BASE_CATALOG_PATH, "base-cli": CLI_CATALOG_PATH}.get(variant)
+    if catalog_path is None:
+        raise BuildProvenanceError("Unknown catalog variant")
     catalog = load_managed_catalog(root / catalog_path)
-    if variant not in {"legacy", "base"} or catalog.catalog_version != (3 if variant == "base" else 2):
-        raise BuildProvenanceError("Compatible image requires canonical catalog version 2")
+    if catalog.catalog_version != {"legacy": 2, "base": 3, "base-cli": 4}[variant]:
+        raise BuildProvenanceError("Compatible image requires the selected canonical catalog version")
+    if variant == "base-cli" and catalog.skills_source.revision != "4e5647d3a3015c26be8f5a390c4d5537d1d10d02":
+        raise BuildProvenanceError("CLI catalog requires the canonical Base CLI package")
     manifest = json.loads((root / SKILLS_MANIFEST_PATH).read_bytes())
     if manifest.get("schema") != catalog.skills_source.manifest_schema:
         raise BuildProvenanceError("Native skills manifest schema differs from canonical pin")
@@ -143,9 +148,9 @@ def _add_context_files(context: bytes, files: dict[str, bytes]) -> bytes:
 
 def compatible_build_context(snapshot: GitSourceSnapshot, skills_root: Path,
                              catalog_variant: str = "legacy") -> bytes:
-    if catalog_variant not in {"legacy", "base"}:
+    if catalog_variant not in {"legacy", "base", "base-cli"}:
         raise BuildProvenanceError("Unknown catalog variant")
-    catalog_path = BASE_CATALOG_PATH if catalog_variant == "base" else CATALOG_PATH
+    catalog_path = {"legacy": CATALOG_PATH, "base": BASE_CATALOG_PATH, "base-cli": CLI_CATALOG_PATH}[catalog_variant]
     context = docker_context_with_manifest(snapshot.archive, snapshot.provenance)
     with tarfile.open(fileobj=io.BytesIO(context)) as source:
         catalog_file = source.extractfile(catalog_path)
@@ -153,7 +158,7 @@ def compatible_build_context(snapshot: GitSourceSnapshot, skills_root: Path,
             raise BuildProvenanceError("Canonical catalog missing from immutable archive")
         catalog = json.load(catalog_file)
     pin = catalog["skills_source"]
-    if catalog_variant == "base":
+    if catalog_variant in {"base", "base-cli"}:
         from project_workflow.infrastructure.db.managed_catalog import CatalogSource
         from scripts.verify_base_sdlc_candidate import load_pinned_package
         load_pinned_package(skills_root / "agent-skills", CatalogSource.model_validate(pin))
@@ -244,7 +249,7 @@ def main(argv: list[str] | None = None) -> int:
     build.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
     build.add_argument("--revision", default="HEAD")
     build.add_argument("--skills-root", type=Path, required=True)
-    build.add_argument("--catalog-variant", choices=("legacy", "base"), default="legacy")
+    build.add_argument("--catalog-variant", choices=("legacy", "base", "base-cli"), default="legacy")
 
     for name in ("derive-compatibility", "verify-compatibility"):
         subparsers.add_parser(name).add_argument("--root", type=Path, required=True)
