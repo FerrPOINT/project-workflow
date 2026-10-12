@@ -563,7 +563,8 @@ def render(skills_root: Path, skills_sha: str) -> dict:
                     "tracker-operator",
                     f"Сверить Task/root/project/revisions, agent/role={role}, namespace/profile, "
                     f"workflow/mode={key}, scope={scopes}, run/cycle/attempt, fencing/operation key, "
-                    "configuration hashes и owner-issued workspace lease. Missing/mismatch — fail-closed до модели.",
+                    "configuration hashes и owner-issued workspace lease. При missing/mismatch assignment/context "
+                    "остановить рабочие действия; existing auth/fence проверки CLI остаются обязательными.",
                 ),
                 (
                     "immutable-evidence-reporting",

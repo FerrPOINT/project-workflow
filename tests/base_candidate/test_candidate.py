@@ -225,6 +225,19 @@ class RenderedCliInstructionsTests(unittest.TestCase):
                     self.assertIn("tool approval — отдельное разрешение, не бизнес-ответ и не owner consent", final)
                     self.assertNotIn("one concrete question владельцу", final)
 
+    def test_all_eleven_modes_stop_work_on_mismatch_without_pre_model_prerequisite(self):
+        modes = list(self.modes())
+        self.assertEqual(11, len(modes))
+        for role, mode in modes:
+            with self.subTest(role=role, mode=mode["key"]):
+                admission = mode["phases"][0]["instructions"]
+                self.assertIn("Первое действие — через terminal", admission[0]["description"])
+                self.assertIn("existing auth/fence проверки CLI остаются обязательными", admission[1]["description"])
+                self.assertIn("остановить рабочие действия", admission[1]["description"])
+                for instruction in admission:
+                    for forbidden in ("до модели", "pre-model", "Hermes hook"):
+                        self.assertNotIn(forbidden, instruction["description"])
+
 
 if __name__ == "__main__":
     unittest.main()
