@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURE = ROOT / "tests/fixtures/pm_v2_mcp_draft_mode.json"
+CONTENT = ROOT / "project_workflow/references/pm_mcp_draft_mode_v1.json"
 LEGACY = ROOT / "project_workflow/references/hermes_sdlc_catalog_v1.json"
 CONTENT_FIELDS = {"instructions", "checks", "evidence"}
 TOOLS = {
@@ -18,7 +18,7 @@ TOOLS = {
 
 class PmV2McpContentTests(unittest.TestCase):
     def setUp(self):
-        self.mode = json.loads(FIXTURE.read_text(encoding="utf-8"))
+        self.mode = json.loads(CONTENT.read_text(encoding="utf-8"))
         catalog = json.loads(LEGACY.read_text(encoding="utf-8"))
         self.assertEqual(catalog["catalog_version"], 2)
         workflow = next(w for w in catalog["workflows"] if w["role_key"] == "project_manager")
