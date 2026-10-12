@@ -150,16 +150,12 @@ function namespaceIconSvg(icon){
   var path = namespaceIconPaths[icon || defaultNamespaceThemeIcon] || namespaceIconPaths[defaultNamespaceThemeIcon];
   return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="' + path + '"></path></svg>';
 }
-function applyNamespaceIdentity(name, command, icon, color){
-  var brandName = document.querySelector('.brand-name');
-  var brandSubname = document.querySelector('.brand-subname');
-  var brandMark = document.querySelector('.brand-mark');
-  if(brandName){ brandName.textContent = name; }
-  if(brandSubname){ brandSubname.textContent = command; }
-  if(brandMark){
-    brandMark.style.setProperty('--namespace-color', color || defaultNamespaceThemeColor);
-    brandMark.innerHTML = namespaceIconSvg(icon);
-  }
+function applyNamespaceIdentity(name, icon, color){
+  document.querySelectorAll('.namespace-trigger').forEach(function(trigger){
+    trigger.querySelector('.namespace-selector-name').textContent = name;
+    trigger.style.setProperty('--namespace-color', color || defaultNamespaceThemeColor);
+    trigger.querySelector('.namespace-selector-mark').innerHTML = namespaceIconSvg(icon);
+  });
 }
 function updateNamespaceThemePreview(){
   var icon = document.querySelector('input[name="namespaceThemeIcon"]:checked').value || defaultNamespaceThemeIcon;
@@ -169,7 +165,7 @@ function updateNamespaceThemePreview(){
   document.getElementById('namespaceThemeControls').style.setProperty('--namespace-color', color);
   document.getElementById('namespaceSelectedIcon').innerHTML = namespaceIconSvg(icon);
   if(namespaceFormMode === 'create'){ return; }
-  applyNamespaceIdentity(name, command, icon, color);
+  applyNamespaceIdentity(name, icon, color);
 }
 function selectNamespaceThemeIcon(){
   updateNamespaceThemePreview();
@@ -217,6 +213,7 @@ function rememberNamespaceSelection(id, historyMode){
   if(id == null){ return; }
   document.cookie={{ namespace_cookie_name | tojson }}+'='+encodeURIComponent(id)+'; path=/; SameSite=Lax'{% if namespace_cookie_secure %}+'; Secure'{% endif %};
   document.querySelectorAll('[data-namespace-selector]').forEach(function(selector){ selector.value = String(id); });
+  refreshNamespaceSelectors();
   updateNamespaceHeaderLinks(id);
   syncNamespaceUrl(id, historyMode || 'replace');
 }
@@ -293,7 +290,6 @@ function restoreNamespaceLocation(){
     if(contextNamespace){
       applyNamespaceIdentity(
         contextNamespace.name,
-        contextNamespace.cli_command,
         contextNamespace.theme_icon,
         contextNamespace.theme_color
       );
@@ -411,10 +407,13 @@ function renderNamespaceSelector(){
       var option = document.createElement('option');
       option.value = String(namespace.id);
       option.textContent = namespaceContextLabel(namespace);
+      option.dataset.icon = namespace.theme_icon || defaultNamespaceThemeIcon;
+      option.dataset.color = namespace.theme_color || defaultNamespaceThemeColor;
       option.selected = namespace.id === selectorNamespaceId;
       selector.appendChild(option);
     });
   });
+  refreshNamespaceSelectors();
 }
 function saveNamespace(){
   if(selectedNamespaceId == null){ showToast('Сначала выберите профессию','error'); return; }

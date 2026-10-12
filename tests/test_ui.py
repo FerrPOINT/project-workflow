@@ -534,7 +534,7 @@ class TestPhasesPage:
         assert 'id="sidebarThemeSelector"' not in response.text
         assert response.text.count('data-base-theme-option') >= 3
         assert 'window.SdlcThemePreference.read("workflow-theme")' in response.text
-        assert response.text.count('data-namespace-selector class="namespace-select"') == 1
+        assert response.text.count('data-namespace-selector class="namespace-select"') == 2
         assert 'id="namespaceSelector" data-namespace-selector' in response.text
         assert '.platform-header .service-menu-popover{position:fixed;left:12px;right:12px;' in response.text
 
@@ -2230,8 +2230,8 @@ class TestProjectsPage:
         assert 'id="namespaceThemeControls"' in response.text
         assert 'aria-controls="namespaceForm"' in response.text
         assert 'aria-pressed="true"' in response.text
-        assert "document.querySelector('.brand-name')" in response.text
-        assert "document.querySelector('.brand-mark')" in response.text
+        assert "document.querySelectorAll('.namespace-trigger')" in response.text
+        assert "document.querySelector('.brand-mark')" not in response.text
         assert 'id="createProjectForm"' not in response.text
         assert 'id="projectForm"' not in response.text
         assert 'id="newProjectButton"' not in response.text
@@ -2257,7 +2257,7 @@ class TestProjectsPage:
         assert response.status_code == 200
         assert "function applyPageTheme(" not in response.text
         assert "document.documentElement.style.setProperty('--accent" not in response.text
-        assert "brandMark.style.setProperty('--namespace-color', color || defaultNamespaceThemeColor)" in response.text
+        assert "trigger.style.setProperty('--namespace-color', color || defaultNamespaceThemeColor)" in response.text
 
     def test_namespace_create_page_uses_plus_without_duplicate_add_label(self):
         response = client.get("/namespaces/new")
@@ -2356,12 +2356,15 @@ class TestProjectsPage:
         assert "updateNamespaceHeaderLinks(id);" in response.text
         assert "updateNamespaceHeaderLinks(selectorNamespaceId);" in response.text
 
-    def test_namespace_editor_refreshes_header_selector_and_brand_identity(self):
+    def test_namespace_editor_refreshes_header_selector_and_profession_identity(self):
         response = client.get("/namespaces")
         assert response.status_code == 200
-        assert "document.querySelector('.brand-name')" in response.text
-        assert "document.querySelector('.brand-subname')" in response.text
-        assert "brandSubname.textContent = command;" in response.text
+        assert "document.querySelector('.brand-name')" not in response.text
+        assert "document.querySelector('.brand-subname')" not in response.text
+        assert "trigger.querySelector('.namespace-selector-name').textContent = name;" in response.text
+        assert "option.dataset.icon = namespace.theme_icon" in response.text
+        assert "option.dataset.color = namespace.theme_color" in response.text
+        assert "refreshNamespaceSelectors();" in response.text
         assert "function renderNamespaceSelector()" in response.text
         assert "selector.replaceChildren();" in response.text
         assert "option.textContent = namespaceContextLabel(namespace);" in response.text

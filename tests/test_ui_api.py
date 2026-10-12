@@ -1006,7 +1006,8 @@ class TestApiNamespaces:
         response = client.get(f"/tasks?namespace_id={namespace_id}")
 
         assert response.status_code == 200
-        assert 'class="brand-mark" aria-hidden="true" style="--namespace-color:#22C55E"' in response.text
+        assert 'aria-controls="namespaceSelectorOptions" style="--namespace-color:#22C55E"' in response.text
+        assert 'class="brand-mark" aria-hidden="true"><svg' in response.text
         assert '<html lang="ru" data-theme="dark" data-theme-storage-key="workflow-theme">' in response.text
         assert "Green Namespace" in response.text
         assert "RUN-1" not in response.text

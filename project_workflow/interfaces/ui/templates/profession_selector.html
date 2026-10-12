@@ -1,0 +1,24 @@
+{% macro profession_selector(id, namespaces, active) -%}
+<details class="namespace-switcher">
+  <select id="{{ id }}" data-namespace-selector class="namespace-select" hidden aria-hidden="true" tabindex="-1">
+    {% if not active %}<option value="" disabled selected>Каталог воркфлоу</option>{% endif %}
+    {% for namespace in namespaces %}
+    <option value="{{ namespace.id }}" data-icon="{{ namespace.theme_icon }}" data-color="{{ namespace.theme_color }}" {% if active and active.id == namespace.id %}selected{% endif %}>{{ namespace.name }}</option>
+    {% endfor %}
+  </select>
+  <summary class="namespace-trigger" aria-label="Выбор профессии" aria-haspopup="listbox" aria-expanded="false" aria-controls="{{ id }}Options"{% if active %} style="--namespace-color:{{ active.theme_color }}"{% endif %}>
+    <span class="namespace-selector-mark" aria-hidden="true"{% if not active %} hidden{% endif %}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ project_icon_path(active.theme_icon if active else default_project_icon) }}"></path></svg></span>
+    <span class="namespace-selector-name">{{ active.name if active else 'Каталог воркфлоу' }}</span>
+    <svg class="namespace-selector-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+  </summary>
+  <div class="namespace-options" id="{{ id }}Options" role="listbox" aria-label="Профессии">
+    {% for namespace in namespaces %}
+    <button type="button" class="namespace-option" role="option" data-value="{{ namespace.id }}" aria-selected="{{ 'true' if active and active.id == namespace.id else 'false' }}" tabindex="-1" style="--namespace-color:{{ namespace.theme_color }}">
+      <span class="namespace-selector-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ project_icon_path(namespace.theme_icon) }}"></path></svg></span>
+      <span class="namespace-selector-name">{{ namespace.name }}</span>
+      <span class="namespace-selector-check" aria-hidden="true">✓</span>
+    </button>
+    {% endfor %}
+  </div>
+</details>
+{%- endmacro %}
