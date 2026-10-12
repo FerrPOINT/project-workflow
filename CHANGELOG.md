@@ -6,6 +6,9 @@
 
 ## [Unreleased]
 
+- Runtime CLI `step` forwards the supplied operation key, frozen request and scoped token;
+  it requires an explicit service URL and never sends execution credentials to the legacy default endpoint.
+
 - Namespace cohort: стабильные refs, локальные binding projections и lifecycle guards; аддитивные migrations, совместимый rollback и отдельные execution v2 gates. Runtime-приёмка ещё не завершена.
 
 
