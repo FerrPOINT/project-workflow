@@ -116,7 +116,6 @@ class SAPhaseRepository(PhaseRepository):
             name=data["name"],
             description=data.get("description"),
             phase_order=data["phase_order"],
-            agent_id=data.get("agent_id"),
             parallel_with_phase_id=data.get("parallel_with_phase_id"),
             rollback_target_phase_id=data.get("rollback_target_phase_id"),
             execution_type=data.get("execution_type", "sync"),
@@ -257,20 +256,6 @@ class SAPhaseRepository(PhaseRepository):
             kinds.add("ссылка фазы")
         return kinds
 
-    def has_agent_reference(self, agent_id: int) -> bool:
-        phase_id = self._session.execute(
-            select(m.Phase.id).where(m.Phase.agent_id == agent_id).limit(1)
-        ).scalar_one_or_none()
-        return phase_id is not None
-
-    def workflow_ids_for_agent(self, agent_id: int) -> Sequence[int]:
-        rows = self._session.execute(
-            select(m.Phase.workflow_id)
-            .where(m.Phase.agent_id == agent_id)
-            .distinct()
-            .order_by(m.Phase.workflow_id)
-        ).scalars()
-        return [int(workflow_id) for workflow_id in rows]
 
     def resequence(self, workflow_id: int, mode_id: int | None = None) -> None:
         mode_id = mode_id if mode_id is not None else self._default_mode_id(workflow_id)

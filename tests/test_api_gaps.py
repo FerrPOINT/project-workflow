@@ -171,28 +171,6 @@ class TestApiNamespaceDelete:
         assert response.status_code == 404
 
 
-class TestApiAgentUpdate:
-    def test_agent_not_found(self):
-        with patch("project_workflow.interfaces.ui.routes.api._app_state") as state:
-            state.agent_service.return_value.update_agent.side_effect = NotFoundError("missing")
-            response = client.put("/api/agents/1", json={"name": "X"})
-        assert response.status_code == 404
-
-
-class TestApiAgentDelete:
-    def test_agent_not_found(self):
-        with patch("project_workflow.interfaces.ui.routes.api._app_state") as state:
-            state.agent_service.return_value.delete_agent.side_effect = NotFoundError("missing")
-            response = client.delete("/api/agents/1")
-        assert response.status_code == 404
-
-    def test_agent_assigned_to_phase(self):
-        with patch("project_workflow.interfaces.ui.routes.api._app_state") as state:
-            state.agent_service.return_value.delete_agent.side_effect = ConflictError("assigned")
-            response = client.delete("/api/agents/1")
-        assert response.status_code == 409
-
-
 class TestApiInstructionCreate:
     def test_phase_not_found(self):
         with patch("project_workflow.interfaces.ui.routes.api._app_state") as state:

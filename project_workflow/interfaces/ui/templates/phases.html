@@ -99,7 +99,6 @@
       </div>
       <div class="execution-row">
         <span class="badge {{ 'badge-parallel' if p.execution_type == 'parallel' else 'badge-sync' }}">{{ 'параллельно' if p.execution_type == 'parallel' else 'последовательно' }}</span>
-        {% if p.agent_name %}<span class="badge badge-agent">{{ p.agent_name }}</span>{% endif %}
       </div>
     </a>
     <details class="phase-card-actions">

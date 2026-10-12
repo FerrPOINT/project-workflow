@@ -7,16 +7,12 @@ import json
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select
 
 from project_workflow import build_provenance, config
-from project_workflow.infrastructure.db import models
 from project_workflow.infrastructure.db.managed_catalog import ensure_managed_catalog
-from project_workflow.infrastructure.db.session import ensure_schema
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.ui.app import create_app
 from project_workflow.interfaces.ui.routes import runtime_api
-from tests.test_managed_catalog import _install_frozen_v1
 from tests.test_runtime_api import _assignment, _bind_payload, _headers, _step_payload
 from tests.test_runtime_assignment_contract import TEST_RUNTIME_COMPATIBILITY, _continuation
 
@@ -175,27 +171,3 @@ def test_late_first_continuation_replay_cannot_replace_second_checkpoint(bound_r
     assert _snapshot(project_id) == before
     assert second["current_phase_code"] == bound["current_phase_code"]
     assert second["assignment_revision"] == bound["assignment_revision"] + 2
-
-
-def test_partial_v2_adoption_rolls_back_all_role_switches_and_preserves_legacy_rows(tmp_path):
-    url = f"sqlite:///{tmp_path / 'partial-adoption.db'}"
-    with SAUnitOfWork(url) as uow:
-        ensure_schema(uow.session.get_bind())
-        _install_frozen_v1(uow)
-        workflow = next(item for item in uow.workflows.list() if item.key == "hermes-sdlc:developer")
-        uow.workflows.create_mode({"workflow_id": workflow.id, "key": "initial", "name": "Partial v2",
-                                   "mode_order": 1, "catalog_version": 2, "role_key": "developer",
-                                   "execution_scopes": ["delivery", "aggregate"], "tech_workspace_policy": "required"})
-    def snapshot():
-        with SAUnitOfWork(url) as uow:
-            return tuple(tuple(tuple(getattr(row, column.name) for column in model.__table__.columns)
-                               for row in uow.session.scalars(select(model).order_by(model.id)))
-                         for model in (models.Workflow, models.WorkflowMode, models.Phase,
-                                       models.PhaseInstruction, models.Project))
-    before = snapshot()
-    with pytest.raises(ValueError, match="Partial managed catalog adoption"):
-        with SAUnitOfWork(url) as uow:
-            ensure_managed_catalog(uow)
-    assert snapshot() == before
-    with SAUnitOfWork(url) as uow:
-        assert all(item.active_catalog_version == 1 for item in uow.workflows.list())

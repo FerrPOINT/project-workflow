@@ -12,8 +12,6 @@ from project_workflow.domain.namespace import legacy_code_from_cli_command
 from project_workflow.domain.project_theme import normalize_theme_color, normalize_theme_icon
 from project_workflow.interfaces.ui.helpers import _select_workflow_mode
 from project_workflow.interfaces.ui.schemas import (
-    AgentCreate,
-    AgentUpdate,
     InstructionCreate,
     InstructionReorder,
     InstructionUpdate,
@@ -51,6 +49,9 @@ def _with_namespace_aliases(item: dict[str, Any]) -> dict[str, Any]:
         "name": item.get("name"),
         "namespace_name": item.get("name"),
         "description": item.get("description", ""),
+        "role_key": item.get("role_key"),
+        "launch_profile": item.get("launch_profile"),
+        "execution_description": item.get("execution_description", ""),
         "workflow_id": item.get("workflow_id"),
         "workflow_name": item.get("workflow_name"),
         "theme_icon": theme_icon,
@@ -153,11 +154,9 @@ def api_phases(
         return _error("В выбранном воркфлоу не настроен ни один режим", 409)
     selected_mode_id = selected_mode.get("id") if selected_mode else None
     phases = _app_state.phase_service().list_phases(selected_workflow_id, mode_id=selected_mode_id)
-    agents = {a["id"]: a for a in _app_state.agent_service().list_agents()}
 
     rows = []
     for phase in phases:
-        agent = agents.get(phase.get("agent_id"))
         rows.append(
             {
                 "id": phase["id"],
@@ -172,9 +171,6 @@ def api_phases(
                 "execution_type": phase.get("execution_type", "sync"),
                 "parallel_with_phase_id": phase.get("parallel_with_phase_id"),
                 "rollback_target_phase_id": phase.get("rollback_target_phase_id"),
-                "agent_name": agent["name"] if agent else None,
-                "agent_id": phase.get("agent_id"),
-                "hermes_profile": agent.get("hermes_profile") if agent else None,
             }
         )
     result: dict[str, Any] = {"ok": True, "phases": rows}
@@ -228,21 +224,6 @@ def api_workflows(namespace_id: PositiveQueryId = None) -> dict[str, Any] | JSON
     return {"ok": True, "workflows": _load_workflows(namespace_id)}
 
 
-def api_agents() -> dict[str, Any] | JSONResponse:
-    rows = _app_state.agent_service().list_agents()
-    return {
-        "ok": True,
-        "agents": [
-            {
-                **agent,
-                "description": agent.get("description", ""),
-                "hermes_profile": agent.get("hermes_profile"),
-            }
-            for agent in rows
-        ],
-    }
-
-
 def api_phase_create(payload: PhaseCreate) -> dict[str, Any] | JSONResponse:
     workflow_id = payload.workflow_id
     assert payload.phase_order is not None
@@ -255,7 +236,6 @@ def api_phase_create(payload: PhaseCreate) -> dict[str, Any] | JSONResponse:
         "execution_type": payload.execution_type,
         "parallel_with_phase_id": payload.parallel_with_phase_id,
         "rollback_target_phase_id": payload.rollback_target_phase_id,
-        "agent_id": payload.agent_id,
     }
     if payload.code:
         data["code"] = payload.code
@@ -288,7 +268,6 @@ def api_phase_update(
         "description",
         "parallel_with_phase_id",
         "rollback_target_phase_id",
-        "agent_id",
         "execution_type",
     }
     selected_fields = scalar_fields.intersection(payload.model_fields_set)
@@ -424,6 +403,9 @@ def api_namespace_create(payload: NamespaceCreate) -> dict[str, Any] | JSONRespo
                 "theme_color": payload.theme_color,
                 "cli_command": payload.cli_command,
                 "key_prefixes": [],
+                "role_key": payload.role_key,
+                "launch_profile": payload.launch_profile,
+                "execution_description": payload.execution_description,
                 **({"workflow_id": payload.workflow_id} if "workflow_id" in payload.model_fields_set else {}),
             }
         )
@@ -446,7 +428,8 @@ def api_namespace_update(namespace_id: PositivePathId, payload: NamespaceUpdate)
     service = _app_state.project_service()
     updates = _updates_from_payload(
         payload,
-        ["name", "description", "workflow_id", "theme_icon", "theme_color", "cli_command"],
+        ["name", "description", "workflow_id", "theme_icon", "theme_color", "cli_command",
+         "role_key", "launch_profile", "execution_description"],
     )
     try:
         service.update_project(namespace_id, updates)
@@ -470,49 +453,6 @@ def api_namespace_delete(namespace_id: PositivePathId) -> dict[str, Any] | JSONR
         return _error(str(exc), 409)
     except ValueError as exc:
         return _error(str(exc), 422)
-    return {"ok": True}
-
-def api_agent_create(payload: AgentCreate) -> dict[str, Any] | JSONResponse:
-    service = _app_state.agent_service()
-    try:
-        agent_id = service.create_agent(
-            {
-                "name": payload.name,
-                "description": payload.description or "",
-                "hermes_profile": payload.hermes_profile,
-            }
-        )["id"]
-    except ConflictError as exc:
-        return _error(str(exc), 409)
-    except ValueError as exc:
-        return _error(str(exc), 422)
-    return {"ok": True, "agent_id": agent_id, "agent": service.get_agent(agent_id)}
-
-
-def api_agent_update(agent_id: PositivePathId, payload: AgentUpdate) -> dict[str, Any] | JSONResponse:
-    service = _app_state.agent_service()
-    updates = _updates_from_payload(payload, ["name", "description"])
-    if "hermes_profile" in payload.model_fields_set:
-        updates["hermes_profile"] = payload.hermes_profile
-    try:
-        service.update_agent(agent_id, updates)
-    except NotFoundError as exc:
-        return _error(str(exc), 404)
-    except ConflictError as exc:
-        return _error(str(exc), 409)
-    except ValueError as exc:
-        return _error(str(exc), 422)
-    return {"ok": True, "agent": service.get_agent(agent_id)}
-
-
-def api_agent_delete(agent_id: PositivePathId) -> dict[str, Any] | JSONResponse:
-    service = _app_state.agent_service()
-    try:
-        service.delete_agent(agent_id)
-    except NotFoundError as exc:
-        return _error(str(exc), 404)
-    except ConflictError as exc:
-        return _error(str(exc), 409)
     return {"ok": True}
 
 

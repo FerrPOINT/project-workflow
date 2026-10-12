@@ -10,7 +10,6 @@ from sqlalchemy.orm import Session
 
 from project_workflow import config
 from project_workflow.domain.repositories import (
-    AgentRepository,
     PhaseCheckRepository,
     PhaseEvidenceRequirementRepository,
     PhaseInstructionRepository,
@@ -22,7 +21,6 @@ from project_workflow.domain.repositories import (
     WorkflowRepository,
 )
 from project_workflow.infrastructure.db.repositories import (
-    SAAgentRepository,
     SAPhaseCheckRepository,
     SAPhaseEvidenceRequirementRepository,
     SAPhaseInstructionRepository,
@@ -55,7 +53,6 @@ class SAUnitOfWork(UnitOfWork):
         self._phase_evidence_requirements = SAPhaseEvidenceRequirementRepository(self._session)
         self._projects: SAProjectRepository = SAProjectRepository(self._session)
         self._tasks: SATaskRepository = SATaskRepository(self._session)
-        self._agents: SAAgentRepository = SAAgentRepository(self._session)
         self._step_history = SATaskStepHistoryRepository(self._session)
 
     def __enter__(self) -> SAUnitOfWork:
@@ -116,9 +113,6 @@ class SAUnitOfWork(UnitOfWork):
     def tasks(self) -> TaskRepository:
         return self._tasks
 
-    @property
-    def agents(self) -> AgentRepository:
-        return self._agents
 
     @property
     def step_history(self) -> TaskStepHistoryRepository:
@@ -166,8 +160,6 @@ class SAUnitOfWork(UnitOfWork):
     def get_tasks(self) -> list[dict[str, Any]]:
         return [task.to_dict() for task in self.tasks.list()]
 
-    def get_agents(self) -> list[dict[str, Any]]:
-        return [agent.to_dict() for agent in self.agents.list()]
 
     def get_workflows(self) -> list[dict[str, Any]]:
         return [workflow.to_dict() for workflow in self.workflows.list()]

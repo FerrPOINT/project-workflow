@@ -119,7 +119,8 @@ class SupervisorEngine:
     def all_phases(self) -> list[Phase]:
         if self._all_phases is None:
             self._all_phases = schema.load_phases_from_db(
-                self._uow, workflow_id=self.workflow_id, mode_id=self.execution_mode_id
+                self._uow, workflow_id=self.workflow_id, mode_id=self.execution_mode_id,
+                profession_settings=self.project,
             )
         return self._all_phases
 
@@ -537,7 +538,10 @@ class SupervisorEngine:
         self.workflow_id = self._require_task_workflow_id(self.task) if self.task else None
         self.workflow = self._workflow_service.get_workflow(self.workflow_id) if self.workflow_id else None
         self._all_phases = (
-            schema.load_phases_from_db(self._uow, workflow_id=self.workflow_id, mode_id=self.execution_mode_id)
+            schema.load_phases_from_db(
+                self._uow, workflow_id=self.workflow_id, mode_id=self.execution_mode_id,
+                profession_settings=self.project,
+            )
             if self.workflow_id
             else []
         )

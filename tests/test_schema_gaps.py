@@ -10,7 +10,6 @@ import pytest
 from project_workflow import config
 from project_workflow.infrastructure.db.schema import (
     _load_seed,
-    _phase_item_to_supervisor,
     _SeedPhase,
     ensure_phase_catalog,
     load_phases_from_db,
@@ -96,25 +95,20 @@ def test_load_packaged_json_seed(tmp_path):
     assert load_phases_from_seed(_seed_path(tmp_path))
 
 
-def test_phase_item_to_supervisor_with_delegate():
-    phase = _phase_item_to_supervisor(
+def test_seed_rejects_phase_agent_assignment():
+    with pytest.raises(ValueError, match="delegate"):
         _SeedPhase.model_validate({
-            "phase_order": 1,
-            "code": "DLG",
-            "name": "Delegate",
+            "phase_order": 1, "code": "DLG", "name": "Delegate",
             "delegate": {"agent": "reviewer"},
         })
-    )
-    assert phase.delegate is not None
-    assert phase.delegate.agent == "reviewer"
 
 
 def test_catalog_bootstrap_is_database_idempotent(tmp_path, monkeypatch):
     uow = _bootstrapped_uow(tmp_path, monkeypatch)
-    counts = (len(uow.workflows.list()), len(uow.phases.list()), len(uow.agents.list()))
+    counts = (len(uow.workflows.list()), len(uow.phases.list()), len(uow.projects.list()))
     ensure_phase_catalog(uow)
     uow.commit()
-    assert counts == (len(uow.workflows.list()), len(uow.phases.list()), len(uow.agents.list()))
+    assert counts == (len(uow.workflows.list()), len(uow.phases.list()), len(uow.projects.list()))
     uow.close()
 
 
@@ -163,7 +157,7 @@ def test_catalog_bootstrap_is_database_idempotent(tmp_path, monkeypatch):
                 "name": "Phase",
                 "delegate": {"agent": "reviewer", "prompt_template": "lost"},
             },
-            "prompt_template",
+            "delegate",
         ),
         (
             {
@@ -172,7 +166,7 @@ def test_catalog_bootstrap_is_database_idempotent(tmp_path, monkeypatch):
                 "name": "Phase",
                 "delegate": {"agent": "reviewer", "toolsets": []},
             },
-            "toolsets",
+            "delegate",
         ),
         (
             {
@@ -181,7 +175,7 @@ def test_catalog_bootstrap_is_database_idempotent(tmp_path, monkeypatch):
                 "name": "Phase",
                 "delegate": {"agent": "reviewer", "timeout_min": 5},
             },
-            "timeout_min",
+            "delegate",
         ),
         (
             {
@@ -190,7 +184,7 @@ def test_catalog_bootstrap_is_database_idempotent(tmp_path, monkeypatch):
                 "name": "Phase",
                 "delegate": {"agent": "reviewer", "max_cycles": 2},
             },
-            "max_cycles",
+            "delegate",
         ),
     ],
 )
@@ -313,53 +307,5 @@ def test_invalid_seed_is_detected_before_catalog_writes(tmp_path):
 
     assert uow.workflows.list() == []
     assert uow.phases.list() == []
-    assert uow.agents.list() == []
-    uow.close()
-
-
-@pytest.mark.parametrize(
-    "catalog",
-    [
-        [
-            {
-                "phase_order": 1,
-                "code": "one",
-                "name": "One",
-                "delegate": {"agent": "reviewer", "hermes_profile": "profile-one"},
-            },
-            {
-                "phase_order": 2,
-                "code": "two",
-                "name": "Two",
-                "delegate": {"agent": "reviewer", "hermes_profile": "profile-two"},
-            },
-        ],
-        [
-            {
-                "phase_order": 1,
-                "code": "one",
-                "name": "One",
-                "delegate": {"agent": "reviewer", "hermes_profile": "shared-profile"},
-            },
-            {
-                "phase_order": 2,
-                "code": "two",
-                "name": "Two",
-                "delegate": {"agent": "coder", "hermes_profile": "shared-profile"},
-            },
-        ],
-    ],
-)
-def test_seed_rejects_ambiguous_agent_profile_ownership_before_writes(tmp_path, catalog):
-    path = tmp_path / "ambiguous-agents.json"
-    path.write_text(json.dumps(catalog), encoding="utf-8")
-    uow = SAUnitOfWork(f"sqlite:///{tmp_path / 'ambiguous-agents.db'}")
-    ensure_schema(uow.session.get_bind())
-
-    with pytest.raises(ValueError, match="профил"):
-        ensure_phase_catalog(uow, path)
-
-    assert uow.workflows.list() == []
-    assert uow.phases.list() == []
-    assert uow.agents.list() == []
+    assert "agents" not in uow.session.get_bind().dialect.get_table_names(uow.session.connection())
     uow.close()

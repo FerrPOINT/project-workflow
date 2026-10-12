@@ -491,19 +491,14 @@ async function captureAll(outputRoot) {
       ],
     });
     await capture(page, outputRoot, {
-      name: "agents.png",
-      url: `/agents?namespace_id=${dev.id}`,
-      expected: [
-        "Агенты",
-        "КЛЮЧ ЗАПУСКА",
-        "Координатор",
-        "Оператор",
-        "Ревьюер",
-        "run-coord",
-        "run-dev",
-        "run-review",
-      ],
-      assertions: [(targetPage, name) => assertLocatorCount(targetPage, name, "#agentsList .agent-entry", 6, "agent list")],
+      name: "profession-execution.png",
+      url: `/namespaces?namespace_id=${dev.id}`,
+      expected: ["НАСТРОЙКИ ВЫПОЛНЕНИЯ", "КЛЮЧ ЗАПУСКА", "ОПИСАНИЕ ВЫПОЛНЕНИЯ"],
+      assertions: [async (targetPage, name) => {
+        await assertLocatorCount(targetPage, name, "#namespaceLaunchProfile", 1, "profession launch profile");
+        const profile = await targetPage.locator("#namespaceLaunchProfile").inputValue();
+        if (profile !== "run-dev") throw new Error(`${name}: unexpected profession launch profile ${profile}`);
+      }],
     });
     await capture(page, outputRoot, {
       name: "settings.png",

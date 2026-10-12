@@ -116,10 +116,8 @@ class UIDataService:
     def _load_phases(self, workflow_id: int, mode_id: int | None = None) -> list[dict[str, Any]]:
         wdb = self._app_state.get_db()
         rows = wdb.get_phases(workflow_id=workflow_id, mode_id=mode_id)
-        agents_by_id = {agent["id"]: agent for agent in wdb.get_agents()}
         result = []
         for p in rows:
-            assigned_agent = agents_by_id.get(p.get("agent_id")) if p.get("agent_id") else None
             result.append(
                 {
                     "id": p["id"],
@@ -132,8 +130,6 @@ class UIDataService:
                     "phase_num": p["phase_order"],
                     "name": p["name"],
                     "description": p["description"],
-                    "agent_id": p.get("agent_id"),
-                    "agent_name": assigned_agent.get("name") if assigned_agent else None,
                     "execution_type": p.get("execution_type", "sync"),
                     "parallel_with_phase_id": p.get("parallel_with_phase_id"),
                     "rollback_target_phase_id": p.get("rollback_target_phase_id"),

@@ -52,7 +52,7 @@ class PMExecution(Base):
     execution_ref: Mapped[str] = mapped_column(String(512), primary_key=True)
     task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id", ondelete="RESTRICT"), unique=True)
     assignment_id: Mapped[int] = mapped_column(ForeignKey("task_runtime_assignments.id", ondelete="RESTRICT"))
-    agent_id: Mapped[int] = mapped_column(ForeignKey("agents.id", ondelete="RESTRICT"))
+    role_key: Mapped[str] = mapped_column(String(128), nullable=False)
     tracker_instance_ref: Mapped[str] = mapped_column(String(512))
     tracker_project_ref: Mapped[str] = mapped_column(String(512))
     task_ref: Mapped[str] = mapped_column(String(512))
@@ -122,22 +122,6 @@ class ResourceExecutionContext(Base):
     mode_id: Mapped[int] = mapped_column(ForeignKey("workflow_modes.id", ondelete="RESTRICT"), nullable=False)
     created_by_subject: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-
-
-class Agent(Base):
-    __tablename__ = "agents"
-
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    name: Mapped[str] = mapped_column(String, nullable=False)
-    description: Mapped[str] = mapped_column(String, nullable=False, default="", server_default=text("''"))
-    hermes_profile: Mapped[str | None] = mapped_column(String(251), nullable=True)
-
-    __table_args__ = (
-        Index("uq_agents_name", "name", unique=True),
-        Index("uq_agents_hermes_profile", "hermes_profile", unique=True),
-    )
-
-    phases: Mapped[list[Phase]] = relationship("Phase", back_populates="agent")
 
 
 class Workflow(Base):
@@ -248,7 +232,6 @@ class Phase(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     phase_order: Mapped[int] = mapped_column(nullable=False)
-    agent_id: Mapped[int | None] = mapped_column(ForeignKey("agents.id", ondelete="RESTRICT"), nullable=True)
     parallel_with_phase_id: Mapped[int | None] = mapped_column(nullable=True)
     rollback_target_phase_id: Mapped[int | None] = mapped_column(nullable=True)
     execution_type: Mapped[str] = mapped_column(
@@ -288,7 +271,6 @@ class Phase(Base):
 
     workflow: Mapped[Workflow] = relationship("Workflow", back_populates="phases", overlaps="phases,mode")
     mode: Mapped[WorkflowMode] = relationship("WorkflowMode", back_populates="phases", overlaps="phases,workflow")
-    agent: Mapped[Agent | None] = relationship("Agent", back_populates="phases")
     instructions: Mapped[list[PhaseInstruction]] = relationship(
         "PhaseInstruction", back_populates="phase", cascade="all, delete-orphan"
     )
@@ -365,6 +347,9 @@ class Project(Base):
     theme_icon: Mapped[str] = mapped_column(String(32), nullable=False, default="folder", server_default="folder")
     theme_color: Mapped[str] = mapped_column(String(7), nullable=False, default="#5E6AD2", server_default="#5E6AD2")
     cli_command: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    role_key: Mapped[str | None] = mapped_column(String, nullable=True)
+    launch_profile: Mapped[str | None] = mapped_column(String(251), nullable=True)
+    execution_description: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default=text("''"))
     key_prefixes: Mapped[str] = mapped_column(String, nullable=False, default="[]", server_default="[]")
 
     __table_args__ = (UniqueConstraint("id", "workflow_id", name="uq_projects_id_workflow"),)

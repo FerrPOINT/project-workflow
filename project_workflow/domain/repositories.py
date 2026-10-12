@@ -8,7 +8,6 @@ from collections.abc import Mapping, Sequence
 from typing import Any, Literal
 
 from project_workflow.domain import (
-    Agent,
     Phase,
     Project,
     Task,
@@ -105,11 +104,6 @@ class PhaseRepository(ABC):
     @abstractmethod
     def reference_kinds(self, phase_id: int) -> set[str]: ...
 
-    @abstractmethod
-    def has_agent_reference(self, agent_id: int) -> bool: ...
-
-    @abstractmethod
-    def workflow_ids_for_agent(self, agent_id: int) -> Sequence[int]: ...
 
     @abstractmethod
     def resequence(self, workflow_id: int, mode_id: int | None = None) -> None: ...
@@ -313,36 +307,6 @@ class TaskRepository(ABC):
     @abstractmethod
     def list_phase_events_batch(self, task_ids: Sequence[int]) -> Mapping[int, Sequence[TaskPhaseEvent]]: ...
 
-class AgentRepository(ABC):
-    """Persistence contract for agents."""
-
-    @abstractmethod
-    def list(self) -> Sequence[Agent]: ...
-
-    @abstractmethod
-    def list_by_ids(self, agent_ids: Sequence[int]) -> Sequence[Agent]: ...
-
-    @abstractmethod
-    def get_by_id(self, agent_id: int) -> Agent | None: ...
-
-    @abstractmethod
-    def get_by_name(self, name: str) -> Agent | None: ...
-
-    @abstractmethod
-    def get_by_hermes_profile(self, profile: str) -> Agent | None: ...
-
-    @abstractmethod
-    def lock(self, agent_id: int) -> Agent | None: ...
-
-    @abstractmethod
-    def create(self, data: dict[str, Any]) -> int: ...
-
-    @abstractmethod
-    def update(self, agent_id: int, data: dict[str, Any]) -> None: ...
-
-    @abstractmethod
-    def delete(self, agent_id: int) -> None: ...
-
 
 class TaskStepHistoryRepository(ABC):
     """Persistence contract for evaluated CLI ``step`` records."""
@@ -462,9 +426,6 @@ class UnitOfWork(ABC):
     @abstractmethod
     def tasks(self) -> TaskRepository: ...
 
-    @property
-    @abstractmethod
-    def agents(self) -> AgentRepository: ...
 
     @property
     @abstractmethod

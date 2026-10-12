@@ -6,10 +6,7 @@ import datetime
 
 from sqlalchemy import text
 
-from project_workflow.application.agent import AgentService
-from project_workflow.infrastructure.db.schema import load_phases_from_db
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
-from project_workflow.supervisor.contracts import PhaseContractBuilder
 
 
 def _runtime_uow() -> SAUnitOfWork:
@@ -45,28 +42,6 @@ def test_phase_events_are_append_only_and_timestamped():
         events = uow.list_phase_events(task_id)
         assert [event["event_type"] for event in events] == ["entered", "completed", "entered"]
         assert len({event["id"] for event in events}) == 3
-    finally:
-        uow.close()
-
-
-def test_agent_hermes_profile_reaches_phase_contract():
-    uow = _runtime_uow()
-    try:
-        project = uow.projects.list()[0]
-        phase = uow.phases.list(workflow_id=project.workflow_id)[0]
-        agent = AgentService(uow).create_agent(
-            {"name": "Hermes reviewer", "description": "", "hermes_profile": "review_profile"}
-        )
-        uow.phases.update(phase.id, {"agent_id": agent["id"]})
-        uow.commit()
-
-        phases = load_phases_from_db(uow, workflow_id=project.workflow_id)
-        loaded = next(item for item in phases if item.code == phase.code)
-        contract = PhaseContractBuilder(phases).build(loaded).to_dict()
-
-        assert contract["delegate_agent"] == "Hermes reviewer"
-        assert contract["hermes_profile"] == "review_profile"
-        assert uow.agents.get_by_hermes_profile("review_profile").id == agent["id"]
     finally:
         uow.close()
 

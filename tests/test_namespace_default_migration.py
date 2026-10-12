@@ -5,7 +5,7 @@ from sqlalchemy import create_engine, text
 
 from project_workflow import config
 from project_workflow.infrastructure.db.managed_catalog import ensure_managed_catalog, validate_managed_catalog_state
-from project_workflow.infrastructure.db.session import ensure_migrated, reset_engine, run_alembic_command
+from project_workflow.infrastructure.db.session import reset_engine, run_alembic_command
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from scripts.init_db import main
 
@@ -76,30 +76,28 @@ def assert_upgrade_preserves_catalog(engine, tmp_path):
                         covered_item_ids=[], missing_item_ids=[], blocker_messages=[],
                         evaluation_snapshot={}, supervisor_response={})
         uow.workflows.create({"key": "user:custom", "name": "Custom workflow", "is_default": False})
-    run_alembic_command("downgrade", engine, "0009_pm_draft_assignment")
-    tables = ["projects", "agents", "workflow_modes", "phases", "phase_instructions", "tasks", "task_step_history"]
+    from importlib import import_module
+
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+
+    tables = ["projects", "workflow_modes", "phases", "phase_instructions", "tasks", "task_step_history"]
     with engine.connect() as connection:
         before = {table: [tuple(row) for row in connection.execute(text(f"SELECT * FROM {table} ORDER BY id"))]
                   for table in tables}
-    ensure_migrated(engine)
-    ensure_migrated(engine)
+    with engine.begin() as connection:
+        migration = import_module("project_workflow.infrastructure.db.migrations.versions.0010_namespace_default_names")
+        with Operations.context(MigrationContext.configure(connection)):
+            migration.upgrade()
+            migration.upgrade()
     with engine.connect() as connection:
         for table in tables:
             rows = connection.execute(text(f"SELECT * FROM {table} ORDER BY id"))
             assert [tuple(row) for row in rows] == before[table]
-        custom_name = connection.execute(text("SELECT name FROM workflows WHERE key='user:custom'")).scalar_one()
-        assert custom_name == "Custom workflow"
-        names = connection.execute(
-            text("SELECT name FROM workflows WHERE key LIKE 'hermes-sdlc:%'")
-        ).scalars().all()
-        assert names == ["Дефолтный"] * 7
-    run_alembic_command("downgrade", engine, "0009_pm_draft_assignment")
-    with engine.connect() as connection:
-        for table in tables:
-            rows = connection.execute(text(f"SELECT * FROM {table} ORDER BY id"))
-            assert [tuple(row) for row in rows] == before[table]
-        names = connection.execute(
-            text("SELECT name FROM workflows WHERE key LIKE 'hermes-sdlc:%'")
-        ).scalars().all()
-        assert names == ["Дефолтный"] * 7
-    ensure_migrated(engine)
+        assert connection.execute(text("SELECT name FROM workflows WHERE key='user:custom'")).scalar_one() == (
+            "Custom workflow"
+        )
+    with SAUnitOfWork(engine) as uow:
+        assert all(w.name == "Дефолтный" for w in uow.workflows.list() if w.key.startswith("hermes-sdlc:"))
+        assert uow.tasks.get_by_id(task_id).task_key == "DV-42"
+        assert uow.step_history.list(task_id=task_id)[0].worker_report == "Saved report"

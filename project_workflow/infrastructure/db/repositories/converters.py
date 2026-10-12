@@ -7,7 +7,6 @@ import json
 from typing import Any
 
 from project_workflow.domain import (
-    Agent,
     Phase,
     Project,
     Task,
@@ -39,7 +38,6 @@ def _row_to_phase(row: m.Phase) -> Phase:
         name=row.name,
         description=row.description,
         phase_order=row.phase_order,
-        agent_id=row.agent_id,
         parallel_with_phase_id=row.parallel_with_phase_id,
         rollback_target_phase_id=row.rollback_target_phase_id,
         execution_type=row.execution_type or "sync",
@@ -94,6 +92,9 @@ def _row_to_project(row: m.Project) -> Project:
         theme_icon=normalize_theme_icon(row.theme_icon),
         theme_color=normalize_theme_color(row.theme_color),
         cli_command=getattr(row, "cli_command", "") or "",
+        role_key=row.role_key,
+        launch_profile=row.launch_profile,
+        execution_description=row.execution_description,
         key_prefixes=list(prefixes),
         workflow_name=row.workflow.name if row.workflow else None,
     )
@@ -178,15 +179,6 @@ def _row_to_runtime_assignment(row: m.TaskRuntimeAssignment) -> TaskRuntimeAssig
         payload_sha256=row.payload_sha256,
         payload=payload,
         created_at=_iso(row.created_at),
-    )
-
-
-def _row_to_agent(row: m.Agent) -> Agent:
-    return Agent(
-        id=row.id,
-        name=row.name,
-        description=row.description or "",
-        hermes_profile=row.hermes_profile or None,
     )
 
 

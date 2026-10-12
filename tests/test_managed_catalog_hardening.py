@@ -9,7 +9,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from project_workflow import config
-from project_workflow.application.agent import AgentService
 from project_workflow.application.phase import PhaseServiceApp
 from project_workflow.application.project import ProjectService
 from project_workflow.application.workflow import WorkflowService
@@ -52,36 +51,14 @@ def _managed_objects(uow: SAUnitOfWork):
     phase = phases[0]
     assert phase.id is not None
     instruction = list(uow.phase_instructions.list(phase.id))[0]
-    agent = uow.agents.get_by_name("project_manager")
     namespace = uow.projects.get_by_cli_command("workflow-project_manager")
-    assert agent is not None and agent.id is not None
     assert namespace is not None and namespace.id is not None
-    return workflow, mode, phases, phase, instruction, agent, namespace
-
-
-def test_unmanaged_database_keeps_crud_and_default_mode_compatibility(empty_uow):
-    workflow = WorkflowService(empty_uow).create_workflow({"name": "Local workflow"})
-    workflow_id = int(workflow["id"])
-    WorkflowService(empty_uow).update_workflow(workflow_id, {"description": "editable"})
-    mode = WorkflowService(empty_uow).create_mode(
-        workflow_id, {"key": "second", "name": "Second"}
-    )
-    phase = PhaseServiceApp(empty_uow).create_phase(
-        {"workflow_id": workflow_id, "mode_id": int(mode["id"]), "name": "Editable"}
-    )
-    AgentService(empty_uow).create_agent({"name": "local-agent"})
-    namespace = ProjectService(empty_uow).create_project(
-        {"code": "LOC", "workflow_id": workflow_id}
-    )
-
-    assert phase["mode_id"] == mode["id"]
-    assert namespace["workflow_id"] == workflow_id
-    assert validate_managed_catalog_state(empty_uow) is False
+    return workflow, mode, phases, phase, instruction, namespace, namespace
 
 
 @pytest.mark.parametrize(
     "drift_kind",
-    ["mode", "instruction", "skills", "check", "evidence", "profile"],
+    ["mode", "instruction", "skills", "check", "evidence"],
 )
 def test_validator_rejects_full_managed_content_drift(empty_uow, drift_kind: str):
     ensure_managed_catalog(empty_uow)
@@ -111,7 +88,7 @@ def test_validator_rejects_full_managed_content_drift(empty_uow, drift_kind: str
             int(evidence["id"]), {"description": "drifted evidence"}
         )
     else:
-        empty_uow.agents.update(int(agent.id), {"hermes_profile": "drifted-profile"})
+        raise AssertionError("Unexpected drift kind")
     empty_uow.commit()
 
     with pytest.raises(ValueError):
@@ -329,3 +306,22 @@ def test_startup_keeps_saved_namespace_theme(monkeypatch):
         assert client.get("/namespaces").status_code == 200
     with SAUnitOfWork() as readback:
         assert readback.projects.get_by_id(int(namespace.id)).theme_icon == "rocket"
+
+
+def test_unmanaged_database_keeps_crud_and_default_mode_compatibility(empty_uow):
+    workflow = WorkflowService(empty_uow).create_workflow({"name": "Local workflow"})
+    workflow_id = int(workflow["id"])
+    WorkflowService(empty_uow).update_workflow(workflow_id, {"description": "editable"})
+    mode = WorkflowService(empty_uow).create_mode(
+        workflow_id, {"key": "second", "name": "Second"}
+    )
+    phase = PhaseServiceApp(empty_uow).create_phase(
+        {"workflow_id": workflow_id, "mode_id": int(mode["id"]), "name": "Editable"}
+    )
+    namespace = ProjectService(empty_uow).create_project(
+        {"code": "LOC", "workflow_id": workflow_id}
+    )
+
+    assert phase["mode_id"] == mode["id"]
+    assert namespace["workflow_id"] == workflow_id
+    assert validate_managed_catalog_state(empty_uow) is False

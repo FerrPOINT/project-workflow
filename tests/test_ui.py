@@ -118,7 +118,6 @@ def _phase_restore_payload(phase: dict) -> dict:
     return {
         "name": phase.get("name", ""),
         "description": phase.get("description", ""),
-        "agent_id": phase.get("agent_id"),
         "execution_type": phase.get("execution_type", "sync"),
         "instructions": [
             {
@@ -248,13 +247,6 @@ def setup_db(isolate_ui_runtime_state, request):
                 "status": "active",
                 "current_phase_id": intake_phase.id,
             },
-        )
-    if not any(agent.name == "reviewer" for agent in uow.agents.list()):
-        uow.agents.create(
-            {
-                "name": "reviewer",
-                "description": "Проверяет качество решения и фиксирует замечания",
-            }
         )
     for profession in uow.projects.list():
         uow.workflows.assign_profession(profession.workflow_id, int(profession.id))
@@ -524,7 +516,7 @@ class TestPhasesPage:
         assert '.platform-header-context{justify-content:flex-end}' in response.text
 
     def test_shell_has_one_service_switcher_and_account_theme_with_mobile_namespace(self):
-        response = client.get("/agents")
+        response = client.get("/namespaces")
 
         assert response.status_code == 200
         assert 'class="sidebar-utilities"' in response.text
@@ -837,11 +829,8 @@ class TestPhasesPage:
         response = client.get("/phases")
 
         assert response.status_code == 200
-        assert re.search(
-            r'<div class="execution-row">\s*<span class="badge badge-parallel">параллельно</span>\s*'
-            r'<span class="badge badge-agent">researcher</span>',
-            response.text,
-        )
+        assert 'class="badge badge-parallel"' in response.text
+        assert 'class="badge badge-agent"' not in response.text
 
     def test_phases_page_add_phase_button_uses_timeline_workflow_id(self):
         response = client.get("/phases")
@@ -1046,31 +1035,11 @@ class TestPhasesPage:
         finally:
             _batch_update_orders(uow, original_batch)
 
-    def test_phases_page_shows_assigned_agent_instead_of_hardcoded_critic(self):
-        uow = ui_app_state.get_db()
-        reviewer = next(agent.to_dict() for agent in uow.agents.list() if agent.name == "reviewer")
-        tracked_codes = ["3.DOR_GATE", "7.PLAN_GATE", "12.RELEASE_GATE", "15.RETRO"]
-        original_agent_ids = {
-            code: (_as_dict(phase_by_code(uow, code)) or {}).get("agent_id") for code in tracked_codes
-        }
+    def test_phases_page_has_no_agent_assignment(self):
+        response = client.get("/phases")
+        assert response.status_code == 200
+        assert 'class="badge badge-agent"' not in response.text
 
-        try:
-            for code in tracked_codes:
-                assert client.put(_phase_api_path(code), json={"agent_id": None}).status_code == 200
-            assert client.put(_phase_api_path("3.DOR_GATE"), json={"agent_id": reviewer["id"]}).status_code == 200
-
-            response = client.get("/phases")
-            assert response.status_code == 200
-
-            phase_09_html = response.text.split(_phase_href("3.DOR_GATE"), 1)[1].split("</a>", 1)[0]
-            phase_35_html = response.text.split(_phase_href("7.PLAN_GATE"), 1)[1].split("</a>", 1)[0]
-
-            assert "reviewer" in phase_09_html
-            assert "🛡️ critic" not in response.text
-            assert "reviewer" not in phase_35_html
-        finally:
-            for code, agent_id in original_agent_ids.items():
-                assert client.put(_phase_api_path(code), json={"agent_id": agent_id}).status_code == 200
 
     def test_phases_page_uses_real_phase_execution_type_for_parallel_badge(self):
         response = client.get("/phases")
@@ -1177,7 +1146,7 @@ class TestPhaseDetail:
         assert response.status_code == 200
         assert 'aria-label="Название фазы"' in response.text
         assert 'aria-label="Описание фазы"' in response.text
-        assert '<label for="agentSelect">Агент:</label>' in response.text
+        assert 'id="agentSelect"' not in response.text
         assert '<button type="button" class="execution-toggle"' in response.text
         assert 'aria-pressed="false"' in response.text
         assert 'aria-label="Описание инструкции ' in response.text
@@ -2771,7 +2740,6 @@ def test_ui_deletions_use_product_modal_not_browser_confirm():
     templates = {
         name: (TEMPLATES_DIR / name).read_text(encoding="utf-8")
         for name in (
-            "agents.html",
             "instructions.html",
             "namespaces.html",
             "phase_detail.html",
@@ -2791,80 +2759,6 @@ def test_ui_deletions_use_product_modal_not_browser_confirm():
     assert ".btn-danger{background:#b42332;color:#fff" in base
     assert "html[data-theme='dark'] .modal-eyebrow{color:#ff6b6b}" in base
     assert all("confirm(" not in template for template in templates.values())
-
-
-class TestAgentsPage:
-    def test_form_editors_have_touch_sized_controls(self):
-        for path, rule in (
-            ("/namespaces", ".namespace-panel input,.namespace-panel select,.namespace-panel .btn{min-height:40px}"),
-            ("/workflows", ".workflow-panel input,.workflow-panel .btn{min-height:40px}"),
-            ("/agents", ".agent-editor input,.agent-editor .btn{min-height:40px}"),
-        ):
-            response = client.get(path)
-            assert response.status_code == 200
-            assert rule in response.text
-            assert "delete:hover{" not in response.text
-            assert "html[data-theme='dark'] .agent-delete" not in response.text
-
-    def test_agents_page_shows_name_and_description_without_sort_field(self):
-        response = client.get("/agents")
-        assert response.status_code == 200
-        assert "Описание" in response.text
-        assert "reviewer" in response.text
-        assert "Sort" not in response.text
-        assert 'type="number"' not in response.text
-        assert "placeholder=" not in response.text
-
-    def test_agents_page_rejects_unknown_query_namespace(self):
-        response = client.get(f"/agents?namespace_id={UNKNOWN_NAMESPACE_ID}")
-        assert response.status_code == 404
-        assert f"Профессия {UNKNOWN_NAMESPACE_ID} не найдена" in response.text
-        assert "reviewer" not in response.text
-
-    def test_agents_crud_reports_network_errors(self):
-        response = client.get("/agents")
-
-        assert response.status_code == 200
-        assert response.text.count("catch(error){showRequestError(error)}") == 3
-
-    def test_agents_page_uses_compact_explicit_editor(self):
-        response = client.get("/agents")
-
-        assert response.status_code == 200
-        assert 'class="agent-list" id="agentsList"' in response.text
-        assert 'class="agent-entry" data-id=' in response.text
-        assert 'onsubmit="saveAgent(event,this)"' in response.text
-        assert 'onclick="cancelAgent(this)"' in response.text
-        assert 'class="agent-create" id="agentCreatePanel"' in response.text
-        assert 'onblur="saveRow(this)"' not in response.text
-        assert 'function cancelAgent(button)' in response.text
-        assert response.text.count("entry.querySelector('summary').focus()") == 2
-        assert "title:'Удалить агента «'+name+'»?'" in response.text
-        assert ".agent-editor input,.agent-editor .btn,.agent-create summary{min-height:44px}" in response.text
-
-    def test_agents_api_create_and_update_description(self):
-        create = client.post(
-            "/api/agents",
-            json={
-                "name": "architect",
-                "description": "Проектирует решение",
-            },
-        )
-        assert create.status_code == 200
-        payload = create.json()
-        assert payload["ok"] is True
-
-        update = client.put(
-            f"/api/agents/{payload['agent_id']}",
-            json={
-                "description": "Проектирует и уточняет контракты",
-            },
-        )
-        assert update.status_code == 200
-
-        agents = client.get("/api/agents").json()["agents"]
-        architect = next(agent for agent in agents if agent["id"] == payload["agent_id"])
-        assert architect["description"] == "Проектирует и уточняет контракты"
 
 
 class TestSettingsPage:
@@ -2980,7 +2874,7 @@ class TestSettingsPage:
 class TestUiNetworkFailures:
     @pytest.mark.parametrize(
         ("path", "minimum_handlers"),
-        [("/namespaces", 4), ("/workflows", 4), ("/agents", 3)],
+        [("/namespaces", 4), ("/workflows", 4)],
     )
     def test_crud_reports_network_errors(self, path, minimum_handlers):
         response = client.get(path)

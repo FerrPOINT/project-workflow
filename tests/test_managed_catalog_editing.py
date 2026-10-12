@@ -55,8 +55,11 @@ def test_installed_catalog_does_not_block_unrelated_crud():
     with TestClient(create_app()) as client:
         workflow = client.post("/api/workflows", json={"name": "Another workflow"})
         assert workflow.status_code == 200, workflow.text
-        agent = client.post("/api/agents", json={"name": "another-agent"})
-        assert agent.status_code == 200, agent.text
+        profession = client.post("/api/namespaces", json={
+            "name": "Another profession", "cli_command": "workflow-another",
+            "role_key": "designer", "launch_profile": "designer-profile",
+        })
+        assert profession.status_code == 200, profession.text
 
 
 def test_init_db_preserves_saved_catalog_edits(tmp_path, monkeypatch):

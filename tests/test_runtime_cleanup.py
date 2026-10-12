@@ -47,27 +47,6 @@ EXPECTED_CODES = [
     "15.RETRO",
 ]
 
-EXPECTED_PROFILES = {
-    "1.INTAKE": "sdlc-orchestrator",
-    "2.REQUIREMENTS": "sdlc-orchestrator",
-    "3.DOR_GATE": None,
-    "4.START": "sdlc-ops",
-    "5.RESEARCH": "sdlc-researcher",
-    "5.PREFLIGHT": "sdlc-ops",
-    "6.SOLUTION": "sdlc-orchestrator",
-    "6.TEST_PLAN": "sdlc-critic",
-    "7.PLAN_GATE": None,
-    "8.IMPLEMENT": "sdlc-coder",
-    "9.PR": "sdlc-ops",
-    "10.REVIEW": "sdlc-reviewer",
-    "10.QA": "sdlc-reviewer",
-    "10.DATAFLOW": "sdlc-researcher",
-    "11.RUNTIME": "sdlc-ops",
-    "12.RELEASE_GATE": None,
-    "13.DELIVERY": "sdlc-ops",
-    "14.CLOSE": "sdlc-orchestrator",
-    "15.RETRO": "sdlc-critic",
-}
 
 
 def _items() -> list[dict]:
@@ -203,12 +182,9 @@ def test_seed_catalog_has_exact_assignment_groups():
     ]
 
 
-def test_seed_catalog_actor_and_profile_bindings_are_complete():
+def test_seed_catalog_instructions_are_complete_and_have_no_phase_executor():
     for phase in _items():
-        delegate = phase.get("delegate") or {}
-        expected_profile = EXPECTED_PROFILES[phase["code"]]
-        assert delegate.get("hermes_profile") == expected_profile
-        assert delegate.get("agent") == ("codex-operator" if expected_profile is None else delegate.get("agent"))
+        assert "delegate" not in phase
         assert phase.get("instructions")
         assert phase.get("checks")
         assert phase.get("evidence")
@@ -263,16 +239,9 @@ def test_post_merge_phases_have_no_workflow_rollback_target():
         assert by_code[code].get("rollback_target_phase_code") is None
 
 
-def test_sqlite_bootstrap_preserves_operator_without_fake_hermes_profile(tmp_path):
-    uow = SAUnitOfWork(f"sqlite:///{tmp_path / 'workflow.db'}")
-    prepare_sqlite_uow(uow)
-
-    phases = schema.load_phases_from_db(uow)
-    assert len(phases) == 19
-    by_code = {phase.code: phase for phase in phases}
-    for code, profile in EXPECTED_PROFILES.items():
-        phase = by_code[code]
-        assert phase.delegate is not None
-        assert phase.delegate.hermes_profile == profile
-        if profile is None:
-            assert phase.delegate.agent == "codex-operator"
+def test_phase_catalog_has_no_per_phase_execution_profile(tmp_path):
+    with SAUnitOfWork(f"sqlite:///{tmp_path / 'workflow.db'}") as uow:
+        prepare_sqlite_uow(uow)
+        phases = schema.load_phases_from_db(uow)
+        assert len(phases) == 19
+        assert all(phase.delegate is None for phase in phases)

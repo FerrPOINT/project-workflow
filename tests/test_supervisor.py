@@ -40,13 +40,10 @@ def _bootstrap_supervisor_workflow(uow: SAUnitOfWork) -> None:
             "workflow_id": workflow_id,
             "code": "SUP",
             "name": "Supervisor Project",
+            "role_key": "critic",
             "key_prefixes": ["SUP"],
         }
     )
-
-    agents = [a.to_dict() for a in uow.agents.list()]
-    critic = next((agent for agent in agents if agent["name"] == "critic"), None)
-    critic_id = critic["id"] if critic else uow.agents.create({"name": "critic", "description": "Quality gate"})
 
     intake_id = uow.phases.create(
         {
@@ -75,7 +72,6 @@ def _bootstrap_supervisor_workflow(uow: SAUnitOfWork) -> None:
             "name": "Review Gate",
             "description": "Review readiness before marking the task done.",
             "phase_order": 2,
-            "agent_id": critic_id,
             "rollback_target_phase_id": intake_id,
         }
     )

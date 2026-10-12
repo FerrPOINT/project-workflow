@@ -500,7 +500,6 @@ def phase_detail(request: Request, phase_id: PositivePathId) -> HTMLResponse:
         )
     if not _workflow_matches_selected_namespace(phase.get("workflow_id"), context):
         return _phase_not_in_selected_namespace_page(request, context)
-    agents = _app_state.agent_service().list_agents()
     workflow_phases = _app_state.phase_service().list_phases(
         phase.get("workflow_id"), mode_id=phase.get("mode_id")
     )
@@ -536,7 +535,6 @@ def phase_detail(request: Request, phase_id: PositivePathId) -> HTMLResponse:
     context.update(
         {
             "phase": phase,
-            "agents": agents,
             "workflow_phases": workflow_phases,
             "parallel_candidates": parallel_candidates,
             "rollback_target_phase": rollback_target_phase,
@@ -725,23 +723,6 @@ def settings_page(request: Request) -> HTMLResponse:
     return _template_response(
         request=request,
         name="settings.html",
-        context=context,
-    )
-
-
-def agents_page(request: Request) -> HTMLResponse:
-    """Список агентов."""
-    context = _namespace_context(request, page="agents")
-    if error_response := _namespace_error_page(request, context, page="agents"):
-        return error_response
-    agents = [
-        {**agent, "launch_profile": agent.get("hermes_profile") or ""}
-        for agent in _app_state.agent_service().list_agents()
-    ]
-    context.update({"agents": agents})
-    return _template_response(
-        request=request,
-        name="agents.html",
         context=context,
     )
 
