@@ -10,7 +10,8 @@ ROOT = Path(__file__).resolve().parents[1]
 CONTENT = ROOT / "project_workflow/references/pm_cli_draft_mode_v1.json"
 LEGACY = ROOT / "project_workflow/references/hermes_sdlc_catalog_v1.json"
 CONTENT_FIELDS = {"instructions", "checks", "evidence"}
-READ_PHASE = "project-workflow --json step --task <workflow-task-key>"
+READ_PHASE = ("project-workflow --json step --task <workflow-task-key> --operation-key <original-key>"
+              " --runtime-request <private-request-json> --execution-token-file <private-token-file>")
 READ_ISSUE = "task-tracker --output json issue get <issue-id>"
 
 
@@ -26,7 +27,7 @@ class PmV2CliContentTests(unittest.TestCase):
         text = json.dumps(mode).lower()
         for forbidden in ("publishdraft", "publish_draft", "workflow_step", "tracker_context", "tracker_requirements",
                           "tracker_clarifications", "tracker_publish_revision", "tracker_publish_question",
-                          "step_operation_key", "call tracker_confirm", "call workflow_publish"):
+                          "call tracker_confirm", "call workflow_publish"):
             self.assertNotIn(forbidden, text)
         self.assertFalse(re.findall(r"\b(?:tracker|workflow)_\w+\b", text))
         commands = re.findall(r"(?:project-workflow|task-tracker)(?:(?: --[a-z-]+)|(?: <[^>]+>)|"
@@ -131,12 +132,17 @@ class PmV2CliContentTests(unittest.TestCase):
         self.assertEqual(source.count("@cli.command()\n"), 2)
         self.assertIn('"POST", "api/cli/step"', source)
         self.assertIn('"GET", "api/cli/history"', source)
+        self.assertIn('"POST", "internal/runtime/step"', source)
+        for flag in ("--operation-key", "--runtime-request", "--execution-token-file"):
+            self.assertIn(f'click.option("{flag}"', source)
         self.assertNotIn('click.option("--step-operation-key"', source)
         text = json.dumps(self.mode)
-        for required in ("no PM SDLC context/readback commands", "no original-operation key/readback",
+        for required in ("no PM SDLC context/readback commands", "no checkpoint/readback CLI command",
+                         "Preserve the supplied assignment, original operation key, exact body and scoped token",
                          "history alone does not authorize a resend", "no PM SDLC confirmation/handoff CLI",
                          "do not use generic issue transition, board move or status edit as a substitute"):
             self.assertIn(required, text)
+        self.assertNotIn("no original-operation key/readback", text)
 
     def test_rejects_future_receipt_as_submission_criterion(self):
         for field in ("checks", "evidence"):
