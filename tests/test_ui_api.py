@@ -163,7 +163,7 @@ class TestIndex:
     def test_tasks_page_has_namespace_column(self, client):
         resp = client.get("/tasks")
         assert resp.status_code == 200
-        assert "Неймспейс" in resp.text
+        assert "Профессия" in resp.text
         assert "verdict-cell" in resp.text
         assert "white-space:normal;overflow-wrap:anywhere" in resp.text
 
@@ -195,7 +195,7 @@ class TestIndex:
         assert 'href="/namespaces/new' not in resp.text
         assert 'class="base-ssr-account"' in resp.text
         assert 'href="/namespaces' in resp.text
-        assert "Неймспейсы" in resp.text
+        assert "Профессии" in resp.text
 
     def test_task_links_include_namespace_id(self, client):
         resp = client.get("/tasks")
@@ -277,7 +277,7 @@ class TestApiPhases:
         assert resp.status_code == 404
         assert resp.json() == {
             "ok": False,
-            "error": f"Неймспейс {UNKNOWN_NAMESPACE_ID} не найден",
+            "error": f"Профессия {UNKNOWN_NAMESPACE_ID} не найдена",
         }
 
     def test_list_phases_rejects_namespace_workflow_owner_conflict(self, client):
@@ -291,7 +291,7 @@ class TestApiPhases:
         assert resp.status_code == 409
         assert resp.json() == {
             "ok": False,
-            "error": "workflow_id не совпадает с владельцем неймспейса",
+            "error": "Воркфлоу не принадлежит выбранной профессии",
         }
 
     def test_get_phase(self, client):
@@ -308,7 +308,7 @@ class TestApiPhases:
         assert resp.status_code == 404
         assert resp.json() == {
             "ok": False,
-            "error": f"Неймспейс {UNKNOWN_NAMESPACE_ID} не найден",
+            "error": f"Профессия {UNKNOWN_NAMESPACE_ID} не найдена",
         }
 
     def test_get_phase_rejects_namespace_workflow_owner_conflict(self, client):
@@ -331,7 +331,7 @@ class TestApiPhases:
         assert resp.status_code == 409
         assert resp.json() == {
             "ok": False,
-            "error": "Фаза недоступна в выбранном неймспейсе",
+            "error": "Фаза недоступна в выбранной профессии",
         }
 
     def test_non_numeric_phase_identifier_is_rejected(self, client):
@@ -389,7 +389,7 @@ class TestApiPhases:
         resp = client.get(f"/api/settings?namespace_id={UNKNOWN_NAMESPACE_ID}")
 
         assert resp.status_code == 404
-        assert resp.json() == {"ok": False, "error": f"Неймспейс {UNKNOWN_NAMESPACE_ID} не найден"}
+        assert resp.json() == {"ok": False, "error": f"Профессия {UNKNOWN_NAMESPACE_ID} не найдена"}
 
     def test_composite_phase_update_commits_once(self, client, monkeypatch):
         phase_id = _phase_id(client, "1.INTAKE")
@@ -762,7 +762,7 @@ class TestApiNamespacesCrud:
         assert "namespaces" in data
 
     @pytest.mark.parametrize("workflow_id", [None, "1", True])
-    def test_create_namespace_requires_strict_workflow_id(self, client, workflow_id):
+    def test_profession_creation_omits_workflow_but_explicit_ids_are_strict(self, client, workflow_id):
         payload = {
             "name": "Strict workflow",
             "cli_command": f"workflow-strict-{uuid.uuid4().hex[:6]}",
@@ -772,6 +772,12 @@ class TestApiNamespacesCrud:
 
         response = client.post("/api/namespaces", json=payload)
 
+        if workflow_id is None:
+            assert response.status_code == 200
+            profession = response.json()["namespace"]
+            rows = client.get(f"/api/workflows?namespace_id={profession['id']}").json()["workflows"]
+            assert [row["name"] for row in rows] == ["Дефолтный"]
+            return
         assert response.status_code == 422
         assert response.json()["ok"] is False
         assert any(detail["field"] == "workflow_id" for detail in response.json()["details"])
@@ -1175,7 +1181,7 @@ class TestApiInstructions:
         namespace_id = namespace.json()["namespace_id"]
         expected_error = {
             "ok": False,
-            "error": "Фаза недоступна в выбранном неймспейсе",
+            "error": "Фаза недоступна в выбранной профессии",
         }
 
         responses = [
@@ -1250,7 +1256,7 @@ class TestApiTasks:
         assert resp.status_code == 409
         assert resp.json() == {
             "ok": False,
-            "error": "workflow_id не совпадает с владельцем неймспейса",
+            "error": "workflow_id не совпадает с владельцем профессии",
         }
 
     def test_api_phases_rejects_unknown_workflow_filter(self, client):
@@ -1268,7 +1274,7 @@ class TestApiTasks:
         assert resp.status_code == 404
         assert resp.json() == {
             "ok": False,
-            "error": f"Неймспейс {UNKNOWN_NAMESPACE_ID} не найден",
+            "error": f"Профессия {UNKNOWN_NAMESPACE_ID} не найдена",
         }
 
     def test_api_tasks_rejects_unknown_workflow_filter(self, client):
@@ -1420,7 +1426,7 @@ class TestApiPhaseDelete:
         assert resp.status_code == 409
         assert resp.json() == {
             "ok": False,
-            "error": "Фаза недоступна в выбранном неймспейсе",
+            "error": "Фаза недоступна в выбранной профессии",
         }
         assert _app_state.phase_service().get_phase(ph1["id"]) is not None
         assert _app_state.phase_service().get_phase(ph2["id"]) is not None
@@ -1469,7 +1475,7 @@ class TestApiPhaseUpdate:
         assert response.status_code == 409
         assert response.json() == {
             "ok": False,
-            "error": "Фаза недоступна в выбранном неймспейсе",
+            "error": "Фаза недоступна в выбранной профессии",
         }
         after = client.get(f"/api/phases/{phase_id}").json()["phase"]
         assert after == before

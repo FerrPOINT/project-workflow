@@ -899,7 +899,7 @@ def _ensure_namespace(uow: UnitOfWork, workflow: ManagedWorkflow, workflow_id: i
             raise ValueError(
                 f"Managed namespace code {code!r} is already owned by another namespace"
             )
-        uow.projects.create(
+        profession_id = uow.projects.create(
             {
                 "workflow_id": workflow_id,
                 "code": code,
@@ -911,6 +911,7 @@ def _ensure_namespace(uow: UnitOfWork, workflow: ManagedWorkflow, workflow_id: i
                 "key_prefixes": [],
             }
         )
+        uow.workflows.assign_profession(workflow_id, profession_id)
         return
     if not _namespace_has_identity(
         uow.projects.get_persisted_identity(int(existing.id or 0)),
@@ -924,6 +925,8 @@ def _ensure_namespace(uow: UnitOfWork, workflow: ManagedWorkflow, workflow_id: i
         raise ValueError(
             f"Managed namespace {workflow.hermes_namespace!r} already exists with another identity"
         )
+
+    uow.workflows.assign_profession(workflow_id, int(existing.id or 0))
 
 
 def _assert_existing_namespace(
@@ -1109,7 +1112,7 @@ def validate_managed_catalog_state(
             agent_id=agent_id,
             allow_editor_changes=role_key is not None and resolved_catalog.catalog_version == 2,
         )
-        _assert_existing_namespace(uow, definition, int(existing.id))
+        _assert_existing_namespace(uow, definition, int(existing.id or 0))
     if role_key is None:
         _assert_exact_persisted_inventory(uow, resolved_catalog)
     return True
@@ -1141,7 +1144,12 @@ def ensure_managed_catalog(
             if existing.id is None:
                 raise ValueError(f"Managed workflow {definition.key!r} has no id")
             workflow_id = int(existing.id)
-            if existing.name != definition.name or existing.description != definition.description:
+            # The frozen catalog identifies the role. Namespace default naming
+            # is presentation data, migrated without rewriting pinned sources.
+            if (
+                existing.name not in {definition.name, config.MANAGED_NAMESPACE_WORKFLOW_NAME}
+                or existing.description != definition.description
+            ):
                 raise ValueError(f"Managed workflow {definition.key!r} already exists with a different identity")
             active_version = existing.active_catalog_version
             if active_version < catalog.catalog_version:
@@ -1169,7 +1177,7 @@ def ensure_managed_catalog(
                 uow.workflows.create(
                     {
                         "key": definition.key,
-                        "name": definition.name,
+                        "name": config.MANAGED_NAMESPACE_WORKFLOW_NAME,
                         "description": definition.description,
                         "is_default": not has_default and definition.role_key == "project_manager",
                         "create_default_mode": False,

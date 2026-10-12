@@ -21,7 +21,12 @@ class WorkflowService:
         self._uow.lock_catalog_state(shared=True)
         payload = dict(data)
         try:
+            profession_id = payload.pop("profession_id", None)
+            if profession_id is not None and self._uow.projects.get_by_id(profession_id) is None:
+                raise NotFoundError(f"Профессия {profession_id} не найдена")
             wid = self._uow.workflows.create(payload)
+            if profession_id is not None:
+                self._uow.workflows.assign_profession(wid, profession_id)
             default_mode = self._uow.workflows.get_mode_by_key(wid, "default")
             if default_mode is None or default_mode.id is None:
                 raise RuntimeError("Не удалось создать режим по умолчанию")
@@ -48,8 +53,13 @@ class WorkflowService:
             self._uow.rollback()
             raise
 
-    def list_workflows(self) -> list[dict[str, Any]]:
-        return [w.to_dict() for w in self._uow.workflows.list()]
+    def list_workflows(self, profession_id: int | None = None) -> list[dict[str, Any]]:
+        rows = (self._uow.workflows.list() if profession_id is None
+                else self._uow.workflows.list_by_profession(profession_id))
+        return [w.to_dict() for w in rows]
+
+    def belongs_to_profession(self, workflow_id: int, profession_id: int) -> bool:
+        return self._uow.workflows.belongs_to_profession(workflow_id, profession_id)
 
     def get_workflow(self, workflow_id: int) -> dict[str, Any] | None:
         w = self._uow.workflows.get_by_id(workflow_id)

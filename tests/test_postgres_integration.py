@@ -339,10 +339,34 @@ def test_pm_ownership_catalog_lock_order_and_stale_0007(pg_url, winner):
     from project_workflow.infrastructure.namespace_auth import NamespacePrincipal
 
     engine = get_engine(pg_url)
-    run_alembic_command("upgrade", engine, "0006_versioned_mode_catalog")
-    with SAUnitOfWork(engine) as uow:
-        ensure_managed_catalog(uow)
-        namespace_id = uow.projects.get_by_cli_command("workflow-project_manager").id
+    # The current initializer requires the current schema. Build fixture data on
+    # SQLite, then copy only legacy columns into a genuine 0006 PostgreSQL schema.
+    # Never bypass the irreversible PM Draft downgrade guard to manufacture it.
+    from sqlalchemy import MetaData, create_engine
+
+    donor = create_engine("sqlite://")
+    try:
+        ensure_migrated(donor)
+        with SAUnitOfWork(donor) as uow:
+            ensure_managed_catalog(uow)
+            namespace_id = uow.projects.get_by_cli_command("workflow-project_manager").id
+        run_alembic_command("upgrade", engine, "0006_versioned_mode_catalog")
+        old_metadata = MetaData()
+        source_metadata = MetaData()
+        source_metadata.reflect(bind=donor)
+        with engine.begin() as target, donor.connect() as source:
+            old_metadata.reflect(bind=target)
+            for table in old_metadata.sorted_tables:
+                if table.name == "alembic_version":
+                    continue
+                rows = [
+                    {column.name: row[column.name] for column in table.columns}
+                    for row in source.execute(source_metadata.tables[table.name].select()).mappings()
+                ]
+                if rows:
+                    target.execute(table.insert(), rows)
+    finally:
+        donor.dispose()
     ensure_migrated(engine)
     held, waiting, release = Event(), Event(), Event()
 
@@ -389,7 +413,7 @@ def test_pm_ownership_catalog_lock_order_and_stale_0007(pg_url, winner):
     assert not schema_is_ready(engine)
     with pytest.raises(DatabaseRecreateRequired):
         ensure_migrated(engine)
-    assert database_revisions(engine) == {"0009_pm_draft_assignment"}
+    assert database_revisions(engine) == {"0011_profession_workflows"}
 
 
 @pytest.mark.integration
@@ -867,6 +891,13 @@ def pg_url(monkeypatch):
 
 
 @pytest.mark.integration
+def test_namespace_defaults_upgrade_preserves_catalog_on_postgres(pg_url, tmp_path):
+    from tests.test_namespace_default_migration import assert_upgrade_preserves_catalog
+
+    assert_upgrade_preserves_catalog(get_engine(pg_url), tmp_path)
+
+
+@pytest.mark.integration
 class TestPostgresInitialMigration:
     def test_get_engine_postgresql(self, pg_url):
         engine = get_engine(pg_url)
@@ -901,7 +932,7 @@ class TestPostgresInitialMigration:
             version = conn.execute(
                 text("SELECT version_num FROM project_workflow.alembic_version")
             ).scalar_one()
-        assert version == migration_head() == "0009_pm_draft_assignment"
+        assert version == migration_head() == "0011_profession_workflows"
         assert schema_is_ready(engine) is True
 
     def test_managed_bootstrap_serializes_with_public_catalog_creation(self, pg_url):
@@ -1022,7 +1053,7 @@ class TestPostgresInitialMigration:
         with pytest.raises(RuntimeError, match=message):
             run_alembic_command("downgrade", engine, "base")
         assert database_revisions(engine) == {revision}
-        assert schema_is_ready(engine) is (revision == "0009_pm_draft_assignment")
+        assert schema_is_ready(engine) is (revision == "0011_profession_workflows")
 
     def test_populated_0001_upgrade_preserves_rows_and_backfills_per_workflow(self, pg_url):
         engine = get_engine(pg_url)

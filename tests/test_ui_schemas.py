@@ -103,9 +103,10 @@ def test_namespace_theme_create_update():
         NamespaceUpdate.model_validate({"theme_color": "not-a-color"})
 
 
-def test_namespace_create_requires_workflow_and_cli_command():
-    with pytest.raises(ValueError, match="Field required"):
-        NamespaceCreate(name="PRJ", cli_command="workflow-prj")
+def test_profession_create_requires_cli_command_and_rejects_explicit_null_workflow():
+    assert NamespaceCreate(name="PRJ", cli_command="workflow-prj").workflow_id is None
+    with pytest.raises(ValueError, match="workflow_id не может быть null"):
+        NamespaceCreate(name="PRJ", cli_command="workflow-prj", workflow_id=None)
     with pytest.raises(ValueError, match="Field required"):
         NamespaceCreate(name="PRJ", workflow_id=1)
 

@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -26,6 +26,30 @@ class SAWorkflowRepository(WorkflowRepository):
     def list(self) -> Sequence[Workflow]:
         rows = self._session.execute(select(m.Workflow).order_by(m.Workflow.id)).scalars().all()
         return [_row_to_workflow(r) for r in rows]
+
+    def count_professions_by_workflow(self) -> dict[int, int]:
+        rows = self._session.execute(
+            select(m.ProfessionWorkflow.workflow_id, func.count())
+            .group_by(m.ProfessionWorkflow.workflow_id)
+        ).all()
+        return {workflow_id: count for workflow_id, count in rows}
+
+    def list_by_profession(self, profession_id: int) -> Sequence[Workflow]:
+        rows = self._session.execute(
+            select(m.Workflow).join(m.ProfessionWorkflow).where(
+                m.ProfessionWorkflow.profession_id == profession_id
+            ).order_by(m.Workflow.id)
+        ).scalars().all()
+        return [_row_to_workflow(row) for row in rows]
+
+    def belongs_to_profession(self, workflow_id: int, profession_id: int) -> bool:
+        return self._session.get(m.ProfessionWorkflow, (workflow_id, profession_id)) is not None
+
+    def assign_profession(self, workflow_id: int, profession_id: int) -> None:
+        if self.belongs_to_profession(workflow_id, profession_id):
+            return
+        self._session.add(m.ProfessionWorkflow(workflow_id=workflow_id, profession_id=profession_id))
+        self._session.flush()
 
     def get_by_id(self, workflow_id: int) -> Workflow | None:
         row = self._session.get(m.Workflow, workflow_id)

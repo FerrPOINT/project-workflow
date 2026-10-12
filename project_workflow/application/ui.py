@@ -96,16 +96,11 @@ class UIDataService:
     def __init__(self, app_state: _AppState):
         self._app_state = app_state
 
-    def _load_workflows(self) -> list[dict[str, Any]]:
+    def _load_workflows(self, profession_id: int | None = None) -> list[dict[str, Any]]:
         wdb = self._app_state.get_db()
-        workflows = wdb.get_workflows()
-        namespaces = wdb.get_projects()
+        workflows = self._app_state.workflow_service().list_workflows(profession_id)
         phase_counts = wdb.phases.count_all_modes_by_workflow()
-        namespace_counts: dict[int, int] = {}
-        for namespace in namespaces:
-            wid = namespace.get("workflow_id")
-            if isinstance(wid, int):
-                namespace_counts[wid] = namespace_counts.get(wid, 0) + 1
+        namespace_counts = wdb.workflows.count_professions_by_workflow()
 
         result = []
         for workflow in workflows:

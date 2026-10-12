@@ -256,6 +256,8 @@ def setup_db(isolate_ui_runtime_state, request):
                 "description": "Проверяет качество решения и фиксирует замечания",
             }
         )
+    for profession in uow.projects.list():
+        uow.workflows.assign_profession(profession.workflow_id, int(profession.id))
     uow.commit()
 
 
@@ -266,7 +268,7 @@ class TestIndexPage:
         assert response.headers["content-type"] == "text/html; charset=utf-8"
         assert "Дашборд" in response.text
         assert "Незавершённые задачи" in response.text
-        assert "Неймспейсы" in response.text
+        assert "Профессии" in response.text
 
     def test_index_has_nav(self):
         response = client.get("/")
@@ -284,8 +286,8 @@ class TestIndexPage:
     def test_index_labels_namespace_blocks_as_namespaces_not_cli(self):
         response = client.get("/")
         assert response.status_code == 200
-        assert '<div class="metric-label">Неймспейсы</div>' in response.text
-        assert 'id="dashboardNamespacesTitle">Неймспейсы · ' in response.text
+        assert '<div class="metric-label">Профессии</div>' in response.text
+        assert 'id="dashboardNamespacesTitle">Профессии · ' in response.text
         assert '<div class="metric-label">CLI</div>' not in response.text
         assert 'id="dashboardNamespacesTitle">CLI' not in response.text
 
@@ -294,7 +296,7 @@ class TestIndexPage:
         assert response.status_code == 200
         assert 'class="btn btn-secondary dashboard-action"' not in response.text
         assert 'data-platform-header-slot="services"' in response.text
-        assert 'class="dashboard-section-link" href="/namespaces">Все неймспейсы</a>' in response.text
+        assert 'class="dashboard-section-link" href="/namespaces">Все профессии</a>' in response.text
 
     def test_dashboard_previews_recent_items_and_links_to_full_lists(self):
         dashboard = {
@@ -348,14 +350,14 @@ class TestIndexPage:
 
         assert response.status_code == 200
         assert "Незавершённых задач нет." in response.text
-        assert "Неймспейсов пока нет." in response.text
+        assert "Профессий пока нет." in response.text
         assert 'href="/tasks' in response.text
         assert 'href="/namespaces"' in response.text
 
     def test_index_rejects_unknown_query_namespace(self):
         response = client.get(f"/?namespace_id={UNKNOWN_NAMESPACE_ID}")
         assert response.status_code == 404
-        assert f"Неймспейс {UNKNOWN_NAMESPACE_ID} не найден" in response.text
+        assert f"Профессия {UNKNOWN_NAMESPACE_ID} не найдена" in response.text
         assert "UITEST-401" not in response.text
 
     def test_index_rejects_malformed_query_namespace(self):
@@ -443,7 +445,7 @@ class TestPhasesPage:
     def test_namespace_switch_resets_phase_workflow_scope(self):
         response = client.get("/phases")
         assert response.status_code == 200
-        assert "if(url.pathname === '/phases')" in response.text
+        assert "if(url.pathname === '/phases' || url.pathname === '/workflows')" in response.text
         assert "url.searchParams.delete('workflow_id');" in response.text
         assert "if(url.pathname.startsWith('/phase/'))" in response.text
         assert "url.pathname='/phases';" in response.text
@@ -453,7 +455,7 @@ class TestPhasesPage:
     def test_phases_reject_unknown_query_namespace(self):
         response = client.get(f"/phases?namespace_id={UNKNOWN_NAMESPACE_ID}")
         assert response.status_code == 404
-        assert f"Неймспейс {UNKNOWN_NAMESPACE_ID} не найден" in response.text
+        assert f"Профессия {UNKNOWN_NAMESPACE_ID} не найдена" in response.text
         assert 'href="/phase/' not in response.text
 
     def test_phases_reject_negative_query_namespace(self):
@@ -489,7 +491,7 @@ class TestPhasesPage:
         response = client.get("/phases")
         assert response.status_code == 200
         assert 'href="/namespaces"' in response.text
-        assert "Неймспейсы" in response.text
+        assert "Профессии" in response.text
 
     def test_sidebar_has_workflows_link(self):
         response = client.get("/phases")
@@ -617,7 +619,7 @@ class TestPhasesPage:
         response = client.get(f"/phases?namespace_id={namespace_id}&workflow_id={workflow_id}")
 
         assert response.status_code == 404
-        assert "Воркфлоу недоступен в выбранном неймспейсе" in response.text
+        assert "Воркфлоу недоступен в выбранной профессии" in response.text
         assert "Foreign phase list item" not in response.text
         assert 'href="/phase/' not in response.text
 
@@ -1242,7 +1244,7 @@ class TestPhaseDetail:
         response = client.get(f"/phase/{phase['id']}?namespace_id={UNKNOWN_NAMESPACE_ID}")
 
         assert response.status_code == 404
-        assert f"Неймспейс {UNKNOWN_NAMESPACE_ID} не найден" in response.text
+        assert f"Профессия {UNKNOWN_NAMESPACE_ID} не найдена" in response.text
         assert "phaseForm" not in response.text
 
     def test_phase_detail_rejects_phase_outside_selected_namespace_workflow(self):
@@ -1808,7 +1810,7 @@ class TestTasksPage:
         namespace_id = _as_dict(uow.projects.get_by_code("UITEST"))["id"]
         response = client.get(f"/tasks?namespace_id={namespace_id}")
         assert response.status_code == 200
-        assert "Неймспейс" in response.text
+        assert "Профессия" in response.text
         assert "UITEST" in response.text
 
     def test_tasks_page_mobile_cards_show_empty_state_for_empty_namespace(self):
@@ -1839,7 +1841,7 @@ class TestTasksPage:
     def test_tasks_reject_unknown_query_namespace(self):
         response = client.get(f"/tasks?namespace_id={UNKNOWN_NAMESPACE_ID}")
         assert response.status_code == 404
-        assert f"Неймспейс {UNKNOWN_NAMESPACE_ID} не найден" in response.text
+        assert f"Профессия {UNKNOWN_NAMESPACE_ID} не найдена" in response.text
         assert "RUN-247" not in response.text
 
     def test_tasks_data_error_returns_controlled_html_error(self):
@@ -1972,7 +1974,7 @@ class TestTaskDetail:
     def test_task_detail_rejects_unknown_query_namespace_without_fallback(self):
         response = client.get(f"/task/RUN-247?namespace_id={UNKNOWN_NAMESPACE_ID}")
         assert response.status_code == 404
-        assert f"Неймспейс {UNKNOWN_NAMESPACE_ID} не найден" in response.text
+        assert f"Профессия {UNKNOWN_NAMESPACE_ID} не найдена" in response.text
         assert "История фаз" not in response.text
 
     def test_task_detail_rejects_malformed_query_namespace_with_html_error(self):
@@ -2141,7 +2143,7 @@ class TestTaskDetail:
         namespace_id = _as_dict(uow.projects.get_by_code("UITEST"))["id"]
         response = client.get(f"/task/UITEST-401?namespace_id={namespace_id}")
         assert response.status_code == 200
-        assert "Неймспейс" in response.text
+        assert "Профессия" in response.text
         assert "workflow-uitest" in response.text
 
     def test_tasks_api_resolves_negative_phase_code_to_phase_name(self):
@@ -2190,7 +2192,7 @@ class TestProjectsPage:
     def test_namespace_page_rejects_unknown_query_namespace_without_edit_fallback(self):
         response = client.get(f"/namespaces?namespace_id={UNKNOWN_NAMESPACE_ID}")
         assert response.status_code == 404
-        assert f"Неймспейс {UNKNOWN_NAMESPACE_ID} не найден" in response.text
+        assert f"Профессия {UNKNOWN_NAMESPACE_ID} не найдена" in response.text
         assert "namespaceForm" not in response.text
 
     def test_removed_namespace_page_alias_returns_404(self):
@@ -2241,14 +2243,14 @@ class TestProjectsPage:
         assert re.search(r'id="namespaceName" value="[^"]*" required', response.text)
         assert 'required minlength="2" maxlength="64" pattern="[a-z][a-z0-9_\\-]{1,63}"' in response.text
         assert 'aria-describedby="namespaceCliHelp"' in response.text
-        assert 'id="namespaceWorkflowId" required' in response.text
+        assert 'id="namespaceWorkflowId"' not in response.text
         assert 'id="namespaceDeleteHint" hidden' in response.text
         assert "var protectedByTasks = !createMode && Boolean(namespace && Number(namespace.task_count) > 0);" in (
             response.text
         )
         assert "button.textContent = 'Удаление…';" in response.text
         assert "button.textContent = namespaceFormMode === 'create' ? 'Создание…' : 'Сохранение…';" in response.text
-        assert "'Удалить неймспейс «' + namespace.name + '»?'" in response.text
+        assert "'Удалить профессию «' + namespace.name + '»?'" in response.text
 
     def test_namespace_theme_preview_keeps_primary_action_text_readable(self):
         response = client.get("/namespaces")
@@ -2260,7 +2262,7 @@ class TestProjectsPage:
     def test_namespace_create_page_uses_plus_without_duplicate_add_label(self):
         response = client.get("/namespaces/new")
         assert response.status_code == 200
-        assert '<h1 class="header-title">Неймспейсы</h1>' in response.text
+        assert '<h1 class="header-title">Профессии</h1>' in response.text
         assert 'href="/namespaces/new' not in response.text
         assert 'id="namespaceCreateLink"' not in response.text
         assert '<div class="card-title" id="namespaceFormMode">Создание</div>' in response.text
@@ -2298,7 +2300,7 @@ class TestProjectsPage:
         response = client.get(f"/namespaces/new?namespace_id={UNKNOWN_NAMESPACE_ID}")
 
         assert response.status_code == 404
-        assert f"Неймспейс {UNKNOWN_NAMESPACE_ID} не найден" in response.text
+        assert f"Профессия {UNKNOWN_NAMESPACE_ID} не найдена" in response.text
         assert "namespaceForm" not in response.text
 
     def test_namespace_card_selection_updates_global_selection_state(self):
@@ -2374,10 +2376,10 @@ class TestProjectsPage:
             in response.text
         )
 
-    def test_namespace_page_exposes_workflow_selector(self):
+    def test_profession_page_has_no_workflow_selector(self):
         response = client.get("/namespaces")
         assert response.status_code == 200
-        assert 'id="namespaceWorkflowId"' in response.text
+        assert 'id="namespaceWorkflowId"' not in response.text
         assert "Воркфлоу" in response.text
 
     def test_namespace_page_hides_removed_intro_cleanup_block(self):
@@ -2507,7 +2509,7 @@ class TestWorkflowsPage:
     def test_workflows_page_rejects_unknown_query_namespace(self):
         response = client.get(f"/workflows?namespace_id={UNKNOWN_NAMESPACE_ID}")
         assert response.status_code == 404
-        assert f"Неймспейс {UNKNOWN_NAMESPACE_ID} не найден" in response.text
+        assert f"Профессия {UNKNOWN_NAMESPACE_ID} не найдена" in response.text
         assert "workflowForm" not in response.text
 
     def test_workflows_page_rejects_invalid_or_unknown_workflow(self):
@@ -2559,7 +2561,8 @@ class TestWorkflowsPage:
         assert response.text.count("← К фазам") == 2
 
     def test_workflows_page_offers_compact_picker_for_multiple_workflows(self):
-        created = client.post("/api/workflows", json={"name": "Secondary UI workflow"})
+        profession_id = client.get("/api/namespaces").json()["namespaces"][0]["id"]
+        created = client.post(f"/api/workflows?namespace_id={profession_id}", json={"name": "Secondary UI workflow"})
         assert created.status_code == 200
         workflow_id = created.json()["workflow_id"]
         try:
@@ -2623,7 +2626,7 @@ class TestWorkflowsPage:
             deleted_workflow = client.delete(f"/api/workflows/{workflow_id}")
             assert deleted_workflow.status_code == 200
 
-    def test_workflows_page_keeps_namespace_default_separate_from_explicit_selection(self):
+    def test_workflows_page_rejects_stale_foreign_profession_selection(self):
         existing_workflow_id = client.get("/api/workflows").json()["workflows"][0]["id"]
         workflow = client.post("/api/workflows", json={"name": "Namespace history default"})
         assert workflow.status_code == 200
@@ -2644,7 +2647,10 @@ class TestWorkflowsPage:
             )
 
             assert response.status_code == 200
-            assert f"let selectedWorkflowId = {existing_workflow_id};" in response.text
+            assert response.history[0].status_code == 303
+            assert f"let selectedWorkflowId = {namespace_workflow_id};" in response.text
+            store = json.loads(re.search(r"const workflowStore = (.*);", response.text).group(1))
+            assert [item["id"] for item in store] == [namespace_workflow_id]
             assert f"const defaultWorkflowId = {namespace_workflow_id};" in response.text
         finally:
             deleted_namespace = client.delete(f"/api/namespaces/{namespace_id}")
@@ -2809,7 +2815,7 @@ class TestAgentsPage:
     def test_agents_page_rejects_unknown_query_namespace(self):
         response = client.get(f"/agents?namespace_id={UNKNOWN_NAMESPACE_ID}")
         assert response.status_code == 404
-        assert f"Неймспейс {UNKNOWN_NAMESPACE_ID} не найден" in response.text
+        assert f"Профессия {UNKNOWN_NAMESPACE_ID} не найдена" in response.text
         assert "reviewer" not in response.text
 
     def test_agents_crud_reports_network_errors(self):
@@ -2901,7 +2907,7 @@ class TestSettingsPage:
     def test_settings_page_rejects_unknown_query_namespace(self):
         response = client.get(f"/settings?namespace_id={UNKNOWN_NAMESPACE_ID}")
         assert response.status_code == 404
-        assert f"Неймспейс {UNKNOWN_NAMESPACE_ID} не найден" in response.text
+        assert f"Профессия {UNKNOWN_NAMESPACE_ID} не найдена" in response.text
         assert "project-workflow step" not in response.text
 
     def test_api_settings_get_returns_json(self):
@@ -3021,7 +3027,7 @@ class TestUiNetworkFailures:
         response = client.get(f"/instructions?phase_id={phase_id}&namespace_id={UNKNOWN_NAMESPACE_ID}")
 
         assert response.status_code == 404
-        assert f"Неймспейс {UNKNOWN_NAMESPACE_ID} не найден" in response.text
+        assert f"Профессия {UNKNOWN_NAMESPACE_ID} не найдена" in response.text
         assert "instructionGroups" not in response.text
 
     def test_instructions_page_back_link_preserves_selected_namespace(self):

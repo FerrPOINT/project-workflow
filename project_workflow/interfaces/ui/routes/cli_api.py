@@ -21,7 +21,7 @@ def _cli_namespace_id(uow: SAUnitOfWork, task: str, requested: int | None) -> in
     namespace_id = requested if requested is not None else _resolve_namespace_id_from_env(uow)
     if namespace_id is not None:
         if uow.projects.get_by_id(namespace_id) is None:
-            raise ValueError(f"Неймспейс {namespace_id} не найден")
+            raise ValueError(f"Профессия {namespace_id} не найдена")
         return namespace_id
     task_key = _require_valid_key(task, uow)
     existing = uow.tasks.get_by_key(task_key)
@@ -30,7 +30,7 @@ def _cli_namespace_id(uow: SAUnitOfWork, task: str, requested: int | None) -> in
     namespaces = uow.projects.list()
     if len(namespaces) == 1 and namespaces[0].id is not None:
         return namespaces[0].id
-    raise ValueError("Укажите PROJECT_WORKFLOW_NAMESPACE_ID для выбора неймспейса")
+    raise ValueError("Укажите PROJECT_WORKFLOW_NAMESPACE_ID для выбора профессии")
 
 
 def cli_step(payload: CliStepRequest) -> dict | JSONResponse:

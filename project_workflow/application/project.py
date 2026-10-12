@@ -63,6 +63,17 @@ class ProjectService:
         try:
             self._uow.projects.lock_prefix_namespace()
             workflow_id_raw = payload.get("workflow_id")
+            if "workflow_id" not in payload:
+                # New professions get an independent starter; the legacy pointer remains for task clients.
+                workflow_id_raw = self._uow.workflows.create({"name": "Дефолтный"})
+                mode = self._uow.workflows.get_mode_by_key(workflow_id_raw, "default")
+                if mode is None:
+                    raise RuntimeError("Не удалось создать стартовый режим")
+                self._uow.phases.create({
+                    "workflow_id": workflow_id_raw, "mode_id": mode.id,
+                    "code": f"wf-{workflow_id_raw}-default", "name": "Новая фаза", "phase_order": 1,
+                })
+                payload["workflow_id"] = workflow_id_raw
             if (
                 not isinstance(workflow_id_raw, int)
                 or isinstance(workflow_id_raw, bool)
@@ -84,6 +95,7 @@ class ProjectService:
             if self._real_project_id(same_cli_command) is not None:
                 raise ConflictError(f"CLI-команда {payload['cli_command']!r} уже существует")
             pid = self._uow.projects.create(payload)
+            self._uow.workflows.assign_profession(workflow_id, pid)
             project = self._uow.projects.get_by_id(pid)
             if not project:
                 raise RuntimeError("Не удалось создать неймспейс")
@@ -147,6 +159,7 @@ class ProjectService:
             if "key_prefixes" in payload:
                 payload["key_prefixes"] = self._normalized_prefixes(payload["key_prefixes"])
             self._uow.projects.update(project_id, payload)
+            self._uow.workflows.assign_profession(target_workflow_id, project_id)
             self._uow.commit()
         except Exception:
             self._uow.rollback()
