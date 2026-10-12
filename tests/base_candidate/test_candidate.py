@@ -29,6 +29,37 @@ class CandidateTests(unittest.TestCase):
         self.assertEqual(11, sum(len(w.modes) for w in catalog.workflows))
         self.assertEqual(33, sum(len(m.phases) for w in catalog.workflows for m in w.modes))
 
+    def test_all_professions_end_with_status_stage_tool_request_and_readback(self):
+        targets = {
+            "project_manager": ("Backlog", "Analysis/Готово", "владельцем exact revision/hash",
+                                "не machine tool", "До owner receipt ждать"),
+            "analyst": ("Architecture/Готово",),
+            "architect": ("Development/Готово", "barrier"),
+            "developer": ("Review/Готово", "того же task"),
+            "reviewer": ("Testing/Готово", "Rework/Готово", "frozen findings"),
+            "tester": ("Deployment/Готово", "Rework/Готово", "frozen findings"),
+            "devops": ("Deployment/Завершено", "integration-приёмки"),
+        }
+        modes = 0
+        for workflow in self.data["workflows"]:
+            for mode in workflow["modes"]:
+                modes += 1
+                final = mode["phases"][-1]["instructions"][-1]["description"]
+                for expected in (*targets[workflow["role_key"]], "статус И стадию", "Tracker tool",
+                                 "transition receipt", "operation key", "generic Task patch"):
+                    self.assertIn(expected, final)
+                self.assertLess(final.index("complete=true"), final.index("статус И стадию"))
+        self.assertEqual(modes, 11)
+
+    def test_first_step_uses_configured_workflow_tool_not_an_unavailable_cli(self):
+        for workflow in self.data["workflows"]:
+            for mode in workflow["modes"]:
+                first = mode["phases"][0]["instructions"][0]["description"]
+                self.assertIn("MCP workflow_step без report", first)
+                self.assertIn("только когда", first)
+                self.assertIn("не как fallback", first)
+                self.assertNotIn("Первый вызов ровно project-workflow --json", first)
+
     def test_extra_developer_mode(self):
         self.reject(lambda d: d["workflows"][3]["modes"].append(copy.deepcopy(d["workflows"][3]["modes"][0])))
 
