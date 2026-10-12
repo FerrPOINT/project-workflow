@@ -1,12 +1,14 @@
 """Candidate-only positive and negative tests of the current catalog validator."""
 
 import copy
+import hashlib
 import json
 import unittest
 from pathlib import Path
 
 from pydantic import ValidationError
 
+from project_workflow.application import base_source
 from project_workflow.infrastructure.db.managed_catalog import ManagedCatalog, load_managed_catalog
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -28,6 +30,12 @@ class CandidateTests(unittest.TestCase):
         self.assertEqual(7, len(catalog.workflows))
         self.assertEqual(11, sum(len(w.modes) for w in catalog.workflows))
         self.assertEqual(33, sum(len(m.phases) for w in catalog.workflows for m in w.modes))
+
+    def test_candidate_source_pin_matches_generated_catalog(self):
+        content = CANDIDATE.read_bytes().replace(b"\r\n", b"\n")
+        blob = hashlib.sha1(b"blob " + str(len(content)).encode("ascii") + b"\0" + content).hexdigest()
+        self.assertEqual(base_source.CANDIDATE_BLOB, blob)
+        self.assertEqual(base_source.CANDIDATE_REVISION, "b01fc3c9b017b81a178ef678754d8f23f9943af7")
 
     def test_all_professions_end_with_status_stage_tool_request_and_readback(self):
         targets = {
