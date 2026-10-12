@@ -557,8 +557,8 @@ class TestPhasesPage:
     def test_phases_page_hides_duplicate_nav_for_single_workflow(self):
         response = client.get("/phases")
         assert response.status_code == 200
-        assert 'class="phases-layout phases-layout-single"' in response.text
-        assert 'id="workflowNav"' not in response.text
+        assert 'class="phases-layout"' in response.text
+        assert 'id="workflowNav"' in response.text
         assert f'data-workflow-id="{_workflow_row("default")["id"]}"' in response.text
 
     def test_phases_page_keeps_nav_for_multiple_workflows(self):
@@ -746,7 +746,7 @@ class TestPhasesPage:
             assert response.status_code == 200
             assert "Workflow Scoped Phase" in response.text
             assert "Приём задачи" not in response.text
-            assert 'id="workflowNav"' not in response.text
+            assert 'id="workflowNav"' in response.text
             assert f'id="phasesTimeline" data-workflow-id="{workflow_id}"' in response.text
         finally:
             uow.rollback()
@@ -870,7 +870,7 @@ class TestPhasesPage:
         assert response.status_code == 200
         assert f'href="/phase/{phase["id"]}?namespace_id={namespace_id}"' in response.text
         assert f'id="phasesTimeline" data-workflow-id="{_workflow_row("default")["id"]}"' in response.text
-        assert 'id="workflowNav"' not in response.text
+        assert 'id="workflowNav"' in response.text
 
     def test_phases_page_add_phase_button_uses_server_phase_order_attribute(self):
         response = client.get("/phases")
@@ -2523,10 +2523,10 @@ class TestWorkflowsPage:
         assert f"Воркфлоу {UNKNOWN_WORKFLOW_ID} не найден" in missing.text
         assert "workflowForm" not in missing.text
 
-    def test_workflows_page_uses_single_editor_without_redundant_nav(self):
+    def test_workflows_page_keeps_list_with_one_workflow(self):
         response = client.get("/workflows")
         assert response.status_code == 200
-        assert 'class="workflow-crud is-single"' in response.text
+        assert 'class="workflow-crud "' in response.text
         assert 'id="workflowNav"' in response.text
         assert 'id="workflowForm"' in response.text
         assert 'id="newWorkflowButton"' in response.text
@@ -2575,7 +2575,7 @@ class TestWorkflowsPage:
             assert 'value="Secondary UI workflow"' in response.text
             assert ".workflow-picker{display:block}" in response.text
             assert ".workflow-nav{display:none}" in response.text
-            assert "classList.toggle('is-single', workflowStore.length <= 1)" in response.text
+            assert "classList.toggle('is-empty', workflowStore.length === 0)" in response.text
         finally:
             deleted = client.delete(f"/api/workflows/{workflow_id}")
             assert deleted.status_code == 200
