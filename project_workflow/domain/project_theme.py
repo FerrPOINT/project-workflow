@@ -47,6 +47,16 @@ PROJECT_THEME_ICONS: dict[str, str] = {
     "layers": "Слои",
 }
 
+MANAGED_PROFESSION_THEMES = {
+    "project_manager": ("briefcase", "#F59E0B"),
+    "analyst": ("chart", "#06B6D4"),
+    "architect": ("layers", "#8B5CF6"),
+    "developer": ("code", "#3B82F6"),
+    "reviewer": ("shield", "#F97316"),
+    "tester": ("flask", "#22C55E"),
+    "devops": ("rocket", "#F43F5E"),
+}
+
 _LEGACY_ICON_ALIASES = {"project": DEFAULT_PROJECT_ICON}
 
 

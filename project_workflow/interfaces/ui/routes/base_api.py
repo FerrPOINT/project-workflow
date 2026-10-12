@@ -1,6 +1,6 @@
 """Explicit Base source and durable receipt surfaces on existing machine scopes."""
 
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import Header
 from fastapi.responses import JSONResponse
@@ -58,20 +58,26 @@ def namespace_binding(
         return _binding_error("binding-unavailable", "Pinned Base namespace observation unavailable", 503)
 
 
-def source_catalog(authorization: str | None = Header(default=None)) -> dict[str, Any] | JSONResponse:
-    return _source(authorization, catalog=True)
+def source_catalog(
+    authorization: str | None = Header(default=None), catalog_version: Literal[3, 4] | None = None,
+) -> dict[str, Any] | JSONResponse:
+    return _source(authorization, catalog=True, catalog_version=catalog_version)
 
 
-def source_capabilities(authorization: str | None = Header(default=None)) -> dict[str, Any] | JSONResponse:
-    return _source(authorization, catalog=False)
+def source_capabilities(
+    authorization: str | None = Header(default=None), catalog_version: Literal[3, 4] | None = None,
+) -> dict[str, Any] | JSONResponse:
+    return _source(authorization, catalog=False, catalog_version=catalog_version)
 
 
-def _source(authorization: str | None, *, catalog: bool) -> dict[str, Any] | JSONResponse:
+def _source(
+    authorization: str | None, *, catalog: bool, catalog_version: int | None = None,
+) -> dict[str, Any] | JSONResponse:
     try:
         credential = authorize_read(authorization)
         if catalog and credential.kind != "catalog":
             return runtime_api._error("Registered catalog reader required", 403)
-        source = export_base_source()
+        source = export_base_source(catalog_version)
         return {"ok": True, "catalog": source} if catalog else {
             "ok": True, "capability": source_capability(
                 source, role_key=credential.role_key, credential_kind=credential.kind,

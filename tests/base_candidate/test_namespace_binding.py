@@ -373,9 +373,9 @@ def test_actual_private_git_pin_and_persisted_owner_binding(monkeypatch, registe
     load_source = base_binding.load_base_source
     installed_candidate = base_binding._installed_candidate
 
-    def timed_source():
+    def timed_source(*args):
         start = time.perf_counter()
-        result = load_source()
+        result = load_source(*args)
         source_costs.append(time.perf_counter() - start)
         return result
 

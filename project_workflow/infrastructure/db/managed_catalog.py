@@ -24,6 +24,7 @@ from project_workflow.domain.phase_graph import PhaseGraphNode, validate_phase_g
 from project_workflow.domain.project_theme import (
     DEFAULT_PROJECT_COLOR,
     DEFAULT_PROJECT_ICON,
+    MANAGED_PROFESSION_THEMES,
     normalize_theme_color,
     normalize_theme_icon,
 )
@@ -121,6 +122,8 @@ class ManagedWorkflow(_CatalogModel):
     hermes_profile: str
     skill_allowlist: list[str] = Field(min_length=2)
     modes: list[ManagedMode] = Field(min_length=1)
+    # Validation policy is carried by the versioned source, not runtime dispatch.
+    terminal_contract: Literal["configured-tools"] | None = Field(default=None, exclude=True)
 
     @field_validator("key", "name", "description", "hermes_namespace", "hermes_profile")
     @classmethod
@@ -202,6 +205,31 @@ class ManagedWorkflow(_CatalogModel):
                         "Task, comments and attachments"
                     )
             terminal_instruction = mode.phases[-1].instructions[-1].description.casefold()
+            if self.terminal_contract == "configured-tools":
+                required = ("task tracker comment", "project-workflow", "complete=true", "outcome", "evidence",
+                            "receipt", "readback", "one concrete question")
+                if any(marker not in terminal_instruction for marker in required):
+                    raise ValueError("Configured-tools terminal requires accepted report and owner handoff evidence")
+                if "workflow_step" not in first_instruction or "configured" not in first_instruction:
+                    raise ValueError("Configured-tools admission must use the supplied Workflow tool")
+                if "publishdraft" in all_instruction_text or "completeassignedstage" in all_instruction_text:
+                    raise ValueError("Configured-tools catalog must not invent tools from capability names")
+                if self.role_key == "project_manager":
+                    if any(marker not in terminal_instruction for marker in (
+                        "human owner", "exact revision", "content_hash", "никогда не вызывает confirm",
+                        "backlog", "analysis",
+                    )):
+                        raise ValueError("PM handoff requires human owner confirmation and matching Tracker receipt")
+                elif any(marker not in terminal_instruction for marker in (
+                    "guarded tracker terminal tool", "typed result", "operation key", "fence", "status", "stage",
+                )):
+                    raise ValueError("Non-PM handoff requires configured guarded terminal tool and server transition")
+                if self.role_key in {"reviewer", "tester"}:
+                    if "outcome passed" not in terminal_instruction or "needs_rework" not in terminal_instruction:
+                        raise ValueError("Review/testing terminal requires passed or needs_rework")
+                elif "needs_rework" in terminal_instruction:
+                    raise ValueError("Only review/testing may return needs_rework")
+                continue
             if "business markdown comment" not in terminal_instruction:
                 raise ValueError(
                     f"Mode {self.role_key!r}/{mode.key!r} must end with a precise Business Markdown comment"
@@ -282,6 +310,9 @@ class ManagedCatalog(_CatalogModel):
         )
         if phase_count != 33:
             raise ValueError("Managed catalog must contain exactly thirty-three phases")
+        modern = self.catalog_version == 4
+        if any((workflow.terminal_contract == "configured-tools") != modern for workflow in self.workflows):
+            raise ValueError("Terminal contract must match the immutable catalog generation")
         serialized = self.model_dump_json().casefold()
         if '"repeatable"' in serialized:
             raise ValueError("Managed catalog must model repeat work as a new cycle, not repeatable")
@@ -732,7 +763,7 @@ def _assert_no_foreign_catalog_objects(
 
 
 def _assert_exact_persisted_inventory(
-    uow: UnitOfWork, catalog: ManagedCatalog
+    uow: UnitOfWork, catalog: ManagedCatalog, *, historical: bool = False,
 ) -> None:
     expected_workflow_keys = {workflow.key for workflow in catalog.workflows}
     expected_agent_names = {workflow.role_key for workflow in catalog.workflows}
@@ -748,13 +779,17 @@ def _assert_exact_persisted_inventory(
         mode
         for workflow in workflows
         if workflow.id is not None
-        for mode in uow.workflows.list_modes(int(workflow.id))
+        for mode in uow.workflows.list_modes(
+            int(workflow.id), catalog_version=catalog.catalog_version if historical else None,
+        )
     ]
     phases = [
         phase
         for workflow in workflows
         if workflow.id is not None
-        for mode in uow.workflows.list_modes(int(workflow.id))
+        for mode in uow.workflows.list_modes(
+            int(workflow.id), catalog_version=catalog.catalog_version if historical else None,
+        )
         if mode.id is not None
         for phase in uow.phases.list(int(workflow.id), mode_id=int(mode.id))
     ]
@@ -798,7 +833,7 @@ def _assert_existing_agent(
     return int(existing.id)
 
 
-def _ensure_agent(uow: UnitOfWork, workflow: ManagedWorkflow) -> int:
+def _ensure_agent(uow: UnitOfWork, workflow: ManagedWorkflow, *, preserve_presentation: bool = False) -> int:
     expected_description = f"Managed Hermes role: {workflow.name}"
     existing = uow.agents.get_by_name(workflow.role_key)
     if existing is None:
@@ -812,7 +847,7 @@ def _ensure_agent(uow: UnitOfWork, workflow: ManagedWorkflow) -> int:
         return int(agent_id)
     if (
         existing.id is None
-        or existing.description != expected_description
+        or (not preserve_presentation and existing.description != expected_description)
         or existing.hermes_profile != workflow.hermes_profile
     ):
         raise ValueError(
@@ -888,10 +923,14 @@ def _persist_mode(
         )
 
 
-def _ensure_namespace(uow: UnitOfWork, workflow: ManagedWorkflow, workflow_id: int) -> None:
+def _ensure_namespace(
+    uow: UnitOfWork, workflow: ManagedWorkflow, workflow_id: int, *, preserve_presentation: bool = False,
+) -> None:
     cli_command = f"workflow-{workflow.role_key}"
     code = legacy_code_from_cli_command(cli_command)
-    description = f"Managed namespace for {workflow.key}"
+    legacy_description = f"Managed namespace for {workflow.key}"
+    description = workflow.description if preserve_presentation else legacy_description
+    theme_icon, theme_color = MANAGED_PROFESSION_THEMES[workflow.role_key]
     existing = uow.projects.get_by_cli_command(cli_command)
     if existing is None:
         code_owner = uow.projects.get_by_code(code)
@@ -905,13 +944,19 @@ def _ensure_namespace(uow: UnitOfWork, workflow: ManagedWorkflow, workflow_id: i
                 "code": code,
                 "name": workflow.hermes_namespace,
                 "description": description,
-                "theme_icon": DEFAULT_PROJECT_ICON,
-                "theme_color": DEFAULT_PROJECT_COLOR,
+                "theme_icon": theme_icon,
+                "theme_color": theme_color,
                 "cli_command": cli_command,
                 "key_prefixes": [],
             }
         )
         uow.workflows.assign_profession(workflow_id, profession_id)
+        return
+    if preserve_presentation:
+        _assert_existing_namespace(uow, workflow, workflow_id)
+        if existing.description == legacy_description:
+            uow.projects.update(int(existing.id or 0), {"description": description})
+        uow.workflows.assign_profession(workflow_id, int(existing.id or 0))
         return
     if not _namespace_has_identity(
         uow.projects.get_persisted_identity(int(existing.id or 0)),
@@ -921,6 +966,8 @@ def _ensure_namespace(uow: UnitOfWork, workflow: ManagedWorkflow, workflow_id: i
         description=description,
         cli_command=cli_command,
         key_prefixes=[],
+        theme_icon=theme_icon,
+        theme_color=theme_color,
     ):
         raise ValueError(
             f"Managed namespace {workflow.hermes_namespace!r} already exists with another identity"
@@ -1081,6 +1128,7 @@ def validate_managed_catalog_state(
     catalog: ManagedCatalog | None = None,
     *,
     role_key: str | None = None,
+    historical: bool = False,
 ) -> bool:
     """Read and validate the complete installed managed catalog.
 
@@ -1104,6 +1152,8 @@ def validate_managed_catalog_state(
         existing = workflows_by_key.get(definition.key)
         if existing is None or existing.id is None:
             raise ValueError(f"Managed workflow {definition.key!r} is missing")
+        if not historical and existing.active_catalog_version != resolved_catalog.catalog_version:
+            raise ValueError("Managed workflow active catalog version differs from the requested source")
         agent_id = _assert_existing_agent(uow, definition)
         _assert_existing_workflow(
             uow,
@@ -1111,10 +1161,11 @@ def validate_managed_catalog_state(
             definition,
             agent_id=agent_id,
             allow_editor_changes=role_key is not None and resolved_catalog.catalog_version == 2,
+            catalog_version=resolved_catalog.catalog_version if historical else None,
         )
         _assert_existing_namespace(uow, definition, int(existing.id or 0))
     if role_key is None:
-        _assert_exact_persisted_inventory(uow, resolved_catalog)
+        _assert_exact_persisted_inventory(uow, resolved_catalog, historical=historical)
     return True
 
 
@@ -1130,7 +1181,9 @@ def ensure_managed_catalog(
     """
     catalog = load_managed_catalog(catalog_path)
     uow.lock_catalog_state()
-    legacy = _assert_no_foreign_catalog_objects(uow, catalog)
+    modern = catalog.catalog_version == 4
+    # User collections coexist with seeded professions; adoption validates only owned rows.
+    legacy = None if modern else _assert_no_foreign_catalog_objects(uow, catalog)
     if legacy is not None:
         for agent_id, alias in legacy.agent_renames:
             uow.agents.update(agent_id, {"name": alias})
@@ -1138,7 +1191,7 @@ def ensure_managed_catalog(
     has_default = uow.workflows.get_default() is not None
 
     for definition in catalog.workflows:
-        agent_id = _ensure_agent(uow, definition)
+        agent_id = _ensure_agent(uow, definition, preserve_presentation=modern)
         existing = workflows_by_key.get(definition.key)
         if existing is not None:
             if existing.id is None:
@@ -1146,16 +1199,29 @@ def ensure_managed_catalog(
             workflow_id = int(existing.id)
             # The frozen catalog identifies the role. Namespace default naming
             # is presentation data, migrated without rewriting pinned sources.
-            if (
+            if not modern and (
                 existing.name not in {definition.name, config.MANAGED_NAMESPACE_WORKFLOW_NAME}
                 or existing.description != definition.description
             ):
                 raise ValueError(f"Managed workflow {definition.key!r} already exists with a different identity")
             active_version = existing.active_catalog_version
             if active_version < catalog.catalog_version:
-                if active_version != 1 or catalog.catalog_version != 2:
+                if modern and active_version in {2, 3}:
+                    previous_path = config.MANAGED_CATALOG_PATH.with_name(
+                        "base_sdlc_catalog_v1.json" if active_version == 3 else "hermes_sdlc_catalog_v1.json"
+                    )
+                    previous = load_managed_catalog(previous_path)
+                    old_definition = next(item for item in previous.workflows if item.key == definition.key)
+                    _assert_existing_workflow(
+                        uow, existing, old_definition, agent_id=agent_id,
+                        catalog_version=active_version, allow_editor_changes=active_version == 2,
+                    )
+                    if existing.description == old_definition.description:
+                        uow.workflows.update(workflow_id, {"description": definition.description})
+                elif active_version == 1 and catalog.catalog_version == 2:
+                    _assert_frozen_legacy_workflow(uow, existing, agent_id=agent_id)
+                else:
                     raise ValueError("Unsupported managed catalog adoption path")
-                _assert_frozen_legacy_workflow(uow, existing, agent_id=agent_id)
                 if uow.workflows.list_modes(workflow_id, catalog_version=catalog.catalog_version):
                     raise ValueError("Partial managed catalog adoption; transaction was not committed")
                 for mode in definition.modes:
@@ -1196,7 +1262,7 @@ def ensure_managed_catalog(
                     mode=mode,
                     catalog_version=catalog.catalog_version,
                 )
-        _ensure_namespace(uow, definition, workflow_id)
+        _ensure_namespace(uow, definition, workflow_id, preserve_presentation=modern)
     validate_managed_catalog_state(uow, catalog)
     return catalog
 

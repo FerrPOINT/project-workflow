@@ -100,7 +100,7 @@ def validate_runtime_compatibility(value: Any) -> dict[str, Any]:
         type(value["catalogVersion"]) is not int
         or not (
             value["catalogVersion"] == 2 and value["capabilityRevision"] == "hermes-sdlc-runtime/v2"
-            or value["catalogVersion"] == 3 and value["capabilityRevision"] == "base-workflow-controlplane/v1"
+            or value["catalogVersion"] in {3, 4} and value["capabilityRevision"] == "base-workflow-controlplane/v1"
         )
     ):
         raise BuildProvenanceError("Runtime compatibility version invalid")

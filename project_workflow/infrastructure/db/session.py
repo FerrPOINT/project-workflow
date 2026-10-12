@@ -280,6 +280,7 @@ def ensure_migrated(engine: Engine | Connection | None = None) -> None:
         "0008_pm_execution",
         "0009_pm_draft_assignment",
         "0010_namespace_default_names",
+        "0011_profession_workflows",
     }
     incompatible_revision = bool(revisions) and not revisions.issubset(compatible_upgrade_revisions)
     exact_tables = existing_tables == expected_tables()

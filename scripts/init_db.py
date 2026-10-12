@@ -37,10 +37,8 @@ def main() -> int:
                 uow.lock_catalog_state()
                 catalog = load_managed_catalog()
                 managed_keys = {workflow.key for workflow in catalog.workflows}
-                if not any(
-                    workflow.key in managed_keys and workflow.active_catalog_version >= catalog.catalog_version
-                    for workflow in uow.workflows.list()
-                ):
+                installed = {workflow.key: workflow.active_catalog_version for workflow in uow.workflows.list()}
+                if not all(installed.get(key, 0) >= catalog.catalog_version for key in managed_keys):
                     ensure_managed_catalog(uow)
     except DatabaseRecreateRequired as exc:
         print(str(exc), file=sys.stderr)

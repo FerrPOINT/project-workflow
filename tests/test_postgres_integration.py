@@ -58,6 +58,21 @@ from project_workflow.interfaces.ui.app import create_app
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.mark.integration
+@pytest.mark.parametrize("scenario", ["appearance", "versioned-adoption"])
+def test_current_base_initial_professions_and_history_preservation_on_postgres(pg_url, scenario):
+    from tests.test_profession_initial_catalog import (
+        test_adoption_preserves_profession_edits_old_tasks_history_and_user_collections,
+        test_theme_migration_updates_only_untouched_managed_professions,
+    )
+    engine = get_engine(pg_url)
+    ensure_migrated(engine)
+    if scenario == "appearance":
+        test_theme_migration_updates_only_untouched_managed_professions(engine)
+    else:
+        test_adoption_preserves_profession_edits_old_tasks_history_and_user_collections(engine)
+
+
 @pytest.fixture
 def pm_postgres(pg_url, monkeypatch):
     from tests.test_pm_execution import prepare_pm
@@ -413,7 +428,7 @@ def test_pm_ownership_catalog_lock_order_and_stale_0007(pg_url, winner):
     assert not schema_is_ready(engine)
     with pytest.raises(DatabaseRecreateRequired):
         ensure_migrated(engine)
-    assert database_revisions(engine) == {"0011_profession_workflows"}
+    assert database_revisions(engine) == {"0012_profession_themes"}
 
 
 @pytest.mark.integration
@@ -932,7 +947,7 @@ class TestPostgresInitialMigration:
             version = conn.execute(
                 text("SELECT version_num FROM project_workflow.alembic_version")
             ).scalar_one()
-        assert version == migration_head() == "0011_profession_workflows"
+        assert version == migration_head() == "0012_profession_themes"
         assert schema_is_ready(engine) is True
 
     def test_managed_bootstrap_serializes_with_public_catalog_creation(self, pg_url):
@@ -1053,7 +1068,7 @@ class TestPostgresInitialMigration:
         with pytest.raises(RuntimeError, match=message):
             run_alembic_command("downgrade", engine, "base")
         assert database_revisions(engine) == {revision}
-        assert schema_is_ready(engine) is (revision == "0011_profession_workflows")
+        assert schema_is_ready(engine) is (revision == "0012_profession_themes")
 
     def test_populated_0001_upgrade_preserves_rows_and_backfills_per_workflow(self, pg_url):
         engine = get_engine(pg_url)
