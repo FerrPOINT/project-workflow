@@ -19,23 +19,35 @@ PM не подтверждает требования за владельца и
 
 ## Фактические команды и границы
 
-Source inventory: Workflow master `bbfd0136d8ec166c4abd2a2cdaaa17ac684bfebc`,
+Source inventory: Workflow CLI candidate `2c9d62475098be99c411f7e61450a4d9a4f624bf`,
 `project_workflow/interfaces/cli/{core,ui}.py`; Tracker main
 `72a10381117efb70cbb89ec09c91be1e4f5ef399`, `backend/cli/src/{main,commands}.rs`.
 Это provenance чтения source, не repin или доказательство установленного бинарника.
 
 ```text
-project-workflow --json step --task <workflow-task-key>
-project-workflow --json step --task <workflow-task-key> --report <report-text>
+project-workflow --json step --task <workflow-task-key> --operation-key <original-key> --runtime-request <private-request-json> --execution-token-file <private-token-file>
+project-workflow --json step --task <workflow-task-key> --operation-key <original-key> --runtime-request <private-request-json> --execution-token-file <private-token-file> --report <report-text>
 project-workflow --json history --task <workflow-task-key> --n 20
 task-tracker --output json issue get <issue-id>
 ```
 
-Workflow при настроенном `SDLC_API_TOKEN` использует `PROJECT_WORKFLOW_URL` и
-`POST api/cli/step` / `GET api/cli/history`; namespace берётся из настроенного
-`PROJECT_WORKFLOW_NAMESPACE_ID`. Без token CLI имеет DB mode, который этот пакет
-не разрешает как fallback. Наличие CLI не гарантирует права токена или доступность
-сервиса: отказ означает stop, не смену identity/namespace.
+Workflow machine `step` с тремя flags использует `PROJECT_WORKFLOW_URL` и
+`POST /internal/runtime/step` без `/api` prefix. Нужны actual role runtime bearer
+в `SDLC_API_TOKEN`, supplied scoped token в приватном файле и полный существующий
+`RuntimeStepRequest`: assignment revision/ref, binding/run refs, mode/cycle/attempt,
+expected phase/status и применимые Base config/session fields. Task/report/key
+должны совпадать с frozen JSON. Сохранить исходные assignment, operation key, body
+и token; не создавать их моделью и не менять для повтора. Сервер выбирает namespace
+по runtime credential и проверяет fence; `PROJECT_WORKFLOW_NAMESPACE_ID` не
+подменяет machine assignment. Без полного context/token — stop, без DB fallback.
+Чтение фазы и report — разные intents: каждый требует своего supplied snapshot/key;
+нельзя переиспользовать ключ чтения с изменённым report body.
+
+Команд по-прежнему две: `step` и `history`. Legacy human `step` без runtime flags
+идёт через `POST /api/cli/step`, а `history` — через `GET /api/cli/history`;
+их human namespace selector и наличие HTTP transport не квалифицируют PM machine
+execution. Локальный DB mode этот пакет не разрешает как fallback. Отказ означает
+stop, не смену identity/namespace.
 
 Tracker CLI использует API и поддерживает `comment list/add` и generic CRUD/status
 transitions, но не имеет PM SDLC context, typed requirements revision, durable
@@ -44,10 +56,13 @@ question/checkpoint, exact confirmation или original-operation readback ко�
 не подтверждает current assignment fence, saved requirements/hash или saved answers.
 При отсутствии необходимых receipts PM останавливается, не выдаёт фазу за завершённую.
 
-Workflow CLI не принимает operation key/CAS/fence и не предоставляет original-key
-operation readback. После unknown report acceptance **не повторять report вслепую**:
-history помогает читать историю, но не доказывает принятие конкретного original body.
-Эти CLI gaps остаются открыты; content patch не делает текущий PM lifecycle исполнимым
+Workflow CLI принимает original operation key и supplied assignment fence, а
+существующий runtime API проверяет их и поддерживает keyed replay. CLI **не реализует
+checkpoint/readback**, отдельную original-key operation readback команду или
+автоматический retry. После unknown report acceptance **не повторять report вслепую**:
+нужен existing authorized original-intent readback вне этих CLI команд; history
+не доказывает принятие конкретного original body. Эти CLI gaps остаются открыты;
+content patch не делает текущий PM lifecycle исполнимым
 целиком и не заявляет transport/API эквивалентность прежнему MCP path.
 
 ## Подготовка через существующий aggregate API
