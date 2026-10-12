@@ -56,7 +56,10 @@
             "type": "string"
           },
           "catalog_version": {
-            "const": 3,
+            "enum": [
+              3,
+              4
+            ],
             "title": "Catalog Version",
             "type": "integer"
           },
@@ -99,7 +102,10 @@
             "type": "string"
           },
           "skills_revision": {
-            "const": "4b9b4c9297a13fb28a6ba2039af2f7cb719f2f58",
+            "enum": [
+              "4b9b4c9297a13fb28a6ba2039af2f7cb719f2f58",
+              "6e1d190ecd15b772b1066c472f864b8becb3f97a"
+            ],
             "title": "Skills Revision",
             "type": "string"
           },
@@ -187,7 +193,7 @@
     }
   },
   "info": {
-    "title": "\u0418\u043d\u0442\u0435\u0440\u0444\u0435\u0439\u0441 project-workflow",
+    "title": "Интерфейс project-workflow",
     "version": "1.0.0"
   },
   "openapi": "3.1.0",

@@ -81,9 +81,13 @@ class SAPhaseRepository(PhaseRepository):
         return [_row_to_phase(r) for r in rows]
 
     def count_all_modes_by_workflow(self) -> dict[int, int]:
-        """Count the complete phase catalog, including every workflow mode."""
+        """Count every mode in the active generation; historical task phases remain addressable."""
         rows = self._session.execute(
-            select(m.Phase.workflow_id, func.count(m.Phase.id)).group_by(m.Phase.workflow_id)
+            select(m.Phase.workflow_id, func.count(m.Phase.id))
+            .join(m.WorkflowMode, m.WorkflowMode.id == m.Phase.mode_id)
+            .join(m.Workflow, m.Workflow.id == m.Phase.workflow_id)
+            .where(m.WorkflowMode.catalog_version == m.Workflow.active_catalog_version)
+            .group_by(m.Phase.workflow_id)
         ).all()
         return {int(workflow_id): int(count) for workflow_id, count in rows}
 

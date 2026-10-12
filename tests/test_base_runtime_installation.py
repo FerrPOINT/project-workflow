@@ -34,7 +34,7 @@ def base_input(tmp_path, monkeypatch):
 def test_base_descriptor_is_controlplane_not_legacy_execution(base_input):
     root, _ = base_input
     descriptor = builder.derive_compatibility(root)
-    assert descriptor["catalogVersion"] == 3
+    assert descriptor["catalogVersion"] == 4
     assert descriptor["capabilityRevision"] == "base-workflow-controlplane/v1"
     assert validate_runtime_compatibility(descriptor) == descriptor
     descriptor["capabilityRevision"] = "hermes-sdlc-runtime/v2"
@@ -63,7 +63,7 @@ def test_selector_keeps_legacy_default_and_explicit_base(monkeypatch):
                "from project_workflow.config import MANAGED_CATALOG_PATH; print(MANAGED_CATALOG_PATH.name)"]
     assert subprocess.check_output(command, cwd=ROOT, text=True).strip() == "hermes_sdlc_catalog_v1.json"
     monkeypatch.setenv("PROJECT_WORKFLOW_CATALOG_VARIANT", "base")
-    assert subprocess.check_output(command, cwd=ROOT, text=True).strip() == "base_sdlc_catalog_v1.json"
+    assert subprocess.check_output(command, cwd=ROOT, text=True).strip() == "base_sdlc_catalog_v2.json"
 
 
 def test_base_execution_credentials_are_rejected(monkeypatch):

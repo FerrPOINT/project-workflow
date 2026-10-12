@@ -23,7 +23,9 @@ class BaseAdmission(BaseModel):
     namespace: ExactRef
     profile: ExactRef
     catalog_sha256: Sha256
-    skills_revision: Literal["4b9b4c9297a13fb28a6ba2039af2f7cb719f2f58"]
+    skills_revision: Literal[
+        "4b9b4c9297a13fb28a6ba2039af2f7cb719f2f58", "6e1d190ecd15b772b1066c472f864b8becb3f97a",
+    ]
     skills_manifest_sha256: Sha256
     role_instruction_sha256: Sha256
     physical_skills: list[str] = Field(min_length=1, max_length=14)

@@ -12,7 +12,7 @@ from scripts.init_db import main
 
 @pytest.mark.parametrize("variant", ["legacy", "base"])
 def test_migration_entrypoint_creates_seven_namespace_defaults_and_is_repeatable(tmp_path, monkeypatch, variant):
-    filename = "hermes_sdlc_catalog_v1.json" if variant == "legacy" else "base_sdlc_catalog_v1.json"
+    filename = "hermes_sdlc_catalog_v1.json" if variant == "legacy" else "base_sdlc_catalog_v2.json"
     monkeypatch.setattr(config, "MANAGED_CATALOG_PATH", config.MANAGED_CATALOG_PATH.with_name(filename))
     url = f"sqlite:///{tmp_path / 'defaults.db'}"
     monkeypatch.setenv("DATABASE_URL", url)

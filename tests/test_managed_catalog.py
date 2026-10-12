@@ -271,8 +271,8 @@ def test_managed_bootstrap_persists_exact_catalog_and_is_idempotent(empty_uow):
         f"workflow-{role_key}" for role_key in MANAGED_ROLE_MODE_SCOPES
     }
     assert all(namespace.key_prefixes == [] for namespace in namespaces)
-    assert all(namespace.theme_icon == "folder" for namespace in namespaces)
-    assert all(namespace.theme_color == "#5E6AD2" for namespace in namespaces)
+    assert len({namespace.theme_icon for namespace in namespaces}) == 7
+    assert len({namespace.theme_color for namespace in namespaces}) == 7
     assert sum(len(empty_uow.workflows.list_modes(workflow.id)) for workflow in workflows) == 11
     assert all(
         mode.key != "default"
