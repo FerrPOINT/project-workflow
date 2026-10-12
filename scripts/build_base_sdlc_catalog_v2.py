@@ -11,6 +11,15 @@ from project_workflow.infrastructure.db.managed_catalog import CatalogSource
 ROOT = Path(__file__).resolve().parents[1]
 BASE_REVISION = "6e1d190ecd15b772b1066c472f864b8becb3f97a"
 OUTPUT = ROOT / "project_workflow/references/base_sdlc_catalog_v2.json"
+PURPOSES = {
+    "project_manager": "Уточнение задачи, подготовка требований и подтверждение их владельцем.",
+    "analyst": "Анализ требований, предметной области и критериев приёмки.",
+    "architect": "Архитектура решения, декомпозиция на связанные задачи и покрытие требований.",
+    "developer": "Разработка, исправление замечаний и интеграция результата.",
+    "reviewer": "Независимая проверка кода, архитектуры, контрактов и результатов проверки.",
+    "tester": "Проверка критериев приёмки и пользовательских сценариев.",
+    "devops": "Сборка и выпуск согласованного результата с проверкой и планом отката.",
+}
 
 ADMISSION = (
     "Первый вызов — настроенный Workflow tool: в PM MCP это workflow_step с command.report: null, "
@@ -89,6 +98,7 @@ def build(skills_root: Path) -> dict:
     assert set(manifest["roles"]) == {workflow["role_key"] for workflow in catalog["workflows"]}
     for workflow in catalog["workflows"]:
         role = workflow["role_key"]
+        workflow["description"] = PURPOSES[role]
         declaration = manifest["roles"][role]
         assert workflow["skill_allowlist"] == declaration["physicalSkills"]
         assert [mode["key"] for mode in workflow["modes"]] == declaration["modes"]
