@@ -5,10 +5,11 @@ import json
 import re
 from pathlib import Path
 
-from verify_base_sdlc_candidate import CatalogSource, load_pinned_package
+from verify_base_sdlc_candidate import CLI_SKILLS_REVISION, CatalogSource, load_pinned_package
 
 ROOT = Path(__file__).resolve().parents[1]
 CANDIDATE = ROOT / "project_workflow/references/base_sdlc_catalog_v1.json"
+CLI_CANDIDATE = ROOT / "project_workflow/references/base_sdlc_catalog_cli_v4.json"
 
 # Ordered role actions are content; rendering does not install or route assignments.
 ACTIONS = {
@@ -513,9 +514,11 @@ def handoff_instruction(role: str) -> str:
     )
 
 
-def render(skills_root: Path, skills_sha: str) -> dict:
+def render(skills_root: Path, skills_sha: str, *, cli_v4: bool = False) -> dict:
     if not re.fullmatch(r"[0-9a-f]{40}", skills_sha):
         raise ValueError("exact skills commit SHA required")
+    if cli_v4 and skills_sha != CLI_SKILLS_REVISION:
+        raise ValueError("CLI catalog v4 requires the exact merged Base package")
     catalog = json.loads((ROOT / "project_workflow/references/hermes_sdlc_catalog_v1.json").read_text(encoding="utf-8"))
     pin = CatalogSource(
         repository="https://github.com/FerrPOINT/services-base.git",
@@ -524,7 +527,7 @@ def render(skills_root: Path, skills_sha: str) -> dict:
         manifest_schema="base-hermes-role-skills/v1",
     )
     manifest = load_pinned_package(skills_root, pin)
-    catalog["catalog_version"] = 3
+    catalog["catalog_version"] = 4 if cli_v4 else 3
     catalog["skills_source"] = {
         "repository": "https://github.com/FerrPOINT/services-base.git",
         "revision": skills_sha,
@@ -671,9 +674,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--skills-root", type=Path, required=True)
     parser.add_argument("--skills-sha", required=True)
+    parser.add_argument("--cli-v4", action="store_true", help="Write only the opt-in CLI v4 artifact")
     args = parser.parse_args()
-    CANDIDATE.write_text(
-        json.dumps(render(args.skills_root, args.skills_sha), ensure_ascii=False, indent=2) + "\n",
+    target = CLI_CANDIDATE if args.cli_v4 else CANDIDATE
+    target.write_text(
+        json.dumps(render(args.skills_root, args.skills_sha, cli_v4=args.cli_v4), ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
         newline="\n",
     )

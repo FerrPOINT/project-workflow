@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+CLI_SKILLS_REVISION = "4e5647d3a3015c26be8f5a390c4d5537d1d10d02"
 sys.path.insert(0, str(ROOT))
 from project_workflow.infrastructure.base_package import BASE_REPOSITORY, load_pinned_package  # noqa: E402
 from project_workflow.infrastructure.db.managed_catalog import (  # noqa: E402
@@ -17,6 +18,8 @@ __all__ = ["BASE_REPOSITORY", "CatalogSource", "load_pinned_package", "verify"]
 
 def verify(skills_root: Path, candidate: ManagedCatalog | None = None) -> None:
     candidate = candidate or load_managed_catalog(ROOT / "project_workflow/references/base_sdlc_catalog_v1.json")
+    if candidate.catalog_version == 4 and candidate.skills_source.revision != CLI_SKILLS_REVISION:
+        raise ValueError("CLI catalog v4 requires the exact merged Base package")
     active = load_managed_catalog(ROOT / "project_workflow/references/hermes_sdlc_catalog_v1.json")
     manifest = load_pinned_package(skills_root, candidate.skills_source)
     if set(manifest["roles"]) != {workflow.role_key for workflow in candidate.workflows}:
@@ -46,5 +49,6 @@ def verify(skills_root: Path, candidate: ManagedCatalog | None = None) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--skills-root", type=Path, required=True)
+    parser.add_argument("--candidate", type=Path, help="Explicit source catalog; default remains historical v3")
     args = parser.parse_args()
-    verify(args.skills_root)
+    verify(args.skills_root, load_managed_catalog(args.candidate) if args.candidate else None)

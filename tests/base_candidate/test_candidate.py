@@ -239,5 +239,105 @@ class RenderedCliInstructionsTests(unittest.TestCase):
                         self.assertNotIn(forbidden, instruction["description"])
 
 
+class CliV4CandidateTests(unittest.TestCase):
+    def setUp(self):
+        self.v3_bytes = CANDIDATE.read_bytes()
+        self.v3 = json.loads(self.v3_bytes)
+        self.v4 = json.loads(builder.CLI_CANDIDATE.read_text(encoding="utf-8"))
+        self.manifest = {"schema": "base-hermes-role-skills/v1", "roles": {
+            workflow["role_key"]: {
+                "namespace": workflow["hermes_namespace"], "profile": workflow["hermes_profile"],
+                "modes": [mode["key"] for mode in workflow["modes"]],
+                "physicalSkills": workflow["skill_allowlist"],
+            } for workflow in self.v4["workflows"]
+        }}
+
+    def test_v4_schema_and_exact_merged_base_pin_are_distinct_from_v3(self):
+        catalog = ManagedCatalog.model_validate(self.v4)
+        self.assertEqual(4, catalog.catalog_version)
+        self.assertEqual("4e5647d3a3015c26be8f5a390c4d5537d1d10d02", catalog.skills_source.revision)
+        self.assertEqual("https://github.com/FerrPOINT/services-base.git", catalog.skills_source.repository)
+        self.assertEqual(3, self.v3["catalog_version"])
+        self.assertEqual("4b9b4c9297a13fb28a6ba2039af2f7cb719f2f58", self.v3["skills_source"]["revision"])
+        self.assertNotEqual(builder.CLI_CANDIDATE, CANDIDATE)
+        self.assertEqual(self.v3_bytes, CANDIDATE.read_bytes())
+
+    def test_v4_preserves_all_existing_identities_skills_scopes_graph_and_actions(self):
+        self.assertEqual(7, len(self.v4["workflows"]))
+        modes = 0
+        phases = 0
+        for old, new in zip(self.v3["workflows"], self.v4["workflows"], strict=True):
+            self.assertEqual({k: v for k, v in old.items() if k not in {"description", "modes"}},
+                             {k: v for k, v in new.items() if k not in {"description", "modes"}})
+            for before, after in zip(old["modes"], new["modes"], strict=True):
+                modes += 1
+                self.assertEqual({k: v for k, v in before.items() if k != "phases"},
+                                 {k: v for k, v in after.items() if k != "phases"})
+                for p, q in zip(before["phases"], after["phases"], strict=True):
+                    phases += 1
+                    self.assertEqual({k: v for k, v in p.items() if k not in {"instructions", "checks", "evidence"}},
+                                     {k: v for k, v in q.items() if k not in {"instructions", "checks", "evidence"}})
+                    self.assertEqual([i["skills"] for i in p["instructions"]],
+                                     [i["skills"] for i in q["instructions"]])
+                self.assertEqual(before["phases"][1], after["phases"][1])
+        self.assertEqual((11, 33), (modes, phases))
+
+    def test_v4_render_matches_committed_content_and_never_writes_v3(self):
+        with patch.object(builder, "load_pinned_package", return_value=self.manifest):
+            result = builder.render(Path("synthetic-package"), builder.CLI_SKILLS_REVISION, cli_v4=True)
+        self.assertEqual(self.v4, result)
+        self.assertEqual(self.v3_bytes, CANDIDATE.read_bytes())
+
+    def test_v4_rejects_legacy_or_arbitrary_package_before_git_read(self):
+        for revision in (self.v3["skills_source"]["revision"],
+                         "6e1d190ecd15b772b1066c472f864b8becb3f97a", "a" * 40):
+            with self.subTest(revision=revision), patch.object(builder, "load_pinned_package") as load:
+                with self.assertRaisesRegex(ValueError, "exact merged Base package"):
+                    builder.render(Path("unused-package"), revision, cli_v4=True)
+                load.assert_not_called()
+
+    def test_v4_verifier_rejects_wrong_pin_before_git_read(self):
+        changed = copy.deepcopy(self.v4)
+        changed["skills_source"]["revision"] = self.v3["skills_source"]["revision"]
+        catalog = ManagedCatalog.model_validate(changed)
+        with patch.object(verify_base_sdlc_candidate, "load_pinned_package") as load:
+            with self.assertRaisesRegex(ValueError, "exact merged Base package"):
+                verify_base_sdlc_candidate.verify(Path("unused-package"), catalog)
+            load.assert_not_called()
+
+    def test_v4_explicit_verifier_checks_the_supplied_catalog(self):
+        catalog = load_managed_catalog(builder.CLI_CANDIDATE)
+        with patch.object(verify_base_sdlc_candidate, "load_pinned_package", return_value=self.manifest) as load:
+            verify_base_sdlc_candidate.verify(Path("synthetic-package"), catalog)
+        load.assert_called_once_with(Path("synthetic-package"), catalog.skills_source)
+        self.assertEqual(self.v3_bytes, CANDIDATE.read_bytes())
+
+    def test_all_v4_modes_keep_cli_auth_and_role_specific_human_boundaries(self):
+        for workflow in self.v4["workflows"]:
+            for mode in workflow["modes"]:
+                with self.subTest(role=workflow["role_key"], mode=mode["key"]):
+                    first = mode["phases"][0]["instructions"]
+                    final = mode["phases"][2]["instructions"][-1]["description"]
+                    self.assertIn("report=null", first[0]["description"])
+                    self.assertIn("existing auth/fence", first[1]["description"])
+                    for text in (first[0]["description"], final):
+                        for flag in ("project-workflow --json step", "--operation-key", "--runtime-request",
+                                     "--execution-token-file"):
+                            self.assertIn(flag, text)
+                        for forbidden in ("MCP", "workflow_step", "до модели", "pre-model", "/Готово"):
+                            self.assertNotIn(forbidden, text)
+                    self.assertIn("body.report должен совпадать с --report", final)
+                    if workflow["role_key"] == "project_manager":
+                        self.assertIn("PM не подтверждает требования за человека", final)
+                        self.assertIn("обычные структурированные clarification", final)
+                    else:
+                        self.assertIn("Только критическая бизнес-неопределённость", final)
+                        self.assertIn("через PM/root и linked checkpoint", final)
+                    if workflow["role_key"] == "analyst":
+                        self.assertIn("не выдавать scheduler credential Hermes", final)
+                    elif workflow["role_key"] != "project_manager":
+                        self.assertIn("нет role-specific guarded completion/readback", final)
+
+
 if __name__ == "__main__":
     unittest.main()
