@@ -24,17 +24,19 @@
 .label{display:block;font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0}
 .field-help,.namespace-delete-hint{font-size:12px;color:var(--text-muted);line-height:1.5;margin-top:6px}
 .namespace-description{min-height:96px;resize:vertical}
-.theme-grid{display:grid;grid-template-columns:minmax(0,1fr) 120px;gap:12px}
-.theme-color-input{height:34px;padding:2px;cursor:pointer}
-.theme-preview{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--panel)}
-.theme-preview .namespace-mark{width:30px;height:30px}
-.theme-preview-name{font-weight:600;color:var(--text)}
+.theme-controls{display:flex;align-items:center;gap:12px;min-width:0}
+.theme-icons{display:flex;gap:6px;overflow-x:auto;padding:3px;min-width:0}
+.theme-icon-option{position:relative;cursor:pointer;flex:0 0 auto}
+.theme-icon-option input{position:absolute;opacity:0;width:1px;height:1px;min-height:0}
+.theme-icon-option .namespace-mark{width:36px;height:36px;background:var(--panel);border-color:var(--border)}
+.theme-icon-option input:checked + .namespace-mark{border-color:var(--namespace-color);background:color-mix(in srgb,var(--namespace-color) 16%,transparent);box-shadow:0 0 0 1px var(--namespace-color)}
+.theme-icon-option input:focus-visible + .namespace-mark{outline:2px solid var(--text);outline-offset:2px}
+.theme-color-input{width:44px;height:40px;padding:2px;cursor:pointer;flex:0 0 auto}
 .panel-actions{display:flex;gap:10px;flex-wrap:wrap}
 .namespace-delete{margin-left:auto;color:var(--text);border-color:var(--red)}
 .namespace-delete:hover{color:var(--text);background:var(--red-soft)}
 .empty-note{color:var(--text-dim);font-size:13px;line-height:1.6}
 @media (max-width: 980px){.namespace-crud{grid-template-columns:minmax(0,1fr)}.namespace-nav{display:none}.namespace-picker{display:block}.namespace-picker select{min-height:40px}}
-@media (max-width: 520px){.theme-grid{grid-template-columns:1fr}}
 {% endblock %}
 
 {% block content %}
@@ -85,23 +87,21 @@
         <label class="label" for="namespaceDescription">Описание</label>
         <textarea id="namespaceDescription" class="namespace-description">{{ edited_namespace.description if edited_namespace else '' }}</textarea>
       </div>
-      <div class="theme-grid">
-        <div>
-          <label class="label" for="namespaceThemeIcon">Иконка</label>
-          <select id="namespaceThemeIcon" onchange="updateNamespaceThemePreview()">
+      <div>
+        <div class="label" id="namespaceThemeLabel">Иконка и цвет</div>
+        <div class="theme-controls" id="namespaceThemeControls" role="group" aria-labelledby="namespaceThemeLabel" style="--namespace-color:{{ edited_namespace.theme_color if edited_namespace else '#5E6AD2' }}">
+          <div class="theme-icons" role="radiogroup" aria-label="Иконка">
             {% for option in project_icon_options %}
-            <option value="{{ option.key }}" {% if edited_namespace and edited_namespace.theme_icon == option.key %}selected{% endif %}>{{ option.label }}</option>
+            <label class="theme-icon-option" title="{{ option.label }}">
+              <input type="radio" name="namespaceThemeIcon" value="{{ option.key }}" aria-label="{{ option.label }}" {% if (edited_namespace.theme_icon if edited_namespace else default_project_icon) == option.key %}checked{% endif %} onchange="updateNamespaceThemePreview()">
+              <span class="namespace-mark" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ option.path }}"></path></svg>
+              </span>
+            </label>
             {% endfor %}
-          </select>
+          </div>
+          <input type="color" id="namespaceThemeColor" class="theme-color-input" aria-label="Цвет" title="Цвет" value="{{ edited_namespace.theme_color if edited_namespace else '#5E6AD2' }}" oninput="updateNamespaceThemePreview()">
         </div>
-        <div>
-          <label class="label" for="namespaceThemeColor">Цвет</label>
-          <input type="color" id="namespaceThemeColor" class="theme-color-input" value="{{ edited_namespace.theme_color if edited_namespace else '#5E6AD2' }}" oninput="updateNamespaceThemePreview()">
-        </div>
-      </div>
-      <div class="theme-preview" id="namespaceThemePreview">
-        <span class="namespace-mark" id="namespaceThemePreviewIcon" aria-hidden="true"></span>
-        <span class="theme-preview-name" id="namespaceThemePreviewName">{{ edited_namespace.name if edited_namespace else 'Без названия' }}</span>
       </div>
       <div class="panel-actions">
         <button class="btn btn-primary" type="submit" id="namespaceSubmitButton">{{ 'Создать' if create_mode else 'Сохранить' }}</button>
@@ -167,15 +167,11 @@ function applyNamespaceIdentity(name, command, icon, color){
   if(brandMark){ brandMark.innerHTML = namespaceIconSvg(icon); }
 }
 function updateNamespaceThemePreview(){
-  var icon = document.getElementById('namespaceThemeIcon').value || defaultNamespaceThemeIcon;
+  var icon = document.querySelector('input[name="namespaceThemeIcon"]:checked').value || defaultNamespaceThemeIcon;
   var color = document.getElementById('namespaceThemeColor').value || defaultNamespaceThemeColor;
   var command = document.getElementById('namespaceCliCommand').value.trim() || 'engine';
   var name = document.getElementById('namespaceName').value.trim() || (command === 'engine' ? '' : command) || 'Без названия';
-  var preview = document.getElementById('namespaceThemePreview');
-  var previewIcon = document.getElementById('namespaceThemePreviewIcon');
-  preview.style.setProperty('--namespace-color', color);
-  previewIcon.innerHTML = namespaceIconSvg(icon);
-  document.getElementById('namespaceThemePreviewName').textContent = name;
+  document.getElementById('namespaceThemeControls').style.setProperty('--namespace-color', color);
   if(namespaceFormMode === 'create'){ return; }
   applyNamespaceIdentity(name, command, icon, color);
 }
@@ -184,7 +180,7 @@ function currentPayload(){
     name: document.getElementById('namespaceName').value.trim(),
     cli_command: document.getElementById('namespaceCliCommand').value.trim(),
     description: document.getElementById('namespaceDescription').value.trim(),
-    theme_icon: document.getElementById('namespaceThemeIcon').value || defaultNamespaceThemeIcon,
+    theme_icon: document.querySelector('input[name="namespaceThemeIcon"]:checked').value || defaultNamespaceThemeIcon,
     theme_color: document.getElementById('namespaceThemeColor').value || defaultNamespaceThemeColor,
   };
   return payload;
@@ -226,7 +222,8 @@ function fillNamespaceForm(namespace){
   document.getElementById('namespaceName').value = namespace ? namespace.name : '';
   document.getElementById('namespaceCliCommand').value = namespace ? (namespace.cli_command || '') : '';
   document.getElementById('namespaceDescription').value = namespace ? (namespace.description || '') : '';
-  document.getElementById('namespaceThemeIcon').value = namespace ? (namespace.theme_icon || defaultNamespaceThemeIcon) : defaultNamespaceThemeIcon;
+  var icon = namespace ? (namespace.theme_icon || defaultNamespaceThemeIcon) : defaultNamespaceThemeIcon;
+  document.querySelectorAll('input[name="namespaceThemeIcon"]').forEach(function(input){ input.checked = input.value === icon; });
   document.getElementById('namespaceThemeColor').value = namespace ? (namespace.theme_color || defaultNamespaceThemeColor) : defaultNamespaceThemeColor;
   updateNamespaceThemePreview();
 }

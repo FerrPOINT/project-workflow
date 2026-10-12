@@ -2225,9 +2225,9 @@ class TestProjectsPage:
         assert 'id="namespaceForm"' in response.text
         assert 'aria-labelledby="namespaceFormMode"' in response.text
         assert 'id="namespaceFormMode"' in response.text
-        assert 'id="namespaceThemeIcon"' in response.text
+        assert 'name="namespaceThemeIcon"' in response.text
         assert 'id="namespaceThemeColor"' in response.text
-        assert 'id="namespaceThemePreview"' in response.text
+        assert 'id="namespaceThemeControls"' in response.text
         assert 'aria-controls="namespaceForm"' in response.text
         assert 'aria-pressed="true"' in response.text
         assert "document.querySelector('.brand-name')" in response.text
