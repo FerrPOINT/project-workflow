@@ -10,6 +10,8 @@
 .namespace-nav-item{width:100%;text-align:left;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;cursor:pointer;color:var(--text);display:flex;gap:12px;align-items:flex-start}
 .namespace-nav-item.active{border-color:var(--namespace-color,var(--accent));box-shadow:0 0 0 1px var(--namespace-color,var(--accent))}
 .namespace-picker{display:none}
+.namespace-crud.is-empty{grid-template-columns:minmax(0,760px)}
+.namespace-crud.is-empty .namespace-nav,.namespace-crud.is-empty .namespace-picker{display:none}
 .namespace-mark{width:34px;height:34px;border-radius:8px;background:color-mix(in srgb,var(--namespace-color,var(--accent)) 16%, transparent);border:1px solid var(--namespace-color,var(--accent));color:var(--namespace-color,var(--accent));display:flex;align-items:center;justify-content:center;flex:0 0 auto}
 .namespace-mark svg{width:19px;height:19px}
 .namespace-card-body{min-width:0}
@@ -36,7 +38,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="namespace-crud">
+<div class="namespace-crud{% if namespaces|length == 0 %} is-empty{% endif %}" id="namespaceCrud">
   <div class="namespace-picker" id="namespacePicker">
     <label class="label" for="namespaceSelect">Профессия</label>
     <select id="namespaceSelect" onchange="selectNamespace(Number(this.value))">
@@ -335,6 +337,7 @@ function reloadNamespaces(nextId){
     .catch(showRequestError);
 }
 function renderNamespaceNav(){
+  document.getElementById('namespaceCrud').classList.toggle('is-empty', namespaceStore.length === 0);
   var nav = document.getElementById('namespaceNav');
   nav.replaceChildren();
   if(namespaceStore.length === 0){
