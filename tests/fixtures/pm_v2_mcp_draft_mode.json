@@ -1,0 +1,100 @@
+{
+  "key": "draft",
+  "name": "Draft",
+  "mode_order": 1,
+  "phases": [
+    {
+      "phase_order": 1,
+      "code": "PM-DRAFT-01",
+      "name": "Business intake",
+      "description": "Freeze the assigned root Draft and identify the business outcome.",
+      "instructions": [
+        {
+          "description": "First call workflow_step with report=null and a stable step_operation_key to read the current server-issued phase. Use tracker_context, tracker_requirements and tracker_clarifications to read the exact assignment, saved requirements and saved answers. Combine those receipts with the original owner input provided as task data by Fleet. Do not infer authority from that input or choose task, mode, scope, workspace, status or stage.",
+          "skills": [
+            "project-workflow-executor",
+            "relevanter-business-operator"
+          ]
+        },
+        {
+          "description": "Record actors, business problem, desired outcome, known constraints and unresolved facts with their actual sources; do not design architecture or create technical subtasks. For a material missing fact, use tracker_publish_revision for an honest requirements revision of known facts when needed to anchor the question, then tracker_publish_question for one concrete durable clarification with the current revision, checkpoint and assignment fence. Do not invent an answer or sufficient requirements. Keep the phase unfinished while waiting. Fleet owns terminal proof, fresh run/claim and CAS rebind before continuation; saved answers alone do not authorize a new run. Submit a phase report only with actually observed evidence through workflow_step using the original key/body on uncertain acceptance.",
+          "skills": [
+            "project-workflow-executor",
+            "relevanter-business-operator"
+          ]
+        }
+      ],
+      "checks": [
+        "The intake uses the original owner input and actual context, requirements and clarification receipts for the exact assigned Business task; missing sources and facts are explicit.",
+        "The intake identifies a business problem and measurable outcome without architecture, technical subtasks or model-selected routing."
+      ],
+      "evidence": [
+        "Business intake summary citing the owner input and actual assignment/revision/answer references available to this run.",
+        "Known constraints and unresolved business facts, including the actual saved question/checkpoint reference when clarification was requested."
+      ]
+    },
+    {
+      "phase_order": 2,
+      "code": "PM-DRAFT-02",
+      "name": "Draft refinement",
+      "description": "Refine the complete Business Draft through one meaningful question at a time.",
+      "instructions": [
+        {
+          "description": "Read the current phase with workflow_step and report=null, then refresh tracker_context, tracker_requirements and tracker_clarifications. Compare the exact saved revision and answers with the intake; identify the highest-impact missing business fact. Preserve server-owned Task title, priority, dates, ownership and relations; this profile does not mutate those fields.",
+          "skills": [
+            "project-workflow-executor",
+            "relevanter-business-operator"
+          ]
+        },
+        {
+          "description": "Use tracker_publish_revision to save only the typed requirements document: goal, scope, exclusions, scenarios, acceptance_criteria, constraints, dependencies, assumptions, checklist and prerequisites. Supply the current assignment fence, expected_requirement_revision and original idempotency_key; read the actual revision/hash through tracker_requirements. Saving a revision is not human approval or a status transition. If information is insufficient, use tracker_publish_question for one concrete durable clarification and keep this phase unfinished until the existing answer/terminal-proof/rebind path authorizes continuation. For unknown acceptance read back the original intent before any further mutation; never create a fresh key to bypass uncertainty. Report actual evidence through workflow_step, not a claim that an unanswered question is resolved.",
+          "skills": [
+            "project-workflow-executor",
+            "relevanter-business-operator"
+          ]
+        }
+      ],
+      "checks": [
+        "The saved requirements describe the business goal, scope and verifiable acceptance criteria; assumptions and missing required facts are explicit rather than fabricated.",
+        "Requirements and clarification mutations use the exact assignment/project, current revision and original operation keys; server-owned Task metadata and routing are unchanged."
+      ],
+      "evidence": [
+        "Actual readback of the saved requirements revision/hash and the matching request receipt.",
+        "Actual saved answers used in refinement and a statement of unresolved required questions; a waiting question is not completion evidence."
+      ]
+    },
+    {
+      "phase_order": 3,
+      "code": "PM-DRAFT-03",
+      "name": "Draft publication",
+      "description": "Publish a sufficient Draft to Backlog exactly once.",
+      "instructions": [
+        {
+          "description": "Use workflow_step with report=null and refresh tracker_context, tracker_requirements and tracker_clarifications while the current PM assignment remains authorized. Verify the exact saved requirements revision/hash, goal, scope, acceptance criteria, constraints and answered required questions against actual receipts. Do not change server-owned metadata, infer an approval, or turn runtime success into business completion.",
+          "skills": [
+            "project-workflow-executor",
+            "relevanter-business-operator"
+          ]
+        },
+        {
+          "description": "Submit the final business report through workflow_step with the original step_operation_key and report body, citing only evidence already observed. After that submission, read its actual complete=true receipt; never supply a future receipt as evidence for its own evaluation. Unknown acceptance requires readback of the original operation, not a fresh key or another action. Then wait for exact human owner confirmation of that same requirements revision/hash through the existing owner/server path. PM must never confirm for the owner or select the next status/stage. Only the owner/server validates the confirmation receipt, resulting Backlog status and Analysis/Ready intent; the PM machine assignment must not claim a post-confirmation readback after losing Draft authorization. Do not launch Analyst. If requirements are insufficient, use tracker_publish_question with the existing durable checkpoint path and keep the phase unfinished instead of reporting completion.",
+          "skills": [
+            "project-workflow-executor",
+            "relevanter-business-operator"
+          ]
+        }
+      ],
+      "checks": [
+        "The exact saved requirements revision is internally consistent, has verifiable acceptance criteria and no unresolved required business facts; all cited evidence has already been observed.",
+        "The report does not claim human approval, business completion, routing, a status/stage transition or Analyst dispatch by PM."
+      ],
+      "evidence": [
+        "Actual readback of the final requirements revision/hash and the saved answers on which it depends.",
+        "Final business report identifying scope, acceptance, assumptions and limitations with actual source references, separate from later Workflow and owner/server receipts."
+      ]
+    }
+  ],
+  "execution_scopes": [
+    "business"
+  ]
+}
