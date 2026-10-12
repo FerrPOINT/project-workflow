@@ -118,6 +118,7 @@ dialog.base-shell-drawer::backdrop { background: rgb(0 0 0 / 65%); }
 
 .platform-header-context {
   flex: 1;
+  justify-content: flex-end;
 }
 
 .platform-header-services,
@@ -217,6 +218,15 @@ dialog.base-shell-drawer::backdrop { background: rgb(0 0 0 / 65%); }
   --color-destructive-foreground: #ffffff;
   --color-success: #166534;
   --color-warning: #92400e;
+}
+
+/* Namespace keeps its context row inside the existing Base header. */
+@media (max-width: 767px) {
+  .platform-header-leading > a { display: none; }
+  :root:has(.platform-header-context) { --shell-header-height: 104px; }
+  .platform-header:has(.platform-header-context) { flex-wrap: wrap; align-content: center; row-gap: 0; }
+  .platform-header:has(.platform-header-context) > :not(.platform-header-context) { height: 52px; }
+  .platform-header-context { order: 4; flex: 0 0 100%; height: 44px; padding-bottom: 8px; }
 }
 
 /* Adapter for server-rendered markup. Values come only from canonical tokens. */
