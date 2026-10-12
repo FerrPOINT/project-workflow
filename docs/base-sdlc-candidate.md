@@ -43,6 +43,49 @@ CLI step/history допустим только при установленной
 
 ## Передача задачи после последнего шага
 
+### Opt-In CLI V4 Source
+
+Новый [CLI catalog v4](../project_workflow/references/base_sdlc_catalog_cli_v4.json)
+закрепляет merged Base `4e5647d3a3015c26be8f5a390c4d5537d1d10d02`.
+Сохранены семь ролей, 11 modes, 33 phase codes, profiles, skills и graph.
+Исторический v3 `base_sdlc_catalog_v1.json` не перезаписан. Это только source:
+активный default, bootstrap, installed IDs, bindings и history не переключены.
+
+```bash
+python scripts/build_base_sdlc_candidate.py --cli-v4 --skills-root <authorized-base>/agent-skills --skills-sha 4e5647d3a3015c26be8f5a390c4d5537d1d10d02
+python scripts/verify_base_sdlc_candidate.py --candidate project_workflow/references/base_sdlc_catalog_cli_v4.json --skills-root <authorized-base>/agent-skills
+```
+
+Флаг `--cli-v4` пишет только новый v4 artifact; verifier без `--candidate`
+по-прежнему проверяет v3. Проверка читает immutable Git package, не заменяет
+runtime admission или deployment. Existing source exporter пока закреплён на
+v3/4b9; version-aware exporter/admission и Fleet catalog4 compatibility требуют
+отдельной согласованной интеграции. Старые receipts не квалифицируют v4.
+Runtime compatibility v2 — отдельный контракт, не номер этого source catalog.
+Этот пакет не подтверждает install/readback/runtime compatibility: binding и
+admission сохраняют v3, а текущий PM execution требует v2. Простая установка v4
+или принятие номера 4 потребителем не заменяет producer-side совместимость.
+
+Source-only уточнение генератора `scripts/build_base_sdlc_candidate.py`:
+будущие first/final instructions используют только existing runtime CLI `step`
+с operation key, request JSON и scoped execution token; report идёт тем же CLI.
+Ни frozen JSON ниже, ни pins/default/history этим изменением не обновляются;
+описанная ниже таблица сохраняет исторический content, не новые CLI-команды.
+Генератор готовит Analyst typed result через Workflow report; Tracker
+`sdlc analysis result submit/operation` допустим только authorized caller.
+Текущую scheduler identity нельзя выдавать Hermes. Для остальных non-PM ролей
+guarded completion/readback CLI остаётся конкретной producer dependency;
+target status/stage не угадываются и generic CRUD не является обходом.
+PM по-прежнему ждёт exact owner confirmation, не подтверждает за человека.
+Обычные структурированные clarification и owner checkpoint ведёт PM. Остальные
+профессии принимают обычные технические решения в рамках approved requirements;
+только критическая бизнес-неопределённость передаётся через PM/root с linked
+checkpoint. Инфраструктурные blockers адресованы оператору, а tool approval
+не заменяет бизнес-ответ или owner consent.
+Отдельные comment mutation и checkpoint/readback CLI здесь не добавляются.
+Base skill content с прежними MCP references требует отдельного owner update;
+этот пакет не квалифицирует установленный CLI, role execution или handoff.
+
 Уточнение инструкций от 2026-10-12 не устанавливает candidate и не добавляет
 несуществующие tools. После `complete=true` и сохранения результата агент должен
 запросить через разрешённую Tracker capability следующий **статус и стадию**, затем
