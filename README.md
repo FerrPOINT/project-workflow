@@ -485,7 +485,7 @@ project-workflow/
 
 - [docs/architecture.md](docs/architecture.md) — CLI/UI/Supervisor boundaries, state/audit model и runtime scope.
 - [PM continuation contract](docs/pm-continuation-contract.md) and [verification](docs/pm-continuation-verification.md) describe the opt-in persistent PM checkpoint/resume API and its remaining Fleet integration gaps.
-- [PM MCP draft content v1](docs/pm-mcp-draft-content.md): optional PM v2 instructions/checks/evidence for the existing aggregate editor, not installed or automatically activated.
+- [PM CLI draft content v1](docs/pm-cli-draft-content.md): optional PM v2 content for the existing aggregate editor; actual CLI commands and explicit PM SDLC gaps, not installed or automatically activated.
 
 - [docs/resource-execution-context.md](docs/resource-execution-context.md) — отдельный Namespace execution context v2, owner readers и совместимость без активации исполнения.
 - [docs/quality-gate.md](docs/quality-gate.md) — local gate, PostgreSQL integration, Compose readiness и browser smoke.
