@@ -1,9 +1,8 @@
 {% import "base/macros.html" as base_ui %}
 {% set active_namespace = theme_namespace if theme_namespace is defined else none %}
 {% set active_namespace_id = active_namespace.id if active_namespace else none %}
-{% set accent_text = active_namespace.theme_color | accent_foreground if active_namespace else none %}
 <!DOCTYPE html>
-<html lang="ru" data-theme="dark" data-theme-storage-key="workflow-theme"{% if active_namespace %} style="--accent:{{ active_namespace.theme_color }};--accent-hover:{{ active_namespace.theme_color }};--accent-soft:{{ active_namespace.theme_color }}26;--accent-foreground:{{ accent_text }};--accent-hover-foreground:{{ accent_text }}"{% endif %}>
+<html lang="ru" data-theme="dark" data-theme-storage-key="workflow-theme">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -65,7 +64,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .sidebar-logo{min-width:0;color:var(--text)}
 .brand-link{display:flex;align-items:center;gap:10px;color:inherit;text-decoration:none;min-width:40px;min-height:40px;padding:4px}
 .brand-link:hover{color:inherit;text-decoration:none}
-.brand-mark{width:32px;height:32px;border-radius:8px;background:var(--accent-soft);border:1px solid var(--accent);color:var(--accent);display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto}
+.brand-mark{width:32px;height:32px;border-radius:8px;background:color-mix(in srgb,var(--namespace-color,var(--accent)) 16%,transparent);border:1px solid var(--namespace-color,var(--accent));color:var(--namespace-color,var(--accent));display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto}
 .brand-mark svg{width:18px;height:18px}
 .brand-text{display:flex;flex-direction:column;min-width:0;line-height:1.1}
 .brand-name{font-size:14px;font-weight:700;color:var(--text);max-width:148px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -397,7 +396,7 @@ textarea{resize:vertical;min-height:60px}
 <header class="platform-header" data-platform-header>
   <div class="platform-header-leading" data-platform-header-slot="leading">
     <button class="burger" id="burgerBtn" onclick="openSidebar()" aria-label="Открыть навигацию" aria-controls="sidebar" aria-expanded="false">☰</button>
-    <a class="brand-link" href="/" aria-label="Project Workflow" title="Project Workflow"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="{{ project_icon_path(default_project_icon) }}"></path></svg></span></a>
+    <a class="brand-link" href="/" aria-label="Project Workflow" title="Project Workflow"><span class="brand-mark" aria-hidden="true"{% if active_namespace %} style="--namespace-color:{{ active_namespace.theme_color }}"{% endif %}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="{{ project_icon_path(active_namespace.theme_icon if active_namespace else default_project_icon) }}"></path></svg></span></a>
   </div>
   <div class="platform-header-services" data-platform-header-slot="services">
       <details class="service-menu" id="serviceMenu">

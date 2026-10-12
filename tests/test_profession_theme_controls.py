@@ -13,26 +13,36 @@ class ThemeInputs(HTMLParser):
     def __init__(self):
         super().__init__()
         self.radios = []
+        self.root_attrs = {}
+        self.brand_attrs = {}
 
     def handle_starttag(self, tag, attrs):
         fields = dict(attrs)
+        if tag == "html":
+            self.root_attrs = fields
+        if fields.get("class") == "brand-mark":
+            self.brand_attrs = fields
         if tag == "input" and fields.get("name") == "namespaceThemeIcon":
             self.radios.append(fields)
 
 
 @pytest.mark.parametrize("icon", [None, "folder", "code", "rocket", "palette", "users"])
 def test_theme_controls_show_all_icons_and_select_current_value(icon):
+    color = "#D2608E" if icon in {"code", "palette"} else "#22C55E"
     edited = None if icon is None else {
         "id": 123, "name": "Profession", "cli_command": "workflow-profession",
-        "description": "", "theme_icon": icon, "theme_color": "#22C55E",
+        "description": "", "theme_icon": icon, "theme_color": color,
     }
     html = templates.get_template("namespaces.html").render(
-        namespaces=[], selected_namespace=None, edited_namespace=edited,
+        namespaces=[], selected_namespace=None, edited_namespace=edited, theme_namespace=edited,
         create_mode=edited is None, page="namespaces", ui_port=8812,
         namespace_cookie_name="workflow_namespace_id", namespace_cookie_secure=False,
     )
     parsed = ThemeInputs()
     parsed.feed(html)
+    assert "style" not in parsed.root_attrs
+    if edited:
+        assert parsed.brand_attrs["style"] == f"--namespace-color:{color}"
     assert {radio["value"] for radio in parsed.radios} == set(PROJECT_THEME_ICONS)
     assert [radio["value"] for radio in parsed.radios if "checked" in radio] == [icon or "folder"]
     assert all(radio["type"] == "radio" and radio["aria-label"] for radio in parsed.radios)
