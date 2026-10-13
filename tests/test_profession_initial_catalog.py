@@ -137,12 +137,19 @@ def test_theme_migration_updates_only_untouched_managed_professions(tmp_path):
         database.dispose()
 
 
-def test_adoption_preserves_profession_edits_old_tasks_history_and_user_collections(database):
+@pytest.mark.parametrize("artifact", ["base_sdlc_catalog_v1.json", "base_sdlc_catalog_v1_frozen.json"])
+@pytest.mark.parametrize("instruction_execution", ["sync", "parallel"])
+def test_adoption_preserves_profession_edits_old_tasks_history_and_user_collections(
+    database, artifact, instruction_execution,
+):
+    previous = OLD.with_name(artifact)
     with SAUnitOfWork(database) as uow:
-        ensure_managed_catalog(uow, OLD)
+        ensure_managed_catalog(uow, previous)
         profession = uow.projects.get_by_cli_command("workflow-developer")
         mode = uow.workflows.get_mode_by_key(profession.workflow_id, "initial")
         phase = uow.phases.list(profession.workflow_id, mode_id=mode.id)[0]
+        instruction = uow.phase_instructions.list(phase.id)[0]
+        uow.phase_instructions.update(instruction["id"], {"execution_type": instruction_execution})
         task_id = uow.tasks.create({
             "project_id": profession.id, "workflow_id": profession.workflow_id, "mode_id": mode.id,
             "task_key": "DEV-42", "title": "Keep historical references",
@@ -176,14 +183,68 @@ def test_adoption_preserves_profession_edits_old_tasks_history_and_user_collecti
             assert rows(uow, table)[:len(old_rows)] == old_rows
         assert uow.workflows.belongs_to_profession(extra, profession.id)
         assert uow.workflows.get_by_id(extra).name == "My workflow"
-        assert validate_managed_catalog_state(uow, load_managed_catalog(OLD), historical=True)
+        if instruction_execution == "sync":
+            assert validate_managed_catalog_state(uow, load_managed_catalog(previous), historical=True)
+        else:
+            with pytest.raises(ValueError, match="different instructions/checks/evidence"):
+                validate_managed_catalog_state(uow, load_managed_catalog(previous), historical=True)
         with pytest.raises(ValueError, match="active catalog version"):
-            validate_managed_catalog_state(uow, load_managed_catalog(OLD))
+            validate_managed_catalog_state(uow, load_managed_catalog(previous))
         uow.commit()
         with pytest.raises(ConflictError, match="owner-issued admission"):
             TaskService(uow).create_task({"project_id": profession.id, "task_key": "DEV-43", "title": "No bypass"})
         ensure_managed_catalog(uow, NEW)
         assert len(uow.workflows.list_modes(profession.workflow_id)) == 2
+
+
+def test_unrecognized_frozen_v3_edits_stop_adoption(database):
+    with SAUnitOfWork(database) as uow:
+        ensure_managed_catalog(uow, OLD.with_name("base_sdlc_catalog_v1_frozen.json"))
+        profession = uow.projects.get_by_cli_command("workflow-developer")
+        mode = uow.workflows.get_mode_by_key(profession.workflow_id, "initial")
+        phase = uow.phases.list(profession.workflow_id, mode_id=mode.id)[0]
+        instruction = uow.phase_instructions.list(phase.id)[0]
+        uow.phase_instructions.update(instruction["id"], {"description": "Unrecognized changed recipe"})
+        uow.commit()
+        with pytest.raises(ValueError, match="does not match any immutable published recipe"):
+            ensure_managed_catalog(uow, NEW)
+        assert not uow.workflows.list_modes(profession.workflow_id, catalog_version=4)
+        assert uow.workflows.get_by_id(profession.workflow_id).active_catalog_version == 3
+
+
+def test_historical_admission_uses_its_frozen_recipe_digest(database, monkeypatch, tmp_path):
+    from project_workflow.application import base_admission
+    from project_workflow.infrastructure.base_package import digest
+
+    path = OLD.with_name("base_sdlc_catalog_v1_frozen.json")
+    catalog = load_managed_catalog(path)
+    definition = next(item for item in catalog.workflows if item.role_key == "developer")
+    role = {"namespace": definition.hermes_namespace, "profile": definition.hermes_profile,
+            "modes": [mode.key for mode in definition.modes], "physicalSkills": definition.skill_allowlist,
+            "roleInstruction": {"sha256": "d" * 64}}
+    monkeypatch.setattr(base_admission, "load_pinned_package", lambda *_: {"roles": {"developer": role}})
+    monkeypatch.setattr(base_admission.GitPackage, "read", lambda *_: b"synthetic manifest")
+    monkeypatch.setenv("PROJECT_WORKFLOW_BASE_SKILLS_ROOT", str(tmp_path / "agent-skills"))
+    config.get_settings.cache_clear()
+    with SAUnitOfWork(database) as uow:
+        ensure_managed_catalog(uow, path)
+        profession = uow.projects.get_by_cli_command("workflow-developer")
+        mode = uow.workflows.get_mode_by_key(profession.workflow_id, "initial")
+        ensure_managed_catalog(uow, NEW)
+        admission = {
+            "contract": "base-sdlc-admission/v1", "config_ref": "fleet-config:synthetic@1",
+            "config_sha256": "a" * 64, "concrete_agent_ref": "11111111-1111-4111-8111-111111111111",
+            "namespace": definition.hermes_namespace, "profile": definition.hermes_profile,
+            "catalog_sha256": digest(path.read_bytes()), "skills_revision": catalog.skills_source.revision,
+            "skills_manifest_sha256": digest(b"synthetic manifest"), "role_instruction_sha256": "d" * 64,
+            "physical_skills": definition.skill_allowlist,
+        }
+        arguments = dict(project_id=profession.id, role_key="developer", workflow_key=definition.key,
+                         mode_key="initial", execution_scope=definition.modes[0].execution_scopes[0],
+                         historical_mode_id=mode.id)
+        assert base_admission.validate_base_admission(uow, admission, **arguments) == admission
+        with pytest.raises(ConflictError, match="pinned package/config validation failed"):
+            base_admission.validate_base_admission(uow, {**admission, "catalog_sha256": "0" * 64}, **arguments)
 
 
 def test_v4_source_and_binding_use_exact_current_package_and_keep_runtime_blocked(database, monkeypatch, tmp_path):
