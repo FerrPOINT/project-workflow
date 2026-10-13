@@ -37,8 +37,9 @@ CLI-команды и идентификаторы сохранены для с�
 [preset single-task-v1](single-task-professions.md): семь профессий, восемь режимов,
 24 фазы. Architect использует существующий `decomposition` как архитектуру/план
 внутри задачи; children и integration barriers не создаются. Preset содержит
-готовые инструкции и явные зависимости от недостающих Tracker CLI capabilities;
-его подключение принадлежит интегратору и не переключает установленный каталог.
+готовые инструкции; [opt-in установка](single-task-installation.md) добавляет
+собственное семейство через existing bootstrap/readback. Live assignment/routing
+остаётся pending parent и не переключает legacy execution.
 
 Инициализация варианта `base` создаёт семь профессий с разными иконками и цветами
 и полные стартовые воркфлоу по закреплённому Base v4: 11 режимов, 33 фазы и

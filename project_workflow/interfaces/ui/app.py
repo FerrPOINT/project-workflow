@@ -242,6 +242,16 @@ def create_app() -> FastAPI:
     app.post("/internal/runtime/rebind", response_model=None)(runtime_api.runtime_rebind)
     app.get("/internal/runtime/history", response_model=None)(runtime_api.runtime_history)
     app.get("/internal/runtime/catalog", response_model=None)(runtime_api.runtime_catalog)
+    from project_workflow.domain.single_task_profile import (
+        SingleTaskBindingResponse,
+        SingleTaskInstallationResponse,
+    )
+
+    app.get("/internal/runtime/profiles/single-task-v1/installation", response_model=SingleTaskInstallationResponse)(
+        runtime_api.single_task_installation
+    )
+    app.get("/internal/runtime/profiles/single-task-v1/namespace-bindings/{namespace_id}",
+            response_model=SingleTaskBindingResponse)(runtime_api.single_task_namespace_binding)
     from project_workflow.domain.base_binding import (
         BaseBindingInvalidRequest,
         BaseNamespaceBindingError,

@@ -10,7 +10,7 @@ from typing import Any
 from fastapi import Header, Query
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from project_workflow import config, supervisor
 from project_workflow.application.base_admission import admission_receipt, assert_base_step
@@ -38,6 +38,7 @@ from project_workflow.interfaces.ui.schemas import (
     RuntimeBindRequest,
     RuntimeRebindRequest,
     RuntimeStepRequest,
+    SingleTaskAssignmentRequest,
 )
 from project_workflow.supervisor import format_result
 
@@ -210,10 +211,59 @@ def runtime_capabilities(
 
 
 def _namespace_id(uow: SAUnitOfWork, role: str) -> int:
-    value = _resolve_namespace_id(uow, f"workflow-{role}")
+    command = (f"workflow-single-task-{role.replace('_', '-')}"
+               if config.CATALOG_VARIANT == "single-task-v1" else f"workflow-{role}")
+    value = _resolve_namespace_id(uow, command)
     if value is None:
         raise ValueError("Namespace роли не найден")
     return value
+
+
+def _single_task_observation(authorization: str | None) -> Any:
+    """Existing catalog credential; persisted observation only, no new registry."""
+    from project_workflow.domain.single_task_profile import SingleTaskInstallationResponse
+    from project_workflow.infrastructure.db.single_task_catalog import observe_installation
+
+    try:
+        credential = _authorized_service_credential(authorization)
+        if credential is None:
+            return _error("Invalid catalog credential", 401)
+        if credential.kind != "catalog":
+            return _error("Catalog credential required", 403)
+        with SAUnitOfWork() as uow:
+            result = observe_installation(uow)
+        return SingleTaskInstallationResponse(installation=result)
+    except ValueError:
+        return _error("Single-task installation missing or divergent", 409)
+    except (RuntimeError, OSError, SQLAlchemyError):
+        return _error("Single-task installation observation unavailable", 503)
+
+
+def single_task_installation(authorization: str | None = Header(default=None)) -> JSONResponse:
+    result = _single_task_observation(authorization)
+    if isinstance(result, JSONResponse):
+        return result
+    return JSONResponse(result.model_dump(mode="json", by_alias=True), headers={"Cache-Control": "no-store"})
+
+
+def single_task_namespace_binding(namespace_id: str, authorization: str | None = Header(default=None)) -> Any:
+    from project_workflow.domain.base_binding import DatabaseId
+    from project_workflow.domain.single_task_profile import SingleTaskBindingResponse
+
+    result = _single_task_observation(authorization)
+    if isinstance(result, JSONResponse):
+        return result
+    from pydantic import TypeAdapter, ValidationError
+
+    try:
+        namespace_id = TypeAdapter(DatabaseId).validate_python(namespace_id)
+    except ValidationError:
+        return _error("Canonical namespace ID required", 422)
+    binding = next((b for b in result.installation.bindings if b.namespace_id == namespace_id), None)
+    if binding is None:
+        return _error("Single-task namespace not found", 404)
+    response = SingleTaskBindingResponse(binding=binding)
+    return JSONResponse(response.model_dump(mode="json", by_alias=True), headers={"Cache-Control": "no-store"})
 
 
 def _assert_task_key_in_namespace(uow: SAUnitOfWork, namespace_id: int, task_key: str) -> None:
@@ -512,7 +562,7 @@ def _assignment_response(task: dict[str, Any]) -> dict[str, Any]:
 
 
 def runtime_assign(
-    payload: RuntimeAssignmentRequest,
+    payload: SingleTaskAssignmentRequest | RuntimeAssignmentRequest,
     authorization: str | None = Header(default=None),
 ) -> dict[str, Any] | JSONResponse:
     """Accept one authorized Business assignment and persist its technical cursor."""

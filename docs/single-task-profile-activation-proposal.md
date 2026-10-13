@@ -1,5 +1,11 @@
 # Single-Task Profile: Activation Proposal
 
+Исторический review proposal `a51f576`. Workflow-owned bootstrap/readback теперь
+согласованы и реализованы в [installation package](single-task-installation.md).
+Routing v2 ниже остаётся предложением: его exact DTO и Registry/Tracker реализация
+не согласованы как готовый контракт и не используются. Прежние review artifacts
+и hashes сохранены отдельно от устанавливаемой редакции инструкций.
+
 Статус: **предложение для согласования, не реализованная активация**.
 Исходные инструкции: Workflow `fb9dd53c90cb4c421ffa12c0c766ca54961f2003`.
 Ни bootstrap, ни текущие Tracker/Fleet owner contracts этот профиль не принимают.

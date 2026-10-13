@@ -163,6 +163,7 @@ class SupervisorEngine:
         project = self._resolve_project()
         if not project:
             raise ValueError(f"Не удалось определить неймспейс для ключа задачи: {self.task_key}")
+        self._task_service._reject_single_task_execution(project["id"])
         current_phase_id = self._first_phase_id_for_project(project["id"])
         try:
             return self._task_service.create_task(

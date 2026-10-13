@@ -213,6 +213,7 @@ class TaskService:
             raise NotFoundError(f"Воркфлоу {project.workflow_id} не найден")
         if workflow.key != workflow_key:
             raise ConflictError("Business workflow key не совпадает с workflow неймспейса")
+        self._reject_single_task_execution(project_id)
         mode = self._uow.workflows.get_mode_by_key(project.workflow_id, mode_key)
         if mode is None or mode.id is None:
             raise ConflictError(f"Режим {mode_key!r} не найден в воркфлоу {project.workflow_id}")
@@ -483,6 +484,7 @@ class TaskService:
         The returned assignment is unbound. Business must confirm its own CAS
         before invoking ordinary bind; runtime step rejects it until then.
         """
+        self._reject_single_task_execution(project_id)
         role_key = normalize_role_key(role_key)
         payload = {**request, "project_id": project_id, "role_key": role_key}
         operation_key = self._bounded_ref(request["operation_key"], "operation_key", 128)
@@ -656,6 +658,7 @@ class TaskService:
         concrete_agent_ref: str | None = None,
     ) -> dict[str, Any]:
         """Atomically attach one real Hermes binding to an accepted assignment."""
+        self._reject_single_task_execution(project_id)
         role_key = normalize_role_key(role_key)
         if concrete_agent_ref is not None:
             concrete_agent_ref = validate_concrete_agent_ref(concrete_agent_ref)
@@ -827,6 +830,7 @@ class TaskService:
         base_config_sha256: str | None = None,
     ) -> RuntimeStepFence:
         """Lock and validate the exact immutable owner assignment for one step."""
+        self._reject_single_task_execution(project_id)
         role_key = normalize_role_key(role_key)
         step_operation_key = self._bounded_ref(step_operation_key, "step_operation_key", 128)
         if (
@@ -970,6 +974,14 @@ class TaskService:
         if not isinstance(value, str) or not value.strip() or len(value.strip()) > max_length:
             raise ValueError(f"{field_name} должен быть непустой строкой длиной до {max_length} символов")
         return value.strip()
+
+    def _reject_single_task_execution(self, project_id: int) -> None:
+        from project_workflow.domain.single_task_profile import EXECUTION_PENDING, is_single_task_key
+
+        project = self._uow.projects.get_by_id(project_id)
+        workflow = self._uow.workflows.get_by_id(project.workflow_id) if project and project.workflow_id else None
+        if workflow is not None and is_single_task_key(workflow.key):
+            raise ConflictError(EXECUTION_PENDING)
 
     @classmethod
     def _validate_retry_assignment(

@@ -1,0 +1,134 @@
+{
+  "instruction_overlay": {
+    "path": "project_workflow/infrastructure/single_task_delivery_instructions.py",
+    "sha256": "b0eb2eb364ea0ef25ff91bf85f19106ca78d9c2434ec7523173fef4e6e6c1e7c"
+  },
+  "instruction_profile": "single-task-v1",
+  "instruction_source": {
+    "commit": "fb9dd53c90cb4c421ffa12c0c766ca54961f2003",
+    "identity_donor": {
+      "path": "project_workflow/references/base_sdlc_catalog_cli_v4.json",
+      "sha256": "d6d18f98b55f14210a3f0e12404074705495d535aa8ba29ae449624b845668c9"
+    },
+    "path": "project_workflow/infrastructure/single_task_catalog.py",
+    "repository": "https://github.com/FerrPOINT/project-workflow.git",
+    "sha256": "aa9fd70897a14c62eb00dab9aa1691a99f19a17519ae67451a13faf5b0e6432d"
+  },
+  "inventory": {
+    "modes": 8,
+    "namespaces": 7,
+    "phases": 24,
+    "workflows": 7
+  },
+  "profile_version": 1,
+  "proposal": false,
+  "role_hash_encoding": "utf-8-json-sort-keys-compact-no-final-newline",
+  "roles": {
+    "analyst": {
+      "fleet_role": "analyst",
+      "modes": {
+        "analysis": [
+          "business"
+        ]
+      },
+      "namespace_cli_command": "workflow-single-task-analyst",
+      "namespace_name": "single-task-analyst",
+      "profile": "single-task-v1-analyst",
+      "role_instructions_sha256": "a527db5dc53816c612d7aacb47984f342f885667c4779ac3b712b3540151b48d",
+      "workflow_key": "single-task-v1:analyst"
+    },
+    "architect": {
+      "fleet_role": "architect",
+      "modes": {
+        "decomposition": [
+          "business"
+        ]
+      },
+      "namespace_cli_command": "workflow-single-task-architect",
+      "namespace_name": "single-task-architect",
+      "profile": "single-task-v1-architect",
+      "role_instructions_sha256": "673998c42d853e2cb58191684cb7b5a5d335dd8d884bf9504a453f8d14d27114",
+      "workflow_key": "single-task-v1:architect"
+    },
+    "developer": {
+      "fleet_role": "developer",
+      "modes": {
+        "initial": [
+          "delivery"
+        ],
+        "rework": [
+          "delivery"
+        ]
+      },
+      "namespace_cli_command": "workflow-single-task-developer",
+      "namespace_name": "single-task-developer",
+      "profile": "single-task-v1-developer",
+      "role_instructions_sha256": "fa992a60866f0f3487c7698a097a95b6148e176b99041eb44269887549500784",
+      "workflow_key": "single-task-v1:developer"
+    },
+    "devops": {
+      "fleet_role": "dev_ops",
+      "modes": {
+        "delivery": [
+          "delivery"
+        ]
+      },
+      "namespace_cli_command": "workflow-single-task-devops",
+      "namespace_name": "single-task-devops",
+      "profile": "single-task-v1-devops",
+      "role_instructions_sha256": "5be8fc2e12844a01e1397c9cda11a94b57a695d4e961f190d6eca39a15d2c3ae",
+      "workflow_key": "single-task-v1:devops"
+    },
+    "project_manager": {
+      "fleet_role": "project_manager",
+      "modes": {
+        "draft": [
+          "business"
+        ]
+      },
+      "namespace_cli_command": "workflow-single-task-project-manager",
+      "namespace_name": "single-task-project-manager",
+      "profile": "single-task-v1-project-manager",
+      "role_instructions_sha256": "6769eaefec5843c72e0ab4dee77ef9a51e9abe4e9431316fea68c8866c36964b",
+      "workflow_key": "single-task-v1:project_manager"
+    },
+    "reviewer": {
+      "fleet_role": "reviewer",
+      "modes": {
+        "delivery": [
+          "delivery"
+        ]
+      },
+      "namespace_cli_command": "workflow-single-task-reviewer",
+      "namespace_name": "single-task-reviewer",
+      "profile": "single-task-v1-reviewer",
+      "role_instructions_sha256": "a327045b7a3ef7ecb3d29cefe9ddbe70449ce458fc17388fb094897ed2a25143",
+      "workflow_key": "single-task-v1:reviewer"
+    },
+    "tester": {
+      "fleet_role": "tester",
+      "modes": {
+        "delivery": [
+          "delivery"
+        ]
+      },
+      "namespace_cli_command": "workflow-single-task-tester",
+      "namespace_name": "single-task-tester",
+      "profile": "single-task-v1-tester",
+      "role_instructions_sha256": "780a5b361d5ad147cab5bcd54eb801907fefb868bbcc67c33fce1196ebdf0c5e",
+      "workflow_key": "single-task-v1:tester"
+    }
+  },
+  "schema": "single-task-sdlc/profile-manifest/v1",
+  "task_identity": {
+    "children": false,
+    "decomposition_barriers": false,
+    "task_equals_root": true
+  },
+  "workflow_catalog": {
+    "artifact": "project_workflow/references/single_task_catalog_v1.json",
+    "hash_encoding": "utf-8-lf-no-bom-with-final-newline",
+    "sha256": "47ddbcdeda6e67ccca01cd07a5b88806ee48c70ddffbf8479c6e225932482200",
+    "version": 1
+  }
+}

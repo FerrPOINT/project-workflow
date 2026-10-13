@@ -185,6 +185,31 @@ class RuntimeAssignmentRequest(StrictRequest):
         return self
 
 
+class SingleTaskAssignmentRequest(RuntimeAssignmentRequest):
+    """Profile-specific shape; persistence/execution remain fenced pending parent integration."""
+
+    instruction_profile: Literal["single-task-v1"]
+    instruction_manifest_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    # This branch intentionally removes the legacy required decomposition input.
+    decomposition_revision_ref: None = None  # type: ignore[assignment]
+
+    @model_validator(mode="after")
+    def _single_task_identity(self) -> SingleTaskAssignmentRequest:
+        from uuid import UUID
+
+        from project_workflow.domain.single_task_profile import MANIFEST_SHA256, ROLE_MODES
+
+        if (self.workflow_key != f"single-task-v1:{self.role_key}"
+            or self.instruction_manifest_sha256 != MANIFEST_SHA256 or self.base_admission is not None
+            or self.business_task_ref != self.root_task_ref
+            or self.execution_scope not in ROLE_MODES.get(self.role_key, {}).get(self.mode_key, [])):
+            raise ValueError("Single-task profile/task=root/mode/hash mismatch")
+        task_uuid = UUID(self.business_task_ref)
+        if task_uuid.int == 0 or str(task_uuid) != self.business_task_ref:
+            raise ValueError("Single-task Tracker reference must be a canonical UUID")
+        return self
+
+
 class RuntimeRebindRequest(StrictRequest):
     """CAS continuation; ordinary bind confirms the prepared immutable run."""
 

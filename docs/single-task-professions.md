@@ -13,10 +13,11 @@ from project_workflow.infrastructure.single_task_catalog import load_single_task
 professions = load_single_task_professions()
 ```
 
-Текущий bootstrap **не умеет устанавливать этот preset**. Нельзя включать его
-через `PROJECT_WORKFLOW_CATALOG_VARIANT` или выдавать результат loader за installed
-catalog/binding. Manifest, отдельные identities и необходимые публичные изменения
-предложены в [проверке совместимости](single-task-profile-activation-proposal.md).
+Исходный loader остаётся source-only. Реальная opt-in установка использует отдельные
+profile artifacts, existing bootstrap и persisted readback:
+[single-task installation](single-task-installation.md). Установка не разрешает live
+исполнение: Tracker registration и assignment DB adaptation остаются pending parent.
+Результат этого loader нельзя выдавать за installed binding.
 
 Функция возвращает независимые определения профессий с существующими workflow keys,
 mode keys, phase codes, namespace/profile и именами skills. Каждый режим проверяется
@@ -28,12 +29,13 @@ default инструкций для выбранного preset, а не уст�
 
 Актуальное предложение интегратору: отдельные namespaces/workflows/launch profiles
 семейства `single-task-v1`, catalog version 1 внутри нового семейства, явный opt-in
-только после реализации bootstrap и owner readback. Прежнее предложение переиспользовать
+через реализованные bootstrap и installed readback, без live dispatch. Прежнее предложение переиспользовать
 legacy identities отозвано: Tracker связывает их со старым package и metadata.
 Не переиспользовать номер pinned Base catalog как номер этого preset.
 Текущий `ManagedCatalog` требует 11 режимов и прежнюю terminal policy,
-поэтому передавать ему эти восемь режимов как старый catalog запрещено. Общие wire
-DTO, schema, API registrations, migrations и bootstrap этим пакетом не меняются.
+поэтому передавать ему эти восемь режимов как старый catalog запрещено. Workflow-owned
+bootstrap/readback и profile assignment DTO реализованы отдельно; Tracker routing DTO,
+DB migrations, Base metadata и live runtime не менялись.
 
 `base_sdlc_catalog_cli_v4.json` используется только как donor технических identities
 и имён skills; автор новых текстов — Workflow. Исходный `skills_source`, Base SHA,
@@ -86,6 +88,11 @@ Workflow complete и ответ на отдельный вопрос не зам
 artifact/deployment/health/acceptance; успешная сборка сама по себе недостаточна.
 
 ## Проверенный Tracker CLI И Пробелы
+
+Ниже сохранена историческая проверка исходного loader `fb9dd53`. Для устанавливаемого
+профиля она заменена [актуальными producer instructions](single-task-installation.md):
+confirmation read требует `--revision`; result propose/operation доступны в parser,
+но не означают stage completion. Live API registration остаётся pending parent.
 
 Read-only проверен свежий Tracker checkout на
 `9eac790a332d9501511d8cac2a3ef0f3ac7ddc23`: `backend/cli/src/commands.rs`,

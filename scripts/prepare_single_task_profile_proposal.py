@@ -113,7 +113,7 @@ def main() -> None:
             OUTPUT.mkdir(parents=True, exist_ok=True)
             path.write_bytes(content)
         print(f"{digest(content)}  {relative}")
-    print("PROPOSAL ONLY: current bootstrap, routing and owner readback do not support this profile")
+    print("PROPOSAL ONLY: review artifacts are not install inputs; use the separate Workflow installation package")
 
 
 if __name__ == "__main__":
