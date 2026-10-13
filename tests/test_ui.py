@@ -4,9 +4,11 @@ import json
 import re
 import sqlite3
 import uuid
+from html import unescape
 from html.parser import HTMLParser
 from pathlib import Path
 from unittest.mock import patch
+from urllib.parse import parse_qs, urlsplit
 
 import click
 import pytest
@@ -406,14 +408,23 @@ class TestPhasesPage:
         assert response.headers["content-type"] == "text/html; charset=utf-8"
         assert "Фазы" in response.text
 
-    def test_mobile_back_action_preserves_namespace_context(self):
+    def test_mobile_back_action_preserves_namespace_and_selection(self):
         uow = ui_app_state.get_db()
-        namespace_id = _as_dict(uow.projects.get_by_code(config.DEFAULT_PROJECT_CODE))["id"]
-        response = client.get(f"/phases?namespace_id={namespace_id}")
+        namespace = _as_dict(uow.projects.get_by_code(config.DEFAULT_PROJECT_CODE))
+        namespace_id, workflow_id = namespace["id"], namespace["workflow_id"]
+        mode_id = uow.workflows.list_modes(workflow_id)[0].id
+        response = client.get(
+            f"/phases?namespace_id={namespace_id}&workflow_id={workflow_id}&mode_id={mode_id}"
+        )
 
         assert response.status_code == 200
-        back_href = f'href="/workflows?namespace_id={namespace_id}"'
-        assert response.text.count(back_href) == 2
+        back_hrefs = re.findall(r'href="(/workflows\?[^\"]+)"', response.text)
+        assert len(back_hrefs) == 2
+        for href in back_hrefs:
+            params = parse_qs(urlsplit(unescape(href)).query)
+            assert params["namespace_id"] == [str(namespace_id)]
+            assert params["workflow_id"] == [str(workflow_id)]
+            assert params["mode_id"] == [str(mode_id)]
         assert 'class="btn btn-secondary phases-header-action"' in response.text
         assert 'class="phases-mobile-actions"' in response.text
         assert (

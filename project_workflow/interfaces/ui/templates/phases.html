@@ -1,8 +1,16 @@
 {% extends "base.html" %}
+{% set editor_path = '/workflows' %}
+{% if selected_workflow %}
+{% set editor_path = editor_path ~ '?workflow_id=' ~ selected_workflow_id %}
+{% if selected_namespace %}{% set editor_path = editor_path ~ '&namespace_id=' ~ selected_namespace.id %}{% endif %}
+{% if selected_mode_id %}{% set editor_path = editor_path ~ '&mode_id=' ~ selected_mode_id %}{% endif %}
+{% elif selected_namespace %}
+{% set editor_path = editor_path ~ '?namespace_id=' ~ selected_namespace.id %}
+{% endif %}
 
 {% block title %}Фазы воркфлоу — Workflow Engine{% endblock %}
 {% block header_title %}<span class="phases-desktop-title">Фазы воркфлоу</span><span class="phases-mobile-title">Фазы</span>{% endblock %}
-{% block header_actions %}<a href="/workflows{% if selected_namespace %}?namespace_id={{ selected_namespace.id }}{% endif %}" class="btn btn-secondary phases-header-action">← К воркфлоу</a>{% endblock %}
+{% block header_actions %}<a href="{{ editor_path }}" class="btn btn-secondary phases-header-action">← К воркфлоу</a>{% endblock %}
 
 {% block extra_style %}
 .phases-layout{display:grid;grid-template-columns:280px minmax(0,1fr);gap:20px;align-items:start}
@@ -116,7 +124,7 @@
 {%- endmacro %}
 
 {% block content %}
-<div class="phases-mobile-actions"><a href="/workflows{% if selected_namespace %}?namespace_id={{ selected_namespace.id }}{% endif %}" class="btn btn-secondary">← К воркфлоу</a></div>
+<div class="phases-mobile-actions"><a href="{{ editor_path }}" class="btn btn-secondary">← К воркфлоу</a></div>
 <div class="phases-layout{% if workflows | length <= 1 %} phases-layout-single{% endif %}">
   {% if workflows | length > 1 %}
   <section class="workflow-nav side-nav-scroll" id="workflowNav">

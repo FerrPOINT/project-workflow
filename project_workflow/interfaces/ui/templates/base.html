@@ -600,15 +600,18 @@ function switchNamespace(namespaceId){
   var url=new URL(window.location.href);
   if(url.pathname === '/phases'){
     url.searchParams.delete('workflow_id');
+    url.searchParams.delete('mode_id');
   }
   if(url.pathname.startsWith('/phase/')){
     url.pathname='/phases';
     url.searchParams.delete('workflow_id');
+    url.searchParams.delete('mode_id');
   }
   if(url.pathname === '/instructions'){
     url.pathname='/phases';
     url.searchParams.delete('phase_id');
     url.searchParams.delete('workflow_id');
+    url.searchParams.delete('mode_id');
   }
   if(url.pathname === '/namespaces/new'){
     url.pathname='/namespaces';
@@ -624,5 +627,23 @@ function pluralizeRu(n, one, few, many){
 {% block extra_script %}{% endblock %}
 </script>
 <script>{% include "base/base-ui.js" %}</script>
+<script data-project-navigation-context>
+// The request URL owns navigation scope; carry it through native links without
+// changing route paths, resource identifiers, or the frozen CLI markup.
+function preserveProjectNavigationScope(){
+  var scopes=new URLSearchParams(window.location.search).getAll('project_scope');
+  if(scopes.length !== 1 || scopes[0] !== 'all'){return;}
+  document.querySelectorAll('a[href]').forEach(function(link){
+    if(link.hasAttribute('download')){return;}
+    var url;
+    try{url=new URL(link.href, window.location.href);}catch(error){return;}
+    if(!['http:', 'https:'].includes(url.protocol)){return;}
+    if(url.origin !== window.location.origin && !link.classList.contains('service-menu-item')){return;}
+    url.searchParams.set('project_scope', 'all');
+    link.href=url.toString();
+  });
+}
+document.addEventListener('DOMContentLoaded', preserveProjectNavigationScope);
+</script>
 </body>
 </html>
