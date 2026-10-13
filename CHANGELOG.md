@@ -6,6 +6,9 @@
 
 ## [Unreleased]
 
+- Логотип оболочки использует общий размер Base 40 px; компактный сайдбар равен высоте хедера (60 px).
+
+
 - Runtime CLI `step` forwards the supplied operation key, frozen request and scoped token;
   it requires an explicit service URL and never sends execution credentials to the legacy default endpoint.
 
