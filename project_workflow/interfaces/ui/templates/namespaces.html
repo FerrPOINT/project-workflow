@@ -118,17 +118,9 @@
       <fieldset class="profession-execution-settings">
         <legend class="label">Настройки выполнения</legend>
         <div>
-          <label class="label" for="namespaceRoleKey">Роль</label>
-          <input type="text" id="namespaceRoleKey" value="{{ edited_namespace.role_key or '' if edited_namespace else '' }}" placeholder="developer">
-        </div>
-        <div>
           <label class="label" for="namespaceLaunchProfile">Ключ запуска</label>
           <input type="text" id="namespaceLaunchProfile" value="{{ edited_namespace.launch_profile or '' if edited_namespace else '' }}" pattern="[a-z0-9][a-z0-9_\-]*" maxlength="251" placeholder="profile-key">
           <p class="field-help">Профиль внешнего исполнителя для этой профессии.</p>
-        </div>
-        <div>
-          <label class="label" for="namespaceExecutionDescription">Описание выполнения</label>
-          <textarea id="namespaceExecutionDescription">{{ edited_namespace.execution_description if edited_namespace else '' }}</textarea>
         </div>
       </fieldset>
       <div class="panel-actions">
@@ -195,9 +187,7 @@ function currentPayload(){
     name: document.getElementById('namespaceName').value.trim(),
     cli_command: document.getElementById('namespaceCliCommand').value.trim(),
     description: document.getElementById('namespaceDescription').value.trim(),
-    role_key: document.getElementById('namespaceRoleKey').value.trim() || null,
     launch_profile: document.getElementById('namespaceLaunchProfile').value.trim() || null,
-    execution_description: document.getElementById('namespaceExecutionDescription').value.trim(),
     theme_icon: document.querySelector('input[name="namespaceThemeIcon"]:checked').value || defaultNamespaceThemeIcon,
     theme_color: document.getElementById('namespaceThemeColor').value || defaultNamespaceThemeColor,
   };
@@ -242,9 +232,7 @@ function fillNamespaceForm(namespace){
   document.getElementById('namespaceName').value = namespace ? namespace.name : '';
   document.getElementById('namespaceCliCommand').value = namespace ? (namespace.cli_command || '') : '';
   document.getElementById('namespaceDescription').value = namespace ? (namespace.description || '') : '';
-  document.getElementById('namespaceRoleKey').value = namespace ? (namespace.role_key || '') : '';
   document.getElementById('namespaceLaunchProfile').value = namespace ? (namespace.launch_profile || '') : '';
-  document.getElementById('namespaceExecutionDescription').value = namespace ? (namespace.execution_description || '') : '';
   var icon = namespace ? (namespace.theme_icon || defaultNamespaceThemeIcon) : defaultNamespaceThemeIcon;
   document.querySelectorAll('input[name="namespaceThemeIcon"]').forEach(function(input){ input.checked = input.value === icon; });
   document.getElementById('namespaceThemeColor').value = namespace ? (namespace.theme_color || defaultNamespaceThemeColor) : defaultNamespaceThemeColor;

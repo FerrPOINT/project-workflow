@@ -493,7 +493,7 @@ async function captureAll(outputRoot) {
     await capture(page, outputRoot, {
       name: "profession-execution.png",
       url: `/namespaces?namespace_id=${dev.id}`,
-      expected: ["НАСТРОЙКИ ВЫПОЛНЕНИЯ", "КЛЮЧ ЗАПУСКА", "ОПИСАНИЕ ВЫПОЛНЕНИЯ"],
+      expected: ["НАСТРОЙКИ ВЫПОЛНЕНИЯ", "КЛЮЧ ЗАПУСКА"],
       assertions: [async (targetPage, name) => {
         await assertLocatorCount(targetPage, name, "#namespaceLaunchProfile", 1, "profession launch profile");
         const profile = await targetPage.locator("#namespaceLaunchProfile").inputValue();
