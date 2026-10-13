@@ -42,7 +42,7 @@
 <button class="base-control base-button base-button-{{ variant }}" type="{{ type }}"{% if id %} id="{{ id }}"{% endif %}{% if disabled or pending %} disabled{% endif %}{% if pending %} aria-busy="true"{% endif %}>{% if pending %}{{ loader('sm') }} {% endif %}{{ label }}</button>
 {%- endmacro %}
 
-{% macro loader(size='lg') -%}
+{% macro loader(size='md') -%}
 <span class="base-loader-stage base-loader-{{ size }}" aria-hidden="true"><span class="base-shapes-loader"></span></span>
 {%- endmacro %}
 
