@@ -410,6 +410,27 @@ def index(request: Request) -> HTMLResponse:
     )
 
 
+def _add_workflow_phases(
+    request: Request, context: dict[str, Any], workflow: dict[str, Any] | None, mode_id: int | None,
+) -> HTMLResponse | None:
+    """Resolve one mode and its phases for both workflow entry points."""
+    workflow_id = workflow["id"] if workflow else None
+    modes, selected_mode = _select_workflow_mode(workflow, mode_id)
+    if workflow_id is not None and selected_mode is None:
+        return _workflow_mode_error_page(request, context, int(workflow_id), mode_id)
+    selected_mode_id = selected_mode.get("id") if selected_mode else None
+    phases = (
+        _load_phases(int(workflow_id), mode_id=int(selected_mode_id))
+        if workflow_id is not None and isinstance(selected_mode_id, int) else []
+    )
+    context.update({
+        "phases": phases, "phase_blocks": _build_parallel_phase_blocks(phases), "phase_count": len(phases),
+        "selected_workflow_id": workflow_id, "modes": modes, "selected_mode": selected_mode,
+        "selected_mode_id": selected_mode_id,
+    })
+    return None
+
+
 def phases_page(request: Request) -> HTMLResponse:
     context = _namespace_context(request, page="phases")
     if error_response := _namespace_error_page(request, context, page="phases"):
@@ -451,33 +472,17 @@ def phases_page(request: Request) -> HTMLResponse:
     if selected_workflow is None and workflows:
         selected_workflow = workflows[0]
     selected_workflow_id = selected_workflow["id"] if selected_workflow else None
-    modes, selected_mode = _select_workflow_mode(selected_workflow, mode_id)
-    if mode_id is not None and selected_mode is None and selected_workflow_id is not None:
-        return _workflow_mode_error_page(request, context, int(selected_workflow_id), mode_id)
-    if selected_workflow_id is not None and selected_mode is None:
-        return _workflow_mode_error_page(request, context, int(selected_workflow_id), None)
-    selected_mode_id = selected_mode.get("id") if selected_mode else None
     namespace_scoped_view = isinstance(context.get("selected_namespace"), dict) and (
         raw_workflow_id is None or has_explicit_namespace
     )
     visible_workflows = scoped_workflows if namespace_scoped_view else workflows
-    phases = (
-        _load_phases(int(selected_workflow_id), mode_id=int(selected_mode_id))
-        if selected_workflow_id is not None and isinstance(selected_mode_id, int)
-        else []
-    )
-    phase_blocks = _build_parallel_phase_blocks(phases)
+    if error_response := _add_workflow_phases(request, context, selected_workflow, mode_id):
+        return error_response
     context.update(
         {
-            "phases": phases,
-            "phase_blocks": phase_blocks,
-            "phase_count": len(phases),
             "workflows": visible_workflows,
             "selected_workflow": selected_workflow,
             "selected_workflow_id": selected_workflow_id,
-            "modes": modes,
-            "selected_mode": selected_mode,
-            "selected_mode_id": selected_mode_id,
         }
     )
     return _template_response(
@@ -640,6 +645,15 @@ def workflows_page(request: Request) -> Response:
         return RedirectResponse(str(target), status_code=303)
     if selected_workflow is None and workflows:
         selected_workflow = workflows[0]
+    raw_mode_id = request.query_params.get("mode_id")
+    mode_id = _parse_positive_int(raw_mode_id)
+    if raw_mode_id is not None and mode_id is None:
+        return _query_id_error_page(
+            request, context, field_name="mode_id", back_url="/workflows",
+            back_label="К воркфлоу", page="workflows",
+        )
+    if error_response := _add_workflow_phases(request, context, selected_workflow, mode_id):
+        return error_response
     context.update(
         {
             "workflows": workflows,
