@@ -5,6 +5,7 @@
 {% block title %}Воркфлоу — Workflow Engine{% endblock %}
 {% block header_title %}Воркфлоу{% endblock %}
 {% block header_actions %}
+  <button type="button" class="btn btn-secondary workflow-header-action" id="editWorkflowButton" data-workflow-edit aria-controls="workflowForm" aria-expanded="false"{% if not selected_workflow %} disabled{% endif %} onclick="startEditWorkflow()">Редактировать воркфлоу</button>
   <button type="button" class="btn btn-primary workflow-header-action" id="newWorkflowButton" onclick="startCreateWorkflow()">+ Новый воркфлоу</button>
 {% endblock %}
 
@@ -24,6 +25,9 @@
 .form-stack{display:flex;flex-direction:column;gap:12px}
 .label{font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em}
 .workflow-description{min-height:64px}
+.workflow-summary{display:flex;flex-direction:column;gap:8px;padding:4px 0}
+.workflow-summary h2{font-size:18px;overflow-wrap:anywhere}
+#workflowForm[hidden],#workflowSummary[hidden]{display:none}
 .panel-actions{display:flex;gap:10px;flex-wrap:wrap}
 .workflow-delete{margin-left:auto}
 .workflow-delete-hint{font-size:12px;color:var(--text-muted);line-height:1.5}
@@ -139,6 +143,7 @@
 
 {% block content %}
 <div class="workflow-mobile-actions">
+  <button type="button" class="btn btn-secondary" id="mobileEditWorkflowButton" data-workflow-edit aria-controls="workflowForm" aria-expanded="false"{% if not selected_workflow %} disabled{% endif %} onclick="startEditWorkflow()">Редактировать воркфлоу</button>
   <button type="button" class="btn btn-primary" id="mobileNewWorkflowButton" onclick="startCreateWorkflow()">+ Новый воркфлоу</button>
 </div>
 <div class="workflow-crud {% if workflows|length == 0 %}is-empty{% endif %}" id="workflowCrud">
@@ -166,7 +171,11 @@
   </section>
 
   <section class="workflow-panel">
-    <form id="workflowForm" data-platform-draft class="card form-stack" aria-labelledby="workflowFormMode" onsubmit="event.preventDefault(); submitWorkflow();">
+    <div id="workflowSummary" class="workflow-summary"{% if not selected_workflow %} hidden{% endif %}>
+      <h2 id="workflowSummaryName">{{ selected_workflow.name if selected_workflow else '' }}</h2>
+      <p id="workflowSummaryDescription" class="empty-note"{% if not selected_workflow or not selected_workflow.description %} hidden{% endif %}>{{ selected_workflow.description if selected_workflow else '' }}</p>
+    </div>
+    <form id="workflowForm" data-platform-draft class="card form-stack" aria-labelledby="workflowFormMode"{% if selected_workflow %} hidden{% endif %} onsubmit="event.preventDefault(); submitWorkflow();">
       <div class="card-title" id="workflowFormMode">Редактирование воркфлоу</div>
       <div>
         <label class="label" for="workflowName">Название</label>
@@ -178,7 +187,7 @@
       </div>
       <div class="panel-actions">
         <button class="btn btn-primary" type="submit" id="workflowSubmitButton">Сохранить</button>
-        <button class="btn btn-secondary" type="button" id="cancelCreateWorkflowButton" onclick="cancelCreateWorkflow()" style="display:none">Отмена</button>
+        <button class="btn btn-secondary" type="button" id="cancelCreateWorkflowButton" onclick="cancelWorkflowForm()" style="display:none">Отмена</button>
         <button class="btn btn-secondary workflow-delete" type="button" id="deleteWorkflowButton" onclick="deleteWorkflow()">Удалить</button>
       </div>
       <p class="workflow-delete-hint" id="workflowDeleteHint" hidden>Воркфлоу по умолчанию нельзя удалить.</p>
@@ -258,6 +267,7 @@ const initialWorkflowId = selectedWorkflowId;
 const defaultWorkflowId = {{ default_workflow_id if default_workflow_id else 'null' }};
 let previousWorkflowId = selectedWorkflowId;
 let workflowFormMode = selectedWorkflowId == null ? 'create' : 'edit';
+let workflowEditorVisible = selectedWorkflowId == null;
 
 function workflowApiUrl(workflowId){
   var url = new URL('/api/workflows' + (workflowId == null ? '' : '/' + workflowId), window.location.origin);
@@ -306,6 +316,34 @@ function syncWorkflowNav(){
 function fillWorkflowForm(workflow){
   document.getElementById('workflowName').value = workflow ? workflow.name : '';
   document.getElementById('workflowDescription').value = workflow ? (workflow.description || '') : '';
+  document.getElementById('workflowSummaryName').textContent = workflow ? workflow.name : '';
+  var description = document.getElementById('workflowSummaryDescription');
+  description.textContent = workflow ? (workflow.description || '') : '';
+  description.hidden = !description.textContent;
+}
+function setWorkflowEditorVisible(visible){
+  workflowEditorVisible = visible;
+  var creating = workflowFormMode === 'create';
+  document.getElementById('workflowForm').hidden = !visible && !creating;
+  document.getElementById('workflowSummary').hidden = visible || creating || selectedWorkflowId == null;
+  document.querySelectorAll('[data-workflow-edit]').forEach(function(button){
+    button.disabled = creating || selectedWorkflowId == null;
+    button.setAttribute('aria-expanded', String(visible && !creating));
+  });
+}
+function startEditWorkflow(){
+  if(selectedWorkflowId == null)return;
+  if(!workflowEditorVisible){ fillWorkflowForm(workflowById(selectedWorkflowId)); }
+  setWorkflowEditorVisible(true);
+  document.getElementById('workflowName').focus();
+}
+function cancelWorkflowForm(){
+  workflowEditorVisible = false;
+  if(workflowFormMode === 'create'){ cancelCreateWorkflow(); }
+  else{ fillWorkflowForm(workflowById(selectedWorkflowId)); setWorkflowFormMode('edit'); }
+  window.SdlcPlatformNavigation.saved(document.getElementById('workflowForm'));
+  var trigger = Array.from(document.querySelectorAll('[data-workflow-edit]')).find(function(button){ return button.getClientRects().length; });
+  if(trigger){ trigger.focus(); }
 }
 function setWorkflowFormMode(mode){
   workflowFormMode = mode;
@@ -320,7 +358,8 @@ function setWorkflowFormMode(mode){
   deleteButton.style.display = createMode ? 'none' : '';
   deleteButton.disabled = protectedDefault;
   document.getElementById('workflowDeleteHint').hidden = !protectedDefault;
-  document.getElementById('cancelCreateWorkflowButton').style.display = createMode && workflowStore.length ? '' : 'none';
+  document.getElementById('cancelCreateWorkflowButton').style.display = !createMode || workflowStore.length ? '' : 'none';
+  setWorkflowEditorVisible(workflowEditorVisible);
 }
 function startCreateWorkflow(){
   if(selectedWorkflowId != null){
@@ -342,7 +381,6 @@ function cancelCreateWorkflow(){
     fallbackId = workflowStore[0].id;
   }
   selectWorkflow(fallbackId);
-  document.getElementById('workflowName').focus();
 }
 function selectWorkflow(id, options){
   if(!workflowById(id))return;
@@ -413,7 +451,7 @@ function reloadWorkflows(nextId){
   return fetch(workflowApiUrl(null))
     .then(function(r){return r.json()})
     .then(function(d){
-      if(!d.ok){showToast(d.error || 'Ошибка загрузки воркфлоу','error');return;}
+      if(!d.ok){showToast(d.error || 'Ошибка загрузки воркфлоу','error');return false;}
       workflowStore.length = 0;
       d.workflows.forEach(function(workflow){ workflowStore.push(workflow); });
       if(workflowStore.length === 0){
@@ -438,6 +476,7 @@ function reloadWorkflows(nextId){
       setWorkflowFormMode('edit');
       syncWorkflowNav();
       syncWorkflowUrl(selectedWorkflowId, 'replace');
+      return true;
     })
     .catch(showRequestError);
 }
@@ -446,7 +485,7 @@ function saveWorkflow(){
   var payload = currentWorkflowPayload();
   return fetch(workflowApiUrl(selectedWorkflowId),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
     .then(function(r){return r.json()})
-    .then(function(d){ if(d.ok){ window.SdlcPlatformNavigation.saved(document.getElementById('workflowForm')); showToast('Воркфлоу сохранён','success'); return reloadWorkflows(selectedWorkflowId); } showToast(d.error || 'Ошибка','error'); })
+    .then(function(d){ if(d.ok){ window.SdlcPlatformNavigation.saved(document.getElementById('workflowForm')); showToast('Воркфлоу сохранён','success'); return reloadWorkflows(selectedWorkflowId).then(function(loaded){ if(loaded){setWorkflowEditorVisible(false);} }); } showToast(d.error || 'Ошибка','error'); })
     .catch(showRequestError);
 }
 function createWorkflow(){
