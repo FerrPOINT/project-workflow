@@ -11,6 +11,7 @@ from project_workflow import config
 from project_workflow.application.namespace_ownership import NamespaceOwnershipService
 from project_workflow.domain.namespace_ownership import NamespaceOwnershipRequest
 from project_workflow.domain.pm_execution import RuntimeObservation
+from project_workflow.domain.runtime_assignment import canonical_json
 from project_workflow.infrastructure import pm_readback
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
@@ -30,23 +31,25 @@ from tests.test_single_task_runtime import (
 )
 
 FIXTURE = Path(__file__).parent / "fixtures" / "single_task_pm_initial_dispatch.json"
+ORIGINAL_INPUT = {"title": "Owner goal", "description": "Exact original input"}
 
 
 @pytest.fixture
 def initial_pm(bridge, monkeypatch):
-    original_input = b"Owner original input for this isolated producer contract test."
-    refs = [{"kind": "original_input", "ref": "22222222-2222-4222-8222-222222222222",
-             "revision": "1", "hash": hashlib.sha256(original_input).hexdigest()}]
+    refs = [{"kind": "pm_draft_input", "ref": "22222222-2222-4222-8222-222222222222",
+             "hash": hashlib.sha256(canonical_json(ORIGINAL_INPUT).encode("utf-8")).hexdigest()}]
     monkeypatch.setenv("PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON", json.dumps({"project_manager": "w" * 40}))
     monkeypatch.setenv("PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON", json.dumps({"project_manager": "r" * 40}))
     config.get_settings.cache_clear()
     assignment = {**assignment_payload(), "role_key": "project_manager",
                   "workflow_key": "single-task-v1:project_manager",
-                  "mode_key": "draft", "stage_key": "Draft", "execution_scope": "business", "exact_input_refs": refs}
+                  "mode_key": "draft", "stage_key": "Draft", "execution_scope": "business", "exact_input_refs": refs,
+                  "task": "SDLC-7", "operation_key": "pm-draft:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"}
     assign_exchange, accepted = exchange(bridge, API + "assign", assignment, WRITER)
-    binding = {**PROFILE, "task": assignment["task"], "bind_operation_key": "bind:1",
+    binding = {**PROFILE, "task": assignment["task"], "bind_operation_key": "fleet-pm-runtime-bind:" + SESSION,
                "assignment_operation_key": assignment["operation_key"], "assignment_revision": 1,
-               "assignment_ref": assignment["assignment_ref"], "binding_ref": "binding:1", "hermes_run_ref": "run:1",
+               "assignment_ref": assignment["assignment_ref"], "binding_ref": "fleet:pm:" + SESSION,
+               "hermes_run_ref": "run_pm",
                "mode_key": "draft", "cycle_number": 0, "attempt_number": 1, "expected_binding_state": "unbound",
                "concrete_agent_ref": assignment["concrete_agent_ref"], "session_run_id": SESSION}
     bind_exchange, bound = exchange(bridge, API + "bind", binding, WRITER, "<execution-token-from-bind>")
@@ -63,7 +66,7 @@ def initial_pm(bridge, monkeypatch):
                 "root_ref": assignment["root_task_ref"], "agent_ref": assignment["concrete_agent_ref"],
                 "assignment_operation_key": assignment["operation_key"], "assignment_ref": assignment["assignment_ref"],
                 "assignment_revision": 1}
-    command = {**PROFILE, **identity, "operation_key": "pm:bind", "expected_version": 0,
+    command = {**PROFILE, **identity, "operation_key": "fleet-pm-bind:" + SESSION, "expected_version": 0,
                "binding_ref": binding["binding_ref"], "hermes_run_ref": binding["hermes_run_ref"],
                "session_run_id": SESSION}
     observation = {**identity, "observation_ref": "observed:1", "status": "running",
@@ -111,6 +114,8 @@ def test_pm_initial_dispatch_actual_producer_fixture(bridge, initial_pm):
     accepted = assign_exchange["response"]
     bound = bind_exchange["response"]
     assert accepted["result"]["exact_input_refs"] == assignment["exact_input_refs"]
+    assert "revision" not in accepted["result"]["exact_input_refs"][0]
+    assert bound["result"]["exact_input_refs"] == assignment["exact_input_refs"]
     assert accepted["result"]["concrete_agent_ref"] is None
     assert accepted["result"]["current_phase_code"] == "PM-DRAFT-01"
     assert bridge.post(API + "step", json=step, headers=general_headers).status_code == 409
@@ -149,6 +154,9 @@ def test_pm_initial_dispatch_actual_producer_fixture(bridge, initial_pm):
     captured = {
         "authority": "Isolated SQLite/TestClient; synthetic Tracker inputs and runtime observation, not live QA.",
         "credential_redaction": "Only execution_token values replaced; all other response values are actual.",
+        "creation_uuid": SESSION,
+        "original_input": {**ORIGINAL_INPUT, "id": assignment["exact_input_refs"][0]["ref"],
+                           "sha256": assignment["exact_input_refs"][0]["hash"]},
         "runtime_observation": observation, "assign": assign_exchange, "bind": bind_exchange,
         "pm_bind": pm_exchange, "first_step": first_exchange, "pm_readback": readback_exchange,
     }
@@ -182,3 +190,26 @@ def test_pm_initial_dispatch_requires_actual_owner_and_current_running_readback(
 def test_profile_pm_packet_is_not_legacy_pm_assign(bridge, initial_pm):
     assignment, _, _, _, _, _, _, _ = initial_pm
     assert bridge.post(PM + "assign", json=assignment, headers=WRITER).status_code == 422
+
+
+def test_profile_assign_preserves_omitted_input_fields_in_response_and_ledger(bridge, initial_pm):
+    assignment, _, _, _, _, _, accepted, bound = initial_pm
+    expected = assignment["exact_input_refs"]
+    assert set(expected[0]) == {"kind", "ref", "hash"}
+    assert accepted["response"]["result"]["exact_input_refs"] == expected
+    assert bound["response"]["result"]["exact_input_refs"] == expected
+    replay = bridge.post(API + "assign", json=assignment, headers=WRITER)
+    assert replay.status_code == 200, replay.text
+    assert replay.json()["result"]["exact_input_refs"] == expected
+    explicit_null = {**assignment, "exact_input_refs": [{**expected[0], "revision": None}]}
+    assert bridge.post(API + "assign", json=explicit_null, headers=WRITER).status_code == 409
+    with SAUnitOfWork() as uow:
+        record = uow.tasks.get_assignment_by_operation_key(assignment["operation_key"])
+        assert record.exact_input_refs == record.payload["exact_input_refs"] == expected
+
+
+def test_legacy_assignment_and_input_request_schemas_match_existing_public_contract(bridge):
+    published = json.loads((FIXTURE.parents[2] / "docs" / "pm-continuation-openapi.json").read_text(encoding="utf-8"))
+    actual = bridge.get("/openapi.json").json()["components"]["schemas"]
+    for name in ("RuntimeAssignmentRequest", "ExactInputRef", "PMDraftAssignment"):
+        assert actual[name] == published["components"]["schemas"][name]

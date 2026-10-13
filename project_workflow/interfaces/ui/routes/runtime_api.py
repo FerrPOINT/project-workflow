@@ -618,6 +618,7 @@ def runtime_assign(
                 from project_workflow.domain.single_task_runtime import SingleTaskContext
 
                 values = payload.model_dump(exclude=set(SingleTaskContext.model_fields))
+                values["exact_input_refs"] = [item.model_dump(exclude_unset=True) for item in payload.exact_input_refs]
                 values["task_key"] = task_key
                 values.pop("task")
                 task = TaskService(uow).assign_runtime_task(

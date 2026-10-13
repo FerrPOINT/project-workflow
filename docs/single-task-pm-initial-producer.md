@@ -31,6 +31,17 @@ Fleet must obtain actual IDs from installation readback, never copy these IDs.
 Fixture response strings include the current installed instructions verbatim;
 this package does not change their source, catalog hash or manifest hash.
 
+Fleet-shaped fixture identity uses local key `SDLC-7`, assignment operation
+`pm-draft:<assignment UUID>`, general bind key `fleet-pm-runtime-bind:<creation UUID>`,
+PM bind key `fleet-pm-bind:<creation UUID>`, binding `fleet:pm:<creation UUID>`,
+run `run_pm` and session_run_id equal to the creation UUID. Its original input
+has title `Owner goal` and description `Exact original input`; the canonical
+Tracker hash is `8f09dacd2e9dcd6335b867319edeb40a412b1affb0906fa4f560f4b12ef6cdcf`.
+The exact input ref contains only `kind=pm_draft_input`, UUID `ref` and `hash`:
+omitted `revision` stays omitted in assign/bind/readback and the assignment ledger.
+An explicitly supplied null is still distinct for idempotency; it is not silently
+collapsed into omission. Legacy request schemas/serialization are unchanged.
+
 ## Builder Mapping
 
 - Assignment: `role_key=project_manager`, `workflow_key=single-task-v1:project_manager`,
@@ -38,7 +49,8 @@ this package does not change their source, catalog hash or manifest hash.
   through equal canonical `business_task_ref` and `root_task_ref`. `task` itself
   is the Workflow-local task key. Preserve the issued context and original input
   `exact_input_refs` (`kind/ref/revision/hash`) without fabricating a requirements
-  revision before it exists. The test computes the original-input hash from bytes.
+  revision before it exists. The test computes the original-input hash from
+  exact UTF-8 canonical JSON of description/title, matching Tracker's producer.
   `expected_revision=0` is the initial Workflow assignment CAS; `task_revision`
   is the separate actual Tracker task revision. Input-ref `revision` is a string.
 - General bind: take `assignment_revision`/`assignment_operation_key`/`assignment_ref`
@@ -132,8 +144,10 @@ Run without `-m integration`:
 & C:/git/azhukov/sdlc/project-workflow/.venv/Scripts/python.exe -m pytest -q tests/test_single_task_pm_producer.py --timeout=60 -W error::ResourceWarning -W error::pytest.PytestUnraisableExceptionWarning
 ```
 
-Seven cases cover exact producer exchanges/replay/readback, original input,
+Nine cases cover exact producer exchanges/replay/readback, original input,
 first-step admission, no extra assignment/execution/run, old-token/hash rejection,
 missing/foreign ownership, mismatched/stopped/unavailable actual run observation
-and rejection by legacy PM assign. Callback authority is synthetic; this is not
+rejection by legacy PM assign, omitted-input-field preservation and equality of
+legacy request schemas with the existing public OpenAPI artifact.
+Callback authority is synthetic; this is not
 a Fleet builder or live dispatch E2E. No PG, Docker or runtime changes.
