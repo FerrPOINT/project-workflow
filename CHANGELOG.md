@@ -8,6 +8,9 @@
 
 - Логотип оболочки использует общий размер Base 40 px; компактный сайдбар равен высоте хедера (60 px).
 
+- Base SSR export закреплён на `5b460dd20eea`: WebKit сохраняет click по
+  ссылке выхода при переносе фокуса на родительский main. Fingerprint обновлён
+  штатным export; включены актуальные Base shell tokens.
 
 - Runtime CLI `step` forwards the supplied operation key, frozen request and scoped token;
   it requires an explicit service URL and never sends execution credentials to the legacy default endpoint.
