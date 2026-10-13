@@ -9,8 +9,6 @@ from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.domain.phase_graph import PhaseGraphNode, validate_phase_graph
 from project_workflow.domain.repositories import UnitOfWork
 
-from .managed_catalog_policy import assert_catalog_mutation_allowed
-
 
 class PhaseServiceApp:
     """Use cases for phases."""
@@ -38,13 +36,6 @@ class PhaseServiceApp:
         if workflow is None:
             raise NotFoundError(f"Воркфлоу {workflow_id} не найден")
 
-    def _validate_agent(self, agent_id: Any) -> None:
-        if agent_id is None:
-            return
-        if not isinstance(agent_id, int) or isinstance(agent_id, bool) or agent_id <= 0:
-            raise ValueError("agent_id должен быть положительным целым числом или null")
-        if self._uow.agents.lock(agent_id) is None:
-            raise NotFoundError(f"Агент {agent_id} не найден")
 
     @staticmethod
     def _node(phase: Phase, **updates: Any) -> PhaseGraphNode:
@@ -83,13 +74,18 @@ class PhaseServiceApp:
             self._uow.rollback()
 
     def create_phase(self, data: dict[str, Any], *, commit: bool = True) -> dict[str, Any]:
-        assert_catalog_mutation_allowed(self._uow)
+        allowed = {
+            "workflow_id", "mode_id", "code", "name", "description", "phase_order", "execution_type",
+            "parallel_with_phase_id", "rollback_target_phase_id",
+        }
+        if unknown := set(data) - allowed:
+            raise ValueError(f"Неизвестные поля фазы: {', '.join(sorted(unknown))}")
+        self._uow.lock_catalog_state(shared=True)
         workflow_id_raw = data.get("workflow_id")
         if not isinstance(workflow_id_raw, int) or isinstance(workflow_id_raw, bool) or workflow_id_raw <= 0:
             raise ValueError("workflow_id должен быть положительным целым числом")
         workflow_id = workflow_id_raw
         try:
-            self._validate_agent(data.get("agent_id"))
             self._lock_workflow(workflow_id)
             mode_id = data.get("mode_id")
             if mode_id is None:
@@ -147,7 +143,6 @@ class PhaseServiceApp:
                 "description": validated.get("description", ""),
                 "execution_type": validated.get("execution_type", "sync"),
                 "phase_order": order,
-                "agent_id": validated.get("agent_id"),
                 "parallel_with_phase_id": validated.get("parallel_with_phase_id"),
                 "rollback_target_phase_id": validated.get("rollback_target_phase_id"),
             }
@@ -181,8 +176,6 @@ class PhaseServiceApp:
             if updates["mode_id"] != phase.mode_id:
                 raise ConflictError("Фаза уже принадлежит режиму; перенос между режимами не поддерживается")
             updates.pop("mode_id")
-        if "agent_id" in updates:
-            self._validate_agent(updates["agent_id"])
         self._lock_workflow(workflow_id)
         self._normalize_links(updates)
         phases = list(self._uow.phases.list(workflow_id, mode_id=phase.mode_id))
@@ -211,7 +204,7 @@ class PhaseServiceApp:
         return updates, detached_ids
 
     def update_phase(self, phase_id: int, data: dict[str, Any], *, commit: bool = True) -> None:
-        assert_catalog_mutation_allowed(self._uow)
+        self._uow.lock_catalog_state(shared=True)
         try:
             updates, detached_ids = self.prepare_update(phase_id, data)
             for detached_id in detached_ids:
@@ -225,7 +218,7 @@ class PhaseServiceApp:
         return None
 
     def delete_phase(self, phase_id: int, *, commit: bool = True) -> None:
-        assert_catalog_mutation_allowed(self._uow)
+        self._uow.lock_catalog_state(shared=True)
         try:
             phase = self._uow.phases.get_by_id(phase_id)
             if phase is None:
@@ -247,7 +240,7 @@ class PhaseServiceApp:
         return None
 
     def reorder_phases(self, orders: list[tuple[int, int]], *, commit: bool = True) -> int:
-        assert_catalog_mutation_allowed(self._uow)
+        self._uow.lock_catalog_state(shared=True)
         try:
             if not orders:
                 raise ValueError("Список порядка фаз пуст")

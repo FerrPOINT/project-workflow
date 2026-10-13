@@ -25,7 +25,6 @@ SCREENSHOTS = {
     "tasks-qa.png": (1900, 1080),
     "workflows.png": (1900, 1000),
     "instructions.png": (1900, 1000),
-    "agents.png": (1900, 1000),
     "phases.png": (1900, 3000),
     "task-detail-dev.png": (1900, 2500),
     "task-detail-qa.png": (1900, 1500),
@@ -105,6 +104,9 @@ def test_compose_and_env_example_forward_runtime_settings() -> None:
     assert "PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON: ${PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON:-}" in compose
     assert "AUTH_ISSUER: ${AUTH_ISSUER:-}" in compose
     assert "AUTH_INTERNAL_BASE_URL: ${AUTH_INTERNAL_BASE_URL:-}" in compose
+    assert (
+        "PROJECT_WORKFLOW_NAMESPACE_PROVISIONER_SUBJECT: ${PROJECT_WORKFLOW_NAMESPACE_PROVISIONER_SUBJECT:-}"
+    ) in compose
     assert "AUTH_PUBLIC_ORIGIN: ${AUTH_PUBLIC_ORIGIN:-http://localhost:8812}" in compose
     assert "AUTH_SESSION_SECRET: ${AUTH_SESSION_SECRET:-}" in compose
     assert "AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}" in compose
@@ -113,6 +115,7 @@ def test_compose_and_env_example_forward_runtime_settings() -> None:
     assert "PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON=" in env_example
     assert "AUTH_ISSUER=" in env_example
     assert "AUTH_INTERNAL_BASE_URL=" in env_example
+    assert "PROJECT_WORKFLOW_NAMESPACE_PROVISIONER_SUBJECT=" in env_example
     assert "AUTH_PUBLIC_ORIGIN=http://localhost:8812" in env_example
     assert "AUTH_SESSION_SECRET=" in env_example
     assert "AUTH_COOKIE_SECURE=false" in env_example

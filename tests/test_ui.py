@@ -118,7 +118,6 @@ def _phase_restore_payload(phase: dict) -> dict:
     return {
         "name": phase.get("name", ""),
         "description": phase.get("description", ""),
-        "agent_id": phase.get("agent_id"),
         "execution_type": phase.get("execution_type", "sync"),
         "instructions": [
             {
@@ -249,13 +248,8 @@ def setup_db(isolate_ui_runtime_state, request):
                 "current_phase_id": intake_phase.id,
             },
         )
-    if not any(agent.name == "reviewer" for agent in uow.agents.list()):
-        uow.agents.create(
-            {
-                "name": "reviewer",
-                "description": "Проверяет качество решения и фиксирует замечания",
-            }
-        )
+    for profession in uow.projects.list():
+        uow.workflows.assign_profession(profession.workflow_id, int(profession.id))
     uow.commit()
 
 
@@ -266,7 +260,7 @@ class TestIndexPage:
         assert response.headers["content-type"] == "text/html; charset=utf-8"
         assert "Дашборд" in response.text
         assert "Незавершённые задачи" in response.text
-        assert "Неймспейсы" in response.text
+        assert "Профессии" in response.text
 
     def test_index_has_nav(self):
         response = client.get("/")
@@ -284,8 +278,8 @@ class TestIndexPage:
     def test_index_labels_namespace_blocks_as_namespaces_not_cli(self):
         response = client.get("/")
         assert response.status_code == 200
-        assert '<div class="metric-label">Неймспейсы</div>' in response.text
-        assert 'id="dashboardNamespacesTitle">Неймспейсы · ' in response.text
+        assert '<div class="metric-label">Профессии</div>' in response.text
+        assert 'id="dashboardNamespacesTitle">Профессии · ' in response.text
         assert '<div class="metric-label">CLI</div>' not in response.text
         assert 'id="dashboardNamespacesTitle">CLI' not in response.text
 
@@ -294,7 +288,7 @@ class TestIndexPage:
         assert response.status_code == 200
         assert 'class="btn btn-secondary dashboard-action"' not in response.text
         assert 'data-platform-header-slot="services"' in response.text
-        assert 'class="dashboard-section-link" href="/namespaces">Все неймспейсы</a>' in response.text
+        assert 'class="dashboard-section-link" href="/namespaces">Все профессии</a>' in response.text
 
     def test_dashboard_previews_recent_items_and_links_to_full_lists(self):
         dashboard = {
@@ -348,14 +342,14 @@ class TestIndexPage:
 
         assert response.status_code == 200
         assert "Незавершённых задач нет." in response.text
-        assert "Неймспейсов пока нет." in response.text
+        assert "Профессий пока нет." in response.text
         assert 'href="/tasks' in response.text
         assert 'href="/namespaces"' in response.text
 
     def test_index_rejects_unknown_query_namespace(self):
         response = client.get(f"/?namespace_id={UNKNOWN_NAMESPACE_ID}")
         assert response.status_code == 404
-        assert f"Неймспейс {UNKNOWN_NAMESPACE_ID} не найден" in response.text
+        assert f"Профессия {UNKNOWN_NAMESPACE_ID} не найдена" in response.text
         assert "UITEST-401" not in response.text
 
     def test_index_rejects_malformed_query_namespace(self):
@@ -443,7 +437,7 @@ class TestPhasesPage:
     def test_namespace_switch_resets_phase_workflow_scope(self):
         response = client.get("/phases")
         assert response.status_code == 200
-        assert "if(url.pathname === '/phases')" in response.text
+        assert "if(url.pathname === '/phases' || url.pathname === '/workflows')" in response.text
         assert "url.searchParams.delete('workflow_id');" in response.text
         assert "if(url.pathname.startsWith('/phase/'))" in response.text
         assert "url.pathname='/phases';" in response.text
@@ -453,7 +447,7 @@ class TestPhasesPage:
     def test_phases_reject_unknown_query_namespace(self):
         response = client.get(f"/phases?namespace_id={UNKNOWN_NAMESPACE_ID}")
         assert response.status_code == 404
-        assert f"Неймспейс {UNKNOWN_NAMESPACE_ID} не найден" in response.text
+        assert f"Профессия {UNKNOWN_NAMESPACE_ID} не найдена" in response.text
         assert 'href="/phase/' not in response.text
 
     def test_phases_reject_negative_query_namespace(self):
@@ -489,7 +483,7 @@ class TestPhasesPage:
         response = client.get("/phases")
         assert response.status_code == 200
         assert 'href="/namespaces"' in response.text
-        assert "Неймспейсы" in response.text
+        assert "Профессии" in response.text
 
     def test_sidebar_has_workflows_link(self):
         response = client.get("/phases")
@@ -516,13 +510,13 @@ class TestPhasesPage:
         assert "color:var(--accent-foreground);border-color:var(--accent)" in response.text
         assert "color:var(--accent-hover-foreground)" in response.text
         assert "--accent-foreground:" in response.text
-        assert "--shell-page-gutter:clamp(16px,2vw,32px)" in response.text
+        assert "--shell-page-gutter:clamp(16px,2vw,32px)" in re.sub(r"\s+", "", response.text)
         assert 'data-page-layout="wide"' in response.text
         assert '<body class="base-ssr-shell">' in response.text
         assert '.platform-header-context{justify-content:flex-end}' in response.text
 
     def test_shell_has_one_service_switcher_and_account_theme_with_mobile_namespace(self):
-        response = client.get("/agents")
+        response = client.get("/namespaces")
 
         assert response.status_code == 200
         assert 'class="sidebar-utilities"' in response.text
@@ -532,7 +526,7 @@ class TestPhasesPage:
         assert 'id="sidebarThemeSelector"' not in response.text
         assert response.text.count('data-base-theme-option') >= 3
         assert 'window.SdlcThemePreference.read("workflow-theme")' in response.text
-        assert response.text.count('data-namespace-selector class="namespace-select"') == 1
+        assert response.text.count('data-namespace-selector class="namespace-select"') == 2
         assert 'id="namespaceSelector" data-namespace-selector' in response.text
         assert '.platform-header .service-menu-popover{position:fixed;left:12px;right:12px;' in response.text
 
@@ -555,8 +549,8 @@ class TestPhasesPage:
     def test_phases_page_hides_duplicate_nav_for_single_workflow(self):
         response = client.get("/phases")
         assert response.status_code == 200
-        assert 'class="phases-layout phases-layout-single"' in response.text
-        assert 'id="workflowNav"' not in response.text
+        assert 'class="phases-layout"' in response.text
+        assert 'id="workflowNav"' in response.text
         assert f'data-workflow-id="{_workflow_row("default")["id"]}"' in response.text
 
     def test_phases_page_keeps_nav_for_multiple_workflows(self):
@@ -617,11 +611,11 @@ class TestPhasesPage:
         response = client.get(f"/phases?namespace_id={namespace_id}&workflow_id={workflow_id}")
 
         assert response.status_code == 404
-        assert "Воркфлоу недоступен в выбранном неймспейсе" in response.text
+        assert "Воркфлоу недоступен в выбранной профессии" in response.text
         assert "Foreign phase list item" not in response.text
         assert 'href="/phase/' not in response.text
 
-    def test_phases_page_rejects_workflow_outside_cookie_selected_namespace(self):
+    def test_phases_page_opens_selected_workflow_despite_another_namespace_cookie(self):
         uow = ui_app_state.get_db()
         namespace_id = _as_dict(uow.projects.get_by_code(config.DEFAULT_PROJECT_CODE))["id"]
         workflow = client.post(
@@ -661,10 +655,10 @@ class TestPhasesPage:
             if previous_cookie is not None:
                 client.cookies.set("workflow_namespace_id", previous_cookie)
 
-        assert response.status_code == 404
-        assert "Воркфлоу недоступен в выбранном неймспейсе" in response.text
-        assert "Cookie foreign phase item" not in response.text
-        assert 'href="/phase/' not in response.text
+        assert response.status_code == 200
+        assert "Cookie foreign phase item" in response.text
+        assert 'href="/phase/' in response.text
+        assert f'namespace_id={namespace_id}' not in response.text
 
     def test_phases_page_allows_unassigned_workflow_with_cookie_selected_namespace(self):
         uow = ui_app_state.get_db()
@@ -744,7 +738,7 @@ class TestPhasesPage:
             assert response.status_code == 200
             assert "Workflow Scoped Phase" in response.text
             assert "Приём задачи" not in response.text
-            assert 'id="workflowNav"' not in response.text
+            assert 'id="workflowNav"' in response.text
             assert f'id="phasesTimeline" data-workflow-id="{workflow_id}"' in response.text
         finally:
             uow.rollback()
@@ -835,11 +829,8 @@ class TestPhasesPage:
         response = client.get("/phases")
 
         assert response.status_code == 200
-        assert re.search(
-            r'<div class="execution-row">\s*<span class="badge badge-parallel">параллельно</span>\s*'
-            r'<span class="badge badge-agent">researcher</span>',
-            response.text,
-        )
+        assert 'class="badge badge-parallel"' in response.text
+        assert 'class="badge badge-agent"' not in response.text
 
     def test_phases_page_add_phase_button_uses_timeline_workflow_id(self):
         response = client.get("/phases")
@@ -868,7 +859,7 @@ class TestPhasesPage:
         assert response.status_code == 200
         assert f'href="/phase/{phase["id"]}?namespace_id={namespace_id}"' in response.text
         assert f'id="phasesTimeline" data-workflow-id="{_workflow_row("default")["id"]}"' in response.text
-        assert 'id="workflowNav"' not in response.text
+        assert 'id="workflowNav"' in response.text
 
     def test_phases_page_add_phase_button_uses_server_phase_order_attribute(self):
         response = client.get("/phases")
@@ -1044,31 +1035,11 @@ class TestPhasesPage:
         finally:
             _batch_update_orders(uow, original_batch)
 
-    def test_phases_page_shows_assigned_agent_instead_of_hardcoded_critic(self):
-        uow = ui_app_state.get_db()
-        reviewer = next(agent.to_dict() for agent in uow.agents.list() if agent.name == "reviewer")
-        tracked_codes = ["3.DOR_GATE", "7.PLAN_GATE", "12.RELEASE_GATE", "15.RETRO"]
-        original_agent_ids = {
-            code: (_as_dict(phase_by_code(uow, code)) or {}).get("agent_id") for code in tracked_codes
-        }
+    def test_phases_page_has_no_agent_assignment(self):
+        response = client.get("/phases")
+        assert response.status_code == 200
+        assert 'class="badge badge-agent"' not in response.text
 
-        try:
-            for code in tracked_codes:
-                assert client.put(_phase_api_path(code), json={"agent_id": None}).status_code == 200
-            assert client.put(_phase_api_path("3.DOR_GATE"), json={"agent_id": reviewer["id"]}).status_code == 200
-
-            response = client.get("/phases")
-            assert response.status_code == 200
-
-            phase_09_html = response.text.split(_phase_href("3.DOR_GATE"), 1)[1].split("</a>", 1)[0]
-            phase_35_html = response.text.split(_phase_href("7.PLAN_GATE"), 1)[1].split("</a>", 1)[0]
-
-            assert "reviewer" in phase_09_html
-            assert "🛡️ critic" not in response.text
-            assert "reviewer" not in phase_35_html
-        finally:
-            for code, agent_id in original_agent_ids.items():
-                assert client.put(_phase_api_path(code), json={"agent_id": agent_id}).status_code == 200
 
     def test_phases_page_uses_real_phase_execution_type_for_parallel_badge(self):
         response = client.get("/phases")
@@ -1175,7 +1146,7 @@ class TestPhaseDetail:
         assert response.status_code == 200
         assert 'aria-label="Название фазы"' in response.text
         assert 'aria-label="Описание фазы"' in response.text
-        assert '<label for="agentSelect">Агент:</label>' in response.text
+        assert 'id="agentSelect"' not in response.text
         assert '<button type="button" class="execution-toggle"' in response.text
         assert 'aria-pressed="false"' in response.text
         assert 'aria-label="Описание инструкции ' in response.text
@@ -1242,7 +1213,7 @@ class TestPhaseDetail:
         response = client.get(f"/phase/{phase['id']}?namespace_id={UNKNOWN_NAMESPACE_ID}")
 
         assert response.status_code == 404
-        assert f"Неймспейс {UNKNOWN_NAMESPACE_ID} не найден" in response.text
+        assert f"Профессия {UNKNOWN_NAMESPACE_ID} не найдена" in response.text
         assert "phaseForm" not in response.text
 
     def test_phase_detail_rejects_phase_outside_selected_namespace_workflow(self):
@@ -1278,10 +1249,11 @@ class TestPhaseDetail:
             isolated_client.cookies.set("workflow_namespace_id", str(namespace_id), domain="testserver.local")
 
             phases_page = isolated_client.get(f"/phases?workflow_id={workflow_id}")
-            response = isolated_client.get(f"/phase/{phase_id}?namespace_id={namespace_id}")
+            response = isolated_client.get(f"/phase/{phase_id}")
+            assert isolated_client.get(f"/phase/{phase_id}?namespace_id={namespace_id}").status_code == 404
 
         assert phases_page.status_code == 200
-        assert f'href="/phase/{phase_id}?namespace_id={namespace_id}"' in phases_page.text
+        assert f'href="/phase/{phase_id}"' in phases_page.text
         assert response.status_code == 200
         assert "Новая фаза" in response.text
         assert "Фаза недоступна в выбранном воркфлоу" not in response.text
@@ -1409,13 +1381,6 @@ class TestPhaseDetail:
         finally:
             client.put(_phase_api_path("1.INTAKE"), json=restore_payload)
 
-    def test_phase_save_ignores_transient_blank_check_and_evidence_rows(self):
-        response = client.get(_phase_detail_path("1.INTAKE"))
-
-        assert response.status_code == 200
-        assert response.text.count("if (inp && inp.value.trim()) data.") == 2
-        assert response.text.count("description: inp.value.trim(),") == 2
-
     def test_phase_detail_javascript_uses_per_instruction_api_calls(self):
         response = client.get(_phase_detail_path("1.INTAKE"))
         assert response.status_code == 200
@@ -1450,14 +1415,6 @@ class TestPhaseDetail:
         assert "const previousPartner = partnerSelect?.value || '';" in response.text
         assert "partnerSelect.value = previousPartner;" in response.text
         assert "return true;" in response.text
-
-    def test_phase_detail_sends_strict_nested_ids_and_stores_returned_ids(self):
-        response = client.get(_phase_detail_path("1.INTAKE"))
-
-        assert response.status_code == 200
-        assert "id: li.dataset.id ? Number(li.dataset.id) : null" in response.text
-        assert "checks[i].setAttribute('data-id', String(id));" in response.text
-        assert "evs[i].setAttribute('data-id', String(id));" in response.text
 
     def test_phase_detail_serializes_all_phase_aggregate_saves(self):
         response = client.get(_phase_detail_path("1.INTAKE"))
@@ -1509,26 +1466,24 @@ class TestPhaseDetail:
         finally:
             client.put(_phase_api_path("1.INTAKE"), json=restore_payload)
 
-    def test_phase_detail_instruction_description_reverts_after_rejected_save(self):
+    def test_phase_detail_instruction_description_retains_input_after_rejected_save(self):
         response = client.get(_phase_detail_path("1.INTAKE"))
 
         assert response.status_code == 200
         assert 'data-original-description="' in response.text
-        assert "const previousDescription = input.dataset.originalDescription || '';" in response.text
         assert "const description = input.value.trim();" in response.text
-        assert "input.value = previousDescription;" in response.text
+        assert "input.value = previousDescription;" not in response.text
         assert "input.dataset.originalDescription = savedDescription;" in response.text
         assert "showToast('Описание инструкции обязательно', 'error');" in response.text
 
-    def test_instructions_page_instruction_description_reverts_after_rejected_save(self):
+    def test_instructions_page_instruction_description_retains_input_after_rejected_save(self):
         phase_id = _phase_id("1.INTAKE")
         response = client.get(f"/instructions?phase_id={phase_id}")
 
         assert response.status_code == 200
         assert 'data-original-description="' in response.text
-        assert "const previousDescription = textarea.dataset.originalDescription || '';" in response.text
         assert "const description = textarea.value.trim();" in response.text
-        assert "textarea.value = previousDescription;" in response.text
+        assert "textarea.value = previousDescription;" not in response.text
         assert "textarea.dataset.originalDescription = savedDescription;" in response.text
         assert "showToast('Описание инструкции обязательно', 'error');" in response.text
 
@@ -1781,7 +1736,7 @@ class TestTimelineHTML:
         assert response.status_code == 200
         assert 'href="/phase/' in response.text
 
-    def test_phase_controls_keep_namespace_accent_with_readable_text(self):
+    def test_phase_controls_keep_interface_accent_with_readable_text(self):
         response = client.get("/phases")
         assert response.status_code == 200
         assert ".badge-agent{background:var(--accent-soft);color:var(--accent-readable)}" in response.text
@@ -1824,7 +1779,7 @@ class TestTasksPage:
         namespace_id = _as_dict(uow.projects.get_by_code("UITEST"))["id"]
         response = client.get(f"/tasks?namespace_id={namespace_id}")
         assert response.status_code == 200
-        assert "Неймспейс" in response.text
+        assert "Профессия" in response.text
         assert "UITEST" in response.text
 
     def test_tasks_page_mobile_cards_show_empty_state_for_empty_namespace(self):
@@ -1855,7 +1810,7 @@ class TestTasksPage:
     def test_tasks_reject_unknown_query_namespace(self):
         response = client.get(f"/tasks?namespace_id={UNKNOWN_NAMESPACE_ID}")
         assert response.status_code == 404
-        assert f"Неймспейс {UNKNOWN_NAMESPACE_ID} не найден" in response.text
+        assert f"Профессия {UNKNOWN_NAMESPACE_ID} не найдена" in response.text
         assert "RUN-247" not in response.text
 
     def test_tasks_data_error_returns_controlled_html_error(self):
@@ -1988,7 +1943,7 @@ class TestTaskDetail:
     def test_task_detail_rejects_unknown_query_namespace_without_fallback(self):
         response = client.get(f"/task/RUN-247?namespace_id={UNKNOWN_NAMESPACE_ID}")
         assert response.status_code == 404
-        assert f"Неймспейс {UNKNOWN_NAMESPACE_ID} не найден" in response.text
+        assert f"Профессия {UNKNOWN_NAMESPACE_ID} не найдена" in response.text
         assert "История фаз" not in response.text
 
     def test_task_detail_rejects_malformed_query_namespace_with_html_error(self):
@@ -2157,7 +2112,7 @@ class TestTaskDetail:
         namespace_id = _as_dict(uow.projects.get_by_code("UITEST"))["id"]
         response = client.get(f"/task/UITEST-401?namespace_id={namespace_id}")
         assert response.status_code == 200
-        assert "Неймспейс" in response.text
+        assert "Профессия" in response.text
         assert "workflow-uitest" in response.text
 
     def test_tasks_api_resolves_negative_phase_code_to_phase_name(self):
@@ -2206,7 +2161,7 @@ class TestProjectsPage:
     def test_namespace_page_rejects_unknown_query_namespace_without_edit_fallback(self):
         response = client.get(f"/namespaces?namespace_id={UNKNOWN_NAMESPACE_ID}")
         assert response.status_code == 404
-        assert f"Неймспейс {UNKNOWN_NAMESPACE_ID} не найден" in response.text
+        assert f"Профессия {UNKNOWN_NAMESPACE_ID} не найдена" in response.text
         assert "namespaceForm" not in response.text
 
     def test_removed_namespace_page_alias_returns_404(self):
@@ -2239,13 +2194,13 @@ class TestProjectsPage:
         assert 'id="namespaceForm"' in response.text
         assert 'aria-labelledby="namespaceFormMode"' in response.text
         assert 'id="namespaceFormMode"' in response.text
-        assert 'id="namespaceThemeIcon"' in response.text
+        assert 'name="namespaceThemeIcon"' in response.text
         assert 'id="namespaceThemeColor"' in response.text
-        assert 'id="namespaceThemePreview"' in response.text
+        assert 'id="namespaceThemeControls"' in response.text
         assert 'aria-controls="namespaceForm"' in response.text
         assert 'aria-pressed="true"' in response.text
-        assert "document.querySelector('.brand-name')" in response.text
-        assert "document.querySelector('.brand-mark')" in response.text
+        assert "document.querySelectorAll('.namespace-trigger')" in response.text
+        assert "document.querySelector('.brand-mark')" not in response.text
         assert 'id="createProjectForm"' not in response.text
         assert 'id="projectForm"' not in response.text
         assert 'id="newProjectButton"' not in response.text
@@ -2257,26 +2212,26 @@ class TestProjectsPage:
         assert re.search(r'id="namespaceName" value="[^"]*" required', response.text)
         assert 'required minlength="2" maxlength="64" pattern="[a-z][a-z0-9_\\-]{1,63}"' in response.text
         assert 'aria-describedby="namespaceCliHelp"' in response.text
-        assert 'id="namespaceWorkflowId" required' in response.text
+        assert 'id="namespaceWorkflowId"' not in response.text
         assert 'id="namespaceDeleteHint" hidden' in response.text
         assert "var protectedByTasks = !createMode && Boolean(namespace && Number(namespace.task_count) > 0);" in (
             response.text
         )
         assert "button.textContent = 'Удаление…';" in response.text
         assert "button.textContent = namespaceFormMode === 'create' ? 'Создание…' : 'Сохранение…';" in response.text
-        assert "'Удалить неймспейс «' + namespace.name + '»?'" in response.text
+        assert "'Удалить профессию «' + namespace.name + '»?'" in response.text
 
-    def test_namespace_theme_preview_keeps_primary_action_text_readable(self):
+    def test_namespace_theme_preview_does_not_change_interface_accent(self):
         response = client.get("/namespaces")
         assert response.status_code == 200
-        assert "function accentForeground(color)" in response.text
-        assert "document.documentElement.style.setProperty('--accent-foreground', foreground);" in response.text
-        assert "document.documentElement.style.setProperty('--accent-hover-foreground', foreground);" in response.text
+        assert "function applyPageTheme(" not in response.text
+        assert "document.documentElement.style.setProperty('--accent" not in response.text
+        assert "trigger.style.setProperty('--namespace-color', color || defaultNamespaceThemeColor)" in response.text
 
     def test_namespace_create_page_uses_plus_without_duplicate_add_label(self):
         response = client.get("/namespaces/new")
         assert response.status_code == 200
-        assert '<h1 class="header-title">Неймспейсы</h1>' in response.text
+        assert '<h1 class="header-title">Профессии</h1>' in response.text
         assert 'href="/namespaces/new' not in response.text
         assert 'id="namespaceCreateLink"' not in response.text
         assert '<div class="card-title" id="namespaceFormMode">Создание</div>' in response.text
@@ -2314,7 +2269,7 @@ class TestProjectsPage:
         response = client.get(f"/namespaces/new?namespace_id={UNKNOWN_NAMESPACE_ID}")
 
         assert response.status_code == 404
-        assert f"Неймспейс {UNKNOWN_NAMESPACE_ID} не найден" in response.text
+        assert f"Профессия {UNKNOWN_NAMESPACE_ID} не найдена" in response.text
         assert "namespaceForm" not in response.text
 
     def test_namespace_card_selection_updates_global_selection_state(self):
@@ -2370,12 +2325,15 @@ class TestProjectsPage:
         assert "updateNamespaceHeaderLinks(id);" in response.text
         assert "updateNamespaceHeaderLinks(selectorNamespaceId);" in response.text
 
-    def test_namespace_editor_refreshes_header_selector_and_brand_identity(self):
+    def test_namespace_editor_refreshes_header_selector_and_profession_identity(self):
         response = client.get("/namespaces")
         assert response.status_code == 200
-        assert "document.querySelector('.brand-name')" in response.text
-        assert "document.querySelector('.brand-subname')" in response.text
-        assert "brandSubname.textContent = command;" in response.text
+        assert "document.querySelector('.brand-name')" not in response.text
+        assert "document.querySelector('.brand-subname')" not in response.text
+        assert "trigger.querySelector('.namespace-selector-name').textContent = name;" in response.text
+        assert "option.dataset.icon = namespace.theme_icon" in response.text
+        assert "option.dataset.color = namespace.theme_color" in response.text
+        assert "refreshNamespaceSelectors();" in response.text
         assert "function renderNamespaceSelector()" in response.text
         assert "selector.replaceChildren();" in response.text
         assert "option.textContent = namespaceContextLabel(namespace);" in response.text
@@ -2390,10 +2348,10 @@ class TestProjectsPage:
             in response.text
         )
 
-    def test_namespace_page_exposes_workflow_selector(self):
+    def test_profession_page_has_no_workflow_selector(self):
         response = client.get("/namespaces")
         assert response.status_code == 200
-        assert 'id="namespaceWorkflowId"' in response.text
+        assert 'id="namespaceWorkflowId"' not in response.text
         assert "Воркфлоу" in response.text
 
     def test_namespace_page_hides_removed_intro_cleanup_block(self):
@@ -2523,7 +2481,7 @@ class TestWorkflowsPage:
     def test_workflows_page_rejects_unknown_query_namespace(self):
         response = client.get(f"/workflows?namespace_id={UNKNOWN_NAMESPACE_ID}")
         assert response.status_code == 404
-        assert f"Неймспейс {UNKNOWN_NAMESPACE_ID} не найден" in response.text
+        assert f"Профессия {UNKNOWN_NAMESPACE_ID} не найдена" in response.text
         assert "workflowForm" not in response.text
 
     def test_workflows_page_rejects_invalid_or_unknown_workflow(self):
@@ -2537,10 +2495,10 @@ class TestWorkflowsPage:
         assert f"Воркфлоу {UNKNOWN_WORKFLOW_ID} не найден" in missing.text
         assert "workflowForm" not in missing.text
 
-    def test_workflows_page_uses_single_editor_without_redundant_nav(self):
+    def test_workflows_page_keeps_list_with_one_workflow(self):
         response = client.get("/workflows")
         assert response.status_code == 200
-        assert 'class="workflow-crud is-single"' in response.text
+        assert 'class="workflow-crud "' in response.text
         assert 'id="workflowNav"' in response.text
         assert 'id="workflowForm"' in response.text
         assert 'id="newWorkflowButton"' in response.text
@@ -2575,11 +2533,12 @@ class TestWorkflowsPage:
         assert response.text.count("← К фазам") == 2
 
     def test_workflows_page_offers_compact_picker_for_multiple_workflows(self):
-        created = client.post("/api/workflows", json={"name": "Secondary UI workflow"})
+        profession_id = client.get("/api/namespaces").json()["namespaces"][0]["id"]
+        created = client.post(f"/api/workflows?namespace_id={profession_id}", json={"name": "Secondary UI workflow"})
         assert created.status_code == 200
         workflow_id = created.json()["workflow_id"]
         try:
-            response = client.get(f"/workflows?workflow_id={workflow_id}")
+            response = client.get(f"/workflows?namespace_id={profession_id}&workflow_id={workflow_id}")
             assert response.status_code == 200
             assert 'class="workflow-crud "' in response.text
             assert f'<option value="{workflow_id}" selected' in response.text
@@ -2588,7 +2547,7 @@ class TestWorkflowsPage:
             assert 'value="Secondary UI workflow"' in response.text
             assert ".workflow-picker{display:block}" in response.text
             assert ".workflow-nav{display:none}" in response.text
-            assert "classList.toggle('is-single', workflowStore.length <= 1)" in response.text
+            assert "classList.toggle('is-empty', workflowStore.length === 0)" in response.text
         finally:
             deleted = client.delete(f"/api/workflows/{workflow_id}")
             assert deleted.status_code == 200
@@ -2639,7 +2598,7 @@ class TestWorkflowsPage:
             deleted_workflow = client.delete(f"/api/workflows/{workflow_id}")
             assert deleted_workflow.status_code == 200
 
-    def test_workflows_page_keeps_namespace_default_separate_from_explicit_selection(self):
+    def test_workflows_page_rejects_stale_foreign_profession_selection(self):
         existing_workflow_id = client.get("/api/workflows").json()["workflows"][0]["id"]
         workflow = client.post("/api/workflows", json={"name": "Namespace history default"})
         assert workflow.status_code == 200
@@ -2660,7 +2619,10 @@ class TestWorkflowsPage:
             )
 
             assert response.status_code == 200
-            assert f"let selectedWorkflowId = {existing_workflow_id};" in response.text
+            assert response.history[0].status_code == 303
+            assert f"let selectedWorkflowId = {namespace_workflow_id};" in response.text
+            store = json.loads(re.search(r"const workflowStore = (.*);", response.text).group(1))
+            assert [item["id"] for item in store] == [namespace_workflow_id]
             assert f"const defaultWorkflowId = {namespace_workflow_id};" in response.text
         finally:
             deleted_namespace = client.delete(f"/api/namespaces/{namespace_id}")
@@ -2778,7 +2740,6 @@ def test_ui_deletions_use_product_modal_not_browser_confirm():
     templates = {
         name: (TEMPLATES_DIR / name).read_text(encoding="utf-8")
         for name in (
-            "agents.html",
             "instructions.html",
             "namespaces.html",
             "phase_detail.html",
@@ -2798,80 +2759,6 @@ def test_ui_deletions_use_product_modal_not_browser_confirm():
     assert ".btn-danger{background:#b42332;color:#fff" in base
     assert "html[data-theme='dark'] .modal-eyebrow{color:#ff6b6b}" in base
     assert all("confirm(" not in template for template in templates.values())
-
-
-class TestAgentsPage:
-    def test_form_editors_have_touch_sized_controls(self):
-        for path, rule in (
-            ("/namespaces", ".namespace-panel input,.namespace-panel select,.namespace-panel .btn{min-height:40px}"),
-            ("/workflows", ".workflow-panel input,.workflow-panel .btn{min-height:40px}"),
-            ("/agents", ".agent-editor input,.agent-editor .btn{min-height:40px}"),
-        ):
-            response = client.get(path)
-            assert response.status_code == 200
-            assert rule in response.text
-            if path == "/agents":
-                assert "html[data-theme='dark'] .agent-delete" in response.text
-
-    def test_agents_page_shows_name_and_description_without_sort_field(self):
-        response = client.get("/agents")
-        assert response.status_code == 200
-        assert "Описание" in response.text
-        assert "reviewer" in response.text
-        assert "Sort" not in response.text
-        assert 'type="number"' not in response.text
-        assert "placeholder=" not in response.text
-
-    def test_agents_page_rejects_unknown_query_namespace(self):
-        response = client.get(f"/agents?namespace_id={UNKNOWN_NAMESPACE_ID}")
-        assert response.status_code == 404
-        assert f"Неймспейс {UNKNOWN_NAMESPACE_ID} не найден" in response.text
-        assert "reviewer" not in response.text
-
-    def test_agents_crud_reports_network_errors(self):
-        response = client.get("/agents")
-
-        assert response.status_code == 200
-        assert response.text.count("catch(error){showRequestError(error)}") == 3
-
-    def test_agents_page_uses_compact_explicit_editor(self):
-        response = client.get("/agents")
-
-        assert response.status_code == 200
-        assert 'class="agent-list" id="agentsList"' in response.text
-        assert 'class="agent-entry" data-id=' in response.text
-        assert 'onsubmit="saveAgent(event,this)"' in response.text
-        assert 'onclick="cancelAgent(this)"' in response.text
-        assert 'class="agent-create" id="agentCreatePanel"' in response.text
-        assert 'onblur="saveRow(this)"' not in response.text
-        assert 'function cancelAgent(button)' in response.text
-        assert response.text.count("entry.querySelector('summary').focus()") == 2
-        assert "title:'Удалить агента «'+name+'»?'" in response.text
-        assert ".agent-editor input,.agent-editor .btn,.agent-create summary{min-height:44px}" in response.text
-
-    def test_agents_api_create_and_update_description(self):
-        create = client.post(
-            "/api/agents",
-            json={
-                "name": "architect",
-                "description": "Проектирует решение",
-            },
-        )
-        assert create.status_code == 200
-        payload = create.json()
-        assert payload["ok"] is True
-
-        update = client.put(
-            f"/api/agents/{payload['agent_id']}",
-            json={
-                "description": "Проектирует и уточняет контракты",
-            },
-        )
-        assert update.status_code == 200
-
-        agents = client.get("/api/agents").json()["agents"]
-        architect = next(agent for agent in agents if agent["id"] == payload["agent_id"])
-        assert architect["description"] == "Проектирует и уточняет контракты"
 
 
 class TestSettingsPage:
@@ -2917,7 +2804,7 @@ class TestSettingsPage:
     def test_settings_page_rejects_unknown_query_namespace(self):
         response = client.get(f"/settings?namespace_id={UNKNOWN_NAMESPACE_ID}")
         assert response.status_code == 404
-        assert f"Неймспейс {UNKNOWN_NAMESPACE_ID} не найден" in response.text
+        assert f"Профессия {UNKNOWN_NAMESPACE_ID} не найдена" in response.text
         assert "project-workflow step" not in response.text
 
     def test_api_settings_get_returns_json(self):
@@ -2959,10 +2846,14 @@ class TestSettingsPage:
         step_options = {option["flags"]: option for option in step["options"]}
         history_options = {option["flags"]: option for option in history["options"]}
 
-        assert set(step_options) == {"--task", "--report"}
+        assert set(step_options) == {
+            "--task", "--report", "--operation-key", "--runtime-request", "--execution-token-file",
+        }
         assert set(history_options) == {"--task", "--n"}
         assert "default" not in step_options["--task"]
         assert "default" not in step_options["--report"]
+        for flag in ("--operation-key", "--runtime-request", "--execution-token-file"):
+            assert "default" not in step_options[flag]
         assert "default" not in history_options["--n"]
         assert "по умолчанию: все" in history_options["--n"]["help"]
 
@@ -2987,7 +2878,7 @@ class TestSettingsPage:
 class TestUiNetworkFailures:
     @pytest.mark.parametrize(
         ("path", "minimum_handlers"),
-        [("/namespaces", 4), ("/workflows", 4), ("/agents", 3)],
+        [("/namespaces", 4), ("/workflows", 4)],
     )
     def test_crud_reports_network_errors(self, path, minimum_handlers):
         response = client.get(path)
@@ -3037,7 +2928,7 @@ class TestUiNetworkFailures:
         response = client.get(f"/instructions?phase_id={phase_id}&namespace_id={UNKNOWN_NAMESPACE_ID}")
 
         assert response.status_code == 404
-        assert f"Неймспейс {UNKNOWN_NAMESPACE_ID} не найден" in response.text
+        assert f"Профессия {UNKNOWN_NAMESPACE_ID} не найдена" in response.text
         assert "instructionGroups" not in response.text
 
     def test_instructions_page_back_link_preserves_selected_namespace(self):
@@ -3117,11 +3008,14 @@ class TestUiNetworkFailures:
             phase_id = phases[0]["id"]
             isolated_client.cookies.set("workflow_namespace_id", str(namespace_id), domain="testserver.local")
 
-            response = isolated_client.get(f"/instructions?phase_id={phase_id}&namespace_id={namespace_id}")
+            response = isolated_client.get(f"/instructions?phase_id={phase_id}")
+            assert isolated_client.get(
+                f"/instructions?phase_id={phase_id}&namespace_id={namespace_id}",
+            ).status_code == 404
 
         assert response.status_code == 200
         assert "Инструкции фазы Новая фаза" in response.text
-        assert f'href="/phase/{phase_id}?namespace_id={namespace_id}"' in response.text
+        assert f'href="/phase/{phase_id}"' in response.text
         assert "Фаза недоступна в выбранном воркфлоу" not in response.text
 
     def test_instructions_page_rejects_malformed_phase_id_with_html_error(self):

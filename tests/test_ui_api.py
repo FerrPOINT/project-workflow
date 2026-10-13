@@ -163,7 +163,7 @@ class TestIndex:
     def test_tasks_page_has_namespace_column(self, client):
         resp = client.get("/tasks")
         assert resp.status_code == 200
-        assert "Неймспейс" in resp.text
+        assert "Профессия" in resp.text
         assert "verdict-cell" in resp.text
         assert "white-space:normal;overflow-wrap:anywhere" in resp.text
 
@@ -195,7 +195,7 @@ class TestIndex:
         assert 'href="/namespaces/new' not in resp.text
         assert 'class="base-ssr-account"' in resp.text
         assert 'href="/namespaces' in resp.text
-        assert "Неймспейсы" in resp.text
+        assert "Профессии" in resp.text
 
     def test_task_links_include_namespace_id(self, client):
         resp = client.get("/tasks")
@@ -277,7 +277,7 @@ class TestApiPhases:
         assert resp.status_code == 404
         assert resp.json() == {
             "ok": False,
-            "error": f"Неймспейс {UNKNOWN_NAMESPACE_ID} не найден",
+            "error": f"Профессия {UNKNOWN_NAMESPACE_ID} не найдена",
         }
 
     def test_list_phases_rejects_namespace_workflow_owner_conflict(self, client):
@@ -291,7 +291,7 @@ class TestApiPhases:
         assert resp.status_code == 409
         assert resp.json() == {
             "ok": False,
-            "error": "workflow_id не совпадает с владельцем неймспейса",
+            "error": "Воркфлоу не принадлежит выбранной профессии",
         }
 
     def test_get_phase(self, client):
@@ -308,7 +308,7 @@ class TestApiPhases:
         assert resp.status_code == 404
         assert resp.json() == {
             "ok": False,
-            "error": f"Неймспейс {UNKNOWN_NAMESPACE_ID} не найден",
+            "error": f"Профессия {UNKNOWN_NAMESPACE_ID} не найдена",
         }
 
     def test_get_phase_rejects_namespace_workflow_owner_conflict(self, client):
@@ -331,7 +331,7 @@ class TestApiPhases:
         assert resp.status_code == 409
         assert resp.json() == {
             "ok": False,
-            "error": "Фаза недоступна в выбранном неймспейсе",
+            "error": "Фаза недоступна в выбранной профессии",
         }
 
     def test_non_numeric_phase_identifier_is_rejected(self, client):
@@ -389,7 +389,7 @@ class TestApiPhases:
         resp = client.get(f"/api/settings?namespace_id={UNKNOWN_NAMESPACE_ID}")
 
         assert resp.status_code == 404
-        assert resp.json() == {"ok": False, "error": f"Неймспейс {UNKNOWN_NAMESPACE_ID} не найден"}
+        assert resp.json() == {"ok": False, "error": f"Профессия {UNKNOWN_NAMESPACE_ID} не найдена"}
 
     def test_composite_phase_update_commits_once(self, client, monkeypatch):
         phase_id = _phase_id(client, "1.INTAKE")
@@ -762,7 +762,7 @@ class TestApiNamespacesCrud:
         assert "namespaces" in data
 
     @pytest.mark.parametrize("workflow_id", [None, "1", True])
-    def test_create_namespace_requires_strict_workflow_id(self, client, workflow_id):
+    def test_profession_creation_omits_workflow_but_explicit_ids_are_strict(self, client, workflow_id):
         payload = {
             "name": "Strict workflow",
             "cli_command": f"workflow-strict-{uuid.uuid4().hex[:6]}",
@@ -772,6 +772,12 @@ class TestApiNamespacesCrud:
 
         response = client.post("/api/namespaces", json=payload)
 
+        if workflow_id is None:
+            assert response.status_code == 200
+            profession = response.json()["namespace"]
+            rows = client.get(f"/api/workflows?namespace_id={profession['id']}").json()["workflows"]
+            assert [row["name"] for row in rows] == ["Дефолтный"]
+            return
         assert response.status_code == 422
         assert response.json()["ok"] is False
         assert any(detail["field"] == "workflow_id" for detail in response.json()["details"])
@@ -980,7 +986,7 @@ class TestApiNamespaces:
         response = client.delete(f"/api/namespaces/{default_namespace['id']}")
         assert response.status_code == 409
 
-    def test_namespace_query_switches_theme_and_task_scope(self, client):
+    def test_namespace_query_switches_identity_and_task_scope(self, client):
         from project_workflow.interfaces.ui import _app_state
 
         default_wf = next(w for w in _app_state.workflow_service().list_workflows() if w.get("is_default"))
@@ -1000,96 +1006,11 @@ class TestApiNamespaces:
         response = client.get(f"/tasks?namespace_id={namespace_id}")
 
         assert response.status_code == 200
-        assert "--accent:#22C55E" in response.text
+        assert 'aria-controls="namespaceSelectorOptions" style="--namespace-color:#22C55E"' in response.text
+        assert 'class="brand-mark base-shell-mark" aria-hidden="true"><svg' in response.text
+        assert '<html lang="ru" data-theme="dark" data-theme-storage-key="workflow-theme">' in response.text
         assert "Green Namespace" in response.text
         assert "RUN-1" not in response.text
-
-
-class TestApiAgents:
-    def test_agents_page_uses_launch_profile_ui_alias(self, client):
-        html = client.get("/agents").text
-        assert 'name="launch_profile"' in html
-        assert "form.elements.namedItem('launch_profile')" in html
-        assert "launch_profile:launchProfile||null" in html
-        assert "hermes" not in html.casefold()
-
-    def test_list_agents(self, client):
-        resp = client.get("/api/agents")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["ok"] is True
-        assert "agents" in data
-
-    def test_create_and_update_agent(self, client):
-        name = _unique("Agent")
-        profile = f"profile_{uuid.uuid4().hex[:8]}"
-        resp = client.post(
-            "/api/agents",
-            json={"name": name, "description": "desc", "hermes_profile": profile},
-        )
-        assert resp.status_code == 200
-        data = resp.json()
-        agent_id = data["agent_id"]
-        assert data["agent"]["hermes_profile"] == profile
-
-        resp = client.put(
-            f"/api/agents/{agent_id}",
-            json={"name": name + "2", "description": "updated", "hermes_profile": None},
-        )
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["agent"]["description"] == "updated"
-        assert data["agent"]["hermes_profile"] is None
-        assert client.put(f"/api/agents/{agent_id}", json={"description": None}).status_code == 422
-
-    def test_create_and_update_agent_accepts_launch_profile_alias(self, client):
-        name = _unique("Agent")
-        profile = f"profile_{uuid.uuid4().hex[:8]}"
-        resp = client.post("/api/agents", json={"name": name, "launch_profile": profile})
-        assert resp.status_code == 200
-        data = resp.json()
-        agent_id = data["agent_id"]
-        assert data["agent"]["hermes_profile"] == profile
-
-        resp = client.put(f"/api/agents/{agent_id}", json={"launch_profile": None})
-        assert resp.status_code == 200
-        assert resp.json()["agent"]["hermes_profile"] is None
-
-    def test_hermes_profile_cannot_be_shared(self, client):
-        profile = f"profile_{uuid.uuid4().hex[:8]}"
-        first = client.post("/api/agents", json={"name": _unique("Agent"), "hermes_profile": profile})
-        assert first.status_code == 200
-
-        second = client.post("/api/agents", json={"name": _unique("Agent"), "hermes_profile": profile})
-        assert second.status_code == 409
-        assert "уже назначен" in second.json()["error"]
-
-    def test_agent_name_cannot_be_shared(self, client):
-        name = _unique("Agent")
-        first = client.post("/api/agents", json={"name": name})
-        assert first.status_code == 200
-
-        second = client.post("/api/agents", json={"name": name})
-        assert second.status_code == 409
-        assert "уже существует" in second.json()["error"]
-
-    def test_invalid_hermes_profile_is_rejected(self, client):
-        response = client.post("/api/agents", json={"name": _unique("Agent"), "hermes_profile": "Bad Profile"})
-        assert response.status_code == 422
-        for invalid in ("", 1, {}, []):
-            response = client.post("/api/agents", json={"name": _unique("Agent"), "hermes_profile": invalid})
-            assert response.status_code == 422
-
-    def test_delete_agent_assigned_to_phase_forbidden(self, client):
-        from project_workflow.interfaces.ui import _app_state
-
-        name = _unique("Agent")
-        resp = client.post("/api/agents", json={"name": name})
-        agent_id = resp.json()["agent_id"]
-        phase_id = _phase_id(client, "1.INTAKE")
-        _app_state.phase_service().update_phase(phase_id, {"agent_id": agent_id})
-        resp = client.delete(f"/api/agents/{agent_id}")
-        assert resp.status_code == 409
 
 
 class TestApiInstructions:
@@ -1175,7 +1096,7 @@ class TestApiInstructions:
         namespace_id = namespace.json()["namespace_id"]
         expected_error = {
             "ok": False,
-            "error": "Фаза недоступна в выбранном неймспейсе",
+            "error": "Фаза недоступна в выбранной профессии",
         }
 
         responses = [
@@ -1250,7 +1171,7 @@ class TestApiTasks:
         assert resp.status_code == 409
         assert resp.json() == {
             "ok": False,
-            "error": "workflow_id не совпадает с владельцем неймспейса",
+            "error": "workflow_id не совпадает с владельцем профессии",
         }
 
     def test_api_phases_rejects_unknown_workflow_filter(self, client):
@@ -1268,7 +1189,7 @@ class TestApiTasks:
         assert resp.status_code == 404
         assert resp.json() == {
             "ok": False,
-            "error": f"Неймспейс {UNKNOWN_NAMESPACE_ID} не найден",
+            "error": f"Профессия {UNKNOWN_NAMESPACE_ID} не найдена",
         }
 
     def test_api_tasks_rejects_unknown_workflow_filter(self, client):
@@ -1351,8 +1272,6 @@ class TestApiPathIds:
             ("get", "/api/namespaces/0", "namespace_id", None),
             ("put", "/api/namespaces/0", "namespace_id", {"name": "Новая настройка"}),
             ("delete", "/api/namespaces/0", "namespace_id", None),
-            ("put", "/api/agents/0", "agent_id", {"name": "Новый агент"}),
-            ("delete", "/api/agents/0", "agent_id", None),
             ("put", "/api/instructions/0", "instruction_id", {"description": "Новый шаг"}),
             ("delete", "/api/instructions/0", "instruction_id", None),
         ],
@@ -1420,7 +1339,7 @@ class TestApiPhaseDelete:
         assert resp.status_code == 409
         assert resp.json() == {
             "ok": False,
-            "error": "Фаза недоступна в выбранном неймспейсе",
+            "error": "Фаза недоступна в выбранной профессии",
         }
         assert _app_state.phase_service().get_phase(ph1["id"]) is not None
         assert _app_state.phase_service().get_phase(ph2["id"]) is not None
@@ -1469,7 +1388,7 @@ class TestApiPhaseUpdate:
         assert response.status_code == 409
         assert response.json() == {
             "ok": False,
-            "error": "Фаза недоступна в выбранном неймспейсе",
+            "error": "Фаза недоступна в выбранной профессии",
         }
         after = client.get(f"/api/phases/{phase_id}").json()["phase"]
         assert after == before
@@ -1611,9 +1530,9 @@ class TestPageRoutes:
         assert resp.status_code == 200
         assert "html" in resp.headers.get("content-type", "")
 
-    def test_agents_page(self, client):
+    def test_agents_page_is_removed(self, client):
         resp = client.get("/agents")
-        assert resp.status_code == 200
+        assert resp.status_code == 404
 
     def test_task_detail_page(self, client):
         resp = client.get("/task/RUN-1")

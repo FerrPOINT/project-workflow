@@ -47,7 +47,7 @@ def test_two_namespaces_share_profile_with_durable_replay_and_closed_dispatch(mo
         profile = dict(workflow_id=mode.workflow_id, catalog_version=mode.catalog_version, mode_key=mode.key)
     calls = []
 
-    async def owner_read(owner, path, context):
+    async def owner_read(owner, path, context, *, client):
         calls.append((owner, path))
         return {
             "namespace": context.namespace.model_dump(mode="json"),
@@ -91,7 +91,7 @@ def test_two_namespaces_share_profile_with_durable_replay_and_closed_dispatch(mo
 
 
 def test_foreign_task_projection_cannot_be_persisted(monkeypatch):
-    async def foreign(owner, path, context):
+    async def foreign(owner, path, context, *, client):
         return {
             "namespace": {"registry_instance_id": str(uuid4()), "namespace_id": str(uuid4())},
             "task_id": str(context.task.task_id),

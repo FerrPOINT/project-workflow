@@ -17,10 +17,8 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from ... import __version__
-from ...infrastructure.db.managed_catalog import validate_managed_catalog_state
 from ...infrastructure.db.session import DatabaseUnavailable, get_engine, reset_engine
-from ...infrastructure.db.uow import SAUnitOfWork
-from .routes import api, cli_api, pages, resource_context, runtime_api
+from .routes import api, cli_api, namespace_ownership_api, pages, pm_api, resource_context, runtime_api
 from .sso import install_sso
 
 logger = logging.getLogger(__name__)
@@ -84,7 +82,10 @@ class _UoWMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         from ...application.state import _app_state, _uow_ctx
 
-        if request.url.path in {"/health", "/internal/runtime/capabilities"}:
+        if request.url.path in {
+            "/health", "/internal/runtime/capabilities",
+            "/internal/runtime/base/source-catalog", "/internal/runtime/base/source-capabilities",
+        } or request.url.path.startswith("/internal/runtime/base/namespace-bindings/"):
             return await call_next(request)
         try:
             uow = _app_state.create_uow()
@@ -119,7 +120,7 @@ class _RequestLoggingMiddleware(BaseHTTPMiddleware):
         return response
 
 
-async def _health() -> JSONResponse:
+def _health() -> JSONResponse:
     """Readiness probe for connectivity, schema presence, and migration head."""
     from ...infrastructure.db import session as _session
 
@@ -140,8 +141,6 @@ async def _health() -> JSONResponse:
         if not _session.schema_is_ready(engine):
             raise RuntimeError("schema-not-ready")
         health["schema"] = "ok"
-        with SAUnitOfWork(engine) as uow:
-            validate_managed_catalog_state(uow)
         health["catalog"] = "ok"
     except Exception:
         logger.error("Health readiness check failed")
@@ -162,22 +161,13 @@ async def _health() -> JSONResponse:
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Verify reachable managed state before accepting traffic."""
+    """Check database connectivity before accepting traffic."""
     try:
         engine = get_engine()
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
     except Exception:
         logger.warning("База данных недоступна при запуске приложения")
-    else:
-        from ...infrastructure.db import session as _session
-
-        if _session.schema_is_ready(engine):
-            try:
-                with SAUnitOfWork(engine) as uow:
-                    validate_managed_catalog_state(uow)
-            except (FileNotFoundError, ValueError) as exc:
-                raise RuntimeError("Managed catalog is not ready") from exc
     yield
     # Shutdown: dispose and clear the cached engine pool.
     try:
@@ -252,6 +242,42 @@ def create_app() -> FastAPI:
     app.post("/internal/runtime/rebind", response_model=None)(runtime_api.runtime_rebind)
     app.get("/internal/runtime/history", response_model=None)(runtime_api.runtime_history)
     app.get("/internal/runtime/catalog", response_model=None)(runtime_api.runtime_catalog)
+    from project_workflow.domain.base_binding import (
+        BaseBindingInvalidRequest,
+        BaseNamespaceBindingError,
+        BaseNamespaceBindingResponse,
+    )
+
+    from .routes import base_api
+
+    app.get(
+        "/internal/runtime/base/namespace-bindings/{namespace_id}", response_model=BaseNamespaceBindingResponse,
+        responses={**{status: {"model": BaseNamespaceBindingError} for status in (401, 403, 409, 503)},
+                   422: {"model": BaseBindingInvalidRequest, "description": "Unprocessable Content"}},
+    )(base_api.namespace_binding)
+    app.post("/internal/runtime/base/terminal-receipt/readback", response_model=None)(base_api.terminal_readback)
+    app.get("/internal/runtime/base/source-catalog", response_model=None)(base_api.source_catalog)
+    app.get("/internal/runtime/base/source-capabilities", response_model=None)(base_api.source_capabilities)
+    from project_workflow.domain.pm_execution import PMResponse
+
+    app.post("/internal/runtime/v1/pm/assign", response_model=None)(pm_api.assign)
+    app.post("/internal/runtime/v1/pm/bind", response_model=PMResponse,
+             response_model_exclude_unset=True)(pm_api.bind)
+    app.post("/internal/runtime/v1/pm/checkpoint", response_model=PMResponse,
+             response_model_exclude_unset=True)(pm_api.checkpoint)
+    app.post("/internal/runtime/v1/pm/resume", response_model=PMResponse,
+             response_model_exclude_unset=True)(pm_api.resume)
+    app.post("/internal/runtime/v1/pm/rebind", response_model=PMResponse,
+             response_model_exclude_unset=True)(pm_api.rebind)
+    app.post("/internal/runtime/v1/pm/readback", response_model=PMResponse,
+             response_model_exclude_unset=True)(pm_api.readback)
+    from project_workflow.domain.namespace_ownership import NamespaceOwnershipResponse
+
+    app.put("/api/pm/namespace-ownership/{namespace_id}", response_model=NamespaceOwnershipResponse,
+            status_code=201)(namespace_ownership_api.provision)
+    app.get("/api/pm/namespace-ownership/{namespace_id}", response_model=NamespaceOwnershipResponse)(
+        namespace_ownership_api.readback
+    )
 
     # Pages
     app.get("/", response_class=HTMLResponse)(pages.index)
@@ -264,7 +290,6 @@ def create_app() -> FastAPI:
     app.get("/workflows", response_class=HTMLResponse)(pages.workflows_page)
     app.get("/task/{task_key}", response_class=HTMLResponse)(pages.task_detail_page)
     app.get("/settings", response_class=HTMLResponse)(pages.settings_page)
-    app.get("/agents", response_class=HTMLResponse)(pages.agents_page)
 
     # API
     app.get("/api/v2/execution-contexts/{identity}")(resource_context.read)
@@ -286,10 +311,6 @@ def create_app() -> FastAPI:
     app.post("/api/namespaces", response_model=None)(api.api_namespace_create)
     app.put("/api/namespaces/{namespace_id}", response_model=None)(api.api_namespace_update)
     app.delete("/api/namespaces/{namespace_id}", response_model=None)(api.api_namespace_delete)
-    app.get("/api/agents", response_model=None)(api.api_agents)
-    app.post("/api/agents", response_model=None)(api.api_agent_create)
-    app.put("/api/agents/{agent_id}", response_model=None)(api.api_agent_update)
-    app.delete("/api/agents/{agent_id}", response_model=None)(api.api_agent_delete)
 
     # Phase order update must be registered before /{phase_id} to avoid shadowing.
     app.put("/api/phases/order", response_model=None)(api.api_phase_batch_order)

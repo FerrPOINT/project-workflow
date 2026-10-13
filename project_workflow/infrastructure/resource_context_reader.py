@@ -1,7 +1,9 @@
 """Fixed owner endpoints and limited service credentials, never a forwarded user PAT."""
 
+import asyncio
 import json
 import os
+from contextlib import AsyncExitStack
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -9,12 +11,32 @@ import httpx
 
 from project_workflow.domain.resource_context import ExecutionContextV2
 
+READER_TIMEOUT_SECONDS = 10
+
 
 class OwnerUnavailable(RuntimeError):
     pass
 
 
-async def read_owner(owner: str, path: str, context: ExecutionContextV2) -> dict:
+async def _read_response(client: httpx.AsyncClient, url: str, params: dict, token: str) -> bytearray:
+    async with client.stream(
+        "GET", url, params=params, headers={"Authorization": f"Bearer {token}"}, follow_redirects=False,
+    ) as response:
+        if response.status_code in {403, 404}:
+            raise ValueError("Foreign or missing context resource")
+        if response.status_code != 200:
+            raise OwnerUnavailable("Context owner is unavailable")
+        data = bytearray()
+        async for chunk in response.aiter_bytes():
+            if len(data) + len(chunk) > 65536:
+                raise OwnerUnavailable("Invalid context owner readback")
+            data.extend(chunk)
+        return data
+
+
+async def read_owner(
+    owner: str, path: str, context: ExecutionContextV2, *, client: httpx.AsyncClient | None = None
+) -> dict:
     prefix = f"PROJECT_WORKFLOW_NAMESPACE__{owner}"
     url = os.environ.get(f"{prefix}_URL", "")
     try:
@@ -43,19 +65,16 @@ async def read_owner(owner: str, path: str, context: ExecutionContextV2) -> dict
         "namespace_id": str(context.namespace.namespace_id),
     }
     try:
-        async with httpx.AsyncClient(timeout=10, follow_redirects=False) as client:
-            async with client.stream(
-                "GET", url.rstrip("/") + "/" + path, params=params, headers={"Authorization": f"Bearer {token}"}
-            ) as response:
-                if response.status_code in {403, 404}:
-                    raise ValueError("Foreign or missing context resource")
-                if response.status_code != 200:
-                    raise OwnerUnavailable("Context owner is unavailable")
-                data = bytearray()
-                async for chunk in response.aiter_bytes():
-                    if len(data) + len(chunk) > 65536:
-                        raise OwnerUnavailable("Invalid context owner readback")
-                    data.extend(chunk)
+        async with AsyncExitStack() as stack:
+            if client is None:
+                client = await stack.enter_async_context(
+                    httpx.AsyncClient(timeout=READER_TIMEOUT_SECONDS, follow_redirects=False)
+                )
+            data = await asyncio.wait_for(
+                _read_response(client, url.rstrip("/") + "/" + path, params, token), READER_TIMEOUT_SECONDS
+            )
+    except asyncio.TimeoutError:
+        raise OwnerUnavailable("Context owner reader deadline exceeded") from None
     except httpx.RequestError:
         raise OwnerUnavailable("Context owner is unavailable") from None
     try:

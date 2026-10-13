@@ -10,7 +10,6 @@ from fastapi.testclient import TestClient
 
 pytestmark = [pytest.mark.ui]
 
-from project_workflow.application.agent import AgentService
 from project_workflow.application.project import ProjectService
 from project_workflow.application.task import TaskService
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
@@ -36,8 +35,7 @@ class TestEndToEndWorkflow:
         workflows = uow.get_workflows()
         assert [w["name"] for w in workflows] == ["sdlc-business-tech-v1"]
         assert len(phases) == 19
-        agents = uow.get_agents()
-        assert len(agents) > 0
+        assert all("agent_id" not in phase for phase in phases)
 
     def test_create_task_and_history(self, tmp_path: Path):
         """Создание таски + запись истории."""
@@ -63,45 +61,6 @@ class TestEndToEndWorkflow:
         hist = uow.list_phase_events(task["id"])
         assert [event["event_type"] for event in hist] == ["entered", "completed"]
 
-    def test_agents_crud(self, tmp_path: Path):
-        """Полный CRUD агентов."""
-        db_path = tmp_path / "test3.db"
-        uow = SAUnitOfWork(f"sqlite:///{db_path}")
-        prepare_sqlite_uow(uow)
-        AgentService(uow).create_agent({"name": "crud-coder", "description": "Пишет код"})
-        agents = uow.get_agents()
-        created = [
-            agent
-            for agent in agents
-            if agent["name"] == "crud-coder" and agent["description"] == "Пишет код"
-        ]
-        assert len(created) == 1
-        assert created[0]["id"] is not None
-
-    def test_phase_with_agent(self, tmp_path: Path):
-        """Фаза сохраняет назначенного агента."""
-        db_path = tmp_path / "test5.db"
-        uow = SAUnitOfWork(f"sqlite:///{db_path}")
-        prepare_sqlite_uow(uow)
-        agent_id = AgentService(uow).create_agent(
-            {"name": "test-bot", "description": "Executes delegated work"}
-        )["id"]
-        workflow_id = uow.workflows.get_default().id
-        uow.phases.create(
-            {
-                "workflow_id": workflow_id,
-                "code": "p2",
-                "name": "P2",
-                "phase_order": 100,
-                "agent_id": agent_id,
-                "execution_type": "parallel",
-            }
-        )
-        rows = uow.get_phases(workflow_id)
-        phase = next(row for row in rows if row["code"] == "p2")
-        assert "group_id" not in phase
-        assert phase["agent_id"] == agent_id
-        assert phase["execution_type"] == "parallel"
 
     def test_api_serves_phases(self):
         """GET /api/phases отдаёт JSON объект с phases."""

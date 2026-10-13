@@ -9,8 +9,8 @@
 
 {% block extra_style %}
 .workflow-crud{display:grid;grid-template-columns:320px minmax(0,1fr);gap:16px;align-items:start}
-.workflow-crud.is-single{grid-template-columns:minmax(0,760px)}
-.workflow-crud.is-single .workflow-nav{display:none}
+.workflow-crud.is-empty{grid-template-columns:minmax(0,760px)}
+.workflow-crud.is-empty .workflow-nav{display:none}
 .workflow-nav{display:flex;flex-direction:column;gap:10px;align-self:start}
 .workflow-nav:focus-visible{outline:2px solid var(--accent-hover);outline-offset:2px}
 .workflow-nav-item{width:100%;text-align:left;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;cursor:pointer;color:var(--text)}
@@ -24,17 +24,16 @@
 .label{font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em}
 .workflow-description{min-height:96px}
 .panel-actions{display:flex;gap:10px;flex-wrap:wrap}
-.workflow-delete{margin-left:auto;color:var(--text);border-color:var(--red)}
-.workflow-delete:hover{color:var(--text);background:var(--red-soft)}
+.workflow-delete{margin-left:auto}
 .workflow-delete-hint{font-size:12px;color:var(--text-muted);line-height:1.5}
 .empty-note{color:var(--text-dim);font-size:13px;line-height:1.6}
 .workflow-mobile-actions{display:none}
 @media (max-width: 980px){
-  .workflow-crud,.workflow-crud.is-single{grid-template-columns:minmax(0,1fr)}
+  .workflow-crud,.workflow-crud.is-empty{grid-template-columns:minmax(0,1fr)}
   .workflow-nav{display:none}
   .workflow-picker{display:block}
   .workflow-picker select{min-height:40px}
-  .workflow-crud.is-single .workflow-picker{display:none}
+  .workflow-crud.is-empty .workflow-picker{display:none}
 }
 @media(max-width:930px){
   .header .workflow-header-action{display:none}
@@ -48,7 +47,7 @@
   <button type="button" class="btn btn-primary" id="mobileNewWorkflowButton" onclick="startCreateWorkflow()">+ Новый воркфлоу</button>
   <a href="/phases{% if selected_namespace %}?namespace_id={{ selected_namespace.id }}{% endif %}" class="btn btn-secondary">← К фазам</a>
 </div>
-<div class="workflow-crud {% if workflows|length <= 1 %}is-single{% endif %}" id="workflowCrud">
+<div class="workflow-crud {% if workflows|length == 0 %}is-empty{% endif %}" id="workflowCrud">
   <div class="workflow-picker" id="workflowPicker">
     <label class="label" for="workflowSelect">Воркфлоу</label>
     <select id="workflowSelect" onchange="selectWorkflow(Number(this.value))">
@@ -63,7 +62,7 @@
     <button type="button" class="workflow-nav-item {% if selected_workflow and selected_workflow.id == workflow.id %}active{% endif %}" data-workflow-id="{{ workflow.id }}" aria-controls="workflowForm" aria-pressed="{{ 'true' if selected_workflow and selected_workflow.id == workflow.id else 'false' }}" onclick="selectWorkflow({{ workflow.id }})">
       <div class="workflow-name">{{ workflow.name }}</div>
       <div class="workflow-meta">
-        <span>{{ workflow.namespace_count | pluralize('неймспейс,неймспейса,неймспейсов') }}</span>
+        <span>{{ workflow.namespace_count | pluralize('профессия,профессии,профессий') }}</span>
         <span>{{ workflow.phase_count | pluralize('фаза,фазы,фаз') }}</span>
       </div>
     </button>
@@ -96,12 +95,18 @@
 {% endblock %}
 
 {% block extra_script %}
+const professionId = {{ selected_namespace.id if selected_namespace else "null" }};
 const workflowStore = {{ workflows | tojson }};
 let selectedWorkflowId = {{ selected_workflow.id if selected_workflow else 'null' }};
 const defaultWorkflowId = {{ default_workflow_id if default_workflow_id else 'null' }};
 let previousWorkflowId = selectedWorkflowId;
 let workflowFormMode = selectedWorkflowId == null ? 'create' : 'edit';
 
+function workflowApiUrl(workflowId){
+  var url = new URL('/api/workflows' + (workflowId == null ? '' : '/' + workflowId), window.location.origin);
+  if(professionId != null){ url.searchParams.set('namespace_id', String(professionId)); }
+  return url.pathname + url.search;
+}
 function workflowById(id){ return workflowStore.find(function(workflow){ return workflow.id === id; }); }
 function workflowSelectionUrl(workflowId){
   var url = new URL(window.location.href);
@@ -126,6 +131,7 @@ function workflowIdFromUrl(){
 function phaseUrlForWorkflow(workflowId){
   var url = new URL('/phases', window.location.origin);
   url.searchParams.set('workflow_id', String(workflowId));
+  if(professionId != null){ url.searchParams.set('namespace_id', String(professionId)); }
   return url.pathname + url.search;
 }
 function currentWorkflowPayload(){
@@ -198,7 +204,7 @@ function selectWorkflow(id, options){
 function renderWorkflowNav(){
   var nav = document.getElementById('workflowNav');
   var picker = document.getElementById('workflowSelect');
-  document.getElementById('workflowCrud').classList.toggle('is-single', workflowStore.length <= 1);
+  document.getElementById('workflowCrud').classList.toggle('is-empty', workflowStore.length === 0);
   nav.replaceChildren();
   picker.replaceChildren();
   var placeholder = document.createElement('option');
@@ -233,7 +239,7 @@ function renderWorkflowNav(){
     meta.className = 'workflow-meta';
 
     var namespaces = document.createElement('span');
-    namespaces.textContent = pluralizeRu(workflow.namespace_count, 'неймспейс', 'неймспейса', 'неймспейсов');
+    namespaces.textContent = pluralizeRu(workflow.namespace_count, 'профессия', 'профессии', 'профессий');
     var phases = document.createElement('span');
     phases.textContent = pluralizeRu(workflow.phase_count, 'фаза', 'фазы', 'фаз');
 
@@ -245,7 +251,7 @@ function renderWorkflowNav(){
   });
 }
 function reloadWorkflows(nextId){
-  return fetch('/api/workflows')
+  return fetch(workflowApiUrl(null))
     .then(function(r){return r.json()})
     .then(function(d){
       if(!d.ok){showToast(d.error || 'Ошибка загрузки воркфлоу','error');return;}
@@ -275,14 +281,14 @@ function reloadWorkflows(nextId){
 function saveWorkflow(){
   if(selectedWorkflowId == null){ showToast('Воркфлоу не выбран','error'); return; }
   var payload = currentWorkflowPayload();
-  return fetch('/api/workflows/' + selectedWorkflowId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+  return fetch(workflowApiUrl(selectedWorkflowId),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
     .then(function(r){return r.json()})
     .then(function(d){ if(d.ok){ window.SdlcPlatformNavigation.saved(document.getElementById('workflowForm')); showToast('Воркфлоу сохранён','success'); return reloadWorkflows(selectedWorkflowId); } showToast(d.error || 'Ошибка','error'); })
     .catch(showRequestError);
 }
 function createWorkflow(){
   var payload = currentWorkflowPayload();
-  return fetch('/api/workflows',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+  return fetch(workflowApiUrl(null),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
     .then(function(r){return r.json()})
     .then(function(d){
       if(d.ok){
@@ -301,14 +307,14 @@ async function deleteWorkflow(){
   var workflow = workflowById(selectedWorkflowId);
   var title = workflow ? 'Удалить воркфлоу «' + workflow.name + '»?' : 'Удалить воркфлоу?';
   var message = workflow
-    ? '«' + workflow.name + '» будет удалён. Пустые неймспейсы будут переведены на воркфлоу по умолчанию.'
+    ? '«' + workflow.name + '» будет удалён. Фазы этого воркфлоу тоже будут удалены.'
     : 'Воркфлоу будет удалён.';
   if(!await requestConfirmation({eyebrow:'Удаление воркфлоу',title:title,message:message,confirmLabel:'Удалить'})) return;
   var workflowId = selectedWorkflowId;
   var button = document.getElementById('deleteWorkflowButton');
   button.disabled = true;
   button.textContent = 'Удаление…';
-  return fetch('/api/workflows/' + workflowId,{method:'DELETE'})
+  return fetch(workflowApiUrl(workflowId),{method:'DELETE'})
     .then(function(r){return r.json()})
     .then(function(d){
       if(d.ok){

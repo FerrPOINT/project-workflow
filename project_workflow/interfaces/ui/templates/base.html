@@ -1,9 +1,9 @@
 {% import "base/macros.html" as base_ui %}
+{% from "profession_selector.html" import profession_selector %}
 {% set active_namespace = theme_namespace if theme_namespace is defined else none %}
 {% set active_namespace_id = active_namespace.id if active_namespace else none %}
-{% set accent_text = active_namespace.theme_color | accent_foreground if active_namespace else none %}
 <!DOCTYPE html>
-<html lang="ru" data-theme="dark" data-theme-storage-key="workflow-theme"{% if active_namespace %} style="--accent:{{ active_namespace.theme_color }};--accent-hover:{{ active_namespace.theme_color }};--accent-soft:{{ active_namespace.theme_color }}26;--accent-foreground:{{ accent_text }};--accent-hover-foreground:{{ accent_text }}"{% endif %}>
+<html lang="ru" data-theme="dark" data-theme-storage-key="workflow-theme">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -21,8 +21,6 @@ document.documentElement.dataset.theme=window.SdlcThemePreference.read("workflow
   --border:rgba(255,255,255,.06);--border-strong:rgba(255,255,255,.10);
   --green:#22c55e;--green-soft:rgba(34,197,94,.12);--red:#ef4444;--red-soft:rgba(239,68,68,.12);
   --orange:#f59e0b;--orange-soft:rgba(245,158,11,.12);--yellow:#eab308;--yellow-soft:rgba(234,179,8,.12);--blue:#3b82f6;
-  --shell-sidebar-expanded:264px;--shell-sidebar-compact:72px;--shell-header-height:60px;
-  --shell-page-gutter:clamp(16px,2vw,32px);--shell-page-block-gap:20px;--shell-readable-width:760px;--shell-aside-width:320px;
   --sidebar-width:var(--shell-sidebar-expanded);--header-height:var(--shell-header-height);
 }
 html[data-theme='gray']{
@@ -66,8 +64,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .sidebar-logo{min-width:0;color:var(--text)}
 .brand-link{display:flex;align-items:center;gap:10px;color:inherit;text-decoration:none;min-width:40px;min-height:40px;padding:4px}
 .brand-link:hover{color:inherit;text-decoration:none}
-.brand-mark{width:32px;height:32px;border-radius:8px;background:var(--accent-soft);border:1px solid var(--accent);color:var(--accent-readable);display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto}
-.brand-mark svg{width:18px;height:18px}
+.brand-mark{border-radius:8px;background:var(--accent-soft);border:1px solid var(--accent);color:var(--accent-readable);display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto}
 .brand-text{display:flex;flex-direction:column;min-width:0;line-height:1.1}
 .brand-name{font-size:14px;font-weight:700;color:var(--text);max-width:148px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .brand-subname{font-size:11px;font-weight:600;color:var(--text-secondary);max-width:148px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -108,8 +105,26 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .header-title{font-size:15px;font-weight:600}
 .header-actions{display:flex;min-width:0;gap:10px;align-items:center}
 .header .btn{display:inline-flex;min-height:40px;align-items:center}
-.namespace-switcher{display:flex;align-items:center;gap:6px;min-width:0}
+.namespace-switcher{position:relative;min-width:0}
 .namespace-select{width:190px;max-width:26vw;min-height:40px;font-weight:600;color:var(--text);background:var(--surface)}
+.namespace-select[hidden]{display:none}
+.namespace-trigger{display:flex;align-items:center;gap:10px;min-height:40px;padding:5px 10px;border:1px solid var(--border-strong);border-radius:8px;background:var(--surface);color:var(--text);cursor:pointer;list-style:none;font-weight:600}
+.namespace-trigger::-webkit-details-marker{display:none}
+.namespace-trigger:hover,.namespace-switcher[open]>.namespace-trigger{background:var(--surface-hover);border-color:var(--accent)}
+.namespace-selector-mark{display:inline-flex;align-items:center;justify-content:center;flex:0 0 28px;width:28px;height:28px;border-radius:6px;background:color-mix(in srgb,var(--namespace-color,var(--accent)) 14%,transparent);color:var(--namespace-color,var(--accent));border:1px solid color-mix(in srgb,var(--namespace-color,var(--accent)) 45%,transparent)}
+.namespace-selector-mark[hidden]{display:none}
+.namespace-selector-mark svg{width:17px;height:17px}
+.namespace-selector-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
+.namespace-selector-chevron{flex:0 0 auto;color:var(--text-muted);transition:transform .15s}
+.namespace-switcher[open] .namespace-selector-chevron{transform:rotate(180deg)}
+.namespace-options{position:absolute;right:0;top:calc(100% + 8px);z-index:250;width:320px;max-width:calc(100vw - 24px);max-height:min(420px,calc(100dvh - var(--header-height) - 24px));overflow-y:auto;overscroll-behavior:contain;padding:6px;background:var(--surface);border:1px solid var(--border-strong);border-radius:10px;box-shadow:0 16px 40px rgba(0,0,0,.45)}
+.namespace-option{display:flex;align-items:center;gap:10px;width:100%;min-height:46px;padding:7px 10px;border:0;border-radius:6px;background:transparent;color:var(--text);font:inherit;cursor:pointer}
+.namespace-option:hover,.namespace-option:focus-visible{background:var(--surface-hover)}
+.namespace-option .namespace-selector-name{white-space:normal;overflow-wrap:anywhere}
+.namespace-option[aria-selected='true']{background:var(--accent-soft);font-weight:600}
+.namespace-selector-check{visibility:hidden;color:var(--text-secondary)}
+.namespace-option[aria-selected='true'] .namespace-selector-check{visibility:visible}
+.namespace-picker-label{margin-bottom:8px;color:var(--text-muted);font-size:11px;font-weight:600;text-transform:uppercase}
 .service-menu{position:relative}
 .theme-select{height:40px;max-width:110px;padding:0 8px;border:1px solid var(--border-strong);border-radius:6px;background:var(--surface);color:var(--text);font:inherit;font-size:12px}
 .service-menu summary{height:40px;padding:0 10px;border:1px solid var(--border-strong);border-radius:6px;background:var(--surface);color:var(--text-secondary);display:flex;align-items:center;gap:8px;font-weight:600;cursor:pointer;list-style:none;white-space:nowrap}
@@ -324,7 +339,7 @@ textarea{resize:vertical;min-height:60px}
 .platform-header .service-menu summary{border:0;background:transparent;font-size:14px;padding-inline:8px}
 .platform-header .service-menu summary>span:first-of-type{max-width:160px;overflow:hidden;text-overflow:ellipsis}
 .platform-header .namespace-select{max-width:220px;width:100%;min-width:0}
-.platform-header-context .namespace-switcher{min-width:0;width:min(220px,100%)}
+.platform-header-context .namespace-switcher{min-width:0;width:min(280px,100%)}
 .platform-header-context{justify-content:flex-end}
 .service-menu-trigger-icon{display:none}
 @media(max-width:767px){.sidebar{z-index:100;top:0;height:100dvh}.mobile-drawer-title{display:flex}.platform-header .platform-header-context{display:none}.sidebar-utilities{display:block;padding:12px 20px}.sidebar-utilities label{display:block;margin-bottom:8px}.sidebar-utilities .namespace-select{width:100%;max-width:none}.platform-header-leading{flex-shrink:0}.platform-header .service-menu summary{min-width:44px;min-height:44px;justify-content:center}.platform-header .service-menu-trigger-label,.platform-header .service-menu-chevron{display:none}.platform-header .service-menu-trigger-icon{display:block}.platform-header .service-menu-popover{position:fixed;left:12px;right:12px;top:calc(var(--header-height) + 8px);width:auto;max-width:none}.page-header h1{font-size:22px}}
@@ -336,6 +351,7 @@ textarea{resize:vertical;min-height:60px}
 .base-ssr-shell .main{min-height:calc(100dvh - var(--header-height))}
 .base-ssr-shell .mobile-drawer-title{display:none}
 @media(max-width:767px){.base-ssr-shell .mobile-drawer-title{display:flex}}
+@media(max-width:767px){.sidebar-utilities .namespace-switcher{width:100%;min-width:0}.sidebar-utilities .namespace-options{position:static;width:100%;max-width:none;max-height:320px;margin-top:8px;box-shadow:none}}
 </style>
 </head>
 <body class="base-ssr-shell">
@@ -347,9 +363,9 @@ textarea{resize:vertical;min-height:60px}
 <aside class="sidebar" id="sidebar">
   <div class="sidebar-header mobile-drawer-title"><strong>Project Workflow</strong><button class="sidebar-close" onclick="closeSidebar()" aria-label="Закрыть навигацию">&times;</button></div>
   <nav class="sidebar-nav" aria-label="Основная навигация">
-    <a class="sidebar-link {% if page == 'namespace' %}active{% endif %}" href="/namespaces" aria-label="Неймспейсы" title="Неймспейсы" {% if page == 'namespace' %}aria-current="page"{% endif %}>
+    <a class="sidebar-link {% if page == 'namespace' %}active{% endif %}" href="/namespaces" aria-label="Профессии" title="Профессии" {% if page == 'namespace' %}aria-current="page"{% endif %}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h18"/><path d="M5 7V5a2 2 0 0 1 2-2h3"/><path d="M19 7v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7"/><path d="M9 12h6"/><path d="M9 16h4"/></svg>
-      <span class="sidebar-label">Неймспейсы</span>
+      <span class="sidebar-label">Профессии</span>
     </a>
     <div class="sidebar-section">ОБЗОР</div>
     <a class="sidebar-link {% if page == 'dashboard' %}active{% endif %}" href="/" aria-label="Дашборд" title="Дашборд" {% if page == 'dashboard' %}aria-current="page"{% endif %}>
@@ -369,20 +385,14 @@ textarea{resize:vertical;min-height:60px}
       <span class="sidebar-label">Задачи</span>
     </a>
     <div class="sidebar-section">УПРАВЛЕНИЕ</div>
-    <a class="sidebar-link {% if page == 'agents' %}active{% endif %}" href="/agents" aria-label="Агенты" title="Агенты" {% if page == 'agents' %}aria-current="page"{% endif %}>
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4z"/><path d="M2 20c0-2.21 3.58-4 8-4s8 1.79 8 4"/></svg>
-      <span class="sidebar-label">Агенты</span>
-    </a>
     <a class="sidebar-link {% if page == 'settings' %}active{% endif %}" href="/settings" aria-label="Команды CLI" title="Команды CLI" {% if page == 'settings' %}aria-current="page"{% endif %}>
       <span class="sidebar-cli-icon" aria-hidden="true">&gt;_</span>
       <span class="sidebar-label">Команды CLI</span>
     </a>
     <div class="sidebar-utilities">
       {% if namespaces is defined and namespaces %}
-      <label for="mobileNamespaceSelector">Пространство</label>
-      <select id="mobileNamespaceSelector" data-namespace-selector class="namespace-select" onchange="switchNamespace(this.value)">
-        {% for namespace in namespaces %}<option value="{{ namespace.id }}" {% if active_namespace_id == namespace.id %}selected{% endif %}>{{ namespace.name }}{% if namespace.workflow_name %} · {{ namespace.workflow_name }}{% endif %}</option>{% endfor %}
-      </select>
+      <p class="namespace-picker-label">Профессия</p>
+      {{ profession_selector('mobileNamespaceSelector', namespaces, active_namespace) }}
       {% endif %}
     </div>
     </nav>
@@ -397,7 +407,8 @@ textarea{resize:vertical;min-height:60px}
 <header class="platform-header" data-platform-header>
   <div class="platform-header-leading" data-platform-header-slot="leading">
     <button class="burger" id="burgerBtn" onclick="openSidebar()" aria-label="Открыть навигацию" aria-controls="sidebar" aria-expanded="false">☰</button>
-    <a class="brand-link" href="/" aria-label="Project Workflow" title="Project Workflow"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="{{ project_icon_path(default_project_icon) }}"></path></svg></span></a>
+    {# Base service-switcher: project-workflow uses the Lucide Workflow mark. #}
+    <a class="brand-link" href="/" aria-label="Project Workflow" title="Project Workflow"><span class="brand-mark base-shell-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="8" x="3" y="3" rx="2"/><path d="M7 11v4a2 2 0 0 0 2 2h4"/><rect width="8" height="8" x="13" y="13" rx="2"/></svg></span></a>
   </div>
   <div class="platform-header-services" data-platform-header-slot="services">
       <details class="service-menu" id="serviceMenu">
@@ -420,13 +431,7 @@ textarea{resize:vertical;min-height:60px}
   </div>
   <div class="platform-header-context" data-platform-header-slot="context">
       {% if namespaces is defined and namespaces %}
-      <div class="namespace-switcher">
-        <select class="namespace-select" id="namespaceSelector" data-namespace-selector aria-label="Выбор пространства" onchange="switchNamespace(this.value)">
-          {% for namespace in namespaces %}
-          <option value="{{ namespace.id }}" {% if active_namespace_id == namespace.id %}selected{% endif %}>{{ namespace.name }}{% if namespace.workflow_name %} · {{ namespace.workflow_name }}{% endif %}</option>
-          {% endfor %}
-        </select>
-      </div>
+      {{ profession_selector('namespaceSelector', namespaces, active_namespace) }}
       {% endif %}
   </div>
   <div class="platform-header-actions" data-platform-header-slot="actions">{{ base_ui.account() }}</div>
@@ -498,6 +503,7 @@ function openSidebar(){
   document.querySelector('.sidebar-close').focus();
 }
 function closeSidebar(){
+  document.querySelectorAll('.sidebar .namespace-switcher').forEach(function(picker){ picker.open = false; });
   document.getElementById('sidebar').classList.remove('open');
   document.getElementById('sidebarOverlay').classList.remove('show');
   document.getElementById('burgerBtn').setAttribute('aria-expanded','false');
@@ -595,11 +601,74 @@ function requestConfirmation(options){
     document.addEventListener('keydown', onKeyDown);
   });
 }
+function refreshNamespaceSelectors(){
+  var paths = {{ project_icon_paths | tojson }};
+  document.querySelectorAll('[data-namespace-selector]').forEach(function(select){
+    var picker = select.closest('.namespace-switcher');
+    var trigger = picker.querySelector('summary');
+    var current = select.selectedOptions[0];
+    picker.hidden = select.options.length === 0;
+    var mark = trigger.querySelector('.namespace-selector-mark');
+    mark.hidden = !current || !current.value;
+    trigger.querySelector('.namespace-selector-name').textContent = current ? current.textContent : 'Каталог воркфлоу';
+    if(current && current.value){
+      trigger.style.setProperty('--namespace-color', current.dataset.color);
+      mark.querySelector('path').setAttribute('d', paths[current.dataset.icon] || paths.folder);
+    }
+    var list = picker.querySelector('[role="listbox"]');
+    list.replaceChildren();
+    Array.from(select.options).filter(function(option){ return option.value; }).forEach(function(option){
+      var item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'namespace-option';
+      item.dataset.value = option.value;
+      item.setAttribute('role', 'option');
+      item.setAttribute('aria-selected', String(option.selected));
+      item.tabIndex = -1;
+      item.style.setProperty('--namespace-color', option.dataset.color);
+      var icon = mark.cloneNode(true);
+      icon.hidden = false;
+      icon.querySelector('path').setAttribute('d', paths[option.dataset.icon] || paths.folder);
+      var name = document.createElement('span');
+      name.className = 'namespace-selector-name';
+      name.textContent = option.textContent;
+      var check = document.createElement('span');
+      check.className = 'namespace-selector-check';
+      check.setAttribute('aria-hidden', 'true');
+      check.textContent = '✓';
+      item.append(icon, name, check);
+      item.onclick = function(){ picker.open = false; switchNamespace(option.value); };
+      list.appendChild(item);
+    });
+  });
+}
+refreshNamespaceSelectors();
+document.querySelectorAll('.namespace-switcher').forEach(function(picker){
+  var trigger = picker.querySelector('summary');
+  function close(restoreFocus){ picker.open = false; if(restoreFocus){ trigger.focus(); } }
+  picker.addEventListener('toggle', function(){ trigger.setAttribute('aria-expanded', String(picker.open)); });
+  picker.addEventListener('keydown', function(event){
+    if(event.key === 'Escape' && picker.open){ event.preventDefault(); event.stopPropagation(); close(true); return; }
+    if(!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)){ return; }
+    event.preventDefault();
+    picker.open = true;
+    var items = Array.from(picker.querySelectorAll('[role="option"]'));
+    if(!items.length){ return; }
+    var index = items.indexOf(document.activeElement);
+    if(event.key === 'Home'){ index = 0; }
+    else if(event.key === 'End'){ index = items.length - 1; }
+    else if(index < 0){ index = Math.max(0, items.findIndex(function(item){ return item.getAttribute('aria-selected') === 'true'; })); }
+    else{ index = (index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length; }
+    items[index].focus();
+  });
+  document.addEventListener('click', function(event){ if(!picker.contains(event.target)){ close(false); } });
+  picker.addEventListener('focusout', function(event){ if(event.relatedTarget && !picker.contains(event.relatedTarget)){ close(false); } });
+});
 function switchNamespace(namespaceId){
   if(!namespaceId){return;}
   if(!window.SdlcPlatformNavigation.embedded) document.cookie={{ namespace_cookie_name | tojson }}+'='+encodeURIComponent(namespaceId)+'; path=/; SameSite=Lax'{% if namespace_cookie_secure %}+'; Secure'{% endif %};
   var url=new URL(window.location.href);
-  if(url.pathname === '/phases'){
+  if(url.pathname === '/phases' || url.pathname === '/workflows'){
     url.searchParams.delete('workflow_id');
   }
   if(url.pathname.startsWith('/phase/')){

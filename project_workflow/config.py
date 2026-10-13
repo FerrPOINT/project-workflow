@@ -45,12 +45,20 @@ class Settings(BaseSettings):
     AUTH_PUBLIC_ORIGIN: str = "http://localhost:8812"
     AUTH_SESSION_SECRET: str = ""
     AUTH_COOKIE_SECURE: bool = False
+    PROJECT_WORKFLOW_NAMESPACE_PROVISIONER_SUBJECT: str = ""
 
     # Private role-token map for isolated agent containers, not the browser UI.
     # Shape: {"analyst":"<token>", ...}. Empty keeps the bridge fail-closed.
     PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON: str = ""
     PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON: str = ""
     PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN: str = ""
+    PROJECT_WORKFLOW_PM_READBACK_URL: str = ""
+    PROJECT_WORKFLOW_PM_READBACK_TOKEN: str = ""
+    PROJECT_WORKFLOW_PM_SCOPE_SECRET: str = ""
+    PROJECT_WORKFLOW_BASE_SKILLS_ROOT: str = ""
+    # Deployment-registered Base reader subject UUID -> canonical role or "catalog".
+    # A PAT scope/email or legacy shared token alone never registers a machine.
+    PROJECT_WORKFLOW_BASE_READER_SUBJECTS_JSON: str = ""
 
     @field_validator("DATABASE_URL", mode="before")
     @classmethod
@@ -73,9 +81,10 @@ CATALOG_VARIANT = os.environ.get("PROJECT_WORKFLOW_CATALOG_VARIANT", "legacy")
 if CATALOG_VARIANT not in {"legacy", "base"}:
     raise ValueError("Unknown managed catalog variant")
 MANAGED_CATALOG_PATH = _pkg_dir / "references" / (
-    "base_sdlc_catalog_v1.json" if CATALOG_VARIANT == "base" else "hermes_sdlc_catalog_v1.json"
+    "base_sdlc_catalog_v2.json" if CATALOG_VARIANT == "base" else "hermes_sdlc_catalog_v1.json"
 )
 LEGACY_UNMANAGED_SEED_PATH = _pkg_dir / "references" / "legacy_unmanaged_seed.json"
+MANAGED_NAMESPACE_WORKFLOW_NAME = "Дефолтный"
 LEGACY_UNMANAGED_WORKFLOW_NAME = "sdlc-business-tech-v1"
 # Compatibility alias for legacy unmanaged editor/tests. Managed startup does
 # not consume this value.

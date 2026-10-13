@@ -207,7 +207,6 @@ class TestAppState:
         state.phase_service = lambda: RealState.phase_service(state)
         state.project_service = lambda: RealState.project_service(state)
         state.task_service = lambda: RealState.task_service(state)
-        state.agent_service = lambda: RealState.agent_service(state)
         state.instruction_service = lambda: RealState.instruction_service(state)
         state.get_service = lambda: RealState.get_service(state)
         state.get_db = lambda: RealState.get_db(state)
@@ -215,11 +214,10 @@ class TestAppState:
         assert state.phase_service() is not None
         assert state.project_service() is not None
         assert state.task_service() is not None
-        assert state.agent_service() is not None
         assert state.instruction_service() is not None
         assert state.get_service() is not None
         assert state.get_db() is not None
-        assert state.get_uow.call_count >= 7
+        assert state.get_uow.call_count >= 6
 
     def test_get_uow_sqlite(self):
         import tempfile

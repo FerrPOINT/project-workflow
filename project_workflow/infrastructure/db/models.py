@@ -30,6 +30,85 @@ class Base(DeclarativeBase):
     pass
 
 
+class PMNamespaceOwnership(Base):
+    __tablename__ = "pm_namespace_ownership"
+
+    ownership_ref: Mapped[str] = mapped_column(String(36), primary_key=True)
+    namespace_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="RESTRICT"), unique=True)
+    tracker_instance_ref: Mapped[str] = mapped_column(String(128))
+    tracker_project_ref: Mapped[str] = mapped_column(String(36))
+    authority_issuer: Mapped[str] = mapped_column(String(512))
+    provisioner_subject: Mapped[str] = mapped_column(String(36))
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    __table_args__ = (
+        UniqueConstraint("tracker_instance_ref", "tracker_project_ref", name="uq_pm_namespace_tracker_project"),
+        CheckConstraint("length(tracker_instance_ref) BETWEEN 1 AND 128", name="ck_pm_namespace_instance_length"),
+    )
+
+
+class PMExecution(Base):
+    __tablename__ = "pm_executions"
+
+    execution_ref: Mapped[str] = mapped_column(String(512), primary_key=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id", ondelete="RESTRICT"), unique=True)
+    assignment_id: Mapped[int] = mapped_column(ForeignKey("task_runtime_assignments.id", ondelete="RESTRICT"))
+    tracker_instance_ref: Mapped[str] = mapped_column(String(512))
+    tracker_project_ref: Mapped[str] = mapped_column(String(512))
+    task_ref: Mapped[str] = mapped_column(String(512))
+    root_ref: Mapped[str] = mapped_column(String(512))
+    agent_ref: Mapped[str] = mapped_column(String(512))
+    identity_json: Mapped[str] = mapped_column(Text)
+    state: Mapped[str] = mapped_column(String(32))
+    version: Mapped[int] = mapped_column(BigInteger)
+    fence: Mapped[int] = mapped_column(BigInteger)
+    session_run_id: Mapped[str] = mapped_column(String(36))
+    phase_id: Mapped[int] = mapped_column(ForeignKey("phases.id", ondelete="RESTRICT"))
+    checkpoint_json: Mapped[str | None] = mapped_column(Text)
+    resume_operation_key: Mapped[str | None] = mapped_column(String(128))
+    resume_session_run_id: Mapped[str | None] = mapped_column(String(36), unique=True)
+
+    __table_args__ = (
+        UniqueConstraint("tracker_instance_ref", "task_ref", "agent_ref", name="uq_pm_task_agent"),
+        CheckConstraint("state IN ('active', 'waiting', 'resume_pending')", name="ck_pm_state"),
+        CheckConstraint("version > 0 AND fence > 0", name="ck_pm_versions"),
+        CheckConstraint("state = 'active' OR checkpoint_json IS NOT NULL", name="ck_pm_checkpoint"),
+        CheckConstraint(
+            "state != 'resume_pending' OR (resume_operation_key IS NOT NULL AND resume_session_run_id IS NOT NULL)",
+            name="ck_pm_resume",
+        ),
+    )
+
+
+class PMRun(Base):
+    __tablename__ = "pm_runs"
+
+    session_run_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    run_ref: Mapped[str] = mapped_column(String(512))
+    execution_ref: Mapped[str] = mapped_column(ForeignKey("pm_executions.execution_ref", ondelete="RESTRICT"))
+    binding_ref: Mapped[str] = mapped_column(String(512))
+    fence: Mapped[int] = mapped_column(BigInteger)
+    observation_json: Mapped[str] = mapped_column(Text)
+    terminal_json: Mapped[str | None] = mapped_column(Text)
+    __table_args__ = (
+        UniqueConstraint("execution_ref", "fence", name="uq_pm_run_fence"),
+        CheckConstraint("fence > 0", name="ck_pm_run_fence"),
+    )
+
+
+class PMOperation(Base):
+    __tablename__ = "pm_operations"
+
+    operation_key: Mapped[str] = mapped_column(String(128), primary_key=True)
+    execution_ref: Mapped[str] = mapped_column(ForeignKey("pm_executions.execution_ref", ondelete="RESTRICT"))
+    kind: Mapped[str] = mapped_column(String(32))
+    request_sha256: Mapped[str] = mapped_column(String(64))
+    result_json: Mapped[str] = mapped_column(Text)
+    __table_args__ = (
+        Index("ix_pm_operations_execution_kind", "execution_ref", "kind"),
+        CheckConstraint("kind IN ('bind', 'checkpoint', 'resume', 'rebind')", name="ck_pm_operation_kind"),
+        CheckConstraint("length(request_sha256) = 64", name="ck_pm_operation_hash"),
+    )
+
 class ResourceExecutionContext(Base):
     """Immutable verified PDLC context; global mode catalogs remain independent."""
 
@@ -42,22 +121,6 @@ class ResourceExecutionContext(Base):
     mode_id: Mapped[int] = mapped_column(ForeignKey("workflow_modes.id", ondelete="RESTRICT"), nullable=False)
     created_by_subject: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-
-
-class Agent(Base):
-    __tablename__ = "agents"
-
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    name: Mapped[str] = mapped_column(String, nullable=False)
-    description: Mapped[str] = mapped_column(String, nullable=False, default="", server_default=text("''"))
-    hermes_profile: Mapped[str | None] = mapped_column(String(251), nullable=True)
-
-    __table_args__ = (
-        Index("uq_agents_name", "name", unique=True),
-        Index("uq_agents_hermes_profile", "hermes_profile", unique=True),
-    )
-
-    phases: Mapped[list[Phase]] = relationship("Phase", back_populates="agent")
 
 
 class Workflow(Base):
@@ -87,6 +150,18 @@ class Workflow(Base):
     )
     projects: Mapped[list[Project]] = relationship("Project", back_populates="workflow", cascade="all, delete-orphan")
     tasks: Mapped[list[Task]] = relationship("Task", back_populates="workflow")
+
+
+class ProfessionWorkflow(Base):
+    """Membership in a profession's collection, independent of legacy task defaults."""
+
+    __tablename__ = "profession_workflows"
+    workflow_id: Mapped[int] = mapped_column(
+        ForeignKey("workflows.id", ondelete="CASCADE"), primary_key=True
+    )
+    profession_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE", onupdate="CASCADE"), primary_key=True, index=True
+    )
 
 
 class WorkflowMode(Base):
@@ -156,7 +231,6 @@ class Phase(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     phase_order: Mapped[int] = mapped_column(nullable=False)
-    agent_id: Mapped[int | None] = mapped_column(ForeignKey("agents.id", ondelete="RESTRICT"), nullable=True)
     parallel_with_phase_id: Mapped[int | None] = mapped_column(nullable=True)
     rollback_target_phase_id: Mapped[int | None] = mapped_column(nullable=True)
     execution_type: Mapped[str] = mapped_column(
@@ -196,7 +270,6 @@ class Phase(Base):
 
     workflow: Mapped[Workflow] = relationship("Workflow", back_populates="phases", overlaps="phases,mode")
     mode: Mapped[WorkflowMode] = relationship("WorkflowMode", back_populates="phases", overlaps="phases,workflow")
-    agent: Mapped[Agent | None] = relationship("Agent", back_populates="phases")
     instructions: Mapped[list[PhaseInstruction]] = relationship(
         "PhaseInstruction", back_populates="phase", cascade="all, delete-orphan"
     )
@@ -273,6 +346,7 @@ class Project(Base):
     theme_icon: Mapped[str] = mapped_column(String(32), nullable=False, default="folder", server_default="folder")
     theme_color: Mapped[str] = mapped_column(String(7), nullable=False, default="#5E6AD2", server_default="#5E6AD2")
     cli_command: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    launch_profile: Mapped[str | None] = mapped_column(String(251), nullable=True)
     key_prefixes: Mapped[str] = mapped_column(String, nullable=False, default="[]", server_default="[]")
 
     __table_args__ = (UniqueConstraint("id", "workflow_id", name="uq_projects_id_workflow"),)
@@ -382,6 +456,7 @@ class TaskRuntimeAssignment(Base):
     hermes_run_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
     bind_operation_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
     bind_request_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    concrete_agent_ref: Mapped[str | None] = mapped_column(String(36), nullable=True)
     workspace_generation: Mapped[int | None] = mapped_column(nullable=True)
     lease_generation: Mapped[int | None] = mapped_column(nullable=True)
     exact_input_refs: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -468,7 +543,20 @@ class TaskRuntimeAssignment(Base):
             "((binding_ref IS NULL AND hermes_run_ref IS NULL AND bind_operation_key IS NULL AND "
             "bind_request_sha256 IS NULL) OR (binding_ref IS NOT NULL AND hermes_run_ref IS NOT NULL AND "
             "((bind_operation_key IS NULL AND bind_request_sha256 IS NULL) OR "
-            "(bind_operation_key IS NOT NULL AND bind_request_sha256 IS NOT NULL)))))",
+            "(bind_operation_key IS NOT NULL AND bind_request_sha256 IS NOT NULL))))) OR "
+            "(workflow_key IS NOT NULL AND workflow_key = 'hermes-sdlc:project_manager' AND "
+            "role_key IS NOT NULL AND role_key = 'project_manager' AND execution_scope IS NOT NULL AND "
+            "execution_scope = 'business' AND stage_key IS NOT NULL AND stage_key = 'draft' AND "
+            "attempt_number IS NOT NULL AND attempt_number = 1 AND cycle_number = 0 AND "
+            "business_task_ref IS NOT NULL AND root_task_ref IS NOT NULL AND "
+            "work_item_ref IS NULL AND work_item_revision IS NULL AND queue_item_ref IS NULL AND "
+            "task_workspace_ref IS NULL AND workspace_revision IS NULL AND workspace_generation IS NULL AND "
+            "tech_execution_workspace_ref IS NULL AND tech_execution_attempt_ref IS NULL AND "
+            "decomposition_revision_ref IS NULL AND stage_revision IS NOT NULL AND assignment_ref IS NOT NULL AND "
+            "lease_generation IS NOT NULL AND exact_input_refs IS NOT NULL AND payload_sha256 IS NOT NULL AND "
+            "((binding_ref IS NULL AND hermes_run_ref IS NULL AND bind_operation_key IS NULL AND "
+            "bind_request_sha256 IS NULL) OR (binding_ref IS NOT NULL AND hermes_run_ref IS NOT NULL AND "
+            "bind_operation_key IS NOT NULL AND bind_request_sha256 IS NOT NULL)))",
             name="ck_task_runtime_assignments_binding_complete",
         ),
         CheckConstraint(
@@ -486,6 +574,12 @@ class TaskRuntimeAssignment(Base):
         CheckConstraint(
             "bind_request_sha256 IS NULL OR length(bind_request_sha256) = 64",
             name="ck_task_runtime_assignments_bind_request_sha256",
+        ),
+        CheckConstraint(
+            "concrete_agent_ref IS NULL OR (length(concrete_agent_ref) = 36 AND "
+            "concrete_agent_ref = lower(concrete_agent_ref) AND binding_ref IS NOT NULL AND "
+            "hermes_run_ref IS NOT NULL AND bind_operation_key IS NOT NULL AND bind_request_sha256 IS NOT NULL)",
+            name="ck_task_runtime_assignments_concrete_agent_binding",
         ),
         Index("ix_task_runtime_assignments_task_id", "task_id"),
         Index("ix_task_runtime_assignments_business_task_ref", "business_task_ref"),

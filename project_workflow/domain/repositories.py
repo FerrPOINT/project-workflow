@@ -8,7 +8,6 @@ from collections.abc import Mapping, Sequence
 from typing import Any, Literal
 
 from project_workflow.domain import (
-    Agent,
     Phase,
     Project,
     Task,
@@ -25,6 +24,18 @@ class WorkflowRepository(ABC):
 
     @abstractmethod
     def list(self) -> Sequence[Workflow]: ...
+
+    @abstractmethod
+    def count_professions_by_workflow(self) -> Mapping[int, int]: ...
+
+    @abstractmethod
+    def list_by_profession(self, profession_id: int) -> Sequence[Workflow]: ...
+
+    @abstractmethod
+    def belongs_to_profession(self, workflow_id: int, profession_id: int) -> bool: ...
+
+    @abstractmethod
+    def assign_profession(self, workflow_id: int, profession_id: int) -> None: ...
 
     @abstractmethod
     def get_by_id(self, workflow_id: int) -> Workflow | None: ...
@@ -93,11 +104,6 @@ class PhaseRepository(ABC):
     @abstractmethod
     def reference_kinds(self, phase_id: int) -> set[str]: ...
 
-    @abstractmethod
-    def has_agent_reference(self, agent_id: int) -> bool: ...
-
-    @abstractmethod
-    def workflow_ids_for_agent(self, agent_id: int) -> Sequence[int]: ...
 
     @abstractmethod
     def resequence(self, workflow_id: int, mode_id: int | None = None) -> None: ...
@@ -170,6 +176,18 @@ class ProjectRepository(ABC):
     def lock_prefix_namespace(self) -> None: ...
 
     @abstractmethod
+    def get_pm_ownership(self, namespace_id: int) -> Mapping[str, Any] | None: ...
+
+    @abstractmethod
+    def lock_pm_namespace(self, namespace_id: int) -> Project | None: ...
+
+    @abstractmethod
+    def get_pm_ownership_by_tracker(self, instance_ref: str, project_ref: str) -> Mapping[str, Any] | None: ...
+
+    @abstractmethod
+    def create_pm_ownership(self, data: Mapping[str, Any]) -> None: ...
+
+    @abstractmethod
     def create(self, data: dict[str, Any]) -> int: ...
 
     @abstractmethod
@@ -201,6 +219,21 @@ class TaskRepository(ABC):
 
     @abstractmethod
     def lock(self, task_id: int) -> Task | None: ...
+
+    @abstractmethod
+    def task_has_pm_execution(self, task_id: int) -> bool:
+        """Check any immutable PM enrollment while the caller holds the task lock."""
+        ...
+
+    @abstractmethod
+    def task_has_pm_draft_assignment(self, task_id: int) -> bool:
+        """Whether immutable initial PM reservation history prevents generic replacement."""
+        ...
+
+    @abstractmethod
+    def assignment_has_pm_execution(self, task_id: int, assignment_id: int) -> bool:
+        """Check immutable PM enrollment while the caller holds the task lock."""
+        ...
 
     @abstractmethod
     def create(self, data: dict[str, Any]) -> int: ...
@@ -237,6 +270,7 @@ class TaskRepository(ABC):
         hermes_run_ref: str,
         bind_operation_key: str,
         bind_request_sha256: str,
+        concrete_agent_ref: str | None,
     ) -> bool: ...
 
     @abstractmethod
@@ -272,36 +306,6 @@ class TaskRepository(ABC):
 
     @abstractmethod
     def list_phase_events_batch(self, task_ids: Sequence[int]) -> Mapping[int, Sequence[TaskPhaseEvent]]: ...
-
-class AgentRepository(ABC):
-    """Persistence contract for agents."""
-
-    @abstractmethod
-    def list(self) -> Sequence[Agent]: ...
-
-    @abstractmethod
-    def list_by_ids(self, agent_ids: Sequence[int]) -> Sequence[Agent]: ...
-
-    @abstractmethod
-    def get_by_id(self, agent_id: int) -> Agent | None: ...
-
-    @abstractmethod
-    def get_by_name(self, name: str) -> Agent | None: ...
-
-    @abstractmethod
-    def get_by_hermes_profile(self, profile: str) -> Agent | None: ...
-
-    @abstractmethod
-    def lock(self, agent_id: int) -> Agent | None: ...
-
-    @abstractmethod
-    def create(self, data: dict[str, Any]) -> int: ...
-
-    @abstractmethod
-    def update(self, agent_id: int, data: dict[str, Any]) -> None: ...
-
-    @abstractmethod
-    def delete(self, agent_id: int) -> None: ...
 
 
 class TaskStepHistoryRepository(ABC):
@@ -422,9 +426,6 @@ class UnitOfWork(ABC):
     @abstractmethod
     def tasks(self) -> TaskRepository: ...
 
-    @property
-    @abstractmethod
-    def agents(self) -> AgentRepository: ...
 
     @property
     @abstractmethod

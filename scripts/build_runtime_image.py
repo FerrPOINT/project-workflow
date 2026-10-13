@@ -71,7 +71,7 @@ def immutable_git_snapshot(root: Path, revision: str) -> GitSourceSnapshot:
 
 
 CATALOG_PATH = "project_workflow/references/hermes_sdlc_catalog_v1.json"
-BASE_CATALOG_PATH = "project_workflow/references/base_sdlc_catalog_v1.json"
+BASE_CATALOG_PATH = "project_workflow/references/base_sdlc_catalog_v2.json"
 COMPATIBILITY_PATH = "runtime-compatibility.json"
 SKILLS_MANIFEST_PATH = "runtime-skills-manifest.json"
 
@@ -90,7 +90,7 @@ def derive_compatibility(root: Path) -> dict[str, object]:
     variant = os.environ.get("PROJECT_WORKFLOW_CATALOG_VARIANT", "legacy")
     catalog_path = BASE_CATALOG_PATH if variant == "base" else CATALOG_PATH
     catalog = load_managed_catalog(root / catalog_path)
-    if variant not in {"legacy", "base"} or catalog.catalog_version != (3 if variant == "base" else 2):
+    if variant not in {"legacy", "base"} or catalog.catalog_version != (4 if variant == "base" else 2):
         raise BuildProvenanceError("Compatible image requires canonical catalog version 2")
     manifest = json.loads((root / SKILLS_MANIFEST_PATH).read_bytes())
     if manifest.get("schema") != catalog.skills_source.manifest_schema:
@@ -105,7 +105,7 @@ def derive_compatibility(root: Path) -> dict[str, object]:
         def digest(value: object) -> str:
             return hashlib.sha256(_json_bytes(value)).hexdigest()
         return {
-            "catalogVersion": 3,
+            "catalogVersion": catalog.catalog_version,
             "catalogRevision": provenance.source_revision,
             "catalogSha256": digest(catalog.model_dump(mode="json", by_alias=True)),
             "skillsRevision": catalog.skills_source.revision,

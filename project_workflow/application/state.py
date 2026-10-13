@@ -13,7 +13,6 @@ from ..application.phase_service import PhaseService
 from ..infrastructure.db.session import get_engine
 from ..infrastructure.db.uow import SAUnitOfWork
 from . import (
-    AgentService,
     InstructionService,
     PhaseServiceApp,
     ProjectService,
@@ -60,8 +59,6 @@ class _AppState:
     def task_service(self) -> TaskService:
         return TaskService(self.get_uow())
 
-    def agent_service(self) -> AgentService:
-        return AgentService(self.get_uow())
 
     def instruction_service(self) -> InstructionService:
         return InstructionService(self.get_uow())

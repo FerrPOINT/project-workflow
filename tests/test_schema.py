@@ -49,12 +49,7 @@ class TestEnsurePhaseCatalog:
         assert len(codes) > 0
         for code in (phase.code for phase in load_phases_from_seed()):
             assert code in codes
-        assert all(phase.delegate for phase in phases)
-        assert all(
-            phase.delegate.hermes_profile or phase.delegate.agent == "codex-operator"
-            for phase in phases
-            if phase.delegate
-        )
+        assert all(phase.delegate is None for phase in phases)
 
     def test_idempotent_rerun(self, fresh_db):
         ensure_phase_catalog(fresh_db)

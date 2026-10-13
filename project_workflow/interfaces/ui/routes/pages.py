@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from typing import Annotated, Any
 
 from fastapi import Path, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from project_workflow.application.phase_service import PhaseService
 from project_workflow.config import get_settings
@@ -176,7 +176,7 @@ def _namespace_error_page(request: Request, context: dict[str, Any], *, page: st
             "message": "Некорректный namespace_id: ожидается положительное целое число.",
             "status_code": 422,
             "back_url": "/namespaces",
-            "back_label": "К неймспейсам",
+            "back_label": "К профессиям",
         }
         return _template_response(
             request=request,
@@ -190,11 +190,11 @@ def _namespace_error_page(request: Request, context: dict[str, Any], *, page: st
     context = {
         **context,
         "page": page,
-        "title": "Неймспейс не найден",
-        "message": f"Неймспейс {missing_namespace_id} не найден.",
+        "title": "Профессия не найдена",
+        "message": f"Профессия {missing_namespace_id} не найдена.",
         "status_code": 404,
         "back_url": "/namespaces",
-        "back_label": "К неймспейсам",
+        "back_label": "К профессиям",
     }
     return _template_response(
         request=request,
@@ -291,7 +291,7 @@ def _workflow_not_in_selected_namespace_page(request: Request, context: dict[str
         **context,
         "page": "phases",
         "title": "Воркфлоу не найден",
-        "message": "Воркфлоу недоступен в выбранном неймспейсе.",
+        "message": "Воркфлоу недоступен в выбранной профессии.",
         "status_code": 404,
         "back_url": back_url,
         "back_label": "К фазам",
@@ -355,27 +355,18 @@ def _task_data_error_page(
     )
 
 
-def _workflow_is_unassigned(workflow_id: Any) -> bool:
-    if not isinstance(workflow_id, int):
-        return False
-    workflow = next((item for item in _load_workflows() if item.get("id") == workflow_id), None)
-    if workflow is None:
-        return False
-    try:
-        return int(workflow.get("namespace_count") or 0) == 0
-    except (TypeError, ValueError):
-        return False
-
-
-def _phase_matches_selected_namespace(phase: dict[str, Any], context: dict[str, Any]) -> bool:
+def _workflow_matches_selected_namespace(workflow_id: int | None, context: dict[str, Any]) -> bool:
     selected_namespace = context.get("selected_namespace")
-    selected_workflow_id = selected_namespace.get("workflow_id") if isinstance(selected_namespace, dict) else None
-    phase_workflow_id = phase.get("workflow_id")
-    return (
-        not isinstance(selected_workflow_id, int)
-        or phase_workflow_id == selected_workflow_id
-        or _workflow_is_unassigned(phase_workflow_id)
-    )
+    if not isinstance(selected_namespace, dict):
+        return True
+    if workflow_id is not None and (
+        _app_state.workflow_service().belongs_to_profession(workflow_id, selected_namespace["id"])
+    ):
+        return True
+    if context["request"].query_params.get("namespace_id") is not None:
+        return False
+    context.update(selected_namespace=None, theme_namespace=None)
+    return True
 
 
 def validation_error_page(request: Request, errors: Sequence[Any]) -> HTMLResponse | None:
@@ -395,7 +386,7 @@ def validation_error_page(request: Request, errors: Sequence[Any]) -> HTMLRespon
     return None
 
 
-async def index(request: Request) -> HTMLResponse:
+def index(request: Request) -> HTMLResponse:
     """Минимальный dashboard без заглушек."""
     context = _namespace_context(request, page="dashboard")
     if error_response := _namespace_error_page(request, context, page="dashboard"):
@@ -419,7 +410,7 @@ async def index(request: Request) -> HTMLResponse:
     )
 
 
-async def phases_page(request: Request) -> HTMLResponse:
+def phases_page(request: Request) -> HTMLResponse:
     context = _namespace_context(request, page="phases")
     if error_response := _namespace_error_page(request, context, page="phases"):
         return error_response
@@ -446,30 +437,16 @@ async def phases_page(request: Request) -> HTMLResponse:
             page="phases",
         )
     selected_namespace = context.get("selected_namespace")
-    selected_namespace_workflow_id = (
-        selected_namespace.get("workflow_id") if isinstance(selected_namespace, dict) else None
-    )
+    profession_id = selected_namespace.get("id") if isinstance(selected_namespace, dict) else None
+    scoped_workflows = _load_workflows(profession_id) if profession_id is not None else _load_workflows()
+    if workflow_id is None and scoped_workflows:
+        workflow_id = scoped_workflows[0]["id"]
     has_explicit_namespace = request.query_params.get("namespace_id") is not None
-    cookie_namespace_id = _parse_positive_int(request.cookies.get(context["namespace_cookie_name"]))
-    has_cookie_namespace = (
-        request.query_params.get("namespace_id") is None
-        and isinstance(cookie_namespace_id, int)
-        and isinstance(selected_namespace, dict)
-        and selected_namespace.get("id") == cookie_namespace_id
-    )
-    if workflow_id is None and isinstance(selected_namespace_workflow_id, int):
-        workflow_id = selected_namespace_workflow_id
     workflows = _load_workflows()
     selected_workflow = next((item for item in workflows if item["id"] == workflow_id), None)
     if workflow_id is not None and selected_workflow is None:
         return _workflow_error_page(request, context, int(workflow_id), page="phases")
-    selected_workflow_has_namespace = bool((selected_workflow or {}).get("namespace_count"))
-    if (
-        (has_explicit_namespace or (has_cookie_namespace and selected_workflow_has_namespace))
-        and isinstance(selected_namespace_workflow_id, int)
-        and workflow_id is not None
-        and workflow_id != selected_namespace_workflow_id
-    ):
+    if not _workflow_matches_selected_namespace(workflow_id, context):
         return _workflow_not_in_selected_namespace_page(request, context)
     if selected_workflow is None and workflows:
         selected_workflow = workflows[0]
@@ -480,10 +457,10 @@ async def phases_page(request: Request) -> HTMLResponse:
     if selected_workflow_id is not None and selected_mode is None:
         return _workflow_mode_error_page(request, context, int(selected_workflow_id), None)
     selected_mode_id = selected_mode.get("id") if selected_mode else None
-    namespace_scoped_view = isinstance(selected_namespace, dict) and (
-        raw_workflow_id is None or has_explicit_namespace or has_cookie_namespace
+    namespace_scoped_view = isinstance(context.get("selected_namespace"), dict) and (
+        raw_workflow_id is None or has_explicit_namespace
     )
-    visible_workflows = [selected_workflow] if namespace_scoped_view and selected_workflow else workflows
+    visible_workflows = scoped_workflows if namespace_scoped_view else workflows
     phases = (
         _load_phases(int(selected_workflow_id), mode_id=int(selected_mode_id))
         if selected_workflow_id is not None and isinstance(selected_mode_id, int)
@@ -510,7 +487,7 @@ async def phases_page(request: Request) -> HTMLResponse:
     )
 
 
-async def phase_detail(request: Request, phase_id: PositivePathId) -> HTMLResponse:
+def phase_detail(request: Request, phase_id: PositivePathId) -> HTMLResponse:
     context = _namespace_context(request, page="phases")
     if error_response := _namespace_error_page(request, context, page="phases"):
         return error_response
@@ -525,9 +502,8 @@ async def phase_detail(request: Request, phase_id: PositivePathId) -> HTMLRespon
             back_label="К фазам",
             page="phases",
         )
-    if not _phase_matches_selected_namespace(phase, context):
+    if not _workflow_matches_selected_namespace(phase.get("workflow_id"), context):
         return _phase_not_in_selected_namespace_page(request, context)
-    agents = _app_state.agent_service().list_agents()
     workflow_phases = _app_state.phase_service().list_phases(
         phase.get("workflow_id"), mode_id=phase.get("mode_id")
     )
@@ -563,7 +539,6 @@ async def phase_detail(request: Request, phase_id: PositivePathId) -> HTMLRespon
     context.update(
         {
             "phase": phase,
-            "agents": agents,
             "workflow_phases": workflow_phases,
             "parallel_candidates": parallel_candidates,
             "rollback_target_phase": rollback_target_phase,
@@ -576,7 +551,7 @@ async def phase_detail(request: Request, phase_id: PositivePathId) -> HTMLRespon
     )
 
 
-async def tasks_page(request: Request) -> HTMLResponse:
+def tasks_page(request: Request) -> HTMLResponse:
     """Список задач workflow."""
     context = _namespace_context(request, page="tasks")
     if error_response := _namespace_error_page(request, context, page="tasks"):
@@ -600,7 +575,7 @@ async def tasks_page(request: Request) -> HTMLResponse:
     )
 
 
-async def namespace_page(request: Request) -> HTMLResponse:
+def namespace_page(request: Request) -> HTMLResponse:
     """CRUD page for namespaces and style."""
     context = _namespace_context(request, page="namespace")
     if error_response := _namespace_error_page(request, context, page="namespace"):
@@ -621,7 +596,7 @@ async def namespace_page(request: Request) -> HTMLResponse:
     )
 
 
-async def namespace_new_page(request: Request) -> HTMLResponse:
+def namespace_new_page(request: Request) -> HTMLResponse:
     """Create page for a new namespace."""
     context = _namespace_context(request, page="namespace")
     if error_response := _namespace_error_page(request, context, page="namespace"):
@@ -636,7 +611,7 @@ async def namespace_new_page(request: Request) -> HTMLResponse:
     return _template_response(request=request, name="namespaces.html", context=context)
 
 
-async def workflows_page(request: Request) -> HTMLResponse:
+def workflows_page(request: Request) -> Response:
     context = _namespace_context(request, page="workflows")
     if error_response := _namespace_error_page(request, context, page="workflows"):
         return error_response
@@ -651,18 +626,18 @@ async def workflows_page(request: Request) -> HTMLResponse:
             back_label="К воркфлоу",
             page="workflows",
         )
-    workflows = _load_workflows()
     selected_namespace = context.get("selected_namespace")
+    profession_id = selected_namespace.get("id") if isinstance(selected_namespace, dict) else None
+    workflows = _load_workflows(profession_id) if profession_id is not None else []
     default_workflow_id = workflows[0]["id"] if workflows else None
-    if isinstance(selected_namespace, dict):
-        namespace_workflow_id = selected_namespace.get("workflow_id")
-        if isinstance(namespace_workflow_id, int):
-            default_workflow_id = namespace_workflow_id
-    if workflow_id is None:
-        workflow_id = default_workflow_id
     selected_workflow = next((item for item in workflows if item["id"] == workflow_id), None)
     if workflow_id is not None and selected_workflow is None:
-        return _workflow_error_page(request, context, workflow_id, page="workflows")
+        if _app_state.workflow_service().get_workflow(workflow_id) is None:
+            return _workflow_error_page(request, context, workflow_id, page="workflows")
+        # A selector switch or saved URL can retain a workflow from another profession.
+        # Canonicalize it before rendering any editor or list from that stale selection.
+        target = request.url.remove_query_params(["workflow_id", "mode_id"])
+        return RedirectResponse(str(target), status_code=303)
     if selected_workflow is None and workflows:
         selected_workflow = workflows[0]
     context.update(
@@ -679,7 +654,7 @@ async def workflows_page(request: Request) -> HTMLResponse:
     )
 
 
-async def task_detail_page(
+def task_detail_page(
     request: Request,
     task_key: str,
 ) -> HTMLResponse:
@@ -741,7 +716,7 @@ async def task_detail_page(
     )
 
 
-async def settings_page(request: Request) -> HTMLResponse:
+def settings_page(request: Request) -> HTMLResponse:
     """Read-only справка по реальным CLI-командам workflow."""
     context = _namespace_context(request, page="settings")
     if error_response := _namespace_error_page(request, context, page="settings"):
@@ -756,24 +731,7 @@ async def settings_page(request: Request) -> HTMLResponse:
     )
 
 
-async def agents_page(request: Request) -> HTMLResponse:
-    """Список агентов."""
-    context = _namespace_context(request, page="agents")
-    if error_response := _namespace_error_page(request, context, page="agents"):
-        return error_response
-    agents = [
-        {**agent, "launch_profile": agent.get("hermes_profile") or ""}
-        for agent in _app_state.agent_service().list_agents()
-    ]
-    context.update({"agents": agents})
-    return _template_response(
-        request=request,
-        name="agents.html",
-        context=context,
-    )
-
-
-async def instructions_page(request: Request) -> HTMLResponse:
+def instructions_page(request: Request) -> HTMLResponse:
     """Dedicated instructions editor page for a phase."""
     context = _namespace_context(request, page="phases")
     if error_response := _namespace_error_page(request, context, page="phases"):
@@ -812,7 +770,7 @@ async def instructions_page(request: Request) -> HTMLResponse:
             }
         )
         return _template_response(request=request, name="error.html", status_code=404, context=context)
-    if not _phase_matches_selected_namespace(phase, context):
+    if not _workflow_matches_selected_namespace(phase.get("workflow_id"), context):
         return _phase_not_in_selected_namespace_page(request, context)
     instructions = phase.get("instructions", [])
     for instruction in instructions:

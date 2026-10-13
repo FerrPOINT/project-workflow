@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from html.parser import HTMLParser
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -91,8 +93,11 @@ def test_existing_workflow_opens_default_mode_with_stable_accessible_navigation(
     assert 'data-testid="workflow-mode-tabs"' in response.text
     assert 'data-testid="workflow-mode-tab-default"' in response.text
     assert 'data-testid="workflow-mode-select"' in response.text
-    assert 'role="tab"' not in response.text
-    assert 'role="tablist"' not in response.text
+    class NavigationRoles(HTMLParser):
+        def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+            assert dict(attrs).get("role") not in {"tab", "tablist"}
+
+    NavigationRoles().feed(response.text)
     default_tab = response.text.split('data-testid="workflow-mode-tab-default"', 1)[0].rsplit("<a", 1)[1]
     assert 'aria-current="page"' in default_tab
     assert "Default phase" in response.text

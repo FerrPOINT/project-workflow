@@ -22,10 +22,10 @@ events synchronize open documents and focus/visibility refreshes restore it.
 
 ## Page Geometry
 
-- Dashboard, tasks, workflows, phases, instructions and agents use `wide`.
+- Dashboard, tasks, workflows, phases and instructions use `wide`.
   Tables, lists and timelines use `minmax(0, 1fr)`; technical horizontal
   scrolling remains local to its data container.
-- Namespace, workflow, phase and agent editors use `reading/form`: only the
+- Profession, workflow and phase editors use `reading/form`: only the
   inner form column is bounded to 760 px. It never constrains task lists,
   dashboards or phase timelines.
 - Task/phase details use `detail-with-aside`: a fluid primary column plus a

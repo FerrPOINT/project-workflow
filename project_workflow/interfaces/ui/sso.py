@@ -83,7 +83,7 @@ class _SsoMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         settings = self.settings
         path = request.url.path
-        if path in _PUBLIC_PATHS or path.startswith("/internal/runtime/"):
+        if path in _PUBLIC_PATHS or path.startswith(("/internal/runtime/", "/api/pm/namespace-ownership/")):
             return await call_next(request)
         canonical_hostname = urlparse(settings.AUTH_PUBLIC_ORIGIN).hostname
         if request.url.hostname in {"127.0.0.1", "localhost"} and canonical_hostname in {"127.0.0.1", "localhost"} \

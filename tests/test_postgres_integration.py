@@ -24,12 +24,11 @@ import pytest
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
 from fastapi.testclient import TestClient
-from sqlalchemy import inspect, text
+from sqlalchemy import inspect, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import close_all_sessions
 
 from project_workflow import config as config_module
-from project_workflow.application.agent import AgentService
 from project_workflow.application.instruction_service import InstructionService
 from project_workflow.application.phase import PhaseServiceApp
 from project_workflow.application.phase_service import PhaseService
@@ -52,9 +51,705 @@ from project_workflow.infrastructure.db.session import (
 )
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.infrastructure.llm import OpenAICompatibleClient
+from project_workflow.infrastructure.pm_readback import observe_run as http_observe_pm_run
 from project_workflow.interfaces.ui.app import create_app
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("scenario", ["appearance", "versioned-adoption"])
+def test_current_base_initial_professions_and_history_preservation_on_postgres(pg_url, scenario):
+    from tests.test_profession_initial_catalog import (
+        assert_theme_migration_updates_only_untouched_managed_professions,
+        test_adoption_preserves_profession_edits_old_tasks_history_and_user_collections,
+    )
+    engine = get_engine(pg_url)
+    if scenario == "appearance":
+        assert_theme_migration_updates_only_untouched_managed_professions(engine)
+    else:
+        ensure_migrated(engine)
+        test_adoption_preserves_profession_edits_old_tasks_history_and_user_collections(engine)
+
+
+@pytest.fixture
+def pm_postgres(pg_url, monkeypatch):
+    from tests.test_pm_execution import prepare_pm
+
+    ensure_migrated(get_engine(pg_url))
+    yield from prepare_pm(monkeypatch)
+
+
+@pytest.mark.integration
+def test_pm_draft_postgres_concurrent_original_assignment_and_restart(pg_url, monkeypatch):
+    from tests.test_pm_draft_assignment import ADAPTER, PATH, prepare_pm_draft
+
+    ensure_migrated(get_engine(pg_url))
+    fixture = prepare_pm_draft(monkeypatch)
+    client, request = next(fixture)
+    try:
+        barrier = Barrier(2)
+
+        def assign():
+            barrier.wait(timeout=10)
+            return client.post(PATH, headers=ADAPTER, json=request)
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(lambda _: assign(), range(2)))
+        assert [r.status_code for r in results] == [200, 200]
+        assert results[0].json() == results[1].json()
+        result = results[0].json()["result"]
+        assert result["queue_item_ref"] is None and result["task_workspace_ref"] is None
+        with SAUnitOfWork() as uow:
+            saved = uow.tasks.get_assignment_by_operation_key(request["assignment_operation_key"])
+            assert saved.payload["pm_draft_context"]["execution_ref"] == request["execution_ref"]
+            before = saved.to_dict()
+        reset_engine()
+        with TestClient(create_app()) as restarted:
+            assert restarted.post(PATH, headers=ADAPTER, json=request).json() == results[0].json()
+        with SAUnitOfWork() as uow:
+            assert uow.tasks.get_assignment_by_operation_key(request["assignment_operation_key"]).to_dict() == before
+    finally:
+        fixture.close()
+
+
+@pytest.mark.integration
+def test_pm_postgres_concurrent_replay_and_restart_readback(pm_postgres):
+    from project_workflow.infrastructure.db import models as m
+    from tests.test_pm_execution import ADAPTER, BASE, NEW_RUN, OLD_RUN, bind_pm
+
+    client, runtime, checkpoint, observations, _ = bind_pm(pm_postgres)
+    barrier = Barrier(2)
+
+    def send_checkpoint():
+        barrier.wait(timeout=10)
+        return client.post(BASE + "/checkpoint", headers=runtime, json=checkpoint)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        responses = list(pool.map(lambda _: send_checkpoint(), range(2)))
+    assert [response.status_code for response in responses] == [200, 200]
+    assert responses[0].json() == responses[1].json()
+    resume = {
+        **checkpoint, "operation_key": "resume:1", "expected_version": 2,
+        "answer_event_ref": "answer:one", "new_session_run_id": NEW_RUN,
+    }
+    observations[OLD_RUN]["status"] = "stopped"
+    observations[OLD_RUN]["checkpoint_ref"] = checkpoint["checkpoint_ref"]
+    barrier = Barrier(2)
+
+    def send_resume():
+        barrier.wait(timeout=10)
+        return client.post(BASE + "/resume", headers=ADAPTER, json=resume)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        responses = list(pool.map(lambda _: send_resume(), range(2)))
+    assert [response.status_code for response in responses] == [200, 200]
+    assert responses[0].json() == responses[1].json()
+    # Recreate the HTTP application and DB connections; acceptance lives in PostgreSQL.
+    restarted = TestClient(create_app())
+    try:
+        read = restarted.post(BASE + "/readback", headers=ADAPTER,
+                              json={**pm_postgres[1], "operation_key": "resume:1"})
+        assert read.status_code == 200, read.text
+        assert read.json()["result"]["state"] == "resume_pending"
+        assert read.json()["result"]["operation"]["result"] == responses[0].json()["result"]
+    finally:
+        restarted.close()
+    with SAUnitOfWork() as uow:
+        assert len(list(uow.session.query(m.PMOperation))) == 3
+        assert len(list(uow.session.query(m.PMRun))) == 1
+
+
+@pytest.mark.integration
+def test_pm_postgres_pending_resume_uuid_serializes_initial_bind(pm_postgres):
+    from project_workflow.infrastructure.db import models as m
+    from tests.test_pm_execution import (
+        ADAPTER,
+        AGENT_REF,
+        BASE,
+        NEW_RUN,
+        OLD_RUN,
+        waiting_pm,
+    )
+    from tests.test_runtime_api import _assignment, _bind_payload
+
+    client, _, _, resume, observations, _ = waiting_pm(pm_postgres)
+    observations[OLD_RUN]["status"] = "stopped"
+    assignment = client.post(
+        "/internal/runtime/assign", headers=ADAPTER,
+        json=_assignment("PM-2", "assign:pm:2", "project_manager"),
+    ).json()["result"]
+    runtime_binding = _bind_payload(assignment)
+    runtime_binding["concrete_agent_ref"] = AGENT_REF
+    binding_response = client.post("/internal/runtime/bind", headers=ADAPTER, json=runtime_binding)
+    assert binding_response.status_code == 200, binding_response.text
+    binding = binding_response.json()["result"]
+    identity = {
+        **pm_postgres[1], "task": "PM-2", "execution_ref": "execution:pm:2",
+        "task_ref": assignment["business_task_ref"], "root_ref": assignment["root_task_ref"],
+        "assignment_operation_key": assignment["assignment_operation_key"],
+        "assignment_ref": assignment["assignment_ref"],
+        "assignment_revision": assignment["assignment_revision"],
+    }
+    observations[NEW_RUN] = {
+        **identity, "observation_ref": "observation:pm:2", "status": "running",
+        "binding_ref": binding["binding_ref"], "hermes_run_ref": binding["hermes_run_ref"],
+        "dispatch_operation_key": "pm-bind:2", "fence": 1, "session_run_id": NEW_RUN,
+    }
+    bind = {
+        **identity, "operation_key": "pm-bind:2", "expected_version": 0,
+        "binding_ref": binding["binding_ref"], "hermes_run_ref": binding["hermes_run_ref"],
+        "session_run_id": NEW_RUN,
+    }
+    barrier = Barrier(2)
+
+    def request(path, payload):
+        barrier.wait(timeout=10)
+        return client.post(BASE + path, headers=ADAPTER, json=payload)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        resume_future = pool.submit(request, "/resume", resume)
+        bind_future = pool.submit(request, "/bind", bind)
+        resume_response = resume_future.result(timeout=30)
+        bind_response = bind_future.result(timeout=30)
+    assert sorted([resume_response.status_code, bind_response.status_code]) == [200, 409]
+    with SAUnitOfWork() as uow:
+        run = uow.session.get(m.PMRun, NEW_RUN)
+        reservation = uow.session.scalar(select(m.PMExecution).where(
+            m.PMExecution.resume_session_run_id == NEW_RUN,
+            m.PMExecution.state == "resume_pending",
+        ))
+        assert (run is not None) != (reservation is not None)
+        if resume_response.status_code == 200:
+            assert reservation is not None and reservation.execution_ref == resume["execution_ref"]
+        else:
+            assert run is not None and run.execution_ref == bind["execution_ref"]
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("winner", ["provision", "bind"])
+def test_pm_ownership_enrollment_race_orders(pg_url, monkeypatch, winner):
+    from project_workflow.application.namespace_ownership import NamespaceOwnershipService
+    from project_workflow.application.pm_execution import PMExecutionService
+    from project_workflow.domain.namespace_ownership import NamespaceOwnershipRequest
+    from project_workflow.domain.pm_execution import PMIdentity
+    from project_workflow.infrastructure.db import models as m
+    from project_workflow.infrastructure.db.repositories.project import SAProjectRepository
+    from project_workflow.infrastructure.namespace_auth import NamespacePrincipal
+    from tests.test_pm_execution import ADAPTER, BASE, PROJECT_REF, prepare_pm
+
+    ensure_migrated(get_engine(pg_url))
+    fixture = prepare_pm(monkeypatch, ownership=False)
+    pm = next(fixture)
+    client = pm[0]
+    with SAUnitOfWork() as uow:
+        namespace_id = uow.projects.get_by_cli_command("workflow-project_manager").id
+    request = NamespaceOwnershipRequest(contract_version=1, tracker_instance_ref="tracker:one",
+                                        tracker_project_ref=PROJECT_REF)
+    principal = NamespacePrincipal("http://auth.test", "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee")
+    held, waiting, release = Event(), Event(), Event()
+    original_lock = SAProjectRepository.lock_pm_namespace
+    def pause_project_lock(self, project_id):
+        if held.is_set():
+            waiting.set()
+            return original_lock(self, project_id)
+        result = original_lock(self, project_id)
+        held.set()
+        assert release.wait(timeout=15)
+        return result
+
+    monkeypatch.setattr(SAProjectRepository, "lock_pm_namespace", pause_project_lock)
+
+    def provision():
+        with SAUnitOfWork() as uow:
+            return NamespaceOwnershipService(uow).provision(namespace_id, request, principal)
+
+    def bind():
+        return client.post(BASE + "/bind", headers=ADAPTER, json=pm[2])
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            first = pool.submit(provision if winner == "provision" else bind)
+            try:
+                assert held.wait(timeout=10)
+                second = pool.submit(bind if winner == "provision" else provision)
+                assert waiting.wait(timeout=10)
+            finally:
+                release.set()
+            first_result, second_result = first.result(timeout=20), second.result(timeout=20)
+        assert (second_result if winner == "provision" else first_result).status_code == (
+            200 if winner == "provision" else 409
+        )
+        monkeypatch.setattr(SAProjectRepository, "lock_pm_namespace", original_lock)
+        if winner == "bind":
+            with SAUnitOfWork() as uow:
+                assert uow.session.query(m.PMExecution).count() == 0
+            assert bind().status_code == 200
+        with SAUnitOfWork() as uow:
+            assert uow.session.query(m.PMExecution).count() == 1
+            assert uow.session.query(m.PMNamespaceOwnership).count() == 1
+            assert PMExecutionService(uow).readback(
+                PMIdentity.model_validate(pm[1]), namespace_id, None,
+            )["identity"]["tracker_project_ref"] == PROJECT_REF
+    finally:
+        fixture.close()
+
+
+@pytest.mark.integration
+def test_pm_ownership_concurrent_provision_replay_and_db_immutability(pm_postgres):
+    from sqlalchemy import select
+    from sqlalchemy.exc import DBAPIError
+
+    from project_workflow.application.namespace_ownership import NamespaceOwnershipService
+    from project_workflow.domain.namespace_ownership import NamespaceOwnershipRequest
+    from project_workflow.infrastructure.db import models as m
+    from project_workflow.infrastructure.namespace_auth import NamespacePrincipal
+    from tests.test_pm_execution import PROJECT_REF
+
+    with SAUnitOfWork() as uow:
+        namespace_id = uow.projects.get_by_cli_command("workflow-project_manager").id
+        before = dict(uow.projects.get_pm_ownership(namespace_id))
+    request = NamespaceOwnershipRequest(contract_version=1, tracker_instance_ref="tracker:one",
+                                        tracker_project_ref=PROJECT_REF)
+    principal = NamespacePrincipal("http://auth.test", "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee")
+    barrier = Barrier(2)
+
+    def provision(project_ref):
+        barrier.wait(timeout=10)
+        with SAUnitOfWork() as uow:
+            try:
+                return NamespaceOwnershipService(uow).provision(namespace_id, request.model_copy(update={
+                    "tracker_project_ref": project_ref,
+                }), principal)
+            except ConflictError:
+                return "conflict"
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        same, foreign = list(pool.map(provision, [PROJECT_REF, "ffffffff-ffff-4fff-8fff-ffffffffffff"]))
+    assert same[0].model_dump() == before and same[1] is False and foreign == "conflict"
+    with SAUnitOfWork() as uow:
+        assert dict(uow.projects.get_pm_ownership(namespace_id)) == before
+        row = uow.session.scalar(select(m.PMNamespaceOwnership))
+        for statement in [
+            "UPDATE pm_namespace_ownership SET tracker_instance_ref='other'",
+            "DELETE FROM pm_namespace_ownership",
+        ]:
+            with pytest.raises(DBAPIError, match="ownership is immutable"):
+                uow.session.execute(text(statement))
+            uow.rollback()
+        with pytest.raises(IntegrityError):
+            uow.projects.delete(namespace_id)
+            uow.session.flush()
+        uow.rollback()
+        assert uow.session.get(m.PMNamespaceOwnership, row.ownership_ref) is not None
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("winner", ["bootstrap", "provision"])
+def test_pm_ownership_catalog_lock_order_and_incomplete_schema(pg_url, winner):
+    from project_workflow.application.namespace_ownership import NamespaceOwnershipService
+    from project_workflow.domain.namespace_ownership import NamespaceOwnershipRequest
+    from project_workflow.infrastructure.db.session import DatabaseRecreateRequired
+    from project_workflow.infrastructure.namespace_auth import NamespacePrincipal
+
+    engine = get_engine(pg_url)
+    ensure_migrated(engine)
+    with SAUnitOfWork(engine) as uow:
+        ensure_managed_catalog(uow)
+        namespace_id = uow.projects.get_by_cli_command("workflow-project_manager").id
+    held, waiting, release = Event(), Event(), Event()
+
+    def bootstrap():
+        with SAUnitOfWork(engine) as uow:
+            if winner == "bootstrap":
+                uow.lock_catalog_state()
+                held.set()
+                assert release.wait(timeout=15)
+            else:
+                waiting.set()
+            ensure_managed_catalog(uow)
+
+    def provision():
+        with SAUnitOfWork(engine) as uow:
+            if winner == "provision":
+                uow.lock_catalog_state(shared=True)
+                uow.projects.lock_pm_namespace(namespace_id)
+                held.set()
+                assert release.wait(timeout=15)
+            else:
+                waiting.set()
+            return NamespaceOwnershipService(uow).provision(namespace_id, NamespaceOwnershipRequest(
+                contract_version=1, tracker_instance_ref="tracker:one",
+                tracker_project_ref="cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            ), NamespacePrincipal("http://auth.test", "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"))
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(bootstrap if winner == "bootstrap" else provision)
+        try:
+            assert held.wait(timeout=10)
+            second = pool.submit(provision if winner == "bootstrap" else bootstrap)
+            assert waiting.wait(timeout=10)
+        finally:
+            release.set()
+        first_result, second_result = first.result(timeout=20), second.result(timeout=20)
+        assert (second_result if winner == "bootstrap" else first_result)[1] is True
+    with SAUnitOfWork(engine) as uow:
+        assert validate_managed_catalog_state(uow) is True
+    assert schema_is_ready(engine)
+    # An old pending head is not silently repaired or stamped as the expanded head.
+    with engine.begin() as conn:
+        conn.execute(text("DROP TABLE pm_namespace_ownership"))
+    assert not schema_is_ready(engine)
+    with pytest.raises(DatabaseRecreateRequired):
+        ensure_migrated(engine)
+    assert database_revisions(engine) == {"0014_launch_profile_only"}
+
+
+@pytest.mark.integration
+def test_pm_ownership_postgres_actual_bounded_auth_and_readback(pg_url, monkeypatch):
+    from tests.test_namespace_ownership import SUBJECT
+    from tests.test_runtime_api import _namespace
+
+    ensure_migrated(get_engine(pg_url))
+    _namespace("PM", "workflow-project_manager", "PM")
+    with SAUnitOfWork() as uow:
+        namespace_id = uow.projects.get_by_cli_command("workflow-project_manager").id
+    probes = []
+    status = [200]
+    scopes = [
+        "project-workflow:read", "project-workflow:write",
+        f"project-workflow:namespace-owner:provision:{namespace_id}",
+        f"project-workflow:namespace-owner:read:{namespace_id}",
+    ]
+
+    class Auth(BaseHTTPRequestHandler):
+        def do_GET(self):
+            probes.append((self.path, self.headers.get("Authorization"), self.headers.get("Accept-Encoding")))
+            body = json.dumps({"sub": SUBJECT, "email": "provisioner@test", "scopes": scopes}).encode()
+            self.send_response(status[0])
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *_args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Auth)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    root = f"http://127.0.0.1:{server.server_port}"
+    monkeypatch.setenv("AUTH_ISSUER", root)
+    monkeypatch.setenv("AUTH_INTERNAL_BASE_URL", root)
+    monkeypatch.setenv("AUTH_SESSION_SECRET", "x" * 40)
+    monkeypatch.setenv("PROJECT_WORKFLOW_NAMESPACE_PROVISIONER_SUBJECT", SUBJECT)
+    config_module.get_settings.cache_clear()
+    client = TestClient(create_app())
+    headers = {"Authorization": "Bearer sdlc_pat_owned-qa-test-only"}
+    payload = {"contract_version": 1, "tracker_instance_ref": "tracker:one",
+               "tracker_project_ref": "cccccccc-cccc-4ccc-8ccc-cccccccccccc"}
+    url = f"/api/pm/namespace-ownership/{namespace_id}"
+    try:
+        from project_workflow.infrastructure.db import models as m
+
+        rejected = client.put(url, headers=headers, json={**payload, "tracker_instance_ref": "\u0416" * 65})
+        assert rejected.status_code == 422 and probes == []
+        unsupported = client.put(url, headers=headers, json=payload)
+        assert unsupported.status_code == 403
+        with SAUnitOfWork() as uow:
+            assert uow.session.query(m.PMNamespaceOwnership).count() == 0
+        scopes[:] = ["project-workflow:read", "project-workflow:write"]
+        first = client.put(url, headers=headers, json=payload)
+        assert first.status_code == 201, first.text
+        assert first.json()["result"]["authority_issuer"] == root
+        assert client.put(url, headers=headers, json=payload).json() == first.json()
+        assert client.get(url, headers=headers).json() == first.json()
+        status[0] = 401
+        denied = client.get(url, headers=headers)
+        assert denied.status_code == 401 and "sdlc_pat_" not in denied.text and root not in denied.text
+        assert probes == [("/auth/tokens/introspect", headers["Authorization"], "identity")] * 5
+    finally:
+        client.close()
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+@pytest.mark.integration
+def test_pm_postgres_concurrent_concrete_binding_has_one_immutable_winner(pm_postgres):
+    from sqlalchemy import select
+
+    from project_workflow.infrastructure.db import models as m
+    from tests.test_pm_execution import ADAPTER, AGENT_REF, OTHER_AGENT_REF
+    from tests.test_runtime_api import _assignment, _bind_payload
+
+    client = pm_postgres[0]
+    assigned = client.post("/internal/runtime/assign", headers=ADAPTER,
+                           json=_assignment("PM-2", "assign:pm:2", "project_manager")).json()["result"]
+    barrier = Barrier(2)
+
+    def bind(agent_ref):
+        barrier.wait(timeout=10)
+        return client.post("/internal/runtime/bind", headers=ADAPTER, json={
+            **_bind_payload(assigned), "concrete_agent_ref": agent_ref,
+        })
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        responses = list(pool.map(bind, [AGENT_REF, OTHER_AGENT_REF]))
+    assert sorted(response.status_code for response in responses) == [200, 409]
+    winner = next(response for response in responses if response.status_code == 200).json()["result"]
+    with SAUnitOfWork() as uow:
+        row = uow.session.scalar(select(m.TaskRuntimeAssignment).where(
+            m.TaskRuntimeAssignment.operation_key == "assign:pm:2",
+        ))
+        assert row.concrete_agent_ref == winner["concrete_agent_ref"]
+    replay = client.post("/internal/runtime/bind", headers=ADAPTER, json={
+        **_bind_payload(assigned), "concrete_agent_ref": winner["concrete_agent_ref"],
+    })
+    assert replay.status_code == 200
+    assert replay.json()["result"] == winner
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("mapping", [
+    None, "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "00000000-0000-0000-0000-000000000000",
+])
+def test_pm_postgres_missing_or_tampered_mapping_fences_continuation(pm_postgres, mapping):
+    from tests.test_concrete_agent_mapping import (
+        test_resume_rechecks_mapping_before_trusted_terminal_probe as verify_mapping,
+    )
+
+    verify_mapping(pm_postgres, mapping)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("winner", ["pm", "generic"])
+def test_pm_enrollment_and_generic_continuation_share_owner_lock(pm_postgres, monkeypatch, winner):
+    from project_workflow.application.pm_execution import PMExecutionService
+    from project_workflow.infrastructure.db.repositories.task import SATaskRepository
+    from tests.test_pm_execution import ADAPTER, BASE
+    from tests.test_pm_generic_continuation import continuation, persisted_state
+
+    client = pm_postgres[0]
+    held, contender_started, release = Event(), Event(), Event()
+    original_proof = PMExecutionService._proof
+    original_enrollment = SATaskRepository.assignment_has_pm_execution
+    original_pm_lock = PMExecutionService._lock_identity
+    original_generic_lock = SATaskRepository.lock
+
+    def pause_proof(*args, **kwargs):
+        held.set()
+        assert release.wait(timeout=20)
+        return original_proof(*args, **kwargs)
+
+    def pause_enrollment(self, *args):
+        result = original_enrollment(self, *args)
+        held.set()
+        assert release.wait(timeout=20)
+        return result
+
+    def notify_pm_lock(self, *args):
+        contender_started.set()
+        return original_pm_lock(self, *args)
+
+    def notify_generic_lock(self, *args):
+        contender_started.set()
+        return original_generic_lock(self, *args)
+
+    if winner == "pm":
+        monkeypatch.setattr(PMExecutionService, "_proof", staticmethod(pause_proof))
+        monkeypatch.setattr(SATaskRepository, "lock", notify_generic_lock)
+    else:
+        monkeypatch.setattr(SATaskRepository, "assignment_has_pm_execution", pause_enrollment)
+        monkeypatch.setattr(PMExecutionService, "_lock_identity", notify_pm_lock)
+
+    def enroll():
+        return client.post(BASE + "/bind", headers=ADAPTER, json=pm_postgres[2])
+
+    def continue_generic():
+        return client.post("/internal/runtime/rebind", headers=ADAPTER, json=continuation(pm_postgres[4]))
+
+    before = persisted_state()
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(enroll if winner == "pm" else continue_generic)
+        try:
+            assert held.wait(timeout=10)
+            second = pool.submit(continue_generic if winner == "pm" else enroll)
+            assert contender_started.wait(timeout=10)
+        finally:
+            release.set()
+        accepted, rejected = first.result(timeout=20), second.result(timeout=20)
+    assert accepted.status_code == 200, accepted.text
+    assert rejected.status_code == 409, rejected.text
+    after = persisted_state()
+    assert after[2:5] == before[2:5]
+    if winner == "pm":
+        assert "Enrolled PM assignment requires PM resume/rebind" in rejected.text
+        assert after[:2] == before[:2]
+        assert after[5] == (1, 0, 1, 1, 1)
+    else:
+        assert rejected.json()["error_code"] == "conflict"
+        assert after[0] == before[0] + 1
+        assert after[5] == (2, 0, 0, 0, 0)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("cycle_number", [0, 1])
+def test_pm_postgres_normal_done_rejects_new_generic_assignment(pm_postgres, supervisor_llm, cycle_number):
+    from tests.test_pm_assignment_guard import (
+        test_normal_scoped_pass_cannot_replace_running_pm_assignment as verify_denial,
+    )
+
+    verify_denial(pm_postgres, supervisor_llm, cycle_number)
+
+
+@pytest.mark.integration
+def test_pm_postgres_done_assignment_replay_races_new_assignment(pm_postgres, supervisor_llm):
+    from tests.test_pm_assignment_guard import persisted_assignment_state, replacement
+    from tests.test_pm_execution import ADAPTER
+    from tests.test_pm_execution_edges import (
+        test_resumed_supervisor_report_is_persistent_and_replayable as verify_done,
+    )
+    from tests.test_runtime_api import _assignment
+
+    verify_done(pm_postgres, supervisor_llm)
+    client = pm_postgres[0]
+    barrier = Barrier(2)
+    before = persisted_assignment_state()
+
+    def assign(request):
+        barrier.wait(timeout=10)
+        return client.post("/internal/runtime/assign", headers=ADAPTER, json=request)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        replay = pool.submit(assign, _assignment("PM-1", "assign:pm:1", "project_manager"))
+        rejected = pool.submit(assign, replacement())
+        replay_response, rejected_response = replay.result(timeout=20), rejected.result(timeout=20)
+    assert replay_response.status_code == 200, replay_response.text
+    assert replay_response.json()["result"]["assignment_revision"] == 1
+    assert rejected_response.status_code == 409, rejected_response.text
+    assert rejected_response.json()["ok"] is False
+    assert "Enrolled PM task requires terminal/quiescent replacement admission" in rejected_response.text
+    assert persisted_assignment_state() == before
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("winner", ["pm", "generic"])
+def test_pm_enrollment_and_new_assignment_share_owner_lock(pm_postgres, supervisor_llm, monkeypatch, winner):
+    from project_workflow.application.pm_execution import PMExecutionService
+    from project_workflow.infrastructure.db.repositories.project import SAProjectRepository
+    from project_workflow.infrastructure.db.repositories.task import SATaskRepository
+    from tests.test_pm_assignment_guard import complete_unenrolled_assignment, persisted_assignment_state, replacement
+    from tests.test_pm_execution import ADAPTER, BASE
+
+    client = pm_postgres[0]
+    held, contender_started, release = Event(), Event(), Event()
+    original_proof = PMExecutionService._proof
+    original_lock = SAProjectRepository.lock
+    original_pm_project_lock = SAProjectRepository.lock_pm_namespace
+    original_enrollment = SATaskRepository.task_has_pm_execution
+
+    def pause_proof(*args, **kwargs):
+        held.set()
+        assert release.wait(timeout=20)
+        return original_proof(*args, **kwargs)
+
+    def notify_lock(self, project_id):
+        if held.is_set():
+            contender_started.set()
+        return original_lock(self, project_id)
+
+    def notify_pm_project_lock(self, project_id):
+        if held.is_set():
+            contender_started.set()
+        return original_pm_project_lock(self, project_id)
+
+    def pause_enrollment(self, task_id):
+        enrolled = original_enrollment(self, task_id)
+        held.set()
+        assert release.wait(timeout=20)
+        return enrolled
+
+    monkeypatch.setattr(SAProjectRepository, "lock", notify_lock)
+    monkeypatch.setattr(SAProjectRepository, "lock_pm_namespace", notify_pm_project_lock)
+    if winner == "pm":
+        monkeypatch.setattr(PMExecutionService, "_proof", staticmethod(pause_proof))
+    else:
+        complete_unenrolled_assignment(pm_postgres, supervisor_llm)
+        monkeypatch.setattr(SATaskRepository, "task_has_pm_execution", pause_enrollment)
+
+    def enroll():
+        return client.post(BASE + "/bind", headers=ADAPTER, json=pm_postgres[2])
+
+    def assign():
+        return client.post("/internal/runtime/assign", headers=ADAPTER, json=replacement())
+
+    before = persisted_assignment_state()
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(enroll if winner == "pm" else assign)
+        try:
+            assert held.wait(timeout=10)
+            second = pool.submit(assign if winner == "pm" else enroll)
+            assert contender_started.wait(timeout=10)
+        finally:
+            release.set()
+        accepted, rejected = first.result(timeout=20), second.result(timeout=20)
+    assert accepted.status_code == 200, accepted.text
+    assert rejected.status_code == 409, rejected.text
+    after = persisted_assignment_state()
+    if winner == "pm":
+        assert "Enrolled PM task requires terminal/quiescent replacement admission" in rejected.text
+        assert after[:4] == before[:4]
+        assert tuple(len(rows) for rows in after[4:]) == (1, 1, 1)
+    else:
+        assert rejected.json()["error_code"] == "conflict"
+        assert accepted.json()["result"]["assignment_revision"] == 2
+        assert after[1][0] == before[1][0] and len(after[1]) == 2
+        assert after[3] == before[3]
+        assert tuple(len(rows) for rows in after[4:]) == (0, 0, 0)
+
+
+@pytest.mark.integration
+def test_pm_postgres_actual_http_callback_and_new_run_binding(pm_postgres, monkeypatch):
+    from project_workflow.infrastructure import pm_readback
+    from tests.test_pm_execution import (
+        NEW_RUN,
+        OLD_RUN,
+        test_wait_resume_new_run_survives_sessions_and_replays,
+    )
+
+    probes: list[str] = []
+    observations = pm_postgres[3]
+
+    class Callback(BaseHTTPRequestHandler):
+        def do_GET(self):
+            probes.append(self.path)
+            run_uuid = self.path.removeprefix("/runs/")
+            if self.headers.get("Authorization") != "Bearer " + "p" * 40 or run_uuid not in observations:
+                self.send_error(503)
+                return
+            body = json.dumps(observations[run_uuid]).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *_args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Callback)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    monkeypatch.setenv("PROJECT_WORKFLOW_PM_READBACK_URL", f"http://127.0.0.1:{server.server_port}/runs")
+    config_module.get_settings.cache_clear()
+    monkeypatch.setattr(pm_readback, "observe_run", http_observe_pm_run)
+    try:
+        test_wait_resume_new_run_survives_sessions_and_replays(pm_postgres)
+        assert probes == ["/runs/" + OLD_RUN] * 3 + ["/runs/" + NEW_RUN]
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
 
 PG_HOST = os.environ.get("PGHOST", "127.0.0.1")
 PG_PORT = int(os.environ.get("PGPORT", "5432"))
@@ -135,7 +830,6 @@ def _fixture_default_mode(connection, workflow_id: int) -> int:
     )
 
 
-
 @pytest.fixture(scope="function")
 def pg_url(monkeypatch):
     """Create a fresh PostgreSQL database and yield a SQLAlchemy URL for it."""
@@ -185,6 +879,13 @@ def pg_url(monkeypatch):
 
 
 @pytest.mark.integration
+def test_namespace_defaults_upgrade_preserves_catalog_on_postgres(pg_url, tmp_path):
+    from tests.test_namespace_default_migration import assert_upgrade_preserves_catalog
+
+    assert_upgrade_preserves_catalog(get_engine(pg_url), tmp_path)
+
+
+@pytest.mark.integration
 class TestPostgresInitialMigration:
     def test_get_engine_postgresql(self, pg_url):
         engine = get_engine(pg_url)
@@ -219,10 +920,10 @@ class TestPostgresInitialMigration:
             version = conn.execute(
                 text("SELECT version_num FROM project_workflow.alembic_version")
             ).scalar_one()
-        assert version == migration_head() == "0007_resource_execution_contexts"
+        assert version == migration_head() == "0014_launch_profile_only"
         assert schema_is_ready(engine) is True
 
-    def test_managed_bootstrap_lock_closes_public_mutation_race(self, pg_url):
+    def test_managed_bootstrap_serializes_with_public_catalog_creation(self, pg_url):
         engine = get_engine(pg_url)
         ensure_migrated(engine)
         bootstrap_locked = Event()
@@ -235,31 +936,43 @@ class TestPostgresInitialMigration:
                 assert mutation_started.wait(timeout=10)
                 ensure_managed_catalog(uow)
 
-        def create_foreign_workflow() -> str:
+        def create_user_workflow() -> str:
             assert bootstrap_locked.wait(timeout=10)
             mutation_started.set()
             with SAUnitOfWork(engine) as uow:
-                try:
-                    WorkflowService(uow).create_workflow(
-                        {"name": "TEST TRASH WORKFLOW"}
-                    )
-                except ConflictError as exc:
-                    return str(exc)
-            return "unexpected-success"
+                WorkflowService(uow).create_workflow({"name": "User workflow"})
+            return "saved"
 
         with ThreadPoolExecutor(max_workers=2) as pool:
             bootstrap_future = pool.submit(bootstrap)
-            mutation_future = pool.submit(create_foreign_workflow)
+            mutation_future = pool.submit(create_user_workflow)
             bootstrap_future.result(timeout=30)
             mutation_result = mutation_future.result(timeout=30)
 
-        assert "Managed workflow catalog is immutable" in mutation_result
+        assert mutation_result == "saved"
         with SAUnitOfWork(engine) as uow:
-            assert validate_managed_catalog_state(uow) is True
-            assert all(
-                workflow.name != "TEST TRASH WORKFLOW"
-                for workflow in uow.workflows.list()
-            )
+            assert len(uow.workflows.list()) == 8
+            assert any(workflow.name == "User workflow" for workflow in uow.workflows.list())
+            assert uow.projects.get_by_cli_command("workflow-project_manager") is not None
+
+    def test_installed_instruction_edit_survives_migration_restart(self, pg_url, monkeypatch):
+        from scripts import init_db
+
+        ensure_migrated(get_engine(pg_url))
+        with SAUnitOfWork(pg_url) as uow:
+            ensure_managed_catalog(uow)
+            workflow = next(item for item in uow.workflows.list() if item.key == "hermes-sdlc:architect")
+            mode = uow.workflows.list_modes(workflow.id)[0]
+            phase = uow.phases.list(workflow.id, mode_id=mode.id)[0]
+            instruction = uow.phase_instructions.list(phase.id)[0]
+            instruction_id = instruction["id"]
+            InstructionService(uow).update_instruction(instruction_id, {"description": "Saved on PostgreSQL"})
+
+        monkeypatch.setenv("DATABASE_URL", pg_url)
+        config_module.get_settings.cache_clear()
+        assert init_db.main() == 0
+        with SAUnitOfWork(pg_url) as readback:
+            assert readback.phase_instructions.get_by_id(instruction_id)["description"] == "Saved on PostgreSQL"
 
     def test_public_catalog_mutation_blocks_managed_bootstrap_until_commit(self, pg_url):
         engine = get_engine(pg_url)
@@ -299,7 +1012,7 @@ class TestPostgresInitialMigration:
                     return "foreign-catalog-rejected"
                 finally:
                     bootstrap_finished.set()
-            return "unexpected-success"
+            return "initialized"
 
         with ThreadPoolExecutor(max_workers=2) as pool:
             mutation_future = pool.submit(mutate)
@@ -310,15 +1023,19 @@ class TestPostgresInitialMigration:
             finally:
                 release_mutation.set()
             assert mutation_future.result(timeout=20) == "committed"
-            assert bootstrap_future.result(timeout=20) == "foreign-catalog-rejected"
+            assert bootstrap_future.result(timeout=20) == "initialized"
 
         with SAUnitOfWork(engine) as uow:
-            assert [workflow.name for workflow in uow.workflows.list()] == ["Existing unmanaged workflow"]
-            assert validate_managed_catalog_state(uow) is False
+            workflows = list(uow.workflows.list())
+            assert len(workflows) == 8
+            assert any(workflow.name == "Existing unmanaged workflow" for workflow in workflows)
+            assert validate_managed_catalog_state(uow) is True
 
     @pytest.mark.parametrize("revision,message", [
         ("0003_runtime_assignment_bind", "Downgrade from runtime assignment bind"),
         ("0004_wide_work_item_revision", "Downgrade from wide Business revisions"),
+        ("0008_pm_execution", "PM execution downgrade refused"),
+        ("0009_pm_draft_assignment", "PM Draft assignment downgrade refused"),
     ])
     def test_downgrade_refuses_lossy_mode_collapse(self, pg_url, revision, message):
         engine = get_engine(pg_url)
@@ -326,7 +1043,7 @@ class TestPostgresInitialMigration:
         with pytest.raises(RuntimeError, match=message):
             run_alembic_command("downgrade", engine, "base")
         assert database_revisions(engine) == {revision}
-        assert schema_is_ready(engine) is False
+        assert schema_is_ready(engine) is (revision == "0014_launch_profile_only")
 
     def test_populated_0001_upgrade_preserves_rows_and_backfills_per_workflow(self, pg_url):
         engine = get_engine(pg_url)
@@ -855,9 +1572,9 @@ class TestPostgresInitialMigration:
                 table: conn.execute(
                     text(f"SELECT count(*) FROM project_workflow.{table}")
                 ).scalar_one()
-                for table in ("workflows", "projects", "agents", "phases")
+                for table in ("workflows", "projects", "phases")
             }
-        assert counts == {"workflows": 7, "projects": 7, "agents": 7, "phases": 33}
+        assert counts == {"workflows": 7, "projects": 7, "phases": 33}
 
     def test_two_concurrent_init_processes_are_idempotent(self, pg_url):
         env = os.environ.copy()
@@ -1334,7 +2051,9 @@ class TestPostgresInitialMigration:
             after = connection.execute(text(
                 "SELECT to_jsonb(t)::text FROM project_workflow.task_runtime_assignments t ORDER BY id"
             )).scalars().all()
-        assert before == after
+        assert [json.loads(row) for row in after] == [
+            {**json.loads(row), "concrete_agent_ref": None} for row in before
+        ]
         with SAUnitOfWork(engine) as uow:
             new_mode = uow.workflows.create_mode({"workflow_id": workflow_id, "key": "initial", "name": "Initial",
                 "mode_order": 1, "role_key": "developer", "execution_scope": "delivery",
@@ -1426,13 +2145,11 @@ class TestPostgresUoW:
         uow.session.execute(text("CREATE INDEX checks_desc_test_idx ON phase_checks (id DESC)"))
         uow.session.execute(text("CREATE INDEX evidence_desc_test_idx ON phase_evidence_requirements (id DESC)"))
         uow.session.execute(text("CREATE INDEX phase_events_desc_test_idx ON task_phase_events (id DESC)"))
-        uow.session.execute(text("CREATE INDEX agents_desc_test_idx ON agents (id DESC)"))
         uow.session.execute(text("CREATE INDEX projects_desc_test_idx ON projects (id DESC)"))
         uow.commit()
         uow.session.execute(text("CLUSTER phase_checks USING checks_desc_test_idx"))
         uow.session.execute(text("CLUSTER phase_evidence_requirements USING evidence_desc_test_idx"))
         uow.session.execute(text("CLUSTER task_phase_events USING phase_events_desc_test_idx"))
-        uow.session.execute(text("CLUSTER agents USING agents_desc_test_idx"))
         uow.session.execute(text("CLUSTER projects USING projects_desc_test_idx"))
         uow.commit()
         uow.session.execute(text("SET LOCAL enable_indexscan = off"))
@@ -1444,7 +2161,6 @@ class TestPostgresUoW:
         evidence = list(uow.phase_evidence_requirements.list(int(phase.id)))
         history = list(uow.tasks.list_phase_events(task_id))
         batch_history = list(uow.tasks.list_phase_events_batch([task_id])[task_id])
-        agents = list(uow.agents.list())
         projects = list(uow.projects.list())
 
         assert [row["id"] for row in phase_checks] == sorted(row["id"] for row in phase_checks)
@@ -1453,7 +2169,6 @@ class TestPostgresUoW:
         assert [row["id"] for row in evidence] == sorted(row["id"] for row in evidence)
         assert [row.id for row in history] == sorted(row.id for row in history)
         assert [row.id for row in batch_history] == sorted(row.id for row in batch_history)
-        assert [agent.id for agent in agents] == sorted(agent.id for agent in agents)
         assert [item.id for item in projects] == sorted(item.id for item in projects)
         uow.close()
 
@@ -1811,144 +2526,6 @@ class TestPostgresUoW:
         assert verify.tasks.get_by_key("MOVERACE-1") is not None
         verify.close()
 
-    def test_agent_assignment_serializes_with_delete(self, pg_url):
-        ensure_migrated(get_engine(pg_url))
-        setup = SAUnitOfWork(pg_url)
-        workflow = WorkflowService(setup).create_workflow({"name": "Agent assignment race"})
-        phase = setup.phases.list(int(workflow["id"]))[0]
-        agent = AgentService(setup).create_agent({"name": "Race agent"})
-        setup.close()
-
-        assignment_holds_agent = Event()
-        delete_started = Event()
-        release_assignment = Event()
-
-        def assign() -> str:
-            uow = SAUnitOfWork(pg_url)
-            original_lock = uow.agents.lock
-
-            def paused_lock(agent_id: int):
-                locked = original_lock(agent_id)
-                assignment_holds_agent.set()
-                assert release_assignment.wait(10)
-                return locked
-
-            uow.agents.lock = paused_lock
-            try:
-                PhaseServiceApp(uow).update_phase(int(phase.id), {"agent_id": int(agent["id"])})
-                return "assigned"
-            finally:
-                uow.close()
-
-        def delete() -> str:
-            uow = SAUnitOfWork(pg_url)
-            original_lock = uow.agents.lock
-
-            def observed_lock(agent_id: int):
-                delete_started.set()
-                return original_lock(agent_id)
-
-            uow.agents.lock = observed_lock
-            try:
-                AgentService(uow).delete_agent(int(agent["id"]))
-                return "deleted"
-            except ConflictError:
-                return "rejected"
-            finally:
-                uow.close()
-
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            assignment_result = pool.submit(assign)
-            assert assignment_holds_agent.wait(10)
-            delete_result = pool.submit(delete)
-            assert delete_started.wait(10)
-            release_assignment.set()
-            assert assignment_result.result(timeout=20) == "assigned"
-            assert delete_result.result(timeout=20) == "rejected"
-
-        verify = SAUnitOfWork(pg_url)
-        assert verify.agents.get_by_id(int(agent["id"])) is not None
-        assert verify.phases.get_by_id(int(phase.id)).agent_id == agent["id"]
-        verify.close()
-
-    @pytest.mark.parametrize("operation", ["create", "update"])
-    def test_concurrent_hermes_profile_claim_is_domain_conflict(self, pg_url, operation):
-        ensure_migrated(get_engine(pg_url))
-        agent_ids: list[int] = []
-        if operation == "update":
-            setup = SAUnitOfWork(pg_url)
-            agent_ids = [
-                int(AgentService(setup).create_agent({"name": f"Profile owner {index}"})["id"])
-                for index in range(2)
-            ]
-            setup.close()
-        barrier = Barrier(2)
-
-        def claim(index: int) -> str:
-            uow = SAUnitOfWork(pg_url)
-            repository_method = uow.agents.create if operation == "create" else uow.agents.update
-
-            def synchronized_write(*args, **kwargs):
-                barrier.wait(timeout=10)
-                return repository_method(*args, **kwargs)
-
-            if operation == "create":
-                uow.agents.create = synchronized_write
-            else:
-                uow.agents.update = synchronized_write
-            try:
-                if operation == "create":
-                    AgentService(uow).create_agent(
-                        {"name": f"Concurrent profile {index}", "hermes_profile": "shared-race-profile"}
-                    )
-                else:
-                    AgentService(uow).update_agent(
-                        agent_ids[index], {"hermes_profile": "shared-race-profile"}
-                    )
-                return "saved"
-            except ConflictError:
-                return "conflict"
-            finally:
-                uow.close()
-
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            results = list(pool.map(claim, range(2)))
-
-        assert sorted(results) == ["conflict", "saved"]
-        verify = SAUnitOfWork(pg_url)
-        assert len([agent for agent in verify.agents.list() if agent.hermes_profile == "shared-race-profile"]) == 1
-        verify.close()
-
-    def test_concurrent_agent_name_claim_is_domain_conflict(self, pg_url):
-        ensure_migrated(get_engine(pg_url))
-        barrier = Barrier(2)
-
-        def create(index: int) -> str:
-            uow = SAUnitOfWork(pg_url)
-            repository_method = uow.agents.create
-
-            def synchronized_write(*args, **kwargs):
-                barrier.wait(timeout=10)
-                return repository_method(*args, **kwargs)
-
-            uow.agents.create = synchronized_write
-            try:
-                AgentService(uow).create_agent(
-                    {"name": "Shared reviewer", "description": f"attempt {index}"}
-                )
-                return "saved"
-            except ConflictError:
-                return "conflict"
-            finally:
-                uow.close()
-
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            results = list(pool.map(create, range(2)))
-
-        assert sorted(results) == ["conflict", "saved"]
-        verify = SAUnitOfWork(pg_url)
-        assert len([agent for agent in verify.agents.list() if agent.name == "Shared reviewer"]) == 1
-        verify.close()
 
     def test_catalog_mutation_during_supervisor_provider_call_fails_closed(self, pg_url):
         from project_workflow.infrastructure.llm import OpenAICompatibleClient
@@ -2093,71 +2670,6 @@ class TestPostgresUoW:
         assert replay["replayed"] is True
         replay_provider.assert_not_called()
 
-    def test_assigned_agent_update_waits_for_supervisor_commit(self, pg_url):
-        from project_workflow.infrastructure.llm import OpenAICompatibleClient
-        from project_workflow.supervisor import SupervisorEngine
-
-        _initialize_legacy_database(pg_url)
-        setup = SAUnitOfWork(pg_url)
-        workflow = setup.workflows.get_default()
-        assert workflow is not None and workflow.id is not None
-        phase = setup.phases.get_by_code(int(workflow.id), "1.INTAKE")
-        assert phase is not None and phase.agent_id is not None
-        agent_id = int(phase.agent_id)
-        setup.close()
-
-        evaluation_holds_workflow = Event()
-        allow_evaluation_commit = Event()
-        update_started = Event()
-        update_finished = Event()
-
-        def evaluate() -> dict:
-            uow = SAUnitOfWork(pg_url)
-            original_create_run = uow.record_step
-
-            def paused_create_run(*args, **kwargs):
-                evaluation_holds_workflow.set()
-                assert allow_evaluation_commit.wait(10)
-                return original_create_run(*args, **kwargs)
-
-            uow.record_step = paused_create_run
-            try:
-                with patch.object(
-                    OpenAICompatibleClient,
-                    "chat",
-                    side_effect=lambda *_args, **kwargs: _pass_response(str(kwargs["user"])),
-                ):
-                    return SupervisorEngine("RUN-90004", uow=uow).evaluate("done")
-            finally:
-                uow.close()
-
-        def update_agent() -> str:
-            uow = SAUnitOfWork(pg_url)
-            try:
-                update_started.set()
-                AgentService(uow).update_agent(agent_id, {"name": "Обновлённый агент"})
-                return "updated"
-            finally:
-                update_finished.set()
-                uow.close()
-
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            evaluation_result = pool.submit(evaluate)
-            assert evaluation_holds_workflow.wait(10)
-            update_result = pool.submit(update_agent)
-            assert update_started.wait(10)
-            update_was_serialized = not update_finished.wait(0.5)
-            allow_evaluation_commit.set()
-            evaluated = evaluation_result.result(timeout=20)
-            updated = update_result.result(timeout=20)
-
-        assert update_was_serialized
-        assert evaluated["verdict"] == "PASS"
-        assert updated == "updated"
-        verify = SAUnitOfWork(pg_url)
-        agent = verify.agents.get_by_id(agent_id)
-        assert agent is not None and agent.name == "Обновлённый агент"
-        verify.close()
 
     @pytest.mark.parametrize("operation", ["update", "delete", "reorder"])
     def test_instruction_mutation_serializes_with_phase_update(self, pg_url, operation):
@@ -2542,6 +3054,8 @@ def _initialize_cli_database(env: dict[str, str]) -> None:
             seed_path=config_module.LEGACY_UNMANAGED_SEED_PATH,
         )
         bootstrap_default_project(uow)
+        profession = uow.projects.get_by_code("RUN")
+        uow.projects.update(profession.id, {"launch_profile": "run-developer"})
         uow.commit()
 
 
@@ -2605,8 +3119,8 @@ def test_full_supervisor_runtime_through_cli_postgres_and_http(pg_url):
             "relevanter-business-operator",
         ]
         assert assignment_contract["execution_type"] == "sync"
-        assert assignment_contract["delegate_agent"] == "orchestrator"
-        assert assignment_contract["hermes_profile"] == "sdlc-orchestrator"
+        assert assignment_contract["delegate_agent"] == "RUN"
+        assert assignment_contract["hermes_profile"] == "run-developer"
         assert assignment_contract["group_phases"] is None
 
         first_report = "E2E report 1 for phase 1.INTAKE"
@@ -2627,7 +3141,7 @@ def test_full_supervisor_runtime_through_cli_postgres_and_http(pg_url):
                 assert [
                     detail["hermes_profile"]
                     for detail in payload["next_phase_contract"]["group_details"]
-                ] == ["sdlc-orchestrator", "sdlc-critic"]
+                ] == ["run-developer", "run-developer"]
                 assert "workflow-writing-plans" in payload["next_phase_contract"]["skills"]
                 assert any(
                     "workflow-code-intelligence" in instruction
@@ -2661,7 +3175,7 @@ def test_full_supervisor_runtime_through_cli_postgres_and_http(pg_url):
         assert terminal_result.returncode == history_result.returncode == 0
         assert terminal["phase_code"] == "15.RETRO"
         assert terminal["next_phase_code"] is None
-        assert terminal["phase_contract"]["hermes_profile"] == "sdlc-critic"
+        assert terminal["phase_contract"]["hermes_profile"] == "run-developer"
         assert terminal["status"] == "done"
         assert history_payload["count"] == 15
 
@@ -2952,62 +3466,3 @@ class TestPostgresContinuationCatalogVersioning:
             assert bound["execution_scope"] == scope and bound["mode_key"] == mode_key
             pinned = uow.workflows.get_mode(bound["mode_id"])
             assert pinned.catalog_version == 2 and set(pinned.execution_scopes) == {"delivery", "aggregate"}
-
-    def test_v1_bound_integration_survives_v2_adoption_but_refuses_v2_step(self, pg_url):
-        from tests.test_managed_catalog import _install_frozen_v1
-        from tests.test_runtime_assignment_contract import _binding, _step_request
-
-        ensure_migrated(get_engine(pg_url))
-        with SAUnitOfWork(pg_url) as uow:
-            _install_frozen_v1(uow)
-            project = uow.projects.get_by_cli_command("workflow-developer")
-            mode = uow.workflows.get_mode_by_key(project.workflow_id, "integration")
-            phase = uow.phases.list(project.workflow_id, mode_id=mode.id)[0]
-            task_id = uow.tasks.create(
-                {
-                    "project_id": project.id,
-                    "workflow_id": project.workflow_id,
-                    "mode_id": mode.id,
-                    "task_key": "DV-LEGACY-1",
-                    "current_phase_id": phase.id,
-                    "status": "active",
-                    "assignment_revision": 1,
-                    "assignment_operation_key": "legacy-bound",
-                }
-            )
-            payload = {**_binding(execution_scope="aggregate"), "mode_key": "integration", "cycle_number": 0}
-            record = {
-                **payload,
-                "task_id": task_id,
-                "project_id": project.id,
-                "workflow_id": project.workflow_id,
-                "mode_id": mode.id,
-                "operation_key": "legacy-bound",
-                "assignment_revision": 1,
-                "payload_sha256": "a" * 64,
-                "payload": payload,
-                "binding_ref": "legacy-binding",
-                "hermes_run_ref": "legacy-run",
-                "bind_operation_key": "legacy-bind-op",
-                "bind_request_sha256": "b" * 64,
-            }
-            uow.tasks.create_assignment(record)
-            uow.commit()
-            before = uow.tasks.get_assignment_by_operation_key("legacy-bound").to_dict()
-            task_before = uow.tasks.get_by_id(task_id).to_dict()
-            ensure_managed_catalog(uow)
-            uow.commit()
-            assert uow.tasks.get_assignment_by_operation_key("legacy-bound").to_dict() == before
-            assert uow.tasks.get_by_id(task_id).to_dict() == task_before
-            bound = {
-                **task_before,
-                **before,
-                "task_key": "DV-LEGACY-1",
-                "current_phase_code": phase.code,
-                "status": "active",
-            }
-            with pytest.raises(ConflictError, match="RUNTIME_VERSION_INCOMPATIBLE"):
-                TaskService(uow).validate_runtime_step(**_step_request(project.id, bound))
-            assert uow.tasks.get_by_id(task_id).to_dict() == task_before
-            assert uow.workflows.get_mode(mode.id).key == "integration"
-            assert uow.workflows.get_mode_by_key(project.workflow_id, "integration") is None

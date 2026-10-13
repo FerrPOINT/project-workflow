@@ -5,16 +5,18 @@ from __future__ import annotations
 import re
 from typing import Annotated, Any, ClassVar, Literal
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from project_workflow.domain.base_admission import BaseAdmission, ExactRef, Sha256
 from project_workflow.domain.namespace import normalize_namespace_cli_command
+from project_workflow.domain.profession_settings import normalize_launch_profile
 from project_workflow.domain.project_theme import (
     DEFAULT_PROJECT_COLOR,
     DEFAULT_PROJECT_ICON,
     normalize_theme_color,
     normalize_theme_icon,
 )
-from project_workflow.domain.runtime_assignment import MAX_WORK_ITEM_REVISION, normalize_role_key
+from project_workflow.domain.runtime_assignment import MAX_WORK_ITEM_REVISION, FleetAgentRef, normalize_role_key
 
 
 class StrictRequest(BaseModel):
@@ -69,6 +71,11 @@ class RuntimeStepRequest(StepRequest):
     attempt_number: int = Field(gt=0, strict=True)
     expected_phase_code: str = Field(min_length=1, max_length=128)
     expected_status: Literal["active", "blocked"]
+    base_config_ref: ExactRef | None = Field(default=None, exclude_if=lambda value: value is None)
+    base_config_sha256: Sha256 | None = Field(default=None, exclude_if=lambda value: value is None)
+    session_run_id: str | None = Field(
+        default=None, strict=True, min_length=36, max_length=36, exclude_if=lambda value: value is None,
+    )
 
     @field_validator(
         "assignment_ref",
@@ -125,6 +132,7 @@ class RuntimeAssignmentRequest(StrictRequest):
     lease_generation: int = Field(ge=0, strict=True)
     exact_input_refs: list[ExactInputRef] = Field(max_length=128)
     runtime_compatibility: dict[str, Any] | None = None
+    base_admission: BaseAdmission | None = Field(default=None, exclude_if=lambda value: value is None)
     expected_revision: int = Field(ge=0, strict=True)
     expected_status: Literal["missing", "active", "done", "blocked"]
     expected_mode_key: str | None = Field(default=None, min_length=1, max_length=128)
@@ -228,6 +236,9 @@ class RuntimeBindRequest(StrictRequest):
     cycle_number: int = Field(ge=0, strict=True)
     attempt_number: int = Field(gt=0, strict=True)
     expected_binding_state: Literal["unbound", "legacy_bound"]
+    concrete_agent_ref: FleetAgentRef | None = Field(
+        default=None, description="Immutable Fleet agent UUID; required for project_manager bindings",
+    )
 
     @field_validator(
         "task",
@@ -282,7 +293,6 @@ class PhaseCreate(StrictRequest):
     name: str = Field(default="Новая фаза")
     description: str = Field(default="")
     execution_type: Literal["sync", "parallel"] = Field(default="sync")
-    agent_id: int | None = Field(default=None, gt=0, strict=True)
     code: str | None = Field(default=None)
     parallel_with_phase_id: int | None = Field(default=None, gt=0, strict=True)
     rollback_target_phase_id: int | None = Field(default=None, gt=0, strict=True)
@@ -344,7 +354,6 @@ class PhaseUpdate(StrictUpdateRequest):
     description: str | None = Field(default=None)
     parallel_with_phase_id: int | None = Field(default=None, gt=0, strict=True)
     rollback_target_phase_id: int | None = Field(default=None, gt=0, strict=True)
-    agent_id: int | None = Field(default=None, gt=0, strict=True)
     execution_type: Literal["sync", "parallel"] | None = Field(default=None)
     instructions: list[PhaseInstructionItem] | None = Field(default=None)
     checks: list[PhaseTextItem] | None = Field(default=None)
@@ -398,10 +407,23 @@ class WorkflowUpdate(StrictUpdateRequest):
 class NamespaceCreate(StrictRequest):
     name: str
     description: str | None = Field(default="")
-    workflow_id: int = Field(gt=0, strict=True)
+    workflow_id: int | None = Field(default=None, gt=0, strict=True)
     theme_icon: str = Field(default=DEFAULT_PROJECT_ICON)
     theme_color: str = Field(default=DEFAULT_PROJECT_COLOR)
     cli_command: str = Field(..., min_length=1, max_length=64)
+    launch_profile: str | None = None
+
+    @field_validator("launch_profile")
+    @classmethod
+    def _launch_profile_valid(cls, value: str | None) -> str | None:
+        return normalize_launch_profile(value)
+
+    @field_validator("workflow_id")
+    @classmethod
+    def _provided_workflow_id(cls, value: int | None) -> int:
+        if value is None:
+            raise ValueError("workflow_id не может быть null")
+        return value
 
     @field_validator("name")
     @classmethod
@@ -425,7 +447,9 @@ class NamespaceCreate(StrictRequest):
 
 
 class NamespaceUpdate(StrictUpdateRequest):
-    non_nullable_fields = frozenset({"name", "description", "workflow_id", "theme_icon", "theme_color", "cli_command"})
+    non_nullable_fields = frozenset({
+        "name", "description", "workflow_id", "theme_icon", "theme_color", "cli_command",
+    })
 
     name: str | None = Field(default=None)
     description: str | None = Field(default=None)
@@ -433,6 +457,12 @@ class NamespaceUpdate(StrictUpdateRequest):
     theme_icon: str | None = Field(default=None)
     theme_color: str | None = Field(default=None)
     cli_command: str | None = Field(default=None, min_length=1, max_length=64)
+    launch_profile: str | None = None
+
+    @field_validator("launch_profile")
+    @classmethod
+    def _launch_profile_valid(cls, value: str | None) -> str | None:
+        return normalize_launch_profile(value)
 
     @field_validator("name")
     @classmethod
@@ -453,64 +483,6 @@ class NamespaceUpdate(StrictUpdateRequest):
     @classmethod
     def _cli_command_valid(cls, value: str | None) -> str | None:
         return normalize_namespace_cli_command(value) if value is not None else None
-
-
-class AgentCreate(StrictRequest):
-    name: str = Field(..., min_length=1)
-    description: str = Field(default="")
-    hermes_profile: str | None = Field(
-        default=None,
-        max_length=251,
-        strict=True,
-        validation_alias=AliasChoices("hermes_profile", "launch_profile"),
-    )
-
-    @field_validator("name")
-    @classmethod
-    def _name_not_blank(cls, value: str) -> str:
-        return _strip_nonblank(value, "name")
-
-    @field_validator("hermes_profile")
-    @classmethod
-    def _validate_hermes_profile(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        profile = value.strip()
-        if not profile:
-            raise ValueError("Ключ запуска не может быть пустым; для очистки используйте null")
-        if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", profile):
-            raise ValueError("Ключ запуска должен соответствовать [a-z0-9][a-z0-9_-]*")
-        return profile
-
-
-class AgentUpdate(StrictUpdateRequest):
-    non_nullable_fields = frozenset({"name", "description"})
-
-    name: str | None = Field(default=None)
-    description: str | None = Field(default=None)
-    hermes_profile: str | None = Field(
-        default=None,
-        max_length=251,
-        strict=True,
-        validation_alias=AliasChoices("hermes_profile", "launch_profile"),
-    )
-
-    @field_validator("name")
-    @classmethod
-    def _name_not_blank(cls, value: str | None) -> str | None:
-        return _strip_nonblank(value, "name") if value is not None else None
-
-    @field_validator("hermes_profile")
-    @classmethod
-    def _validate_hermes_profile(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        profile = value.strip()
-        if not profile:
-            raise ValueError("Ключ запуска не может быть пустым; для очистки используйте null")
-        if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", profile):
-            raise ValueError("Ключ запуска должен соответствовать [a-z0-9][a-z0-9_-]*")
-        return profile
 
 
 class PhaseOrderUpdate(StrictRequest):

@@ -7,7 +7,6 @@ import json
 from typing import Any
 
 from project_workflow.domain import (
-    Agent,
     Phase,
     Project,
     Task,
@@ -39,7 +38,6 @@ def _row_to_phase(row: m.Phase) -> Phase:
         name=row.name,
         description=row.description,
         phase_order=row.phase_order,
-        agent_id=row.agent_id,
         parallel_with_phase_id=row.parallel_with_phase_id,
         rollback_target_phase_id=row.rollback_target_phase_id,
         execution_type=row.execution_type or "sync",
@@ -94,6 +92,7 @@ def _row_to_project(row: m.Project) -> Project:
         theme_icon=normalize_theme_icon(row.theme_icon),
         theme_color=normalize_theme_color(row.theme_color),
         cli_command=getattr(row, "cli_command", "") or "",
+        launch_profile=row.launch_profile,
         key_prefixes=list(prefixes),
         workflow_name=row.workflow.name if row.workflow else None,
     )
@@ -171,21 +170,13 @@ def _row_to_runtime_assignment(row: m.TaskRuntimeAssignment) -> TaskRuntimeAssig
         hermes_run_ref=row.hermes_run_ref,
         bind_operation_key=row.bind_operation_key,
         bind_request_sha256=row.bind_request_sha256,
+        concrete_agent_ref=row.concrete_agent_ref,
         workspace_generation=row.workspace_generation,
         lease_generation=row.lease_generation,
         exact_input_refs=exact_input_refs,
         payload_sha256=row.payload_sha256,
         payload=payload,
         created_at=_iso(row.created_at),
-    )
-
-
-def _row_to_agent(row: m.Agent) -> Agent:
-    return Agent(
-        id=row.id,
-        name=row.name,
-        description=row.description or "",
-        hermes_profile=row.hermes_profile or None,
     )
 
 

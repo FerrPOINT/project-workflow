@@ -8,8 +8,6 @@ from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.domain.repositories import UnitOfWork
 from project_workflow.domain.runtime_assignment import normalize_role_key
 
-from .managed_catalog_policy import assert_catalog_mutation_allowed
-
 
 class WorkflowService:
     """Use cases for workflow templates."""
@@ -20,10 +18,15 @@ class WorkflowService:
         self._uow = uow
 
     def create_workflow(self, data: dict[str, Any]) -> dict[str, Any]:
-        assert_catalog_mutation_allowed(self._uow)
+        self._uow.lock_catalog_state(shared=True)
         payload = dict(data)
         try:
+            profession_id = payload.pop("profession_id", None)
+            if profession_id is not None and self._uow.projects.get_by_id(profession_id) is None:
+                raise NotFoundError(f"Профессия {profession_id} не найдена")
             wid = self._uow.workflows.create(payload)
+            if profession_id is not None:
+                self._uow.workflows.assign_profession(wid, profession_id)
             default_mode = self._uow.workflows.get_mode_by_key(wid, "default")
             if default_mode is None or default_mode.id is None:
                 raise RuntimeError("Не удалось создать режим по умолчанию")
@@ -35,7 +38,6 @@ class WorkflowService:
                 "name": self.DEFAULT_PHASE_NAME,
                 "description": "",
                 "phase_order": 1,
-                "agent_id": None,
                 "parallel_with_phase_id": None,
                 "rollback_target_phase_id": None,
                 "execution_type": "sync",
@@ -50,8 +52,13 @@ class WorkflowService:
             self._uow.rollback()
             raise
 
-    def list_workflows(self) -> list[dict[str, Any]]:
-        return [w.to_dict() for w in self._uow.workflows.list()]
+    def list_workflows(self, profession_id: int | None = None) -> list[dict[str, Any]]:
+        rows = (self._uow.workflows.list() if profession_id is None
+                else self._uow.workflows.list_by_profession(profession_id))
+        return [w.to_dict() for w in rows]
+
+    def belongs_to_profession(self, workflow_id: int, profession_id: int) -> bool:
+        return self._uow.workflows.belongs_to_profession(workflow_id, profession_id)
 
     def get_workflow(self, workflow_id: int) -> dict[str, Any] | None:
         w = self._uow.workflows.get_by_id(workflow_id)
@@ -63,7 +70,7 @@ class WorkflowService:
         return [mode.to_dict() for mode in self._uow.workflows.list_modes(workflow_id)]
 
     def create_mode(self, workflow_id: int, data: dict[str, Any]) -> dict[str, Any]:
-        assert_catalog_mutation_allowed(self._uow)
+        self._uow.lock_catalog_state(shared=True)
         workflow = self._uow.workflows.lock(workflow_id)
         if workflow is None:
             raise NotFoundError(f"Воркфлоу {workflow_id} не найден")
@@ -81,7 +88,7 @@ class WorkflowService:
         return mode.to_dict()
 
     def update_workflow(self, workflow_id: int, data: dict[str, Any]) -> None:
-        assert_catalog_mutation_allowed(self._uow)
+        self._uow.lock_catalog_state(shared=True)
         workflow = self._uow.workflows.lock(workflow_id)
         if workflow is None:
             raise NotFoundError(f"Воркфлоу {workflow_id} не найден")
@@ -95,7 +102,7 @@ class WorkflowService:
         return None
 
     def delete_workflow(self, workflow_id: int) -> None:
-        assert_catalog_mutation_allowed(self._uow)
+        self._uow.lock_catalog_state(shared=True)
         workflow = self._uow.workflows.lock(workflow_id)
         if workflow is None:
             raise NotFoundError(f"Воркфлоу {workflow_id} не найден")
