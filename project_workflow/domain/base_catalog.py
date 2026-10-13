@@ -7,11 +7,11 @@ BASE_CATALOG_ARTIFACTS = {
     4: "base_sdlc_catalog_v2.json",
 }
 BASE_CATALOG_REVISIONS = {
-    3: "674aab3f016255cf948b6e6e8b0ea92a8bf92557",
+    3: "b01fc3c9b017b81a178ef678754d8f23f9943af7",
     4: "ea90d3b734f82a337e2fb2b1ac68ce0ec8f57326",
 }
 BASE_CATALOG_BLOBS = {
-    3: "5581b929c9e80bfba85684e98109944b2fb898ae",
+    3: "71560ee37de8acfd020630d58a036618f007b94b",
     4: "aa5ff53b147b83ec5adf2d270ce18607121d8e78",
 }
 BASE_CATALOG_SKILLS = {

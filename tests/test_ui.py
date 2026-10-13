@@ -2846,10 +2846,14 @@ class TestSettingsPage:
         step_options = {option["flags"]: option for option in step["options"]}
         history_options = {option["flags"]: option for option in history["options"]}
 
-        assert set(step_options) == {"--task", "--report"}
+        assert set(step_options) == {
+            "--task", "--report", "--operation-key", "--runtime-request", "--execution-token-file",
+        }
         assert set(history_options) == {"--task", "--n"}
         assert "default" not in step_options["--task"]
         assert "default" not in step_options["--report"]
+        for flag in ("--operation-key", "--runtime-request", "--execution-token-file"):
+            assert "default" not in step_options[flag]
         assert "default" not in history_options["--n"]
         assert "по умолчанию: все" in history_options["--n"]["help"]
 
