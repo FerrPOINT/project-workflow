@@ -984,6 +984,62 @@ class TestPostgresSingleTaskProfile:
         with SAUnitOfWork() as uow:
             assert uow.tasks.get_assignment_by_operation_key(assignment["operation_key"]).to_dict() == before
 
+    def test_pm_pre_document_feedback_checkpoint_preserves_execution_and_null_requirements(
+        self, profile_client, monkeypatch,
+    ):
+        from project_workflow.infrastructure.db import models as m
+        from tests.test_single_task_runtime import (
+            PM,
+            PROFILE,
+            SESSION,
+            WRITER,
+            test_pm_brainstorming_checkpoints_and_resumes_feedback_before_any_requirements,
+        )
+
+        def no_model(*_args, **_kwargs):
+            pytest.fail("Pre-document brainstorming checkpoint/resume must not evaluate a report")
+
+        monkeypatch.setattr(OpenAICompatibleClient, "chat", no_model)
+        # Reuse the parent endpoint case with synthetic readback, including invalid-pair/input rejection and replay.
+        test_pm_brainstorming_checkpoints_and_resumes_feedback_before_any_requirements(profile_client, monkeypatch)
+        with SAUnitOfWork() as uow:
+            task = uow.tasks.get_by_key("RUN-7")
+            assignments = uow.tasks.list_assignments(task.id)
+            executions = uow.session.scalars(select(m.PMExecution)).all()
+            assert len(assignments) == len(executions) == 1
+            execution = executions[0]
+            identity = json.loads(execution.identity_json)
+            assert execution.execution_ref == assignments[0].payload["single_task_context"]["execution_ref"]
+            assert execution.state == "resume_pending" and execution.version == 3 and execution.fence == 2
+            assert task.status == "active" and task.current_phase_code == "PM-DRAFT-01" and task.cycle_number == 0
+            assert not uow.step_history.list(task_id=task.id)
+            checkpoint = json.loads(execution.checkpoint_json)
+            assert checkpoint["requirements_revision"] is checkpoint["requirements_sha256"] is None
+            assert checkpoint["clarification_request_ref"] is checkpoint["clarification_version"] is None
+            assert checkpoint["resume_input"]["input"]["input_kind"] == "feedback"
+            assert set(checkpoint["resume_input"]) == {"input", "input_receipt"}
+            operations = uow.session.scalars(select(m.PMOperation)).all()
+            assert len(operations) == 3
+            assert {operation.kind for operation in operations} == {"bind", "checkpoint", "resume"}
+            for operation in operations:
+                if operation.kind != "bind":
+                    accepted = json.loads(operation.result_json)
+                    assert accepted["checkpoint"]["requirements_revision"] is None
+                    assert accepted["checkpoint"]["requirements_sha256"] is None
+            runs = uow.session.scalars(select(m.PMRun)).all()
+            assert len(runs) == 1 and runs[0].session_run_id == execution.session_run_id == SESSION
+            assert json.loads(runs[0].terminal_json)["status"] == "stopped"
+            assert execution.resume_session_run_id != SESSION
+            assert uow.session.get(m.PMRun, execution.resume_session_run_id) is None
+        readback = profile_client.post(PM + "readback", headers=WRITER,
+                                      json={**PROFILE, **identity, "operation_key": "brainstorm:resume"})
+        assert readback.status_code == 200, readback.text
+        result = readback.json()["result"]
+        assert result["state"] == "resume_pending" and result["workflow_step_allowed"] is False
+        assert result["resume_input"] == checkpoint["resume_input"]
+        assert result["operation"]["result"]["resume_input"] == checkpoint["resume_input"]
+        assert result["checkpoint"]["requirements_revision"] is result["checkpoint"]["requirements_sha256"] is None
+
     def test_non_pm_terminal_completion_replay_and_committed_history(self, profile_client, monkeypatch, supervisor_llm):
         from project_workflow.infrastructure.db import models as m
         from tests.test_single_task_terminal import test_actual_completion_artifact_matches_readback_replay_and_restart
