@@ -5,13 +5,18 @@ checks и evidence семи профессий для одной Tracker зад�
 24 последовательные фазы. Исходный baseline Workflow:
 `6a50985841daa22aa6513868548a5d0b897fac44`.
 
-Точка подключения для интегратора:
+Source-only чтение подготовленных инструкций (не точка активации):
 
 ```python
 from project_workflow.infrastructure.single_task_catalog import load_single_task_professions
 
 professions = load_single_task_professions()
 ```
+
+Текущий bootstrap **не умеет устанавливать этот preset**. Нельзя включать его
+через `PROJECT_WORKFLOW_CATALOG_VARIANT` или выдавать результат loader за installed
+catalog/binding. Manifest, отдельные identities и необходимые публичные изменения
+предложены в [проверке совместимости](single-task-profile-activation-proposal.md).
 
 Функция возвращает независимые определения профессий с существующими workflow keys,
 mode keys, phase codes, namespace/profile и именами skills. Каждый режим проверяется
@@ -21,9 +26,12 @@ default инструкций для выбранного preset, а не уст�
 
 ## Совместимая Активация
 
-Минимальное предложение интегратору: отдельный явный выбор `single-task-v1` для новых
-назначений одной задачи. Не переиспользовать номер pinned Base catalog как номер
-этого preset. Текущий `ManagedCatalog` требует 11 режимов и прежнюю terminal policy,
+Актуальное предложение интегратору: отдельные namespaces/workflows/launch profiles
+семейства `single-task-v1`, catalog version 1 внутри нового семейства, явный opt-in
+только после реализации bootstrap и owner readback. Прежнее предложение переиспользовать
+legacy identities отозвано: Tracker связывает их со старым package и metadata.
+Не переиспользовать номер pinned Base catalog как номер этого preset.
+Текущий `ManagedCatalog` требует 11 режимов и прежнюю terminal policy,
 поэтому передавать ему эти восемь режимов как старый catalog запрещено. Общие wire
 DTO, schema, API registrations, migrations и bootstrap этим пакетом не меняются.
 
