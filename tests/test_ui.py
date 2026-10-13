@@ -510,7 +510,7 @@ class TestPhasesPage:
         assert "color:var(--accent-foreground);border-color:var(--accent)" in response.text
         assert "color:var(--accent-hover-foreground)" in response.text
         assert "--accent-foreground:" in response.text
-        assert "--shell-page-gutter:clamp(16px,2vw,32px)" in response.text
+        assert "--shell-page-gutter:clamp(16px,2vw,32px)" in re.sub(r"\s+", "", response.text)
         assert 'data-page-layout="wide"' in response.text
         assert '<body class="base-ssr-shell">' in response.text
         assert '.platform-header-context{justify-content:flex-end}' in response.text
