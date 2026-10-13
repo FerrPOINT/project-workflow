@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "package": "@sdlc/ui",
   "files": {
-    "base-ui.css": "d7611aa5c43b635b58bd67f0c0ed07248e76c243d3d1106b4c1ca7f56d04c4b8",
+    "base-ui.css": "011eef39130757a88b29e84546c955debb4dc2e468ada2ae4f217f5caa61e284",
     "base-ui.js": "8ecbf558111cec630972707a9a153091b97b7b51ba611ce8cdafcc5fd774432e",
     "theme-preference.js": "56e93cf4a6769cb062ad30e1bcb4cb91df7fbde53296e601c65a6119d3a45738",
-    "macros.html": "d045968da78262ed1d408936bd482458781384b36315836a5e06c3b952103004",
+    "macros.html": "f518637b7a94d7e05ebcd74f91bd7a203b346456a92f1598c3b51ffcfbc1f422",
     "platform-bridge.js": "f32aedecaeddbec0b9868471299f84afb27c8c40ae291f694c63e34cfe9bd903",
     "platform-ssr.js": "03ed585fca2fb025e6efdc6f5b7b737ae91edc92928319a570c4091e72daa18c",
     "platform-navigation.js": "9875be56a2912c1b5b18cd5b70731c42bafa492b2f13c62d2d18559fec4861b3"
