@@ -191,7 +191,7 @@ def test_version_one_cannot_bypass_runtime_or_human_step_guard(database):
                           "mode_id": int(binding.modes[0].mode_id), "task_key": "RUN-7", "title": "Unbound",
                           "status": "active", "current_phase_id": int(binding.modes[0].phase_ids[0])})
         uow.commit()
-        with pytest.raises(ConflictError, match="pending parent"):
+        with pytest.raises(ConflictError, match="authenticated assigned"):
             supervisor.SupervisorEngine("RUN-7", uow=uow, project_id=project_id, create_if_missing=False)
 
 
@@ -263,9 +263,13 @@ def assignment_payload():
         "task": "RUN-7", "role_key": "developer", "workflow_key": "single-task-v1:developer", "mode_key": "initial",
         "execution_scope": "delivery", "stage_key": "Development", "cycle_number": 0, "attempt_number": 1,
         "operation_key": "assignment-7", "business_task_ref": "11111111-1111-4111-8111-111111111111",
-        "root_task_ref": "11111111-1111-4111-8111-111111111111", "work_item_ref": "task-7", "work_item_revision": 1,
-        "queue_item_ref": "queue-7", "task_workspace_ref": "workspace-7", "workspace_revision": 1,
-        "stage_revision": "1", "assignment_ref": "assignment-7", "workspace_generation": 1, "lease_generation": 1,
+        "root_task_ref": "11111111-1111-4111-8111-111111111111",
+        "assignment_ref": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "execution_ref": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        "concrete_agent_ref": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        "tracker_instance_ref": "tracker:one", "tracker_project_ref": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+        "task_revision": 1, "lease_ref": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        "lease_version": 1, "fencing_token": 1,
         "exact_input_refs": [], "expected_revision": 0, "expected_status": "missing",
     }
 
@@ -273,7 +277,7 @@ def assignment_payload():
 def test_profile_assignment_shape_omits_decomposition_and_enforces_task_root():
     payload = assignment_payload()
     request = SingleTaskAssignmentRequest.model_validate(payload)
-    assert request.decomposition_revision_ref is None
+    assert "decomposition_revision_ref" not in request.model_dump()
     for changes in ({"root_task_ref": "22222222-2222-4222-8222-222222222222"},
                     {"instruction_manifest_sha256": "0" * 64}, {"decomposition_revision_ref": "fake"},
                     {"workflow_key": "hermes-sdlc:developer"}, {"execution_scope": "aggregate"}):
@@ -291,6 +295,7 @@ def test_profile_assign_bind_step_keep_existing_auth_and_fail_closed(database, m
     monkeypatch.setattr(runtime_api, "SAUnitOfWork", lambda: SAUnitOfWork(database))
     monkeypatch.setenv("PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON", json.dumps({"developer": "w" * 32}))
     monkeypatch.setenv("PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON", json.dumps({"developer": "r" * 32}))
+    monkeypatch.setenv("PROJECT_WORKFLOW_PM_SCOPE_SECRET", "s" * 40)
     config.get_settings.cache_clear()
     with TestClient(create_app()) as client:
         assignment = assignment_payload()
@@ -300,20 +305,32 @@ def test_profile_assign_bind_step_keep_existing_auth_and_fail_closed(database, m
         assert client.post(base + "assign", json=assignment).status_code == 401
         assert client.post(base + "assign", json=assignment, headers=runner).status_code == 403
         response = client.post(base + "assign", json=assignment, headers=writer)
-        assert response.status_code == 409 and "pending parent" in response.text
+        assert response.status_code == 200, response.text
         bind = {"task": "RUN-7", "bind_operation_key": "bind-7", "assignment_operation_key": "assignment-7",
-                "assignment_revision": 1, "assignment_ref": "assignment-7", "binding_ref": "bind-7",
+                "assignment_revision": 1, "assignment_ref": assignment["assignment_ref"], "binding_ref": "bind-7",
                 "hermes_run_ref": "run-7", "mode_key": "initial", "cycle_number": 0, "attempt_number": 1,
-                "expected_binding_state": "unbound"}
+                "expected_binding_state": "unbound", "instruction_profile": "single-task-v1",
+                "instruction_manifest_sha256": MANIFEST_SHA256,
+                "session_run_id": "ffffffff-ffff-4fff-8fff-ffffffffffff",
+                "concrete_agent_ref": assignment["concrete_agent_ref"]}
         assert client.post(base + "bind", json=bind, headers=runner).status_code == 403
         response = client.post(base + "bind", json=bind, headers=writer)
-        assert response.status_code == 409 and "pending parent" in response.text
+        assert response.status_code == 200, response.text
+        bound = response.json()
         step = {"task": "RUN-7", "step_operation_key": "step-7", "assignment_revision": 1,
-                "assignment_ref": "assignment-7", "binding_ref": "bind-7", "hermes_run_ref": "run-7",
+                "assignment_ref": assignment["assignment_ref"], "binding_ref": "bind-7", "hermes_run_ref": "run-7",
                 "mode_key": "initial", "cycle_number": 0, "attempt_number": 1,
-                "expected_phase_code": "DV-INITIAL-01", "expected_status": "active"}
+                "expected_phase_code": "DV-INITIAL-01", "expected_status": "active",
+                "instruction_profile": "single-task-v1", "instruction_manifest_sha256": MANIFEST_SHA256,
+                "session_run_id": bind["session_run_id"],
+                "single_task_context_sha256": bound["result"]["single_task_context_sha256"]}
         assert client.post(base + "step", json=step, headers=writer).status_code == 403
         response = client.post(base + "step", json=step, headers=runner)
-        assert response.status_code == 409 and "pending parent" in response.text
+        assert response.status_code == 403
+        response = client.post(base + "step", json=step,
+                               headers={**runner, "X-Workflow-Execution-Token": bound["execution_token"]})
+        assert response.status_code == 200, response.text
     with SAUnitOfWork(database) as uow:
-        assert not uow.tasks.list()
+        assert len(uow.tasks.list()) == 1
+        assignment = uow.tasks.get_assignment_by_operation_key("assignment-7")
+        assert assignment.work_item_ref is assignment.queue_item_ref is assignment.decomposition_revision_ref is None

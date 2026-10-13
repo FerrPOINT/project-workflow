@@ -271,6 +271,7 @@ class TaskRepository(ABC):
         bind_operation_key: str,
         bind_request_sha256: str,
         concrete_agent_ref: str | None,
+        single_task_binding: dict[str, Any] | None = None,
     ) -> bool: ...
 
     @abstractmethod

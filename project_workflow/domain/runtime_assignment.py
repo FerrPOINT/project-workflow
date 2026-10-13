@@ -84,6 +84,7 @@ class RuntimeStepFence:
     pm_version: int | None = None
     pm_fence: int | None = None
     base_admission_sha256: str | None = None
+    single_task_context_sha256: str | None = None
 
     def assert_task(self, task: dict[str, Any] | None) -> None:
         """Reject a stale task projection before Supervisor can use or mutate it."""
@@ -122,6 +123,10 @@ class RuntimeStepFence:
             "role_key": self.role_key,
         }
         mismatched = [name for name, value in expected.items() if history.get(name) != value]
+        if self.single_task_context_sha256 is not None:
+            snapshot = history.get("evaluation_snapshot", {})
+            if snapshot.get("single_task_context_sha256") != self.single_task_context_sha256:
+                mismatched.append("single_task_context_sha256")
         if mismatched:
             raise ValueError(
                 "step_operation_key уже использован для другого runtime step"

@@ -5,6 +5,10 @@ catalog version 1: семь namespaces, семь workflows, восемь modes �
 Default остаётся `legacy`. **Установка не активирует live исполнение**:
 Registry/Tracker routing и API integration остаются pending parent.
 
+Bounded profile-aware execution и typed PM packet реализованы отдельно:
+[Single-Task Runtime Packet](single-task-runtime.md). Ниже ограничения прежнего
+source-installer пакета отмечены как исторические; live activation по-прежнему запрещена.
+
 ## Bootstrap И Readback
 
 Existing selector `PROJECT_WORKFLOW_CATALOG_VARIANT=single-task-v1` выбирает новый
@@ -56,23 +60,25 @@ Base `PACKAGE_COMMIT`, catalog pins/source и legacy history не перепис
 `single-task-v1:<canonical-role>`, launch profile `single-task-v1-<role-with-hyphens>`.
 Wire role — `devops`; только Fleet boundary явно отображает его в `dev_ops`.
 
-## Assignment И Guard
+## Assignment И Guard (Installer Baseline)
 
-Existing assign endpoint принимает отдельный `SingleTaskAssignmentRequest`:
+До bounded execution пакета existing assign endpoint принимал `SingleTaskAssignmentRequest`:
 `instruction_profile=single-task-v1`, exact manifest hash и canonical Tracker UUID
 с `business_task_ref == root_task_ref`. Decomposition revision может отсутствовать/null
 и не может быть фиктивной строкой. Legacy request сохраняет обязательность поля.
 Profile branch отвергает legacy workflow key, aggregate scope и Base admission.
 Общие workspace/queue/work-item inputs пока сохраняются; их producer mapping не выдуман.
 
-**Persistence/dispatch пока fail-closed.** Текущий DB constraint
+**Историческая граница installer-only пакета.** Тогда DB constraint
 `ck_task_runtime_assignments_binding_complete` требует decomposition revision для
 ordinary assignment. Нужна отдельно согласованная DB-адаптация; migrations здесь
-не добавлялись. Parent также владеет Registry/Tracker routing и registration.
+не добавлялись. Теперь additive `0015` и standalone profile DTO описаны в runtime packet.
+Parent по-прежнему владеет Registry/Tracker routing и registration.
 
-Existing assign/bind/rebind/step сохраняют раздельные credentials и assignment/run
+Existing assign/bind/rebind/step сохраняли раздельные credentials и assignment/run
 fence проверки. Новый family key явно блокируется до parent integration независимо
-от version 1. Human/local-DB Supervisor step не создаёт задачу и не исполняет
+от version 1 в installer-only пакете. В bounded execution этот blocker заменён
+installed profile + authenticated binding guard. Human/local-DB Supervisor step не создаёт задачу и не исполняет
 существующий unbound cursor этого семейства. Нового terminal-owner registry нет.
 
 ## Tracker Instructions
@@ -119,11 +125,12 @@ Consent может создать Analysis / Ready intent в Tracker, но Analy
 заблокирован до PM actual completion. Дополнительные PM assignment cycles
 или resume completed execution не являются способом реализовать ожидание.
 
-Existing PM checkpoint/resume DTO пока answer-only. Требуется отдельно согласованное
+Legacy PM checkpoint/resume DTO остаётся answer-only. Opt-in typed contract реализован
+в runtime packet на существующих endpoints. Исходная dependency формулировалась как
 typed `input_kind=answer|feedback|confirmation`: только answer ссылается на реальный
 question/answer event, feedback не получает фиктивный answer ID, confirmation
 ссылается на существующий real confirmation receipt. До интеграции typed contract
-фаза остаётся unfinished с явной зависимостью. В этом пакете shared wire,
+фаза остаётся unfinished с явной зависимостью. В installer-only пакете shared wire,
 checkpoint/resume implementation и migrations не менялись. Проверки фазы требуют
 actual receipt и разрешённых зависимостей до final report; это instruction gate,
 не заявление о готовом runtime enforcement.

@@ -175,10 +175,10 @@ class TaskService:
         tech_execution_workspace_ref: str | None,
         tech_execution_attempt_ref: str | None,
         decomposition_revision_ref: str | None,
-        stage_revision: str,
+        stage_revision: str | None,
         assignment_ref: str,
         workspace_generation: int | None,
-        lease_generation: int,
+        lease_generation: int | None,
         exact_input_refs: list[dict[str, Any]],
         expected_revision: int,
         expected_status: str,
@@ -187,6 +187,7 @@ class TaskService:
         runtime_compatibility: dict[str, Any] | None = None,
         base_admission: dict[str, Any] | None = None,
         pm_draft_context: PMDraftAssignment | None = None,
+        single_task_context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Persist one authorized Business assignment atomically and idempotently."""
         operation_key = operation_key.strip()
@@ -213,7 +214,26 @@ class TaskService:
             raise NotFoundError(f"Воркфлоу {project.workflow_id} не найден")
         if workflow.key != workflow_key:
             raise ConflictError("Business workflow key не совпадает с workflow неймспейса")
-        self._reject_single_task_execution(project_id)
+        from project_workflow.domain.single_task_profile import is_single_task_key
+
+        single_task = is_single_task_key(workflow.key)
+        if single_task != (single_task_context is not None):
+            raise ConflictError("Single-task profile context required only for its installed family")
+        if single_task:
+            from project_workflow.application.single_task_runtime import installed_context
+            from project_workflow.domain.single_task_runtime import validate_assignment_identity
+
+            single_task_context = installed_context(self._uow, project_id, single_task_context or {})
+            validate_assignment_identity(
+                workflow_key=workflow_key, role_key=role_key, mode_key=mode_key, execution_scope=execution_scope,
+                stage_key=stage_key, business_task_ref=business_task_ref, root_task_ref=root_task_ref,
+                assignment_ref=assignment_ref,
+            )
+            if base_admission is not None or pm_draft_context is not None or any(v is not None for v in (
+                work_item_ref, work_item_revision, queue_item_ref, task_workspace_ref, workspace_revision,
+                workspace_generation, decomposition_revision_ref, stage_revision, lease_generation,
+            )):
+                raise ConflictError("Single-task assignment forbids fabricated legacy resources/Base admission")
         mode = self._uow.workflows.get_mode_by_key(project.workflow_id, mode_key)
         if mode is None or mode.id is None:
             raise ConflictError(f"Режим {mode_key!r} не найден в воркфлоу {project.workflow_id}")
@@ -223,6 +243,7 @@ class TaskService:
             execution_scope=execution_scope,
             tech_execution_workspace_ref=tech_execution_workspace_ref,
             tech_execution_attempt_ref=tech_execution_attempt_ref,
+            single_task=single_task,
         )
         if (
             not isinstance(cycle_number, int)
@@ -249,18 +270,18 @@ class TaskService:
                 ))
             ):
                 raise ConflictError("PM Draft context differs from its initial reservation")
-        if pm_draft_context is None and (
+        if pm_draft_context is None and not single_task and (
             not isinstance(work_item_revision, int)
             or isinstance(work_item_revision, bool)
             or work_item_revision < 0
             or work_item_revision > MAX_WORK_ITEM_REVISION
         ):
             raise ValueError("work_item_revision должен быть неотрицательным 64-битным целым числом")
-        if pm_draft_context is None and (
+        if pm_draft_context is None and not single_task and (
             not isinstance(workspace_revision, int) or isinstance(workspace_revision, bool) or workspace_revision <= 0
         ):
             raise ValueError("workspace_revision должен быть положительным целым числом")
-        if (
+        if not single_task and (
             (pm_draft_context is None and (
                 not isinstance(workspace_generation, int) or isinstance(workspace_generation, bool)
                 or workspace_generation < 0
@@ -281,7 +302,7 @@ class TaskService:
             "assignment_ref": assignment_ref,
         }
         normalized_refs = {
-            key: None if pm_draft_context is not None and value is None else self._bounded_ref(
+            key: None if (pm_draft_context is not None or single_task) and value is None else self._bounded_ref(
                 value, key, 128 if key == "stage_revision" else 512,
             )
             for key, value in external_refs.items()
@@ -343,6 +364,8 @@ class TaskService:
             payload["pm_draft_context"] = pm_draft_context.model_dump(exclude={"runtime_compatibility"})
         if base_admission is not None:
             payload["base_admission"] = base_admission
+        if single_task_context is not None:
+            payload["single_task_context"] = single_task_context
         if replay is not None:
             return self._reconcile_assignment(replay.to_dict(), payload)
         phases = list(self._uow.phases.list(workflow_id=project.workflow_id, mode_id=mode.id))
@@ -656,9 +679,9 @@ class TaskService:
         attempt_number: int,
         expected_binding_state: str,
         concrete_agent_ref: str | None = None,
+        single_task_profile: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Atomically attach one real Hermes binding to an accepted assignment."""
-        self._reject_single_task_execution(project_id)
         role_key = normalize_role_key(role_key)
         if concrete_agent_ref is not None:
             concrete_agent_ref = validate_concrete_agent_ref(concrete_agent_ref)
@@ -698,6 +721,8 @@ class TaskService:
         # Omitted mappings keep the published non-PM bind replay digest unchanged.
         if concrete_agent_ref is not None:
             request["concrete_agent_ref"] = concrete_agent_ref
+        if single_task_profile is not None:
+            request.update(single_task_profile)
         request_digest = payload_sha256(request)
         replay = self._uow.tasks.get_assignment_by_bind_operation_key(refs["bind_operation_key"])
         if replay is not None:
@@ -725,6 +750,24 @@ class TaskService:
             raise ConflictError("Принятый runtime assignment не найден")
         record = assignment.to_dict()
         continuation = record.get("payload", {})
+        single_context = continuation.get("single_task_context")
+        single_binding = None
+        if (single_context is not None) != (single_task_profile is not None):
+            raise ConflictError("Single-task bind requires exact profile/session context")
+        if single_context is not None:
+            from project_workflow.application.single_task_runtime import installed_context
+
+            installed_context(self._uow, project_id, single_context)
+            if (concrete_agent_ref != single_context["concrete_agent_ref"]
+                or single_task_profile is None
+                or single_task_profile["instruction_manifest_sha256"] != single_context["instruction_manifest_sha256"]
+                or single_task_profile["instruction_profile"] != "single-task-v1"
+                or expected_binding_state != "unbound"):
+                raise ConflictError("Single-task bind differs from assigned agent/profile")
+            validate_concrete_agent_ref(single_task_profile["session_run_id"])
+            single_binding = {"request": request, "context": single_context,
+                              "task_ref": record["business_task_ref"], "root_ref": record["root_task_ref"],
+                              "assignment_sha256": record["payload_sha256"]}
         if continuation.get("pm_draft_context") is not None:
             if concrete_agent_ref != continuation["pm_draft_context"]["agent_ref"]:
                 raise ConflictError("PM bind concrete agent differs from the Draft reservation")
@@ -793,6 +836,7 @@ class TaskService:
                 bind_operation_key=refs["bind_operation_key"],
                 bind_request_sha256=request_digest,
                 concrete_agent_ref=concrete_agent_ref,
+                **({"single_task_binding": single_binding} if single_binding is not None else {}),
             )
             if not updated:
                 self._uow.rollback()
@@ -830,7 +874,6 @@ class TaskService:
         base_config_sha256: str | None = None,
     ) -> RuntimeStepFence:
         """Lock and validate the exact immutable owner assignment for one step."""
-        self._reject_single_task_execution(project_id)
         role_key = normalize_role_key(role_key)
         step_operation_key = self._bounded_ref(step_operation_key, "step_operation_key", 128)
         if (
@@ -934,7 +977,8 @@ class TaskService:
         pinned_mode = self._uow.workflows.get_mode(mode_id)
         if pinned_mode is None:
             raise ConflictError("Runtime assignment pinned mode missing")
-        if getattr(pinned_mode, "catalog_version", 1) == 1:
+        single_context = record.get("payload", {}).get("single_task_context")
+        if getattr(pinned_mode, "catalog_version", 1) == 1 and single_context is None:
             # Frozen legacy phases remain readable; a v2 image cannot execute their old tool contract.
             raise ConflictError("RUNTIME_VERSION_INCOMPATIBLE: pinned legacy catalog requires legacy runtime")
         descriptor = record.get("payload", {}).get("runtime_compatibility")
@@ -967,6 +1011,9 @@ class TaskService:
             pm_version=pm_execution.version if pm_execution is not None else None,
             pm_fence=pm_execution.fence if pm_execution is not None else None,
             base_admission_sha256=payload_sha256(base_admission) if base_admission is not None else None,
+            single_task_context_sha256=(
+                self._single_task_hash(record) if single_context is not None else None
+            ),
         )
 
     @staticmethod
@@ -982,6 +1029,14 @@ class TaskService:
         workflow = self._uow.workflows.get_by_id(project.workflow_id) if project and project.workflow_id else None
         if workflow is not None and is_single_task_key(workflow.key):
             raise ConflictError(EXECUTION_PENDING)
+
+    def _single_task_hash(self, record: dict[str, Any]) -> str:
+        from project_workflow.application.single_task_runtime import context_hash
+
+        original = self._uow.tasks.get_assignment_by_operation_key(record["operation_key"])
+        if original is None:
+            raise ConflictError("Single-task assignment missing")
+        return context_hash(self._uow, original.to_dict())  # type: ignore[arg-type]
 
     @classmethod
     def _validate_retry_assignment(
@@ -1047,6 +1102,7 @@ class TaskService:
         execution_scope: str,
         tech_execution_workspace_ref: str | None,
         tech_execution_attempt_ref: str | None,
+        single_task: bool = False,
     ) -> None:
         if not mode.role_key or not mode.execution_scopes or not mode.tech_workspace_policy:
             raise ConflictError("Режим не содержит полный backend-owned assignment policy")
@@ -1054,7 +1110,9 @@ class TaskService:
             raise ConflictError("Backend-owned policy не разрешает указанную роль")
         if execution_scope not in mode.execution_scopes:
             raise ConflictError("Backend-owned mode policy не разрешает указанный execution scope")
-        if mode.tech_workspace_policy == "required" and (
+        if single_task and (tech_execution_workspace_ref is None) != (tech_execution_attempt_ref is None):
+            raise ConflictError("Single-task Tech workspace/attempt must be a real pair or both absent")
+        if not single_task and mode.tech_workspace_policy == "required" and (
             tech_execution_workspace_ref is None or tech_execution_attempt_ref is None
         ):
             raise ConflictError("Mode policy требует TechExecutionWorkspace и attempt ref")
@@ -1139,6 +1197,11 @@ class TaskService:
         receipt = admission_receipt(assignment, task)
         if receipt is not None:
             result["base_admission_receipt"] = receipt
+        if assignment.get("single_task_binding") is not None:
+            from project_workflow.domain.runtime_assignment import payload_sha256
+
+            result["single_task_context_sha256"] = payload_sha256(assignment["single_task_binding"])
+            result["single_task_binding"] = assignment["single_task_binding"]
         return result
 
     def _reconcile_bind_after_race(self, request: dict[str, Any], request_digest: str) -> dict[str, Any]:

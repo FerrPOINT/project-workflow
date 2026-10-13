@@ -283,6 +283,7 @@ def ensure_migrated(engine: Engine | Connection | None = None) -> None:
         "0011_profession_workflows",
         "0012_profession_themes",
         "0013_profession_execution",
+        "0014_launch_profile_only",
     }
     incompatible_revision = bool(revisions) and not revisions.issubset(compatible_upgrade_revisions)
     exact_tables = existing_tables == expected_tables()

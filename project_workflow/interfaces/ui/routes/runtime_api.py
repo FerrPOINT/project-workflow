@@ -39,6 +39,8 @@ from project_workflow.interfaces.ui.schemas import (
     RuntimeRebindRequest,
     RuntimeStepRequest,
     SingleTaskAssignmentRequest,
+    SingleTaskBindRequest,
+    SingleTaskStepRequest,
 )
 from project_workflow.supervisor import format_result
 
@@ -325,6 +327,10 @@ def _history_rows(uow: SAUnitOfWork, task_key: str, namespace_id: int, limit: in
                 "execution_ref", "session_run_id", "execution_version", "execution_fence",
                 "binding_ref", "hermes_run_ref", "assignment_ref", "assignment_revision",
             )})
+        snapshot = item.get("evaluation_snapshot", {})
+        if snapshot.get("single_task_context_sha256") is not None:
+            rows[-1]["single_task_context_sha256"] = snapshot["single_task_context_sha256"]
+            rows[-1]["single_task_binding"] = snapshot["single_task_binding"]
     return rows
 
 
@@ -413,6 +419,13 @@ def _runtime_step_replay(
     )
     if mismatched or invalid_task or invalid_assignment:
         raise ConflictError("step_operation_key уже использован для другого runtime step")
+    if assignment_data.get("single_task_binding") is not None:
+        from project_workflow.application.single_task_runtime import context_hash
+
+        if (not isinstance(payload, SingleTaskStepRequest)
+            or history.get("evaluation_snapshot", {}).get("single_task_context_sha256")
+            != context_hash(uow, assignment.to_dict() if assignment is not None else {})):
+            raise ConflictError("Single-task replay integrity fence mismatch")
     if task is not None:
         assert_base_step(
             uow, task.to_dict(), assignment_data,
@@ -556,7 +569,8 @@ def _assignment_response(task: dict[str, Any]) -> dict[str, Any]:
     return {
         "ok": True,
         "exit_code": 0,
-        "result": {key: task.get(key) for key in keys},
+        "result": {**{key: task.get(key) for key in keys},
+                   **{key: task[key] for key in ("single_task_context_sha256", "single_task_binding") if key in task}},
         **({"base_admission_receipt": task["base_admission_receipt"]} if "base_admission_receipt" in task else {}),
     }
 
@@ -582,7 +596,7 @@ def runtime_assign(
     if payload.role_key != role:
         return _error("role_key не совпадает с ролью assignment token", 403)
     try:
-        if (
+        if isinstance(payload, RuntimeAssignmentRequest) and (
             payload.runtime_compatibility is not None
             and payload.runtime_compatibility != runtime_compatibility_descriptor()
         ):
@@ -591,6 +605,21 @@ def runtime_assign(
             namespace_id = _namespace_id(uow, role)
             task_key = _require_valid_key(payload.task, uow, project_id=namespace_id)
             _assert_task_key_in_namespace(uow, namespace_id, task_key)
+            if isinstance(payload, SingleTaskAssignmentRequest):
+                from project_workflow.domain.single_task_runtime import SingleTaskContext
+
+                values = payload.model_dump(exclude=set(SingleTaskContext.model_fields))
+                values["task_key"] = task_key
+                values.pop("task")
+                task = TaskService(uow).assign_runtime_task(
+                    project_id=namespace_id, **values,
+                    work_item_ref=None, work_item_revision=None, queue_item_ref=None, task_workspace_ref=None,
+                    workspace_revision=None,
+                    decomposition_revision_ref=None, stage_revision=None, workspace_generation=None,
+                    lease_generation=None,
+                    single_task_context=payload.model_dump(include=set(SingleTaskContext.model_fields)),
+                )
+                return _assignment_response(task)
             task = TaskService(uow).assign_runtime_task(
                 project_id=namespace_id,
                 task_key=task_key,
@@ -657,7 +686,7 @@ def runtime_rebind(
 
 
 def runtime_bind(
-    payload: RuntimeBindRequest,
+    payload: SingleTaskBindRequest | RuntimeBindRequest,
     authorization: str | None = Header(default=None),
 ) -> dict[str, Any] | JSONResponse:
     """Attach the adapter's real Hermes binding to one accepted assignment."""
@@ -692,14 +721,27 @@ def runtime_bind(
                 attempt_number=payload.attempt_number,
                 expected_binding_state=payload.expected_binding_state,
                 concrete_agent_ref=payload.concrete_agent_ref,
+                single_task_profile=(payload.model_dump(include={
+                    "instruction_profile", "instruction_manifest_sha256", "session_run_id",
+                }) if isinstance(payload, SingleTaskBindRequest) else None),
             )
+            if "single_task_context_sha256" in task:
+                from project_workflow.application.single_task_runtime import current_binding, execution_token
+
+                assignment = uow.tasks.get_assignment_by_operation_key(task["assignment_operation_key"])
+                if assignment is None:
+                    raise ConflictError("Single-task bound assignment missing")
+                current_binding(uow, assignment.to_dict())
+                response = _assignment_response(task)
+                response["execution_token"] = execution_token(task["single_task_context_sha256"])
+                return response
             return _assignment_response(task)
     except (ConflictError, RuntimeError, ValueError) as exc:
         return _error(str(exc), 409)
 
 
 def runtime_step(
-    payload: RuntimeStepRequest,
+    payload: SingleTaskStepRequest | RuntimeStepRequest,
     authorization: str | None = Header(default=None),
     x_workflow_execution_token: str | None = Header(default=None),
 ) -> dict[str, Any] | JSONResponse:
@@ -725,6 +767,8 @@ def runtime_step(
             from . import pm_api
 
             task_row = uow.tasks.get_by_key(task_key, project_id=namespace_id)
+            _authorize_single_task(uow, task_row, x_workflow_execution_token, payload.session_run_id,
+                                   payload=payload)
             if role == "project_manager" and task_row is not None:
                 execution = uow.session.scalar(select(PMExecution).where(PMExecution.task_id == task_row.id))
                 if execution is not None:
@@ -736,6 +780,10 @@ def runtime_step(
                         return _error("Current PM execution/run credential required", 403)
                     if payload.session_run_id != snapshot["session_run_id"]:
                         return _error("Current Fleet session_run_id required", 409)
+                    if (isinstance(payload, SingleTaskStepRequest) and payload.report is not None
+                        and payload.expected_phase_code == "PM-DRAFT-03"
+                        and snapshot.get("resume_input", {}).get("input", {}).get("input_kind") != "confirmation"):
+                        return _error("PM final report requires actual typed owner confirmation receipt", 409)
                 else:
                     PMExecutionService(uow).supervisor_binding(int(task_row.id or 0))
             replay = _runtime_step_replay(
@@ -804,6 +852,8 @@ def runtime_step(
             request_sha256=request_digest,
             role_key=role,
         )
+    except PermissionError as exc:
+        return _error(str(exc), 403)
     except IntegrityError:
         try:
             return _read_committed_runtime_step(
@@ -823,6 +873,8 @@ def runtime_history(
     authorization: str | None = Header(default=None),
     x_workflow_execution_token: str | None = Header(default=None),
     session_run_id: str | None = Query(default=None),
+    instruction_profile: str | None = Query(default=None),
+    instruction_manifest_sha256: str | None = Query(default=None),
 ) -> dict[str, Any] | JSONResponse:
     """Return history only from the namespace bound to the supplied role token."""
     try:
@@ -839,6 +891,10 @@ def runtime_history(
             namespace_id = _namespace_id(uow, role)
             task_key = _require_valid_key(task, uow, project_id=namespace_id)
             _assert_task_key_in_namespace(uow, namespace_id, task_key)
+            _authorize_single_task(uow, uow.tasks.get_by_key(task_key, project_id=namespace_id),
+                                   x_workflow_execution_token, session_run_id,
+                                   instruction_profile=instruction_profile,
+                                   instruction_manifest_sha256=instruction_manifest_sha256)
             if role == "project_manager":
                 from project_workflow.application.pm_execution import PMExecutionService
 
@@ -866,8 +922,37 @@ def runtime_history(
                 "output": json.dumps(rows, ensure_ascii=False),
                 "result": {"task_key": task_key, "count": len(rows), "records": rows},
             }
+    except PermissionError as exc:
+        return _error(str(exc), 403)
     except (ConflictError, RuntimeError, ValueError) as exc:
         return _error(str(exc), 409)
+
+
+def _authorize_single_task(
+    uow: SAUnitOfWork, task: Any, token: str | None, session_run_id: str | None, *,
+    payload: RuntimeStepRequest | None = None, instruction_profile: str | None = None,
+    instruction_manifest_sha256: str | None = None,
+) -> None:
+    from project_workflow.application.single_task_runtime import authorize
+    from project_workflow.domain.single_task_profile import is_single_task_key
+
+    project_id = task.project_id if task is not None else None
+    workflow = uow.workflows.get_by_id(task.workflow_id) if task is not None else None
+    if workflow is None or not is_single_task_key(workflow.key):
+        if isinstance(payload, SingleTaskStepRequest) or instruction_profile is not None:
+            raise ConflictError("Profile supplied for a foreign task")
+        return
+    assignment = uow.tasks.get_assignment_by_operation_key(task.assignment_operation_key or "")
+    if assignment is None or assignment.project_id != project_id:
+        raise ConflictError("Single-task assignment missing")
+    if payload is not None:
+        if not isinstance(payload, SingleTaskStepRequest):
+            raise ConflictError("Single-task step requires profile-aware packet")
+        instruction_profile = payload.instruction_profile
+        instruction_manifest_sha256 = payload.instruction_manifest_sha256
+    authorize(uow, assignment.to_dict(), token=token, session_run_id=session_run_id,
+              instruction_profile=instruction_profile, instruction_manifest_sha256=instruction_manifest_sha256,
+              declared_hash=payload.single_task_context_sha256 if isinstance(payload, SingleTaskStepRequest) else None)
 
 
 def runtime_catalog(

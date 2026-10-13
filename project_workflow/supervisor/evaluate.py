@@ -649,6 +649,14 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
     }
     runtime_fence = getattr(engine, "runtime_fence", None)
     if isinstance(runtime_fence, RuntimeStepFence):
+        if runtime_fence.single_task_context_sha256 is not None:
+            from ..application.single_task_runtime import current_binding
+
+            assignment = engine.db.tasks.get_assignment_by_operation_key(runtime_fence.assignment_operation_key)
+            if assignment is None:
+                raise ConcurrentTransitionError("Single-task assignment disappeared before history")
+            run_data["evaluation_snapshot"]["single_task_binding"] = current_binding(engine.db, assignment.to_dict())
+            run_data["evaluation_snapshot"]["single_task_context_sha256"] = runtime_fence.single_task_context_sha256
         if runtime_fence.base_admission_sha256 is not None:
             # Persist the exact accepted hash inputs, not a partial/public contract
             # or a reconstruction using future catalog/history state.
@@ -683,6 +691,9 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         )
         if isinstance(runtime_fence, RuntimeStepFence):
             result.update(_runtime_assignment_cursor(engine, runtime_fence))
+            if runtime_fence.single_task_context_sha256 is not None:
+                result["complete"] = result.get("status") == "done"
+                result["single_task_context_sha256"] = runtime_fence.single_task_context_sha256
             if runtime_fence.base_admission_sha256 is not None:
                 result["complete"] = False
             engine.db.step_history.update_supervisor_response(step_history_id, result)

@@ -4,6 +4,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
+from project_workflow.domain.base_admission import Sha256
 from project_workflow.domain.namespace_ownership import InstanceRef, UUIDRef
 from project_workflow.domain.runtime_assignment import FleetAgentRef
 
@@ -99,6 +100,76 @@ class PMReadback(PMIdentity):
     operation_key: Key | None = None
 
 
+class SingleTaskPMProfile(BaseModel):
+    instruction_profile: Literal["single-task-v1"]
+    instruction_manifest_sha256: Sha256
+
+
+class SingleTaskPMBind(PMBind, SingleTaskPMProfile):
+    session_run_id: UUIDRef
+
+
+class SingleTaskPMCheckpoint(PMCommand, SingleTaskPMProfile):
+    checkpoint_ref: Ref
+    requirements_revision: Version
+    requirements_sha256: Sha256
+    clarification_request_ref: Ref | None = None
+    clarification_version: Version | None = None
+
+    @model_validator(mode="after")
+    def clarification_pair(self) -> "SingleTaskPMCheckpoint":
+        if (self.clarification_request_ref is None) != (self.clarification_version is None):
+            raise ValueError("Clarification reference/version must be a real pair or absent")
+        return self
+
+
+class PMInputReceipt(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    reference: Ref
+    sha256: Sha256
+
+
+class PMTypedInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    input_kind: Literal["answer", "feedback", "confirmation"]
+    input_id: UUIDRef
+
+
+class SingleTaskPMResume(SingleTaskPMCheckpoint):
+    new_session_run_id: UUIDRef
+    input: PMTypedInput
+    input_receipt: PMInputReceipt
+
+    @model_validator(mode="after")
+    def actual_input(self) -> "SingleTaskPMResume":
+        if (self.input.input_kind == "answer") != (self.clarification_request_ref is not None):
+            raise ValueError("Only a real answer carries clarification references")
+        return self
+
+
+class SingleTaskPMRebind(PMRebind, SingleTaskPMProfile):
+    new_session_run_id: UUIDRef
+
+
+class SingleTaskPMReadback(PMReadback, SingleTaskPMProfile):
+    pass
+
+
+class SingleTaskPMCheckpointData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    checkpoint_ref: Ref
+    requirements_revision: Version
+    requirements_sha256: Sha256
+    clarification_request_ref: Ref | None = None
+    clarification_version: Version | None = None
+
+
+class PMResumeInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    input: PMTypedInput
+    input_receipt: PMInputReceipt
+
+
 class RuntimeObservation(PMIdentity):
     """Response obtained directly from the trusted readback provider."""
 
@@ -130,12 +201,16 @@ class PMExecutionSnapshot(BaseModel):
     session_run_id: FleetRunId
     binding_ref: Ref
     hermes_run_ref: Ref
-    checkpoint: PMCheckpointData | None
+    checkpoint: PMCheckpointData | SingleTaskPMCheckpointData | None
     resume_operation_key: Key | None
     resume_session_run_id: FleetRunId | None
     terminal_readback: RuntimeObservation | None
     workflow_step_allowed: bool
     resume_delivered: bool
+    instruction_profile: Literal["single-task-v1"] | None = Field(default=None, exclude_if=lambda v: v is None)
+    instruction_manifest_sha256: Sha256 | None = Field(default=None, exclude_if=lambda v: v is None)
+    resume_input: PMResumeInput | None = Field(default=None, exclude_if=lambda v: v is None)
+    single_task_context_sha256: Sha256 | None = Field(default=None, exclude_if=lambda v: v is None)
 
 
 class PMOperationResult(BaseModel):

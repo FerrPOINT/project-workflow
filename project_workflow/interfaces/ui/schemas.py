@@ -17,6 +17,7 @@ from project_workflow.domain.project_theme import (
     normalize_theme_icon,
 )
 from project_workflow.domain.runtime_assignment import MAX_WORK_ITEM_REVISION, FleetAgentRef, normalize_role_key
+from project_workflow.domain.single_task_runtime import SingleTaskContext, validate_assignment_identity
 
 
 class StrictRequest(BaseModel):
@@ -185,28 +186,39 @@ class RuntimeAssignmentRequest(StrictRequest):
         return self
 
 
-class SingleTaskAssignmentRequest(RuntimeAssignmentRequest):
-    """Profile-specific shape; persistence/execution remain fenced pending parent integration."""
+class SingleTaskAssignmentRequest(SingleTaskContext):
+    """Real task/assignment references, without resources from decomposition."""
 
-    instruction_profile: Literal["single-task-v1"]
-    instruction_manifest_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    # This branch intentionally removes the legacy required decomposition input.
-    decomposition_revision_ref: None = None  # type: ignore[assignment]
+    task: str = Field(min_length=1, max_length=128)
+    role_key: str
+    workflow_key: str
+    mode_key: str
+    execution_scope: Literal["business", "delivery"]
+    stage_key: str
+    cycle_number: int = Field(strict=True, ge=0)
+    attempt_number: int = Field(strict=True, gt=0)
+    operation_key: str = Field(min_length=1, max_length=128)
+    business_task_ref: str
+    root_task_ref: str
+    assignment_ref: str
+    tech_execution_workspace_ref: str | None = Field(default=None, min_length=1, max_length=512)
+    tech_execution_attempt_ref: str | None = Field(default=None, min_length=1, max_length=512)
+    exact_input_refs: list[ExactInputRef] = Field(max_length=128)
+    expected_revision: int = Field(strict=True, ge=0)
+    expected_status: Literal["missing", "active", "done", "blocked"]
+    expected_mode_key: str | None = None
+    expected_cycle_number: int | None = Field(default=None, strict=True, ge=0)
 
     @model_validator(mode="after")
     def _single_task_identity(self) -> SingleTaskAssignmentRequest:
-        from uuid import UUID
-
-        from project_workflow.domain.single_task_profile import MANIFEST_SHA256, ROLE_MODES
-
-        if (self.workflow_key != f"single-task-v1:{self.role_key}"
-            or self.instruction_manifest_sha256 != MANIFEST_SHA256 or self.base_admission is not None
-            or self.business_task_ref != self.root_task_ref
-            or self.execution_scope not in ROLE_MODES.get(self.role_key, {}).get(self.mode_key, [])):
-            raise ValueError("Single-task profile/task=root/mode/hash mismatch")
-        task_uuid = UUID(self.business_task_ref)
-        if task_uuid.int == 0 or str(task_uuid) != self.business_task_ref:
-            raise ValueError("Single-task Tracker reference must be a canonical UUID")
+        if (self.tech_execution_workspace_ref is None) != (self.tech_execution_attempt_ref is None):
+            raise ValueError("Tech workspace/attempt must be a real pair or both absent")
+        if self.execution_scope == "business" and self.tech_execution_workspace_ref is not None:
+            raise ValueError("Business scope forbids Tech workspace")
+        validate_assignment_identity(**self.model_dump(include={
+            "workflow_key", "role_key", "mode_key", "execution_scope", "stage_key",
+            "business_task_ref", "root_task_ref", "assignment_ref",
+        }))
         return self
 
 
@@ -284,6 +296,23 @@ class RuntimeBindRequest(StrictRequest):
         if re.fullmatch(r"[a-z0-9][a-z0-9._-]*", value) is None:
             raise ValueError("mode_key должен соответствовать [a-z0-9][a-z0-9._-]*")
         return value
+
+
+class SingleTaskBindRequest(RuntimeBindRequest):
+    instruction_profile: Literal["single-task-v1"]
+    instruction_manifest_sha256: Sha256
+    session_run_id: FleetAgentRef
+    concrete_agent_ref: FleetAgentRef
+    expected_binding_state: Literal["unbound"]
+
+
+class SingleTaskStepRequest(RuntimeStepRequest):
+    instruction_profile: Literal["single-task-v1"]
+    instruction_manifest_sha256: Sha256
+    session_run_id: FleetAgentRef
+    single_task_context_sha256: Sha256
+    base_config_ref: None = None
+    base_config_sha256: None = None
 
 
 def _strip_nonblank(value: str, field_name: str) -> str:

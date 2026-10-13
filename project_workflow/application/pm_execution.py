@@ -18,6 +18,8 @@ from project_workflow.domain.pm_execution import (
     PMRebind,
     PMResume,
     RuntimeObservation,
+    SingleTaskPMCheckpoint,
+    SingleTaskPMResume,
 )
 from project_workflow.domain.runtime_assignment import (
     RuntimeStepFence,
@@ -45,6 +47,14 @@ class PMExecutionService:
             or not assignment.bind_operation_key or not assignment.bind_request_sha256
         ):
             raise ConflictError("PM concrete agent mapping requires a finalized runtime binding")
+        if json.loads(assignment.payload).get("single_task_context") is not None:
+            from project_workflow.application.single_task_runtime import current_binding
+
+            record = self.uow.tasks.get_assignment_by_operation_key(assignment.operation_key)
+            if record is None:
+                raise ConflictError("Single-task PM assignment missing")
+            current_binding(self.uow, record.to_dict())
+            return agent_ref
         task = self.session.get(m.Task, assignment.task_id)
         if task is None:
             raise ConflictError("PM mapping no longer belongs to a task")
@@ -89,7 +99,17 @@ class PMExecutionService:
             raise ConflictError("Stale or foreign PM assignment identity")
         from project_workflow.build_provenance import runtime_compatibility_descriptor
 
-        if (
+        single_context = json.loads(assignment.payload).get("single_task_context")
+        if single_context is not None:
+            from project_workflow.application.single_task_runtime import installed_context
+
+            context = installed_context(self.uow, project_id, single_context)
+            if (identity.task_ref != identity.root_ref
+                or any(context[k] != getattr(identity, k) for k in (
+                    "execution_ref", "tracker_instance_ref", "tracker_project_ref",
+                ))):
+                raise ConflictError("Single-task PM differs from assignment identity")
+        elif (
             assignment.mode.catalog_version != 2
             or json.loads(assignment.payload).get("runtime_compatibility") != runtime_compatibility_descriptor()
         ):
@@ -164,12 +184,14 @@ class PMExecutionService:
             raise ConflictError("PM task no longer exists")
         self.execution(PMIdentity.model_validate_json(execution.identity_json), task.project_id)
         run = self.run(execution)
-        return {
+        checkpoint = json.loads(execution.checkpoint_json) if execution.checkpoint_json else None
+        resume_input = checkpoint.pop("resume_input", None) if checkpoint else None
+        snapshot = {
             "contract_version": 1, "identity": json.loads(execution.identity_json),
             "state": execution.state, "version": execution.version, "fence": execution.fence,
             "binding_ref": run.binding_ref, "hermes_run_ref": run.run_ref,
             "session_run_id": run.session_run_id,
-            "checkpoint": json.loads(execution.checkpoint_json) if execution.checkpoint_json else None,
+            "checkpoint": checkpoint,
             "resume_operation_key": execution.resume_operation_key,
             "resume_session_run_id": execution.resume_session_run_id,
             "terminal_readback": json.loads(run.terminal_json) if run.terminal_json else None,
@@ -178,6 +200,20 @@ class PMExecutionService:
             ),
             "resume_delivered": execution.state == "active" and execution.resume_operation_key is not None,
         }
+        assignment = self.session.get(m.TaskRuntimeAssignment, execution.assignment_id)
+        context = json.loads(assignment.payload).get("single_task_context") if assignment else None
+        if context is not None and assignment is not None:
+            from project_workflow.application.single_task_runtime import context_hash
+
+            record = self.uow.tasks.get_assignment_by_operation_key(assignment.operation_key)
+            if record is None:
+                raise ConflictError("Single-task PM assignment missing")
+            snapshot.update({"instruction_profile": context["instruction_profile"],
+                             "instruction_manifest_sha256": context["instruction_manifest_sha256"],
+                             "single_task_context_sha256": context_hash(self.uow, record.to_dict())})
+            if resume_input is not None:
+                snapshot["resume_input"] = resume_input
+        return snapshot
 
     def _record(self, command: PMBind | PMCommand, kind: str, execution: m.PMExecution) -> dict[str, Any]:
         self.session.flush()
@@ -232,6 +268,10 @@ class PMExecutionService:
             or not assignment.bind_operation_key or not assignment.bind_request_sha256
         ):
             raise ConflictError("PM bind requires the current concrete agent and finalized runtime binding")
+        if assignment.single_task_binding_json is not None:
+            bound_session = json.loads(assignment.single_task_binding_json)["request"]["session_run_id"]
+            if bound_session != command.session_run_id:
+                raise ConflictError("PM enrollment differs from the profile-bound Fleet session")
         proof = self._proof(
             identity, command.hermes_run_ref, command.binding_ref, 1, command.operation_key, None,
             command.session_run_id,
@@ -267,7 +307,7 @@ class PMExecutionService:
             raise ConflictError("Stale execution version, fence, checkpoint cursor or run")
         return run
 
-    def checkpoint(self, command: PMCheckpoint, project_id: int) -> dict[str, Any]:
+    def checkpoint(self, command: PMCheckpoint | SingleTaskPMCheckpoint, project_id: int) -> dict[str, Any]:
         execution, task = self.execution(self.identity(command), project_id)
         replay = self._replay(command, "checkpoint")
         if replay is not None:
@@ -278,6 +318,7 @@ class PMExecutionService:
             raise ConflictError("Checkpoint no longer belongs to the bound profession")
         checkpoint = command.model_dump(include={
             "checkpoint_ref", "clarification_request_ref", "clarification_version", "requirements_revision",
+            "requirements_sha256",
         })
         # Checkpoint references cannot be reused for a later clarification wait.
         for stored in self.session.scalars(select(m.PMOperation).where(
@@ -293,7 +334,7 @@ class PMExecutionService:
         execution.version += 1
         return self._record(command, "checkpoint", execution)
 
-    def resume(self, command: PMResume, project_id: int) -> dict[str, Any]:
+    def resume(self, command: PMResume | SingleTaskPMResume, project_id: int) -> dict[str, Any]:
         execution, task = self.execution(self.identity(command), project_id)
         replay = self._replay(command, "resume")
         if replay is not None:
@@ -310,7 +351,7 @@ class PMExecutionService:
         ):
             raise ConflictError("Resume requires an unused Fleet session-run UUID")
         checkpoint = json.loads(execution.checkpoint_json or "{}")
-        if any(command.model_dump()[key] != value for key, value in checkpoint.items()):
+        if any(command.model_dump().get(key) != value for key, value in checkpoint.items() if key != "resume_input"):
             raise ConflictError("Late answer: clarification/checkpoint/revision does not match")
         observed = RuntimeObservation.model_validate_json(run.observation_json)
         proof = self._proof(
@@ -321,6 +362,11 @@ class PMExecutionService:
         if proof.status not in {"completed", "failed", "cancelled", "stopped"}:
             raise ConflictError("Old run is not terminal; runtime stop/readback is required")
         run.terminal_json = proof.model_dump_json()
+        if isinstance(command, SingleTaskPMResume):
+            checkpoint["resume_input"] = command.model_dump(include={
+                "input", "input_receipt",
+            }, exclude_none=True)
+            execution.checkpoint_json = canonical_json(checkpoint)
         execution.state = "resume_pending"
         execution.version += 1
         execution.fence += 1
@@ -412,6 +458,8 @@ class PMExecutionService:
                     m.TaskRuntimeAssignment.task_id == task.id,
                 ).execution_options(populate_existing=True))
                 if assignment is not None and assignment.role_key == "project_manager":
+                    if json.loads(assignment.payload).get("single_task_context") is not None:
+                        raise ConflictError("Single-task PM requires existing PM execution enrollment")
                     if json.loads(assignment.payload).get("pm_draft_context") is not None:
                         raise ConflictError("PM Draft requires verified execution enrollment before a step")
                     self.concrete_agent_ref(assignment)

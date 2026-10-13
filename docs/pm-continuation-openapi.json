@@ -718,9 +718,13 @@
                 "$ref": "#/components/schemas/PMCheckpointData"
               },
               {
+                "$ref": "#/components/schemas/SingleTaskPMCheckpointData"
+              },
+              {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Checkpoint"
           },
           "contract_version": {
             "const": 1,
@@ -742,9 +746,43 @@
           "identity": {
             "$ref": "#/components/schemas/PMIdentity"
           },
+          "instruction_manifest_sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instruction Manifest Sha256"
+          },
+          "instruction_profile": {
+            "anyOf": [
+              {
+                "const": "single-task-v1",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instruction Profile"
+          },
           "resume_delivered": {
             "title": "Resume Delivered",
             "type": "boolean"
+          },
+          "resume_input": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PMResumeInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "resume_operation_key": {
             "anyOf": [
@@ -775,6 +813,18 @@
             "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
             "title": "Session Run Id",
             "type": "string"
+          },
+          "single_task_context_sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Single Task Context Sha256"
           },
           "state": {
             "enum": [
@@ -904,6 +954,28 @@
           "assignment_revision"
         ],
         "title": "PMIdentity",
+        "type": "object"
+      },
+      "PMInputReceipt": {
+        "additionalProperties": false,
+        "properties": {
+          "reference": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Reference",
+            "type": "string"
+          },
+          "sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reference",
+          "sha256"
+        ],
+        "title": "PMInputReceipt",
         "type": "object"
       },
       "PMOperationResult": {
@@ -1235,9 +1307,13 @@
                 "$ref": "#/components/schemas/PMCheckpointData"
               },
               {
+                "$ref": "#/components/schemas/SingleTaskPMCheckpointData"
+              },
+              {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Checkpoint"
           },
           "contract_version": {
             "const": 1,
@@ -1259,6 +1335,30 @@
           "identity": {
             "$ref": "#/components/schemas/PMIdentity"
           },
+          "instruction_manifest_sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instruction Manifest Sha256"
+          },
+          "instruction_profile": {
+            "anyOf": [
+              {
+                "const": "single-task-v1",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instruction Profile"
+          },
           "operation": {
             "anyOf": [
               {
@@ -1272,6 +1372,16 @@
           "resume_delivered": {
             "title": "Resume Delivered",
             "type": "boolean"
+          },
+          "resume_input": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PMResumeInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "resume_operation_key": {
             "anyOf": [
@@ -1302,6 +1412,18 @@
             "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
             "title": "Session Run Id",
             "type": "string"
+          },
+          "single_task_context_sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Single Task Context Sha256"
           },
           "state": {
             "enum": [
@@ -1513,6 +1635,51 @@
           "new_session_run_id"
         ],
         "title": "PMResume",
+        "type": "object"
+      },
+      "PMResumeInput": {
+        "additionalProperties": false,
+        "properties": {
+          "input": {
+            "$ref": "#/components/schemas/PMTypedInput"
+          },
+          "input_receipt": {
+            "$ref": "#/components/schemas/PMInputReceipt"
+          }
+        },
+        "required": [
+          "input",
+          "input_receipt"
+        ],
+        "title": "PMResumeInput",
+        "type": "object"
+      },
+      "PMTypedInput": {
+        "additionalProperties": false,
+        "properties": {
+          "input_id": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Input Id",
+            "type": "string"
+          },
+          "input_kind": {
+            "enum": [
+              "answer",
+              "feedback",
+              "confirmation"
+            ],
+            "title": "Input Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "input_kind",
+          "input_id"
+        ],
+        "title": "PMTypedInput",
         "type": "object"
       },
       "RuntimeAssignmentRequest": {
@@ -2263,6 +2430,1457 @@
         "title": "RuntimeRebindRequest",
         "type": "object"
       },
+      "RuntimeStepRequest": {
+        "additionalProperties": false,
+        "description": "One private Supervisor step fenced to an immutable Business assignment.",
+        "properties": {
+          "assignment_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Assignment Ref",
+            "type": "string"
+          },
+          "assignment_revision": {
+            "exclusiveMinimum": 0.0,
+            "title": "Assignment Revision",
+            "type": "integer"
+          },
+          "attempt_number": {
+            "exclusiveMinimum": 0.0,
+            "title": "Attempt Number",
+            "type": "integer"
+          },
+          "base_config_ref": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "pattern": "^\\S(?:.*\\S)?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Config Ref"
+          },
+          "base_config_sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Config Sha256"
+          },
+          "binding_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Binding Ref",
+            "type": "string"
+          },
+          "cycle_number": {
+            "minimum": 0.0,
+            "title": "Cycle Number",
+            "type": "integer"
+          },
+          "expected_phase_code": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Expected Phase Code",
+            "type": "string"
+          },
+          "expected_status": {
+            "enum": [
+              "active",
+              "blocked"
+            ],
+            "title": "Expected Status",
+            "type": "string"
+          },
+          "hermes_run_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Hermes Run Ref",
+            "type": "string"
+          },
+          "mode_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Mode Key",
+            "type": "string"
+          },
+          "report": {
+            "anyOf": [
+              {
+                "maxLength": 32000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Report"
+          },
+          "session_run_id": {
+            "anyOf": [
+              {
+                "maxLength": 36,
+                "minLength": 36,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Run Id"
+          },
+          "step_operation_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Step Operation Key",
+            "type": "string"
+          },
+          "task": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Task",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task",
+          "step_operation_key",
+          "assignment_revision",
+          "assignment_ref",
+          "binding_ref",
+          "hermes_run_ref",
+          "mode_key",
+          "cycle_number",
+          "attempt_number",
+          "expected_phase_code",
+          "expected_status"
+        ],
+        "title": "RuntimeStepRequest",
+        "type": "object"
+      },
+      "SingleTaskAssignmentRequest": {
+        "additionalProperties": false,
+        "description": "Real task/assignment references, without resources from decomposition.",
+        "properties": {
+          "assignment_ref": {
+            "title": "Assignment Ref",
+            "type": "string"
+          },
+          "attempt_number": {
+            "exclusiveMinimum": 0.0,
+            "title": "Attempt Number",
+            "type": "integer"
+          },
+          "business_task_ref": {
+            "title": "Business Task Ref",
+            "type": "string"
+          },
+          "concrete_agent_ref": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Concrete Agent Ref",
+            "type": "string"
+          },
+          "cycle_number": {
+            "minimum": 0.0,
+            "title": "Cycle Number",
+            "type": "integer"
+          },
+          "exact_input_refs": {
+            "items": {
+              "$ref": "#/components/schemas/ExactInputRef"
+            },
+            "maxItems": 128,
+            "title": "Exact Input Refs",
+            "type": "array"
+          },
+          "execution_ref": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Execution Ref",
+            "type": "string"
+          },
+          "execution_scope": {
+            "enum": [
+              "business",
+              "delivery"
+            ],
+            "title": "Execution Scope",
+            "type": "string"
+          },
+          "expected_cycle_number": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Cycle Number"
+          },
+          "expected_mode_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Mode Key"
+          },
+          "expected_revision": {
+            "minimum": 0.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "expected_status": {
+            "enum": [
+              "missing",
+              "active",
+              "done",
+              "blocked"
+            ],
+            "title": "Expected Status",
+            "type": "string"
+          },
+          "fencing_token": {
+            "exclusiveMinimum": 0.0,
+            "title": "Fencing Token",
+            "type": "integer"
+          },
+          "instruction_manifest_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Instruction Manifest Sha256",
+            "type": "string"
+          },
+          "instruction_profile": {
+            "const": "single-task-v1",
+            "title": "Instruction Profile",
+            "type": "string"
+          },
+          "lease_ref": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Lease Ref",
+            "type": "string"
+          },
+          "lease_version": {
+            "exclusiveMinimum": 0.0,
+            "title": "Lease Version",
+            "type": "integer"
+          },
+          "mode_key": {
+            "title": "Mode Key",
+            "type": "string"
+          },
+          "operation_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Operation Key",
+            "type": "string"
+          },
+          "role_key": {
+            "title": "Role Key",
+            "type": "string"
+          },
+          "root_task_ref": {
+            "title": "Root Task Ref",
+            "type": "string"
+          },
+          "stage_key": {
+            "title": "Stage Key",
+            "type": "string"
+          },
+          "task": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Task",
+            "type": "string"
+          },
+          "task_revision": {
+            "exclusiveMinimum": 0.0,
+            "title": "Task Revision",
+            "type": "integer"
+          },
+          "tech_execution_attempt_ref": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tech Execution Attempt Ref"
+          },
+          "tech_execution_workspace_ref": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tech Execution Workspace Ref"
+          },
+          "tracker_instance_ref": {
+            "description": "Exact 1..128 UTF-8 bytes; no whitespace/control or normalization",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[^\\s\\x00-\\x1f\\x7f-\\x9f]+$",
+            "title": "Tracker Instance Ref",
+            "type": "string",
+            "x-max-utf8-bytes": 128
+          },
+          "tracker_project_ref": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Tracker Project Ref",
+            "type": "string"
+          },
+          "workflow_key": {
+            "title": "Workflow Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instruction_profile",
+          "instruction_manifest_sha256",
+          "tracker_instance_ref",
+          "tracker_project_ref",
+          "execution_ref",
+          "concrete_agent_ref",
+          "task_revision",
+          "lease_ref",
+          "lease_version",
+          "fencing_token",
+          "task",
+          "role_key",
+          "workflow_key",
+          "mode_key",
+          "execution_scope",
+          "stage_key",
+          "cycle_number",
+          "attempt_number",
+          "operation_key",
+          "business_task_ref",
+          "root_task_ref",
+          "assignment_ref",
+          "exact_input_refs",
+          "expected_revision",
+          "expected_status"
+        ],
+        "title": "SingleTaskAssignmentRequest",
+        "type": "object"
+      },
+      "SingleTaskBindRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "assignment_operation_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Assignment Operation Key",
+            "type": "string"
+          },
+          "assignment_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Assignment Ref",
+            "type": "string"
+          },
+          "assignment_revision": {
+            "exclusiveMinimum": 0.0,
+            "title": "Assignment Revision",
+            "type": "integer"
+          },
+          "attempt_number": {
+            "exclusiveMinimum": 0.0,
+            "title": "Attempt Number",
+            "type": "integer"
+          },
+          "bind_operation_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Bind Operation Key",
+            "type": "string"
+          },
+          "binding_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Binding Ref",
+            "type": "string"
+          },
+          "concrete_agent_ref": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Concrete Agent Ref",
+            "type": "string"
+          },
+          "cycle_number": {
+            "minimum": 0.0,
+            "title": "Cycle Number",
+            "type": "integer"
+          },
+          "expected_binding_state": {
+            "const": "unbound",
+            "title": "Expected Binding State",
+            "type": "string"
+          },
+          "hermes_run_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Hermes Run Ref",
+            "type": "string"
+          },
+          "instruction_manifest_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Instruction Manifest Sha256",
+            "type": "string"
+          },
+          "instruction_profile": {
+            "const": "single-task-v1",
+            "title": "Instruction Profile",
+            "type": "string"
+          },
+          "mode_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Mode Key",
+            "type": "string"
+          },
+          "session_run_id": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Session Run Id",
+            "type": "string"
+          },
+          "task": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Task",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task",
+          "bind_operation_key",
+          "assignment_operation_key",
+          "assignment_revision",
+          "assignment_ref",
+          "binding_ref",
+          "hermes_run_ref",
+          "mode_key",
+          "cycle_number",
+          "attempt_number",
+          "expected_binding_state",
+          "concrete_agent_ref",
+          "instruction_profile",
+          "instruction_manifest_sha256",
+          "session_run_id"
+        ],
+        "title": "SingleTaskBindRequest",
+        "type": "object"
+      },
+      "SingleTaskPMBind": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_ref": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Agent Ref",
+            "type": "string"
+          },
+          "assignment_operation_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Assignment Operation Key",
+            "type": "string"
+          },
+          "assignment_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Assignment Ref",
+            "type": "string"
+          },
+          "assignment_revision": {
+            "maximum": 9.223372036854776e+18,
+            "minimum": 1.0,
+            "title": "Assignment Revision",
+            "type": "integer"
+          },
+          "binding_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Binding Ref",
+            "type": "string"
+          },
+          "execution_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Execution Ref",
+            "type": "string"
+          },
+          "expected_version": {
+            "maximum": 0.0,
+            "minimum": 0.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "hermes_run_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Hermes Run Ref",
+            "type": "string"
+          },
+          "instruction_manifest_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Instruction Manifest Sha256",
+            "type": "string"
+          },
+          "instruction_profile": {
+            "const": "single-task-v1",
+            "title": "Instruction Profile",
+            "type": "string"
+          },
+          "operation_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Operation Key",
+            "type": "string"
+          },
+          "root_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Root Ref",
+            "type": "string"
+          },
+          "session_run_id": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Session Run Id",
+            "type": "string"
+          },
+          "task": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Task",
+            "type": "string"
+          },
+          "task_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Task Ref",
+            "type": "string"
+          },
+          "tracker_instance_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Tracker Instance Ref",
+            "type": "string"
+          },
+          "tracker_project_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Tracker Project Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instruction_profile",
+          "instruction_manifest_sha256",
+          "task",
+          "execution_ref",
+          "tracker_instance_ref",
+          "tracker_project_ref",
+          "task_ref",
+          "root_ref",
+          "agent_ref",
+          "assignment_operation_key",
+          "assignment_ref",
+          "assignment_revision",
+          "operation_key",
+          "expected_version",
+          "binding_ref",
+          "hermes_run_ref",
+          "session_run_id"
+        ],
+        "title": "SingleTaskPMBind",
+        "type": "object"
+      },
+      "SingleTaskPMCheckpoint": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_ref": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Agent Ref",
+            "type": "string"
+          },
+          "assignment_operation_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Assignment Operation Key",
+            "type": "string"
+          },
+          "assignment_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Assignment Ref",
+            "type": "string"
+          },
+          "assignment_revision": {
+            "maximum": 9.223372036854776e+18,
+            "minimum": 1.0,
+            "title": "Assignment Revision",
+            "type": "integer"
+          },
+          "binding_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Binding Ref",
+            "type": "string"
+          },
+          "checkpoint_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Checkpoint Ref",
+            "type": "string"
+          },
+          "clarification_request_ref": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clarification Request Ref"
+          },
+          "clarification_version": {
+            "anyOf": [
+              {
+                "maximum": 9.223372036854776e+18,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clarification Version"
+          },
+          "execution_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Execution Ref",
+            "type": "string"
+          },
+          "expected_fence": {
+            "maximum": 9.223372036854776e+18,
+            "minimum": 1.0,
+            "title": "Expected Fence",
+            "type": "integer"
+          },
+          "expected_version": {
+            "maximum": 9.223372036854776e+18,
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "hermes_run_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Hermes Run Ref",
+            "type": "string"
+          },
+          "instruction_manifest_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Instruction Manifest Sha256",
+            "type": "string"
+          },
+          "instruction_profile": {
+            "const": "single-task-v1",
+            "title": "Instruction Profile",
+            "type": "string"
+          },
+          "operation_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Operation Key",
+            "type": "string"
+          },
+          "requirements_revision": {
+            "maximum": 9.223372036854776e+18,
+            "minimum": 1.0,
+            "title": "Requirements Revision",
+            "type": "integer"
+          },
+          "requirements_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Requirements Sha256",
+            "type": "string"
+          },
+          "root_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Root Ref",
+            "type": "string"
+          },
+          "session_run_id": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Session Run Id",
+            "type": "string"
+          },
+          "task": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Task",
+            "type": "string"
+          },
+          "task_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Task Ref",
+            "type": "string"
+          },
+          "tracker_instance_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Tracker Instance Ref",
+            "type": "string"
+          },
+          "tracker_project_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Tracker Project Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instruction_profile",
+          "instruction_manifest_sha256",
+          "task",
+          "execution_ref",
+          "tracker_instance_ref",
+          "tracker_project_ref",
+          "task_ref",
+          "root_ref",
+          "agent_ref",
+          "assignment_operation_key",
+          "assignment_ref",
+          "assignment_revision",
+          "operation_key",
+          "expected_version",
+          "expected_fence",
+          "binding_ref",
+          "hermes_run_ref",
+          "session_run_id",
+          "checkpoint_ref",
+          "requirements_revision",
+          "requirements_sha256"
+        ],
+        "title": "SingleTaskPMCheckpoint",
+        "type": "object"
+      },
+      "SingleTaskPMCheckpointData": {
+        "additionalProperties": false,
+        "properties": {
+          "checkpoint_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Checkpoint Ref",
+            "type": "string"
+          },
+          "clarification_request_ref": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clarification Request Ref"
+          },
+          "clarification_version": {
+            "anyOf": [
+              {
+                "maximum": 9.223372036854776e+18,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clarification Version"
+          },
+          "requirements_revision": {
+            "maximum": 9.223372036854776e+18,
+            "minimum": 1.0,
+            "title": "Requirements Revision",
+            "type": "integer"
+          },
+          "requirements_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Requirements Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "checkpoint_ref",
+          "requirements_revision",
+          "requirements_sha256"
+        ],
+        "title": "SingleTaskPMCheckpointData",
+        "type": "object"
+      },
+      "SingleTaskPMReadback": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_ref": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Agent Ref",
+            "type": "string"
+          },
+          "assignment_operation_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Assignment Operation Key",
+            "type": "string"
+          },
+          "assignment_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Assignment Ref",
+            "type": "string"
+          },
+          "assignment_revision": {
+            "maximum": 9.223372036854776e+18,
+            "minimum": 1.0,
+            "title": "Assignment Revision",
+            "type": "integer"
+          },
+          "execution_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Execution Ref",
+            "type": "string"
+          },
+          "instruction_manifest_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Instruction Manifest Sha256",
+            "type": "string"
+          },
+          "instruction_profile": {
+            "const": "single-task-v1",
+            "title": "Instruction Profile",
+            "type": "string"
+          },
+          "operation_key": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operation Key"
+          },
+          "root_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Root Ref",
+            "type": "string"
+          },
+          "task": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Task",
+            "type": "string"
+          },
+          "task_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Task Ref",
+            "type": "string"
+          },
+          "tracker_instance_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Tracker Instance Ref",
+            "type": "string"
+          },
+          "tracker_project_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Tracker Project Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instruction_profile",
+          "instruction_manifest_sha256",
+          "task",
+          "execution_ref",
+          "tracker_instance_ref",
+          "tracker_project_ref",
+          "task_ref",
+          "root_ref",
+          "agent_ref",
+          "assignment_operation_key",
+          "assignment_ref",
+          "assignment_revision"
+        ],
+        "title": "SingleTaskPMReadback",
+        "type": "object"
+      },
+      "SingleTaskPMRebind": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_ref": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Agent Ref",
+            "type": "string"
+          },
+          "assignment_operation_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Assignment Operation Key",
+            "type": "string"
+          },
+          "assignment_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Assignment Ref",
+            "type": "string"
+          },
+          "assignment_revision": {
+            "maximum": 9.223372036854776e+18,
+            "minimum": 1.0,
+            "title": "Assignment Revision",
+            "type": "integer"
+          },
+          "binding_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Binding Ref",
+            "type": "string"
+          },
+          "checkpoint_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Checkpoint Ref",
+            "type": "string"
+          },
+          "execution_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Execution Ref",
+            "type": "string"
+          },
+          "expected_fence": {
+            "maximum": 9.223372036854776e+18,
+            "minimum": 1.0,
+            "title": "Expected Fence",
+            "type": "integer"
+          },
+          "expected_version": {
+            "maximum": 9.223372036854776e+18,
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "hermes_run_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Hermes Run Ref",
+            "type": "string"
+          },
+          "instruction_manifest_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Instruction Manifest Sha256",
+            "type": "string"
+          },
+          "instruction_profile": {
+            "const": "single-task-v1",
+            "title": "Instruction Profile",
+            "type": "string"
+          },
+          "new_binding_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "New Binding Ref",
+            "type": "string"
+          },
+          "new_hermes_run_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "New Hermes Run Ref",
+            "type": "string"
+          },
+          "new_session_run_id": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "New Session Run Id",
+            "type": "string"
+          },
+          "operation_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Operation Key",
+            "type": "string"
+          },
+          "resume_operation_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Resume Operation Key",
+            "type": "string"
+          },
+          "root_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Root Ref",
+            "type": "string"
+          },
+          "session_run_id": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Session Run Id",
+            "type": "string"
+          },
+          "task": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Task",
+            "type": "string"
+          },
+          "task_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Task Ref",
+            "type": "string"
+          },
+          "tracker_instance_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Tracker Instance Ref",
+            "type": "string"
+          },
+          "tracker_project_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Tracker Project Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instruction_profile",
+          "instruction_manifest_sha256",
+          "task",
+          "execution_ref",
+          "tracker_instance_ref",
+          "tracker_project_ref",
+          "task_ref",
+          "root_ref",
+          "agent_ref",
+          "assignment_operation_key",
+          "assignment_ref",
+          "assignment_revision",
+          "operation_key",
+          "expected_version",
+          "expected_fence",
+          "binding_ref",
+          "hermes_run_ref",
+          "session_run_id",
+          "checkpoint_ref",
+          "resume_operation_key",
+          "new_binding_ref",
+          "new_hermes_run_ref",
+          "new_session_run_id"
+        ],
+        "title": "SingleTaskPMRebind",
+        "type": "object"
+      },
+      "SingleTaskPMResume": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_ref": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Agent Ref",
+            "type": "string"
+          },
+          "assignment_operation_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Assignment Operation Key",
+            "type": "string"
+          },
+          "assignment_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Assignment Ref",
+            "type": "string"
+          },
+          "assignment_revision": {
+            "maximum": 9.223372036854776e+18,
+            "minimum": 1.0,
+            "title": "Assignment Revision",
+            "type": "integer"
+          },
+          "binding_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Binding Ref",
+            "type": "string"
+          },
+          "checkpoint_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Checkpoint Ref",
+            "type": "string"
+          },
+          "clarification_request_ref": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clarification Request Ref"
+          },
+          "clarification_version": {
+            "anyOf": [
+              {
+                "maximum": 9.223372036854776e+18,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clarification Version"
+          },
+          "execution_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Execution Ref",
+            "type": "string"
+          },
+          "expected_fence": {
+            "maximum": 9.223372036854776e+18,
+            "minimum": 1.0,
+            "title": "Expected Fence",
+            "type": "integer"
+          },
+          "expected_version": {
+            "maximum": 9.223372036854776e+18,
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "hermes_run_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Hermes Run Ref",
+            "type": "string"
+          },
+          "input": {
+            "$ref": "#/components/schemas/PMTypedInput"
+          },
+          "input_receipt": {
+            "$ref": "#/components/schemas/PMInputReceipt"
+          },
+          "instruction_manifest_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Instruction Manifest Sha256",
+            "type": "string"
+          },
+          "instruction_profile": {
+            "const": "single-task-v1",
+            "title": "Instruction Profile",
+            "type": "string"
+          },
+          "new_session_run_id": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "New Session Run Id",
+            "type": "string"
+          },
+          "operation_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Operation Key",
+            "type": "string"
+          },
+          "requirements_revision": {
+            "maximum": 9.223372036854776e+18,
+            "minimum": 1.0,
+            "title": "Requirements Revision",
+            "type": "integer"
+          },
+          "requirements_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Requirements Sha256",
+            "type": "string"
+          },
+          "root_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Root Ref",
+            "type": "string"
+          },
+          "session_run_id": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Session Run Id",
+            "type": "string"
+          },
+          "task": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Task",
+            "type": "string"
+          },
+          "task_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Task Ref",
+            "type": "string"
+          },
+          "tracker_instance_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Tracker Instance Ref",
+            "type": "string"
+          },
+          "tracker_project_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Tracker Project Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instruction_profile",
+          "instruction_manifest_sha256",
+          "task",
+          "execution_ref",
+          "tracker_instance_ref",
+          "tracker_project_ref",
+          "task_ref",
+          "root_ref",
+          "agent_ref",
+          "assignment_operation_key",
+          "assignment_ref",
+          "assignment_revision",
+          "operation_key",
+          "expected_version",
+          "expected_fence",
+          "binding_ref",
+          "hermes_run_ref",
+          "session_run_id",
+          "checkpoint_ref",
+          "requirements_revision",
+          "requirements_sha256",
+          "new_session_run_id",
+          "input",
+          "input_receipt"
+        ],
+        "title": "SingleTaskPMResume",
+        "type": "object"
+      },
+      "SingleTaskStepRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "assignment_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Assignment Ref",
+            "type": "string"
+          },
+          "assignment_revision": {
+            "exclusiveMinimum": 0.0,
+            "title": "Assignment Revision",
+            "type": "integer"
+          },
+          "attempt_number": {
+            "exclusiveMinimum": 0.0,
+            "title": "Attempt Number",
+            "type": "integer"
+          },
+          "base_config_ref": {
+            "title": "Base Config Ref",
+            "type": "null"
+          },
+          "base_config_sha256": {
+            "title": "Base Config Sha256",
+            "type": "null"
+          },
+          "binding_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Binding Ref",
+            "type": "string"
+          },
+          "cycle_number": {
+            "minimum": 0.0,
+            "title": "Cycle Number",
+            "type": "integer"
+          },
+          "expected_phase_code": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Expected Phase Code",
+            "type": "string"
+          },
+          "expected_status": {
+            "enum": [
+              "active",
+              "blocked"
+            ],
+            "title": "Expected Status",
+            "type": "string"
+          },
+          "hermes_run_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Hermes Run Ref",
+            "type": "string"
+          },
+          "instruction_manifest_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Instruction Manifest Sha256",
+            "type": "string"
+          },
+          "instruction_profile": {
+            "const": "single-task-v1",
+            "title": "Instruction Profile",
+            "type": "string"
+          },
+          "mode_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Mode Key",
+            "type": "string"
+          },
+          "report": {
+            "anyOf": [
+              {
+                "maxLength": 32000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Report"
+          },
+          "session_run_id": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Session Run Id",
+            "type": "string"
+          },
+          "single_task_context_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Single Task Context Sha256",
+            "type": "string"
+          },
+          "step_operation_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Step Operation Key",
+            "type": "string"
+          },
+          "task": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Task",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task",
+          "step_operation_key",
+          "assignment_revision",
+          "assignment_ref",
+          "binding_ref",
+          "hermes_run_ref",
+          "mode_key",
+          "cycle_number",
+          "attempt_number",
+          "expected_phase_code",
+          "expected_status",
+          "session_run_id",
+          "instruction_profile",
+          "instruction_manifest_sha256",
+          "single_task_context_sha256"
+        ],
+        "title": "SingleTaskStepRequest",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -2306,7 +3924,7 @@
     }
   },
   "info": {
-    "title": "Интерфейс project-workflow",
+    "title": "\u0418\u043d\u0442\u0435\u0440\u0444\u0435\u0439\u0441 project-workflow",
     "version": "1.0.0"
   },
   "openapi": "3.1.0",
@@ -2457,7 +4075,15 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RuntimeAssignmentRequest"
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/SingleTaskAssignmentRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RuntimeAssignmentRequest"
+                  }
+                ],
+                "title": "Payload"
               }
             }
           },
@@ -2512,7 +4138,15 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RuntimeBindRequest"
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/SingleTaskBindRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RuntimeBindRequest"
+                  }
+                ],
+                "title": "Payload"
               }
             }
           },
@@ -2539,6 +4173,136 @@
           }
         },
         "summary": "Runtime Bind"
+      }
+    },
+    "/internal/runtime/history": {
+      "get": {
+        "description": "Return history only from the namespace bound to the supplied role token.",
+        "operationId": "runtime_history_internal_runtime_history_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "task",
+            "required": true,
+            "schema": {
+              "title": "Task",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "n",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "N",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "session_run_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Run Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "instruction_profile",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Instruction Profile"
+            }
+          },
+          {
+            "in": "query",
+            "name": "instruction_manifest_sha256",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Instruction Manifest Sha256"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-workflow-execution-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Workflow-Execution-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Runtime History"
       }
     },
     "/internal/runtime/rebind": {
@@ -2594,6 +4358,85 @@
           }
         },
         "summary": "Runtime Rebind"
+      }
+    },
+    "/internal/runtime/step": {
+      "post": {
+        "description": "Execute one role-scoped step in the trusted workflow service.",
+        "operationId": "runtime_step_internal_runtime_step_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-workflow-execution-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Workflow-Execution-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/SingleTaskStepRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RuntimeStepRequest"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Runtime Step"
       }
     },
     "/internal/runtime/v1/pm/assign": {
@@ -2676,7 +4519,15 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PMBind"
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/SingleTaskPMBind"
+                  },
+                  {
+                    "$ref": "#/components/schemas/PMBind"
+                  }
+                ],
+                "title": "Payload"
               }
             }
           },
@@ -2748,7 +4599,15 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PMCheckpoint"
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/SingleTaskPMCheckpoint"
+                  },
+                  {
+                    "$ref": "#/components/schemas/PMCheckpoint"
+                  }
+                ],
+                "title": "Payload"
               }
             }
           },
@@ -2820,7 +4679,15 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PMReadback"
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/SingleTaskPMReadback"
+                  },
+                  {
+                    "$ref": "#/components/schemas/PMReadback"
+                  }
+                ],
+                "title": "Payload"
               }
             }
           },
@@ -2876,7 +4743,15 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PMRebind"
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/SingleTaskPMRebind"
+                  },
+                  {
+                    "$ref": "#/components/schemas/PMRebind"
+                  }
+                ],
+                "title": "Payload"
               }
             }
           },
@@ -2932,7 +4807,15 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PMResume"
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/SingleTaskPMResume"
+                  },
+                  {
+                    "$ref": "#/components/schemas/PMResume"
+                  }
+                ],
+                "title": "Payload"
               }
             }
           },

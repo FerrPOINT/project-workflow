@@ -93,8 +93,9 @@ def test_repository_has_one_linear_migration_head():
         "0012_profession_themes.py",
         "0013_profession_execution.py",
         "0014_launch_profile_only.py",
+        "0015_single_task_assignments.py",
     ]
-    assert migration_head() == "0014_launch_profile_only"
+    assert migration_head() == "0015_single_task_assignments"
 
 
 def test_pm_upgrade_preserves_existing_resource_contexts(tmp_path):
@@ -129,7 +130,7 @@ def test_pm_upgrade_preserves_existing_resource_contexts(tmp_path):
         original = connection.execute(text("SELECT * FROM resource_execution_contexts")).mappings().all()
     ensure_migrated(engine)
     ensure_migrated(engine)
-    assert database_revisions(engine) == {"0014_launch_profile_only"}
+    assert database_revisions(engine) == {"0015_single_task_assignments"}
     assert schema_is_ready(engine)
     with engine.connect() as connection:
         assert connection.execute(text("SELECT * FROM resource_execution_contexts")).mappings().all() == original
@@ -184,7 +185,7 @@ def test_fresh_sqlite_migration_matches_orm_metadata(tmp_path):
         }
         assert actual_fks == expected_fks, table_name
 
-    assert database_revisions(engine) == {"0014_launch_profile_only"}
+    assert database_revisions(engine) == {"0015_single_task_assignments"}
     assert schema_is_ready(engine) is True
     with engine.connect() as connection:
         context = MigrationContext.configure(
@@ -367,12 +368,12 @@ def test_sqlite_supported_additive_upgrade_preserves_legacy_catalog_and_assignme
     assert database_revisions(engine) == {predecessor}
     ensure_migrated(engine)
     ensure_migrated(engine)  # Restart is idempotent and cannot reinterpret historical payloads.
-    assert database_revisions(engine) == {"0014_launch_profile_only"}
+    assert database_revisions(engine) == {"0015_single_task_assignments"}
     assert schema_is_ready(engine)
     with engine.connect() as conn:
         for table, original in frozen.items():
             actual = conn.execute(text(f"SELECT * FROM {table} ORDER BY id")).mappings().all()
-            expected = [dict(row, concrete_agent_ref=None) for row in original] if (
+            expected = [dict(row, concrete_agent_ref=None, single_task_binding_json=None) for row in original] if (
                 table == "task_runtime_assignments"
             ) else original
             assert actual == expected, table
@@ -506,7 +507,7 @@ def test_sqlite_runtime_assignment_rejects_invalid_immutable_bindings(tmp_path, 
         )
 
     ensure_migrated(engine)
-    assert database_revisions(engine) == {"0014_launch_profile_only"}
+    assert database_revisions(engine) == {"0015_single_task_assignments"}
     with engine.connect() as conn:
         preserved = conn.execute(
             text(
@@ -903,7 +904,7 @@ def test_head_with_damaged_or_polluted_schema_is_refused(tmp_path, mutation):
     assert schema_is_ready(engine) is False
     with pytest.raises(DatabaseRecreateRequired):
         ensure_migrated(engine)
-    assert database_revisions(engine) == {"0014_launch_profile_only"}
+    assert database_revisions(engine) == {"0015_single_task_assignments"}
     if mutation == "extra":
         with engine.connect() as connection:
             assert connection.execute(text("SELECT id FROM unexpected_table")).scalar_one() == 42
