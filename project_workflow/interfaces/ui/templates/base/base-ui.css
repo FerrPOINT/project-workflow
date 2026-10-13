@@ -227,6 +227,9 @@ dialog.base-shell-drawer::backdrop { background: rgb(0 0 0 / 65%); }
 .base-loader-lg{--base-loader-box:156px;--base-loader-tile:38px}
 .base-shapes-loader{--c:no-repeat linear-gradient(currentColor 0 0);display:block;width:69.23077%;height:69.23077%;background:var(--c),var(--c),var(--c),var(--c),var(--c),var(--c),var(--c),var(--c),var(--c);background-size:var(--base-loader-tile) var(--base-loader-tile);animation:base-shapes-size 1s infinite,base-shapes-position 1s infinite}
 .base-loading-state{display:flex;min-height:240px;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:24px;text-align:center;font-size:14px;line-height:1.5;color:var(--color-text-muted)}
+/* A root loading state occupies the application viewport; section states keep
+   their containing layout, including forms and tables. */
+#root > .base-loading-state,body > .base-loading-state{min-height:100dvh;box-sizing:border-box}
 .base-control.bg-accent .base-loader-stage,.base-button-primary .base-loader-stage{color:inherit}
 @keyframes base-shapes-size{0%,100%{width:69.23077%;height:69.23077%}35%,65%{width:100%;height:100%}}
 @keyframes base-shapes-position{0%,40%{background-position:0 0,0 50%,0 100%,50% 100%,100% 100%,100% 50%,100% 0,50% 0,50% 50%}60%,100%{background-position:0 50%,0 100%,50% 100%,100% 100%,100% 50%,100% 0,50% 0,0 0,50% 50%}}
