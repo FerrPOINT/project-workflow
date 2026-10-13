@@ -289,7 +289,7 @@ function syncPhaseSectionUrl(sectionId, historyMode) {
   const currentUrl = window.location.pathname + window.location.search + window.location.hash;
   if (nextUrl === currentUrl) return;
   const method = historyMode === 'replace' ? 'replaceState' : 'pushState';
-  window.history[method](null, '', nextUrl);
+  window.SdlcPlatformNavigation.syncRoute(nextUrl, method === 'replaceState');
 }
 
 function jumpToPhaseSection(sectionId, historyMode = 'push') {
@@ -559,7 +559,7 @@ async function addInstructionAfter(button) {
       showToast(data.error || 'Не удалось добавить инструкцию', 'error');
       return;
     }
-    window.location.reload();
+    window.SdlcPlatformNavigation.reload();
   } finally {
     button.disabled = false;
   }
@@ -583,7 +583,7 @@ async function addInstructionLast() {
       showToast(data.error || 'Не удалось добавить инструкцию', 'error');
       return;
     }
-    window.location.reload();
+    window.SdlcPlatformNavigation.reload();
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -603,7 +603,7 @@ async function deleteInstruction(button) {
       showToast(data.error || 'Не удалось удалить инструкцию', 'error');
       return;
     }
-    window.location.reload();
+    window.SdlcPlatformNavigation.reload();
   } finally {
     button.disabled = false;
   }
@@ -627,7 +627,7 @@ async function toggleInstructionType(badge) {
       showToast('Не удалось сменить режим', 'error');
       return;
     }
-    window.location.reload();
+    window.SdlcPlatformNavigation.reload();
   } finally {
     badge.disabled = false;
   }
@@ -688,7 +688,7 @@ async function addSkillToInstruction(input) {
       showToast('Не удалось добавить навык', 'error');
       return;
     }
-    window.location.reload();
+    window.SdlcPlatformNavigation.reload();
   } finally {
     input.disabled = false;
   }
@@ -713,7 +713,7 @@ async function removeSkillFromInstruction(button) {
     showToast('Не удалось убрать навык', 'error');
     return;
   }
-  window.location.reload();
+  window.SdlcPlatformNavigation.reload();
 }
 
 /* ---------- Checks & Evidence ---------- */

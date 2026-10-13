@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from html.parser import HTMLParser
 from pathlib import Path
 
 import pytest
@@ -198,7 +199,30 @@ def test_ui_smoke_pages_render_neutral_screenshot_fixture(tmp_path, monkeypatch)
     for asset in ("base-ui.css", "base-ui.js", "theme-preference.js"):
         rendered = rendered.replace((assets / asset).read_text(encoding="utf-8"), "")
     assert "hermes" not in rendered.casefold()
-    assert "project-workflow" not in rendered.casefold()
+    class VisibleContent(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.ignored = 0
+            self.values = []
+
+        def handle_starttag(self, tag, attrs):
+            if tag in {"script", "style"}:
+                self.ignored += 1
+            if tag == "input":
+                self.values.extend(value for name, value in attrs if name == "value" and value)
+
+        def handle_endtag(self, tag):
+            if tag in {"script", "style"}:
+                self.ignored -= 1
+
+        def handle_data(self, data):
+            if not self.ignored:
+                self.values.append(data)
+
+    visible = VisibleContent()
+    visible.feed(rendered)
+    # Technical service keys and bridge configuration are not screenshot business content.
+    assert "project-workflow" not in " ".join(visible.values).casefold()
     assert "relevanter" not in rendered.casefold()
     assert "бизнес" not in rendered.casefold()
     assert "duedate" not in rendered.casefold()

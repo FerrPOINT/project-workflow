@@ -82,6 +82,9 @@ def _namespace_context(
         "request": request,
         "page": page,
         "ui_port": get_settings().UI_PORT,
+        "platform_origin": settings.UI_PLATFORM_ORIGIN,
+        "platform_logout_url": settings.AUTH_ISSUER.rstrip("/") + "/oidc/logout?client_id=project-workflow"
+        if settings.AUTH_ISSUER else "",
         "namespaces": namespaces,
         "namespace_cookie_name": namespace_cookie_name,
         "namespace_cookie_secure": settings.AUTH_COOKIE_SECURE,
@@ -109,7 +112,8 @@ def _template_response(
     )
     selected_namespace = context.get("selected_namespace")
     selected_id = selected_namespace.get("id") if isinstance(selected_namespace, dict) else None
-    if isinstance(selected_id, int):
+    embedded = bool(get_settings().UI_PLATFORM_ORIGIN) and request.headers.get("sec-fetch-dest") == "iframe"
+    if isinstance(selected_id, int) and not embedded:
         response.set_cookie(context["namespace_cookie_name"], str(selected_id), samesite="lax",
                             secure=context["namespace_cookie_secure"])
     return response

@@ -1314,7 +1314,7 @@ class TestPhaseDetail:
         assert response.status_code == 200
         assert "function syncPhaseSectionUrl(sectionId, historyMode)" in response.text
         assert "const method = historyMode === 'replace' ? 'replaceState' : 'pushState';" in response.text
-        assert "window.history[method](null, '', nextUrl);" in response.text
+        assert "window.SdlcPlatformNavigation.syncRoute(nextUrl, method === 'replaceState');" in response.text
         assert "function jumpToPhaseSection(sectionId, historyMode = 'push')" in response.text
         assert "function releasePhaseSectionNavigationLock()" in response.text
         assert "jumpToPhaseSection(sectionId, 'none');" in response.text
@@ -2289,7 +2289,7 @@ class TestProjectsPage:
         )
         assert "url.pathname = '/namespaces';" in response.text
         assert "var method = historyMode === 'push' ? 'pushState' : 'replaceState';" in response.text
-        assert "window.history[method](null, '', url.toString());" in response.text
+        assert "window.SdlcPlatformNavigation.syncRoute(url.toString(), method === 'replaceState');" in response.text
         assert re.search(
             r"function selectNamespace\(id, historyMode\)\{\s*"
             r"var namespace = namespaceById\(Number\(id\)\);\s*if\(!namespace\)\{ return; \}\s*"
@@ -2347,7 +2347,7 @@ class TestProjectsPage:
         response = client.get("/namespaces/new")
         assert response.status_code == 200
         assert (
-            "window.location.href = '/namespaces?namespace_id=' + encodeURIComponent(d.namespace_id);"
+            "window.SdlcPlatformNavigation.navigate('/namespaces?namespace_id=' + encodeURIComponent(d.namespace_id));"
             in response.text
         )
 
@@ -2568,7 +2568,7 @@ class TestWorkflowsPage:
         assert "function workflowSelectionUrl(workflowId)" in response.text
         assert "url.searchParams.set('workflow_id', String(workflowId));" in response.text
         assert "url.searchParams.delete('workflow_id');" in response.text
-        assert "window.history[mode === 'replace' ? 'replaceState' : 'pushState']" in response.text
+        assert "window.SdlcPlatformNavigation.syncRoute(nextUrl, mode === 'replace'" in response.text
         assert "window.addEventListener('popstate'" in response.text
         assert "selectWorkflow(workflowId, {updateUrl:false});" in response.text
         assert "syncWorkflowUrl(selectedWorkflowId, 'replace');" in response.text
@@ -2652,7 +2652,7 @@ class TestWorkflowsPage:
         assert "function phaseUrlForWorkflow(workflowId)" in response.text
         assert "url.searchParams.set('workflow_id', String(workflowId));" in response.text
         assert "url.searchParams.set('namespace_id', String(activeNamespaceId));" not in response.text
-        assert "window.location.href = phaseUrlForWorkflow(d.workflow_id);" in response.text
+        assert "window.SdlcPlatformNavigation.navigate(phaseUrlForWorkflow(d.workflow_id));" in response.text
         assert "window.location.href = '/phases?workflow_id=' + d.workflow_id;" not in response.text
 
     def test_workflows_api_create_update_and_delete(self):

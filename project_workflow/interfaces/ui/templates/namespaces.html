@@ -78,7 +78,7 @@
   </section>
 
   <section class="namespace-panel">
-    <form id="namespaceForm" class="card form-stack" aria-labelledby="namespaceFormMode" onsubmit="event.preventDefault(); submitNamespace();">
+    <form id="namespaceForm" data-platform-draft class="card form-stack" aria-labelledby="namespaceFormMode" onsubmit="event.preventDefault(); submitNamespace();">
       <div class="card-title" id="namespaceFormMode">{{ 'Создание' if create_mode else 'Редактирование' }}</div>
       <div>
         <label class="label" for="namespaceName">Название</label>
@@ -217,11 +217,11 @@ function syncNamespaceUrl(id, historyMode){
   url.searchParams.set('namespace_id', id);
   if(url.toString() === window.location.href){ return; }
   var method = historyMode === 'push' ? 'pushState' : 'replaceState';
-  window.history[method](null, '', url.toString());
+  window.SdlcPlatformNavigation.syncRoute(url.toString(), method === 'replaceState');
 }
 function rememberNamespaceSelection(id, historyMode){
   if(id == null){ return; }
-  document.cookie={{ namespace_cookie_name | tojson }}+'='+encodeURIComponent(id)+'; path=/; SameSite=Lax'{% if namespace_cookie_secure %}+'; Secure'{% endif %};
+  if(!window.SdlcPlatformNavigation.embedded || window.SdlcPlatformNavigation.active) document.cookie={{ namespace_cookie_name | tojson }}+'='+encodeURIComponent(id)+'; path=/; SameSite=Lax'{% if namespace_cookie_secure %}+'; Secure'{% endif %};
   document.querySelectorAll('[data-namespace-selector]').forEach(function(selector){ selector.value = String(id); });
   refreshNamespaceSelectors();
   updateNamespaceHeaderLinks(id);
@@ -432,7 +432,7 @@ function saveNamespace(){
   var payload = currentPayload();
   return fetch('/api/namespaces/' + namespaceId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
     .then(function(r){return r.json()})
-    .then(function(d){ if(d.ok){ showToast('Профессия сохранена','success'); return reloadNamespaces(namespaceId); } showToast(d.error || 'Ошибка','error'); })
+    .then(function(d){ if(d.ok){ window.SdlcPlatformNavigation.saved(document.getElementById('namespaceForm')); showToast('Профессия сохранён','success'); return reloadNamespaces(namespaceId); } showToast(d.error || 'Ошибка','error'); })
     .catch(showRequestError);
 }
 async function deleteNamespace(){
@@ -458,8 +458,9 @@ function createNamespace(){
     .then(function(r){return r.json()})
     .then(function(d){
       if(d.ok){
-        showToast('Профессия создана','success');
-        window.location.href = '/namespaces?namespace_id=' + encodeURIComponent(d.namespace_id);
+        showToast('Профессия создан','success');
+        window.SdlcPlatformNavigation.saved(document.getElementById('namespaceForm'));
+        window.SdlcPlatformNavigation.navigate('/namespaces?namespace_id=' + encodeURIComponent(d.namespace_id));
       } else {
         showToast(d.error || 'Ошибка','error');
       }

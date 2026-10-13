@@ -52,14 +52,17 @@ def test_add_instruction_uses_visible_position_after_reorder(position):
         f"const button={{disabled:false,closest:()=>items[{position}]}};",
         "const getInstructionItems=()=>items;const phaseId=7;const phaseApiUrl=u=>u;",
         "const requestPhaseDetail=async(u,o)=>{payload=JSON.parse(o.body);return {resp:{ok:true},data:{ok:true}};};",
-        "const window={location:{reload(){}}};",
+        "let reloads=0;const window={SdlcPlatformNavigation:{reload(){reloads++;}}};",
         template[start:end],
-        "await addInstructionAfter(button);console.log(JSON.stringify(payload));",
+        "await addInstructionAfter(button);console.log(JSON.stringify({...payload,reloads,disabled:button.disabled}));",
     ])
     completed = subprocess.run(
         ["node", "--input-type=module", "-"], input=script, text=True, capture_output=True, check=True, timeout=10,
     )
-    assert json.loads(completed.stdout)["step_num"] == position + 2
+    result = json.loads(completed.stdout)
+    assert result["step_num"] == position + 2
+    assert result["reloads"] == 1
+    assert result["disabled"] is False
 
 
 @pytest.mark.parametrize("result", [None, {"resp": {"ok": False}, "data": {"ok": False, "error": "Conflict"}}])

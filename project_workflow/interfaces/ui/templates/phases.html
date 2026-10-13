@@ -221,7 +221,7 @@ function selectMode(modeId){
   if(!Number.isInteger(parsed)||parsed<=0){showToast('Не удалось определить режим воркфлоу','error');return;}
   const url=new URL(window.location.href);
   url.searchParams.set('mode_id',String(parsed));
-  window.location.assign(url.pathname+url.search);
+  window.SdlcPlatformNavigation.navigate(url.pathname+url.search);
 }
 
 function setPhaseView(view,persist=true){
@@ -255,7 +255,7 @@ async function addPhaseAfter(button){
     const resp=await fetch('/api/phases',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({workflow_id:parseInt(workflowId,10),mode_id:parseInt(modeId,10),phase_order:currentOrder+1})});
     const data=await resp.json().catch(()=>({}));
     if(!resp.ok||!data.ok){showToast(data.error||'Не удалось добавить фазу','error');return;}
-    window.location.reload();
+    window.SdlcPlatformNavigation.reload();
   }catch(_error){showRequestError();
   }finally{button.disabled=false;}
 }
@@ -272,7 +272,7 @@ async function deletePhase(button){
     const resp=await fetch('/api/phases/'+item.dataset.phaseId,{method:'DELETE'});
     const data=await resp.json().catch(()=>({}));
     if(!resp.ok||!data.ok){showToast(data.error||'Не удалось удалить фазу','error');return;}
-    window.location.reload();
+    window.SdlcPlatformNavigation.reload();
   }catch(_error){showRequestError();
   }finally{button.disabled=false;}
 }
@@ -286,7 +286,7 @@ async function togglePhaseType(button){
     const resp=await fetch('/api/phases/'+item.dataset.phaseId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({execution_type:nextType})});
     const data=await resp.json().catch(()=>({}));
     if(!resp.ok||!data.ok){showToast(data.error||'Не удалось сменить режим','error');return;}
-    window.location.reload();
+    window.SdlcPlatformNavigation.reload();
   }catch(_error){showRequestError();
   }finally{button.disabled=false;}
 }
@@ -305,7 +305,7 @@ async function movePhase(button,direction){
     const orders=reordered.map((phase,index)=>({phase_id:Number(phase.dataset.phaseId),phase_order:index+1}));
     const resp=await fetch('/api/phases/order',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({orders})});
     if(!resp.ok){showToast('Не удалось сохранить порядок фаз','error');return;}
-    window.location.reload();
+    window.SdlcPlatformNavigation.reload();
   }catch(_error){showRequestError();
   }finally{button.disabled=false;}
 }
