@@ -3148,15 +3148,29 @@
             "type": "string"
           },
           "requirements_revision": {
-            "maximum": 9.223372036854776e+18,
-            "minimum": 1.0,
-            "title": "Requirements Revision",
-            "type": "integer"
+            "anyOf": [
+              {
+                "maximum": 9.223372036854776e+18,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requirements Revision"
           },
           "requirements_sha256": {
-            "pattern": "^[a-f0-9]{64}$",
-            "title": "Requirements Sha256",
-            "type": "string"
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requirements Sha256"
           },
           "root_ref": {
             "maxLength": 512,
@@ -3256,15 +3270,29 @@
             "title": "Clarification Version"
           },
           "requirements_revision": {
-            "maximum": 9.223372036854776e+18,
-            "minimum": 1.0,
-            "title": "Requirements Revision",
-            "type": "integer"
+            "anyOf": [
+              {
+                "maximum": 9.223372036854776e+18,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requirements Revision"
           },
           "requirements_sha256": {
-            "pattern": "^[a-f0-9]{64}$",
-            "title": "Requirements Sha256",
-            "type": "string"
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requirements Sha256"
           }
         },
         "required": [
@@ -3674,15 +3702,29 @@
             "type": "string"
           },
           "requirements_revision": {
-            "maximum": 9.223372036854776e+18,
-            "minimum": 1.0,
-            "title": "Requirements Revision",
-            "type": "integer"
+            "anyOf": [
+              {
+                "maximum": 9.223372036854776e+18,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requirements Revision"
           },
           "requirements_sha256": {
-            "pattern": "^[a-f0-9]{64}$",
-            "title": "Requirements Sha256",
-            "type": "string"
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requirements Sha256"
           },
           "root_ref": {
             "maxLength": 512,

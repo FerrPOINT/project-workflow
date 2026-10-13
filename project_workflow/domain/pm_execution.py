@@ -111,8 +111,8 @@ class SingleTaskPMBind(PMBind, SingleTaskPMProfile):
 
 class SingleTaskPMCheckpoint(PMCommand, SingleTaskPMProfile):
     checkpoint_ref: Ref
-    requirements_revision: Version
-    requirements_sha256: Sha256
+    requirements_revision: Version | None
+    requirements_sha256: Sha256 | None
     clarification_request_ref: Ref | None = None
     clarification_version: Version | None = None
 
@@ -120,6 +120,10 @@ class SingleTaskPMCheckpoint(PMCommand, SingleTaskPMProfile):
     def clarification_pair(self) -> "SingleTaskPMCheckpoint":
         if (self.clarification_request_ref is None) != (self.clarification_version is None):
             raise ValueError("Clarification reference/version must be a real pair or absent")
+        if (self.requirements_revision is None) != (self.requirements_sha256 is None):
+            raise ValueError("Requirements revision/hash must be a real pair or explicitly absent")
+        if self.clarification_request_ref is not None and self.requirements_revision is None:
+            raise ValueError("Clarification requires an existing requirements revision")
         return self
 
 
@@ -144,6 +148,8 @@ class SingleTaskPMResume(SingleTaskPMCheckpoint):
     def actual_input(self) -> "SingleTaskPMResume":
         if (self.input.input_kind == "answer") != (self.clarification_request_ref is not None):
             raise ValueError("Only a real answer carries clarification references")
+        if self.input.input_kind != "feedback" and self.requirements_revision is None:
+            raise ValueError("Answer/confirmation requires an existing requirements revision")
         return self
 
 
@@ -158,10 +164,18 @@ class SingleTaskPMReadback(PMReadback, SingleTaskPMProfile):
 class SingleTaskPMCheckpointData(BaseModel):
     model_config = ConfigDict(extra="forbid")
     checkpoint_ref: Ref
-    requirements_revision: Version
-    requirements_sha256: Sha256
+    requirements_revision: Version | None
+    requirements_sha256: Sha256 | None
     clarification_request_ref: Ref | None = None
     clarification_version: Version | None = None
+
+    @model_validator(mode="after")
+    def actual_references(self) -> "SingleTaskPMCheckpointData":
+        if ((self.requirements_revision is None) != (self.requirements_sha256 is None)
+            or (self.clarification_request_ref is None) != (self.clarification_version is None)
+            or self.clarification_request_ref is not None and self.requirements_revision is None):
+            raise ValueError("Checkpoint requires paired real revision and clarification references")
+        return self
 
 
 class PMResumeInput(BaseModel):

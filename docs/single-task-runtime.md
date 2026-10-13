@@ -74,8 +74,11 @@ DTOs, including `PMResume.answer_event_ref`, remain unchanged. Existing namespac
 ownership provisioning/authorization is reused; no new owner is added.
 
 Checkpoint keeps existing PM identity/CAS/run fields and `checkpoint_ref`, adds
-required `requirements_revision`, `requirements_sha256`. Optional clarification
-ref/version must be a real pair. Resume echoes that exact checkpoint/document,
+required nullable `requirements_revision`, `requirements_sha256`. Both are null
+before the first document, otherwise both identify a real revision/hash. This
+lets brainstorming wait for owner feedback without a fake initial document.
+Optional clarification ref/version must be a real pair and requires an existing
+document. Resume echoes that exact checkpoint/document,
 retains `new_session_run_id` and uses only:
 
 ```json
@@ -88,6 +91,9 @@ retains `new_session_run_id` and uses only:
 `input_kind` is `answer|feedback|confirmation`; IDs are respectively actual
 `Answer.id`, `PmFeedbackReceipt.message_id`, `Confirmation.id`. Only answer
 requires clarification refs. Feedback/confirmation reject fake answer fields.
+Only feedback can resume a pre-document checkpoint. Answer and confirmation
+require an existing requirements revision/hash; ordinary legacy PM schemas are
+not relaxed.
 The trusted parent Fleet assignment adapter reads Tracker and validates receipt,
 task/owner/current document before submitting this packet. Workflow does not
 treat an agent assertion or the supplied reference as independently fetched proof.

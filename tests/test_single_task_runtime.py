@@ -289,3 +289,46 @@ def test_delivery_can_retain_real_tech_workspace_pair_without_decomposition(brid
         record = uow.tasks.get_assignment_by_operation_key(assignment["operation_key"])
         assert (record.tech_execution_workspace_ref, record.tech_execution_attempt_ref) == pair
         assert record.task_workspace_ref is record.decomposition_revision_ref is None
+
+
+def test_pm_brainstorming_checkpoints_and_resumes_feedback_before_any_requirements(bridge, monkeypatch):
+    identity, observations, headers, step = enroll_pm(bridge, monkeypatch)
+    checkpoint = {**PROFILE, **identity, "operation_key": "brainstorm:checkpoint", "expected_version": 1,
+                  "expected_fence": 1, "binding_ref": step["binding_ref"], "hermes_run_ref": step["hermes_run_ref"],
+                  "session_run_id": SESSION, "checkpoint_ref": str(uuid4()),
+                  "requirements_revision": None, "requirements_sha256": None}
+    for change in ({"requirements_revision": 1}, {"requirements_sha256": "a" * 64},
+                   {"clarification_request_ref": "not-an-existing-question", "clarification_version": 1}):
+        response = bridge.post(PM + "checkpoint", json={**checkpoint, **change}, headers=headers)
+        assert response.status_code == 422, response.text
+    waiting = bridge.post(PM + "checkpoint", json=checkpoint, headers=headers)
+    assert waiting.status_code == 200, waiting.text
+    assert bridge.post(PM + "checkpoint", json=checkpoint, headers=headers).json() == waiting.json()
+    saved = waiting.json()["result"]["checkpoint"]
+    assert saved["requirements_revision"] is saved["requirements_sha256"] is None
+    assert saved["clarification_request_ref"] is saved["clarification_version"] is None
+    new_run = str(uuid4())
+    resume = {**checkpoint, "operation_key": "brainstorm:resume", "expected_version": 2,
+              "new_session_run_id": new_run, "input": {"input_kind": "feedback", "input_id": str(uuid4())},
+              "input_receipt": {"reference": "tracker:real-owner-feedback", "sha256": "b" * 64}}
+    for kind in ("answer", "confirmation"):
+        response = bridge.post(PM + "resume", json={**resume, "input": {**resume["input"], "input_kind": kind}},
+                               headers=WRITER)
+        assert response.status_code == 422, response.text
+    assert bridge.post(PM + "resume", json=resume, headers=WRITER).status_code == 409
+    observations[SESSION].update(status="stopped", checkpoint_ref=checkpoint["checkpoint_ref"])
+    reserved = bridge.post(PM + "resume", json=resume, headers=WRITER)
+    assert reserved.status_code == 200, reserved.text
+    assert bridge.post(PM + "resume", json=resume, headers=WRITER).json() == reserved.json()
+    assert reserved.json()["result"]["identity"] == identity
+    assert reserved.json()["result"]["resume_input"] == {
+        "input": resume["input"], "input_receipt": resume["input_receipt"],
+    }
+    assert reserved.json()["result"]["checkpoint"] == saved
+    with SAUnitOfWork() as uow:
+        execution = uow.session.scalar(select(m.PMExecution))
+        task = uow.tasks.get_by_key(identity["task"])
+        assert execution.execution_ref == identity["execution_ref"]
+        assert execution.state == "resume_pending"
+        assert task.current_phase_code == "PM-DRAFT-01"
+        assert not uow.step_history.list(task_id=task.id)
