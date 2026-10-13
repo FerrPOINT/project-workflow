@@ -2,6 +2,7 @@
 {% from "profession_selector.html" import profession_selector %}
 {% set active_namespace = theme_namespace if theme_namespace is defined else none %}
 {% set active_namespace_id = active_namespace.id if active_namespace else none %}
+{% set sidebar_scope_suffix = '?project_scope=all' if request is defined and request.query_params.get('project_scope') == 'all' else '' %}
 <!DOCTYPE html>
 <html lang="ru" data-theme="dark" data-theme-storage-key="workflow-theme">
 <head>
@@ -362,29 +363,25 @@ textarea{resize:vertical;min-height:60px}
 <aside class="sidebar" id="sidebar">
   <div class="sidebar-header mobile-drawer-title"><strong>Project Workflow</strong><button class="sidebar-close" onclick="closeSidebar()" aria-label="Закрыть навигацию">&times;</button></div>
   <nav class="sidebar-nav" aria-label="Основная навигация">
-    <a class="sidebar-link {% if page == 'namespace' %}active{% endif %}" href="/namespaces" aria-label="Профессии" title="Профессии" {% if page == 'namespace' %}aria-current="page"{% endif %}>
+    <a class="sidebar-link {% if page == 'namespace' %}active{% endif %}" href="/namespaces{{ sidebar_scope_suffix }}" aria-label="Профессии" title="Профессии" {% if page == 'namespace' %}aria-current="page"{% endif %}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h18"/><path d="M5 7V5a2 2 0 0 1 2-2h3"/><path d="M19 7v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7"/><path d="M9 12h6"/><path d="M9 16h4"/></svg>
       <span class="sidebar-label">Профессии</span>
     </a>
     <div class="sidebar-section">ОБЗОР</div>
-    <a class="sidebar-link {% if page == 'dashboard' %}active{% endif %}" href="/" aria-label="Дашборд" title="Дашборд" {% if page == 'dashboard' %}aria-current="page"{% endif %}>
+    <a class="sidebar-link {% if page == 'dashboard' %}active{% endif %}" href="/{{ sidebar_scope_suffix }}" aria-label="Дашборд" title="Дашборд" {% if page == 'dashboard' %}aria-current="page"{% endif %}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
       <span class="sidebar-label">Дашборд</span>
     </a>
-    <a class="sidebar-link {% if page == 'workflows' %}active{% endif %}" href="/workflows" aria-label="Воркфлоу" title="Воркфлоу" {% if page == 'workflows' %}aria-current="page"{% endif %}>
+    <a class="sidebar-link {% if page in ['workflows', 'phases'] %}active{% endif %}" href="/workflows{{ sidebar_scope_suffix }}" aria-label="Процессы" title="Процессы" {% if page in ['workflows', 'phases'] %}aria-current="page"{% endif %}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><path d="M7 10v4"/><path d="M17 10v4"/></svg>
-      <span class="sidebar-label">Воркфлоу</span>
+      <span class="sidebar-label">Процессы</span>
     </a>
-    <a class="sidebar-link {% if page == 'phases' %}active{% endif %}" href="/phases" aria-label="Фазы" title="Фазы" {% if page == 'phases' %}aria-current="page"{% endif %}>
+    <a class="sidebar-link {% if page == 'tasks' %}active{% endif %}" href="/tasks{{ sidebar_scope_suffix }}" aria-label="Выполнения задач" title="Выполнения задач" {% if page == 'tasks' %}aria-current="page"{% endif %}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
-      <span class="sidebar-label">Фазы</span>
-    </a>
-    <a class="sidebar-link {% if page == 'tasks' %}active{% endif %}" href="/tasks" aria-label="Задачи" title="Задачи" {% if page == 'tasks' %}aria-current="page"{% endif %}>
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
-      <span class="sidebar-label">Задачи</span>
+      <span class="sidebar-label">Выполнения задач</span>
     </a>
     <div class="sidebar-section">УПРАВЛЕНИЕ</div>
-    <a class="sidebar-link {% if page == 'settings' %}active{% endif %}" href="/settings" aria-label="Команды CLI" title="Команды CLI" {% if page == 'settings' %}aria-current="page"{% endif %}>
+    <a class="sidebar-link {% if page == 'settings' %}active{% endif %}" href="/settings{{ sidebar_scope_suffix }}" aria-label="Команды CLI" title="Команды CLI" {% if page == 'settings' %}aria-current="page"{% endif %}>
       <span class="sidebar-cli-icon" aria-hidden="true">&gt;_</span>
       <span class="sidebar-label">Команды CLI</span>
     </a>
@@ -395,11 +392,6 @@ textarea{resize:vertical;min-height:60px}
       {% endif %}
     </div>
     </nav>
-    <div class="sidebar-footer">
-    <span class="dot green"></span>
-    <span class="sidebar-status-label">Сервис работает</span>
-
-    </div>
 </aside>
 
 <!-- Main -->
@@ -669,15 +661,18 @@ function switchNamespace(namespaceId){
   var url=new URL(window.location.href);
   if(url.pathname === '/phases' || url.pathname === '/workflows'){
     url.searchParams.delete('workflow_id');
+    url.searchParams.delete('mode_id');
   }
   if(url.pathname.startsWith('/phase/')){
     url.pathname='/phases';
     url.searchParams.delete('workflow_id');
+    url.searchParams.delete('mode_id');
   }
   if(url.pathname === '/instructions'){
     url.pathname='/phases';
     url.searchParams.delete('phase_id');
     url.searchParams.delete('workflow_id');
+    url.searchParams.delete('mode_id');
   }
   if(url.pathname === '/namespaces/new'){
     url.pathname='/namespaces';
@@ -693,5 +688,22 @@ function pluralizeRu(n, one, few, many){
 {% block extra_script %}{% endblock %}
 </script>
 <script>{% include "base/base-ui.js" %}</script>
+<script data-project-navigation-context>
+// Keep the URL-owned scope on native links and platform service navigation.
+function preserveProjectNavigationScope(){
+  var scopes=new URLSearchParams(window.location.search).getAll('project_scope');
+  if(scopes.length !== 1 || scopes[0] !== 'all'){return;}
+  document.querySelectorAll('a[href]').forEach(function(link){
+    if(link.hasAttribute('download')){return;}
+    var url;
+    try{url=new URL(link.href, window.location.href);}catch(error){return;}
+    if(!['http:', 'https:'].includes(url.protocol)){return;}
+    if(url.origin !== window.location.origin && !link.classList.contains('service-menu-item')){return;}
+    url.searchParams.set('project_scope', 'all');
+    link.href=url.toString();
+  });
+}
+document.addEventListener('DOMContentLoaded', preserveProjectNavigationScope);
+</script>
 </body>
 </html>

@@ -69,7 +69,9 @@ def test_current_base_initial_professions_and_history_preservation_on_postgres(p
         assert_theme_migration_updates_only_untouched_managed_professions(engine)
     else:
         ensure_migrated(engine)
-        test_adoption_preserves_profession_edits_old_tasks_history_and_user_collections(engine)
+        test_adoption_preserves_profession_edits_old_tasks_history_and_user_collections(
+            engine, "base_sdlc_catalog_v1_frozen.json", "parallel",
+        )
 
 
 @pytest.fixture

@@ -4,7 +4,7 @@
 {% block header_title %}Воркфлоу{% endblock %}
 {% block header_actions %}
   <button type="button" class="btn btn-primary workflow-header-action" id="newWorkflowButton" onclick="startCreateWorkflow()">+ Новый воркфлоу</button>
-  <a href="/phases{% if selected_namespace %}?namespace_id={{ selected_namespace.id }}{% endif %}" class="btn btn-secondary workflow-header-action">← К фазам</a>
+  <a data-workflow-phases {% if selected_workflow %}href="/phases?workflow_id={{ selected_workflow.id }}{% if selected_namespace %}&amp;namespace_id={{ selected_namespace.id }}{% endif %}{% if request.query_params.get('mode_id') %}&amp;mode_id={{ request.query_params.get('mode_id') | urlencode }}{% endif %}{% if request.query_params.get('project_scope') == 'all' %}&amp;project_scope=all{% endif %}"{% else %}aria-disabled="true" tabindex="-1"{% endif %} class="btn btn-secondary workflow-header-action">Фазы процесса</a>
 {% endblock %}
 
 {% block extra_style %}
@@ -45,7 +45,7 @@
 {% block content %}
 <div class="workflow-mobile-actions">
   <button type="button" class="btn btn-primary" id="mobileNewWorkflowButton" onclick="startCreateWorkflow()">+ Новый воркфлоу</button>
-  <a href="/phases{% if selected_namespace %}?namespace_id={{ selected_namespace.id }}{% endif %}" class="btn btn-secondary">← К фазам</a>
+  <a data-workflow-phases {% if selected_workflow %}href="/phases?workflow_id={{ selected_workflow.id }}{% if selected_namespace %}&amp;namespace_id={{ selected_namespace.id }}{% endif %}{% if request.query_params.get('mode_id') %}&amp;mode_id={{ request.query_params.get('mode_id') | urlencode }}{% endif %}{% if request.query_params.get('project_scope') == 'all' %}&amp;project_scope=all{% endif %}"{% else %}aria-disabled="true" tabindex="-1"{% endif %} class="btn btn-secondary">Фазы процесса</a>
 </div>
 <div class="workflow-crud {% if workflows|length == 0 %}is-empty{% endif %}" id="workflowCrud">
   <div class="workflow-picker" id="workflowPicker">
@@ -98,6 +98,7 @@
 const professionId = {{ selected_namespace.id if selected_namespace else "null" }};
 const workflowStore = {{ workflows | tojson }};
 let selectedWorkflowId = {{ selected_workflow.id if selected_workflow else 'null' }};
+const initialWorkflowId = selectedWorkflowId;
 const defaultWorkflowId = {{ default_workflow_id if default_workflow_id else 'null' }};
 let previousWorkflowId = selectedWorkflowId;
 let workflowFormMode = selectedWorkflowId == null ? 'create' : 'edit';
@@ -110,6 +111,7 @@ function workflowApiUrl(workflowId){
 function workflowById(id){ return workflowStore.find(function(workflow){ return workflow.id === id; }); }
 function workflowSelectionUrl(workflowId){
   var url = new URL(window.location.href);
+  if(Number(url.searchParams.get('workflow_id') || initialWorkflowId) !== workflowId){ url.searchParams.delete('mode_id'); }
   if(workflowId == null){ url.searchParams.delete('workflow_id'); }
   else { url.searchParams.set('workflow_id', String(workflowId)); }
   return url.pathname + url.search + url.hash;
@@ -132,6 +134,9 @@ function phaseUrlForWorkflow(workflowId){
   var url = new URL('/phases', window.location.origin);
   url.searchParams.set('workflow_id', String(workflowId));
   if(professionId != null){ url.searchParams.set('namespace_id', String(professionId)); }
+  var current = new URL(window.location.href);
+  if(Number(current.searchParams.get('workflow_id') || initialWorkflowId) === workflowId && current.searchParams.has('mode_id')){ url.searchParams.set('mode_id', current.searchParams.get('mode_id')); }
+  if(current.searchParams.get('project_scope') === 'all'){ url.searchParams.set('project_scope', 'all'); }
   return url.pathname + url.search;
 }
 function currentWorkflowPayload(){
@@ -149,6 +154,10 @@ function syncWorkflowNav(){
   var picker = document.getElementById('workflowSelect');
   picker.options[0].textContent = workflowFormMode === 'create' ? 'Новый воркфлоу' : 'Выберите воркфлоу';
   picker.value = selectedWorkflowId == null ? '' : String(selectedWorkflowId);
+  document.querySelectorAll('[data-workflow-phases]').forEach(function(link){
+    if(selectedWorkflowId == null){link.removeAttribute('href');link.setAttribute('aria-disabled','true');link.tabIndex=-1;}
+    else{link.href=phaseUrlForWorkflow(selectedWorkflowId);link.removeAttribute('aria-disabled');link.removeAttribute('tabindex');}
+  });
 }
 function fillWorkflowForm(workflow){
   document.getElementById('workflowName').value = workflow ? workflow.name : '';

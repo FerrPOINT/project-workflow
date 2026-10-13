@@ -5,7 +5,7 @@ from typing import Any
 
 from project_workflow import config
 from project_workflow.domain.base_admission import BaseAdmission
-from project_workflow.domain.base_catalog import BASE_CATALOG_ARTIFACTS, BASE_CATALOG_SKILLS
+from project_workflow.domain.base_catalog import BASE_CATALOG_ARTIFACTS, BASE_CATALOG_SKILLS, FROZEN_BASE_CATALOG_V3
 from project_workflow.domain.exceptions import ConflictError
 from project_workflow.domain.repositories import UnitOfWork
 from project_workflow.domain.runtime_assignment import RuntimeStepFence, payload_sha256
@@ -35,6 +35,11 @@ def validate_base_admission(
     if version is None:
         raise ConflictError("Base candidate pin/version mismatch")
     candidate_path = CANDIDATE_PATH if version == 3 else CANDIDATE_PATH.with_name(BASE_CATALOG_ARTIFACTS[version])
+    if (version == 3 and historical_mode_id is not None
+        and digest(candidate_path.read_bytes()) != declared.catalog_sha256):
+        candidate_path = CANDIDATE_PATH.with_name(FROZEN_BASE_CATALOG_V3)
+        if digest(candidate_path.read_bytes()) != declared.catalog_sha256:
+            raise ConflictError("Base pinned package/config validation failed")
     candidate = load_managed_catalog(candidate_path)
     if candidate.catalog_version != version or candidate.skills_source.revision != declared.skills_revision:
         raise ConflictError("Base candidate pin/version mismatch")

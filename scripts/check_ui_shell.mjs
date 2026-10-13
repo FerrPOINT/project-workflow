@@ -56,7 +56,7 @@ try {
       return { sidebarWidth: sidebar.width, mainLeft: main.left, labelWidth: label.width, contextRight: context.right, accountLeft: account.left };
     });
     if (width >= 768) {
-      const expectedWidth = width < 1280 ? 72 : 264;
+      const expectedWidth = width < 1280 ? 60 : 264;
       assert.equal(shell.sidebarWidth, expectedWidth, `Sidebar width at ${width}`);
       assert.equal(shell.mainLeft, expectedWidth, `Content offset at ${width}`);
       assert.equal(shell.labelWidth > 1, width >= 1280, `Sidebar labels at ${width}`);
@@ -90,6 +90,23 @@ try {
     const created = await response.json();
     assert.ok(response.ok() && created.ok);
     const id = String(created.namespace_id);
+    const collection = await (await page.request.get(`${baseUrl}/api/workflows?namespace_id=${id}`)).json();
+    const starter = collection.workflows[0];
+    const phaseData = await (await page.request.get(`${baseUrl}/api/phases?namespace_id=${id}&workflow_id=${starter.id}`)).json();
+    const extraResponse = await page.request.post(`${baseUrl}/api/workflows?namespace_id=${id}`, {data:{name:'Owned extra process'}});
+    const extra = await extraResponse.json();
+    assert.ok(extraResponse.ok() && extra.ok);
+    await page.goto(`${baseUrl}/workflows?namespace_id=${id}&workflow_id=${starter.id}&mode_id=${phaseData.modes[0].id}&project_scope=all`);
+    for (const href of await page.locator('.sidebar-link, .service-menu-item').evaluateAll(links => links.map(link => link.href))) {
+      assert.equal(new URL(href).searchParams.get('project_scope'), 'all', 'Navigation retains the all-project scope');
+    }
+    await page.locator(`#workflowNav [data-workflow-id="${extra.workflow_id}"]`).click();
+    assert.equal(new URL(page.url()).searchParams.has('mode_id'), false, 'Changing workflow removes the foreign mode');
+    const phaseHref = await page.locator('[data-workflow-phases]').first().getAttribute('href');
+    const phaseUrl = new URL(phaseHref, baseUrl);
+    assert.equal(phaseUrl.searchParams.get('namespace_id'), id, 'A second workflow keeps its profession');
+    assert.equal(phaseUrl.searchParams.get('project_scope'), 'all');
+    await page.request.delete(`${baseUrl}/api/workflows/${extra.workflow_id}?namespace_id=${id}`);
     await page.goto(`${baseUrl}/namespaces?namespace_id=${id}`);
     assert.deepEqual(await selectedIds(), [id, id]);
     await page.locator('#deleteNamespaceButton').click();
@@ -102,7 +119,7 @@ try {
     assert.deepEqual(remaining.namespaces.map(item => item.id).sort(), initial.namespaces.map(item => item.id).sort());
     console.log('PASS: owned empty-namespace deletion removes both selector options and preserves neighboring fixtures');
   }
-  console.log('PASS: namespace context beside account; sidebar72/264 with matching labels/content offset; menu320/375/767/768/1000/1279/1280/1920/2560');
+  console.log('PASS: namespace context beside account; sidebar60/264 with matching labels/content offset; menu320/375/767/768/1000/1279/1280/1920/2560');
 } finally {
   await browser.close();
 }

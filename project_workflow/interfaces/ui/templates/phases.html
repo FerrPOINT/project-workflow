@@ -1,8 +1,19 @@
 {% extends "base.html" %}
+{% set phase_scope_suffix = ('&project_scope=all' if selected_namespace else '?project_scope=all') if request is defined and request.query_params.get('project_scope') == 'all' else '' %}
+{% set mode_scope_suffix = '&project_scope=all' if request is defined and request.query_params.get('project_scope') == 'all' else '' %}
+{% set editor_path = '/workflows' %}
+{% if selected_workflow %}
+{% set editor_path = editor_path ~ '?workflow_id=' ~ selected_workflow_id %}
+{% if selected_namespace %}{% set editor_path = editor_path ~ '&namespace_id=' ~ selected_namespace.id %}{% endif %}
+{% if selected_mode_id %}{% set editor_path = editor_path ~ '&mode_id=' ~ selected_mode_id %}{% endif %}
+{% elif selected_namespace %}
+{% set editor_path = editor_path ~ '?namespace_id=' ~ selected_namespace.id %}
+{% endif %}
+{% if request is defined and request.query_params.get('project_scope') == 'all' %}{% set editor_path = editor_path ~ ('&' if '?' in editor_path else '?') ~ 'project_scope=all' %}{% endif %}
 
 {% block title %}Фазы воркфлоу — Workflow Engine{% endblock %}
 {% block header_title %}<span class="phases-desktop-title">Фазы воркфлоу</span><span class="phases-mobile-title">Фазы</span>{% endblock %}
-{% block header_actions %}<a href="/workflows{% if selected_namespace %}?namespace_id={{ selected_namespace.id }}{% endif %}" class="btn btn-secondary phases-header-action">← К воркфлоу</a>{% endblock %}
+{% block header_actions %}<a href="{{ editor_path }}" class="btn btn-secondary phases-header-action">← К воркфлоу</a>{% endblock %}
 
 {% block extra_style %}
 .phases-layout{display:grid;grid-template-columns:280px minmax(0,1fr);gap:20px;align-items:start}
@@ -91,7 +102,7 @@
 {% macro phase_card(p) -%}
 <div class="timeline-item" id="phase-{{ p.id }}" data-phase-id="{{ p.id }}" data-phase-order="{{ p.phase_num }}" data-execution-type="{{ p.execution_type }}">
   <div class="phase-card-shell">
-    <a href="/phase/{{ p.id }}{% if selected_namespace %}?namespace_id={{ selected_namespace.id }}{% endif %}" class="timeline-card">
+    <a href="/phase/{{ p.id }}{% if selected_namespace %}?namespace_id={{ selected_namespace.id }}{% endif %}{{ phase_scope_suffix }}" class="timeline-card">
       <div class="phase-card-copy">
         <div class="timeline-name">{{ p.name }}</div>
         {% set description = p.description | default('') %}
@@ -115,12 +126,12 @@
 {%- endmacro %}
 
 {% block content %}
-<div class="phases-mobile-actions"><a href="/workflows{% if selected_namespace %}?namespace_id={{ selected_namespace.id }}{% endif %}" class="btn btn-secondary">← К воркфлоу</a></div>
+<div class="phases-mobile-actions"><a href="{{ editor_path }}" class="btn btn-secondary">← К воркфлоу</a></div>
 <div class="phases-layout{% if workflows | length == 0 %} phases-layout-single{% endif %}">
   {% if workflows | length > 0 %}
   <section class="workflow-nav side-nav-scroll" id="workflowNav">
     {% for workflow in workflows %}
-    <a class="workflow-nav-item {% if selected_workflow_id == workflow.id %}active{% endif %}" href="/phases?workflow_id={{ workflow.id }}{% if selected_namespace %}&namespace_id={{ selected_namespace.id }}{% endif %}" data-workflow-id="{{ workflow.id }}">
+    <a class="workflow-nav-item {% if selected_workflow_id == workflow.id %}active{% endif %}" href="/phases?workflow_id={{ workflow.id }}{% if selected_namespace %}&namespace_id={{ selected_namespace.id }}{% endif %}{{ mode_scope_suffix }}" data-workflow-id="{{ workflow.id }}">
       <div class="workflow-name">{{ workflow.name }}</div>
       <div class="workflow-meta">
         <span class="workflow-chip">{{ workflow.namespace_count | pluralize('профессия,профессии,профессий') }}</span>
@@ -164,7 +175,7 @@
           {% if selected_mode_id == mode.id %}aria-current="page"{% endif %}
           data-testid="workflow-mode-tab-{{ mode.key }}"
           data-mode-id="{{ mode.id }}"
-          href="/phases?workflow_id={{ selected_workflow_id }}&mode_id={{ mode.id }}{% if selected_namespace %}&namespace_id={{ selected_namespace.id }}{% endif %}"
+          href="/phases?workflow_id={{ selected_workflow_id }}&mode_id={{ mode.id }}{% if selected_namespace %}&namespace_id={{ selected_namespace.id }}{% endif %}{{ mode_scope_suffix }}"
         >{{ mode.name }}</a>
         {% endfor %}
       </div>
