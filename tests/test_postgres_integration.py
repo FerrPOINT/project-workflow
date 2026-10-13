@@ -888,6 +888,159 @@ def test_namespace_defaults_upgrade_preserves_catalog_on_postgres(pg_url, tmp_pa
 
 
 @pytest.mark.integration
+class TestPostgresSingleTaskProfile:
+    """Real PG transactions/constraints; synthetic evaluator and runtime authority, not live agents."""
+
+    @pytest.fixture
+    def profile_client(self, pg_url, monkeypatch):
+        from project_workflow.infrastructure.db.single_task_catalog import ensure_single_task_catalog
+
+        engine = get_engine(pg_url)
+        assert engine.dialect.name == "postgresql"
+        ensure_migrated(engine)
+        monkeypatch.setattr(config_module, "CATALOG_VARIANT", "single-task-v1")
+        monkeypatch.setenv("PROJECT_WORKFLOW_PM_SCOPE_SECRET", "s" * 40)
+        monkeypatch.setenv("PROJECT_WORKFLOW_PM_READBACK_TOKEN", "p" * 40)
+        monkeypatch.setenv("PROJECT_WORKFLOW_PM_READBACK_URL", "http://runtime.test/readback")
+        config_module.get_settings.cache_clear()
+        with SAUnitOfWork() as uow:
+            assert uow.session.get_bind() is engine
+            ensure_single_task_catalog(uow)
+        with TestClient(create_app()) as client:
+            yield client
+
+    def test_pm_initial_dispatch_persists_binding_run_and_omitted_input_revision(self, profile_client, monkeypatch):
+        from project_workflow.domain.pm_execution import RuntimeObservation
+        from project_workflow.infrastructure import pm_readback
+        from project_workflow.infrastructure.db import models as m
+        from tests.test_single_task_pm_producer import exchange, provision
+        from tests.test_single_task_runtime import API, PM, RUNNER, WRITER
+
+        source = json.loads((REPO_ROOT / "tests/fixtures/single_task_pm_initial_dispatch.json").read_text("utf-8"))
+        assignment = source["assign"]["request"]
+        binding = source["bind"]["request"]
+        command = source["pm_bind"]["request"]
+        monkeypatch.setenv("PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON", json.dumps({"project_manager": "w" * 40}))
+        monkeypatch.setenv("PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON", json.dumps({"project_manager": "r" * 40}))
+        config_module.get_settings.cache_clear()
+
+        def no_model(*_args, **_kwargs):
+            pytest.fail("PM initial instruction read must not evaluate a report")
+
+        monkeypatch.setattr(OpenAICompatibleClient, "chat", no_model)
+        _, accepted = exchange(profile_client, API + "assign", assignment, WRITER)
+        _, bound = exchange(profile_client, API + "bind", binding, WRITER)
+        assert accepted["result"]["exact_input_refs"] == assignment["exact_input_refs"]
+        assert set(accepted["result"]["exact_input_refs"][0]) == {"kind", "ref", "hash"}
+        step = {**source["first_step"]["request"],
+                "single_task_context_sha256": bound["result"]["single_task_context_sha256"]}
+        general_headers = {**RUNNER, "X-Workflow-Execution-Token": bound["execution_token"]}
+        assert profile_client.post(API + "step", json=step, headers=general_headers).status_code == 409
+        provision(assignment)
+        probes = []
+
+        def synthetic_readback(run):
+            probes.append(run)
+            assert run == binding["session_run_id"]
+            return RuntimeObservation.model_validate(source["runtime_observation"])
+
+        monkeypatch.setattr(pm_readback, "observe_run", synthetic_readback)
+        _, enrolled = exchange(profile_client, PM + "bind", command, WRITER)
+        assert probes == [binding["session_run_id"]]
+        assert enrolled["execution_token"] != bound["execution_token"]
+        assert enrolled["result"]["single_task_context_sha256"] != step["single_task_context_sha256"]
+        step["single_task_context_sha256"] = enrolled["result"]["single_task_context_sha256"]
+        headers = {**RUNNER, "X-Workflow-Execution-Token": enrolled["execution_token"]}
+        assert profile_client.post(API + "step", json=step, headers=general_headers).status_code == 403
+        _, first = exchange(profile_client, API + "step", step, headers)
+        assert first["result"]["phase_code"] == "PM-DRAFT-01"
+        assert "complete" not in first["result"] and "workflow_receipt" not in first["result"]
+        readback = profile_client.post(PM + "readback", json=source["pm_readback"]["request"], headers=WRITER)
+        assert readback.status_code == 200, readback.text
+        assert readback.json()["result"]["operation"]["result"] == enrolled["result"]
+        with SAUnitOfWork() as uow:
+            task = uow.tasks.get_by_key(assignment["task"])
+            records = uow.tasks.list_assignments(task.id)
+            assert len(records) == 1 and task.status == "active" and task.current_phase_code == "PM-DRAFT-01"
+            saved = records[0]
+            assert saved.exact_input_refs == saved.payload["exact_input_refs"] == assignment["exact_input_refs"]
+            assert saved.business_task_ref == saved.root_task_ref == assignment["business_task_ref"]
+            assert saved.decomposition_revision_ref is saved.queue_item_ref is saved.task_workspace_ref is None
+            assert saved.single_task_binding["request"]["session_run_id"] == binding["session_run_id"]
+            assert len(uow.session.scalars(select(m.PMNamespaceOwnership)).all()) == 1
+            assert len(uow.session.scalars(select(m.PMExecution)).all()) == 1
+            assert len(uow.session.scalars(select(m.PMRun)).all()) == 1
+            assert len(uow.session.scalars(select(m.PMOperation)).all()) == 1
+            assert not uow.step_history.list(task_id=task.id)
+            before = saved.to_dict()
+        # Exercise the actual 0015 CHECK branch, not request validators or a SQLite substitute.
+        for mutation in ({"root_task_ref": "99999999-9999-4999-8999-999999999999"},
+                         {"decomposition_revision_ref": "forbidden:decomposition"},
+                         {"single_task_binding_json": None}):
+            with pytest.raises(IntegrityError) as rejected, SAUnitOfWork() as uow:
+                uow.session.execute(m.TaskRuntimeAssignment.__table__.update().where(
+                    m.TaskRuntimeAssignment.operation_key == assignment["operation_key"]).values(**mutation))
+            assert rejected.value.orig.diag.constraint_name == "ck_task_runtime_assignments_binding_complete"
+        with SAUnitOfWork() as uow:
+            assert uow.tasks.get_assignment_by_operation_key(assignment["operation_key"]).to_dict() == before
+
+    def test_non_pm_terminal_completion_replay_and_committed_history(self, profile_client, monkeypatch, supervisor_llm):
+        from project_workflow.infrastructure.db import models as m
+        from tests.test_single_task_terminal import test_actual_completion_artifact_matches_readback_replay_and_restart
+
+        # The shared evaluator fixture is synthetic PASS; all ledgers/receipt seals commit in PostgreSQL.
+        test_actual_completion_artifact_matches_readback_replay_and_restart(profile_client, monkeypatch, supervisor_llm)
+        with SAUnitOfWork() as uow:
+            assignment = uow.tasks.get_assignment_by_operation_key("assignment-7")
+            task = uow.tasks.get_by_id(assignment.task_id)
+            history = uow.step_history.list(task_id=task.id)
+            assert task.status == "done" and len(history) == 3
+            assert len(uow.tasks.list_assignments(task.id)) == 1
+            terminal = uow.step_history.get_by_step_operation_key("terminal:final")
+            assert terminal.supervisor_response["workflow_receipt"]
+            events = uow.tasks.list_phase_events(task.id)
+            assert len([event for event in events if event.step_history_id == terminal.id
+                        and event.event_type == "completed"]) == 1
+            before = assignment.to_dict()
+        with pytest.raises(IntegrityError) as rejected, SAUnitOfWork() as uow:
+            uow.session.execute(m.TaskRuntimeAssignment.__table__.update().where(
+                m.TaskRuntimeAssignment.operation_key == "assignment-7").values(
+                    tech_execution_workspace_ref="99999999-9999-4999-8999-999999999999"))
+        assert rejected.value.orig.diag.constraint_name == "ck_task_runtime_assignments_scope_tech_refs"
+        with SAUnitOfWork() as uow:
+            assert uow.tasks.get_assignment_by_operation_key("assignment-7").to_dict() == before
+
+    def test_non_pm_terminal_seal_failure_rolls_back_completion(self, profile_client, monkeypatch, supervisor_llm):
+        from tests.test_single_task_terminal import test_receipt_and_actual_completion_commit_atomically
+
+        test_receipt_and_actual_completion_commit_atomically(profile_client, monkeypatch, supervisor_llm, "seal")
+
+    @pytest.mark.parametrize("mutation", ["body", "report", "assignment", "unsealed"])
+    def test_non_pm_terminal_tamper_or_stale_replay_denied(
+        self, profile_client, monkeypatch, supervisor_llm, mutation,
+    ):
+        from tests.test_single_task_terminal import (
+            test_receipt_readback_and_exact_replay_reject_mismatch_or_stale_state,
+        )
+
+        test_receipt_readback_and_exact_replay_reject_mismatch_or_stale_state(
+            profile_client, monkeypatch, supervisor_llm, mutation,
+        )
+        # Rejected readback/replay must not add another completion history record.
+        with SAUnitOfWork() as uow:
+            history = uow.step_history.get_by_step_operation_key("terminal:final")
+            assert len(uow.step_history.list(task_id=history.task_id)) == 3
+            if mutation == "unsealed":
+                assert "workflow_receipt" not in history.supervisor_response
+                assert "single_task_terminal_receipt" not in history.supervisor_response
+
+    def test_old_non_pm_terminal_history_has_no_retroactive_receipt(self, profile_client, monkeypatch, supervisor_llm):
+        from tests.test_single_task_terminal import test_old_terminal_record_is_not_retroactively_sealed
+
+        test_old_terminal_record_is_not_retroactively_sealed(profile_client, monkeypatch, supervisor_llm)
+
+
+@pytest.mark.integration
 class TestPostgresInitialMigration:
     def test_get_engine_postgresql(self, pg_url):
         engine = get_engine(pg_url)
