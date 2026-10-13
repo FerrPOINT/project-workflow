@@ -30,19 +30,67 @@ TARGETS = {
     "devops": "Deployment / Completed",
 }
 
+PM_PHASE_REPORT = (
+    "Report only this completed preparation phase via terminal -> project-workflow --json step "
+    "--task <workflow-task-key> --report <report-text> with the supplied --operation-key, --runtime-request "
+    "and --execution-token-file. body.report must equal --report; retain exact key/body for uncertain-effect "
+    "readback. Stop at the returned next phase: owner confirmation belongs to phase 3 in this SAME execution. "
+    "Do not complete the PM Workflow or create another assignment/cycle to wait for consent."
+)
+PM_CONFIRMATION_INSTRUCTIONS = [
+    "Present the FULL server-saved requirements document to the human owner, including exact revision and "
+    "content_hash, scope/non-goals, acceptance criteria, choices/tradeoffs and unresolved contradictions. "
+    "Request explicit confirmation of this exact revision/hash; a summary alone, silence, preselection "
+    "or a yes to a clarification question is not consent. PM never confirms as the owner.",
+    "Checkpoint while awaiting actual owner confirmation with phase 3 unfinished and PM Workflow NOT "
+    "completed. Waiting is separate from Tracker stage/status. Keep the same execution/assignment/cycle; "
+    "never resume a completed execution or multiply PM assignment cycles to work around ordering. "
+    "Checkpoint/resume needs typed input_kind answer|feedback|confirmation. The existing answer-only "
+    "checkpoint/resume contract does not support free feedback or consent: until the typed extension is "
+    "integrated, report that explicit dependency and leave this phase unfinished. Do not invent CLI commands.",
+    "Handle feedback by revising and publishing the document within the SAME execution, then present the "
+    "FULL new saved revision/content_hash and checkpoint again. Any document change invalidates earlier "
+    "consent. Only input_kind=answer may reference a real question and answer_event_ref; free feedback and "
+    "input_kind=confirmation must not fabricate an answer ID, question or clarification request. Confirmation "
+    "input must reference the existing real owner confirmation receipt, not a conversational assertion. "
+    "Unresolved feedback keeps phase 3 unfinished; no final Workflow report is permitted yet.",
+    "AFTER actual owner confirmation, read its real receipt using task-tracker sdlc confirmation read "
+    "--task <task-uuid> --revision <confirmed-revision>. --revision is required. Match task UUID, exact latest "
+    "revision/content_hash, owner_subject and confirmation ID against the saved document and actual owner "
+    "confirmation. Dependency: the inspected CLI still reads analysis-intent/outbox, unavailable to the PM "
+    "grant; the Tracker worker is preparing direct GET requirements/{revision}/confirmation under this same "
+    "CLI. Until that direct readback is available and authorized, leave phase 3 unfinished. Do not borrow "
+    "scheduler/owner credentials, require PM to read an Analysis intent, or accept a missing/stale receipt.",
+]
+PM_CONFIRMATION_CHECKS = [
+    "The FULL latest server-saved requirements document and exact revision/content_hash were presented to the owner.",
+    "Actual owner confirmation has a real authorized readback receipt matching task, latest revision/hash and owner.",
+    "Feedback was resolved within the same execution; no stale consent, fake answer IDs or extra PM cycles were used.",
+    "Typed checkpoint/resume and direct PM confirmation readback dependencies are satisfied; no blockers remain.",
+    "PM finalizes only; allowed next stage/status are Backlog / Ready then Analysis / Ready, not PM dispatch.",
+]
+PM_CONFIRMATION_EVIDENCE = [
+    "FULL saved requirements document, exact revision/content_hash and owner presentation reference.",
+    "Actual owner confirmation receipt ID/reference and readback matching task/revision/hash/owner_subject.",
+    "Same-execution typed checkpoint/input references and feedback-to-revision history without fabricated answers.",
+]
+
 
 def terminal_instruction(role: str) -> str:
     if role == "project_manager":
         return (
-            "After accepted Workflow complete=true, the allowed next stage AND status are Backlog / Ready "
-            "only after the human owner's exact revision/content_hash confirmation, then Tracker pickup "
-            "Analysis / Ready. PM never confirms for the owner or dispatches Analyst. Read the real receipt "
-            "with task-tracker sdlc confirmation read --task <task-uuid> --revision <confirmed-revision>; "
-            "--revision is required by the current CLI parser. Match task UUID, revision/content_hash, "
-            "owner_subject and confirmation ID to task-tracker sdlc intent --task <task-uuid>. A prior receipt "
-            "does not confirm changed requirements. Missing/rejected receipt remains unconfirmed. "
-            "Tracker API registration is pending parent; do not activate live routing or infer readiness "
-            "from installed CLI. Generic patch/issue transition/board move are forbidden substitutes."
+            "ONLY AFTER the preceding exact owner confirmation receipt readback succeeds and all feedback "
+            "is resolved, submit the FINAL phase report via terminal -> project-workflow --json step "
+            "--task <workflow-task-key> --report <report-text> with the supplied --operation-key, --runtime-request "
+            "and --execution-token-file. body.report must equal --report. Include actual saved document and "
+            "confirmation receipt refs, revision/content_hash, owner_subject and check/evidence coverage; "
+            "never invent authority fields. Reconcile uncertain effects using the exact original key/body "
+            "before retry. Verify accepted Workflow complete=true, then finalize the PM run. The allowed next "
+            "stage AND status are Backlog / Ready, then Analysis / Ready through Tracker/Fleet pickup. "
+            "Tracker may create an Analysis / Ready intent at consent, but Analyst reserve remains blocked "
+            "until PM actual completion is observed. PM does not dispatch Analyst or create another PM cycle. "
+            "API/policy integration remains pending parent; installed instructions do not authorize live routing. "
+            "Generic patch/issue transition/board move are forbidden substitutes."
         )
     return (
         f"After accepted Workflow complete=true, the allowed next stage AND status are {TARGETS[role]} "

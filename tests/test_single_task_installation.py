@@ -208,12 +208,53 @@ def test_actual_catalog_hashes_and_cli_publication_semantics():
         for mode in workflow["modes"]:
             terminal = mode["phases"][-1]["instructions"][-1]["description"]
             if role == "project_manager":
-                assert "sdlc confirmation read" in terminal and "--revision <confirmed-revision>" in terminal
+                assert "ONLY AFTER" in terminal and "confirmation receipt readback succeeds" in terminal
             else:
                 for required in ("sdlc result propose", "sdlc result operation", "DOES NOT transition",
                                  "actual terminal", "schedulerComplete", "end the run", "lifecycle readback"):
                     assert required in terminal
                 assert "fence, workflow_receipt, result, idempotency_key" in terminal
+
+
+def test_pm_confirmation_precedes_final_report_in_actual_installed_phase(database):
+    with SAUnitOfWork(database) as uow:
+        installation = ensure_single_task_catalog(uow)
+        binding = next(b for b in installation.bindings if b.role_key == "project_manager")
+        phases = uow.phases.list(int(binding.workflow_id), mode_id=int(binding.modes[0].mode_id))
+        assert len(phases) == 3
+        for phase in phases[:2]:
+            instructions = [i["description"] for i in uow.phase_instructions.list(phase.id)]
+            assert "Stop at the returned next phase" in instructions[-1]
+            assert "until an accepted complete=true" not in " ".join(instructions)
+        phase = phases[-1]
+        instructions = [i["description"] for i in uow.phase_instructions.list(phase.id)]
+        assert len(instructions) == 5
+        present, checkpoint, feedback, readback, report = instructions
+        assert "FULL server-saved requirements document" in present
+        assert "exact revision" in present and "content_hash" in present
+        assert "PM Workflow NOT completed" in checkpoint
+        assert "input_kind answer|feedback|confirmation" in checkpoint
+        assert "existing answer-only" in checkpoint
+        assert "same execution/assignment/cycle" in checkpoint
+        assert "within the SAME execution" in feedback
+        assert "Any document change invalidates earlier consent" in feedback
+        assert "must not fabricate an answer ID" in feedback
+        assert "existing real owner confirmation receipt" in feedback
+        assert "sdlc confirmation read --task <task-uuid> --revision <confirmed-revision>" in readback
+        assert "direct GET requirements/{revision}/confirmation" in readback
+        assert "unavailable to the PM grant" in readback
+        assert "until" in checkpoint and "Until" in readback
+        assert "--report" not in " ".join(instructions[:-1])
+        assert "ONLY AFTER" in report and "--report <report-text>" in report
+        assert report.index("confirmation receipt readback succeeds") < report.index("--report")
+        assert "Analyst reserve remains blocked" in report and "PM actual completion" in report
+        assert "PM does not dispatch Analyst" in report
+        assert "sdlc intent --task" not in " ".join(instructions)
+        checks = uow.phase_checks.list(phase.id)
+        evidence = uow.phase_evidence_requirements.list(phase.id)
+        assert any("real authorized readback receipt" in row["description"] for row in checks)
+        assert any("dependencies are satisfied" in row["description"] for row in checks)
+        assert any("Actual owner confirmation receipt" in row["description"] for row in evidence)
 
 
 def assignment_payload():

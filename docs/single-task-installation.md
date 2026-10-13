@@ -43,8 +43,8 @@ Installed binding не является runtime admission или Tracker transit
 и `single_task_manifest_v1.json`, проверяемые по фактическим UTF-8/LF bytes:
 
 ```text
-catalog:  47ddbcdeda6e67ccca01cd07a5b88806ee48c70ddffbf8479c6e225932482200
-manifest: 727f9941e375c6650ddf66668c794edd24fe1e80fbe80fd9bc761719e9d59fea
+catalog:  896c4063ac10660e5a95824d560d191ba609fe24e7fa34cd77d6338d6c2ab260
+manifest: e44b83a7d0909a1e0371cb19919d08b51b29967edfdf4c759f59125e6681f74b
 ```
 
 `python -m scripts.build_single_task_profile --check` проверяет воспроизводимость.
@@ -80,7 +80,11 @@ fence проверки. Новый family key явно блокируется д
 Read-only сверены текущие parser/dispatch и `SubmitDeliveryProposal`:
 
 - PM: `task-tracker sdlc confirmation read --task <UUID> --revision <REVISION>`;
-  `--revision` обязателен в фактическом parser. PM сверяет exact owner receipt и intent.
+  `--revision` обязателен в фактическом parser. Текущий dispatch использует
+  analysis-intent/outbox, недоступные PM grant. Tracker worker готовит direct
+  `GET requirements/{revision}/confirmation` под тем же CLI; до доступного
+  authorized readback PM phase 3 остаётся незавершённой. PM не читает intent
+  и не заимствует scheduler/owner credentials ради обхода.
 - Non-PM: `task-tracker sdlc result propose --task <UUID> --from-file <proposal.json>`.
 - Readback: `task-tracker sdlc result operation --task <UUID> --key <KEY>`.
 
@@ -89,7 +93,7 @@ ArtifactReceipt содержит `reference`, `sha256`. Fence/receipt выдаё
 Reviewer verdict — `approved|rework`, Tester — `passed|rework`, DevOps —
 `deployment` и `verification`; verification покрывает exact artifact/health/acceptance.
 
-После accepted Workflow complete=true агент публикует proposal **пока run жив**,
+Non-PM: после accepted Workflow complete=true агент публикует proposal **пока run жив**,
 сверяет actual `proposal_id/output_sha256` через operation, возвращает их с original
 key в отчёте и завершает run. Proposal сам не меняет stage. После actual terminal
 Fleet проверяет proposal и делает schedulerComplete; Fleet/operator читает итоговые
@@ -98,11 +102,44 @@ Lifecycle CLI команды в inspected parser нет: инструкции е
 Tracker API registration pending parent; missing/403/404/unknown acceptance — blocker,
 не permission для generic patch, scheduler credential или фиктивного receipt.
 
+### PM Phase Ordering
+
+Фазы 1/2 отчитываются только о подготовке и останавливаются на следующей фазе,
+не пытаясь довести весь Workflow до complete. Phase 3 строго упорядочена:
+
+1. Показать полный сохранённый документ с exact revision/content_hash.
+2. Ждать actual owner confirmation в checkpoint при незавершённой phase 3.
+3. Feedback перерабатывает документ в том же execution/assignment/cycle;
+   новая revision/hash отменяет старое consent и показывается целиком заново.
+4. Прочитать реальный confirmation receipt и сверить task/revision/hash/owner.
+5. Только теперь отправить final Workflow report, проверить complete=true
+   и завершить PM run. PM не dispatch-ит Analyst.
+
+Consent может создать Analysis / Ready intent в Tracker, но Analyst reserve
+заблокирован до PM actual completion. Дополнительные PM assignment cycles
+или resume completed execution не являются способом реализовать ожидание.
+
+Existing PM checkpoint/resume DTO пока answer-only. Требуется отдельно согласованное
+typed `input_kind=answer|feedback|confirmation`: только answer ссылается на реальный
+question/answer event, feedback не получает фиктивный answer ID, confirmation
+ссылается на существующий real confirmation receipt. До интеграции typed contract
+фаза остаётся unfinished с явной зависимостью. В этом пакете shared wire,
+checkpoint/resume implementation и migrations не менялись. Проверки фазы требуют
+actual receipt и разрешённых зависимостей до final report; это instruction gate,
+не заявление о готовом runtime enforcement.
+
+Installed artifact hashes обновлены только для source-only opt-in семейства.
+Установка предыдущего content отклоняется как drift, автоматически не ремонтируется;
+live catalog не активировался и legacy/proposal pins не изменены.
+
 ## Validation И Parent QA
 
 Focused tests: настоящий `init_db` дважды, persisted router readback, coexistence
 с авторскими legacy edits/task/history, rollback, drift, task=root DTO,
 auth/version-1 bypass rejection, source hashes и producer/terminal последовательность.
+Отдельно persisted PM phase 3 проверяется на presentation/checkpoint/feedback/readback
+до единственного final report, наличие receipt checks/evidence и отсутствие
+premature complete в preparation reports.
 
 Parent QA: согласовать exact Registry/Tracker DTO до использования, адаптировать
 assignment constraint, подключить actual terminal/lifecycle readback; проверить

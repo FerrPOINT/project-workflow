@@ -3,7 +3,14 @@
 import argparse
 import json
 
-from project_workflow.infrastructure.single_task_delivery_instructions import FIRST_STEP, terminal_instruction
+from project_workflow.infrastructure.single_task_delivery_instructions import (
+    FIRST_STEP,
+    PM_CONFIRMATION_CHECKS,
+    PM_CONFIRMATION_EVIDENCE,
+    PM_CONFIRMATION_INSTRUCTIONS,
+    PM_PHASE_REPORT,
+    terminal_instruction,
+)
 from scripts.prepare_single_task_profile_proposal import ROOT, digest, encoded
 from scripts.prepare_single_task_profile_proposal import render as render_proposal
 
@@ -22,6 +29,24 @@ def render() -> tuple[bytes, bytes]:
         for mode in workflow["modes"]:
             mode["phases"][0]["instructions"][0]["description"] = FIRST_STEP
             mode["phases"][-1]["instructions"][-1]["description"] = terminal_instruction(role)
+            if role == "project_manager":
+                for phase in mode["phases"][:2]:
+                    phase["instructions"][-1]["description"] = PM_PHASE_REPORT
+                mode["phases"][1]["instructions"][4]["description"] = (
+                    "Prepare the FULL saved requirements document and its exact revision/content_hash for "
+                    "owner review in phase 3. Include scope, acceptance criteria, choices/tradeoffs and open "
+                    "issues. This preparation is not consent and does not complete the PM execution."
+                )
+                phase = mode["phases"][-1]
+                phase.update(
+                    name="Owner confirmation before final Workflow report",
+                    description="single-task-v1: project_manager/draft; confirmation within the same execution.",
+                    instructions=[
+                        {"description": text, "skills": ["project-workflow-executor", "tracker-operator"]}
+                        for text in [*PM_CONFIRMATION_INSTRUCTIONS, terminal_instruction(role)]
+                    ],
+                    checks=list(PM_CONFIRMATION_CHECKS), evidence=list(PM_CONFIRMATION_EVIDENCE),
+                )
             if role == "analyst":
                 mode["phases"][1]["instructions"][2]["description"] = (
                     "Produce the analysis report and requirement/criterion/verification coverage matrix for this "
