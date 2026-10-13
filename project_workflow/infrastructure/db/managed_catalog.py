@@ -18,7 +18,11 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 
 from project_workflow import config
 from project_workflow.domain import Workflow
-from project_workflow.domain.base_catalog import BASE_SKILLS_REVISION_V4
+from project_workflow.domain.base_catalog import (
+    BASE_SKILLS_REVISION_V4,
+    FROZEN_BASE_CATALOG_V3,
+    FROZEN_BASE_CATALOG_V3_SHA256,
+)
 from project_workflow.domain.namespace import legacy_code_from_cli_command
 from project_workflow.domain.phase_graph import PhaseGraphNode, validate_phase_graph
 from project_workflow.domain.project_theme import (
@@ -334,6 +338,10 @@ def load_managed_catalog(path: Path | str | None = None) -> ManagedCatalog:
         raise FileNotFoundError(f"Managed workflow catalog not found: {catalog_path}")
     if catalog_path.suffix.casefold() != ".json":
         raise ValueError("Managed workflow catalog must be JSON")
+    if catalog_path.name == FROZEN_BASE_CATALOG_V3:
+        content = catalog_path.read_bytes().replace(b"\r\n", b"\n")
+        if hashlib.sha256(content).hexdigest() != FROZEN_BASE_CATALOG_V3_SHA256:
+            raise ValueError("Frozen Base v3 differs from its immutable source")
     try:
         raw = json.loads(catalog_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
@@ -687,6 +695,7 @@ def _assert_existing_workflow(
     *,
     catalog_version: int | None = None,
     allow_editor_changes: bool = False,
+    allow_instruction_execution_changes: bool = False,
 ) -> None:
     if actual_workflow.id is None:
         raise ValueError(f"Managed workflow {expected.key!r} has no id")
@@ -787,6 +796,11 @@ def _assert_existing_workflow(
                 (index, item.description, "sync", item.skills)
                 for index, item in enumerate(expected_phase.instructions, start=1)
             ]
+            if allow_instruction_execution_changes:
+                if any(item[2] not in {"sync", "parallel"} for item in actual_instructions):
+                    raise ValueError("Unsupported saved instruction execution mode")
+                actual_instructions = [(step, text, "sync", skills)
+                                       for step, text, _, skills in actual_instructions]
             actual_checks = [item["description"] for item in uow.phases.get_checks(phase.id)]
             actual_evidence = [item["description"] for item in uow.phases.get_evidence(phase.id)]
             expected_checks = [
@@ -814,6 +828,7 @@ def validate_managed_catalog_state(
     *,
     role_key: str | None = None,
     historical: bool = False,
+    allow_instruction_execution_changes: bool = False,
 ) -> bool:
     """Read and validate the complete installed managed catalog.
 
@@ -845,11 +860,28 @@ def validate_managed_catalog_state(
             definition,
             allow_editor_changes=role_key is not None and resolved_catalog.catalog_version == 2,
             catalog_version=resolved_catalog.catalog_version if historical else None,
+            allow_instruction_execution_changes=allow_instruction_execution_changes,
         )
         _assert_existing_namespace(uow, definition, int(existing.id or 0))
     if role_key is None:
         _assert_exact_persisted_inventory(uow, resolved_catalog, historical=historical)
     return True
+
+
+def _installed_base_v3(uow: UnitOfWork) -> ManagedCatalog:
+    """Identify the exact persisted recipe across the two published v3 sources."""
+    root = config.MANAGED_CATALOG_PATH.parent
+    for artifact in ("base_sdlc_catalog_v1.json", FROZEN_BASE_CATALOG_V3):
+        candidate = load_managed_catalog(root / artifact)
+        try:
+            installed = validate_managed_catalog_state(
+                uow, candidate, historical=True, allow_instruction_execution_changes=True,
+            )
+        except ValueError:
+            continue
+        if installed:
+            return candidate
+    raise ValueError("Installed Base v3 does not match any immutable published recipe")
 
 
 def ensure_managed_catalog(
@@ -866,6 +898,12 @@ def ensure_managed_catalog(
     uow.lock_catalog_state()
     modern = catalog.catalog_version == 4
     workflows_by_key = {workflow.key: workflow for workflow in uow.workflows.list()}
+    previous_v3 = (
+        _installed_base_v3(uow) if modern and any(
+            workflow.active_catalog_version == 3 for workflow in workflows_by_key.values()
+            if workflow.key in {definition.key for definition in catalog.workflows}
+        ) else None
+    )
     has_default = uow.workflows.get_default() is not None
 
     for definition in catalog.workflows:
@@ -887,11 +925,13 @@ def ensure_managed_catalog(
                     previous_path = config.MANAGED_CATALOG_PATH.with_name(
                         "base_sdlc_catalog_v1.json" if active_version == 3 else "hermes_sdlc_catalog_v1.json"
                     )
-                    previous = load_managed_catalog(previous_path)
+                    previous = previous_v3 if active_version == 3 else load_managed_catalog(previous_path)
+                    assert previous is not None
                     old_definition = next(item for item in previous.workflows if item.key == definition.key)
                     _assert_existing_workflow(
                         uow, existing, old_definition,
                         catalog_version=active_version, allow_editor_changes=active_version == 2,
+                        allow_instruction_execution_changes=active_version == 3,
                     )
                     if existing.description == old_definition.description:
                         uow.workflows.update(workflow_id, {"description": definition.description})

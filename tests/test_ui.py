@@ -265,7 +265,8 @@ class TestIndexPage:
     def test_index_has_nav(self):
         response = client.get("/")
         assert response.status_code == 200
-        assert "Фазы" in response.text
+        assert 'aria-label="Процессы"' in response.text
+        assert 'aria-label="Выполнения задач"' in response.text
 
     def test_index_shows_real_task_and_project_data(self):
         uow = ui_app_state.get_db()
@@ -406,7 +407,9 @@ class TestPhasesPage:
         response = client.get(f"/phases?namespace_id={namespace_id}")
 
         assert response.status_code == 200
-        back_href = f'href="/workflows?namespace_id={namespace_id}"'
+        selected = client.get(f"/api/phases?namespace_id={namespace_id}").json()
+        back_href = (f'href="/workflows?workflow_id={selected["workflow"]["id"]}'
+                     f'&amp;namespace_id={namespace_id}&amp;mode_id={selected["mode"]["id"]}"')
         assert response.text.count(back_href) == 2
         assert 'class="btn btn-secondary phases-header-action"' in response.text
         assert 'class="phases-mobile-actions"' in response.text
@@ -489,7 +492,7 @@ class TestPhasesPage:
         response = client.get("/phases")
         assert response.status_code == 200
         assert 'href="/workflows"' in response.text
-        assert "Воркфлоу" in response.text
+        assert 'aria-label="Процессы"' in response.text
 
     def test_shared_shell_uses_desktop_rail_and_mobile_drawer_contract(self):
         response = client.get("/workflows")
@@ -538,10 +541,10 @@ class TestPhasesPage:
         assert sidebar_nav is not None
 
         hrefs = re.findall(r'href="([^"]+)"', sidebar_nav.group(1))
-        assert hrefs[:5] == ["/namespaces", "/", "/workflows", "/phases", "/tasks"]
+        assert hrefs[:5] == ["/namespaces", "/", "/workflows", "/tasks", "/settings"]
         assert 'aria-label="Основная навигация"' in response.text
         assert re.search(
-            r'<a class="sidebar-link active" href="/phases"[^>]*aria-current="page">',
+            r'<a class="sidebar-link active" href="/workflows"[^>]*aria-current="page">',
             response.text,
         )
         assert sidebar_nav.group(1).count('aria-current="page"') == 1
@@ -2530,7 +2533,7 @@ class TestWorkflowsPage:
         assert 'class="workflow-mobile-actions"' in response.text
         assert "@media(max-width:930px){" in response.text
         assert ".header .workflow-header-action{display:none}" in response.text
-        assert response.text.count("← К фазам") == 2
+        assert response.text.count("Фазы процесса") == 2
 
     def test_workflows_page_offers_compact_picker_for_multiple_workflows(self):
         profession_id = client.get("/api/namespaces").json()["namespaces"][0]["id"]

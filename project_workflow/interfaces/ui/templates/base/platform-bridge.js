@@ -4,7 +4,7 @@ export const PLATFORM_PROTOCOL = 'sdlc.platform.v1'
 export function transportNamespaceLocation(value, search) {
   const target = new URL(value, 'https://relative.invalid')
   const source = new URLSearchParams(search)
-  for (const key of ['registry_instance_id', 'namespace_id']) {
+  for (const key of ['registry_instance_id', 'namespace_id', 'project_scope']) {
     target.searchParams.delete(key)
     for (const item of source.getAll(key)) target.searchParams.append(key, item)
   }
