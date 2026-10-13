@@ -7,11 +7,47 @@ from html.parser import HTMLParser
 import pytest
 from fastapi.testclient import TestClient
 
+from project_workflow import config
 from project_workflow.interfaces.ui import _app_state, app
 
 pytestmark = [pytest.mark.ui]
 
 client = TestClient(app)
+
+
+@pytest.mark.parametrize("mode_key", ["initial", "rework"])
+def test_unified_editor_renders_only_the_selected_workflow_mode(mode_key):
+    catalog = _developer_catalog()
+    with _app_state.get_db() as uow:
+        profession = uow.projects.get_by_code(config.DEFAULT_PROJECT_CODE)
+        assert profession is not None
+        uow.workflows.assign_profession(catalog["workflow_id"], profession.id)
+        uow.commit()
+        profession_id = profession.id
+    mode_id = catalog[f"{mode_key}_mode_id"]
+    response = client.get(
+        f"/workflows?namespace_id={profession_id}&workflow_id={catalog['workflow_id']}"
+        f"&mode_id={mode_id}&project_scope=all"
+    )
+    assert response.status_code == 200
+    assert response.text.count('id="workflowNav"') == 1
+    assert response.text.index('id="workflowForm"') < response.text.index('id="phasesTimeline"')
+    assert 'id="workflowName" value="Developer"' in response.text
+    assert f'data-mode-id="{mode_id}"' in response.text
+    assert f'{mode_key.title()} phase' in response.text
+    other_mode = "rework" if mode_key == "initial" else "initial"
+    assert f'{other_mode.title()} phase' not in response.text
+    assert 'Default phase' not in response.text
+    assert 'href="/workflows?workflow_id=' in response.text
+    assert '&amp;project_scope=all' in response.text
+
+
+@pytest.mark.parametrize("mode_id,status", [("invalid", 422), ("999999", 404)])
+def test_unified_editor_rejects_invalid_or_foreign_mode(mode_id, status):
+    response = client.get(f"/workflows?mode_id={mode_id}")
+    assert response.status_code == status
+    assert 'id="workflowForm"' not in response.text
+    assert 'id="phasesTimeline"' not in response.text
 
 
 def _developer_catalog() -> dict[str, int]:

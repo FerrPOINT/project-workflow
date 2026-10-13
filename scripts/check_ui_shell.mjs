@@ -101,11 +101,42 @@ try {
       assert.equal(new URL(href).searchParams.get('project_scope'), 'all', 'Navigation retains the all-project scope');
     }
     await page.locator(`#workflowNav [data-workflow-id="${extra.workflow_id}"]`).click();
+    await page.locator(`#phasesTimeline[data-workflow-id="${extra.workflow_id}"]`).waitFor();
     assert.equal(new URL(page.url()).searchParams.has('mode_id'), false, 'Changing workflow removes the foreign mode');
-    const phaseHref = await page.locator('[data-workflow-phases]').first().getAttribute('href');
-    const phaseUrl = new URL(phaseHref, baseUrl);
-    assert.equal(phaseUrl.searchParams.get('namespace_id'), id, 'A second workflow keeps its profession');
-    assert.equal(phaseUrl.searchParams.get('project_scope'), 'all');
+    assert.equal(new URL(page.url()).searchParams.get('namespace_id'), id, 'A second workflow keeps its profession');
+    assert.equal(new URL(page.url()).searchParams.get('project_scope'), 'all');
+    assert.equal(await page.locator('#workflowName').inputValue(), 'Owned extra process');
+    assert.equal(await page.locator('#workflowNav').count(), 1, 'Editor and phases share one workflow list');
+    for (const width of [375, 768, 1280]) {
+      await page.setViewportSize({width, height:812});
+      assert.ok(await page.locator('#workflowForm').isVisible());
+      assert.ok(await page.locator('#workflowPhases').isVisible());
+      assert.equal(await page.locator('#workflowSelect').isVisible(), width < 980);
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `Unified editor fits at ${width}`);
+    }
+    await page.setViewportSize({width:2560, height:812});
+    await page.locator('#newWorkflowButton').click();
+    assert.equal(await page.locator('#workflowPhases').isVisible(), false, 'A new workflow never shows the previous phases');
+    await page.locator('#cancelCreateWorkflowButton').click();
+    assert.equal(await page.locator('#workflowPhases').isVisible(), true);
+    await page.locator('#workflowName').fill('Owned renamed process');
+    await page.locator('#workflowSubmitButton').click();
+    await page.locator('#workflowNav .workflow-name').filter({hasText:'Owned renamed process'}).waitFor();
+    assert.equal(await page.locator('#phasesTimeline').getAttribute('data-workflow-id'), String(extra.workflow_id));
+    await page.locator('#newWorkflowButton').click();
+    await page.locator('#workflowName').fill('Owned created process');
+    await page.locator('#workflowSubmitButton').click();
+    await page.waitForURL(url => url.pathname === '/workflows' && url.searchParams.has('workflow_id') && url.searchParams.get('workflow_id') !== String(extra.workflow_id));
+    const addedId = Number(new URL(page.url()).searchParams.get('workflow_id'));
+    assert.ok(Number.isInteger(addedId) && addedId > 0);
+    await page.locator(`#phasesTimeline[data-workflow-id="${addedId}"]`).waitFor();
+    assert.equal(new URL(page.url()).pathname, '/workflows');
+    assert.equal(await page.locator('#workflowName').inputValue(), 'Owned created process');
+    assert.equal(await page.locator('#phasesTimeline .timeline-item').count(), 1);
+    await page.locator('#deleteWorkflowButton').click();
+    await page.locator('#confirmDialogAccept').click();
+    await page.locator(`#phasesTimeline[data-workflow-id="${starter.id}"]`).waitFor();
+    assert.equal(await page.locator('#workflowName').inputValue(), starter.name);
     await page.request.delete(`${baseUrl}/api/workflows/${extra.workflow_id}?namespace_id=${id}`);
     await page.goto(`${baseUrl}/namespaces?namespace_id=${id}`);
     assert.deepEqual(await selectedIds(), [id, id]);

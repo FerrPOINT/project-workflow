@@ -22,12 +22,11 @@ def test_list_visibility_depends_on_empty_collection_only(name, count):
         phase_count=0, modes=[], selected_mode=None, page="workflows", ui_port=8812,
         namespace_cookie_name="workflow_namespace_id", namespace_cookie_secure=False,
     )
-    if name == "workflows.html":
+    if name in {"workflows.html", "phases.html"}:
         assert ('class="workflow-crud is-empty"' in html) is (count == 0)
+        assert '.workflow-crud.is-empty .workflow-nav{display:none}' in html
         assert "classList.toggle('is-empty', workflowStore.length === 0)" in html
     elif name == "namespaces.html":
         assert ('class="namespace-crud is-empty"' in html) is (count == 0)
         assert "classList.toggle('is-empty', namespaceStore.length === 0)" in html
-    else:
-        assert ('id="workflowNav"' in html) is (count > 0)
     assert "is-single" not in html

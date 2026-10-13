@@ -401,26 +401,20 @@ class TestPhasesPage:
         assert response.headers["content-type"] == "text/html; charset=utf-8"
         assert "Фазы" in response.text
 
-    def test_mobile_back_action_preserves_namespace_context(self):
+    def test_phase_entry_includes_editor_and_preserves_namespace_context(self):
         uow = ui_app_state.get_db()
         namespace_id = _as_dict(uow.projects.get_by_code(config.DEFAULT_PROJECT_CODE))["id"]
         response = client.get(f"/phases?namespace_id={namespace_id}")
 
         assert response.status_code == 200
         selected = client.get(f"/api/phases?namespace_id={namespace_id}").json()
-        back_href = (f'href="/workflows?workflow_id={selected["workflow"]["id"]}'
-                     f'&amp;namespace_id={namespace_id}&amp;mode_id={selected["mode"]["id"]}"')
-        assert response.text.count(back_href) == 2
-        assert 'class="btn btn-secondary phases-header-action"' in response.text
-        assert 'class="phases-mobile-actions"' in response.text
-        assert (
-            '<span class="phases-desktop-title">Фазы воркфлоу</span>'
-            '<span class="phases-mobile-title">Фазы</span>'
-        ) in response.text
-        assert ".header .phases-header-action{display:none}" in response.text
-        assert ".phases-mobile-actions{display:flex" in response.text
-        assert "@media(max-width:930px){.header .phases-header-action{display:none}" in response.text
-        assert ".phases-desktop-title{display:none}.phases-mobile-title{display:inline}" in response.text
+        assert response.text.count('id="workflowNav"') == 1
+        assert response.text.count('id="workflowForm"') == 1
+        assert response.text.index('id="workflowForm"') < response.text.index('id="phasesTimeline"')
+        assert f'data-workflow-id="{selected["workflow"]["id"]}"' in response.text
+        assert f'data-mode-id="{selected["mode"]["id"]}"' in response.text
+        assert f"const professionId = {namespace_id};" in response.text
+        assert "← К воркфлоу" not in response.text
 
     def test_phases_has_phase_rows(self):
         response = client.get("/phases")
@@ -552,7 +546,7 @@ class TestPhasesPage:
     def test_phases_page_hides_duplicate_nav_for_single_workflow(self):
         response = client.get("/phases")
         assert response.status_code == 200
-        assert 'class="phases-layout"' in response.text
+        assert 'class="workflow-crud "' in response.text
         assert 'id="workflowNav"' in response.text
         assert f'data-workflow-id="{_workflow_row("default")["id"]}"' in response.text
 
@@ -567,10 +561,10 @@ class TestPhasesPage:
         response = TestClient(app).get(f"/phases?workflow_id={workflow_id}")
 
         assert response.status_code == 200
-        assert 'class="phases-layout"' in response.text
+        assert 'class="workflow-crud "' in response.text
         assert 'id="workflowNav"' in response.text
         assert 'class="workflow-nav-item active"' in response.text
-        assert "workflow-chip" in response.text
+        assert 'id="workflowForm"' in response.text
 
     def test_phases_page_hides_other_workflows_when_namespace_is_selected(self):
         uow = ui_app_state.get_db()
@@ -2533,7 +2527,8 @@ class TestWorkflowsPage:
         assert 'class="workflow-mobile-actions"' in response.text
         assert "@media(max-width:930px){" in response.text
         assert ".header .workflow-header-action{display:none}" in response.text
-        assert response.text.count("Фазы процесса") == 2
+        assert 'data-workflow-phases' not in response.text
+        assert 'id="workflowPhases"' in response.text
 
     def test_workflows_page_offers_compact_picker_for_multiple_workflows(self):
         profession_id = client.get("/api/namespaces").json()["namespaces"][0]["id"]
@@ -2649,10 +2644,10 @@ class TestWorkflowsPage:
         response = client.get(f"/workflows?namespace_id={namespace_id}")
 
         assert response.status_code == 200
-        assert "function phaseUrlForWorkflow(workflowId)" in response.text
+        assert "function workflowSelectionUrl(workflowId)" in response.text
         assert "url.searchParams.set('workflow_id', String(workflowId));" in response.text
         assert "url.searchParams.set('namespace_id', String(activeNamespaceId));" not in response.text
-        assert "window.SdlcPlatformNavigation.navigate(phaseUrlForWorkflow(d.workflow_id));" in response.text
+        assert "window.SdlcPlatformNavigation.navigate(workflowSelectionUrl(d.workflow_id));" in response.text
         assert "window.location.href = '/phases?workflow_id=' + d.workflow_id;" not in response.text
 
     def test_workflows_api_create_update_and_delete(self):

@@ -35,7 +35,7 @@ def test_sidebar_keeps_cli_and_has_no_removed_registry(client):
     assert "Сервис работает" not in sidebar
 
 
-def test_phases_link_targets_nonstarter_workflow_in_same_profession(client):
+def test_unified_phases_target_nonstarter_workflow_in_same_profession(client):
     profession = client.get("/api/namespaces").json()["namespaces"][0]
     created = client.post(f'/api/workflows?namespace_id={profession["id"]}', json={"name":"Extra process"})
     assert created.status_code == 200
@@ -44,10 +44,14 @@ def test_phases_link_targets_nonstarter_workflow_in_same_profession(client):
     assert response.status_code == 200
     links = Links()
     links.feed(response.text)
-    phase_links = [link for link in links.links if "data-workflow-phases" in link]
-    assert len(phase_links) == 2
-    assert all(f'workflow_id={workflow_id}' in link["href"] and
-               f'namespace_id={profession["id"]}' in link["href"] for link in phase_links)
+    phases = client.get(f'/api/phases?namespace_id={profession["id"]}&workflow_id={workflow_id}').json()
+    phase_links = [link for link in links.links if link.get("href", "").startswith("/phase/")]
+    assert {int(link["href"].split("/phase/", 1)[1].split("?", 1)[0]) for link in phase_links} == {
+        phase["id"] for phase in phases["phases"]
+    }
+    assert all(f'namespace_id={profession["id"]}' in link["href"] for link in phase_links)
+    assert 'id="workflowForm"' in response.text
+    assert f'id="phasesTimeline" data-workflow-id="{workflow_id}"' in response.text
 
 
 @pytest.mark.parametrize("scope", ["all", "selected"])
@@ -57,8 +61,9 @@ def test_phase_modes_and_sidebar_preserve_explicit_all_scope(client, scope):
     assert response.status_code == 200
     links = Links()
     links.feed(response.text)
-    modes = [link for link in links.links if link.get("href", "").startswith("/phases?")]
+    modes = [link for link in links.links if "data-mode-id" in link]
     assert modes
+    assert all(link["href"].startswith("/workflows?") for link in modes)
     assert all(("project_scope=all" in link["href"]) == (scope == "all") for link in modes)
     sidebar = Links()
     sidebar.feed(response.text.split('<aside class="sidebar"', 1)[1].split("</aside>", 1)[0])
