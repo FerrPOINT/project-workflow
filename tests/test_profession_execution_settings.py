@@ -36,7 +36,8 @@ def test_settings_round_trip_and_agent_registration_removed(client):
         assert getattr(client, method)(path).status_code == 404
     html = client.get(f'/namespaces?namespace_id={profession["id"]}').text
     assert 'id="namespaceLaunchProfile"' in html
-    assert 'id="namespaceExecutionDescription"' in html
+    assert "namespaceRoleKey" not in html
+    assert "namespaceExecutionDescription" not in html
     assert 'href="/agents"' not in html
 
 
