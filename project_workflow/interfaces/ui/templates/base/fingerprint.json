@@ -6,7 +6,7 @@
     "base-ui.js": "fc0c629373d1ac61eb512f67ec9b750abf2d26c4301abc86828e9ffa564b6b20",
     "theme-preference.js": "56e93cf4a6769cb062ad30e1bcb4cb91df7fbde53296e601c65a6119d3a45738",
     "macros.html": "f518637b7a94d7e05ebcd74f91bd7a203b346456a92f1598c3b51ffcfbc1f422",
-    "platform-bridge.js": "f32aedecaeddbec0b9868471299f84afb27c8c40ae291f694c63e34cfe9bd903",
+    "platform-bridge.js": "ad703579189ded8913f3229d161d14d52e63a5671606b5a6f3288451864f224d",
     "platform-ssr.js": "03ed585fca2fb025e6efdc6f5b7b737ae91edc92928319a570c4091e72daa18c",
     "platform-navigation.js": "9875be56a2912c1b5b18cd5b70731c42bafa492b2f13c62d2d18559fec4861b3"
   }

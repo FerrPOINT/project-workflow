@@ -111,7 +111,7 @@ export function connectPlatformProduct({ serviceKey, portalOrigin, window: targe
     get publicPath() { return publicPath },
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener) },
     readiness(next, predicate) { status = next; check = predicate || (() => status); publish() },
-    addReadinessSource(source) { readinessSources.add(source); publish(); return () => { readinessSources.delete(source); publish() } },
+    addReadinessSource(source) { readinessSources.add(source); publish(); return () => { readinessSources.delete(source); queueMicrotask(publish) } },
     refreshReadiness() { publish() },
     onCommitted(callback) { committedCallbacks.add(callback); return () => committedCallbacks.delete(callback) },
     onRetire(callback) { retireCallbacks.add(callback); return () => retireCallbacks.delete(callback) },
