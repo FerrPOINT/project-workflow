@@ -4,7 +4,7 @@ from html.parser import HTMLParser
 import pytest
 from fastapi.testclient import TestClient
 
-from project_workflow.interfaces.ui import app
+from project_workflow.interfaces.ui import _app_state, app
 
 
 @pytest.fixture
@@ -57,6 +57,12 @@ def test_unified_phases_target_nonstarter_workflow_in_same_profession(client):
 @pytest.mark.parametrize("scope", ["all", "selected"])
 def test_phase_modes_and_sidebar_preserve_explicit_all_scope(client, scope):
     profession = client.get("/api/namespaces").json()["namespaces"][0]
+    with _app_state.get_db() as uow:
+        uow.workflows.create_mode({
+            "workflow_id": profession["workflow_id"], "key": "follow-up",
+            "name": "Follow-up", "mode_order": 2,
+        })
+        uow.commit()
     response = client.get(f'/phases?namespace_id={profession["id"]}&project_scope={scope}')
     assert response.status_code == 200
     links = Links()

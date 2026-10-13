@@ -209,7 +209,7 @@
       </div>
       {% endif %}
 </div>
-    {% if selected_workflow %}
+    {% if selected_workflow and modes | length > 1 %}
     <nav class="mode-navigation" aria-label="Режимы воркфлоу" data-testid="workflow-mode-navigation">
       <div class="mode-tabs" data-testid="workflow-mode-tabs">
         {% for mode in modes %}
