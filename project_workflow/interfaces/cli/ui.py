@@ -1,7 +1,7 @@
 """CLI commands — ровно 2 команды: step, history.
 
 ПРАВИЛО CLI: новые CLI-команды ЗАПРЕЩЕНЫ.
-Весь CRUD workflows/phases/неймспейсов/agents и администрирование выполняется через Web UI.
+Весь CRUD воркфлоу, фаз и профессий и администрирование выполняется через Web UI.
 Если кто-то добавит @cli.command() сюда — тесты поймают
 (см. test_ui.py::test_only_two_commands_allowed).
 

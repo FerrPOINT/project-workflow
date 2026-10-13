@@ -18,6 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 
 from project_workflow import config
 from project_workflow.domain import Workflow
+from project_workflow.domain.base_catalog import BASE_SKILLS_REVISION_V4
 from project_workflow.domain.namespace import legacy_code_from_cli_command
 from project_workflow.domain.phase_graph import PhaseGraphNode, validate_phase_graph
 from project_workflow.domain.project_theme import (
@@ -304,7 +305,10 @@ class ManagedCatalog(_CatalogModel):
         )
         if phase_count != 33:
             raise ValueError("Managed catalog must contain exactly thirty-three phases")
-        modern = self.catalog_version == 4
+        modern = (
+            self.catalog_version == 4
+            and self.skills_source.revision == BASE_SKILLS_REVISION_V4
+        )
         if any((workflow.terminal_contract == "configured-tools") != modern for workflow in self.workflows):
             raise ValueError("Terminal contract must match the immutable catalog generation")
         serialized = self.model_dump_json().casefold()

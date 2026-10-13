@@ -12,6 +12,7 @@ product theme and full-page screenshots after route/content assertions.
 |---|---|---|---|---|---|
 | [dashboard.png](dashboard.png) | `/` | `wide` | 1920x1080 | 1920x1080 | yes |
 | [settings.png](settings.png) | `/settings` | `reading` | 1920x1080 | 1920x1080 | yes |
+| [profession-execution.png](profession-execution.png) | `/namespaces` | `form` | 1920x1080 | 1920x1080 | no |
 | [task-detail-dev.png](task-detail-dev.png) | `/task/RUN-42` | `detail-with-aside` | 1920x1080 | 1920x2652 | yes |
 | [wide.png](375x812/wide.png) | `/` | `wide` | 375x812 | 375x1152 | no |
 | [reading.png](375x812/reading.png) | `/settings` | `reading` | 375x812 | 375x841 | no |

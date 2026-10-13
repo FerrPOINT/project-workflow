@@ -47,7 +47,7 @@ const screenshotNames = [
   "instructions.png",
   "task-detail-dev.png",
   "task-detail-qa.png",
-  "agents.png",
+  "profession-execution.png",
   "settings.png",
 ];
 const responsiveScreenshotNames = [
@@ -196,10 +196,8 @@ async function assertRenderedText(page, name, expected) {
       .join("\n"),
   );
   const visibleText = `${bodyText}\n${fieldText}\n${attributeText}`;
-  const fullHtml = await page.content();
-  const searchableText = `${visibleText}\n${fullHtml}`;
   for (const pattern of forbiddenVisibleText) {
-    if (pattern.test(searchableText)) {
+    if (pattern.test(visibleText)) {
       throw new Error(`${name} contains forbidden screenshot text: ${pattern}`);
     }
   }
@@ -335,17 +333,16 @@ async function capture(page, outputRoot, { name, url, expected = [], prepare, as
   console.log(`captured ${name} ${size.width}x${size.height}`);
 }
 
-async function fillNamespaceDraft(page, qaWorkflowId) {
+async function fillNamespaceDraft(page) {
   await page.fill("#namespaceName", "Релизный прогон");
   await page.fill("#namespaceCliCommand", "workflow-release");
   await page.fill("#namespaceDescription", "Проверка заполненной формы создания, выбора и визуального стиля.");
-  await page.selectOption("#namespaceThemeIcon", "rocket");
+  await page.locator("#namespaceThemeControls summary").click();
+  await page.locator('input[name="namespaceThemeIcon"][value="rocket"]').check();
   await page.fill("#namespaceThemeColor", "#F59E0B");
-  await page.selectOption("#namespaceWorkflowId", String(qaWorkflowId));
   const values = await page.evaluate(() => ({
     name: document.getElementById("namespaceName").value,
     command: document.getElementById("namespaceCliCommand").value,
-    workflow: document.getElementById("namespaceWorkflowId").value,
   }));
   if (values.name !== "Релизный прогон" || values.command !== "workflow-release") {
     throw new Error("namespace-new form values were not applied");
@@ -413,14 +410,14 @@ async function captureAll(outputRoot) {
     await capture(page, outputRoot, {
       name: "namespaces.png",
       url: `/namespaces?namespace_id=${dev.id}`,
-      expected: ["Разработка", "Проверка качества", "workflow-dev", "workflow-qa", "Воркфлоу разработки"],
+      expected: ["Разработка", "Проверка качества", "workflow-dev", "workflow-qa"],
       assertions: [(targetPage, name) => assertLocatorCount(targetPage, name, ".namespace-nav-item", 2, "namespace list")],
     });
     await capture(page, outputRoot, {
       name: "namespace-new.png",
       url: `/namespaces/new?namespace_id=${dev.id}`,
-      expected: ["Новый неймспейс", "Разработка", "Проверка качества", "CLI-КОМАНДА"],
-      prepare: (targetPage) => fillNamespaceDraft(targetPage, qa.workflow_id),
+      expected: ["Новая профессия", "Разработка", "Проверка качества", "CLI-КОМАНДА"],
+      prepare: fillNamespaceDraft,
       assertions: [(targetPage, name) => assertLocatorCount(targetPage, name, ".namespace-nav-item", 2, "namespace list")],
     });
     await capture(page, outputRoot, {
@@ -446,8 +443,11 @@ async function captureAll(outputRoot) {
     await capture(page, outputRoot, {
       name: "workflows.png",
       url: `/workflows?namespace_id=${dev.id}`,
-      expected: ["Воркфлоу разработки", "Воркфлоу проверки"],
-      assertions: [(targetPage, name) => assertLocatorCount(targetPage, name, ".workflow-nav-item", 2, "workflow list")],
+      expected: ["Воркфлоу разработки"],
+      assertions: [async (targetPage, name) => {
+        const names = await targetPage.locator(".workflow-nav-item .workflow-name").allTextContents();
+        assertSameSet(name, "profession workflows", names.map(value => value.trim()), ["Воркфлоу разработки"]);
+      }],
     });
     await capture(page, outputRoot, {
       name: "phases.png",

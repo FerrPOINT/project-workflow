@@ -85,7 +85,7 @@ try {
     const initial = await (await page.request.get(`${baseUrl}/api/namespaces`)).json();
     assert.deepEqual(initial.namespaces.map(item => item.cli_command).sort(), ['workflow-dev', 'workflow-qa'], 'Mutation tests require the neutral smoke database');
     const response = await page.request.post(`${baseUrl}/api/namespaces`, { data: {
-      name: 'UI shell owned fixture', cli_command: `workflow-shell-${Date.now()}`, workflow_id: initial.namespaces[0].workflow_id,
+      name: 'UI shell owned fixture', cli_command: `workflow-shell-${Date.now()}`,
     } });
     const created = await response.json();
     assert.ok(response.ok() && created.ok);

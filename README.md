@@ -236,7 +236,7 @@ SSO остаются HttpOnly, а namespace-cookie доступна selector JS.
 | Phase workflow | Задача идёт по шаблону фаз с инструкциями, checks, evidence и audit history. |
 | Supervisor gate | Переход фазы проходит через обязательную оценку отчёта и фиксирует `PASS` / `ROLLBACK` / `BLOCK`. |
 | Namespace runtime | Несколько entrypoints могут иметь свои workflow, задачи, стиль UI и CLI-команду. |
-| Web UI | Управление workflows, phases, namespaces и agents; просмотр задач и audit history. |
+| Web UI | Управление воркфлоу, фазами и профессиями; просмотр задач и audit history. |
 | Append-only history | История фаз и `step`-проверок не затирается. |
 | CLI freeze | Публичный CLI остаётся управляемым и предсказуемым: `step` / `history`. |
 | Wrapper commands | `workflow-qa`, `workflow-dev` и другие команды генерируются из записей PostgreSQL. |
@@ -361,11 +361,10 @@ curl --fail http://127.0.0.1:8812/health
 | Area | Route |
 |---|---|
 | Dashboard | `/` |
-| Namespaces | `/namespaces`, `/namespaces/new` |
+| Professions | `/namespaces`, `/namespaces/new` |
 | Tasks | `/tasks`, `/task/{task_key}` (только наблюдение) |
 | Phases | `/phases`, `/phase/{phase_id}`, `/instructions?phase_id={phase_id}` |
 | Workflows | `/workflows` |
-| Agents | `/agents` |
 | Settings | `/settings` |
 
 <a name="visual-proof"></a>
@@ -460,7 +459,7 @@ python -m pip install --constraint constraints.txt -e ".[dev,ui]"
 ## 🗺️ Roadmap
 
 - [x] PostgreSQL runtime, SQLAlchemy repositories и Alembic baseline
-- [x] FastAPI/Jinja2 Web UI для workflows, phases, namespaces, agents и tasks
+- [x] FastAPI/Jinja2 Web UI для воркфлоу, фаз, профессий и просмотра задач
 - [x] Namespace selector, theme metadata и wrapper CLI commands
 - [x] Supervisor verdict audit trail для phase transitions
 - [x] FerrPOINT proprietary source-available licensing
