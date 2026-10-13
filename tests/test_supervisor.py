@@ -40,7 +40,6 @@ def _bootstrap_supervisor_workflow(uow: SAUnitOfWork) -> None:
             "workflow_id": workflow_id,
             "code": "SUP",
             "name": "Supervisor Project",
-            "role_key": "critic",
             "key_prefixes": ["SUP"],
         }
     )

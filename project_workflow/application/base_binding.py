@@ -38,14 +38,13 @@ def _persisted_binding(
     if (
         (catalog.catalog_version == 3 and namespace["name"] != definition.hermes_namespace)
         or namespace["cli_command"] != f"workflow-{definition.role_key}"
-        or namespace.get("role_key") != definition.role_key
         or namespace.get("launch_profile") != definition.hermes_profile
     ):
         raise ConflictError("Persisted Base namespace/role/profile mismatch")
     return BaseNamespaceBinding.model_validate({
         "schema": "base-sdlc/workflow-binding/v1", "namespace_id": str(namespace_id),
         "namespace_name": definition.hermes_namespace, "workflow_id": str(workflow.id), "workflow_key": workflow.key,
-        "role_key": namespace["role_key"], "profile": namespace["launch_profile"],
+        "role_key": definition.role_key, "profile": namespace["launch_profile"],
         "catalog_version": catalog.catalog_version,
         "catalog_sha256": catalog_sha256, "skills_revision": catalog.skills_source.revision, "runtime_ready": False,
     })

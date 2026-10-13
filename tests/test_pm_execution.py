@@ -60,7 +60,6 @@ def prepare_pm(monkeypatch, *, ownership=True):
                 "namespace_id": namespace.id, "tracker_instance_ref": "tracker:one", "tracker_project_ref": PROJECT_REF,
                 "authority_issuer": "http://auth.test", "provisioner_subject": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
             })
-        uow.projects.update(namespace.id, {"role_key": "project_manager"})
     client = TestClient(create_app())
     assigned = client.post("/internal/runtime/assign", headers=ADAPTER,
                            json=_assignment("PM-1", "assign:pm:1", "project_manager"))

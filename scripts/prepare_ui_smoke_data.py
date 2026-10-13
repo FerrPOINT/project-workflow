@@ -569,9 +569,7 @@ def _ensure_namespace(
         "theme_icon": theme_icon,
         "theme_color": theme_color,
         "cli_command": command,
-        "role_key": "developer" if command == "workflow-dev" else "tester",
         "launch_profile": "run-dev" if command == "workflow-dev" else "run-quality",
-        "execution_description": "Выполнение сценариев проверки интерфейса.",
     }
     if namespace is None:
         namespace = service.create_project({**payload, "code": code, "key_prefixes": []})

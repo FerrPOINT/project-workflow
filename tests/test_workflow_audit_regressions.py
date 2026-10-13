@@ -16,7 +16,7 @@ pytestmark = pytest.mark.unit
 
 
 @pytest.mark.parametrize("edit", [
-    "theme", "other_workflow", "namespace_caption", "workflow_caption", "execution_description", "mode_caption",
+    "theme", "other_workflow", "namespace_caption", "workflow_caption", "mode_caption",
     "other_role_instruction",
 ])
 def test_unrelated_editor_changes_do_not_disable_runtime_discovery(monkeypatch, tmp_path, edit):
@@ -41,9 +41,6 @@ def test_unrelated_editor_changes_do_not_disable_runtime_discovery(monkeypatch, 
                 WorkflowService(uow).update_workflow(
                     namespace.workflow_id, {"name": "Development", "description": "Team workflow"},
                 )
-            elif edit == "execution_description":
-                namespace = uow.projects.get_by_cli_command("workflow-developer")
-                ProjectService(uow).update_project(namespace.id, {"execution_description": "Team developer"})
             elif edit == "mode_caption":
                 from project_workflow.infrastructure.db.models import WorkflowMode
 

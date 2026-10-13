@@ -630,9 +630,7 @@ def _ensure_namespace(
                 "theme_icon": theme_icon,
                 "theme_color": theme_color,
                 "cli_command": cli_command,
-                "role_key": workflow.role_key,
                 "launch_profile": workflow.hermes_profile,
-                "execution_description": f"Managed Hermes role: {workflow.name}",
                 "key_prefixes": [],
             }
         )
@@ -640,11 +638,6 @@ def _ensure_namespace(
         return
     if preserve_presentation:
         _assert_existing_namespace(uow, workflow, workflow_id)
-        if existing.role_key is None:
-            uow.projects.update(int(existing.id or 0), {
-                "role_key": workflow.role_key, "launch_profile": workflow.hermes_profile,
-                "execution_description": f"Managed Hermes role: {workflow.name}",
-            })
         if existing.description == legacy_description:
             uow.projects.update(int(existing.id or 0), {"description": description})
         uow.workflows.assign_profession(workflow_id, int(existing.id or 0))

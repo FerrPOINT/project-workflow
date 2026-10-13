@@ -52,7 +52,6 @@ class PMExecution(Base):
     execution_ref: Mapped[str] = mapped_column(String(512), primary_key=True)
     task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id", ondelete="RESTRICT"), unique=True)
     assignment_id: Mapped[int] = mapped_column(ForeignKey("task_runtime_assignments.id", ondelete="RESTRICT"))
-    role_key: Mapped[str] = mapped_column(String(128), nullable=False)
     tracker_instance_ref: Mapped[str] = mapped_column(String(512))
     tracker_project_ref: Mapped[str] = mapped_column(String(512))
     task_ref: Mapped[str] = mapped_column(String(512))
@@ -347,9 +346,7 @@ class Project(Base):
     theme_icon: Mapped[str] = mapped_column(String(32), nullable=False, default="folder", server_default="folder")
     theme_color: Mapped[str] = mapped_column(String(7), nullable=False, default="#5E6AD2", server_default="#5E6AD2")
     cli_command: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
-    role_key: Mapped[str | None] = mapped_column(String, nullable=True)
     launch_profile: Mapped[str | None] = mapped_column(String(251), nullable=True)
-    execution_description: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default=text("''"))
     key_prefixes: Mapped[str] = mapped_column(String, nullable=False, default="[]", server_default="[]")
 
     __table_args__ = (UniqueConstraint("id", "workflow_id", name="uq_projects_id_workflow"),)

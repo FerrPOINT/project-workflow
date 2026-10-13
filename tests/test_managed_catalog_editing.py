@@ -57,7 +57,7 @@ def test_installed_catalog_does_not_block_unrelated_crud():
         assert workflow.status_code == 200, workflow.text
         profession = client.post("/api/namespaces", json={
             "name": "Another profession", "cli_command": "workflow-another",
-            "role_key": "designer", "launch_profile": "designer-profile",
+            "launch_profile": "designer-profile",
         })
         assert profession.status_code == 200, profession.text
 

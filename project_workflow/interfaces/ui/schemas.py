@@ -10,7 +10,6 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from project_workflow.domain.base_admission import BaseAdmission, ExactRef, Sha256
 from project_workflow.domain.namespace import normalize_namespace_cli_command
 from project_workflow.domain.profession_settings import normalize_launch_profile
-from project_workflow.domain.profession_settings import normalize_role_key as profession_role_key
 from project_workflow.domain.project_theme import (
     DEFAULT_PROJECT_COLOR,
     DEFAULT_PROJECT_ICON,
@@ -412,14 +411,7 @@ class NamespaceCreate(StrictRequest):
     theme_icon: str = Field(default=DEFAULT_PROJECT_ICON)
     theme_color: str = Field(default=DEFAULT_PROJECT_COLOR)
     cli_command: str = Field(..., min_length=1, max_length=64)
-    role_key: str | None = None
     launch_profile: str | None = None
-    execution_description: str = ""
-
-    @field_validator("role_key")
-    @classmethod
-    def _role_key_valid(cls, value: str | None) -> str | None:
-        return profession_role_key(value)
 
     @field_validator("launch_profile")
     @classmethod
@@ -456,7 +448,7 @@ class NamespaceCreate(StrictRequest):
 
 class NamespaceUpdate(StrictUpdateRequest):
     non_nullable_fields = frozenset({
-        "name", "description", "workflow_id", "theme_icon", "theme_color", "cli_command", "execution_description",
+        "name", "description", "workflow_id", "theme_icon", "theme_color", "cli_command",
     })
 
     name: str | None = Field(default=None)
@@ -465,14 +457,7 @@ class NamespaceUpdate(StrictUpdateRequest):
     theme_icon: str | None = Field(default=None)
     theme_color: str | None = Field(default=None)
     cli_command: str | None = Field(default=None, min_length=1, max_length=64)
-    role_key: str | None = None
     launch_profile: str | None = None
-    execution_description: str | None = None
-
-    @field_validator("role_key")
-    @classmethod
-    def _role_key_valid(cls, value: str | None) -> str | None:
-        return profession_role_key(value)
 
     @field_validator("launch_profile")
     @classmethod

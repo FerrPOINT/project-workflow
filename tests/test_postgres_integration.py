@@ -402,7 +402,7 @@ def test_pm_ownership_catalog_lock_order_and_incomplete_schema(pg_url, winner):
     assert not schema_is_ready(engine)
     with pytest.raises(DatabaseRecreateRequired):
         ensure_migrated(engine)
-    assert database_revisions(engine) == {"0013_profession_execution"}
+    assert database_revisions(engine) == {"0014_launch_profile_only"}
 
 
 @pytest.mark.integration
@@ -920,7 +920,7 @@ class TestPostgresInitialMigration:
             version = conn.execute(
                 text("SELECT version_num FROM project_workflow.alembic_version")
             ).scalar_one()
-        assert version == migration_head() == "0013_profession_execution"
+        assert version == migration_head() == "0014_launch_profile_only"
         assert schema_is_ready(engine) is True
 
     def test_managed_bootstrap_serializes_with_public_catalog_creation(self, pg_url):
@@ -1043,7 +1043,7 @@ class TestPostgresInitialMigration:
         with pytest.raises(RuntimeError, match=message):
             run_alembic_command("downgrade", engine, "base")
         assert database_revisions(engine) == {revision}
-        assert schema_is_ready(engine) is (revision == "0013_profession_execution")
+        assert schema_is_ready(engine) is (revision == "0014_launch_profile_only")
 
     def test_populated_0001_upgrade_preserves_rows_and_backfills_per_workflow(self, pg_url):
         engine = get_engine(pg_url)
@@ -3055,7 +3055,7 @@ def _initialize_cli_database(env: dict[str, str]) -> None:
         )
         bootstrap_default_project(uow)
         profession = uow.projects.get_by_code("RUN")
-        uow.projects.update(profession.id, {"role_key": "developer", "launch_profile": "run-developer"})
+        uow.projects.update(profession.id, {"launch_profile": "run-developer"})
         uow.commit()
 
 
@@ -3119,7 +3119,7 @@ def test_full_supervisor_runtime_through_cli_postgres_and_http(pg_url):
             "relevanter-business-operator",
         ]
         assert assignment_contract["execution_type"] == "sync"
-        assert assignment_contract["delegate_agent"] == "developer"
+        assert assignment_contract["delegate_agent"] == "RUN"
         assert assignment_contract["hermes_profile"] == "run-developer"
         assert assignment_contract["group_phases"] is None
 

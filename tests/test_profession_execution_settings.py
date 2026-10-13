@@ -18,13 +18,12 @@ def create_profession(client, key, **settings):
 
 
 def test_settings_round_trip_and_agent_registration_removed(client):
-    profession = create_profession(client, "designer", role_key="designer", launch_profile="java-designer",
-                                   execution_description="Design execution")
-    assert profession["role_key"] == "designer"
+    profession = create_profession(client, "designer", launch_profile="java-designer")
+    assert "role_key" not in profession
     assert profession["launch_profile"] == "java-designer"
-    assert profession["execution_description"] == "Design execution"
+    assert "execution_description" not in profession
     updated = client.put(f'/api/namespaces/{profession["id"]}', json={
-        "launch_profile": "other-runtime-profile", "execution_description": "Updated configuration",
+        "launch_profile": "other-runtime-profile", "description": "Updated profession",
     })
     assert updated.status_code == 200, updated.text
     assert updated.json()["namespace"]["launch_profile"] == "other-runtime-profile"
@@ -43,7 +42,7 @@ def test_settings_round_trip_and_agent_registration_removed(client):
 
 @pytest.mark.parametrize("invalid", ["", "Bad Profile", "profile/key", "a" * 252, 123])
 def test_invalid_profile_does_not_change_profession(client, invalid):
-    profession = create_profession(client, "validation", role_key="developer", launch_profile="valid-profile")
+    profession = create_profession(client, "validation", launch_profile="valid-profile")
     response = client.put(f'/api/namespaces/{profession["id"]}', json={"launch_profile": invalid})
     assert response.status_code == 422
     current = client.get(f'/api/namespaces/{profession["id"]}').json()["namespace"]
@@ -51,16 +50,18 @@ def test_invalid_profile_does_not_change_profession(client, invalid):
 
 
 def test_execution_comes_from_selected_profession_and_profiles_can_be_shared(client):
-    first = create_profession(client, "alpha", role_key="alpha", launch_profile="shared-profile")
-    second = create_profession(client, "beta", role_key="beta", launch_profile="shared-profile",
+    first = create_profession(client, "alpha", launch_profile="shared-profile")
+    second = create_profession(client, "beta", launch_profile="shared-profile",
                                workflow_id=first["workflow_id"])
     from project_workflow.interfaces.ui import _app_state
 
     with _app_state.get_db() as uow:
-        a = schema.load_phases_from_db(uow, first["workflow_id"], profession_settings=first)
-        b = schema.load_phases_from_db(uow, first["workflow_id"], profession_settings=second)
-        assert {phase.delegate.agent for phase in a} == {"alpha"}
-        assert {phase.delegate.agent for phase in b} == {"beta"}
+        first_settings = uow.projects.get_by_id(first["id"]).to_dict()
+        second_settings = uow.projects.get_by_id(second["id"]).to_dict()
+        a = schema.load_phases_from_db(uow, first["workflow_id"], profession_settings=first_settings)
+        b = schema.load_phases_from_db(uow, first["workflow_id"], profession_settings=second_settings)
+        assert {phase.delegate.agent for phase in a} == {first_settings["code"]}
+        assert {phase.delegate.agent for phase in b} == {second_settings["code"]}
         assert {phase.delegate.hermes_profile for phase in a + b} == {"shared-profile"}
         tables = inspect(uow.session.get_bind()).get_table_names()
         assert "agents" not in tables
@@ -109,9 +110,7 @@ def test_migration_transfers_settings_and_preserves_phase_identity(tmp_path, own
         assert schema_is_ready(engine)
         with SAUnitOfWork(engine) as uow:
             profession = uow.projects.get_by_id(191)
-            assert profession.role_key == "builder"
             assert profession.launch_profile == "external-builder"
-            assert profession.execution_description == "Saved note"
             phase = uow.phases.get_by_id(117)
             assert phase.code == "start" and phase.workflow_id == 37
         assert "agents" not in inspect(engine).get_table_names()
@@ -119,9 +118,9 @@ def test_migration_transfers_settings_and_preserves_phase_identity(tmp_path, own
         engine.dispose()
 
 
-@pytest.mark.parametrize("field,value", [("role_key", "other-role"), ("launch_profile", "other-profile")])
+@pytest.mark.parametrize("field,value", [("launch_profile", "other-profile")])
 def test_active_tasks_freeze_launch_settings_but_allow_notes(client, field, value):
-    profession = create_profession(client, "active", role_key="builder", launch_profile="builder-profile")
+    profession = create_profession(client, "active", launch_profile="builder-profile")
     from project_workflow.interfaces.ui import _app_state
 
     with _app_state.get_db() as uow:
@@ -134,9 +133,27 @@ def test_active_tasks_freeze_launch_settings_but_allow_notes(client, field, valu
     path = f'/api/namespaces/{profession["id"]}'
     assert client.put(path, json={field: value}).status_code == 409
     assert client.get(path).json()["namespace"][field] == profession[field]
-    assert client.put(path, json={field: profession[field], "execution_description": "New note"}).status_code == 200
+    note = {field: profession[field], "description": "New profession description"}
+    assert client.put(path, json=note).status_code == 200
     with _app_state.get_db() as uow:
         uow.tasks.update(task_id, {"status": "done"})
         uow.commit()
     assert client.put(path, json={field: value}).status_code == 200
     assert client.get(path).json()["namespace"][field] == value
+
+
+@pytest.mark.parametrize("field,value", [("role_key", "designer"), ("execution_description", "Unneeded note")])
+def test_removed_fields_are_rejected_and_not_stored(client, field, value):
+    profession = create_profession(client, "strict", launch_profile="java-designer")
+    assert client.put(f'/api/namespaces/{profession["id"]}', json={field: value}).status_code == 422
+    assert client.post("/api/namespaces", json={"name": "Other", "cli_command": "workflow-other",
+                                              field: value}).status_code == 422
+    from project_workflow.interfaces.ui import _app_state
+
+    with _app_state.get_db() as uow:
+        columns = {column["name"] for column in inspect(uow.session.get_bind()).get_columns("projects")}
+        assert "role_key" not in columns and "execution_description" not in columns
+        assert "role_key" not in {c["name"] for c in inspect(uow.session.get_bind()).get_columns("pm_executions")}
+    current = client.get(f'/api/namespaces/{profession["id"]}').json()["namespace"]
+    assert current["launch_profile"] == "java-designer"
+    assert field not in current

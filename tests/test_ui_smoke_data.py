@@ -109,8 +109,8 @@ def test_prepare_ui_smoke_data_creates_neutral_parallel_namespace_fixture(tmp_pa
     assert {task["status"] for task in dev_tasks} == {"active", "blocked", "done"}
     assert {task["status"] for task in qa_tasks} == {"active", "blocked", "done"}
     assert latest_verdicts == {"pass", "partial", "blocked", "delegate", "rollback"}
-    assert dev["role_key"] == "developer" and dev["launch_profile"] == "run-dev"
-    assert qa["role_key"] == "tester" and qa["launch_profile"] == "run-quality"
+    assert dev["launch_profile"] == "run-dev"
+    assert qa["launch_profile"] == "run-quality"
     assert dev_task is not None
     assert qa_task is not None
     assert dev_task.task_key == qa_task.task_key == TASK_KEY

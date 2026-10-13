@@ -130,9 +130,7 @@ class Project:
     theme_icon: str = DEFAULT_PROJECT_ICON
     theme_color: str = DEFAULT_PROJECT_COLOR
     cli_command: str = ""
-    role_key: str | None = None
     launch_profile: str | None = None
-    execution_description: str = ""
     key_prefixes: list[str] = field(default_factory=list)
     workflow_name: str | None = None
 
@@ -146,9 +144,7 @@ class Project:
             "theme_icon": self.theme_icon,
             "theme_color": self.theme_color,
             "cli_command": self.cli_command,
-            "role_key": self.role_key,
             "launch_profile": self.launch_profile,
-            "execution_description": self.execution_description,
             "key_prefixes": self.key_prefixes,
             "workflow_name": self.workflow_name,
         }
