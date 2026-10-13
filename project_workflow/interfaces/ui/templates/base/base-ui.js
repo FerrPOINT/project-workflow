@@ -13,10 +13,16 @@
   }
   for (const account of document.querySelectorAll('.base-ssr-account')) {
     const toggle = account.querySelector('summary');
+    let pointerInAccount = false;
     function closeAccount(restoreFocus) { account.open = false; if (restoreFocus) toggle?.focus(); }
+    // WebKit focuses an ancestor main before clicking a non-focusable link.
+    // Keep the pressed menu item mounted until its click can be delivered.
+    document.addEventListener('pointerdown', (event) => { pointerInAccount = event.target instanceof Node && account.contains(event.target); });
+    document.addEventListener('pointerup', () => { pointerInAccount = false; });
+    document.addEventListener('pointercancel', () => { pointerInAccount = false; });
     account.addEventListener('keydown', (event) => { if (event.key === 'Escape' && account.open) { event.preventDefault(); closeAccount(true); } });
     document.addEventListener('click', (event) => { if (event.target instanceof Node && !account.contains(event.target)) closeAccount(false); });
-    account.addEventListener('focusout', (event) => { if (event.relatedTarget instanceof Node && !account.contains(event.relatedTarget)) closeAccount(false); });
+    account.addEventListener('focusout', (event) => { if (!pointerInAccount && event.relatedTarget instanceof Node && !account.contains(event.relatedTarget)) closeAccount(false); });
   }
   const trigger = document.querySelector('[data-base-drawer-trigger]');
   const drawer = document.querySelector('[data-base-drawer]');
