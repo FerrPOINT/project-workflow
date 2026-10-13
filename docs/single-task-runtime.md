@@ -118,12 +118,19 @@ SQLite tests cover actual predecessor upgrade, repeat readback, preserved legacy
 rows/history/predicates, three-phase execution, typed PM continuation and contracts.
 
 `SingleTaskNamespaceBinding` remains unchanged and `live_activation_allowed=false`
-until actual parent Registry/Tracker/Fleet policy integration. `runtime_ready=false`
+until actual parent Tracker/Fleet policy integration. `runtime_ready=false`
 is the same integration boundary, not a claim that the bounded bridge is absent.
 Remaining parent QA: PostgreSQL upgrade/concurrency, actual installed deployment
 manifest, authorized owner confirmation CLI direct GET, trusted receipt validation,
 Scheduler lease-resume/PM actual completion ordering and a usable immutable Workflow
 terminal ArtifactReceipt for non-PM delivery proposals. No Docker/PG/deployment,
 runtime configuration, secrets or other repositories were changed by this packet.
+
+Parent integration preserves one additive migration and the exact installer family.
+Separate source-qualified tests are not PostgreSQL/live acceptance. Dependent Drafts:
+[Fleet81](https://github.com/FerrPOINT/fleet-control/pull/81),
+[Tracker152](https://github.com/FerrPOINT/task-tracker/pull/152),
+[Forge103](https://github.com/FerrPOINT/CI-CD/pull/103). Terminal receipt publication
+and actual consumer rollout remain explicit follow-up, not a new registry.
 
 Generated public request/readback schema: [pm-continuation-openapi.json](pm-continuation-openapi.json).
