@@ -65,6 +65,7 @@ class SAProjectRepository(ProjectRepository):
             "theme_icon": row.theme_icon,
             "theme_color": row.theme_color,
             "cli_command": row.cli_command,
+            "launch_profile": row.launch_profile,
             "key_prefixes": project.key_prefixes,
         }
 
@@ -136,6 +137,7 @@ class SAProjectRepository(ProjectRepository):
             theme_icon=data.get("theme_icon", DEFAULT_PROJECT_ICON),
             theme_color=data.get("theme_color", DEFAULT_PROJECT_COLOR),
             cli_command=data.get("cli_command") or default_cli_command_from_code(data["code"]),
+            launch_profile=data.get("launch_profile"),
             key_prefixes=_serialize_key_prefixes(data.get("key_prefixes")),
         )
         self._session.add(item)
@@ -162,6 +164,8 @@ class SAProjectRepository(ProjectRepository):
             row.cli_command = data["cli_command"]
         if "key_prefixes" in data:
             row.key_prefixes = _serialize_key_prefixes(data["key_prefixes"])
+        if "launch_profile" in data:
+            row.launch_profile = data["launch_profile"]
 
     def delete(self, project_id: int) -> None:
         row = self._session.get(m.Project, project_id)

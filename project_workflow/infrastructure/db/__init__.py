@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from .models import Base
 from .repositories import (
-    SAAgentRepository,
     SAPhaseCheckRepository,
     SAPhaseEvidenceRequirementRepository,
     SAPhaseInstructionRepository,
@@ -19,7 +18,6 @@ from .uow import SAUnitOfWork, UnitOfWork
 
 __all__ = [
     "Base",
-    "SAAgentRepository",
     "SAPhaseCheckRepository",
     "SAPhaseEvidenceRequirementRepository",
     "SAPhaseInstructionRepository",

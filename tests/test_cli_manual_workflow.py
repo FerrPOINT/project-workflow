@@ -67,13 +67,7 @@ def manual_env(tmp_path, monkeypatch):
     )
     uow.commit()
 
-    delegate_agent_id = uow.agents.create(
-        {
-            "name": "Старший ревьюер",
-            "description": "Тестовый делегат",
-            "hermes_profile": "senior-reviewer",
-        }
-    )
+    uow.projects.update(project_id, {"launch_profile": "senior-reviewer"})
     phase_ids: dict[str, int] = {}
     for p in seed:
         phase_id = uow.phases.create(
@@ -84,7 +78,6 @@ def manual_env(tmp_path, monkeypatch):
                 "name": p["name"],
                 "description": p["description"],
                 "execution_type": p["execution_type"],
-                "agent_id": delegate_agent_id if p.get("delegate") else None,
             }
         )
         phase_ids[p["code"]] = phase_id

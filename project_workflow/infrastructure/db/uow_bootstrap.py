@@ -18,7 +18,7 @@ def bootstrap_default_project(uow: SAUnitOfWork) -> None:
             raise ValueError("Начальный воркфлоу не загружен")
         if uow.phases.count_all_modes_by_workflow().get(int(default_wf.id), 0) == 0:
             raise ValueError("Начальный воркфлоу не содержит фаз")
-        uow.projects.create(
+        profession_id = uow.projects.create(
             {
                 "workflow_id": default_wf.id,
                 "code": code,
@@ -27,3 +27,4 @@ def bootstrap_default_project(uow: SAUnitOfWork) -> None:
                 "key_prefixes": list(config.DEFAULT_TASK_KEY_PREFIXES),
             }
         )
+        uow.workflows.assign_profession(int(default_wf.id), profession_id)

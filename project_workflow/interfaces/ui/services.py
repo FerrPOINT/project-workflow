@@ -34,9 +34,9 @@ def _load_cli_reference(entrypoint: str | None = None) -> list[dict[str, Any]]:
     return _impl(entrypoint=entrypoint)
 
 
-def _load_workflows() -> list[dict[str, Any]]:
+def _load_workflows(profession_id: int | None = None) -> list[dict[str, Any]]:
     """Load workflows for UI pages/API."""
-    return _ui_data_service()._load_workflows()
+    return _ui_data_service()._load_workflows(profession_id)
 
 
 def _load_phases(workflow_id: int, mode_id: int | None = None) -> list[dict[str, Any]]:

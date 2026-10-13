@@ -16,7 +16,7 @@ pytestmark = pytest.mark.unit
 
 
 @pytest.mark.parametrize("edit", [
-    "theme", "other_workflow", "namespace_caption", "workflow_caption", "agent_description", "mode_caption",
+    "theme", "other_workflow", "namespace_caption", "workflow_caption", "mode_caption",
     "other_role_instruction",
 ])
 def test_unrelated_editor_changes_do_not_disable_runtime_discovery(monkeypatch, tmp_path, edit):
@@ -41,11 +41,6 @@ def test_unrelated_editor_changes_do_not_disable_runtime_discovery(monkeypatch, 
                 WorkflowService(uow).update_workflow(
                     namespace.workflow_id, {"name": "Development", "description": "Team workflow"},
                 )
-            elif edit == "agent_description":
-                from project_workflow.application.agent import AgentService
-
-                agent = uow.agents.get_by_name("developer")
-                AgentService(uow).update_agent(agent.id, {"description": "Team developer"})
             elif edit == "mode_caption":
                 from project_workflow.infrastructure.db.models import WorkflowMode
 
@@ -84,7 +79,7 @@ def test_blocked_catalog_read_does_not_block_other_http_requests(monkeypatch, pa
 
     entered, release, timed_out = Event(), Event(), Event()
 
-    def blocked_read():
+    def blocked_read(profession_id=None):
         entered.set()
         if not release.wait(5):
             timed_out.set()
@@ -173,21 +168,17 @@ def test_blocked_health_probe_does_not_block_other_http_requests(monkeypatch):
     asyncio.run(exercise())
 
 
-@pytest.mark.parametrize("damage", ["foreign_skill", "namespace_binding", "foreign_agent", "invalid_graph"])
+@pytest.mark.parametrize("damage", ["foreign_skill", "namespace_binding", "invalid_graph"])
 def test_execution_contract_and_directory_links_remain_checked(monkeypatch, tmp_path, damage):
     _bootstrap_global_managed_catalog()
     runtime_token, catalog_token = _install_runtime_credentials(monkeypatch, tmp_path)
     monkeypatch.setattr("project_workflow.infrastructure.db.session.schema_is_ready", lambda _engine: True)
     with SAUnitOfWork() as uow:
         namespace = uow.projects.get_by_cli_command("workflow-developer")
-        if damage in {"foreign_agent", "invalid_graph"}:
+        if damage == "invalid_graph":
             mode = uow.workflows.list_modes(namespace.workflow_id)[0]
             phase = uow.phases.list(namespace.workflow_id, mode_id=mode.id)[0]
-            updates = (
-                {"agent_id": uow.agents.get_by_name("architect").id}
-                if damage == "foreign_agent" else
-                {"execution_type": "parallel", "parallel_with_phase_id": phase.id}
-            )
+            updates = {"execution_type": "parallel", "parallel_with_phase_id": phase.id}
             uow.phases.update(phase.id, updates)
         elif damage == "foreign_skill":
             from project_workflow.application.instruction_service import InstructionService

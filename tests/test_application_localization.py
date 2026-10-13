@@ -27,7 +27,6 @@ def test_primary_ui_labels_do_not_expose_internal_english_enums() -> None:
             "instructions.html",
             "task_detail.html",
             "namespaces.html",
-            "agents.html",
             "settings.html",
         )
     )

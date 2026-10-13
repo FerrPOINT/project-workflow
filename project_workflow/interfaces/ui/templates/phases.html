@@ -99,7 +99,6 @@
       </div>
       <div class="execution-row">
         <span class="badge {{ 'badge-parallel' if p.execution_type == 'parallel' else 'badge-sync' }}">{{ 'параллельно' if p.execution_type == 'parallel' else 'последовательно' }}</span>
-        {% if p.agent_name %}<span class="badge badge-agent">{{ p.agent_name }}</span>{% endif %}
       </div>
     </a>
     <details class="phase-card-actions">
@@ -117,14 +116,14 @@
 
 {% block content %}
 <div class="phases-mobile-actions"><a href="/workflows{% if selected_namespace %}?namespace_id={{ selected_namespace.id }}{% endif %}" class="btn btn-secondary">← К воркфлоу</a></div>
-<div class="phases-layout{% if workflows | length <= 1 %} phases-layout-single{% endif %}">
-  {% if workflows | length > 1 %}
+<div class="phases-layout{% if workflows | length == 0 %} phases-layout-single{% endif %}">
+  {% if workflows | length > 0 %}
   <section class="workflow-nav side-nav-scroll" id="workflowNav">
     {% for workflow in workflows %}
     <a class="workflow-nav-item {% if selected_workflow_id == workflow.id %}active{% endif %}" href="/phases?workflow_id={{ workflow.id }}{% if selected_namespace %}&namespace_id={{ selected_namespace.id }}{% endif %}" data-workflow-id="{{ workflow.id }}">
       <div class="workflow-name">{{ workflow.name }}</div>
       <div class="workflow-meta">
-        <span class="workflow-chip">{{ workflow.namespace_count | pluralize('неймспейс,неймспейса,неймспейсов') }}</span>
+        <span class="workflow-chip">{{ workflow.namespace_count | pluralize('профессия,профессии,профессий') }}</span>
         <span class="workflow-chip">{{ workflow.phase_count | pluralize('фаза,фазы,фаз') }}</span>
       </div>
     </a>

@@ -9,7 +9,6 @@ import pytest
 
 pytestmark = [pytest.mark.unit]
 
-from project_workflow.application.agent import AgentService
 from project_workflow.application.instruction_service import InstructionService
 from project_workflow.application.phase import PhaseServiceApp
 from project_workflow.application.project import ProjectService
@@ -73,14 +72,6 @@ class TestSupervisorModelContractFinalGaps:
 
 
 class TestApplicationServiceFinalGaps:
-    def test_agent_service_creation_failed(self):
-        uow = MagicMock()
-        uow.agents.get_by_name.return_value = None
-        uow.agents.get_by_hermes_profile.return_value = None
-        uow.agents.create.return_value = 1
-        uow.agents.get_by_id.return_value = None
-        with pytest.raises(RuntimeError, match="Не удалось создать агента"):
-            AgentService(uow).create_agent({"name": "x"})
 
     def test_phase_service_create_auto_order(self):
         uow = MagicMock()

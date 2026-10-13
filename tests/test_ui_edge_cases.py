@@ -394,7 +394,7 @@ class TestApiErrorPaths:
 
     def test_api_agents(self):
         response = client.get("/api/agents")
-        assert response.status_code == 200
+        assert response.status_code == 404
 
     def test_api_namespaces(self):
         response = client.get("/api/namespaces")
@@ -431,7 +431,7 @@ class TestPageEdgeCases:
 
     def test_agents_page(self):
         response = client.get("/agents")
-        assert response.status_code == 200
+        assert response.status_code == 404
 
     def test_workflows_page(self):
         response = client.get("/workflows")

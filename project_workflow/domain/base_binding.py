@@ -2,9 +2,10 @@
 
 from typing import Annotated, Literal
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from project_workflow.domain.base_admission import ExactRef, Sha256
+from project_workflow.domain.base_catalog import BASE_CATALOG_SKILLS
 
 
 def _bounded_database_id(value: str) -> str:
@@ -30,10 +31,18 @@ class BaseNamespaceBinding(BaseModel):
     workflow_key: ExactRef
     role_key: ExactRef
     profile: ExactRef
-    catalog_version: Literal[3]
+    catalog_version: Literal[3, 4]
     catalog_sha256: Sha256
-    skills_revision: Literal["4b9b4c9297a13fb28a6ba2039af2f7cb719f2f58"]
+    skills_revision: Literal[
+        "4b9b4c9297a13fb28a6ba2039af2f7cb719f2f58", "6e1d190ecd15b772b1066c472f864b8becb3f97a",
+    ]
     runtime_ready: Literal[False]
+
+    @model_validator(mode="after")
+    def _source_generation(self) -> "BaseNamespaceBinding":
+        if self.skills_revision != BASE_CATALOG_SKILLS[self.catalog_version]:
+            raise ValueError("Base catalog version and skills revision differ")
+        return self
 
 
 class BaseNamespaceBindingResponse(BaseModel):

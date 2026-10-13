@@ -90,7 +90,7 @@ def test_batch_reorder_is_complete_single_workflow_and_atomic():
     ("extra", "status"),
     [
         ({"code": "duplicate"}, 409),
-        ({"agent_id": 999999}, 404),
+        ({"agent_id": 999999}, 422),
         ({"execution_type": "parallel", "parallel_with_phase_id": 999999}, 409),
         ({"rollback_target_phase_id": 999999}, 409),
     ],
@@ -341,7 +341,6 @@ def test_explicit_project_task_validates_key_shape_and_scoped_phase_before_write
 def test_nullable_phase_fields_distinguish_omitted_from_explicit_null():
     workflow_id, phases = _workflow_with_phases(3)
     rollback_target, first, second = phases
-    agent = _app_state.agent_service().create_agent({"name": _unique("agent")})
     service = _app_state.phase_service()
     service.update_phase(
         first["id"],
@@ -357,7 +356,6 @@ def test_nullable_phase_fields_distinguish_omitted_from_explicit_null():
             "execution_type": "parallel",
             "parallel_with_phase_id": first["id"],
             "rollback_target_phase_id": rollback_target["id"],
-            "agent_id": agent["id"],
         },
     )
 
@@ -367,7 +365,6 @@ def test_nullable_phase_fields_distinguish_omitted_from_explicit_null():
             "description": None,
             "parallel_with_phase_id": None,
             "rollback_target_phase_id": None,
-            "agent_id": None,
         },
     )
     assert response.status_code == 200
@@ -375,7 +372,6 @@ def test_nullable_phase_fields_distinguish_omitted_from_explicit_null():
     assert updated["description"] is None
     assert updated["parallel_with_phase_id"] is None
     assert updated["rollback_target_phase_id"] is None
-    assert updated["agent_id"] is None
 
     with pytest.raises(ConflictError):
         service.update_phase(first["id"], {"parallel_with_phase_id": 999999})

@@ -42,7 +42,6 @@ class Phase:
     name: str = ""
     description: str | None = ""
     phase_order: int = 0
-    agent_id: int | None = None
     parallel_with_phase_id: int | None = None
     rollback_target_phase_id: int | None = None
     execution_type: str = "sync"
@@ -58,29 +57,10 @@ class Phase:
             "name": self.name,
             "description": self.description,
             "phase_order": self.phase_order,
-            "agent_id": self.agent_id,
             "parallel_with_phase_id": self.parallel_with_phase_id,
             "rollback_target_phase_id": self.rollback_target_phase_id,
             "execution_type": self.execution_type,
             "workflow_name": self.workflow_name,
-        }
-
-
-@dataclass
-class Agent:
-    """Domain agent."""
-
-    id: int | None = None
-    name: str = ""
-    description: str = ""
-    hermes_profile: str | None = None
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "id": self.id,
-            "name": self.name,
-            "description": self.description,
-            "hermes_profile": self.hermes_profile,
         }
 
 
@@ -150,6 +130,7 @@ class Project:
     theme_icon: str = DEFAULT_PROJECT_ICON
     theme_color: str = DEFAULT_PROJECT_COLOR
     cli_command: str = ""
+    launch_profile: str | None = None
     key_prefixes: list[str] = field(default_factory=list)
     workflow_name: str | None = None
 
@@ -163,6 +144,7 @@ class Project:
             "theme_icon": self.theme_icon,
             "theme_color": self.theme_color,
             "cli_command": self.cli_command,
+            "launch_profile": self.launch_profile,
             "key_prefixes": self.key_prefixes,
             "workflow_name": self.workflow_name,
         }

@@ -78,12 +78,11 @@ def test_persisted_fk_registered_profile_and_exact_source_binding(source, regist
     with SAUnitOfWork() as uow:
         namespace = uow.projects.get_persisted_identity(namespace_id)
         workflow = uow.workflows.get_by_id(namespace["workflow_id"])
-        agent = uow.agents.get_by_name(role)
     expected = {
         "ok": True, "binding": {
             "schema": "base-sdlc/workflow-binding/v1", "namespace_id": str(namespace_id),
             "namespace_name": namespace["name"], "workflow_id": str(workflow.id), "workflow_key": workflow.key,
-            "role_key": role, "profile": agent.hermes_profile, "catalog_version": 3,
+            "role_key": role, "profile": namespace["launch_profile"], "catalog_version": 3,
             "catalog_sha256": hashlib.sha256(
                 base_source.CANDIDATE_PATH.read_bytes().replace(b"\r\n", b"\n"),
             ).hexdigest(),
@@ -214,9 +213,8 @@ def test_active_v3_observation_preserves_historical_v2_modes_assignments_history
     with SAUnitOfWork() as uow:
         for definition in candidate.workflows:
             actual = next(item for item in uow.workflows.list() if item.key == definition.key)
-            agent = uow.agents.get_by_name(definition.role_key)
             for new_mode in definition.modes:
-                _persist_mode(uow, workflow_id=actual.id, role_key=definition.role_key, agent_id=agent.id,
+                _persist_mode(uow, workflow_id=actual.id, role_key=definition.role_key,
                               mode=new_mode, catalog_version=3)
             uow.workflows.update(actual.id, {
                 "active_catalog_version": 3, "name": definition.name, "description": definition.description,
@@ -238,7 +236,7 @@ def test_active_v3_observation_preserves_historical_v2_modes_assignments_history
 
 @pytest.mark.parametrize("change", [
     "namespace-name", "namespace-cli", "namespace-fk", "missing-namespace", "workflow-key", "profile",
-    "missing-profile", "missing-agent", "other-role-profile", "other-role-version", "mode-version", "phase-agent",
+    "missing-profile", "mode-role", "other-role-version", "mode-version",
     "instruction", "check", "evidence", "missing-phase",
 ])
 def test_persisted_mapping_or_complete_candidate_drift_never_returns_binding(
@@ -248,7 +246,6 @@ def test_persisted_mapping_or_complete_candidate_drift_never_returns_binding(
     with SAUnitOfWork() as uow:
         namespace = uow.session.get(m.Project, namespace_id)
         workflow = uow.session.get(m.Workflow, namespace.workflow_id)
-        agent = uow.session.scalar(select(m.Agent).where(m.Agent.name == "developer"))
         phase = uow.session.scalar(select(m.Phase).where(m.Phase.workflow_id == workflow.id))
         if change == "namespace-name":
             namespace.name = "foreign"
@@ -261,18 +258,14 @@ def test_persisted_mapping_or_complete_candidate_drift_never_returns_binding(
         elif change == "workflow-key":
             workflow.key = "foreign-key"
         elif change in {"profile", "missing-profile"}:
-            agent.hermes_profile = "foreign-profile" if change == "profile" else None
-        elif change == "missing-agent":
-            agent.name = "unregistered-agent"
-        elif change == "other-role-profile":
-            uow.session.scalar(select(m.Agent).where(m.Agent.name == "tester")).hermes_profile = "foreign-profile"
+            namespace.launch_profile = "foreign-profile" if change == "profile" else None
+        elif change == "mode-role":
+            uow.session.get(m.WorkflowMode, phase.mode_id).role_key = "tester"
         elif change == "other-role-version":
             uow.session.get(m.Workflow, uow.projects.get_persisted_identity(installed["tester"])["workflow_id"]
                             ).active_catalog_version = 2
         elif change == "mode-version":
             uow.session.get(m.WorkflowMode, phase.mode_id).catalog_version = 2
-        elif change == "phase-agent":
-            phase.agent_id = uow.agents.get_by_name("tester").id
         elif change == "instruction":
             uow.session.scalar(select(m.PhaseInstruction).where(m.PhaseInstruction.phase_id == phase.id)
                                ).description = "foreign"
@@ -373,9 +366,9 @@ def test_actual_private_git_pin_and_persisted_owner_binding(monkeypatch, registe
     load_source = base_binding.load_base_source
     installed_candidate = base_binding._installed_candidate
 
-    def timed_source():
+    def timed_source(*args):
         start = time.perf_counter()
-        result = load_source()
+        result = load_source(*args)
         source_costs.append(time.perf_counter() - start)
         return result
 

@@ -78,7 +78,7 @@ class TaskService:
             locked_workflow = self._uow.workflows.lock(project.workflow_id)
             if locked_workflow is None:
                 raise NotFoundError(f"Воркфлоу {project.workflow_id} не найден")
-            if getattr(locked_workflow, "active_catalog_version", 1) == 3:
+            if getattr(locked_workflow, "active_catalog_version", 1) >= 3:
                 raise ConflictError("Base candidate tasks require owner-issued admission")
             locked_project = self._uow.projects.lock(project_id)
             if locked_project is None:
@@ -303,7 +303,7 @@ class TaskService:
                 self._uow, base_admission, project_id=project_id, role_key=role_key,
                 workflow_key=workflow_key, mode_key=mode_key, execution_scope=execution_scope,
             )
-        elif getattr(mode, "catalog_version", 1) == 3:
+        elif getattr(mode, "catalog_version", 1) >= 3:
             raise ConflictError("Base candidate requires opt-in admission")
         if getattr(mode, "catalog_version", 1) == 2:
             from project_workflow.build_provenance import validate_runtime_compatibility

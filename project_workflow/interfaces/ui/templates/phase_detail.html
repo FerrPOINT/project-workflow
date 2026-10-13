@@ -131,12 +131,6 @@
     <textarea class="inline-input wiki-subtitle" rows="1" data-field="description" aria-label="Описание фазы" onblur="scheduleSave()">{{ phase.description or '' }}</textarea>
 
     <div class="wiki-meta">
-      <span><label for="agentSelect">Агент:</label> <select id="agentSelect" class="inline-input" style="width:180px;display:inline" onchange="scheduleSave()">
-        <option value="">—</option>
-        {% for a in agents %}
-        <option value="{{ a.id }}" {% if phase.agent_id == a.id %}selected{% endif %}>{{ a.name }}</option>
-        {% endfor %}
-      </select></span>
       {% if rollback_target_phase %}
       <span>Откат: {{ rollback_target_phase.name }} · {{ rollback_target_phase.code }}</span>
       {% endif %}
@@ -822,9 +816,6 @@ async function persistPhase() {
       ? (document.getElementById('parallelPartnerSelect')?.value
         ? Number(document.getElementById('parallelPartnerSelect').value)
         : null)
-      : null,
-    agent_id: document.getElementById('agentSelect')?.value
-      ? Number(document.getElementById('agentSelect').value)
       : null,
   };
 

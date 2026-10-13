@@ -12,8 +12,6 @@ from project_workflow.domain.namespace import legacy_code_from_cli_command
 from project_workflow.domain.project_theme import normalize_theme_color, normalize_theme_icon
 from project_workflow.interfaces.ui.helpers import _select_workflow_mode
 from project_workflow.interfaces.ui.schemas import (
-    AgentCreate,
-    AgentUpdate,
     InstructionCreate,
     InstructionReorder,
     InstructionUpdate,
@@ -51,6 +49,7 @@ def _with_namespace_aliases(item: dict[str, Any]) -> dict[str, Any]:
         "name": item.get("name"),
         "namespace_name": item.get("name"),
         "description": item.get("description", ""),
+        "launch_profile": item.get("launch_profile"),
         "workflow_id": item.get("workflow_id"),
         "workflow_name": item.get("workflow_name"),
         "theme_icon": theme_icon,
@@ -83,12 +82,12 @@ def _phase_namespace_scope_error(phase_id: int, namespace_id: int | None) -> JSO
         return None
     namespace = _app_state.project_service().get_project(namespace_id)
     if namespace is None:
-        return _error(f"Неймспейс {namespace_id} не найден", 404)
+        return _error(f"Профессия {namespace_id} не найдена", 404)
     phase = _app_state.phase_service().get_phase(phase_id)
     if phase is None:
         return _error(f"Фаза {phase_id} не найдена", 404)
-    if phase.get("workflow_id") != namespace.get("workflow_id"):
-        return _error("Фаза недоступна в выбранном неймспейсе", 409)
+    if not _app_state.workflow_service().belongs_to_profession(phase["workflow_id"], namespace_id):
+        return _error("Фаза недоступна в выбранной профессии", 409)
     return None
 
 
@@ -97,7 +96,7 @@ def _instruction_namespace_scope_error(instruction_id: int, namespace_id: int | 
         return None
     namespace = _app_state.project_service().get_project(namespace_id)
     if namespace is None:
-        return _error(f"Неймспейс {namespace_id} не найден", 404)
+        return _error(f"Профессия {namespace_id} не найдена", 404)
     instruction = _app_state.instruction_service().get_instruction(instruction_id)
     if instruction is None:
         return _error(f"Инструкция {instruction_id} не найдена", 404)
@@ -107,8 +106,8 @@ def _instruction_namespace_scope_error(instruction_id: int, namespace_id: int | 
     phase = _app_state.phase_service().get_phase(phase_id)
     if phase is None:
         return _error(f"Фаза {phase_id} не найдена", 404)
-    if phase.get("workflow_id") != namespace.get("workflow_id"):
-        return _error("Фаза недоступна в выбранном неймспейсе", 409)
+    if not _app_state.workflow_service().belongs_to_profession(phase["workflow_id"], namespace_id):
+        return _error("Фаза недоступна в выбранной профессии", 409)
     return None
 
 
@@ -120,7 +119,7 @@ def api_settings_get(namespace_id: int | None = Query(default=None, gt=0)) -> di
     if namespace_id is not None:
         namespace = _app_state.project_service().get_project(namespace_id)
         if namespace is None:
-            return _error(f"Неймспейс {namespace_id} не найден", 404)
+            return _error(f"Профессия {namespace_id} не найдена", 404)
         entrypoint = namespace.get("cli_command")
     return {"ok": True, "commands": _load_cli_reference(entrypoint=entrypoint)}
 
@@ -132,14 +131,14 @@ def api_phases(
 ) -> dict[str, Any] | JSONResponse:
     namespace = _app_state.project_service().get_project(namespace_id) if namespace_id is not None else None
     if namespace_id is not None and namespace is None:
-        return _error(f"Неймспейс {namespace_id} не найден", 404)
-    if namespace is not None:
-        namespace_workflow_id = namespace.get("workflow_id")
-        if workflow_id is not None and namespace_workflow_id != workflow_id:
-            return _error("workflow_id не совпадает с владельцем неймспейса", 409)
-        if workflow_id is None:
-            workflow_id = namespace_workflow_id
-    workflows = _app_state.workflow_service().list_workflows()
+        return _error(f"Профессия {namespace_id} не найдена", 404)
+    service = _app_state.workflow_service()
+    if namespace_id is not None and workflow_id is not None:
+        if error := _workflow_profession_scope_error(workflow_id, namespace_id):
+            return error
+    workflows = service.list_workflows(namespace_id)
+    if namespace_id is not None and not workflows:
+        return {"ok": True, "phases": []}
     selected_workflow = next((item for item in workflows if item["id"] == workflow_id), None)
     if workflow_id is not None and selected_workflow is None:
         return _error(f"Воркфлоу {workflow_id} не найден", 404)
@@ -153,11 +152,9 @@ def api_phases(
         return _error("В выбранном воркфлоу не настроен ни один режим", 409)
     selected_mode_id = selected_mode.get("id") if selected_mode else None
     phases = _app_state.phase_service().list_phases(selected_workflow_id, mode_id=selected_mode_id)
-    agents = {a["id"]: a for a in _app_state.agent_service().list_agents()}
 
     rows = []
     for phase in phases:
-        agent = agents.get(phase.get("agent_id"))
         rows.append(
             {
                 "id": phase["id"],
@@ -172,9 +169,6 @@ def api_phases(
                 "execution_type": phase.get("execution_type", "sync"),
                 "parallel_with_phase_id": phase.get("parallel_with_phase_id"),
                 "rollback_target_phase_id": phase.get("rollback_target_phase_id"),
-                "agent_name": agent["name"] if agent else None,
-                "agent_id": phase.get("agent_id"),
-                "hermes_profile": agent.get("hermes_profile") if agent else None,
             }
         )
     result: dict[str, Any] = {"ok": True, "phases": rows}
@@ -191,12 +185,12 @@ def api_tasks(
 ) -> dict[str, Any] | JSONResponse:
     namespace = _app_state.project_service().get_project(namespace_id) if namespace_id is not None else None
     if namespace_id is not None and namespace is None:
-        return _error(f"Неймспейс {namespace_id} не найден", 404)
+        return _error(f"Профессия {namespace_id} не найдена", 404)
     workflow = _app_state.workflow_service().get_workflow(workflow_id) if workflow_id is not None else None
     if workflow_id is not None and workflow is None:
         return _error(f"Воркфлоу {workflow_id} не найден", 404)
     if namespace is not None and workflow_id is not None and namespace.get("workflow_id") != workflow_id:
-        return _error("workflow_id не совпадает с владельцем неймспейса", 409)
+        return _error("workflow_id не совпадает с владельцем профессии", 409)
     try:
         tasks = _load_tasks(namespace_id=namespace_id)
     except ValueError as exc:
@@ -216,29 +210,16 @@ def api_namespaces() -> dict[str, Any] | JSONResponse:
 def api_namespace_get(namespace_id: PositivePathId) -> dict[str, Any] | JSONResponse:
     namespace = _app_state.project_service().get_project(namespace_id)
     if namespace is None:
-        return _error(f"Неймспейс {namespace_id} не найден", 404)
+        return _error(f"Профессия {namespace_id} не найдена", 404)
     payload = _with_namespace_aliases(namespace)
     return {"ok": True, "namespace": payload}
 
-def api_workflows() -> dict[str, Any] | JSONResponse:
+def api_workflows(namespace_id: PositiveQueryId = None) -> dict[str, Any] | JSONResponse:
     from project_workflow.interfaces.ui.services import _load_workflows
 
-    return {"ok": True, "workflows": _load_workflows()}
-
-
-def api_agents() -> dict[str, Any] | JSONResponse:
-    rows = _app_state.agent_service().list_agents()
-    return {
-        "ok": True,
-        "agents": [
-            {
-                **agent,
-                "description": agent.get("description", ""),
-                "hermes_profile": agent.get("hermes_profile"),
-            }
-            for agent in rows
-        ],
-    }
+    if namespace_id is not None and _app_state.project_service().get_project(namespace_id) is None:
+        return _error(f"Профессия {namespace_id} не найдена", 404)
+    return {"ok": True, "workflows": _load_workflows(namespace_id)}
 
 
 def api_phase_create(payload: PhaseCreate) -> dict[str, Any] | JSONResponse:
@@ -253,7 +234,6 @@ def api_phase_create(payload: PhaseCreate) -> dict[str, Any] | JSONResponse:
         "execution_type": payload.execution_type,
         "parallel_with_phase_id": payload.parallel_with_phase_id,
         "rollback_target_phase_id": payload.rollback_target_phase_id,
-        "agent_id": payload.agent_id,
     }
     if payload.code:
         data["code"] = payload.code
@@ -286,7 +266,6 @@ def api_phase_update(
         "description",
         "parallel_with_phase_id",
         "rollback_target_phase_id",
-        "agent_id",
         "execution_type",
     }
     selected_fields = scalar_fields.intersection(payload.model_fields_set)
@@ -344,10 +323,16 @@ def api_phase_batch_order(payload: PhaseOrderUpdate) -> dict[str, Any] | JSONRes
     return {"ok": True, "updated": updated}
 
 
-def api_workflow_create(payload: WorkflowCreate) -> dict[str, Any] | JSONResponse:
+def api_workflow_create(
+    payload: WorkflowCreate, namespace_id: PositiveQueryId = None,
+) -> dict[str, Any] | JSONResponse:
     service = _app_state.workflow_service()
     try:
-        workflow = service.create_workflow({"name": payload.name, "description": payload.description or ""})
+        workflow = service.create_workflow({
+            "name": payload.name, "description": payload.description or "", "profession_id": namespace_id,
+        })
+    except NotFoundError as exc:
+        return _error(str(exc), 404)
     except ConflictError as exc:
         return _error(str(exc), 409)
     except ValueError as exc:
@@ -356,7 +341,23 @@ def api_workflow_create(payload: WorkflowCreate) -> dict[str, Any] | JSONRespons
     return {"ok": True, "workflow_id": workflow_id, "workflow": service.get_workflow(workflow_id)}
 
 
-def api_workflow_update(workflow_id: PositivePathId, payload: WorkflowUpdate) -> dict[str, Any] | JSONResponse:
+def _workflow_profession_scope_error(workflow_id: int, namespace_id: int | None) -> JSONResponse | None:
+    if namespace_id is None:
+        return None
+    if _app_state.project_service().get_project(namespace_id) is None:
+        return _error(f"Профессия {namespace_id} не найдена", 404)
+    if _app_state.workflow_service().get_workflow(workflow_id) is None:
+        return _error(f"Воркфлоу {workflow_id} не найден", 404)
+    if not _app_state.workflow_service().belongs_to_profession(workflow_id, namespace_id):
+        return _error("Воркфлоу не принадлежит выбранной профессии", 409)
+    return None
+
+
+def api_workflow_update(
+    workflow_id: PositivePathId, payload: WorkflowUpdate, namespace_id: PositiveQueryId = None,
+) -> dict[str, Any] | JSONResponse:
+    if error := _workflow_profession_scope_error(workflow_id, namespace_id):
+        return error
     service = _app_state.workflow_service()
     updates = _updates_from_payload(payload, ["name", "description"])
     try:
@@ -370,7 +371,11 @@ def api_workflow_update(workflow_id: PositivePathId, payload: WorkflowUpdate) ->
     return {"ok": True, "workflow": service.get_workflow(workflow_id)}
 
 
-def api_workflow_delete(workflow_id: PositivePathId) -> dict[str, Any] | JSONResponse:
+def api_workflow_delete(
+    workflow_id: PositivePathId, namespace_id: PositiveQueryId = None,
+) -> dict[str, Any] | JSONResponse:
+    if error := _workflow_profession_scope_error(workflow_id, namespace_id):
+        return error
     service = _app_state.workflow_service()
     try:
         service.delete_workflow(workflow_id)
@@ -396,7 +401,8 @@ def api_namespace_create(payload: NamespaceCreate) -> dict[str, Any] | JSONRespo
                 "theme_color": payload.theme_color,
                 "cli_command": payload.cli_command,
                 "key_prefixes": [],
-                "workflow_id": payload.workflow_id,
+                "launch_profile": payload.launch_profile,
+                **({"workflow_id": payload.workflow_id} if "workflow_id" in payload.model_fields_set else {}),
             }
         )
     except ConflictError as exc:
@@ -418,7 +424,8 @@ def api_namespace_update(namespace_id: PositivePathId, payload: NamespaceUpdate)
     service = _app_state.project_service()
     updates = _updates_from_payload(
         payload,
-        ["name", "description", "workflow_id", "theme_icon", "theme_color", "cli_command"],
+        ["name", "description", "workflow_id", "theme_icon", "theme_color", "cli_command",
+         "launch_profile"],
     )
     try:
         service.update_project(namespace_id, updates)
@@ -442,49 +449,6 @@ def api_namespace_delete(namespace_id: PositivePathId) -> dict[str, Any] | JSONR
         return _error(str(exc), 409)
     except ValueError as exc:
         return _error(str(exc), 422)
-    return {"ok": True}
-
-def api_agent_create(payload: AgentCreate) -> dict[str, Any] | JSONResponse:
-    service = _app_state.agent_service()
-    try:
-        agent_id = service.create_agent(
-            {
-                "name": payload.name,
-                "description": payload.description or "",
-                "hermes_profile": payload.hermes_profile,
-            }
-        )["id"]
-    except ConflictError as exc:
-        return _error(str(exc), 409)
-    except ValueError as exc:
-        return _error(str(exc), 422)
-    return {"ok": True, "agent_id": agent_id, "agent": service.get_agent(agent_id)}
-
-
-def api_agent_update(agent_id: PositivePathId, payload: AgentUpdate) -> dict[str, Any] | JSONResponse:
-    service = _app_state.agent_service()
-    updates = _updates_from_payload(payload, ["name", "description"])
-    if "hermes_profile" in payload.model_fields_set:
-        updates["hermes_profile"] = payload.hermes_profile
-    try:
-        service.update_agent(agent_id, updates)
-    except NotFoundError as exc:
-        return _error(str(exc), 404)
-    except ConflictError as exc:
-        return _error(str(exc), 409)
-    except ValueError as exc:
-        return _error(str(exc), 422)
-    return {"ok": True, "agent": service.get_agent(agent_id)}
-
-
-def api_agent_delete(agent_id: PositivePathId) -> dict[str, Any] | JSONResponse:
-    service = _app_state.agent_service()
-    try:
-        service.delete_agent(agent_id)
-    except NotFoundError as exc:
-        return _error(str(exc), 404)
-    except ConflictError as exc:
-        return _error(str(exc), 409)
     return {"ok": True}
 
 

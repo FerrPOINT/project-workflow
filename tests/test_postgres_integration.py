@@ -29,7 +29,6 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import close_all_sessions
 
 from project_workflow import config as config_module
-from project_workflow.application.agent import AgentService
 from project_workflow.application.instruction_service import InstructionService
 from project_workflow.application.phase import PhaseServiceApp
 from project_workflow.application.phase_service import PhaseService
@@ -56,6 +55,21 @@ from project_workflow.infrastructure.pm_readback import observe_run as http_obse
 from project_workflow.interfaces.ui.app import create_app
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("scenario", ["appearance", "versioned-adoption"])
+def test_current_base_initial_professions_and_history_preservation_on_postgres(pg_url, scenario):
+    from tests.test_profession_initial_catalog import (
+        assert_theme_migration_updates_only_untouched_managed_professions,
+        test_adoption_preserves_profession_edits_old_tasks_history_and_user_collections,
+    )
+    engine = get_engine(pg_url)
+    if scenario == "appearance":
+        assert_theme_migration_updates_only_untouched_managed_professions(engine)
+    else:
+        ensure_migrated(engine)
+        test_adoption_preserves_profession_edits_old_tasks_history_and_user_collections(engine)
 
 
 @pytest.fixture
@@ -332,18 +346,17 @@ def test_pm_ownership_concurrent_provision_replay_and_db_immutability(pm_postgre
 
 @pytest.mark.integration
 @pytest.mark.parametrize("winner", ["bootstrap", "provision"])
-def test_pm_ownership_catalog_lock_order_and_stale_0007(pg_url, winner):
+def test_pm_ownership_catalog_lock_order_and_incomplete_schema(pg_url, winner):
     from project_workflow.application.namespace_ownership import NamespaceOwnershipService
     from project_workflow.domain.namespace_ownership import NamespaceOwnershipRequest
     from project_workflow.infrastructure.db.session import DatabaseRecreateRequired
     from project_workflow.infrastructure.namespace_auth import NamespacePrincipal
 
     engine = get_engine(pg_url)
-    run_alembic_command("upgrade", engine, "0006_versioned_mode_catalog")
+    ensure_migrated(engine)
     with SAUnitOfWork(engine) as uow:
         ensure_managed_catalog(uow)
         namespace_id = uow.projects.get_by_cli_command("workflow-project_manager").id
-    ensure_migrated(engine)
     held, waiting, release = Event(), Event(), Event()
 
     def bootstrap():
@@ -389,7 +402,7 @@ def test_pm_ownership_catalog_lock_order_and_stale_0007(pg_url, winner):
     assert not schema_is_ready(engine)
     with pytest.raises(DatabaseRecreateRequired):
         ensure_migrated(engine)
-    assert database_revisions(engine) == {"0009_pm_draft_assignment"}
+    assert database_revisions(engine) == {"0014_launch_profile_only"}
 
 
 @pytest.mark.integration
@@ -817,7 +830,6 @@ def _fixture_default_mode(connection, workflow_id: int) -> int:
     )
 
 
-
 @pytest.fixture(scope="function")
 def pg_url(monkeypatch):
     """Create a fresh PostgreSQL database and yield a SQLAlchemy URL for it."""
@@ -867,6 +879,13 @@ def pg_url(monkeypatch):
 
 
 @pytest.mark.integration
+def test_namespace_defaults_upgrade_preserves_catalog_on_postgres(pg_url, tmp_path):
+    from tests.test_namespace_default_migration import assert_upgrade_preserves_catalog
+
+    assert_upgrade_preserves_catalog(get_engine(pg_url), tmp_path)
+
+
+@pytest.mark.integration
 class TestPostgresInitialMigration:
     def test_get_engine_postgresql(self, pg_url):
         engine = get_engine(pg_url)
@@ -901,7 +920,7 @@ class TestPostgresInitialMigration:
             version = conn.execute(
                 text("SELECT version_num FROM project_workflow.alembic_version")
             ).scalar_one()
-        assert version == migration_head() == "0009_pm_draft_assignment"
+        assert version == migration_head() == "0014_launch_profile_only"
         assert schema_is_ready(engine) is True
 
     def test_managed_bootstrap_serializes_with_public_catalog_creation(self, pg_url):
@@ -993,7 +1012,7 @@ class TestPostgresInitialMigration:
                     return "foreign-catalog-rejected"
                 finally:
                     bootstrap_finished.set()
-            return "unexpected-success"
+            return "initialized"
 
         with ThreadPoolExecutor(max_workers=2) as pool:
             mutation_future = pool.submit(mutate)
@@ -1004,11 +1023,13 @@ class TestPostgresInitialMigration:
             finally:
                 release_mutation.set()
             assert mutation_future.result(timeout=20) == "committed"
-            assert bootstrap_future.result(timeout=20) == "foreign-catalog-rejected"
+            assert bootstrap_future.result(timeout=20) == "initialized"
 
         with SAUnitOfWork(engine) as uow:
-            assert [workflow.name for workflow in uow.workflows.list()] == ["Existing unmanaged workflow"]
-            assert validate_managed_catalog_state(uow) is False
+            workflows = list(uow.workflows.list())
+            assert len(workflows) == 8
+            assert any(workflow.name == "Existing unmanaged workflow" for workflow in workflows)
+            assert validate_managed_catalog_state(uow) is True
 
     @pytest.mark.parametrize("revision,message", [
         ("0003_runtime_assignment_bind", "Downgrade from runtime assignment bind"),
@@ -1022,7 +1043,7 @@ class TestPostgresInitialMigration:
         with pytest.raises(RuntimeError, match=message):
             run_alembic_command("downgrade", engine, "base")
         assert database_revisions(engine) == {revision}
-        assert schema_is_ready(engine) is (revision == "0009_pm_draft_assignment")
+        assert schema_is_ready(engine) is (revision == "0014_launch_profile_only")
 
     def test_populated_0001_upgrade_preserves_rows_and_backfills_per_workflow(self, pg_url):
         engine = get_engine(pg_url)
@@ -1551,9 +1572,9 @@ class TestPostgresInitialMigration:
                 table: conn.execute(
                     text(f"SELECT count(*) FROM project_workflow.{table}")
                 ).scalar_one()
-                for table in ("workflows", "projects", "agents", "phases")
+                for table in ("workflows", "projects", "phases")
             }
-        assert counts == {"workflows": 7, "projects": 7, "agents": 7, "phases": 33}
+        assert counts == {"workflows": 7, "projects": 7, "phases": 33}
 
     def test_two_concurrent_init_processes_are_idempotent(self, pg_url):
         env = os.environ.copy()
@@ -2124,13 +2145,11 @@ class TestPostgresUoW:
         uow.session.execute(text("CREATE INDEX checks_desc_test_idx ON phase_checks (id DESC)"))
         uow.session.execute(text("CREATE INDEX evidence_desc_test_idx ON phase_evidence_requirements (id DESC)"))
         uow.session.execute(text("CREATE INDEX phase_events_desc_test_idx ON task_phase_events (id DESC)"))
-        uow.session.execute(text("CREATE INDEX agents_desc_test_idx ON agents (id DESC)"))
         uow.session.execute(text("CREATE INDEX projects_desc_test_idx ON projects (id DESC)"))
         uow.commit()
         uow.session.execute(text("CLUSTER phase_checks USING checks_desc_test_idx"))
         uow.session.execute(text("CLUSTER phase_evidence_requirements USING evidence_desc_test_idx"))
         uow.session.execute(text("CLUSTER task_phase_events USING phase_events_desc_test_idx"))
-        uow.session.execute(text("CLUSTER agents USING agents_desc_test_idx"))
         uow.session.execute(text("CLUSTER projects USING projects_desc_test_idx"))
         uow.commit()
         uow.session.execute(text("SET LOCAL enable_indexscan = off"))
@@ -2142,7 +2161,6 @@ class TestPostgresUoW:
         evidence = list(uow.phase_evidence_requirements.list(int(phase.id)))
         history = list(uow.tasks.list_phase_events(task_id))
         batch_history = list(uow.tasks.list_phase_events_batch([task_id])[task_id])
-        agents = list(uow.agents.list())
         projects = list(uow.projects.list())
 
         assert [row["id"] for row in phase_checks] == sorted(row["id"] for row in phase_checks)
@@ -2151,7 +2169,6 @@ class TestPostgresUoW:
         assert [row["id"] for row in evidence] == sorted(row["id"] for row in evidence)
         assert [row.id for row in history] == sorted(row.id for row in history)
         assert [row.id for row in batch_history] == sorted(row.id for row in batch_history)
-        assert [agent.id for agent in agents] == sorted(agent.id for agent in agents)
         assert [item.id for item in projects] == sorted(item.id for item in projects)
         uow.close()
 
@@ -2509,144 +2526,6 @@ class TestPostgresUoW:
         assert verify.tasks.get_by_key("MOVERACE-1") is not None
         verify.close()
 
-    def test_agent_assignment_serializes_with_delete(self, pg_url):
-        ensure_migrated(get_engine(pg_url))
-        setup = SAUnitOfWork(pg_url)
-        workflow = WorkflowService(setup).create_workflow({"name": "Agent assignment race"})
-        phase = setup.phases.list(int(workflow["id"]))[0]
-        agent = AgentService(setup).create_agent({"name": "Race agent"})
-        setup.close()
-
-        assignment_holds_agent = Event()
-        delete_started = Event()
-        release_assignment = Event()
-
-        def assign() -> str:
-            uow = SAUnitOfWork(pg_url)
-            original_lock = uow.agents.lock
-
-            def paused_lock(agent_id: int):
-                locked = original_lock(agent_id)
-                assignment_holds_agent.set()
-                assert release_assignment.wait(10)
-                return locked
-
-            uow.agents.lock = paused_lock
-            try:
-                PhaseServiceApp(uow).update_phase(int(phase.id), {"agent_id": int(agent["id"])})
-                return "assigned"
-            finally:
-                uow.close()
-
-        def delete() -> str:
-            uow = SAUnitOfWork(pg_url)
-            original_lock = uow.agents.lock
-
-            def observed_lock(agent_id: int):
-                delete_started.set()
-                return original_lock(agent_id)
-
-            uow.agents.lock = observed_lock
-            try:
-                AgentService(uow).delete_agent(int(agent["id"]))
-                return "deleted"
-            except ConflictError:
-                return "rejected"
-            finally:
-                uow.close()
-
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            assignment_result = pool.submit(assign)
-            assert assignment_holds_agent.wait(10)
-            delete_result = pool.submit(delete)
-            assert delete_started.wait(10)
-            release_assignment.set()
-            assert assignment_result.result(timeout=20) == "assigned"
-            assert delete_result.result(timeout=20) == "rejected"
-
-        verify = SAUnitOfWork(pg_url)
-        assert verify.agents.get_by_id(int(agent["id"])) is not None
-        assert verify.phases.get_by_id(int(phase.id)).agent_id == agent["id"]
-        verify.close()
-
-    @pytest.mark.parametrize("operation", ["create", "update"])
-    def test_concurrent_hermes_profile_claim_is_domain_conflict(self, pg_url, operation):
-        ensure_migrated(get_engine(pg_url))
-        agent_ids: list[int] = []
-        if operation == "update":
-            setup = SAUnitOfWork(pg_url)
-            agent_ids = [
-                int(AgentService(setup).create_agent({"name": f"Profile owner {index}"})["id"])
-                for index in range(2)
-            ]
-            setup.close()
-        barrier = Barrier(2)
-
-        def claim(index: int) -> str:
-            uow = SAUnitOfWork(pg_url)
-            repository_method = uow.agents.create if operation == "create" else uow.agents.update
-
-            def synchronized_write(*args, **kwargs):
-                barrier.wait(timeout=10)
-                return repository_method(*args, **kwargs)
-
-            if operation == "create":
-                uow.agents.create = synchronized_write
-            else:
-                uow.agents.update = synchronized_write
-            try:
-                if operation == "create":
-                    AgentService(uow).create_agent(
-                        {"name": f"Concurrent profile {index}", "hermes_profile": "shared-race-profile"}
-                    )
-                else:
-                    AgentService(uow).update_agent(
-                        agent_ids[index], {"hermes_profile": "shared-race-profile"}
-                    )
-                return "saved"
-            except ConflictError:
-                return "conflict"
-            finally:
-                uow.close()
-
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            results = list(pool.map(claim, range(2)))
-
-        assert sorted(results) == ["conflict", "saved"]
-        verify = SAUnitOfWork(pg_url)
-        assert len([agent for agent in verify.agents.list() if agent.hermes_profile == "shared-race-profile"]) == 1
-        verify.close()
-
-    def test_concurrent_agent_name_claim_is_domain_conflict(self, pg_url):
-        ensure_migrated(get_engine(pg_url))
-        barrier = Barrier(2)
-
-        def create(index: int) -> str:
-            uow = SAUnitOfWork(pg_url)
-            repository_method = uow.agents.create
-
-            def synchronized_write(*args, **kwargs):
-                barrier.wait(timeout=10)
-                return repository_method(*args, **kwargs)
-
-            uow.agents.create = synchronized_write
-            try:
-                AgentService(uow).create_agent(
-                    {"name": "Shared reviewer", "description": f"attempt {index}"}
-                )
-                return "saved"
-            except ConflictError:
-                return "conflict"
-            finally:
-                uow.close()
-
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            results = list(pool.map(create, range(2)))
-
-        assert sorted(results) == ["conflict", "saved"]
-        verify = SAUnitOfWork(pg_url)
-        assert len([agent for agent in verify.agents.list() if agent.name == "Shared reviewer"]) == 1
-        verify.close()
 
     def test_catalog_mutation_during_supervisor_provider_call_fails_closed(self, pg_url):
         from project_workflow.infrastructure.llm import OpenAICompatibleClient
@@ -2791,71 +2670,6 @@ class TestPostgresUoW:
         assert replay["replayed"] is True
         replay_provider.assert_not_called()
 
-    def test_assigned_agent_update_waits_for_supervisor_commit(self, pg_url):
-        from project_workflow.infrastructure.llm import OpenAICompatibleClient
-        from project_workflow.supervisor import SupervisorEngine
-
-        _initialize_legacy_database(pg_url)
-        setup = SAUnitOfWork(pg_url)
-        workflow = setup.workflows.get_default()
-        assert workflow is not None and workflow.id is not None
-        phase = setup.phases.get_by_code(int(workflow.id), "1.INTAKE")
-        assert phase is not None and phase.agent_id is not None
-        agent_id = int(phase.agent_id)
-        setup.close()
-
-        evaluation_holds_workflow = Event()
-        allow_evaluation_commit = Event()
-        update_started = Event()
-        update_finished = Event()
-
-        def evaluate() -> dict:
-            uow = SAUnitOfWork(pg_url)
-            original_create_run = uow.record_step
-
-            def paused_create_run(*args, **kwargs):
-                evaluation_holds_workflow.set()
-                assert allow_evaluation_commit.wait(10)
-                return original_create_run(*args, **kwargs)
-
-            uow.record_step = paused_create_run
-            try:
-                with patch.object(
-                    OpenAICompatibleClient,
-                    "chat",
-                    side_effect=lambda *_args, **kwargs: _pass_response(str(kwargs["user"])),
-                ):
-                    return SupervisorEngine("RUN-90004", uow=uow).evaluate("done")
-            finally:
-                uow.close()
-
-        def update_agent() -> str:
-            uow = SAUnitOfWork(pg_url)
-            try:
-                update_started.set()
-                AgentService(uow).update_agent(agent_id, {"name": "Обновлённый агент"})
-                return "updated"
-            finally:
-                update_finished.set()
-                uow.close()
-
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            evaluation_result = pool.submit(evaluate)
-            assert evaluation_holds_workflow.wait(10)
-            update_result = pool.submit(update_agent)
-            assert update_started.wait(10)
-            update_was_serialized = not update_finished.wait(0.5)
-            allow_evaluation_commit.set()
-            evaluated = evaluation_result.result(timeout=20)
-            updated = update_result.result(timeout=20)
-
-        assert update_was_serialized
-        assert evaluated["verdict"] == "PASS"
-        assert updated == "updated"
-        verify = SAUnitOfWork(pg_url)
-        agent = verify.agents.get_by_id(agent_id)
-        assert agent is not None and agent.name == "Обновлённый агент"
-        verify.close()
 
     @pytest.mark.parametrize("operation", ["update", "delete", "reorder"])
     def test_instruction_mutation_serializes_with_phase_update(self, pg_url, operation):
@@ -3240,6 +3054,8 @@ def _initialize_cli_database(env: dict[str, str]) -> None:
             seed_path=config_module.LEGACY_UNMANAGED_SEED_PATH,
         )
         bootstrap_default_project(uow)
+        profession = uow.projects.get_by_code("RUN")
+        uow.projects.update(profession.id, {"launch_profile": "run-developer"})
         uow.commit()
 
 
@@ -3303,8 +3119,8 @@ def test_full_supervisor_runtime_through_cli_postgres_and_http(pg_url):
             "relevanter-business-operator",
         ]
         assert assignment_contract["execution_type"] == "sync"
-        assert assignment_contract["delegate_agent"] == "orchestrator"
-        assert assignment_contract["hermes_profile"] == "sdlc-orchestrator"
+        assert assignment_contract["delegate_agent"] == "RUN"
+        assert assignment_contract["hermes_profile"] == "run-developer"
         assert assignment_contract["group_phases"] is None
 
         first_report = "E2E report 1 for phase 1.INTAKE"
@@ -3325,7 +3141,7 @@ def test_full_supervisor_runtime_through_cli_postgres_and_http(pg_url):
                 assert [
                     detail["hermes_profile"]
                     for detail in payload["next_phase_contract"]["group_details"]
-                ] == ["sdlc-orchestrator", "sdlc-critic"]
+                ] == ["run-developer", "run-developer"]
                 assert "workflow-writing-plans" in payload["next_phase_contract"]["skills"]
                 assert any(
                     "workflow-code-intelligence" in instruction
@@ -3359,7 +3175,7 @@ def test_full_supervisor_runtime_through_cli_postgres_and_http(pg_url):
         assert terminal_result.returncode == history_result.returncode == 0
         assert terminal["phase_code"] == "15.RETRO"
         assert terminal["next_phase_code"] is None
-        assert terminal["phase_contract"]["hermes_profile"] == "sdlc-critic"
+        assert terminal["phase_contract"]["hermes_profile"] == "run-developer"
         assert terminal["status"] == "done"
         assert history_payload["count"] == 15
 
@@ -3650,62 +3466,3 @@ class TestPostgresContinuationCatalogVersioning:
             assert bound["execution_scope"] == scope and bound["mode_key"] == mode_key
             pinned = uow.workflows.get_mode(bound["mode_id"])
             assert pinned.catalog_version == 2 and set(pinned.execution_scopes) == {"delivery", "aggregate"}
-
-    def test_v1_bound_integration_survives_v2_adoption_but_refuses_v2_step(self, pg_url):
-        from tests.test_managed_catalog import _install_frozen_v1
-        from tests.test_runtime_assignment_contract import _binding, _step_request
-
-        ensure_migrated(get_engine(pg_url))
-        with SAUnitOfWork(pg_url) as uow:
-            _install_frozen_v1(uow)
-            project = uow.projects.get_by_cli_command("workflow-developer")
-            mode = uow.workflows.get_mode_by_key(project.workflow_id, "integration")
-            phase = uow.phases.list(project.workflow_id, mode_id=mode.id)[0]
-            task_id = uow.tasks.create(
-                {
-                    "project_id": project.id,
-                    "workflow_id": project.workflow_id,
-                    "mode_id": mode.id,
-                    "task_key": "DV-LEGACY-1",
-                    "current_phase_id": phase.id,
-                    "status": "active",
-                    "assignment_revision": 1,
-                    "assignment_operation_key": "legacy-bound",
-                }
-            )
-            payload = {**_binding(execution_scope="aggregate"), "mode_key": "integration", "cycle_number": 0}
-            record = {
-                **payload,
-                "task_id": task_id,
-                "project_id": project.id,
-                "workflow_id": project.workflow_id,
-                "mode_id": mode.id,
-                "operation_key": "legacy-bound",
-                "assignment_revision": 1,
-                "payload_sha256": "a" * 64,
-                "payload": payload,
-                "binding_ref": "legacy-binding",
-                "hermes_run_ref": "legacy-run",
-                "bind_operation_key": "legacy-bind-op",
-                "bind_request_sha256": "b" * 64,
-            }
-            uow.tasks.create_assignment(record)
-            uow.commit()
-            before = uow.tasks.get_assignment_by_operation_key("legacy-bound").to_dict()
-            task_before = uow.tasks.get_by_id(task_id).to_dict()
-            ensure_managed_catalog(uow)
-            uow.commit()
-            assert uow.tasks.get_assignment_by_operation_key("legacy-bound").to_dict() == before
-            assert uow.tasks.get_by_id(task_id).to_dict() == task_before
-            bound = {
-                **task_before,
-                **before,
-                "task_key": "DV-LEGACY-1",
-                "current_phase_code": phase.code,
-                "status": "active",
-            }
-            with pytest.raises(ConflictError, match="RUNTIME_VERSION_INCOMPATIBLE"):
-                TaskService(uow).validate_runtime_step(**_step_request(project.id, bound))
-            assert uow.tasks.get_by_id(task_id).to_dict() == task_before
-            assert uow.workflows.get_mode(mode.id).key == "integration"
-            assert uow.workflows.get_mode_by_key(project.workflow_id, "integration") is None

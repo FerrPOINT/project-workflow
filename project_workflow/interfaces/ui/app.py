@@ -290,7 +290,6 @@ def create_app() -> FastAPI:
     app.get("/workflows", response_class=HTMLResponse)(pages.workflows_page)
     app.get("/task/{task_key}", response_class=HTMLResponse)(pages.task_detail_page)
     app.get("/settings", response_class=HTMLResponse)(pages.settings_page)
-    app.get("/agents", response_class=HTMLResponse)(pages.agents_page)
 
     # API
     app.get("/api/v2/execution-contexts/{identity}")(resource_context.read)
@@ -312,10 +311,6 @@ def create_app() -> FastAPI:
     app.post("/api/namespaces", response_model=None)(api.api_namespace_create)
     app.put("/api/namespaces/{namespace_id}", response_model=None)(api.api_namespace_update)
     app.delete("/api/namespaces/{namespace_id}", response_model=None)(api.api_namespace_delete)
-    app.get("/api/agents", response_model=None)(api.api_agents)
-    app.post("/api/agents", response_model=None)(api.api_agent_create)
-    app.put("/api/agents/{agent_id}", response_model=None)(api.api_agent_update)
-    app.delete("/api/agents/{agent_id}", response_model=None)(api.api_agent_delete)
 
     # Phase order update must be registered before /{phase_id} to avoid shadowing.
     app.put("/api/phases/order", response_model=None)(api.api_phase_batch_order)

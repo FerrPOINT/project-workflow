@@ -31,7 +31,7 @@
 
 {% block content %}
 <div class="dashboard-grid">
-  <section class="metric-card"><div class="metric-label">Неймспейсы</div><div class="metric-value">{{ stats.namespaces }}</div></section>
+  <section class="metric-card"><div class="metric-label">Профессии</div><div class="metric-value">{{ stats.namespaces }}</div></section>
   <section class="metric-card"><div class="metric-label">Задачи</div><div class="metric-value">{{ stats.tasks }}</div></section>
   <section class="metric-card"><div class="metric-label">Активные</div><div class="metric-value">{{ stats.active }}</div></section>
   <section class="metric-card"><div class="metric-label">Завершённые</div><div class="metric-value">{{ stats.done }}</div></section>
@@ -69,8 +69,8 @@
 
   <section class="dashboard-section" data-dashboard-namespaces aria-labelledby="dashboardNamespacesTitle">
     <div class="dashboard-section-heading">
-      <h2 class="dashboard-section-title" id="dashboardNamespacesTitle">Неймспейсы · {{ namespaces|length }}</h2>
-      <a class="dashboard-section-link" href="/namespaces">Все неймспейсы</a>
+      <h2 class="dashboard-section-title" id="dashboardNamespacesTitle">Профессии · {{ namespaces|length }}</h2>
+      <a class="dashboard-section-link" href="/namespaces">Все профессии</a>
     </div>
     {% if namespaces %}
     <div class="dashboard-list">
@@ -85,7 +85,7 @@
     </div>
     {% if namespaces|length > 6 %}<div class="dashboard-section-footer">Показано 6 из {{ namespaces|length }}</div>{% endif %}
     {% else %}
-    <p class="dashboard-empty">Неймспейсов пока нет.</p>
+    <p class="dashboard-empty">Профессий пока нет.</p>
     {% endif %}
   </section>
 
