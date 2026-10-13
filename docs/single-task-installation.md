@@ -3,7 +3,7 @@
 Workflow поддерживает opt-in установку собственного семейства `single-task-v1`,
 catalog version 1: семь namespaces, семь workflows, восемь modes и 24 phases.
 Default остаётся `legacy`. **Установка не активирует live исполнение**:
-Registry/Tracker routing и API integration остаются pending parent.
+Tracker/Fleet policy и API integration остаются pending parent.
 
 Bounded profile-aware execution и typed PM packet реализованы отдельно:
 [Single-Task Runtime Packet](single-task-runtime.md). Ниже ограничения прежнего
@@ -28,7 +28,7 @@ Drift, partial install и foreign collisions отклоняются без repai
 - `/internal/runtime/profiles/single-task-v1/namespace-bindings/{namespace_id}` → `SingleTaskBindingResponse`.
 
 Используется existing catalog credential `PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN`;
-это прежнее имя настройки, не новый registry и не требование запускать Fleet.
+это прежнее имя настройки, не новый owner и не требование запускать Fleet.
 Нет нового controller, installer HTTP endpoint или runtime proof surface.
 Unknown credential → 401, role runtime/assignment credential → 403,
 missing/divergent installation → 409, dependency unavailable → 503.
@@ -73,13 +73,13 @@ Profile branch отвергает legacy workflow key, aggregate scope и Base a
 `ck_task_runtime_assignments_binding_complete` требует decomposition revision для
 ordinary assignment. Нужна отдельно согласованная DB-адаптация; migrations здесь
 не добавлялись. Теперь additive `0015` и standalone profile DTO описаны в runtime packet.
-Parent по-прежнему владеет Registry/Tracker routing и registration.
+Parent по-прежнему владеет Tracker/Fleet policy и registration.
 
 Existing assign/bind/rebind/step сохраняли раздельные credentials и assignment/run
 fence проверки. Новый family key явно блокируется до parent integration независимо
 от version 1 в installer-only пакете. В bounded execution этот blocker заменён
 installed profile + authenticated binding guard. Human/local-DB Supervisor step не создаёт задачу и не исполняет
-существующий unbound cursor этого семейства. Нового terminal-owner registry нет.
+существующий unbound cursor этого семейства. Нового terminal owner нет.
 
 ## Tracker Instructions
 
@@ -148,7 +148,7 @@ auth/version-1 bypass rejection, source hashes и producer/terminal послед
 до единственного final report, наличие receipt checks/evidence и отсутствие
 premature complete в preparation reports.
 
-Parent QA: согласовать exact Registry/Tracker DTO до использования, адаптировать
+Parent QA: согласовать exact Tracker/Fleet DTO до использования, адаптировать
 assignment constraint, подключить actual terminal/lifecycle readback; проверить
 полный single-task flow, оба Rework возврата, replay/stale fences, PG persistence
 и deployment artifact/health/acceptance. Docker/PG/build/live activation здесь не выполнялись.

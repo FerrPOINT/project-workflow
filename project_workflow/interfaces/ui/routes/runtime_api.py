@@ -20,7 +20,7 @@ from project_workflow.build_provenance import (
     load_build_provenance,
     runtime_compatibility_descriptor,
 )
-from project_workflow.domain.exceptions import ConflictError
+from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.domain.runtime_assignment import (
     MANAGED_ROLE_MODE_SCOPES,
     MANAGED_WORKFLOW_KEYS,
@@ -29,6 +29,7 @@ from project_workflow.domain.runtime_assignment import (
     payload_sha256,
     phase_allowed_tools,
 )
+from project_workflow.domain.single_task_runtime import SingleTaskTerminalReadback
 from project_workflow.infrastructure.db.managed_catalog import validate_managed_catalog_state
 from project_workflow.infrastructure.db.models import PMExecution, PMRun
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
@@ -434,6 +435,14 @@ def _runtime_step_replay(
     response = history.get("supervisor_response")
     if not isinstance(response, dict):
         raise ConflictError("Сохранённый runtime step не содержит корректный ответ")
+    if (assignment_data.get("single_task_binding") is not None and role_key != "project_manager"
+        and (response.get("complete") is True or response.get("status") == "done"
+             or "workflow_receipt" in response or "single_task_terminal_receipt" in response
+             or history.get("verdict") == "pass" and history.get("next_phase_id") is None
+             and history.get("rollback_phase_id") is None)):
+        from project_workflow.application.single_task_terminal import read_terminal_receipt as read_single_task_receipt
+
+        read_single_task_receipt(uow, payload.step_operation_key)
     if assignment_data.get("payload", {}).get("base_admission") is not None and (
         response.get("status") == "done" or response.get("complete") is True
         or "base_terminal_receipt" in response
@@ -926,6 +935,58 @@ def runtime_history(
         return _error(str(exc), 403)
     except (ConflictError, RuntimeError, ValueError) as exc:
         return _error(str(exc), 409)
+
+
+def runtime_terminal_readback(
+    payload: SingleTaskTerminalReadback,
+    authorization: str | None = Header(default=None),
+    x_workflow_execution_token: str | None = Header(default=None),
+) -> JSONResponse:
+    """Authenticated lookup of an actual non-PM completion; never synthesize evidence."""
+    from project_workflow.application.single_task_runtime import authorize
+    from project_workflow.application.single_task_terminal import read_terminal_receipt
+
+    def reply(body: dict[str, Any], status: int = 200) -> JSONResponse:
+        return JSONResponse(body, status_code=status, headers={"Cache-Control": "no-store"})
+
+    try:
+        credential = _authorized_service_credential(authorization)
+        if credential is None:
+            return reply({"ok": False, "error": "Invalid runtime credential"}, 401)
+        if credential.kind != "runtime" or credential.role_key == "project_manager":
+            return reply({"ok": False, "error": "Non-PM runtime role required"}, 403)
+        with SAUnitOfWork() as uow:
+            namespace_id = _namespace_id(uow, credential.role_key)
+            task_key = _require_valid_key(payload.task, uow, project_id=namespace_id)
+            _assert_task_key_in_namespace(uow, namespace_id, task_key)
+            task = uow.tasks.get_by_key(task_key, project_id=namespace_id)
+            if task is None or task.id is None:
+                raise NotFoundError("Terminal task not found")
+            locked = uow.tasks.lock(task.id)
+            if locked is None:
+                raise NotFoundError("Terminal task not found")
+            assignment = uow.tasks.get_assignment_by_operation_key(locked.assignment_operation_key or "")
+            if assignment is None:
+                raise ConflictError("Terminal assignment missing")
+            authorize(uow, assignment.to_dict(), token=x_workflow_execution_token,
+                      session_run_id=payload.session_run_id, instruction_profile=payload.instruction_profile,
+                      instruction_manifest_sha256=payload.instruction_manifest_sha256,
+                      declared_hash=payload.single_task_context_sha256)
+            history = uow.step_history.get_by_step_operation_key(payload.step_operation_key)
+            if history is None or history.task_id != task.id or history.role_key != credential.role_key:
+                raise NotFoundError("Accepted terminal step not found")
+            result = read_terminal_receipt(uow, payload.step_operation_key)
+            if payload.receipt_sha256 is not None and result["workflow_receipt"]["sha256"] != payload.receipt_sha256:
+                raise ConflictError("Terminal receipt hash mismatch")
+            return reply(result)
+    except PermissionError:
+        return reply({"ok": False, "error": "Current execution/run scoped credential required"}, 403)
+    except NotFoundError:
+        return reply({"ok": False, "error": "Accepted terminal step not found"}, 404)
+    except (ConflictError, ValueError, KeyError, TypeError):
+        return reply({"ok": False, "error": "Terminal receipt incomplete, stale or mismatched"}, 409)
+    except (RuntimeError, SQLAlchemyError):
+        return reply({"ok": False, "error": "Terminal receipt dependency unavailable"}, 503)
 
 
 def _authorize_single_task(

@@ -2,7 +2,7 @@
 
 Исторический review proposal `a51f576`. Workflow-owned bootstrap/readback теперь
 согласованы и реализованы в [installation package](single-task-installation.md).
-Routing v2 ниже остаётся предложением: его exact DTO и Registry/Tracker реализация
+Routing v2 ниже остаётся историческим предложением: его exact DTO и Tracker/Fleet реализация
 не согласованы как готовый контракт и не используются. Прежние review artifacts
 и hashes сохранены отдельно от устанавливаемой редакции инструкций.
 
@@ -152,7 +152,7 @@ workflow keys или историческому Fleet enum и не допуск�
    и возможные DB constraints согласует интегратор, ничего из этого здесь не изменено.
 
 Минимальные owner решения: принять/изменить identities и version 1; выбрать владельца
-manifest registry и допустимый exact manifest hash; согласовать routing v2 и SQL
+публикации manifest и допустимый exact manifest hash; согласовать routing v2 и SQL
 ветку; выбрать authenticated configuration observation и binding/admission DTO.
 Формат producer result, command names и outcome vocabulary добавляются только после
 реального Tracker producer report; нынешние missing-capability инструкции сохраняются.

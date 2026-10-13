@@ -3881,6 +3881,178 @@
         "title": "SingleTaskStepRequest",
         "type": "object"
       },
+      "SingleTaskTerminalReadback": {
+        "additionalProperties": false,
+        "properties": {
+          "instruction_manifest_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Instruction Manifest Sha256",
+            "type": "string"
+          },
+          "instruction_profile": {
+            "const": "single-task-v1",
+            "title": "Instruction Profile",
+            "type": "string"
+          },
+          "receipt_sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Receipt Sha256"
+          },
+          "session_run_id": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Session Run Id",
+            "type": "string"
+          },
+          "single_task_context_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Single Task Context Sha256",
+            "type": "string"
+          },
+          "step_operation_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Step Operation Key",
+            "type": "string"
+          },
+          "task": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Task",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task",
+          "step_operation_key",
+          "instruction_profile",
+          "instruction_manifest_sha256",
+          "session_run_id",
+          "single_task_context_sha256"
+        ],
+        "title": "SingleTaskTerminalReadback",
+        "type": "object"
+      },
+      "SingleTaskTerminalReceipt": {
+        "additionalProperties": false,
+        "properties": {
+          "accepted_response_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Accepted Response Sha256",
+            "type": "string"
+          },
+          "assignment_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Assignment Sha256",
+            "type": "string"
+          },
+          "binding": {
+            "additionalProperties": true,
+            "title": "Binding",
+            "type": "object"
+          },
+          "complete": {
+            "const": true,
+            "title": "Complete",
+            "type": "boolean"
+          },
+          "cursor": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "title": "Cursor",
+            "type": "object"
+          },
+          "reference": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Reference",
+            "type": "string"
+          },
+          "result": {
+            "additionalProperties": true,
+            "title": "Result",
+            "type": "object"
+          },
+          "schema": {
+            "const": "single-task-sdlc/workflow-terminal-receipt/v1",
+            "title": "Schema",
+            "type": "string"
+          },
+          "single_task_context_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Single Task Context Sha256",
+            "type": "string"
+          },
+          "step": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Step",
+            "type": "object"
+          }
+        },
+        "required": [
+          "schema",
+          "reference",
+          "complete",
+          "binding",
+          "single_task_context_sha256",
+          "assignment_sha256",
+          "cursor",
+          "step",
+          "result",
+          "accepted_response_sha256"
+        ],
+        "title": "SingleTaskTerminalReceipt",
+        "type": "object"
+      },
+      "SingleTaskTerminalResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "complete": {
+            "const": true,
+            "title": "Complete",
+            "type": "boolean"
+          },
+          "ok": {
+            "const": true,
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "receipt": {
+            "$ref": "#/components/schemas/SingleTaskTerminalReceipt"
+          },
+          "workflow_receipt": {
+            "$ref": "#/components/schemas/WorkflowArtifactReceipt"
+          }
+        },
+        "required": [
+          "ok",
+          "complete",
+          "workflow_receipt",
+          "receipt"
+        ],
+        "title": "SingleTaskTerminalResponse",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -3919,6 +4091,28 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "WorkflowArtifactReceipt": {
+        "additionalProperties": false,
+        "properties": {
+          "reference": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Reference",
+            "type": "string"
+          },
+          "sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reference",
+          "sha256"
+        ],
+        "title": "WorkflowArtifactReceipt",
         "type": "object"
       }
     }
@@ -4437,6 +4631,79 @@
           }
         },
         "summary": "Runtime Step"
+      }
+    },
+    "/internal/runtime/terminal-receipt/readback": {
+      "post": {
+        "description": "Authenticated lookup of an actual non-PM completion; never synthesize evidence.",
+        "operationId": "runtime_terminal_readback_internal_runtime_terminal_receipt_readback_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-workflow-execution-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Workflow-Execution-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SingleTaskTerminalReadback"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SingleTaskTerminalResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Runtime Terminal Readback"
       }
     },
     "/internal/runtime/v1/pm/assign": {

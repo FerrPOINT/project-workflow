@@ -1,6 +1,6 @@
 """Single-task assignment context; not native-runtime or lease-liveness proof."""
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -45,3 +45,42 @@ class SingleTaskContext(BaseModel):
         if self.instruction_manifest_sha256 != MANIFEST_SHA256:
             raise ValueError("Single-task manifest mismatch")
         return self
+
+
+class WorkflowArtifactReceipt(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    reference: str = Field(strict=True, min_length=1, max_length=512)
+    sha256: Sha256
+
+
+class SingleTaskTerminalReadback(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    task: str = Field(strict=True, min_length=1, max_length=128)
+    step_operation_key: str = Field(strict=True, min_length=1, max_length=128)
+    instruction_profile: Literal["single-task-v1"]
+    instruction_manifest_sha256: Sha256
+    session_run_id: UUIDRef
+    single_task_context_sha256: Sha256
+    receipt_sha256: Sha256 | None = None
+
+
+class SingleTaskTerminalReceipt(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    receipt_schema: Literal["single-task-sdlc/workflow-terminal-receipt/v1"] = Field(alias="schema")
+    reference: str = Field(strict=True, min_length=1, max_length=512)
+    complete: Literal[True]
+    binding: dict[str, Any]
+    single_task_context_sha256: Sha256
+    assignment_sha256: Sha256
+    cursor: dict[str, int | str]
+    step: dict[str, str]
+    result: dict[str, Any]
+    accepted_response_sha256: Sha256
+
+
+class SingleTaskTerminalResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    ok: Literal[True]
+    complete: Literal[True]
+    workflow_receipt: WorkflowArtifactReceipt
+    receipt: SingleTaskTerminalReceipt

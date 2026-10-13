@@ -58,8 +58,8 @@ caller-selected observed owner/lease fields are accepted.
 Supervisor history keeps exact effective binding/context and its hash in the
 existing evaluation snapshot. Profile report responses explicitly include
 `complete` and `single_task_context_sha256`; exact operation replay returns the
-persisted response. This packet does not invent a Tracker transition receipt or
-an ArtifactReceipt for Workflow terminal publication.
+persisted response. [Terminal receipts](single-task-terminal-receipt.md) now publish
+an actual Workflow ArtifactReceipt; this is not a Tracker transition receipt.
 
 `GET /internal/runtime/history` requires existing runtime credential/execution
 token plus `task`, `session_run_id`, `instruction_profile`,
@@ -71,7 +71,7 @@ saved binding/hash. Legacy query/response/replay serialization remains unchanged
 Existing `/internal/runtime/v1/pm/{bind,checkpoint,resume,rebind,readback}` endpoints
 accept separate `SingleTaskPM*` DTOs with exact profile/manifest. Legacy PM request
 DTOs, including `PMResume.answer_event_ref`, remain unchanged. Existing namespace
-ownership provisioning/authorization is reused; no new owner registry is added.
+ownership provisioning/authorization is reused; no new owner is added.
 
 Checkpoint keeps existing PM identity/CAS/run fields and `checkpoint_ref`, adds
 required `requirements_revision`, `requirements_sha256`. Optional clarification
@@ -123,7 +123,9 @@ is the same integration boundary, not a claim that the bounded bridge is absent.
 Remaining parent QA: PostgreSQL upgrade/concurrency, actual installed deployment
 manifest, authorized owner confirmation CLI direct GET, trusted receipt validation,
 Scheduler lease-resume/PM actual completion ordering and a usable immutable Workflow
-terminal ArtifactReceipt for non-PM delivery proposals. No Docker/PG/deployment,
+terminal ArtifactReceipt for non-PM delivery proposals. The latter is now implemented
+in [Single-Task Terminal Receipt](single-task-terminal-receipt.md); parent still
+owns actual run/receipt verification and policy activation. No Docker/PG/deployment,
 runtime configuration, secrets or other repositories were changed by this packet.
 
 Parent integration preserves one additive migration and the exact installer family.
