@@ -32,14 +32,9 @@ def upgrade() -> None:
         phases, phases.c.workflow_id == links.c.workflow_id,
     ).group_by(links.c.profession_id).having(sa.func.count(sa.distinct(phases.c.agent_id)) == 1)
     assignments = list(connection.execute(roles))
-    ambiguous = connection.execute(sa.select(links.c.profession_id).join(
-        phases, phases.c.workflow_id == links.c.workflow_id,
-    ).group_by(links.c.profession_id).having(sa.func.count(sa.distinct(phases.c.agent_id)) > 1)).scalars().all()
-    unmapped = set(connection.execute(sa.select(agents.c.id)).scalars()) - {row.role_id for row in assignments}
-    if ambiguous or unmapped:
-        raise RuntimeError(
-            f"Execution settings need a profession owner: ambiguous={ambiguous}, unmapped={sorted(unmapped)}"
-        )
+    # Phase-level agents were historical execution details, not profession
+    # ownership. Only a single unambiguous workflow assignment can seed the
+    # optional launch profile; all other legacy values are discarded safely.
     op.add_column("projects", sa.Column("role_key", sa.String(), nullable=True))
     op.add_column("projects", sa.Column("launch_profile", sa.String(251), nullable=True))
     op.add_column("projects", sa.Column("execution_description", sa.Text(), nullable=False, server_default=""))

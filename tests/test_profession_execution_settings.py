@@ -74,7 +74,7 @@ def test_execution_comes_from_selected_profession_and_profiles_can_be_shared(cli
 
 
 @pytest.mark.parametrize("ownership", ["unique", "ambiguous", "unmapped"])
-def test_migration_transfers_settings_and_preserves_phase_identity(tmp_path, ownership):
+def test_migration_discards_phase_agent_settings_without_blocking_existing_professions(tmp_path, ownership):
     engine = create_engine(f'sqlite:///{tmp_path / "transfer.db"}')
     try:
         run_alembic_command("upgrade", engine, "0012_profession_themes")
@@ -95,22 +95,12 @@ def test_migration_transfers_settings_and_preserves_phase_identity(tmp_path, own
             if ownership == "ambiguous":
                 connection.execute(text("INSERT INTO phases (id,workflow_id,mode_id,code,name,phase_order,agent_id) "
                                         "VALUES (118,37,57,'next','Next',2,94)"))
-        if ownership != "unique":
-            with pytest.raises(RuntimeError, match="need a profession owner"):
-                run_alembic_command("upgrade", engine)
-            with engine.connect() as connection:
-                assert connection.execute(text("SELECT COUNT(*) FROM agents")).scalar_one() == 2
-                assert connection.execute(text("SELECT agent_id FROM phases WHERE id=117")).scalar_one() == 93
-                assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == (
-                    "0012_profession_themes"
-                )
-            assert "role_key" not in {column["name"] for column in inspect(engine).get_columns("projects")}
-            return
         run_alembic_command("upgrade", engine)
         assert schema_is_ready(engine)
         with SAUnitOfWork(engine) as uow:
             profession = uow.projects.get_by_id(191)
-            assert profession.launch_profile == "external-builder"
+            assert profession is not None
+            assert profession.launch_profile == (None if ownership == "ambiguous" else "external-builder")
             phase = uow.phases.get_by_id(117)
             assert phase.code == "start" and phase.workflow_id == 37
         assert "agents" not in inspect(engine).get_table_names()
