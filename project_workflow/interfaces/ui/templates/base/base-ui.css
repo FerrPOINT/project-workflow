@@ -79,6 +79,14 @@
 .base-shell-navigation-scroll { min-height: 0; flex: 1; overflow-y: auto; padding: 12px; }
 .base-shell-navigation, .base-sidebar-list { display: flex; flex-direction: column; gap: 4px; }
 .base-sidebar-list[hidden] { display: none; }
+.base-sidebar-group-header { position: relative; display: flex; align-items: center; gap: 4px; min-width: 0; }
+.base-sidebar-group-header > .base-sidebar-item { flex: 1; }
+.base-sidebar-group-actions { flex-shrink: 0; }
+.base-sidebar-group-header[data-compact="false"][data-has-actions="true"] > .base-sidebar-item { padding-inline-end: 80px; }
+.base-sidebar-group-header[data-compact="false"][data-has-actions="true"] .base-sidebar-group-chevron { position: absolute; inset-inline-end: 12px; pointer-events: none; }
+.base-sidebar-group-header[data-compact="false"][data-has-actions="true"] > .base-sidebar-group-actions { position: absolute; inset-inline-end: 32px; }
+.base-sidebar-group-header:hover > .base-sidebar-item { background: var(--color-surface-raised); color: var(--color-text-primary); }
+.base-sidebar-group-header[data-compact="true"] { flex-direction: column; }
 .base-sidebar-list[data-nested="true"] { padding-inline-start: 12px; }
 .base-sidebar-item, .base-shell-link { display: flex; width: 100%; min-height: var(--shell-control-min); min-width: 0; align-items: center; gap: 12px; padding: 8px 12px; border: 0; border-radius: var(--base-radius); background: transparent; color: var(--color-text-secondary); font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: var(--base-font-body); font-weight: 400; line-height: 20px; text-align: left; text-decoration: none; cursor: pointer; transition: background-color 150ms, color 150ms; }
 .base-sidebar-item > svg { width: 16px; height: 16px; flex-shrink: 0; }
@@ -111,6 +119,7 @@ dialog.base-shell-drawer::backdrop { background: rgb(0 0 0 / 65%); }
   .base-shell-link { justify-content: center; padding: 8px; }
   .base-sidebar-item[data-compact="responsive"] { justify-content: center; padding-inline: 8px; }
   .base-sidebar-item[data-compact="responsive"] > .base-sidebar-item-label { display: none; }
+  .base-sidebar-list[data-compact="responsive"] > .base-sidebar-list[data-nested="true"] { padding-inline-start: 0; }
   .base-shell-work { padding-left: var(--shell-sidebar-compact); }
 }
 @media (max-width: 767px) {
@@ -259,9 +268,9 @@ dialog.base-shell-drawer::backdrop { background: rgb(0 0 0 / 65%); }
 
 /* Shapes #32 by Temani Afif, selected from https://css-loaders.com/shapes/.
    Shared by React, server-rendered products and the persistent Base document. */
-.base-loader-stage{--base-loader-box:64px;--base-loader-tile:16px;display:inline-grid;place-items:center;width:var(--base-loader-box);height:var(--base-loader-box);flex-shrink:0;color:var(--color-accent);vertical-align:middle}
+.base-loader-stage{--base-loader-box:32px;--base-loader-tile:8px;display:inline-grid;place-items:center;width:var(--base-loader-box);height:var(--base-loader-box);flex-shrink:0;color:var(--color-accent);vertical-align:middle}
 .base-loader-sm{--base-loader-box:20px;--base-loader-tile:5px}
-.base-loader-lg{--base-loader-box:156px;--base-loader-tile:38px}
+.base-loader-lg{--base-loader-box:48px;--base-loader-tile:12px}
 .base-shapes-loader{--c:no-repeat linear-gradient(currentColor 0 0);display:block;width:69.23077%;height:69.23077%;background:var(--c),var(--c),var(--c),var(--c),var(--c),var(--c),var(--c),var(--c),var(--c);background-size:var(--base-loader-tile) var(--base-loader-tile);animation:base-shapes-size 1s infinite,base-shapes-position 1s infinite}
 .base-loading-state{display:flex;min-height:240px;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:24px;text-align:center;font-size:14px;line-height:1.5;color:var(--color-text-muted)}
 /* A root loading state occupies the application viewport; section states keep
