@@ -108,6 +108,8 @@ try {
     assert.equal(await page.locator('#workflowName').inputValue(), 'Owned extra process');
     assert.equal(await page.locator('#workflowSummaryName').innerText(), 'Owned extra process');
     assert.equal(await page.locator('#workflowForm').isVisible(), false, 'Editing opens only on request');
+    assert.equal(await page.locator('[data-testid="workflow-mode-navigation"]').count(), 0, 'One mode does not need a selector');
+    assert.equal(await page.locator('#phasesTimeline .timeline-item').count(), 1, 'Single-mode phases remain visible');
     assert.equal(await page.locator('#workflowNav').count(), 1, 'Editor and phases share one workflow list');
     for (const width of [375, 768, 1280]) {
       await page.setViewportSize({width, height:812});
