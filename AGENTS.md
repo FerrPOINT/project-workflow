@@ -73,8 +73,9 @@ Supervisor Engine перед commit выполнить следующие про
   свой source; отдельный [Base candidate](docs/base-sdlc-candidate.md) закрепляет
   commit пакета `services-base/agent-skills`. Candidate не установлен: не менять
   default path, bootstrap, migrations и pinned history при подготовке документов.
-- Настройки выполнения принадлежат профессии: `role_key`, `launch_profile` и
-  `execution_description`. Фазы не назначают отдельных агентов. Профилем запуска
+- Профессия хранит только `launch_profile` как настройку выполнения. Её
+  идентификатор — существующий `code`; роль задачи задаётся назначением и режимом.
+  Фазы не назначают отдельных агентов. Профилем запуска
   владеет внешний исполнитель; несколько профессий могут использовать один профиль.
 - Воспроизводимый CLI acceptance описан в `LIVE_TEST_PLAN.md`.
 

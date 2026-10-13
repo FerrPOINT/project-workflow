@@ -67,7 +67,7 @@ def manual_env(tmp_path, monkeypatch):
     )
     uow.commit()
 
-    uow.projects.update(project_id, {"role_key": "Старший ревьюер", "launch_profile": "senior-reviewer"})
+    uow.projects.update(project_id, {"launch_profile": "senior-reviewer"})
     phase_ids: dict[str, int] = {}
     for p in seed:
         phase_id = uow.phases.create(

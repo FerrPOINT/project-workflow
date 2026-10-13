@@ -92,9 +92,7 @@ def _row_to_project(row: m.Project) -> Project:
         theme_icon=normalize_theme_icon(row.theme_icon),
         theme_color=normalize_theme_color(row.theme_color),
         cli_command=getattr(row, "cli_command", "") or "",
-        role_key=row.role_key,
         launch_profile=row.launch_profile,
-        execution_description=row.execution_description,
         key_prefixes=list(prefixes),
         workflow_name=row.workflow.name if row.workflow else None,
     )

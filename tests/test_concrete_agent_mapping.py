@@ -40,8 +40,7 @@ def test_mapping_is_persisted_separately_from_catalog_and_bind_replay_is_immutab
     assert bound["concrete_agent_ref"] == identity["agent_ref"] == AGENT_REF
     with SAUnitOfWork() as uow:
         row = uow.session.scalar(select(m.TaskRuntimeAssignment))
-        task = uow.session.get(m.Task, row.task_id)
-        assert uow.session.get(m.Project, task.project_id).role_key == "project_manager"
+        assert row.role_key == "project_manager"
         assert uow.tasks.get_assignment_by_operation_key(row.operation_key).concrete_agent_ref == AGENT_REF
         digest_payload = {key: value for key, value in payload.items() if key != "task"}
         digest_payload.update(project_id=row.project_id, task_key=payload["task"], role_key="project_manager")

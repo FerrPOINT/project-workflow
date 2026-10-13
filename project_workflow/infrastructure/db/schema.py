@@ -111,12 +111,11 @@ def load_phases_from_db(
         )
         for row in rows
     ]
-    role_key = profession_settings.get("role_key") if profession_settings else None
-    if isinstance(role_key, str) and role_key:
-        # Every phase uses the selected profession's execution settings.
-        profile = profession_settings.get("launch_profile") if profession_settings else None
+    profile = profession_settings.get("launch_profile") if profession_settings else None
+    if profession_settings is not None and isinstance(profile, str) and profile:
+        profession_code = profession_settings["code"]
         for phase in result:
-            phase.delegate = PhaseDelegate(agent=role_key, hermes_profile=profile)
+            phase.delegate = PhaseDelegate(agent=profession_code, hermes_profile=profile)
     return result
 
 

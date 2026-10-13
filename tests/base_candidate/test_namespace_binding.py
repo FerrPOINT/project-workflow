@@ -236,7 +236,7 @@ def test_active_v3_observation_preserves_historical_v2_modes_assignments_history
 
 @pytest.mark.parametrize("change", [
     "namespace-name", "namespace-cli", "namespace-fk", "missing-namespace", "workflow-key", "profile",
-    "missing-profile", "missing-role", "other-role-version", "mode-version",
+    "missing-profile", "mode-role", "other-role-version", "mode-version",
     "instruction", "check", "evidence", "missing-phase",
 ])
 def test_persisted_mapping_or_complete_candidate_drift_never_returns_binding(
@@ -259,8 +259,8 @@ def test_persisted_mapping_or_complete_candidate_drift_never_returns_binding(
             workflow.key = "foreign-key"
         elif change in {"profile", "missing-profile"}:
             namespace.launch_profile = "foreign-profile" if change == "profile" else None
-        elif change == "missing-role":
-            namespace.role_key = None
+        elif change == "mode-role":
+            uow.session.get(m.WorkflowMode, phase.mode_id).role_key = "tester"
         elif change == "other-role-version":
             uow.session.get(m.Workflow, uow.projects.get_persisted_identity(installed["tester"])["workflow_id"]
                             ).active_catalog_version = 2

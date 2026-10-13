@@ -49,9 +49,7 @@ def _with_namespace_aliases(item: dict[str, Any]) -> dict[str, Any]:
         "name": item.get("name"),
         "namespace_name": item.get("name"),
         "description": item.get("description", ""),
-        "role_key": item.get("role_key"),
         "launch_profile": item.get("launch_profile"),
-        "execution_description": item.get("execution_description", ""),
         "workflow_id": item.get("workflow_id"),
         "workflow_name": item.get("workflow_name"),
         "theme_icon": theme_icon,
@@ -403,9 +401,7 @@ def api_namespace_create(payload: NamespaceCreate) -> dict[str, Any] | JSONRespo
                 "theme_color": payload.theme_color,
                 "cli_command": payload.cli_command,
                 "key_prefixes": [],
-                "role_key": payload.role_key,
                 "launch_profile": payload.launch_profile,
-                "execution_description": payload.execution_description,
                 **({"workflow_id": payload.workflow_id} if "workflow_id" in payload.model_fields_set else {}),
             }
         )
@@ -429,7 +425,7 @@ def api_namespace_update(namespace_id: PositivePathId, payload: NamespaceUpdate)
     updates = _updates_from_payload(
         payload,
         ["name", "description", "workflow_id", "theme_icon", "theme_color", "cli_command",
-         "role_key", "launch_profile", "execution_description"],
+         "launch_profile"],
     )
     try:
         service.update_project(namespace_id, updates)
