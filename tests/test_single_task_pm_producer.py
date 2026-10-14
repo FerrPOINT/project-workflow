@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -160,6 +161,8 @@ def test_pm_initial_dispatch_actual_producer_fixture(bridge, initial_pm):
         "runtime_observation": observation, "assign": assign_exchange, "bind": bind_exchange,
         "pm_bind": pm_exchange, "first_step": first_exchange, "pm_readback": readback_exchange,
     }
+    if os.environ.get("WORKFLOW_UPDATE_PM_INITIAL_FIXTURE") == "1":
+        FIXTURE.write_text(json.dumps(captured, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     assert captured == json.loads(FIXTURE.read_text(encoding="utf-8"))
 
 

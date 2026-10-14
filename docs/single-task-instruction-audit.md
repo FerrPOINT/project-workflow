@@ -111,17 +111,19 @@ subcommand. Do not invent one or give agents scheduler completion credentials.
 No generic patch, issue transition, board move or manual status substitution.
 API registration, authorized grants, receipt resolution, health/acceptance and
 actual consumer policy must all be available; 403/404/missing evidence is a blocker.
-This packet does not verify an immutable role-artifact publisher/resolver for
-analysis/design/review/test/change/check/deployment evidence. Parent must provide
-that actual authorized capability and retrievable contents before delivery;
-invented ArtifactReceipt references/hashes or ordinary Tracker attachment uploads
-under the restricted task grant are not substitutes. No publisher CLI is invented.
+Tracker now has the scoped sealed-artifact publisher on the existing attachment
+CLI/API, and Fleet has a bounded fixed-origin resolver. These source packages do
+not establish live producer/consumer compatibility. Technical instructions require
+actual uploaded bytes, assignment binding and raw SHA-256 verification before the
+final Workflow report; PM's ordinary attachment access remains prohibited.
+Missing publisher/resolver capability blocks execution. No references, hashes,
+human credentials or extra publisher CLI are invented.
 
 ## Source Hashes And Rollout Boundary
 
 ```text
-catalog:  7e89aef262ad700813d6448f2cd4b066dcf44086d166d1374f9872e191c0018e
-manifest: 1ed007c21c5352217c454ac807ae54a1de2671ab8630d43e29597b87dd1bf947
+catalog:  b7b8bed470dc8a8730c8c1b1af8db0d556afec652394c569a9b0e97a64b6dcfd
+manifest: e5e67111d89a0eeae89b6f78da6c887281cca187d7ea7792822d76ce2c4cc7a8
 ```
 
 Only instruction changes trigger this family/hash revision. Existing two source
@@ -145,3 +147,13 @@ brainstorming, pre-document feedback, exact confirmation ordering and single-tas
 boundaries. It does not mistake the frozen historical preset for the installed
 content. Existing installer, source provenance, runtime and terminal tests cover
 actual scoped SQLite execution/readback. No PG/Docker/heavy/live QA is run here.
+
+On 14 October the regenerated installable artifacts passed 64 instruction,
+artifact-instruction and catalog tests, plus source-generation `--check` and scoped
+Ruff. The runtime/terminal/installation run passed 85 cases; its remaining failure
+was the old expected manifest hash in the PM terminal fixture. Both initial and
+terminal wire fixtures were regenerated from actual isolated producer responses,
+not hand-edited, and all ten focused producer/terminal-fixture tests then passed
+without update mode. Only synthetic authority/native inputs and redacted execution
+tokens are used. No live model, installed catalog update or full SDLC acceptance
+is inferred from these results.

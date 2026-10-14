@@ -47,14 +47,21 @@ Installed binding не является runtime admission или Tracker transit
 и `single_task_manifest_v1.json`, проверяемые по фактическим UTF-8/LF bytes:
 
 ```text
-catalog:  7e89aef262ad700813d6448f2cd4b066dcf44086d166d1374f9872e191c0018e
-manifest: 1ed007c21c5352217c454ac807ae54a1de2671ab8630d43e29597b87dd1bf947
+catalog:  b7b8bed470dc8a8730c8c1b1af8db0d556afec652394c569a9b0e97a64b6dcfd
+manifest: e5e67111d89a0eeae89b6f78da6c887281cca187d7ea7792822d76ce2c4cc7a8
 ```
 
 `python -m scripts.build_single_task_profile --check` проверяет воспроизводимость.
 Это отдельная редакция от `docs/proposals`: их hashes и исходный module `fb9dd53`
 сохранены. Новый instruction overlay имеет собственный source path/hash.
 Base `PACKAGE_COMMIT`, catalog pins/source и legacy history не переписываются.
+
+Редакция 14 октября добавляет разрешённые sealed role artifacts через существующий
+Tracker CLI; hash нового ещё не выпущенного profile family изменён вместе с pins.
+PM-инструкции сохранены, но общий manifest hash относится ко всем профессиям.
+Не заменять его в старых заданиях, истории или установленном каталоге вручную:
+свежий профиль проверяется в disposable QA, установка совместимого набора сервисов
+и назначений выполняется отдельно. Эти source-изменения не включают поток на стенде.
 
 Новые identities: namespace `single-task-<role-with-hyphens>`, workflow
 `single-task-v1:<canonical-role>`, launch profile `single-task-v1-<role-with-hyphens>`.

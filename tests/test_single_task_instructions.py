@@ -66,14 +66,21 @@ def test_all_eight_modes_start_with_scoped_step_and_keep_one_task(catalog, role,
 def test_context_commands_respect_actual_pm_or_delivery_grant(catalog, role, mode):
     context = mode_for(catalog, role, mode)["phases"][0]["instructions"][1]["description"]
     for required in ("sdlc context --task", "sdlc requirements --task", "immutable", "supplied",
-                     "do not borrow", "comments/attachments", "not authorized"):
+                     "do not borrow"):
         assert required in context
     if role == "project_manager":
         assert "sdlc questions --task" in context and "sdlc input --task" in context
         assert "absent requirements revision is normal" in context
+        assert "comments/attachments" in context and "not authorized" in context
+        assert "attachment list" not in context
     else:
         assert "sdlc questions --task" not in context
-    assert "comment list" not in context and "attachment list" not in context
+        for required in ("sealed assignment artifacts", "current delivery grant",
+                         "Ordinary comments remain unauthorized",
+                         "task-tracker attachment list --issue <task-uuid>", "artifact.binding", "Verify SHA256",
+                         "actual server-returned artifact.receipt", "missing artifact capability"):
+            assert required in context
+    assert "comment list" not in context
 
 
 @pytest.mark.parametrize("role,mode", MODES[1:])
