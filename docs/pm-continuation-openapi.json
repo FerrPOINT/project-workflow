@@ -1654,6 +1654,84 @@
         "title": "PMResumeInput",
         "type": "object"
       },
+      "PMReviewAdmissionContext": {
+        "additionalProperties": false,
+        "description": "Saved Tracker review authority, distinct from Workflow's sink CAS.",
+        "properties": {
+          "blocker_id": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Blocker Id",
+            "type": "string"
+          },
+          "blocker_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Blocker Sha256",
+            "type": "string"
+          },
+          "blocker_version": {
+            "maximum": 9007199254740991.0,
+            "minimum": 1.0,
+            "title": "Blocker Version",
+            "type": "integer"
+          },
+          "owner_version": {
+            "maximum": 9007199254740991.0,
+            "minimum": 2.0,
+            "title": "Owner Version",
+            "type": "integer"
+          },
+          "purpose": {
+            "const": "critical_business_review",
+            "title": "Purpose",
+            "type": "string"
+          },
+          "requirements": {
+            "$ref": "#/components/schemas/PMReviewRequirements"
+          },
+          "tracker_assignment_revision": {
+            "maximum": 9007199254740991.0,
+            "minimum": 2.0,
+            "title": "Tracker Assignment Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "purpose",
+          "tracker_assignment_revision",
+          "owner_version",
+          "blocker_id",
+          "blocker_sha256",
+          "blocker_version",
+          "requirements"
+        ],
+        "title": "PMReviewAdmissionContext",
+        "type": "object"
+      },
+      "PMReviewRequirements": {
+        "additionalProperties": false,
+        "properties": {
+          "content_hash": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "revision": {
+            "maximum": 9007199254740991.0,
+            "minimum": 1.0,
+            "title": "Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "revision",
+          "content_hash"
+        ],
+        "title": "PMReviewRequirements",
+        "type": "object"
+      },
       "PMTypedInput": {
         "additionalProperties": false,
         "properties": {
@@ -3791,6 +3869,377 @@
         "title": "SingleTaskPMResume",
         "type": "object"
       },
+      "SingleTaskPMReviewAssignmentRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "assignment_ref": {
+            "title": "Assignment Ref",
+            "type": "string"
+          },
+          "attempt_number": {
+            "exclusiveMinimum": 0.0,
+            "title": "Attempt Number",
+            "type": "integer"
+          },
+          "business_task_ref": {
+            "title": "Business Task Ref",
+            "type": "string"
+          },
+          "concrete_agent_ref": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Concrete Agent Ref",
+            "type": "string"
+          },
+          "cycle_number": {
+            "minimum": 0.0,
+            "title": "Cycle Number",
+            "type": "integer"
+          },
+          "exact_input_refs": {
+            "items": {
+              "$ref": "#/components/schemas/ExactInputRef"
+            },
+            "maxItems": 128,
+            "title": "Exact Input Refs",
+            "type": "array"
+          },
+          "execution_ref": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Execution Ref",
+            "type": "string"
+          },
+          "execution_scope": {
+            "enum": [
+              "business",
+              "delivery"
+            ],
+            "title": "Execution Scope",
+            "type": "string"
+          },
+          "expected_cycle_number": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Cycle Number"
+          },
+          "expected_mode_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Mode Key"
+          },
+          "expected_revision": {
+            "minimum": 0.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "expected_status": {
+            "enum": [
+              "missing",
+              "active",
+              "done",
+              "blocked"
+            ],
+            "title": "Expected Status",
+            "type": "string"
+          },
+          "fencing_token": {
+            "exclusiveMinimum": 0.0,
+            "title": "Fencing Token",
+            "type": "integer"
+          },
+          "instruction_manifest_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Instruction Manifest Sha256",
+            "type": "string"
+          },
+          "instruction_profile": {
+            "const": "single-task-v1",
+            "title": "Instruction Profile",
+            "type": "string"
+          },
+          "lease_ref": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Lease Ref",
+            "type": "string"
+          },
+          "lease_version": {
+            "exclusiveMinimum": 0.0,
+            "title": "Lease Version",
+            "type": "integer"
+          },
+          "mode_key": {
+            "title": "Mode Key",
+            "type": "string"
+          },
+          "operation_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Operation Key",
+            "type": "string"
+          },
+          "pm_review_context": {
+            "$ref": "#/components/schemas/PMReviewAdmissionContext"
+          },
+          "role_key": {
+            "title": "Role Key",
+            "type": "string"
+          },
+          "root_task_ref": {
+            "title": "Root Task Ref",
+            "type": "string"
+          },
+          "stage_key": {
+            "title": "Stage Key",
+            "type": "string"
+          },
+          "task": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Task",
+            "type": "string"
+          },
+          "task_revision": {
+            "exclusiveMinimum": 0.0,
+            "title": "Task Revision",
+            "type": "integer"
+          },
+          "tech_execution_attempt_ref": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tech Execution Attempt Ref"
+          },
+          "tech_execution_workspace_ref": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tech Execution Workspace Ref"
+          },
+          "tracker_instance_ref": {
+            "description": "Exact 1..128 UTF-8 bytes; no whitespace/control or normalization",
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[^\\s\\x00-\\x1f\\x7f-\\x9f]+$",
+            "title": "Tracker Instance Ref",
+            "type": "string",
+            "x-max-utf8-bytes": 128
+          },
+          "tracker_project_ref": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Tracker Project Ref",
+            "type": "string"
+          },
+          "workflow_key": {
+            "title": "Workflow Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instruction_profile",
+          "instruction_manifest_sha256",
+          "tracker_instance_ref",
+          "tracker_project_ref",
+          "execution_ref",
+          "concrete_agent_ref",
+          "task_revision",
+          "lease_ref",
+          "lease_version",
+          "fencing_token",
+          "task",
+          "role_key",
+          "workflow_key",
+          "mode_key",
+          "execution_scope",
+          "stage_key",
+          "cycle_number",
+          "attempt_number",
+          "operation_key",
+          "business_task_ref",
+          "root_task_ref",
+          "assignment_ref",
+          "exact_input_refs",
+          "expected_revision",
+          "expected_status",
+          "pm_review_context"
+        ],
+        "title": "SingleTaskPMReviewAssignmentRequest",
+        "type": "object"
+      },
+      "SingleTaskPMReviewBind": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_ref": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Agent Ref",
+            "type": "string"
+          },
+          "assignment_operation_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Assignment Operation Key",
+            "type": "string"
+          },
+          "assignment_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Assignment Ref",
+            "type": "string"
+          },
+          "assignment_revision": {
+            "maximum": 9007199254740991.0,
+            "minimum": 2.0,
+            "title": "Assignment Revision",
+            "type": "integer"
+          },
+          "binding_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Binding Ref",
+            "type": "string"
+          },
+          "execution_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Execution Ref",
+            "type": "string"
+          },
+          "expected_version": {
+            "maximum": 0.0,
+            "minimum": 0.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "hermes_run_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Hermes Run Ref",
+            "type": "string"
+          },
+          "instruction_manifest_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Instruction Manifest Sha256",
+            "type": "string"
+          },
+          "instruction_profile": {
+            "const": "single-task-v1",
+            "title": "Instruction Profile",
+            "type": "string"
+          },
+          "operation_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Operation Key",
+            "type": "string"
+          },
+          "root_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Root Ref",
+            "type": "string"
+          },
+          "session_run_id": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Session Run Id",
+            "type": "string"
+          },
+          "task": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Task",
+            "type": "string"
+          },
+          "task_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Task Ref",
+            "type": "string"
+          },
+          "tracker_instance_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Tracker Instance Ref",
+            "type": "string"
+          },
+          "tracker_project_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Tracker Project Ref",
+            "type": "string"
+          },
+          "workflow_assignment_revision": {
+            "maximum": 9.223372036854776e+18,
+            "minimum": 1.0,
+            "title": "Workflow Assignment Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "instruction_profile",
+          "instruction_manifest_sha256",
+          "task",
+          "execution_ref",
+          "tracker_instance_ref",
+          "tracker_project_ref",
+          "task_ref",
+          "root_ref",
+          "agent_ref",
+          "assignment_operation_key",
+          "assignment_ref",
+          "assignment_revision",
+          "operation_key",
+          "expected_version",
+          "binding_ref",
+          "hermes_run_ref",
+          "session_run_id",
+          "workflow_assignment_revision"
+        ],
+        "title": "SingleTaskPMReviewBind",
+        "type": "object"
+      },
       "SingleTaskStepRequest": {
         "additionalProperties": false,
         "properties": {
@@ -4391,6 +4840,9 @@
               "schema": {
                 "anyOf": [
                   {
+                    "$ref": "#/components/schemas/SingleTaskPMReviewAssignmentRequest"
+                  },
+                  {
                     "$ref": "#/components/schemas/SingleTaskAssignmentRequest"
                   },
                   {
@@ -4907,6 +5359,9 @@
             "application/json": {
               "schema": {
                 "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/SingleTaskPMReviewBind"
+                  },
                   {
                     "$ref": "#/components/schemas/SingleTaskPMBind"
                   },

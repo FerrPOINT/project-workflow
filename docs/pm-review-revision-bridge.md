@@ -66,9 +66,10 @@ typed input, terminal and scope guards are unchanged.
 `POST /internal/runtime/v1/pm/assign` remains strictly initial `PMDraftAssignment`
 with assignment1/owner1 and its original canonical key/body. Legacy and ordinary
 single-task requests/responses omit review context and the new bind sink field.
-No table, migration, catalog/pin change or schema snapshot regeneration belongs
-to this packet. Integrators must adapt review callers to the two explicit revisions
-and separately regenerate/qualify generated clients where required.
+No table, migration or catalog/pin change is required. Review callers must use the
+two explicit revisions. The [PM OpenAPI snapshot](pm-continuation-openapi.json) is
+generated from source with `scripts/export_pm_openapi.py`; clients and installation
+still need their own qualification.
 
 Focused synthetic SQLite/HTTP tests live in
 [test_pm_review_revision_bridge.py](../tests/test_pm_review_revision_bridge.py).
@@ -76,3 +77,28 @@ These are not live Tracker authorization, installed rollout, real native dispatc
 or end-to-end review completion qualification. The earlier PostgreSQL preservation
 result remains scoped to its original source and cases; it does not qualify this
 new revision-bridge implementation.
+
+## Integration Qualification: 15 October 2026
+
+On integrated production source `fadb61a1da088772f2e2b6d6baa0afe80dcd044f`, after
+source regeneration of the PM OpenAPI snapshot, the following invocation passes
+**29 tests, zero failures/errors/skips**:
+
+```text
+pytest tests/test_pm_execution.py::test_openapi_exposes_pm_wire_and_callback_schema tests/test_pm_review_revision_bridge.py -q --timeout=60 -p no:cacheprovider --maxfail=1
+```
+
+This includes the final task89 fixture, independent assignment/owner/sink values,
+checkpoint/resume/terminal behavior, exact legacy1/1 bytes, stale/malformed context,
+changed-body replay and credential/namespace negatives. The previously excluded
+generated-snapshot check now passes; assertions or timeouts were not weakened.
+
+- Generated PM OpenAPI SHA256: `3a09e169b98d5f4404f846a61e8b0cc16961340d38957790289dbccc1fd70320`.
+- Retained local JUnit SHA256: `11cc4b222dae776154c58d076ad8a41b10f733954d310318fd1d81a208f12146`.
+- Pytest reports72.59 seconds; JUnit suite records72.198 seconds and29 cases.
+- One existing Starlette/AnyIO alias deprecation warning is retained, not hidden.
+
+The source-development Python environment was used; this is focused SQLite/HTTP
+component evidence, not a locked full gate, PostgreSQL bridge, installed Fleet
+consumer or live model execution. The worker's131 passing old behavior cases have
+their own source boundary; this invocation does not repeat the full repository.

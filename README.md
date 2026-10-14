@@ -485,6 +485,7 @@ project-workflow/
 - [docs/architecture.md](docs/architecture.md) — CLI/UI/Supervisor boundaries, state/audit model и runtime scope.
 - [PM continuation contract](docs/pm-continuation-contract.md) and [verification](docs/pm-continuation-verification.md) describe the opt-in persistent PM checkpoint/resume API and its remaining Fleet integration gaps.
 - [Critical PM migration boundary](docs/critical-pm-review-migrations.md) and [PostgreSQL preservation qualification](docs/critical-pm-preservation-postgres-20261015.md): nine passing synthetic legacy-upgrade cases; accepted database upgrade and live subsequent-PM execution remain separate.
+- [PM review revision bridge](docs/pm-review-revision-bridge.md): explicit Tracker authority versus Workflow sink revision, generated contract and focused qualification boundary.
 - [PM CLI draft content v1](docs/pm-cli-draft-content.md): optional PM v2 content for the existing aggregate editor; actual CLI commands and explicit PM SDLC gaps, not installed or automatically activated.
 
 - [docs/resource-execution-context.md](docs/resource-execution-context.md) — отдельный Namespace execution context v2, owner readers и совместимость без активации исполнения.
