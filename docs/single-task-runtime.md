@@ -202,10 +202,13 @@ seal or pending continuation refuses enrollment. Legacy PM repeat stays denied.
 Only the existing trusted runtime observation establishes quiescence, never EOF
 or a Stop ACK. Native terminal status does not itself establish business success.
 
-Additive migration `0016_pm_review_executions` replaces only the permanent
+The same unreleased `0015_single_task_assignments` migration also replaces the permanent
 `uq_pm_task_agent` constraint with a lookup index. Execution, Workflow-task and
 run/fence uniqueness remain; no execution, assignment, operation or history rows
 are deleted or repurposed. Downgrade refuses rather than discard repeat history.
+Released migrations 0001 through 0014 remain byte unchanged. The existing guarded
+migration entrypoint supports their real ancestry from `0001_initial` to 0015;
+no stamp, reset or catalog adoption is needed to migrate the schema alone.
 The same instructions and exact owner-confirmation final-step guards apply to
 the new execution; no new mode, generic rebind capability or Hermes change exists.
 SQLite/HTTP regression evidence is not PostgreSQL or installed-runtime acceptance.

@@ -8,7 +8,7 @@ from uuid import uuid4
 import pytest
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import MetaData, create_engine, inspect, select, text
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.pool import NullPool, StaticPool
 
@@ -94,9 +94,8 @@ def test_repository_has_one_linear_migration_head():
         "0013_profession_execution.py",
         "0014_launch_profile_only.py",
         "0015_single_task_assignments.py",
-        "0016_pm_review_executions.py",
     ]
-    assert migration_head() == "0016_pm_review_executions"
+    assert migration_head() == "0015_single_task_assignments"
 
 
 def test_pm_upgrade_preserves_existing_resource_contexts(tmp_path):
@@ -131,7 +130,7 @@ def test_pm_upgrade_preserves_existing_resource_contexts(tmp_path):
         original = connection.execute(text("SELECT * FROM resource_execution_contexts")).mappings().all()
     ensure_migrated(engine)
     ensure_migrated(engine)
-    assert database_revisions(engine) == {"0016_pm_review_executions"}
+    assert database_revisions(engine) == {"0015_single_task_assignments"}
     assert schema_is_ready(engine)
     with engine.connect() as connection:
         assert connection.execute(text("SELECT * FROM resource_execution_contexts")).mappings().all() == original
@@ -186,7 +185,7 @@ def test_fresh_sqlite_migration_matches_orm_metadata(tmp_path):
         }
         assert actual_fks == expected_fks, table_name
 
-    assert database_revisions(engine) == {"0016_pm_review_executions"}
+    assert database_revisions(engine) == {"0015_single_task_assignments"}
     assert schema_is_ready(engine) is True
     with engine.connect() as connection:
         context = MigrationContext.configure(
@@ -239,8 +238,11 @@ def test_sqlite_upgrade_populated_legacy_backfills_each_workflow_mode(tmp_path):
             history_id = conn.execute(
                 text(
                     "INSERT INTO task_step_history "
-                    "(task_id, workflow_id, phase_id, verdict, replay_fingerprint) "
-                    "VALUES (:task_id, :workflow_id, :phase_id, 'partial', :fingerprint) RETURNING id"
+                    "(task_id, workflow_id, phase_id, verdict, replay_fingerprint, worker_report, "
+                    "evaluation_snapshot, supervisor_response) "
+                    "VALUES (:task_id, :workflow_id, :phase_id, 'partial', :fingerprint, "
+                    "'Frozen legacy report', '{\"retained\":\"evaluation\"}', "
+                    "'{\"retained\":\"response\"}') RETURNING id"
                 ),
                 {
                     "task_id": task_id,
@@ -259,8 +261,22 @@ def test_sqlite_upgrade_populated_legacy_backfills_each_workflow_mode(tmp_path):
             )
             rows.append((workflow_id, project_id, task_id, phase_id))
 
-    ensure_migrated(engine)
+    legacy = MetaData()
+    legacy.reflect(bind=engine)
+    # Released 0013 removes the agent model; persistent legacy fields stay exact.
+    preserved = {name: select(*(column for column in table.c
+                               if not (name == "phases" and column.name == "agent_id")))
+                 for name, table in legacy.tables.items() if name not in {"agents", "alembic_version"}}
     with engine.connect() as conn:
+        frozen = {name: conn.execute(query).mappings().all() for name, query in preserved.items()}
+    assert database_revisions(engine) == {"0001_initial"}
+    ensure_migrated(engine)
+    ensure_migrated(engine)
+    assert database_revisions(engine) == {"0015_single_task_assignments"}
+    with engine.connect() as conn:
+        assert not conn.execute(text("PRAGMA foreign_key_check")).all()
+        for name, query in preserved.items():
+            assert conn.execute(query).mappings().all() == frozen[name], name
         mode_rows = conn.execute(
             text("SELECT workflow_id, id FROM workflow_modes WHERE key = 'default' ORDER BY workflow_id")
         ).all()
@@ -369,7 +385,7 @@ def test_sqlite_supported_additive_upgrade_preserves_legacy_catalog_and_assignme
     assert database_revisions(engine) == {predecessor}
     ensure_migrated(engine)
     ensure_migrated(engine)  # Restart is idempotent and cannot reinterpret historical payloads.
-    assert database_revisions(engine) == {"0016_pm_review_executions"}
+    assert database_revisions(engine) == {"0015_single_task_assignments"}
     assert schema_is_ready(engine)
     with engine.connect() as conn:
         for table, original in frozen.items():
@@ -508,7 +524,7 @@ def test_sqlite_runtime_assignment_rejects_invalid_immutable_bindings(tmp_path, 
         )
 
     ensure_migrated(engine)
-    assert database_revisions(engine) == {"0016_pm_review_executions"}
+    assert database_revisions(engine) == {"0015_single_task_assignments"}
     with engine.connect() as conn:
         preserved = conn.execute(
             text(
@@ -905,7 +921,7 @@ def test_head_with_damaged_or_polluted_schema_is_refused(tmp_path, mutation):
     assert schema_is_ready(engine) is False
     with pytest.raises(DatabaseRecreateRequired):
         ensure_migrated(engine)
-    assert database_revisions(engine) == {"0016_pm_review_executions"}
+    assert database_revisions(engine) == {"0015_single_task_assignments"}
     if mutation == "extra":
         with engine.connect() as connection:
             assert connection.execute(text("SELECT id FROM unexpected_table")).scalar_one() == 42

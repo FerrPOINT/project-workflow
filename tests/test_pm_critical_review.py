@@ -4,15 +4,13 @@ import json
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, inspect, select, text
+from sqlalchemy import MetaData, create_engine, inspect, select, text
 
-from project_workflow import config
 from project_workflow.domain.exceptions import ConflictError
 from project_workflow.domain.pm_execution import PMIdentity, RuntimeObservation
 from project_workflow.infrastructure import pm_readback
 from project_workflow.infrastructure.db import models as m
-from project_workflow.infrastructure.db.session import ensure_migrated, reset_engine, run_alembic_command
-from project_workflow.infrastructure.db.single_task_catalog import ensure_single_task_catalog
+from project_workflow.infrastructure.db.session import database_revisions, ensure_migrated, run_alembic_command
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.ui.app import create_app
 from tests import test_single_task_runtime as runtime_fixture
@@ -168,34 +166,66 @@ def test_pm_review_keeps_legacy_enrollment_closed(bridge, monkeypatch, superviso
             )
 
 
-def test_pm_review_migration_preserves_populated_execution_and_history(
-    bridge, monkeypatch, supervisor_llm, tmp_path,
-):
+def test_pm_review_migration_preserves_populated_execution_and_history(tmp_path):
     url = f"sqlite:///{tmp_path / 'retained-pm.db'}"
     engine = create_engine(url)
     try:
-        run_alembic_command("upgrade", engine, "0015_single_task_assignments")
-        monkeypatch.setenv("DATABASE_URL", url)
-        config.get_settings.cache_clear()
-        reset_engine()
-        with SAUnitOfWork() as uow:
-            ensure_single_task_catalog(uow)
-        complete(bridge, monkeypatch, supervisor_llm)
-        tables = tuple(m.Base.metadata.tables)
+        run_alembic_command("upgrade", engine, "0014_launch_profile_only")
+        legacy = MetaData()
+        legacy.reflect(bind=engine)
+        with engine.begin() as connection:
+            def insert(table_name, **values):
+                table = legacy.tables[table_name]
+                return connection.execute(table.insert().values(**values).returning(table.c.id)).scalar_one()
+
+            workflow = insert("workflows", key="historical:pm", name="Historical PM", description="", is_default=1)
+            mode = insert("workflow_modes", workflow_id=workflow, key="default", name="Historical", mode_order=1)
+            project = insert("projects", workflow_id=workflow, code="OLD", name="Old namespace", cli_command="old")
+            phase = insert("phases", workflow_id=workflow, mode_id=mode, code="OLD-01", name="Old", phase_order=1)
+            task = insert("tasks", workflow_id=workflow, mode_id=mode, project_id=project, task_key="OLD-1",
+                          current_phase_id=phase, status="done", assignment_revision=1,
+                          assignment_operation_key="old:assignment")
+            assignment = insert("task_runtime_assignments", operation_key="old:assignment", task_id=task,
+                                project_id=project, workflow_id=workflow, mode_id=mode, cycle_number=0,
+                                assignment_revision=1, payload='{"retained":"original legacy body"}')
+            history = insert("task_step_history", task_id=task, workflow_id=workflow, mode_id=mode, phase_id=phase,
+                             verdict="pass", worker_report="Retained historical report")
+            insert("task_phase_events", task_id=task, workflow_id=workflow, mode_id=mode, phase_id=phase,
+                   step_history_id=history, event_type="completed")
+            # Schema-preservation fixtures, not authenticated runtime/assignment proof.
+            connection.execute(legacy.tables["pm_executions"].insert().values(
+                execution_ref="old:execution", task_id=task, assignment_id=assignment,
+                tracker_instance_ref="tracker:one",
+                tracker_project_ref="old:project", task_ref="old:task", root_ref="old:task", agent_ref="old:agent",
+                session_run_id=CURRENT_RUN, identity_json='{"retained":"identity"}', state="active",
+                version=1, fence=1, phase_id=phase,
+            ))
+            connection.execute(legacy.tables["pm_runs"].insert().values(
+                session_run_id=CURRENT_RUN, run_ref="old:run", execution_ref="old:execution", binding_ref="old:binding",
+                fence=1, observation_json='{"retained":"observation"}', terminal_json='{"retained":"terminal"}',
+            ))
+            connection.execute(legacy.tables["pm_operations"].insert().values(
+                operation_key="old:bind", execution_ref="old:execution", kind="bind", request_sha256="a" * 64,
+                result_json='{"retained":"original result"}',
+            ))
+        tables = {name: table for name, table in legacy.tables.items() if name != "alembic_version"}
         with engine.connect() as connection:
-            frozen = {name: connection.execute(select(m.Base.metadata.tables[name])).mappings().all()
-                      for name in tables}
+            frozen = {name: connection.execute(select(table)).mappings().all() for name, table in tables.items()}
         assert "uq_pm_task_agent" in {u["name"] for u in inspect(engine).get_unique_constraints("pm_executions")}
         ensure_migrated(engine)
         ensure_migrated(engine)
+        assert database_revisions(engine) == {"0015_single_task_assignments"}
         assert "uq_pm_task_agent" not in {u["name"] for u in inspect(engine).get_unique_constraints("pm_executions")}
         assert "ix_pm_task_agent" in {i["name"] for i in inspect(engine).get_indexes("pm_executions")}
         with engine.connect() as connection:
             assert not connection.execute(text("PRAGMA foreign_key_check")).all()
             assert connection.execute(text("PRAGMA foreign_keys")).scalar_one() == 1
-            for name in tables:
-                assert connection.execute(select(m.Base.metadata.tables[name])).mappings().all() == frozen[name], name
+            for name, table in tables.items():
+                assert connection.execute(select(table)).mappings().all() == frozen[name], name
+            assert connection.execute(text("SELECT single_task_binding_json FROM task_runtime_assignments")).all() == [
+                (None,),
+            ]
         with pytest.raises(RuntimeError, match="preserved"):
-            run_alembic_command("downgrade", engine, "0015_single_task_assignments")
+            run_alembic_command("downgrade", engine, "0014_launch_profile_only")
     finally:
         engine.dispose()

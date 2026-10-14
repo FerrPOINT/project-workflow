@@ -49,6 +49,9 @@ def upgrade() -> None:
                 legacy += " AND (workflow_key IS NULL OR workflow_key NOT LIKE 'single-task-v1:%')"
                 legacy += " AND single_task_binding_json IS NULL"
             batch.create_check_constraint(name, f"{legacy} OR {branch}")
+    with op.batch_alter_table("pm_executions") as batch:
+        batch.drop_constraint("uq_pm_task_agent", type_="unique")
+        batch.create_index("ix_pm_task_agent", ["tracker_instance_ref", "task_ref", "agent_ref"])
 
 
 def downgrade() -> None:
