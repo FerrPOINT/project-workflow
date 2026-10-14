@@ -1,5 +1,10 @@
 # Single-Task Runtime Packet
 
+The current source permits later PM review executions without rewriting the
+completed first execution. Its consolidated0015 and preserved legacy agent/phase
+metadata have [separate qualification and rollout boundaries](critical-pm-review-migrations.md).
+Source/component passes are not proof of a populated PostgreSQL upgrade or live PM.
+
 ## Runtime Routing Follow-Up: 14 October 2026
 
 Source package `a7cfc454845bce83aebd2fc6342e7a16b8b95ad7`, integrated as
