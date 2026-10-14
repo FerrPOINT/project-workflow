@@ -204,7 +204,8 @@ class TaskService:
             raise ConflictError(validated_key.error_message or f"Недопустимый ключ задачи {task_key!r}")
         task_key = validated_key.normalized or task_key
         project = (
-            self._uow.projects.lock_pm_namespace(project_id) if pm_draft_context is not None
+            self._uow.projects.lock_pm_namespace(project_id)
+            if pm_draft_context is not None or single_task_context is not None and role_key == "project_manager"
             else self._uow.projects.lock(project_id)
         )
         if project is None or project.workflow_id is None:
@@ -377,6 +378,17 @@ class TaskService:
                 raise ConflictError("Ожидаемое состояние отсутствующей задачи не совпадает")
             if cycle_number != 0 and (not single_task or role_key == "project_manager"):
                 raise ConflictError("Начальный Business assignment должен иметь cycle_number=0")
+            if single_task_context is not None and role_key == "project_manager":
+                from project_workflow.application.pm_execution import PMExecutionService
+                from project_workflow.infrastructure.db.uow import SAUnitOfWork
+
+                if not isinstance(self._uow, SAUnitOfWork):
+                    raise ConflictError("PM enrollment requires durable execution/history custody")
+                PMExecutionService(self._uow).assert_previous_terminal(
+                    tracker_instance_ref=single_task_context["tracker_instance_ref"],
+                    tracker_project_ref=single_task_context["tracker_project_ref"], task_ref=business_task_ref,
+                    agent_ref=single_task_context["concrete_agent_ref"], single_task=True,
+                )
             # Business may have retried dispatch before this sink saw any
             # assignment. Its positive attempt number is authoritative;
             # the sink's first assignment revision still starts at one.

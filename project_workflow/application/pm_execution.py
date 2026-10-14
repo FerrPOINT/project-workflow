@@ -240,6 +240,41 @@ class PMExecutionService:
             raise ConflictError("Trusted runtime readback does not match the scoped execution/run")
         return proof
 
+    def assert_previous_terminal(
+        self, *, tracker_instance_ref: str, tracker_project_ref: str, task_ref: str,
+        agent_ref: str, single_task: bool,
+    ) -> None:
+        """Under the namespace lock, admit a new execution, never replace history."""
+        from project_workflow.application.single_task_terminal import (
+            read_terminal_receipt,
+            terminal_operation_key_for_current_run,
+        )
+
+        previous = self.session.scalars(select(m.PMExecution).where(
+            m.PMExecution.tracker_instance_ref == tracker_instance_ref,
+            m.PMExecution.task_ref == task_ref, m.PMExecution.agent_ref == agent_ref,
+        ).order_by(m.PMExecution.execution_ref).execution_options(populate_existing=True))
+        for execution in previous:
+            assignment = self.session.get(m.TaskRuntimeAssignment, execution.assignment_id)
+            if (not single_task or assignment is None or assignment.single_task_binding_json is None
+                or execution.tracker_project_ref != tracker_project_ref or execution.root_ref != task_ref
+                or execution.state != "active"):
+                raise ConflictError("Previous PM execution is not a closed single-task execution")
+            identity = PMIdentity.model_validate_json(execution.identity_json)
+            _, task = self.execution(identity, assignment.project_id)
+            if task.status != "done":
+                raise ConflictError("Previous PM Workflow execution is not complete")
+            run = self.run(execution)
+            key = terminal_operation_key_for_current_run(
+                self.uow, task_id=execution.task_id, role_key="project_manager", session_run_id=run.session_run_id,
+            )
+            read_terminal_receipt(self.uow, key)
+            observed = RuntimeObservation.model_validate_json(run.observation_json)
+            proof = self._proof(identity, run.run_ref, run.binding_ref, execution.fence,
+                                observed.dispatch_operation_key, observed.checkpoint_ref, run.session_run_id)
+            if proof.status not in {"completed", "failed", "cancelled", "stopped"}:
+                raise ConflictError("Previous PM native run is not terminal")
+
     def bind(self, command: PMBind, project_id: int) -> dict[str, Any]:
         from project_workflow.application.namespace_ownership import NamespaceOwnershipService
 
@@ -262,6 +297,11 @@ class PMExecutionService:
             raise ConflictError("PM enrollment does not match namespace ownership")
         if self.session.get(m.PMExecution, command.execution_ref) is not None:
             raise ConflictError("Execution already bound; use command readback")
+        self.assert_previous_terminal(
+            tracker_instance_ref=identity.tracker_instance_ref, tracker_project_ref=identity.tracker_project_ref,
+            task_ref=identity.task_ref, agent_ref=identity.agent_ref,
+            single_task=assignment.single_task_binding_json is not None,
+        )
         if (
             task.status != "active"
             or assignment.binding_ref != command.binding_ref or assignment.hermes_run_ref != command.hermes_run_ref

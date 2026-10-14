@@ -144,7 +144,7 @@ require PM CLI confirmation readback before final report. PM never dispatches An
 
 ## Migration And Remaining Integration
 
-Exactly one additive migration: `0015_single_task_assignments`, predecessor
+The original profile migration is `0015_single_task_assignments`, predecessor
 `0014_launch_profile_only`. It preserves prior CHECK predicates and legacy/history
 rows, excludes the new family from the legacy binding branch, adds the narrow
 task=root / NULL-decomposition branch, and permits an absent delivery tech pair
@@ -177,7 +177,7 @@ parent PG gates, is not installed-image or live-agent acceptance. No Docker/PG/b
 deployment, runtime configuration, secrets or other repositories were changed by
 this docs-only reconciliation.
 
-Parent integration preserves one additive migration and the exact installer family.
+Parent integration preserves the original profile migration and the exact installer family.
 Source/unit evidence and parent PostgreSQL qualification remain separate from live
 acceptance. Parent-owned integration references (not rollout approval):
 [Fleet81](https://github.com/FerrPOINT/fleet-control/pull/81),
@@ -187,3 +187,25 @@ and the consumer hook are implemented in source; actual rollout remains explicit
 follow-up, not a new registry.
 
 Generated public request/readback schema: [pm-continuation-openapi.json](pm-continuation-openapi.json).
+
+## Subsequent PM Business Review
+
+A trusted assignment may start another `draft` PM execution of the same Tracker
+task/root in the existing single-task PM namespace after the previous PM Workflow
+has a validated sealed final step and its original native run is confirmed terminal.
+Use the new authoritative execution's Workflow task key, execution UUID, assignment
+and session-run UUID; do not replace the original Workflow task or reuse its keys.
+The existing role credential, assign/bind, execution-token step and history APIs
+remain unchanged. The assignment and PM bind both check prior completion under
+the existing namespace lock. Unknown readback, a live prior run, missing
+seal or pending continuation refuses enrollment. Legacy PM repeat stays denied.
+Only the existing trusted runtime observation establishes quiescence, never EOF
+or a Stop ACK. Native terminal status does not itself establish business success.
+
+Additive migration `0016_pm_review_executions` replaces only the permanent
+`uq_pm_task_agent` constraint with a lookup index. Execution, Workflow-task and
+run/fence uniqueness remain; no execution, assignment, operation or history rows
+are deleted or repurposed. Downgrade refuses rather than discard repeat history.
+The same instructions and exact owner-confirmation final-step guards apply to
+the new execution; no new mode, generic rebind capability or Hermes change exists.
+SQLite/HTTP regression evidence is not PostgreSQL or installed-runtime acceptance.

@@ -70,7 +70,7 @@ class PMExecution(Base):
     resume_session_run_id: Mapped[str | None] = mapped_column(String(36), unique=True)
 
     __table_args__ = (
-        UniqueConstraint("tracker_instance_ref", "task_ref", "agent_ref", name="uq_pm_task_agent"),
+        Index("ix_pm_task_agent", "tracker_instance_ref", "task_ref", "agent_ref"),
         CheckConstraint("state IN ('active', 'waiting', 'resume_pending')", name="ck_pm_state"),
         CheckConstraint("version > 0 AND fence > 0", name="ck_pm_versions"),
         CheckConstraint("state = 'active' OR checkpoint_json IS NOT NULL", name="ck_pm_checkpoint"),
