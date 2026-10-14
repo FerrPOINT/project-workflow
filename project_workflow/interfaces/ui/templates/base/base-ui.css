@@ -64,6 +64,8 @@
 .base-shell-mark { display: inline-flex; align-items: center; justify-content: center; width: var(--shell-platform-mark-size); height: var(--shell-platform-mark-size); flex-shrink: 0; font-size: calc(var(--shell-platform-mark-size) / 2); }
 .base-shell-mark > svg { width: 60%; height: 60%; }
 
+/* Multiline editors own their height; an unlayered single-line floor would
+   override both Textarea's default and product Tailwind min-height utilities. */
 .base-control:not(textarea) { min-height: var(--shell-control-min); }
 /* Resource rows share geometry with SSR, but flex/grid remains product-owned. */
 .base-resource-list {
