@@ -54,14 +54,33 @@ class WorkflowArtifactReceipt(BaseModel):
 
 
 class SingleTaskTerminalReadback(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", json_schema_extra={
+        "oneOf": [
+            {"required": ["step_operation_key"], "properties": {
+                "step_operation_key": {"type": "string"}, "receipt_reference": {"type": "null"},
+            }},
+            {"required": ["receipt_reference", "receipt_sha256"], "properties": {
+                "receipt_reference": {"type": "string"}, "receipt_sha256": {"type": "string"},
+                "step_operation_key": {"type": "null"},
+            }},
+        ],
+    })
     task: str = Field(strict=True, min_length=1, max_length=128)
-    step_operation_key: str = Field(strict=True, min_length=1, max_length=128)
+    step_operation_key: str | None = Field(default=None, strict=True, min_length=1, max_length=128)
+    receipt_reference: str | None = Field(default=None, strict=True, min_length=1, max_length=512)
     instruction_profile: Literal["single-task-v1"]
     instruction_manifest_sha256: Sha256
     session_run_id: UUIDRef
     single_task_context_sha256: Sha256
     receipt_sha256: Sha256 | None = None
+
+    @model_validator(mode="after")
+    def exact_selector(self) -> "SingleTaskTerminalReadback":
+        if (self.step_operation_key is None) == (self.receipt_reference is None):
+            raise ValueError("Exactly one terminal step operation key or receipt reference required")
+        if self.receipt_reference is not None and self.receipt_sha256 is None:
+            raise ValueError("Receipt reference lookup requires receipt_sha256")
+        return self
 
 
 class SingleTaskTerminalReceipt(BaseModel):

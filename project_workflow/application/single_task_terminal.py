@@ -1,12 +1,13 @@
 """Immutable single-task completion receipts on the existing step ledger."""
 
 import hashlib
+import re
 from typing import Any
 
 from project_workflow.application.base_terminal import _validate_frozen_evaluation
 from project_workflow.application.single_task_runtime import current_binding
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
-from project_workflow.domain.runtime_assignment import RuntimeStepFence, payload_sha256
+from project_workflow.domain.runtime_assignment import MAX_WORK_ITEM_REVISION, RuntimeStepFence, payload_sha256
 from project_workflow.domain.single_task_runtime import SingleTaskTerminalReceipt, SingleTaskTerminalResponse
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
@@ -126,3 +127,21 @@ def read_terminal_receipt(uow: SAUnitOfWork, operation_key: str) -> dict[str, An
         "ok": True, "complete": True, "receipt": response["single_task_terminal_receipt"],
         "workflow_receipt": response["workflow_receipt"],
     }).model_dump(mode="json", by_alias=True)
+
+
+def terminal_operation_key_for_reference(
+    uow: SAUnitOfWork, reference: str, *, namespace_id: int, task_id: int, role_key: str,
+) -> str:
+    """Resolve only this owner's canonical reference within the authorized task."""
+    match = re.fullmatch(r"workflow-terminal:single-task-v1:([1-9][0-9]*):([1-9][0-9]*)", reference)
+    if match is None:
+        raise NotFoundError("Accepted terminal reference not found")
+    namespace, history_id = map(int, match.groups())
+    if namespace != namespace_id or history_id > MAX_WORK_ITEM_REVISION:
+        raise NotFoundError("Accepted terminal reference not found")
+    history = uow.step_history.get_by_id(history_id)
+    if history is None or history.task_id != task_id or history.role_key != role_key:
+        raise NotFoundError("Accepted terminal reference not found")
+    if not history.step_operation_key:
+        raise ConflictError("Terminal history has no accepted operation key")
+    return history.step_operation_key

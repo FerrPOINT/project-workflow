@@ -3925,6 +3925,38 @@
       },
       "SingleTaskTerminalReadback": {
         "additionalProperties": false,
+        "oneOf": [
+          {
+            "properties": {
+              "receipt_reference": {
+                "type": "null"
+              },
+              "step_operation_key": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "step_operation_key"
+            ]
+          },
+          {
+            "properties": {
+              "receipt_reference": {
+                "type": "string"
+              },
+              "receipt_sha256": {
+                "type": "string"
+              },
+              "step_operation_key": {
+                "type": "null"
+              }
+            },
+            "required": [
+              "receipt_reference",
+              "receipt_sha256"
+            ]
+          }
+        ],
         "properties": {
           "instruction_manifest_sha256": {
             "pattern": "^[a-f0-9]{64}$",
@@ -3935,6 +3967,19 @@
             "const": "single-task-v1",
             "title": "Instruction Profile",
             "type": "string"
+          },
+          "receipt_reference": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Receipt Reference"
           },
           "receipt_sha256": {
             "anyOf": [
@@ -3962,10 +4007,17 @@
             "type": "string"
           },
           "step_operation_key": {
-            "maxLength": 128,
-            "minLength": 1,
-            "title": "Step Operation Key",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step Operation Key"
           },
           "task": {
             "maxLength": 128,
@@ -3976,7 +4028,6 @@
         },
         "required": [
           "task",
-          "step_operation_key",
           "instruction_profile",
           "instruction_manifest_sha256",
           "session_run_id",

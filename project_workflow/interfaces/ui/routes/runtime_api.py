@@ -945,7 +945,10 @@ def runtime_terminal_readback(
 ) -> JSONResponse:
     """Authenticated lookup of an actual non-PM completion; never synthesize evidence."""
     from project_workflow.application.single_task_runtime import authorize
-    from project_workflow.application.single_task_terminal import read_terminal_receipt
+    from project_workflow.application.single_task_terminal import (
+        read_terminal_receipt,
+        terminal_operation_key_for_reference,
+    )
 
     def reply(body: dict[str, Any], status: int = 200) -> JSONResponse:
         return JSONResponse(body, status_code=status, headers={"Cache-Control": "no-store"})
@@ -973,10 +976,21 @@ def runtime_terminal_readback(
                       session_run_id=payload.session_run_id, instruction_profile=payload.instruction_profile,
                       instruction_manifest_sha256=payload.instruction_manifest_sha256,
                       declared_hash=payload.single_task_context_sha256)
-            history = uow.step_history.get_by_step_operation_key(payload.step_operation_key)
+            operation_key = payload.step_operation_key
+            if payload.receipt_reference is not None:
+                operation_key = terminal_operation_key_for_reference(
+                    uow, payload.receipt_reference, namespace_id=namespace_id,
+                    task_id=task.id, role_key=credential.role_key,
+                )
+            if operation_key is None:
+                raise ValueError("Terminal receipt selector required")
+            history = uow.step_history.get_by_step_operation_key(operation_key)
             if history is None or history.task_id != task.id or history.role_key != credential.role_key:
                 raise NotFoundError("Accepted terminal step not found")
-            result = read_terminal_receipt(uow, payload.step_operation_key)
+            result = read_terminal_receipt(uow, operation_key)
+            if (payload.receipt_reference is not None
+                and result["workflow_receipt"]["reference"] != payload.receipt_reference):
+                raise ConflictError("Terminal receipt reference mismatch")
             if payload.receipt_sha256 is not None and result["workflow_receipt"]["sha256"] != payload.receipt_sha256:
                 raise ConflictError("Terminal receipt hash mismatch")
             return reply(result)

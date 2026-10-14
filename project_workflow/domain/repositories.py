@@ -313,6 +313,9 @@ class TaskStepHistoryRepository(ABC):
     """Persistence contract for evaluated CLI ``step`` records."""
 
     @abstractmethod
+    def get_by_id(self, history_id: int) -> TaskStepHistoryEntry | None: ...
+
+    @abstractmethod
     def list(
         self,
         task_id: int | None = None,

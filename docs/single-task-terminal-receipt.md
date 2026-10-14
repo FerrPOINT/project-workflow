@@ -50,13 +50,45 @@ environment-based redaction is introduced. Existing report handling is unchanged
 
 ```text
 task: string
-step_operation_key: string
+step_operation_key?: string
+receipt_reference?: string
 instruction_profile: "single-task-v1"
 instruction_manifest_sha256: lowercase SHA-256
 session_run_id: canonical non-nil UUID
 single_task_context_sha256: lowercase SHA-256
 receipt_sha256?: lowercase SHA-256
 ```
+
+Exactly one non-null selector is required: `step_operation_key` XOR
+`receipt_reference`. Existing operation-key callers and responses are unchanged;
+an explicit null for the unused selector is also accepted. Reference lookup
+requires non-null `receipt_sha256`. Missing/both selectors or a missing reference
+hash produce framework validation HTTP 422. Generated OpenAPI expresses both
+branches in `SingleTaskTerminalReadback.oneOf`.
+
+Fleet can submit the actual `workflow_receipt` reference/hash without retaining
+the original final step operation key:
+
+```json
+{
+  "task": "SDLC-7",
+  "receipt_reference": "workflow-terminal:single-task-v1:7:42",
+  "receipt_sha256": "<actual workflow_receipt.sha256>",
+  "instruction_profile": "single-task-v1",
+  "instruction_manifest_sha256": "<actual installed manifest sha256>",
+  "session_run_id": "<actual session run UUID>",
+  "single_task_context_sha256": "<actual saved binding hash>"
+}
+```
+
+IDs above illustrate the owner-reference format, not real deployment evidence.
+Resolution happens after the same current task/run authorization: parse only the
+canonical Workflow reference, require the authorized namespace/task/role, find
+the existing history row, then use the same complete/stale/manifest/seal/hash
+validation as operation-key lookup. Unknown, foreign or noncanonical references
+return 404 without receipt contents; incomplete/unsealed/drifted records or a
+wrong hash return 409. No URL fetching, new storage, credentials, migration,
+catalog hash change or retroactive sealing is introduced.
 
 Headers: existing runtime role credential in `Authorization`, and
 `X-Workflow-Execution-Token`. Fleet uses the existing actual run role credential
@@ -96,6 +128,10 @@ After actual run terminal Fleet reads Workflow's endpoint, compares exact receip
 body/reference/hash and run/fence/result against the proposal, then performs its
 authorized Tracker completion. Workflow receipt alone does not establish actual
 Fleet terminal, lease freshness, deployment acceptance or stage completion.
+
+This readback does not publish analysis/design/review/test/change/check/deployment
+artifact contents. A terminal receipt or its report hash is not a substitute for
+the distinct role-artifact receipts and their authorized resolvers.
 
 ## QA Selectors
 

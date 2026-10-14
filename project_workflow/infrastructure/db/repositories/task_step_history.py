@@ -32,6 +32,10 @@ class SATaskStepHistoryRepository(TaskStepHistoryRepository):
     def __init__(self, session: Session):
         self._session = session
 
+    def get_by_id(self, history_id: int) -> TaskStepHistoryEntry | None:
+        row = self._session.get(m.TaskStepHistoryEntry, history_id)
+        return _row_to_step_history(row) if row is not None else None
+
     def list(
         self,
         task_id: int | None = None,

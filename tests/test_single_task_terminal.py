@@ -26,6 +26,11 @@ from tests.test_single_task_runtime import bridge as bridge
 READBACK = API + "terminal-receipt/readback"
 
 
+def reference_lookup(lookup, artifact):
+    return {**{key: value for key, value in lookup.items() if key != "step_operation_key"},
+            "receipt_reference": artifact["reference"], "receipt_sha256": artifact["sha256"]}
+
+
 def advance(client, monkeypatch, supervisor_llm):
     assignment, _, step, headers = prepare(client, monkeypatch)
     supervisor_llm("PASS")
@@ -74,6 +79,15 @@ def test_actual_completion_artifact_matches_readback_replay_and_restart(bridge, 
     assert read.status_code == 200, read.text
     assert read.headers["Cache-Control"] == "no-store"
     assert read.json() == {"ok": True, "complete": True, "workflow_receipt": artifact, "receipt": receipt}
+    by_reference = reference_lookup(lookup, artifact)
+    for body in (by_reference, {**by_reference, "step_operation_key": None}, by_reference):
+        resolved = bridge.post(READBACK, json=body, headers=headers)
+        assert resolved.status_code == 200, resolved.text
+        assert resolved.headers["Cache-Control"] == "no-store"
+        assert resolved.json() == read.json()
+    assert bridge.post(READBACK, json={**lookup, "receipt_reference": None}, headers=headers).json() == read.json()
+    with TestClient(create_app()) as restarted_client:
+        assert restarted_client.post(READBACK, json=by_reference, headers=headers).json() == read.json()
     with SAUnitOfWork() as restarted:
         assert single_task_terminal.read_terminal_receipt(restarted, final["step_operation_key"]) == read.json()
         assert restarted.step_history.get_by_step_operation_key(final["step_operation_key"]).to_dict() == before
@@ -116,7 +130,8 @@ def test_receipt_and_actual_completion_commit_atomically(bridge, monkeypatch, su
 def test_receipt_readback_and_exact_replay_reject_mismatch_or_stale_state(
     bridge, monkeypatch, supervisor_llm, mutation,
 ):
-    _, final, lookup, headers, _ = complete(bridge, monkeypatch, supervisor_llm)
+    _, final, lookup, headers, response = complete(bridge, monkeypatch, supervisor_llm)
+    by_reference = reference_lookup(lookup, response.json()["result"]["workflow_receipt"])
     with SAUnitOfWork() as uow:
         entry = uow.step_history.get_by_step_operation_key(final["step_operation_key"])
         row = uow.session.get(m.TaskStepHistoryEntry, entry.id)
@@ -152,7 +167,90 @@ def test_receipt_readback_and_exact_replay_reject_mismatch_or_stale_state(
             uow.phase_instructions.update(instruction["id"], {"description": "Installed manifest drift"})
     read = bridge.post(READBACK, json=lookup, headers=headers)
     assert read.status_code == 409, read.text
+    assert bridge.post(READBACK, json=by_reference, headers=headers).status_code == 409
     assert bridge.post(API + "step", json=final, headers=headers).status_code == 409
+
+
+def test_reference_selector_rejects_missing_foreign_noncanonical_and_unauthorized_reads(
+    bridge, monkeypatch, supervisor_llm,
+):
+    _, _, lookup, headers, response = complete(bridge, monkeypatch, supervisor_llm)
+    artifact = response.json()["result"]["workflow_receipt"]
+    body = reference_lookup(lookup, artifact)
+    namespace, history_id = artifact["reference"].split(":")[-2:]
+    for reference in (
+        "https://caller.test/receipt", "workflow-terminal:single-task-v1:0:1",
+        f"workflow-terminal:single-task-v1:0{namespace}:{history_id}",
+        f"workflow-terminal:single-task-v1:{namespace}:0{history_id}",
+        f"workflow-terminal:single-task-v1:{namespace}:{history_id}\n",
+        f"workflow-terminal:single-task-v1:{int(namespace) + 1}:{history_id}",
+        f"workflow-terminal:single-task-v1:{namespace}:9223372036854775807",
+        f"workflow-terminal:single-task-v1:{namespace}:9223372036854775808",
+    ):
+        rejected = bridge.post(READBACK, json={**body, "receipt_reference": reference}, headers=headers)
+        assert rejected.status_code == 404, rejected.text
+        assert rejected.headers["Cache-Control"] == "no-store"
+    assert bridge.post(READBACK, json={**body, "receipt_sha256": "0" * 64}, headers=headers).status_code == 409
+    assert bridge.post(READBACK, json=body).status_code == 401
+    assert bridge.post(READBACK, json=body, headers=WRITER).status_code == 403
+    assert bridge.post(READBACK, json=body, headers=RUNNER).status_code == 403
+    for field, value in (
+        ("session_run_id", str(uuid4())), ("single_task_context_sha256", "0" * 64),
+        ("instruction_manifest_sha256", "0" * 64),
+    ):
+        assert bridge.post(READBACK, json={**body, field: value}, headers=headers).status_code == 409
+    with SAUnitOfWork() as uow:
+        early = uow.step_history.get_by_step_operation_key("terminal:preparation:1")
+        early_reference = f"workflow-terminal:single-task-v1:{namespace}:{early.id}"
+    early_read = bridge.post(READBACK, json={**body, "receipt_reference": early_reference}, headers=headers)
+    assert early_read.status_code == 409, early_read.text
+
+
+@pytest.mark.parametrize("mutation", ["foreign_task", "foreign_role", "legacy_history"])
+def test_reference_history_identity_cannot_escape_authorized_task(
+    bridge, monkeypatch, supervisor_llm, mutation,
+):
+    _, final, lookup, headers, response = complete(bridge, monkeypatch, supervisor_llm)
+    body = reference_lookup(lookup, response.json()["result"]["workflow_receipt"])
+    with SAUnitOfWork() as uow:
+        history = uow.step_history.get_by_step_operation_key(final["step_operation_key"])
+        row = uow.session.get(m.TaskStepHistoryEntry, history.id)
+        if mutation == "foreign_task":
+            task = uow.tasks.get_by_id(history.task_id)
+            other_task_id = uow.tasks.create({
+                "project_id": task.project_id, "workflow_id": task.workflow_id, "mode_id": task.mode_id,
+                "task_key": "OTHER-8", "current_phase_id": task.current_phase_id,
+            })
+            other_history_id = uow.record_step(**{
+                **history.to_dict(), "task_id": other_task_id, "step_operation_key": "other:terminal",
+            })
+            body["receipt_reference"] = f"workflow-terminal:single-task-v1:{task.project_id}:{other_history_id}"
+        elif mutation == "foreign_role":
+            row.role_key = "reviewer"
+        else:
+            legacy_id = uow.record_step(
+                task_id=history.task_id, phase_id=history.phase_id, verdict="pass", worker_report="Legacy report",
+                covered_item_ids=[], missing_item_ids=[], blocker_messages=[], evaluation_snapshot={},
+                supervisor_response={"complete": True, "status": "done"},
+            )
+            namespace = body["receipt_reference"].split(":")[-2]
+            body["receipt_reference"] = f"workflow-terminal:single-task-v1:{namespace}:{legacy_id}"
+    denied = bridge.post(READBACK, json=body, headers=headers)
+    assert denied.status_code == 404, denied.text
+
+
+def test_terminal_selector_xor_and_reference_hash_are_required_at_http_boundary(bridge):
+    base = {**PROFILE, "task": "DEV-7", "session_run_id": SESSION, "single_task_context_sha256": "0" * 64}
+    reference = "workflow-terminal:single-task-v1:1:1"
+    for selector in (
+        {}, {"step_operation_key": None, "receipt_reference": None},
+        {"step_operation_key": "terminal:final", "receipt_reference": reference, "receipt_sha256": "0" * 64},
+        {"receipt_reference": reference}, {"receipt_reference": reference, "receipt_sha256": None},
+        {"receipt_reference": reference, "receipt_sha256": "invalid"},
+        {"step_operation_key": ""}, {"receipt_reference": "", "receipt_sha256": "0" * 64},
+    ):
+        rejected = bridge.post(READBACK, json={**base, **selector}, headers=RUNNER)
+        assert rejected.status_code == 422, rejected.text
 
 
 def test_incomplete_missing_wrong_hash_and_authority_are_not_receipts(bridge, monkeypatch, supervisor_llm):
@@ -217,9 +315,12 @@ def test_terminal_contract_has_no_caller_owner_lease_or_proof_fields(bridge):
     request = schema["components"]["schemas"]["SingleTaskTerminalReadback"]
     assert set(request["properties"]) == {
         "task", "step_operation_key", "instruction_profile", "instruction_manifest_sha256",
-        "session_run_id", "single_task_context_sha256", "receipt_sha256",
+        "session_run_id", "single_task_context_sha256", "receipt_sha256", "receipt_reference",
     }
     assert request["additionalProperties"] is False
+    assert "step_operation_key" not in request["required"]
+    assert request["oneOf"][0]["required"] == ["step_operation_key"]
+    assert request["oneOf"][1]["required"] == ["receipt_reference", "receipt_sha256"]
     assert READBACK in schema["paths"]
 
 
@@ -253,7 +354,8 @@ def test_existing_cli_exact_step_replay_outputs_usable_artifact_without_new_comm
 
 
 def test_old_terminal_record_is_not_retroactively_sealed(bridge, monkeypatch, supervisor_llm):
-    _, final, lookup, headers, _ = complete(bridge, monkeypatch, supervisor_llm)
+    _, final, lookup, headers, accepted = complete(bridge, monkeypatch, supervisor_llm)
+    by_reference = reference_lookup(lookup, accepted.json()["result"]["workflow_receipt"])
     with SAUnitOfWork() as uow:
         history = uow.step_history.get_by_step_operation_key(final["step_operation_key"])
         response = dict(history.supervisor_response)
@@ -265,6 +367,7 @@ def test_old_terminal_record_is_not_retroactively_sealed(bridge, monkeypatch, su
         evaluation.pop("contract_fingerprint_state")
         row.evaluation_snapshot = canonical_json(evaluation)
     assert bridge.post(READBACK, json=lookup, headers=headers).status_code == 409
+    assert bridge.post(READBACK, json=by_reference, headers=headers).status_code == 409
     assert bridge.post(API + "step", json=final, headers=headers).status_code == 409
     with SAUnitOfWork() as uow:
         assert uow.step_history.get_by_step_operation_key(final["step_operation_key"]).supervisor_response == response
