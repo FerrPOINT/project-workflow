@@ -53,3 +53,18 @@ test('invalid legacy profession is not silently converted into all projects', ()
   assert.equal(p.targets[1].searchParams.get('namespace_id'), 'invalid');
   assert.equal(p.url.searchParams.has('profession_id'), false);
 });
+
+test('loading stored profession fields resets the leave guard after the form is populated', () => {
+  const template = readFileSync(new URL('../project_workflow/interfaces/ui/templates/namespaces.html', import.meta.url), 'utf8');
+  const fill = template.match(/function fillNamespaceForm\(namespace\)\{([\s\S]*?)\n\}/)[1];
+  const fields = new Map(['namespaceIconSelect', 'namespaceName', 'namespaceCliCommand', 'namespaceDescription', 'namespaceLaunchProfile', 'namespaceThemeColor', 'namespaceForm'].map(id => [id, {}]));
+  const saved = [];
+  const context = { document: { getElementById: id => fields.get(id), querySelectorAll: () => [] }, window: { SdlcPlatformNavigation: { saved: form => saved.push({ form, name: fields.get('namespaceName').value, color: fields.get('namespaceThemeColor').value }) } }, updateNamespaceThemePreview() {}, defaultNamespaceThemeIcon: 'folder', defaultNamespaceThemeColor: '#000' };
+  vm.runInNewContext('function fillNamespaceForm(namespace){' + fill + '} fillNamespaceForm({name:"Analyst",theme_color:"#123456"});', context);
+  assert.equal(saved.length, 1);
+  assert.equal(saved[0].form, fields.get('namespaceForm'));
+  assert.equal(saved[0].name, 'Analyst');
+  assert.equal(saved[0].color, '#123456');
+  fields.get('namespaceName').value = 'Unsaved edit';
+  assert.equal(saved[0].name, 'Analyst');
+});

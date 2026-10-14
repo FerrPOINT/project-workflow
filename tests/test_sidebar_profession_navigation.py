@@ -106,3 +106,16 @@ def test_profession_selection_accepts_canonical_and_legacy_links(client, query):
 def test_invalid_profession_selection_does_not_choose_another_profession(client, query):
     response = client.get("/workflows?" + query)
     assert response.status_code == 422
+
+
+@pytest.mark.parametrize("path,fields", [
+    ("/namespaces", [
+        "namespaceName", "namespaceCliCommand", "namespaceDescription", "namespaceLaunchProfile", "namespaceThemeColor",
+    ]),
+    ("/workflows", ["workflowName", "workflowDescription"]),
+])
+def test_editable_fields_participate_in_the_platform_leave_guard(client, path, fields):
+    response = client.get(path)
+    assert response.status_code == 200
+    for field in fields:
+        assert f'id="{field}" name="{field}"' in response.text

@@ -179,11 +179,11 @@
       <div class="card-title" id="workflowFormMode">Редактирование воркфлоу</div>
       <div>
         <label class="label" for="workflowName">Название</label>
-        <input type="text" id="workflowName" value="{{ selected_workflow.name if selected_workflow else '' }}" required>
+        <input type="text" id="workflowName" name="workflowName" value="{{ selected_workflow.name if selected_workflow else '' }}" required>
       </div>
       <div>
         <label class="label" for="workflowDescription">Описание</label>
-        <textarea id="workflowDescription" class="workflow-description">{{ selected_workflow.description if selected_workflow else '' }}</textarea>
+        <textarea id="workflowDescription" name="workflowDescription" class="workflow-description">{{ selected_workflow.description if selected_workflow else '' }}</textarea>
       </div>
       <div class="panel-actions">
         <button class="btn btn-primary" type="submit" id="workflowSubmitButton">Сохранить</button>

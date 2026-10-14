@@ -82,16 +82,16 @@
       <div class="card-title" id="namespaceFormMode">{{ 'Создание' if create_mode else 'Редактирование' }}</div>
       <div>
         <label class="label" for="namespaceName">Название</label>
-        <input type="text" id="namespaceName" value="{{ edited_namespace.name if edited_namespace else '' }}" required>
+        <input type="text" id="namespaceName" name="namespaceName" value="{{ edited_namespace.name if edited_namespace else '' }}" required>
       </div>
       <div>
         <label class="label" for="namespaceCliCommand">CLI-команда</label>
-        <input type="text" id="namespaceCliCommand" value="{{ edited_namespace.cli_command if edited_namespace else '' }}" placeholder="workflow-qa" required minlength="2" maxlength="64" pattern="[a-z][a-z0-9_\-]{1,63}" aria-describedby="namespaceCliHelp">
+        <input type="text" id="namespaceCliCommand" name="namespaceCliCommand" value="{{ edited_namespace.cli_command if edited_namespace else '' }}" placeholder="workflow-qa" required minlength="2" maxlength="64" pattern="[a-z][a-z0-9_\-]{1,63}" aria-describedby="namespaceCliHelp">
         <p class="field-help" id="namespaceCliHelp">От 2 до 64 символов: строчные латинские буквы, цифры, дефис и подчёркивание; первый символ — буква.</p>
       </div>
       <div>
         <label class="label" for="namespaceDescription">Описание</label>
-        <textarea id="namespaceDescription" class="namespace-description">{{ edited_namespace.description if edited_namespace else '' }}</textarea>
+        <textarea id="namespaceDescription" name="namespaceDescription" class="namespace-description">{{ edited_namespace.description if edited_namespace else '' }}</textarea>
       </div>
       <div>
         <div class="label" id="namespaceThemeLabel">Иконка и цвет</div>
@@ -112,14 +112,14 @@
             {% endfor %}
             </div>
           </details>
-          <input type="color" id="namespaceThemeColor" class="theme-color-input" aria-label="Цвет" title="Цвет" value="{{ edited_namespace.theme_color if edited_namespace else '#5E6AD2' }}" oninput="updateNamespaceThemePreview()">
+          <input type="color" id="namespaceThemeColor" name="namespaceThemeColor" class="theme-color-input" aria-label="Цвет" title="Цвет" value="{{ edited_namespace.theme_color if edited_namespace else '#5E6AD2' }}" oninput="updateNamespaceThemePreview()">
         </div>
       </div>
       <fieldset class="profession-execution-settings">
         <legend class="label">Настройки выполнения</legend>
         <div>
           <label class="label" for="namespaceLaunchProfile">Ключ запуска</label>
-          <input type="text" id="namespaceLaunchProfile" value="{{ edited_namespace.launch_profile or '' if edited_namespace else '' }}" pattern="[a-z0-9][a-z0-9_\-]*" maxlength="251" placeholder="profile-key">
+          <input type="text" id="namespaceLaunchProfile" name="namespaceLaunchProfile" value="{{ edited_namespace.launch_profile or '' if edited_namespace else '' }}" pattern="[a-z0-9][a-z0-9_\-]*" maxlength="251" placeholder="profile-key">
           <p class="field-help">Профиль внешнего исполнителя для этой профессии.</p>
         </div>
       </fieldset>
@@ -238,6 +238,7 @@ function fillNamespaceForm(namespace){
   document.querySelectorAll('input[name="namespaceThemeIcon"]').forEach(function(input){ input.checked = input.value === icon; });
   document.getElementById('namespaceThemeColor').value = namespace ? (namespace.theme_color || defaultNamespaceThemeColor) : defaultNamespaceThemeColor;
   updateNamespaceThemePreview();
+  window.SdlcPlatformNavigation.saved(document.getElementById('namespaceForm'));
 }
 function setNamespaceFormMode(mode){
   namespaceFormMode = mode;

@@ -2207,7 +2207,7 @@ class TestProjectsPage:
     def test_namespace_editor_exposes_validation_and_safe_action_states(self):
         response = client.get("/namespaces")
         assert response.status_code == 200
-        assert re.search(r'id="namespaceName" value="[^"]*" required', response.text)
+        assert re.search(r'id="namespaceName" name="namespaceName" value="[^"]*" required', response.text)
         assert 'required minlength="2" maxlength="64" pattern="[a-z][a-z0-9_\\-]{1,63}"' in response.text
         assert 'aria-describedby="namespaceCliHelp"' in response.text
         assert 'id="namespaceWorkflowId"' not in response.text
