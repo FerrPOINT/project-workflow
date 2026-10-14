@@ -25,6 +25,17 @@ key/fence/body. A verified held receipt leaves Workflow unfinished: report it an
 end the native run, without a normal final report/proposal, polling or a fabricated
 stage transition. Scheduler-only `return-to-pm/return-operation` are not agent actions.
 
+The coordinated original critical key is exactly
+`fleet-critical-blocker:<Fleet session_run_id>` from the existing runtime context,
+not the Tracker execution UUID or normal result-proposal key. Fleet must supply
+this value in CLI startup input/context before dispatch; the agent must not derive
+or replace it. The exact context field/flag is not yet agreed, so this document
+does not invent one or claim that delivery is wired. Missing supplied key remains
+an instruction-level blocker. Current consumer support must not be inferred from
+native MCP, arbitrary output-text parsing or a blocker discovery route: none is
+assumed. The configured Fleet scheduler owns native stop/readback and Return;
+the agent submits the critical proposal and reads its original operation only.
+
 CLI syntax/key bounds were checked at Tracker
 `3ddb1596960ffd10ec66a99b4353ef3a74a70187`; current service contracts were inspected
 read-only at `caf7ab3f9c93946fc149d61027bee72cafb536ac`. Existing frozen CLI2aa does
