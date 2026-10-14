@@ -17,9 +17,8 @@
 .dashboard-section-heading{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px}
 .dashboard-section-title{font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em}
 .dashboard-section-link{font-size:12px;font-weight:600;white-space:nowrap}
-.dashboard-list{border-top:1px solid var(--border)}
-.dashboard-row{display:block;padding:10px 8px;border-bottom:1px solid var(--border);color:inherit;min-width:0}
-.dashboard-row:hover{background:var(--surface-hover);color:inherit;text-decoration:none}
+.dashboard-row{display:block;color:inherit}
+.dashboard-row:hover{color:inherit;text-decoration:none}
 .list-title{font-size:13px;font-weight:600;line-height:1.35;color:var(--text);margin-bottom:3px;overflow-wrap:anywhere}
 .list-meta{display:flex;gap:4px 10px;flex-wrap:wrap;font-size:11px;color:var(--text-dim)}
 .code{font-family:'JetBrains Mono',monospace;color:var(--accent-readable)}
@@ -49,9 +48,9 @@
       <a class="dashboard-section-link" href="/tasks{% if active_namespace_id %}?namespace_id={{ active_namespace_id }}{% endif %}">Все задачи</a>
     </div>
     {% if open_tasks %}
-    <div class="dashboard-list">
+    <div class="base-resource-list" data-variant="plain" data-density="normal">
       {% for task in open_tasks[:8] %}
-      <a href="/task/{{ task.task_key }}{% if task.namespace_id %}?namespace_id={{ task.namespace_id }}{% endif %}" class="dashboard-row" data-task-key="{{ task.task_key }}">
+      <a href="/task/{{ task.task_key }}{% if task.namespace_id %}?namespace_id={{ task.namespace_id }}{% endif %}" class="dashboard-row base-resource-list-row" data-interactive="true" data-task-key="{{ task.task_key }}">
         <div class="list-title"><span class="code">{{ task.task_key }}</span>{% if task.title %} — {{ task.title }}{% endif %}</div>
         <div class="list-meta">
           <span>{{ task.namespace_name }}</span>
@@ -73,9 +72,9 @@
       <a class="dashboard-section-link" href="/namespaces">Все профессии</a>
     </div>
     {% if namespaces %}
-    <div class="dashboard-list">
+    <div class="base-resource-list" data-variant="plain" data-density="normal">
       {% for namespace in namespaces[:6] %}
-      <a href="/namespaces?namespace_id={{ namespace.id }}" class="dashboard-row" data-namespace-id="{{ namespace.id }}">
+      <a href="/namespaces?namespace_id={{ namespace.id }}" class="dashboard-row base-resource-list-row" data-interactive="true" data-namespace-id="{{ namespace.id }}">
         <div class="list-title">{{ namespace.name }}</div>
         <div class="list-meta">
           <span>{{ namespace.task_count | pluralize('задача,задачи,задач') }}</span>

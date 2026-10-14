@@ -323,8 +323,9 @@ class TestIndexPage:
         assert response.status_code == 200
         assert response.text.count('data-task-key="PREVIEW-') == 8
         assert 'data-task-key="PREVIEW-9"' not in response.text
-        assert 'class="dashboard-row" data-namespace-id="6"' in response.text
-        assert 'class="dashboard-row" data-namespace-id="7"' not in response.text
+        namespace_rows = re.findall(r'<a\b[^>]*data-namespace-id="(\d+)"[^>]*>', response.text)
+        assert namespace_rows == [str(number) for number in range(1, 7)]
+        assert 'dashboard-row base-resource-list-row' in response.text
         assert "Показано 8 из 12" in response.text
         assert "Показано 6 из 8" in response.text
         assert 'class="dashboard-section-link" href="/tasks' in response.text
