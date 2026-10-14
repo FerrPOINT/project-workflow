@@ -32,7 +32,7 @@
     "path": "/internal/runtime/assign",
     "request": {
       "instruction_profile": "single-task-v1",
-      "instruction_manifest_sha256": "af354aef11f12d2d27e08a1bd24b06fb7518a30086f225382b6b13c286293da9",
+      "instruction_manifest_sha256": "96df381922bb85922e6401a33d2bf9758eaf74ff6b1108a96b83ee4bc59aa7af",
       "task": "SDLC-7",
       "role_key": "project_manager",
       "workflow_key": "single-task-v1:project_manager",
@@ -117,7 +117,7 @@
     "path": "/internal/runtime/bind",
     "request": {
       "instruction_profile": "single-task-v1",
-      "instruction_manifest_sha256": "af354aef11f12d2d27e08a1bd24b06fb7518a30086f225382b6b13c286293da9",
+      "instruction_manifest_sha256": "96df381922bb85922e6401a33d2bf9758eaf74ff6b1108a96b83ee4bc59aa7af",
       "task": "SDLC-7",
       "bind_operation_key": "fleet-pm-runtime-bind:ffffffff-ffff-4fff-8fff-ffffffffffff",
       "assignment_operation_key": "pm-draft:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
@@ -179,14 +179,14 @@
         "current_phase_id": 20,
         "current_phase_code": "PM-DRAFT-01",
         "current_phase_name": "Workflow step and task context",
-        "single_task_context_sha256": "bafdcf35929be2213b9c59220ad39cea8d7f771f8fa5005fbe852aae899ee3ae",
+        "single_task_context_sha256": "cb0410286e5d5c659140571f2ba67798d9a4851f1747d8c6cc11d1dee259abdd",
         "single_task_binding": {
-          "assignment_sha256": "a48b2938b61f5e23a33ccb4830608ef3472a2f42b43bbc93511cabded6049318",
+          "assignment_sha256": "677f9591292d25f79c90df236df8f8368fd163e849f2ad76ac8716e55054bd91",
           "context": {
             "concrete_agent_ref": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
             "execution_ref": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
             "fencing_token": 1,
-            "instruction_manifest_sha256": "af354aef11f12d2d27e08a1bd24b06fb7518a30086f225382b6b13c286293da9",
+            "instruction_manifest_sha256": "96df381922bb85922e6401a33d2bf9758eaf74ff6b1108a96b83ee4bc59aa7af",
             "instruction_profile": "single-task-v1",
             "lease_ref": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
             "lease_version": 1,
@@ -205,7 +205,7 @@
             "cycle_number": 0,
             "expected_binding_state": "unbound",
             "hermes_run_ref": "run_pm",
-            "instruction_manifest_sha256": "af354aef11f12d2d27e08a1bd24b06fb7518a30086f225382b6b13c286293da9",
+            "instruction_manifest_sha256": "96df381922bb85922e6401a33d2bf9758eaf74ff6b1108a96b83ee4bc59aa7af",
             "instruction_profile": "single-task-v1",
             "mode_key": "draft",
             "project_id": 2,
@@ -224,7 +224,7 @@
     "path": "/internal/runtime/v1/pm/bind",
     "request": {
       "instruction_profile": "single-task-v1",
-      "instruction_manifest_sha256": "af354aef11f12d2d27e08a1bd24b06fb7518a30086f225382b6b13c286293da9",
+      "instruction_manifest_sha256": "96df381922bb85922e6401a33d2bf9758eaf74ff6b1108a96b83ee4bc59aa7af",
       "task": "SDLC-7",
       "execution_ref": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
       "tracker_instance_ref": "tracker:one",
@@ -271,8 +271,8 @@
         "workflow_step_allowed": true,
         "resume_delivered": false,
         "instruction_profile": "single-task-v1",
-        "instruction_manifest_sha256": "af354aef11f12d2d27e08a1bd24b06fb7518a30086f225382b6b13c286293da9",
-        "single_task_context_sha256": "1eb3640264873ac65e5547a15d4685045765f4d2e1b4cb423d1f8f6333dab2b6"
+        "instruction_manifest_sha256": "96df381922bb85922e6401a33d2bf9758eaf74ff6b1108a96b83ee4bc59aa7af",
+        "single_task_context_sha256": "60fa33e58673056f75d77a164fa08d8e6a825ea78ba8c19030ec9188c67a3cf2"
       },
       "execution_token": "<execution-token-from-pm-bind>"
     }
@@ -281,7 +281,7 @@
     "path": "/internal/runtime/step",
     "request": {
       "instruction_profile": "single-task-v1",
-      "instruction_manifest_sha256": "af354aef11f12d2d27e08a1bd24b06fb7518a30086f225382b6b13c286293da9",
+      "instruction_manifest_sha256": "96df381922bb85922e6401a33d2bf9758eaf74ff6b1108a96b83ee4bc59aa7af",
       "task": "SDLC-7",
       "step_operation_key": "step:read",
       "assignment_revision": 1,
@@ -294,7 +294,7 @@
       "expected_phase_code": "PM-DRAFT-01",
       "expected_status": "active",
       "session_run_id": "ffffffff-ffff-4fff-8fff-ffffffffffff",
-      "single_task_context_sha256": "1eb3640264873ac65e5547a15d4685045765f4d2e1b4cb423d1f8f6333dab2b6"
+      "single_task_context_sha256": "60fa33e58673056f75d77a164fa08d8e6a825ea78ba8c19030ec9188c67a3cf2"
     },
     "status_code": 200,
     "response": {
@@ -358,7 +358,7 @@
     "path": "/internal/runtime/v1/pm/readback",
     "request": {
       "instruction_profile": "single-task-v1",
-      "instruction_manifest_sha256": "af354aef11f12d2d27e08a1bd24b06fb7518a30086f225382b6b13c286293da9",
+      "instruction_manifest_sha256": "96df381922bb85922e6401a33d2bf9758eaf74ff6b1108a96b83ee4bc59aa7af",
       "task": "SDLC-7",
       "execution_ref": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
       "tracker_instance_ref": "tracker:one",
@@ -401,12 +401,12 @@
         "workflow_step_allowed": true,
         "resume_delivered": false,
         "instruction_profile": "single-task-v1",
-        "instruction_manifest_sha256": "af354aef11f12d2d27e08a1bd24b06fb7518a30086f225382b6b13c286293da9",
-        "single_task_context_sha256": "1eb3640264873ac65e5547a15d4685045765f4d2e1b4cb423d1f8f6333dab2b6",
+        "instruction_manifest_sha256": "96df381922bb85922e6401a33d2bf9758eaf74ff6b1108a96b83ee4bc59aa7af",
+        "single_task_context_sha256": "60fa33e58673056f75d77a164fa08d8e6a825ea78ba8c19030ec9188c67a3cf2",
         "operation": {
           "operation_key": "fleet-pm-bind:ffffffff-ffff-4fff-8fff-ffffffffffff",
           "kind": "bind",
-          "request_sha256": "c84aac39a41ebc12646d92fc4329d9e8d05f2409007cfe0fb9fb53ad88b4a435",
+          "request_sha256": "180d78d8a62ac3e48693d8b5a55012bee6dd8e6a7e7d99a17aa3dacba8b7feaa",
           "result": {
             "contract_version": 1,
             "identity": {
@@ -434,8 +434,8 @@
             "workflow_step_allowed": true,
             "resume_delivered": false,
             "instruction_profile": "single-task-v1",
-            "instruction_manifest_sha256": "af354aef11f12d2d27e08a1bd24b06fb7518a30086f225382b6b13c286293da9",
-            "single_task_context_sha256": "1eb3640264873ac65e5547a15d4685045765f4d2e1b4cb423d1f8f6333dab2b6"
+            "instruction_manifest_sha256": "96df381922bb85922e6401a33d2bf9758eaf74ff6b1108a96b83ee4bc59aa7af",
+            "single_task_context_sha256": "60fa33e58673056f75d77a164fa08d8e6a825ea78ba8c19030ec9188c67a3cf2"
           }
         }
       },

@@ -8,8 +8,8 @@ from project_workflow.domain.base_admission import Sha256
 from project_workflow.domain.base_binding import DatabaseId
 
 PROFILE = "single-task-v1"
-CATALOG_SHA256 = "03c479707645ab3721be5a4252b5f4ecaa1a783d955bad06c79222e721a8a076"
-MANIFEST_SHA256 = "af354aef11f12d2d27e08a1bd24b06fb7518a30086f225382b6b13c286293da9"
+CATALOG_SHA256 = "c06d0dad2cf8cb5e856f4010bfb646454149a6db6461202721f0dd0a9fb57368"
+MANIFEST_SHA256 = "96df381922bb85922e6401a33d2bf9758eaf74ff6b1108a96b83ee4bc59aa7af"
 ROLE_MODES = {
     "project_manager": {"draft": ["business"]},
     "analyst": {"analysis": ["business"]},

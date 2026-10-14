@@ -30,6 +30,11 @@ TARGETS = {
     "devops": "Deployment / Completed",
 }
 
+CRITICAL_BODY_COMMAND = (
+    '(umask 077; set -C; jq -e --arg key "${FLEET_CRITICAL_BLOCKER_KEY:?Fleet critical proposal key unavailable}" '
+    "'.idempotency_key = $key' critical-body.json > critical-blocker.json)"
+)
+
 CRITICAL_BUSINESS_REVIEW = (
     "Decide routine technical details autonomously within approved requirements. Review/Test defects use normal "
     "rework; infrastructure failures go to the operator, and tool approval is a separate permission decision. "
@@ -43,12 +48,23 @@ CRITICAL_BUSINESS_REVIEW = (
     "current DeliveryFence and requirements revision/hash; evidence contains verified artifact.receipt and "
     "artifact.binding for this own assignment/execution/role, never a Workflow terminal receipt or invented ID. "
     "Keep question <=4096 bytes, rationale <=8192 bytes, at most 8 options and 1..16 sealed evidence entries. "
-    "Any recommendation must reference an actual option_id. Use a supplied original critical operation key, "
-    "not the normal result proposal key: nonempty, <=128 UTF-8 bytes, neither '.' nor '..', with no whitespace, "
-    "control characters, slash or backslash. Pass the raw key; CLI escapes it, so do not pre-encode it. "
-    "Missing supplied key/fence/evidence is a blocker; never fabricate it. Freeze that key and exact body. "
+    "Any recommendation must reference an actual option_id. Use the supplied original critical operation key "
+    "from FLEET_CRITICAL_BLOCKER_KEY after sourcing the supplied env.sh in this same foreground shell. "
+    "Fleet supplies exactly fleet-critical-blocker:<Fleet session_run_id>, NOT the Tracker execution UUID "
+    "or normal result proposal key. Never construct a missing value or choose another key. Require installed "
+    "jq before preparing JSON; missing jq/export is a concrete dependency, not permission for raw shell JSON "
+    "interpolation or protocol fallback. The key is nonempty, <=128 UTF-8 bytes, neither '.' nor '..', "
+    "with no whitespace, control characters, slash or backslash. Pass the raw key; CLI escapes it, "
+    "so do not pre-encode it. "
+    "Missing supplied key/fence/evidence is a blocker; never fabricate it. Before the FIRST submit only, "
+    "prepare the real typed fields in private critical-body.json, then set the key safely using jq --arg: "
+    + CRITICAL_BODY_COMMAND + ". Require command exit 0 and the actual valid JSON body; do not print env, "
+    "tokens or private payloads. The command creates a private new file without overwriting an existing body. "
+    "Freeze that key and exact body. Never regenerate or overwrite the original body after uncertain POST. "
     "Run task-tracker sdlc critical-blocker submit --task <task-uuid> --from-file <critical-blocker.json>. "
-    "Reconcile with task-tracker sdlc critical-blocker operation --task <task-uuid> --key <original-critical-key>; "
+    "Reconcile with task-tracker sdlc critical-blocker operation --task <task-uuid> "
+    '--key "$FLEET_CRITICAL_BLOCKER_KEY" '
+    "in the same original run context; "
     "read current detail with task-tracker sdlc critical-blocker read --task <task-uuid> --blocker <blocker-uuid> "
     "only under still-authorized access. Verify the actual task/root/project/owner, assignment/execution/agent, "
     "role/fence, requirements revision/hash, original proposal/key and blocker_id/blocker_sha256. "

@@ -1,7 +1,7 @@
 {
   "instruction_overlay": {
     "path": "project_workflow/infrastructure/single_task_delivery_instructions.py",
-    "sha256": "178128e11b231c7954c44cbb95628f3a535714299c5bfbff2e2e2e3438191cac"
+    "sha256": "afe40c71a5bf05a1355aa1e08a916dae02c2c411bdf76b55ada45a1d490e8d3e"
   },
   "instruction_profile": "single-task-v1",
   "instruction_source": {
@@ -34,7 +34,7 @@
       "namespace_cli_command": "workflow-single-task-analyst",
       "namespace_name": "single-task-analyst",
       "profile": "single-task-v1-analyst",
-      "role_instructions_sha256": "84dd858c053cbbb5cc19963c4ccb18439e4b1260e003197b135ff8f5e4864957",
+      "role_instructions_sha256": "a19f1ce1f7275de464668311bc5f804f2e5d51052dc0d8ba1ac719069996ddca",
       "workflow_key": "single-task-v1:analyst"
     },
     "architect": {
@@ -47,7 +47,7 @@
       "namespace_cli_command": "workflow-single-task-architect",
       "namespace_name": "single-task-architect",
       "profile": "single-task-v1-architect",
-      "role_instructions_sha256": "2476d7c0a06f1cbf90a0215bc844eb8d4a5f5d1f486f1a415b9dd6896dfc6c9e",
+      "role_instructions_sha256": "a8d0ca2ee29e4aa9f1a03a41552c4d996864bfe51123c9e859f00aefefa5e8d7",
       "workflow_key": "single-task-v1:architect"
     },
     "developer": {
@@ -63,7 +63,7 @@
       "namespace_cli_command": "workflow-single-task-developer",
       "namespace_name": "single-task-developer",
       "profile": "single-task-v1-developer",
-      "role_instructions_sha256": "fb6a9b2570c665405dedd1c1de4fd0e68e4201739fc972c64ab44153a9bfa29d",
+      "role_instructions_sha256": "036b78ddee83809489d5adb03e4a6e451dfcd41b99d2621c21f57793c2874a6b",
       "workflow_key": "single-task-v1:developer"
     },
     "devops": {
@@ -76,7 +76,7 @@
       "namespace_cli_command": "workflow-single-task-devops",
       "namespace_name": "single-task-devops",
       "profile": "single-task-v1-devops",
-      "role_instructions_sha256": "92a1c5d9c49b9832a81730cacfd5463a3d7357c1da6790ee95a7b3899142592a",
+      "role_instructions_sha256": "340dc33c5bcf24bd9c79563899125c63ed881c8312473477072e76e7d3ffc126",
       "workflow_key": "single-task-v1:devops"
     },
     "project_manager": {
@@ -102,7 +102,7 @@
       "namespace_cli_command": "workflow-single-task-reviewer",
       "namespace_name": "single-task-reviewer",
       "profile": "single-task-v1-reviewer",
-      "role_instructions_sha256": "12a0a7d608fccf8de55d26d1e457a36640a1a1eb0329e2bf59eb97c0d9019050",
+      "role_instructions_sha256": "0eb246c222aa5e77bc3795f61ab63d0b08a17e0fec27367ee0489a17128245c6",
       "workflow_key": "single-task-v1:reviewer"
     },
     "tester": {
@@ -115,7 +115,7 @@
       "namespace_cli_command": "workflow-single-task-tester",
       "namespace_name": "single-task-tester",
       "profile": "single-task-v1-tester",
-      "role_instructions_sha256": "10a64850d945f5f0f6478320b4ce4623be4c7fbbe76ff8ee32a7c53f9218e939",
+      "role_instructions_sha256": "3987122e99160248f4fb33858c73fe9654d6561ae604c94d7881f2e2ed1a7116",
       "workflow_key": "single-task-v1:tester"
     }
   },
@@ -128,7 +128,7 @@
   "workflow_catalog": {
     "artifact": "project_workflow/references/single_task_catalog_v1.json",
     "hash_encoding": "utf-8-lf-no-bom-with-final-newline",
-    "sha256": "03c479707645ab3721be5a4252b5f4ecaa1a783d955bad06c79222e721a8a076",
+    "sha256": "c06d0dad2cf8cb5e856f4010bfb646454149a6db6461202721f0dd0a9fb57368",
     "version": 1
   }
 }

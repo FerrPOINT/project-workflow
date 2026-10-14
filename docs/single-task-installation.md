@@ -49,8 +49,8 @@ Installed binding не является runtime admission или Tracker transit
 и `single_task_manifest_v1.json`, проверяемые по фактическим UTF-8/LF bytes:
 
 ```text
-catalog:  03c479707645ab3721be5a4252b5f4ecaa1a783d955bad06c79222e721a8a076
-manifest: af354aef11f12d2d27e08a1bd24b06fb7518a30086f225382b6b13c286293da9
+catalog:  c06d0dad2cf8cb5e856f4010bfb646454149a6db6461202721f0dd0a9fb57368
+manifest: 96df381922bb85922e6401a33d2bf9758eaf74ff6b1108a96b83ee4bc59aa7af
 ```
 
 `python -m scripts.build_single_task_profile --check` проверяет воспроизводимость.
@@ -64,7 +64,9 @@ Tracker CLI; соответствующие artifacts и pins опубликов
 Текущий source-кандидат добавляет critical-business ветку техническим ролям и
 отдельную инструкцию PM review для доверенно выданного нового assignment той же
 задачи. Обычный PM brainstorming/confirmation текст сохранён. Требуются новый
-Tracker CLI с `critical-blocker submit/read/operation` и доверенный PM review input;
+Tracker CLI с `critical-blocker submit/read/operation`, существующий `jq`,
+согласованный non-secret export `FLEET_CRITICAL_BLOCKER_KEY` в приватном `env.sh`
+и доверенный PM review input;
 старый CLI2aa и исходный Draft snapshot этого не обеспечивают. Подробные границы
 даны в [аудите инструкций](single-task-instruction-audit.md).
 Общий manifest hash относится ко всем профессиям.

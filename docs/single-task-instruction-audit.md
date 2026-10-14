@@ -28,11 +28,17 @@ stage transition. Scheduler-only `return-to-pm/return-operation` are not agent a
 The coordinated original critical key is exactly
 `fleet-critical-blocker:<Fleet session_run_id>` from the existing runtime context,
 not the Tracker execution UUID or normal result-proposal key. Fleet must supply
-this value in CLI startup input/context before dispatch; the agent must not derive
-or replace it. The exact context field/flag is not yet agreed, so this document
-does not invent one or claim that delivery is wired. Missing supplied key remains
-an instruction-level blocker. Current consumer support must not be inferred from
-native MCP, arbitrary output-text parsing or a blocker discovery route: none is
+this value through the agreed optional fifth export `FLEET_CRITICAL_BLOCKER_KEY`
+in the existing private `env.sh`, for technical delivery only. PM retains its four
+original exports; `step.json` is unchanged. The main-owned implementation binds
+the export to the actual run UUID, not an arbitrary string. Its reported source
+fmt/diff checks are not Cargo or installed qualification of this carrier.
+The agent must not derive or replace the value. Instructions use `jq --arg` to
+set JSON `idempotency_key` in a private new file with no overwrite, never raw shell
+JSON interpolation. Require `jq`, the supplied export and successful JSON
+preparation before POST; retain the original file/body after uncertain acceptance.
+Missing supplied key remains an instruction-level blocker. Current consumer support
+must not be inferred from native MCP, arbitrary output-text parsing or a blocker discovery route: none is
 assumed. The configured Fleet scheduler owns native stop/readback and Return;
 the agent submits the critical proposal and reads its original operation only.
 
@@ -214,8 +220,8 @@ human credentials or extra publisher CLI are invented.
 ## Source Hashes And Rollout Boundary
 
 ```text
-catalog:  03c479707645ab3721be5a4252b5f4ecaa1a783d955bad06c79222e721a8a076
-manifest: af354aef11f12d2d27e08a1bd24b06fb7518a30086f225382b6b13c286293da9
+catalog:  c06d0dad2cf8cb5e856f4010bfb646454149a6db6461202721f0dd0a9fb57368
+manifest: 96df381922bb85922e6401a33d2bf9758eaf74ff6b1108a96b83ee4bc59aa7af
 ```
 
 Only instruction changes trigger this family/hash revision. Existing two source

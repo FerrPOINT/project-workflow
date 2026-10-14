@@ -181,7 +181,7 @@ def test_critical_business_hold_uses_real_commands_without_false_completion(cata
         "routine technical details autonomously", "defects use normal rework", "infrastructure failures",
         "tool approval is a separate", "ONLY a requirements_contradiction or missing_business_decision",
         "critical-blocker --help", "critical-blocker submit --task <task-uuid> --from-file <critical-blocker.json>",
-        "critical-blocker operation --task <task-uuid> --key <original-critical-key>",
+        'critical-blocker operation --task <task-uuid> --key "$FLEET_CRITICAL_BLOCKER_KEY"',
         "critical-blocker read --task <task-uuid> --blocker <blocker-uuid>",
         "own sealed assignment evidence", "artifact.receipt", "artifact.binding", "supplied original critical",
         "<=128 UTF-8 bytes", "do not pre-encode", "never a fresh key or blind resend",
@@ -201,6 +201,26 @@ def test_critical_business_hold_uses_real_commands_without_false_completion(cata
     assert "There is no lifecycle CLI command" not in terminal
 
 
+@pytest.mark.parametrize("role,mode", MODES[1:])
+def test_critical_carrier_is_supplied_and_json_encoded_not_shell_interpolated(catalog, role, mode):
+    from project_workflow.infrastructure.single_task_delivery_instructions import CRITICAL_BODY_COMMAND
+
+    context = mode_for(catalog, role, mode)["phases"][0]["instructions"][1]["description"]
+    for required in (
+        "FLEET_CRITICAL_BLOCKER_KEY", "same foreground shell", "fleet-critical-blocker:<Fleet session_run_id>",
+        "NOT the Tracker execution UUID", "Never construct a missing value", "Require installed jq",
+        "Before the FIRST submit only", "Require command exit 0", "Never regenerate or overwrite",
+        "protocol fallback", CRITICAL_BODY_COMMAND,
+    ):
+        assert required in context
+    assert CRITICAL_BODY_COMMAND == (
+        '(umask 077; set -C; jq -e --arg key "${FLEET_CRITICAL_BLOCKER_KEY:?Fleet critical proposal key unavailable}" '
+        "'.idempotency_key = $key' critical-body.json > critical-blocker.json)"
+    )
+    assert '"idempotency_key":"$FLEET_CRITICAL_BLOCKER_KEY"' not in context
+    assert "<original-critical-key>" not in context
+
+
 def test_pm_critical_review_preserves_initial_brainstorm_and_requires_new_real_input(catalog):
     phase = mode_for(catalog, "project_manager", "draft")["phases"][0]
     review = phase["instructions"][-2]["description"]
@@ -214,3 +234,6 @@ def test_pm_critical_review_preserves_initial_brainstorm_and_requires_new_real_i
         assert required in review
     assert phase["instructions"][0]["description"].startswith("Your first working operation")
     assert phase["instructions"][-1]["description"].startswith("During pre-document brainstorming")
+    assert "FLEET_CRITICAL_BLOCKER_KEY" not in " ".join(
+        instruction_text(item) for item in mode_for(catalog, "project_manager", "draft")["phases"]
+    )
