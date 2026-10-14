@@ -2,7 +2,7 @@
   "catalog_version": 1,
   "instruction_overlay": {
     "path": "project_workflow/infrastructure/single_task_delivery_instructions.py",
-    "sha256": "912f0cab8c4212512cbd192e32fb1c9c2a6b7445e2359236d87f776d16e36922"
+    "sha256": "e1294fb75b0d7e25cb8ef5bc916aa0f016f87b84570b07eac5aa23b3fcf1cbd2"
   },
   "instruction_profile": "single-task-v1",
   "instruction_source": {
@@ -48,7 +48,7 @@
                   ]
                 },
                 {
-                  "description": "After the Workflow step, read task-tracker sdlc context --task <task-uuid>, task-tracker sdlc requirements --task <task-uuid> and task-tracker sdlc questions --task <task-uuid> with the authorized task identity. Read all available comments and attachments using permitted existing task-tracker comment list <issue-id> and task-tracker attachment list --issue <issue-id>; follow attachment references only with authorized access. Missing required input/access is an explicit blocker. Verify the same task UUID, approved revision/hash, assigned role/mode, current stage/status and predecessor evidence. An absent requirements revision is normal only while PM creates the first Draft.",
+                  "description": "After the Workflow step, read task-tracker sdlc context --task <task-uuid> and task-tracker sdlc requirements --task <task-uuid> with the supplied own-task grant. Verify task=root, assigned role/mode, stage/status, exact input revision/hash and predecessor evidence. Read supplied immutable source/evidence references only through authorized access. Ordinary comments/attachments are not authorized by the inspected PM or delivery task grants; do not borrow owner/scheduler credentials or call their ordinary endpoints. Parent must supply required source snapshots or an explicitly authorized read capability; missing required input/access is a blocker, not permission to invent sources or broaden authority. Also read task-tracker sdlc input --task <task-uuid> and task-tracker sdlc questions --task <task-uuid> under the PM grant. An absent requirements revision is normal during pre-document brainstorming; do not publish a placeholder merely to obtain a revision.",
                   "skills": [
                     "project-workflow-executor",
                     "tracker-operator"
@@ -62,7 +62,7 @@
                   ]
                 },
                 {
-                  "description": "Report only this completed preparation phase via terminal -> project-workflow --json step --task <workflow-task-key> --report <report-text> with the supplied --operation-key, --runtime-request and --execution-token-file. body.report must equal --report; retain exact key/body for uncertain-effect readback. Stop at the returned next phase: owner confirmation belongs to phase 3 in this SAME execution. Do not complete the PM Workflow or create another assignment/cycle to wait for consent.",
+                  "description": "During pre-document brainstorming the current phase may stay unfinished while the trusted Fleet adapter checkpoints with requirements_revision=null and requirements_sha256=null. Only input_kind=feedback may resume that checkpoint, using actual PmFeedbackReceipt.message_id and its input_receipt reference/sha256 after old run terminal readback; no placeholder document or fake question/answer is needed. Keep the same execution/assignment/cycle. Report only this completed preparation phase via terminal -> project-workflow --json step --task <workflow-task-key> --report <report-text> with the supplied --operation-key, --runtime-request and --execution-token-file. body.report must equal --report; retain exact key/body for uncertain-effect readback. Stop at the returned next phase: owner confirmation belongs to phase 3 in this SAME execution. Do not complete the PM Workflow or create another assignment/cycle to wait for consent.",
                   "skills": [
                     "project-workflow-executor",
                     "tracker-operator"
@@ -107,7 +107,7 @@
                   ]
                 },
                 {
-                  "description": "When clarification is needed, publish a focused question using task-tracker sdlc question publish --task <task-uuid> --from-file <question.json>. Publish the evolving requirements revision using task-tracker sdlc revision publish --task <task-uuid> --from-file <revision.json>. Use the actual existing strict payloads and authorized ownership/version/idempotency fields; do not invent IDs or JSON fields. Read questions/requirements back and match the server revision/hash. After an uncertain publish, reconcile before another write.",
+                  "description": "Brainstorm in small free-form iterations before a document exists; never create a placeholder revision or question solely for checkpointing. When the agreed draft is ready, publish the real requirements using task-tracker sdlc revision publish --task <task-uuid> --from-file <revision.json>. Formal clarification requires an existing requirements revision: only then publish a focused question using task-tracker sdlc question publish --task <task-uuid> --from-file <question.json>. Use actual strict MachineFence, revision/version and idempotency fields from the supplied context; never invent IDs. Read questions/requirements back and match the actual server revision/content_hash. Reconcile uncertain publication through those supported reads before retry with the exact original key/body.",
                   "skills": [
                     "project-workflow-executor",
                     "tracker-operator"
@@ -128,7 +128,7 @@
                   ]
                 },
                 {
-                  "description": "Report only this completed preparation phase via terminal -> project-workflow --json step --task <workflow-task-key> --report <report-text> with the supplied --operation-key, --runtime-request and --execution-token-file. body.report must equal --report; retain exact key/body for uncertain-effect readback. Stop at the returned next phase: owner confirmation belongs to phase 3 in this SAME execution. Do not complete the PM Workflow or create another assignment/cycle to wait for consent.",
+                  "description": "During pre-document brainstorming the current phase may stay unfinished while the trusted Fleet adapter checkpoints with requirements_revision=null and requirements_sha256=null. Only input_kind=feedback may resume that checkpoint, using actual PmFeedbackReceipt.message_id and its input_receipt reference/sha256 after old run terminal readback; no placeholder document or fake question/answer is needed. Keep the same execution/assignment/cycle. Report only this completed preparation phase via terminal -> project-workflow --json step --task <workflow-task-key> --report <report-text> with the supplied --operation-key, --runtime-request and --execution-token-file. body.report must equal --report; retain exact key/body for uncertain-effect readback. Stop at the returned next phase: owner confirmation belongs to phase 3 in this SAME execution. Do not complete the PM Workflow or create another assignment/cycle to wait for consent.",
                   "skills": [
                     "project-workflow-executor",
                     "tracker-operator"
@@ -143,7 +143,7 @@
                 "The FULL latest server-saved requirements document and exact revision/content_hash were presented to the owner.",
                 "Actual owner confirmation has a real authorized readback receipt matching task, latest revision/hash and owner.",
                 "Feedback was resolved within the same execution; no stale consent, fake answer IDs or extra PM cycles were used.",
-                "Typed checkpoint/resume and direct PM confirmation readback dependencies are satisfied; no blockers remain.",
+                "Authorized typed checkpoint/resume and direct PM confirmation readback dependencies are satisfied; no blockers remain.",
                 "PM finalizes only; allowed next stage/status are Backlog / Ready then Analysis / Ready, not PM dispatch."
               ],
               "code": "PM-DRAFT-03",
@@ -162,28 +162,28 @@
                   ]
                 },
                 {
-                  "description": "Checkpoint while awaiting actual owner confirmation with phase 3 unfinished and PM Workflow NOT completed. Waiting is separate from Tracker stage/status. Keep the same execution/assignment/cycle; never resume a completed execution or multiply PM assignment cycles to work around ordering. Checkpoint/resume needs typed input_kind answer|feedback|confirmation. The existing answer-only checkpoint/resume contract does not support free feedback or consent: until the typed extension is integrated, report that explicit dependency and leave this phase unfinished. Do not invent CLI commands.",
+                  "description": "Checkpoint while awaiting actual owner confirmation with phase 3 unfinished and PM Workflow NOT completed. Waiting is separate from Tracker stage/status. Keep the same execution/assignment/cycle; never resume a completed execution or multiply PM assignment cycles to work around ordering. Use the existing profile checkpoint/resume through the trusted Fleet adapter with typed input_kind answer|feedback|confirmation and unified input {input_kind,input_id} plus input_receipt {reference,sha256}. The adapter validates actual Tracker input and old run terminal readback before resume; the agent does not choose the observed owner/lease or call scheduler resume itself. Missing authorized adapter capability is a blocker; leave the phase unfinished and do not invent CLI commands.",
                   "skills": [
                     "project-workflow-executor",
                     "tracker-operator"
                   ]
                 },
                 {
-                  "description": "Handle feedback by revising and publishing the document within the SAME execution, then present the FULL new saved revision/content_hash and checkpoint again. Any document change invalidates earlier consent. Only input_kind=answer may reference a real question and answer_event_ref; free feedback and input_kind=confirmation must not fabricate an answer ID, question or clarification request. Confirmation input must reference the existing real owner confirmation receipt, not a conversational assertion. Unresolved feedback keeps phase 3 unfinished; no final Workflow report is permitted yet.",
+                  "description": "Handle feedback by revising and publishing the document within the SAME execution, then present the FULL new saved revision/content_hash and checkpoint again. Any document change invalidates earlier consent. input_id is actual Answer.id, PmFeedbackReceipt.message_id or Confirmation.id according to input_kind; only answer carries a real clarification reference/version pair. Free feedback and input_kind=confirmation must not fabricate an answer ID, question or clarification request. Answer and confirmation require an existing exact requirements revision/hash; only feedback can use the pre-document null/null pair. Confirmation input must reference the existing real owner confirmation receipt, not a conversational assertion. Unresolved feedback keeps phase 3 unfinished; no final Workflow report is permitted yet.",
                   "skills": [
                     "project-workflow-executor",
                     "tracker-operator"
                   ]
                 },
                 {
-                  "description": "AFTER actual owner confirmation, read its real receipt using task-tracker sdlc confirmation read --task <task-uuid> --revision <confirmed-revision>. --revision is required. Match task UUID, exact latest revision/content_hash, owner_subject and confirmation ID against the saved document and actual owner confirmation. Dependency: the inspected CLI still reads analysis-intent/outbox, unavailable to the PM grant; the Tracker worker is preparing direct GET requirements/{revision}/confirmation under this same CLI. Until that direct readback is available and authorized, leave phase 3 unfinished. Do not borrow scheduler/owner credentials, require PM to read an Analysis intent, or accept a missing/stale receipt.",
+                  "description": "AFTER actual owner confirmation, read its real receipt using task-tracker sdlc confirmation read --task <task-uuid> --revision <confirmed-revision>. --revision is required. Match task UUID, exact latest revision/content_hash, owner_subject and confirmation ID against the saved document and actual owner confirmation. The inspected CLI uses direct GET requirements/{revision}/confirmation under the own-task PM grant and checks the actual receipt ID/task/revision/content_hash/owner_subject/created_at and stage=Backlog. This historical confirmation receipt is not current lifecycle completion. Missing capability, denied access or a stale/mismatched receipt leaves phase 3 unfinished. Do not borrow scheduler/owner credentials or require PM to read an Analysis intent.",
                   "skills": [
                     "project-workflow-executor",
                     "tracker-operator"
                   ]
                 },
                 {
-                  "description": "ONLY AFTER the preceding exact owner confirmation receipt readback succeeds and all feedback is resolved, submit the FINAL phase report via terminal -> project-workflow --json step --task <workflow-task-key> --report <report-text> with the supplied --operation-key, --runtime-request and --execution-token-file. body.report must equal --report. Include actual saved document and confirmation receipt refs, revision/content_hash, owner_subject and check/evidence coverage; never invent authority fields. Reconcile uncertain effects using the exact original key/body before retry. Verify accepted Workflow complete=true, then finalize the PM run. The allowed next stage AND status are Backlog / Ready, then Analysis / Ready through Tracker/Fleet pickup. Tracker may create an Analysis / Ready intent at consent, but Analyst reserve remains blocked until PM actual completion is observed. PM does not dispatch Analyst or create another PM cycle. API/policy integration remains pending parent; installed instructions do not authorize live routing. Generic patch/issue transition/board move are forbidden substitutes.",
+                  "description": "ONLY AFTER the preceding exact owner confirmation receipt readback succeeds and all feedback is resolved, reconcile task-tracker sdlc confirmation read --task <task-uuid> --revision <confirmed-revision>, then submit the FINAL phase report via terminal -> project-workflow --json step --task <workflow-task-key> --report <report-text> with the supplied --operation-key, --runtime-request and --execution-token-file. body.report must equal --report. Include actual saved document and confirmation receipt refs, revision/content_hash, owner_subject and check/evidence coverage; never invent authority fields. Reconcile uncertain effects using the exact original key/body before retry. Verify accepted Workflow complete=true, then finalize the PM run. The allowed next stage AND status are Backlog / Ready, then Analysis / Ready through Tracker/Fleet pickup. Tracker may create an Analysis / Ready intent at consent, but Analyst reserve remains blocked until PM actual completion is observed. PM does not dispatch Analyst or create another PM cycle. API/policy integration remains pending parent; installed instructions do not authorize live routing. Generic patch/issue transition/board move are forbidden substitutes.",
                   "skills": [
                     "project-workflow-executor",
                     "tracker-operator"
@@ -242,7 +242,7 @@
                   ]
                 },
                 {
-                  "description": "After the Workflow step, read task-tracker sdlc context --task <task-uuid>, task-tracker sdlc requirements --task <task-uuid> and task-tracker sdlc questions --task <task-uuid> with the authorized task identity. Read all available comments and attachments using permitted existing task-tracker comment list <issue-id> and task-tracker attachment list --issue <issue-id>; follow attachment references only with authorized access. Missing required input/access is an explicit blocker. Verify the same task UUID, approved revision/hash, assigned role/mode, current stage/status and predecessor evidence. An absent requirements revision is normal only while PM creates the first Draft.",
+                  "description": "After the Workflow step, read task-tracker sdlc context --task <task-uuid> and task-tracker sdlc requirements --task <task-uuid> with the supplied own-task grant. Verify task=root, assigned role/mode, stage/status, exact input revision/hash and predecessor evidence. Read supplied immutable source/evidence references only through authorized access. Ordinary comments/attachments are not authorized by the inspected PM or delivery task grants; do not borrow owner/scheduler credentials or call their ordinary endpoints. Parent must supply required source snapshots or an explicitly authorized read capability; missing required input/access is a blocker, not permission to invent sources or broaden authority. The delivery task grant does not authorize clarifications/questions; use supplied immutable requirements and predecessor evidence, and route material business contradictions back to PM.",
                   "skills": [
                     "project-workflow-executor",
                     "tracker-operator"
@@ -400,7 +400,7 @@
                   ]
                 },
                 {
-                  "description": "After the Workflow step, read task-tracker sdlc context --task <task-uuid>, task-tracker sdlc requirements --task <task-uuid> and task-tracker sdlc questions --task <task-uuid> with the authorized task identity. Read all available comments and attachments using permitted existing task-tracker comment list <issue-id> and task-tracker attachment list --issue <issue-id>; follow attachment references only with authorized access. Missing required input/access is an explicit blocker. Verify the same task UUID, approved revision/hash, assigned role/mode, current stage/status and predecessor evidence. An absent requirements revision is normal only while PM creates the first Draft.",
+                  "description": "After the Workflow step, read task-tracker sdlc context --task <task-uuid> and task-tracker sdlc requirements --task <task-uuid> with the supplied own-task grant. Verify task=root, assigned role/mode, stage/status, exact input revision/hash and predecessor evidence. Read supplied immutable source/evidence references only through authorized access. Ordinary comments/attachments are not authorized by the inspected PM or delivery task grants; do not borrow owner/scheduler credentials or call their ordinary endpoints. Parent must supply required source snapshots or an explicitly authorized read capability; missing required input/access is a blocker, not permission to invent sources or broaden authority. The delivery task grant does not authorize clarifications/questions; use supplied immutable requirements and predecessor evidence, and route material business contradictions back to PM.",
                   "skills": [
                     "project-workflow-executor",
                     "tracker-operator"
@@ -558,7 +558,7 @@
                   ]
                 },
                 {
-                  "description": "After the Workflow step, read task-tracker sdlc context --task <task-uuid>, task-tracker sdlc requirements --task <task-uuid> and task-tracker sdlc questions --task <task-uuid> with the authorized task identity. Read all available comments and attachments using permitted existing task-tracker comment list <issue-id> and task-tracker attachment list --issue <issue-id>; follow attachment references only with authorized access. Missing required input/access is an explicit blocker. Verify the same task UUID, approved revision/hash, assigned role/mode, current stage/status and predecessor evidence. An absent requirements revision is normal only while PM creates the first Draft.",
+                  "description": "After the Workflow step, read task-tracker sdlc context --task <task-uuid> and task-tracker sdlc requirements --task <task-uuid> with the supplied own-task grant. Verify task=root, assigned role/mode, stage/status, exact input revision/hash and predecessor evidence. Read supplied immutable source/evidence references only through authorized access. Ordinary comments/attachments are not authorized by the inspected PM or delivery task grants; do not borrow owner/scheduler credentials or call their ordinary endpoints. Parent must supply required source snapshots or an explicitly authorized read capability; missing required input/access is a blocker, not permission to invent sources or broaden authority. The delivery task grant does not authorize clarifications/questions; use supplied immutable requirements and predecessor evidence, and route material business contradictions back to PM.",
                   "skills": [
                     "project-workflow-executor",
                     "tracker-operator"
@@ -694,7 +694,7 @@
                   ]
                 },
                 {
-                  "description": "After the Workflow step, read task-tracker sdlc context --task <task-uuid>, task-tracker sdlc requirements --task <task-uuid> and task-tracker sdlc questions --task <task-uuid> with the authorized task identity. Read all available comments and attachments using permitted existing task-tracker comment list <issue-id> and task-tracker attachment list --issue <issue-id>; follow attachment references only with authorized access. Missing required input/access is an explicit blocker. Verify the same task UUID, approved revision/hash, assigned role/mode, current stage/status and predecessor evidence. An absent requirements revision is normal only while PM creates the first Draft.",
+                  "description": "After the Workflow step, read task-tracker sdlc context --task <task-uuid> and task-tracker sdlc requirements --task <task-uuid> with the supplied own-task grant. Verify task=root, assigned role/mode, stage/status, exact input revision/hash and predecessor evidence. Read supplied immutable source/evidence references only through authorized access. Ordinary comments/attachments are not authorized by the inspected PM or delivery task grants; do not borrow owner/scheduler credentials or call their ordinary endpoints. Parent must supply required source snapshots or an explicitly authorized read capability; missing required input/access is a blocker, not permission to invent sources or broaden authority. The delivery task grant does not authorize clarifications/questions; use supplied immutable requirements and predecessor evidence, and route material business contradictions back to PM.",
                   "skills": [
                     "project-workflow-executor",
                     "tracker-operator"
@@ -853,7 +853,7 @@
                   ]
                 },
                 {
-                  "description": "After the Workflow step, read task-tracker sdlc context --task <task-uuid>, task-tracker sdlc requirements --task <task-uuid> and task-tracker sdlc questions --task <task-uuid> with the authorized task identity. Read all available comments and attachments using permitted existing task-tracker comment list <issue-id> and task-tracker attachment list --issue <issue-id>; follow attachment references only with authorized access. Missing required input/access is an explicit blocker. Verify the same task UUID, approved revision/hash, assigned role/mode, current stage/status and predecessor evidence. An absent requirements revision is normal only while PM creates the first Draft.",
+                  "description": "After the Workflow step, read task-tracker sdlc context --task <task-uuid> and task-tracker sdlc requirements --task <task-uuid> with the supplied own-task grant. Verify task=root, assigned role/mode, stage/status, exact input revision/hash and predecessor evidence. Read supplied immutable source/evidence references only through authorized access. Ordinary comments/attachments are not authorized by the inspected PM or delivery task grants; do not borrow owner/scheduler credentials or call their ordinary endpoints. Parent must supply required source snapshots or an explicitly authorized read capability; missing required input/access is a blocker, not permission to invent sources or broaden authority. The delivery task grant does not authorize clarifications/questions; use supplied immutable requirements and predecessor evidence, and route material business contradictions back to PM.",
                   "skills": [
                     "project-workflow-executor",
                     "tracker-operator"
@@ -1010,7 +1010,7 @@
                   ]
                 },
                 {
-                  "description": "After the Workflow step, read task-tracker sdlc context --task <task-uuid>, task-tracker sdlc requirements --task <task-uuid> and task-tracker sdlc questions --task <task-uuid> with the authorized task identity. Read all available comments and attachments using permitted existing task-tracker comment list <issue-id> and task-tracker attachment list --issue <issue-id>; follow attachment references only with authorized access. Missing required input/access is an explicit blocker. Verify the same task UUID, approved revision/hash, assigned role/mode, current stage/status and predecessor evidence. An absent requirements revision is normal only while PM creates the first Draft.",
+                  "description": "After the Workflow step, read task-tracker sdlc context --task <task-uuid> and task-tracker sdlc requirements --task <task-uuid> with the supplied own-task grant. Verify task=root, assigned role/mode, stage/status, exact input revision/hash and predecessor evidence. Read supplied immutable source/evidence references only through authorized access. Ordinary comments/attachments are not authorized by the inspected PM or delivery task grants; do not borrow owner/scheduler credentials or call their ordinary endpoints. Parent must supply required source snapshots or an explicitly authorized read capability; missing required input/access is a blocker, not permission to invent sources or broaden authority. The delivery task grant does not authorize clarifications/questions; use supplied immutable requirements and predecessor evidence, and route material business contradictions back to PM.",
                   "skills": [
                     "project-workflow-executor",
                     "tracker-operator"
@@ -1168,7 +1168,7 @@
                   ]
                 },
                 {
-                  "description": "After the Workflow step, read task-tracker sdlc context --task <task-uuid>, task-tracker sdlc requirements --task <task-uuid> and task-tracker sdlc questions --task <task-uuid> with the authorized task identity. Read all available comments and attachments using permitted existing task-tracker comment list <issue-id> and task-tracker attachment list --issue <issue-id>; follow attachment references only with authorized access. Missing required input/access is an explicit blocker. Verify the same task UUID, approved revision/hash, assigned role/mode, current stage/status and predecessor evidence. An absent requirements revision is normal only while PM creates the first Draft.",
+                  "description": "After the Workflow step, read task-tracker sdlc context --task <task-uuid> and task-tracker sdlc requirements --task <task-uuid> with the supplied own-task grant. Verify task=root, assigned role/mode, stage/status, exact input revision/hash and predecessor evidence. Read supplied immutable source/evidence references only through authorized access. Ordinary comments/attachments are not authorized by the inspected PM or delivery task grants; do not borrow owner/scheduler credentials or call their ordinary endpoints. Parent must supply required source snapshots or an explicitly authorized read capability; missing required input/access is a blocker, not permission to invent sources or broaden authority. The delivery task grant does not authorize clarifications/questions; use supplied immutable requirements and predecessor evidence, and route material business contradictions back to PM.",
                   "skills": [
                     "project-workflow-executor",
                     "tracker-operator"

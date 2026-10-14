@@ -6,9 +6,9 @@ Fleet actual-run terminal observation, Tracker lifecycle transition or new proof
 owner. Parent Tracker/Fleet policy remains responsible for those checks.
 
 No new service, queue, table, migration, CLI command, secret setting or instruction
-change. Legacy/Base receipt content and history remain unchanged. The profile
-catalog/manifest hashes remain `896c4063ac10660e5a95824d560d191ba609fe24e7fa34cd77d6338d6c2ab260`
-and `e44b83a7d0909a1e0371cb19919d08b51b29967edfdf4c759f59125e6681f74b`.
+change in the receipt packet. Legacy/Base receipt content and history remain
+unchanged. Current profile source hashes and later instruction-only corrections
+are recorded in the [instruction audit](single-task-instruction-audit.md).
 
 ## Publication And Readback
 

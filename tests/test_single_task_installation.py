@@ -234,7 +234,8 @@ def test_pm_confirmation_precedes_final_report_in_actual_installed_phase(databas
         assert "exact revision" in present and "content_hash" in present
         assert "PM Workflow NOT completed" in checkpoint
         assert "input_kind answer|feedback|confirmation" in checkpoint
-        assert "existing answer-only" in checkpoint
+        assert "unified input {input_kind,input_id}" in checkpoint
+        assert "input_receipt {reference,sha256}" in checkpoint
         assert "same execution/assignment/cycle" in checkpoint
         assert "within the SAME execution" in feedback
         assert "Any document change invalidates earlier consent" in feedback
@@ -242,8 +243,10 @@ def test_pm_confirmation_precedes_final_report_in_actual_installed_phase(databas
         assert "existing real owner confirmation receipt" in feedback
         assert "sdlc confirmation read --task <task-uuid> --revision <confirmed-revision>" in readback
         assert "direct GET requirements/{revision}/confirmation" in readback
-        assert "unavailable to the PM grant" in readback
-        assert "until" in checkpoint and "Until" in readback
+        assert "own-task PM grant" in readback
+        assert "historical confirmation receipt is not current lifecycle completion" in readback
+        assert "Missing" in checkpoint and "Missing" in readback
+        assert "answer_event_ref" not in feedback
         assert "--report" not in " ".join(instructions[:-1])
         assert "ONLY AFTER" in report and "--report <report-text>" in report
         assert report.index("confirmation receipt readback succeeds") < report.index("--report")

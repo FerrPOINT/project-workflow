@@ -47,8 +47,8 @@ Installed binding не является runtime admission или Tracker transit
 и `single_task_manifest_v1.json`, проверяемые по фактическим UTF-8/LF bytes:
 
 ```text
-catalog:  896c4063ac10660e5a95824d560d191ba609fe24e7fa34cd77d6338d6c2ab260
-manifest: e44b83a7d0909a1e0371cb19919d08b51b29967edfdf4c759f59125e6681f74b
+catalog:  7e89aef262ad700813d6448f2cd4b066dcf44086d166d1374f9872e191c0018e
+manifest: 1ed007c21c5352217c454ac807ae54a1de2671ab8630d43e29597b87dd1bf947
 ```
 
 `python -m scripts.build_single_task_profile --check` проверяет воспроизводимость.
@@ -86,11 +86,11 @@ installed profile + authenticated binding guard. Human/local-DB Supervisor step 
 Read-only сверены текущие parser/dispatch и `SubmitDeliveryProposal`:
 
 - PM: `task-tracker sdlc confirmation read --task <UUID> --revision <REVISION>`;
-  `--revision` обязателен в фактическом parser. Текущий dispatch использует
-  analysis-intent/outbox, недоступные PM grant. Tracker worker готовит direct
-  `GET requirements/{revision}/confirmation` под тем же CLI; до доступного
-  authorized readback PM phase 3 остаётся незавершённой. PM не читает intent
-  и не заимствует scheduler/owner credentials ради обхода.
+  `--revision` обязателен в фактическом parser. Текущий dispatch использует direct
+  `GET requirements/{revision}/confirmation` под own-task PM grant. Receipt
+  проверяется по task/revision/hash/owner; исторический stage=Backlog не заменяет
+  текущий lifecycle. Missing/denied/stale readback оставляет phase 3 незавершённой.
+  PM не читает intent и не заимствует scheduler/owner credentials ради обхода.
 - Non-PM: `task-tracker sdlc result propose --task <UUID> --from-file <proposal.json>`.
 - Readback: `task-tracker sdlc result operation --task <UUID> --key <KEY>`.
 
@@ -107,6 +107,10 @@ stage/status через registered lifecycle readback. Агент не удер�
 Lifecycle CLI команды в inspected parser нет: инструкции её не придумывают.
 Tracker API registration pending parent; missing/403/404/unknown acceptance — blocker,
 не permission для generic patch, scheduler credential или фиктивного receipt.
+
+Current instruction audit, grant restrictions and exact consumer prerequisites:
+[Single-Task Instruction Audit](single-task-instruction-audit.md). Content/hash
+updates are source-only; existing installed content must not be silently repaired.
 
 ### PM Phase Ordering
 

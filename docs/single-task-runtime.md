@@ -4,8 +4,9 @@ Bounded opt-in execution uses the existing assignment/bind/step/history bridge,
 Supervisor, PM continuation endpoints and repositories/locks. No routing DTO,
 second queue, native-runtime proof, Hermes change or additional readback service.
 Installed family remains 7 namespaces / 7 workflows / 8 modes / 24 phases.
-Instruction/catalog/manifest bytes remain unchanged: catalog `896c4063ac10660e5a95824d560d191ba609fe24e7fa34cd77d6338d6c2ab260`,
-manifest `e44b83a7d0909a1e0371cb19919d08b51b29967edfdf4c759f59125e6681f74b`.
+The runtime packet did not change instruction bytes. The subsequent
+[instruction audit](single-task-instruction-audit.md) records current source hashes
+and grant-aware PM/context corrections; runtime DTOs and producer behavior are unchanged.
 
 ## Assignment And Binding
 

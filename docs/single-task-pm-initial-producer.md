@@ -28,8 +28,10 @@ token/hash before the admitted first step. No deployed credentials are captured.
 The authority and all UUIDs/keys/input contents are synthetic test data, not
 live Tracker/Fleet evidence. Numeric catalog IDs are this fixture's persisted IDs;
 Fleet must obtain actual IDs from installation readback, never copy these IDs.
-Fixture response strings include the current installed instructions verbatim;
-this package does not change their source, catalog hash or manifest hash.
+Fixture response strings include the current installed instructions verbatim.
+The later [instruction audit](single-task-instruction-audit.md) refreshes the
+fixture from actual isolated endpoints for its new source hash, with the same
+producer logic, request shapes, Fleet keys, original input and token redaction.
 
 Fleet-shaped fixture identity uses local key `SDLC-7`, assignment operation
 `pm-draft:<assignment UUID>`, general bind key `fleet-pm-runtime-bind:<creation UUID>`,

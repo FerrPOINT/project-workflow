@@ -9,6 +9,8 @@ from project_workflow.infrastructure.single_task_delivery_instructions import (
     PM_CONFIRMATION_EVIDENCE,
     PM_CONFIRMATION_INSTRUCTIONS,
     PM_PHASE_REPORT,
+    PM_PUBLISH_INSTRUCTION,
+    context_instruction,
     terminal_instruction,
 )
 from scripts.prepare_single_task_profile_proposal import ROOT, digest, encoded
@@ -28,10 +30,12 @@ def render() -> tuple[bytes, bytes]:
         role = workflow["role_key"]
         for mode in workflow["modes"]:
             mode["phases"][0]["instructions"][0]["description"] = FIRST_STEP
+            mode["phases"][0]["instructions"][1]["description"] = context_instruction(role)
             mode["phases"][-1]["instructions"][-1]["description"] = terminal_instruction(role)
             if role == "project_manager":
                 for phase in mode["phases"][:2]:
                     phase["instructions"][-1]["description"] = PM_PHASE_REPORT
+                mode["phases"][1]["instructions"][3]["description"] = PM_PUBLISH_INSTRUCTION
                 mode["phases"][1]["instructions"][4]["description"] = (
                     "Prepare the FULL saved requirements document and its exact revision/content_hash for "
                     "owner review in phase 3. Include scope, acceptance criteria, choices/tradeoffs and open "
