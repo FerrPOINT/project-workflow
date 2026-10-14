@@ -65,6 +65,41 @@
 .base-shell-mark > svg { width: 60%; height: 60%; }
 
 .base-control { min-height: var(--shell-control-min); }
+/* Resource rows share geometry with SSR, but flex/grid remains product-owned. */
+.base-resource-list {
+  --resource-row-padding-inline: 16px;
+  --resource-row-padding-block: 8px;
+  --resource-row-min-height: 48px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-block: 1px solid var(--color-border);
+}
+.base-resource-list[data-density="comfortable"] {
+  --resource-row-padding-block: 16px;
+  --resource-row-min-height: 56px;
+}
+.base-resource-list[data-variant="bordered"] {
+  border: 1px solid var(--color-border);
+  border-radius: var(--base-radius);
+  background: var(--color-surface);
+}
+.base-resource-list > * + * { border-block-start: 1px solid var(--color-border); }
+.base-resource-list-row {
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: var(--resource-row-min-height, 48px);
+  padding-inline: var(--resource-row-padding-inline, 16px);
+  padding-block: var(--resource-row-padding-block, 8px);
+}
+.base-resource-list-row[data-interactive="true"]:not(:disabled):not([aria-disabled="true"]):hover {
+  background: var(--color-surface-raised);
+}
+.base-resource-list-row[data-interactive="true"]:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
+}
 .base-section-navigation { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid var(--color-border); padding-bottom: 8px; }
 .base-section-navigation-item { display: inline-flex; align-items: center; justify-content: center; padding: 8px 12px; border-radius: var(--base-radius); color: var(--color-text-secondary); font-size: var(--base-font-body); text-decoration: none; }
 .base-section-navigation-item:hover, .base-section-navigation-item[aria-current="page"] { background: var(--color-surface-raised); color: var(--color-text-primary); }
@@ -266,20 +301,9 @@ dialog.base-shell-drawer::backdrop { background: rgb(0 0 0 / 65%); }
   --color-warning: #92400e;
 }
 
-/* Shapes #32 by Temani Afif, selected from https://css-loaders.com/shapes/.
-   Shared by React, server-rendered products and the persistent Base document. */
-.base-loader-stage{--base-loader-box:32px;--base-loader-tile:8px;display:inline-grid;place-items:center;width:var(--base-loader-box);height:var(--base-loader-box);flex-shrink:0;color:var(--color-accent);vertical-align:middle}
-.base-loader-sm{--base-loader-box:20px;--base-loader-tile:5px}
-.base-loader-lg{--base-loader-box:48px;--base-loader-tile:12px}
-.base-shapes-loader{--c:no-repeat linear-gradient(currentColor 0 0);display:block;width:69.23077%;height:69.23077%;background:var(--c),var(--c),var(--c),var(--c),var(--c),var(--c),var(--c),var(--c),var(--c);background-size:var(--base-loader-tile) var(--base-loader-tile);animation:base-shapes-size 1s infinite,base-shapes-position 1s infinite}
-.base-loading-state{display:flex;min-height:240px;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:24px;text-align:center;font-size:14px;line-height:1.5;color:var(--color-text-muted)}
-/* A root loading state occupies the application viewport; section states keep
-   their containing layout, including forms and tables. */
+.base-loading-state{display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;font-size:14px;line-height:1.5;color:var(--color-text-muted)}
+/* Initial product checks keep meaningful status text in the viewport. */
 #root > .base-loading-state,body > .base-loading-state{min-height:100dvh;box-sizing:border-box}
-.base-control.bg-accent .base-loader-stage,.base-button-primary .base-loader-stage{color:inherit}
-@keyframes base-shapes-size{0%,100%{width:69.23077%;height:69.23077%}35%,65%{width:100%;height:100%}}
-@keyframes base-shapes-position{0%,40%{background-position:0 0,0 50%,0 100%,50% 100%,100% 100%,100% 50%,100% 0,50% 0,50% 50%}60%,100%{background-position:0 50%,0 100%,50% 100%,100% 100%,100% 50%,100% 0,50% 0,0 0,50% 50%}}
-@media(prefers-reduced-motion:reduce){.base-shapes-loader{animation:none;background-position:0 0,0 50%,0 100%,50% 100%,100% 100%,100% 50%,100% 0,50% 0,0 0,50% 50%}}
 
 /* Namespace keeps its context row inside the existing Base header. */
 @media (max-width: 767px) {
