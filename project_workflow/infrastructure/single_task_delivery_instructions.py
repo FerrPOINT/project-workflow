@@ -30,27 +30,71 @@ TARGETS = {
     "devops": "Deployment / Completed",
 }
 
+SEALED_ARTIFACTS = (
+    "For the six technical roles, only sealed assignment artifacts are authorized on the narrow attachment "
+    "routes under the supplied current delivery grant. Ordinary comments remain unauthorized; do not borrow "
+    "owner/scheduler credentials, use an ordinary human token or broaden permissions. Read permitted own "
+    "artifacts and accepted predecessor references using task-tracker attachment list --issue <task-uuid> "
+    "and task-tracker attachment download <attachment-uuid> --out <private-artifact-path>. Match issue_id to "
+    "task=root and the exact supplied reference/hash; match expected assignment_id, execution_id and role "
+    "from artifact.binding to the actual producer/predecessor, not a guessed current assignment for old evidence. "
+    "Verify SHA256 of the raw downloaded bytes; CLI download success alone is not an ArtifactReceipt. "
+    "After role work and BEFORE the FINAL Workflow phase report, publish the actual structured JSON role "
+    "reports/checks/deployment evidence through task-tracker attachment upload --issue <task-uuid> "
+    "--file <role-artifact.json> --content-type application/json. Use only the current supplied "
+    "assignment/execution/agent/fence and run context. Tracker enforces exact routing, Running/InProgress "
+    "and a live lease; the lease holder is the scheduler, not the agent. Do not renew it as scheduler or set "
+    "status yourself. Preserve the exact uploaded bytes, filename and MIME for replay. "
+    "Use the actual server-returned artifact.receipt {reference,sha256}, with "
+    "reference=tracker-attachment:<UUID> and SHA256 of raw bytes, and artifact.binding "
+    "{assignment_id,execution_id,role}. Read the saved metadata back with attachment list, download by the "
+    "actual attachment UUID and verify raw SHA256 and size against that receipt. New role outputs must match "
+    "this current task/assignment/execution/role, including Developer rework. Never fabricate an attachment "
+    "UUID, reference, SHA or a receipt from a local path, comment, Forge URL/job ID or Workflow terminal hash. "
+    "Workflow terminal receipt and role artifact contents are separate evidence. Unknown upload acceptance "
+    "requires authorized metadata/byte readback: locate the actual saved entry by exact current binding, "
+    "filename, MIME, size and raw SHA; if found, download its returned UUID and retain the verified receipt "
+    "without another upload. If no matching saved entry exists, only an exact-file replay with the original "
+    "filename/MIME under the still-current grant is permitted; never overwrite sealed bytes, delete evidence, "
+    "change identity/fence or declare success from uncertainty. "
+    "404/403, missing artifact capability, stale binding, checksum mismatch or unavailable readback is a "
+    "concrete blocker: leave the phase unfinished, report it and do not fake Workflow/business completion. "
+)
+
+
+def artifact_instruction(role: str) -> str:
+    return SEALED_ARTIFACTS + (
+        f"Prepare {RESULTS[role]} using only those verified actual artifact.receipt values. "
+        "Require the exact supplied proposal.idempotency_key from runtime guidance/template before the FINAL "
+        "Workflow report; do not generate or derive a key, even from a known session/run UUID. A missing "
+        "supplied key is a blocker, not permission to invent one. Include artifact references/hashes, provenance "
+        "and role evidence in the final Workflow phase report, then use the actual accepted Workflow receipt "
+        "for the delivery proposal; no new artifact envelope or producer protocol is introduced. "
+    )
+
 
 def context_instruction(role: str) -> str:
     common = (
         "After the Workflow step, read task-tracker sdlc context --task <task-uuid> and "
         "task-tracker sdlc requirements --task <task-uuid> with the supplied own-task grant. Verify task=root, "
         "assigned role/mode, stage/status, exact input revision/hash and predecessor evidence. Read supplied "
-        "immutable source/evidence references only through authorized access. Ordinary comments/attachments "
-        "are not authorized by the inspected PM or delivery task grants; do not borrow owner/scheduler "
-        "credentials or call their ordinary endpoints. Parent must supply required source snapshots or an "
-        "explicitly authorized read capability; missing required input/access is a blocker, not permission "
-        "to invent sources or broaden authority. "
+        "immutable source/evidence references only through authorized access. "
     )
     if role == "project_manager":
         return common + (
+            "Ordinary comments/attachments are not authorized by the inspected PM or delivery task grants; "
+            "do not borrow owner/scheduler credentials or call their ordinary endpoints. Parent must supply "
+            "required source snapshots or an explicitly authorized read capability; missing required "
+            "input/access is a blocker, not permission to invent sources or broaden authority. "
             "Also read task-tracker sdlc input --task <task-uuid> and task-tracker sdlc questions "
             "--task <task-uuid> under the PM grant. An absent requirements revision is normal during "
             "pre-document brainstorming; do not publish a placeholder merely to obtain a revision."
         )
-    return common + (
+    return common + artifact_instruction(role) + (
         "The delivery task grant does not authorize clarifications/questions; use supplied immutable "
-        "requirements and predecessor evidence, and route material business contradictions back to PM."
+        "requirements and predecessor evidence, and route material business contradictions back to PM. "
+        "Missing required source/input/access is a blocker; request an authorized snapshot from parent, "
+        "never invent sources or broaden authority."
     )
 
 
@@ -140,10 +184,12 @@ def terminal_instruction(role: str) -> str:
             "API/policy integration remains pending parent; installed instructions do not authorize live routing. "
             "Generic patch/issue transition/board move are forbidden substitutes."
         )
-    return (
+    return artifact_instruction(role) + (
         f"After accepted Workflow complete=true, the allowed next stage AND status are {TARGETS[role]} "
         "on this same task=root. While the assigned run is still alive, prepare the actual existing "
         "SubmitDeliveryProposal JSON with exactly fence, workflow_receipt, result, idempotency_key. "
+        "Set proposal.idempotency_key to the exact supplied value from runtime guidance/template; "
+        "original-key below means that supplied proposal.idempotency_key, never an agent-generated key. "
         f"Use {RESULTS[role]}. ArtifactReceipt has reference and sha256. "
         "Use the supplied DeliveryFence assignment_id/execution_id/fencing_token/lease_id/expected_lease_version "
         "and real accepted Workflow receipt reference/hash; never invent evidence or authority fields. "

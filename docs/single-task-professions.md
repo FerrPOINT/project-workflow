@@ -79,13 +79,50 @@ preselection или подразумеваемого согласия. Owner п�
 revision и content_hash. Изменение содержимого требует нового подтверждения.
 Workflow complete и ответ на отдельный вопрос не заменяют owner consent.
 
-Последняя инструкция каждого режима сначала требует accepted Workflow `complete=true`,
-затем называет разрешённые stage/status и требует реальный Tracker receipt/readback.
+PM сначала получает exact owner confirmation receipt, затем завершает Workflow.
+Технические роли до FINAL Workflow report публикуют и проверяют sealed role artifacts;
+после accepted Workflow `complete=true` используют реальный Workflow receipt для typed
+Tracker proposal/readback с явно названными разрешёнными stage/status.
 Будущий receipt не включён в checks/evidence как условие предшествующего report:
 это предотвращает цикл «сначала принеси результат ещё не выполненного handoff».
 Дефекты Reviewer/Tester возвращают эту же задачу в Rework. Новый candidate снова
 проходит Review и Testing. DevOps завершает задачу только с совпадающими доказательствами
 artifact/deployment/health/acceptance; успешная сборка сама по себе недостаточна.
+
+## Sealed Role Artifacts
+
+Актуальный generator для шести технических ролей использует existing Tracker attachment
+CLI под текущим delivery grant, без ordinary comments, human token или заимствования
+owner/scheduler credentials:
+
+```text
+task-tracker attachment upload --issue <task-uuid> --file <role-artifact.json> --content-type application/json
+task-tracker attachment list --issue <task-uuid>
+task-tracker attachment download <attachment-uuid> --out <private-artifact-path>
+```
+
+Structured role evidence публикуется до FINAL Workflow report. В role-typed result
+попадает actual server `artifact.receipt {reference,sha256}`, где reference имеет вид
+`tracker-attachment:<UUID>`. Metadata `artifact.binding {assignment_id,execution_id,role}`,
+task=root, size и SHA256 raw downloaded bytes сверяются с выданным текущим producer
+или accepted predecessor context. Workflow terminal receipt/hash не заменяет содержимое
+role artifact; локальный файл, comment или выдуманный Forge job/URL не являются receipt.
+Upload требует current routing/run/assignment и живую lease; её holder — scheduler,
+не агент. Unknown upload сверяется через list/download до exact-file replay, без
+перезаписи sealed bytes, смены identity/fence или расширения permissions.
+
+`proposal.idempotency_key` берётся **только** из supplied runtime guidance/template.
+Агент не генерирует и не выводит ключ из session/run UUID. Existing
+`sdlc result operation --task <task-uuid> --key <original-key>` использует это точное
+supplied значение; unknown proposal acceptance сохраняет exact key/body до readback.
+Missing key, 404/403, отсутствующая capability, stale binding или mismatch hash/readback
+оставляют фазу незавершённой, не дают фиктивного completion. PM attachment capability
+не добавлена; brainstorming Draft и exact confirmation-before-complete не меняются.
+
+Этот пакет меняет generator, не installed artifacts. Main регенерирует catalog/manifest
+из своего checkout командой `python -m scripts.build_single_task_profile`, затем проверяет
+`python -m scripts.build_single_task_profile --check` и обновляет согласованные consumer
+pins/hashes. Legacy source/pins/history не переписываются; regeneration не активирует runtime.
 
 ## Проверенный Tracker CLI И Пробелы
 
