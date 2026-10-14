@@ -1,5 +1,10 @@
 """Fail-closed checks for the server-rendered OIDC boundary."""
 
+import json
+import shutil
+import subprocess
+from pathlib import Path
+
 import httpx
 import pytest
 from fastapi import FastAPI
@@ -7,6 +12,29 @@ from fastapi.testclient import TestClient
 
 from project_workflow.config import Settings
 from project_workflow.interfaces.ui import sso
+
+
+@pytest.mark.parametrize("result", ["error", "login-required"])
+def test_callback_entry_reports_result_before_any_product_route(monkeypatch, result):
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node is required for the executable bridge regression")
+    app, _ = _app(monkeypatch, UI_PLATFORM_ORIGIN="http://portal.test")
+    with TestClient(app, follow_redirects=False) as client:
+        if result == "login-required":
+            from urllib.parse import parse_qs, urlparse
+
+            login = client.get("/login?next=/phases&silent=1")
+            state = parse_qs(urlparse(login.headers["location"]).query)["state"][0]
+            response = client.get("/sso/callback", params={"error": "login_required", "state": state})
+        else:
+            response = client.get("/sso/callback?error=access_denied&state=foreign")
+        assert response.status_code == 401
+        check = subprocess.run(
+            [node, str(Path(__file__).resolve().parents[1] / "scripts/check_sso_entry.mjs")],
+            input=json.dumps({"html": response.text, "expected": result}), text=True, capture_output=True, check=False,
+        )
+        assert check.returncode == 0, check.stderr
 
 
 def _app(monkeypatch, **overrides):

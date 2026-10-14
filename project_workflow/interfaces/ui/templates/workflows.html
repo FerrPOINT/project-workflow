@@ -118,7 +118,7 @@
 {% macro phase_card(p) -%}
 <div class="timeline-item" id="phase-{{ p.id }}" data-phase-id="{{ p.id }}" data-phase-order="{{ p.phase_num }}" data-execution-type="{{ p.execution_type }}">
   <div class="phase-card-shell">
-    <a href="/phase/{{ p.id }}{% if selected_namespace %}?namespace_id={{ selected_namespace.id }}{% endif %}{{ phase_scope_suffix }}" class="timeline-card">
+    <a href="/phase/{{ p.id }}{% if selected_namespace %}?profession_id={{ selected_namespace.id }}{% endif %}{{ phase_scope_suffix }}" class="timeline-card">
       <div class="phase-card-copy">
         <div class="timeline-name">{{ p.name }}</div>
         {% set description = p.description | default('') %}
@@ -179,11 +179,11 @@
       <div class="card-title" id="workflowFormMode">Редактирование воркфлоу</div>
       <div>
         <label class="label" for="workflowName">Название</label>
-        <input type="text" id="workflowName" value="{{ selected_workflow.name if selected_workflow else '' }}" required>
+        <input type="text" id="workflowName" name="workflowName" value="{{ selected_workflow.name if selected_workflow else '' }}" required>
       </div>
       <div>
         <label class="label" for="workflowDescription">Описание</label>
-        <textarea id="workflowDescription" class="workflow-description">{{ selected_workflow.description if selected_workflow else '' }}</textarea>
+        <textarea id="workflowDescription" name="workflowDescription" class="workflow-description">{{ selected_workflow.description if selected_workflow else '' }}</textarea>
       </div>
       <div class="panel-actions">
         <button class="btn btn-primary" type="submit" id="workflowSubmitButton">Сохранить</button>
@@ -218,7 +218,7 @@
           {% if selected_mode_id == mode.id %}aria-current="page"{% endif %}
           data-testid="workflow-mode-tab-{{ mode.key }}"
           data-mode-id="{{ mode.id }}"
-          href="/workflows?workflow_id={{ selected_workflow_id }}&mode_id={{ mode.id }}{% if selected_namespace %}&namespace_id={{ selected_namespace.id }}{% endif %}{{ mode_scope_suffix }}"
+          href="/workflows?workflow_id={{ selected_workflow_id }}&mode_id={{ mode.id }}{% if selected_namespace %}&profession_id={{ selected_namespace.id }}{% endif %}{{ mode_scope_suffix }}"
         >{{ mode.name }}</a>
         {% endfor %}
       </div>

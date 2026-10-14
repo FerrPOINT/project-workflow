@@ -855,7 +855,7 @@ class TestPhasesPage:
         response = client.get(f"/phases?namespace_id={namespace_id}")
 
         assert response.status_code == 200
-        assert f'href="/phase/{phase["id"]}?namespace_id={namespace_id}"' in response.text
+        assert f'href="/phase/{phase["id"]}?profession_id={namespace_id}"' in response.text
         assert f'id="phasesTimeline" data-workflow-id="{_workflow_row("default")["id"]}"' in response.text
         assert 'id="workflowNav"' in response.text
 
@@ -1203,7 +1203,7 @@ class TestPhaseDetail:
         assert response.status_code == 200
         assert (
             f'href="/phases?workflow_id={workflow_id}'
-            f'&mode_id={phase["mode_id"]}&namespace_id={namespace_id}"'
+            f'&mode_id={phase["mode_id"]}&profession_id={namespace_id}"'
         ) in response.text
 
     def test_phase_detail_rejects_unknown_query_namespace(self):
@@ -1223,7 +1223,7 @@ class TestPhaseDetail:
         assert response.status_code == 404
         assert "Фаза недоступна в выбранном воркфлоу" in response.text
         assert "phaseForm" not in response.text
-        assert f'href="/phases?namespace_id={namespace_id}"' in response.text
+        assert f'href="/phases?profession_id={namespace_id}"' in response.text
 
     def test_phase_detail_allows_unassigned_workflow_with_selected_namespace_cookie(self):
         uow = ui_app_state.get_db()
@@ -1827,7 +1827,7 @@ class TestTasksPage:
         assert response.headers["content-type"] == "text/html; charset=utf-8"
         assert "Данные задач некорректны" in response.text
         assert "Список задач повреждён" in response.text
-        assert f'href="/tasks?namespace_id={namespace_id}"' in response.text
+        assert f'href="/tasks?profession_id={namespace_id}"' in response.text
         assert "<table" not in response.text
 
     def test_tasks_page_hides_dead_filters_search_and_pagination(self):
@@ -1958,7 +1958,7 @@ class TestTaskDetail:
 
         assert response.status_code == 404
         assert "Задача не найдена" in response.text
-        assert f'href="/tasks?namespace_id={namespace_id}"' in response.text
+        assert f'href="/tasks?profession_id={namespace_id}"' in response.text
 
     def test_task_detail_conflict_preserves_selected_namespace_in_back_link(self):
         namespace_id = self._default_namespace_id()
@@ -1970,7 +1970,7 @@ class TestTaskDetail:
 
         assert response.status_code == 409
         assert "Задача неоднозначна" in response.text
-        assert f'href="/tasks?namespace_id={namespace_id}"' in response.text
+        assert f'href="/tasks?profession_id={namespace_id}"' in response.text
 
     def test_task_detail_data_error_returns_controlled_html_error(self):
         namespace_id = self._default_namespace_id()
@@ -1984,7 +1984,7 @@ class TestTaskDetail:
         assert response.headers["content-type"] == "text/html; charset=utf-8"
         assert "Состояние задачи некорректно" in response.text
         assert "Журнал задачи повреждён" in response.text
-        assert f'href="/tasks?namespace_id={namespace_id}"' in response.text
+        assert f'href="/tasks?profession_id={namespace_id}"' in response.text
         assert "История фаз" not in response.text
 
     def test_task_detail_current_state_uses_namespace_accent_styles(self):
@@ -2035,7 +2035,7 @@ class TestTaskDetail:
         response = client.get(f"/task/RUN-247?namespace_id={namespace_id}")
 
         assert response.status_code == 200
-        assert response.text.count(f'href="/tasks?namespace_id={namespace_id}"') == 2
+        assert response.text.count(f'href="/tasks?profession_id={namespace_id}"') == 2
         assert '<h1>RUN-247</h1>' in response.text
         assert 'class="task-detail-mobile-actions"' in response.text
         assert "@media(max-width:350px){.detail-jump-nav{top:105px}" in response.text
@@ -2207,7 +2207,7 @@ class TestProjectsPage:
     def test_namespace_editor_exposes_validation_and_safe_action_states(self):
         response = client.get("/namespaces")
         assert response.status_code == 200
-        assert re.search(r'id="namespaceName" value="[^"]*" required', response.text)
+        assert re.search(r'id="namespaceName" name="namespaceName" value="[^"]*" required', response.text)
         assert 'required minlength="2" maxlength="64" pattern="[a-z][a-z0-9_\\-]{1,63}"' in response.text
         assert 'aria-describedby="namespaceCliHelp"' in response.text
         assert 'id="namespaceWorkflowId"' not in response.text
@@ -2342,7 +2342,7 @@ class TestProjectsPage:
         response = client.get("/namespaces/new")
         assert response.status_code == 200
         assert (
-            "window.SdlcPlatformNavigation.navigate('/namespaces?namespace_id=' + encodeURIComponent(d.namespace_id));"
+            "window.SdlcPlatformNavigation.navigate(namespaceScopedPath('/namespaces', d.namespace_id));"
             in response.text
         )
 
@@ -2938,14 +2938,14 @@ class TestUiNetworkFailures:
         response = client.get(f"/instructions?phase_id={phase_id}&namespace_id={namespace_id}")
 
         assert response.status_code == 200
-        assert f'href="/phase/{phase_id}?namespace_id={namespace_id}"' in response.text
+        assert f'href="/phase/{phase_id}?profession_id={namespace_id}"' in response.text
 
     def test_instructions_page_has_readable_mobile_editor(self):
         phase_id = _phase_id("1.INTAKE")
         response = client.get(f"/instructions?phase_id={phase_id}")
 
         assert response.status_code == 200
-        assert len(re.findall(rf'href="/phase/{phase_id}(?:\?namespace_id=\d+)?"', response.text)) == 2
+        assert len(re.findall(rf'href="/phase/{phase_id}(?:\?profession_id=\d+)?"', response.text)) == 2
         assert 'class="instructions-mobile-actions"' in response.text
         assert 'class="instructions-context"' in response.text
         assert '<span class="instructions-mobile-title">Шаги</span>' in response.text
@@ -2984,7 +2984,7 @@ class TestUiNetworkFailures:
         assert response.status_code == 404
         assert "Фаза недоступна в выбранном воркфлоу" in response.text
         assert "instructionGroups" not in response.text
-        assert f'href="/phases?namespace_id={namespace_id}"' in response.text
+        assert f'href="/phases?profession_id={namespace_id}"' in response.text
 
     def test_instructions_page_allows_unassigned_workflow_with_selected_namespace_cookie(self):
         uow = ui_app_state.get_db()
