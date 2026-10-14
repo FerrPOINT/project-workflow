@@ -58,6 +58,37 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.mark.integration
+def test_postgres_legacy_agent_archives_preserve_seven_agents_and_nineteen_links(pg_url):
+    from tests.test_initial_migration import assert_populated_legacy_agent_archive_upgrade
+
+    assert_populated_legacy_agent_archive_upgrade(get_engine(pg_url))
+
+
+@pytest.mark.integration
+def test_postgres_legacy_archive_and_released_migrations_roll_back_together(pg_url, monkeypatch):
+    from tests.test_initial_migration import assert_legacy_archive_migration_rollback
+
+    assert_legacy_archive_migration_rollback(get_engine(pg_url), monkeypatch)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("failure", [
+    "partial", "unguarded", "view", "changed_source", "foreign_column", "missing_guard",
+])
+def test_postgres_legacy_archive_refuses_foreign_partial_or_changed_without_overwrite(pg_url, failure):
+    from tests.test_initial_migration import assert_legacy_archive_refusal
+
+    assert_legacy_archive_refusal(get_engine(pg_url), failure)
+
+
+@pytest.mark.integration
+def test_postgres_legacy_archive_guard_loss_at_head_is_not_readiness(pg_url):
+    from tests.test_initial_migration import assert_legacy_archive_guard_loss_holds_at_head
+
+    assert_legacy_archive_guard_loss_holds_at_head(get_engine(pg_url))
+
+
+@pytest.mark.integration
 @pytest.mark.parametrize("scenario", ["appearance", "versioned-adoption"])
 def test_current_base_initial_professions_and_history_preservation_on_postgres(pg_url, scenario):
     from tests.test_profession_initial_catalog import (

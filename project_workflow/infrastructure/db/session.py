@@ -19,7 +19,20 @@ from alembic.autogenerate import compare_metadata
 from alembic.config import Config
 from alembic.migration import MigrationContext
 from alembic.script import ScriptDirectory
-from sqlalchemy import create_engine, event, inspect, text
+from sqlalchemy import (
+    Column,
+    ForeignKey,
+    Integer,
+    MetaData,
+    String,
+    Table,
+    create_engine,
+    event,
+    inspect,
+    literal,
+    select,
+    text,
+)
 from sqlalchemy.engine import Connection, Engine, make_url
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
@@ -33,6 +46,139 @@ logger = logging.getLogger(__name__)
 
 _engine: Engine | None = None
 _engine_lock = Lock()
+
+_LEGACY_ARCHIVES = frozenset({"legacy_agent_metadata", "legacy_phase_agent_links"})
+_LEGACY_READONLY_BODY = "BEGIN RAISE EXCEPTION 'Legacy metadata archive is read-only'; END;"
+
+
+def _legacy_archive_tables(connection: Connection) -> tuple[Table, Table]:
+    """Released metadata only; these records never establish runtime authority."""
+    schema = get_settings().DB_SCHEMA if connection.dialect.name == "postgresql" else None
+    metadata = MetaData(schema=schema)
+    agents = Table("legacy_agent_metadata", metadata,
+                   Column("id", Integer, primary_key=True, autoincrement=False),
+                   Column("name", String, nullable=False), Column("description", String, nullable=False),
+                   Column("hermes_profile", String(251), nullable=True))
+    links = Table("legacy_phase_agent_links", metadata,
+                  Column("phase_id", Integer, primary_key=True, autoincrement=False),
+                  Column("agent_id", Integer, ForeignKey(f"{agents.fullname}.id", ondelete="RESTRICT"), nullable=True))
+    return agents, links
+
+
+def _legacy_readonly_ddl(connection: Connection) -> list[str]:
+    if connection.dialect.name == "sqlite":
+        return [f"CREATE TRIGGER {name}_no_{action.lower()} BEFORE {action} ON {name} "
+                "BEGIN SELECT RAISE(ABORT, 'Legacy metadata archive is read-only'); END"
+                for name in sorted(_LEGACY_ARCHIVES) for action in ("INSERT", "UPDATE", "DELETE")]
+    schema = connection.dialect.identifier_preparer.quote_schema(get_settings().DB_SCHEMA)
+    return [f"CREATE FUNCTION {schema}.legacy_metadata_readonly() RETURNS trigger LANGUAGE plpgsql "
+            f"AS $${_LEGACY_READONLY_BODY}$$",
+            *[f"CREATE TRIGGER {name}_readonly BEFORE INSERT OR UPDATE OR DELETE OR TRUNCATE ON {schema}.{name} "
+              f"FOR EACH STATEMENT EXECUTE FUNCTION {schema}.legacy_metadata_readonly()"
+              for name in sorted(_LEGACY_ARCHIVES)]]
+
+
+def _legacy_archive_guards(connection: Connection, present: bool) -> bool:
+    if connection.dialect.name == "sqlite":
+        rows: dict[str, str] = {name: sql for name, sql in connection.execute(text(
+            "SELECT name,sql FROM sqlite_master WHERE type='trigger' AND "
+            "(tbl_name IN ('legacy_agent_metadata','legacy_phase_agent_links') OR "
+            "name LIKE 'legacy_agent_metadata_no_%' OR name LIKE 'legacy_phase_agent_links_no_%')"
+        )).all()}
+        expected_sql = {sql.split()[2]: sql for sql in _legacy_readonly_ddl(connection)} if present else {}
+        return rows == expected_sql
+    schema = get_settings().DB_SCHEMA
+    functions = connection.execute(text(
+        "SELECT p.prosrc,p.pronargs,p.prorettype='trigger'::regtype,l.lanname FROM pg_proc p "
+        "JOIN pg_namespace n ON n.oid=p.pronamespace JOIN pg_language l ON l.oid=p.prolang "
+        "WHERE n.nspname=:schema AND p.proname='legacy_metadata_readonly'"
+    ), {"schema": schema}).all()
+    triggers = connection.execute(text(
+        "SELECT c.relname,t.tgname,t.tgtype,t.tgenabled,t.tgnargs,t.tgqual IS NULL,p.proname,pn.nspname "
+        "FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace "
+        "JOIN pg_proc p ON p.oid=t.tgfoid JOIN pg_namespace pn ON pn.oid=p.pronamespace "
+        "WHERE n.nspname=:schema AND NOT t.tgisinternal AND "
+        "(c.relname IN ('legacy_agent_metadata','legacy_phase_agent_links') OR "
+        "t.tgname IN ('legacy_agent_metadata_readonly','legacy_phase_agent_links_readonly'))"
+    ), {"schema": schema}).all()
+    expected_triggers = {(name, f"{name}_readonly", 62, "O", 0, True, "legacy_metadata_readonly", schema)
+                         for name in _LEGACY_ARCHIVES} if present else set()
+    return (functions == ([(_LEGACY_READONLY_BODY, 0, True, "plpgsql")] if present else [])
+            and set(triggers) == expected_triggers)
+
+
+def _validate_legacy_archives(connection: Connection) -> bool:
+    agents, links = _legacy_archive_tables(connection)
+    inspector = inspect(connection)
+    views = set(inspector.get_view_names(schema=agents.schema))
+    if connection.dialect.name == "postgresql":
+        views.update(inspector.get_materialized_view_names(schema=agents.schema))
+    if views & _LEGACY_ARCHIVES:
+        raise ValueError("Legacy agent metadata preservation refused: foreign archive view")
+    present = set(inspector.get_table_names(schema=agents.schema)) & _LEGACY_ARCHIVES
+    if present and present != _LEGACY_ARCHIVES or not _legacy_archive_guards(connection, bool(present)):
+        raise ValueError("Legacy agent metadata preservation refused: partial or foreign archive")
+    if not present:
+        return False
+    for table in (agents, links):
+        columns = inspector.get_columns(table.name, schema=table.schema)
+        expected = [(c.name, str(c.type.compile(dialect=connection.dialect)), c.nullable) for c in table.c]
+        actual = [(c["name"], str(c["type"].compile(dialect=connection.dialect)), c["nullable"]) for c in columns]
+        keys = inspector.get_pk_constraint(table.name, schema=table.schema)["constrained_columns"]
+        foreign = inspector.get_foreign_keys(table.name, schema=table.schema)
+        valid_fk = not foreign if table is agents else len(foreign) == 1 and (
+            foreign[0]["constrained_columns"] == ["agent_id"] and foreign[0]["referred_table"] == agents.name
+            and foreign[0]["referred_columns"] == ["id"]
+            and foreign[0]["referred_schema"] in {None, agents.schema}
+            and foreign[0]["options"].get("ondelete") == "RESTRICT"
+        )
+        if (actual != expected or keys != [c.name for c in table.primary_key]
+            or any(c.get("default") is not None for c in columns)
+            or not valid_fk or inspector.get_indexes(table.name, schema=table.schema)
+            or inspector.get_unique_constraints(table.name, schema=table.schema)
+            or inspector.get_check_constraints(table.name, schema=table.schema)):
+            raise ValueError("Legacy agent metadata preservation refused: foreign archive schema")
+    orphan = select(literal(1)).select_from(links.outerjoin(agents, links.c.agent_id == agents.c.id)).where(
+        links.c.agent_id.is_not(None), agents.c.id.is_(None),
+    ).limit(1)
+    if connection.execute(orphan).first() is not None:
+        raise ValueError("Legacy agent metadata preservation refused: foreign phase-agent join")
+    return True
+
+
+def _preserve_legacy_metadata(connection: Connection) -> None:
+    """Copy before released 0013 inside initialization transaction; never overwrite."""
+    agents, links = _legacy_archive_tables(connection)
+    tables = set(inspect(connection).get_table_names(schema=agents.schema))
+    present = _validate_legacy_archives(connection)
+    phase_columns = inspect(connection).get_columns("phases", schema=agents.schema) if "phases" in tables else []
+    source_present = "agents" in tables
+    if source_present != any(c["name"] == "agent_id" for c in phase_columns):
+        raise ValueError("Legacy agent metadata preservation refused: partial legacy source")
+    if not source_present:
+        return
+    if connection.dialect.name == "postgresql":
+        schema = connection.dialect.identifier_preparer.quote_schema(get_settings().DB_SCHEMA)
+        connection.execute(text(f"LOCK TABLE {schema}.agents,{schema}.phases IN ACCESS EXCLUSIVE MODE"))
+    original = Table("agents", MetaData(), schema=agents.schema, autoload_with=connection, resolve_fks=False)
+    phases = Table("phases", MetaData(), schema=agents.schema, autoload_with=connection, resolve_fks=False)
+    if ([(c.name, str(c.type.compile(dialect=connection.dialect)), c.nullable) for c in original.c]
+        != [(c.name, str(c.type.compile(dialect=connection.dialect)), c.nullable) for c in agents.c]):
+        raise ValueError("Legacy agent metadata preservation refused: foreign legacy columns")
+    sources = (select(*original.c), select(phases.c.id, phases.c.agent_id))
+    if not present:
+        agents.metadata.create_all(connection)
+        for table, source in zip((agents, links), sources, strict=True):
+            connection.execute(table.insert().from_select(list(table.c.keys()), source))
+    for table, source in zip((agents, links), sources, strict=True):
+        archived = select(*table.c)
+        for difference in (source.except_(archived), archived.except_(source)):
+            if connection.execute(select(literal(1)).select_from(difference.subquery()).limit(1)).first() is not None:
+                raise ValueError("Legacy agent metadata preservation refused: incomplete or changed archive")
+    if not present:
+        for sql in _legacy_readonly_ddl(connection):
+            connection.execute(text(sql))
+    _validate_legacy_archives(connection)
 
 
 PG_CONNECT_RETRY_ATTEMPTS: int = 3
@@ -248,9 +394,15 @@ def _metadata_is_current(target: Engine | Connection) -> bool:
     """Compare the live schema with the complete ORM metadata contract."""
 
     def compare(connection: Connection) -> bool:
+        try:
+            _validate_legacy_archives(connection)
+        except ValueError:
+            return False
         context = MigrationContext.configure(
             connection,
-            opts={"compare_type": True, "compare_server_default": True},
+            opts={"compare_type": True, "compare_server_default": True,
+                  "include_object": lambda obj, name, kind, reflected, compare_to:
+                  kind != "table" or name not in _LEGACY_ARCHIVES},
         )
         return compare_metadata(context, Base.metadata) == []
 
@@ -263,6 +415,16 @@ def _metadata_is_current(target: Engine | Connection) -> bool:
 def ensure_migrated(engine: Engine | Connection | None = None) -> None:
     """Apply migrations to empty databases or supported versioned predecessors."""
     target = engine or get_engine()
+    if isinstance(target, Engine):
+        with initialization_transaction(target) as connection:
+            ensure_migrated(connection)
+        return
+    if target.dialect.name == "sqlite":
+        driver = target.connection.driver_connection
+        if not isinstance(driver, sqlite3.Connection):
+            raise ValueError("SQLite migration connection unavailable")
+        if not driver.in_transaction:
+            target.exec_driver_sql("BEGIN IMMEDIATE")
     bound_engine = target.engine if isinstance(target, Connection) else target
     schema = None if _is_sqlite(str(bound_engine.url)) else get_settings().DB_SCHEMA
     revisions = database_revisions(target)
@@ -286,16 +448,18 @@ def ensure_migrated(engine: Engine | Connection | None = None) -> None:
         "0014_launch_profile_only",
     }
     incompatible_revision = bool(revisions) and not revisions.issubset(compatible_upgrade_revisions)
-    exact_tables = existing_tables == expected_tables()
+    _validate_legacy_archives(target)
+    exact_tables = existing_tables - _LEGACY_ARCHIVES == expected_tables()
     incompatible_schema = revisions == {head} and (
         not exact_tables or not _metadata_is_current(target)
     )
     unversioned_database = not revisions and bool(existing_tables)
     if incompatible_revision or incompatible_schema or unversioned_database:
         raise DatabaseRecreateRequired()
+    _preserve_legacy_metadata(target)
     run_alembic_command("upgrade", target)
     migrated_tables = set(inspect(target).get_table_names(schema=schema)) - {"alembic_version"}
-    if migrated_tables != expected_tables() or not _metadata_is_current(target):
+    if migrated_tables - _LEGACY_ARCHIVES != expected_tables() or not _metadata_is_current(target):
         raise DatabaseRecreateRequired()
 
 
@@ -339,7 +503,7 @@ def schema_is_ready(engine: Engine) -> bool:
     tables = set(inspect(engine).get_table_names(schema=schema))
     return (
         database_revisions(engine) == {migration_head()}
-        and tables - {"alembic_version"} == expected_tables()
+        and tables - {"alembic_version"} - _LEGACY_ARCHIVES == expected_tables()
         and _metadata_is_current(engine)
     )
 
@@ -353,6 +517,8 @@ def initialization_transaction(engine: Engine) -> Iterator[Connection]:
             connection.commit()
             try:
                 with connection.begin():
+                    # pysqlite's legacy mode otherwise auto-commits DDL before the first INSERT.
+                    connection.exec_driver_sql("BEGIN IMMEDIATE")
                     yield connection
             finally:
                 connection.exec_driver_sql("PRAGMA foreign_keys=ON")
