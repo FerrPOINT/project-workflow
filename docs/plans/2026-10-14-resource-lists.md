@@ -10,10 +10,12 @@
 
 | Участок | Результат | Основание |
 |---|---|---|
-| `project_workflow/interfaces/ui/templates/dashboard.html` | migrated | Dashboard tasks and professions, shared SSR classes |
+| `project_workflow/interfaces/ui/templates/dashboard.html` | Перенесено | Задачи и профессии дашборда; общие SSR-классы Base |
 
 Сайдбары, document trees, маркированные пояснения/ошибки, формы, редакторы, таблицы и схемы исключены по назначению, а не по совпадению CSS-класса.
 
 ## Приёмка
 
 Компонентные тесты и Chromium contract: семантика/действия, 16 px, grid, темы, длинный текст, 375/1281/1920 px, native disclosure. Затем продуктовые тесты, lint, typecheck/build, packed SDK и SSR drift. Установленная PDLC1 проверяется через IAB; происхождение images фиксируется отдельно от source/CI. Изменённые сервисы обновляются через private bundle с rollback images.
+
+Полный локальный прогон: 2529 passed, 5 skipped, 77 deselected; покрытие 94,15%. Единственное падение — устаревшее сравнение полной строки class — исправлено с сохранением строгого лимита шести профессий; весь TestIndexPage повторно прошёл (12 tests). Ruff/mypy и SSR fingerprint проверены. Python application/domain и миграции не меняются.
