@@ -200,7 +200,7 @@ class TestIndex:
     def test_task_links_include_namespace_id(self, client):
         resp = client.get("/tasks")
         assert resp.status_code == 200
-        assert "/task/RUN-1?namespace_id=" in resp.text
+        assert "/task/RUN-1?profession_id=" in resp.text
 
     def test_settings_page_describes_cli_commands(self, client):
         resp = client.get("/settings")

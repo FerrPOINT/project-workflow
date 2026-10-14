@@ -32,7 +32,7 @@ def test_unified_editor_renders_only_the_selected_workflow_mode(mode_key):
     assert response.status_code == 200
     assert response.text.count('id="workflowNav"') == 1
     assert response.text.index('id="workflowForm"') < response.text.index('id="phasesTimeline"')
-    assert 'id="workflowName" value="Developer"' in response.text
+    assert 'id="workflowName" name="workflowName" value="Developer"' in response.text
     assert f'data-mode-id="{mode_id}"' in response.text
     assert f'{mode_key.title()} phase' in response.text
     other_mode = "rework" if mode_key == "initial" else "initial"
