@@ -131,12 +131,15 @@ def test_installed_single_task_capabilities_keep_truthful_base_image_descriptor(
                   "capabilityRevision": "base-workflow-controlplane/v1"}
     (manifest.parent / "runtime-compatibility.json").write_text(json.dumps(descriptor), encoding="utf-8")
     with TestClient(create_app()) as client:
-        response = client.get("/internal/runtime/capabilities", headers={"Authorization": "Bearer " + token})
+        response = client.get(
+            "/internal/runtime/capabilities", params={"instruction_profile": "single-task-v1"},
+            headers={"Authorization": "Bearer " + token},
+        )
     assert response.status_code == 200, response.text
     assert response.json()["runtimeCompatibility"] == descriptor
     assert response.json()["role_key"] == role
     assert response.json()["credential_kind"] == kind
-    expected = ["assign", "bind", "rebind"] if kind == "assignment" else ["step", "history"]
+    expected = ["assign", "bind"] if kind == "assignment" else ["step", "history"]
     assert response.json()["capabilities"] == expected
     assert token not in response.text
     with SAUnitOfWork() as uow:
@@ -158,10 +161,131 @@ def test_base_single_task_capabilities_refuse_missing_or_drifted_installation(mo
     _configure_tokens(monkeypatch, runtime={"developer": token})
     _install_manifest(monkeypatch, tmp_path, _valid_manifest())
     with TestClient(create_app()) as client:
-        response = client.get("/internal/runtime/capabilities", headers={"Authorization": "Bearer " + token})
+        response = client.get(
+            "/internal/runtime/capabilities", params={"instruction_profile": "single-task-v1"},
+            headers={"Authorization": "Bearer " + token},
+        )
     assert response.status_code == 503
     assert response.json()["readiness"]["catalog"] == "not_ready"
     assert token not in response.text
+
+
+@pytest.mark.parametrize("profile_state", ["missing", "partial", "drifted"])
+def test_unhealthy_profile_does_not_block_healthy_legacy_capabilities(monkeypatch, tmp_path, profile_state):
+    from project_workflow.infrastructure.db import models as m
+    from project_workflow.infrastructure.db.single_task_catalog import ensure_single_task_catalog
+
+    with SAUnitOfWork() as uow:
+        default_before = uow.workflows.get_default().id
+        if profile_state != "missing":
+            installed = ensure_single_task_catalog(uow)
+            binding = next(item for item in installed.bindings if item.role_key == "developer")
+            if profile_state == "partial":
+                row = uow.session.get(m.Workflow, int(binding.workflow_id))
+                assert row is not None
+                row.key = "partial-profile-developer"
+            else:
+                phase = int(binding.modes[0].phase_ids[0])
+                instruction = uow.phase_instructions.list(phase)[0]
+                uow.phase_instructions.update(instruction["id"], {"description": "drift"})
+    token = _token("developer-assignment")
+    _configure_tokens(monkeypatch, assignment={"developer": token})
+    _install_manifest(monkeypatch, tmp_path, _valid_manifest())
+    headers = {"Authorization": "Bearer " + token}
+    with TestClient(create_app()) as client:
+        legacy = client.get("/internal/runtime/capabilities", headers=headers)
+        profile = client.get(
+            "/internal/runtime/capabilities", params={"instruction_profile": "single-task-v1"}, headers=headers,
+        )
+    assert legacy.status_code == 200, legacy.text
+    assert legacy.json()["capabilities"] == ["assign", "bind", "rebind"]
+    assert profile.status_code == 503
+    assert profile.json()["readiness"]["catalog"] == "not_ready"
+    with SAUnitOfWork() as uow:
+        assert uow.workflows.get_default().id == default_before
+
+
+def test_healthy_profile_does_not_mask_legacy_catalog_drift(monkeypatch, tmp_path):
+    from project_workflow.infrastructure.db.single_task_catalog import ensure_single_task_catalog
+
+    with SAUnitOfWork() as uow:
+        ensure_single_task_catalog(uow)
+        legacy = next(item for item in uow.workflows.list() if item.key == "hermes-sdlc:developer")
+        uow.workflows.update(legacy.id, {"active_catalog_version": 99})
+    token = _token("developer-assignment")
+    _configure_tokens(monkeypatch, assignment={"developer": token})
+    _install_manifest(monkeypatch, tmp_path, _valid_manifest())
+    headers = {"Authorization": "Bearer " + token}
+    with TestClient(create_app()) as client:
+        legacy_caps = client.get("/internal/runtime/capabilities", headers=headers)
+        profile_caps = client.get(
+            "/internal/runtime/capabilities", params={"instruction_profile": "single-task-v1"}, headers=headers,
+        )
+    assert legacy_caps.status_code == 503
+    assert legacy_caps.json()["readiness"]["catalog"] == "not_ready"
+    assert profile_caps.status_code == 200, profile_caps.text
+    assert profile_caps.json()["capabilities"] == ["assign", "bind"]
+    assert profile_caps.json()["runtimeCompatibility"] == _valid_compatibility()
+
+
+@pytest.mark.parametrize("instruction_profile", ["unknown", "legacy", "", "single-task-v2"])
+def test_capabilities_reject_unknown_profile_query(monkeypatch, tmp_path, instruction_profile):
+    token = _token("developer-runtime")
+    _configure_tokens(monkeypatch, runtime={"developer": token})
+    _install_manifest(monkeypatch, tmp_path, _valid_manifest())
+    with TestClient(create_app()) as client:
+        response = client.get(
+            "/internal/runtime/capabilities", params={"instruction_profile": instruction_profile},
+            headers={"Authorization": "Bearer " + token},
+        )
+    assert response.status_code == 422
+    assert "runtimeCompatibility" not in response.json()
+    assert token not in response.text
+
+
+def test_base_catalog_auth_matches_before_ordinary_execution_restriction(monkeypatch, tmp_path):
+    from project_workflow.infrastructure.db.single_task_catalog import ensure_single_task_catalog
+
+    with SAUnitOfWork() as uow:
+        ensure_single_task_catalog(uow)
+    monkeypatch.setattr(config, "CATALOG_VARIANT", "base")
+    runtime, assignment, catalog = (_token(kind) for kind in ("runtime", "assignment", "catalog"))
+    _configure_tokens(
+        monkeypatch, runtime={"developer": runtime}, assignment={"developer": assignment}, catalog=catalog,
+    )
+    _install_manifest(monkeypatch, tmp_path, _valid_manifest())
+    with TestClient(create_app()) as client:
+        catalog_read = client.get("/internal/runtime/catalog", headers={"Authorization": "Bearer " + catalog})
+        profile_read = client.get(
+            "/internal/runtime/profiles/single-task-v1/installation", headers={"Authorization": "Bearer " + catalog},
+        )
+        assert catalog_read.status_code == profile_read.status_code == 200
+        for params in ({}, {"instruction_profile": "single-task-v1"}):
+            assert client.get(
+                "/internal/runtime/capabilities", params=params, headers={"Authorization": "Bearer " + catalog},
+            ).status_code == 403
+            assert client.get(
+                "/internal/runtime/capabilities", params=params, headers={"Authorization": "Bearer " + _token("wrong")},
+            ).status_code == 401
+        for token in (runtime, assignment):
+            denied = client.get("/internal/runtime/capabilities", headers={"Authorization": "Bearer " + token})
+            assert denied.status_code == 503
+
+
+@pytest.mark.parametrize("kind", ["runtime", "assignment"])
+def test_base_catalog_token_collision_remains_fail_closed(monkeypatch, kind):
+    token = _token("shared")
+    monkeypatch.setattr(config, "CATALOG_VARIANT", "base")
+    _configure_tokens(monkeypatch, catalog=token, **{kind: {"developer": token}})
+    with TestClient(create_app()) as client:
+        for path, params in [
+            ("/internal/runtime/catalog", {}),
+            ("/internal/runtime/capabilities", {}),
+            ("/internal/runtime/capabilities", {"instruction_profile": "single-task-v1"}),
+        ]:
+            response = client.get(path, params=params, headers={"Authorization": "Bearer " + token})
+            assert response.status_code == 503
+            assert token not in response.text
 
 
 @pytest.mark.parametrize(

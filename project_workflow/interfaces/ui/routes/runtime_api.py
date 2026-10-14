@@ -5,7 +5,7 @@ from __future__ import annotations
 import hmac
 import json
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import Header, Query
 from fastapi.responses import JSONResponse
@@ -114,8 +114,6 @@ def _authorized_service_credential(
         return None
     supplied = authorization[len(prefix) :]
     runtime_tokens, assignment_tokens, catalog_token = _token_configuration()
-    if config.CATALOG_VARIANT == "base" and (runtime_tokens or assignment_tokens) and not single_task:
-        raise RuntimeError("Base assigned execution is not enabled; catalog credentials only")
     matches: list[_ServiceCredential] = []
     for role, expected in runtime_tokens.items():
         if hmac.compare_digest(supplied, expected):
@@ -129,15 +127,20 @@ def _authorized_service_credential(
         # _token_configuration normally catches this. Keep the auth boundary
         # fail-closed if configuration changes between validation and matching.
         raise RuntimeError("Service token configuration collision")
-    return matches[0] if matches else None
+    credential = matches[0] if matches else None
+    if credential is not None and credential.kind != "catalog" and config.CATALOG_VARIANT == "base" and not single_task:
+        raise RuntimeError("Base assigned execution is not enabled; catalog credentials only")
+    return credential
 
 
 def runtime_capabilities(
     authorization: str | None = Header(default=None),
+    instruction_profile: Literal["single-task-v1"] | None = Query(default=None),
 ) -> dict[str, Any] | JSONResponse:
     """Return authenticated runtime contract and immutable build provenance."""
+    single_task = instruction_profile == "single-task-v1"
     try:
-        credential = _authorized_service_credential(authorization, single_task=True)
+        credential = _authorized_service_credential(authorization, single_task=single_task)
     except RuntimeError:
         return _error("Runtime capability configuration unavailable", 503)
     if credential is None:
@@ -167,11 +170,7 @@ def runtime_capabilities(
     if schema_ready:
         try:
             with SAUnitOfWork(engine) as uow:
-                from project_workflow.domain.single_task_profile import is_single_task_key
-
-                if config.CATALOG_VARIANT in {"base", "single-task-v1"} or any(
-                    is_single_task_key(workflow.key) for workflow in uow.workflows.list()
-                ):
+                if single_task:
                     _namespace_id(uow, credential.role_key, single_task=True)
                     catalog_ready = True
                 else:
@@ -197,7 +196,9 @@ def runtime_capabilities(
             status_code=503,
         )
 
-    capabilities = ["assign", "bind", "rebind"] if credential.kind == "assignment" else ["step", "history"]
+    capabilities = ["assign", "bind"] if credential.kind == "assignment" else ["step", "history"]
+    if credential.kind == "assignment" and not single_task:
+        capabilities.append("rebind")
     response: dict[str, Any] = {
         "ok": True,
         "role_key": credential.role_key,
