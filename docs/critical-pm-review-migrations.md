@@ -46,13 +46,20 @@ guards, refusal of foreign/partial metadata and rollback after released0013 has
 actually removed its source objects inside the transaction. SQLAlchemy/application
 files retain those exact source bytes after integration and upstream UI merging.
 
-Nine PostgreSQL cases are authored but NOT executed:
+Nine PostgreSQL cases passed against immutable source
+`49a5fa9ada90a868ad00b70b559f13efd7495862`: **9 passed, zero failures,
+errors or skips**. The [qualification record](critical-pm-preservation-postgres-20261015.md)
+lists the exact selected cases, source/toolchain seals and verified cleanup.
+The cases cover populated preservation, transactional rollback, archive guards
+and refusal of foreign/partial/changed metadata. They were selected individually;
+the equivalent bounded selector is:
 
 ```text
 pytest tests/test_postgres_integration.py -m integration -k 'legacy_agent_archives or legacy_archive' --timeout=120 -p no:cacheprovider
 ```
 
-PostgreSQL DDL/trigger/lock behavior, populated accepted-data upgrade, whole-repo
-gates and live subsequent-PM execution remain unqualified. Earlier b7 companion
+This qualifies the selected PostgreSQL preservation behaviors on synthetic
+populated data, not an upgrade of the accepted database. Populated accepted-data
+upgrade, whole-repo gates and live subsequent-PM execution remain unqualified. Earlier b7 companion
 image/provenance results do not qualify this new migration/preservation source.
 Neither accepted stand nor its data/images have been changed by this packet.
