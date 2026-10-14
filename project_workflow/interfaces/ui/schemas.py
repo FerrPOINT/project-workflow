@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from project_workflow.domain.base_admission import BaseAdmission, ExactRef, Sha256
 from project_workflow.domain.namespace import normalize_namespace_cli_command
+from project_workflow.domain.pm_execution import PMReviewAdmissionContext
 from project_workflow.domain.profession_settings import normalize_launch_profile
 from project_workflow.domain.project_theme import (
     DEFAULT_PROJECT_COLOR,
@@ -219,6 +220,22 @@ class SingleTaskAssignmentRequest(SingleTaskContext):
             "workflow_key", "role_key", "mode_key", "execution_scope", "stage_key",
             "business_task_ref", "root_task_ref", "assignment_ref",
         }))
+        return self
+
+
+class SingleTaskPMReviewAssignmentRequest(SingleTaskAssignmentRequest):
+    pm_review_context: PMReviewAdmissionContext
+
+    @model_validator(mode="after")
+    def _review_identity(self) -> SingleTaskPMReviewAssignmentRequest:
+        if (
+            self.role_key != "project_manager" or self.mode_key != "draft"
+            or self.stage_key != "Draft" or self.execution_scope != "business"
+            or self.expected_revision != 0 or self.expected_status != "missing"
+            or self.cycle_number != 0 or self.attempt_number != 1
+            or self.operation_key != f"pm-draft:{self.assignment_ref}"
+        ):
+            raise ValueError("PM review requires its original reservation and a new single-task PM Draft cursor")
         return self
 
 

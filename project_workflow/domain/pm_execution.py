@@ -109,6 +109,30 @@ class SingleTaskPMBind(PMBind, SingleTaskPMProfile):
     session_run_id: UUIDRef
 
 
+class PMReviewRequirements(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    revision: Annotated[int, Field(strict=True, ge=1, le=9007199254740991)]
+    content_hash: Sha256
+
+
+class PMReviewAdmissionContext(BaseModel):
+    """Saved Tracker review authority, distinct from Workflow's sink CAS."""
+
+    model_config = ConfigDict(extra="forbid")
+    purpose: Literal["critical_business_review"]
+    tracker_assignment_revision: Annotated[int, Field(strict=True, ge=2, le=9007199254740991)]
+    owner_version: Annotated[int, Field(strict=True, ge=2, le=9007199254740991)]
+    blocker_id: UUIDRef
+    blocker_sha256: Sha256
+    blocker_version: Annotated[int, Field(strict=True, ge=1, le=9007199254740991)]
+    requirements: PMReviewRequirements
+
+
+class SingleTaskPMReviewBind(SingleTaskPMBind):
+    assignment_revision: Annotated[int, Field(strict=True, ge=2, le=9007199254740991)]
+    workflow_assignment_revision: Version
+
+
 class SingleTaskPMCheckpoint(PMCommand, SingleTaskPMProfile):
     checkpoint_ref: Ref
     requirements_revision: Version | None

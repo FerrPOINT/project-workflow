@@ -17,9 +17,11 @@ from project_workflow.domain.pm_execution import (
     PMIdentity,
     PMRebind,
     PMResume,
+    PMReviewAdmissionContext,
     RuntimeObservation,
     SingleTaskPMCheckpoint,
     SingleTaskPMResume,
+    SingleTaskPMReviewBind,
 )
 from project_workflow.domain.runtime_assignment import (
     RuntimeStepFence,
@@ -85,10 +87,27 @@ class PMExecutionService:
             m.TaskRuntimeAssignment.operation_key == identity.assignment_operation_key,
             m.TaskRuntimeAssignment.task_id == task.id,
         ).execution_options(populate_existing=True)).scalar_one_or_none()
-        if assignment is None or (
+        if assignment is None:
+            raise ConflictError("Stale or foreign PM assignment identity")
+        payload = json.loads(assignment.payload)
+        review = None
+        if "pm_review_context" in payload:
+            try:
+                review = PMReviewAdmissionContext.model_validate(payload["pm_review_context"])
+            except ValueError as exc:
+                raise ConflictError("Malformed saved PM review authority") from exc
+            if (payload.get("single_task_context") is None or assignment.mode.key != "draft"
+                or assignment.stage_key != "Draft" or assignment.execution_scope != "business"
+                or assignment.operation_key != f"pm-draft:{assignment.assignment_ref}"
+                or payload.get("pm_draft_context") is not None):
+                raise ConflictError("Saved PM review differs from single-task Draft admission")
+        authority_revision = (
+            review.tracker_assignment_revision if review is not None else assignment.assignment_revision
+        )
+        if (
             task.assignment_operation_key != identity.assignment_operation_key
-            or task.assignment_revision != identity.assignment_revision
-            or assignment.assignment_revision != identity.assignment_revision
+            or task.assignment_revision != assignment.assignment_revision
+            or authority_revision != identity.assignment_revision
             or assignment.assignment_ref != identity.assignment_ref
             or assignment.role_key != "project_manager" or assignment.mode.role_key != assignment.role_key
             or assignment.business_task_ref != identity.task_ref
@@ -282,6 +301,12 @@ class PMExecutionService:
         ownership_service.lock_namespace(project_id)
         identity = self.identity(command)
         task, assignment = self._lock_identity(identity, project_id)
+        review = "pm_review_context" in json.loads(assignment.payload)
+        if review != isinstance(command, SingleTaskPMReviewBind) or (
+            isinstance(command, SingleTaskPMReviewBind)
+            and command.workflow_assignment_revision != assignment.assignment_revision
+        ):
+            raise ConflictError("PM review bind requires its exact independent Workflow revision")
         replay = self._replay(command, "bind")
         if replay is not None:
             return replay

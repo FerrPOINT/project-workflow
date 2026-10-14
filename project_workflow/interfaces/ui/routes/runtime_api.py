@@ -41,6 +41,7 @@ from project_workflow.interfaces.ui.schemas import (
     RuntimeStepRequest,
     SingleTaskAssignmentRequest,
     SingleTaskBindRequest,
+    SingleTaskPMReviewAssignmentRequest,
     SingleTaskStepRequest,
 )
 from project_workflow.supervisor import format_result
@@ -609,13 +610,15 @@ def _assignment_response(task: dict[str, Any]) -> dict[str, Any]:
         "ok": True,
         "exit_code": 0,
         "result": {**{key: task.get(key) for key in keys},
-                   **{key: task[key] for key in ("single_task_context_sha256", "single_task_binding") if key in task}},
+                   **{key: task[key] for key in (
+                       "single_task_context_sha256", "single_task_binding", "pm_review_context",
+                   ) if key in task}},
         **({"base_admission_receipt": task["base_admission_receipt"]} if "base_admission_receipt" in task else {}),
     }
 
 
 def runtime_assign(
-    payload: SingleTaskAssignmentRequest | RuntimeAssignmentRequest,
+    payload: SingleTaskPMReviewAssignmentRequest | SingleTaskAssignmentRequest | RuntimeAssignmentRequest,
     authorization: str | None = Header(default=None),
 ) -> dict[str, Any] | JSONResponse:
     """Accept one authorized Business assignment and persist its technical cursor."""
@@ -647,9 +650,19 @@ def runtime_assign(
             task_key = _require_valid_key(payload.task, uow, project_id=namespace_id)
             _assert_task_key_in_namespace(uow, namespace_id, task_key)
             if isinstance(payload, SingleTaskAssignmentRequest):
+                if isinstance(payload, SingleTaskPMReviewAssignmentRequest):
+                    from project_workflow.application.namespace_ownership import NamespaceOwnershipService
+
+                    ownership = NamespaceOwnershipService(uow)
+                    ownership.lock_namespace(namespace_id)
+                    owner = ownership.get(namespace_id)
+                    if (owner.tracker_instance_ref != payload.tracker_instance_ref
+                        or owner.tracker_project_ref != payload.tracker_project_ref):
+                        raise ConflictError("PM review belongs to another namespace owner")
                 from project_workflow.domain.single_task_runtime import SingleTaskContext
 
                 values = payload.model_dump(exclude=set(SingleTaskContext.model_fields))
+                values.pop("pm_review_context", None)
                 values["exact_input_refs"] = [item.model_dump(exclude_unset=True) for item in payload.exact_input_refs]
                 values["task_key"] = task_key
                 values.pop("task")
@@ -660,6 +673,8 @@ def runtime_assign(
                     decomposition_revision_ref=None, stage_revision=None, workspace_generation=None,
                     lease_generation=None,
                     single_task_context=payload.model_dump(include=set(SingleTaskContext.model_fields)),
+                    pm_review_context=(payload.pm_review_context
+                                       if isinstance(payload, SingleTaskPMReviewAssignmentRequest) else None),
                 )
                 return _assignment_response(task)
             task = TaskService(uow).assign_runtime_task(

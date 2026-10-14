@@ -26,6 +26,7 @@ from project_workflow.domain.pm_execution import (
     SingleTaskPMReadback,
     SingleTaskPMRebind,
     SingleTaskPMResume,
+    SingleTaskPMReviewBind,
 )
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.infrastructure.pm_readback import ReadbackUnavailable, readback_configured
@@ -136,7 +137,8 @@ def _execute(
 
 
 def bind(
-    payload: SingleTaskPMBind | PMBind, authorization: str | None = Header(default=None),
+    payload: SingleTaskPMReviewBind | SingleTaskPMBind | PMBind,
+    authorization: str | None = Header(default=None),
 ) -> dict[str, Any] | JSONResponse:
     return _execute(payload, "bind", authorization)
 

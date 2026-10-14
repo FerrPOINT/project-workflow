@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 
 from project_workflow.application.execution_mode import resolve_execution_selection
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
-from project_workflow.domain.pm_execution import PMDraftAssignment
+from project_workflow.domain.pm_execution import PMDraftAssignment, PMReviewAdmissionContext
 from project_workflow.domain.repositories import UnitOfWork
 from project_workflow.domain.runtime_assignment import (
     MAX_WORK_ITEM_REVISION,
@@ -188,6 +188,7 @@ class TaskService:
         base_admission: dict[str, Any] | None = None,
         pm_draft_context: PMDraftAssignment | None = None,
         single_task_context: dict[str, Any] | None = None,
+        pm_review_context: PMReviewAdmissionContext | None = None,
     ) -> dict[str, Any]:
         """Persist one authorized Business assignment atomically and idempotently."""
         operation_key = operation_key.strip()
@@ -220,6 +221,15 @@ class TaskService:
         single_task = is_single_task_key(workflow.key)
         if single_task != (single_task_context is not None):
             raise ConflictError("Single-task profile context required only for its installed family")
+        if pm_review_context is not None:
+            pm_review_context = PMReviewAdmissionContext.model_validate(pm_review_context)
+            if (
+                not single_task or role_key != "project_manager" or mode_key != "draft"
+                or execution_scope != "business" or stage_key != "Draft" or cycle_number != 0
+                or attempt_number != 1 or expected_revision != 0 or expected_status != "missing"
+                or operation_key != f"pm-draft:{assignment_ref}" or pm_draft_context is not None
+            ):
+                raise ConflictError("PM review requires its original reservation and a new single-task PM Draft cursor")
         if single_task:
             from project_workflow.application.single_task_runtime import installed_context
             from project_workflow.domain.single_task_runtime import validate_assignment_identity
@@ -367,6 +377,8 @@ class TaskService:
             payload["base_admission"] = base_admission
         if single_task_context is not None:
             payload["single_task_context"] = single_task_context
+        if pm_review_context is not None:
+            payload["pm_review_context"] = pm_review_context.model_dump(mode="json")
         if replay is not None:
             return self._reconcile_assignment(replay.to_dict(), payload)
         phases = list(self._uow.phases.list(workflow_id=project.workflow_id, mode_id=mode.id))
@@ -1214,6 +1226,11 @@ class TaskService:
 
             result["single_task_context_sha256"] = payload_sha256(assignment["single_task_binding"])
             result["single_task_binding"] = assignment["single_task_binding"]
+        payload = assignment.get("payload", {})
+        if "pm_review_context" in payload:
+            result["pm_review_context"] = PMReviewAdmissionContext.model_validate(
+                payload["pm_review_context"],
+            ).model_dump(mode="json")
         return result
 
     def _reconcile_bind_after_race(self, request: dict[str, Any], request_digest: str) -> dict[str, Any]:
