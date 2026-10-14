@@ -39,15 +39,15 @@
 {%- endmacro %}
 
 {% macro button(label, id=none, type='button', variant='secondary', disabled=false, pending=false) -%}
-<button class="base-control base-button base-button-{{ variant }}" type="{{ type }}"{% if id %} id="{{ id }}"{% endif %}{% if disabled or pending %} disabled{% endif %}{% if pending %} aria-busy="true"{% endif %}>{% if pending %}{{ loader('sm') }} {% endif %}{{ label }}</button>
+<button class="base-control base-button base-button-{{ variant }}" type="{{ type }}"{% if id %} id="{{ id }}"{% endif %}{% if disabled or pending %} disabled{% endif %}{% if pending %} aria-busy="true"{% endif %}>{{ label }}</button>
 {%- endmacro %}
 
 {% macro loader(size='md') -%}
-<span class="base-loader-stage base-loader-{{ size }}" aria-hidden="true"><span class="base-shapes-loader"></span></span>
+<span class="base-pending-status" aria-hidden="true">…</span>
 {%- endmacro %}
 
 {% macro state(kind, message, retry_url=none, retry_label='Повторить') -%}
-<section class="base-resource-state{% if kind == 'loading' %} base-loading-state{% endif %}" data-page-state="{{ kind }}" {% if kind in ['error', 'partial-error'] %}role="alert"{% else %}role="status"{% endif %}{% if kind == 'loading' %} aria-busy="true"{% endif %}>{% if kind == 'loading' %}{{ loader() }}{% endif %}<p>{{ message }}</p>{% if retry_url and kind in ['error', 'partial-error'] %}<a class="base-control base-button base-button-secondary" href="{{ retry_url }}">{{ retry_label }}</a>{% endif %}</section>
+<section class="base-resource-state{% if kind == 'loading' %} base-loading-state{% endif %}" data-page-state="{{ kind }}" {% if kind in ['error', 'partial-error'] %}role="alert"{% else %}role="status"{% endif %}{% if kind == 'loading' %} aria-busy="true"{% endif %}><p>{{ message }}</p>{% if retry_url and kind in ['error', 'partial-error'] %}<a class="base-control base-button base-button-secondary" href="{{ retry_url }}">{{ retry_label }}</a>{% endif %}</section>
 {%- endmacro %}
 
 {% macro nav(items, current_path) -%}
