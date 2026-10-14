@@ -130,7 +130,7 @@ is the same integration boundary, not a claim that the bounded bridge is absent.
 Remaining parent QA: PostgreSQL upgrade/concurrency, actual installed deployment
 manifest, authorized owner confirmation CLI direct GET, trusted receipt validation,
 Scheduler lease-resume/PM actual completion ordering and a usable immutable Workflow
-terminal ArtifactReceipt for non-PM delivery proposals. The latter is now implemented
+terminal ArtifactReceipt for PM completion and non-PM delivery proposals. The latter is now implemented
 in [Single-Task Terminal Receipt](single-task-terminal-receipt.md); parent still
 owns actual run/receipt verification and policy activation. No Docker/PG/deployment,
 runtime configuration, secrets or other repositories were changed by this packet.

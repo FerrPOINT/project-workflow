@@ -1,14 +1,19 @@
 """Immutable single-task completion receipts on the existing step ledger."""
 
 import hashlib
+import json
 import re
 from typing import Any
 
 from project_workflow.application.base_terminal import _validate_frozen_evaluation
+from project_workflow.application.namespace_ownership import NamespaceOwnershipService
+from project_workflow.application.pm_execution import PMExecutionService
 from project_workflow.application.single_task_runtime import current_binding
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
+from project_workflow.domain.pm_execution import PMExecutionSnapshot, PMResumeInput, SingleTaskPMCheckpointData
 from project_workflow.domain.runtime_assignment import MAX_WORK_ITEM_REVISION, RuntimeStepFence, payload_sha256
 from project_workflow.domain.single_task_runtime import SingleTaskTerminalReceipt, SingleTaskTerminalResponse
+from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
 _RESULT_FIELDS = (
@@ -23,6 +28,51 @@ _BIND_FIELDS = (
     "cycle_number", "attempt_number", "expected_binding_state", "concrete_agent_ref",
     "instruction_profile", "instruction_manifest_sha256", "session_run_id",
 )
+_PM_RESULT_FIELDS = ("execution_ref", "session_run_id", "execution_version", "execution_fence")
+
+
+def _pm_binding(
+    uow: SAUnitOfWork, task_id: int, namespace_id: int, *, fence: RuntimeStepFence | None,
+) -> dict[str, Any]:
+    service = PMExecutionService(uow)
+    execution = service.supervisor_binding(task_id, fence)
+    if execution is None:
+        raise ConflictError("Terminal PM execution missing")
+    if service.run(execution).fence != execution.fence:
+        raise ConflictError("Terminal PM run fence differs from execution")
+    snapshot = service.snapshot(execution)
+    try:
+        owner = NamespaceOwnershipService(uow).get(namespace_id)
+    except NotFoundError:
+        raise ConflictError("Terminal PM namespace owner missing") from None
+    identity = snapshot["identity"]
+    if (owner.tracker_instance_ref != identity["tracker_instance_ref"]
+        or owner.tracker_project_ref != identity["tracker_project_ref"]):
+        raise ConflictError("Terminal PM namespace owner changed")
+    checkpoint = SingleTaskPMCheckpointData.model_validate(snapshot.get("checkpoint"))
+    resumed = PMResumeInput.model_validate(snapshot.get("resume_input"))
+    operation = uow.session.get(m.PMOperation, execution.resume_operation_key)
+    if operation is None or operation.kind != "resume" or operation.execution_ref != execution.execution_ref:
+        raise ConflictError("Terminal PM confirmation resume operation missing")
+    accepted = PMExecutionSnapshot.model_validate(json.loads(operation.result_json))
+    if (resumed.input.input_kind != "confirmation" or checkpoint.requirements_revision is None
+        or checkpoint.requirements_sha256 is None or checkpoint.clarification_request_ref is not None
+        or accepted.identity.model_dump() != identity or accepted.state != "resume_pending"
+        or accepted.version + 1 != execution.version or accepted.fence != execution.fence
+        or accepted.resume_session_run_id != snapshot["session_run_id"]
+        or accepted.resume_operation_key != execution.resume_operation_key
+        or accepted.checkpoint is None or accepted.checkpoint.model_dump() != checkpoint.model_dump()
+        or accepted.resume_input is None or accepted.resume_input.model_dump() != resumed.model_dump()):
+        raise ConflictError("Terminal PM requires the exact retained typed confirmation checkpoint")
+    return {
+        "identity": identity, "namespace_ownership_ref": owner.ownership_ref,
+        "execution_version": snapshot["version"], "execution_fence": snapshot["fence"],
+        "session_run_id": snapshot["session_run_id"], "binding_ref": snapshot["binding_ref"],
+        "hermes_run_ref": snapshot["hermes_run_ref"],
+        "checkpoint": checkpoint.model_dump(mode="json"), "resume_input": resumed.model_dump(mode="json"),
+        "resume_operation_key": execution.resume_operation_key,
+        "resume_request_sha256": operation.request_sha256,
+    }
 
 
 def _body(
@@ -36,8 +86,12 @@ def _body(
     if task_row is None or assignment_row is None:
         raise ConflictError("Terminal task/assignment missing")
     task, assignment, step = task_row.to_dict(), assignment_row.to_dict(), history.to_dict()
-    if assignment.get("role_key") not in {"analyst", "architect", "developer", "reviewer", "tester", "devops"}:
-        raise ConflictError("Terminal delivery receipt requires a non-PM single-task assignment")
+    if assignment.get("role_key") not in {
+        "project_manager", "analyst", "architect", "developer", "reviewer", "tester", "devops",
+    }:
+        raise ConflictError("Terminal receipt requires a single-task assignment")
+    pm = (_pm_binding(uow, history.task_id, assignment["project_id"], fence=fence)
+          if assignment["role_key"] == "project_manager" else None)
     binding = current_binding(uow, assignment)
     digest = payload_sha256(binding)
     evaluation, response = step["evaluation_snapshot"], step["supervisor_response"]
@@ -54,6 +108,8 @@ def _body(
     )}
     expected_step.update(assignment_operation_key=assignment["operation_key"], verdict="pass",
                          next_phase_id=None, rollback_phase_id=None)
+    if pm is not None:
+        expected_step.update(binding_ref=pm["binding_ref"], hermes_run_ref=pm["hermes_run_ref"])
     phases = list(uow.phases.list(workflow_id=assignment["workflow_id"], mode_id=assignment["mode_id"]))
     if (any(task.get(k) != v for k, v in expected_task.items())
         or any(step.get(k) != v for k, v in expected_step.items())
@@ -73,8 +129,14 @@ def _body(
                              binding_state="bound", phase_code=phases[-1].code, current_phase_code=phases[-1].code,
                              next_phase_code=None, rollback_phase_code=None, single_task_context_sha256=digest,
                              retryable=False, missing=[], blockers=[])
+    result_fields: tuple[str, ...] = _RESULT_FIELDS
+    if pm is not None:
+        expected_response.update(binding_ref=pm["binding_ref"], hermes_run_ref=pm["hermes_run_ref"],
+                                 execution_ref=pm["identity"]["execution_ref"], session_run_id=pm["session_run_id"],
+                                 execution_version=pm["execution_version"], execution_fence=pm["execution_fence"])
+        result_fields += _PM_RESULT_FIELDS
     if (any(response.get(k) != v for k, v in expected_response.items())
-        or not set(_RESULT_FIELDS) <= response.keys()
+        or not set(result_fields) <= response.keys()
         or step["missing_item_ids"] or step["blocker_messages"] or not step["worker_report"].strip()):
         raise ConflictError("Terminal report/evaluator result is not an accepted complete PASS")
     events = [event for event in uow.tasks.list_phase_events(
@@ -90,6 +152,8 @@ def _body(
         "task_ref": binding["task_ref"], "root_ref": binding["root_ref"],
         "assignment_sha256": binding["assignment_sha256"],
     }
+    if pm is not None:
+        public_binding["pm"] = pm
     return SingleTaskTerminalReceipt.model_validate({
         "schema": "single-task-sdlc/workflow-terminal-receipt/v1",
         "reference": f"workflow-terminal:single-task-v1:{assignment['project_id']}:{step['id']}", "complete": True,
@@ -102,7 +166,7 @@ def _body(
         "step": {"operation_key": operation_key, "request_sha256": step["request_sha256"],
                  "worker_report_sha256": hashlib.sha256(step["worker_report"].encode("utf-8")).hexdigest(),
                  "evaluation_sha256": payload_sha256(evaluation)},
-        "result": {k: accepted[k] for k in _RESULT_FIELDS}, "accepted_response_sha256": payload_sha256(accepted),
+        "result": {k: accepted[k] for k in result_fields}, "accepted_response_sha256": payload_sha256(accepted),
     }).model_dump(mode="json", by_alias=True)
 
 

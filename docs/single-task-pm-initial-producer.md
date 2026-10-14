@@ -133,7 +133,7 @@ hash or reuse the general-bind token. The CLI outputs the HTTP `result` at its
 JSON root. PM completion remains after actual owner confirmation in the same
 execution, using the existing typed checkpoint/resume path.
 
-The non-PM immutable terminal producer, exact readback DTO, final-report CLI,
+The immutable terminal producer (including PM final sealing), exact readback DTO, final-report CLI,
 Tracker proposal handoff and parent PG selectors are documented in
 [`single-task-terminal-receipt.md`](single-task-terminal-receipt.md).
 That receipt is not produced by this PM first instruction read.

@@ -1,7 +1,7 @@
 # Single-Task Terminal Receipt
 
-Actual Workflow completion produces an immutable `ArtifactReceipt` for non-PM
-single-task-v1 roles, including analyst/architect business scopes. This is not a
+Actual Workflow completion produces an immutable `ArtifactReceipt` for
+single-task-v1 roles, including PM and analyst/architect business scopes. This is not a
 Fleet actual-run terminal observation, Tracker lifecycle transition or new proof
 owner. Parent Tracker/Fleet policy remains responsible for those checks.
 
@@ -14,9 +14,11 @@ are recorded in the [instruction audit](single-task-instruction-audit.md).
 
 The existing final Supervisor report transaction records PASS/coverage, completion
 event and done cursor, builds the receipt, persists it in `supervisor_response`,
-then commits. Any build/seal failure rolls everything back. Non-PM profile
-`complete=true` is returned only after the receipt is durably accepted. PM ordering
-and its separate owner confirmation path are unchanged.
+then commits. Any build/seal failure rolls everything back. Profile `complete=true`
+is returned only after the receipt is durably accepted. PM additionally retains
+its current execution/run and typed confirmation ledger pins inside `binding.pm`;
+see [PM sealing](single-task-pm-terminal-receipt.md). Owner confirmation and native
+terminal remain separate authorities.
 
 Final step API `result` and the existing CLI JSON result add:
 
@@ -93,7 +95,8 @@ catalog hash change or retroactive sealing is introduced.
 Headers: existing runtime role credential in `Authorization`, and
 `X-Workflow-Execution-Token`. Fleet uses the existing actual run role credential
 and retained scoped context, not an agent-supplied owner URL/lease/observation.
-Assignment/catalog credentials and PM role cannot use this non-PM endpoint.
+Assignment/catalog credentials cannot use this endpoint. PM requires its existing
+current PM scoped token and the exact typed confirmation completion seal.
 Response: `{ok:true, complete:true, workflow_receipt:{reference,sha256}, receipt:body}`.
 All handler responses have `Cache-Control: no-store`; malformed DTOs retain the
 existing framework validation response contract.

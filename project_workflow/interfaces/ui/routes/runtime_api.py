@@ -435,7 +435,7 @@ def _runtime_step_replay(
     response = history.get("supervisor_response")
     if not isinstance(response, dict):
         raise ConflictError("Сохранённый runtime step не содержит корректный ответ")
-    if (assignment_data.get("single_task_binding") is not None and role_key != "project_manager"
+    if (assignment_data.get("single_task_binding") is not None
         and (response.get("complete") is True or response.get("status") == "done"
              or "workflow_receipt" in response or "single_task_terminal_receipt" in response
              or history.get("verdict") == "pass" and history.get("next_phase_id") is None
@@ -943,7 +943,7 @@ def runtime_terminal_readback(
     authorization: str | None = Header(default=None),
     x_workflow_execution_token: str | None = Header(default=None),
 ) -> JSONResponse:
-    """Authenticated lookup of an actual non-PM completion; never synthesize evidence."""
+    """Authenticated lookup of an actual completion; never synthesize evidence."""
     from project_workflow.application.single_task_runtime import authorize
     from project_workflow.application.single_task_terminal import (
         read_terminal_receipt,
@@ -957,8 +957,8 @@ def runtime_terminal_readback(
         credential = _authorized_service_credential(authorization)
         if credential is None:
             return reply({"ok": False, "error": "Invalid runtime credential"}, 401)
-        if credential.kind != "runtime" or credential.role_key == "project_manager":
-            return reply({"ok": False, "error": "Non-PM runtime role required"}, 403)
+        if credential.kind != "runtime":
+            return reply({"ok": False, "error": "Runtime role required"}, 403)
         with SAUnitOfWork() as uow:
             namespace_id = _namespace_id(uow, credential.role_key)
             task_key = _require_valid_key(payload.task, uow, project_id=namespace_id)

@@ -658,7 +658,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
             run_data["evaluation_snapshot"]["single_task_binding"] = current_binding(engine.db, assignment.to_dict())
             run_data["evaluation_snapshot"]["single_task_context_sha256"] = runtime_fence.single_task_context_sha256
         if (runtime_fence.base_admission_sha256 is not None
-            or runtime_fence.single_task_context_sha256 is not None and runtime_fence.role_key != "project_manager"):
+            or runtime_fence.single_task_context_sha256 is not None):
             # Persist the exact accepted hash inputs, not a partial/public contract
             # or a reconstruction using future catalog/history state.
             run_data["evaluation_snapshot"]["contract_fingerprint_state"] = _contract_fingerprint_state(
@@ -693,13 +693,12 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         if isinstance(runtime_fence, RuntimeStepFence):
             result.update(_runtime_assignment_cursor(engine, runtime_fence))
             if runtime_fence.single_task_context_sha256 is not None:
-                result["complete"] = result.get("status") == "done" and runtime_fence.role_key == "project_manager"
+                result["complete"] = False
                 result["single_task_context_sha256"] = runtime_fence.single_task_context_sha256
             if runtime_fence.base_admission_sha256 is not None:
                 result["complete"] = False
             engine.db.step_history.update_supervisor_response(step_history_id, result)
-            if (runtime_fence.single_task_context_sha256 is not None
-                and runtime_fence.role_key != "project_manager" and result.get("status") == "done"):
+            if runtime_fence.single_task_context_sha256 is not None and result.get("status") == "done":
                 from ..application.single_task_terminal import build_terminal_receipt as build_single_task_receipt
 
                 terminal = build_single_task_receipt(engine.db, runtime_fence.step_operation_key, fence=runtime_fence)
