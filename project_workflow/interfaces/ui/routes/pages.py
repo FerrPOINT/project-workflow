@@ -49,6 +49,14 @@ def _parse_query_namespace_id(raw: str | None) -> tuple[int | None, bool]:
     parsed = _parse_positive_int(raw)
     return parsed, parsed is None
 
+def _profession_query(request: Request) -> str | None:
+    # The platform UUID pair belongs to the project, never to a profession.
+    values = request.query_params.getlist("profession_id")
+    if not values and "registry_instance_id" not in request.query_params:
+        values = request.query_params.getlist("namespace_id")  # legacy UI links
+    return values[0] if len(values) == 1 else "" if values else None
+
+
 def _namespace_context(
     request: Request,
     *,
@@ -57,7 +65,7 @@ def _namespace_context(
 ) -> dict[str, Any]:
     namespaces = _load_namespaces()
     query_namespace_id, invalid_query_namespace_id = _parse_query_namespace_id(
-        request.query_params.get("namespace_id")
+        _profession_query(request)
     )
     settings = get_settings()
     namespace_cookie_name = cookie_name(settings, NAMESPACE_COOKIE)
@@ -233,7 +241,7 @@ def _query_id_error_page(
 def _workflow_error_page(request: Request, context: dict[str, Any], workflow_id: int, *, page: str) -> HTMLResponse:
     selected_namespace = context.get("selected_namespace")
     namespace_id = selected_namespace.get("id") if isinstance(selected_namespace, dict) else None
-    back_url = f"/workflows?namespace_id={namespace_id}" if isinstance(namespace_id, int) else "/workflows"
+    back_url = f"/workflows?profession_id={namespace_id}" if isinstance(namespace_id, int) else "/workflows"
     context = {
         **context,
         "page": page,
@@ -261,7 +269,7 @@ def _workflow_mode_error_page(
     namespace_id = selected_namespace.get("id") if isinstance(selected_namespace, dict) else None
     back_url = f"/phases?workflow_id={workflow_id}"
     if isinstance(namespace_id, int):
-        back_url += f"&namespace_id={namespace_id}"
+        back_url += f"&profession_id={namespace_id}"
     context = {
         **context,
         "page": "phases",
@@ -286,7 +294,7 @@ def _workflow_mode_error_page(
 def _workflow_not_in_selected_namespace_page(request: Request, context: dict[str, Any]) -> HTMLResponse:
     selected_namespace = context.get("selected_namespace")
     namespace_id = selected_namespace.get("id") if isinstance(selected_namespace, dict) else None
-    back_url = f"/phases?namespace_id={namespace_id}" if isinstance(namespace_id, int) else "/phases"
+    back_url = f"/phases?profession_id={namespace_id}" if isinstance(namespace_id, int) else "/phases"
     context = {
         **context,
         "page": "phases",
@@ -307,7 +315,7 @@ def _workflow_not_in_selected_namespace_page(request: Request, context: dict[str
 def _phase_not_in_selected_namespace_page(request: Request, context: dict[str, Any]) -> HTMLResponse:
     selected_namespace = context.get("selected_namespace")
     namespace_id = selected_namespace.get("id") if isinstance(selected_namespace, dict) else None
-    back_url = f"/phases?namespace_id={namespace_id}" if isinstance(namespace_id, int) else "/phases"
+    back_url = f"/phases?profession_id={namespace_id}" if isinstance(namespace_id, int) else "/phases"
     context = {
         **context,
         "page": "phases",
@@ -328,7 +336,7 @@ def _phase_not_in_selected_namespace_page(request: Request, context: dict[str, A
 def _tasks_back_url(context: dict[str, Any]) -> str:
     selected_namespace = context.get("selected_namespace")
     namespace_id = selected_namespace.get("id") if isinstance(selected_namespace, dict) else None
-    return f"/tasks?namespace_id={namespace_id}" if isinstance(namespace_id, int) else "/tasks"
+    return f"/tasks?profession_id={namespace_id}" if isinstance(namespace_id, int) else "/tasks"
 
 
 def _task_data_error_page(
@@ -363,7 +371,7 @@ def _workflow_matches_selected_namespace(workflow_id: int | None, context: dict[
         _app_state.workflow_service().belongs_to_profession(workflow_id, selected_namespace["id"])
     ):
         return True
-    if context["request"].query_params.get("namespace_id") is not None:
+    if _profession_query(context["request"]) is not None:
         return False
     context.update(selected_namespace=None, theme_namespace=None)
     return True
@@ -462,7 +470,7 @@ def phases_page(request: Request) -> HTMLResponse:
     scoped_workflows = _load_workflows(profession_id) if profession_id is not None else _load_workflows()
     if workflow_id is None and scoped_workflows:
         workflow_id = scoped_workflows[0]["id"]
-    has_explicit_namespace = request.query_params.get("namespace_id") is not None
+    has_explicit_namespace = _profession_query(request) is not None
     workflows = _load_workflows()
     selected_workflow = next((item for item in workflows if item["id"] == workflow_id), None)
     if workflow_id is not None and selected_workflow is None:

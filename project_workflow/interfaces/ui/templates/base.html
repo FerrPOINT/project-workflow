@@ -9,6 +9,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <script>document.documentElement.dataset.platformOrigin={{ platform_origin|default('')|tojson }};{% include 'base/platform-navigation.js' %}</script>
+<script>{% include 'profession-navigation.js' %}</script>
 <title>{% block title %}Workflow Engine{% endblock %}</title>
 <script>{% include "base/theme-preference.js" %}
 document.documentElement.dataset.theme=window.SdlcThemePreference.read("workflow-theme");</script>
@@ -678,7 +679,7 @@ function switchNamespace(namespaceId){
   if(url.pathname === '/namespaces/new'){
     url.pathname='/namespaces';
   }
-  url.searchParams.set('namespace_id', namespaceId);
+  url.searchParams.set('profession_id', namespaceId);
   window.SdlcPlatformNavigation.navigate(url.toString());
 }
 function pluralizeRu(n, one, few, many){
@@ -706,21 +707,7 @@ installServerProduct({connectPlatformProduct, platformNavigate, platformReload, 
 });
 </script>
 <script data-project-navigation-context>
-// Keep the URL-owned scope on native links and platform service navigation.
-function preserveProjectNavigationScope(){
-  var scopes=new URLSearchParams(window.location.search).getAll('project_scope');
-  if(scopes.length !== 1 || scopes[0] !== 'all'){return;}
-  document.querySelectorAll('a[href]').forEach(function(link){
-    if(link.hasAttribute('download')){return;}
-    var url;
-    try{url=new URL(link.href, window.location.href);}catch(error){return;}
-    if(!['http:', 'https:'].includes(url.protocol)){return;}
-    if(url.origin !== window.location.origin && !link.classList.contains('service-menu-item')){return;}
-    url.searchParams.set('project_scope', 'all');
-    link.href=url.toString();
-  });
-}
-document.addEventListener('DOMContentLoaded', preserveProjectNavigationScope);
+document.addEventListener('DOMContentLoaded', window.WorkflowNavigation.preserveProjectContext);
 </script>
 </body>
 </html>

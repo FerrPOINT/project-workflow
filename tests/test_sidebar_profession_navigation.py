@@ -49,7 +49,7 @@ def test_unified_phases_target_nonstarter_workflow_in_same_profession(client):
     assert {int(link["href"].split("/phase/", 1)[1].split("?", 1)[0]) for link in phase_links} == {
         phase["id"] for phase in phases["phases"]
     }
-    assert all(f'namespace_id={profession["id"]}' in link["href"] for link in phase_links)
+    assert all(f'profession_id={profession["id"]}' in link["href"] for link in phase_links)
     assert 'id="workflowForm"' in response.text
     assert f'id="phasesTimeline" data-workflow-id="{workflow_id}"' in response.text
 
@@ -75,3 +75,32 @@ def test_phase_modes_and_sidebar_preserve_explicit_all_scope(client, scope):
     sidebar.feed(response.text.split('<aside class="sidebar"', 1)[1].split("</aside>", 1)[0])
     assert all(("project_scope=all" in link.get("href", "")) == (scope == "all")
                for link in sidebar.links)
+
+
+@pytest.mark.parametrize("path", ["/", "/namespaces", "/workflows", "/tasks", "/settings"])
+def test_platform_namespace_is_not_interpreted_as_a_profession(client, path):
+    response = client.get(path, params={
+        "registry_instance_id": "11111111-1111-4111-8111-111111111111",
+        "namespace_id": "22222222-2222-4222-8222-222222222222",
+        "project_scope": "all",
+    })
+    assert response.status_code == 200
+    assert "Некорректный namespace_id" not in response.text
+
+
+@pytest.mark.parametrize("query", ["profession_id", "namespace_id"])
+def test_profession_selection_accepts_canonical_and_legacy_links(client, query):
+    profession = client.get("/api/namespaces").json()["namespaces"][0]
+    response = client.get("/workflows", params={query: profession["id"]})
+    assert response.status_code == 200
+    links = Links()
+    links.feed(response.text)
+    phases = [link for link in links.links if link.get("href", "").startswith("/phase/")]
+    assert phases
+    assert all(f'profession_id={profession["id"]}' in link["href"] for link in phases)
+
+
+@pytest.mark.parametrize("query", ["profession_id=invalid", "profession_id=1&profession_id=2"])
+def test_invalid_profession_selection_does_not_choose_another_profession(client, query):
+    response = client.get("/workflows?" + query)
+    assert response.status_code == 422
