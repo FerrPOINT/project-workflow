@@ -30,6 +30,55 @@ TARGETS = {
     "devops": "Deployment / Completed",
 }
 
+CRITICAL_BUSINESS_REVIEW = (
+    "Decide routine technical details autonomously within approved requirements. Review/Test defects use normal "
+    "rework; infrastructure failures go to the operator, and tool approval is a separate permission decision. "
+    "ONLY a requirements_contradiction or missing_business_decision that prevents safe progress requires PM "
+    "business review. After the first Workflow step, check installed task-tracker sdlc critical-blocker --help "
+    "for submit/read/operation; missing CLI, denied authority or unavailable producer is an explicit blocker, "
+    "not permission for ordinary comments, a generic issue transition or borrowed credentials. "
+    "For that critical branch, publish and read back your own sealed assignment evidence using the authorized "
+    "attachment commands. Prepare the actual SubmitCriticalBlocker JSON: fence, requirement_revision, "
+    "content_hash, kind, question, rationale, options, recommendation, evidence, idempotency_key. Use the supplied "
+    "current DeliveryFence and requirements revision/hash; evidence contains verified artifact.receipt and "
+    "artifact.binding for this own assignment/execution/role, never a Workflow terminal receipt or invented ID. "
+    "Keep question <=4096 bytes, rationale <=8192 bytes, at most 8 options and 1..16 sealed evidence entries. "
+    "Any recommendation must reference an actual option_id. Use a supplied original critical operation key, "
+    "not the normal result proposal key: nonempty, <=128 UTF-8 bytes, neither '.' nor '..', with no whitespace, "
+    "control characters, slash or backslash. Pass the raw key; CLI escapes it, so do not pre-encode it. "
+    "Missing supplied key/fence/evidence is a blocker; never fabricate it. Freeze that key and exact body. "
+    "Run task-tracker sdlc critical-blocker submit --task <task-uuid> --from-file <critical-blocker.json>. "
+    "Reconcile with task-tracker sdlc critical-blocker operation --task <task-uuid> --key <original-critical-key>; "
+    "read current detail with task-tracker sdlc critical-blocker read --task <task-uuid> --blocker <blocker-uuid> "
+    "only under still-authorized access. Verify the actual task/root/project/owner, assignment/execution/agent, "
+    "role/fence, requirements revision/hash, original proposal/key and blocker_id/blocker_sha256. "
+    "Unknown POST acceptance requires original-key operation readback, never a fresh key or blind resend. "
+    "A successful held receipt is NOT stage completion, PM return, capacity release or Workflow completion. "
+    "Leave the phase unfinished, report the actual held receipt or unresolved uncertainty and end the run; "
+    "do not poll while keeping it alive, send a normal final Workflow report or propose a role result for this "
+    "blocked branch. Return-to-PM is scheduler-only after actual native terminal readback; never run "
+    "return-to-pm/return-operation as the agent or invent terminal proof. Full PM return/reconfirmation "
+    "requires separately integrated and qualified producer/consumer support, not this instruction text. "
+)
+
+PM_CRITICAL_REVIEW = (
+    "Ordinary PM brainstorming and owner feedback stay within the current execution/assignment/cycle, "
+    "including pre-document null/null checkpoints. A later critical business review is different: proceed "
+    "only when the trusted coordinator supplies a NEW PM execution/assignment for this SAME task=root and "
+    "the same single-task PM workflow. Preserve the previous completed execution/history; never reopen it "
+    "or create an assignment yourself. Require an authorized critical-review input identifying the actual "
+    "blocker and sealed source evidence, current requirements and original technical contradiction/decision. "
+    "The inspected PM grant cannot read critical-blocker detail, and sdlc input returns the original Draft "
+    "snapshot, not the critical-review payload. Missing trusted input/read capability is a concrete delivery "
+    "dependency; do not call delivery/scheduler-only commands or borrow their credentials. Discuss the real "
+    "business decision with the owner in small iterations; do not send routine technical choices to the owner. "
+    "Publish any changed requirements through the existing revision command in this new assigned execution. "
+    "Present the FULL saved latest revision/hash and obtain a NEW exact owner confirmation; old consent and "
+    "a technical held receipt cannot resolve this review. Use the existing typed checkpoint/feedback/answer/"
+    "confirmation path, then the normal guarded final PM Workflow report only after actual receipt readback. "
+    "This instruction does not prove installed PM-return allocation or reconfirmation support."
+)
+
 SEALED_ARTIFACTS = (
     "For the six technical roles, only sealed assignment artifacts are authorized on the narrow attachment "
     "routes under the supplied current delivery grant. Ordinary comments remain unauthorized; do not borrow "
@@ -91,11 +140,16 @@ def context_instruction(role: str) -> str:
             "pre-document brainstorming; do not publish a placeholder merely to obtain a revision."
         )
     return common + artifact_instruction(role) + (
+        "Read task-tracker sdlc lifecycle --task <task-uuid>; if the supplied input has previous_result_id, "
+        "read task-tracker sdlc result read --task <task-uuid> --result <previous-result-uuid> and verify "
+        "the exact accepted predecessor result and artifact references before work. Do not infer acceptance "
+        "from a current lifecycle result=null after Reserve. "
         "The delivery task grant does not authorize clarifications/questions; use supplied immutable "
         "requirements and predecessor evidence, and route material business contradictions back to PM. "
+        "Use only the critical business review branch for such contradictions, not routine questions. "
         "Missing required source/input/access is a blocker; request an authorized snapshot from parent, "
-        "never invent sources or broaden authority."
-    )
+        "never invent sources or broaden authority. "
+    ) + CRITICAL_BUSINESS_REVIEW
 
 
 PM_PHASE_REPORT = (
@@ -184,7 +238,10 @@ def terminal_instruction(role: str) -> str:
             "API/policy integration remains pending parent; installed instructions do not authorize live routing. "
             "Generic patch/issue transition/board move are forbidden substitutes."
         )
-    return artifact_instruction(role) + (
+    return (
+        "This is the normal result branch ONLY when no critical business hold or unresolved blocker remains. "
+        "The critical branch ends with its actual held receipt and unfinished Workflow, not a delivery proposal. "
+    ) + artifact_instruction(role) + (
         f"After accepted Workflow complete=true, the allowed next stage AND status are {TARGETS[role]} "
         "on this same task=root. While the assigned run is still alive, prepare the actual existing "
         "SubmitDeliveryProposal JSON with exactly fence, workflow_receipt, result, idempotency_key. "
@@ -203,7 +260,8 @@ def terminal_instruction(role: str) -> str:
         "do not wait or poll for stage transition while "
         "keeping the run alive. After actual terminal, Fleet verifies the proposal and invokes schedulerComplete; "
         "Fleet/operator reads the resulting stage/status through the registered Tracker lifecycle readback. "
-        "There is no lifecycle CLI command in the inspected parser, so do not invent one. Reviewer/Tester "
+        "using task-tracker sdlc lifecycle --task <task-uuid>. Verify the actual returned stage/status and "
+        "accepted result identity; a saved proposal or held receipt is not that transition. Reviewer/Tester "
         "rework includes frozen actionable findings; repaired candidates repeat Review and Testing. "
         "Workflow assessment passed/needs_rework is report language; serialize only the role-specific verdict "
         "values listed above, never needs_rework in a proposal verdict. "

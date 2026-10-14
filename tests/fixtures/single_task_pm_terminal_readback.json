@@ -6,7 +6,7 @@
   ],
   "final_step_request": {
     "instruction_profile": "single-task-v1",
-    "instruction_manifest_sha256": "e5e67111d89a0eeae89b6f78da6c887281cca187d7ea7792822d76ce2c4cc7a8",
+    "instruction_manifest_sha256": "af354aef11f12d2d27e08a1bd24b06fb7518a30086f225382b6b13c286293da9",
     "task": "SDLC-7",
     "step_operation_key": "pm:final",
     "assignment_revision": 1,
@@ -19,32 +19,32 @@
     "expected_phase_code": "PM-DRAFT-03",
     "expected_status": "active",
     "session_run_id": "11111111-1111-4111-8111-111111111103",
-    "single_task_context_sha256": "258de59d24370a1dcb7b4be7e39ef45a6ce5351993ebd53c5c3917e6e14302db",
+    "single_task_context_sha256": "8a4f59f5870c2607672196d317ed0c7c1fb98d1670f651e0c8d94c4c53165dd4",
     "report": "Actual confirmed final report"
   },
   "readback_request": {
     "instruction_profile": "single-task-v1",
-    "instruction_manifest_sha256": "e5e67111d89a0eeae89b6f78da6c887281cca187d7ea7792822d76ce2c4cc7a8",
+    "instruction_manifest_sha256": "af354aef11f12d2d27e08a1bd24b06fb7518a30086f225382b6b13c286293da9",
     "task": "SDLC-7",
     "step_operation_key": "pm:final",
     "session_run_id": "11111111-1111-4111-8111-111111111103",
-    "single_task_context_sha256": "258de59d24370a1dcb7b4be7e39ef45a6ce5351993ebd53c5c3917e6e14302db"
+    "single_task_context_sha256": "8a4f59f5870c2607672196d317ed0c7c1fb98d1670f651e0c8d94c4c53165dd4"
   },
   "reference_readback_request": {
     "instruction_profile": "single-task-v1",
-    "instruction_manifest_sha256": "e5e67111d89a0eeae89b6f78da6c887281cca187d7ea7792822d76ce2c4cc7a8",
+    "instruction_manifest_sha256": "af354aef11f12d2d27e08a1bd24b06fb7518a30086f225382b6b13c286293da9",
     "task": "SDLC-7",
     "session_run_id": "11111111-1111-4111-8111-111111111103",
-    "single_task_context_sha256": "258de59d24370a1dcb7b4be7e39ef45a6ce5351993ebd53c5c3917e6e14302db",
+    "single_task_context_sha256": "8a4f59f5870c2607672196d317ed0c7c1fb98d1670f651e0c8d94c4c53165dd4",
     "receipt_reference": "workflow-terminal:single-task-v1:2:3",
-    "receipt_sha256": "265e9b0074d28e9345fa1b776a21a3122ba44d99b654bf67f048eec5b79efdb1"
+    "receipt_sha256": "3c6e162c3d81f51c03843297bb699c84cc624a862bf3c989ec6b0e1b73a2d532"
   },
   "readback_response": {
     "ok": true,
     "complete": true,
     "workflow_receipt": {
       "reference": "workflow-terminal:single-task-v1:2:3",
-      "sha256": "265e9b0074d28e9345fa1b776a21a3122ba44d99b654bf67f048eec5b79efdb1"
+      "sha256": "3c6e162c3d81f51c03843297bb699c84cc624a862bf3c989ec6b0e1b73a2d532"
     },
     "receipt": {
       "schema": "single-task-sdlc/workflow-terminal-receipt/v1",
@@ -67,14 +67,14 @@
           "expected_binding_state": "unbound",
           "concrete_agent_ref": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
           "instruction_profile": "single-task-v1",
-          "instruction_manifest_sha256": "e5e67111d89a0eeae89b6f78da6c887281cca187d7ea7792822d76ce2c4cc7a8",
+          "instruction_manifest_sha256": "af354aef11f12d2d27e08a1bd24b06fb7518a30086f225382b6b13c286293da9",
           "session_run_id": "ffffffff-ffff-4fff-8fff-ffffffffffff"
         },
         "context": {
           "concrete_agent_ref": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
           "execution_ref": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
           "fencing_token": 1,
-          "instruction_manifest_sha256": "e5e67111d89a0eeae89b6f78da6c887281cca187d7ea7792822d76ce2c4cc7a8",
+          "instruction_manifest_sha256": "af354aef11f12d2d27e08a1bd24b06fb7518a30086f225382b6b13c286293da9",
           "instruction_profile": "single-task-v1",
           "lease_ref": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
           "lease_version": 1,
@@ -84,7 +84,7 @@
         },
         "task_ref": "11111111-1111-4111-8111-111111111111",
         "root_ref": "11111111-1111-4111-8111-111111111111",
-        "assignment_sha256": "8289051d07bda22ecbf91832b185bab1ba863bdb4ab6748cd0fa806894781e7c",
+        "assignment_sha256": "82f75a84f3d4fc97874da9949ec4fee69487514179936e6fca84359eb7c90f9a",
         "pm": {
           "identity": {
             "agent_ref": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
@@ -122,11 +122,11 @@
             }
           },
           "resume_operation_key": "pm:resume",
-          "resume_request_sha256": "f29dc47034a28660d5e238ce122926e5bbfa8b3d2e4c74e4dc8c0837154c4532"
+          "resume_request_sha256": "e9bd347c851aea9c94500c0b5615c88d54c221f8c1636b6ac094e4e98c6f4611"
         }
       },
-      "single_task_context_sha256": "258de59d24370a1dcb7b4be7e39ef45a6ce5351993ebd53c5c3917e6e14302db",
-      "assignment_sha256": "8289051d07bda22ecbf91832b185bab1ba863bdb4ab6748cd0fa806894781e7c",
+      "single_task_context_sha256": "8a4f59f5870c2607672196d317ed0c7c1fb98d1670f651e0c8d94c4c53165dd4",
+      "assignment_sha256": "82f75a84f3d4fc97874da9949ec4fee69487514179936e6fca84359eb7c90f9a",
       "cursor": {
         "task_key": "SDLC-7",
         "namespace_id": 2,
@@ -140,9 +140,9 @@
       },
       "step": {
         "operation_key": "pm:final",
-        "request_sha256": "519a516a8405dc4308146589d8ffcd26d8fd71cd9cdf026e682d599cbe147dae",
+        "request_sha256": "a4016d1244e2bf9ab6561f259c5b2e8ab4ed0ea10689359286711e0887f18924",
         "worker_report_sha256": "507392277a3eb9c49aa959209193ce2247ef38eebc2ff3198a43f1d98d3a7496",
-        "evaluation_sha256": "57c626610f8949129b741628ac587fc0344cfcc7cf96ea541b4a3d909f4b1af5"
+        "evaluation_sha256": "3ddff50915bc7e7e03426b7fcc565ba4c37343179a6f39200aaaeeb0c1fabecc"
       },
       "result": {
         "verdict": "PASS",
@@ -162,13 +162,13 @@
         "mode_key": "draft",
         "cycle_number": 0,
         "attempt_number": 1,
-        "single_task_context_sha256": "258de59d24370a1dcb7b4be7e39ef45a6ce5351993ebd53c5c3917e6e14302db",
+        "single_task_context_sha256": "8a4f59f5870c2607672196d317ed0c7c1fb98d1670f651e0c8d94c4c53165dd4",
         "execution_ref": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
         "session_run_id": "11111111-1111-4111-8111-111111111103",
         "execution_version": 4,
         "execution_fence": 2
       },
-      "accepted_response_sha256": "e9d0c5a5014e3f1479581379d1a767e6db97da6e7bde22c3ec831e484fd9d663"
+      "accepted_response_sha256": "caeea3b769d1420bf8f84e6f69c5ce5724f456227f38cc2fa55c03111d9b028e"
     }
   }
 }

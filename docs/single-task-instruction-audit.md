@@ -10,8 +10,42 @@ current capability inventory. Current source was rechecked read-only at:
 - Tracker server `81759bbb8a07c1076b9c3c4f97c7af058b626dd2`.
 - Fleet backend/web `d5d6643e288dbdf858f060538dca34295ac62bd3`.
 
-This docs-only reconciliation does not change runtime DTOs, producers, migrations,
-OpenAPI, instructions or catalog/reference hashes and claims no live acceptance.
+Those revisions describe the previous reconciliation, not qualification of the
+instruction candidate below. Runtime DTOs, producers, migrations and OpenAPI are
+unchanged by this content packet; no live acceptance is claimed.
+
+## Critical Business Review Candidate
+
+The installable overlay now distinguishes normal technical autonomy, ordinary
+Review/Test rework, operator infrastructure failures and critical business review.
+All six technical roles use the existing `task-tracker sdlc critical-blocker
+submit/read/operation` commands only for `requirements_contradiction` or
+`missing_business_decision`, with their own sealed evidence and supplied original
+key/fence/body. A verified held receipt leaves Workflow unfinished: report it and
+end the native run, without a normal final report/proposal, polling or a fabricated
+stage transition. Scheduler-only `return-to-pm/return-operation` are not agent actions.
+
+CLI syntax/key bounds were checked at Tracker
+`3ddb1596960ffd10ec66a99b4353ef3a74a70187`; current service contracts were inspected
+read-only at `caf7ab3f9c93946fc149d61027bee72cafb536ac`. Existing frozen CLI2aa does
+not ship these commands: a qualified newer CLI/server plus matching build manifest
+and supplied critical key are rollout dependencies, not changed pins here. Check
+installed help after the first Workflow step; denied/missing commands remain blockers.
+
+PM keeps pre-document brainstorming and typed feedback within its existing cycle.
+A later trusted new PM assignment may review the same task's actual business
+blocker; it must not reopen the completed original execution or reuse old consent.
+It needs the real review input and a new exact owner confirmation of the latest
+saved revision/hash. Current PM grants cannot read critical-blocker detail
+(`backend/infra/src/sdlc_critical_blockers.rs:critical_blocker`), and `sdlc input`
+returns only the original Draft snapshot. Authorized review-input delivery,
+allocation and reconfirmation remain explicit integration/qualification dependencies.
+This package does not implement or establish their live acceptance.
+
+Normal final instructions retain the eight-mode matrix below, actual typed result
+proposal/readback and post-native-terminal scheduler transition. They now name the
+existing `sdlc lifecycle` and `sdlc result read` commands, including accepted
+predecessor lookup by `previous_result_id`; no generic transition bypass is allowed.
 
 ## Findings And Corrections
 
@@ -169,8 +203,8 @@ human credentials or extra publisher CLI are invented.
 ## Source Hashes And Rollout Boundary
 
 ```text
-catalog:  b7b8bed470dc8a8730c8c1b1af8db0d556afec652394c569a9b0e97a64b6dcfd
-manifest: e5e67111d89a0eeae89b6f78da6c887281cca187d7ea7792822d76ce2c4cc7a8
+catalog:  03c479707645ab3721be5a4252b5f4ecaa1a783d955bad06c79222e721a8a076
+manifest: af354aef11f12d2d27e08a1bd24b06fb7518a30086f225382b6b13c286293da9
 ```
 
 Only instruction changes trigger this family/hash revision. Existing two source
@@ -197,7 +231,7 @@ boundaries. It does not mistake the frozen historical preset for the installed
 content. Existing installer, source provenance, runtime and terminal tests cover
 actual scoped SQLite execution/readback. No PG/Docker/heavy/live QA is run here.
 
-On 14 October the regenerated installable artifacts passed 64 instruction,
+For the preceding d0 family, on 14 October the regenerated installable artifacts passed 64 instruction,
 artifact-instruction and catalog tests, plus source-generation `--check` and scoped
 Ruff. The runtime/terminal/installation run passed 85 cases; its remaining failure
 was the old expected manifest hash in the PM terminal fixture. Both initial and

@@ -71,7 +71,7 @@ def test_role_artifacts_precede_final_workflow_report_and_existing_typed_proposa
         "Workflow terminal receipt and role artifact contents are separate evidence",
         "fence, workflow_receipt, result, idempotency_key", "real accepted Workflow receipt reference/hash",
         "A proposal receipt DOES NOT transition", "do not wait or poll for stage transition",
-        "Fleet/operator reads", "There is no lifecycle CLI command",
+        "Fleet/operator reads", "task-tracker sdlc lifecycle --task <task-uuid>",
     ):
         assert required in terminal
     ordered = (

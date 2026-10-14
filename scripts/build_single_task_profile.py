@@ -4,10 +4,12 @@ import argparse
 import json
 
 from project_workflow.infrastructure.single_task_delivery_instructions import (
+    CRITICAL_BUSINESS_REVIEW,
     FIRST_STEP,
     PM_CONFIRMATION_CHECKS,
     PM_CONFIRMATION_EVIDENCE,
     PM_CONFIRMATION_INSTRUCTIONS,
+    PM_CRITICAL_REVIEW,
     PM_PHASE_REPORT,
     PM_PUBLISH_INSTRUCTION,
     context_instruction,
@@ -33,6 +35,10 @@ def render() -> tuple[bytes, bytes]:
             mode["phases"][0]["instructions"][1]["description"] = context_instruction(role)
             mode["phases"][-1]["instructions"][-1]["description"] = terminal_instruction(role)
             if role == "project_manager":
+                mode["phases"][0]["instructions"].insert(-1, {
+                    "description": PM_CRITICAL_REVIEW,
+                    "skills": ["project-workflow-executor", "tracker-operator"],
+                })
                 for phase in mode["phases"][:2]:
                     phase["instructions"][-1]["description"] = PM_PHASE_REPORT
                 mode["phases"][1]["instructions"][3]["description"] = PM_PUBLISH_INSTRUCTION
@@ -51,6 +57,8 @@ def render() -> tuple[bytes, bytes]:
                     ],
                     checks=list(PM_CONFIRMATION_CHECKS), evidence=list(PM_CONFIRMATION_EVIDENCE),
                 )
+            else:
+                mode["phases"][1]["instructions"][-2]["description"] = CRITICAL_BUSINESS_REVIEW
             if role == "analyst":
                 mode["phases"][1]["instructions"][2]["description"] = (
                     "Produce the analysis report and requirement/criterion/verification coverage matrix for this "

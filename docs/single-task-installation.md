@@ -49,8 +49,8 @@ Installed binding не является runtime admission или Tracker transit
 и `single_task_manifest_v1.json`, проверяемые по фактическим UTF-8/LF bytes:
 
 ```text
-catalog:  b7b8bed470dc8a8730c8c1b1af8db0d556afec652394c569a9b0e97a64b6dcfd
-manifest: e5e67111d89a0eeae89b6f78da6c887281cca187d7ea7792822d76ce2c4cc7a8
+catalog:  03c479707645ab3721be5a4252b5f4ecaa1a783d955bad06c79222e721a8a076
+manifest: af354aef11f12d2d27e08a1bd24b06fb7518a30086f225382b6b13c286293da9
 ```
 
 `python -m scripts.build_single_task_profile --check` проверяет воспроизводимость.
@@ -58,10 +58,16 @@ manifest: e5e67111d89a0eeae89b6f78da6c887281cca187d7ea7792822d76ce2c4cc7a8
 сохранены. Новый instruction overlay имеет собственный source path/hash.
 Base `PACKAGE_COMMIT`, catalog pins/source и legacy history не переписываются.
 
-Редакция 14 октября добавляет разрешённые sealed role artifacts через существующий
+Предыдущая редакция 14 октября добавляла разрешённые sealed role artifacts через существующий
 Tracker CLI; соответствующие artifacts и pins опубликованы в Workflow source
 `d0ea6b181f7b6beb292297404df0fa0dc8743a9c` и проверены отдельно от live rollout.
-PM-инструкции сохранены, но общий manifest hash относится ко всем профессиям.
+Текущий source-кандидат добавляет critical-business ветку техническим ролям и
+отдельную инструкцию PM review для доверенно выданного нового assignment той же
+задачи. Обычный PM brainstorming/confirmation текст сохранён. Требуются новый
+Tracker CLI с `critical-blocker submit/read/operation` и доверенный PM review input;
+старый CLI2aa и исходный Draft snapshot этого не обеспечивают. Подробные границы
+даны в [аудите инструкций](single-task-instruction-audit.md).
+Общий manifest hash относится ко всем профессиям.
 Не заменять его в старых заданиях, истории или установленном каталоге вручную:
 свежий профиль проверяется в disposable QA, установка совместимого набора сервисов
 и назначений выполняется отдельно. Эти source-изменения не включают поток на стенде.

@@ -92,7 +92,7 @@ def test_final_non_pm_step_uses_real_proposal_readback_then_actual_terminal(cata
                      "assignment_id/execution_id/fencing_token/lease_id/expected_lease_version",
                      "no usable immutable Workflow receipt", "original-key", "exact same key/body",
                      "proposal_id/output_sha256", "DOES NOT transition", "generic Task patch", "actual terminal",
-                     "schedulerComplete", "lifecycle readback", "There is no lifecycle CLI command"):
+                     "schedulerComplete", "lifecycle readback", "task-tracker sdlc lifecycle --task <task-uuid>"):
         assert required in terminal
     ordered = ("accepted Workflow complete=true", "sdlc result propose --task <task-uuid> --from-file <proposal.json>",
                "sdlc result operation --task <task-uuid> --key <original-key>", "end the run", "After actual terminal",
@@ -171,3 +171,46 @@ def test_inventory_and_frozen_source_provenance_remain_compatible(catalog):
     assert manifest["instruction_source"]["sha256"] == (
         "aa9fd70897a14c62eb00dab9aa1691a99f19a17519ae67451a13faf5b0e6432d"
     )
+
+
+@pytest.mark.parametrize("role,mode", MODES[1:])
+def test_critical_business_hold_uses_real_commands_without_false_completion(catalog, role, mode):
+    selected = mode_for(catalog, role, mode)
+    critical = selected["phases"][1]["instructions"][-2]["description"]
+    for required in (
+        "routine technical details autonomously", "defects use normal rework", "infrastructure failures",
+        "tool approval is a separate", "ONLY a requirements_contradiction or missing_business_decision",
+        "critical-blocker --help", "critical-blocker submit --task <task-uuid> --from-file <critical-blocker.json>",
+        "critical-blocker operation --task <task-uuid> --key <original-critical-key>",
+        "critical-blocker read --task <task-uuid> --blocker <blocker-uuid>",
+        "own sealed assignment evidence", "artifact.receipt", "artifact.binding", "supplied original critical",
+        "<=128 UTF-8 bytes", "do not pre-encode", "never a fresh key or blind resend",
+        "held receipt is NOT stage completion", "Leave the phase unfinished", "end the run",
+        "do not poll", "scheduler-only", "never run return-to-pm/return-operation as the agent",
+        "separately integrated and qualified",
+    ):
+        assert required in critical
+    assert "project-workflow --json step" not in critical
+    assert "sdlc result propose" not in critical
+    context = selected["phases"][0]["instructions"][1]["description"]
+    assert "sdlc lifecycle --task" in context and "sdlc result read --task" in context
+    assert "previous_result_id" in context and "result=null after Reserve" in context
+    assert critical in context  # A contradiction can block the first phase, before role work starts.
+    terminal = selected["phases"][-1]["instructions"][-1]["description"]
+    assert terminal.startswith("This is the normal result branch ONLY")
+    assert "There is no lifecycle CLI command" not in terminal
+
+
+def test_pm_critical_review_preserves_initial_brainstorm_and_requires_new_real_input(catalog):
+    phase = mode_for(catalog, "project_manager", "draft")["phases"][0]
+    review = phase["instructions"][-2]["description"]
+    for required in (
+        "pre-document null/null checkpoints", "NEW PM execution/assignment", "SAME task=root",
+        "Preserve the previous completed execution/history", "never reopen", "authorized critical-review input",
+        "PM grant cannot read critical-blocker detail", "original Draft snapshot, not the critical-review payload",
+        "Missing trusted input/read capability", "NEW exact owner confirmation", "old consent",
+        "does not prove installed PM-return",
+    ):
+        assert required in review
+    assert phase["instructions"][0]["description"].startswith("Your first working operation")
+    assert phase["instructions"][-1]["description"].startswith("During pre-document brainstorming")
