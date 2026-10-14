@@ -1,17 +1,29 @@
 # Single-Task Instruction Audit
 
 Source-qualified audit of the actual installable family: seven professions,
-eight role/modes and 24 phases. Tracker was inspected read-only at
-`b8b9546ff2a083d849028ccceadb0c699a7ed71b`. No live agent/PG/deployment evidence
-is claimed. Runtime DTOs, producers, migration and public OpenAPI are unchanged.
+eight role/modes and 24 phases. The original audit inspected Tracker read-only at
+`b8b9546ff2a083d849028ccceadb0c699a7ed71b`; that historical baseline is not the
+current capability inventory. Current source was rechecked read-only at:
+
+- Workflow `d0ea6b181f7b6beb292297404df0fa0dc8743a9c` (unchanged compile inputs).
+- Tracker CLI `2aa87cbc9061f60b626f11f26de2281693f8b05f`.
+- Tracker server `81759bbb8a07c1076b9c3c4f97c7af058b626dd2`.
+- Fleet backend/web `d5d6643e288dbdf858f060538dca34295ac62bd3`.
+
+This docs-only reconciliation does not change runtime DTOs, producers, migrations,
+OpenAPI, instructions or catalog/reference hashes and claims no live acceptance.
 
 ## Findings And Corrections
 
 1. The shared context instruction called questions for delivery roles, but
    `backend/app/src/sdlc_lifecycle.rs:delivery_request_policy` allows their own-task
    context/requirements/events/lifecycle, not clarifications. Ordinary comments
-   and attachments are outside both delivery and PM task-grant prefixes
-   (`backend/api/src/middleware/sdlc_auth.rs:pm_request_policy`). The overlay now
+   and ordinary attachments were outside both delivery and PM task-grant prefixes
+   at that baseline (`backend/api/src/middleware/sdlc_auth.rs:pm_request_policy`).
+   The subsequent sealed-artifact packet permits six technical roles to use
+   exact attachment upload/list/download routes under their delivery grant;
+   PM ordinary attachments and ordinary comment access remain prohibited.
+   The overlay now
    selects permitted commands by role and requires parent-supplied immutable
    sources or explicit authorized access, not borrowed owner/scheduler credentials.
 2. PM instructions still described typed continuation and confirmation readback
@@ -54,9 +66,13 @@ DevOps terminal evidence is artifact/deployment/health/acceptance, not build alo
 
 PM context uses existing `task-tracker sdlc context`, `requirements`, `input` and
 `questions`, each with `--task <UUID>`. Delivery roles use context/requirements,
-plus authorized supplied predecessor/source artifacts. The parent must make
-required comment/attachment content available as immutable inputs; do not require
-an agent to call an endpoint excluded by its task grant. Missing authorized
+plus current lifecycle and accepted-result readback using the commands below.
+Six technical roles publish/read sealed assignment artifacts through existing
+`task-tracker attachment upload|list|download` commands; metadata/bytes are bound
+to task/assignment/execution/role and server-verified raw SHA-256. This is not
+ordinary attachment permission. The parent must make other required comment/source
+content available as authorized immutable inputs; do not require an agent to call
+an endpoint excluded by its task grant. Missing authorized
 sources remain a blocker and may not be summarized into invented evidence.
 
 PM publishes only real drafts/questions through existing `sdlc revision publish`
@@ -99,21 +115,52 @@ and tester passed|rework. Wire devops maps to Fleet dev_ops only at that boundar
 Readback must match proposal_id/task/assignment/execution/agent/producer_subject,
 workflow_receipt/result/output_sha256 and the original operation. Unknown effect:
 read that operation before exact key/body replay; never issue a new key to retry.
+Use the exact proposal key supplied in runtime guidance; do not invent one before
+that context is available. Fleet d5 supplies `fleet-delivery-proposal:<session_run_uuid>`.
 Return actual proposal receipt identifiers and end the run, without stage polling.
 The proposal does NOT transition the stage. After actual acceptable runtime terminal,
 Fleet must verify the immutable Workflow terminal receipt through its existing
 authenticated readback, exact binding/session/run/fence/result, all referenced
 artifact contents/hashes and current Tracker lease/assignment before schedulerComplete.
-Re-read `GET /api/v1/issues/{UUID}/sdlc/lifecycle` and its real operation/result
-receipts using the registered parent authority. This API exists in
-`backend/api/src/routes/sdlc_delivery.rs`; the inspected CLI has no lifecycle
-subcommand. Do not invent one or give agents scheduler completion credentials.
+Current Tracker CLI2aa supports these read-only commands:
+
+```text
+task-tracker sdlc lifecycle --task <UUID>
+task-tracker sdlc result read --task <UUID> --result <RESULT_UUID>
+```
+
+They call `GET /api/v1/issues/{UUID}/sdlc/lifecycle` and
+`GET /api/v1/issues/{UUID}/sdlc/lifecycle/results/{RESULT_UUID}`. Server817 merges
+`backend/api/src/routes/sdlc_delivery.rs:router` into the existing SDLC router and
+registers its handlers in ApiDoc. Its delivery read branch uses `producer(false)`
+and `authorize_read`: read scope, exact current assignment, bound machine subject,
+current requirements revision and project authorization; it does not require
+borrowing a human/scheduler token. Lifecycle operation reads and mutating scheduler
+commands retain their separate authority. PM grants are not broadened by this branch.
 No generic patch, issue transition, board move or manual status substitution.
-API registration, authorized grants, receipt resolution, health/acceptance and
-actual consumer policy must all be available; 403/404/missing evidence is a blocker.
-Tracker now has the scoped sealed-artifact publisher on the existing attachment
-CLI/API, and Fleet has a bounded fixed-origin resolver. These source packages do
-not establish live producer/consumer compatibility. Technical instructions require
+
+Tracker817 has the scoped sealed-artifact publisher on the existing attachment
+CLI/API. The exact machine routes are GET/POST `/api/v1/issues/{UUID}/attachments`
+and GET `/api/v1/attachments/{UUID}/download`, with existing service-level current
+assignment/owner ACL/routing/Running/lease checks and restricted artifact reads.
+Sealed delete remains forbidden, including for admin; no ordinary attachment or
+Central effective-admin bypass is introduced.
+
+Fleet d5 does not merely expose an unused resolver: actual
+`backend/infra/src/runtime/delivery_consumer.rs:finish_delivery_result` calls
+`TrackerArtifactsClient::verify_delivery_result` using `child.cli_access()` PAT
+and the exact own-assignment binding. It verifies metadata and downloaded raw
+bytes for analysis/design/changes+checks/report/deployment+verification. Artifact IO
+runs outside `fence_gate`, followed by fresh native/Tracker custody/fence readback
+and existing `complete_from_proposal`/Complete. Workflow terminal seals are checked
+separately through authenticated Workflow readback, not as Tracker attachment bytes.
+The configured client call uses a conservative Fleet download cap of 25 MiB;
+this is not a claim about the actual deployed Tracker upload limit.
+
+These implemented source hooks do not establish live producer/consumer compatibility.
+Actual deployment registration/configuration, authorized grants, receipt resolution
+and health/acceptance must still be available; 403/404/missing evidence is a blocker.
+Technical instructions require
 actual uploaded bytes, assignment binding and raw SHA-256 verification before the
 final Workflow report; PM's ordinary attachment access remains prohibited.
 Missing publisher/resolver capability blocks execution. No references, hashes,
@@ -137,7 +184,9 @@ bootstrap intentionally rejects old installed content as drift; do not rewrite
 old instructions/bindings/history or add a permissive dual-hash fallback. Parent
 owns the coordinated existing-installation rollout/versioning decision; fresh
 disposable QA may install this source directly. Legacy pins/history and archived
-source remain unchanged; live_activation_allowed remains false until actual policy.
+source remain unchanged. Workflow's published installation DTO still reports
+`live_activation_allowed=false` and `runtime_ready=false`; implemented parent source
+policy/hooks do not turn installation readback into authorization to activate live.
 
 ## Regression Evidence
 
@@ -157,3 +206,12 @@ not hand-edited, and all ten focused producer/terminal-fixture tests then passed
 without update mode. Only synthetic authority/native inputs and redacted execution
 tokens are used. No live model, installed catalog update or full SDLC acceptance
 is inferred from these results.
+
+Subsequent parent source qualification is separately recorded as joint gate
+`evidence-delivery-final-6dd397c13c76-949692`, terminal exit 0 and owned cleanup:
+Fleet6dd strict Clippy/native PG1/startup4; Tracker817 CLI3/route1/services134/PG1
+and strict workspace all-target Clippy PASS. Fleet d5 backend tree equals 0db;
+0db differs from6dd only in startup instruction text and two text assertions.
+The exact d5 release startup delta and final image smoke remain main-owned build
+checks, not completed image/live evidence in this document. No tests/builds were
+repeated for this docs-only update; no model/provider input or native live run is inferred.

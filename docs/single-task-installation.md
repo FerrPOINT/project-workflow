@@ -3,7 +3,9 @@
 Workflow поддерживает opt-in установку собственного семейства `single-task-v1`,
 catalog version 1: семь namespaces, семь workflows, восемь modes и 24 phases.
 Default остаётся `legacy`. **Установка не активирует live исполнение**:
-Tracker/Fleet policy и API integration остаются pending parent.
+Tracker/Fleet source integration уже реализована; source qualification не является
+разрешением установки/активации на стенде. Exact source и оставшаяся live-граница:
+[Single-Task Instruction Audit](single-task-instruction-audit.md).
 
 Bounded profile-aware execution и typed PM packet реализованы отдельно:
 [Single-Task Runtime Packet](single-task-runtime.md). Ниже ограничения прежнего
@@ -57,7 +59,8 @@ manifest: e5e67111d89a0eeae89b6f78da6c887281cca187d7ea7792822d76ce2c4cc7a8
 Base `PACKAGE_COMMIT`, catalog pins/source и legacy history не переписываются.
 
 Редакция 14 октября добавляет разрешённые sealed role artifacts через существующий
-Tracker CLI; hash нового ещё не выпущенного profile family изменён вместе с pins.
+Tracker CLI; соответствующие artifacts и pins опубликованы в Workflow source
+`d0ea6b181f7b6beb292297404df0fa0dc8743a9c` и проверены отдельно от live rollout.
 PM-инструкции сохранены, но общий manifest hash относится ко всем профессиям.
 Не заменять его в старых заданиях, истории или установленном каталоге вручную:
 свежий профиль проверяется в disposable QA, установка совместимого набора сервисов
@@ -80,7 +83,8 @@ Profile branch отвергает legacy workflow key, aggregate scope и Base a
 `ck_task_runtime_assignments_binding_complete` требует decomposition revision для
 ordinary assignment. Нужна отдельно согласованная DB-адаптация; migrations здесь
 не добавлялись. Теперь additive `0015` и standalone profile DTO описаны в runtime packet.
-Parent по-прежнему владеет Tracker/Fleet policy и registration.
+Parent владеет Tracker/Fleet policy и её развёртыванием; source registration уже
+есть в согласованном Tracker817, а не остаётся текущим installer blocker.
 
 Existing assign/bind/rebind/step сохраняли раздельные credentials и assignment/run
 fence проверки. Новый family key явно блокируется до parent integration независимо
@@ -100,6 +104,15 @@ Read-only сверены текущие parser/dispatch и `SubmitDeliveryPropos
   PM не читает intent и не заимствует scheduler/owner credentials ради обхода.
 - Non-PM: `task-tracker sdlc result propose --task <UUID> --from-file <proposal.json>`.
 - Readback: `task-tracker sdlc result operation --task <UUID> --key <KEY>`.
+- Current lifecycle: `task-tracker sdlc lifecycle --task <UUID>`.
+- Accepted result: `task-tracker sdlc result read --task <UUID> --result <RESULT_UUID>`.
+
+Последние две команды реализованы в Tracker CLI
+`2aa87cbc9061f60b626f11f26de2281693f8b05f`; server
+`81759bbb8a07c1076b9c3c4f97c7af058b626dd2` регистрирует соответствующие GET routes.
+Own-task delivery reader требует `task-tracker:read`, exact current assignment,
+bound machine subject, актуальную requirements revision и project authorization.
+Это не PM grant, scheduler authority или доступ ко всему проекту.
 
 Proposal содержит ровно `fence`, `workflow_receipt`, `result`, `idempotency_key`.
 ArtifactReceipt содержит `reference`, `sha256`. Fence/receipt выдаёт владелец.
@@ -111,8 +124,11 @@ Non-PM: после accepted Workflow complete=true агент публикует
 key в отчёте и завершает run. Proposal сам не меняет stage. После actual terminal
 Fleet проверяет proposal и делает schedulerComplete; Fleet/operator читает итоговые
 stage/status через registered lifecycle readback. Агент не удерживает run polling-ом.
-Lifecycle CLI команды в inspected parser нет: инструкции её не придумывают.
-Tracker API registration pending parent; missing/403/404/unknown acceptance — blocker,
+В Fleet `d5d6643e288dbdf858f060538dca34295ac62bd3` consumer уже сверяет actual
+Workflow terminal receipt, proposal и raw role artifacts под delegated child PAT,
+затем заново читает current authority/fence перед существующим Complete.
+API/grant/consumer source реализован, но требуется совместимый actual deployment;
+missing/403/404/unknown acceptance — blocker,
 не permission для generic patch, scheduler credential или фиктивного receipt.
 
 Current instruction audit, grant restrictions and exact consumer prerequisites:
@@ -140,11 +156,11 @@ Legacy PM checkpoint/resume DTO остаётся answer-only. Opt-in typed contr
 в runtime packet на существующих endpoints. Исходная dependency формулировалась как
 typed `input_kind=answer|feedback|confirmation`: только answer ссылается на реальный
 question/answer event, feedback не получает фиктивный answer ID, confirmation
-ссылается на существующий real confirmation receipt. До интеграции typed contract
-фаза остаётся unfinished с явной зависимостью. В installer-only пакете shared wire,
+ссылается на существующий real confirmation receipt. До реализации typed contract
+фаза оставалась unfinished с явной зависимостью. В installer-only пакете shared wire,
 checkpoint/resume implementation и migrations не менялись. Проверки фазы требуют
-actual receipt и разрешённых зависимостей до final report; это instruction gate,
-не заявление о готовом runtime enforcement.
+actual receipt и разрешённых зависимостей до final report; тот пакет задавал
+instruction gate, а текущий implemented runtime guard описан в runtime packet.
 
 Installed artifact hashes обновлены только для source-only opt-in семейства.
 Установка предыдущего content отклоняется как drift, автоматически не ремонтируется;
@@ -159,7 +175,10 @@ auth/version-1 bypass rejection, source hashes и producer/terminal послед
 до единственного final report, наличие receipt checks/evidence и отсутствие
 premature complete в preparation reports.
 
-Parent QA: согласовать exact Tracker/Fleet DTO до использования, адаптировать
-assignment constraint, подключить actual terminal/lifecycle readback; проверить
-полный single-task flow, оба Rework возврата, replay/stale fences, PG persistence
-и deployment artifact/health/acceptance. Docker/PG/build/live activation здесь не выполнялись.
+Source integration включает additive assignment constraint, typed PM packet,
+terminal/lifecycle/result readback и consumer artifact hook. Уже полученное parent
+source QA описано в instruction audit; этот docs-only пакет его не повторяет.
+Remaining acceptance: actual installed deployment manifest/credentials/policy,
+native completion witness, полный single-task flow, оба Rework возврата,
+replay/stale fences и deployment artifact/health/acceptance. Source/PG qualification
+не подменяет эти live receipts. Docker/PG/build/live activation этим пакетом не выполнялись.

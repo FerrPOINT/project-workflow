@@ -130,22 +130,38 @@ only for this profile. A partial tech pair still fails. No destructive downgrade
 SQLite tests cover actual predecessor upgrade, repeat readback, preserved legacy
 rows/history/predicates, three-phase execution, typed PM continuation and contracts.
 
-`SingleTaskNamespaceBinding` remains unchanged and `live_activation_allowed=false`
-until actual parent Tracker/Fleet policy integration. `runtime_ready=false`
-is the same integration boundary, not a claim that the bounded bridge is absent.
-Remaining parent QA: PostgreSQL upgrade/concurrency, actual installed deployment
-manifest, authorized owner confirmation CLI direct GET, trusted receipt validation,
-Scheduler lease-resume/PM actual completion ordering and a usable immutable Workflow
-terminal ArtifactReceipt for PM completion and non-PM delivery proposals. The latter is now implemented
-in [Single-Task Terminal Receipt](single-task-terminal-receipt.md); parent still
-owns actual run/receipt verification and policy activation. No Docker/PG/deployment,
-runtime configuration, secrets or other repositories were changed by this packet.
+`SingleTaskNamespaceBinding` remains unchanged and reports
+`live_activation_allowed=false` / `runtime_ready=false`. This installation response
+is not live admission even though the parent source policy/consumer hooks now exist.
+The current exact Workflowd0/Tracker CLI2aa/server817/Fleetd5 source inventory and
+already obtained parent qualification are recorded in the
+[instruction audit](single-task-instruction-audit.md). Tracker registers actual
+lifecycle/result routes and authorizes current delivery-grant readers; its CLI
+supports `sdlc lifecycle --task` and `sdlc result read --task --result`.
+Authorized PM confirmation direct GET and the actual immutable Workflow
+terminal ArtifactReceipt are implemented, not current missing producers; see
+[Single-Task Terminal Receipt](single-task-terminal-receipt.md).
+
+Fleet d5 connects the receipt/proposal consumer to actual raw-artifact validation
+using delegated child CLI credentials, outside the fence gate, then performs a
+fresh authority/fence read before existing Complete. No scheduler credential is
+given to the agent. Exact owner confirmation still precedes PM Workflow completion
+and actual native completion; an Analysis intent alone cannot assign Analyst.
+
+Remaining deployment acceptance: compatible installed manifest and configured
+credentials/policy, actual run/receipt/lease-resume readbacks, all-role and Rework
+flows, plus deployment artifact/health/acceptance. Source qualification, including
+parent PG gates, is not installed-image or live-agent acceptance. No Docker/PG/build,
+deployment, runtime configuration, secrets or other repositories were changed by
+this docs-only reconciliation.
 
 Parent integration preserves one additive migration and the exact installer family.
-Separate source-qualified tests are not PostgreSQL/live acceptance. Dependent Drafts:
+Source/unit evidence and parent PostgreSQL qualification remain separate from live
+acceptance. Parent-owned integration references (not rollout approval):
 [Fleet81](https://github.com/FerrPOINT/fleet-control/pull/81),
 [Tracker152](https://github.com/FerrPOINT/task-tracker/pull/152),
 [Forge103](https://github.com/FerrPOINT/CI-CD/pull/103). Terminal receipt publication
-and actual consumer rollout remain explicit follow-up, not a new registry.
+and the consumer hook are implemented in source; actual rollout remains explicit
+follow-up, not a new registry.
 
 Generated public request/readback schema: [pm-continuation-openapi.json](pm-continuation-openapi.json).
