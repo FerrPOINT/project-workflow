@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "package": "@sdlc/ui",
   "files": {
-    "base-ui.css": "401c2b3ecbaba5ec47ec89fbca6b8271a6a7e8925f74dbc2b53082117a29f49a",
+    "base-ui.css": "653e7b4a8363fa087d9a537ed6b57b09d277784bbb8ce98c0e2bf93037e55b2d",
     "base-ui.js": "fc0c629373d1ac61eb512f67ec9b750abf2d26c4301abc86828e9ffa564b6b20",
     "theme-preference.js": "56e93cf4a6769cb062ad30e1bcb4cb91df7fbde53296e601c65a6119d3a45738",
     "macros.html": "627cb7a154a9b3740aa24c563e2ff11aa0b464dc2b3edb6bdf358f6a607ff49d",

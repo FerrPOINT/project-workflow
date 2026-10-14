@@ -65,6 +65,41 @@
 .base-shell-mark > svg { width: 60%; height: 60%; }
 
 .base-control { min-height: var(--shell-control-min); }
+/* Resource rows share geometry with SSR, but flex/grid remains product-owned. */
+.base-resource-list {
+  --resource-row-padding-inline: 16px;
+  --resource-row-padding-block: 8px;
+  --resource-row-min-height: 48px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-block: 1px solid var(--color-border);
+}
+.base-resource-list[data-density="comfortable"] {
+  --resource-row-padding-block: 16px;
+  --resource-row-min-height: 56px;
+}
+.base-resource-list[data-variant="bordered"] {
+  border: 1px solid var(--color-border);
+  border-radius: var(--base-radius);
+  background: var(--color-surface);
+}
+.base-resource-list > * + * { border-block-start: 1px solid var(--color-border); }
+.base-resource-list-row {
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: var(--resource-row-min-height, 48px);
+  padding-inline: var(--resource-row-padding-inline, 16px);
+  padding-block: var(--resource-row-padding-block, 8px);
+}
+.base-resource-list-row[data-interactive="true"]:not(:disabled):not([aria-disabled="true"]):hover {
+  background: var(--color-surface-raised);
+}
+.base-resource-list-row[data-interactive="true"]:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
+}
 .base-section-navigation { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid var(--color-border); padding-bottom: 8px; }
 .base-section-navigation-item { display: inline-flex; align-items: center; justify-content: center; padding: 8px 12px; border-radius: var(--base-radius); color: var(--color-text-secondary); font-size: var(--base-font-body); text-decoration: none; }
 .base-section-navigation-item:hover, .base-section-navigation-item[aria-current="page"] { background: var(--color-surface-raised); color: var(--color-text-primary); }
