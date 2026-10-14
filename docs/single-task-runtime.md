@@ -17,6 +17,10 @@ and installed legacy/profile coexistence still need independent qualification.
 The frozen d0 CLI remains a separate input, not relabeled as this server package.
 Base's matching catalog3/4 descriptor probe is implemented separately; an actual
 Base4 companion image and preserved-history rollout are not claimed here.
+Counter-review identified remaining family-specific capability-readiness,
+unsupported generic-rebind advertising and Base catalog-auth/role-map cases.
+Their paired producer/consumer follow-up is required before rollout; the263
+component passes do not close those newly identified cases.
 
 Bounded opt-in execution uses the existing assignment/bind/step/history bridge,
 Supervisor, PM continuation endpoints and repositories/locks. No routing DTO,
