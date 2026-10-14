@@ -64,7 +64,7 @@
 .base-shell-mark { display: inline-flex; align-items: center; justify-content: center; width: var(--shell-platform-mark-size); height: var(--shell-platform-mark-size); flex-shrink: 0; font-size: calc(var(--shell-platform-mark-size) / 2); }
 .base-shell-mark > svg { width: 60%; height: 60%; }
 
-.base-control { min-height: var(--shell-control-min); }
+.base-control:not(textarea) { min-height: var(--shell-control-min); }
 /* Resource rows share geometry with SSR, but flex/grid remains product-owned. */
 .base-resource-list {
   --resource-row-padding-inline: 16px;
@@ -158,7 +158,7 @@ dialog.base-shell-drawer::backdrop { background: rgb(0 0 0 / 65%); }
   .base-shell-work { padding-left: var(--shell-sidebar-compact); }
 }
 @media (max-width: 767px) {
-  .base-control, .base-sidebar-item, .base-shell-link { min-height: var(--shell-control-mobile-min); }
+  .base-control:not(textarea), .base-sidebar-item, .base-shell-link { min-height: var(--shell-control-mobile-min); }
   .base-icon-control { min-width: var(--shell-control-mobile-min); }
   .base-shell-sidebar { display: none; }
   .base-shell-work { padding-left: 0; }
@@ -200,10 +200,8 @@ dialog.base-shell-drawer::backdrop { background: rgb(0 0 0 / 65%); }
   justify-content: flex-end;
 }
 
-.platform-header-services,
-.platform-header-actions {
-  flex-shrink: 0;
-}
+.platform-header-services { min-width: 0; flex-shrink: 1; }
+.platform-header-actions { flex-shrink: 0; }
 
 .platform-header-actions {
   margin-left: auto;
@@ -215,7 +213,7 @@ dialog.base-shell-drawer::backdrop { background: rgb(0 0 0 / 65%); }
 }
 
 .service-switcher-label {
-  max-width: 160px;
+  max-width: clamp(64px, 18vw, 160px);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -379,8 +377,8 @@ dialog.base-shell-drawer::backdrop { background: rgb(0 0 0 / 65%); }
 .base-ssr-account-menu { position: absolute; right: 0; top: calc(100% + 8px); min-width: 160px; padding: 8px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--base-radius); }
 .base-ssr-account-menu a { display: flex; align-items: center; min-height: var(--shell-control-min); padding: 8px; }
 .base-ssr-shell .base-shell-drawer .sidebar-nav { padding: 0; }
-.base-ssr-shell :where(button,select,textarea,input:not([type='checkbox']):not([type='radio']),.btn,summary,.namespace-icon-action,.brand-link,.sidebar-service-link) { min-height: var(--shell-control-min); }
-.base-ssr-shell :where(button,.namespace-icon-action) { min-width: var(--shell-control-min); }
+.base-ssr-shell :is(button,select,input:not([type='checkbox']):not([type='radio']),.btn,summary,.namespace-icon-action,.brand-link,.sidebar-service-link) { min-height: var(--shell-control-min); }
+.base-ssr-shell :is(button,summary,.namespace-icon-action) { min-width: var(--shell-control-min); }
 .base-ssr-shell label:has(input[type='checkbox']), .base-ssr-shell label:has(input[type='radio']) { min-height: var(--shell-control-min); display: flex; align-items: center; }
 .base-ssr-shell .btn-danger { background: var(--color-danger); color: var(--color-destructive-foreground); border-color: var(--color-danger); }
 @media (min-width: 768px) and (max-width: 1279px) {
@@ -393,7 +391,15 @@ dialog.base-shell-drawer::backdrop { background: rgb(0 0 0 / 65%); }
   .base-ssr-shell { --shell-control-min: var(--shell-control-mobile-min); }
   .base-ssr-account summary { min-width: var(--shell-control-mobile-min); min-height: var(--shell-control-mobile-min); }
   .base-ssr-shell .main { width: 100%; margin-left: 0; }
-  .base-ssr-shell :where(button,select,textarea,input:not([type='checkbox']):not([type='radio']),.btn,summary,.namespace-icon-action,.brand-link,.sidebar-service-link,.sidebar-link) { min-height: var(--shell-control-mobile-min); }
-  .base-ssr-shell :where(button,.namespace-icon-action) { min-width: var(--shell-control-mobile-min); }
+  .base-ssr-shell :is(button,select,input:not([type='checkbox']):not([type='radio']),.btn,summary,.namespace-icon-action,.brand-link,.sidebar-service-link,.sidebar-link) { min-height: var(--shell-control-mobile-min); }
+  .base-ssr-shell :is(button,summary,.namespace-icon-action) { min-width: var(--shell-control-mobile-min); }
   .base-ssr-shell label:has(input[type='checkbox']), .base-ssr-shell label:has(input[type='radio']) { min-height: var(--shell-control-mobile-min); }
 }
+
+.modal-backdrop[hidden]{display:none}
+.modal-backdrop{position:fixed;inset:0;z-index:300;display:grid;place-items:center;padding:20px;background:rgba(5,6,10,.72);backdrop-filter:blur(5px)}
+.modal-card{width:min(100%,420px);background:var(--surface);border:1px solid var(--border-strong);border-radius:14px;padding:22px;box-shadow:0 24px 64px rgba(0,0,0,.48)}
+.modal-eyebrow{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--red)}
+.modal-title{margin:8px 0 0;font-size:20px;line-height:1.25;color:var(--text)}
+.modal-copy{margin-top:10px;color:var(--text-muted);line-height:1.55}
+.modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;flex-wrap:wrap}

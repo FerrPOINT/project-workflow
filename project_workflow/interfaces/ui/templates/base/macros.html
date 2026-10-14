@@ -1,5 +1,5 @@
-{% macro page_header(title, context=none, actions=none) -%}
-<div class="base-page-header"><div><h1 class="base-page-title">{{ title }}</h1>{% if context %}<p>{{ context }}</p>{% endif %}</div>{% if actions %}<div class="base-page-actions">{{ actions }}</div>{% endif %}</div>
+{% macro page_header(title=none, context=none, actions=none, heading=none) -%}
+<div class="base-page-header"><div>{% if heading %}{{ heading }}{% else %}<h1 class="base-page-title">{{ title }}</h1>{% endif %}{% if context %}<p>{{ context }}</p>{% endif %}</div>{% if actions %}<div class="base-page-actions">{{ actions }}</div>{% endif %}</div>
 {%- endmacro %}
 
 {% macro frame(mode='wide') -%}
@@ -56,4 +56,19 @@
 
 {% macro drawer(title, items, current_path) -%}
 <button type="button" class="base-control base-icon-control base-shell-drawer-trigger" data-base-drawer-trigger aria-expanded="false" aria-controls="base-mobile-navigation">Меню</button><dialog id="base-mobile-navigation" class="base-shell-drawer" data-base-drawer aria-labelledby="base-drawer-title"><div class="base-shell-drawer-title"><h2 id="base-drawer-title">{{ title }}</h2><button type="button" class="base-control" data-base-drawer-close aria-label="Закрыть навигацию">Закрыть</button></div><div class="base-shell-navigation-scroll">{{ nav(items, current_path) }}</div></dialog>
+{%- endmacro %}
+
+{% macro confirmation_dialog() -%}
+<div class="modal-backdrop" id="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="confirmDialogTitle" aria-hidden="true" hidden>
+  <section class="modal-card" role="document">
+    <div class="modal-eyebrow" id="confirmDialogEyebrow">Подтверждение</div>
+    <h2 class="modal-title" id="confirmDialogTitle">Подтвердите действие</h2>
+    <p class="modal-copy" id="confirmDialogCopy"></p>
+    <div class="modal-actions">
+      <button type="button" class="base-button base-button-secondary base-control" id="confirmDialogCancel">Отмена</button>
+      <button type="button" class="base-button base-button-danger base-control" id="confirmDialogAccept">Удалить</button>
+    </div>
+  </section>
+</div>
+
 {%- endmacro %}

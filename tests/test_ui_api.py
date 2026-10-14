@@ -134,7 +134,7 @@ class TestIndex:
         resp = client.get(f"/phase/{phase_id}?namespace_id={namespace['id']}")
 
         assert resp.status_code == 200
-        assert "fetch(phaseApiUrl(`/api/phases/${phaseId}/instructions/reorder`)" in resp.text
+        assert "requestPhaseDetail(phaseApiUrl(`/api/phases/${phaseId}/instructions/reorder`)" in resp.text
         assert "requestPhaseDetail(phaseApiUrl('/api/instructions')" in resp.text
         assert "requestPhaseDetail(phaseApiUrl('/api/instructions/' + id)" in resp.text
 

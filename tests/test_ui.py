@@ -1408,10 +1408,10 @@ class TestPhaseDetail:
         assert response.status_code == 200
         assert "async function togglePhaseMode(el)" in response.text
         assert "if (el.dataset.saving === 'true') return;" in response.text
-        assert "const saved = await savePhase();" in response.text
+        assert "await savePhase();" in response.text
         assert "el.setAttribute('aria-busy', 'true');" in response.text
-        assert "const previousPartner = partnerSelect?.value || '';" in response.text
-        assert "partnerSelect.value = previousPartner;" in response.text
+        assert "notePhaseEdit();" in response.text
+        assert "partnerSelect.value = previousPartner;" not in response.text
         assert "return true;" in response.text
 
     def test_phase_detail_serializes_all_phase_aggregate_saves(self):
@@ -1419,7 +1419,7 @@ class TestPhaseDetail:
 
         assert response.status_code == 200
         assert "let _phaseSaveQueue = Promise.resolve(true);" in response.text
-        assert "const queued = _phaseSaveQueue.then(() => persistPhase());" in response.text
+        assert "const queued = _phaseSaveQueue.then(() => savingStopped ? false : persistPhase());" in response.text
         assert "_phaseSaveQueue = queued.catch(() => false);" in response.text
         assert "async function persistPhase()" in response.text
 
@@ -2518,16 +2518,16 @@ class TestWorkflowsPage:
         assert 'id="workflowThemeColor"' not in response.text
         assert 'id="workflowThemePreview"' not in response.text
 
-    def test_workflows_mobile_actions_leave_sticky_header(self):
+    def test_workflows_use_one_shared_adaptive_action_block(self):
         response = client.get("/workflows")
 
         assert response.status_code == 200
         assert 'id="newWorkflowButton"' in response.text
-        assert 'id="mobileNewWorkflowButton"' in response.text
-        assert response.text.count('onclick="startCreateWorkflow()"') == 2
-        assert 'class="workflow-mobile-actions"' in response.text
-        assert "@media(max-width:930px){" in response.text
-        assert ".header .workflow-header-action{display:none}" in response.text
+        assert 'id="mobileNewWorkflowButton"' not in response.text
+        assert response.text.count('onclick="startCreateWorkflow()"') == 1
+        assert 'class="workflow-mobile-actions"' not in response.text
+        assert 'class="base-page-actions"' in response.text
+        assert ".header .workflow-header-action{display:none}" not in response.text
         assert 'data-workflow-phases' not in response.text
         assert 'id="workflowPhases"' in response.text
 
@@ -2748,15 +2748,18 @@ def test_ui_deletions_use_product_modal_not_browser_confirm():
     }
     base = (TEMPLATES_DIR / "base.html").read_text(encoding="utf-8")
 
-    assert 'id="confirmDialog"' in base
-    assert "function requestConfirmation" in base
-    assert "background.forEach(function(element){ element.inert = true; })" in base
-    assert "background.forEach(function(element,index){ element.inert = previousInert[index]; })" in base
-    assert "if(event.key === 'Tab')" in base
+    shared_dialog = (TEMPLATES_DIR / "base/base-ui.js").read_text(encoding="utf-8")
+    shared_macros = (TEMPLATES_DIR / "base/macros.html").read_text(encoding="utf-8")
+    assert "base_ui.confirmation_dialog()" in base
+    assert 'id="confirmDialog"' in shared_macros
+    assert "function requestConfirmation" in shared_dialog
+    assert "background.forEach(function(element){ element.inert = true; })" in shared_dialog
+    assert "background.forEach(function(element,index){ element.inert = previousInert[index]; })" in shared_dialog
+    assert "if(event.key === 'Tab')" in shared_dialog
     assert "var dialogOpen=!document.getElementById('confirmDialog').hidden" in base
     assert "sidebar.inert=dialogOpen||(mobile&&!sidebar.classList.contains('open'))" in base
     assert ".btn-danger{background:#b42332;color:#fff" in base
-    assert "html[data-theme='dark'] .modal-eyebrow{color:#ff6b6b}" in base
+    assert "window.SdlcBaseUI.requestConfirmation(unsavedChangesConfirmation)" in base
     assert all("confirm(" not in template for template in templates.values())
 
 
@@ -2917,7 +2920,7 @@ class TestUiNetworkFailures:
         assert "async function requestInstruction(url, options)" in instructions_page.text
         assert "showRequestError();" in instructions_page.text
         assert detail_page.status_code == 200
-        assert "async function requestPhaseDetail(url, options)" in detail_page.text
+        assert "async function requestPhaseDetail(url, options, trackedDraft = false)" in detail_page.text
         assert "if (!await savePhase())" in detail_page.text
         assert "list.insertBefore(li, nextSibling)" in detail_page.text
         assert "await deleteItem(input);" in detail_page.text

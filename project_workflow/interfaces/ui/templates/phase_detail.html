@@ -156,6 +156,10 @@
   </div>
 
   <!-- Instructions — managed like phases list with inline edit, reorder, add, delete -->
+  <div class="base-page-actions">
+    <button type="button" class="btn btn-secondary" id="phaseSaveEditor" onclick="saveEditorChanges()">Сохранить правки</button>
+    <button type="button" class="btn btn-secondary" id="phaseSaveReadback" hidden onclick="reconcilePhaseSave()">Проверить сохранение</button>
+  </div>
   <div class="wiki-section phase-editor-section" id="phase-instructions" data-phase-section tabindex="-1">
     <div class="wiki-section-title">
       📋 Инструкции
@@ -267,6 +271,38 @@
 
 {% block extra_script %}
 const phaseId = {{ phase.id }};
+let phaseDraft = null;
+let phaseSignature = '';
+let confirmedPhase = null;
+let unknownPhaseSave = null;
+let mutationPending = 0;
+let mutationNeedsReadback = false;
+let mutationRequiresReload = false;
+let savingStopped = false;
+const instructionDrafts = new Map();
+const unknownInstructionSaves = new Map();
+window.hasUnsavedWorkflowChanges = () => mutationPending > 0 || mutationNeedsReadback || [...document.querySelectorAll('.skill-candidate')].some(input => input.value.trim()) || !!phaseDraft?.dirty || [...instructionDrafts.values()].some(draft => draft.dirty);
+
+function instructionDraft(input) {
+  const id = input.closest('.timeline-card').dataset.instructionId;
+  if (!instructionDrafts.has(id)) instructionDrafts.set(id, window.SdlcPlatformNavigation.createDraftTracker());
+  return instructionDrafts.get(id);
+}
+
+function currentPhaseSignature() {
+  const fields = [...document.querySelectorAll('.wiki-header [data-field], #checks-list [data-field], #evidence-list [data-field]')].map(input => input.value);
+  return JSON.stringify([fields, document.querySelector('.execution-toggle')?.dataset.mode, document.getElementById('parallelPartnerSelect')?.value]);
+}
+function notePhaseEdit() {
+  const current = currentPhaseSignature();
+  if (phaseDraft && current !== phaseSignature) { savingStopped = false; phaseDraft.edit(); phaseSignature = current; }
+}
+function updatePhaseSaveStatus() {
+  const button = document.getElementById('phaseSaveReadback');
+  if (button) button.hidden = !unknownPhaseSave && !unknownInstructionSaves.size && !mutationNeedsReadback && !mutationRequiresReload;
+  const save = document.getElementById('phaseSaveEditor');
+  if (save) { save.disabled = mutationPending > 0 || !!phaseDraft?.pending || [...instructionDrafts.values()].some(draft => draft.pending); save.setAttribute('aria-busy', String(save.disabled)); }
+}
 const selectedNamespaceId = {{ selected_namespace.id if selected_namespace else 'null' }};
 const phaseSectionIds = ['phase-overview', 'phase-instructions', 'phase-checks', 'phase-evidence'];
 let phaseSectionNavigationLock = null;
@@ -412,18 +448,13 @@ function setPhaseMode(el, mode) {
 async function togglePhaseMode(el) {
   if (el.dataset.saving === 'true') return;
   const previousMode = el.dataset.mode || 'sync';
-  const partnerSelect = document.getElementById('parallelPartnerSelect');
-  const previousPartner = partnerSelect?.value || '';
   const nextMode = previousMode === 'sync' ? 'parallel' : 'sync';
   setPhaseMode(el, nextMode);
+  notePhaseEdit();
   el.dataset.saving = 'true';
   el.setAttribute('aria-busy', 'true');
   try {
-    const saved = await savePhase();
-    if (!saved) {
-      setPhaseMode(el, previousMode);
-      if (partnerSelect) partnerSelect.value = previousPartner;
-    }
+    await savePhase();
   } finally {
     delete el.dataset.saving;
     el.removeAttribute('aria-busy');
@@ -490,12 +521,12 @@ function updateInstructionControls() {
 async function persistInstructionOrder() {
   const ids = getInstructionItems().map((item) => parseInt(item.dataset.instructionId, 10));
   try {
-    const resp = await fetch(phaseApiUrl(`/api/phases/${phaseId}/instructions/reorder`), {
+    const result = await requestPhaseDetail(phaseApiUrl(`/api/phases/${phaseId}/instructions/reorder`), {
       method: 'PUT',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({instruction_ids: ids}),
     });
-    if (!resp.ok) {
+    if (!result || !result.resp.ok || !result.data.ok) {
       showToast('Не удалось сохранить порядок инструкций', 'error');
       return false;
     }
@@ -531,14 +562,23 @@ async function moveInstruction(button, direction) {
   }
 }
 
-async function requestPhaseDetail(url, options) {
+async function requestPhaseDetail(url, options, trackedDraft = false) {
+  if (mutationNeedsReadback || mutationRequiresReload) { showToast('Сначала проверьте результат изменения и обновите страницу', 'error'); return null; }
+  mutationPending++;
+  updatePhaseSaveStatus();
   try {
     const resp = await fetch(url, options);
     const data = await resp.json().catch(() => ({}));
+    if (!trackedDraft && (resp.status >= 500 || (resp.ok && typeof data.ok !== 'boolean'))) { mutationNeedsReadback = true; mutationRequiresReload = true; }
     return {resp, data};
   } catch (_error) {
+    if (!trackedDraft) { mutationNeedsReadback = true; mutationRequiresReload = true; }
     showRequestError();
     return null;
+  } finally {
+    mutationPending--;
+    updatePhaseSaveStatus();
+    window.SdlcPlatformNavigation.refreshDrafts?.();
   }
 }
 
@@ -592,7 +632,7 @@ async function addInstructionLast() {
 async function deleteInstruction(button) {
   const item = button.closest('.timeline-item');
   if (!item) return;
-  if (!await requestConfirmation({eyebrow:'Удаление инструкции',title:'Удалить инструкцию?',message:'Инструкция будет удалена без возможности восстановления.',confirmLabel:'Удалить'})) return;
+  if (!await window.SdlcBaseUI.requestConfirmation({eyebrow:'Удаление инструкции',title:'Удалить инструкцию?',message:'Инструкция будет удалена без возможности восстановления.',confirmLabel:'Удалить'})) return;
   button.disabled = true;
   try {
     const id = item.dataset.instructionId;
@@ -642,25 +682,36 @@ async function saveInstructionDescription(input) {
     showToast('Описание инструкции обязательно', 'error');
     return;
   }
+  const draft = window.SdlcPlatformNavigation.createDraftTracker ? instructionDraft(input) : null;
+  if (draft?.uncertain) { showToast('Проверьте состояние инструкции перед повтором сохранения', 'error'); return; }
+  const ticket = draft?.beginSave();
+  let outcome = 'unknown';
   input.disabled = true;
   try {
     const result = await requestPhaseDetail(phaseApiUrl('/api/instructions/' + id), {
       method: 'PUT',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({description: description}),
-    });
+    }, true);
     if (!result) {
       return;
     }
     const {resp, data} = result;
     if (!resp.ok || !data.ok) {
+      if (resp.status < 500) outcome = 'failed';
       showToast(data.error || 'Не удалось сохранить описание', 'error');
       return;
     }
+    outcome = 'saved';
     const savedDescription = data.instruction?.description || description;
     input.value = savedDescription;
     input.dataset.originalDescription = savedDescription;
   } finally {
+    if (ticket) {
+      draft.finishSave(ticket, outcome);
+      if (outcome === 'unknown') unknownInstructionSaves.set(id, {ticket, draft, input, description, previous: input.dataset.originalDescription});
+      updatePhaseSaveStatus();
+    }
     input.disabled = false;
     resizeInlineTextarea(input);
   }
@@ -789,17 +840,22 @@ function addEvidence() {
 let _saveTimer = null;
 let _phaseSaveQueue = Promise.resolve(true);
 function scheduleSave() {
+  if (savingStopped) return;
+  notePhaseEdit();
   if (_saveTimer) clearTimeout(_saveTimer);
-  _saveTimer = setTimeout(savePhase, 400);
+  _saveTimer = setTimeout(() => { _saveTimer = null; void savePhase(); }, 400);
 }
 
 function savePhase() {
-  const queued = _phaseSaveQueue.then(() => persistPhase());
+  notePhaseEdit();
+  if (phaseDraft?.uncertain) { showToast('Сначала проверьте результат предыдущего сохранения', 'error'); return Promise.resolve(false); }
+  const queued = _phaseSaveQueue.then(() => savingStopped ? false : persistPhase());
   _phaseSaveQueue = queued.catch(() => false);
   return queued;
 }
 
 async function persistPhase() {
+  if (phaseDraft?.uncertain) return false;
   const header = document.querySelector('.wiki-header');
   const meta = {};
   header.querySelectorAll('[data-field]').forEach((inp) => {
@@ -835,15 +891,18 @@ async function persistPhase() {
     }
   }
 
+  const ticket = phaseDraft?.beginSave();
+  updatePhaseSaveStatus();
+  let outcome = 'unknown';
   try {
     const resp = await fetch(phaseApiUrl('/api/phases/' + phaseId), {
       method: 'PUT',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(data),
     });
-    if (!resp.ok) { showToast('Ошибка сохранения', 'error'); return false; }
+    if (!resp.ok) { if (resp.status < 500) outcome = 'failed'; showToast('Ошибка сохранения', 'error'); return false; }
     const result = await resp.json();
-    if (!result.ok) { showToast(result.error || 'Ошибка сохранения', 'error'); return false; }
+    if (!result.ok) { outcome = 'failed'; showToast(result.error || 'Ошибка сохранения', 'error'); return false; }
     for (const field of ['checks', 'evidence']) {
       const ids = result.ids?.[field];
       if (!Array.isArray(ids) || ids.length !== submittedRows[field].length) {
@@ -856,15 +915,88 @@ async function persistPhase() {
         submittedRows[field][i].setAttribute('data-id', String(id));
       });
     }
+    outcome = 'saved';
+    confirmedPhase = {...data};
+    for (const field of ['checks', 'evidence']) confirmedPhase[field] = data[field].map((row, index) => ({...row, id: result.ids[field][index]}));
     showToast('Сохранено', 'success');
     return true;
   } catch (_error) {
-    showToast('Ошибка сохранения', 'error');
+    showToast('Результат сохранения неизвестен. Проверьте состояние перед повтором.', 'error');
     return false;
+  } finally {
+    if (ticket) {
+      phaseDraft.finishSave(ticket, outcome);
+      if (outcome === 'unknown') unknownPhaseSave = {ticket, payload: data, rows: submittedRows};
+      updatePhaseSaveStatus();
+    }
   }
 }
 
+async function saveEditorChanges() {
+  savingStopped = false;
+  await savePhase();
+  for (const input of document.querySelectorAll('.timeline-name-input')) {
+    const draft = instructionDraft(input);
+    if (draft.dirty && !draft.pending && !draft.uncertain) await saveInstructionDescription(input);
+  }
+}
+
+function phaseMatches(actual, expected) {
+  return actual.name === expected.name && (actual.description || '') === (expected.description || '')
+    && (actual.execution_type || 'sync') === expected.execution_type && (actual.parallel_with_phase_id ?? null) === expected.parallel_with_phase_id
+    && ['checks', 'evidence'].every(field => actual[field].length === expected[field].length
+      && expected[field].every((row, index) => actual[field][index].description === row.description && (row.id == null || Number(actual[field][index].id) === Number(row.id))));
+}
+async function reconcilePhaseSave() {
+  const unknown = unknownPhaseSave;
+  if (!unknown && !unknownInstructionSaves.size && !mutationNeedsReadback && !mutationRequiresReload) return;
+  try {
+    const response = await fetch(phaseApiUrl('/api/phases/' + phaseId));
+    if (!response.ok) throw new Error('Readback unavailable');
+    const result = await response.json();
+    if (!result.ok) throw new Error('Readback failed');
+    for (const [id, saved] of unknownInstructionSaves) {
+      const instruction = result.phase.instructions?.find(item => String(item.id) === id);
+      if (!instruction || (instruction.description !== saved.description && instruction.description !== saved.previous)) continue;
+      const matches = instruction.description === saved.description;
+      saved.draft.reconcile(saved.ticket, matches);
+      saved.input.dataset.originalDescription = instruction.description;
+      unknownInstructionSaves.delete(id);
+    }
+    updatePhaseSaveStatus();
+    if (!unknown && !unknownInstructionSaves.size && (mutationNeedsReadback || mutationRequiresReload)) {
+      mutationNeedsReadback = false;
+      // Readback precedes a fresh server view. No uncertain mutation is replayed.
+      window.SdlcPlatformNavigation.reload();
+      return;
+    }
+    if (!unknown) {
+      showToast(unknownInstructionSaves.size ? 'Состояние инструкции отличается. Черновик сохранён.' : 'Состояние инструкций проверено. Несохранённые правки можно отправить повторно.', unknownInstructionSaves.size ? 'error' : 'success');
+      return;
+    }
+    const matches = phaseMatches(result.phase, unknown.payload);
+    if (!matches && (!confirmedPhase || !phaseMatches(result.phase, confirmedPhase))) {
+      showToast('Серверное состояние отличается. Черновик сохранён; проверьте изменения перед повтором.', 'error');
+      return;
+    }
+    if (matches) {
+      for (const field of ['checks', 'evidence']) result.phase[field].forEach((row, index) => unknown.rows[field][index].setAttribute('data-id', String(row.id)));
+    }
+    phaseDraft.reconcile(unknown.ticket, matches);
+    confirmedPhase = result.phase;
+    unknownPhaseSave = null;
+    updatePhaseSaveStatus();
+    showToast(matches ? 'Сохранение подтверждено' : 'Изменения не записаны. Черновик сохранён; повторите сохранение.', matches ? 'success' : 'error');
+  } catch (_error) { showToast('Не удалось проверить сохранение. Черновик сохранён.', 'error'); }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+  phaseDraft = window.SdlcPlatformNavigation.createDraftTracker();
+  phaseSignature = currentPhaseSignature();
+  confirmedPhase = {name: document.querySelector('.wiki-header [data-field="name"]').value, description: document.querySelector('.wiki-header [data-field="description"]').value,
+    execution_type: document.querySelector('.execution-toggle')?.dataset.mode || 'sync', parallel_with_phase_id: Number(document.getElementById('parallelPartnerSelect')?.value) || null,
+    checks: [...document.querySelectorAll('#checks-list [data-field]')].map(input => ({id: Number(input.closest('li').dataset.id) || null, description: input.value.trim()})),
+    evidence: [...document.querySelectorAll('#evidence-list [data-field]')].map(input => ({id: Number(input.closest('li').dataset.id) || null, description: input.value.trim()}))};
   initializePhaseOutline();
   renderInstructionTimeline(getInstructionItems());
   updateInstructionControls();
@@ -872,7 +1004,10 @@ document.addEventListener('DOMContentLoaded', () => {
   if (document.fonts) document.fonts.ready.then(resizeAllInlineTextareas);
 });
 document.addEventListener('input', (event) => {
+  if (event.target.matches('.timeline-name-input')) instructionDraft(event.target).edit();
+  else if (event.target.closest('.wiki-header, #checks-list, #evidence-list')) notePhaseEdit();
   if (event.target.matches('.wiki-page textarea')) resizeInlineTextarea(event.target);
 });
+window.discardWorkflowDraft = () => { savingStopped = true; if (_saveTimer) clearTimeout(_saveTimer); _saveTimer = null; };
 window.addEventListener('resize', resizeAllInlineTextareas);
 {% endblock %}

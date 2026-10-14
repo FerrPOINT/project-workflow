@@ -41,3 +41,56 @@
   });
   window.matchMedia('(min-width: 768px)').addEventListener('change', (event) => { if (event.matches && drawer.open) close(); });
 })();
+
+(() => {
+function requestConfirmation(options){
+  var dialog = document.getElementById('confirmDialog');
+  var cancel = document.getElementById('confirmDialogCancel');
+  var accept = document.getElementById('confirmDialogAccept');
+  var trigger = document.activeElement;
+  var background = Array.from(document.querySelectorAll('[data-base-dialog-background]'));
+  var previousInert = background.map(function(element){ return element.inert; });
+  document.getElementById('confirmDialogEyebrow').textContent = options.eyebrow || 'Подтверждение';
+  document.getElementById('confirmDialogTitle').textContent = options.title || 'Подтвердите действие';
+  document.getElementById('confirmDialogCopy').textContent = options.message || '';
+  accept.textContent = options.confirmLabel || 'Подтвердить';
+  dialog.hidden = false;
+  dialog.setAttribute('aria-hidden', 'false');
+  background.forEach(function(element){ element.inert = true; });
+  cancel.focus();
+  return new Promise(function(resolve){
+    function close(value){
+      dialog.hidden = true;
+      dialog.setAttribute('aria-hidden', 'true');
+      background.forEach(function(element,index){ element.inert = previousInert[index]; });
+      document.dispatchEvent(new Event('base-dialog-closed'));
+      cancel.removeEventListener('click', onCancel);
+      accept.removeEventListener('click', onAccept);
+      dialog.removeEventListener('click', onBackdrop);
+      document.removeEventListener('keydown', onKeyDown);
+      if(trigger && typeof trigger.focus === 'function'){ trigger.focus(); }
+      resolve(value);
+    }
+    function onCancel(){ close(false); }
+    function onAccept(){ close(true); }
+    function onBackdrop(event){ if(event.target === dialog){ close(false); } }
+    function onKeyDown(event){
+      if(event.key === 'Escape'){ close(false); }
+      if(event.key === 'Tab'){
+        if(event.shiftKey && (document.activeElement === cancel || !dialog.contains(document.activeElement))){
+          event.preventDefault();
+          accept.focus();
+        }else if(!event.shiftKey && (document.activeElement === accept || !dialog.contains(document.activeElement))){
+          event.preventDefault();
+          cancel.focus();
+        }
+      }
+    }
+    cancel.addEventListener('click', onCancel);
+    accept.addEventListener('click', onAccept);
+    dialog.addEventListener('click', onBackdrop);
+    document.addEventListener('keydown', onKeyDown);
+  });
+}
+  window.SdlcBaseUI = { ...window.SdlcBaseUI, requestConfirmation };
+})();

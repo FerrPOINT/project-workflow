@@ -2,12 +2,13 @@
   "schemaVersion": 1,
   "package": "@sdlc/ui",
   "files": {
-    "base-ui.css": "653e7b4a8363fa087d9a537ed6b57b09d277784bbb8ce98c0e2bf93037e55b2d",
-    "base-ui.js": "fc0c629373d1ac61eb512f67ec9b750abf2d26c4301abc86828e9ffa564b6b20",
+    "base-ui.css": "72f5f1da7eefdc0c253255a2c089e7079bee11da4ba1e49f7f5d52a64ce83900",
+    "base-ui.js": "6c6614d773209a07757abca7fb1e2953bcc625f2b002a0970dea363c19c7d0cf",
     "theme-preference.js": "56e93cf4a6769cb062ad30e1bcb4cb91df7fbde53296e601c65a6119d3a45738",
-    "macros.html": "627cb7a154a9b3740aa24c563e2ff11aa0b464dc2b3edb6bdf358f6a607ff49d",
+    "macros.html": "347ecf727cf3d8ae62e06f7ba11564084f5b85d2e27ddb4da1a638af0ec95b5c",
+    "draft-state.js": "cf286a375a6607309917d9721d32ec7bd2f61b7fedc328026c3b96f1216a02a3",
     "platform-bridge.js": "94210779ab389a43acbee15df852b9747f90e8467a26d76ab4b5d3a225e8c110",
-    "platform-ssr.js": "03ed585fca2fb025e6efdc6f5b7b737ae91edc92928319a570c4091e72daa18c",
+    "platform-ssr.js": "1db5b016e9249154110aa99d8cbbcfa6c280a4408efad000c1f0cbffe03e0feb",
     "platform-navigation.js": "9875be56a2912c1b5b18cd5b70731c42bafa492b2f13c62d2d18559fec4861b3"
   }
 }

@@ -77,7 +77,7 @@ def test_instruction_save_failure_retains_entered_text(result, page, fn, next_fn
     end = template.index(f"async function {next_fn}(", start)
     source = template[start:end]
     script = "\n".join([
-        "const messages=[];",
+        "const messages=[];const window={SdlcPlatformNavigation:{}};",
         "const input={value:'Edited instruction',disabled:false,",
         "dataset:{originalDescription:'Original instruction'},closest:()=>({dataset:{instructionId:'23'}})};",
         "const resizeInlineTextarea=()=>{}; const showToast=(text)=>messages.push(text); const phaseApiUrl=(url)=>url;",
@@ -105,7 +105,8 @@ def test_phase_save_keeps_response_ids_attached_to_submitted_rows(change, field)
     start = template.index("async function persistPhase()")
     end = template.index("document.addEventListener('DOMContentLoaded'", start)
     script = "\n".join([
-        "const messages=[];let payload=null;",
+        "const messages=[];let payload=null;const phaseDraft=null;let confirmedPhase=null;"
+        "const updatePhaseSaveStatus=()=>{};",
         "const row=(text,id)=>({dataset:id?{id:String(id)}:{},classList:{contains:()=>false},",
         "querySelector:()=>({value:text}),setAttribute(k,v){this.dataset.id=v;}});",
         "const first=row('First');const second=row('Second');const blank=row('');",
