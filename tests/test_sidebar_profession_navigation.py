@@ -100,7 +100,9 @@ def test_profession_selection_accepts_canonical_and_legacy_links(client, query):
     assert all(f'profession_id={profession["id"]}' in link["href"] for link in phases)
 
 
-@pytest.mark.parametrize("query", ["profession_id=invalid", "profession_id=1&profession_id=2"])
+@pytest.mark.parametrize("query", [
+    "profession_id=invalid", "profession_id=1&profession_id=2", "profession_id=1&namespace_id=2",
+])
 def test_invalid_profession_selection_does_not_choose_another_profession(client, query):
     response = client.get("/workflows?" + query)
     assert response.status_code == 422

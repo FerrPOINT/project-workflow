@@ -48,6 +48,8 @@ jobs:
           enable-cache: true
       - name: Unit and UI tests
         run: uv run --isolated --with-requirements constraints.txt --all-extras pytest -q --timeout=60
+      - name: Profession and platform navigation regression
+        run: node scripts/test_profession_navigation.mjs
       - name: PostgreSQL integration tests
         run: uv run --isolated --with-requirements constraints.txt --all-extras pytest -q -m integration tests/test_postgres_integration.py --timeout=120
       - name: Lint

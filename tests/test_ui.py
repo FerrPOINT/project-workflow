@@ -1203,7 +1203,7 @@ class TestPhaseDetail:
         assert response.status_code == 200
         assert (
             f'href="/phases?workflow_id={workflow_id}'
-            f'&mode_id={phase["mode_id"]}&namespace_id={namespace_id}"'
+            f'&mode_id={phase["mode_id"]}&profession_id={namespace_id}"'
         ) in response.text
 
     def test_phase_detail_rejects_unknown_query_namespace(self):
@@ -2342,7 +2342,7 @@ class TestProjectsPage:
         response = client.get("/namespaces/new")
         assert response.status_code == 200
         assert (
-            "window.SdlcPlatformNavigation.navigate('/namespaces?namespace_id=' + encodeURIComponent(d.namespace_id));"
+            "window.SdlcPlatformNavigation.navigate(namespaceScopedPath('/namespaces', d.namespace_id));"
             in response.text
         )
 

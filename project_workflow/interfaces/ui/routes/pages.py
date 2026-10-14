@@ -49,9 +49,12 @@ def _parse_query_namespace_id(raw: str | None) -> tuple[int | None, bool]:
     parsed = _parse_positive_int(raw)
     return parsed, parsed is None
 
+
 def _profession_query(request: Request) -> str | None:
     # The platform UUID pair belongs to the project, never to a profession.
     values = request.query_params.getlist("profession_id")
+    if values and "registry_instance_id" not in request.query_params and "namespace_id" in request.query_params:
+        return ""  # conflicting canonical and legacy local selectors
     if not values and "registry_instance_id" not in request.query_params:
         values = request.query_params.getlist("namespace_id")  # legacy UI links
     return values[0] if len(values) == 1 else "" if values else None
