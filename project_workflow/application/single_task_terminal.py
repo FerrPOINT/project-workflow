@@ -5,6 +5,8 @@ import json
 import re
 from typing import Any
 
+from sqlalchemy import select
+
 from project_workflow.application.base_terminal import _validate_frozen_evaluation
 from project_workflow.application.namespace_ownership import NamespaceOwnershipService
 from project_workflow.application.pm_execution import PMExecutionService
@@ -209,3 +211,39 @@ def terminal_operation_key_for_reference(
     if not history.step_operation_key:
         raise ConflictError("Terminal history has no accepted operation key")
     return history.step_operation_key
+
+
+def terminal_operation_key_for_current_run(
+    uow: SAUnitOfWork, *, task_id: int, role_key: str, session_run_id: str,
+) -> str:
+    """Find only an actual terminal row of the already-authorized current run."""
+    task = uow.tasks.get_by_id(task_id)
+    if task is None or task.status != "done":
+        raise NotFoundError("Current run has no completed Workflow step")
+    assignment = uow.tasks.get_assignment_by_operation_key(task.assignment_operation_key or "")
+    if assignment is None or assignment.role_key != role_key:
+        raise ConflictError("Current terminal assignment differs")
+    binding = current_binding(uow, assignment.to_dict())
+    run = binding.get("pm_run", binding["request"])
+    if run.get("session_run_id") != session_run_id:
+        raise ConflictError("Current terminal run differs")
+    rows = list(uow.session.scalars(select(m.TaskStepHistoryEntry).where(
+        m.TaskStepHistoryEntry.task_id == task_id,
+        m.TaskStepHistoryEntry.role_key == role_key,
+        m.TaskStepHistoryEntry.assignment_ref == assignment.assignment_ref,
+        m.TaskStepHistoryEntry.assignment_revision == assignment.assignment_revision,
+        m.TaskStepHistoryEntry.binding_ref == run["binding_ref"],
+        m.TaskStepHistoryEntry.hermes_run_ref == run["hermes_run_ref"],
+        m.TaskStepHistoryEntry.verdict == "pass",
+        m.TaskStepHistoryEntry.next_phase_id.is_(None),
+        m.TaskStepHistoryEntry.rollback_phase_id.is_(None),
+        m.TaskStepHistoryEntry.step_operation_key.is_not(None),
+    ).limit(2)))
+    if not rows:
+        raise NotFoundError("Current terminal step not found")
+    if len(rows) != 1:
+        raise ConflictError("Current terminal step is ambiguous")
+    key = rows[0].step_operation_key
+    if key is None:
+        raise ConflictError("Current terminal operation key missing")
+    return key

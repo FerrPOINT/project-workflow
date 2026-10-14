@@ -76,6 +76,12 @@ credential. Analyst discovery следует только за accepted Tracker 
 
 ## Fixture И Проверки
 
+Для original CLI final report Fleet может использовать тот же readback endpoint
+с `current_run=true` вместо неизвестного ему operation key. Task/run/profile/hash
+и scoped token обязательны; server находит ровно одну фактическую terminal запись
+текущего PM binding. Это read-only selector, не дополнительная tool-прослойка,
+новый CLI, storage или разрешение самостоятельно подтвердить требования.
+
 Exact actual request/response из SQLite/TestClient:
 [`single_task_pm_terminal_readback.json`](../tests/fixtures/single_task_pm_terminal_readback.json).
 Tracker inputs и native observations синтетические; это не live runtime proof.

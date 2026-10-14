@@ -85,6 +85,33 @@ def complete(client, monkeypatch, supervisor_llm):
     return (*prepared, response.json())
 
 
+def test_pm_direct_cli_completion_is_discovered_by_current_run_without_fleet_report_key(
+    bridge, monkeypatch, supervisor_llm,
+):
+    final, lookup, headers, old_headers, _ = advance(bridge, monkeypatch, supervisor_llm)
+    by_run = {**{key: value for key, value in lookup.items() if key != "step_operation_key"}, "current_run": True}
+    assert bridge.post(READBACK, json=by_run, headers=headers).status_code == 404
+    response = bridge.post(API + "step", json=final, headers=headers)
+    assert response.status_code == 200
+    expected = bridge.post(READBACK, json=lookup, headers=headers).json()
+    assert bridge.post(READBACK, json=by_run, headers=headers).json() == expected
+    assert bridge.post(READBACK, json=by_run, headers=old_headers).status_code == 403
+    for body in [{**by_run, "step_operation_key": "pm:final"},
+                 {**by_run, "current_run": "true"}, {**by_run, "current_run": False}]:
+        assert bridge.post(READBACK, json=body, headers=headers).status_code == 422
+    with TestClient(create_app()) as restarted:
+        assert restarted.post(READBACK, json=by_run, headers=headers).json() == expected
+    with SAUnitOfWork() as uow:
+        source = uow.step_history.get_by_step_operation_key(final["step_operation_key"])
+        row = uow.session.get(m.TaskStepHistoryEntry, source.id)
+        values = {column.name: getattr(row, column.name) for column in m.TaskStepHistoryEntry.__table__.columns
+                  if column.name not in {"id", "created_at"}}
+        values.update(step_operation_key="pm:ambiguous-final", replay_fingerprint=None)
+        uow.session.add(m.TaskStepHistoryEntry(**values))
+        uow.commit()
+    assert bridge.post(READBACK, json=by_run, headers=headers).status_code == 409
+
+
 def test_pm_actual_seal_readback_replay_restart_and_exact_wire_fixture(bridge, monkeypatch, supervisor_llm):
     final, lookup, headers, old_headers, resumed_input, response = complete(bridge, monkeypatch, supervisor_llm)
     artifact = response["result"]["workflow_receipt"]

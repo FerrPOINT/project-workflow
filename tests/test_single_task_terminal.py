@@ -80,6 +80,8 @@ def test_actual_completion_artifact_matches_readback_replay_and_restart(bridge, 
     assert read.headers["Cache-Control"] == "no-store"
     assert read.json() == {"ok": True, "complete": True, "workflow_receipt": artifact, "receipt": receipt}
     by_reference = reference_lookup(lookup, artifact)
+    by_run = {**{key: value for key, value in lookup.items() if key != "step_operation_key"}, "current_run": True}
+    assert bridge.post(READBACK, json=by_run, headers=headers).json() == read.json()
     for body in (by_reference, {**by_reference, "step_operation_key": None}, by_reference):
         resolved = bridge.post(READBACK, json=body, headers=headers)
         assert resolved.status_code == 200, resolved.text
@@ -88,6 +90,7 @@ def test_actual_completion_artifact_matches_readback_replay_and_restart(bridge, 
     assert bridge.post(READBACK, json={**lookup, "receipt_reference": None}, headers=headers).json() == read.json()
     with TestClient(create_app()) as restarted_client:
         assert restarted_client.post(READBACK, json=by_reference, headers=headers).json() == read.json()
+        assert restarted_client.post(READBACK, json=by_run, headers=headers).json() == read.json()
     with SAUnitOfWork() as restarted:
         assert single_task_terminal.read_terminal_receipt(restarted, final["step_operation_key"]) == read.json()
         assert restarted.step_history.get_by_step_operation_key(final["step_operation_key"]).to_dict() == before
@@ -315,12 +318,14 @@ def test_terminal_contract_has_no_caller_owner_lease_or_proof_fields(bridge):
     request = schema["components"]["schemas"]["SingleTaskTerminalReadback"]
     assert set(request["properties"]) == {
         "task", "step_operation_key", "instruction_profile", "instruction_manifest_sha256",
-        "session_run_id", "single_task_context_sha256", "receipt_sha256", "receipt_reference",
+        "session_run_id", "single_task_context_sha256", "receipt_sha256", "receipt_reference", "current_run",
     }
     assert request["additionalProperties"] is False
     assert "step_operation_key" not in request["required"]
     assert request["oneOf"][0]["required"] == ["step_operation_key"]
     assert request["oneOf"][1]["required"] == ["receipt_reference", "receipt_sha256"]
+    assert request["oneOf"][2]["required"] == ["current_run"]
+    assert request["properties"]["current_run"]["default"] is False
     assert READBACK in schema["paths"]
 
 

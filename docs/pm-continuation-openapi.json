@@ -3928,6 +3928,9 @@
         "oneOf": [
           {
             "properties": {
+              "current_run": {
+                "const": false
+              },
               "receipt_reference": {
                 "type": "null"
               },
@@ -3941,6 +3944,9 @@
           },
           {
             "properties": {
+              "current_run": {
+                "const": false
+              },
               "receipt_reference": {
                 "type": "string"
               },
@@ -3955,9 +3961,30 @@
               "receipt_reference",
               "receipt_sha256"
             ]
+          },
+          {
+            "properties": {
+              "current_run": {
+                "const": true
+              },
+              "receipt_reference": {
+                "type": "null"
+              },
+              "step_operation_key": {
+                "type": "null"
+              }
+            },
+            "required": [
+              "current_run"
+            ]
           }
         ],
         "properties": {
+          "current_run": {
+            "default": false,
+            "title": "Current Run",
+            "type": "boolean"
+          },
           "instruction_manifest_sha256": {
             "pattern": "^[a-f0-9]{64}$",
             "title": "Instruction Manifest Sha256",
@@ -4728,7 +4755,7 @@
     },
     "/internal/runtime/terminal-receipt/readback": {
       "post": {
-        "description": "Authenticated lookup of an actual non-PM completion; never synthesize evidence.",
+        "description": "Authenticated lookup of an actual completion; never synthesize evidence.",
         "operationId": "runtime_terminal_readback_internal_runtime_terminal_receipt_readback_post",
         "parameters": [
           {

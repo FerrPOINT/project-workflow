@@ -54,6 +54,7 @@ environment-based redaction is introduced. Existing report handling is unchanged
 task: string
 step_operation_key?: string
 receipt_reference?: string
+current_run?: boolean (default false)
 instruction_profile: "single-task-v1"
 instruction_manifest_sha256: lowercase SHA-256
 session_run_id: canonical non-nil UUID
@@ -61,12 +62,20 @@ single_task_context_sha256: lowercase SHA-256
 receipt_sha256?: lowercase SHA-256
 ```
 
-Exactly one non-null selector is required: `step_operation_key` XOR
-`receipt_reference`. Existing operation-key callers and responses are unchanged;
+Exactly one selector is required: `step_operation_key`, `receipt_reference`, or
+explicit `current_run=true`. Existing operation-key callers and responses are unchanged;
 an explicit null for the unused selector is also accepted. Reference lookup
 requires non-null `receipt_sha256`. Missing/both selectors or a missing reference
-hash produce framework validation HTTP 422. Generated OpenAPI expresses both
+hash produce framework validation HTTP 422. Generated OpenAPI expresses all three
 branches in `SingleTaskTerminalReadback.oneOf`.
+
+Direct CLI reports need not appear in Fleet's private tool journal. When their
+operation key/reference is not yet known, Fleet uses `current_run=true` with the
+same task/run/profile/context/token. After authorization the existing service
+finds at most two actual final PASS rows for the current assignment and native
+binding. One sealed row is read back; no row/not done returns 404, ambiguity or
+unsealed/stale evidence returns 409. It never searches model text, manufactures
+a report key, creates a receipt during lookup or bypasses the current-run scope.
 
 Fleet can submit the actual `workflow_receipt` reference/hash without retaining
 the original final step operation key:

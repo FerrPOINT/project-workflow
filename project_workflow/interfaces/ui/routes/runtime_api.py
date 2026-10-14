@@ -947,6 +947,7 @@ def runtime_terminal_readback(
     from project_workflow.application.single_task_runtime import authorize
     from project_workflow.application.single_task_terminal import (
         read_terminal_receipt,
+        terminal_operation_key_for_current_run,
         terminal_operation_key_for_reference,
     )
 
@@ -977,6 +978,10 @@ def runtime_terminal_readback(
                       instruction_manifest_sha256=payload.instruction_manifest_sha256,
                       declared_hash=payload.single_task_context_sha256)
             operation_key = payload.step_operation_key
+            if payload.current_run:
+                operation_key = terminal_operation_key_for_current_run(
+                    uow, task_id=task.id, role_key=credential.role_key, session_run_id=payload.session_run_id,
+                )
             if payload.receipt_reference is not None:
                 operation_key = terminal_operation_key_for_reference(
                     uow, payload.receipt_reference, namespace_id=namespace_id,

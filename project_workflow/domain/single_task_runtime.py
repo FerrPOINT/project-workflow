@@ -58,16 +58,23 @@ class SingleTaskTerminalReadback(BaseModel):
         "oneOf": [
             {"required": ["step_operation_key"], "properties": {
                 "step_operation_key": {"type": "string"}, "receipt_reference": {"type": "null"},
+                "current_run": {"const": False},
             }},
             {"required": ["receipt_reference", "receipt_sha256"], "properties": {
                 "receipt_reference": {"type": "string"}, "receipt_sha256": {"type": "string"},
                 "step_operation_key": {"type": "null"},
+                "current_run": {"const": False},
+            }},
+            {"required": ["current_run"], "properties": {
+                "current_run": {"const": True}, "step_operation_key": {"type": "null"},
+                "receipt_reference": {"type": "null"},
             }},
         ],
     })
     task: str = Field(strict=True, min_length=1, max_length=128)
     step_operation_key: str | None = Field(default=None, strict=True, min_length=1, max_length=128)
     receipt_reference: str | None = Field(default=None, strict=True, min_length=1, max_length=512)
+    current_run: bool = Field(default=False, strict=True)
     instruction_profile: Literal["single-task-v1"]
     instruction_manifest_sha256: Sha256
     session_run_id: UUIDRef
@@ -76,8 +83,8 @@ class SingleTaskTerminalReadback(BaseModel):
 
     @model_validator(mode="after")
     def exact_selector(self) -> "SingleTaskTerminalReadback":
-        if (self.step_operation_key is None) == (self.receipt_reference is None):
-            raise ValueError("Exactly one terminal step operation key or receipt reference required")
+        if sum((self.step_operation_key is not None, self.receipt_reference is not None, self.current_run)) != 1:
+            raise ValueError("Exactly one terminal step key, receipt reference or current-run selector required")
         if self.receipt_reference is not None and self.receipt_sha256 is None:
             raise ValueError("Receipt reference lookup requires receipt_sha256")
         return self
