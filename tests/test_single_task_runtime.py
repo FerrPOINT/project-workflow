@@ -39,13 +39,13 @@ def bridge(monkeypatch):
         yield client
 
 
-def prepare(client, monkeypatch, role="developer", mode="initial", stage="Development", tech_pair=None):
+def prepare(client, monkeypatch, role="developer", mode="initial", stage="Development", tech_pair=None, cycle=0):
     monkeypatch.setenv("PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON", json.dumps({role: "w" * 40}))
     monkeypatch.setenv("PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON", json.dumps({role: "r" * 40}))
     config.get_settings.cache_clear()
     assignment = {**assignment_payload(), "role_key": role, "workflow_key": "single-task-v1:" + role,
                   "mode_key": mode, "stage_key": stage,
-                  "execution_scope": ROLE_MODES[role][mode][0]}
+                  "execution_scope": ROLE_MODES[role][mode][0], "cycle_number": cycle}
     if tech_pair is not None:
         assignment.update(tech_execution_workspace_ref=tech_pair[0], tech_execution_attempt_ref=tech_pair[1])
     response = client.post(API + "assign", json=assignment, headers=WRITER)
@@ -55,7 +55,7 @@ def prepare(client, monkeypatch, role="developer", mode="initial", stage="Develo
     bind = {**PROFILE, "task": assignment["task"], "bind_operation_key": "bind:1",
             "assignment_operation_key": assignment["operation_key"], "assignment_revision": 1,
             "assignment_ref": assignment["assignment_ref"], "binding_ref": "binding:1", "hermes_run_ref": "run:1",
-            "mode_key": mode, "cycle_number": 0, "attempt_number": 1, "expected_binding_state": "unbound",
+            "mode_key": mode, "cycle_number": cycle, "attempt_number": 1, "expected_binding_state": "unbound",
             "concrete_agent_ref": assignment["concrete_agent_ref"], "session_run_id": SESSION}
     response = client.post(API + "bind", json=bind, headers=WRITER)
     assert response.status_code == 200, response.text
@@ -64,11 +64,32 @@ def prepare(client, monkeypatch, role="developer", mode="initial", stage="Develo
     step = {**PROFILE, "task": assignment["task"], "step_operation_key": "step:read",
             "assignment_revision": 1, "assignment_ref": assignment["assignment_ref"],
             "binding_ref": bind["binding_ref"], "hermes_run_ref": bind["hermes_run_ref"], "mode_key": mode,
-            "cycle_number": 0, "attempt_number": 1, "expected_phase_code": accepted["current_phase_code"],
+            "cycle_number": cycle, "attempt_number": 1, "expected_phase_code": accepted["current_phase_code"],
             "expected_status": "active", "session_run_id": SESSION,
             "single_task_context_sha256": bound["result"]["single_task_context_sha256"]}
     headers = {**RUNNER, "X-Workflow-Execution-Token": bound["execution_token"]}
     return assignment, bind, step, headers
+
+
+@pytest.mark.parametrize("cycle", [1, 2, 3])
+def test_new_single_task_rework_execution_retains_tracker_cycle_through_first_step(bridge, monkeypatch, cycle):
+    assignment, _, step, headers = prepare(bridge, monkeypatch, mode="rework", stage="Rework", cycle=cycle)
+    read = bridge.post(API + "step", json=step, headers=headers)
+    assert read.status_code == 200, read.text
+    assert read.json()["result"]["cycle_number"] == cycle
+    assert read.json()["result"]["phase_code"] == "DV-REWORK-01"
+    with SAUnitOfWork() as uow:
+        task = uow.tasks.get_by_key(assignment["task"])
+        assert task.cycle_number == cycle and task.assignment_revision == 1
+        assert uow.tasks.get_assignment_by_operation_key(assignment["operation_key"]).cycle_number == cycle
+
+
+def test_new_pm_task_still_rejects_nonzero_cycle(bridge, monkeypatch):
+    monkeypatch.setenv("PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON", json.dumps({"project_manager": "w" * 40}))
+    config.get_settings.cache_clear()
+    body = {**assignment_payload(), "role_key": "project_manager", "workflow_key": "single-task-v1:project_manager",
+            "mode_key": "draft", "stage_key": "Draft", "execution_scope": "business", "cycle_number": 1}
+    assert bridge.post(API + "assign", json=body, headers=WRITER).status_code == 409
 
 
 @pytest.mark.parametrize("role,mode,stage", [

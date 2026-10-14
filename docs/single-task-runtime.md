@@ -10,6 +10,12 @@ and grant-aware PM/context corrections; runtime DTOs and producer behavior are u
 
 ## Assignment And Binding
 
+For the validated single-task technical family, a new local execution key may
+start with Tracker's nonzero Rework cycle. Assignment revision still starts at 1;
+actual cycle is retained through bind and first step. Legacy/Base new-task
+assignments and a new PM Draft still require cycle 0. Fleet must not normalize
+cycle to zero or reuse another execution's display key to satisfy this sink.
+
 `POST /internal/runtime/assign` accepts `SingleTaskAssignmentRequest` separately
 from legacy `RuntimeAssignmentRequest`. The trusted assignment credential owns:
 

@@ -375,7 +375,7 @@ class TaskService:
         if current is None:
             if expected_status != "missing" or expected_revision != 0:
                 raise ConflictError("Ожидаемое состояние отсутствующей задачи не совпадает")
-            if cycle_number != 0:
+            if cycle_number != 0 and (not single_task or role_key == "project_manager"):
                 raise ConflictError("Начальный Business assignment должен иметь cycle_number=0")
             # Business may have retried dispatch before this sink saw any
             # assignment. Its positive attempt number is authoritative;
