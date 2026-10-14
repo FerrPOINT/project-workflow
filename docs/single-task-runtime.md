@@ -1,5 +1,23 @@
 # Single-Task Runtime Packet
 
+## Runtime Routing Follow-Up: 14 October 2026
+
+Source package `a7cfc454845bce83aebd2fc6342e7a16b8b95ad7`, integrated as
+`f0d1780`, corrects generic capability validation of the builtin profile and
+selects namespaces from validated typed requests/original assignment family,
+not the process-global default alone. Legacy requests retain legacy routing.
+The original Base ordinary-execution prohibition, role/credential purpose,
+manifest/native binding, execution token and fence checks remain in place.
+No DTO, URL, catalog, manifest hash, migration or Hermes change is included.
+
+Affected component suites report263 passing tests, scoped Ruff/mypy and diff
+checks; the final post-test changes are formatting and a local optional-int
+annotation. PostgreSQL/concurrency, whole-suite coverage, actual image/runtime
+and installed legacy/profile coexistence still need independent qualification.
+The frozen d0 CLI remains a separate input, not relabeled as this server package.
+Base's matching catalog3/4 descriptor probe is implemented separately; an actual
+Base4 companion image and preserved-history rollout are not claimed here.
+
 Bounded opt-in execution uses the existing assignment/bind/step/history bridge,
 Supervisor, PM continuation endpoints and repositories/locks. No routing DTO,
 second queue, native-runtime proof, Hermes change or additional readback service.
