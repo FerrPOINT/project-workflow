@@ -106,6 +106,64 @@ def _valid_manifest() -> dict[str, str | int]:
     }
 
 
+@pytest.mark.parametrize("variant", ["legacy", "base", "single-task-v1"])
+@pytest.mark.parametrize(
+    "role", ["project_manager", "analyst", "architect", "developer", "reviewer", "tester", "devops"],
+)
+@pytest.mark.parametrize("kind", ["assignment", "runtime"])
+def test_installed_single_task_capabilities_keep_truthful_base_image_descriptor(
+    monkeypatch, tmp_path, variant, role, kind,
+):
+    from project_workflow.infrastructure.db.single_task_catalog import ensure_single_task_catalog
+
+    with SAUnitOfWork() as uow:
+        default_before = uow.workflows.get_default().id
+        ensure_single_task_catalog(uow)
+    monkeypatch.setattr(config, "CATALOG_VARIANT", variant)
+    if variant == "single-task-v1":
+        monkeypatch.setattr(config, "MANAGED_CATALOG_PATH", Path(
+            "project_workflow/references/single_task_catalog_v1.json",
+        ))
+    token = _token(role + kind)
+    _configure_tokens(monkeypatch, **{kind: {role: token}})
+    manifest = _install_manifest(monkeypatch, tmp_path, _valid_manifest())
+    descriptor = {**_valid_compatibility(), "catalogVersion": 4,
+                  "capabilityRevision": "base-workflow-controlplane/v1"}
+    (manifest.parent / "runtime-compatibility.json").write_text(json.dumps(descriptor), encoding="utf-8")
+    with TestClient(create_app()) as client:
+        response = client.get("/internal/runtime/capabilities", headers={"Authorization": "Bearer " + token})
+    assert response.status_code == 200, response.text
+    assert response.json()["runtimeCompatibility"] == descriptor
+    assert response.json()["role_key"] == role
+    assert response.json()["credential_kind"] == kind
+    expected = ["assign", "bind", "rebind"] if kind == "assignment" else ["step", "history"]
+    assert response.json()["capabilities"] == expected
+    assert token not in response.text
+    with SAUnitOfWork() as uow:
+        assert uow.workflows.get_default().id == default_before
+
+
+@pytest.mark.parametrize("missing", [True, False])
+def test_base_single_task_capabilities_refuse_missing_or_drifted_installation(monkeypatch, tmp_path, missing):
+    from project_workflow.infrastructure.db.single_task_catalog import ensure_single_task_catalog
+
+    if not missing:
+        with SAUnitOfWork() as uow:
+            installed = ensure_single_task_catalog(uow)
+            phase = int(installed.bindings[0].modes[0].phase_ids[0])
+            instruction = uow.phase_instructions.list(phase)[0]
+            uow.phase_instructions.update(instruction["id"], {"description": "drift"})
+    monkeypatch.setattr(config, "CATALOG_VARIANT", "base")
+    token = _token("developer-runtime")
+    _configure_tokens(monkeypatch, runtime={"developer": token})
+    _install_manifest(monkeypatch, tmp_path, _valid_manifest())
+    with TestClient(create_app()) as client:
+        response = client.get("/internal/runtime/capabilities", headers={"Authorization": "Bearer " + token})
+    assert response.status_code == 503
+    assert response.json()["readiness"]["catalog"] == "not_ready"
+    assert token not in response.text
+
+
 @pytest.mark.parametrize(
     "role",
     [

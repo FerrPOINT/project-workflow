@@ -71,6 +71,77 @@ def prepare(client, monkeypatch, role="developer", mode="initial", stage="Develo
     return assignment, bind, step, headers
 
 
+@pytest.mark.parametrize("variant", ["legacy", "single-task-v1"])
+def test_profile_and_legacy_same_key_route_independently_without_history_rewrite(
+    bridge, monkeypatch, supervisor_llm, variant,
+):
+    from project_workflow import build_provenance
+    from project_workflow.interfaces.ui.routes import runtime_api
+    from tests.test_runtime_api import (
+        TEST_RUNTIME_COMPATIBILITY,
+        _assignment,
+        _bind_assignment,
+        _namespace,
+        _step_payload,
+    )
+
+    _namespace("LEGACYDEV", "workflow-developer", "RUN")
+    monkeypatch.setattr(config, "CATALOG_VARIANT", variant)
+    monkeypatch.setattr(runtime_api, "runtime_compatibility_descriptor", lambda: TEST_RUNTIME_COMPATIBILITY)
+    monkeypatch.setattr(build_provenance, "runtime_compatibility_descriptor", lambda: TEST_RUNTIME_COMPATIBILITY)
+    assignment, binding, step, headers = prepare(bridge, monkeypatch)
+    legacy = bridge.post(API + "assign", headers=WRITER, json=_assignment(assignment["task"], "legacy:7", "developer"))
+    assert legacy.status_code == 200, legacy.text
+    legacy_bound = _bind_assignment(bridge, "w" * 40, legacy.json()["result"])
+    supervisor_llm("PASS")
+    profile_report = {**step, "step_operation_key": "profile:report", "report": "Verified profile work"}
+    legacy_report = _step_payload(legacy_bound, report="Verified legacy work")
+    for body, auth in [(profile_report, headers), (legacy_report, RUNNER)]:
+        response = bridge.post(API + "step", json=body, headers=auth)
+        assert response.status_code == 200, response.text
+        assert bridge.post(API + "step", json=body, headers=auth).json() == response.json()
+    legacy_history = bridge.get(API + "history", params={"task": assignment["task"]}, headers=RUNNER)
+    profile_history = bridge.get(
+        API + "history", params={**PROFILE, "task": assignment["task"], "session_run_id": SESSION}, headers=headers,
+    )
+    assert legacy_history.status_code == profile_history.status_code == 200
+    assert legacy_history.json()["result"]["count"] == profile_history.json()["result"]["count"] == 1
+    assert legacy_history.json()["result"]["records"][0]["phase_code"] == "assigned"
+    assert profile_history.json()["result"]["records"][0]["phase_code"] == "DV-INITIAL-01"
+    cross_family = {**binding, "assignment_operation_key": "legacy:7"}
+    assert bridge.post(API + "bind", json=cross_family, headers=WRITER).status_code == 409
+    assert bridge.get(
+        API + "history", params={**PROFILE, "task": assignment["task"], "session_run_id": SESSION}, headers=RUNNER,
+    ).status_code == 403
+    assert bridge.get(
+        API + "history", params={"instruction_profile": "foreign", "task": assignment["task"]}, headers=RUNNER,
+    ).status_code == 409
+    with SAUnitOfWork() as uow:
+        old = uow.tasks.get_assignment_by_operation_key("legacy:7")
+        new = uow.tasks.get_assignment_by_operation_key(assignment["operation_key"])
+        assert old.project_id != new.project_id
+        assert old.task_id != new.task_id
+        assert old.payload.get("single_task_context") is None
+        assert new.payload["single_task_context"]["instruction_manifest_sha256"] == MANIFEST_SHA256
+        assert len(uow.step_history.list(task_id=old.task_id)) == len(uow.step_history.list(task_id=new.task_id)) == 1
+
+
+def test_base_controlplane_only_permits_explicit_installed_profile_execution(bridge, monkeypatch):
+    from tests.test_runtime_api import _assignment
+
+    monkeypatch.setattr(config, "CATALOG_VARIANT", "base")
+    assignment, binding, step, headers = prepare(bridge, monkeypatch)
+    assert bridge.post(API + "step", json=step, headers=headers).status_code == 200
+    assert bridge.post(
+        API + "assign", json=_assignment("RUN-8", "legacy:8", "developer"), headers=WRITER,
+    ).status_code == 503
+    assert bridge.post(API + "assign", json=assignment, headers=RUNNER).status_code == 403
+    assert bridge.post(API + "assign", json=assignment, headers={"Authorization": "Bearer wrong"}).status_code == 401
+    assert bridge.post(
+        API + "bind", json={**binding, "instruction_manifest_sha256": "0" * 64}, headers=WRITER,
+    ).status_code == 409
+
+
 @pytest.mark.parametrize("cycle", [1, 2, 3])
 def test_new_single_task_rework_execution_retains_tracker_cycle_through_first_step(bridge, monkeypatch, cycle):
     assignment, _, step, headers = prepare(bridge, monkeypatch, mode="rework", stage="Rework", cycle=cycle)
@@ -159,6 +230,23 @@ def enroll_pm(client, monkeypatch):
     headers = {**RUNNER, "X-Workflow-Execution-Token": result.json()["execution_token"]}
     step["single_task_context_sha256"] = result.json()["result"]["single_task_context_sha256"]
     return identity, observations, headers, step
+
+
+@pytest.mark.parametrize("variant", ["legacy", "base", "single-task-v1"])
+def test_profile_pm_readback_resolves_original_assignment_family(bridge, monkeypatch, variant):
+    monkeypatch.setattr(config, "CATALOG_VARIANT", variant)
+    identity, _, headers, _ = enroll_pm(bridge, monkeypatch)
+    body = {**PROFILE, **identity}
+    read = bridge.post(PM + "readback", json=body, headers=headers)
+    assert read.status_code == 200, read.text
+    assert read.json()["result"]["identity"] == identity
+    assert bridge.post(PM + "readback", json=body, headers=RUNNER).status_code == 403
+    for changed, status in [
+        ({**body, "instruction_manifest_sha256": "0" * 64}, 409),
+        ({**body, "assignment_operation_key": "foreign"}, 409),
+        (identity, 503 if variant == "base" else 409),
+    ]:
+        assert bridge.post(PM + "readback", json=changed, headers=WRITER).status_code == status
 
 
 @pytest.mark.parametrize("kind", ["answer", "feedback", "confirmation"])

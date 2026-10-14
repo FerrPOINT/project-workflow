@@ -66,7 +66,9 @@ def _execute(
     authorization: str | None, scope_token: str | None = None,
 ) -> dict[str, Any] | JSONResponse:
     try:
-        credential = runtime_api._authorized_service_credential(authorization)
+        credential = runtime_api._authorized_service_credential(
+            authorization, single_task=isinstance(payload, SingleTaskPMProfile),
+        )
         if credential is None:
             return error("unauthorized", "Invalid machine credential", 401)
         if credential.role_key != "project_manager" or credential.kind == "catalog":
@@ -85,7 +87,6 @@ def _execute(
             ):
                 return error("forbidden", "Execution/run scoped credential required", 403)
         with SAUnitOfWork() as uow:
-            project_id = runtime_api._namespace_id(uow, credential.role_key)
             assignment = uow.tasks.get_assignment_by_operation_key(identity.assignment_operation_key)
             context = assignment.payload.get("single_task_context") if assignment else None
             if (context is not None) != isinstance(payload, SingleTaskPMProfile):
@@ -94,6 +95,10 @@ def _execute(
                 payload.instruction_manifest_sha256 != context["instruction_manifest_sha256"]
             ):
                 raise ConflictError("PM profile manifest mismatch")
+            project_id = runtime_api._namespace_id(
+                uow, credential.role_key, single_task=isinstance(payload, SingleTaskPMProfile),
+                assignment_operation_key=identity.assignment_operation_key,
+            )
             service = PMExecutionService(uow)
             if isinstance(payload, PMReadback):
                 result = service.readback(identity, project_id, payload.operation_key)

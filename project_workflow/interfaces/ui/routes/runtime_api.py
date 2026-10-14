@@ -97,8 +97,8 @@ def _token_configuration() -> tuple[dict[str, str], dict[str, str], str]:
     return runtime_tokens, assignment_tokens, catalog_token
 
 
-def _authorized_assignment_role(authorization: str | None) -> str | None:
-    credential = _authorized_service_credential(authorization)
+def _authorized_assignment_role(authorization: str | None, *, single_task: bool = False) -> str | None:
+    credential = _authorized_service_credential(authorization, single_task=single_task)
     if credential is None or credential.kind != "assignment":
         return None
     return credential.role_key
@@ -106,6 +106,7 @@ def _authorized_assignment_role(authorization: str | None) -> str | None:
 
 def _authorized_service_credential(
     authorization: str | None,
+    *, single_task: bool = False,
 ) -> _ServiceCredential | None:
     """Match all configured service credentials without value-based early exits."""
     prefix = "Bearer "
@@ -113,7 +114,7 @@ def _authorized_service_credential(
         return None
     supplied = authorization[len(prefix) :]
     runtime_tokens, assignment_tokens, catalog_token = _token_configuration()
-    if config.CATALOG_VARIANT == "base" and (runtime_tokens or assignment_tokens):
+    if config.CATALOG_VARIANT == "base" and (runtime_tokens or assignment_tokens) and not single_task:
         raise RuntimeError("Base assigned execution is not enabled; catalog credentials only")
     matches: list[_ServiceCredential] = []
     for role, expected in runtime_tokens.items():
@@ -136,7 +137,7 @@ def runtime_capabilities(
 ) -> dict[str, Any] | JSONResponse:
     """Return authenticated runtime contract and immutable build provenance."""
     try:
-        credential = _authorized_service_credential(authorization)
+        credential = _authorized_service_credential(authorization, single_task=True)
     except RuntimeError:
         return _error("Runtime capability configuration unavailable", 503)
     if credential is None:
@@ -166,10 +167,18 @@ def runtime_capabilities(
     if schema_ready:
         try:
             with SAUnitOfWork(engine) as uow:
-                catalog_ready = validate_managed_catalog_state(
-                    uow,
-                    role_key=credential.role_key if credential.role_key in MANAGED_ROLE_MODE_SCOPES else None,
-                )
+                from project_workflow.domain.single_task_profile import is_single_task_key
+
+                if config.CATALOG_VARIANT in {"base", "single-task-v1"} or any(
+                    is_single_task_key(workflow.key) for workflow in uow.workflows.list()
+                ):
+                    _namespace_id(uow, credential.role_key, single_task=True)
+                    catalog_ready = True
+                else:
+                    catalog_ready = validate_managed_catalog_state(
+                        uow,
+                        role_key=credential.role_key if credential.role_key in MANAGED_ROLE_MODE_SCOPES else None,
+                    )
         except Exception:
             catalog_ready = False
 
@@ -213,12 +222,32 @@ def runtime_capabilities(
     return response
 
 
-def _namespace_id(uow: SAUnitOfWork, role: str) -> int:
-    command = (f"workflow-single-task-{role.replace('_', '-')}"
-               if config.CATALOG_VARIANT == "single-task-v1" else f"workflow-{role}")
-    value = _resolve_namespace_id(uow, command)
+def _namespace_id(
+    uow: SAUnitOfWork, role: str, *, single_task: bool = False,
+    assignment_operation_key: str | None = None,
+) -> int:
+    assignment = None
+    if assignment_operation_key is not None:
+        assignment = uow.tasks.get_assignment_by_operation_key(assignment_operation_key)
+        if assignment is None or assignment.role_key != role:
+            raise ConflictError("Original role assignment required")
+        if (assignment.payload.get("single_task_context") is not None) != single_task:
+            raise ConflictError("Packet differs from the original assignment family")
+    value: int | None
+    if single_task:
+        from project_workflow.infrastructure.db.single_task_catalog import observe_installation
+
+        installation = observe_installation(uow)
+        binding = next((item for item in installation.bindings if item.role_key == role), None)
+        if binding is None:
+            raise ConflictError("Installed single-task role required")
+        value = int(binding.namespace_id)
+    else:
+        value = _resolve_namespace_id(uow, f"workflow-{role}")
     if value is None:
         raise ValueError("Namespace роли не найден")
+    if assignment is not None and assignment.project_id != value:
+        raise ConflictError("Original assignment namespace mismatch")
     return value
 
 
@@ -228,7 +257,7 @@ def _single_task_observation(authorization: str | None) -> Any:
     from project_workflow.infrastructure.db.single_task_catalog import observe_installation
 
     try:
-        credential = _authorized_service_credential(authorization)
+        credential = _authorized_service_credential(authorization, single_task=True)
         if credential is None:
             return _error("Invalid catalog credential", 401)
         if credential.kind != "catalog":
@@ -467,7 +496,7 @@ def _read_committed_runtime_step(
 ) -> dict[str, Any]:
     """Read a committed operation response in a fresh transaction."""
     with SAUnitOfWork() as uow:
-        namespace_id = _namespace_id(uow, role_key)
+        namespace_id = _namespace_id(uow, role_key, single_task=isinstance(payload, SingleTaskStepRequest))
         task_key = _require_valid_key(payload.task, uow, project_id=namespace_id)
         _assert_task_key_in_namespace(uow, namespace_id, task_key)
         replay = _runtime_step_replay(
@@ -590,14 +619,16 @@ def runtime_assign(
 ) -> dict[str, Any] | JSONResponse:
     """Accept one authorized Business assignment and persist its technical cursor."""
     try:
-        role = _authorized_assignment_role(authorization)
+        role = _authorized_assignment_role(authorization, single_task=isinstance(payload, SingleTaskAssignmentRequest))
     except RuntimeError as exc:
         return _error(str(exc), 503)
     if role is None:
         try:
             # A valid execution/catalog credential is deliberately distinguishable
             # from an unknown credential: only the adapter credential may assign.
-            if _authorized_service_credential(authorization) is not None:
+            if _authorized_service_credential(
+                authorization, single_task=isinstance(payload, SingleTaskAssignmentRequest),
+            ) is not None:
                 return _error("Runtime token не разрешает назначение задач", 403)
         except RuntimeError as exc:
             return _error(str(exc), 503)
@@ -611,7 +642,7 @@ def runtime_assign(
         ):
             return _error("Runtime compatibility mismatch", 409)
         with SAUnitOfWork() as uow:
-            namespace_id = _namespace_id(uow, role)
+            namespace_id = _namespace_id(uow, role, single_task=isinstance(payload, SingleTaskAssignmentRequest))
             task_key = _require_valid_key(payload.task, uow, project_id=namespace_id)
             _assert_task_key_in_namespace(uow, namespace_id, task_key)
             if isinstance(payload, SingleTaskAssignmentRequest):
@@ -701,19 +732,24 @@ def runtime_bind(
 ) -> dict[str, Any] | JSONResponse:
     """Attach the adapter's real Hermes binding to one accepted assignment."""
     try:
-        role = _authorized_assignment_role(authorization)
+        role = _authorized_assignment_role(authorization, single_task=isinstance(payload, SingleTaskBindRequest))
     except RuntimeError as exc:
         return _error(str(exc), 503)
     if role is None:
         try:
-            if _authorized_service_credential(authorization) is not None:
+            if _authorized_service_credential(
+                authorization, single_task=isinstance(payload, SingleTaskBindRequest),
+            ) is not None:
                 return _error("Runtime token не разрешает связывание задач", 403)
         except RuntimeError as exc:
             return _error(str(exc), 503)
         return _error("Недействительный runtime token", 401)
     try:
         with SAUnitOfWork() as uow:
-            namespace_id = _namespace_id(uow, role)
+            namespace_id = _namespace_id(
+                uow, role, single_task=isinstance(payload, SingleTaskBindRequest),
+                assignment_operation_key=payload.assignment_operation_key,
+            )
             task_key = _require_valid_key(payload.task, uow, project_id=namespace_id)
             _assert_task_key_in_namespace(uow, namespace_id, task_key)
             task = TaskService(uow).bind_runtime_assignment(
@@ -757,7 +793,9 @@ def runtime_step(
 ) -> dict[str, Any] | JSONResponse:
     """Execute one role-scoped step in the trusted workflow service."""
     try:
-        credential = _authorized_service_credential(authorization)
+        credential = _authorized_service_credential(
+            authorization, single_task=isinstance(payload, SingleTaskStepRequest),
+        )
     except RuntimeError as exc:
         return _error(str(exc), 503)
     if credential is None:
@@ -769,7 +807,7 @@ def runtime_step(
     try:
         response: dict[str, Any] | None = None
         with SAUnitOfWork() as uow:
-            namespace_id = _namespace_id(uow, role)
+            namespace_id = _namespace_id(uow, role, single_task=isinstance(payload, SingleTaskStepRequest))
             task_key = _require_valid_key(payload.task, uow, project_id=namespace_id)
             _assert_task_key_in_namespace(uow, namespace_id, task_key)
             from project_workflow.application.pm_execution import PMExecutionService
@@ -888,7 +926,7 @@ def runtime_history(
 ) -> dict[str, Any] | JSONResponse:
     """Return history only from the namespace bound to the supplied role token."""
     try:
-        credential = _authorized_service_credential(authorization)
+        credential = _authorized_service_credential(authorization, single_task=instruction_profile == "single-task-v1")
     except RuntimeError as exc:
         return _error(str(exc), 503)
     if credential is None:
@@ -898,7 +936,9 @@ def runtime_history(
     role = credential.role_key
     try:
         with SAUnitOfWork() as uow:
-            namespace_id = _namespace_id(uow, role)
+            if instruction_profile not in {None, "single-task-v1"}:
+                raise ConflictError("Unknown instruction profile")
+            namespace_id = _namespace_id(uow, role, single_task=instruction_profile == "single-task-v1")
             task_key = _require_valid_key(task, uow, project_id=namespace_id)
             _assert_task_key_in_namespace(uow, namespace_id, task_key)
             _authorize_single_task(uow, uow.tasks.get_by_key(task_key, project_id=namespace_id),
@@ -955,13 +995,13 @@ def runtime_terminal_readback(
         return JSONResponse(body, status_code=status, headers={"Cache-Control": "no-store"})
 
     try:
-        credential = _authorized_service_credential(authorization)
+        credential = _authorized_service_credential(authorization, single_task=True)
         if credential is None:
             return reply({"ok": False, "error": "Invalid runtime credential"}, 401)
         if credential.kind != "runtime":
             return reply({"ok": False, "error": "Runtime role required"}, 403)
         with SAUnitOfWork() as uow:
-            namespace_id = _namespace_id(uow, credential.role_key)
+            namespace_id = _namespace_id(uow, credential.role_key, single_task=True)
             task_key = _require_valid_key(payload.task, uow, project_id=namespace_id)
             _assert_task_key_in_namespace(uow, namespace_id, task_key)
             task = uow.tasks.get_by_key(task_key, project_id=namespace_id)
