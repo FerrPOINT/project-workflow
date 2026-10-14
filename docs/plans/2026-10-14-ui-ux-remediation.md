@@ -2,7 +2,7 @@
 
 UX-01/05/11. Редактор учитывает ввод до blur/debounce, очередь сохранения и подтверждения версий отдельных частей. Старый ACK не очищает новые правки; неизвестная запись требует readback перед повтором. Общий SSR guard и подтверждение используются из Base. Адаптивные действия единые; карточки профессий показывают имя, CLI остаётся в форме настроек, редактирование не назначает workflow.
 
-Base UI pin: `16e0ab44924fae7c67c2df56438667e7830cafd6`; зависимость — [Base PR #206](https://github.com/FerrPOINT/services-base/pull/206). SDK и skills pins сохранены. Новые изменения remote master по разделению profession/project context интегрированы; HTTP API и схема не меняются этой доработкой.
+Base UI pin: `6b9dd35a92bb095debf166724e4ecb1cb0e8ceb0`; зависимость — [Base PR #206](https://github.com/FerrPOINT/services-base/pull/206). SDK и skills pins сохранены. Новые изменения remote master по разделению profession/project context интегрированы; HTTP API и схема не меняются этой доработкой.
 
 Локальный финальный gate: 2553 passed, 5 skipped, 77 integration deselected и 60 subtests; coverage 94,17%; отдельный PostgreSQL gate — 77 passed. Ruff/Mypy проходят. SSR экспорт и fingerprints совпадают с Base. В IAB на собственной native PostgreSQL проверены сохранение, readback неизвестного исхода, отмена ухода, фокус/клавиатура общего диалога, карточки и размеры 40/44 px с Textarea 96 px.
 
@@ -13,3 +13,7 @@ QA выполняется внутри PDLC2 без дополнительных
 ## Генерализация UI
 
 Синхронизирован UI pin с общим Base-кандидатом; SSR export и fingerprints проверяются штатным экспортом. SDK/skills pins не меняются.
+
+## Общие блоки текста и описаний
+
+Общий UI pin синхронизирован с React-потребителями. SSR bytes сверены со штатным экспортом Base; React-компоненты не копируются в SSR.
