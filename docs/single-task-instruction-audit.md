@@ -1,5 +1,11 @@
 # Single-Task Instruction Audit
 
+Merged candidate `cca3474` passes81 targeted instruction/artifact/catalog and PM
+producer/terminal cases on14 October2026, without fixture-update flags. This is
+a fresh post-integration run, not relabeling the worker's earlier result. The
+new carrier/catalog/manifest source is tested; actual installed CLI/carrier/jq,
+PostgreSQL preservation and live seven-role execution remain separate gates.
+
 Source-qualified audit of the actual installable family: seven professions,
 eight role/modes and 24 phases. The original audit inspected Tracker read-only at
 `b8b9546ff2a083d849028ccceadb0c699a7ed71b`; that historical baseline is not the
