@@ -87,6 +87,21 @@ business E2E с настоящим исполнителем.
 Полный executor-driven acceptance описан отдельно в
 [`LIVE_TEST_PLAN.md`](../LIVE_TEST_PLAN.md).
 
+### Локальная Квалификация 15 Октября
+
+Все96 PostgreSQL integration cases прошли,0 skipped,0 failures/errors, на
+immutable source `188b6bf0ed429293bf75486c2e7363b43777343c`. Включены прежние95
+сценариев и новый side-by-side adoption текущего семейства7be/999 поверх
+сохранённых legacy rows/history, с повторной установкой и readback persisted IDs.
+Тестовый/production closure интегрированного `82b3e7a` идентичен этому source;
+дополнительное отличие относится только к документации результатов non-PG gate.
+
+Использованы frozen Python3.11/uv dependencies и закрытый PostgreSQL без host
+ports. Base-v2 project `sdlc-qa-workflow-preservation-0837242884ae` и собственные
+disposable ресурсы очищены; evidence сохранено. Controlled OpenAI-compatible
+HTTP peer в тестах не является live model, installed catalog или семиролевой
+SDLC/deployment приёмкой. Production dependencies, catalog и manifest не менялись.
+
 ## Compose Readiness
 
 Для проверки локального runtime:
