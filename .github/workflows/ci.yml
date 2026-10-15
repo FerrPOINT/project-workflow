@@ -51,7 +51,8 @@ jobs:
           repository: FerrPOINT/services-base
           path: services-base
           ref: ${{ steps.base-sdk.outputs.sha }}
-          token: ${{ secrets.SERVICES_BASE_TOKEN }}
+          ssh-key: ${{ secrets.SERVICES_BASE_DEPLOY_KEY }}
+          persist-credentials: false
       - name: Verify generated dependency-free namespace contract
         run: |
           python ../services-base/scripts/verify_base_revision.py --base ../services-base --revision .base-revision
