@@ -1,5 +1,32 @@
 # Single-Task Instruction Audit
 
+## Current Content Qualification: 15 October 2026
+
+Integrated1435ec8 has the identical tree34cb81f81b428a25f047226b70722ec905c6efdf
+as the worker's frozen b409 packet:89 instruction/artifact/catalog cases and2
+canonical PM producer/terminal verification cases pass, without fixture-update
+flags in the verification run. Generator check, Ruff and structural inverses pass.
+The existing generator/capture modes produced the new sealed catalog and two
+canonical wire fixtures; receipts were not manually edited.
+
+Reviewer/Tester now describe the three-cycle Rework cap: retain the rejected
+Review/Testing stage, Ready status and rework_limit_reached, with no fourth cycle,
+false Completed or automatic resume. Infrastructure escalation is for the operator,
+not owner business confirmation. Existing typed proposal/native terminal/scheduler
+completion ordering is unchanged.
+
+Current PM may read only its selected review blocker and sealed source evidence
+under actual own-task PM grant, task-tracker:read, fresh ACL and live lease.
+There is no broad attachment/list/upload/delete or scheduler credential access.
+Missing installed/authorized capability is still a blocker.
+
+Catalog SHA256 a626dc7d94f474964d2a1715ed00e2ebb76fa9d275cb458c945921b3945a65d7;
+manifest71e9045c8665b20f3fc95b1df5115f0c4bbefd5515d3f2593ecef094158f2d80.
+Profile versions, IDs, seven roles/eight modes/24 phases and governance remain
+unchanged. Old installed manifests are rejected as drift, never silently
+overwritten. Adoption/config revisions and live seven-role acceptance remain open.
+Historical results below retain their original hashes and scope.
+
 Merged candidate `cca3474` passes81 targeted instruction/artifact/catalog and PM
 producer/terminal cases on14 October2026, without fixture-update flags. This is
 a fresh post-integration run, not relabeling the worker's earlier result. The
@@ -59,9 +86,10 @@ PM keeps pre-document brainstorming and typed feedback within its existing cycle
 A later trusted new PM assignment may review the same task's actual business
 blocker; it must not reopen the completed original execution or reuse old consent.
 It needs the real review input and a new exact owner confirmation of the latest
-saved revision/hash. Current PM grants cannot read critical-blocker detail
-(`backend/infra/src/sdlc_critical_blockers.rs:critical_blocker`), and `sdlc input`
-returns only the original Draft snapshot. Authorized review-input delivery,
+saved revision/hash. The earlier inspected PM grant could not read blocker detail;
+current Tracker0fb permits only the selected current review under fresh guards.
+`sdlc input` still returns the original Draft snapshot, not the review payload.
+Authorized review-input delivery,
 allocation and reconfirmation remain explicit integration/qualification dependencies.
 This package does not implement or establish their live acceptance.
 

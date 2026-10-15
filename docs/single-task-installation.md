@@ -49,9 +49,15 @@ Installed binding не является runtime admission или Tracker transit
 и `single_task_manifest_v1.json`, проверяемые по фактическим UTF-8/LF bytes:
 
 ```text
-catalog:  c06d0dad2cf8cb5e856f4010bfb646454149a6db6461202721f0dd0a9fb57368
-manifest: 96df381922bb85922e6401a33d2bf9758eaf74ff6b1108a96b83ee4bc59aa7af
+catalog:  a626dc7d94f474964d2a1715ed00e2ebb76fa9d275cb458c945921b3945a65d7
+manifest: 71e9045c8665b20f3fc95b1df5115f0c4bbefd5515d3f2593ecef094158f2d80
 ```
+
+15October instruction correction changes sealed content/hashes, not role IDs or
+profile/protocol versions. Existing installation with an older manifest is drift:
+observation/init must not repair it silently. Coordinate reviewed installation
+adoption and Fleet effective configuration revisions before activation; never
+relabel old assignments, terminal receipts or history with the new hash.
 
 `python -m scripts.build_single_task_profile --check` проверяет воспроизводимость.
 Это отдельная редакция от `docs/proposals`: их hashes и исходный module `fb9dd53`
