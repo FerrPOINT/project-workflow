@@ -2294,7 +2294,7 @@ class TestPostgresInitialMigration:
                 "SELECT to_jsonb(t)::text FROM project_workflow.task_runtime_assignments t ORDER BY id"
             )).scalars().all()
         assert [json.loads(row) for row in after] == [
-            {**json.loads(row), "concrete_agent_ref": None} for row in before
+            {**json.loads(row), "concrete_agent_ref": None, "single_task_binding_json": None} for row in before
         ]
         with SAUnitOfWork(engine) as uow:
             new_mode = uow.workflows.create_mode({"workflow_id": workflow_id, "key": "initial", "name": "Initial",

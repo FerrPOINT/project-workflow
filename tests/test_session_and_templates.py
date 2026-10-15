@@ -270,24 +270,54 @@ class TestSessionHelpers:
 
         assert migration_head() == "0015_single_task_assignments"
 
-    def test_ensure_migrated_postgresql_branch(self, tmp_path):
+    @pytest.mark.parametrize("use_connection", [False, True])
+    @pytest.mark.parametrize("partial_archive", [False, True])
+    def test_ensure_migrated_postgresql_branch(self, use_connection, partial_archive):
         from unittest.mock import MagicMock, patch
+
+        from sqlalchemy.engine import Connection
 
         from project_workflow.infrastructure.db.session import ensure_migrated
 
-        fake_engine = MagicMock()
+        fake_engine = MagicMock(spec=Engine)
         fake_engine.url = "postgresql://u:***@h/d"
+        fake_engine.dialect = MagicMock(name="postgresql_dialect")
+        fake_engine.dialect.name = "postgresql"
+        fake_connection = MagicMock(spec=Connection)
+        fake_connection.engine = fake_engine
+        fake_connection.dialect = fake_engine.dialect
+        fake_connection.execute.return_value.all.return_value = []
+        transaction = fake_engine.begin.return_value
+        transaction.__enter__.return_value = fake_connection
+        inspector = MagicMock()
+        inspector.get_table_names.return_value = ["legacy_agent_metadata"] if partial_archive else []
+        inspector.get_view_names.return_value = []
+        inspector.get_materialized_view_names.return_value = []
         with (
-            patch("project_workflow.infrastructure.db.session._is_sqlite", return_value=False),
+            patch("project_workflow.infrastructure.db.session.inspect", return_value=inspector),
             patch("project_workflow.infrastructure.db.session.database_revisions", return_value=set()),
             patch("project_workflow.infrastructure.db.session.expected_tables", return_value=frozenset()),
             patch("project_workflow.infrastructure.db.session._metadata_is_current", return_value=True),
             patch("project_workflow.infrastructure.db.session.run_alembic_command") as mock_run,
-            patch("project_workflow.infrastructure.db.session.get_engine", return_value=fake_engine),
         ):
-            ensure_migrated(fake_engine)
-        fake_engine.begin.assert_not_called()
-        mock_run.assert_called_once_with("upgrade", fake_engine)
+            target = fake_connection if use_connection else fake_engine
+            if partial_archive:
+                with pytest.raises(ValueError, match="partial or foreign archive"):
+                    ensure_migrated(target)
+                mock_run.assert_not_called()
+            else:
+                ensure_migrated(target)
+                mock_run.assert_called_once_with("upgrade", fake_connection)
+        fake_engine.connect.assert_not_called()
+        fake_connection.begin.assert_not_called()
+        if use_connection:
+            fake_engine.begin.assert_not_called()
+        else:
+            fake_engine.begin.assert_called_once_with()
+            transaction.__exit__.assert_called_once()
+            assert transaction.__exit__.call_args.args[0] is (ValueError if partial_archive else None)
+            lock = fake_connection.execute.call_args_list[0]
+            assert "pg_advisory_xact_lock" in str(lock.args[0])
 
     def test_ensure_schema_postgresql_connection(self):
         from unittest.mock import MagicMock, patch
