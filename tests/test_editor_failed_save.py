@@ -31,7 +31,8 @@ def test_reorder_waits_for_original_ack_before_another_move():
         "console.log(JSON.stringify({saves,order:items.map(i=>i.id)}));",
     ])
     completed = subprocess.run(
-        ["node", "--input-type=module", "-"], input=script, text=True, capture_output=True, timeout=10,
+        ["node", "--input-type=module", "-"], input=script, text=True, encoding="utf-8",
+        capture_output=True, timeout=10,
     )
     rows = [json.loads(line) for line in completed.stdout.splitlines()]
     assert rows and rows[0] == {"saves": 1, "order": [2, 1, 3]}, completed.stderr
@@ -57,7 +58,8 @@ def test_add_instruction_uses_visible_position_after_reorder(position):
         "await addInstructionAfter(button);console.log(JSON.stringify({...payload,reloads,disabled:button.disabled}));",
     ])
     completed = subprocess.run(
-        ["node", "--input-type=module", "-"], input=script, text=True, capture_output=True, check=True, timeout=10,
+        ["node", "--input-type=module", "-"], input=script, text=True, encoding="utf-8",
+        capture_output=True, check=True, timeout=10,
     )
     result = json.loads(completed.stdout)
     assert result["step_num"] == position + 2
@@ -89,7 +91,8 @@ def test_instruction_save_failure_retains_entered_text(result, page, fn, next_fn
         "console.log(JSON.stringify({value:input.value,saved:input.dataset.originalDescription,disabled:input.disabled}));",
     ])
     completed = subprocess.run(
-        ["node", "--input-type=module", "-"], input=script, text=True, capture_output=True, check=True, timeout=10,
+        ["node", "--input-type=module", "-"], input=script, text=True, encoding="utf-8",
+        capture_output=True, check=True, timeout=10,
     )
     assert json.loads(completed.stdout) == {
         "value": "Edited instruction", "saved": "Original instruction", "disabled": False,
@@ -127,7 +130,8 @@ def test_phase_save_keeps_response_ids_attached_to_submitted_rows(change, field)
         "blank:blank.dataset.id,existing:existing.dataset.id}));",
     ])
     completed = subprocess.run(
-        ["node", "--input-type=module", "-"], input=script, text=True, capture_output=True, check=True, timeout=10,
+        ["node", "--input-type=module", "-"], input=script, text=True, encoding="utf-8",
+        capture_output=True, check=True, timeout=10,
     )
     result = json.loads(completed.stdout)
     if change == "empty_existing":
