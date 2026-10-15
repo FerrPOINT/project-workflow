@@ -22,6 +22,8 @@ from urllib.parse import urljoin
 import click
 import requests
 
+from project_workflow.infrastructure.platform_namespace import platform_env
+
 from ... import supervisor
 from ...domain.exceptions import ConflictError
 from ...infrastructure.db.uow import SAUnitOfWork
@@ -62,12 +64,12 @@ def _platform_request(
     execution_token: str | None = None,
 ) -> dict:
     try:
-        from sdlc_cli_core import ApiClient, ApiError
+        from pdlc_cli_core import ApiClient, ApiError
     except ImportError as exc:  # pragma: no cover - exercised via test_token_step_explains_missing_transport
         if execution_token is not None:
-            raise ValueError("Runtime CLI требует sdlc-cli-core; DB fallback запрещён") from exc
+            raise ValueError("Runtime CLI требует pdlc-cli-core; DB fallback запрещён") from exc
         raise ValueError(
-            "Токен-режим требует пакет sdlc-cli-core (services-base/python/cli-core); "
+            "Токен-режим требует пакет pdlc-cli-core (services-base/base-modules/python/cli-core); "
             "без него используйте локальный режим с DATABASE_URL"
         ) from exc
 
@@ -110,8 +112,8 @@ def _runtime_step_inputs(
     task: str, report: str | None, operation_key: str | None,
     runtime_request: Path | None, execution_token_file: Path | None,
 ) -> tuple[dict, str]:
-    if not os.environ.get("SDLC_API_TOKEN", "").strip():
-        raise ValueError("Runtime step требует SDLC_API_TOKEN; локальный DB fallback запрещён")
+    if not (platform_env("API_TOKEN") or "").strip():
+        raise ValueError("Runtime step требует PDLC_API_TOKEN; локальный DB fallback запрещён")
     if (not operation_key or operation_key != operation_key.strip() or len(operation_key) > 128
             or runtime_request is None or execution_token_file is None):
         raise ValueError("Runtime step требует --operation-key, --runtime-request и --execution-token-file")
@@ -165,7 +167,7 @@ def step_cmd(
         console.print(format_result(result))
         raise click.exceptions.Exit(1)
     machine = any(value is not None for value in (operation_key, runtime_request, execution_token_file))
-    if machine or os.environ.get("SDLC_API_TOKEN"):
+    if machine or platform_env("API_TOKEN"):
         try:
             if machine:
                 body, execution_token = _runtime_step_inputs(
@@ -282,7 +284,7 @@ def history_cmd(
       project-workflow history --task RUN-42 --n 50     -> последние 50 записей
     """
     jmode = ctx.obj.get("json_mode", False)
-    if os.environ.get("SDLC_API_TOKEN"):
+    if platform_env("API_TOKEN"):
         try:
             params = {"task": task, "n": n}
             namespace_id = _token_namespace_id()

@@ -20,6 +20,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
 from project_workflow.config import Settings, get_settings
+from project_workflow.infrastructure.platform_namespace import is_personal_token as platform_personal_token
 from project_workflow.interfaces.ui.cookies import cookie_name
 from project_workflow.interfaces.ui.templates import templates
 
@@ -100,7 +101,7 @@ class _SsoMiddleware(BaseHTTPMiddleware):
             if request.headers.get("origin") != settings.AUTH_PUBLIC_ORIGIN.rstrip("/"):
                 return _auth_error(request, 403, "Неверный источник запроса")
 
-        is_personal_token = bearer.startswith("sdlc_pat_")
+        is_personal_token = platform_personal_token(bearer)
         path = "/auth/tokens/introspect" if is_personal_token else "/auth/me"
         try:
             async with httpx.AsyncClient(timeout=5) as client:

@@ -31,7 +31,8 @@ def test_reorder_waits_for_original_ack_before_another_move():
         "console.log(JSON.stringify({saves,order:items.map(i=>i.id)}));",
     ])
     completed = subprocess.run(
-        ["node", "--input-type=module", "-"], input=script, text=True, capture_output=True, timeout=10,
+        ["node", "--input-type=module", "-"], input=script, text=True, encoding="utf-8",
+        capture_output=True, timeout=10,
     )
     rows = [json.loads(line) for line in completed.stdout.splitlines()]
     assert rows and rows[0] == {"saves": 1, "order": [2, 1, 3]}, completed.stderr
@@ -52,12 +53,13 @@ def test_add_instruction_uses_visible_position_after_reorder(position):
         f"const button={{disabled:false,closest:()=>items[{position}]}};",
         "const getInstructionItems=()=>items;const phaseId=7;const phaseApiUrl=u=>u;",
         "const requestPhaseDetail=async(u,o)=>{payload=JSON.parse(o.body);return {resp:{ok:true},data:{ok:true}};};",
-        "let reloads=0;const window={SdlcPlatformNavigation:{reload(){reloads++;}}};",
+        "let reloads=0;const window={PdlcPlatformNavigation:{reload(){reloads++;}}};",
         template[start:end],
         "await addInstructionAfter(button);console.log(JSON.stringify({...payload,reloads,disabled:button.disabled}));",
     ])
     completed = subprocess.run(
-        ["node", "--input-type=module", "-"], input=script, text=True, capture_output=True, check=True, timeout=10,
+        ["node", "--input-type=module", "-"], input=script, text=True, encoding="utf-8",
+        capture_output=True, check=True, timeout=10,
     )
     result = json.loads(completed.stdout)
     assert result["step_num"] == position + 2
@@ -77,7 +79,7 @@ def test_instruction_save_failure_retains_entered_text(result, page, fn, next_fn
     end = template.index(f"async function {next_fn}(", start)
     source = template[start:end]
     script = "\n".join([
-        "const messages=[];",
+        "const messages=[];const window={PdlcPlatformNavigation:{}};",
         "const input={value:'Edited instruction',disabled:false,",
         "dataset:{originalDescription:'Original instruction'},closest:()=>({dataset:{instructionId:'23'}})};",
         "const resizeInlineTextarea=()=>{}; const showToast=(text)=>messages.push(text); const phaseApiUrl=(url)=>url;",
@@ -89,7 +91,8 @@ def test_instruction_save_failure_retains_entered_text(result, page, fn, next_fn
         "console.log(JSON.stringify({value:input.value,saved:input.dataset.originalDescription,disabled:input.disabled}));",
     ])
     completed = subprocess.run(
-        ["node", "--input-type=module", "-"], input=script, text=True, capture_output=True, check=True, timeout=10,
+        ["node", "--input-type=module", "-"], input=script, text=True, encoding="utf-8",
+        capture_output=True, check=True, timeout=10,
     )
     assert json.loads(completed.stdout) == {
         "value": "Edited instruction", "saved": "Original instruction", "disabled": False,
@@ -105,7 +108,8 @@ def test_phase_save_keeps_response_ids_attached_to_submitted_rows(change, field)
     start = template.index("async function persistPhase()")
     end = template.index("document.addEventListener('DOMContentLoaded'", start)
     script = "\n".join([
-        "const messages=[];let payload=null;",
+        "const messages=[];let payload=null;const phaseDraft=null;let confirmedPhase=null;"
+        "const updatePhaseSaveStatus=()=>{};",
         "const row=(text,id)=>({dataset:id?{id:String(id)}:{},classList:{contains:()=>false},",
         "querySelector:()=>({value:text}),setAttribute(k,v){this.dataset.id=v;}});",
         "const first=row('First');const second=row('Second');const blank=row('');",
@@ -127,7 +131,8 @@ def test_phase_save_keeps_response_ids_attached_to_submitted_rows(change, field)
         "blank:blank.dataset.id,existing:existing.dataset.id}));",
     ])
     completed = subprocess.run(
-        ["node", "--input-type=module", "-"], input=script, text=True, capture_output=True, check=True, timeout=10,
+        ["node", "--input-type=module", "-"], input=script, text=True, encoding="utf-8",
+        capture_output=True, check=True, timeout=10,
     )
     result = json.loads(completed.stdout)
     if change == "empty_existing":

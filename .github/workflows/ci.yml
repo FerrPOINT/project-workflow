@@ -42,6 +42,21 @@ jobs:
       - uses: actions/checkout@v4
         with:
           path: project-workflow
+      - name: Read independent Base SDK contract revision
+        id: base-sdk
+        run: echo "sha=$(cat .base-revision)" >> "$GITHUB_OUTPUT"
+      - name: Check out pinned Base SDK source
+        uses: actions/checkout@v4
+        with:
+          repository: FerrPOINT/services-base
+          path: services-base
+          ref: ${{ steps.base-sdk.outputs.sha }}
+          ssh-key: ${{ secrets.SERVICES_BASE_DEPLOY_KEY }}
+          persist-credentials: false
+      - name: Verify generated dependency-free namespace contract
+        run: |
+          python ../services-base/scripts/verify_base_revision.py --base ../services-base --revision .base-revision
+          python ../services-base/scripts/export_python_namespace.py --out project_workflow/infrastructure/platform_namespace.py --check
       - uses: astral-sh/setup-uv@v6
         with:
           version: "0.10.10"

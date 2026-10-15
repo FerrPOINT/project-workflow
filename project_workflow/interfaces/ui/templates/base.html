@@ -12,7 +12,7 @@
 <script>{% include 'profession-navigation.js' %}</script>
 <title>{% block title %}Workflow Engine{% endblock %}</title>
 <script>{% include "base/theme-preference.js" %}
-document.documentElement.dataset.theme=window.SdlcThemePreference.read("workflow-theme");</script>
+document.documentElement.dataset.theme=window.PdlcThemePreference.read("workflow-theme");</script>
 <style>
 :root{
   --bg:#111217;--panel:#17181d;--surface:#202126;--surface-hover:#27282e;--surface-active:#2d2e35;
@@ -151,14 +151,6 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .btn-secondary:hover{background:var(--surface-hover);color:var(--text)}
 .btn-danger{background:#b42332;color:#fff;border-color:#b42332}
 .btn-danger:hover{filter:brightness(1.08)}
-.modal-backdrop[hidden]{display:none}
-.modal-backdrop{position:fixed;inset:0;z-index:300;display:grid;place-items:center;padding:20px;background:rgba(5,6,10,.72);backdrop-filter:blur(5px)}
-.modal-card{width:min(100%,420px);background:var(--surface);border:1px solid var(--border-strong);border-radius:14px;padding:22px;box-shadow:0 24px 64px rgba(0,0,0,.48)}
-.modal-eyebrow{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--red)}
-html[data-theme='dark'] .modal-eyebrow{color:#ff6b6b}
-.modal-title{margin:8px 0 0;font-size:20px;line-height:1.25;color:var(--text)}
-.modal-copy{margin-top:10px;color:var(--text-muted);line-height:1.55}
-.modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;flex-wrap:wrap}
 .burger{display:none;background:none;border:none;color:var(--text-muted);font-size:22px;cursor:pointer;padding:0;width:44px;height:44px;align-items:center;justify-content:center;margin-right:4px}
 .container,.page-frame{min-width:0;width:100%;padding:var(--shell-page-gutter)}
 .page-wide,.page-detail{min-width:0;width:100%}
@@ -333,17 +325,14 @@ textarea{resize:vertical;min-height:60px}
 
 .mobile-drawer-title{display:none}
 .main{min-height:calc(100dvh - var(--header-height))}
-.page-header{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:20px}
-.page-header h1{font-size:24px;font-weight:650;line-height:1.3}
 .page-actions:empty,.page-header:has(.page-actions:empty):has(h1:empty){display:none}
-.page-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .platform-header .service-menu summary{border:0;background:transparent;font-size:14px;padding-inline:8px}
 .platform-header .service-menu summary>span:first-of-type{max-width:160px;overflow:hidden;text-overflow:ellipsis}
 .platform-header .namespace-select{max-width:220px;width:100%;min-width:0}
 .platform-header-context .namespace-switcher{min-width:0;width:min(280px,100%)}
 .platform-header-context{justify-content:flex-end}
 .service-menu-trigger-icon{display:none}
-@media(max-width:767px){.sidebar{z-index:100;top:0;height:100dvh}.mobile-drawer-title{display:flex}.platform-header .platform-header-context{display:none}.sidebar-utilities{display:block;padding:12px 20px}.sidebar-utilities label{display:block;margin-bottom:8px}.sidebar-utilities .namespace-select{width:100%;max-width:none}.platform-header-leading{flex-shrink:0}.platform-header .service-menu summary{min-width:44px;min-height:44px;justify-content:center}.platform-header .service-menu-trigger-label,.platform-header .service-menu-chevron{display:none}.platform-header .service-menu-trigger-icon{display:block}.platform-header .service-menu-popover{position:fixed;left:12px;right:12px;top:calc(var(--header-height) + 8px);width:auto;max-width:none}.page-header h1{font-size:22px}}
+@media(max-width:767px){.sidebar{z-index:100;top:0;height:100dvh}.mobile-drawer-title{display:flex}.platform-header .platform-header-context{display:none}.sidebar-utilities{display:block;padding:12px 20px}.sidebar-utilities label{display:block;margin-bottom:8px}.sidebar-utilities .namespace-select{width:100%;max-width:none}.platform-header-leading{flex-shrink:0}.platform-header .service-menu summary{min-width:44px;min-height:44px;justify-content:center}.platform-header .service-menu-chevron{display:none}.platform-header .service-menu-trigger-icon{display:block}.platform-header .service-menu-popover{position:fixed;left:12px;right:12px;top:calc(var(--header-height) + 8px);width:auto;max-width:none}.page-header h1{font-size:22px}}
 
 {% block extra_style %}{% endblock %}
 </style>
@@ -361,7 +350,7 @@ textarea{resize:vertical;min-height:60px}
 <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
 
 <!-- Sidebar -->
-<aside class="sidebar" id="sidebar">
+<aside class="sidebar" data-base-dialog-background id="sidebar">
   <div class="sidebar-header mobile-drawer-title"><strong>Project Workflow</strong><button class="sidebar-close" onclick="closeSidebar()" aria-label="Закрыть навигацию">&times;</button></div>
   <nav class="sidebar-nav" aria-label="Основная навигация">
     <a class="sidebar-link {% if page == 'namespace' %}active{% endif %}" href="/namespaces{{ sidebar_scope_suffix }}" aria-label="Профессии" title="Профессии" {% if page == 'namespace' %}aria-current="page"{% endif %}>
@@ -396,7 +385,7 @@ textarea{resize:vertical;min-height:60px}
 </aside>
 
 <!-- Main -->
-<header class="platform-header" data-platform-header>
+<header class="platform-header" data-base-dialog-background data-platform-header>
   <div class="platform-header-leading" data-platform-header-slot="leading">
     <button class="burger" id="burgerBtn" onclick="openSidebar()" aria-label="Открыть навигацию" aria-controls="sidebar" aria-expanded="false">☰</button>
     {# Base service-switcher: project-workflow uses the Lucide Workflow mark. #}
@@ -405,7 +394,7 @@ textarea{resize:vertical;min-height:60px}
   <div class="platform-header-services" data-platform-header-slot="services">
       <details class="service-menu" id="serviceMenu">
         {% set current_service = other_services | selectattr('key', 'equalto', 'project-workflow') | first %}
-        <summary aria-label="Открыть список сервисов платформы"><svg class="service-menu-trigger-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span class="service-menu-trigger-label">{{ current_service.label if current_service else 'Project Workflow' }}</span><span class="service-menu-chevron" aria-hidden="true">▾</span></summary>
+        <summary aria-label="{{ current_service.label if current_service else 'Project Workflow' }} — открыть список сервисов платформы"><svg class="service-menu-trigger-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span class="service-menu-trigger-label service-switcher-label" title="{{ current_service.label if current_service else 'Project Workflow' }}">{{ current_service.label if current_service else 'Project Workflow' }}</span><span class="service-menu-chevron" aria-hidden="true">▾</span></summary>
         <div class="service-menu-popover">
           <div role="menu" aria-label="Сервисы платформы">
         {% for service in other_services %}
@@ -428,34 +417,23 @@ textarea{resize:vertical;min-height:60px}
   </div>
   <div class="platform-header-actions" data-platform-header-slot="actions">{{ base_ui.account() }}</div>
 </header>
-<main class="main">
+<main class="main" data-base-dialog-background>
 
 
   {% set layout_mode %}{% block page_layout %}wide{% endblock %}{% endset %}
   {% set layout_mode = layout_mode | trim %}
   <div class="container page-frame">
     <div class="{% if layout_mode == 'reading' %}page-readable{% elif layout_mode == 'detail-with-aside' %}page-detail{% else %}page-wide{% endif %}" data-page-layout="{{ layout_mode }}">
-      <div class="page-header">
-        {% block page_heading %}<h1 class="header-title">{% block header_title %}{% endblock %}</h1>{% endblock %}
-        <div class="page-actions">{% block header_actions %}{% endblock %}</div>
-      </div>
+      {% set page_heading_markup %}{% block page_heading %}<h1 class="header-title">{% block header_title %}{% endblock %}</h1>{% endblock %}{% endset %}
+      {% set page_actions_markup %}{% block header_actions %}{% endblock %}{% endset %}
+      {{ base_ui.page_header(heading=page_heading_markup, actions=page_actions_markup) }}
       {% block content %}{% endblock %}
     </div>
   </div>
 </main>
 
 <div class="toast toast-success" id="toast" aria-hidden="true">Сохранено</div>
-<div class="modal-backdrop" id="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="confirmDialogTitle" aria-hidden="true" hidden>
-  <section class="modal-card" role="document">
-    <div class="modal-eyebrow" id="confirmDialogEyebrow">Подтверждение</div>
-    <h2 class="modal-title" id="confirmDialogTitle">Подтвердите действие</h2>
-    <p class="modal-copy" id="confirmDialogCopy"></p>
-    <div class="modal-actions">
-      <button type="button" class="btn btn-secondary" id="confirmDialogCancel">Отмена</button>
-      <button type="button" class="btn btn-danger" id="confirmDialogAccept">Удалить</button>
-    </div>
-  </section>
-</div>
+{{ base_ui.confirmation_dialog() }}
 
 <script>
 function syncSidebarLayout(){
@@ -505,6 +483,7 @@ function closeSidebar(){
   document.getElementById('burgerBtn').focus();
 }
 syncSidebarLayout();
+document.addEventListener('base-dialog-closed', syncSidebarLayout);
 window.addEventListener('resize',syncSidebarLayout);
 var serviceMenu=document.getElementById('serviceMenu');
 document.addEventListener('click',function(event){
@@ -543,55 +522,6 @@ function showToast(msg, type){
 }
 function showRequestError(){
   showToast('Не удалось связаться с сервером','error');
-}
-function requestConfirmation(options){
-  var dialog = document.getElementById('confirmDialog');
-  var cancel = document.getElementById('confirmDialogCancel');
-  var accept = document.getElementById('confirmDialogAccept');
-  var trigger = document.activeElement;
-  var background = [document.querySelector('.sidebar'), document.querySelector('.main'), document.querySelector('[data-platform-header]')];
-  var previousInert = background.map(function(element){ return element.inert; });
-  document.getElementById('confirmDialogEyebrow').textContent = options.eyebrow || 'Подтверждение';
-  document.getElementById('confirmDialogTitle').textContent = options.title || 'Подтвердите действие';
-  document.getElementById('confirmDialogCopy').textContent = options.message || '';
-  accept.textContent = options.confirmLabel || 'Удалить';
-  dialog.hidden = false;
-  dialog.setAttribute('aria-hidden', 'false');
-  background.forEach(function(element){ element.inert = true; });
-  accept.focus();
-  return new Promise(function(resolve){
-    function close(value){
-      dialog.hidden = true;
-      dialog.setAttribute('aria-hidden', 'true');
-      background.forEach(function(element,index){ element.inert = previousInert[index]; });
-      syncSidebarLayout();
-      cancel.removeEventListener('click', onCancel);
-      accept.removeEventListener('click', onAccept);
-      dialog.removeEventListener('click', onBackdrop);
-      document.removeEventListener('keydown', onKeyDown);
-      if(trigger && typeof trigger.focus === 'function'){ trigger.focus(); }
-      resolve(value);
-    }
-    function onCancel(){ close(false); }
-    function onAccept(){ close(true); }
-    function onBackdrop(event){ if(event.target === dialog){ close(false); } }
-    function onKeyDown(event){
-      if(event.key === 'Escape'){ close(false); }
-      if(event.key === 'Tab'){
-        if(event.shiftKey && (document.activeElement === cancel || !dialog.contains(document.activeElement))){
-          event.preventDefault();
-          accept.focus();
-        }else if(!event.shiftKey && (document.activeElement === accept || !dialog.contains(document.activeElement))){
-          event.preventDefault();
-          cancel.focus();
-        }
-      }
-    }
-    cancel.addEventListener('click', onCancel);
-    accept.addEventListener('click', onAccept);
-    dialog.addEventListener('click', onBackdrop);
-    document.addEventListener('keydown', onKeyDown);
-  });
 }
 function refreshNamespaceSelectors(){
   var paths = {{ project_icon_paths | tojson }};
@@ -690,9 +620,10 @@ function pluralizeRu(n, one, few, many){
 </script>
 <script>{% include "base/base-ui.js" %}</script>
 <script type="module">
+{% include "base/draft-state.js" %}
 {% include "base/platform-bridge.js" %}
 {% include "base/platform-ssr.js" %}
-installServerProduct({connectPlatformProduct, platformNavigate, platformReload, transportNamespaceLocation}, {
+installServerProduct({connectPlatformProduct, platformNavigate, platformReload, transportNamespaceLocation, createDraftTracker}, {
   serviceKey: 'project-workflow', portalOrigin: {{ platform_origin|default('')|tojson }},
   logoutUrl: {{ platform_logout_url|default('')|tojson }},
   error: {{ (message if status_code is defined and status_code >= 400 else none)|tojson }},
@@ -701,7 +632,9 @@ installServerProduct({connectPlatformProduct, platformNavigate, platformReload, 
     document.cookie={{ namespace_cookie_name|tojson }}+'='+encodeURIComponent({{ selected_namespace.id|tojson }})+'; Path=/; SameSite=Lax'{% if namespace_cookie_secure %}+'; Secure'{% endif %};
     {% endif %}
   },
-  confirmLeave: () => requestConfirmation({title:'Покинуть страницу?',message:'Есть несохранённые изменения.',confirmLabel:'Покинуть'}),
+  hasUnsavedChanges: () => window.hasUnsavedWorkflowChanges?.() ?? false,
+  onDiscard: () => window.discardWorkflowDraft?.(),
+  confirmLeave: () => window.PdlcBaseUI.requestConfirmation(unsavedChangesConfirmation),
   cancelLeave: () => { const dialog=document.getElementById('confirmDialog'); if(dialog && !dialog.hidden) document.getElementById('confirmDialogCancel').click(); }
 });
 </script>

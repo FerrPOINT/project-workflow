@@ -523,7 +523,7 @@ class TestPhasesPage:
         assert 'id="themeSelector"' not in response.text
         assert 'id="sidebarThemeSelector"' not in response.text
         assert response.text.count('data-base-theme-option') >= 3
-        assert 'window.SdlcThemePreference.read("workflow-theme")' in response.text
+        assert 'window.PdlcThemePreference.read("workflow-theme")' in response.text
         assert response.text.count('data-namespace-selector class="namespace-select"') == 2
         assert 'id="namespaceSelector" data-namespace-selector' in response.text
         assert '.platform-header .service-menu-popover{position:fixed;left:12px;right:12px;' in response.text
@@ -1309,7 +1309,7 @@ class TestPhaseDetail:
         assert response.status_code == 200
         assert "function syncPhaseSectionUrl(sectionId, historyMode)" in response.text
         assert "const method = historyMode === 'replace' ? 'replaceState' : 'pushState';" in response.text
-        assert "window.SdlcPlatformNavigation.syncRoute(nextUrl, method === 'replaceState');" in response.text
+        assert "window.PdlcPlatformNavigation.syncRoute(nextUrl, method === 'replaceState');" in response.text
         assert "function jumpToPhaseSection(sectionId, historyMode = 'push')" in response.text
         assert "function releasePhaseSectionNavigationLock()" in response.text
         assert "jumpToPhaseSection(sectionId, 'none');" in response.text
@@ -1408,10 +1408,10 @@ class TestPhaseDetail:
         assert response.status_code == 200
         assert "async function togglePhaseMode(el)" in response.text
         assert "if (el.dataset.saving === 'true') return;" in response.text
-        assert "const saved = await savePhase();" in response.text
+        assert "await savePhase();" in response.text
         assert "el.setAttribute('aria-busy', 'true');" in response.text
-        assert "const previousPartner = partnerSelect?.value || '';" in response.text
-        assert "partnerSelect.value = previousPartner;" in response.text
+        assert "notePhaseEdit();" in response.text
+        assert "partnerSelect.value = previousPartner;" not in response.text
         assert "return true;" in response.text
 
     def test_phase_detail_serializes_all_phase_aggregate_saves(self):
@@ -1419,7 +1419,7 @@ class TestPhaseDetail:
 
         assert response.status_code == 200
         assert "let _phaseSaveQueue = Promise.resolve(true);" in response.text
-        assert "const queued = _phaseSaveQueue.then(() => persistPhase());" in response.text
+        assert "const queued = _phaseSaveQueue.then(() => savingStopped ? false : persistPhase());" in response.text
         assert "_phaseSaveQueue = queued.catch(() => false);" in response.text
         assert "async function persistPhase()" in response.text
 
@@ -2284,7 +2284,7 @@ class TestProjectsPage:
         )
         assert "url.pathname = '/namespaces';" in response.text
         assert "var method = historyMode === 'push' ? 'pushState' : 'replaceState';" in response.text
-        assert "window.SdlcPlatformNavigation.syncRoute(url.toString(), method === 'replaceState');" in response.text
+        assert "window.PdlcPlatformNavigation.syncRoute(url.toString(), method === 'replaceState');" in response.text
         assert re.search(
             r"function selectNamespace\(id, historyMode\)\{\s*"
             r"var namespace = namespaceById\(Number\(id\)\);\s*if\(!namespace\)\{ return; \}\s*"
@@ -2342,7 +2342,7 @@ class TestProjectsPage:
         response = client.get("/namespaces/new")
         assert response.status_code == 200
         assert (
-            "window.SdlcPlatformNavigation.navigate(namespaceScopedPath('/namespaces', d.namespace_id));"
+            "window.PdlcPlatformNavigation.navigate(namespaceScopedPath('/namespaces', d.namespace_id));"
             in response.text
         )
 
@@ -2508,7 +2508,7 @@ class TestWorkflowsPage:
         assert 'aria-controls="workflowForm" aria-pressed="true"' in response.text
         assert "node.setAttribute('aria-pressed', String(active))" in response.text
         assert response.text.count("document.getElementById('workflowName').focus()") == 2
-        assert "deleteButton.disabled = protectedDefault" in response.text
+        assert "deleteButton.disabled = workflowWritePending || protectedDefault" in response.text
         assert "title = workflow ? 'Удалить воркфлоу «' + workflow.name + '»?'" in response.text
         assert "Promise.resolve(operation).finally" in response.text
         assert "button.textContent = workflowFormMode === 'create' ? 'Создание…' : 'Сохранение…'" in response.text
@@ -2518,16 +2518,16 @@ class TestWorkflowsPage:
         assert 'id="workflowThemeColor"' not in response.text
         assert 'id="workflowThemePreview"' not in response.text
 
-    def test_workflows_mobile_actions_leave_sticky_header(self):
+    def test_workflows_use_one_shared_adaptive_action_block(self):
         response = client.get("/workflows")
 
         assert response.status_code == 200
         assert 'id="newWorkflowButton"' in response.text
-        assert 'id="mobileNewWorkflowButton"' in response.text
-        assert response.text.count('onclick="startCreateWorkflow()"') == 2
-        assert 'class="workflow-mobile-actions"' in response.text
-        assert "@media(max-width:930px){" in response.text
-        assert ".header .workflow-header-action{display:none}" in response.text
+        assert 'id="mobileNewWorkflowButton"' not in response.text
+        assert response.text.count('onclick="startCreateWorkflow()"') == 1
+        assert 'class="workflow-mobile-actions"' not in response.text
+        assert 'class="base-page-actions"' in response.text
+        assert ".header .workflow-header-action{display:none}" not in response.text
         assert 'data-workflow-phases' not in response.text
         assert 'id="workflowPhases"' in response.text
 
@@ -2564,7 +2564,7 @@ class TestWorkflowsPage:
         assert "function workflowSelectionUrl(workflowId)" in response.text
         assert "url.searchParams.set('workflow_id', String(workflowId));" in response.text
         assert "url.searchParams.delete('workflow_id');" in response.text
-        assert "window.SdlcPlatformNavigation.syncRoute(nextUrl, mode === 'replace'" in response.text
+        assert "window.PdlcPlatformNavigation.syncRoute(nextUrl, mode === 'replace'" in response.text
         assert "window.addEventListener('popstate'" in response.text
         assert "selectWorkflow(workflowId, {updateUrl:false});" in response.text
         assert "syncWorkflowUrl(selectedWorkflowId, 'replace');" in response.text
@@ -2648,7 +2648,7 @@ class TestWorkflowsPage:
         assert "function workflowSelectionUrl(workflowId)" in response.text
         assert "url.searchParams.set('workflow_id', String(workflowId));" in response.text
         assert "url.searchParams.set('namespace_id', String(activeNamespaceId));" not in response.text
-        assert "window.SdlcPlatformNavigation.navigate(workflowSelectionUrl(d.workflow_id));" in response.text
+        assert "window.PdlcPlatformNavigation.navigate(workflowSelectionUrl(d.workflow_id));" in response.text
         assert "window.location.href = '/phases?workflow_id=' + d.workflow_id;" not in response.text
 
     def test_workflows_api_create_update_and_delete(self):
@@ -2748,15 +2748,18 @@ def test_ui_deletions_use_product_modal_not_browser_confirm():
     }
     base = (TEMPLATES_DIR / "base.html").read_text(encoding="utf-8")
 
-    assert 'id="confirmDialog"' in base
-    assert "function requestConfirmation" in base
-    assert "background.forEach(function(element){ element.inert = true; })" in base
-    assert "background.forEach(function(element,index){ element.inert = previousInert[index]; })" in base
-    assert "if(event.key === 'Tab')" in base
+    shared_dialog = (TEMPLATES_DIR / "base/base-ui.js").read_text(encoding="utf-8")
+    shared_macros = (TEMPLATES_DIR / "base/macros.html").read_text(encoding="utf-8")
+    assert "base_ui.confirmation_dialog()" in base
+    assert 'id="confirmDialog"' in shared_macros
+    assert "function requestConfirmation" in shared_dialog
+    assert "background.forEach(function(element){ element.inert = true; })" in shared_dialog
+    assert "background.forEach(function(element,index){ element.inert = previousInert[index]; })" in shared_dialog
+    assert "if(event.key === 'Tab')" in shared_dialog
     assert "var dialogOpen=!document.getElementById('confirmDialog').hidden" in base
     assert "sidebar.inert=dialogOpen||(mobile&&!sidebar.classList.contains('open'))" in base
     assert ".btn-danger{background:#b42332;color:#fff" in base
-    assert "html[data-theme='dark'] .modal-eyebrow{color:#ff6b6b}" in base
+    assert "window.PdlcBaseUI.requestConfirmation(unsavedChangesConfirmation)" in base
     assert all("confirm(" not in template for template in templates.values())
 
 
@@ -2917,7 +2920,7 @@ class TestUiNetworkFailures:
         assert "async function requestInstruction(url, options)" in instructions_page.text
         assert "showRequestError();" in instructions_page.text
         assert detail_page.status_code == 200
-        assert "async function requestPhaseDetail(url, options)" in detail_page.text
+        assert "async function requestPhaseDetail(url, options, trackedDraft = false)" in detail_page.text
         assert "if (!await savePhase())" in detail_page.text
         assert "list.insertBefore(li, nextSibling)" in detail_page.text
         assert "await deleteItem(input);" in detail_page.text

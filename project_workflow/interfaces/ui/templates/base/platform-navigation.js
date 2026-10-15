@@ -1,8 +1,9 @@
 // Available before product inline startup scripts; the module upgrades it later.
 (() => {
-  if (window.SdlcPlatformNavigation) return
+  const existing = window.PdlcPlatformNavigation || window.SdlcPlatformNavigation
+  if (existing) { window.PdlcPlatformNavigation = window.SdlcPlatformNavigation = existing; return }
   const embedded = window.parent !== window && !!document.documentElement.dataset.platformOrigin
-  window.SdlcPlatformNavigation = {
+  window.PdlcPlatformNavigation = window.SdlcPlatformNavigation = {
     embedded, active: false, saved: () => {},
     navigate: (url, options = {}) => options.replace ? location.replace(url) : location.assign(url),
     reload: () => location.reload(),

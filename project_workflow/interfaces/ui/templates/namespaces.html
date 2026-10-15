@@ -15,7 +15,6 @@
 .namespace-mark{width:34px;height:34px;border-radius:8px;background:color-mix(in srgb,var(--namespace-color,var(--accent)) 16%, transparent);border:1px solid var(--namespace-color,var(--accent));color:var(--namespace-color,var(--accent));display:flex;align-items:center;justify-content:center;flex:0 0 auto}
 .namespace-mark svg{width:19px;height:19px}
 .namespace-card-body{min-width:0}
-.namespace-command{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--namespace-color,var(--accent));margin-bottom:6px}
 .namespace-name{font-size:15px;font-weight:600;color:var(--text)}
 .namespace-meta{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:var(--text-dim)}
 .namespace-panel{display:flex;flex-direction:column;gap:16px;max-width:760px;min-width:0}
@@ -65,7 +64,6 @@
         </svg>
       </span>
       <span class="namespace-card-body">
-        <div class="namespace-command">{{ namespace.cli_command }}</div>
         <div class="namespace-name">{{ namespace.name }}</div>
         <div class="namespace-meta">
           <span>{{ namespace.task_count | pluralize('задача,задачи,задач') }}</span>
@@ -218,11 +216,11 @@ function syncNamespaceUrl(id, historyMode){
   url.searchParams.set('profession_id', id);
   if(url.toString() === window.location.href){ return; }
   var method = historyMode === 'push' ? 'pushState' : 'replaceState';
-  window.SdlcPlatformNavigation.syncRoute(url.toString(), method === 'replaceState');
+  window.PdlcPlatformNavigation.syncRoute(url.toString(), method === 'replaceState');
 }
 function rememberNamespaceSelection(id, historyMode){
   if(id == null){ return; }
-  if(!window.SdlcPlatformNavigation.embedded || window.SdlcPlatformNavigation.active) document.cookie={{ namespace_cookie_name | tojson }}+'='+encodeURIComponent(id)+'; path=/; SameSite=Lax'{% if namespace_cookie_secure %}+'; Secure'{% endif %};
+  if(!window.PdlcPlatformNavigation.embedded || window.PdlcPlatformNavigation.active) document.cookie={{ namespace_cookie_name | tojson }}+'='+encodeURIComponent(id)+'; path=/; SameSite=Lax'{% if namespace_cookie_secure %}+'; Secure'{% endif %};
   document.querySelectorAll('[data-namespace-selector]').forEach(function(selector){ selector.value = String(id); });
   refreshNamespaceSelectors();
   updateNamespaceHeaderLinks(id);
@@ -238,7 +236,7 @@ function fillNamespaceForm(namespace){
   document.querySelectorAll('input[name="namespaceThemeIcon"]').forEach(function(input){ input.checked = input.value === icon; });
   document.getElementById('namespaceThemeColor').value = namespace ? (namespace.theme_color || defaultNamespaceThemeColor) : defaultNamespaceThemeColor;
   updateNamespaceThemePreview();
-  window.SdlcPlatformNavigation.saved(document.getElementById('namespaceForm'));
+  window.PdlcPlatformNavigation.saved(document.getElementById('namespaceForm'));
 }
 function setNamespaceFormMode(mode){
   namespaceFormMode = mode;
@@ -373,10 +371,6 @@ function renderNamespaceNav(){
     var body = document.createElement('span');
     body.className = 'namespace-card-body';
 
-    var command = document.createElement('div');
-    command.className = 'namespace-command';
-    command.textContent = namespace.cli_command || '';
-
     var name = document.createElement('div');
     name.className = 'namespace-name';
     name.textContent = namespace.name;
@@ -388,7 +382,6 @@ function renderNamespaceNav(){
     tasks.textContent = pluralizeRu(namespace.task_count, 'задача', 'задачи', 'задач');
 
     meta.appendChild(tasks);
-    body.appendChild(command);
     body.appendChild(name);
     body.appendChild(meta);
     button.appendChild(mark);
@@ -434,7 +427,7 @@ function saveNamespace(){
   var payload = currentPayload();
   return fetch('/api/namespaces/' + namespaceId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
     .then(function(r){return r.json()})
-    .then(function(d){ if(d.ok){ window.SdlcPlatformNavigation.saved(document.getElementById('namespaceForm')); showToast('Профессия сохранён','success'); return reloadNamespaces(namespaceId); } showToast(d.error || 'Ошибка','error'); })
+    .then(function(d){ if(d.ok){ window.PdlcPlatformNavigation.saved(document.getElementById('namespaceForm')); showToast('Профессия сохранён','success'); return reloadNamespaces(namespaceId); } showToast(d.error || 'Ошибка','error'); })
     .catch(showRequestError);
 }
 async function deleteNamespace(){
@@ -443,7 +436,7 @@ async function deleteNamespace(){
   if(namespace && Number(namespace.task_count) > 0){ showToast('Сначала удалите или перенесите задачи','error'); return; }
   var title = namespace ? 'Удалить профессию «' + namespace.name + '»?' : 'Удалить профессию?';
   var message = namespace ? '«' + namespace.name + '» будет удалён без возможности восстановления.' : 'Профессия будет удалена без возможности восстановления.';
-  if(!await requestConfirmation({eyebrow:'Удаление профессии',title:title,message:message,confirmLabel:'Удалить'})) return;
+  if(!await window.PdlcBaseUI.requestConfirmation({eyebrow:'Удаление профессии',title:title,message:message,confirmLabel:'Удалить'})) return;
   var namespaceId = selectedNamespaceId;
   var button = document.getElementById('deleteNamespaceButton');
   button.disabled = true;
@@ -461,8 +454,8 @@ function createNamespace(){
     .then(function(d){
       if(d.ok){
         showToast('Профессия создан','success');
-        window.SdlcPlatformNavigation.saved(document.getElementById('namespaceForm'));
-        window.SdlcPlatformNavigation.navigate(namespaceScopedPath('/namespaces', d.namespace_id));
+        window.PdlcPlatformNavigation.saved(document.getElementById('namespaceForm'));
+        window.PdlcPlatformNavigation.navigate(namespaceScopedPath('/namespaces', d.namespace_id));
       } else {
         showToast(d.error || 'Ошибка','error');
       }

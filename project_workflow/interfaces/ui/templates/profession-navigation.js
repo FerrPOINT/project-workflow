@@ -6,7 +6,7 @@
       legacy.length === 1 && /^[1-9]\d*$/.test(legacy[0])) {
     url.searchParams.set('profession_id', legacy[0]);
     url.searchParams.delete('namespace_id');
-    window.SdlcPlatformNavigation.syncRoute(url.toString(), true);
+    window.PdlcPlatformNavigation.syncRoute(url.toString(), true);
   }
   const withProjectContext = value => {
     const target = new URL(value, window.location.href);
