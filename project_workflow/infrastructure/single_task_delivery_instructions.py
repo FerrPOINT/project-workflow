@@ -129,9 +129,9 @@ SOURCE_CONTEXT = (
 
 FORGE_TASK_WORKSPACE = (
     "For a required Forge task workspace, first verify installed cicd-cli pipeline run --help exposes "
-    "--task-intent and cicd-cli pipeline task-workspace --help exists. Packaged Forge CLI 4525694 does NOT "
-    "provide these commands/options; the TaskWorkspaceIntent producer is source candidate 5ea0ebc, not proof "
-    "of installed/qualified capability. An older CLI, missing feature, 403/404 or unavailable configured "
+    "--task-intent and cicd-cli pipeline task-workspace --help exists. Check the actual installed CLI "
+    "capabilities, not a historical packaging pin. CLI help proves syntax only, not configured server "
+    "support, qualification or task authority. A missing feature, 403/404 or unavailable configured "
     "producer blocks this operation for the operator; do not fall back to an ordinary unbound pipeline. "
     "Read authorized project/repository metadata with existing cicd-cli project list and cicd-cli repository "
     "list, matching the supplied exact IDs and approved coordinates, never choosing by name alone. There is "
@@ -167,6 +167,54 @@ FORGE_TASK_WORKSPACE = (
     "physical_source_observed or a blocked workspace receipt is not task completion, deployment, health or "
     "acceptance. No new queue, controller, MCP, children or automatic dispatch is introduced. "
 )
+
+FORGE_IMAGE_BUILD = (
+    "For an OCI application, the approved repository .forge-ci.yml v1 uses a typed image_build job, "
+    "not docker build in commands. The existing pipeline run --task-intent transport carries task intent; "
+    "there is no new image-build CLI flag. The configured Forge server must separately support and be "
+    "qualified for this backend build action; working CLI help or a preloaded image does not prove that. "
+    "The image_build fields are context, dockerfile, optional target, descriptor_artifact and "
+    "readable_schema_versions. Use actual portable relative paths, a Dockerfile inside context, an existing "
+    "target stage if selected, and the application's actual supported positive schema versions; never "
+    "invent a stage or data compatibility. A job cannot mix image_build with commands, image, tags, secrets, "
+    "artifacts or allow_failure=true, and default tags must be empty. descriptor_artifact declares the "
+    "server-produced descriptor artifact automatically. Forge's backend uses the sealed Git source and "
+    "its configured verified daemon under the current task/attempt/lease. Docker authority and TLS "
+    "credentials stay on the backend, never in agent/job env, mounts, secrets or commands. Do not request "
+    "a socket, run HostShell/docker/dind as a workaround, or grant new authority. The successful build "
+    "produces forge/oci-candidate/v1 with imageId, sourceCommit, dataProtocol, readableSchemaVersions and "
+    "migrations. Require the actual immutable sha256: image ID, exact candidate sourceCommit, "
+    "dataProtocol=readonly_snapshot_v1 and empty migrations for the current owner delivery adapter. "
+    "Do not author this descriptor by hand, substitute a mutable tag or equate it with deployed acceptance. "
+    "Read the actual original pipeline/job/artifact metadata; use installed cicd-cli artifact list "
+    "--job <actual-job-uuid> and cicd-cli artifact download --id <actual-artifact-uuid> "
+    "--output <private-descriptor-path> under the approved Forge credential. Verify raw descriptor SHA256 "
+    "against actual artifact metadata and the original workspace/candidate evidence. Missing server "
+    "capability, descriptor or authorized readback is an operator dependency, not permission to fabricate "
+    "evidence. Unknown/timeout retains the original attempt/key/body for authorized readback; no blind "
+    "rebuild, fresh key or second pipeline. "
+)
+
+ROLE_IMAGE_BUILD = {
+    "developer": FORGE_IMAGE_BUILD + (
+        "In Developer initial AND rework, author the real application Dockerfile and typed build recipe "
+        "only in the approved writable checkout/branch, then freeze their actual candidate commit SHA. "
+        "Use the supplied original task pipeline key for that frozen candidate; do not spend it on a "
+        "preliminary base-SHA build and later change the original intent/body to another commit. Retain "
+        "the server-produced descriptor artifact ID/raw SHA, exact pipeline/job/attempt and original "
+        "workspace receipt in sealed changes/checks. Build success is not Review, Testing or deployment. "
+    ),
+    "devops": FORGE_IMAGE_BUILD + (
+        "DevOps consumes the actual descriptor from the accepted Developer candidate's original pipeline "
+        "and verifies it against the accepted Developer result/SHA propagated through Review and Testing. "
+        "Do not edit the accepted candidate, replace its descriptor with an independently preloaded image, "
+        "or substitute a new DevOps workspace/pipeline for the saved build provenance. The configured "
+        "delivery owner must observe that exact image on its verified daemon; image transfer or daemon "
+        "substitution is not authorized. Use the existing guarded workspace delivery/readback commands "
+        "and current DevOps taskFence, then verify actual deployment, health, application acceptance and "
+        "rollback evidence before the unchanged final Workflow/Tracker handoff. "
+    ),
+}
 
 ROLE_SOURCE_EVIDENCE = {
     "analyst": (
@@ -286,7 +334,8 @@ def context_instruction(role: str) -> str:
             "--task <task-uuid> under the PM grant. An absent requirements revision is normal during "
             "pre-document brainstorming; do not publish a placeholder merely to obtain a revision."
         )
-    return common + SOURCE_CONTEXT + FORGE_TASK_WORKSPACE + artifact_instruction(role) + (
+    context = common + SOURCE_CONTEXT + FORGE_TASK_WORKSPACE + ROLE_IMAGE_BUILD.get(role, "")
+    return context + artifact_instruction(role) + (
         "Read task-tracker sdlc lifecycle --task <task-uuid>; if the supplied input has previous_result_id, "
         "read task-tracker sdlc result read --task <task-uuid> --result <previous-result-uuid> and verify "
         "the exact accepted predecessor result and artifact references before work. Do not infer acceptance "

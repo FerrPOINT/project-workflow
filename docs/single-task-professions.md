@@ -139,8 +139,9 @@ Existing `env_json`/`secret_ref` доставляет разрешённый д�
 checkout или permission — operator infrastructure blocker, не business question/consent.
 Нельзя угадывать project по имени, принимать default `main` или заимствовать identity.
 
-Для первого требуемого Forge task workspace проверен source candidate
-`5ea0ebcd6cdf013ed82079f515edb82b1bbe9812`, не установленный CLI или live runtime:
+Для первого требуемого Forge task workspace используются существующие команды
+CLI `6493fe891c39e640bcdf6542212d823463a65ff8`. Их наличие проверяется через actual
+installed help; совпадение CLI syntax не доказывает server capability или live acceptance:
 
 ```text
 cicd-cli pipeline run --project <forge-configuration-uuid> --git-ref <exact-source-sha> --idempotency-key <fleet-supplied-pipeline-key-uuid> --task-intent <task-intent.json>
@@ -148,8 +149,9 @@ cicd-cli pipeline task-workspace --project <forge-configuration-uuid> --id <actu
 ```
 
 `project list` и `repository list` существуют; CLI `project get` отсутствует.
-Старый packaging pin `4525694` не содержит `--task-intent`/`task-workspace`;
-нужны отдельно квалифицированные repin и producer setup. Fleet startup guidance выдаёт
+Исторический pin `4525694` не содержал `--task-intent`/`task-workspace`; это не основание
+блокировать текущий CLI с реально доступными командами. Server setup/qualification
+проверяется отдельно, без fallback на unbound pipeline. Fleet startup guidance выдаёт
 backend-derived pipeline Idempotency-Key UUID = actual Fleet `session_run_id` и workspace
 `operationKey = fleet-workspace:<session_run_id>`. Эти значения сохраняются в retained
 request; агент берёт их verbatim, не генерирует и не выводит из Tracker execution/chat UUID.
@@ -178,6 +180,43 @@ DevOps использует actual original workspace lookup и existing `worksp
 Original workspace key из build receipt не заменяется ключом нового DevOps startup.
 Owner target refs/published policy предоставляются оператором; protected target,
 generic deployment create или unbound pipeline не заменяют guarded delivery.
+
+## OCI Image Build Instructions (Source Only)
+
+Developer initial/rework готовит настоящий Dockerfile и `.forge-ci.yml` v1 с typed
+`image_build` в разрешённом writable checkout, затем фиксирует candidate commit.
+Поля: `context`, `dockerfile`, optional `target`, `descriptor_artifact`,
+`readable_schema_versions`. Пути, stage и supported schema versions должны
+соответствовать приложению, не шаблонным догадкам. Job не смешивает action с
+commands/image/tags/secrets/artifacts/allow_failure=true; default tags пусты.
+Original task pipeline key используется для frozen candidate, не для предварительного
+base-SHA build с последующей заменой исходного intent/body.
+
+Build выполняет Forge backend из sealed Git source на configured verified daemon
+с actual task/attempt/lease. Нового CLI flag нет; существующий `pipeline run --task-intent`
+остаётся transport. Docker/TLS authority не передаётся агенту/job. CLI6493 help не
+доказывает поддержку/qualification нового server-side action; это отдельный prerequisite.
+Unknown/timeout удерживает original attempt/key/body, не разрешает blind rebuild.
+
+Actual artifact `forge/oci-candidate/v1` содержит immutable imageId и exact sourceCommit;
+current owner adapter требует readonly_snapshot_v1 и пустые migrations. Descriptor
+создаёт сервер, не агент. Проверяются original pipeline/job/artifact IDs, raw SHA и
+workspace/candidate provenance через existing authorized artifact list/download.
+DevOps потребляет descriptor принятого Developer SHA через Review/Testing, не меняет
+candidate и не подставляет самостоятельно preloaded image или новый workspace.
+Guarded delivery/readback, current DevOps taskFence, health/acceptance/rollback и
+final Workflow/Tracker handoff сохранены; build artifact не равен deployed application.
+
+Этот source packet меняет только first-phase context. Все first-step commands и final
+instructions byte-identical `abe4`; PM role hash остаётся
+`b363961b2a49d24a259d57f53e6febb06ff53a1605ffd9683a88eacd6ceabae1`, inventory 7/8/24.
+Generated catalog SHA256:
+`86e6c983b7aa6a2c99da11d1d4b1f1b4563ff913262236903a19bc86bdec2d67`;
+manifest SHA256:
+`652a38c0f7bdb48a569aa3fcd5c2e81e153db6e22b5201cfb6ce15c988dd57f3`.
+Qualified `abe4` companion остаётся historical и ещё не установлен; этот обновлённый
+family требует собственной qualification/adoption перед live history. Legacy catalog,
+его pins/history, Hermes и runtime protocol не меняются; здесь image/install/live PASS нет.
 Artifact/deployment/health/acceptance/rollback evidence остаётся обязательным,
 как и ordinary tool approval. PM ordering, 7/7/8/24 и final transitions сохранены.
 Нет stand adoption, публикации, нового controller/queue/MCP или native acceptance claim.

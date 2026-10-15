@@ -1,5 +1,6 @@
 """Actual generated instructions: source custody and non-circular role evidence."""
 
+import hashlib
 import json
 import shlex
 
@@ -63,7 +64,8 @@ def test_first_workspace_uses_actual_task_trigger_and_real_server_allocated_rece
         "--idempotency-key", "<fleet-supplied-pipeline-key-uuid>", "--task-intent", "<task-intent.json>",
     ]
     for required in (
-        "Packaged Forge CLI 4525694 does NOT", "source candidate 5ea0ebc", "not proof of installed/qualified",
+        "actual installed CLI capabilities, not a historical packaging pin", "CLI help proves syntax only",
+        "not configured server support, qualification or task authority",
         "cicd-cli project list", "cicd-cli repository list", "no project-get CLI operation",
         "holderSubject is the actual scheduler lease holder", "sourceCommit, not a moving branch",
         "no legacy template", "Null means preparation pending, not success", "same pipeline",
@@ -76,6 +78,84 @@ def test_first_workspace_uses_actual_task_trigger_and_real_server_allocated_rece
     ):
         assert required in context
     assert "cicd-cli project get" not in context and "--config-id" not in context
+    assert "4525694" not in context and "5ea0ebc" not in context
+
+
+@pytest.mark.parametrize("role,mode", MODES)
+def test_typed_image_build_is_role_scoped_and_server_capability_is_separate(generated, role, mode):
+    catalog, _ = generated
+    context = mode_for(catalog, role, mode)["phases"][0]["instructions"][1]["description"]
+    if role not in {"developer", "devops"}:
+        assert instructions.FORGE_IMAGE_BUILD not in context
+        return
+    assert instructions.FORGE_IMAGE_BUILD in context
+    assert instructions.ROLE_IMAGE_BUILD[role] in context
+    for required in (
+        ".forge-ci.yml v1", "typed image_build job", "not docker build in commands",
+        "no new image-build CLI flag", "server must separately support and be qualified",
+        "working CLI help or a preloaded image does not prove", "context, dockerfile, optional target",
+        "descriptor_artifact and readable_schema_versions", "Dockerfile inside context",
+        "application's actual supported positive schema versions", "cannot mix image_build with commands",
+        "image, tags, secrets, artifacts or allow_failure=true", "default tags must be empty",
+        "descriptor_artifact declares the server-produced descriptor artifact automatically",
+        "sealed Git source", "current task/attempt/lease", "credentials stay on the backend",
+        "never in agent/job env, mounts, secrets or commands", "Do not request a socket",
+        "forge/oci-candidate/v1", "immutable sha256: image ID", "exact candidate sourceCommit",
+        "dataProtocol=readonly_snapshot_v1 and empty migrations", "Do not author this descriptor by hand",
+        "cicd-cli artifact list --job <actual-job-uuid>",
+        "cicd-cli artifact download --id <actual-artifact-uuid> --output <private-descriptor-path>",
+        "Verify raw descriptor SHA256", "Unknown/timeout retains the original attempt/key/body",
+        "no blind rebuild, fresh key or second pipeline",
+    ):
+        assert required in context
+
+
+@pytest.mark.parametrize("mode", ["initial", "rework"])
+def test_developer_freezes_actual_candidate_before_original_typed_build(generated, mode):
+    catalog, _ = generated
+    context = mode_for(catalog, "developer", mode)["phases"][0]["instructions"][1]["description"]
+    for required in (
+        "Developer initial AND rework", "approved writable checkout/branch",
+        "freeze their actual candidate commit SHA", "original task pipeline key for that frozen candidate",
+        "do not spend it on a preliminary base-SHA build", "server-produced descriptor artifact ID/raw SHA",
+        "exact pipeline/job/attempt and original workspace receipt", "not Review, Testing or deployment",
+    ):
+        assert required in context
+
+
+def test_devops_uses_accepted_descriptor_not_preloaded_or_new_build_substitute(generated):
+    catalog, _ = generated
+    context = mode_for(catalog, "devops", "delivery")["phases"][0]["instructions"][1]["description"]
+    for required in (
+        "accepted Developer candidate's original pipeline", "accepted Developer result/SHA",
+        "propagated through Review and Testing", "Do not edit the accepted candidate",
+        "independently preloaded image", "new DevOps workspace/pipeline", "exact image on its verified daemon",
+        "image transfer or daemon substitution is not authorized", "current DevOps taskFence",
+        "deployment, health, application acceptance and rollback evidence", "unchanged final Workflow/Tracker handoff",
+    ):
+        assert required in context
+
+
+@pytest.mark.parametrize("role,mode", [("project_manager", "draft"), *MODES])
+def test_original_first_step_and_final_workflow_tracker_handoff_are_byte_identical(generated, role, mode):
+    # UTF-8 text digests of the shipped abe4 catalog, not execution or native proof.
+    terminal_hashes = {
+        "project_manager": "4b4e9c4cd49d85364321f5e7dbd14af77d828d89ff2351248178450516f63cc7",
+        "analyst": "7d7467473ec382e374cadb5ee233c2460030414c1730efcee10b421817c35862",
+        "architect": "1fca5c6eff98972d51251417186afc743ae53fcedf53de064916c35469cc95ef",
+        "developer": "8494c25be76b6a2181077e4ade19aacd9cc8bfd06a07a077efc7d4543681e5d2",
+        "reviewer": "bd31010b1cf6a8c7ee69987237fd07578ff3df5cc01e0b8890d8f40b8e0f8bd0",
+        "tester": "be6798e3386f9caa634f5e09df9ab1f923db792e956b3197812f203952debe11",
+        "devops": "9fc8dcb4dd1e42d601212dca572fb9f2acdcea47dcaef3b8fa90e0b2638c1882",
+    }
+    catalog, _ = generated
+    phases = mode_for(catalog, role, mode)["phases"]
+    first = phases[0]["instructions"][0]["description"]
+    terminal = phases[-1]["instructions"][-1]["description"]
+    assert hashlib.sha256(first.encode()).hexdigest() == (
+        "57d621e3ceb98b62cd1e8d2c5a329117c9b6b7a5b96dd983aa00a2a0442f162a"
+    )
+    assert hashlib.sha256(terminal.encode()).hexdigest() == terminal_hashes[role]
 
 
 @pytest.mark.parametrize("role,mode", MODES)
