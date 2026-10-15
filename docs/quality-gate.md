@@ -19,6 +19,10 @@ pytest с coverage >=94%, XML, строгими ResourceWarning/unraisable flags
 `.local/quality-python/<OS>/3.11.15` постоянно; frozen `uv.lock` и overlay
 `constraints.txt` сохраняются. Неизменившиеся зависимости повторно не устанавливаются.
 Scoped пример: `python scripts/quality.py test -- tests/test_quality_runner.py`.
+Полный coverage запускает два worker в load mode с общим отчётом и прежним
+порогом 94%; scoped и PostgreSQL integration выполняются последовательно.
+Для явного override prefix использовать WORKFLOW_QUALITY_UV; переменная UV
+может содержать только путь binary, выставленный самим uv.
 
 
 Ожидаемый результат:

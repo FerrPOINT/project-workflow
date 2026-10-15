@@ -13,11 +13,14 @@ TARGETS = ("test", "test-integration", "coverage", "lint", "quality", "warnings"
 
 
 def commands(target: str) -> list[list[str]]:
-    prefix = shlex.split(os.environ.get("UV", UV))
+    prefix = shlex.split(os.environ.get("WORKFLOW_QUALITY_UV", UV))
     test = ["pytest", "-q", "--timeout=60", "--durations=25"]
     coverage = [
         "pytest",
         "-q",
+        "-n",
+        "2",
+        "--dist=load",
         "--cov=project_workflow",
         "--cov-report=term",
         "--cov-report=xml",

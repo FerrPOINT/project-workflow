@@ -3,6 +3,13 @@
 from scripts.quality import commands
 
 
+def test_uv_binary_environment_does_not_replace_the_canonical_runner(monkeypatch) -> None:
+    monkeypatch.delenv("WORKFLOW_QUALITY_UV", raising=False)
+    monkeypatch.setenv("UV", "/installed/uv")
+    assert "--frozen" in commands("coverage")[0]
+    assert "--with-requirements" in commands("coverage")[0]
+
+
 def test_quality_runs_unit_coverage_once_and_postgres_separately() -> None:
     selected = commands("quality")
     tests = [command for command in selected if "pytest" in command]
@@ -11,6 +18,10 @@ def test_quality_runs_unit_coverage_once_and_postgres_separately() -> None:
     coverage = next(command for command in tests if "--cov=project_workflow" in command)
     assert "error::ResourceWarning" in coverage
     assert "error::pytest.PytestUnraisableExceptionWarning" in coverage
+    assert coverage[coverage.index("-n") + 1] == "2"
+    assert "--dist=load" in coverage
+    integration = next(command for command in tests if "integration" in command)
+    assert "-n" not in integration
     assert any("integration" in command and "tests/test_postgres_integration.py" in command for command in tests)
     assert all("--durations=25" in command for command in tests)
     assert any("ruff" in command for command in selected)

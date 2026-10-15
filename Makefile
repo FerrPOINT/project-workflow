@@ -1,6 +1,7 @@
 # project-workflow — Makefile
 
-UV ?= uv run --python 3.11.15 --frozen --with-requirements constraints.txt --all-extras
+WORKFLOW_QUALITY_UV ?= uv run --python 3.11.15 --frozen --with-requirements constraints.txt --all-extras
+UV ?= $(WORKFLOW_QUALITY_UV)
 PYTEST ?= $(UV) pytest
 
 .PHONY: test test-verbose test-integration coverage coverage-html lint lint-fix quality warnings compose-ready clean install-dev
@@ -8,7 +9,7 @@ PYTEST ?= $(UV) pytest
 # --- testing ---------------------------------------------------------------
 
 test test-integration coverage lint quality warnings compose-ready:
-	UV="$(UV)" python scripts/quality.py $@
+	WORKFLOW_QUALITY_UV="$(WORKFLOW_QUALITY_UV)" python scripts/quality.py $@
 
 test-verbose:
 	$(PYTEST) -v --timeout=60

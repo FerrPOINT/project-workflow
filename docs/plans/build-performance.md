@@ -12,5 +12,13 @@ session и seed digest. SQLite backup фиксирует committed WAL в неи
 шаблоне; каждый тест получает отдельную копию, собственные settings/UoW и cleanup.
 Изменения теста никогда не попадают в шаблон. Прямые schema/migration tests
 по-прежнему выполняют настоящую подготовку через prepare_sqlite_uow.
+Полный pytest/coverage использует ровно два pytest-xdist worker в load mode:
+каждый case выполняется один раз, pytest-cov объединяет coverage до порога 94%.
+Scoped test и PostgreSQL integration остаются последовательными. Зависимости
+pytest-xdist/execnet закреплены в pyproject, constraints и frozen uv.lock.
+WORKFLOW_QUALITY_UV — отдельный override команды; переменная UV, которую сам uv
+передаёт дочерним процессам как путь к binary, не заменяет canonical arguments.
+Основание: [pytest-cov](https://pytest-cov.readthedocs.io/en/stable/xdist.html),
+[pytest-xdist](https://pytest-xdist.readthedocs.io/en/latest/distribution.html).
 Профилировать setup отдельно от call/teardown; миграционные и PostgreSQL gates
 не заменять snapshot-копией. Регрессия: tests/test_runtime_fixture_isolation.py.
