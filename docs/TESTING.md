@@ -34,3 +34,8 @@ dependencies; выбранный runtime/UI requirement инвалидирует
 Application layer по-прежнему проверяет immutable manifest до установки пакета,
 затем выполняет pip check и installed compatibility proof. Producer не заменяется
 сборкой произвольного каталога; локальные `.local` environments исключены из context.
+Проверка manifest передаёт installation stage bind witness с постоянными bytes:
+новые revision/archive/descriptor обновляют provenance, сохраняя wheel layer при
+прежних application inputs. Проверка всё равно выполняется для нового manifest;
+неверный manifest блокирует и прогретый слой. SHA сам по себе не является причиной
+повторной установки приложения, если он читается из отдельного runtime manifest.
