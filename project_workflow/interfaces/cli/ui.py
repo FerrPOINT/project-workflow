@@ -69,7 +69,7 @@ def _platform_request(
         if execution_token is not None:
             raise ValueError("Runtime CLI требует pdlc-cli-core; DB fallback запрещён") from exc
         raise ValueError(
-            "Токен-режим требует пакет pdlc-cli-core (services-base/python/cli-core); "
+            "Токен-режим требует пакет pdlc-cli-core (services-base/base-modules/python/cli-core); "
             "без него используйте локальный режим с DATABASE_URL"
         ) from exc
 

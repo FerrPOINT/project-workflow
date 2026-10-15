@@ -284,7 +284,7 @@ export DATABASE_URL=postgresql+psycopg://project_workflow:project_workflow@local
 Платформенный token mode не подключается к БД напрямую. При заданном
 `SDLC_API_TOKEN` команды `step` и `history` используют защищённый HTTP API и
 общий transport package `pdlc-cli-core` (ставится отдельно из
-`services-base/python/cli-core`; в standalone-сборку не входит):
+`services-base/base-modules/python/cli-core`; в standalone-сборку не входит):
 
 ```bash
 export PROJECT_WORKFLOW_URL=http://localhost:8812

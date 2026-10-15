@@ -1,4 +1,5 @@
 /** Tracks acknowledgements, not requests: an old response cannot clean a newer edit. */
+/** @param {() => void} [onChange] @returns {import("./draft-types").DraftTracker} */
 export function createDraftTracker(onChange = () => {}) {
   let revision = 0, savedRevision = 0
   const unknown = new Set()

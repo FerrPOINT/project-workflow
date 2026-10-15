@@ -1,8 +1,10 @@
 // This module is also exported verbatim to the server-rendered Base consumers.
 export const PLATFORM_PROTOCOL = 'sdlc.platform.v1'
 export const PDLC_PLATFORM_PROTOCOL = 'pdlc.platform.v1'
+/** @param {unknown} value */
 export function isPlatformProtocol(value) { return value === PLATFORM_PROTOCOL || value === PDLC_PLATFORM_PROTOCOL }
 /** Transport immutable namespace references without guessing a destination ID. */
+/** @param {string} value @param {string} search */
 export function transportNamespaceLocation(value, search) {
   const target = new URL(value, 'https://relative.invalid')
   const source = new URLSearchParams(search)
@@ -17,6 +19,7 @@ export function transportNamespaceLocation(value, search) {
 const productKey = Symbol.for('pdlc.platform.product.v1')
 const legacyProductKey = Symbol.for('sdlc.platform.product.v1')
 
+/** @param {string} value @param {string} origin */
 export function routePath(value, origin) {
   const url = new URL(value, origin)
   if (url.origin !== origin || url.username || url.password || value.includes('\\')) throw new Error('Недопустимый маршрут приложения.')
@@ -24,8 +27,10 @@ export function routePath(value, origin) {
   return url.pathname + url.search + url.hash
 }
 
+/** @returns {import("./contracts").PlatformProduct | null} */
 export function getPlatformProduct() { return typeof window === 'undefined' ? null : window[productKey] || window[legacyProductKey] || null }
 
+/** @param {{serviceKey: string, portalOrigin?: string, window?: Window}} options @returns {import("./contracts").PlatformProduct | null} */
 export function connectPlatformProduct({ serviceKey, portalOrigin, window: target = window }) {
   if (target.parent === target || !portalOrigin) return null
   const origin = new URL(portalOrigin).origin
@@ -108,6 +113,7 @@ export function connectPlatformProduct({ serviceKey, portalOrigin, window: targe
     product.dispose()
   }
   target.addEventListener('pagehide', leavePage)
+  /** @type {import("./contracts").PlatformProduct} */
   const product = {
     serviceKey,
     portalOrigin: origin,
@@ -135,6 +141,7 @@ export function connectPlatformProduct({ serviceKey, portalOrigin, window: targe
   return product
 }
 
+/** @param {string} url @param {{replace?: boolean}} [options] */
 export function platformNavigate(url, options = {}) {
   const product = getPlatformProduct()
   if (product) product.navigate(url, options)
@@ -144,6 +151,7 @@ export function platformNavigate(url, options = {}) {
 
 export function platformReload() { platformNavigate(window.location.href, { replace: true }) }
 
+/** @param {string} [portalOrigin] */
 export function capturePlatformReturn(portalOrigin) {
   if (!portalOrigin || window.parent !== window || window.location.pathname !== '/login') return
   const path = new URLSearchParams(window.location.search).get('platform_return')
@@ -155,6 +163,7 @@ export function capturePlatformReturn(portalOrigin) {
   } catch { /* Standalone login remains available. */ }
 }
 
+/** @param {string} [portalOrigin] */
 export function finishPlatformLogin(portalOrigin) {
   if (!portalOrigin || window.parent !== window) return false
   try {

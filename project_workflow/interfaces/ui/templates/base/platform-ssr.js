@@ -44,7 +44,7 @@ export function installServerProduct(runtime, options) {
     window.PdlcPlatformNavigation.navigate = (url, navigationOptions) => depart(() => runtime.platformNavigate(url, navigationOptions))
     window.PdlcPlatformNavigation.reload = () => depart(runtime.platformReload)
     document.addEventListener('click', event => {
-      const link = event.target instanceof Element ? event.target.closest('a[href]') : null
+      const link = event.target instanceof Element ? /** @type {HTMLAnchorElement} */ (event.target.closest('a[href]')) : null
       if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || link.hasAttribute('download') || link.target === '_blank') return
       const url = new URL(link.href)
       if (!['http:', 'https:'].includes(url.protocol) || (url.origin === location.origin && url.pathname === location.pathname && url.search === location.search && url.hash)) return
@@ -64,7 +64,7 @@ export function installServerProduct(runtime, options) {
   client.addLeaveGuard(checkLeave, () => { const finish = pendingLeave; pendingLeave = null; options.cancelLeave?.(); finish?.(false) })
   client.onCommitted(() => { window.PdlcPlatformNavigation.active = true; options.onCommitted?.(); document.querySelector('main')?.focus() })
   const map = () => {
-    for (const link of document.querySelectorAll('a[data-platform-service]')) {
+    for (const link of /** @type {NodeListOf<HTMLAnchorElement>} */ (document.querySelectorAll('a[data-platform-service]'))) {
       const service = client.services.find(item => item.key === link.dataset.platformService)
       link.hidden = !service
       if (service) link.href = runtime.transportNamespaceLocation(client.portalOrigin + service.path, new URL(client.route, location.origin).search)
@@ -72,7 +72,7 @@ export function installServerProduct(runtime, options) {
   }
   client.subscribe(() => { map(); client.reportRoute(location.pathname + location.search + location.hash, true) }); map()
   document.addEventListener('click', event => {
-    const link = event.target instanceof Element ? event.target.closest('a[href]') : null
+    const link = event.target instanceof Element ? /** @type {HTMLAnchorElement} */ (event.target.closest('a[href]')) : null
     if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || link.hasAttribute('download') || link.target === '_blank') return
     const url = new URL(link.href)
     if (url.origin !== location.origin && url.origin !== client.portalOrigin && !client.services.some(service => service.origin === url.origin)) return

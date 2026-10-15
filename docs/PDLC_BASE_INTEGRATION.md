@@ -56,3 +56,14 @@ Back/Forward, reload и phase deep link. Неподтверждённый вво
 ![Dashboard на мобильной ширине](assets/pdlc-namespace-20261015/workflow-dashboard-375.jpg)
 
 ![Общий диалог защиты правок](assets/pdlc-namespace-20261015/workflow-dirty-guard-375.jpg)
+
+## Source-структура Base
+
+Python SDK расположен в `services-base/base-modules/python/cli-core`; UI и SSR
+exporter — в `services-base/base-modules/ui`. Библиотека, Auth, оператор, host и
+справочник имеют отдельные границы по
+[ADR 0006](https://github.com/FerrPOINT/services-base/blob/a4dea438ec99103ca83b51540d11de548b1ee82d/docs/adr/0006-base-repository-layout.md).
+Имена imports, credentials и wire-контракты сохраняются; UI/SDK/skills pins
+остаются независимыми. SSR assets получаются штатным exporter и проверяются
+по fingerprints. Общие CSS/mechanisms не редактируются в продуктовой копии.
+Установка и authenticated межпродуктовая приёмка выполняются отдельно.

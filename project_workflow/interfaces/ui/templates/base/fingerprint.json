@@ -3,12 +3,12 @@
   "package": "@pdlc/ui",
   "files": {
     "base-ui.css": "3f1cd395ece062796609a1280571934882d6d1e4deb3c038e98c0a2fba2afd76",
-    "base-ui.js": "edfff456a29366b6a43daad86f5f93f567cb5947255ea4cee7478d5b57841169",
+    "base-ui.js": "2925c6bdafc2bb5a78f652c62342dfe1ff4d94c94ff7ea43eab35f83052ace63",
     "theme-preference.js": "cd9fee1556e6546bca6b4199ae672091e1ec147d3d383d0cf85c79b2a7f1154c",
     "macros.html": "347ecf727cf3d8ae62e06f7ba11564084f5b85d2e27ddb4da1a638af0ec95b5c",
-    "draft-state.js": "cf286a375a6607309917d9721d32ec7bd2f61b7fedc328026c3b96f1216a02a3",
-    "platform-bridge.js": "619fa52f105169de308e3ea068d5b6fcd6a401b6d9bd56bc7199652f80ac7b14",
-    "platform-ssr.js": "d2dbc69c8b48e828ae0408caa50708869710ee52db34318fb12aee78b757e113",
+    "draft-state.js": "0e0ec1eabdaaf1b43772c62189b9ece38824b4c186122cfbf3c1f85c123c3107",
+    "platform-bridge.js": "46d5ff594fb04d659eb7a7a51325ed26d70c21d5fd2b6187ee80fa44133807bb",
+    "platform-ssr.js": "65b26841db5da63daa274468fe00697a3b0e4aa544551609005ae31cc8e0c80b",
     "platform-navigation.js": "dda0b4476d1985b69af81a5aeeb2a1583eea3345f777435ac8c37eaa336d6298"
   }
 }
