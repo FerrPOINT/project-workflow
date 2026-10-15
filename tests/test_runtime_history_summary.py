@@ -217,3 +217,48 @@ def test_summary_openapi_has_only_additive_query_parameters():
     assert cursor["type"] == "string" and cursor["maxLength"] == 19
     assert cursor["pattern"] == "^[1-9][0-9]*$"
     assert operation["responses"]["200"]["content"]["application/json"]["schema"] == {}
+
+
+@pytest.mark.parametrize("present,value", [(False, None), (True, None), (True, False), (True, True)])
+def test_summary_retryable_preserves_nullable_actual_boolean(history, present, value):
+    client, ids, _ = history
+    with SAUnitOfWork() as uow:
+        row = uow.session.get(m.TaskStepHistoryEntry, ids[-1])
+        response = json.loads(row.supervisor_response)
+        response.pop("retryable")
+        if present:
+            response["retryable"] = value
+        row.supervisor_response = json.dumps(response)
+        uow.commit()
+    response = client.get(API, headers=_headers("r" * 40), params=PARAMS)
+    assert response.status_code == 200, response.text
+    record = response.json()["result"]["records"][0]
+    assert record["history_id"] == str(ids[-1])
+    assert record["retryable"] is value
+    assert PRIVATE not in response.text
+
+
+@pytest.mark.parametrize("value", [PRIVATE, 0, 1, [], {"raw": PRIVATE}])
+def test_summary_invalid_retryable_fails_closed_without_echo(history, value):
+    client, ids, _ = history
+    with SAUnitOfWork() as uow:
+        row = uow.session.get(m.TaskStepHistoryEntry, ids[-1])
+        response = json.loads(row.supervisor_response)
+        response["retryable"] = value
+        row.supervisor_response = json.dumps(response)
+        uow.commit()
+    response = client.get(API, headers=_headers("r" * 40), params=PARAMS)
+    assert response.status_code == 409
+    assert PRIVATE not in response.text
+
+
+@pytest.mark.parametrize("value", [None, [PRIVATE], PRIVATE, 1, False])
+def test_summary_nonobject_saved_response_fails_closed_without_echo(history, value):
+    client, ids, _ = history
+    with SAUnitOfWork() as uow:
+        row = uow.session.get(m.TaskStepHistoryEntry, ids[-1])
+        row.supervisor_response = json.dumps(value)
+        uow.commit()
+    response = client.get(API, headers=_headers("r" * 40), params=PARAMS)
+    assert response.status_code == 409
+    assert PRIVATE not in response.text

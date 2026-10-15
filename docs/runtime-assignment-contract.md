@@ -259,6 +259,8 @@ sanitized records. Поля каждой записи: `history_id` (canonical d
 (`pass|partial|blocked|rollback|delegate`), `status` (`active|blocked|done|null`),
 `retryable`, `next_phase_code`, `rollback_phase_code`, `created_at`.
 Status читается только из сохранённого ответа; отсутствие не реконструируется.
+`retryable` сохраняет exact boolean; отсутствие/null возвращается как `null`,
+не `false`. Иной тип поля или не-object сохранённого ответа отклоняется fail-closed.
 Reports, messages, prompts, tokens, raw bindings и terminal receipts не возвращаются.
 
 `n` ограничен 1..200; `count` — размер страницы, не полный total.

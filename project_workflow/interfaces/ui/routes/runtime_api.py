@@ -378,16 +378,20 @@ def _history_summary(
         phase = uow.phases.get_by_id(entry.phase_id)
         next_phase = uow.phases.get_by_id(entry.next_phase_id) if entry.next_phase_id is not None else None
         rollback = uow.phases.get_by_id(entry.rollback_phase_id) if entry.rollback_phase_id is not None else None
+        if not isinstance(entry.supervisor_response, dict):
+            raise ConflictError("Stored history summary response is invalid")
         status = entry.supervisor_response.get("status")
+        retryable = entry.supervisor_response.get("retryable")
         if (entry.id is None or entry.id <= 0 or phase is None or entry.verdict not in VERDICT_LABELS
             or (status is not None and status not in ("active", "blocked", "done"))
+            or (retryable is not None and type(retryable) is not bool)
             or (entry.next_phase_id is not None and next_phase is None)
             or (entry.rollback_phase_id is not None and rollback is None)):
             raise ConflictError("Stored history summary fields are invalid")
         records.append({
             "history_id": str(entry.id), "step_operation_key": entry.step_operation_key,
             "phase_code": phase.code, "verdict": entry.verdict, "status": status,
-            "retryable": entry.supervisor_response.get("retryable") is True,
+            "retryable": retryable,
             "next_phase_code": next_phase.code if next_phase else None,
             "rollback_phase_code": rollback.code if rollback else None, "created_at": entry.created_at,
         })
