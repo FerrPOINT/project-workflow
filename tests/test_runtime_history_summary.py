@@ -3,6 +3,8 @@ import json
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import event
+from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 
 from project_workflow import config
@@ -262,3 +264,32 @@ def test_summary_nonobject_saved_response_fails_closed_without_echo(history, val
     response = client.get(API, headers=_headers("r" * 40), params=PARAMS)
     assert response.status_code == 409
     assert PRIVATE not in response.text
+
+
+def test_summary_query_count_does_not_grow_for_repeated_phase_references(history):
+    client, _, _ = history
+    for _ in range(200):
+        seed_history("developer", "DEV-1", "pass", "active")
+
+    def read_page(n):
+        selects = []
+
+        def record_select(connection, cursor, statement, parameters, context, executemany):
+            if statement.lstrip().upper().startswith("SELECT"):
+                selects.append(statement)
+
+        event.listen(Engine, "before_cursor_execute", record_select)
+        try:
+            response = client.get(API, headers=_headers("r" * 40), params={**PARAMS, "n": n})
+        finally:
+            event.remove(Engine, "before_cursor_execute", record_select)
+        assert response.status_code == 200, response.text
+        records = response.json()["result"]["records"]
+        assert len(records) == n
+        assert all(row["phase_code"] == row["next_phase_code"] == "assigned" for row in records)
+        assert PRIVATE not in response.text
+        return len(selects)
+
+    small_page_queries = read_page(1)
+    full_page_queries = read_page(200)
+    assert full_page_queries <= small_page_queries + 2
