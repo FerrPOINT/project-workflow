@@ -16,20 +16,23 @@
 Канонический локальный gate и expected output описаны в
 `docs/quality-gate.md`; цели `Makefile` и `scripts/quality.ps1` повторяют эти
 команды через `uv`, `constraints.txt` и текущий marker contract.
+Один штатный вызов `python scripts/quality.py quality` выполняет шаги 1–5.
+Ниже описаны их ожидания; отдельные команды нужны для диагностики конкретного
+сбоя, а не для повторного полного прогона после штатного gate.
 
 После любого изменения SQLAlchemy-слоя, application services, состояния UI или
 Supervisor Engine на интегрированной вехе выполнить следующие проверки (в ходе реализации scoped checks):
 
 1. **Tests**
    ```bash
-   pytest -q --cov=project_workflow --cov-report=term --cov-report=xml --timeout=60 --durations=25
+   python scripts/quality.py coverage
    ```
    Ожидается 0 падений и 0 ошибок. PostgreSQL integration tests здесь намеренно
    исключены и запускаются отдельно.
 
 2. **PostgreSQL integration**
    ```bash
-   pytest -q -m integration tests/test_postgres_integration.py --timeout=120
+   python scripts/quality.py test-integration
    ```
    Ожидается 0 падений и 0 ошибок. Набор включает реальный путь CLI subprocess →
    PostgreSQL → тестовый OpenAI-compatible HTTP endpoint. Два multi-process E2E
@@ -66,7 +69,8 @@ Supervisor Engine на интегрированной вехе выполнит�
 
 ## Примечания
 
-- Для стандартного полного набора использовать `pytest -q --timeout=60`.
+- Для полного gate использовать `python scripts/quality.py quality`;
+  scoped проверки — `python scripts/quality.py test -- <test-path>`.
   `--forked` не требуется; при нём отчёт coverage некорректен.
 - `DATABASE_URL` обязателен в runtime. SQLite используется только в изолированных тестах.
 - `project-workflow` хранит имена skills. Действующий legacy-каталог сохраняет
