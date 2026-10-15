@@ -1,5 +1,10 @@
-# syntax=docker/dockerfile:1
-FROM python:3.11-slim-bookworm@sha256:0bee7276f83efd4a1ee05bbbf4281d95ed28e079220a9457f25a93e3f1e3c31b AS builder
+# syntax=docker/dockerfile:1.19@sha256:b6afd42430b15f2d2a4c5a02b919e98a525b785b1aaff16747d2f623364e39b6
+FROM python:3.11-slim-bookworm@sha256:0bee7276f83efd4a1ee05bbbf4281d95ed28e079220a9457f25a93e3f1e3c31b AS dependency-inputs
+WORKDIR /inputs
+COPY pyproject.toml scripts/dependency_inputs.py ./
+RUN python dependency_inputs.py --project pyproject.toml --extra ui --output runtime-deps.txt
+
+FROM python:3.11-slim-bookworm@sha256:0bee7276f83efd4a1ee05bbbf4281d95ed28e079220a9457f25a93e3f1e3c31b AS runtime-dependencies
 
 WORKDIR /app
 
@@ -9,20 +14,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml constraints.txt ./
+COPY constraints.txt ./
+COPY --from=dependency-inputs /inputs/runtime-deps.txt /tmp/runtime-deps.txt
 ENV PIP_CONSTRAINT=/app/constraints.txt
-RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+ARG TARGETARCH
+ARG PIP_CACHE_ID=pdlc-operator-downloads-v1-pip-cp311
+RUN --mount=type=cache,id=${PIP_CACHE_ID}-${TARGETARCH},target=/root/.cache/pip,sharing=locked \
     python -m venv /opt/venv \
-    && python -c "import tomllib; from pathlib import Path; p=tomllib.loads(Path('pyproject.toml').read_text()); Path('/tmp/runtime-deps.txt').write_text('\n'.join(p['project']['dependencies'] + p['project']['optional-dependencies']['ui']))" \
     && /opt/venv/bin/python -m pip install --no-compile --constraint constraints.txt -r /tmp/runtime-deps.txt
 
+FROM runtime-dependencies AS builder
 ARG SOURCE_REVISION=""
 ARG SOURCE_ARCHIVE_SHA256=""
 ARG RUNTIME_BUNDLE_SHA256=""
 ARG CATALOG_VARIANT="legacy"
 ENV PROJECT_WORKFLOW_CATALOG_VARIANT=${CATALOG_VARIANT}
 
-COPY README.md LICENSE alembic.ini ./
+COPY pyproject.toml README.md LICENSE alembic.ini ./
 COPY scripts/ ./scripts/
 COPY project_workflow/ ./project_workflow/
 COPY runtime-*.json ./
@@ -40,7 +48,7 @@ RUN find scripts project_workflow -type f -exec chmod 0644 {} + \
             --runtime-bundle-sha256 "$RUNTIME_BUNDLE_SHA256"; \
     fi
 
-RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+RUN --mount=type=cache,id=${PIP_CACHE_ID}-${TARGETARCH},target=/root/.cache/pip,sharing=locked \
     /opt/venv/bin/python -m pip install --no-compile --no-deps \
         --constraint constraints.txt ".[ui]" \
         && /opt/venv/bin/python -m pip check \

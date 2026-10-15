@@ -11,6 +11,7 @@
     "test_supervisor_prompt.py",
     "test_ui_schemas.py",
     "test_quality_runner.py",
+    "test_dependency_inputs.py",
     "test_test_lanes.py"
   ],
   "slow": [

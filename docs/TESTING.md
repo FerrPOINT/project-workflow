@@ -22,3 +22,15 @@ workflow_dispatch на exact ref. Автоматический CI не подн�
 
 Required security/data/compatibility checks и thresholds сохраняются.
 Unit success не заменяет ручную приёмку; NOT RUN не означает PASS.
+
+## Python dependency layers
+
+Runtime Dockerfile выделяет `runtime-dependencies` до исходников приложения.
+`scripts/dependency_inputs.py` выбирает только static runtime + UI requirements;
+constraints, Python parent/ABI и platform остаются входами установки. Изменение
+версии/описания пакета или неиспользуемого dev extra не переустанавливает runtime
+dependencies; выбранный runtime/UI requirement инвалидирует слой. Проверки этой
+границы входят в unit lane. Pip download store сохраняется в общем operator pool.
+Application layer по-прежнему проверяет immutable manifest до установки пакета,
+затем выполняет pip check и installed compatibility proof. Producer не заменяется
+сборкой произвольного каталога; локальные `.local` environments исключены из context.
