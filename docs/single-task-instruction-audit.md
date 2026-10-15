@@ -23,8 +23,10 @@ under actual own-task PM grant, task-tracker:read, fresh ACL and live lease.
 There is no broad attachment/list/upload/delete or scheduler credential access.
 Missing installed/authorized capability is still a blocker.
 
-Catalog SHA256 a626dc7d94f474964d2a1715ed00e2ebb76fa9d275cb458c945921b3945a65d7;
-manifest71e9045c8665b20f3fc95b1df5115f0c4bbefd5515d3f2593ecef094158f2d80.
+Current packaged-file SHA256, rechecked16 October against source7452a789:
+catalog7be522c6a78e35a4ebdd611f4b6dd6d6d03cc9a2751f973f69d423f68e0db543;
+manifest999b78f3d7e823d2cde818ed5cfe2ac00cd378a8fe7eb03c21b9711795196f3b.
+Previously documented hashes are not the current installation input.
 Profile versions, IDs, seven roles/eight modes/24 phases and governance remain
 unchanged. Old installed manifests are rejected as drift, never silently
 overwritten. Adoption/config revisions and live seven-role acceptance remain open.

@@ -49,8 +49,8 @@ Installed binding не является runtime admission или Tracker transit
 и `single_task_manifest_v1.json`, проверяемые по фактическим UTF-8/LF bytes:
 
 ```text
-catalog:  a626dc7d94f474964d2a1715ed00e2ebb76fa9d275cb458c945921b3945a65d7
-manifest: 71e9045c8665b20f3fc95b1df5115f0c4bbefd5515d3f2593ecef094158f2d80
+catalog:  7be522c6a78e35a4ebdd611f4b6dd6d6d03cc9a2751f973f69d423f68e0db543
+manifest: 999b78f3d7e823d2cde818ed5cfe2ac00cd378a8fe7eb03c21b9711795196f3b
 ```
 
 15October instruction correction changes sealed content/hashes, not role IDs or
