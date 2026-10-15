@@ -129,8 +129,10 @@ regeneration не устанавливает каталог на стенд и �
 
 После первого admitted Workflow step технические роли требуют exact Tracker
 instance/project, task=root, approved repository URL/ID, full base SHA, allowed branch,
-а при работе с существующим candidate — его exact SHA. Operator Forge `configId`
-сопровождается отдельным exact Forge project UUID; это не новый API field или CLI flag.
+а при работе с существующим candidate — его exact SHA. Selected Forge delivery
+configuration UUID — это existing Forge `projects.id`, принимаемый CLI `--project`.
+Это один ID, не пара configId/projectId; Tracker project UUID, namespace и repository ID
+имеют отдельные значения и не подставляются вместо Forge configuration UUID.
 Контекст вручную задаёт оператор в versioned SOUL/config либо immutable approved
 requirements/source snapshot. Автоматического project resolver/supplier нет.
 Existing `env_json`/`secret_ref` доставляет разрешённый доступ; отсутствие source mapping,
@@ -141,13 +143,19 @@ checkout или permission — operator infrastructure blocker, не business qu
 `5ea0ebcd6cdf013ed82079f515edb82b1bbe9812`, не установленный CLI или live runtime:
 
 ```text
-cicd-cli pipeline run --project <forge-project-uuid> --git-ref <exact-source-sha> --idempotency-key <original-pipeline-key-uuid> --task-intent <task-intent.json>
-cicd-cli pipeline task-workspace --project <forge-project-uuid> --id <actual-pipeline-uuid>
+cicd-cli pipeline run --project <forge-configuration-uuid> --git-ref <exact-source-sha> --idempotency-key <fleet-supplied-pipeline-key-uuid> --task-intent <task-intent.json>
+cicd-cli pipeline task-workspace --project <forge-configuration-uuid> --id <actual-pipeline-uuid>
 ```
 
 `project list` и `repository list` существуют; CLI `project get` отсутствует.
 Старый packaging pin `4525694` не содержит `--task-intent`/`task-workspace`;
-нужны отдельно квалифицированные repin и producer setup. Typed TaskWorkspaceIntent
+нужны отдельно квалифицированные repin и producer setup. Fleet startup guidance выдаёт
+backend-derived pipeline Idempotency-Key UUID = actual Fleet `session_run_id` и workspace
+`operationKey = fleet-workspace:<session_run_id>`. Эти значения сохраняются в retained
+request; агент берёт их verbatim, не генерирует и не выводит из Tracker execution/chat UUID.
+Не нужны отдельный operator key provider или новые private first-step JSON fields;
+соответствующий startup-guidance hook интегрирует main. Critical/proposal key rules
+сохранены отдельно: эти ключи не взаимозаменяемы. Typed TaskWorkspaceIntent
 использует actual Tracker binding/lease и supplied source coordinates, не caller-made
 runner lease/attempt/workspace IDs. Forge выдаёт их сам. Preparation read-only в runner,
 не writable Hermes checkout. Null readback — pending, blocked receipt — не deployment PASS.
@@ -167,6 +175,7 @@ Developer result; DevOps читает accepted Tester report и реальный
 
 DevOps использует actual original workspace lookup и existing `workspace delivery` /
 `workspace delivery-readback`, current DevOps taskFence отдельно от old build binding.
+Original workspace key из build receipt не заменяется ключом нового DevOps startup.
 Owner target refs/published policy предоставляются оператором; protected target,
 generic deployment create или unbound pipeline не заменяют guarded delivery.
 Artifact/deployment/health/acceptance/rollback evidence остаётся обязательным,
@@ -224,7 +233,8 @@ Generic patch, обычный issue transition, board move или status edit н
 Локально: targeted pytest `tests/test_single_task_catalog.py`, существующие CLI/catalog
 regressions, ruff и diff check, без установки зависимостей и без Docker/PG.
 
-Source-context packet от `3e0c4d5`: 155 targeted tests PASS, включая 19 новых
+Source-context packet от `3e0c4d5` с single Forge configuration UUID и Fleet-supplied
+retained keys: 162 targeted tests PASS, включая 26 source-context cases в
 `tests/test_single_task_source_context_instructions.py` и actual SQLite/TestClient
 PM producer/terminal fixture readbacks с synthetic external authority/runtime inputs.
 Canonical generator `--check`, targeted Ruff и diff check PASS. Единственное warning —

@@ -13,10 +13,10 @@ MODES = [
     ("developer", "rework"), ("reviewer", "delivery"), ("tester", "delivery"), ("devops", "delivery"),
 ]
 TRIGGER = (
-    "cicd-cli pipeline run --project <forge-project-uuid> --git-ref <exact-source-sha> "
-    "--idempotency-key <original-pipeline-key-uuid> --task-intent <task-intent.json>"
+    "cicd-cli pipeline run --project <forge-configuration-uuid> --git-ref <exact-source-sha> "
+    "--idempotency-key <fleet-supplied-pipeline-key-uuid> --task-intent <task-intent.json>"
 )
-WORKSPACE = "cicd-cli pipeline task-workspace --project <forge-project-uuid> --id <actual-pipeline-uuid>"
+WORKSPACE = "cicd-cli pipeline task-workspace --project <forge-configuration-uuid> --id <actual-pipeline-uuid>"
 
 
 @pytest.fixture(scope="module")
@@ -42,7 +42,9 @@ def test_source_context_is_supplied_after_first_step_not_automatically_resolved(
         "operator-edited versioned SOUL/config", "immutable approved requirements/source snapshots",
         "no automatic project resolver or automatic source-context supplier", "Tracker instance and project UUID",
         "task=root", "approved repository URL and repository ID", "full base SHA", "allowed branch",
-        "Forge configId", "exact Forge project UUID", "configId is not a CLI option",
+        "selected Forge delivery configuration UUID", "IS the existing Forge projects.id accepted by CLI --project",
+        "only one Forge configuration/project UUID, not a second configId",
+        "distinct from the Tracker project UUID, namespace and repository ID",
         "exact candidate SHA whenever consuming an existing candidate", "must not invent a future candidate SHA",
         "infrastructure blockers for the operator, not business questions for PM",
         "permission to guess names or permission to default to main", "env_json/secret_ref",
@@ -57,8 +59,8 @@ def test_first_workspace_uses_actual_task_trigger_and_real_server_allocated_rece
     context = mode_for(catalog, role, mode)["phases"][0]["instructions"][1]["description"]
     assert TRIGGER in context and WORKSPACE in context
     assert shlex.split(TRIGGER)[2:] == [
-        "run", "--project", "<forge-project-uuid>", "--git-ref", "<exact-source-sha>",
-        "--idempotency-key", "<original-pipeline-key-uuid>", "--task-intent", "<task-intent.json>",
+        "run", "--project", "<forge-configuration-uuid>", "--git-ref", "<exact-source-sha>",
+        "--idempotency-key", "<fleet-supplied-pipeline-key-uuid>", "--task-intent", "<task-intent.json>",
     ]
     for required in (
         "Packaged Forge CLI 4525694 does NOT", "source candidate 5ea0ebc", "not proof of installed/qualified",
@@ -69,11 +71,31 @@ def test_first_workspace_uses_actual_task_trigger_and_real_server_allocated_rece
         "reuse the Tracker lease as a runner lease", "read-only in the Forge runner",
         "does not create or authorize a writable Hermes checkout", "Unknown trigger acceptance",
         "no blind retry, fresh key, changed body or second pipeline", "actual pipeline ID is unavailable, stop",
-        "candidate-evidence --project <forge-project-uuid>", "actual original WorkspaceOperationLookup",
+        "candidate-evidence --project <forge-configuration-uuid>", "actual original WorkspaceOperationLookup",
         "not task completion, deployment, health or acceptance",
     ):
         assert required in context
     assert "cicd-cli project get" not in context and "--config-id" not in context
+
+
+@pytest.mark.parametrize("role,mode", MODES)
+def test_workspace_keys_are_retained_fleet_guidance_not_operator_or_agent_generated(generated, role, mode):
+    catalog, _ = generated
+    context = mode_for(catalog, role, mode)["phases"][0]["instructions"][1]["description"]
+    for required in (
+        "Fleet supplies the original pipeline Idempotency-Key UUID and workspace operationKey",
+        "retained startup guidance", "pipeline UUID is the actual Fleet session_run_id",
+        "workspace operationKey is fleet-workspace:<Fleet session_run_id>", "Fleet-supplied values verbatim",
+        "not a new operator UUID, Tracker execution UUID or chat UUID", "Do not generate or derive them as agent",
+        "request a separate key provider", "extra fields in the private first-step JSON",
+        "Critical-blocker and delivery-proposal key rules remain separate and unchanged",
+        "TaskWorkspaceIntent JSON with that workspace operationKey",
+        "--operation-key <fleet-supplied-workspace-key>",
+    ):
+        assert required in context
+    assert "operator-supplied pipeline" not in context and "operator-supplied workspace" not in context
+    assert "FLEET_CRITICAL_BLOCKER_KEY" in context
+    assert "proposal.idempotency_key from runtime guidance/template" in context
 
 
 @pytest.mark.parametrize("mode", ["initial", "rework"])
@@ -128,6 +150,7 @@ def test_tester_and_devops_propagate_accepted_predecessor_reports_not_synthetic_
         "operator owner-target references", "actually published Forge target policy", "never invent",
         "cicd-cli workspace delivery --project", "cicd-cli workspace delivery-readback --project",
         "current DevOps taskFence", "actual developmentResultId", "old build/workspace binding separately",
+        "saved build's original workspace key", "do not replace it with the current DevOps startup key",
         "generic deployment create", "health, acceptance and rollback readbacks", "original-key readback",
         "Do not wait for your own future accepted result or Tracker transition",
     ):
