@@ -30,7 +30,7 @@ export function routePath(value, origin) {
 /** @returns {import("./contracts").PlatformProduct | null} */
 export function getPlatformProduct() { return typeof window === 'undefined' ? null : window[productKey] || window[legacyProductKey] || null }
 
-/** @param {{serviceKey: string, portalOrigin?: string, window?: Window}} options @returns {import("./contracts").PlatformProduct | null} */
+/** @param { {serviceKey: string, portalOrigin?: string, window?: Window} } options @returns {import("./contracts").PlatformProduct | null} */
 export function connectPlatformProduct({ serviceKey, portalOrigin, window: target = window }) {
   if (target.parent === target || !portalOrigin) return null
   const origin = new URL(portalOrigin).origin
@@ -141,7 +141,7 @@ export function connectPlatformProduct({ serviceKey, portalOrigin, window: targe
   return product
 }
 
-/** @param {string} url @param {{replace?: boolean}} [options] */
+/** @param {string} url @param { {replace?: boolean} } [options] */
 export function platformNavigate(url, options = {}) {
   const product = getPlatformProduct()
   if (product) product.navigate(url, options)

@@ -7,7 +7,7 @@
     "theme-preference.js": "cd9fee1556e6546bca6b4199ae672091e1ec147d3d383d0cf85c79b2a7f1154c",
     "macros.html": "347ecf727cf3d8ae62e06f7ba11564084f5b85d2e27ddb4da1a638af0ec95b5c",
     "draft-state.js": "0e0ec1eabdaaf1b43772c62189b9ece38824b4c186122cfbf3c1f85c123c3107",
-    "platform-bridge.js": "46d5ff594fb04d659eb7a7a51325ed26d70c21d5fd2b6187ee80fa44133807bb",
+    "platform-bridge.js": "273e09ddd02c45c3b91540d64cfa5e0b36512e1a39bf7bb3e620b99feefd2ad2",
     "platform-ssr.js": "65b26841db5da63daa274468fe00697a3b0e4aa544551609005ae31cc8e0c80b",
     "platform-navigation.js": "dda0b4476d1985b69af81a5aeeb2a1583eea3345f777435ac8c37eaa336d6298"
   }
