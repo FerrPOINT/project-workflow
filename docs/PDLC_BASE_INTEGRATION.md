@@ -16,8 +16,8 @@ Dependency-free Python namespace contract экспортируется из Base
 
 SSR export принадлежит `base-modules/ui/ssr`; продукт хранит штатно экспортированные templates/base и fingerprint. React-примеры справочника не являются SSR macros. `.base-ui-revision` и SDK pin проверяются независимо.
 
-UI SHA хранится в `.base-ui-revision`; пути package/lockfiles, Docker и CI
-используют `services-base/base-modules/ui`. Приложения `components-dictionary`
+UI SHA хранится в `.base-ui-revision`; SSR tooling и Docker используют
+`services-base/base-modules/ui`. React-потребители обновляют также package/lockfiles. Приложения `components-dictionary`
 и `base-platform` расположены отдельно и не входят в UI-пакет продукта.
 Визуальный каталог запускается только при необходимости проверки примера.
 
@@ -37,3 +37,22 @@ branding сохраняет приоритет над default PDLC. Истори
 Локальные source-тесты, hosted CI, установка и authenticated browser-приёмка
 фиксируются отдельно. Этот source-комплект не меняет установленный runtime,
 credentials или группы `pdlc1`, `pdlc2`, `pdlc3`, `pdlc-common`.
+
+## Локальные доказательства
+
+PostgreSQL integration: 77 тестов прошли на собственном disposable PostgreSQL.
+Полный unit/coverage-прогон дал 2542 успешных теста; 16 failures исправлены
+в mocks общего SSR global и явном UTF-8 для Node subprocess. Повтор затронутых
+модулей и соседних сценариев: 28 passed; итоговый appended coverage 94.17%.
+Ruff и mypy (127 файлов) прошли; документационный gate — 13 тестов.
+SSR fingerprint и generated Python contract проверены штатными exporters Base.
+
+IAB использовал собственную SQLite smoke-базу с синтетическими данными, без
+центральной сессии и внешнего LLM. При ширине 375 проверены dashboard, drawer,
+Back/Forward, reload и phase deep link. Неподтверждённый ввод вызывает общий
+диалог Base; отмена сохраняет введённое значение, уход после очистки работает.
+Это отдельная локальная UI-проверка, не evidence установленного SSO/runtime.
+
+![Dashboard на мобильной ширине](assets/pdlc-namespace-20261015/workflow-dashboard-375.jpg)
+
+![Общий диалог защиты правок](assets/pdlc-namespace-20261015/workflow-dirty-guard-375.jpg)
