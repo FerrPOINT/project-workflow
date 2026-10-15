@@ -30,6 +30,20 @@ git diff --check
 без `make` используйте `pwsh -File scripts/quality.ps1 quality`. Дополнительные
 цели `warnings` и `compose-ready` есть и в `Makefile`, и в PowerShell helper.
 
+### Windows И UTF-8 В Тестовых Subprocess
+
+JavaScript передаётся в Node через stdin с явным `encoding="utf-8"`.
+Один `text=True` использует системную кодировку Python и на Windows cp1252
+не может передать кириллицу. Не обходить ошибку изменением assertions или
+таймаутов. Исправленный `test_editor_failed_save.py` проходит14 случаев даже
+при `PYTHONUTF8=0` и locale cp1252, без изменения `PYTHONIOENCODING`.
+
+Локальный полный прогон sourceab3 был остановлен после955 проходов,13 отказов
+этого файла и4 skips. Причина13 отказов подтверждена отдельным traceback и
+устранена только в четырёх тестовых subprocess-вызовах. Ruff и mypy137 исходных
+файлов проходят. Полный gate и coverage после исправления ещё не завершены;
+целевые14 проходов не заменяют их и PostgreSQL/image/live-приёмку.
+
 ## ResourceWarning Gate
 
 После изменений в тестовой инфраструктуре, SQLAlchemy layer, UI request
