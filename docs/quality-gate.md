@@ -34,6 +34,10 @@ git diff --check
 
 ## ResourceWarning Gate
 
+Канонический `quality` уже включает строгие ResourceWarning и unraisable flags
+в единственный coverage-прогон. После его успеха отдельный полный `warnings`
+не повторять. Команда ниже остаётся отдельной диагностикой без coverage.
+
 РџРѕСЃР»Рµ РёР·РјРµРЅРµРЅРёР№ РІ С‚РµСЃС‚РѕРІРѕР№ РёРЅС„СЂР°СЃС‚СЂСѓРєС‚СѓСЂРµ, SQLAlchemy layer, UI request
 lifecycle РёР»Рё CLI session lifecycle РґРѕРїРѕР»РЅРёС‚РµР»СЊРЅРѕ Р·Р°РїСѓСЃРєР°С‚СЊ:
 

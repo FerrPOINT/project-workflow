@@ -23,6 +23,10 @@ def commands(target: str) -> list[list[str]]:
         "--cov-report=xml",
         "--timeout=60",
         "--durations=25",
+        "-W",
+        "error::ResourceWarning",
+        "-W",
+        "error::pytest.PytestUnraisableExceptionWarning",
     ]
     integration = [
         "pytest",

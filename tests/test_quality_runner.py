@@ -8,6 +8,9 @@ def test_quality_runs_unit_coverage_once_and_postgres_separately() -> None:
     tests = [command for command in selected if "pytest" in command]
     assert len(tests) == 2
     assert sum("--cov=project_workflow" in command for command in tests) == 1
+    coverage = next(command for command in tests if "--cov=project_workflow" in command)
+    assert "error::ResourceWarning" in coverage
+    assert "error::pytest.PytestUnraisableExceptionWarning" in coverage
     assert any("integration" in command and "tests/test_postgres_integration.py" in command for command in tests)
     assert all("--durations=25" in command for command in tests)
     assert any("ruff" in command for command in selected)
