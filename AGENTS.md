@@ -18,11 +18,11 @@
 команды через `uv`, `constraints.txt` и текущий marker contract.
 
 После любого изменения SQLAlchemy-слоя, application services, состояния UI или
-Supervisor Engine перед commit выполнить следующие проверки:
+Supervisor Engine на интегрированной вехе выполнить следующие проверки (в ходе реализации scoped checks):
 
 1. **Tests**
    ```bash
-   pytest -q --timeout=60
+   pytest -q --cov=project_workflow --cov-report=term --cov-report=xml --timeout=60 --durations=25
    ```
    Ожидается 0 падений и 0 ошибок. PostgreSQL integration tests здесь намеренно
    исключены и запускаются отдельно.
@@ -35,9 +35,9 @@ Supervisor Engine перед commit выполнить следующие про
    PostgreSQL → тестовый OpenAI-compatible HTTP endpoint. Два multi-process E2E
    теста имеют собственный timeout 240 секунд.
 
-3. **Coverage**
+3. **Coverage (из результата шага 1, без повторного запуска)**
    ```bash
-   pytest --cov=project_workflow --cov-report=term --timeout=60
+   # Coverage report получен в шаге 1; повторный pytest не нужен.
    ```
    Ожидается общее покрытие не ниже текущего локального baseline 94%.
 
@@ -97,3 +97,13 @@ Supervisor Engine перед commit выполнить следующие про
 Если изменятся исходные условия, например появятся внешний доступ,
 многопользовательский режим или клиентские данные, этот раздел нужно пересмотреть
 до расширения scope.
+
+## Быстрые проверки и сборка
+
+Перед тестами, build и CI читать обязательный [стандарт Base](https://github.com/FerrPOINT/services-base/blob/2a8b5e905ab2a6fd4c12d0d2a70d9436e745765d/docs/BUILD_PERFORMANCE.md).
+Scoped checks во время реализации; полный gate на одной интегрированной вехе.
+Сохранять полезный cache, не переустанавливать неизменные dependencies и не
+пересобирать приложение из-за test-only. До повторного тяжёлого запуска назвать
+изменившиеся inputs/недостающее evidence; передавать один artifact между этапами.
+Required security/data/compatibility/live checks и product toolchains сохраняются.
+Компоненты и команды: `.quality-gate.json`; общие правила не копировать.
