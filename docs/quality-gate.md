@@ -20,7 +20,7 @@ python ../services-base/scripts/export_python_namespace.py --out project_workflo
 Это независимый SDK pin для подготовленного модуля без внешних зависимостей.
 `.base-ui-revision` закрепляет SSR/UI; skills и candidate-каталог имеют собственные
 источники. Web runtime не обязан устанавливать HTTP SDK ради классификации PAT
-или чтения env. В CI checkout SDK использует read credential `SERVICES_BASE_TOKEN`.
+или чтения env. В CI checkout SDK использует read-only deploy key `SERVICES_BASE_DEPLOY_KEY`.
 
 ```bash
 uv run --isolated --with-requirements constraints.txt --all-extras pytest -q --timeout=60
