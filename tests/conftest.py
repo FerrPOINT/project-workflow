@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
+import shutil
+import sqlite3
+from contextlib import closing
 from pathlib import Path
 from typing import Any
 
@@ -13,8 +17,14 @@ from project_workflow.infrastructure.llm import OpenAICompatibleClient
 from tests._db_helpers import prepare_sqlite_uow
 
 
+@pytest.fixture(scope="session")
+def ui_runtime_templates(tmp_path_factory):
+    """Cache only the immutable initial fixture, never a test's modified database."""
+    return tmp_path_factory.mktemp("ui-runtime-templates"), {}
+
+
 @pytest.fixture(autouse=True)
-def isolate_ui_runtime_state(tmp_path, monkeypatch):
+def isolate_ui_runtime_state(tmp_path, monkeypatch, ui_runtime_templates):
     """Keep tests away from the user's real runtime DB/settings and mutable seed file."""
     created_uows: list[SAUnitOfWork] = []
     original_uow_init = SAUnitOfWork.__init__
@@ -58,9 +68,20 @@ def isolate_ui_runtime_state(tmp_path, monkeypatch):
     ui_state._app_state = sqlite_app_state
     ui_package._app_state = sqlite_app_state
 
-    uow = SAUnitOfWork(database_url)
-    prepare_sqlite_uow(uow)
-    uow.close()
+    template_directory, templates = ui_runtime_templates
+    seed_digest = hashlib.sha256(seed_path.read_bytes()).hexdigest()
+    template = templates.get(seed_digest)
+    if template is None:
+        uow = SAUnitOfWork(database_url)
+        prepare_sqlite_uow(uow)
+        uow.close()
+        template = template_directory / (seed_digest + ".db")
+        # SQLite backup includes committed WAL data; plain copying a live DB does not.
+        with closing(sqlite3.connect(test_db)) as source, closing(sqlite3.connect(template)) as target:
+            source.backup(target)
+        templates[seed_digest] = template
+    else:
+        shutil.copyfile(template, test_db)
 
     yield
 
