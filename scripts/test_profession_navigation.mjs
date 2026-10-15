@@ -4,11 +4,14 @@ import vm from 'node:vm';
 import test from 'node:test';
 
 const source = readFileSync(new URL('../project_workflow/interfaces/ui/templates/profession-navigation.js', import.meta.url), 'utf8');
+const bootstrap = readFileSync(new URL('../project_workflow/interfaces/ui/templates/base/platform-navigation.js', import.meta.url), 'utf8');
 const registry = '11111111-1111-4111-8111-111111111111';
 const namespace = '22222222-2222-4222-8222-222222222222';
 function page(search) {
   const window = { location: new URL('http://workflow.test/namespaces' + search) };
   window.SdlcPlatformNavigation = { syncRoute: url => { window.location = new URL(url); } };
+  vm.runInNewContext(bootstrap, { window });
+  assert.equal(window.PdlcPlatformNavigation, window.SdlcPlatformNavigation);
   const links = [
     { href: 'http://workflow.test/workflows?profession_id=7#details', service: false },
     { href: 'http://wiki.test/?namespace_id=stale', service: true },
@@ -60,6 +63,8 @@ test('loading stored profession fields resets the leave guard after the form is 
   const fields = new Map(['namespaceIconSelect', 'namespaceName', 'namespaceCliCommand', 'namespaceDescription', 'namespaceLaunchProfile', 'namespaceThemeColor', 'namespaceForm'].map(id => [id, {}]));
   const saved = [];
   const context = { document: { getElementById: id => fields.get(id), querySelectorAll: () => [] }, window: { SdlcPlatformNavigation: { saved: form => saved.push({ form, name: fields.get('namespaceName').value, color: fields.get('namespaceThemeColor').value }) } }, updateNamespaceThemePreview() {}, defaultNamespaceThemeIcon: 'folder', defaultNamespaceThemeColor: '#000' };
+  vm.runInNewContext(bootstrap, context);
+  assert.equal(context.window.PdlcPlatformNavigation, context.window.SdlcPlatformNavigation);
   vm.runInNewContext('function fillNamespaceForm(namespace){' + fill + '} fillNamespaceForm({name:"Analyst",theme_color:"#123456"});', context);
   assert.equal(saved.length, 1);
   assert.equal(saved[0].form, fields.get('namespaceForm'));
@@ -67,4 +72,28 @@ test('loading stored profession fields resets the leave guard after the form is 
   assert.equal(saved[0].color, '#123456');
   fields.get('namespaceName').value = 'Unsaved edit';
   assert.equal(saved[0].name, 'Analyst');
+});
+
+for (const name of ['PdlcPlatformNavigation', 'SdlcPlatformNavigation']) test(`SSR bootstrap preserves the existing ${name} controller`, () => {
+  const controller = { active: true, saved() {}, syncRoute() {} };
+  const window = { [name]: controller };
+  vm.runInNewContext(bootstrap, { window });
+  assert.equal(window.PdlcPlatformNavigation, controller);
+  assert.equal(window.SdlcPlatformNavigation, controller);
+});
+
+test('SSR bootstrap creates one controller for canonical and legacy callers', () => {
+  const window = {};
+  window.parent = window;
+  const calls = [];
+  const context = {
+    window,
+    document: { documentElement: { dataset: {} } },
+    history: { pushState: (...args) => calls.push(['push', ...args]), replaceState: (...args) => calls.push(['replace', ...args]) },
+  };
+  vm.runInNewContext(bootstrap, context);
+  assert.equal(window.PdlcPlatformNavigation, window.SdlcPlatformNavigation);
+  window.PdlcPlatformNavigation.syncRoute('/workflows');
+  window.SdlcPlatformNavigation.syncRoute('/namespaces', true);
+  assert.deepEqual(calls, [['push', null, '', '/workflows'], ['replace', null, '', '/namespaces']]);
 });
