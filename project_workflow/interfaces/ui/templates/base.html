@@ -634,7 +634,7 @@ installServerProduct({connectPlatformProduct, platformNavigate, platformReload, 
   },
   hasUnsavedChanges: () => window.hasUnsavedWorkflowChanges?.() ?? false,
   onDiscard: () => window.discardWorkflowDraft?.(),
-  confirmLeave: () => window.SdlcBaseUI.requestConfirmation(unsavedChangesConfirmation),
+  confirmLeave: () => window.PdlcBaseUI.requestConfirmation(unsavedChangesConfirmation),
   cancelLeave: () => { const dialog=document.getElementById('confirmDialog'); if(dialog && !dialog.hidden) document.getElementById('confirmDialogCancel').click(); }
 });
 </script>

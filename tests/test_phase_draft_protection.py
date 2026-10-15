@@ -29,7 +29,7 @@ def editor_script():
         tracker,
         "const listeners=new Map();const fields=[{dataset:{field:'name'},value:'Original'},"
         "{dataset:{field:'description'},value:''}];",
-        "const window={SdlcPlatformNavigation:{createDraftTracker}};const selectedNamespaceId=null;",
+        "const window={PdlcPlatformNavigation:{createDraftTracker}};const selectedNamespaceId=null;",
         "const document={addEventListener:(type,fn)=>listeners.set(type,fn),getElementById:()=>null,",
         "querySelector:s=>s==='.wiki-header'?{querySelectorAll:()=>fields}:null,",
         "querySelectorAll:s=>s.startsWith('.wiki-header')?fields:[]};",

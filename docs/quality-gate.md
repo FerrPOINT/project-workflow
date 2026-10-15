@@ -9,6 +9,19 @@ job `quality` запускает тесты и статический анали
 
 ## Базовый gate
 
+Перед тестами проверить экспорт общего namespace из чистого sibling Base,
+закреплённого в `.base-revision`:
+
+```bash
+python ../services-base/scripts/verify_base_revision.py --base ../services-base --revision .base-revision
+python ../services-base/scripts/export_python_namespace.py --out project_workflow/infrastructure/platform_namespace.py --check
+```
+
+Это независимый SDK pin для подготовленного модуля без внешних зависимостей.
+`.base-ui-revision` закрепляет SSR/UI; skills и candidate-каталог имеют собственные
+источники. Web runtime не обязан устанавливать HTTP SDK ради классификации PAT
+или чтения env. В CI checkout SDK использует read credential `SERVICES_BASE_TOKEN`.
+
 ```bash
 uv run --isolated --with-requirements constraints.txt --all-extras pytest -q --timeout=60
 uv run --isolated --with-requirements constraints.txt --all-extras pytest -q -m integration tests/test_postgres_integration.py --timeout=120
@@ -104,7 +117,7 @@ history/reload, service popover на 320/375/767/768/1920/2560 и mobile drawer.
 ```bash
 export DATABASE_URL=sqlite:///$PWD/.smoke/ui-smoke.db
 rm -f .smoke/ui-smoke.db
-python scripts/prepare_ui_smoke_data.py
+python -m scripts.prepare_ui_smoke_data
 python -m project_workflow.interfaces.ui --host 127.0.0.1 --port 8812
 ```
 
@@ -120,7 +133,7 @@ PowerShell:
 ```powershell
 $env:DATABASE_URL = "sqlite:///$PWD/.smoke/ui-smoke.db"
 Remove-Item -LiteralPath .smoke/ui-smoke.db -ErrorAction SilentlyContinue
-python scripts/prepare_ui_smoke_data.py
+python -m scripts.prepare_ui_smoke_data
 python -m project_workflow.interfaces.ui --host 127.0.0.1 --port 8812
 ```
 

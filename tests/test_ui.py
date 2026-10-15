@@ -1309,7 +1309,7 @@ class TestPhaseDetail:
         assert response.status_code == 200
         assert "function syncPhaseSectionUrl(sectionId, historyMode)" in response.text
         assert "const method = historyMode === 'replace' ? 'replaceState' : 'pushState';" in response.text
-        assert "window.SdlcPlatformNavigation.syncRoute(nextUrl, method === 'replaceState');" in response.text
+        assert "window.PdlcPlatformNavigation.syncRoute(nextUrl, method === 'replaceState');" in response.text
         assert "function jumpToPhaseSection(sectionId, historyMode = 'push')" in response.text
         assert "function releasePhaseSectionNavigationLock()" in response.text
         assert "jumpToPhaseSection(sectionId, 'none');" in response.text
@@ -2284,7 +2284,7 @@ class TestProjectsPage:
         )
         assert "url.pathname = '/namespaces';" in response.text
         assert "var method = historyMode === 'push' ? 'pushState' : 'replaceState';" in response.text
-        assert "window.SdlcPlatformNavigation.syncRoute(url.toString(), method === 'replaceState');" in response.text
+        assert "window.PdlcPlatformNavigation.syncRoute(url.toString(), method === 'replaceState');" in response.text
         assert re.search(
             r"function selectNamespace\(id, historyMode\)\{\s*"
             r"var namespace = namespaceById\(Number\(id\)\);\s*if\(!namespace\)\{ return; \}\s*"
@@ -2342,7 +2342,7 @@ class TestProjectsPage:
         response = client.get("/namespaces/new")
         assert response.status_code == 200
         assert (
-            "window.SdlcPlatformNavigation.navigate(namespaceScopedPath('/namespaces', d.namespace_id));"
+            "window.PdlcPlatformNavigation.navigate(namespaceScopedPath('/namespaces', d.namespace_id));"
             in response.text
         )
 
@@ -2564,7 +2564,7 @@ class TestWorkflowsPage:
         assert "function workflowSelectionUrl(workflowId)" in response.text
         assert "url.searchParams.set('workflow_id', String(workflowId));" in response.text
         assert "url.searchParams.delete('workflow_id');" in response.text
-        assert "window.SdlcPlatformNavigation.syncRoute(nextUrl, mode === 'replace'" in response.text
+        assert "window.PdlcPlatformNavigation.syncRoute(nextUrl, mode === 'replace'" in response.text
         assert "window.addEventListener('popstate'" in response.text
         assert "selectWorkflow(workflowId, {updateUrl:false});" in response.text
         assert "syncWorkflowUrl(selectedWorkflowId, 'replace');" in response.text
@@ -2648,7 +2648,7 @@ class TestWorkflowsPage:
         assert "function workflowSelectionUrl(workflowId)" in response.text
         assert "url.searchParams.set('workflow_id', String(workflowId));" in response.text
         assert "url.searchParams.set('namespace_id', String(activeNamespaceId));" not in response.text
-        assert "window.SdlcPlatformNavigation.navigate(workflowSelectionUrl(d.workflow_id));" in response.text
+        assert "window.PdlcPlatformNavigation.navigate(workflowSelectionUrl(d.workflow_id));" in response.text
         assert "window.location.href = '/phases?workflow_id=' + d.workflow_id;" not in response.text
 
     def test_workflows_api_create_update_and_delete(self):
@@ -2759,7 +2759,7 @@ def test_ui_deletions_use_product_modal_not_browser_confirm():
     assert "var dialogOpen=!document.getElementById('confirmDialog').hidden" in base
     assert "sidebar.inert=dialogOpen||(mobile&&!sidebar.classList.contains('open'))" in base
     assert ".btn-danger{background:#b42332;color:#fff" in base
-    assert "window.SdlcBaseUI.requestConfirmation(unsavedChangesConfirmation)" in base
+    assert "window.PdlcBaseUI.requestConfirmation(unsavedChangesConfirmation)" in base
     assert all("confirm(" not in template for template in templates.values())
 
 
