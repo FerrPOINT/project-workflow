@@ -1,16 +1,19 @@
 # Quality Gate
 
-Этот файл фиксирует обязательный локальный quality gate для `project-workflow`.
-GitHub Actions в `.github/workflows/ci.yml` сохранён как опциональное зеркало:
-job `quality` запускает тесты и статический анализ с PostgreSQL 16, а
-`compose-smoke` собирает стек и проверяет `/health`. Для локального выпуска
-результаты оплачиваемых hosted jobs не требуются; `[skip ci]` предотвращает
-их запуск на push/PR. На интегрированной вехе проверки ниже выполняются локально; во время реализации — scoped checks.
+Обязательная политика уровней: [TESTING](TESTING.md).
+Автоматический ci.yml выполняет `make quality`: unit + ruff/mypy, без БД.
+Ручной release.yml выполняет `make release`: один полный non-PostgreSQL pytest
+с coverage >=94%, XML, strict warnings и двумя workers; затем PostgreSQL 16
+отдельно, serial, с прежними timeout и integration assertions.
+Make, scripts/quality.ps1 и CI используют scripts/quality.py, frozen uv.lock
+и constraints.txt. `coverage` — ручная полная non-PostgreSQL проверка.
+Далее описаны ручные release/diagnostic сценарии, а не обязательная работа
+после каждого изменения. Unit fixture не создаёт SQLite/UI state.
 
 ## Базовый gate
 
 ```bash
-python scripts/quality.py quality
+python scripts/quality.py release
 ```
 
 Make, PowerShell и CI делегируют `scripts/quality.py`. Он выполняет один полный
@@ -33,8 +36,8 @@ Scoped пример: `python scripts/quality.py test -- tests/test_quality_runne
 - coverage остаётся не ниже текущего локального baseline `94%`;
 - `ruff`, `mypy` и `git diff --check` не находят ошибок.
 
-На Unix-like окружении тот же набор доступен через `make quality`; на Windows
-без `make` используйте `pwsh -File scripts/quality.ps1 quality`. Дополнительные
+На Unix-like окружении тот же набор доступен через `make release`; на Windows
+без `make` используйте `pwsh -File scripts/quality.ps1 release`. Дополнительные
 цели `warnings` и `compose-ready` есть и в `Makefile`, и в PowerShell helper.
 
 ## ResourceWarning Gate

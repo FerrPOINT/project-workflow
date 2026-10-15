@@ -10,8 +10,8 @@ def test_uv_binary_environment_does_not_replace_the_canonical_runner(monkeypatch
     assert "--with-requirements" in commands("coverage")[0]
 
 
-def test_quality_runs_unit_coverage_once_and_postgres_separately() -> None:
-    selected = commands("quality")
+def test_release_runs_full_coverage_once_and_postgres_separately() -> None:
+    selected = commands("release")
     tests = [command for command in selected if "pytest" in command]
     assert len(tests) == 2
     assert sum("--cov=project_workflow" in command for command in tests) == 1
@@ -20,9 +20,9 @@ def test_quality_runs_unit_coverage_once_and_postgres_separately() -> None:
     assert "error::pytest.PytestUnraisableExceptionWarning" in coverage
     assert coverage[coverage.index("-n") + 1] == "2"
     assert "--dist=load" in coverage
-    integration = next(command for command in tests if "integration" in command)
+    integration = next(command for command in tests if "postgres" in command)
     assert "-n" not in integration
-    assert any("integration" in command and "tests/test_postgres_integration.py" in command for command in tests)
+    assert any("postgres" in command and "tests/test_postgres_integration.py" in command for command in tests)
     assert all("--durations=25" in command for command in tests)
     assert any("ruff" in command for command in selected)
     assert any("mypy" in command for command in selected)

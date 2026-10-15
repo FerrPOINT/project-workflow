@@ -35,7 +35,8 @@
       "component": "docs",
       "profiles": [
         "fast",
-        "integrated"
+        "integrated",
+        "release"
       ],
       "argv": [
         "{python}",
@@ -46,18 +47,19 @@
       "inputs": [
         "**"
       ],
-      "cacheable": true
+      "cacheable": true,
+      "test_tier": "static"
     },
     {
       "id": "docs:contracts",
       "component": "docs",
       "profiles": [
-        "fast"
+        "integration"
       ],
       "argv": [
         "{python}",
         "scripts/quality.py",
-        "test",
+        "integration",
         "--",
         "tests/test_docs_quality.py"
       ],
@@ -65,13 +67,17 @@
       "inputs": [
         "**"
       ],
-      "cacheable": false
+      "cacheable": false,
+      "test_tier": "integration"
     },
     {
       "id": "tooling:quality-runner",
       "component": "tooling",
       "profiles": [
-        "fast"
+        "fast",
+        "release",
+        "unit",
+        "build"
       ],
       "argv": [
         "{python}",
@@ -84,18 +90,20 @@
       "inputs": [
         "**"
       ],
-      "cacheable": false
+      "cacheable": false,
+      "test_tier": "unit"
     },
     {
       "id": "backend:quality",
       "component": "backend",
       "profiles": [
+        "release",
         "integrated"
       ],
       "argv": [
         "{python}",
         "scripts/quality.py",
-        "quality"
+        "release"
       ],
       "cwd": ".",
       "inputs": [
@@ -111,14 +119,18 @@
         "PGUSER",
         "PGDATABASE"
       ],
-      "external_state": true
+      "external_state": true,
+      "test_tier": "integration"
     },
     {
       "id": "frontend:navigation",
       "component": "frontend",
       "profiles": [
         "fast",
-        "integrated"
+        "integrated",
+        "release",
+        "unit",
+        "build"
       ],
       "argv": [
         "node",
@@ -128,27 +140,66 @@
       "inputs": [
         "**"
       ],
-      "cacheable": true
+      "cacheable": true,
+      "test_tier": "unit"
     },
     {
       "id": "backend:unit",
       "component": "backend",
       "profiles": [
-        "fast"
+        "fast",
+        "unit",
+        "build"
       ],
       "argv": [
         "{python}",
         "scripts/quality.py",
-        "test",
-        "--",
-        "-m",
         "unit"
       ],
       "cwd": ".",
       "inputs": [
         "**"
       ],
-      "cacheable": false
+      "cacheable": false,
+      "test_tier": "unit"
+    },
+    {
+      "id": "backend:integration",
+      "component": "backend",
+      "profiles": [
+        "integration"
+      ],
+      "argv": [
+        "{python}",
+        "scripts/quality.py",
+        "integration"
+      ],
+      "cwd": ".",
+      "inputs": [
+        "**"
+      ],
+      "cacheable": false,
+      "test_tier": "integration",
+      "external_state": true
+    },
+    {
+      "id": "backend:slow",
+      "component": "backend",
+      "profiles": [
+        "slow"
+      ],
+      "argv": [
+        "{python}",
+        "scripts/quality.py",
+        "slow"
+      ],
+      "cwd": ".",
+      "inputs": [
+        "**"
+      ],
+      "cacheable": false,
+      "test_tier": "slow",
+      "external_state": true
     }
   ],
   "additional_acceptance": "Existing product CI/CONTRIBUTING: MSRV/features, ignored DB, OpenAPI/packed consumer/themes, security and live acceptance remain separate mandatory gates where applicable.",
@@ -163,5 +214,18 @@
         "backend"
       ]
     }
-  ]
+  ],
+  "test_policy": {
+    "automatic": [
+      "unit",
+      "static",
+      "artifact"
+    ],
+    "manual_release": [
+      "integration",
+      "slow",
+      "live"
+    ],
+    "release_required": true
+  }
 }

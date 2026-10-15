@@ -9,18 +9,24 @@ import subprocess
 from pathlib import Path
 
 UV = "uv run --python 3.11.15 --frozen --with-requirements constraints.txt --all-extras"
-TARGETS = ("test", "test-integration", "coverage", "lint", "quality", "warnings", "compose-ready")
+TARGETS = (
+    "test", "test-integration", "coverage", "lint", "quality", "warnings",
+    "compose-ready", "unit", "integration", "slow", "release",
+)
 
 
 def commands(target: str) -> list[list[str]]:
     prefix = shlex.split(os.environ.get("WORKFLOW_QUALITY_UV", UV))
     test = ["pytest", "-q", "--timeout=60", "--durations=25"]
+    unit = [*test, "-m", "unit and not integration and not slow"]
     coverage = [
         "pytest",
         "-q",
         "-n",
         "2",
         "--dist=load",
+        "-m",
+        "not postgres",
         "--cov=project_workflow",
         "--cov-report=term",
         "--cov-report=xml",
@@ -35,20 +41,24 @@ def commands(target: str) -> list[list[str]]:
         "pytest",
         "-q",
         "-m",
-        "integration",
+        "postgres",
         "tests/test_postgres_integration.py",
         "--timeout=120",
         "--durations=25",
     ]
     lint = [prefix + ["ruff", "check", "."], prefix + ["mypy", "project_workflow", "scripts"]]
     choices = {
-        "test": [prefix + test],
+        "test": [prefix + unit],
+        "unit": [prefix + unit],
+        "integration": [prefix + test + ["-m", "integration and not slow and not postgres"]],
+        "slow": [prefix + test + ["-m", "slow and not postgres"]],
         "test-integration": [prefix + integration],
         "coverage": [prefix + coverage],
         "lint": lint,
-        "quality": [prefix + coverage, prefix + integration, *lint, ["git", "diff", "--check"]],
+        "quality": [prefix + unit, *lint, ["git", "diff", "--check"]],
+        "release": [prefix + coverage, prefix + integration, *lint, ["git", "diff", "--check"]],
         "warnings": [
-            prefix + test + ["-W", "error::ResourceWarning", "-W", "error::pytest.PytestUnraisableExceptionWarning"]
+            prefix + unit + ["-W", "error::ResourceWarning", "-W", "error::pytest.PytestUnraisableExceptionWarning"]
         ],
         "compose-ready": [
             ["docker", "compose", "up", "--build", "-d", "--wait"],
@@ -64,8 +74,8 @@ def main() -> int:
     parser.add_argument("pytest_args", nargs=argparse.REMAINDER)
     args = parser.parse_args()
     extra = args.pytest_args[1:] if args.pytest_args[:1] == ["--"] else args.pytest_args
-    if extra and args.target != "test":
-        parser.error("Scoped pytest arguments require target test")
+    if extra and args.target not in ("test", "unit", "integration", "slow"):
+        parser.error("Scoped pytest arguments require a single test lane")
     root = Path(__file__).resolve().parents[1]
     environment = {
         **os.environ,
@@ -73,8 +83,11 @@ def main() -> int:
             "WORKFLOW_QUALITY_ENVIRONMENT", str(root / ".local" / "quality-python" / os.name / "3.11.15")
         ),
     }
+    # The workspace shell may pin Python 3.12; uv owns this lane's frozen 3.11 runtime.
+    environment.pop("PYTHONHOME", None)
+    environment.pop("VIRTUAL_ENV", None)
     for command in commands(args.target):
-        if args.target == "test":
+        if args.target in ("test", "unit", "integration", "slow"):
             command = [*command, *extra]
         result = subprocess.run(command, cwd=root, env=environment, check=False)
         if result.returncode:

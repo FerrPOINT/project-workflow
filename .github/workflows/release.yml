@@ -1,0 +1,128 @@
+name: release-checks (manual)
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.classify.outputs.backend }}
+      frontend: ${{ steps.classify.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: project-workflow
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Fetch exact comparison commits
+        working-directory: project-workflow
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          if [ -n "$BASE_SHA" ] && [ "$BASE_SHA" != 0000000000000000000000000000000000000000 ]; then
+            git fetch --no-tags --depth=1 origin "$BASE_SHA" "$HEAD_SHA"
+          fi
+      - name: Verify packaged Base selector
+        run: |
+          python3 - <<'PY'
+          import hashlib,json,re
+          from pathlib import Path
+          root=Path('project-workflow')
+          pin=(root/'.quality-tooling-revision').read_text().strip()
+          receipt=json.loads((root/'scripts/vendor/base-quality-tooling.json').read_text())
+          if not re.fullmatch(r'[0-9a-f]{40}',pin) or receipt['schema']!='base-quality-tooling/v1' or receipt['revision']!=pin:
+              raise SystemExit('Packaged Base revision mismatch')
+          if hashlib.sha256((root/'scripts/vendor/base_quality_selection.py').read_bytes()).hexdigest()!=receipt['sha256']:
+              raise SystemExit('Packaged Base selector checksum mismatch')
+          PY
+      - id: classify
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: python3 project-workflow/scripts/vendor/base_quality_selection.py --root project-workflow
+
+  docs:
+    needs: changes
+    if: needs.changes.outputs.backend != 'true' && needs.changes.outputs.frontend != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.10.10"
+          enable-cache: true
+      - run: python scripts/quality.py test -- tests/test_docs_quality.py tests/test_quality_runner.py
+
+  quality:
+    needs: changes
+    if: ((needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true')) && (github.actor != 'dependabot[bot]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: project-workflow
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: project_workflow
+          POSTGRES_PASSWORD: project_workflow
+          POSTGRES_DB: project_workflow
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U project_workflow -d project_workflow"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: "5432"
+      PGUSER: project_workflow
+      PGPASSWORD: project_workflow
+      PGDATABASE: project_workflow
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: project-workflow
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.10.10"
+          enable-cache: true
+      - name: Canonical local quality gate (unit coverage, PostgreSQL, lint, types)
+        run: make release
+      - name: Profession and platform navigation regression
+        run: node scripts/test_profession_navigation.mjs
+  compose-smoke:
+    needs: changes
+    if: ((needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true')) && (github.actor != 'dependabot[bot]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: project-workflow
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: project-workflow
+      - name: Compose config
+        run: docker compose config -q
+      - name: Build and start
+        run: docker compose up --build -d --wait
+      - name: Readiness
+        run: curl --fail --retry 10 --retry-connrefused http://127.0.0.1:8812/health
+      - name: Compose logs
+        if: failure()
+        run: docker compose logs --no-color
+      - name: Compose cleanup
+        if: always()
+        run: docker compose down -v --remove-orphans

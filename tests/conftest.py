@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import shutil
 import sqlite3
 from contextlib import closing
@@ -16,6 +17,21 @@ from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.infrastructure.llm import OpenAICompatibleClient
 from tests._db_helpers import prepare_sqlite_uow
 
+# An explicit reviewed allowlist prevents new boundary tests entering the build lane.
+_LANES = json.loads((Path(__file__).with_name("lanes.json")).read_text(encoding="utf-8"))
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_collection_modifyitems(items):
+    for item in items:
+        relative = Path(item.path).relative_to(Path(__file__).parent).as_posix()
+        tier = "unit" if relative in _LANES["unit"] else "integration"
+        item.add_marker(getattr(pytest.mark, tier))
+        if relative in _LANES["slow"]:
+            item.add_marker(pytest.mark.slow)
+        if relative == _LANES["postgres"]:
+            item.add_marker(pytest.mark.postgres)
+
 
 @pytest.fixture(scope="session")
 def ui_runtime_templates(tmp_path_factory):
@@ -24,8 +40,12 @@ def ui_runtime_templates(tmp_path_factory):
 
 
 @pytest.fixture(autouse=True)
-def isolate_ui_runtime_state(tmp_path, monkeypatch, ui_runtime_templates):
+def isolate_ui_runtime_state(request, tmp_path, monkeypatch, ui_runtime_templates):
     """Keep tests away from the user's real runtime DB/settings and mutable seed file."""
+    if request.node.get_closest_marker("unit") and not request.node.get_closest_marker("integration"):
+        # Pure tests must not pay for or silently depend on the SQLite/UI fixture.
+        yield
+        return
     created_uows: list[SAUnitOfWork] = []
     original_uow_init = SAUnitOfWork.__init__
 
