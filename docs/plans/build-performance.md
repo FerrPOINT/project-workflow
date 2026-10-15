@@ -20,5 +20,8 @@ WORKFLOW_QUALITY_UV — отдельный override команды; переме
 передаёт дочерним процессам как путь к binary, не заменяет canonical arguments.
 Основание: [pytest-cov](https://pytest-cov.readthedocs.io/en/stable/xdist.html),
 [pytest-xdist](https://pytest-xdist.readthedocs.io/en/latest/distribution.html).
+Локальная квалификация на двух CPU: полный coverage около 19 минут, отдельный
+PostgreSQL около 10 минут. Общий CI budget — 40 минут; индивидуальные timeouts
+60/120 секунд и специальные 240-секундные E2E limits сохранены.
 Профилировать setup отдельно от call/teardown; миграционные и PostgreSQL gates
 не заменять snapshot-копией. Регрессия: tests/test_runtime_fixture_isolation.py.
