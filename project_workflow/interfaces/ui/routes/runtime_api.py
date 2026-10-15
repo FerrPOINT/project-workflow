@@ -373,11 +373,17 @@ def _history_summary(
     entries = uow.step_history.list(
         task_key=task_key, project_id=namespace_id, limit=n + 1, before_history_id=before,
     )
+    phase_ids = {
+        phase_id for entry in entries[:n]
+        for phase_id in (entry.phase_id, entry.next_phase_id, entry.rollback_phase_id)
+        if phase_id is not None
+    }
+    phases = {phase_id: uow.phases.get_by_id(phase_id) for phase_id in phase_ids}
     records: list[dict[str, Any]] = []
     for entry in entries[:n]:
-        phase = uow.phases.get_by_id(entry.phase_id)
-        next_phase = uow.phases.get_by_id(entry.next_phase_id) if entry.next_phase_id is not None else None
-        rollback = uow.phases.get_by_id(entry.rollback_phase_id) if entry.rollback_phase_id is not None else None
+        phase = phases.get(entry.phase_id)
+        next_phase = phases.get(entry.next_phase_id) if entry.next_phase_id is not None else None
+        rollback = phases.get(entry.rollback_phase_id) if entry.rollback_phase_id is not None else None
         if not isinstance(entry.supervisor_response, dict):
             raise ConflictError("Stored history summary response is invalid")
         status = entry.supervisor_response.get("status")
