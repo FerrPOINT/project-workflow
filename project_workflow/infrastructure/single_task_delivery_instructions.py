@@ -110,6 +110,114 @@ PM_CRITICAL_REVIEW = (
     "This instruction does not prove installed PM-return allocation or reconfirmation support."
 )
 
+SOURCE_CONTEXT = (
+    "AFTER the admitted first Workflow step and before source/workspace work, require an approved source "
+    "context supplied through operator-edited versioned SOUL/config or immutable approved requirements/source "
+    "snapshots. There is no automatic project resolver or automatic source-context supplier. Verify the exact "
+    "Tracker instance and project UUID, task=root, approved repository URL and repository ID, full base SHA, "
+    "allowed branch, operator Forge configId and its explicitly supplied exact Forge project UUID. Verify "
+    "those coordinates against authorized readback; configId is not a CLI option and is not assumed equal to "
+    "a Tracker or Forge project UUID. A repository name, working-directory name or default main branch is not "
+    "an approved mapping. Require the exact candidate SHA whenever consuming an existing candidate; initial "
+    "analysis/design/implementation must not invent a future candidate SHA. Missing/mismatched coordinates, "
+    "checkout, permissions or source access are infrastructure blockers for the operator, not business "
+    "questions for PM, consent, permission to guess names or permission to default to main. Existing env_json/"
+    "secret_ref configuration supplies authorized CLI access; never print credentials or borrow a different "
+    "identity. Ordinary tool/effect approval remains required and is not granted by these instructions. "
+)
+
+FORGE_TASK_WORKSPACE = (
+    "For a required Forge task workspace, first verify installed cicd-cli pipeline run --help exposes "
+    "--task-intent and cicd-cli pipeline task-workspace --help exists. Packaged Forge CLI 4525694 does NOT "
+    "provide these commands/options; the TaskWorkspaceIntent producer is source candidate 5ea0ebc, not proof "
+    "of installed/qualified capability. An older CLI, missing feature, 403/404 or unavailable configured "
+    "producer blocks this operation for the operator; do not fall back to an ordinary unbound pipeline. "
+    "Read authorized project/repository metadata with existing cicd-cli project list and cicd-cli repository "
+    "list, matching the supplied exact IDs and approved coordinates, never choosing by name alone. There is "
+    "no project-get CLI operation. Prepare the existing strict TaskWorkspaceIntent JSON from the supplied "
+    "original operationKey, actual Tracker binding/routing snapshot, repositoryId, sourceCommit, role, "
+    "agentId, trackerLeaseId, holderSubject and expectedLeaseVersion. holderSubject is the actual scheduler "
+    "lease holder from lifecycle readback, not this agent. Require supplied original pipeline Idempotency-Key "
+    "UUID and full source SHA before the first write. Run cicd-cli pipeline run --project <forge-project-uuid> "
+    "--git-ref <exact-source-sha> --idempotency-key <original-pipeline-key-uuid> --task-intent <task-intent.json>. "
+    "The git-ref must equal sourceCommit, not a moving branch; preserve the exact original key, intent bytes "
+    "and command arguments. The server requires the linked hosted repository, live matching Tracker custody "
+    "and repository pipeline config; no legacy template or default-success substitute. Use the actual "
+    "returned pipeline ID with cicd-cli pipeline task-workspace --project <forge-project-uuid> "
+    "--id <actual-pipeline-uuid>. Null means preparation pending, not success; read back the same pipeline "
+    "within the current authorized run and lease, never trigger another pipeline to obtain a receipt. "
+    "Validate the returned original workspace operation receipt, request/hash, task/root, assignment, "
+    "execution, repository/source SHA and real runner lease/attempt/generation. Forge allocates runner "
+    "lease, attempt and workspace IDs; never invent them, reuse the Tracker lease as a runner lease, or "
+    "manufacture a WorkspaceOperationRequest for first preparation. This preparation is read-only in the "
+    "Forge runner and does not create or authorize a writable Hermes checkout. Developer needs the separately "
+    "approved working checkout and branch. Unknown trigger acceptance permits no blind retry, fresh key, "
+    "changed body or second pipeline. If the actual pipeline ID is unavailable, stop with the retained "
+    "original inputs for authorized reconciliation; do not guess a pipeline or claim readback succeeded. "
+    "For candidate evidence use existing cicd-cli workspace candidate-evidence --project <forge-project-uuid> "
+    "--operation-key <original-workspace-key> --from-file <lookup.json>, using the actual original "
+    "WorkspaceOperationLookup from the saved receipt. Inspect actual candidate/artifact IDs and SHA; "
+    "physical_source_observed or a blocked workspace receipt is not task completion, deployment, health or "
+    "acceptance. No new queue, controller, MCP, children or automatic dispatch is introduced. "
+)
+
+ROLE_SOURCE_EVIDENCE = {
+    "analyst": (
+        "In the sealed analysis artifact retain the verified approved source coordinates and immutable "
+        "requirements/source snapshot references, distinguishing observed facts from missing inputs. "
+    ),
+    "architect": (
+        "In the sealed design artifact retain the same verified source coordinates and analysis references, "
+        "approved branch/base SHA and permitted checkout/verification plan for this task only. "
+    ),
+    "developer": (
+        "In Developer initial AND rework sealed changes/checks retain the actual candidate commit SHA, "
+        "approved repository/branch/base coordinates, real build pipeline ID, original pipeline/workspace "
+        "operation keys and actual workspace receipt reference/hash or exact receipt bytes with their SHA. "
+        "Record actual artifact/check provenance; a local filename or guessed Forge URL is not a receipt. "
+        "Developer CANNOT embed its own acceptedDeveloperResultId: Tracker allocates that accepted result "
+        "only AFTER native terminal and Fleet scheduler Complete. Do not invent the UUID, wait for your own "
+        "future accepted result/transition inside the active run, or make it a precondition of sealing "
+        "changes/checks or final Workflow completion. Publish current artifacts, complete Workflow, submit "
+        "the real proposal with the supplied key and finish the native run using the existing final instructions. "
+    ),
+    "reviewer": (
+        "Reviewer obtains actual acceptedDeveloperResultId from this assignment's supplied previous_result_id "
+        "AFTER Developer Complete. Read task-tracker sdlc result read --task <task-uuid> --result "
+        "<accepted-developer-result-uuid>; require source=delivery, matching task/cycle, role=developer and "
+        "exact candidate commit_sha, then verify the sealed changes/checks and their build/workspace "
+        "provenance. Embed that verified Developer result ID, candidate SHA, approved source coordinates and "
+        "actual pipeline/workspace receipt references in the Reviewer's own sealed report. Do not amend "
+        "Developer artifacts to insert a future ID or wait for your own future accepted Reviewer result. "
+    ),
+    "tester": (
+        "Tester reads the actual accepted Reviewer result identified by supplied previous_result_id and its "
+        "sealed report. Propagate its verified acceptedDeveloperResultId, exact candidate SHA, approved "
+        "coordinates and actual build/workspace receipt references into the Tester's sealed report; reread "
+        "that accepted Developer result and verify source=delivery, task/cycle, role=developer and commit_sha. "
+        "Missing/mismatched provenance blocks testing acceptance; do not infer it from a report filename, "
+        "moving branch or old passing cycle. Do not wait for your own future accepted Tester result. "
+    ),
+    "devops": (
+        "DevOps reads the actual accepted Tester result identified by supplied previous_result_id and its "
+        "sealed report, resolves the propagated acceptedDeveloperResultId and rereads that real accepted "
+        "Developer result/SHA. Verify the same task/cycle, reviewed/tested candidate, repository, original "
+        "pipeline/workspace receipt, lookup hash, artifact ID and raw SHA. Require separately supplied "
+        "operator owner-target references and the actually published Forge target policy; never invent an "
+        "environment, deployment URL or target, enroll one as agent, or use a protected stand by default. "
+        "Use existing cicd-cli workspace delivery --project <forge-project-uuid> --operation-key "
+        "<original-workspace-key> --from-file <delivery.json> and cicd-cli workspace delivery-readback "
+        "--project <forge-project-uuid> --operation-key <original-workspace-key> --delivery-key "
+        "<original-delivery-key> --from-file <lookup.json>. Use the existing DeliveryCommand and current "
+        "DevOps taskFence with actual developmentResultId; preserve the old build/workspace binding "
+        "separately from the current DevOps assignment/lease. Owner target policy and server verification "
+        "remain authoritative; do not replace this with generic deployment create or an unbound pipeline. "
+        "Retain actual deployment, health, acceptance and rollback readbacks in sealed deployment/verification "
+        "artifacts. Unknown delivery uses original-key readback, not another effect. Do not wait for your own "
+        "future accepted result or Tracker transition before ending this run. "
+    ),
+}
+
 SEALED_ARTIFACTS = (
     "For the six technical roles, only sealed assignment artifacts are authorized on the narrow attachment "
     "routes under the supplied current delivery grant. Ordinary comments remain unauthorized; do not borrow "
@@ -143,7 +251,7 @@ SEALED_ARTIFACTS = (
 
 
 def artifact_instruction(role: str) -> str:
-    return SEALED_ARTIFACTS + (
+    return ROLE_SOURCE_EVIDENCE[role] + SEALED_ARTIFACTS + (
         f"Prepare {RESULTS[role]} using only those verified actual artifact.receipt values. "
         "Require the exact supplied proposal.idempotency_key from runtime guidance/template before the FINAL "
         "Workflow report; do not generate or derive a key, even from a known session/run UUID. A missing "
@@ -170,7 +278,7 @@ def context_instruction(role: str) -> str:
             "--task <task-uuid> under the PM grant. An absent requirements revision is normal during "
             "pre-document brainstorming; do not publish a placeholder merely to obtain a revision."
         )
-    return common + artifact_instruction(role) + (
+    return common + SOURCE_CONTEXT + FORGE_TASK_WORKSPACE + artifact_instruction(role) + (
         "Read task-tracker sdlc lifecycle --task <task-uuid>; if the supplied input has previous_result_id, "
         "read task-tracker sdlc result read --task <task-uuid> --result <previous-result-uuid> and verify "
         "the exact accepted predecessor result and artifact references before work. Do not infer acceptance "

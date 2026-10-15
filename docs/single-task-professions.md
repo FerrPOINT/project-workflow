@@ -119,10 +119,59 @@ Missing key, 404/403, отсутствующая capability, stale binding ил�
 оставляют фазу незавершённой, не дают фиктивного completion. PM attachment capability
 не добавлена; brainstorming Draft и exact confirmation-before-complete не меняются.
 
-Этот пакет меняет generator, не installed artifacts. Main регенерирует catalog/manifest
-из своего checkout командой `python -m scripts.build_single_task_profile`, затем проверяет
-`python -m scripts.build_single_task_profile --check` и обновляет согласованные consumer
-pins/hashes. Legacy source/pins/history не переписываются; regeneration не активирует runtime.
+Исторический attachment packet менял только generator. Текущий source-context packet
+регенерирует canonical catalog/manifest командой `python -m scripts.build_single_task_profile`
+и проверяет `python -m scripts.build_single_task_profile --check`. Consumer pins/hashes
+обновляет main отдельно после review. Legacy source/pins/history не переписываются;
+regeneration не устанавливает каталог на стенд и не активирует runtime.
+
+## Approved Source Context И Forge
+
+После первого admitted Workflow step технические роли требуют exact Tracker
+instance/project, task=root, approved repository URL/ID, full base SHA, allowed branch,
+а при работе с существующим candidate — его exact SHA. Operator Forge `configId`
+сопровождается отдельным exact Forge project UUID; это не новый API field или CLI flag.
+Контекст вручную задаёт оператор в versioned SOUL/config либо immutable approved
+requirements/source snapshot. Автоматического project resolver/supplier нет.
+Existing `env_json`/`secret_ref` доставляет разрешённый доступ; отсутствие source mapping,
+checkout или permission — operator infrastructure blocker, не business question/consent.
+Нельзя угадывать project по имени, принимать default `main` или заимствовать identity.
+
+Для первого требуемого Forge task workspace проверен source candidate
+`5ea0ebcd6cdf013ed82079f515edb82b1bbe9812`, не установленный CLI или live runtime:
+
+```text
+cicd-cli pipeline run --project <forge-project-uuid> --git-ref <exact-source-sha> --idempotency-key <original-pipeline-key-uuid> --task-intent <task-intent.json>
+cicd-cli pipeline task-workspace --project <forge-project-uuid> --id <actual-pipeline-uuid>
+```
+
+`project list` и `repository list` существуют; CLI `project get` отсутствует.
+Старый packaging pin `4525694` не содержит `--task-intent`/`task-workspace`;
+нужны отдельно квалифицированные repin и producer setup. Typed TaskWorkspaceIntent
+использует actual Tracker binding/lease и supplied source coordinates, не caller-made
+runner lease/attempt/workspace IDs. Forge выдаёт их сам. Preparation read-only в runner,
+не writable Hermes checkout. Null readback — pending, blocked receipt — не deployment PASS.
+Unknown trigger ACK сохраняет original key/body/args; без actual pipeline ID требуется
+authorized reconciliation, а не второй pipeline, guessed ID или слепой retry.
+
+Developer initial/rework sealed changes/checks содержат actual candidate SHA,
+build pipeline ID, original operation keys и actual workspace receipt/lookup provenance.
+**Собственный acceptedDeveloperResultId туда не входит:** Tracker создаёт его только
+после native terminal и Fleet scheduler Complete. Developer не ждёт своего будущего
+result/transition внутри active run и не выдумывает UUID. Reviewer после Complete берёт
+actual Developer result ID из supplied `previous_result_id`, перечитывает accepted result,
+сверяет SHA и sealed evidence, затем включает verified ID/coordinates/build refs в свой
+sealed report. Tester передаёт их через accepted Reviewer report с повторной сверкой
+Developer result; DevOps читает accepted Tester report и реальный Developer ID/SHA.
+Это содержимое existing artifacts, не новые result DTO и не изменение sealed прошлого.
+
+DevOps использует actual original workspace lookup и existing `workspace delivery` /
+`workspace delivery-readback`, current DevOps taskFence отдельно от old build binding.
+Owner target refs/published policy предоставляются оператором; protected target,
+generic deployment create или unbound pipeline не заменяют guarded delivery.
+Artifact/deployment/health/acceptance/rollback evidence остаётся обязательным,
+как и ordinary tool approval. PM ordering, 7/7/8/24 и final transitions сохранены.
+Нет stand adoption, публикации, нового controller/queue/MCP или native acceptance claim.
 
 ## Проверенный Tracker CLI И Пробелы
 
@@ -174,6 +223,13 @@ Generic patch, обычный issue transition, board move или status edit н
 
 Локально: targeted pytest `tests/test_single_task_catalog.py`, существующие CLI/catalog
 regressions, ruff и diff check, без установки зависимостей и без Docker/PG.
+
+Source-context packet от `3e0c4d5`: 155 targeted tests PASS, включая 19 новых
+`tests/test_single_task_source_context_instructions.py` и actual SQLite/TestClient
+PM producer/terminal fixture readbacks с synthetic external authority/runtime inputs.
+Canonical generator `--check`, targeted Ruff и diff check PASS. Единственное warning —
+existing Starlette/anyio deprecation. PG/native/image/live проверки не выполнялись;
+новые catalog/manifest hashes требуют отдельного main integration и квалификации.
 
 В едином parent QA после подключения owner contracts проверить:
 
