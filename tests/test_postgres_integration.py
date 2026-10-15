@@ -105,6 +105,34 @@ def test_current_base_initial_professions_and_history_preservation_on_postgres(p
         )
 
 
+@pytest.mark.integration
+def test_current_single_task_family_preserves_legacy_rows_and_history_on_postgres(pg_url):
+    from project_workflow.infrastructure.db.single_task_catalog import (
+        ensure_single_task_catalog,
+        observe_installation,
+    )
+    from tests.test_single_task_installation import test_side_by_side_preserves_every_legacy_row_and_history
+
+    engine = get_engine(pg_url)
+    ensure_migrated(engine)
+    test_side_by_side_preserves_every_legacy_row_and_history(engine)
+    with SAUnitOfWork(engine) as uow:
+        first = observe_installation(uow)
+        assert first.workflow_catalog_sha256 == "7be522c6a78e35a4ebdd611f4b6dd6d6d03cc9a2751f973f69d423f68e0db543"
+        assert first.instruction_manifest_sha256 == "999b78f3d7e823d2cde818ed5cfe2ac00cd378a8fe7eb03c21b9711795196f3b"
+        assert [first.namespaces, first.workflows, first.modes, first.phases] == [7, 7, 8, 24]
+        assert len({binding.namespace_id for binding in first.bindings}) == 7
+        assert len({binding.workflow_id for binding in first.bindings}) == 7
+        modes = [mode for binding in first.bindings for mode in binding.modes]
+        assert len({mode.mode_id for mode in modes}) == 8
+        assert len({phase_id for mode in modes for phase_id in mode.phase_ids}) == 24
+    with SAUnitOfWork(engine) as uow:
+        assert ensure_single_task_catalog(uow) == first
+        uow.commit()
+    with SAUnitOfWork(engine) as uow:
+        assert observe_installation(uow) == first
+
+
 @pytest.fixture
 def pm_postgres(pg_url, monkeypatch):
     from tests.test_pm_execution import prepare_pm
