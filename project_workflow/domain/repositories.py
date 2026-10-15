@@ -326,6 +326,7 @@ class TaskStepHistoryRepository(ABC):
         mode_id: int | None = None,
         cycle_number: int | None = None,
         limit: int | None = 200,
+        before_history_id: int | None = None,
     ) -> Sequence[TaskStepHistoryEntry]: ...
 
     @abstractmethod

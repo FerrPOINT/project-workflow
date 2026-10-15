@@ -244,3 +244,27 @@ Project-workflow `step` с внутренним verdict `PASS` закрывае�
 `needs_rework` никогда не кодируется как project-workflow verdict. Внутренние
 `BLOCKED`, `PARTIAL`, `ROLLBACK` и `DELEGATE` не вызывают Business transition.
 Agent-facing CLI по-прежнему содержит только `step` и `history`.
+
+## Fleet History Summary
+
+Существующий `GET /internal/runtime/history` принимает optional
+`projection=fleet-summary-v1`. Без projection прежний response не меняется.
+Projection сохраняет runtime role, namespace, profile и current execution/run
+credential проверки; это read-only view ledger, не terminal receipt или business approval.
+
+Envelope остаётся `{ok, exit_code, output, result}`. `result` содержит только
+`projection`, `task_key`, `count`, `records`, `next_before`; `output` — JSON тех же
+sanitized records. Поля каждой записи: `history_id` (canonical decimal string),
+`step_operation_key` (сохранённый nullable key), `phase_code`, `verdict`
+(`pass|partial|blocked|rollback|delegate`), `status` (`active|blocked|done|null`),
+`retryable`, `next_phase_code`, `rollback_phase_code`, `created_at`.
+Status читается только из сохранённого ответа; отсутствие не реконструируется.
+Reports, messages, prompts, tokens, raw bindings и terminal receipts не возвращаются.
+
+`n` ограничен 1..200; `count` — размер страницы, не полный total.
+Порядок — ledger ID descending. Только с projection разрешён
+`before_history_id`: canonical positive decimal string в пределах signed 64-bit.
+Следующая страница использует строго `id < before_history_id`; `next_before`
+равен ID последней возвращённой записи только при наличии более старых записей,
+иначе `null`. Cursor не расширяет namespace/task scope. Неизвестная projection,
+неканонический cursor или cursor без projection отклоняются с `422`.

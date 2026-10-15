@@ -45,6 +45,7 @@ from project_workflow.interfaces.ui.schemas import (
     SingleTaskStepRequest,
 )
 from project_workflow.supervisor import format_result
+from project_workflow.supervisor.types import VERDICT_LABELS
 
 _CATALOG_ROLE = "fleet-control"
 
@@ -364,6 +365,34 @@ def _history_rows(uow: SAUnitOfWork, task_key: str, namespace_id: int, limit: in
             rows[-1]["single_task_context_sha256"] = snapshot["single_task_context_sha256"]
             rows[-1]["single_task_binding"] = snapshot["single_task_binding"]
     return rows
+
+
+def _history_summary(
+    uow: SAUnitOfWork, task_key: str, namespace_id: int, n: int, before: int | None,
+) -> dict[str, Any]:
+    entries = uow.step_history.list(
+        task_key=task_key, project_id=namespace_id, limit=n + 1, before_history_id=before,
+    )
+    records: list[dict[str, Any]] = []
+    for entry in entries[:n]:
+        phase = uow.phases.get_by_id(entry.phase_id)
+        next_phase = uow.phases.get_by_id(entry.next_phase_id) if entry.next_phase_id is not None else None
+        rollback = uow.phases.get_by_id(entry.rollback_phase_id) if entry.rollback_phase_id is not None else None
+        status = entry.supervisor_response.get("status")
+        if (entry.id is None or entry.id <= 0 or phase is None or entry.verdict not in VERDICT_LABELS
+            or (status is not None and status not in ("active", "blocked", "done"))
+            or (entry.next_phase_id is not None and next_phase is None)
+            or (entry.rollback_phase_id is not None and rollback is None)):
+            raise ConflictError("Stored history summary fields are invalid")
+        records.append({
+            "history_id": str(entry.id), "step_operation_key": entry.step_operation_key,
+            "phase_code": phase.code, "verdict": entry.verdict, "status": status,
+            "retryable": entry.supervisor_response.get("retryable") is True,
+            "next_phase_code": next_phase.code if next_phase else None,
+            "rollback_phase_code": rollback.code if rollback else None, "created_at": entry.created_at,
+        })
+    return {"projection": "fleet-summary-v1", "task_key": task_key, "count": len(records),
+            "records": records, "next_before": records[-1]["history_id"] if len(entries) > n else None}
 
 
 def _step_response(result: dict[str, Any]) -> dict[str, Any]:
@@ -939,6 +968,8 @@ def runtime_history(
     session_run_id: str | None = Query(default=None),
     instruction_profile: str | None = Query(default=None),
     instruction_manifest_sha256: str | None = Query(default=None),
+    projection: Literal["fleet-summary-v1"] | None = Query(default=None),
+    before_history_id: str | None = Query(default=None, pattern=r"^[1-9][0-9]*$", max_length=19),
 ) -> dict[str, Any] | JSONResponse:
     """Return history only from the namespace bound to the supplied role token."""
     try:
@@ -949,6 +980,8 @@ def runtime_history(
         return _error("Недействительный runtime token", 401)
     if credential.kind != "runtime":
         return _error("Токен не разрешает чтение истории", 403)
+    if before_history_id is not None and (projection is None or int(before_history_id) > 9_223_372_036_854_775_807):
+        return _error("History cursor requires fleet-summary-v1 and a positive signed 64-bit ID", 422)
     role = credential.role_key
     try:
         with SAUnitOfWork() as uow:
@@ -981,6 +1014,12 @@ def runtime_history(
                         return _error("Current Fleet session_run_id required", 409)
                 elif task_row is not None:
                     PMExecutionService(uow).supervisor_binding(int(task_row.id or 0))
+            if projection == "fleet-summary-v1":
+                summary = _history_summary(
+                    uow, task_key, namespace_id, n, int(before_history_id) if before_history_id is not None else None,
+                )
+                return {"ok": True, "exit_code": 0,
+                        "output": json.dumps(summary["records"], ensure_ascii=False), "result": summary}
             rows = _history_rows(uow, task_key, namespace_id, n)
             return {
                 "ok": True,

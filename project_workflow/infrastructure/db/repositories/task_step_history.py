@@ -46,8 +46,11 @@ class SATaskStepHistoryRepository(TaskStepHistoryRepository):
         mode_id: int | None = None,
         cycle_number: int | None = None,
         limit: int | None = 200,
+        before_history_id: int | None = None,
     ) -> Sequence[TaskStepHistoryEntry]:
         stmt = select(m.TaskStepHistoryEntry).order_by(m.TaskStepHistoryEntry.id.desc())
+        if before_history_id is not None:
+            stmt = stmt.where(m.TaskStepHistoryEntry.id < before_history_id)
         if limit is not None:
             stmt = stmt.limit(limit)
         if task_id is not None:
