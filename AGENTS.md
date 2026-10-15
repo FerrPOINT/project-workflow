@@ -102,4 +102,4 @@ Supervisor Engine перед commit выполнить следующие про
 
 Перед изменением платформенных имён прочитайте [интеграцию с Base](docs/PDLC_BASE_INTEGRATION.md) и канонические TERMS/BRANDING.
 Для UI: CLI `pdlc-ui` из закреплённого UI-пакета Base, затем карточка и один пример. SSR-ресурсы получать штатным exporter Base; fingerprint проверять отдельно.
-Не переносите продуктовые запросы, DTO и права в общий UI. SDK/UI/skills pins независимы; новое имя платформы не меняет SDLC IDs/scopes или Hermes upstream.
+Не переносите продуктовые запросы, DTO и права в общий UI. SDK/UI/skills pins независимы; новое имя платформы не меняет SDLC IDs/scopes или закреплённые внешние runtime-источники.
