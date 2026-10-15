@@ -84,7 +84,7 @@ def main() -> None:
         else:
             (ROOT / path).write_bytes(content)
         print(f"{digest(content)}  {path}")
-    print("Workflow installation only; Tracker routing/API and live execution remain pending parent")
+    print("Workflow profile generation only; verify installation, routing and live execution independently")
 
 
 if __name__ == "__main__":
