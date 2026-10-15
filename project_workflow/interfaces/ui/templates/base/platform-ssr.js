@@ -3,7 +3,7 @@ export const unsavedChangesConfirmation = Object.freeze({
   title: 'Покинуть страницу?', message: 'Есть несохранённые изменения.', confirmLabel: 'Покинуть',
 })
 export function installServerProduct(runtime, options) {
-  window.SdlcPlatformNavigation = { ...window.SdlcPlatformNavigation, navigate: runtime.platformNavigate, reload: runtime.platformReload, saved: () => {}, createDraftTracker: runtime.createDraftTracker, embedded: false, active: false }
+  window.PdlcPlatformNavigation = window.SdlcPlatformNavigation = { ...(window.PdlcPlatformNavigation || window.SdlcPlatformNavigation), navigate: runtime.platformNavigate, reload: runtime.platformReload, saved: () => {}, createDraftTracker: runtime.createDraftTracker, embedded: false, active: false }
   const snapshots = new Map()
   const snapshot = form => JSON.stringify([...form.querySelectorAll('input,textarea,select')].map((field, index) => [
     field.name || field.id || index,
@@ -21,9 +21,9 @@ export function installServerProduct(runtime, options) {
       options.cancelLeave?.(); finish(true)
     }
   }
-  window.SdlcPlatformNavigation.refreshDrafts = refreshDrafts
-  if (runtime.createDraftTracker) window.SdlcPlatformNavigation.createDraftTracker = () => runtime.createDraftTracker(refreshDrafts)
-  window.SdlcPlatformNavigation.saved = form => { if (form) snapshots.set(form, snapshot(form)); refreshDrafts() }
+  window.PdlcPlatformNavigation.refreshDrafts = refreshDrafts
+  if (runtime.createDraftTracker) window.PdlcPlatformNavigation.createDraftTracker = () => runtime.createDraftTracker(refreshDrafts)
+  window.PdlcPlatformNavigation.saved = form => { if (form) snapshots.set(form, snapshot(form)); refreshDrafts() }
   window.addEventListener('beforeunload', event => { if (!approvedUnload && dirty()) { event.preventDefault(); event.returnValue = '' } })
   document.addEventListener('input', event => {
     if (event.target instanceof Element && event.target.closest('form[data-platform-draft]')) refreshDrafts()
@@ -41,20 +41,20 @@ export function installServerProduct(runtime, options) {
   const client = runtime.connectPlatformProduct(options)
   if (!client) {
     const depart = action => { void Promise.resolve(checkLeave()).then(allowed => { if (allowed) { approvedUnload = true; action() } }) }
-    window.SdlcPlatformNavigation.navigate = (url, navigationOptions) => depart(() => runtime.platformNavigate(url, navigationOptions))
-    window.SdlcPlatformNavigation.reload = () => depart(runtime.platformReload)
+    window.PdlcPlatformNavigation.navigate = (url, navigationOptions) => depart(() => runtime.platformNavigate(url, navigationOptions))
+    window.PdlcPlatformNavigation.reload = () => depart(runtime.platformReload)
     document.addEventListener('click', event => {
       const link = event.target instanceof Element ? event.target.closest('a[href]') : null
       if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || link.hasAttribute('download') || link.target === '_blank') return
       const url = new URL(link.href)
       if (!['http:', 'https:'].includes(url.protocol) || (url.origin === location.origin && url.pathname === location.pathname && url.search === location.search && url.hash)) return
       event.preventDefault()
-      window.SdlcPlatformNavigation.navigate(url.href)
+      window.PdlcPlatformNavigation.navigate(url.href)
     })
     return
   }
-  window.SdlcPlatformNavigation.embedded = true
-  window.SdlcPlatformNavigation.syncRoute = (url, replace = false, state = null) => {
+  window.PdlcPlatformNavigation.embedded = true
+  window.PdlcPlatformNavigation.syncRoute = (url, replace = false, state = null) => {
     history.replaceState(state, '', url)
     client.reportRoute(location.pathname + location.search + location.hash, replace)
   }
@@ -62,7 +62,7 @@ export function installServerProduct(runtime, options) {
     if (event.target instanceof Element && event.target.closest('form[data-platform-draft]')) client.refreshReadiness()
   })
   client.addLeaveGuard(checkLeave, () => { const finish = pendingLeave; pendingLeave = null; options.cancelLeave?.(); finish?.(false) })
-  client.onCommitted(() => { window.SdlcPlatformNavigation.active = true; options.onCommitted?.(); document.querySelector('main')?.focus() })
+  client.onCommitted(() => { window.PdlcPlatformNavigation.active = true; options.onCommitted?.(); document.querySelector('main')?.focus() })
   const map = () => {
     for (const link of document.querySelectorAll('a[data-platform-service]')) {
       const service = client.services.find(item => item.key === link.dataset.platformService)

@@ -148,7 +148,7 @@ Runtime-источник данных — **PostgreSQL**. SQLite использ�
 |---|---|---|---|
 | Standalone без авторизации | Локальная разработка, loopback/VPN, один репозиторий | Не задавать `AUTH_*` | `docker compose up --build -d --wait` запускает db, migrate и api; UI/API открыты без входа. |
 | Central Auth SSO | Общий private-контур и несколько пользователей | `AUTH_ISSUER`, `AUTH_INTERNAL_BASE_URL`, `AUTH_PUBLIC_ORIGIN`, `AUTH_SESSION_SECRET` | UI и human API требуют Central Auth через Authorization Code + PKCE; при недоступности Auth запросы fail closed с `503`. |
-| Personal-token CLI | CLI запускается вне БД сервиса | `SDLC_API_TOKEN`, `PROJECT_WORKFLOW_URL`, отдельно установленный `sdlc-cli-core` | Central Auth интроспектирует token и scopes `project-workflow:read/write`; token не хранится приложением. |
+| Personal-token CLI | CLI запускается вне БД сервиса | `SDLC_API_TOKEN`, `PROJECT_WORKFLOW_URL`, отдельно установленный `pdlc-cli-core` | Central Auth интроспектирует token и scopes `project-workflow:read/write`; token не хранится приложением. |
 
 ### Standalone без авторизации
 
@@ -283,7 +283,7 @@ export DATABASE_URL=postgresql+psycopg://project_workflow:project_workflow@local
 
 Платформенный token mode не подключается к БД напрямую. При заданном
 `SDLC_API_TOKEN` команды `step` и `history` используют защищённый HTTP API и
-общий transport package `sdlc-cli-core` (ставится отдельно из
+общий transport package `pdlc-cli-core` (ставится отдельно из
 `services-base/python/cli-core`; в standalone-сборку не входит):
 
 ```bash

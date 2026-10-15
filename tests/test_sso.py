@@ -143,7 +143,8 @@ def test_cookie_session_checks_identity_and_csrf(monkeypatch):
         assert accepted.status_code == 200
 
 
-def test_personal_token_scopes_and_invalid_central_responses(monkeypatch):
+@pytest.mark.parametrize("prefix", ["sdlc_pat_", "pdlc_pat_"])
+def test_personal_token_scopes_and_invalid_central_responses(monkeypatch, prefix):
     app, _ = _app(monkeypatch)
     original_client = httpx.AsyncClient
     response = {"status": 200, "body": {"sub": "user-1", "scopes": ["project-workflow:read"]}}
@@ -157,7 +158,7 @@ def test_personal_token_scopes_and_invalid_central_responses(monkeypatch):
         "AsyncClient",
         lambda **kwargs: original_client(transport=httpx.MockTransport(introspect), **kwargs),
     )
-    headers = {"authorization": "Bearer sdlc_pat_test"}
+    headers = {"authorization": f"Bearer {prefix}test"}
     with TestClient(app, follow_redirects=False) as client:
         assert client.get("/api/tasks", headers=headers).status_code == 200
         assert client.post("/api/tasks", headers=headers).status_code == 403
@@ -268,7 +269,8 @@ def test_sso_configuration_and_cookie_validation_fail_closed(monkeypatch):
     assert sso._decode_cookie(settings, "not-a-cookie", 60) is None
 
 
-def test_machine_principal_cannot_enter_human_routes_even_with_write_scope(monkeypatch):
+@pytest.mark.parametrize("prefix", ["sdlc_pat_", "pdlc_pat_"])
+def test_machine_principal_cannot_enter_human_routes_even_with_write_scope(monkeypatch, prefix):
     app, _ = _app(monkeypatch)
     original_client = httpx.AsyncClient
     identity = {
@@ -283,7 +285,7 @@ def test_machine_principal_cannot_enter_human_routes_even_with_write_scope(monke
         ),
     )
     with TestClient(app) as client:
-        headers = {"Authorization": "Bearer sdlc_pat_test"}
+        headers = {"Authorization": f"Bearer {prefix}test"}
         assert client.get("/api/tasks", headers=headers).status_code == 403
         assert client.post("/api/tasks", headers=headers).status_code == 403
         identity["sub"] = "human"

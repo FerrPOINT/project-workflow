@@ -1,15 +1,26 @@
 (() => {
-  if (typeof window === 'undefined' || window.SdlcThemePreference) return
-  const cookieName = 'sdlc-ui-theme'
-  const eventName = 'sdlc-ui-theme-change'
+  if (typeof window === 'undefined') return
+  const existing = window.PdlcThemePreference || window.SdlcThemePreference
+  if (existing) {
+    window.PdlcThemePreference = window.SdlcThemePreference = existing
+    return
+  }
+  // While legacy builds are supported, their cookie remains authoritative.
+  // Dual writes keep both generations consistent without a second preference store.
+  const cookieNames = ['sdlc-ui-theme', 'pdlc-ui-theme']
+  const eventNames = ['sdlc-ui-theme-change', 'pdlc-ui-theme-change']
   const valid = value => ['dark', 'gray', 'light'].includes(value)
   let sessionTheme
+  let notificationVersion = 0
+  let emitting = false
 
   function shared() {
     try {
-      const cookie = document.cookie.split(';').map(value => value.trim()).find(value => value.startsWith(cookieName + '='))
-      const value = cookie?.slice(cookieName.length + 1)
-      if (valid(value)) return value
+      for (const name of cookieNames) {
+        const cookie = document.cookie.split(';').map(value => value.trim()).find(value => value.startsWith(name + '='))
+        const value = cookie?.slice(name.length + 1)
+        if (valid(value)) return value
+      }
     } catch { /* Cookies may be blocked. */ }
   }
 
@@ -28,34 +39,43 @@
     if (!valid(value)) return
     sessionTheme = value
     try {
-      document.cookie = cookieName + '=' + value + '; Path=/; Max-Age=31536000; SameSite=Lax' + (location.protocol === 'https:' ? '; Secure' : '')
+      for (const name of cookieNames) document.cookie = name + '=' + value + '; Path=/; Max-Age=31536000; SameSite=Lax' + (location.protocol === 'https:' ? '; Secure' : '')
     } catch { /* The current window retains the selection. */ }
     if (shared() === value) sessionTheme = undefined
     try { localStorage.setItem(legacyKey, value) } catch { /* The shared cookie remains authoritative. */ }
-    window.dispatchEvent(new Event(eventName))
+    notificationVersion++
+    emitting = true
+    try { for (const name of eventNames) window.dispatchEvent(new Event(name)) }
+    finally { emitting = false }
   }
 
   function subscribe(listener) {
+    let delivered = -1
+    const preferenceChanged = () => {
+      if (emitting && delivered === notificationVersion) return
+      delivered = notificationVersion
+      listener()
+    }
     const change = event => {
-      if ([...(event.changed || []), ...(event.deleted || [])].some(cookie => cookie.name === cookieName)) {
+      if ([...(event.changed || []), ...(event.deleted || [])].some(cookie => cookieNames.includes(cookie.name))) {
         sessionTheme = undefined
         listener()
       }
     }
     const visible = () => { if (document.visibilityState === 'visible') listener() }
     window.cookieStore?.addEventListener('change', change)
-    window.addEventListener(eventName, listener)
+    for (const name of eventNames) window.addEventListener(name, preferenceChanged)
     window.addEventListener('focus', listener)
     window.addEventListener('pageshow', listener)
     document.addEventListener('visibilitychange', visible)
     return () => {
       window.cookieStore?.removeEventListener('change', change)
-      window.removeEventListener(eventName, listener)
+      for (const name of eventNames) window.removeEventListener(name, preferenceChanged)
       window.removeEventListener('focus', listener)
       window.removeEventListener('pageshow', listener)
       document.removeEventListener('visibilitychange', visible)
     }
   }
 
-  window.SdlcThemePreference = { read, set, subscribe }
+  window.PdlcThemePreference = window.SdlcThemePreference = { read, set, subscribe }
 })()

@@ -1,5 +1,5 @@
 (() => {
-  const preference = window.SdlcThemePreference;
+  const preference = window.PdlcThemePreference || window.SdlcThemePreference;
   if (preference) {
     const legacyKey = document.documentElement.dataset.themeStorageKey || 'theme';
     const apply = () => {
@@ -92,5 +92,5 @@ function requestConfirmation(options){
     document.addEventListener('keydown', onKeyDown);
   });
 }
-  window.SdlcBaseUI = { ...window.SdlcBaseUI, requestConfirmation };
+  window.PdlcBaseUI = window.SdlcBaseUI = { ...(window.PdlcBaseUI || window.SdlcBaseUI), requestConfirmation };
 })();

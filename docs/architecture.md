@@ -21,7 +21,7 @@ introspection, а также сохраняет отдельный private runti
 - **CLI** предоставляет только `step` и `history`. Пользовательские команды для
   отдельных неймспейсов создаются wrapper-скриптами и внутри вызывают тот же
   `project-workflow step/history`. В token mode команды используют защищённый
-  HTTP API через общий `sdlc-cli-core` (опциональный пакет из services-base;
+  HTTP API через общий `pdlc-cli-core` (опциональный пакет из services-base;
   без него CLI работает в локальном direct DB режиме); direct DB mode остаётся локальным
   legacy/dev вариантом.
 - **Browser SSO** включается только при заданном `AUTH_ISSUER`: использует
@@ -124,7 +124,7 @@ The `project-workflow` OIDC client must register exactly
 
 Personal-token CLI is a separate optional integration: `SDLC_API_TOKEN` causes
 CLI calls to use protected HTTP transport via separately installed
-`sdlc-cli-core`; Central Auth enforces `project-workflow:read/write` scopes.
+`pdlc-cli-core`; Central Auth enforces `project-workflow:read/write` scopes.
 Without that package and token, CLI operates in local direct-DB mode.
 
 ## State And Audit

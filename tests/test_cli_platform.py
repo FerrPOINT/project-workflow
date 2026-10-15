@@ -94,15 +94,15 @@ def test_server_cli_namespace_selection_is_unambiguous(monkeypatch):
 
 
 def test_token_step_explains_missing_transport(monkeypatch):
-    """Token mode without sdlc-cli-core must fail with an actionable message, not ImportError."""
+    """Token mode without pdlc-cli-core must fail with an actionable message, not ImportError."""
     monkeypatch.setenv("SDLC_API_TOKEN", "sdlc_pat_test")
     monkeypatch.setattr(ui, "SAUnitOfWork", lambda: (_ for _ in ()).throw(AssertionError("DB opened")))
-    monkeypatch.setitem(__import__("sys").modules, "sdlc_cli_core", None)  # force ImportError on lazy import
+    monkeypatch.setitem(__import__("sys").modules, "pdlc_cli_core", None)  # force ImportError on lazy import
     result = CliRunner().invoke(cli, ["--json", "step", "--task", "RUN-7"])
     assert result.exit_code != 0
     payload = json.loads(result.output)
     assert payload["verdict"] == "BLOCKED"
-    assert "sdlc-cli-core" in payload["message"]
+    assert "pdlc-cli-core" in payload["message"]
     assert "DATABASE_URL" in payload["message"]
 
 
@@ -120,7 +120,7 @@ def runtime_inputs(tmp_path, monkeypatch):
         return SimpleNamespace(base_url=service_url.rstrip("/") + "/",
                                token=os.environ["SDLC_API_TOKEN"], timeout=10)
 
-    monkeypatch.setitem(sys.modules, "sdlc_cli_core", SimpleNamespace(
+    monkeypatch.setitem(sys.modules, "pdlc_cli_core", SimpleNamespace(
         ApiClient=shared_client, ApiError=SharedClientError,
     ))
     body = {
@@ -256,11 +256,11 @@ def test_runtime_requires_explicit_service_url_before_sending_credentials(runtim
 
 def test_runtime_missing_shared_transport_stops_without_http_or_database(runtime_inputs, monkeypatch):
     _, _, _, args = runtime_inputs
-    monkeypatch.setitem(sys.modules, "sdlc_cli_core", None)
+    monkeypatch.setitem(sys.modules, "pdlc_cli_core", None)
     monkeypatch.setattr(ui.requests, "request", lambda *_args, **_kwargs: pytest.fail("HTTP called"))
     result = CliRunner().invoke(cli, args)
     assert result.exit_code != 0
-    assert "sdlc-cli-core" in result.output and "DB fallback запрещён" in result.output
+    assert "pdlc-cli-core" in result.output and "DB fallback запрещён" in result.output
     assert "role-runtime-test" not in result.output and "b" * 64 not in result.output
 
 

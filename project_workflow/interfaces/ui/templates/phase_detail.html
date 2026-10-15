@@ -285,7 +285,7 @@ window.hasUnsavedWorkflowChanges = () => mutationPending > 0 || mutationNeedsRea
 
 function instructionDraft(input) {
   const id = input.closest('.timeline-card').dataset.instructionId;
-  if (!instructionDrafts.has(id)) instructionDrafts.set(id, window.SdlcPlatformNavigation.createDraftTracker());
+  if (!instructionDrafts.has(id)) instructionDrafts.set(id, window.PdlcPlatformNavigation.createDraftTracker());
   return instructionDrafts.get(id);
 }
 
@@ -325,7 +325,7 @@ function syncPhaseSectionUrl(sectionId, historyMode) {
   const currentUrl = window.location.pathname + window.location.search + window.location.hash;
   if (nextUrl === currentUrl) return;
   const method = historyMode === 'replace' ? 'replaceState' : 'pushState';
-  window.SdlcPlatformNavigation.syncRoute(nextUrl, method === 'replaceState');
+  window.PdlcPlatformNavigation.syncRoute(nextUrl, method === 'replaceState');
 }
 
 function jumpToPhaseSection(sectionId, historyMode = 'push') {
@@ -578,7 +578,7 @@ async function requestPhaseDetail(url, options, trackedDraft = false) {
   } finally {
     mutationPending--;
     updatePhaseSaveStatus();
-    window.SdlcPlatformNavigation.refreshDrafts?.();
+    window.PdlcPlatformNavigation.refreshDrafts?.();
   }
 }
 
@@ -599,7 +599,7 @@ async function addInstructionAfter(button) {
       showToast(data.error || 'Не удалось добавить инструкцию', 'error');
       return;
     }
-    window.SdlcPlatformNavigation.reload();
+    window.PdlcPlatformNavigation.reload();
   } finally {
     button.disabled = false;
   }
@@ -623,7 +623,7 @@ async function addInstructionLast() {
       showToast(data.error || 'Не удалось добавить инструкцию', 'error');
       return;
     }
-    window.SdlcPlatformNavigation.reload();
+    window.PdlcPlatformNavigation.reload();
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -632,7 +632,7 @@ async function addInstructionLast() {
 async function deleteInstruction(button) {
   const item = button.closest('.timeline-item');
   if (!item) return;
-  if (!await window.SdlcBaseUI.requestConfirmation({eyebrow:'Удаление инструкции',title:'Удалить инструкцию?',message:'Инструкция будет удалена без возможности восстановления.',confirmLabel:'Удалить'})) return;
+  if (!await window.PdlcBaseUI.requestConfirmation({eyebrow:'Удаление инструкции',title:'Удалить инструкцию?',message:'Инструкция будет удалена без возможности восстановления.',confirmLabel:'Удалить'})) return;
   button.disabled = true;
   try {
     const id = item.dataset.instructionId;
@@ -643,7 +643,7 @@ async function deleteInstruction(button) {
       showToast(data.error || 'Не удалось удалить инструкцию', 'error');
       return;
     }
-    window.SdlcPlatformNavigation.reload();
+    window.PdlcPlatformNavigation.reload();
   } finally {
     button.disabled = false;
   }
@@ -667,7 +667,7 @@ async function toggleInstructionType(badge) {
       showToast('Не удалось сменить режим', 'error');
       return;
     }
-    window.SdlcPlatformNavigation.reload();
+    window.PdlcPlatformNavigation.reload();
   } finally {
     badge.disabled = false;
   }
@@ -682,7 +682,7 @@ async function saveInstructionDescription(input) {
     showToast('Описание инструкции обязательно', 'error');
     return;
   }
-  const draft = window.SdlcPlatformNavigation.createDraftTracker ? instructionDraft(input) : null;
+  const draft = window.PdlcPlatformNavigation.createDraftTracker ? instructionDraft(input) : null;
   if (draft?.uncertain) { showToast('Проверьте состояние инструкции перед повтором сохранения', 'error'); return; }
   const ticket = draft?.beginSave();
   let outcome = 'unknown';
@@ -739,7 +739,7 @@ async function addSkillToInstruction(input) {
       showToast('Не удалось добавить навык', 'error');
       return;
     }
-    window.SdlcPlatformNavigation.reload();
+    window.PdlcPlatformNavigation.reload();
   } finally {
     input.disabled = false;
   }
@@ -764,7 +764,7 @@ async function removeSkillFromInstruction(button) {
     showToast('Не удалось убрать навык', 'error');
     return;
   }
-  window.SdlcPlatformNavigation.reload();
+  window.PdlcPlatformNavigation.reload();
 }
 
 /* ---------- Checks & Evidence ---------- */
@@ -967,7 +967,7 @@ async function reconcilePhaseSave() {
     if (!unknown && !unknownInstructionSaves.size && (mutationNeedsReadback || mutationRequiresReload)) {
       mutationNeedsReadback = false;
       // Readback precedes a fresh server view. No uncertain mutation is replayed.
-      window.SdlcPlatformNavigation.reload();
+      window.PdlcPlatformNavigation.reload();
       return;
     }
     if (!unknown) {
@@ -991,7 +991,7 @@ async function reconcilePhaseSave() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  phaseDraft = window.SdlcPlatformNavigation.createDraftTracker();
+  phaseDraft = window.PdlcPlatformNavigation.createDraftTracker();
   phaseSignature = currentPhaseSignature();
   confirmedPhase = {name: document.querySelector('.wiki-header [data-field="name"]').value, description: document.querySelector('.wiki-header [data-field="description"]').value,
     execution_type: document.querySelector('.execution-toggle')?.dataset.mode || 'sync', parallel_with_phase_id: Number(document.getElementById('parallelPartnerSelect')?.value) || null,

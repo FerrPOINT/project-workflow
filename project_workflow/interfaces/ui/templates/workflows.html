@@ -277,7 +277,7 @@ function syncWorkflowUrl(workflowId, mode){
   var nextUrl = workflowSelectionUrl(workflowId);
   var currentUrl = window.location.pathname + window.location.search + window.location.hash;
   if(nextUrl === currentUrl)return;
-  window.SdlcPlatformNavigation.syncRoute(nextUrl, mode === 'replace', {workflowId:workflowId});
+  window.PdlcPlatformNavigation.syncRoute(nextUrl, mode === 'replace', {workflowId:workflowId});
 }
 function workflowIdFromUrl(){
   var raw = new URL(window.location.href).searchParams.get('workflow_id');
@@ -331,7 +331,7 @@ function cancelWorkflowForm(){
   workflowEditorVisible = false;
   if(workflowFormMode === 'create'){ cancelCreateWorkflow(); }
   else{ fillWorkflowForm(workflowById(selectedWorkflowId)); setWorkflowFormMode('edit'); }
-  window.SdlcPlatformNavigation.saved(document.getElementById('workflowForm'));
+  window.PdlcPlatformNavigation.saved(document.getElementById('workflowForm'));
   var trigger = Array.from(document.querySelectorAll('[data-workflow-edit]')).find(function(button){ return button.getClientRects().length; });
   if(trigger){ trigger.focus(); }
 }
@@ -376,7 +376,7 @@ function selectWorkflow(id, options){
   if(!workflowById(id))return;
   // Mode and phases are server-owned: changing workflow reloads the whole editor.
   if(id !== initialWorkflowId){
-    window.SdlcPlatformNavigation.navigate(workflowSelectionUrl(id));
+    window.PdlcPlatformNavigation.navigate(workflowSelectionUrl(id));
     return;
   }
   selectedWorkflowId = id;
@@ -457,7 +457,7 @@ function reloadWorkflows(nextId){
       selectedWorkflowId = nextId || selectedWorkflowId || previousWorkflowId || workflowStore[0].id;
       if(!workflowById(selectedWorkflowId)){ selectedWorkflowId = workflowStore[0].id; }
       if(selectedWorkflowId !== initialWorkflowId){
-        window.SdlcPlatformNavigation.navigate(workflowSelectionUrl(selectedWorkflowId));
+        window.PdlcPlatformNavigation.navigate(workflowSelectionUrl(selectedWorkflowId));
         return;
       }
       previousWorkflowId = selectedWorkflowId;
@@ -475,7 +475,7 @@ function saveWorkflow(){
   var payload = currentWorkflowPayload();
   return fetch(workflowApiUrl(selectedWorkflowId),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
     .then(function(r){return r.json()})
-    .then(function(d){ if(d.ok){ window.SdlcPlatformNavigation.saved(document.getElementById('workflowForm')); showToast('Воркфлоу сохранён','success'); return reloadWorkflows(selectedWorkflowId).then(function(loaded){ if(loaded){setWorkflowEditorVisible(false);} }); } showToast(d.error || 'Ошибка','error'); })
+    .then(function(d){ if(d.ok){ window.PdlcPlatformNavigation.saved(document.getElementById('workflowForm')); showToast('Воркфлоу сохранён','success'); return reloadWorkflows(selectedWorkflowId).then(function(loaded){ if(loaded){setWorkflowEditorVisible(false);} }); } showToast(d.error || 'Ошибка','error'); })
     .catch(showRequestError);
 }
 function createWorkflow(){
@@ -485,8 +485,8 @@ function createWorkflow(){
     .then(function(d){
       if(d.ok){
         showToast('Воркфлоу создан','success');
-        window.SdlcPlatformNavigation.saved(document.getElementById('workflowForm'));
-        window.SdlcPlatformNavigation.navigate(workflowSelectionUrl(d.workflow_id));
+        window.PdlcPlatformNavigation.saved(document.getElementById('workflowForm'));
+        window.PdlcPlatformNavigation.navigate(workflowSelectionUrl(d.workflow_id));
       } else {
         showToast(d.error || 'Ошибка','error');
       }
@@ -500,7 +500,7 @@ async function deleteWorkflow(){
   var message = workflow
     ? '«' + workflow.name + '» будет удалён. Фазы этого воркфлоу тоже будут удалены.'
     : 'Воркфлоу будет удалён.';
-  if(!await window.SdlcBaseUI.requestConfirmation({eyebrow:'Удаление воркфлоу',title:title,message:message,confirmLabel:'Удалить'})) return;
+  if(!await window.PdlcBaseUI.requestConfirmation({eyebrow:'Удаление воркфлоу',title:title,message:message,confirmLabel:'Удалить'})) return;
   var workflowId = selectedWorkflowId;
   var button = document.getElementById('deleteWorkflowButton');
   button.disabled = true;
@@ -554,7 +554,7 @@ function selectMode(modeId){
   const url=new URL(window.location.href);
   url.pathname='/workflows';
   url.searchParams.set('mode_id',String(parsed));
-  window.SdlcPlatformNavigation.navigate(url.pathname+url.search);
+  window.PdlcPlatformNavigation.navigate(url.pathname+url.search);
 }
 
 function setPhaseView(view,persist=true){
@@ -588,7 +588,7 @@ async function addPhaseAfter(button){
     const resp=await fetch('/api/phases',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({workflow_id:parseInt(workflowId,10),mode_id:parseInt(modeId,10),phase_order:currentOrder+1})});
     const data=await resp.json().catch(()=>({}));
     if(!resp.ok||!data.ok){showToast(data.error||'Не удалось добавить фазу','error');return;}
-    window.SdlcPlatformNavigation.reload();
+    window.PdlcPlatformNavigation.reload();
   }catch(_error){showRequestError();
   }finally{button.disabled=false;}
 }
@@ -599,13 +599,13 @@ async function deletePhase(button){
   if(!item)return;
   if(items.length<=1){showToast('Нельзя удалить единственную фазу воркфлоу','error');return;}
   const phaseName=item.querySelector('.timeline-name')?.textContent.trim()||'эту фазу';
-  if(!await window.SdlcBaseUI.requestConfirmation({eyebrow:'Удаление фазы',title:'Удалить фазу «'+phaseName+'»?',message:'Фаза «'+phaseName+'» и её настройки будут удалены.',confirmLabel:'Удалить'}))return;
+  if(!await window.PdlcBaseUI.requestConfirmation({eyebrow:'Удаление фазы',title:'Удалить фазу «'+phaseName+'»?',message:'Фаза «'+phaseName+'» и её настройки будут удалены.',confirmLabel:'Удалить'}))return;
   button.disabled=true;
   try{
     const resp=await fetch('/api/phases/'+item.dataset.phaseId,{method:'DELETE'});
     const data=await resp.json().catch(()=>({}));
     if(!resp.ok||!data.ok){showToast(data.error||'Не удалось удалить фазу','error');return;}
-    window.SdlcPlatformNavigation.reload();
+    window.PdlcPlatformNavigation.reload();
   }catch(_error){showRequestError();
   }finally{button.disabled=false;}
 }
@@ -619,7 +619,7 @@ async function togglePhaseType(button){
     const resp=await fetch('/api/phases/'+item.dataset.phaseId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({execution_type:nextType})});
     const data=await resp.json().catch(()=>({}));
     if(!resp.ok||!data.ok){showToast(data.error||'Не удалось сменить режим','error');return;}
-    window.SdlcPlatformNavigation.reload();
+    window.PdlcPlatformNavigation.reload();
   }catch(_error){showRequestError();
   }finally{button.disabled=false;}
 }
@@ -638,7 +638,7 @@ async function movePhase(button,direction){
     const orders=reordered.map((phase,index)=>({phase_id:Number(phase.dataset.phaseId),phase_order:index+1}));
     const resp=await fetch('/api/phases/order',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({orders})});
     if(!resp.ok){showToast('Не удалось сохранить порядок фаз','error');return;}
-    window.SdlcPlatformNavigation.reload();
+    window.PdlcPlatformNavigation.reload();
   }catch(_error){showRequestError();
   }finally{button.disabled=false;}
 }

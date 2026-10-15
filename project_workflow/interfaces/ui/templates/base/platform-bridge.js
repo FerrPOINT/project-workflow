@@ -1,5 +1,7 @@
 // This module is also exported verbatim to the server-rendered Base consumers.
 export const PLATFORM_PROTOCOL = 'sdlc.platform.v1'
+export const PDLC_PLATFORM_PROTOCOL = 'pdlc.platform.v1'
+export function isPlatformProtocol(value) { return value === PLATFORM_PROTOCOL || value === PDLC_PLATFORM_PROTOCOL }
 /** Transport immutable namespace references without guessing a destination ID. */
 export function transportNamespaceLocation(value, search) {
   const target = new URL(value, 'https://relative.invalid')
@@ -12,7 +14,8 @@ export function transportNamespaceLocation(value, search) {
 }
 // Vite can prebundle ./ui, ./sso and ./platform independently. The client belongs
 // to this document, not to a particular copy of the package entry point.
-const productKey = Symbol.for('sdlc.platform.product.v1')
+const productKey = Symbol.for('pdlc.platform.product.v1')
+const legacyProductKey = Symbol.for('sdlc.platform.product.v1')
 
 export function routePath(value, origin) {
   const url = new URL(value, origin)
@@ -21,13 +24,14 @@ export function routePath(value, origin) {
   return url.pathname + url.search + url.hash
 }
 
-export function getPlatformProduct() { return typeof window === 'undefined' ? null : window[productKey] || null }
+export function getPlatformProduct() { return typeof window === 'undefined' ? null : window[productKey] || window[legacyProductKey] || null }
 
 export function connectPlatformProduct({ serviceKey, portalOrigin, window: target = window }) {
   if (target.parent === target || !portalOrigin) return null
   const origin = new URL(portalOrigin).origin
-  if (target[productKey]) return target[productKey]
+  if (target[productKey] || target[legacyProductKey]) return target[productKey] || target[legacyProductKey]
   let attemptId = null
+  let wireProtocol = PLATFORM_PROTOCOL
   let status = { ready: false, error: null }
   let check = () => status
   let navigate = null
@@ -43,7 +47,7 @@ export function connectPlatformProduct({ serviceKey, portalOrigin, window: targe
   const retireCallbacks = new Set()
   const listeners = new Set()
   const send = (type, payload = {}) => {
-    if (!disposed) target.parent.postMessage({ protocol: PLATFORM_PROTOCOL, serviceKey, attemptId, type, ...payload }, origin)
+    if (!disposed) target.parent.postMessage({ protocol: wireProtocol, serviceKey, attemptId, type, ...payload }, origin)
   }
   const publish = () => {
     if (!attemptId) return
@@ -62,16 +66,17 @@ export function connectPlatformProduct({ serviceKey, portalOrigin, window: targe
   }
   const receive = async event => {
     const message = event.data
-    if (event.origin !== origin || event.source !== target.parent || !message || message.protocol !== PLATFORM_PROTOCOL || message.serviceKey !== serviceKey) return
+    if (event.origin !== origin || event.source !== target.parent || !message || !isPlatformProtocol(message.protocol) || message.serviceKey !== serviceKey) return
     if (message.type === 'initialize' && typeof message.attemptId === 'string' && typeof message.publicPath === 'string' && Array.isArray(message.services)) {
       attemptId = message.attemptId
+      wireProtocol = message.protocol
       publicPath = message.publicPath
       services = message.services
       for (const listener of listeners) listener()
       publish()
       return
     }
-    if (!attemptId || message.attemptId !== attemptId) return
+    if (!attemptId || message.attemptId !== attemptId || message.protocol !== wireProtocol) return
     if (message.type === 'activate') {
       const next = checkAll()
       send(next.ready && !next.error ? 'activated' : 'pending')
@@ -123,9 +128,9 @@ export function connectPlatformProduct({ serviceKey, portalOrigin, window: targe
     addLeaveGuard(check, cancel = () => {}) { const guard = { check, cancel }; guards.add(guard); return () => guards.delete(guard) },
     endingSession(url) { send('session-ending', { url }) },
     requireLogin(route) { loginRoute = route; publish() },
-    dispose() { disposed = true; target.removeEventListener('message', receive); target.removeEventListener('pagehide', leavePage); listeners.clear(); guards.clear(); readinessSources.clear(); committedCallbacks.clear(); retireCallbacks.clear(); if (target[productKey] === this) delete target[productKey] },
+    dispose() { disposed = true; target.removeEventListener('message', receive); target.removeEventListener('pagehide', leavePage); listeners.clear(); guards.clear(); readinessSources.clear(); committedCallbacks.clear(); retireCallbacks.clear(); for (const key of [productKey, legacyProductKey]) if (target[key] === this) delete target[key] },
   }
-  target[productKey] = product
+  target[productKey] = target[legacyProductKey] = product
   send('connect')
   return product
 }
@@ -144,19 +149,31 @@ export function capturePlatformReturn(portalOrigin) {
   const path = new URLSearchParams(window.location.search).get('platform_return')
   if (!path || !path.startsWith('/') || path.startsWith('//') || path.includes('\\')) return
   const origin = new URL(portalOrigin).origin
-  try { sessionStorage.setItem('sdlc.platform.return', JSON.stringify({ origin, path, createdAt: Date.now() })) } catch { /* Standalone login remains available. */ }
+  try {
+    const value = JSON.stringify({ origin, path, createdAt: Date.now() })
+    for (const key of ['pdlc.platform.return', 'sdlc.platform.return']) sessionStorage.setItem(key, value)
+  } catch { /* Standalone login remains available. */ }
 }
 
 export function finishPlatformLogin(portalOrigin) {
   if (!portalOrigin || window.parent !== window) return false
   try {
-    const raw = sessionStorage.getItem('sdlc.platform.return')
-    sessionStorage.removeItem('sdlc.platform.return')
-    if (!raw) return false
-    const value = JSON.parse(raw)
+    const pending = ['sdlc.platform.return', 'pdlc.platform.return'].map(key => sessionStorage.getItem(key))
+    for (const key of ['pdlc.platform.return', 'sdlc.platform.return']) sessionStorage.removeItem(key)
     const origin = new URL(portalOrigin).origin
-    const age = Date.now() - value.createdAt
-    if (value.origin !== origin || typeof value.path !== 'string' || !value.path.startsWith('/') || value.path.startsWith('//') || value.path.includes('\\') || !Number.isFinite(value.createdAt) || age < 0 || age > 600000) return false
+    const candidates = pending.flatMap(raw => {
+      if (!raw) return []
+      try {
+        const value = JSON.parse(raw)
+        const age = Date.now() - value.createdAt
+        if (value.origin !== origin || typeof value.path !== 'string' || !value.path.startsWith('/') || value.path.startsWith('//') || value.path.includes('\\') || !Number.isFinite(value.createdAt) || age < 0 || age > 600000) return []
+        return [value]
+      } catch { return [] }
+    })
+    // Old peers update only their key. Prefer the latest valid transaction;
+    // legacy wins a timestamp tie while mixed writers are supported.
+    const value = candidates.sort((a, b) => b.createdAt - a.createdAt)[0]
+    if (!value) return false
     window.location.replace(origin + value.path)
     return true
   } catch { return false }

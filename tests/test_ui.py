@@ -523,7 +523,7 @@ class TestPhasesPage:
         assert 'id="themeSelector"' not in response.text
         assert 'id="sidebarThemeSelector"' not in response.text
         assert response.text.count('data-base-theme-option') >= 3
-        assert 'window.SdlcThemePreference.read("workflow-theme")' in response.text
+        assert 'window.PdlcThemePreference.read("workflow-theme")' in response.text
         assert response.text.count('data-namespace-selector class="namespace-select"') == 2
         assert 'id="namespaceSelector" data-namespace-selector' in response.text
         assert '.platform-header .service-menu-popover{position:fixed;left:12px;right:12px;' in response.text

@@ -9,6 +9,7 @@ import httpx
 
 from project_workflow import config
 from project_workflow.domain.namespace_ownership import canonical_uuid
+from project_workflow.infrastructure.platform_namespace import is_personal_token
 
 MAX_BODY = 16384
 _monotonic = time.monotonic
@@ -48,7 +49,7 @@ def introspect(authorization: str | None) -> tuple[NamespacePrincipal, list[str]
         issuer = _root(settings.AUTH_ISSUER)
     except ValueError:
         raise NamespaceAuthError(503) from None
-    if not authorization or not authorization.startswith("Bearer sdlc_pat_"):
+    if not authorization or not (authorization.startswith("Bearer ") and is_personal_token(authorization[7:])):
         raise NamespaceAuthError(401)
     token = authorization[7:]
     if len(token) > 4096 or any(not 33 <= ord(character) <= 126 for character in token):

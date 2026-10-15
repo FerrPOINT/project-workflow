@@ -7,6 +7,7 @@ from project_workflow import config
 from project_workflow.domain.namespace_ownership import canonical_uuid
 from project_workflow.domain.runtime_assignment import MANAGED_ROLE_MODE_SCOPES
 from project_workflow.infrastructure import namespace_auth
+from project_workflow.infrastructure.platform_namespace import is_personal_token
 
 
 @dataclass(frozen=True)
@@ -21,7 +22,7 @@ class BaseReader:
 
 def authorize_read(authorization: str | None) -> BaseReader:
     """No browser, privileged-human, email, local role-token or wildcard fallback."""
-    if not authorization or not authorization.startswith("Bearer sdlc_pat_"):
+    if not authorization or not (authorization.startswith("Bearer ") and is_personal_token(authorization[7:])):
         raise namespace_auth.NamespaceAuthError(401)
     raw = config.get_settings().PROJECT_WORKFLOW_BASE_READER_SUBJECTS_JSON
     try:
