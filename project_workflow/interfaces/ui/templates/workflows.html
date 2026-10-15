@@ -258,6 +258,7 @@ const defaultWorkflowId = {{ default_workflow_id if default_workflow_id else 'nu
 let previousWorkflowId = selectedWorkflowId;
 let workflowFormMode = selectedWorkflowId == null ? 'create' : 'edit';
 let workflowEditorVisible = selectedWorkflowId == null;
+let workflowWritePending = false;
 
 function workflowApiUrl(workflowId){
   var url = new URL('/api/workflows' + (workflowId == null ? '' : '/' + workflowId), window.location.origin);
@@ -317,17 +318,19 @@ function setWorkflowEditorVisible(visible){
   document.getElementById('workflowForm').hidden = !visible && !creating;
   document.getElementById('workflowSummary').hidden = visible || creating || selectedWorkflowId == null;
   document.querySelectorAll('[data-workflow-edit]').forEach(function(button){
-    button.disabled = creating || selectedWorkflowId == null;
+    button.disabled = workflowWritePending || creating || selectedWorkflowId == null;
     button.setAttribute('aria-expanded', String(visible && !creating));
   });
 }
 function startEditWorkflow(){
+  if(workflowWritePending)return;
   if(selectedWorkflowId == null)return;
   if(!workflowEditorVisible){ fillWorkflowForm(workflowById(selectedWorkflowId)); }
   setWorkflowEditorVisible(true);
   document.getElementById('workflowName').focus();
 }
 function cancelWorkflowForm(){
+  if(workflowWritePending)return;
   workflowEditorVisible = false;
   if(workflowFormMode === 'create'){ cancelCreateWorkflow(); }
   else{ fillWorkflowForm(workflowById(selectedWorkflowId)); setWorkflowFormMode('edit'); }
@@ -346,12 +349,13 @@ function setWorkflowFormMode(mode){
   document.getElementById('workflowSubmitButton').textContent = createMode ? 'Создать воркфлоу' : 'Сохранить';
   deleteButton.textContent = 'Удалить';
   deleteButton.style.display = createMode ? 'none' : '';
-  deleteButton.disabled = protectedDefault;
+  deleteButton.disabled = workflowWritePending || protectedDefault;
   document.getElementById('workflowDeleteHint').hidden = !protectedDefault;
   document.getElementById('cancelCreateWorkflowButton').style.display = !createMode || workflowStore.length ? '' : 'none';
   setWorkflowEditorVisible(workflowEditorVisible);
 }
 function startCreateWorkflow(){
+  if(workflowWritePending)return;
   if(selectedWorkflowId != null){
     previousWorkflowId = selectedWorkflowId;
   }
@@ -362,6 +366,7 @@ function startCreateWorkflow(){
   document.getElementById('workflowName').focus();
 }
 function cancelCreateWorkflow(){
+  if(workflowWritePending)return;
   if(workflowStore.length === 0){
     startCreateWorkflow();
     return;
@@ -373,6 +378,7 @@ function cancelCreateWorkflow(){
   selectWorkflow(fallbackId);
 }
 function selectWorkflow(id, options){
+  if(workflowWritePending)return;
   if(!workflowById(id))return;
   // Mode and phases are server-owned: changing workflow reloads the whole editor.
   if(id !== initialWorkflowId){
@@ -494,6 +500,7 @@ function createWorkflow(){
     .catch(showRequestError);
 }
 async function deleteWorkflow(){
+  if(workflowWritePending)return;
   if(selectedWorkflowId == null){ showToast('Воркфлоу не выбран','error'); return; }
   var workflow = workflowById(selectedWorkflowId);
   var title = workflow ? 'Удалить воркфлоу «' + workflow.name + '»?' : 'Удалить воркфлоу?';
@@ -501,6 +508,8 @@ async function deleteWorkflow(){
     ? '«' + workflow.name + '» будет удалён. Фазы этого воркфлоу тоже будут удалены.'
     : 'Воркфлоу будет удалён.';
   if(!await window.PdlcBaseUI.requestConfirmation({eyebrow:'Удаление воркфлоу',title:title,message:message,confirmLabel:'Удалить'})) return;
+  if(workflowWritePending)return;
+  setWorkflowWritePending(true);
   var workflowId = selectedWorkflowId;
   var button = document.getElementById('deleteWorkflowButton');
   button.disabled = true;
@@ -516,9 +525,18 @@ async function deleteWorkflow(){
       }
     })
     .catch(showRequestError)
-    .finally(function(){ setWorkflowFormMode(workflowFormMode); });
+    .finally(function(){ setWorkflowWritePending(false); });
+}
+function setWorkflowWritePending(pending){
+  workflowWritePending = pending;
+  var form = document.getElementById('workflowForm');
+  form.setAttribute('aria-busy', String(pending));
+  form.querySelectorAll('input,textarea,button').forEach(function(control){ control.disabled = pending; });
+  document.querySelectorAll('#workflowSelect, #workflowNav button, #newWorkflowButton').forEach(function(control){ control.disabled = pending; });
+  setWorkflowFormMode(workflowFormMode);
 }
 function submitWorkflow(){
+  if(workflowWritePending)return;
   var nameInput = document.getElementById('workflowName');
   if(!nameInput.value.trim()){
     showToast('Введите название воркфлоу','error');
@@ -527,10 +545,10 @@ function submitWorkflow(){
   }
   var button = document.getElementById('workflowSubmitButton');
   if(button.disabled)return;
-  button.disabled = true;
+  setWorkflowWritePending(true);
   button.textContent = workflowFormMode === 'create' ? 'Создание…' : 'Сохранение…';
   var operation = workflowFormMode === 'create' ? createWorkflow() : saveWorkflow();
-  Promise.resolve(operation).finally(function(){ button.disabled = false; setWorkflowFormMode(workflowFormMode); });
+  Promise.resolve(operation).finally(function(){ setWorkflowWritePending(false); });
 }
 renderWorkflowNav();
 if(selectedWorkflowId == null){

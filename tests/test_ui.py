@@ -2508,7 +2508,7 @@ class TestWorkflowsPage:
         assert 'aria-controls="workflowForm" aria-pressed="true"' in response.text
         assert "node.setAttribute('aria-pressed', String(active))" in response.text
         assert response.text.count("document.getElementById('workflowName').focus()") == 2
-        assert "deleteButton.disabled = protectedDefault" in response.text
+        assert "deleteButton.disabled = workflowWritePending || protectedDefault" in response.text
         assert "title = workflow ? 'Удалить воркфлоу «' + workflow.name + '»?'" in response.text
         assert "Promise.resolve(operation).finally" in response.text
         assert "button.textContent = workflowFormMode === 'create' ? 'Создание…' : 'Сохранение…'" in response.text
