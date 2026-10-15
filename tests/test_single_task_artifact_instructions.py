@@ -107,10 +107,16 @@ def test_missing_or_unknown_effects_never_broaden_authority_or_invent_proposal_k
     assert "attachment operation" not in terminal and "attachment delete" not in terminal
 
 
-def test_pm_text_and_confirmation_order_are_unchanged_from_a649ccb(generated):
+def test_pm_text_and_confirmation_order_are_unchanged_except_registration_wording(generated):
     # A private scope regression checksum, not a public catalog/manifest/profile pin.
+    terminal = instructions.terminal_instruction("project_manager")
+    current = (
+        "Installed instructions alone do not authorize live routing; use only the actually authorized API/policy. "
+    )
+    historical = "API/policy integration remains pending parent; installed instructions do not authorize live routing. "
+    assert terminal.count(current) == 1
     pm_text = [
-        instructions.context_instruction("project_manager"), instructions.terminal_instruction("project_manager"),
+        instructions.context_instruction("project_manager"), terminal.replace(current, historical),
         instructions.FIRST_STEP, instructions.PM_PHASE_REPORT, instructions.PM_PUBLISH_INSTRUCTION,
         instructions.PM_CONFIRMATION_INSTRUCTIONS, instructions.PM_CONFIRMATION_CHECKS,
         instructions.PM_CONFIRMATION_EVIDENCE,
@@ -130,7 +136,13 @@ def test_pm_text_and_confirmation_order_are_unchanged_from_a649ccb(generated):
         "PM does not dispatch Analyst", "Backlog / Ready", "Analysis / Ready",
     ):
         assert required in text
-    assert "task-tracker attachment" not in text and "proposal.idempotency_key" not in text
+    assert text.count(instructions.PM_CRITICAL_REVIEW) == 1
+    ordinary = text.replace(instructions.PM_CRITICAL_REVIEW, "")
+    assert "task-tracker attachment" not in ordinary and "proposal.idempotency_key" not in text
+    for forbidden in (
+        "task-tracker attachment list", "task-tracker attachment upload", "task-tracker attachment delete",
+    ):
+        assert forbidden not in text
     final = phases[-1]["instructions"][-1]["description"]
     assert final.index("confirmation receipt readback succeeds") < final.index("--report <report-text>")
 

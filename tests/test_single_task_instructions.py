@@ -161,6 +161,35 @@ def test_architecture_rework_and_devops_keep_the_single_task_boundaries(catalog)
         assert all(required in criteria for required in ("artifact", "deployment receipt", "health", "acceptance"))
 
 
+@pytest.mark.parametrize("role,retained_stage", [("reviewer", "Review"), ("tester", "Testing")])
+def test_rework_limit_preserves_rejected_stage_without_fourth_cycle_or_automatic_resume(catalog, role, retained_stage):
+    terminal = mode_for(catalog, role, "delivery")["phases"][-1]["instructions"][-1]["description"]
+    for required in (
+        "Rework / Ready for rework while cycle < 3", f"on rework at cycle 3 preserve {retained_stage} / Ready",
+        "waiting_reason=rework_limit_reached", "runtime=Terminal", "at most three Rework cycles",
+        "Escalate the actual limit outcome to the operator", "not human business consent",
+        "does not authorize automatic resume", "Never start a fourth Rework cycle", "reset the cycle",
+        "force a transition or claim Completed",
+    ):
+        assert required in terminal
+    assert "sdlc result propose --task" in terminal and "sdlc result operation --task" in terminal
+    assert terminal.index("end the run") < terminal.index("After actual terminal")
+    developer = mode_for(catalog, "developer", "rework")["phases"][-1]["instructions"][-1]["description"]
+    assert "at most three Rework cycles" in developer and "Never start a fourth Rework cycle" in developer
+
+
+@pytest.mark.parametrize("role,mode", MODES)
+def test_shipped_instructions_require_authorized_capability_without_stale_registration_claim(catalog, role, mode):
+    text = " ".join(instruction_text(phase) for phase in mode_for(catalog, role, mode)["phases"])
+    assert "registration remains pending parent" not in text
+    assert "API/policy integration remains pending parent" not in text
+    terminal = mode_for(catalog, role, mode)["phases"][-1]["instructions"][-1]["description"]
+    if role == "project_manager":
+        assert "Installed instructions alone do not authorize live routing" in terminal
+    else:
+        assert "404/403 or absent capability is a blocker" in terminal
+
+
 def test_inventory_and_frozen_source_provenance_remain_compatible(catalog):
     rendered, manifest_bytes = render()
     assert json.loads(rendered) == catalog
@@ -227,11 +256,19 @@ def test_pm_critical_review_preserves_initial_brainstorm_and_requires_new_real_i
     for required in (
         "pre-document null/null checkpoints", "NEW PM execution/assignment", "SAME task=root",
         "Preserve the previous completed execution/history", "never reopen", "authorized critical-review input",
-        "PM grant cannot read critical-blocker detail", "original Draft snapshot, not the critical-review payload",
+        "sdlc critical-blocker read --task <task-uuid> --blocker <supplied-selected-blocker-uuid>",
+        "current own-task PM grant", "task-tracker:read", "saved current PM review", "fresh owner/project",
+        "live PM lease", "selected blocker ID/hash", "current PM assignment/execution",
+        "attachment download <referenced-attachment-uuid> --out <private-evidence-path>", "verify raw SHA256",
+        "original technical assignment/execution/role binding", "not a guessed PM evidence binding",
+        "no general attachment list/upload/delete or unrelated blocker access", "initial Draft input",
+        "installed CLI, denied access or unavailable producer", "not proof of availability on an older accepted stand",
+        "scheduler/parent credentials",
         "Missing trusted input/read capability", "NEW exact owner confirmation", "old consent",
         "does not prove installed PM-return",
     ):
         assert required in review
+    assert "PM grant cannot read critical-blocker detail" not in review
     assert phase["instructions"][0]["description"].startswith("Your first working operation")
     assert phase["instructions"][-1]["description"].startswith("During pre-document brainstorming")
     assert "FLEET_CRITICAL_BLOCKER_KEY" not in " ".join(

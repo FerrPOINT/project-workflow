@@ -25,8 +25,14 @@ TARGETS = {
     "analyst": "Architecture / Ready",
     "architect": "Development / Ready",
     "developer": "Review / Ready for both initial and rework, followed by fresh Testing",
-    "reviewer": "Testing / Ready for approved; Rework / Ready for rework",
-    "tester": "Deployment / Ready for passed; Rework / Ready for rework",
+    "reviewer": (
+        "Testing / Ready for approved; Rework / Ready for rework while cycle < 3; "
+        "on rework at cycle 3 preserve Review / Ready with waiting_reason=rework_limit_reached and runtime=Terminal"
+    ),
+    "tester": (
+        "Deployment / Ready for passed; Rework / Ready for rework while cycle < 3; "
+        "on rework at cycle 3 preserve Testing / Ready with waiting_reason=rework_limit_reached and runtime=Terminal"
+    ),
     "devops": "Deployment / Completed",
 }
 
@@ -84,9 +90,18 @@ PM_CRITICAL_REVIEW = (
     "the same single-task PM workflow. Preserve the previous completed execution/history; never reopen it "
     "or create an assignment yourself. Require an authorized critical-review input identifying the actual "
     "blocker and sealed source evidence, current requirements and original technical contradiction/decision. "
-    "The inspected PM grant cannot read critical-blocker detail, and sdlc input returns the original Draft "
-    "snapshot, not the critical-review payload. Missing trusted input/read capability is a concrete delivery "
-    "dependency; do not call delivery/scheduler-only commands or borrow their credentials. Discuss the real "
+    "After the first Workflow step, use installed authorized task-tracker sdlc critical-blocker read "
+    "--task <task-uuid> --blocker <supplied-selected-blocker-uuid>. The current own-task PM grant with "
+    "task-tracker:read permits only the selected blocker under the saved current PM review, fresh owner/project "
+    "ACL and live PM lease. Verify task/root/project/owner, selected blocker ID/hash and current PM "
+    "assignment/execution. Download only sealed evidence referenced by that selected blocker using "
+    "task-tracker attachment download <referenced-attachment-uuid> --out <private-evidence-path>; verify raw "
+    "SHA256 and the original technical assignment/execution/role binding, not a guessed PM evidence binding. "
+    "This grants no general attachment list/upload/delete or unrelated blocker access. Do not substitute the "
+    "initial Draft input for the selected critical-review receipt. Missing trusted input/read capability, "
+    "installed CLI, denied access or unavailable producer is a concrete delivery dependency, not proof of "
+    "availability on an older accepted stand. Do not call delivery/scheduler-only commands or borrow "
+    "scheduler/parent credentials. Discuss the real "
     "business decision with the owner in small iterations; do not send routine technical choices to the owner. "
     "Publish any changed requirements through the existing revision command in this new assigned execution. "
     "Present the FULL saved latest revision/hash and obtain a NEW exact owner confirmation; old consent and "
@@ -251,7 +266,7 @@ def terminal_instruction(role: str) -> str:
             "stage AND status are Backlog / Ready, then Analysis / Ready through Tracker/Fleet pickup. "
             "Tracker may create an Analysis / Ready intent at consent, but Analyst reserve remains blocked "
             "until PM actual completion is observed. PM does not dispatch Analyst or create another PM cycle. "
-            "API/policy integration remains pending parent; installed instructions do not authorize live routing. "
+            "Installed instructions alone do not authorize live routing; use only the actually authorized API/policy. "
             "Generic patch/issue transition/board move are forbidden substitutes."
         )
     return (
@@ -279,9 +294,15 @@ def terminal_instruction(role: str) -> str:
         "using task-tracker sdlc lifecycle --task <task-uuid>. Verify the actual returned stage/status and "
         "accepted result identity; a saved proposal or held receipt is not that transition. Reviewer/Tester "
         "rework includes frozen actionable findings; repaired candidates repeat Review and Testing. "
+        "Tracker permits at most three Rework cycles. If actual readback reports rework_limit_reached, retain "
+        "its current Review or Testing stage, Ready status and Terminal runtime; do not substitute Rework. "
+        "Escalate the actual limit outcome to the operator. Escalation is not human business consent and "
+        "does not authorize automatic resume. Never start a fourth Rework cycle, reset the cycle, "
+        "force a transition or claim Completed. "
         "Workflow assessment passed/needs_rework is report language; serialize only the role-specific verdict "
         "values listed above, never needs_rework in a proposal verdict. "
         "Wire role is devops; only the Fleet boundary explicitly maps it to dev_ops. "
-        "API registration remains pending parent: 404/403 or absent capability is a blocker, not permission "
-        "to fabricate a receipt, manually schedulerComplete, generic Task patch, issue transition or board move."
+        "Use only the actually installed and authorized producer: 404/403 or absent capability is a blocker, "
+        "not permission to fabricate a receipt, manually schedulerComplete, generic Task patch, "
+        "issue transition or board move."
     )
