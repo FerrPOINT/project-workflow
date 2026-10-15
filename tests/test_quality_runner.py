@@ -43,3 +43,46 @@ def test_make_powershell_and_ci_delegate_to_product_quality_entrypoint() -> None
     assert "scripts/quality.py" in (root / "Makefile").read_text(encoding="utf-8")
     assert "quality.py" in (root / "scripts/quality.ps1").read_text(encoding="utf-8")
     assert "make quality" in (root / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+
+
+def test_default_unit_collection_uses_the_reviewed_files_only() -> None:
+    import json
+    from pathlib import Path
+
+    lanes = json.loads(Path(__file__).with_name("lanes.json").read_text(encoding="utf-8"))
+    expected = {"tests/" + name for name in lanes["unit"]}
+    for target in ("unit", "test", "quality", "warnings"):
+        selected = next(command for command in commands(target) if "pytest" in command)
+        actual = {arg for arg in selected if arg.startswith("tests/")}
+        assert actual == expected
+    release = commands("release")
+    coverage = next(command for command in release if "--cov=project_workflow" in command)
+    assert not any(arg.startswith("tests/") for arg in coverage)
+
+
+def test_explicit_scoped_arguments_keep_the_original_pytest_selection(monkeypatch) -> None:
+    import sys
+    from types import SimpleNamespace
+
+    from scripts import quality
+
+    captured = []
+    monkeypatch.setattr(sys, "argv", ["quality.py", "unit", "--", "tests/test_phase_graph.py"])
+    monkeypatch.setattr(
+        quality.subprocess, "run",
+        lambda command, **_kwargs: (captured.append(command) or SimpleNamespace(returncode=0)),
+    )
+    assert quality.main() == 0
+    assert {arg for arg in captured[0] if arg.startswith("tests/")} == {"tests/test_phase_graph.py"}
+
+
+def test_empty_or_invalid_unit_list_never_falls_back_to_full_collection(monkeypatch) -> None:
+    import pytest
+
+    from scripts import quality
+
+    for names in ([], "test_domain_entities.py", ["../outside.py"], ["missing.py"], [3]):
+        with monkeypatch.context() as context:
+            context.setattr(quality.json, "loads", lambda _text: {"unit": names})
+            with pytest.raises(ValueError, match="Unit lane"):
+                commands("unit")

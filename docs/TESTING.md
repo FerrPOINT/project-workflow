@@ -9,6 +9,10 @@
 Ручные уровни: `integration`, `slow`, `test-integration` (PostgreSQL), `release`.
 Release выполняет единый coverage >=94% и PostgreSQL отдельно.
 Классификация — tests/lanes.json; unit не инициализирует SQLite/UI fixture.
+По умолчанию unit/test/quality/warnings передают reviewed unit files в pytest
+до collection, не импортируя остальные integration modules. Пустой/неверный
+список завершает запуск ошибкой. `unit -- <test-path>` сохраняет явный выбор
+pytest; release coverage по-прежнему собирает полный non-PostgreSQL набор.
 
 ## Ручная релизная проверка
 

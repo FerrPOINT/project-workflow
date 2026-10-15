@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shlex
 import subprocess
@@ -15,10 +16,30 @@ TARGETS = (
 )
 
 
-def commands(target: str) -> list[list[str]]:
+def unit_test_paths() -> list[str]:
+    root = Path(__file__).resolve().parents[1] / "tests"
+    names = json.loads((root / "lanes.json").read_text(encoding="utf-8"))["unit"]
+    if not isinstance(names, list) or not names:
+        raise ValueError("Unit lane requires a nonempty reviewed file list")
+    for name in names:
+        if (
+            not isinstance(name, str)
+            or Path(name).is_absolute()
+            or ".." in Path(name).parts
+            or not (root / name).resolve().is_relative_to(root)
+            or not (root / name).is_file()
+        ):
+            raise ValueError("Unit lane contains an invalid test path")
+    return ["tests/" + name for name in names]
+
+
+def commands(target: str, *, scoped: bool = False) -> list[list[str]]:
     prefix = shlex.split(os.environ.get("WORKFLOW_QUALITY_UV", UV))
     test = ["pytest", "-q", "--timeout=60", "--durations=25"]
-    unit = [*test, "-m", "unit and not integration and not slow"]
+    # Filtering markers after collecting every integration module still imports
+    # its dependencies. Default builds collect only the reviewed unit files.
+    paths = unit_test_paths() if target in ("unit", "test", "quality", "warnings") and not scoped else []
+    unit = [*test, "-m", "unit and not integration and not slow", *paths]
     coverage = [
         "pytest",
         "-q",
@@ -86,7 +107,7 @@ def main() -> int:
     # The workspace shell may pin Python 3.12; uv owns this lane's frozen 3.11 runtime.
     environment.pop("PYTHONHOME", None)
     environment.pop("VIRTUAL_ENV", None)
-    for command in commands(args.target):
+    for command in commands(args.target, scoped=bool(extra)):
         if args.target in ("test", "unit", "integration", "slow"):
             command = [*command, *extra]
         result = subprocess.run(command, cwd=root, env=environment, check=False)
