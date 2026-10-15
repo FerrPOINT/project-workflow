@@ -46,7 +46,7 @@ Compose/browser acceptance выполняется отдельно для зат
 
 | Возможность | Решение | Причина |
 |---|---|---|
-| CI/CD pipeline (GitHub) | **Использовать** | Quality, coverage, PostgreSQL integration и Compose smoke воспроизводят обязательный локальный gate. |
+| CI/CD pipeline (GitHub) | **Использовать** | Автоматически unit + lint/types затронутых компонентов; coverage, PostgreSQL integration и Compose smoke — отдельный ручной release gate на exact ref. |
 | Security middleware (CORS, CSP, HTTPS redirect, rate limits) | **Не добавлять** | UI доступен только на loopback либо в защищённом private/VPN-контуре. |
 | Локальные credentials в `docker-compose.yml` | **Допустимо только локально** | Compose публикуется только на loopback; внешний runtime обязан передавать собственный `DATABASE_URL`. |
 | Observability / metrics / structured JSON logs | **Не добавлять** | Request logging и `/health` достаточны для внутренней утилиты. |
