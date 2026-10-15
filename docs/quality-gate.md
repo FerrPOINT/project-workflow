@@ -41,8 +41,15 @@ JavaScript передаётся в Node через stdin с явным `encoding
 Локальный полный прогон sourceab3 был остановлен после955 проходов,13 отказов
 этого файла и4 skips. Причина13 отказов подтверждена отдельным traceback и
 устранена только в четырёх тестовых subprocess-вызовах. Ruff и mypy137 исходных
-файлов проходят. Полный gate и coverage после исправления ещё не завершены;
-целевые14 проходов не заменяют их и PostgreSQL/image/live-приёмку.
+файлов проходят.
+
+После исправления полный non-PG gate source
+`50ae18efebb5f8ffc56c682ce90b1bc5bdb13a41` прошёл:2910 passed,5 skipped,
+95 deselected,60 subtests passed,0 failures; coverage94.17% при baseline94%.
+Пять skips относятся к optional private Base-source checks и не считаются
+выполненными.95 deselected являются отдельным PostgreSQL integration gate,
+а не пропущенной частью успешного non-PG результата. Исторический отказab3
+не удаляется; текущий non-PG PASS не заменяет PostgreSQL/image/live-приёмку.
 
 ## ResourceWarning Gate
 
