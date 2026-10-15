@@ -10,6 +10,11 @@ Make, scripts/quality.ps1 и CI используют scripts/quality.py, frozen 
 Далее описаны ручные release/diagnostic сценарии, а не обязательная работа
 после каждого изменения. Unit fixture не создаёт SQLite/UI state.
 
+Canonical quality runner готовит frozen Python 3.11.15/extras/constraints один раз
+на операцию; pytest, Ruff и mypy используют подготовленный interpreter.
+Между операциями uv заново проверяет определяющие inputs.
+Пользовательский WORKFLOW_QUALITY_UV сохраняет собственную семантику запуска.
+
 ## Базовый gate
 
 ```bash

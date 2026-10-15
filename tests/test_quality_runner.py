@@ -86,3 +86,30 @@ def test_empty_or_invalid_unit_list_never_falls_back_to_full_collection(monkeypa
             context.setattr(quality.json, "loads", lambda _text: {"unit": names})
             with pytest.raises(ValueError, match="Unit lane"):
                 commands("unit")
+
+
+def test_prepared_operation_reuses_one_interpreter_without_uv_resync() -> None:
+    import sys
+
+    selected = commands("quality", prepared=True)
+    tools = [command for command in selected if command != ["git", "diff", "--check"]]
+    assert len(tools) == 3
+    assert all(command[:2] == [sys.executable, "-m"] for command in tools)
+    assert {command[2] for command in tools} == {"pytest", "ruff", "mypy"}
+
+
+def test_quality_bootstrap_prepares_once_for_multiple_tools(monkeypatch) -> None:
+    import sys
+    from types import SimpleNamespace
+
+    from scripts import quality
+
+    calls = []
+    monkeypatch.delenv("WORKFLOW_QUALITY_UV", raising=False)
+    monkeypatch.setattr(sys, "argv", ["quality.py", "quality"])
+    monkeypatch.setattr(quality.subprocess, "run", lambda command, **_kwargs: (
+        calls.append(command) or SimpleNamespace(returncode=0)))
+    assert quality.main() == 0
+    assert len(calls) == 1
+    assert calls[0].count("--prepared") == 1
+    assert calls[0][-1] == "quality"

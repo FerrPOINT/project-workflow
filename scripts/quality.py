@@ -7,6 +7,7 @@ import json
 import os
 import shlex
 import subprocess
+import sys
 from pathlib import Path
 
 UV = "uv run --python 3.11.15 --frozen --with-requirements constraints.txt --all-extras"
@@ -33,8 +34,8 @@ def unit_test_paths() -> list[str]:
     return ["tests/" + name for name in names]
 
 
-def commands(target: str, *, scoped: bool = False) -> list[list[str]]:
-    prefix = shlex.split(os.environ.get("WORKFLOW_QUALITY_UV", UV))
+def commands(target: str, *, scoped: bool = False, prepared: bool = False) -> list[list[str]]:
+    prefix = [sys.executable, "-m"] if prepared else shlex.split(os.environ.get("WORKFLOW_QUALITY_UV", UV))
     test = ["pytest", "-q", "--timeout=60", "--durations=25"]
     # Filtering markers after collecting every integration module still imports
     # its dependencies. Default builds collect only the reviewed unit files.
@@ -91,6 +92,7 @@ def commands(target: str, *, scoped: bool = False) -> list[list[str]]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--prepared", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("target", choices=TARGETS, default="quality", nargs="?")
     parser.add_argument("pytest_args", nargs=argparse.REMAINDER)
     args = parser.parse_args()
@@ -107,7 +109,17 @@ def main() -> int:
     # The workspace shell may pin Python 3.12; uv owns this lane's frozen 3.11 runtime.
     environment.pop("PYTHONHOME", None)
     environment.pop("VIRTUAL_ENV", None)
-    for command in commands(args.target, scoped=bool(extra)):
+    if args.prepared and sys.version_info[:3] != (3, 11, 15):
+        parser.error("Prepared quality operation requires the pinned Python 3.11.15")
+    prefix = shlex.split(os.environ.get("WORKFLOW_QUALITY_UV", UV))
+    if not args.prepared and args.target != "compose-ready" and prefix == shlex.split(UV):
+        # uv prepares the frozen/extras/constraints environment once. Every tool
+        # then runs inside that operation with the prepared interpreter.
+        child = prefix + ["python", str(Path(__file__).resolve()), "--prepared", args.target]
+        if extra:
+            child += ["--", *extra]
+        return subprocess.run(child, cwd=root, env=environment, check=False).returncode
+    for command in commands(args.target, scoped=bool(extra), prepared=args.prepared):
         if args.target in ("test", "unit", "integration", "slow"):
             command = [*command, *extra]
         result = subprocess.run(command, cwd=root, env=environment, check=False)
