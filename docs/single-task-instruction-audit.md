@@ -6,6 +6,9 @@ Integrated1435ec8 has the identical tree34cb81f81b428a25f047226b70722ec905c6efdf
 as the worker's frozen b409 packet:89 instruction/artifact/catalog cases and2
 canonical PM producer/terminal verification cases pass, without fixture-update
 flags in the verification run. Generator check, Ruff and structural inverses pass.
+Fourteen targeted nullable/invalid/nonobject history-projection cases also pass
+against the new catalog inputs;26 other module cases were deselected, not claimed
+as checked. The old69-case receipt retains its earlier input boundary.
 The existing generator/capture modes produced the new sealed catalog and two
 canonical wire fixtures; receipts were not manually edited.
 
