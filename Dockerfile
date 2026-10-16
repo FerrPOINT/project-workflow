@@ -1,16 +1,18 @@
-# syntax=docker/dockerfile:1.19@sha256:b6afd42430b15f2d2a4c5a02b919e98a525b785b1aaff16747d2f623364e39b6
+# syntax=docker/dockerfile:1.27.1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
 FROM python:3.11-slim-bookworm@sha256:0bee7276f83efd4a1ee05bbbf4281d95ed28e079220a9457f25a93e3f1e3c31b AS dependency-inputs
+ARG PDLC_RUN_SLOT_SHARING=locked
 WORKDIR /inputs
 COPY pyproject.toml scripts/dependency_inputs.py ./
-RUN python dependency_inputs.py --project pyproject.toml --extra ui --output runtime-deps.txt
+RUN --mount=type=cache,id=pdlc-host-run-slot-v1,target=/.__pdlc_build_slot__,sharing=${PDLC_RUN_SLOT_SHARING} python dependency_inputs.py --project pyproject.toml --extra ui --output runtime-deps.txt
 
 FROM python:3.11-slim-bookworm@sha256:0bee7276f83efd4a1ee05bbbf4281d95ed28e079220a9457f25a93e3f1e3c31b AS runtime-dependencies
+ARG PDLC_RUN_SLOT_SHARING=locked
 
 WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN --mount=type=cache,id=pdlc-host-run-slot-v1,target=/.__pdlc_build_slot__,sharing=${PDLC_RUN_SLOT_SHARING} apt-get update && apt-get install -y --no-install-recommends \
     build-essential libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
@@ -19,26 +21,28 @@ COPY --from=dependency-inputs /inputs/runtime-deps.txt /tmp/runtime-deps.txt
 ENV PIP_CONSTRAINT=/app/constraints.txt
 ARG TARGETARCH
 ARG PIP_CACHE_ID=pdlc-operator-downloads-v1-pip-cp311
-RUN --mount=type=cache,id=${PIP_CACHE_ID}-${TARGETARCH},target=/root/.cache/pip,sharing=locked \
+RUN --mount=type=cache,id=pdlc-host-run-slot-v1,target=/.__pdlc_build_slot__,sharing=${PDLC_RUN_SLOT_SHARING} --mount=type=cache,id=${PIP_CACHE_ID}-${TARGETARCH},target=/root/.cache/pip,sharing=locked \
     python -m venv /opt/venv \
     && /opt/venv/bin/python -m pip install --no-compile --constraint constraints.txt -r /tmp/runtime-deps.txt
 
 FROM runtime-dependencies AS application-inputs
+ARG PDLC_RUN_SLOT_SHARING=locked
 COPY pyproject.toml README.md LICENSE alembic.ini ./
 COPY scripts/ ./scripts/
 COPY project_workflow/ ./project_workflow/
 
 # Runtime inputs are non-executable Git files; normalize NTFS transport modes
 # without removing directory search permissions or relaxing digest verification.
-RUN find scripts project_workflow -type f -exec chmod 0644 {} + \
+RUN --mount=type=cache,id=pdlc-host-run-slot-v1,target=/.__pdlc_build_slot__,sharing=${PDLC_RUN_SLOT_SHARING} find scripts project_workflow -type f -exec chmod 0644 {} + \
     && chmod 0644 pyproject.toml constraints.txt README.md LICENSE alembic.ini
 
 FROM application-inputs AS verified-inputs
+ARG PDLC_RUN_SLOT_SHARING=locked
 ARG SOURCE_REVISION=""
 ARG SOURCE_ARCHIVE_SHA256=""
 ARG RUNTIME_BUNDLE_SHA256=""
 COPY runtime-*.json ./
-RUN if [ -n "$SOURCE_REVISION" ] || [ -n "$SOURCE_ARCHIVE_SHA256" ] || [ -n "$RUNTIME_BUNDLE_SHA256" ]; then \
+RUN --mount=type=cache,id=pdlc-host-run-slot-v1,target=/.__pdlc_build_slot__,sharing=${PDLC_RUN_SLOT_SHARING} if [ -n "$SOURCE_REVISION" ] || [ -n "$SOURCE_ARCHIVE_SHA256" ] || [ -n "$RUNTIME_BUNDLE_SHA256" ]; then \
         python -m scripts.build_runtime_image verify-manifest \
             --root /app \
             --manifest /app/runtime-build-manifest.json \
@@ -49,7 +53,8 @@ RUN if [ -n "$SOURCE_REVISION" ] || [ -n "$SOURCE_ARCHIVE_SHA256" ] || [ -n "$RU
     && printf 'verified\n' > /tmp/runtime-inputs-verified
 
 FROM application-inputs AS builder
-RUN --mount=type=bind,from=verified-inputs,source=/tmp/runtime-inputs-verified,target=/tmp/runtime-inputs-verified,ro \
+ARG PDLC_RUN_SLOT_SHARING=locked
+RUN --mount=type=cache,id=pdlc-host-run-slot-v1,target=/.__pdlc_build_slot__,sharing=${PDLC_RUN_SLOT_SHARING} --mount=type=bind,from=verified-inputs,source=/tmp/runtime-inputs-verified,target=/tmp/runtime-inputs-verified,ro \
     --mount=type=cache,id=${PIP_CACHE_ID}-${TARGETARCH},target=/root/.cache/pip,sharing=locked \
     /opt/venv/bin/python -m pip install --no-compile --no-deps \
         --constraint constraints.txt ".[ui]" \
@@ -62,15 +67,16 @@ ARG RUNTIME_BUNDLE_SHA256=""
 ARG CATALOG_VARIANT="legacy"
 ENV PROJECT_WORKFLOW_CATALOG_VARIANT=${CATALOG_VARIANT}
 COPY --from=verified-inputs /app/runtime-*.json ./
-RUN if [ -n "$SOURCE_REVISION" ] || [ -n "$SOURCE_ARCHIVE_SHA256" ] || [ -n "$RUNTIME_BUNDLE_SHA256" ]; then \
+RUN --mount=type=cache,id=pdlc-host-run-slot-v1,target=/.__pdlc_build_slot__,sharing=${PDLC_RUN_SLOT_SHARING} if [ -n "$SOURCE_REVISION" ] || [ -n "$SOURCE_ARCHIVE_SHA256" ] || [ -n "$RUNTIME_BUNDLE_SHA256" ]; then \
         /opt/venv/bin/python -m scripts.build_runtime_image verify-compatibility --root /app; \
     fi
 
 FROM python:3.11-slim-bookworm@sha256:0bee7276f83efd4a1ee05bbbf4281d95ed28e079220a9457f25a93e3f1e3c31b AS runtime
+ARG PDLC_RUN_SLOT_SHARING=locked
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN --mount=type=cache,id=pdlc-host-run-slot-v1,target=/.__pdlc_build_slot__,sharing=${PDLC_RUN_SLOT_SHARING} apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
     && rm -rf /var/lib/apt/lists/* \
     && python -m pip uninstall -y pip setuptools wheel
