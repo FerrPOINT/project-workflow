@@ -48,6 +48,7 @@ class OpenAICompatibleClient:
         max_tokens: int | None = None,
         api_key: str | None = None,
         reasoning_effort: str | None = None,
+        wire_dialect: Literal["openai", "aihub"] | None = None,
     ):
         settings = config.get_settings()
         self.base_url = (base_url or settings.OPENAI_BASE_URL).rstrip("/")
@@ -57,12 +58,15 @@ class OpenAICompatibleClient:
         if self.max_tokens <= 0:
             raise ValueError("max_tokens must be positive")
         self.api_key = (api_key if api_key is not None else settings.OPENAI_API_KEY).strip()
+        self.wire_dialect = wire_dialect or settings.OPENAI_WIRE_DIALECT
         self.reasoning_effort = (
             settings.OPENAI_REASONING_EFFORT if reasoning_effort is None else reasoning_effort
         ).strip()
 
     def chat(self, system: str, user: str, temperature: float = 0.1) -> dict[str, Any]:
         """Send chat request, return parsed JSON content."""
+        if self.wire_dialect == "aihub" and not self.api_key:
+            raise LlmConfigurationError("Для AI Hub требуется client key: задайте OPENAI_API_KEY")
         if urlsplit(self.base_url).hostname == "openrouter.ai" and not self.api_key:
             raise LlmConfigurationError("Для OpenRouter требуется OPENAI_API_KEY")
 
@@ -79,11 +83,14 @@ class OpenAICompatibleClient:
                 {"role": "user", "content": user},
             ],
             "temperature": temperature,
-            "response_format": {"type": "json_object"},
             # Reasoning-capable OpenAI-compatible models may spend part of this
             # budget before emitting the small JSON verdict.
-            "max_tokens": self.max_tokens,
         }
+        if self.wire_dialect == "aihub":
+            payload["max_completion_tokens"] = self.max_tokens
+        else:
+            payload["max_tokens"] = self.max_tokens
+            payload["response_format"] = {"type": "json_object"}
         if self.reasoning_effort:
             payload["reasoning_effort"] = self.reasoning_effort
 

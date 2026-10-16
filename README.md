@@ -166,6 +166,28 @@ UI: `http://127.0.0.1:8812`. Стандартный Compose публикует A
 только на loopback; не делайте этот режим общедоступным без отдельного security
 review.
 
+### Supervisor evaluator через AI Hub
+
+Supervisor можно направить на опубликованный AI Hub профиль без изменения его
+парсера вердиктов. В `.env` задайте URL Hub с `/v1`, slug опубликованного
+виртуального профиля и `OPENAI_WIRE_DIALECT=aihub`; `OPENAI_API_KEY` должен быть
+отдельным Hub client key для агента `supervisor-evaluator`. Секрет храните
+только в игнорируемом локальном `.env` или deployment secret store:
+
+```dotenv
+OPENAI_BASE_URL=http://<ai-hub-origin>/v1
+OPENAI_MODEL=<published-profile-slug>
+OPENAI_WIRE_DIALECT=aihub
+OPENAI_API_KEY=<one-time-issued-ai-hub-client-key>
+```
+
+В режиме `aihub` evaluator отправляет `max_completion_tokens`, не передаёт
+неподдерживаемый `response_format=json_object` и требует непустой Bearer key.
+Strict JSON shape и допустимость вердикта остаются проверкой
+`ResponseParser`. Значение по умолчанию `openai` сохраняет текущий Octo/LiteLLM
+wire format. Сначала выпустите key в Hub и разрешите клиенту опубликованный
+profile UUID; установка этих параметров сама по себе не переключает runtime.
+
 ### Central Auth SSO
 
 В `services-base` зарегистрирован OIDC client `project-workflow` с redirect URI

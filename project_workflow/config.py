@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -32,6 +33,7 @@ class Settings(BaseSettings):
 
     OPENAI_BASE_URL: str = "http://192.168.10.1:4000/v1"
     OPENAI_MODEL: str = "app-test"
+    OPENAI_WIRE_DIALECT: Literal["openai", "aihub"] = "openai"
     OPENAI_TIMEOUT: int = 120
     OPENAI_MAX_TOKENS: int = Field(default=4000, gt=0)
     OPENAI_API_KEY: str = ""

@@ -55,6 +55,7 @@ class TestOpenAICompatibleClient:
             "OPENAI_TIMEOUT",
             "OPENAI_MAX_TOKENS",
             "OPENAI_API_KEY",
+            "OPENAI_WIRE_DIALECT",
             "OPENAI_REASONING_EFFORT",
         ):
             monkeypatch.delenv(name, raising=False)
@@ -65,6 +66,7 @@ class TestOpenAICompatibleClient:
         assert client.timeout == 120
         assert client.max_tokens == 4000
         assert client.api_key == ""
+        assert client.wire_dialect == "openai"
         assert client.reasoning_effort == "none"
 
     def test_env_overrides(self, monkeypatch):
@@ -75,6 +77,7 @@ class TestOpenAICompatibleClient:
         monkeypatch.setenv("OPENAI_TIMEOUT", "45")
         monkeypatch.setenv("OPENAI_MAX_TOKENS", "1200")
         monkeypatch.setenv("OPENAI_API_KEY", "secret")
+        monkeypatch.setenv("OPENAI_WIRE_DIALECT", "aihub")
         monkeypatch.setenv("OPENAI_REASONING_EFFORT", "low")
         get_settings.cache_clear()
         client = OpenAICompatibleClient()
@@ -83,6 +86,7 @@ class TestOpenAICompatibleClient:
         assert client.timeout == 45
         assert client.max_tokens == 1200
         assert client.api_key == "secret"
+        assert client.wire_dialect == "aihub"
         assert client.reasoning_effort == "low"
 
     def test_dotenv_overrides(self, tmp_path, monkeypatch):
@@ -94,6 +98,7 @@ class TestOpenAICompatibleClient:
             "OPENAI_TIMEOUT",
             "OPENAI_MAX_TOKENS",
             "OPENAI_API_KEY",
+            "OPENAI_WIRE_DIALECT",
             "OPENAI_REASONING_EFFORT",
         ):
             monkeypatch.delenv(name, raising=False)
@@ -103,7 +108,8 @@ class TestOpenAICompatibleClient:
             "OPENAI_MODEL=dotenv-model\n"
             "OPENAI_TIMEOUT=35\n"
             "OPENAI_MAX_TOKENS=900\n"
-            "OPENAI_API_KEY=dotenv-secret\n",
+            "OPENAI_API_KEY=dotenv-secret\n"
+            "OPENAI_WIRE_DIALECT=aihub\n",
             encoding="utf-8",
         )
         get_settings.cache_clear()
@@ -115,6 +121,7 @@ class TestOpenAICompatibleClient:
         assert client.timeout == 35
         assert client.max_tokens == 900
         assert client.api_key == "dotenv-secret"
+        assert client.wire_dialect == "aihub"
         assert client.reasoning_effort == "none"
 
     def test_chat_parses_json_response(self):
@@ -151,6 +158,33 @@ class TestOpenAICompatibleClient:
             assert len(payload["messages"]) == 2
             assert payload["messages"][0]["role"] == "system"
             assert payload["messages"][1]["role"] == "user"
+
+    def test_aihub_wire_dialect_uses_hub_chat_contract(self):
+        client = OpenAICompatibleClient(
+            model="published-supervisor-slug",
+            base_url="http://ai-hub.internal/v1",
+            api_key="aih1_test-client-key",
+            wire_dialect="aihub",
+        )
+        with patch("project_workflow.infrastructure.llm.requests.post") as mock_post:
+            mock_post.return_value = MagicMock(
+                status_code=200,
+                json=lambda: {"choices": [{"message": {"content": '{"verdict":"PASS"}'}}]},
+                raise_for_status=lambda: None,
+            )
+            result = client.chat("sys", "usr")
+
+        assert result == {"verdict": "PASS"}
+        mock_post.assert_called_once()
+        url = mock_post.call_args.args[0]
+        kwargs = mock_post.call_args.kwargs
+        assert url == "http://ai-hub.internal/v1/chat/completions"
+        assert kwargs["headers"]["Authorization"] == "Bearer aih1_test-client-key"
+        payload = kwargs["json"]
+        assert payload["model"] == "published-supervisor-slug"
+        assert payload["max_completion_tokens"] == 4000
+        assert "max_tokens" not in payload
+        assert "response_format" not in payload
 
     def test_chat_omits_reasoning_effort_when_disabled(self):
         client = OpenAICompatibleClient(reasoning_effort="", api_key="test-key")

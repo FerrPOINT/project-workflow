@@ -202,6 +202,20 @@ class TestOpenAICompatibleClientChatErrors:
 
         post.assert_not_called()
 
+    def test_aihub_without_client_key_is_rejected_before_network(self):
+        client = OpenAICompatibleClient(
+            base_url="http://ai-hub.internal/v1",
+            api_key="   ",
+            wire_dialect="aihub",
+        )
+        with patch("requests.post") as post, pytest.raises(
+            LlmConfigurationError,
+            match="AI Hub.*OPENAI_API_KEY",
+        ):
+            client.chat("sys", "user")
+
+        post.assert_not_called()
+
     def test_custom_endpoint_remains_available_without_key(self):
         client = OpenAICompatibleClient(base_url="http://provider.internal/v1", api_key="")
         response = MagicMock()
