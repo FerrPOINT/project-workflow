@@ -16,8 +16,10 @@ source-installer пакета отмечены как исторические; 
 Existing selector `PROJECT_WORKFLOW_CATALOG_VARIANT=single-task-v1` выбирает новый
 профиль в `python -m scripts.init_db`. Это реальная установка через existing
 initialization transaction, catalog lock, repositories и profession membership.
-Команда читает явный `DATABASE_URL`; здесь она проверена только на временной SQLite.
-Live runtime не менялся. Не направлять этот запуск на live до parent acceptance.
+Команда читает явный `DATABASE_URL`. Текущая семья проверена на настоящем
+временном PostgreSQL с сохранением legacy rows/history и persisted readback:
+[PG1 evidence](current-family-postgres-20261016.md). Live runtime не менялся;
+не направлять этот запуск на live до согласованной установки.
 
 Bootstrap печатает typed installation readback после успешного commit. Повторный
 запуск полностью сверяет content/relations и сохраняет реальные IDs/counts.
@@ -49,11 +51,11 @@ Installed binding не является runtime admission или Tracker transit
 и `single_task_manifest_v1.json`, проверяемые по фактическим UTF-8/LF bytes:
 
 ```text
-catalog:  7be522c6a78e35a4ebdd611f4b6dd6d6d03cc9a2751f973f69d423f68e0db543
-manifest: 999b78f3d7e823d2cde818ed5cfe2ac00cd378a8fe7eb03c21b9711795196f3b
+catalog:  86e6c983b7aa6a2c99da11d1d4b1f1b4563ff913262236903a19bc86bdec2d67
+manifest: 652a38c0f7bdb48a569aa3fcd5c2e81e153db6e22b5201cfb6ce15c988dd57f3
 ```
 
-15October instruction correction changes sealed content/hashes, not role IDs or
+16October typed backend image-build instructions change sealed content/hashes, not role IDs or
 profile/protocol versions. Existing installation with an older manifest is drift:
 observation/init must not repair it silently. Coordinate reviewed installation
 adoption and Fleet effective configuration revisions before activation; never

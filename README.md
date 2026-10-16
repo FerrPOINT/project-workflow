@@ -47,6 +47,10 @@ Fleet Control читает каталог через `GET /internal/runtime/cata
 с role key `fleet-control` остаётся runtime credential и не получает каталог.
 Маршрут должен оставаться во внутренней сети или на host loopback.
 
+Отдельная opt-in single-task семья описана в [установке](docs/single-task-installation.md).
+Её текущая редакция прошла [PostgreSQL side-by-side проверку](docs/current-family-postgres-20261016.md);
+это не установка на стенд и не подтверждение полного SDLC.
+
 Business adapter проверяет runtime-контракт через аутентифицированный
 `GET /internal/runtime/capabilities`. Assignment token получает только
 `assign`/`bind`/`rebind`, runtime token — только `step`/`history`; catalog token не имеет

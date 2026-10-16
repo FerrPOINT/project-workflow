@@ -1,6 +1,15 @@
 # Single-Task Instruction Audit
 
-## Current Content Qualification: 15 October 2026
+## Current Content Qualification: 16 October 2026
+
+Текущий исходник dfb содержит инструкции typed backend image build, current
+catalog86e6/manifest652a и актуальные producer fixtures. Focused133 и producer31
+проверки проходят отдельно от новой реальной PostgreSQL side-by-side проверки:
+[PG1 и точные границы](current-family-postgres-20261016.md).
+Полный non-PG/coverage и image/live gates ещё не закрыты. Старые hashes и
+результаты ниже относятся только к указанным историческим версиям.
+
+## Historical Content Qualification: 15 October 2026
 
 Integrated1435ec8 has the identical tree34cb81f81b428a25f047226b70722ec905c6efdf
 as the worker's frozen b409 packet:89 instruction/artifact/catalog cases and2
