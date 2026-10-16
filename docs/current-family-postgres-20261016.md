@@ -33,8 +33,29 @@ SHA256 JUnit:
 
 Это не новый полный96-PG gate и не live acceptance. Исторические96 результатов
 сохраняют свою версию исходника. Focused133 и producer31 проверки учитываются
-отдельно. Full non-PG/coverage, новый image, protected installation, CLI packaging
+отдельно. Full non-PG/coverage, protected installation, CLI packaging
 и seven-role deployment acceptance остаются отдельными незавершёнными gates.
+
+## Отдельно Собранный Кандидат
+
+Штатный Base Build собрал backend из immutable Git snapshot
+`8d8dfe995f78999b53318f49ffb52e6873155c44`. Это docs-only successor проверенного
+`dfb5682`; новый catalog и requirements hashes не изменились. Runtime provenance
+probe подтвердил revision, source archive и runtime bundle образа:
+
+```text
+image:          sha256:47455ca3e40bf5aedb4120b080459a1313a7bc87f3017ec11b5d5f6463662fc6
+source archive: 10ce42f83e36263c66177d4743a6946755e98bb1aa3b9c173b02fbcfd799fb68
+runtime bundle: 53e52bb6a6d4ff5c6167d16835618b8b8ee2066f67045bc8d80697682cc510e9
+build receipt:  12a3e11d44e8bd9c7d2fc5f81a9ca6da26137a3d806cab89bc13f97564f2eebe
+```
+
+`workflow_build.status=passed`, profile `base-v3`; `complete=false` относится
+к неполной сборке всего workspace, а не к отказу этого единственного сервиса.
+Временный provenance project удалён; отдельный Docker readback не обнаружил
+его контейнеров или volumes. Образ не установлен: accepted runtime, база,
+secrets и legacy catalog не менялись. Build/provenance не заменяют full test
+gate, установку single-task семьи или live SDLC acceptance.
 
 Установка описана в [single-task-installation](single-task-installation.md).
 Исходное состояние стенда остаётся [legacy predecessor](workflow-installed-predecessor-20261016.md).
