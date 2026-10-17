@@ -13,60 +13,20 @@
 
 ## Обязательные проверки
 
-Канонический локальный gate и expected output описаны в
-`docs/quality-gate.md`; цели `Makefile` и `scripts/quality.ps1` повторяют эти
-команды через `uv`, `constraints.txt` и текущий marker contract.
-
-После любого изменения SQLAlchemy-слоя, application services, состояния UI или
-Supervisor Engine перед commit выполнить следующие проверки:
-
-1. **Tests**
-   ```bash
-   pytest -q --timeout=60
-   ```
-   Ожидается 0 падений и 0 ошибок. PostgreSQL integration tests здесь намеренно
-   исключены и запускаются отдельно.
-
-2. **PostgreSQL integration**
-   ```bash
-   pytest -q -m integration tests/test_postgres_integration.py --timeout=120
-   ```
-   Ожидается 0 падений и 0 ошибок. Набор включает реальный путь CLI subprocess →
-   PostgreSQL → тестовый OpenAI-compatible HTTP endpoint. Два multi-process E2E
-   теста имеют собственный timeout 240 секунд.
-
-3. **Coverage**
-   ```bash
-   pytest --cov=project_workflow --cov-report=term --timeout=60
-   ```
-   Ожидается общее покрытие не ниже текущего локального baseline 94%.
-
-4. **Lint**
-   ```bash
-   ruff check .
-   ```
-   Ожидается `All checks passed!`.
-
-5. **Type check**
-   ```bash
-   mypy project_workflow scripts
-   ```
-   Ожидается `Success: no issues found`.
-
-6. **Readiness локального Compose**
-   ```bash
-   docker compose up --build -d --wait
-   curl --fail http://127.0.0.1:8812/health
-   ```
-   Ожидается HTTP `200` и `database=ok`, `schema=ok`.
-
-7. **Браузерная проверка** для изменений UI
-   - Открыть `http://127.0.0.1:8812/` и `http://127.0.0.1:8812/phases`.
-   - Сохранить скриншот.
+Политика и команды: [TESTING](docs/TESTING.md), [quality gate](docs/quality-gate.md).
+Обычная сборка/разработка: `python scripts/quality.py quality` — unit + lint/types.
+Scoped unit: `python scripts/quality.py test -- <unit-test-path>`.
+Integration/slow/full coverage и PostgreSQL запускаются вручную при подготовке
+релиза через `python scripts/quality.py release` либо release.yml на exact ref.
+Coverage baseline 94%, data/security/live gates сохранены. Невыполненная
+релизная проверка остаётся NOT RUN; не запускать её автоматически после правки.
+Compose/browser acceptance выполняется отдельно для затронутого релиза
+на разрешённом тестовом target, без изменения принятого runtime.
 
 ## Примечания
 
-- Для стандартного полного набора использовать `pytest -q --timeout=60`.
+- Для ручного полного release gate использовать `python scripts/quality.py release`;
+  scoped проверки — `python scripts/quality.py test -- <test-path>`.
   `--forked` не требуется; при нём отчёт coverage некорректен.
 - `DATABASE_URL` обязателен в runtime. SQLite используется только в изолированных тестах.
 - `project-workflow` хранит имена skills. Действующий legacy-каталог сохраняет
@@ -86,7 +46,7 @@ Supervisor Engine перед commit выполнить следующие про
 
 | Возможность | Решение | Причина |
 |---|---|---|
-| CI/CD pipeline (GitHub) | **Использовать** | Quality, coverage, PostgreSQL integration и Compose smoke воспроизводят обязательный локальный gate. |
+| CI/CD pipeline (GitHub) | **Использовать** | Автоматически unit + lint/types затронутых компонентов; coverage, PostgreSQL integration и Compose smoke — отдельный ручной release gate на exact ref. |
 | Security middleware (CORS, CSP, HTTPS redirect, rate limits) | **Не добавлять** | UI доступен только на loopback либо в защищённом private/VPN-контуре. |
 | Локальные credentials в `docker-compose.yml` | **Допустимо только локально** | Compose публикуется только на loopback; внешний runtime обязан передавать собственный `DATABASE_URL`. |
 | Observability / metrics / structured JSON logs | **Не добавлять** | Request logging и `/health` достаточны для внутренней утилиты. |
@@ -103,3 +63,33 @@ Supervisor Engine перед commit выполнить следующие про
 Перед изменением платформенных имён прочитайте [интеграцию с Base](docs/PDLC_BASE_INTEGRATION.md) и канонические TERMS/BRANDING.
 Для UI: CLI `pdlc-ui` из закреплённого UI-пакета Base, затем карточка и один пример. SSR-ресурсы получать штатным exporter Base; fingerprint проверять отдельно.
 Не переносите продуктовые запросы, DTO и права в общий UI. SDK/UI/skills pins независимы; новое имя платформы не меняет SDLC IDs/scopes или закреплённые внешние runtime-источники.
+
+## Быстрые проверки и сборка
+
+Перед тестами, build и CI читать обязательный [стандарт Base](https://github.com/FerrPOINT/services-base/blob/197ead9d9b6cf6901e8f9dd31f43f719885502c3/docs/BUILD_PERFORMANCE.md).
+При разработке и сборке unit/static. Integration/slow/full coverage —
+ручной gate при подготовке релиза по docs/TESTING.md.
+Сохранять полезный cache, не переустанавливать неизменные dependencies и не
+пересобирать приложение из-за test-only. До повторного тяжёлого запуска назвать
+изменившиеся inputs/недостающее evidence; передавать один artifact между этапами.
+Required security/data/compatibility/live checks и product toolchains сохраняются.
+Компоненты и команды: `.quality-gate.json`; общие правила не копировать.
+
+Уровни и команды: [TESTING](docs/TESTING.md). Полный `.github/workflows/release.yml`
+запускается вручную на exact ref; зелёный unit build не означает release acceptance.
+
+## Выбор сборки и повторное использование
+
+Перед build/test/install определить нужные компоненты и изменившиеся реальные
+inputs; проверить готовый artifact, environment и cache. Неизменные inputs и
+проверенный artifact означают отсутствие повторных install/compile/source export.
+Docs/test-only не пересобирают приложение без изменения его build inputs.
+Во время работы выполнять scoped unit/static; полный gate — на согласованной
+вехе. Integration/slow/full coverage — вручную перед релизом; необходимые
+security/data/compatibility/live gates сохраняются. Полные команды в этом
+документе — каталог проверок, а не требование выполнять всё после каждой правки.
+Перед повторным heavy назвать changed inputs или missing proof; REUSED не
+выдавать за новый тест. Полезный прогретый cache сохранять в его бюджете.
+В source workspace читать `docs/BUILD_PERFORMANCE.md` из `qualityTooling.path`
+в `../source-workspace.json` и правила workspace в `../AGENTS.md`.
+В standalone checkout использовать стандарт принятой версии Base.

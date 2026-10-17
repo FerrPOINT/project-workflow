@@ -60,3 +60,5 @@ data/workflow.db
 data/workflow.db-*
 tmp/
 .env
+
+.local/

@@ -1,0 +1,191 @@
+{
+  "schema": "base-quality-product/v1",
+  "product": "project-workflow",
+  "components": {
+    "docs": [
+      "docs/**",
+      "*.md",
+      "LICENSE"
+    ],
+    "backend": [
+      "project_workflow/**",
+      "scripts/**",
+      "tests/**",
+      "pyproject.toml",
+      "constraints.txt",
+      "Makefile",
+      ".github/**",
+      "openapi/**"
+    ],
+    "frontend": [
+      "project_workflow/interfaces/ui/**",
+      "project_workflow/ui/**",
+      ".github/**",
+      "openapi/**"
+    ]
+  },
+  "gates": [
+    {
+      "id": "docs:readme",
+      "component": "docs",
+      "profiles": [
+        "fast",
+        "integrated",
+        "release"
+      ],
+      "argv": [
+        "{python}",
+        "-B",
+        "scripts/verify_readme.py"
+      ],
+      "cwd": ".",
+      "inputs": [
+        "**"
+      ],
+      "cacheable": true,
+      "test_tier": "static"
+    },
+    {
+      "id": "docs:contracts",
+      "component": "docs",
+      "profiles": [
+        "integration"
+      ],
+      "argv": [
+        "{python}",
+        "scripts/quality.py",
+        "integration",
+        "--",
+        "tests/test_docs_quality.py"
+      ],
+      "cwd": ".",
+      "inputs": [
+        "**"
+      ],
+      "cacheable": false,
+      "test_tier": "integration"
+    },
+    {
+      "id": "backend:quality",
+      "component": "backend",
+      "profiles": [
+        "release",
+        "integrated"
+      ],
+      "argv": [
+        "{python}",
+        "scripts/quality.py",
+        "release"
+      ],
+      "cwd": ".",
+      "inputs": [
+        "**"
+      ],
+      "cacheable": false,
+      "platforms": [
+        "linux"
+      ],
+      "requires_env": [
+        "PGHOST",
+        "PGPORT",
+        "PGUSER",
+        "PGDATABASE"
+      ],
+      "external_state": true,
+      "test_tier": "integration"
+    },
+    {
+      "id": "frontend:navigation",
+      "component": "frontend",
+      "profiles": [
+        "fast",
+        "integrated",
+        "release",
+        "unit",
+        "build"
+      ],
+      "argv": [
+        "node",
+        "scripts/test_profession_navigation.mjs"
+      ],
+      "cwd": ".",
+      "inputs": [
+        "**"
+      ],
+      "cacheable": true,
+      "test_tier": "unit"
+    },
+    {
+      "id": "backend:unit",
+      "component": "backend",
+      "profiles": [
+        "fast",
+        "unit",
+        "build"
+      ],
+      "argv": [
+        "{python}",
+        "scripts/quality.py",
+        "unit"
+      ],
+      "cwd": ".",
+      "inputs": [
+        "**"
+      ],
+      "cacheable": false,
+      "test_tier": "unit"
+    },
+    {
+      "id": "backend:integration",
+      "component": "backend",
+      "profiles": [
+        "integration"
+      ],
+      "argv": [
+        "{python}",
+        "scripts/quality.py",
+        "integration"
+      ],
+      "cwd": ".",
+      "inputs": [
+        "**"
+      ],
+      "cacheable": false,
+      "test_tier": "integration",
+      "external_state": true
+    },
+    {
+      "id": "backend:slow",
+      "component": "backend",
+      "profiles": [
+        "slow"
+      ],
+      "argv": [
+        "{python}",
+        "scripts/quality.py",
+        "slow"
+      ],
+      "cwd": ".",
+      "inputs": [
+        "**"
+      ],
+      "cacheable": false,
+      "test_tier": "slow",
+      "external_state": true
+    }
+  ],
+  "additional_acceptance": "Existing product CI/CONTRIBUTING: MSRV/features, ignored DB, OpenAPI/packed consumer/themes, security and live acceptance remain separate mandatory gates where applicable.",
+  "test_policy": {
+    "automatic": [
+      "unit",
+      "static",
+      "artifact"
+    ],
+    "manual_release": [
+      "integration",
+      "slow",
+      "live"
+    ],
+    "release_required": true
+  }
+}
