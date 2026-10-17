@@ -1,0 +1,150 @@
+"""Install/read back a separate profile using the existing catalog transaction."""
+
+import hashlib
+import json
+from pathlib import Path
+
+from project_workflow import config
+from project_workflow.domain.namespace import legacy_code_from_cli_command
+from project_workflow.domain.project_theme import MANAGED_PROFESSION_THEMES
+from project_workflow.domain.single_task_profile import (
+    CATALOG_SHA256,
+    MANIFEST_SHA256,
+    PROFILE,
+    ROLE_MODES,
+    SingleTaskInstallation,
+    is_single_task_key,
+)
+from project_workflow.infrastructure.db.managed_catalog import (
+    ManagedMode,
+    _ArchivedWorkflowDefinition,
+    _assert_existing_workflow,
+    _namespace_has_identity,
+    _persist_mode,
+)
+from project_workflow.infrastructure.db.uow import SAUnitOfWork
+
+REFERENCES = Path(__file__).resolve().parents[2] / "references"
+
+
+def load_profile() -> tuple[dict, dict]:
+    values = []
+    for filename, expected in (("single_task_catalog_v1.json", CATALOG_SHA256),
+                               ("single_task_manifest_v1.json", MANIFEST_SHA256)):
+        path = REFERENCES / filename
+        if path.is_symlink():
+            raise ValueError("Profile source must be a regular artifact")
+        content = path.read_bytes()
+        if hashlib.sha256(content).hexdigest() != expected:
+            raise ValueError("Single-task profile source hash mismatch")
+        values.append(json.loads(content))
+    catalog, manifest = values
+    if (catalog["schema"] != "single-task-sdlc/workflow-catalog/v1"
+        or manifest["schema"] != "single-task-sdlc/profile-manifest/v1"
+        or catalog["instruction_profile"] != PROFILE or manifest["instruction_profile"] != PROFILE
+        or catalog["catalog_version"] != 1 or manifest["profile_version"] != 1 or manifest["proposal"] is not False
+        or manifest["workflow_catalog"]["sha256"] != CATALOG_SHA256):
+        raise ValueError("Single-task profile generation mismatch")
+    if [w["role_key"] for w in catalog["workflows"]] != list(ROLE_MODES):
+        raise ValueError("Single-task role inventory mismatch")
+    for workflow in catalog["workflows"]:
+        role = workflow["role_key"]
+        if {m["key"]: m["execution_scopes"] for m in workflow["modes"]} != ROLE_MODES[role]:
+            raise ValueError("Single-task mode/scope inventory mismatch")
+        for mode in workflow["modes"]:
+            ManagedMode.model_validate(mode)
+    return catalog, manifest
+
+
+def observe_installation(uow: SAUnitOfWork) -> SingleTaskInstallation:
+    """Validate all seven persisted professions before returning any binding."""
+    uow.lock_catalog_state(shared=True)
+    uow.refresh()
+    catalog, manifest = load_profile()
+    installed_workflows = {workflow.key: workflow for workflow in uow.workflows.list()}
+    if {key for key in installed_workflows if is_single_task_key(key)} != {w["key"] for w in catalog["workflows"]}:
+        raise ValueError("Single-task installed workflow inventory mismatch")
+    expected_commands = {w["namespace"]["cli_command"] for w in catalog["workflows"]}
+    installed_commands = {p.cli_command for p in uow.projects.list()
+                          if p.cli_command.startswith("workflow-single-task-")}
+    if installed_commands != expected_commands:
+        raise ValueError("Single-task installed namespace inventory mismatch")
+    bindings = []
+    memberships = uow.workflows.count_professions_by_workflow()
+    for definition in catalog["workflows"]:
+        role = definition["role_key"]
+        workflow = installed_workflows.get(definition["key"])
+        if (workflow is None or workflow.id is None or workflow.active_catalog_version != 1
+            or workflow.name != config.MANAGED_NAMESPACE_WORKFLOW_NAME
+            or workflow.description != definition["description"]):
+            raise ValueError("Single-task installed workflow missing or divergent")
+        expected = _ArchivedWorkflowDefinition(
+            key=definition["key"], name=definition["name"], description=definition["description"], role_key=role,
+            modes=[ManagedMode.model_validate(mode) for mode in definition["modes"]],
+        )
+        _assert_existing_workflow(uow, workflow, expected)
+        namespace = definition["namespace"]
+        project = uow.projects.get_by_cli_command(namespace["cli_command"])
+        identity = uow.projects.get_persisted_identity(project.id) if project and project.id else None
+        icon, color = MANAGED_PROFESSION_THEMES[role]
+        if (identity is None or identity.get("launch_profile") != namespace["launch_profile"]
+            or not _namespace_has_identity(
+                identity, workflow_id=workflow.id, code=legacy_code_from_cli_command(namespace["cli_command"]),
+                name=namespace["name"], description=definition["description"], cli_command=namespace["cli_command"],
+                key_prefixes=[], theme_icon=icon, theme_color=color,
+            ) or project is None or project.id is None
+            or not uow.workflows.belongs_to_profession(workflow.id, project.id)
+            or memberships.get(workflow.id) != 1):
+            raise ValueError("Single-task installed namespace missing or divergent")
+        modes = []
+        for mode, source_mode in zip(uow.workflows.list_modes(workflow.id), definition["modes"], strict=True):
+            if mode.id is None or mode.catalog_version != 1 or mode.name != source_mode["name"]:
+                raise ValueError("Single-task installed mode identity mismatch")
+            modes.append({"mode_id": str(mode.id), "key": mode.key, "execution_scopes": mode.execution_scopes,
+                          "phase_ids": [str(p.id) for p in uow.phases.list(workflow.id, mode_id=mode.id)]})
+        bindings.append({
+            "schema": "single-task-sdlc/workflow-binding/v1", "instruction_manifest_sha256": MANIFEST_SHA256,
+            "workflow_catalog_sha256": CATALOG_SHA256, "namespace_id": str(project.id),
+            "namespace_name": identity["name"], "namespace_cli_command": identity["cli_command"],
+            "workflow_id": str(workflow.id), "workflow_key": workflow.key, "role_key": role,
+            "profile": identity["launch_profile"], "modes": modes,
+            "role_instructions_sha256": manifest["roles"][role]["role_instructions_sha256"],
+        })
+    return SingleTaskInstallation.model_validate({
+        "schema": "single-task-sdlc/installation/v1", "instruction_manifest_sha256": MANIFEST_SHA256,
+        "workflow_catalog_sha256": CATALOG_SHA256, "bindings": bindings,
+    })
+
+
+def ensure_single_task_catalog(uow: SAUnitOfWork) -> SingleTaskInstallation:
+    """No commits: the existing initialization transaction owns atomicity."""
+    uow.lock_catalog_state()
+    catalog, _ = load_profile()
+    existing = {workflow.key for workflow in uow.workflows.list()}
+    if any(is_single_task_key(key) for key in existing):
+        return observe_installation(uow)  # A partial install/drift must fail, not silently repair.
+    for definition in catalog["workflows"]:
+        command = definition["namespace"]["cli_command"]
+        if uow.projects.get_by_cli_command(command) or uow.projects.get_by_code(legacy_code_from_cli_command(command)):
+            raise ValueError("Single-task namespace identity is already owned")
+    has_default = uow.workflows.get_default() is not None
+    for definition in catalog["workflows"]:
+        role = definition["role_key"]
+        workflow_id = uow.workflows.create({
+            "key": definition["key"], "name": config.MANAGED_NAMESPACE_WORKFLOW_NAME,
+            "description": definition["description"], "is_default": not has_default and role == "project_manager",
+            "active_catalog_version": 1, "create_default_mode": False,
+        })
+        for mode in definition["modes"]:
+            _persist_mode(uow, workflow_id=workflow_id, role_key=role,
+                          mode=ManagedMode.model_validate(mode), catalog_version=1)
+        namespace = definition["namespace"]
+        icon, color = MANAGED_PROFESSION_THEMES[role]
+        project_id = uow.projects.create({
+            "workflow_id": workflow_id, "code": legacy_code_from_cli_command(namespace["cli_command"]),
+            "name": namespace["name"], "description": definition["description"],
+            "cli_command": namespace["cli_command"], "launch_profile": namespace["launch_profile"],
+            "theme_icon": icon, "theme_color": color, "key_prefixes": [],
+        })
+        uow.workflows.assign_profession(workflow_id, project_id)
+    return observe_installation(uow)

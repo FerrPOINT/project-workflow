@@ -1,0 +1,174 @@
+{
+  "authority": "Actual isolated SQLite/TestClient responses; synthetic Tracker confirmation/runtime inputs, not live proof.",
+  "headers": [
+    "Authorization: Bearer <PM runtime role credential>",
+    "X-Workflow-Execution-Token: <current PM scoped token>"
+  ],
+  "final_step_request": {
+    "instruction_profile": "single-task-v1",
+    "instruction_manifest_sha256": "652a38c0f7bdb48a569aa3fcd5c2e81e153db6e22b5201cfb6ce15c988dd57f3",
+    "task": "SDLC-7",
+    "step_operation_key": "pm:final",
+    "assignment_revision": 1,
+    "assignment_ref": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    "binding_ref": "binding:current",
+    "hermes_run_ref": "run:current",
+    "mode_key": "draft",
+    "cycle_number": 0,
+    "attempt_number": 1,
+    "expected_phase_code": "PM-DRAFT-03",
+    "expected_status": "active",
+    "session_run_id": "11111111-1111-4111-8111-111111111103",
+    "single_task_context_sha256": "0558664e0b04640d614f510f480b3d56c2b6bd78aec13829d776914846c81262",
+    "report": "Actual confirmed final report"
+  },
+  "readback_request": {
+    "instruction_profile": "single-task-v1",
+    "instruction_manifest_sha256": "652a38c0f7bdb48a569aa3fcd5c2e81e153db6e22b5201cfb6ce15c988dd57f3",
+    "task": "SDLC-7",
+    "step_operation_key": "pm:final",
+    "session_run_id": "11111111-1111-4111-8111-111111111103",
+    "single_task_context_sha256": "0558664e0b04640d614f510f480b3d56c2b6bd78aec13829d776914846c81262"
+  },
+  "reference_readback_request": {
+    "instruction_profile": "single-task-v1",
+    "instruction_manifest_sha256": "652a38c0f7bdb48a569aa3fcd5c2e81e153db6e22b5201cfb6ce15c988dd57f3",
+    "task": "SDLC-7",
+    "session_run_id": "11111111-1111-4111-8111-111111111103",
+    "single_task_context_sha256": "0558664e0b04640d614f510f480b3d56c2b6bd78aec13829d776914846c81262",
+    "receipt_reference": "workflow-terminal:single-task-v1:2:3",
+    "receipt_sha256": "a85a35f257ffd00f7d7c99d5c59aabb0a494d51c07dd061616597a5d5a4b5db9"
+  },
+  "readback_response": {
+    "ok": true,
+    "complete": true,
+    "workflow_receipt": {
+      "reference": "workflow-terminal:single-task-v1:2:3",
+      "sha256": "a85a35f257ffd00f7d7c99d5c59aabb0a494d51c07dd061616597a5d5a4b5db9"
+    },
+    "receipt": {
+      "schema": "single-task-sdlc/workflow-terminal-receipt/v1",
+      "reference": "workflow-terminal:single-task-v1:2:3",
+      "complete": true,
+      "binding": {
+        "request": {
+          "project_id": 2,
+          "task_key": "SDLC-7",
+          "role_key": "project_manager",
+          "bind_operation_key": "bind:1",
+          "assignment_operation_key": "pm-draft:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          "assignment_revision": 1,
+          "assignment_ref": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          "binding_ref": "binding:1",
+          "hermes_run_ref": "run:1",
+          "mode_key": "draft",
+          "cycle_number": 0,
+          "attempt_number": 1,
+          "expected_binding_state": "unbound",
+          "concrete_agent_ref": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "instruction_profile": "single-task-v1",
+          "instruction_manifest_sha256": "652a38c0f7bdb48a569aa3fcd5c2e81e153db6e22b5201cfb6ce15c988dd57f3",
+          "session_run_id": "ffffffff-ffff-4fff-8fff-ffffffffffff"
+        },
+        "context": {
+          "concrete_agent_ref": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "execution_ref": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "fencing_token": 1,
+          "instruction_manifest_sha256": "652a38c0f7bdb48a569aa3fcd5c2e81e153db6e22b5201cfb6ce15c988dd57f3",
+          "instruction_profile": "single-task-v1",
+          "lease_ref": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "lease_version": 1,
+          "task_revision": 1,
+          "tracker_instance_ref": "tracker:one",
+          "tracker_project_ref": "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
+        },
+        "task_ref": "11111111-1111-4111-8111-111111111111",
+        "root_ref": "11111111-1111-4111-8111-111111111111",
+        "assignment_sha256": "274c2f6e2684ad17145e82ea995add650a615d9d4fae3d052410ff643ca16e12",
+        "pm": {
+          "identity": {
+            "agent_ref": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "assignment_operation_key": "pm-draft:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "assignment_ref": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "assignment_revision": 1,
+            "execution_ref": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "root_ref": "11111111-1111-4111-8111-111111111111",
+            "task": "SDLC-7",
+            "task_ref": "11111111-1111-4111-8111-111111111111",
+            "tracker_instance_ref": "tracker:one",
+            "tracker_project_ref": "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
+          },
+          "namespace_ownership_ref": "11111111-1111-4111-8111-111111111104",
+          "execution_version": 4,
+          "execution_fence": 2,
+          "session_run_id": "11111111-1111-4111-8111-111111111103",
+          "binding_ref": "binding:current",
+          "hermes_run_ref": "run:current",
+          "checkpoint": {
+            "checkpoint_ref": "11111111-1111-4111-8111-111111111101",
+            "requirements_revision": 7,
+            "requirements_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "clarification_request_ref": null,
+            "clarification_version": null
+          },
+          "resume_input": {
+            "input": {
+              "input_kind": "confirmation",
+              "input_id": "11111111-1111-4111-8111-111111111102"
+            },
+            "input_receipt": {
+              "reference": "tracker:synthetic-confirmation",
+              "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            }
+          },
+          "resume_operation_key": "pm:resume",
+          "resume_request_sha256": "b30705bf1392a77615999bbcb2500ce021446c46c02871fa2c6158c7935037e3"
+        }
+      },
+      "single_task_context_sha256": "0558664e0b04640d614f510f480b3d56c2b6bd78aec13829d776914846c81262",
+      "assignment_sha256": "274c2f6e2684ad17145e82ea995add650a615d9d4fae3d052410ff643ca16e12",
+      "cursor": {
+        "task_key": "SDLC-7",
+        "namespace_id": 2,
+        "workflow_id": 2,
+        "mode_id": 2,
+        "phase_id": 22,
+        "phase_code": "PM-DRAFT-03",
+        "status": "done",
+        "history_id": 3,
+        "completion_event_id": 6
+      },
+      "step": {
+        "operation_key": "pm:final",
+        "request_sha256": "a6d8ec50714628f00135c6de51fb82cf66376a0de3781ea7c2706e4a2e576da7",
+        "worker_report_sha256": "507392277a3eb9c49aa959209193ce2247ef38eebc2ff3198a43f1d98d3a7496",
+        "evaluation_sha256": "9428549d0a61aaf5bfa939682a5e1a99fffc47259a8449967178afd837a694ba"
+      },
+      "result": {
+        "verdict": "PASS",
+        "status": "done",
+        "complete": true,
+        "retryable": false,
+        "phase_code": "PM-DRAFT-03",
+        "current_phase_code": "PM-DRAFT-03",
+        "next_phase_code": null,
+        "rollback_phase_code": null,
+        "assignment_operation_key": "pm-draft:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "assignment_revision": 1,
+        "assignment_ref": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "binding_ref": "binding:current",
+        "hermes_run_ref": "run:current",
+        "binding_state": "bound",
+        "mode_key": "draft",
+        "cycle_number": 0,
+        "attempt_number": 1,
+        "single_task_context_sha256": "0558664e0b04640d614f510f480b3d56c2b6bd78aec13829d776914846c81262",
+        "execution_ref": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        "session_run_id": "11111111-1111-4111-8111-111111111103",
+        "execution_version": 4,
+        "execution_fence": 2
+      },
+      "accepted_response_sha256": "4f284ef8c68b74b220b2a060dc2d9c7971434a57177f8c989b1c7f2862918d9a"
+    }
+  }
+}

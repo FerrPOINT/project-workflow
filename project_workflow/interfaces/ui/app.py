@@ -242,6 +242,16 @@ def create_app() -> FastAPI:
     app.post("/internal/runtime/rebind", response_model=None)(runtime_api.runtime_rebind)
     app.get("/internal/runtime/history", response_model=None)(runtime_api.runtime_history)
     app.get("/internal/runtime/catalog", response_model=None)(runtime_api.runtime_catalog)
+    from project_workflow.domain.single_task_profile import (
+        SingleTaskBindingResponse,
+        SingleTaskInstallationResponse,
+    )
+
+    app.get("/internal/runtime/profiles/single-task-v1/installation", response_model=SingleTaskInstallationResponse)(
+        runtime_api.single_task_installation
+    )
+    app.get("/internal/runtime/profiles/single-task-v1/namespace-bindings/{namespace_id}",
+            response_model=SingleTaskBindingResponse)(runtime_api.single_task_namespace_binding)
     from project_workflow.domain.base_binding import (
         BaseBindingInvalidRequest,
         BaseNamespaceBindingError,
@@ -258,6 +268,11 @@ def create_app() -> FastAPI:
     app.post("/internal/runtime/base/terminal-receipt/readback", response_model=None)(base_api.terminal_readback)
     app.get("/internal/runtime/base/source-catalog", response_model=None)(base_api.source_catalog)
     app.get("/internal/runtime/base/source-capabilities", response_model=None)(base_api.source_capabilities)
+    from project_workflow.domain.single_task_runtime import SingleTaskTerminalResponse
+
+    app.post("/internal/runtime/terminal-receipt/readback", response_model=SingleTaskTerminalResponse)(
+        runtime_api.runtime_terminal_readback
+    )
     from project_workflow.domain.pm_execution import PMResponse
 
     app.post("/internal/runtime/v1/pm/assign", response_model=None)(pm_api.assign)

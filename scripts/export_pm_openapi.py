@@ -16,6 +16,8 @@ def pm_openapi() -> dict[str, Any]:
     paths = {path: value for path, value in schema["paths"].items() if (
         path.startswith(("/internal/runtime/v1/pm/", "/api/pm/namespace-ownership/")) or path in {
             "/internal/runtime/assign", "/internal/runtime/bind", "/internal/runtime/rebind",
+            "/internal/runtime/step", "/internal/runtime/history",
+            "/internal/runtime/terminal-receipt/readback",
         }
     )}
     components: dict[str, Any] = {}

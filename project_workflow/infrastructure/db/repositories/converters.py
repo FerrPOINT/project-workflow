@@ -171,6 +171,7 @@ def _row_to_runtime_assignment(row: m.TaskRuntimeAssignment) -> TaskRuntimeAssig
         bind_operation_key=row.bind_operation_key,
         bind_request_sha256=row.bind_request_sha256,
         concrete_agent_ref=row.concrete_agent_ref,
+        single_task_binding=json.loads(row.single_task_binding_json) if row.single_task_binding_json else None,
         workspace_generation=row.workspace_generation,
         lease_generation=row.lease_generation,
         exact_input_refs=exact_input_refs,

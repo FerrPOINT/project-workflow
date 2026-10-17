@@ -32,6 +32,10 @@ class SATaskStepHistoryRepository(TaskStepHistoryRepository):
     def __init__(self, session: Session):
         self._session = session
 
+    def get_by_id(self, history_id: int) -> TaskStepHistoryEntry | None:
+        row = self._session.get(m.TaskStepHistoryEntry, history_id)
+        return _row_to_step_history(row) if row is not None else None
+
     def list(
         self,
         task_id: int | None = None,
@@ -42,8 +46,15 @@ class SATaskStepHistoryRepository(TaskStepHistoryRepository):
         mode_id: int | None = None,
         cycle_number: int | None = None,
         limit: int | None = 200,
+        before_history_id: int | None = None,
     ) -> Sequence[TaskStepHistoryEntry]:
-        stmt = select(m.TaskStepHistoryEntry).order_by(m.TaskStepHistoryEntry.id.desc())
+        stmt = (
+            select(m.TaskStepHistoryEntry)
+            .options(joinedload(m.TaskStepHistoryEntry.mode))
+            .order_by(m.TaskStepHistoryEntry.id.desc())
+        )
+        if before_history_id is not None:
+            stmt = stmt.where(m.TaskStepHistoryEntry.id < before_history_id)
         if limit is not None:
             stmt = stmt.limit(limit)
         if task_id is not None:

@@ -271,6 +271,7 @@ class TaskRepository(ABC):
         bind_operation_key: str,
         bind_request_sha256: str,
         concrete_agent_ref: str | None,
+        single_task_binding: dict[str, Any] | None = None,
     ) -> bool: ...
 
     @abstractmethod
@@ -312,6 +313,9 @@ class TaskStepHistoryRepository(ABC):
     """Persistence contract for evaluated CLI ``step`` records."""
 
     @abstractmethod
+    def get_by_id(self, history_id: int) -> TaskStepHistoryEntry | None: ...
+
+    @abstractmethod
     def list(
         self,
         task_id: int | None = None,
@@ -322,6 +326,7 @@ class TaskStepHistoryRepository(ABC):
         mode_id: int | None = None,
         cycle_number: int | None = None,
         limit: int | None = 200,
+        before_history_id: int | None = None,
     ) -> Sequence[TaskStepHistoryEntry]: ...
 
     @abstractmethod

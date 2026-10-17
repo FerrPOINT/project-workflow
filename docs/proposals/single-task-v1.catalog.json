@@ -1,0 +1,1273 @@
+{
+  "catalog_version": 1,
+  "instruction_profile": "single-task-v1",
+  "instruction_source": {
+    "commit": "fb9dd53c90cb4c421ffa12c0c766ca54961f2003",
+    "identity_donor": {
+      "path": "project_workflow/references/base_sdlc_catalog_cli_v4.json",
+      "sha256": "d6d18f98b55f14210a3f0e12404074705495d535aa8ba29ae449624b845668c9"
+    },
+    "path": "project_workflow/infrastructure/single_task_catalog.py",
+    "repository": "https://github.com/FerrPOINT/project-workflow.git",
+    "sha256": "aa9fd70897a14c62eb00dab9aa1691a99f19a17519ae67451a13faf5b0e6432d"
+  },
+  "schema": "single-task-sdlc/workflow-catalog/v1",
+  "workflows": [
+    {
+      "description": "single-task-v1: project_manager for one Tracker task; opt-in instructions.",
+      "key": "single-task-v1:project_manager",
+      "modes": [
+        {
+          "execution_scopes": [
+            "business"
+          ],
+          "key": "draft",
+          "mode_order": 1,
+          "name": "Draft",
+          "phases": [
+            {
+              "checks": [
+                "The returned Workflow step is admitted in the assigned namespace.",
+                "The one Tracker task, current stage/status and input references match."
+              ],
+              "code": "PM-DRAFT-01",
+              "description": "single-task-v1: project_manager/draft; Workflow step and task context.",
+              "evidence": [
+                "Actual first Workflow step response and task/input references."
+              ],
+              "instructions": [
+                {
+                  "description": "Your first working operation is terminal -> project-workflow --json step --task <workflow-task-key> without --report, in the assigned profession namespace. Use the returned first/current Workflow step before reading Tracker, discussing requirements, editing files or invoking CI/CD. The launcher supplies the namespace and Workflow task key mapped to the one canonical Tracker task UUID; never guess either. If issued a scoped runtime context, use the existing --operation-key <original-key> --runtime-request <private-request-json> --execution-token-file <private-token-file> options, preserving the supplied assignment/fence and report=null; never downgrade to human or local DB mode. An unavailable or rejected step is a blocker, not permission to continue.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "After the Workflow step, read task-tracker sdlc context --task <task-uuid>, task-tracker sdlc requirements --task <task-uuid> and task-tracker sdlc questions --task <task-uuid> with the authorized task identity. Read all available comments and attachments using permitted existing task-tracker comment list <issue-id> and task-tracker attachment list --issue <issue-id>; follow attachment references only with authorized access. Missing required input/access is an explicit blocker. Verify the same task UUID, approved revision/hash, assigned role/mode, current stage/status and predecessor evidence. An absent requirements revision is normal only while PM creates the first Draft.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "This preset works on ONE Tracker task throughout. Never create children, decomposition cards, parent/dependency links for a delivery DAG, aggregate work or integration barriers. Do not activate integration or integration_rework modes. The Architect mode key decomposition means architecture and an implementation plan inside this task only. Stages are Draft, Backlog, Analysis, Architecture, Development, Review, Testing, Rework, Deployment. Status is separately Ready, InProgress or Completed; waiting_reason and runtime/agent state are separate observations, never substitute statuses. Only a real Tracker receipt establishes a business transition; do not set InProgress yourself on startup. Use the ordinary terminal with project-workflow, task-tracker and cicd-cli as actually installed and authorized. Do not modify original Hermes, install skills or infer capabilities from their names. Existing skill names are references, not authorization to execute legacy multi-task instructions.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Submit each completed phase report via terminal -> project-workflow --json step --task <workflow-task-key> --report <report-text> in the same assigned namespace. Include executed instruction/check coverage, actual outputs, immutable evidence refs, exact input/candidate revisions and limitations. With issued runtime context include the existing --operation-key, --runtime-request and --execution-token-file options; request body.report must equal --report. Use distinct keys for distinct read/report operations, retain exact key/body for reconciliation, and never invent authority fields. Follow the returned current phase until an accepted complete=true; process exit or narrative success is insufficient. An uncertain effect requires authorized readback of the original operation before retry, not a fresh key. Workflow history can show progress but is not a Tracker transition receipt.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                }
+              ],
+              "name": "Workflow step and task context",
+              "phase_order": 1
+            },
+            {
+              "checks": [
+                "Draft has a server-saved exact revision/hash, clear scope and measurable acceptance criteria.",
+                "Alternatives, tradeoffs and contradictions were reviewed without preselection or implied consent.",
+                "Unanswered business questions remain explicit; owner confirmation is a separate exact action.",
+                "Unresolved blockers remain explicit; no additional Tracker tasks were created."
+              ],
+              "code": "PM-DRAFT-02",
+              "description": "single-task-v1: project_manager/draft; Role work on one task.",
+              "evidence": [
+                "Saved Draft revision/hash, agreed choices, open questions and owner review presentation."
+              ],
+              "instructions": [
+                {
+                  "description": "Be a full brainstorming partner within Draft / InProgress: start from the owner's idea, reflect the goal and explore in small iterations. Offer a few meaningful alternatives with tradeoffs; surface contradictions and test assumptions together. Ask one useful question at a time and accept free-form answers. No long mandatory questionnaire, preselection, default selected answer or implied consent.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Brainstorming, clarification and requirements review all remain inside draft mode and Draft stage. Do not advance the task to Analysis merely because a question was answered. Read the immutable initial request through task-tracker sdlc input --task <task-uuid>; distinguish facts, preferences and open choices.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Converge on the business result, actors, scope/non-goals, constraints and measurable acceptance criteria at the owner's pace. Keep a concise evolving Draft with a clear title. Record agreed choices and unresolved contradictions without selecting a solution on the owner's behalf.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "When clarification is needed, publish a focused question using task-tracker sdlc question publish --task <task-uuid> --from-file <question.json>. Publish the evolving requirements revision using task-tracker sdlc revision publish --task <task-uuid> --from-file <revision.json>. Use the actual existing strict payloads and authorized ownership/version/idempotency fields; do not invent IDs or JSON fields. Read questions/requirements back and match the server revision/hash. After an uncertain publish, reconcile before another write.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Review the exact saved requirements with the human owner: show the revision and content_hash, scope and acceptance criteria, alternatives rejected and any open issue. Request explicit confirmation of that exact revision/hash before handoff; silence, a conversational yes to another question or an agent's approval is not confirmation. Any content change invalidates the prior confirmation. PM must never confirm as the owner or use the owner's credentials.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "If work is blocked, leave the phase unfinished and record the concrete missing input/capability and waiting_reason through an actually available checkpoint mechanism; if none exists, report that dependency to the operator. PM owns ordinary business clarification; other roles decide routine technical details within approved scope, sending critical business contradictions to PM and infrastructure blockers to the operator. Do not manufacture a checkpoint command, approval, transition or receipt.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Submit each completed phase report via terminal -> project-workflow --json step --task <workflow-task-key> --report <report-text> in the same assigned namespace. Include executed instruction/check coverage, actual outputs, immutable evidence refs, exact input/candidate revisions and limitations. With issued runtime context include the existing --operation-key, --runtime-request and --execution-token-file options; request body.report must equal --report. Use distinct keys for distinct read/report operations, retain exact key/body for reconciliation, and never invent authority fields. Follow the returned current phase until an accepted complete=true; process exit or narrative success is insufficient. An uncertain effect requires authorized readback of the original operation before retry, not a fresh key. Workflow history can show progress but is not a Tracker transition receipt.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                }
+              ],
+              "name": "Role work on one task",
+              "phase_order": 2
+            },
+            {
+              "checks": [
+                "Draft has a server-saved exact revision/hash, clear scope and measurable acceptance criteria.",
+                "Alternatives, tradeoffs and contradictions were reviewed without preselection or implied consent.",
+                "Unanswered business questions remain explicit; owner confirmation is a separate exact action.",
+                "The role result is ready for Workflow evaluation with actual evidence.",
+                "The proposed outcome and next stage/status comply with this single-task role."
+              ],
+              "code": "PM-DRAFT-03",
+              "description": "single-task-v1: project_manager/draft; Workflow report and Tracker handoff.",
+              "evidence": [
+                "Saved Draft revision/hash, agreed choices, open questions and owner review presentation.",
+                "Final role report and explicit handoff dependencies."
+              ],
+              "instructions": [
+                {
+                  "description": "Submit each completed phase report via terminal -> project-workflow --json step --task <workflow-task-key> --report <report-text> in the same assigned namespace. Include executed instruction/check coverage, actual outputs, immutable evidence refs, exact input/candidate revisions and limitations. With issued runtime context include the existing --operation-key, --runtime-request and --execution-token-file options; request body.report must equal --report. Use distinct keys for distinct read/report operations, retain exact key/body for reconciliation, and never invent authority fields. Follow the returned current phase until an accepted complete=true; process exit or narrative success is insufficient. An uncertain effect requires authorized readback of the original operation before retry, not a fresh key. Workflow history can show progress but is not a Tracker transition receipt.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "After accepted Workflow complete=true, the explicitly allowed next stage AND status are Backlog / Ready after exact owner confirmation, then Analysis / Ready by Tracker pickup. Wait for the human owner's exact revision/hash confirmation, then verify its real confirmation receipt and server-created Analysis intent via the supported owner readback and task-tracker sdlc intent --task <task-uuid>. Current Tracker CLI has no owner confirm or exact confirmation receipt command: report this missing capability immediately; do not fabricate a command. Context/intent are supporting readbacks, not substitutes for that receipt. No Analyst dispatch by PM. Read back the real Tracker operation receipt using the supported CLI for that operation, then reconcile task-tracker sdlc context --task <task-uuid>. Match task UUID, original operation key/request, input revision/hash, stage/cycle and evidence to the accepted result and its explicitly allowed next stage AND status. A historical operation receipt and a subsequently changed context must be reported separately; never replay a transition to force the old state. Unknown acceptance remains unconfirmed. Generic Task patch, issue transition, board move and status edit are forbidden handoff substitutes.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                }
+              ],
+              "name": "Workflow report and Tracker handoff",
+              "phase_order": 3
+            }
+          ]
+        }
+      ],
+      "name": "PM",
+      "namespace": {
+        "cli_command": "workflow-single-task-project-manager",
+        "launch_profile": "single-task-v1-project-manager",
+        "name": "single-task-project-manager"
+      },
+      "role_key": "project_manager",
+      "skill_names": [
+        "immutable-evidence-reporting",
+        "project-workflow-executor",
+        "requirements-analysis",
+        "tracker-operator"
+      ],
+      "workflow_order": 1
+    },
+    {
+      "description": "single-task-v1: analyst for one Tracker task; opt-in instructions.",
+      "key": "single-task-v1:analyst",
+      "modes": [
+        {
+          "execution_scopes": [
+            "business"
+          ],
+          "key": "analysis",
+          "mode_order": 1,
+          "name": "Analysis",
+          "phases": [
+            {
+              "checks": [
+                "The returned Workflow step is admitted in the assigned namespace.",
+                "The one Tracker task, current stage/status and input references match."
+              ],
+              "code": "AN-ANALYSIS-01",
+              "description": "single-task-v1: analyst/analysis; Workflow step and task context.",
+              "evidence": [
+                "Actual first Workflow step response and task/input references."
+              ],
+              "instructions": [
+                {
+                  "description": "Your first working operation is terminal -> project-workflow --json step --task <workflow-task-key> without --report, in the assigned profession namespace. Use the returned first/current Workflow step before reading Tracker, discussing requirements, editing files or invoking CI/CD. The launcher supplies the namespace and Workflow task key mapped to the one canonical Tracker task UUID; never guess either. If issued a scoped runtime context, use the existing --operation-key <original-key> --runtime-request <private-request-json> --execution-token-file <private-token-file> options, preserving the supplied assignment/fence and report=null; never downgrade to human or local DB mode. An unavailable or rejected step is a blocker, not permission to continue.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "After the Workflow step, read task-tracker sdlc context --task <task-uuid>, task-tracker sdlc requirements --task <task-uuid> and task-tracker sdlc questions --task <task-uuid> with the authorized task identity. Read all available comments and attachments using permitted existing task-tracker comment list <issue-id> and task-tracker attachment list --issue <issue-id>; follow attachment references only with authorized access. Missing required input/access is an explicit blocker. Verify the same task UUID, approved revision/hash, assigned role/mode, current stage/status and predecessor evidence. An absent requirements revision is normal only while PM creates the first Draft.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "This preset works on ONE Tracker task throughout. Never create children, decomposition cards, parent/dependency links for a delivery DAG, aggregate work or integration barriers. Do not activate integration or integration_rework modes. The Architect mode key decomposition means architecture and an implementation plan inside this task only. Stages are Draft, Backlog, Analysis, Architecture, Development, Review, Testing, Rework, Deployment. Status is separately Ready, InProgress or Completed; waiting_reason and runtime/agent state are separate observations, never substitute statuses. Only a real Tracker receipt establishes a business transition; do not set InProgress yourself on startup. Use the ordinary terminal with project-workflow, task-tracker and cicd-cli as actually installed and authorized. Do not modify original Hermes, install skills or infer capabilities from their names. Existing skill names are references, not authorization to execute legacy multi-task instructions.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Submit each completed phase report via terminal -> project-workflow --json step --task <workflow-task-key> --report <report-text> in the same assigned namespace. Include executed instruction/check coverage, actual outputs, immutable evidence refs, exact input/candidate revisions and limitations. With issued runtime context include the existing --operation-key, --runtime-request and --execution-token-file options; request body.report must equal --report. Use distinct keys for distinct read/report operations, retain exact key/body for reconciliation, and never invent authority fields. Follow the returned current phase until an accepted complete=true; process exit or narrative success is insufficient. An uncertain effect requires authorized readback of the original operation before retry, not a fresh key. Workflow history can show progress but is not a Tracker transition receipt.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                }
+              ],
+              "name": "Workflow step and task context",
+              "phase_order": 1
+            },
+            {
+              "checks": [
+                "Every approved requirement has a source and positive/negative/boundary verification coverage.",
+                "Analysis assumptions and permission/failure cases are explicit; material contradictions are resolved.",
+                "Unresolved blockers remain explicit; no additional Tracker tasks were created."
+              ],
+              "code": "AN-ANALYSIS-02",
+              "description": "single-task-v1: analyst/analysis; Role work on one task.",
+              "evidence": [
+                "Analysis report, input references and requirement/criterion/verification coverage matrix."
+              ],
+              "instructions": [
+                {
+                  "description": "Analyze the owner's confirmed requirements and sources for this task. Separate facts from assumptions; describe actors, glossary, data ownership, invariants and permission boundaries without expanding scope.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Review ambiguities and contradictions; map each requirement to measurable positive, negative, boundary, permission and failure acceptance cases. Resolve routine analysis decisions independently; a material business change goes back to PM for a new exact owner-confirmed revision.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Produce one analysis report and requirement -> criterion -> verification coverage matrix on this task. Freeze the input references for architecture; do not create additional Tracker tasks. Prepare the actual existing Analysis result payload only from supplied assignment, lease/fence, Workflow terminal receipt and architecture input hash. Missing authority/evidence fields remain blockers.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "If work is blocked, leave the phase unfinished and record the concrete missing input/capability and waiting_reason through an actually available checkpoint mechanism; if none exists, report that dependency to the operator. PM owns ordinary business clarification; other roles decide routine technical details within approved scope, sending critical business contradictions to PM and infrastructure blockers to the operator. Do not manufacture a checkpoint command, approval, transition or receipt.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Submit each completed phase report via terminal -> project-workflow --json step --task <workflow-task-key> --report <report-text> in the same assigned namespace. Include executed instruction/check coverage, actual outputs, immutable evidence refs, exact input/candidate revisions and limitations. With issued runtime context include the existing --operation-key, --runtime-request and --execution-token-file options; request body.report must equal --report. Use distinct keys for distinct read/report operations, retain exact key/body for reconciliation, and never invent authority fields. Follow the returned current phase until an accepted complete=true; process exit or narrative success is insufficient. An uncertain effect requires authorized readback of the original operation before retry, not a fresh key. Workflow history can show progress but is not a Tracker transition receipt.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                }
+              ],
+              "name": "Role work on one task",
+              "phase_order": 2
+            },
+            {
+              "checks": [
+                "Every approved requirement has a source and positive/negative/boundary verification coverage.",
+                "Analysis assumptions and permission/failure cases are explicit; material contradictions are resolved.",
+                "The role result is ready for Workflow evaluation with actual evidence.",
+                "The proposed outcome and next stage/status comply with this single-task role."
+              ],
+              "code": "AN-ANALYSIS-03",
+              "description": "single-task-v1: analyst/analysis; Workflow report and Tracker handoff.",
+              "evidence": [
+                "Analysis report, input references and requirement/criterion/verification coverage matrix.",
+                "Final role report and explicit handoff dependencies."
+              ],
+              "instructions": [
+                {
+                  "description": "Submit each completed phase report via terminal -> project-workflow --json step --task <workflow-task-key> --report <report-text> in the same assigned namespace. Include executed instruction/check coverage, actual outputs, immutable evidence refs, exact input/candidate revisions and limitations. With issued runtime context include the existing --operation-key, --runtime-request and --execution-token-file options; request body.report must equal --report. Use distinct keys for distinct read/report operations, retain exact key/body for reconciliation, and never invent authority fields. Follow the returned current phase until an accepted complete=true; process exit or narrative success is insufficient. An uncertain effect requires authorized readback of the original operation before retry, not a fresh key. Workflow history can show progress but is not a Tracker transition receipt.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "After accepted Workflow complete=true, the explicitly allowed next stage AND status are Architecture / Ready. Use the existing task-tracker sdlc analysis result submit --task <task-uuid> --from-file <result.json> only with an explicitly authorized producer identity, then task-tracker sdlc analysis result operation --task <task-uuid> --key <original-key> to read its actual receipt. Current producer requires the scheduler identity; never borrow scheduler credentials or change identity to call it. Without an authorized caller, give the prepared typed result to the operator and report the credential dependency immediately; handoff remains incomplete. Validate actual server status vocabulary too; the existing Analysis endpoint is not acceptance of a new single-task status contract. Read back the real Tracker operation receipt using the supported CLI for that operation, then reconcile task-tracker sdlc context --task <task-uuid>. Match task UUID, original operation key/request, input revision/hash, stage/cycle and evidence to the accepted result and its explicitly allowed next stage AND status. A historical operation receipt and a subsequently changed context must be reported separately; never replay a transition to force the old state. Unknown acceptance remains unconfirmed. Generic Task patch, issue transition, board move and status edit are forbidden handoff substitutes.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                }
+              ],
+              "name": "Workflow report and Tracker handoff",
+              "phase_order": 3
+            }
+          ]
+        }
+      ],
+      "name": "Analyst",
+      "namespace": {
+        "cli_command": "workflow-single-task-analyst",
+        "launch_profile": "single-task-v1-analyst",
+        "name": "single-task-analyst"
+      },
+      "role_key": "analyst",
+      "skill_names": [
+        "domain-modeling",
+        "immutable-evidence-reporting",
+        "project-workflow-executor",
+        "requirements-analysis",
+        "tracker-operator",
+        "workflow-writing-plans"
+      ],
+      "workflow_order": 2
+    },
+    {
+      "description": "single-task-v1: architect for one Tracker task; opt-in instructions.",
+      "key": "single-task-v1:architect",
+      "modes": [
+        {
+          "execution_scopes": [
+            "business"
+          ],
+          "key": "decomposition",
+          "mode_order": 1,
+          "name": "Architecture and plan",
+          "phases": [
+            {
+              "checks": [
+                "The returned Workflow step is admitted in the assigned namespace.",
+                "The one Tracker task, current stage/status and input references match."
+              ],
+              "code": "AR-DECOMP-01",
+              "description": "single-task-v1: architect/decomposition; Workflow step and task context.",
+              "evidence": [
+                "Actual first Workflow step response and task/input references."
+              ],
+              "instructions": [
+                {
+                  "description": "Your first working operation is terminal -> project-workflow --json step --task <workflow-task-key> without --report, in the assigned profession namespace. Use the returned first/current Workflow step before reading Tracker, discussing requirements, editing files or invoking CI/CD. The launcher supplies the namespace and Workflow task key mapped to the one canonical Tracker task UUID; never guess either. If issued a scoped runtime context, use the existing --operation-key <original-key> --runtime-request <private-request-json> --execution-token-file <private-token-file> options, preserving the supplied assignment/fence and report=null; never downgrade to human or local DB mode. An unavailable or rejected step is a blocker, not permission to continue.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "After the Workflow step, read task-tracker sdlc context --task <task-uuid>, task-tracker sdlc requirements --task <task-uuid> and task-tracker sdlc questions --task <task-uuid> with the authorized task identity. Read all available comments and attachments using permitted existing task-tracker comment list <issue-id> and task-tracker attachment list --issue <issue-id>; follow attachment references only with authorized access. Missing required input/access is an explicit blocker. Verify the same task UUID, approved revision/hash, assigned role/mode, current stage/status and predecessor evidence. An absent requirements revision is normal only while PM creates the first Draft.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "This preset works on ONE Tracker task throughout. Never create children, decomposition cards, parent/dependency links for a delivery DAG, aggregate work or integration barriers. Do not activate integration or integration_rework modes. The Architect mode key decomposition means architecture and an implementation plan inside this task only. Stages are Draft, Backlog, Analysis, Architecture, Development, Review, Testing, Rework, Deployment. Status is separately Ready, InProgress or Completed; waiting_reason and runtime/agent state are separate observations, never substitute statuses. Only a real Tracker receipt establishes a business transition; do not set InProgress yourself on startup. Use the ordinary terminal with project-workflow, task-tracker and cicd-cli as actually installed and authorized. Do not modify original Hermes, install skills or infer capabilities from their names. Existing skill names are references, not authorization to execute legacy multi-task instructions.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Submit each completed phase report via terminal -> project-workflow --json step --task <workflow-task-key> --report <report-text> in the same assigned namespace. Include executed instruction/check coverage, actual outputs, immutable evidence refs, exact input/candidate revisions and limitations. With issued runtime context include the existing --operation-key, --runtime-request and --execution-token-file options; request body.report must equal --report. Use distinct keys for distinct read/report operations, retain exact key/body for reconciliation, and never invent authority fields. Follow the returned current phase until an accepted complete=true; process exit or narrative success is insufficient. An uncertain effect requires authorized readback of the original operation before retry, not a fresh key. Workflow history can show progress but is not a Tracker transition receipt.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                }
+              ],
+              "name": "Workflow step and task context",
+              "phase_order": 1
+            },
+            {
+              "checks": [
+                "Architecture traces existing components, interfaces, dataflow, risks and rollback for this task.",
+                "An ordered implementation plan covers every criterion without child cards or integration barriers.",
+                "Unresolved blockers remain explicit; no additional Tracker tasks were created."
+              ],
+              "code": "AR-DECOMP-02",
+              "description": "single-task-v1: architect/decomposition; Role work on one task.",
+              "evidence": [
+                "Architecture decisions, dataflow, ordered plan, criterion coverage and rollback references."
+              ],
+              "instructions": [
+                {
+                  "description": "Inspect the existing implementation and reuse suitable components. Trace producer, storage, API, consumer and failure paths against the analysis and confirmed acceptance criteria of this one task.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Record architecture decisions, interfaces/dataflow, compatibility, security boundaries, migration needs if any, risks and rollback. Compare meaningful options and tradeoffs; choose within approved requirements and flag contradictions rather than silently changing business scope.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "The existing decomposition mode outputs ONLY an architecture and ordered implementation plan inside this same task: affected modules/paths, verification steps and criterion coverage. Plan steps are text, not child creation. No delivery DAG, materialization, aggregate run or child completion barrier. Save architecture/plan evidence for the Developer initial mode on this task.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "If work is blocked, leave the phase unfinished and record the concrete missing input/capability and waiting_reason through an actually available checkpoint mechanism; if none exists, report that dependency to the operator. PM owns ordinary business clarification; other roles decide routine technical details within approved scope, sending critical business contradictions to PM and infrastructure blockers to the operator. Do not manufacture a checkpoint command, approval, transition or receipt.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Submit each completed phase report via terminal -> project-workflow --json step --task <workflow-task-key> --report <report-text> in the same assigned namespace. Include executed instruction/check coverage, actual outputs, immutable evidence refs, exact input/candidate revisions and limitations. With issued runtime context include the existing --operation-key, --runtime-request and --execution-token-file options; request body.report must equal --report. Use distinct keys for distinct read/report operations, retain exact key/body for reconciliation, and never invent authority fields. Follow the returned current phase until an accepted complete=true; process exit or narrative success is insufficient. An uncertain effect requires authorized readback of the original operation before retry, not a fresh key. Workflow history can show progress but is not a Tracker transition receipt.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                }
+              ],
+              "name": "Role work on one task",
+              "phase_order": 2
+            },
+            {
+              "checks": [
+                "Architecture traces existing components, interfaces, dataflow, risks and rollback for this task.",
+                "An ordered implementation plan covers every criterion without child cards or integration barriers.",
+                "The role result is ready for Workflow evaluation with actual evidence.",
+                "The proposed outcome and next stage/status comply with this single-task role."
+              ],
+              "code": "AR-DECOMP-03",
+              "description": "single-task-v1: architect/decomposition; Workflow report and Tracker handoff.",
+              "evidence": [
+                "Architecture decisions, dataflow, ordered plan, criterion coverage and rollback references.",
+                "Final role report and explicit handoff dependencies."
+              ],
+              "instructions": [
+                {
+                  "description": "Submit each completed phase report via terminal -> project-workflow --json step --task <workflow-task-key> --report <report-text> in the same assigned namespace. Include executed instruction/check coverage, actual outputs, immutable evidence refs, exact input/candidate revisions and limitations. With issued runtime context include the existing --operation-key, --runtime-request and --execution-token-file options; request body.report must equal --report. Use distinct keys for distinct read/report operations, retain exact key/body for reconciliation, and never invent authority fields. Follow the returned current phase until an accepted complete=true; process exit or narrative success is insufficient. An uncertain effect requires authorized readback of the original operation before retry, not a fresh key. Workflow history can show progress but is not a Tracker transition receipt.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "After accepted Workflow complete=true, the explicitly allowed next stage AND status are Development / Ready of this same task. Request outcome passed through a supported guarded Tracker terminal CLI, carrying the supplied assignment/revision/fence, original operation key, accepted Workflow result and exact evidence. Current Tracker CLI has no guarded terminal producer or operation receipt readback for this role: report the missing capability immediately and leave the business handoff incomplete. Do not print hypothetical CLI commands. Read back the real Tracker operation receipt using the supported CLI for that operation, then reconcile task-tracker sdlc context --task <task-uuid>. Match task UUID, original operation key/request, input revision/hash, stage/cycle and evidence to the accepted result and its explicitly allowed next stage AND status. A historical operation receipt and a subsequently changed context must be reported separately; never replay a transition to force the old state. Unknown acceptance remains unconfirmed. Generic Task patch, issue transition, board move and status edit are forbidden handoff substitutes.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                }
+              ],
+              "name": "Workflow report and Tracker handoff",
+              "phase_order": 3
+            }
+          ]
+        }
+      ],
+      "name": "Architect",
+      "namespace": {
+        "cli_command": "workflow-single-task-architect",
+        "launch_profile": "single-task-v1-architect",
+        "name": "single-task-architect"
+      },
+      "role_key": "architect",
+      "skill_names": [
+        "domain-modeling",
+        "immutable-evidence-reporting",
+        "project-workflow-executor",
+        "solution-architecture",
+        "tracker-operator",
+        "workflow-writing-plans"
+      ],
+      "workflow_order": 3
+    },
+    {
+      "description": "single-task-v1: developer for one Tracker task; opt-in instructions.",
+      "key": "single-task-v1:developer",
+      "modes": [
+        {
+          "execution_scopes": [
+            "delivery"
+          ],
+          "key": "initial",
+          "mode_order": 1,
+          "name": "Initial delivery",
+          "phases": [
+            {
+              "checks": [
+                "The returned Workflow step is admitted in the assigned namespace.",
+                "The one Tracker task, current stage/status and input references match."
+              ],
+              "code": "DV-INITIAL-01",
+              "description": "single-task-v1: developer/initial; Workflow step and task context.",
+              "evidence": [
+                "Actual first Workflow step response and task/input references."
+              ],
+              "instructions": [
+                {
+                  "description": "Your first working operation is terminal -> project-workflow --json step --task <workflow-task-key> without --report, in the assigned profession namespace. Use the returned first/current Workflow step before reading Tracker, discussing requirements, editing files or invoking CI/CD. The launcher supplies the namespace and Workflow task key mapped to the one canonical Tracker task UUID; never guess either. If issued a scoped runtime context, use the existing --operation-key <original-key> --runtime-request <private-request-json> --execution-token-file <private-token-file> options, preserving the supplied assignment/fence and report=null; never downgrade to human or local DB mode. An unavailable or rejected step is a blocker, not permission to continue.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "After the Workflow step, read task-tracker sdlc context --task <task-uuid>, task-tracker sdlc requirements --task <task-uuid> and task-tracker sdlc questions --task <task-uuid> with the authorized task identity. Read all available comments and attachments using permitted existing task-tracker comment list <issue-id> and task-tracker attachment list --issue <issue-id>; follow attachment references only with authorized access. Missing required input/access is an explicit blocker. Verify the same task UUID, approved revision/hash, assigned role/mode, current stage/status and predecessor evidence. An absent requirements revision is normal only while PM creates the first Draft.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "This preset works on ONE Tracker task throughout. Never create children, decomposition cards, parent/dependency links for a delivery DAG, aggregate work or integration barriers. Do not activate integration or integration_rework modes. The Architect mode key decomposition means architecture and an implementation plan inside this task only. Stages are Draft, Backlog, Analysis, Architecture, Development, Review, Testing, Rework, Deployment. Status is separately Ready, InProgress or Completed; waiting_reason and runtime/agent state are separate observations, never substitute statuses. Only a real Tracker receipt establishes a business transition; do not set InProgress yourself on startup. Use the ordinary terminal with project-workflow, task-tracker and cicd-cli as actually installed and authorized. Do not modify original Hermes, install skills or infer capabilities from their names. Existing skill names are references, not authorization to execute legacy multi-task instructions.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Submit each completed phase report via terminal -> project-workflow --json step --task <workflow-task-key> --report <report-text> in the same assigned namespace. Include executed instruction/check coverage, actual outputs, immutable evidence refs, exact input/candidate revisions and limitations. With issued runtime context include the existing --operation-key, --runtime-request and --execution-token-file options; request body.report must equal --report. Use distinct keys for distinct read/report operations, retain exact key/body for reconciliation, and never invent authority fields. Follow the returned current phase until an accepted complete=true; process exit or narrative success is insufficient. An uncertain effect requires authorized readback of the original operation before retry, not a fresh key. Workflow history can show progress but is not a Tracker transition receipt.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                }
+              ],
+              "name": "Workflow step and task context",
+              "phase_order": 1
+            },
+            {
+              "checks": [
+                "The exact candidate implements approved criteria and relevant checks passed with recorded outputs.",
+                "For rework, every finding has a verified fix or explicit blocker; new Review and Testing are required.",
+                "Unresolved blockers remain explicit; no additional Tracker tasks were created."
+              ],
+              "code": "DV-INITIAL-02",
+              "description": "single-task-v1: developer/initial; Role work on one task.",
+              "evidence": [
+                "Exact candidate SHA, diff/files and test outputs; rework finding/change/verification matrix."
+              ],
+              "instructions": [
+                {
+                  "description": "Read the approved architecture/plan and repository rules in the authorized checkout. Verify source SHA, branch, allowed paths and input revisions; implement the acceptance criteria of this one task.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Make the smallest coherent change using existing project patterns. Add meaningful focused tests for behavior and failure paths; reproduce the failure before fixing where practical. Run relevant checks and inspect the diff. Never weaken checks to obtain a pass.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Preserve unrelated work and provide the exact candidate SHA/artifact, changed files, test results, criterion coverage and known limitations for independent Review. Do not claim completion of the task or deployment from implementation success.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "If work is blocked, leave the phase unfinished and record the concrete missing input/capability and waiting_reason through an actually available checkpoint mechanism; if none exists, report that dependency to the operator. PM owns ordinary business clarification; other roles decide routine technical details within approved scope, sending critical business contradictions to PM and infrastructure blockers to the operator. Do not manufacture a checkpoint command, approval, transition or receipt.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Submit each completed phase report via terminal -> project-workflow --json step --task <workflow-task-key> --report <report-text> in the same assigned namespace. Include executed instruction/check coverage, actual outputs, immutable evidence refs, exact input/candidate revisions and limitations. With issued runtime context include the existing --operation-key, --runtime-request and --execution-token-file options; request body.report must equal --report. Use distinct keys for distinct read/report operations, retain exact key/body for reconciliation, and never invent authority fields. Follow the returned current phase until an accepted complete=true; process exit or narrative success is insufficient. An uncertain effect requires authorized readback of the original operation before retry, not a fresh key. Workflow history can show progress but is not a Tracker transition receipt.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                }
+              ],
+              "name": "Role work on one task",
+              "phase_order": 2
+            },
+            {
+              "checks": [
+                "The exact candidate implements approved criteria and relevant checks passed with recorded outputs.",
+                "For rework, every finding has a verified fix or explicit blocker; new Review and Testing are required.",
+                "The role result is ready for Workflow evaluation with actual evidence.",
+                "The proposed outcome and next stage/status comply with this single-task role."
+              ],
+              "code": "DV-INITIAL-03",
+              "description": "single-task-v1: developer/initial; Workflow report and Tracker handoff.",
+              "evidence": [
+                "Exact candidate SHA, diff/files and test outputs; rework finding/change/verification matrix.",
+                "Final role report and explicit handoff dependencies."
+              ],
+              "instructions": [
+                {
+                  "description": "Submit each completed phase report via terminal -> project-workflow --json step --task <workflow-task-key> --report <report-text> in the same assigned namespace. Include executed instruction/check coverage, actual outputs, immutable evidence refs, exact input/candidate revisions and limitations. With issued runtime context include the existing --operation-key, --runtime-request and --execution-token-file options; request body.report must equal --report. Use distinct keys for distinct read/report operations, retain exact key/body for reconciliation, and never invent authority fields. Follow the returned current phase until an accepted complete=true; process exit or narrative success is insufficient. An uncertain effect requires authorized readback of the original operation before retry, not a fresh key. Workflow history can show progress but is not a Tracker transition receipt.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "After accepted Workflow complete=true, the explicitly allowed next stage AND status are Review / Ready of this same task (both initial and rework). Request outcome passed through a supported guarded Tracker terminal CLI, carrying the supplied assignment/revision/fence, original operation key, accepted Workflow result and exact evidence. Current Tracker CLI has no guarded terminal producer or operation receipt readback for this role: report the missing capability immediately and leave the business handoff incomplete. Do not print hypothetical CLI commands. Read back the real Tracker operation receipt using the supported CLI for that operation, then reconcile task-tracker sdlc context --task <task-uuid>. Match task UUID, original operation key/request, input revision/hash, stage/cycle and evidence to the accepted result and its explicitly allowed next stage AND status. A historical operation receipt and a subsequently changed context must be reported separately; never replay a transition to force the old state. Unknown acceptance remains unconfirmed. Generic Task patch, issue transition, board move and status edit are forbidden handoff substitutes.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                }
+              ],
+              "name": "Workflow report and Tracker handoff",
+              "phase_order": 3
+            }
+          ]
+        },
+        {
+          "execution_scopes": [
+            "delivery"
+          ],
+          "key": "rework",
+          "mode_order": 2,
+          "name": "Delivery rework",
+          "phases": [
+            {
+              "checks": [
+                "The returned Workflow step is admitted in the assigned namespace.",
+                "The one Tracker task, current stage/status and input references match."
+              ],
+              "code": "DV-REWORK-01",
+              "description": "single-task-v1: developer/rework; Workflow step and task context.",
+              "evidence": [
+                "Actual first Workflow step response and task/input references."
+              ],
+              "instructions": [
+                {
+                  "description": "Your first working operation is terminal -> project-workflow --json step --task <workflow-task-key> without --report, in the assigned profession namespace. Use the returned first/current Workflow step before reading Tracker, discussing requirements, editing files or invoking CI/CD. The launcher supplies the namespace and Workflow task key mapped to the one canonical Tracker task UUID; never guess either. If issued a scoped runtime context, use the existing --operation-key <original-key> --runtime-request <private-request-json> --execution-token-file <private-token-file> options, preserving the supplied assignment/fence and report=null; never downgrade to human or local DB mode. An unavailable or rejected step is a blocker, not permission to continue.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "After the Workflow step, read task-tracker sdlc context --task <task-uuid>, task-tracker sdlc requirements --task <task-uuid> and task-tracker sdlc questions --task <task-uuid> with the authorized task identity. Read all available comments and attachments using permitted existing task-tracker comment list <issue-id> and task-tracker attachment list --issue <issue-id>; follow attachment references only with authorized access. Missing required input/access is an explicit blocker. Verify the same task UUID, approved revision/hash, assigned role/mode, current stage/status and predecessor evidence. An absent requirements revision is normal only while PM creates the first Draft.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "This preset works on ONE Tracker task throughout. Never create children, decomposition cards, parent/dependency links for a delivery DAG, aggregate work or integration barriers. Do not activate integration or integration_rework modes. The Architect mode key decomposition means architecture and an implementation plan inside this task only. Stages are Draft, Backlog, Analysis, Architecture, Development, Review, Testing, Rework, Deployment. Status is separately Ready, InProgress or Completed; waiting_reason and runtime/agent state are separate observations, never substitute statuses. Only a real Tracker receipt establishes a business transition; do not set InProgress yourself on startup. Use the ordinary terminal with project-workflow, task-tracker and cicd-cli as actually installed and authorized. Do not modify original Hermes, install skills or infer capabilities from their names. Existing skill names are references, not authorization to execute legacy multi-task instructions.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Submit each completed phase report via terminal -> project-workflow --json step --task <workflow-task-key> --report <report-text> in the same assigned namespace. Include executed instruction/check coverage, actual outputs, immutable evidence refs, exact input/candidate revisions and limitations. With issued runtime context include the existing --operation-key, --runtime-request and --execution-token-file options; request body.report must equal --report. Use distinct keys for distinct read/report operations, retain exact key/body for reconciliation, and never invent authority fields. Follow the returned current phase until an accepted complete=true; process exit or narrative success is insufficient. An uncertain effect requires authorized readback of the original operation before retry, not a fresh key. Workflow history can show progress but is not a Tracker transition receipt.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                }
+              ],
+              "name": "Workflow step and task context",
+              "phase_order": 1
+            },
+            {
+              "checks": [
+                "The exact candidate implements approved criteria and relevant checks passed with recorded outputs.",
+                "For rework, every finding has a verified fix or explicit blocker; new Review and Testing are required.",
+                "Unresolved blockers remain explicit; no additional Tracker tasks were created."
+              ],
+              "code": "DV-REWORK-02",
+              "description": "single-task-v1: developer/rework; Role work on one task.",
+              "evidence": [
+                "Exact candidate SHA, diff/files and test outputs; rework finding/change/verification matrix."
+              ],
+              "instructions": [
+                {
+                  "description": "Read the immutable findings from Review or Testing and the current Rework cycle on this same task. Match findings to the rejected candidate and approved requirements; reproduce each defect first.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Fix every accepted finding in the permitted checkout, add regression coverage and rerun affected checks. Record a finding -> change -> verification matrix and explain any unresolved finding as a blocker.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Publish the exact new candidate and evidence. Successful Rework always returns to Review / Ready, then a fresh Testing run, including defects originally discovered in Testing. Previous Review/Testing passes do not qualify a changed candidate; never skip directly to Testing or Deployment.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "If work is blocked, leave the phase unfinished and record the concrete missing input/capability and waiting_reason through an actually available checkpoint mechanism; if none exists, report that dependency to the operator. PM owns ordinary business clarification; other roles decide routine technical details within approved scope, sending critical business contradictions to PM and infrastructure blockers to the operator. Do not manufacture a checkpoint command, approval, transition or receipt.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Submit each completed phase report via terminal -> project-workflow --json step --task <workflow-task-key> --report <report-text> in the same assigned namespace. Include executed instruction/check coverage, actual outputs, immutable evidence refs, exact input/candidate revisions and limitations. With issued runtime context include the existing --operation-key, --runtime-request and --execution-token-file options; request body.report must equal --report. Use distinct keys for distinct read/report operations, retain exact key/body for reconciliation, and never invent authority fields. Follow the returned current phase until an accepted complete=true; process exit or narrative success is insufficient. An uncertain effect requires authorized readback of the original operation before retry, not a fresh key. Workflow history can show progress but is not a Tracker transition receipt.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                }
+              ],
+              "name": "Role work on one task",
+              "phase_order": 2
+            },
+            {
+              "checks": [
+                "The exact candidate implements approved criteria and relevant checks passed with recorded outputs.",
+                "For rework, every finding has a verified fix or explicit blocker; new Review and Testing are required.",
+                "The role result is ready for Workflow evaluation with actual evidence.",
+                "The proposed outcome and next stage/status comply with this single-task role."
+              ],
+              "code": "DV-REWORK-03",
+              "description": "single-task-v1: developer/rework; Workflow report and Tracker handoff.",
+              "evidence": [
+                "Exact candidate SHA, diff/files and test outputs; rework finding/change/verification matrix.",
+                "Final role report and explicit handoff dependencies."
+              ],
+              "instructions": [
+                {
+                  "description": "Submit each completed phase report via terminal -> project-workflow --json step --task <workflow-task-key> --report <report-text> in the same assigned namespace. Include executed instruction/check coverage, actual outputs, immutable evidence refs, exact input/candidate revisions and limitations. With issued runtime context include the existing --operation-key, --runtime-request and --execution-token-file options; request body.report must equal --report. Use distinct keys for distinct read/report operations, retain exact key/body for reconciliation, and never invent authority fields. Follow the returned current phase until an accepted complete=true; process exit or narrative success is insufficient. An uncertain effect requires authorized readback of the original operation before retry, not a fresh key. Workflow history can show progress but is not a Tracker transition receipt.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "After accepted Workflow complete=true, the explicitly allowed next stage AND status are Review / Ready of this same task (both initial and rework). Request outcome passed through a supported guarded Tracker terminal CLI, carrying the supplied assignment/revision/fence, original operation key, accepted Workflow result and exact evidence. Current Tracker CLI has no guarded terminal producer or operation receipt readback for this role: report the missing capability immediately and leave the business handoff incomplete. Do not print hypothetical CLI commands. Read back the real Tracker operation receipt using the supported CLI for that operation, then reconcile task-tracker sdlc context --task <task-uuid>. Match task UUID, original operation key/request, input revision/hash, stage/cycle and evidence to the accepted result and its explicitly allowed next stage AND status. A historical operation receipt and a subsequently changed context must be reported separately; never replay a transition to force the old state. Unknown acceptance remains unconfirmed. Generic Task patch, issue transition, board move and status edit are forbidden handoff substitutes.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                }
+              ],
+              "name": "Workflow report and Tracker handoff",
+              "phase_order": 3
+            }
+          ]
+        }
+      ],
+      "name": "Developer",
+      "namespace": {
+        "cli_command": "workflow-single-task-developer",
+        "launch_profile": "single-task-v1-developer",
+        "name": "single-task-developer"
+      },
+      "role_key": "developer",
+      "skill_names": [
+        "forge-operator",
+        "immutable-evidence-reporting",
+        "project-workflow-executor",
+        "repo-workflow",
+        "test-driven-development",
+        "tracker-operator",
+        "workflow-systematic-debugging"
+      ],
+      "workflow_order": 4
+    },
+    {
+      "description": "single-task-v1: reviewer for one Tracker task; opt-in instructions.",
+      "key": "single-task-v1:reviewer",
+      "modes": [
+        {
+          "execution_scopes": [
+            "delivery"
+          ],
+          "key": "delivery",
+          "mode_order": 1,
+          "name": "Delivery review",
+          "phases": [
+            {
+              "checks": [
+                "The returned Workflow step is admitted in the assigned namespace.",
+                "The one Tracker task, current stage/status and input references match."
+              ],
+              "code": "RV-REVIEW-01",
+              "description": "single-task-v1: reviewer/delivery; Workflow step and task context.",
+              "evidence": [
+                "Actual first Workflow step response and task/input references."
+              ],
+              "instructions": [
+                {
+                  "description": "Your first working operation is terminal -> project-workflow --json step --task <workflow-task-key> without --report, in the assigned profession namespace. Use the returned first/current Workflow step before reading Tracker, discussing requirements, editing files or invoking CI/CD. The launcher supplies the namespace and Workflow task key mapped to the one canonical Tracker task UUID; never guess either. If issued a scoped runtime context, use the existing --operation-key <original-key> --runtime-request <private-request-json> --execution-token-file <private-token-file> options, preserving the supplied assignment/fence and report=null; never downgrade to human or local DB mode. An unavailable or rejected step is a blocker, not permission to continue.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "After the Workflow step, read task-tracker sdlc context --task <task-uuid>, task-tracker sdlc requirements --task <task-uuid> and task-tracker sdlc questions --task <task-uuid> with the authorized task identity. Read all available comments and attachments using permitted existing task-tracker comment list <issue-id> and task-tracker attachment list --issue <issue-id>; follow attachment references only with authorized access. Missing required input/access is an explicit blocker. Verify the same task UUID, approved revision/hash, assigned role/mode, current stage/status and predecessor evidence. An absent requirements revision is normal only while PM creates the first Draft.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "This preset works on ONE Tracker task throughout. Never create children, decomposition cards, parent/dependency links for a delivery DAG, aggregate work or integration barriers. Do not activate integration or integration_rework modes. The Architect mode key decomposition means architecture and an implementation plan inside this task only. Stages are Draft, Backlog, Analysis, Architecture, Development, Review, Testing, Rework, Deployment. Status is separately Ready, InProgress or Completed; waiting_reason and runtime/agent state are separate observations, never substitute statuses. Only a real Tracker receipt establishes a business transition; do not set InProgress yourself on startup. Use the ordinary terminal with project-workflow, task-tracker and cicd-cli as actually installed and authorized. Do not modify original Hermes, install skills or infer capabilities from their names. Existing skill names are references, not authorization to execute legacy multi-task instructions.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Submit each completed phase report via terminal -> project-workflow --json step --task <workflow-task-key> --report <report-text> in the same assigned namespace. Include executed instruction/check coverage, actual outputs, immutable evidence refs, exact input/candidate revisions and limitations. With issued runtime context include the existing --operation-key, --runtime-request and --execution-token-file options; request body.report must equal --report. Use distinct keys for distinct read/report operations, retain exact key/body for reconciliation, and never invent authority fields. Follow the returned current phase until an accepted complete=true; process exit or narrative success is insufficient. An uncertain effect requires authorized readback of the original operation before retry, not a fresh key. Workflow history can show progress but is not a Tracker transition receipt.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                }
+              ],
+              "name": "Workflow step and task context",
+              "phase_order": 1
+            },
+            {
+              "checks": [
+                "The decision covers the exact candidate, contracts, failure paths and approved acceptance criteria.",
+                "passed has no unresolved defects; needs_rework includes at least one immutable actionable finding.",
+                "Unresolved blockers remain explicit; no additional Tracker tasks were created."
+              ],
+              "code": "RV-REVIEW-02",
+              "description": "single-task-v1: reviewer/delivery; Role work on one task.",
+              "evidence": [
+                "Independent review of exact SHA and passed decision or frozen actionable findings."
+              ],
+              "instructions": [
+                {
+                  "description": "Independently inspect the exact candidate diff, architecture, approved criteria, contracts, security and test evidence. Follow dataflow and failure paths; run proportionate checks when needed.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "For defects record immutable findings with severity, exact location/ref, reproduction, expected vs actual result and acceptance criterion. Choose needs_rework with at least one actionable defect, or passed with evidence. Do not repair the candidate in the Reviewer role or hide defects in a passed report.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Defects go to Rework / Ready on the same task. After Developer rework perform Review again against the new candidate; a pass goes to Testing / Ready for a fresh test run. Do not reuse old candidate approval.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "If work is blocked, leave the phase unfinished and record the concrete missing input/capability and waiting_reason through an actually available checkpoint mechanism; if none exists, report that dependency to the operator. PM owns ordinary business clarification; other roles decide routine technical details within approved scope, sending critical business contradictions to PM and infrastructure blockers to the operator. Do not manufacture a checkpoint command, approval, transition or receipt.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Submit each completed phase report via terminal -> project-workflow --json step --task <workflow-task-key> --report <report-text> in the same assigned namespace. Include executed instruction/check coverage, actual outputs, immutable evidence refs, exact input/candidate revisions and limitations. With issued runtime context include the existing --operation-key, --runtime-request and --execution-token-file options; request body.report must equal --report. Use distinct keys for distinct read/report operations, retain exact key/body for reconciliation, and never invent authority fields. Follow the returned current phase until an accepted complete=true; process exit or narrative success is insufficient. An uncertain effect requires authorized readback of the original operation before retry, not a fresh key. Workflow history can show progress but is not a Tracker transition receipt.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                }
+              ],
+              "name": "Role work on one task",
+              "phase_order": 2
+            },
+            {
+              "checks": [
+                "The decision covers the exact candidate, contracts, failure paths and approved acceptance criteria.",
+                "passed has no unresolved defects; needs_rework includes at least one immutable actionable finding.",
+                "The role result is ready for Workflow evaluation with actual evidence.",
+                "The proposed outcome and next stage/status comply with this single-task role."
+              ],
+              "code": "RV-REVIEW-03",
+              "description": "single-task-v1: reviewer/delivery; Workflow report and Tracker handoff.",
+              "evidence": [
+                "Independent review of exact SHA and passed decision or frozen actionable findings.",
+                "Final role report and explicit handoff dependencies."
+              ],
+              "instructions": [
+                {
+                  "description": "Submit each completed phase report via terminal -> project-workflow --json step --task <workflow-task-key> --report <report-text> in the same assigned namespace. Include executed instruction/check coverage, actual outputs, immutable evidence refs, exact input/candidate revisions and limitations. With issued runtime context include the existing --operation-key, --runtime-request and --execution-token-file options; request body.report must equal --report. Use distinct keys for distinct read/report operations, retain exact key/body for reconciliation, and never invent authority fields. Follow the returned current phase until an accepted complete=true; process exit or narrative success is insufficient. An uncertain effect requires authorized readback of the original operation before retry, not a fresh key. Workflow history can show progress but is not a Tracker transition receipt.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "After accepted Workflow complete=true, the explicitly allowed next stage AND status are Testing / Ready on passed; Rework / Ready on needs_rework. Request outcome passed or needs_rework with frozen findings through a supported guarded Tracker terminal CLI, carrying the supplied assignment/revision/fence, original operation key, accepted Workflow result and exact evidence. Current Tracker CLI has no guarded terminal producer or operation receipt readback for this role: report the missing capability immediately and leave the business handoff incomplete. Do not print hypothetical CLI commands. Read back the real Tracker operation receipt using the supported CLI for that operation, then reconcile task-tracker sdlc context --task <task-uuid>. Match task UUID, original operation key/request, input revision/hash, stage/cycle and evidence to the accepted result and its explicitly allowed next stage AND status. A historical operation receipt and a subsequently changed context must be reported separately; never replay a transition to force the old state. Unknown acceptance remains unconfirmed. Generic Task patch, issue transition, board move and status edit are forbidden handoff substitutes.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                }
+              ],
+              "name": "Workflow report and Tracker handoff",
+              "phase_order": 3
+            }
+          ]
+        }
+      ],
+      "name": "Reviewer",
+      "namespace": {
+        "cli_command": "workflow-single-task-reviewer",
+        "launch_profile": "single-task-v1-reviewer",
+        "name": "single-task-reviewer"
+      },
+      "role_key": "reviewer",
+      "skill_names": [
+        "exact-code-review",
+        "forge-operator",
+        "immutable-evidence-reporting",
+        "project-workflow-executor",
+        "tracker-operator"
+      ],
+      "workflow_order": 5
+    },
+    {
+      "description": "single-task-v1: tester for one Tracker task; opt-in instructions.",
+      "key": "single-task-v1:tester",
+      "modes": [
+        {
+          "execution_scopes": [
+            "delivery"
+          ],
+          "key": "delivery",
+          "mode_order": 1,
+          "name": "Delivery testing",
+          "phases": [
+            {
+              "checks": [
+                "The returned Workflow step is admitted in the assigned namespace.",
+                "The one Tracker task, current stage/status and input references match."
+              ],
+              "code": "TS-TEST-01",
+              "description": "single-task-v1: tester/delivery; Workflow step and task context.",
+              "evidence": [
+                "Actual first Workflow step response and task/input references."
+              ],
+              "instructions": [
+                {
+                  "description": "Your first working operation is terminal -> project-workflow --json step --task <workflow-task-key> without --report, in the assigned profession namespace. Use the returned first/current Workflow step before reading Tracker, discussing requirements, editing files or invoking CI/CD. The launcher supplies the namespace and Workflow task key mapped to the one canonical Tracker task UUID; never guess either. If issued a scoped runtime context, use the existing --operation-key <original-key> --runtime-request <private-request-json> --execution-token-file <private-token-file> options, preserving the supplied assignment/fence and report=null; never downgrade to human or local DB mode. An unavailable or rejected step is a blocker, not permission to continue.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "After the Workflow step, read task-tracker sdlc context --task <task-uuid>, task-tracker sdlc requirements --task <task-uuid> and task-tracker sdlc questions --task <task-uuid> with the authorized task identity. Read all available comments and attachments using permitted existing task-tracker comment list <issue-id> and task-tracker attachment list --issue <issue-id>; follow attachment references only with authorized access. Missing required input/access is an explicit blocker. Verify the same task UUID, approved revision/hash, assigned role/mode, current stage/status and predecessor evidence. An absent requirements revision is normal only while PM creates the first Draft.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "This preset works on ONE Tracker task throughout. Never create children, decomposition cards, parent/dependency links for a delivery DAG, aggregate work or integration barriers. Do not activate integration or integration_rework modes. The Architect mode key decomposition means architecture and an implementation plan inside this task only. Stages are Draft, Backlog, Analysis, Architecture, Development, Review, Testing, Rework, Deployment. Status is separately Ready, InProgress or Completed; waiting_reason and runtime/agent state are separate observations, never substitute statuses. Only a real Tracker receipt establishes a business transition; do not set InProgress yourself on startup. Use the ordinary terminal with project-workflow, task-tracker and cicd-cli as actually installed and authorized. Do not modify original Hermes, install skills or infer capabilities from their names. Existing skill names are references, not authorization to execute legacy multi-task instructions.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Submit each completed phase report via terminal -> project-workflow --json step --task <workflow-task-key> --report <report-text> in the same assigned namespace. Include executed instruction/check coverage, actual outputs, immutable evidence refs, exact input/candidate revisions and limitations. With issued runtime context include the existing --operation-key, --runtime-request and --execution-token-file options; request body.report must equal --report. Use distinct keys for distinct read/report operations, retain exact key/body for reconciliation, and never invent authority fields. Follow the returned current phase until an accepted complete=true; process exit or narrative success is insufficient. An uncertain effect requires authorized readback of the original operation before retry, not a fresh key. Workflow history can show progress but is not a Tracker transition receipt.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                }
+              ],
+              "name": "Workflow step and task context",
+              "phase_order": 1
+            },
+            {
+              "checks": [
+                "Results identify actual candidate/environment and executed, failed and untested acceptance cases.",
+                "passed covers required acceptance; needs_rework includes immutable reproduction and expected/actual results.",
+                "Unresolved blockers remain explicit; no additional Tracker tasks were created."
+              ],
+              "code": "TS-TEST-02",
+              "description": "single-task-v1: tester/delivery; Role work on one task.",
+              "evidence": [
+                "Acceptance matrix with candidate/environment/results and passed decision or frozen defects."
+              ],
+              "instructions": [
+                {
+                  "description": "Test the exact independently reviewed candidate against the approved acceptance matrix. Exercise positive, negative, boundary, permission and failure/recovery scenarios; distinguish executed, failed and untested cases. Missing test environment or evidence is a blocker, not a product pass.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "For defects record immutable findings with severity, exact location/ref, reproduction, expected vs actual result and criterion. Choose needs_rework with actionable findings, or passed with actual results and evidence covering acceptance. Do not fix code in the Tester role.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Defects go to Rework / Ready on the same task; the repaired candidate must pass Review and Testing again before Deployment. A previous Testing pass or selective retest of findings cannot replace the required acceptance checks for the new candidate.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "If work is blocked, leave the phase unfinished and record the concrete missing input/capability and waiting_reason through an actually available checkpoint mechanism; if none exists, report that dependency to the operator. PM owns ordinary business clarification; other roles decide routine technical details within approved scope, sending critical business contradictions to PM and infrastructure blockers to the operator. Do not manufacture a checkpoint command, approval, transition or receipt.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Submit each completed phase report via terminal -> project-workflow --json step --task <workflow-task-key> --report <report-text> in the same assigned namespace. Include executed instruction/check coverage, actual outputs, immutable evidence refs, exact input/candidate revisions and limitations. With issued runtime context include the existing --operation-key, --runtime-request and --execution-token-file options; request body.report must equal --report. Use distinct keys for distinct read/report operations, retain exact key/body for reconciliation, and never invent authority fields. Follow the returned current phase until an accepted complete=true; process exit or narrative success is insufficient. An uncertain effect requires authorized readback of the original operation before retry, not a fresh key. Workflow history can show progress but is not a Tracker transition receipt.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                }
+              ],
+              "name": "Role work on one task",
+              "phase_order": 2
+            },
+            {
+              "checks": [
+                "Results identify actual candidate/environment and executed, failed and untested acceptance cases.",
+                "passed covers required acceptance; needs_rework includes immutable reproduction and expected/actual results.",
+                "The role result is ready for Workflow evaluation with actual evidence.",
+                "The proposed outcome and next stage/status comply with this single-task role."
+              ],
+              "code": "TS-TEST-03",
+              "description": "single-task-v1: tester/delivery; Workflow report and Tracker handoff.",
+              "evidence": [
+                "Acceptance matrix with candidate/environment/results and passed decision or frozen defects.",
+                "Final role report and explicit handoff dependencies."
+              ],
+              "instructions": [
+                {
+                  "description": "Submit each completed phase report via terminal -> project-workflow --json step --task <workflow-task-key> --report <report-text> in the same assigned namespace. Include executed instruction/check coverage, actual outputs, immutable evidence refs, exact input/candidate revisions and limitations. With issued runtime context include the existing --operation-key, --runtime-request and --execution-token-file options; request body.report must equal --report. Use distinct keys for distinct read/report operations, retain exact key/body for reconciliation, and never invent authority fields. Follow the returned current phase until an accepted complete=true; process exit or narrative success is insufficient. An uncertain effect requires authorized readback of the original operation before retry, not a fresh key. Workflow history can show progress but is not a Tracker transition receipt.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "After accepted Workflow complete=true, the explicitly allowed next stage AND status are Deployment / Ready on passed; Rework / Ready on needs_rework. Request outcome passed or needs_rework with frozen findings through a supported guarded Tracker terminal CLI, carrying the supplied assignment/revision/fence, original operation key, accepted Workflow result and exact evidence. Current Tracker CLI has no guarded terminal producer or operation receipt readback for this role: report the missing capability immediately and leave the business handoff incomplete. Do not print hypothetical CLI commands. Read back the real Tracker operation receipt using the supported CLI for that operation, then reconcile task-tracker sdlc context --task <task-uuid>. Match task UUID, original operation key/request, input revision/hash, stage/cycle and evidence to the accepted result and its explicitly allowed next stage AND status. A historical operation receipt and a subsequently changed context must be reported separately; never replay a transition to force the old state. Unknown acceptance remains unconfirmed. Generic Task patch, issue transition, board move and status edit are forbidden handoff substitutes.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                }
+              ],
+              "name": "Workflow report and Tracker handoff",
+              "phase_order": 3
+            }
+          ]
+        }
+      ],
+      "name": "Tester",
+      "namespace": {
+        "cli_command": "workflow-single-task-tester",
+        "launch_profile": "single-task-v1-tester",
+        "name": "single-task-tester"
+      },
+      "role_key": "tester",
+      "skill_names": [
+        "deployed-acceptance",
+        "forge-operator",
+        "immutable-evidence-reporting",
+        "project-workflow-executor",
+        "tracker-operator",
+        "workflow-systematic-debugging"
+      ],
+      "workflow_order": 6
+    },
+    {
+      "description": "single-task-v1: devops for one Tracker task; opt-in instructions.",
+      "key": "single-task-v1:devops",
+      "modes": [
+        {
+          "execution_scopes": [
+            "delivery"
+          ],
+          "key": "delivery",
+          "mode_order": 1,
+          "name": "Delivery deploy",
+          "phases": [
+            {
+              "checks": [
+                "The returned Workflow step is admitted in the assigned namespace.",
+                "The one Tracker task, current stage/status and input references match."
+              ],
+              "code": "DO-DEPLOY-01",
+              "description": "single-task-v1: devops/delivery; Workflow step and task context.",
+              "evidence": [
+                "Actual first Workflow step response and task/input references."
+              ],
+              "instructions": [
+                {
+                  "description": "Your first working operation is terminal -> project-workflow --json step --task <workflow-task-key> without --report, in the assigned profession namespace. Use the returned first/current Workflow step before reading Tracker, discussing requirements, editing files or invoking CI/CD. The launcher supplies the namespace and Workflow task key mapped to the one canonical Tracker task UUID; never guess either. If issued a scoped runtime context, use the existing --operation-key <original-key> --runtime-request <private-request-json> --execution-token-file <private-token-file> options, preserving the supplied assignment/fence and report=null; never downgrade to human or local DB mode. An unavailable or rejected step is a blocker, not permission to continue.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "After the Workflow step, read task-tracker sdlc context --task <task-uuid>, task-tracker sdlc requirements --task <task-uuid> and task-tracker sdlc questions --task <task-uuid> with the authorized task identity. Read all available comments and attachments using permitted existing task-tracker comment list <issue-id> and task-tracker attachment list --issue <issue-id>; follow attachment references only with authorized access. Missing required input/access is an explicit blocker. Verify the same task UUID, approved revision/hash, assigned role/mode, current stage/status and predecessor evidence. An absent requirements revision is normal only while PM creates the first Draft.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "This preset works on ONE Tracker task throughout. Never create children, decomposition cards, parent/dependency links for a delivery DAG, aggregate work or integration barriers. Do not activate integration or integration_rework modes. The Architect mode key decomposition means architecture and an implementation plan inside this task only. Stages are Draft, Backlog, Analysis, Architecture, Development, Review, Testing, Rework, Deployment. Status is separately Ready, InProgress or Completed; waiting_reason and runtime/agent state are separate observations, never substitute statuses. Only a real Tracker receipt establishes a business transition; do not set InProgress yourself on startup. Use the ordinary terminal with project-workflow, task-tracker and cicd-cli as actually installed and authorized. Do not modify original Hermes, install skills or infer capabilities from their names. Existing skill names are references, not authorization to execute legacy multi-task instructions.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Submit each completed phase report via terminal -> project-workflow --json step --task <workflow-task-key> --report <report-text> in the same assigned namespace. Include executed instruction/check coverage, actual outputs, immutable evidence refs, exact input/candidate revisions and limitations. With issued runtime context include the existing --operation-key, --runtime-request and --execution-token-file options; request body.report must equal --report. Use distinct keys for distinct read/report operations, retain exact key/body for reconciliation, and never invent authority fields. Follow the returned current phase until an accepted complete=true; process exit or narrative success is insufficient. An uncertain effect requires authorized readback of the original operation before retry, not a fresh key. Workflow history can show progress but is not a Tracker transition receipt.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                }
+              ],
+              "name": "Workflow step and task context",
+              "phase_order": 1
+            },
+            {
+              "checks": [
+                "Artifact provenance and deployment receipt match the exact reviewed and tested candidate and target.",
+                "Health and deployed acceptance passed with actual evidence; rollback references are preserved.",
+                "Unresolved blockers remain explicit; no additional Tracker tasks were created."
+              ],
+              "code": "DO-DEPLOY-02",
+              "description": "single-task-v1: devops/delivery; Role work on one task.",
+              "evidence": [
+                "Exact artifact provenance, deployment receipt/target, health results and deployed acceptance."
+              ],
+              "instructions": [
+                {
+                  "description": "Verify the exact candidate SHA/artifact accepted by Review and Testing and the authorized deployment target. Through the installed cicd-cli inspect actual help and supported operations before invoking them; this preset does not invent build/deploy/health commands. Record immutable artifact provenance.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Build/release and deploy the approved artifact through the authorized existing CI/CD procedure. Read actual deployment receipt/target/revision, verify health and run deployed acceptance for this task. Preserve rollback references and report failed/unknown operations without claiming success.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Terminal evidence is limited to this task's exact artifact, deployment, health and acceptance. Do not implement features, perform architecture decomposition or aggregate child outputs. Complete only when artifact/deployment/health/acceptance evidence all match the accepted candidate and target.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "If work is blocked, leave the phase unfinished and record the concrete missing input/capability and waiting_reason through an actually available checkpoint mechanism; if none exists, report that dependency to the operator. PM owns ordinary business clarification; other roles decide routine technical details within approved scope, sending critical business contradictions to PM and infrastructure blockers to the operator. Do not manufacture a checkpoint command, approval, transition or receipt.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "Submit each completed phase report via terminal -> project-workflow --json step --task <workflow-task-key> --report <report-text> in the same assigned namespace. Include executed instruction/check coverage, actual outputs, immutable evidence refs, exact input/candidate revisions and limitations. With issued runtime context include the existing --operation-key, --runtime-request and --execution-token-file options; request body.report must equal --report. Use distinct keys for distinct read/report operations, retain exact key/body for reconciliation, and never invent authority fields. Follow the returned current phase until an accepted complete=true; process exit or narrative success is insufficient. An uncertain effect requires authorized readback of the original operation before retry, not a fresh key. Workflow history can show progress but is not a Tracker transition receipt.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                }
+              ],
+              "name": "Role work on one task",
+              "phase_order": 2
+            },
+            {
+              "checks": [
+                "Artifact provenance and deployment receipt match the exact reviewed and tested candidate and target.",
+                "Health and deployed acceptance passed with actual evidence; rollback references are preserved.",
+                "The role result is ready for Workflow evaluation with actual evidence.",
+                "The proposed outcome and next stage/status comply with this single-task role."
+              ],
+              "code": "DO-DEPLOY-03",
+              "description": "single-task-v1: devops/delivery; Workflow report and Tracker handoff.",
+              "evidence": [
+                "Exact artifact provenance, deployment receipt/target, health results and deployed acceptance.",
+                "Final role report and explicit handoff dependencies."
+              ],
+              "instructions": [
+                {
+                  "description": "Submit each completed phase report via terminal -> project-workflow --json step --task <workflow-task-key> --report <report-text> in the same assigned namespace. Include executed instruction/check coverage, actual outputs, immutable evidence refs, exact input/candidate revisions and limitations. With issued runtime context include the existing --operation-key, --runtime-request and --execution-token-file options; request body.report must equal --report. Use distinct keys for distinct read/report operations, retain exact key/body for reconciliation, and never invent authority fields. Follow the returned current phase until an accepted complete=true; process exit or narrative success is insufficient. An uncertain effect requires authorized readback of the original operation before retry, not a fresh key. Workflow history can show progress but is not a Tracker transition receipt.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                },
+                {
+                  "description": "After accepted Workflow complete=true, the explicitly allowed next stage AND status are Deployment / Completed of this same task. Request outcome passed through a supported guarded Tracker terminal CLI, carrying the supplied assignment/revision/fence, original operation key, accepted Workflow result and exact evidence. Current Tracker CLI has no guarded terminal producer or operation receipt readback for this role: report the missing capability immediately and leave the business handoff incomplete. Do not print hypothetical CLI commands. Read back the real Tracker operation receipt using the supported CLI for that operation, then reconcile task-tracker sdlc context --task <task-uuid>. Match task UUID, original operation key/request, input revision/hash, stage/cycle and evidence to the accepted result and its explicitly allowed next stage AND status. A historical operation receipt and a subsequently changed context must be reported separately; never replay a transition to force the old state. Unknown acceptance remains unconfirmed. Generic Task patch, issue transition, board move and status edit are forbidden handoff substitutes.",
+                  "skills": [
+                    "project-workflow-executor",
+                    "tracker-operator"
+                  ]
+                }
+              ],
+              "name": "Workflow report and Tracker handoff",
+              "phase_order": 3
+            }
+          ]
+        }
+      ],
+      "name": "DevOps",
+      "namespace": {
+        "cli_command": "workflow-single-task-devops",
+        "launch_profile": "single-task-v1-devops",
+        "name": "single-task-devops"
+      },
+      "role_key": "devops",
+      "skill_names": [
+        "exact-sha-deployment",
+        "forge-operator",
+        "immutable-evidence-reporting",
+        "project-workflow-executor",
+        "tracker-operator",
+        "workflow-systematic-debugging"
+      ],
+      "workflow_order": 7
+    }
+  ]
+}

@@ -254,6 +254,7 @@ class SATaskRepository(TaskRepository):
         bind_operation_key: str,
         bind_request_sha256: str,
         concrete_agent_ref: str | None,
+        single_task_binding: dict[str, Any] | None = None,
     ) -> bool:
         result = self._session.execute(
             update(m.TaskRuntimeAssignment)
@@ -282,6 +283,7 @@ class SATaskRepository(TaskRepository):
                 bind_operation_key=bind_operation_key,
                 bind_request_sha256=bind_request_sha256,
                 concrete_agent_ref=concrete_agent_ref,
+                single_task_binding_json=canonical_json(single_task_binding) if single_task_binding else None,
             )
         )
         return getattr(result, "rowcount", 0) == 1

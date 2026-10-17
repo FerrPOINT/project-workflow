@@ -20,6 +20,13 @@ from project_workflow.domain.pm_execution import (
     PMReadback,
     PMRebind,
     PMResume,
+    SingleTaskPMBind,
+    SingleTaskPMCheckpoint,
+    SingleTaskPMProfile,
+    SingleTaskPMReadback,
+    SingleTaskPMRebind,
+    SingleTaskPMResume,
+    SingleTaskPMReviewBind,
 )
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.infrastructure.pm_readback import ReadbackUnavailable, readback_configured
@@ -60,7 +67,9 @@ def _execute(
     authorization: str | None, scope_token: str | None = None,
 ) -> dict[str, Any] | JSONResponse:
     try:
-        credential = runtime_api._authorized_service_credential(authorization)
+        credential = runtime_api._authorized_service_credential(
+            authorization, single_task=isinstance(payload, SingleTaskPMProfile),
+        )
         if credential is None:
             return error("unauthorized", "Invalid machine credential", 401)
         if credential.role_key != "project_manager" or credential.kind == "catalog":
@@ -79,7 +88,18 @@ def _execute(
             ):
                 return error("forbidden", "Execution/run scoped credential required", 403)
         with SAUnitOfWork() as uow:
-            project_id = runtime_api._namespace_id(uow, credential.role_key)
+            assignment = uow.tasks.get_assignment_by_operation_key(identity.assignment_operation_key)
+            context = assignment.payload.get("single_task_context") if assignment else None
+            if (context is not None) != isinstance(payload, SingleTaskPMProfile):
+                raise ConflictError("PM profile packet differs from assignment family")
+            if context is not None and isinstance(payload, SingleTaskPMProfile) and (
+                payload.instruction_manifest_sha256 != context["instruction_manifest_sha256"]
+            ):
+                raise ConflictError("PM profile manifest mismatch")
+            project_id = runtime_api._namespace_id(
+                uow, credential.role_key, single_task=isinstance(payload, SingleTaskPMProfile),
+                assignment_operation_key=identity.assignment_operation_key,
+            )
             service = PMExecutionService(uow)
             if isinstance(payload, PMReadback):
                 result = service.readback(identity, project_id, payload.operation_key)
@@ -92,9 +112,9 @@ def _execute(
                 result = service.bind(payload, project_id)
             elif isinstance(payload, PMRebind):
                 result = service.rebind(payload, project_id)
-            elif isinstance(payload, PMResume):
+            elif isinstance(payload, (PMResume, SingleTaskPMResume)):
                 result = service.resume(payload, project_id)
-            elif isinstance(payload, PMCheckpoint):
+            elif isinstance(payload, (PMCheckpoint, SingleTaskPMCheckpoint)):
                 result = service.checkpoint(payload, project_id)
             else:
                 raise ValueError("Unsupported PM command")
@@ -116,7 +136,10 @@ def _execute(
         return error("validation-error", str(exc), 422)
 
 
-def bind(payload: PMBind, authorization: str | None = Header(default=None)) -> dict[str, Any] | JSONResponse:
+def bind(
+    payload: SingleTaskPMReviewBind | SingleTaskPMBind | PMBind,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any] | JSONResponse:
     return _execute(payload, "bind", authorization)
 
 
@@ -153,22 +176,26 @@ def assign(
 
 
 def checkpoint(
-    payload: PMCheckpoint, authorization: str | None = Header(default=None),
+    payload: SingleTaskPMCheckpoint | PMCheckpoint, authorization: str | None = Header(default=None),
     x_workflow_execution_token: str | None = Header(default=None),
 ) -> dict[str, Any] | JSONResponse:
     return _execute(payload, "checkpoint", authorization, x_workflow_execution_token)
 
 
-def resume(payload: PMResume, authorization: str | None = Header(default=None)) -> dict[str, Any] | JSONResponse:
+def resume(
+    payload: SingleTaskPMResume | PMResume, authorization: str | None = Header(default=None),
+) -> dict[str, Any] | JSONResponse:
     return _execute(payload, "resume", authorization)
 
 
-def rebind(payload: PMRebind, authorization: str | None = Header(default=None)) -> dict[str, Any] | JSONResponse:
+def rebind(
+    payload: SingleTaskPMRebind | PMRebind, authorization: str | None = Header(default=None),
+) -> dict[str, Any] | JSONResponse:
     return _execute(payload, "rebind", authorization)
 
 
 def readback(
-    payload: PMReadback, authorization: str | None = Header(default=None),
+    payload: SingleTaskPMReadback | PMReadback, authorization: str | None = Header(default=None),
     x_workflow_execution_token: str | None = Header(default=None),
 ) -> dict[str, Any] | JSONResponse:
     return _execute(payload, "readback", authorization, x_workflow_execution_token)

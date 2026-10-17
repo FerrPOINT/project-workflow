@@ -21,6 +21,14 @@ class NamespaceOwnershipService:
         if project is None:
             raise NotFoundError("Namespace not found")
         workflow = self.uow.workflows.get_by_id(project.workflow_id)
+        if (project.cli_command == "workflow-single-task-project-manager" and workflow is not None
+            and workflow.key == "single-task-v1:project_manager"):
+            from project_workflow.infrastructure.db.single_task_catalog import observe_installation
+
+            binding = next(b for b in observe_installation(self.uow).bindings if b.role_key == "project_manager")
+            if int(binding.namespace_id) != namespace_id:
+                raise ConflictError("Installed PM namespace mismatch")
+            return
         if (
             project.cli_command != "workflow-project_manager" or workflow is None
             or workflow.key != "hermes-sdlc:project_manager"

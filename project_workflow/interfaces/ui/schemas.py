@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from project_workflow.domain.base_admission import BaseAdmission, ExactRef, Sha256
 from project_workflow.domain.namespace import normalize_namespace_cli_command
+from project_workflow.domain.pm_execution import PMReviewAdmissionContext
 from project_workflow.domain.profession_settings import normalize_launch_profile
 from project_workflow.domain.project_theme import (
     DEFAULT_PROJECT_COLOR,
@@ -17,6 +18,7 @@ from project_workflow.domain.project_theme import (
     normalize_theme_icon,
 )
 from project_workflow.domain.runtime_assignment import MAX_WORK_ITEM_REVISION, FleetAgentRef, normalize_role_key
+from project_workflow.domain.single_task_runtime import SingleTaskContext, validate_assignment_identity
 
 
 class StrictRequest(BaseModel):
@@ -185,6 +187,58 @@ class RuntimeAssignmentRequest(StrictRequest):
         return self
 
 
+class SingleTaskAssignmentRequest(SingleTaskContext):
+    """Real task/assignment references, without resources from decomposition."""
+
+    task: str = Field(min_length=1, max_length=128)
+    role_key: str
+    workflow_key: str
+    mode_key: str
+    execution_scope: Literal["business", "delivery"]
+    stage_key: str
+    cycle_number: int = Field(strict=True, ge=0)
+    attempt_number: int = Field(strict=True, gt=0)
+    operation_key: str = Field(min_length=1, max_length=128)
+    business_task_ref: str
+    root_task_ref: str
+    assignment_ref: str
+    tech_execution_workspace_ref: str | None = Field(default=None, min_length=1, max_length=512)
+    tech_execution_attempt_ref: str | None = Field(default=None, min_length=1, max_length=512)
+    exact_input_refs: list[ExactInputRef] = Field(max_length=128)
+    expected_revision: int = Field(strict=True, ge=0)
+    expected_status: Literal["missing", "active", "done", "blocked"]
+    expected_mode_key: str | None = None
+    expected_cycle_number: int | None = Field(default=None, strict=True, ge=0)
+
+    @model_validator(mode="after")
+    def _single_task_identity(self) -> SingleTaskAssignmentRequest:
+        if (self.tech_execution_workspace_ref is None) != (self.tech_execution_attempt_ref is None):
+            raise ValueError("Tech workspace/attempt must be a real pair or both absent")
+        if self.execution_scope == "business" and self.tech_execution_workspace_ref is not None:
+            raise ValueError("Business scope forbids Tech workspace")
+        validate_assignment_identity(**self.model_dump(include={
+            "workflow_key", "role_key", "mode_key", "execution_scope", "stage_key",
+            "business_task_ref", "root_task_ref", "assignment_ref",
+        }))
+        return self
+
+
+class SingleTaskPMReviewAssignmentRequest(SingleTaskAssignmentRequest):
+    pm_review_context: PMReviewAdmissionContext
+
+    @model_validator(mode="after")
+    def _review_identity(self) -> SingleTaskPMReviewAssignmentRequest:
+        if (
+            self.role_key != "project_manager" or self.mode_key != "draft"
+            or self.stage_key != "Draft" or self.execution_scope != "business"
+            or self.expected_revision != 0 or self.expected_status != "missing"
+            or self.cycle_number != 0 or self.attempt_number != 1
+            or self.operation_key != f"pm-draft:{self.assignment_ref}"
+        ):
+            raise ValueError("PM review requires its original reservation and a new single-task PM Draft cursor")
+        return self
+
+
 class RuntimeRebindRequest(StrictRequest):
     """CAS continuation; ordinary bind confirms the prepared immutable run."""
 
@@ -259,6 +313,23 @@ class RuntimeBindRequest(StrictRequest):
         if re.fullmatch(r"[a-z0-9][a-z0-9._-]*", value) is None:
             raise ValueError("mode_key должен соответствовать [a-z0-9][a-z0-9._-]*")
         return value
+
+
+class SingleTaskBindRequest(RuntimeBindRequest):
+    instruction_profile: Literal["single-task-v1"]
+    instruction_manifest_sha256: Sha256
+    session_run_id: FleetAgentRef
+    concrete_agent_ref: FleetAgentRef
+    expected_binding_state: Literal["unbound"]
+
+
+class SingleTaskStepRequest(RuntimeStepRequest):
+    instruction_profile: Literal["single-task-v1"]
+    instruction_manifest_sha256: Sha256
+    session_run_id: FleetAgentRef
+    single_task_context_sha256: Sha256
+    base_config_ref: None = None
+    base_config_sha256: None = None
 
 
 def _strip_nonblank(value: str, field_name: str) -> str:

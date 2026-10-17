@@ -25,6 +25,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
+from project_workflow.infrastructure.db.single_task_constraints import SINGLE_TASK_BINDING, SINGLE_TASK_TECH
+
 
 class Base(DeclarativeBase):
     pass
@@ -68,7 +70,7 @@ class PMExecution(Base):
     resume_session_run_id: Mapped[str | None] = mapped_column(String(36), unique=True)
 
     __table_args__ = (
-        UniqueConstraint("tracker_instance_ref", "task_ref", "agent_ref", name="uq_pm_task_agent"),
+        Index("ix_pm_task_agent", "tracker_instance_ref", "task_ref", "agent_ref"),
         CheckConstraint("state IN ('active', 'waiting', 'resume_pending')", name="ck_pm_state"),
         CheckConstraint("version > 0 AND fence > 0", name="ck_pm_versions"),
         CheckConstraint("state = 'active' OR checkpoint_json IS NOT NULL", name="ck_pm_checkpoint"),
@@ -456,6 +458,7 @@ class TaskRuntimeAssignment(Base):
     hermes_run_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
     bind_operation_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
     bind_request_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    single_task_binding_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     concrete_agent_ref: Mapped[str | None] = mapped_column(String(36), nullable=True)
     workspace_generation: Mapped[int | None] = mapped_column(nullable=True)
     lease_generation: Mapped[int | None] = mapped_column(nullable=True)
@@ -524,7 +527,7 @@ class TaskRuntimeAssignment(Base):
             name="ck_task_runtime_assignments_lease_generation",
         ),
         CheckConstraint(
-            "(workflow_key IS NULL AND role_key IS NULL AND execution_scope IS NULL AND stage_key IS NULL AND "
+            "((workflow_key IS NULL AND role_key IS NULL AND execution_scope IS NULL AND stage_key IS NULL AND "
             "attempt_number IS NULL AND business_task_ref IS NULL AND root_task_ref IS NULL AND "
             "work_item_ref IS NULL AND work_item_revision IS NULL AND queue_item_ref IS NULL AND "
             "task_workspace_ref IS NULL AND workspace_revision IS NULL AND "
@@ -556,15 +559,19 @@ class TaskRuntimeAssignment(Base):
             "lease_generation IS NOT NULL AND exact_input_refs IS NOT NULL AND payload_sha256 IS NOT NULL AND "
             "((binding_ref IS NULL AND hermes_run_ref IS NULL AND bind_operation_key IS NULL AND "
             "bind_request_sha256 IS NULL) OR (binding_ref IS NOT NULL AND hermes_run_ref IS NOT NULL AND "
-            "bind_operation_key IS NOT NULL AND bind_request_sha256 IS NOT NULL)))",
+            "bind_operation_key IS NOT NULL AND bind_request_sha256 IS NOT NULL)))) AND "
+            "(workflow_key IS NULL OR workflow_key NOT LIKE 'single-task-v1:%') AND "
+            "single_task_binding_json IS NULL OR "
+            + SINGLE_TASK_BINDING,
             name="ck_task_runtime_assignments_binding_complete",
         ),
         CheckConstraint(
-            "execution_scope IS NULL OR "
+            "(execution_scope IS NULL OR "
             "(execution_scope = 'business' AND tech_execution_workspace_ref IS NULL AND "
             "tech_execution_attempt_ref IS NULL) OR "
             "(execution_scope IN ('delivery', 'aggregate') AND tech_execution_workspace_ref IS NOT NULL AND "
-            "tech_execution_attempt_ref IS NOT NULL)",
+            "tech_execution_attempt_ref IS NOT NULL)) OR "
+            + SINGLE_TASK_TECH,
             name="ck_task_runtime_assignments_scope_tech_refs",
         ),
         CheckConstraint(

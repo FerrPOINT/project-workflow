@@ -43,6 +43,27 @@ git diff --check
 без `make` используйте `pwsh -File scripts/quality.ps1 quality`. Дополнительные
 цели `warnings` и `compose-ready` есть и в `Makefile`, и в PowerShell helper.
 
+### Windows И UTF-8 В Тестовых Subprocess
+
+JavaScript передаётся в Node через stdin с явным `encoding="utf-8"`.
+Один `text=True` использует системную кодировку Python и на Windows cp1252
+не может передать кириллицу. Не обходить ошибку изменением assertions или
+таймаутов. Исправленный `test_editor_failed_save.py` проходит14 случаев даже
+при `PYTHONUTF8=0` и locale cp1252, без изменения `PYTHONIOENCODING`.
+
+Локальный полный прогон sourceab3 был остановлен после955 проходов,13 отказов
+этого файла и4 skips. Причина13 отказов подтверждена отдельным traceback и
+устранена только в четырёх тестовых subprocess-вызовах. Ruff и mypy137 исходных
+файлов проходят.
+
+После исправления полный non-PG gate source
+`50ae18efebb5f8ffc56c682ce90b1bc5bdb13a41` прошёл:2910 passed,5 skipped,
+95 deselected,60 subtests passed,0 failures; coverage94.17% при baseline94%.
+Пять skips относятся к optional private Base-source checks и не считаются
+выполненными.95 deselected являются отдельным PostgreSQL integration gate,
+а не пропущенной частью успешного non-PG результата. Исторический отказab3
+не удаляется; текущий non-PG PASS не заменяет PostgreSQL/image/live-приёмку.
+
 ## ResourceWarning Gate
 
 После изменений в тестовой инфраструктуре, SQLAlchemy layer, UI request
@@ -78,6 +99,21 @@ business E2E с настоящим исполнителем.
 
 Полный executor-driven acceptance описан отдельно в
 [`LIVE_TEST_PLAN.md`](../LIVE_TEST_PLAN.md).
+
+### Локальная Квалификация 15 Октября
+
+Все96 PostgreSQL integration cases прошли,0 skipped,0 failures/errors, на
+immutable source `188b6bf0ed429293bf75486c2e7363b43777343c`. Включены прежние95
+сценариев и новый side-by-side adoption текущего семейства7be/999 поверх
+сохранённых legacy rows/history, с повторной установкой и readback persisted IDs.
+Тестовый/production closure интегрированного `82b3e7a` идентичен этому source;
+дополнительное отличие относится только к документации результатов non-PG gate.
+
+Использованы frozen Python3.11/uv dependencies и закрытый PostgreSQL без host
+ports. Base-v2 project `sdlc-qa-workflow-preservation-0837242884ae` и собственные
+disposable ресурсы очищены; evidence сохранено. Controlled OpenAI-compatible
+HTTP peer в тестах не является live model, installed catalog или семиролевой
+SDLC/deployment приёмкой. Production dependencies, catalog и manifest не менялись.
 
 ## Compose Readiness
 

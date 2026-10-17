@@ -123,6 +123,17 @@ def assert_base_supervisor(
     uow: UnitOfWork, task: dict[str, Any], fence: RuntimeStepFence | None,
 ) -> None:
     """Keep legacy CLI/human step from bypassing admitted candidate execution."""
+    from project_workflow.domain.single_task_profile import is_single_task_key
+
+    workflow = uow.workflows.get_by_id(task["workflow_id"]) if task.get("workflow_id") else None
+    if workflow is not None and is_single_task_key(workflow.key):
+        from project_workflow.application.single_task_runtime import context_hash
+
+        assignment = uow.tasks.get_assignment_by_operation_key(task.get("assignment_operation_key") or "")
+        if (assignment is None or fence is None or fence.single_task_context_sha256 is None
+            or context_hash(uow, assignment.to_dict()) != fence.single_task_context_sha256):  # type: ignore[arg-type]
+            raise ConflictError("Single-task requires authenticated assigned runtime step")
+        return
     assignment = uow.tasks.get_assignment_by_operation_key(task.get("assignment_operation_key") or "")
     record = assignment.to_dict() if assignment is not None else {}
     admission = record.get("payload", {}).get("base_admission")

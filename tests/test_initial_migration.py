@@ -8,8 +8,8 @@ from uuid import uuid4
 import pytest
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
-from sqlalchemy import create_engine, inspect, text
-from sqlalchemy.exc import IntegrityError, OperationalError
+from sqlalchemy import MetaData, create_engine, inspect, select, text
+from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
 from sqlalchemy.pool import NullPool, StaticPool
 
 from project_workflow import config
@@ -93,8 +93,9 @@ def test_repository_has_one_linear_migration_head():
         "0012_profession_themes.py",
         "0013_profession_execution.py",
         "0014_launch_profile_only.py",
+        "0015_single_task_assignments.py",
     ]
-    assert migration_head() == "0014_launch_profile_only"
+    assert migration_head() == "0015_single_task_assignments"
 
 
 def test_pm_upgrade_preserves_existing_resource_contexts(tmp_path):
@@ -129,7 +130,7 @@ def test_pm_upgrade_preserves_existing_resource_contexts(tmp_path):
         original = connection.execute(text("SELECT * FROM resource_execution_contexts")).mappings().all()
     ensure_migrated(engine)
     ensure_migrated(engine)
-    assert database_revisions(engine) == {"0014_launch_profile_only"}
+    assert database_revisions(engine) == {"0015_single_task_assignments"}
     assert schema_is_ready(engine)
     with engine.connect() as connection:
         assert connection.execute(text("SELECT * FROM resource_execution_contexts")).mappings().all() == original
@@ -184,7 +185,7 @@ def test_fresh_sqlite_migration_matches_orm_metadata(tmp_path):
         }
         assert actual_fks == expected_fks, table_name
 
-    assert database_revisions(engine) == {"0014_launch_profile_only"}
+    assert database_revisions(engine) == {"0015_single_task_assignments"}
     assert schema_is_ready(engine) is True
     with engine.connect() as connection:
         context = MigrationContext.configure(
@@ -196,8 +197,16 @@ def test_fresh_sqlite_migration_matches_orm_metadata(tmp_path):
 
 def test_sqlite_upgrade_populated_legacy_backfills_each_workflow_mode(tmp_path):
     engine = _sqlite_engine(tmp_path, "legacy-populated.db")
+    assert_populated_legacy_agent_archive_upgrade(engine)
+
+
+def assert_populated_legacy_agent_archive_upgrade(engine):
     run_alembic_command("upgrade", engine, "0001_initial")
     with engine.begin() as conn:
+        agents = [conn.execute(text(
+            "INSERT INTO agents(name,description,hermes_profile) VALUES(:name,:description,:profile) RETURNING id"
+        ), {"name": f"Legacy agent {number}", "description": f"  Historical metadata {number}\n ",
+            "profile": f"profile-{number}" if number != 7 else None}).scalar_one() for number in range(1, 8)]
         workflow_ids = [
             conn.execute(
                 text("INSERT INTO workflows (name, description, is_default) VALUES (:name, '', 0) RETURNING id"),
@@ -209,10 +218,10 @@ def test_sqlite_upgrade_populated_legacy_backfills_each_workflow_mode(tmp_path):
         for index, workflow_id in enumerate(workflow_ids, 1):
             phase_id = conn.execute(
                 text(
-                    "INSERT INTO phases (workflow_id, code, name, phase_order) "
-                    "VALUES (:workflow_id, :code, :name, 1) RETURNING id"
+                    "INSERT INTO phases (workflow_id, code, name, phase_order,agent_id) "
+                    "VALUES (:workflow_id, :code, :name, 1,:agent) RETURNING id"
                 ),
-                {"workflow_id": workflow_id, "code": f"legacy-{index}", "name": "Legacy"},
+                {"workflow_id": workflow_id, "code": f"legacy-{index}", "name": "Legacy", "agent": agents[index - 1]},
             ).scalar_one()
             project_id = conn.execute(
                 text(
@@ -237,8 +246,11 @@ def test_sqlite_upgrade_populated_legacy_backfills_each_workflow_mode(tmp_path):
             history_id = conn.execute(
                 text(
                     "INSERT INTO task_step_history "
-                    "(task_id, workflow_id, phase_id, verdict, replay_fingerprint) "
-                    "VALUES (:task_id, :workflow_id, :phase_id, 'partial', :fingerprint) RETURNING id"
+                    "(task_id, workflow_id, phase_id, verdict, replay_fingerprint, worker_report, "
+                    "evaluation_snapshot, supervisor_response) "
+                    "VALUES (:task_id, :workflow_id, :phase_id, 'partial', :fingerprint, "
+                    "'Frozen legacy report', '{\"retained\":\"evaluation\"}', "
+                    "'{\"retained\":\"response\"}') RETURNING id"
                 ),
                 {
                     "task_id": task_id,
@@ -256,9 +268,51 @@ def test_sqlite_upgrade_populated_legacy_backfills_each_workflow_mode(tmp_path):
                 {"task_id": task_id, "workflow_id": workflow_id, "phase_id": phase_id, "history_id": history_id},
             )
             rows.append((workflow_id, project_id, task_id, phase_id))
+        for number in range(17):
+            conn.execute(text(
+                "INSERT INTO phases(workflow_id,code,name,phase_order,agent_id) "
+                "VALUES(:workflow,:code,'Legacy extra',:position,:agent)"
+            ), {"workflow": workflow_ids[0], "code": f"legacy-extra-{number}", "position": number + 2,
+                "agent": agents[number % 7]})
+        conn.execute(text(
+            "INSERT INTO phases(workflow_id,code,name,phase_order) VALUES(:workflow,'legacy-unassigned','No agent',19)"
+        ), {"workflow": workflow_ids[0]})
 
-    ensure_migrated(engine)
+    legacy = MetaData()
+    legacy.reflect(bind=engine)
+    # Released 0013 removes the agent model; persistent legacy fields stay exact.
+    preserved = {name: select(*(column for column in table.c
+                               if not (name == "phases" and column.name == "agent_id")))
+                 for name, table in legacy.tables.items() if name not in {"agents", "alembic_version"}}
     with engine.connect() as conn:
+        frozen = {name: conn.execute(query).mappings().all() for name, query in preserved.items()}
+        source_agents = conn.execute(select(legacy.tables["agents"]).order_by(legacy.tables["agents"].c.id)).all()
+        source_links = conn.execute(text("SELECT id,agent_id FROM phases ORDER BY id")).all()
+        source_join = conn.execute(text(
+            "SELECT p.id,a.id,a.name,a.description,a.hermes_profile FROM phases p "
+            "LEFT JOIN agents a ON a.id=p.agent_id ORDER BY p.id"
+        )).all()
+    assert database_revisions(engine) == {"0001_initial"}
+    ensure_migrated(engine)
+    ensure_migrated(engine)
+    assert database_revisions(engine) == {"0015_single_task_assignments"}
+    assert schema_is_ready(engine)
+    with engine.connect() as conn:
+        if engine.dialect.name == "sqlite":
+            assert not conn.execute(text("PRAGMA foreign_key_check")).all()
+        assert conn.execute(text(
+            "SELECT id,name,description,hermes_profile FROM legacy_agent_metadata ORDER BY id"
+        )).all() == source_agents
+        assert conn.execute(text("SELECT phase_id,agent_id FROM legacy_phase_agent_links ORDER BY phase_id")).all() == (
+            source_links
+        )
+        assert conn.execute(text(
+            "SELECT p.phase_id,a.id,a.name,a.description,a.hermes_profile FROM legacy_phase_agent_links p "
+            "LEFT JOIN legacy_agent_metadata a ON a.id=p.agent_id ORDER BY p.phase_id"
+        )).all() == source_join
+        assert len(source_agents) == 7 and sum(agent is not None for _, agent in source_links) == 19
+        for name, query in preserved.items():
+            assert conn.execute(query).mappings().all() == frozen[name], name
         mode_rows = conn.execute(
             text("SELECT workflow_id, id FROM workflow_modes WHERE key = 'default' ORDER BY workflow_id")
         ).all()
@@ -294,6 +348,126 @@ def test_sqlite_upgrade_populated_legacy_backfills_each_workflow_mode(tmp_path):
             conn.execute(
                 text("INSERT INTO workflows (key, name, description, is_default) VALUES (NULL, 'Invalid', '', 0)")
             )
+    for table in ("legacy_agent_metadata", "legacy_phase_agent_links"):
+        statements = [f"UPDATE {table} SET {'id=id' if table == 'legacy_agent_metadata' else 'phase_id=phase_id'}",
+                      f"DELETE FROM {table}",
+                      "INSERT INTO legacy_agent_metadata(id,name,description) VALUES(999,'foreign','foreign')"
+                      if table == "legacy_agent_metadata" else
+                      "INSERT INTO legacy_phase_agent_links(phase_id,agent_id) VALUES(999,NULL)"]
+        if engine.dialect.name == "postgresql":
+            statements.append("TRUNCATE legacy_phase_agent_links,legacy_agent_metadata")
+        for sql in statements:
+            with pytest.raises(SQLAlchemyError, match="Legacy metadata archive is read-only"), engine.begin() as conn:
+                conn.execute(text(sql))
+
+
+def assert_legacy_archive_migration_rollback(engine, monkeypatch):
+    from project_workflow.infrastructure.db import session
+
+    original = session.run_alembic_command
+    before = {}
+
+    def fail_after_drop(cmd, connection, revision="head"):
+        assert cmd == "upgrade" and revision == "head"
+        metadata = MetaData()
+        metadata.reflect(bind=connection)
+        before.update({name: (table, connection.execute(select(table)).all())
+                       for name, table in metadata.tables.items() if name not in session._LEGACY_ARCHIVES})
+        original(cmd, connection, "0013_profession_execution")
+        assert "agents" not in inspect(connection).get_table_names(schema=session.get_settings().DB_SCHEMA
+                                                                 if engine.dialect.name == "postgresql" else None)
+        raise RuntimeError("Injected migration failure after released 0013")
+
+    with monkeypatch.context() as patcher:
+        patcher.setattr(session, "run_alembic_command", fail_after_drop)
+        with pytest.raises(RuntimeError, match="Injected migration failure"):
+            assert_populated_legacy_agent_archive_upgrade(engine)
+    assert database_revisions(engine) == {"0001_initial"}
+    schema = session.get_settings().DB_SCHEMA if engine.dialect.name == "postgresql" else None
+    assert set(inspect(engine).get_table_names(schema=schema)) == set(before)
+    with engine.connect() as conn:
+        for name, (table, frozen) in before.items():
+            assert conn.execute(select(table)).all() == frozen, name
+        assert not session._validate_legacy_archives(conn)
+    ensure_migrated(engine)
+    with engine.connect() as conn:
+        assert conn.execute(text("SELECT COUNT(*) FROM legacy_agent_metadata")).scalar_one() == 7
+        assert conn.execute(text(
+            "SELECT COUNT(*) FROM legacy_phase_agent_links WHERE agent_id IS NOT NULL"
+        )).scalar_one() == 19
+
+
+def test_sqlite_legacy_archive_and_released_migrations_roll_back_together(tmp_path, monkeypatch):
+    assert_legacy_archive_migration_rollback(_sqlite_engine(tmp_path, "archive-rollback.db"), monkeypatch)
+
+
+def assert_legacy_archive_refusal(engine, failure):
+    from project_workflow.infrastructure.db import session
+
+    run_alembic_command("upgrade", engine, "0001_initial")
+    with engine.begin() as conn:
+        conn.execute(text("INSERT INTO agents(id,name,description) VALUES(1,'Retained agent','Retained metadata')"))
+        conn.execute(text("INSERT INTO workflows(id,name) VALUES(1,'Retained workflow')"))
+        conn.execute(text("INSERT INTO phases(workflow_id,code,name,phase_order,agent_id) "
+                          "VALUES(1,'old','Retained phase',1,1)"))
+    with session.initialization_transaction(engine) as conn:
+        agents, links = session._legacy_archive_tables(conn)
+        if failure == "partial":
+            agents.create(conn)
+        elif failure == "unguarded":
+            agents.metadata.create_all(conn)
+        elif failure == "view":
+            conn.execute(text(f"CREATE VIEW {agents.fullname} AS SELECT * FROM agents"))
+        else:
+            session._preserve_legacy_metadata(conn)
+            if failure == "changed_source":
+                conn.execute(text("UPDATE agents SET description='New source metadata' WHERE id=1"))
+            elif failure == "foreign_column":
+                conn.execute(text(f"ALTER TABLE {agents.fullname} ADD COLUMN foreign_column TEXT"))
+            elif failure == "missing_guard":
+                sql = (f"DROP TRIGGER {agents.name}_readonly ON {agents.fullname}"
+                       if engine.dialect.name == "postgresql" else f"DROP TRIGGER {agents.name}_no_update")
+                conn.execute(text(sql))
+            else:
+                raise AssertionError(failure)
+    metadata = MetaData(schema=agents.schema)
+    metadata.reflect(bind=engine, views=True)
+    with engine.connect() as conn:
+        before = {name: conn.execute(select(table)).all() for name, table in metadata.tables.items()}
+    with pytest.raises(ValueError, match="Legacy agent metadata preservation refused"):
+        ensure_migrated(engine)
+    assert database_revisions(engine) == {"0001_initial"}
+    with engine.connect() as conn:
+        for name, table in metadata.tables.items():
+            assert conn.execute(select(table)).all() == before[name], name
+
+
+@pytest.mark.parametrize("failure", [
+    "partial", "unguarded", "view", "changed_source", "foreign_column", "missing_guard",
+])
+def test_sqlite_legacy_archive_refuses_foreign_partial_or_changed_without_overwrite(tmp_path, failure):
+    assert_legacy_archive_refusal(_sqlite_engine(tmp_path, f"archive-{failure}.db"), failure)
+
+
+def assert_legacy_archive_guard_loss_holds_at_head(engine):
+    from project_workflow.infrastructure.db import session
+
+    assert_populated_legacy_agent_archive_upgrade(engine)
+    with engine.begin() as conn:
+        agents, _ = session._legacy_archive_tables(conn)
+        sql = (f"DROP TRIGGER {agents.name}_readonly ON {agents.fullname}"
+               if engine.dialect.name == "postgresql" else f"DROP TRIGGER {agents.name}_no_update")
+        conn.execute(text(sql))
+    assert not schema_is_ready(engine)
+    with pytest.raises(ValueError, match="Legacy agent metadata preservation refused"):
+        ensure_migrated(engine)
+    assert database_revisions(engine) == {"0015_single_task_assignments"}
+    with engine.connect() as conn:
+        assert conn.execute(text("SELECT COUNT(*) FROM legacy_agent_metadata")).scalar_one() == 7
+
+
+def test_sqlite_legacy_archive_guard_loss_at_head_is_not_readiness(tmp_path):
+    assert_legacy_archive_guard_loss_holds_at_head(_sqlite_engine(tmp_path, "archive-head.db"))
 
 
 @pytest.mark.parametrize("predecessor", [
@@ -367,12 +541,12 @@ def test_sqlite_supported_additive_upgrade_preserves_legacy_catalog_and_assignme
     assert database_revisions(engine) == {predecessor}
     ensure_migrated(engine)
     ensure_migrated(engine)  # Restart is idempotent and cannot reinterpret historical payloads.
-    assert database_revisions(engine) == {"0014_launch_profile_only"}
+    assert database_revisions(engine) == {"0015_single_task_assignments"}
     assert schema_is_ready(engine)
     with engine.connect() as conn:
         for table, original in frozen.items():
             actual = conn.execute(text(f"SELECT * FROM {table} ORDER BY id")).mappings().all()
-            expected = [dict(row, concrete_agent_ref=None) for row in original] if (
+            expected = [dict(row, concrete_agent_ref=None, single_task_binding_json=None) for row in original] if (
                 table == "task_runtime_assignments"
             ) else original
             assert actual == expected, table
@@ -506,7 +680,7 @@ def test_sqlite_runtime_assignment_rejects_invalid_immutable_bindings(tmp_path, 
         )
 
     ensure_migrated(engine)
-    assert database_revisions(engine) == {"0014_launch_profile_only"}
+    assert database_revisions(engine) == {"0015_single_task_assignments"}
     with engine.connect() as conn:
         preserved = conn.execute(
             text(
@@ -903,7 +1077,7 @@ def test_head_with_damaged_or_polluted_schema_is_refused(tmp_path, mutation):
     assert schema_is_ready(engine) is False
     with pytest.raises(DatabaseRecreateRequired):
         ensure_migrated(engine)
-    assert database_revisions(engine) == {"0014_launch_profile_only"}
+    assert database_revisions(engine) == {"0015_single_task_assignments"}
     if mutation == "extra":
         with engine.connect() as connection:
             assert connection.execute(text("SELECT id FROM unexpected_table")).scalar_one() == 42
