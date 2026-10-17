@@ -1,5 +1,21 @@
 # AGENTS.md
 
+## Выбор сборки и повторное использование
+
+Перед build/test/install определить нужные компоненты и изменившиеся реальные
+inputs; проверить готовый artifact, environment и cache. Неизменные inputs и
+проверенный artifact означают отсутствие повторных install/compile/source export.
+Docs/test-only не пересобирают приложение без изменения его build inputs.
+Во время работы выполнять scoped unit/static; полный gate — на согласованной
+вехе. Integration/slow/full coverage — вручную перед релизом; необходимые
+security/data/compatibility/live gates сохраняются. Полные команды в этом
+документе — каталог проверок, а не требование выполнять всё после каждой правки.
+Перед повторным heavy назвать changed inputs или missing proof; REUSED не
+выдавать за новый тест. Полезный прогретый cache сохранять в его бюджете.
+В source workspace читать `docs/BUILD_PERFORMANCE.md` из `qualityTooling.path`
+в `../source-workspace.json` и [правила workspace](../AGENTS.md).
+В standalone checkout использовать стандарт принятой версии Base.
+
 ## Правила репозитория
 
 1. После завершения задачи нельзя оставлять готовую работу в незакоммиченном состоянии.
@@ -11,14 +27,15 @@
 
 3. Merge и deploy запрещены без явной команды пользователя.
 
-## Обязательные проверки
+## Каталог проверок и полный gate
 
 Канонический локальный gate и expected output описаны в
 `docs/quality-gate.md`; цели `Makefile` и `scripts/quality.ps1` повторяют эти
 команды через `uv`, `constraints.txt` и текущий marker contract.
 
-После любого изменения SQLAlchemy-слоя, application services, состояния UI или
-Supervisor Engine перед commit выполнить следующие проверки:
+При изменении SQLAlchemy-слоя, application services, состояния UI или Supervisor Engine
+выполнять scoped unit/static. Ниже — каталог проверок для согласованной итоговой вехи;
+integration/slow/full coverage запускать вручную перед релизом.
 
 1. **Tests**
    ```bash
