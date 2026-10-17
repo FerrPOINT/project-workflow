@@ -14,6 +14,7 @@
     "test_supervisor_text_and_status.py",
     "test_task_validator.py",
     "test_test_lanes.py",
+    "test_ui_imports.py",
     "test_ui_schemas.py"
   ],
   "slow": [

@@ -45,8 +45,41 @@ Peak — OS working set процесса с начала жизни, включ�
 В измеряемой фазе guard запрещает DB/network/subprocess/file writes.
 
 Реальные SQLite/PG/release coverage gates остаются отдельной ручной приёмкой.
-Публичные UI exports пока не переведены на lazy contract: schema-only import
-UI package — следующий независимый P7 scope, а не результат этого fixture pilot.
+Public UI exports и schema-only import имеют отдельный pilot ниже; его числа
+не суммируются с fixture pilot и не относятся к полной сборке.
+
+## Ленивые UI exports
+
+`project_workflow.interfaces.ui` загружает public symbols при обращении к ним.
+Schema-only import не готовит ASGI app/routes, DB или Uvicorn. `__all__`, `dir`,
+wildcard import, service/template symbols и прежние имена сохраняются.
+`_app_state`/`_AppState` остаются read-through, включая явные monkeypatch overrides.
+Остальные exports сохраняют identity после первого обращения; новый app не
+создаётся на каждое чтение атрибута.
+
+`app` и `main` — legacy object/function exports с именами подмодулей. Обычного
+`__getattr__` недостаточно: direct submodule import может записать module на
+parent package. Стандартный ModuleType setter сохраняет legacy value только
+для этих двух collisions. Direct importlib module access и остальные submodules
+остаются обычными modules; ASGI app и CLI function не обёрнуты в proxy.
+TYPE_CHECKING imports сохраняют static exports без runtime preparation.
+
+`tests/test_ui_imports.py` проверяет package-first, legacy-first, submodule-first,
+services-first, wildcard/state и настоящий schemas import с запрещёнными heavy
+imports. Scoped run с существующими schemas/fixture tests дал48PASS; после
+уточнения static exports final7 cases PASS за0,83с, scoped Ruff/mypy PASS.
+Контролируемые modules проверяют Python binding, не HTTP semantics. Отдельный
+read-only probe с actual app/main подтвердил обе import orders и прежнюю сигнатуру
+60 routes без lifespan/server/DB/network. Browser/live acceptance этого source
+кандидата остаётся на интегрированной вехе; старый runtime её не заменяет.
+
+Schema import pilot в том же Windows Python3.11.15, три fresh-process samples:
+median wall1,377→0,200с, own CPU1,250→0,203с, process peak working set
+101 085 184→32 260 096 B. Общий platform bootstrap до timer; static app/route
+parity проверяется после снятия метрик, вне schema-import boundary. Это не
+startup/полная collection/build metric. Cold FS cache и unique RAM не измерены.
+Изменён production module, поэтому applicable Workflow application image/UI
+проверяется свежим на вехе; неизменные dependency graphs не готовятся повторно.
 
 ## Ручная релизная проверка
 
