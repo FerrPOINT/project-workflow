@@ -19,6 +19,35 @@ pytest; release coverage по-прежнему собирает полный non
 Для точечного запуска сохраняется `python scripts/quality.py test -- tests/test_quality_runner.py`.
 Docs-only CI выполняет stdlib README validator без uv bootstrap и pytest.
 
+## Подготовка fixtures только для потребителя
+
+Root `tests/conftest.py` не импортирует DB/UoW/LLM и SQLite helpers при collection.
+Autouse isolation сначала читает reviewed unit marker; для unit не запрашивает
+`tmp_path`, `monkeypatch` и session UI templates. Integration получает эти
+fixtures через `request.getfixturevalue()` во время setup, затем выполняет
+прежнюю SQLite snapshot/isolation/teardown логику. LLM implementation загружается
+только при запросе `supervisor_llm`. Fixtures не запрашиваются при teardown.
+
+`tests/test_fixture_imports.py` проверяет эту границу в свежем interpreter с
+запрещёнными application imports, а также сохраняет integration/LLM consumer
+activation. Это короткий tooling unit с контролируемым Python subprocess,
+без продукта/сервера/БД/сети. Pytest lane metadata включает его явно.
+Scoped command: `python scripts/quality.py test -- tests/test_fixture_imports.py`.
+
+Import-only pilot на Windows, existing prepared Python3.11.15/pytest9.1.1:
+три fresh-process samples на каждую версию дали медианы wall0,903→0,183с,
+own CPU0,906→0,188с, process peak working set79 638 528→30 273 536 B.
+Измерены только definitions/import conftest, с одинаковой frozen lane metadata
+и общим OS platform bootstrap до таймера. Dependency installation не выполнялась;
+это не новый proof completeness uv lock или ускорение полного quality/build.
+Peak — OS working set процесса с начала жизни, включая bootstrap, не unique RAM
+приложения/хоста и не process tree. Cold filesystem cache не квалифицирован.
+В измеряемой фазе guard запрещает DB/network/subprocess/file writes.
+
+Реальные SQLite/PG/release coverage gates остаются отдельной ручной приёмкой.
+Публичные UI exports пока не переведены на lazy contract: schema-only import
+UI package — следующий независимый P7 scope, а не результат этого fixture pilot.
+
 ## Ручная релизная проверка
 
 Полный прежний набор сохранён в `.github/workflows/release.yml`: только
