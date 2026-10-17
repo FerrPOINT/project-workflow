@@ -176,6 +176,87 @@ def test_existing_router_authorizes_readback_and_rejects_drift(database, monkeyp
         assert client.get(path, headers=headers).status_code == 409
 
 
+@pytest.mark.parametrize("with_managed_legacy", [False, True])
+def test_runtime_catalog_reads_installed_single_task_with_legacy_selector(monkeypatch, with_managed_legacy):
+    monkeypatch.setattr(config, "CATALOG_VARIANT", "legacy")
+    monkeypatch.setenv("PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN", "c" * 32)
+    monkeypatch.setenv("PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON", json.dumps({"analyst": "a" * 32}))
+    monkeypatch.setenv("PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON", json.dumps({"analyst": "b" * 32}))
+    config.get_settings.cache_clear()
+    with SAUnitOfWork() as uow:
+        if with_managed_legacy:
+            ensure_managed_catalog(uow)
+        installation = ensure_single_task_catalog(uow)
+        uow.commit()
+        before = {name: rows(uow, table) for name, table in m.Base.metadata.tables.items()}
+    with TestClient(create_app()) as client:
+        path = "/internal/runtime/catalog"
+        assert client.get(path).status_code == 401
+        for token in ("a" * 32, "b" * 32):
+            assert client.get(path, headers={"Authorization": "Bearer " + token}).status_code == 403
+        response = client.get(path, headers={"Authorization": "Bearer " + "c" * 32})
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["ok"] is True
+    assert len(payload["namespaces"]) == len(payload["workflows"]) == 7
+    assert payload["namespaces"] == [
+        {"id": int(binding.namespace_id), "name": binding.namespace_name,
+         "cli_command": binding.namespace_cli_command, "launch_profile": binding.profile,
+         "workflow_id": int(binding.workflow_id)}
+        for binding in installation.bindings
+    ]
+    assert payload["workflows"] == [
+        {"id": int(binding.workflow_id), "key": binding.workflow_key,
+         "name": config.MANAGED_NAMESPACE_WORKFLOW_NAME}
+        for binding in installation.bindings
+    ]
+    with SAUnitOfWork() as uow:
+        assert {name: rows(uow, table) for name, table in m.Base.metadata.tables.items()} == before
+
+
+@pytest.mark.parametrize("drift", ["instruction", "mode", "namespace", "membership", "extra", "missing"])
+def test_runtime_catalog_rejects_single_task_drift_without_legacy_fallback_or_repair(monkeypatch, drift):
+    monkeypatch.setattr(config, "CATALOG_VARIANT", "legacy")
+    monkeypatch.setenv("PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN", "c" * 32)
+    config.get_settings.cache_clear()
+    with SAUnitOfWork() as uow:
+        ensure_managed_catalog(uow)
+        installation = ensure_single_task_catalog(uow)
+        binding = installation.bindings[0]
+        if drift == "instruction":
+            instruction = uow.phase_instructions.list(int(binding.modes[0].phase_ids[0]))[0]
+            uow.phase_instructions.update(instruction["id"], {"description": "tampered"})
+        elif drift == "mode":
+            uow.session.get(m.WorkflowMode, int(binding.modes[0].mode_id)).execution_scopes = ["aggregate"]
+        elif drift == "namespace":
+            uow.projects.update(int(binding.namespace_id), {"launch_profile": "foreign"})
+        elif drift == "membership":
+            membership = uow.session.get(m.ProfessionWorkflow, (int(binding.workflow_id), int(binding.namespace_id)))
+            uow.session.delete(membership)
+        elif drift == "extra":
+            uow.workflows.create({"key": "single-task-v1:foreign", "name": "Foreign"})
+        else:
+            uow.session.get(m.Workflow, int(binding.workflow_id)).key = "foreign:missing"
+        uow.commit()
+        before = {name: rows(uow, table) for name, table in m.Base.metadata.tables.items()}
+    with TestClient(create_app()) as client:
+        response = client.get("/internal/runtime/catalog", headers={"Authorization": "Bearer " + "c" * 32})
+    assert response.status_code == 503
+    assert response.json() == {"ok": False, "error": "Single-task installation missing or divergent"}
+    with SAUnitOfWork() as uow:
+        assert {name: rows(uow, table) for name, table in m.Base.metadata.tables.items()} == before
+
+
+def test_runtime_catalog_requires_installation_when_single_task_is_selected(monkeypatch):
+    monkeypatch.setattr(config, "CATALOG_VARIANT", "single-task-v1")
+    monkeypatch.setenv("PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN", "c" * 32)
+    config.get_settings.cache_clear()
+    with TestClient(create_app()) as client:
+        response = client.get("/internal/runtime/catalog", headers={"Authorization": "Bearer " + "c" * 32})
+    assert response.status_code == 503
+    assert response.json() == {"ok": False, "error": "Single-task installation missing or divergent"}
+
+
 def test_version_one_cannot_bypass_runtime_or_human_step_guard(database):
     with SAUnitOfWork(database) as uow:
         installation = ensure_single_task_catalog(uow)
