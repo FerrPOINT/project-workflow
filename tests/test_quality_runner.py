@@ -3,6 +3,29 @@
 from scripts.quality import commands
 
 
+def test_changed_runner_has_one_unit_owner_in_product_selection() -> None:
+    from pathlib import Path
+
+    from scripts.vendor import base_quality_selection as selection
+
+    root = Path(__file__).resolve().parents[1]
+    for path in ("scripts/quality.py", "Makefile", "tests/test_quality_runner.py"):
+        candidate = selection.plan(root, profile="unit", changed=[path])
+        assert [gate["id"] for gate in candidate["gates"]] == ["backend:unit"]
+    assert "tests/test_quality_runner.py" in commands("unit")[0]
+    assert selection.plan(root, profile="unit", changed=["README.md"])["gates"] == []
+
+
+def test_docs_only_ci_does_not_prepare_python_dependencies() -> None:
+    from pathlib import Path
+
+    source = (Path(__file__).resolve().parents[1] / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    docs_job = source.split("\n  docs:\n", 1)[1].split("\n  quality:\n", 1)[0]
+    assert "python scripts/verify_readme.py" in docs_job
+    assert "setup-uv" not in docs_job
+    assert "quality.py" not in docs_job
+
+
 def test_uv_binary_environment_does_not_replace_the_canonical_runner(monkeypatch) -> None:
     monkeypatch.delenv("WORKFLOW_QUALITY_UV", raising=False)
     monkeypatch.setenv("UV", "/installed/uv")

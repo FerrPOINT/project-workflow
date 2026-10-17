@@ -56,13 +56,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
-        with:
-          version: 0.10.10
-          enable-cache: true
-      - run: |-
-          python scripts/verify_readme.py
-          python scripts/quality.py test -- tests/test_quality_runner.py
+      - run: python scripts/verify_readme.py
   quality:
     needs: changes
     if: ((needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true')) && (github.actor != 'dependabot[bot]')

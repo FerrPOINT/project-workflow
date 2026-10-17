@@ -14,6 +14,11 @@ Release выполняет единый coverage >=94% и PostgreSQL отдел�
 список завершает запуск ошибкой. `unit -- <test-path>` сохраняет явный выбор
 pytest; release coverage по-прежнему собирает полный non-PostgreSQL набор.
 
+`tests/test_quality_runner.py` имеет одного владельца — `backend:unit`;
+изменения runner/Makefile/его тестов выбирают этот lane без второго tooling gate.
+Для точечного запуска сохраняется `python scripts/quality.py test -- tests/test_quality_runner.py`.
+Docs-only CI выполняет stdlib README validator без uv bootstrap и pytest.
+
 ## Ручная релизная проверка
 
 Полный прежний набор сохранён в `.github/workflows/release.yml`: только

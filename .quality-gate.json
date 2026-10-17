@@ -22,11 +22,6 @@
       "project_workflow/ui/**",
       ".github/**",
       "openapi/**"
-    ],
-    "tooling": [
-      "scripts/quality*",
-      "Makefile",
-      "tests/test_quality_runner.py"
     ]
   },
   "gates": [
@@ -69,29 +64,6 @@
       ],
       "cacheable": false,
       "test_tier": "integration"
-    },
-    {
-      "id": "tooling:quality-runner",
-      "component": "tooling",
-      "profiles": [
-        "fast",
-        "release",
-        "unit",
-        "build"
-      ],
-      "argv": [
-        "{python}",
-        "scripts/quality.py",
-        "test",
-        "--",
-        "tests/test_quality_runner.py"
-      ],
-      "cwd": ".",
-      "inputs": [
-        "**"
-      ],
-      "cacheable": false,
-      "test_tier": "unit"
     },
     {
       "id": "backend:quality",
@@ -203,18 +175,6 @@
     }
   ],
   "additional_acceptance": "Existing product CI/CONTRIBUTING: MSRV/features, ignored DB, OpenAPI/packed consumer/themes, security and live acceptance remain separate mandatory gates where applicable.",
-  "impacts": [
-    {
-      "paths": [
-        "scripts/quality*",
-        "Makefile",
-        "tests/test_quality_runner.py"
-      ],
-      "components": [
-        "backend"
-      ]
-    }
-  ],
   "test_policy": {
     "automatic": [
       "unit",
