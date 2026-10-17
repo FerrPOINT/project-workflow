@@ -1161,6 +1161,34 @@ def runtime_catalog(
     workflow_items = workflows.get("workflows") if isinstance(workflows, dict) else None
     if not isinstance(namespace_items, list) or not isinstance(workflow_items, list):
         return _error("Каталог временно недоступен", 503)
+    from project_workflow.domain.single_task_profile import PROFILE, is_single_task_key
+    from project_workflow.infrastructure.db.single_task_catalog import observe_installation
+
+    if (config.CATALOG_VARIANT == PROFILE
+        or any(isinstance(item, dict) and is_single_task_key(item.get("key")) for item in workflow_items)
+        or any(isinstance(item, dict) and str(item.get("cli_command", "")).startswith("workflow-single-task-")
+               for item in namespace_items)):
+        try:
+            with SAUnitOfWork() as uow:
+                installation = observe_installation(uow)
+                return {
+                    "ok": True,
+                    "namespaces": [
+                        {"id": int(binding.namespace_id), "name": binding.namespace_name,
+                         "cli_command": binding.namespace_cli_command, "launch_profile": binding.profile,
+                         "workflow_id": int(binding.workflow_id)}
+                        for binding in installation.bindings
+                    ],
+                    "workflows": [
+                        {"id": int(binding.workflow_id), "key": binding.workflow_key,
+                         "name": config.MANAGED_NAMESPACE_WORKFLOW_NAME}
+                        for binding in installation.bindings
+                    ],
+                }
+        except ValueError:
+            return _error("Single-task installation missing or divergent", 503)
+        except (RuntimeError, OSError, SQLAlchemyError):
+            return _error("Single-task installation observation unavailable", 503)
     managed_namespace_commands = {f"workflow-{role_key}" for role_key in MANAGED_ROLE_MODE_SCOPES}
     managed_namespaces = [
         item
