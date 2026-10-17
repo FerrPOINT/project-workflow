@@ -1,6 +1,7 @@
 """Platform service catalog switcher (catalog v1.1)."""
 import io
 import json
+from html.parser import HTMLParser
 from pathlib import Path
 
 import pytest
@@ -275,3 +276,75 @@ def test_rendered_switcher_uses_current_runtime_health_without_duplicate(monkeyp
     assert 'Project Workflow' not in menu  # runtime label is PW, not a fabricated replacement
     assert 'Central Auth' not in menu
     assert 'href="/" role="menuitem" aria-current="page"' in menu
+
+
+class _ServiceLinks(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.links = {}
+
+    def handle_starttag(self, tag, attrs):
+        attributes = dict(attrs)
+        key = attributes.get("data-platform-service")
+        if tag == "a" and key:
+            self.links[key] = attributes
+
+
+@pytest.mark.parametrize("source", ["fallback-unreachable", "fallback-invalid", "fallback-empty", None])
+def test_fallback_menu_never_navigates_to_unverified_workspace_addresses(source):
+    from project_workflow.interfaces.ui.templates import templates
+
+    context = {
+        "page": "tasks", "other_services": load_service_catalog(None).services,
+        "namespace_cookie_name": "workflow_namespace_id", "namespace_cookie_secure": False,
+    }
+    if source is not None:
+        context["services_source"] = source
+    html = templates.get_template("base.html").render(**context)
+    links = _ServiceLinks()
+    links.feed(html)
+    assert len(links.links) == 6
+    for key, attributes in links.links.items():
+        if key == "project-workflow":
+            assert attributes["href"] == "/"
+            assert "aria-disabled" not in attributes
+        else:
+            assert "href" not in attributes
+            assert attributes["aria-disabled"] == "true"
+            assert attributes["tabindex"] == "-1"
+
+
+def test_runtime_menu_recovers_exact_own_workspace_addresses(monkeypatch):
+    from project_workflow.interfaces.ui import platform_services as ps
+    from project_workflow.interfaces.ui.templates import templates
+
+    now = [100.0]
+    monkeypatch.setattr(ps.time, "monotonic", lambda: now[0])
+    services = [
+        {"key": "wiki", "label": "Wiki", "ui_url": "http://localhost:8732", "health": "unreachable"},
+        {"key": "project-workflow", "label": "Workflow", "ui_url": "http://localhost:8752"},
+    ]
+    monkeypatch.setattr(ps, "urlopen", lambda *_args, **_kwargs: _response(services))
+
+    def render_links():
+        catalog = load_service_catalog("http://admin-backend:7771/api/v1/runtime/services")
+        html = templates.get_template("base.html").render(
+            page="tasks", other_services=catalog.services, services_source=catalog.source,
+            namespace_cookie_name="workflow_namespace_id", namespace_cookie_secure=False,
+        )
+        links = _ServiceLinks()
+        links.feed(html)
+        return links.links
+
+    assert render_links()["wiki"]["href"] == "http://localhost:8732"
+    now[0] += 61
+
+    def unavailable(*_args, **_kwargs):
+        raise OSError("own Admin unavailable")
+
+    monkeypatch.setattr(ps, "urlopen", unavailable)
+    assert "href" not in render_links()["wiki"]
+    monkeypatch.setattr(ps, "urlopen", lambda *_args, **_kwargs: _response(services))
+    recovered = render_links()["wiki"]
+    assert recovered["href"] == "http://localhost:8732"
+    assert "aria-disabled" not in recovered
