@@ -64,6 +64,30 @@ Capability определяется сохранённым типом credential
 token; `/internal/runtime/catalog` принимает только точный catalog credential,
 а catalog credential не принимается `step`, `history` и `capabilities`.
 
+## Installed catalog selection
+
+`GET /internal/runtime/catalog` сохраняет тот же catalog-only credential и
+форму ответа `ok`, `namespaces`, `workflows`. При наличии сохранённых workflow
+`single-task-v1:*` или namespace-команд `workflow-single-task-*` приоритет имеет
+single-task семья, даже если startup selector остаётся `legacy`. Явный selector
+`single-task-v1` также требует её установленного состояния.
+
+Перед возвратом семи namespace/workflow пар endpoint вызывает существующий
+`observe_installation`: он проверяет полную сохранённую установку 7 ролей,
+8 modes и 24 фаз, инструкции, membership и исходные namespace identities.
+Partial installation или drift дают `503`, без fallback в managed legacy,
+повторной установки, ремонта или пересоздания namespace. Ошибка чтения
+installation также даёт `503`; успешное чтение не разрешает dispatch.
+
+Если single-task записи отсутствуют и selector не требует single-task, прежний
+managed legacy-only путь и его fail-closed проверки остаются без изменений.
+Этот выбор каталога не меняет role/mode policy assignment API ниже; контракт
+single-task семьи описан в [single-task installation](single-task-installation.md).
+
+Статус исправления catalog selection: source-only, проверено host SQLite
+route-тестами; установка исправленного image и live endpoint acceptance
+этим результатом не подтверждены.
+
 ## Backend-owned mode policy
 
 Канонический managed registry:
