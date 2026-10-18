@@ -71,12 +71,12 @@ def test_context_commands_respect_actual_pm_or_delivery_grant(catalog, role, mod
     if role == "project_manager":
         assert "sdlc questions --task" in context and "sdlc input --task" in context
         assert "absent requirements revision is normal" in context
-        assert "comments/attachments" in context and "not authorized" in context
+        assert "Ordinary attachments" in context and "not authorized" in context
         assert "attachment list" not in context
     else:
         assert "sdlc questions --task" not in context
         for required in ("sealed assignment artifacts", "current delivery grant",
-                         "Ordinary comments remain unauthorized",
+                         "Task discussion uses its separate narrow SDLC route",
                          "task-tracker attachment list --issue <task-uuid>", "artifact.binding", "Verify SHA256",
                          "actual server-returned artifact.receipt", "missing artifact capability"):
             assert required in context

@@ -45,7 +45,8 @@ def test_context_authorizes_only_sealed_assignment_artifacts_under_delivery_gran
     assert context == instructions.context_instruction(role)
     for required in (
         "sdlc context --task <task-uuid>", "sdlc requirements --task <task-uuid>", LIST, DOWNLOAD, UPLOAD,
-        "only sealed assignment artifacts", "supplied current delivery grant", "Ordinary comments remain unauthorized",
+        "only sealed assignment artifacts", "supplied current delivery grant",
+        "Task discussion uses its separate narrow SDLC route",
         "do not borrow owner/scheduler credentials", "ordinary human token", "task=root", "artifact.binding",
         "actual producer/predecessor", "Running/InProgress", "live lease",
         "lease holder is the scheduler, not the agent",
@@ -107,7 +108,7 @@ def test_missing_or_unknown_effects_never_broaden_authority_or_invent_proposal_k
     assert "attachment operation" not in terminal and "attachment delete" not in terminal
 
 
-def test_pm_text_and_confirmation_order_are_unchanged_except_registration_wording(generated):
+def test_pm_discussion_contract_preserves_confirmation_and_role_boundaries(generated):
     # A private scope regression checksum, not a public catalog/manifest/profile pin.
     terminal = instructions.terminal_instruction("project_manager")
     current = (
@@ -122,13 +123,13 @@ def test_pm_text_and_confirmation_order_are_unchanged_except_registration_wordin
         instructions.PM_CONFIRMATION_EVIDENCE,
     ]
     assert hashlib.sha256(json.dumps(pm_text, ensure_ascii=True).encode()).hexdigest() == (
-        "d8604de3f2e303701f76fcb50fc0b5c095d67a54ea516245c1d5471c7b435644"
+        "13ccebcb8615114623b612fd8abc6f680f3f3175d8e5620cbe505875ebc9c55f"
     )
     catalog, _ = generated
     phases = mode_for(catalog, "project_manager", "draft")["phases"]
     text = " ".join(phase_text(phase) for phase in phases)
     for required in (
-        "Ordinary comments/attachments are not authorized", "brainstorming partner", "small iterations",
+        "Ordinary attachments are not authorized", "brainstorming partner", "small iterations",
         "alternatives with tradeoffs", "one useful question", "No long mandatory questionnaire", "preselection",
         "requirements review all remain inside draft", "requirements_revision=null", "requirements_sha256=null",
         "same execution/assignment/cycle", "PM Workflow NOT completed", "FULL server-saved requirements document",

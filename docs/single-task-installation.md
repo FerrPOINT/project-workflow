@@ -51,11 +51,11 @@ Installed binding не является runtime admission или Tracker transit
 и `single_task_manifest_v1.json`, проверяемые по фактическим UTF-8/LF bytes:
 
 ```text
-catalog:  86e6c983b7aa6a2c99da11d1d4b1f1b4563ff913262236903a19bc86bdec2d67
-manifest: 652a38c0f7bdb48a569aa3fcd5c2e81e153db6e22b5201cfb6ce15c988dd57f3
+catalog:  614ea7434eb4c89344559f6e5647b26c11c4aff4dfe1a9a4d11bbe578b2dd66b
+manifest: 9413bb008eefc5a13cb9f8e25c7670409a7576485010c7f751e89bd0c2c2ff15
 ```
 
-16October typed backend image-build instructions change sealed content/hashes, not role IDs or
+18October stage-discussion instructions change sealed content/hashes, not role IDs or
 profile/protocol versions. Existing installation with an older manifest is drift:
 observation/init must not repair it silently. Coordinate reviewed installation
 adoption and Fleet effective configuration revisions before activation; never
@@ -161,8 +161,10 @@ updates are source-only; existing installed content must not be silently repaire
 3. Feedback перерабатывает документ в том же execution/assignment/cycle;
    новая revision/hash отменяет старое consent и показывается целиком заново.
 4. Прочитать реальный confirmation receipt и сверить task/revision/hash/owner.
-5. Только теперь отправить final Workflow report, проверить complete=true
-   и завершить PM run. PM не dispatch-ит Analyst.
+5. Отправить final Workflow report и проверить actual accepted complete=true.
+6. Сохранить настоящий итоговый комментарий текущего PM в Tracker и проверить
+   исходную operation, автора, assignment/revision/hash и тело в обсуждении,
+   затем завершить PM run. PM не dispatch-ит Analyst.
 
 Consent может создать Analysis / Ready intent в Tracker, но Analyst reserve
 заблокирован до PM actual completion. Дополнительные PM assignment cycles

@@ -80,9 +80,11 @@ revision и content_hash. Изменение содержимого требуе
 Workflow complete и ответ на отдельный вопрос не заменяют owner consent.
 
 PM сначала получает exact owner confirmation receipt, затем завершает Workflow.
-Технические роли до FINAL Workflow report публикуют и проверяют sealed role artifacts;
-после accepted Workflow `complete=true` используют реальный Workflow receipt для typed
+Технические роли до FINAL Workflow report публикуют и проверяют sealed role artifacts.
+После accepted Workflow `complete=true` сохраняют настоящий итоговый комментарий,
+сверяют original-operation readback и тело в обсуждении, затем используют Workflow receipt для typed
 Tracker proposal/readback с явно названными разрешёнными stage/status.
+[Полный порядок и права](stage-work-contract.md).
 Будущий receipt не включён в checks/evidence как условие предшествующего report:
 это предотвращает цикл «сначала принеси результат ещё не выполненного handoff».
 Дефекты Reviewer/Tester возвращают эту же задачу в Rework. Новый candidate снова
@@ -92,8 +94,8 @@ artifact/deployment/health/acceptance; успешная сборка сама п
 ## Sealed Role Artifacts
 
 Актуальный generator для шести технических ролей использует existing Tracker attachment
-CLI под текущим delivery grant, без ordinary comments, human token или заимствования
-owner/scheduler credentials:
+CLI под текущим delivery grant, отдельно от итогового комментария в обсуждении.
+Human token и заимствование owner/scheduler credentials запрещены:
 
 ```text
 task-tracker attachment upload --issue <task-uuid> --file <role-artifact.json> --content-type application/json
@@ -211,9 +213,9 @@ final Workflow/Tracker handoff сохранены; build artifact не раве�
 instructions byte-identical `abe4`; PM role hash остаётся
 `b363961b2a49d24a259d57f53e6febb06ff53a1605ffd9683a88eacd6ceabae1`, inventory 7/8/24.
 Generated catalog SHA256:
-`86e6c983b7aa6a2c99da11d1d4b1f1b4563ff913262236903a19bc86bdec2d67`;
+`614ea7434eb4c89344559f6e5647b26c11c4aff4dfe1a9a4d11bbe578b2dd66b`;
 manifest SHA256:
-`652a38c0f7bdb48a569aa3fcd5c2e81e153db6e22b5201cfb6ce15c988dd57f3`.
+`9413bb008eefc5a13cb9f8e25c7670409a7576485010c7f751e89bd0c2c2ff15`.
 Qualified `abe4` companion остаётся historical и ещё не установлен; этот обновлённый
 family требует собственной qualification/adoption перед live history. Legacy catalog,
 его pins/history, Hermes и runtime protocol не меняются; здесь image/install/live PASS нет.
@@ -221,7 +223,7 @@ Artifact/deployment/health/acceptance/rollback evidence остаётся обя�
 как и ordinary tool approval. PM ordering, 7/7/8/24 и final transitions сохранены.
 Нет stand adoption, публикации, нового controller/queue/MCP или native acceptance claim.
 
-## Проверенный Tracker CLI И Пробелы
+## Исторический Tracker CLI И Пробелы На Указанной Ревизии
 
 Ниже сохранена историческая проверка исходного loader `fb9dd53`. Для устанавливаемого
 профиля она заменена [актуальными producer instructions](single-task-installation.md):

@@ -1,6 +1,14 @@
 # Single-Task Instruction Audit
 
-## Current Content Qualification: 16 October 2026
+## Current Stage Work Contract: 18 October 2026
+
+[Единый порядок действий и границы доказательства](stage-work-contract.md):
+полное обсуждение → работа профессии → принятая финальная оценка → реальный
+комментарий → typed proposal → native terminal → guarded переход/readback.
+Новые source/unit проверки не являются PostgreSQL/HTTP или live-приёмкой;
+исторические результаты ниже не переносятся на изменившиеся hashes.
+
+## Historical Content Qualification: 16 October 2026
 
 Текущий исходник dfb содержит инструкции typed backend image build, current
 catalog86e6/manifest652a и актуальные producer fixtures. Focused133 и producer31

@@ -59,6 +59,11 @@ def render() -> tuple[bytes, bytes]:
                 )
             else:
                 mode["phases"][1]["instructions"][-2]["description"] = CRITICAL_BUSINESS_REVIEW
+                mode["phases"][-1]["instructions"][-2]["description"] = (
+                    "Prepare the final report and actual role evidence. Prepare the Tracker completion comment "
+                    "with work, checks, findings and the requested next stage/status. Follow the final instruction "
+                    "below: actual publication/readback follows accepted Workflow evaluation, before handoff."
+                )
             if role == "analyst":
                 mode["phases"][1]["instructions"][2]["description"] = (
                     "Produce the analysis report and requirement/criterion/verification coverage matrix for this "
@@ -66,6 +71,23 @@ def render() -> tuple[bytes, bytes]:
                     "result.role=analyst with a real analysis ArtifactReceipt for the existing delivery proposal; "
                     "do not borrow scheduler credentials or use scheduler Analysis submit as the agent producer."
                 )
+            final = mode["phases"][-1]
+            final["instructions"].insert(-1, {
+                "description": (
+                    "Prepare the completion summary from actual role work, exact inputs, checks/evidence, "
+                    "findings and limitations; state the permitted next stage/status as requested. "
+                    "Publish the actual comment only after this final report is accepted, before handoff. "
+                    "A PARTIAL/BLOCKED report still requires more work, not a frozen completion comment."
+                ),
+                "skills": ["project-workflow-executor", "tracker-operator"],
+            })
+            final["checks"].append(
+                "Completion comment content and the permitted next stage/status are prepared; "
+                "future effects are not prerequisites of this evaluation."
+            )
+            final["evidence"].append(
+                "Prepared completion summary: work, exact inputs, actual checks/evidence, findings and limitations."
+            )
         manifest["roles"][role]["role_instructions_sha256"] = digest(encoded(workflow["modes"], canonical=True))
     catalog_bytes = encoded(catalog)
     manifest["proposal"] = False

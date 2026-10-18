@@ -36,6 +36,42 @@ TARGETS = {
     "devops": "Deployment / Completed",
 }
 
+DISCUSSION_READ = (
+    "Read the ticket title/description and every participant's comments with "
+    "task-tracker sdlc discussion read --task <task-uuid>. Follow every non-null next_after using "
+    "--after <next-after-uuid> --snapshot <original-snapshot-uuid> until next_after=null. Preserve the "
+    "same snapshot across pages; a first page is not the whole discussion. A missing/deleted cursor "
+    "requires a fresh scan, not silently skipping comments. Start a fresh scan before the completion "
+    "comment to account for new input. Check installed task-tracker sdlc discussion --help; missing CLI, "
+    "denied access or unavailable API is a concrete blocker. Do not borrow owner/scheduler credentials "
+    "or use generic issue/comment mutation endpoints. Discussion does not replace requirements, exact "
+    "owner consent, sealed role evidence or a critical-blocker decision. "
+)
+
+COMPLETION_COMMENT = (
+    "AFTER the accepted final Workflow report and BEFORE proposing the result or ending the run, "
+    "leave an actual completion comment in this Tracker task. "
+    "First refresh its full discussion as above. Summarize work performed, the exact requirements revision "
+    "and candidate when applicable, actual checks/evidence, findings, limitations and the requested next "
+    "stage/status. A rework verdict must contain actionable findings; do not claim the transition has "
+    "already happened. Use PublishStageComment JSON with body, fence and idempotency_key in a private file. "
+    "For PM, fence is {kind:pm, fence:<current MachineFence>, lease_id:<actual lease UUID>, "
+    "expected_lease_version:<actual current version>}; read task-tracker sdlc pm lease read --task "
+    "<task-uuid> for the current lease/fence. For technical roles, fence is {kind:delivery, "
+    "fence:<supplied current DeliveryFence>}. Never invent or borrow these values. Source env.sh in the "
+    "current foreground shell and require the supplied FLEET_STAGE_COMMENT_KEY. Set idempotency_key "
+    "using jq --arg, private permissions and a new output file; never interpolate body text into shell "
+    "code or overwrite a previously submitted body. Publish with task-tracker sdlc discussion publish "
+    "--task <task-uuid> --from-file <stage-comment.json>. Reconcile with task-tracker sdlc discussion "
+    "operation --task <task-uuid> --key <original-comment-key>. Verify actual comment_id, task_id, "
+    "author_subject/author_id, assignment/execution/agent, requirement_revision and body_sha256 of the "
+    "exact UTF-8 comment body; read the real comment in the task discussion as well. After uncertain "
+    "POST, retain the original key/body and read that operation before any retry; no fresh key. Missing "
+    "comment/readback, changed or deleted content, stale fence, or missing permission prevents successful "
+    "handoff. Include the actual comment receipt in the final agent handoff report. The comment does not grant "
+    "owner consent, mark the business stage complete or authorize a generic transition. "
+)
+
 CRITICAL_BODY_COMMAND = (
     '(umask 077; set -C; jq -e --arg key "${FLEET_CRITICAL_BLOCKER_KEY:?Fleet critical proposal key unavailable}" '
     "'.idempotency_key = $key' critical-body.json > critical-blocker.json)"
@@ -47,7 +83,8 @@ CRITICAL_BUSINESS_REVIEW = (
     "ONLY a requirements_contradiction or missing_business_decision that prevents safe progress requires PM "
     "business review. After the first Workflow step, check installed task-tracker sdlc critical-blocker --help "
     "for submit/read/operation; missing CLI, denied authority or unavailable producer is an explicit blocker, "
-    "not permission for ordinary comments, a generic issue transition or borrowed credentials. "
+    "not permission to replace the critical-blocker protocol with a discussion comment, a generic issue "
+    "transition or borrowed credentials. "
     "For that critical branch, publish and read back your own sealed assignment evidence using the authorized "
     "attachment commands. Prepare the actual SubmitCriticalBlocker JSON: fence, requirement_revision, "
     "content_hash, kind, question, rationale, options, recommendation, evidence, idempotency_key. Use the supplied "
@@ -276,7 +313,8 @@ ROLE_SOURCE_EVIDENCE = {
 
 SEALED_ARTIFACTS = (
     "For the six technical roles, only sealed assignment artifacts are authorized on the narrow attachment "
-    "routes under the supplied current delivery grant. Ordinary comments remain unauthorized; do not borrow "
+    "routes under the supplied current delivery grant. Task discussion uses its separate narrow SDLC route; "
+    "do not borrow "
     "owner/scheduler credentials, use an ordinary human token or broaden permissions. Read permitted own "
     "artifacts and accepted predecessor references using task-tracker attachment list --issue <task-uuid> "
     "and task-tracker attachment download <attachment-uuid> --out <private-artifact-path>. Match issue_id to "
@@ -323,10 +361,10 @@ def context_instruction(role: str) -> str:
         "task-tracker sdlc requirements --task <task-uuid> with the supplied own-task grant. Verify task=root, "
         "assigned role/mode, stage/status, exact input revision/hash and predecessor evidence. Read supplied "
         "immutable source/evidence references only through authorized access. "
-    )
+    ) + DISCUSSION_READ
     if role == "project_manager":
         return common + (
-            "Ordinary comments/attachments are not authorized by the inspected PM or delivery task grants; "
+            "Ordinary attachments are not authorized by the PM task grant; "
             "do not borrow owner/scheduler credentials or call their ordinary endpoints. Parent must supply "
             "required source snapshots or an explicitly authorized read capability; missing required "
             "input/access is a blocker, not permission to invent sources or broaden authority. "
@@ -427,7 +465,8 @@ def terminal_instruction(role: str) -> str:
             "and --execution-token-file. body.report must equal --report. Include actual saved document and "
             "confirmation receipt refs, revision/content_hash, owner_subject and check/evidence coverage; "
             "never invent authority fields. Reconcile uncertain effects using the exact original key/body "
-            "before retry. Verify accepted Workflow complete=true, then finalize the PM run. The allowed next "
+            "before retry. Verify accepted Workflow complete=true. "
+            + COMPLETION_COMMENT + "Then finalize the PM run. The allowed next "
             "stage AND status are Backlog / Ready, then Analysis / Ready through Tracker/Fleet pickup. "
             "Tracker may create an Analysis / Ready intent at consent, but Analyst reserve remains blocked "
             "until PM actual completion is observed. PM does not dispatch Analyst or create another PM cycle. "
@@ -438,6 +477,12 @@ def terminal_instruction(role: str) -> str:
         "This is the normal result branch ONLY when no critical business hold or unresolved blocker remains. "
         "The critical branch ends with its actual held receipt and unfinished Workflow, not a delivery proposal. "
     ) + artifact_instruction(role) + (
+        "Then submit the FINAL phase report via terminal -> project-workflow --json step "
+        "--task <workflow-task-key> --report <report-text> with the supplied --operation-key, "
+        "--runtime-request and --execution-token-file; body.report must equal --report. "
+        "Reconcile uncertain effects with the original key/body. Verify accepted Workflow complete=true "
+        "and the actual immutable Workflow receipt before the next operation. "
+        + COMPLETION_COMMENT +
         f"After accepted Workflow complete=true, the allowed next stage AND status are {TARGETS[role]} "
         "on this same task=root. While the assigned run is still alive, prepare the actual existing "
         "SubmitDeliveryProposal JSON with exactly fence, workflow_receipt, result, idempotency_key. "

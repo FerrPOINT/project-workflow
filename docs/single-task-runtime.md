@@ -147,6 +147,10 @@ new revision/hash rejects stale consent. Actual owner/receipt/latest-document
 verification belongs to Tracker plus the trusted adapter; instructions still
 require PM CLI confirmation readback before final report. PM never dispatches Analyst.
 
+Every profession also reads all discussion pages and saves an actual stage comment
+after its accepted final Workflow report, before business handoff. Tracker verifies its current assignment/revision
+and preserved body before handoff. See [stage work contract](stage-work-contract.md).
+
 ## Migration And Remaining Integration
 
 The original profile migration is `0015_single_task_assignments`, predecessor
