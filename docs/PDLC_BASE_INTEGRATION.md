@@ -67,3 +67,11 @@ exporter — в `services-base/base-modules/ui`. Библиотека, Auth, о�
 остаются независимыми. SSR assets получаются штатным exporter и проверяются
 по fingerprints. Общие CSS/mechanisms не редактируются в продуктовой копии.
 Установка и authenticated межпродуктовая приёмка выполняются отдельно.
+
+## UI-кандидат 2026-10-18
+
+SSR/UI pin: `6f1c797a0b11380f7e36db5ced0360f25a0265a5`.
+SDK и skills pins независимы. Обновлены канонические SSR CSS и fingerprint штатным exporter Base: поля формы
+получают собственный border-box и не зависят от reset продукта.
+Защита черновика и namespace-состояние сохраняют продуктового владельца.
+Source-проверки не означают установки в PDLC2.

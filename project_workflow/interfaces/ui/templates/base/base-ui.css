@@ -354,7 +354,7 @@ dialog.base-shell-drawer::backdrop { background: rgb(0 0 0 / 65%); }
 .base-form-field label { font-weight: 500; }
 .base-form-field p { margin: 0; color: var(--color-text-muted); font-size: var(--base-font-label); }
 .base-form-field [role='alert'] { color: var(--color-danger); }
-.base-form-field > .base-control { width: 100%; min-width: 0; padding: 8px 12px; border: 1px solid var(--color-border); border-radius: var(--base-radius); background: var(--color-surface); color: var(--color-text-primary); font: inherit; }
+.base-form-field > .base-control { box-sizing: border-box; width: 100%; min-width: 0; padding: 8px 12px; border: 1px solid var(--color-border); border-radius: var(--base-radius); background: var(--color-surface); color: var(--color-text-primary); font: inherit; }
 .base-form-field > [aria-invalid='true'] { border-color: var(--color-danger); }
 .base-ssr-shell .base-control:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
 .base-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 8px 12px; border: 1px solid var(--color-border); border-radius: var(--base-radius); cursor: pointer; font: inherit; text-decoration: none; }
@@ -379,7 +379,8 @@ dialog.base-shell-drawer::backdrop { background: rgb(0 0 0 / 65%); }
 .base-ssr-account-menu { position: absolute; right: 0; top: calc(100% + 8px); min-width: 160px; padding: 8px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--base-radius); }
 .base-ssr-account-menu a { display: flex; align-items: center; min-height: var(--shell-control-min); padding: 8px; }
 .base-ssr-shell .base-shell-drawer .sidebar-nav { padding: 0; }
-.base-ssr-shell :is(button,select,input:not([type='checkbox']):not([type='radio']),.btn,summary,.namespace-icon-action,.brand-link,.sidebar-service-link) { min-height: var(--shell-control-min); }
+/* Resource rows own their density size; the shell minimum applies to other controls. */
+.base-ssr-shell :is(button,select,input:not([type='checkbox']):not([type='radio']),.btn,summary,.namespace-icon-action,.brand-link,.sidebar-service-link):not(.base-resource-list-row) { min-height: var(--shell-control-min); }
 .base-ssr-shell :is(button,summary,.namespace-icon-action) { min-width: var(--shell-control-min); }
 .base-ssr-shell label:has(input[type='checkbox']), .base-ssr-shell label:has(input[type='radio']) { min-height: var(--shell-control-min); display: flex; align-items: center; }
 .base-ssr-shell .btn-danger { background: var(--color-danger); color: var(--color-destructive-foreground); border-color: var(--color-danger); }
@@ -393,7 +394,7 @@ dialog.base-shell-drawer::backdrop { background: rgb(0 0 0 / 65%); }
   .base-ssr-shell { --shell-control-min: var(--shell-control-mobile-min); }
   .base-ssr-account summary { min-width: var(--shell-control-mobile-min); min-height: var(--shell-control-mobile-min); }
   .base-ssr-shell .main { width: 100%; margin-left: 0; }
-  .base-ssr-shell :is(button,select,input:not([type='checkbox']):not([type='radio']),.btn,summary,.namespace-icon-action,.brand-link,.sidebar-service-link,.sidebar-link) { min-height: var(--shell-control-mobile-min); }
+  .base-ssr-shell :is(button,select,input:not([type='checkbox']):not([type='radio']),.btn,summary,.namespace-icon-action,.brand-link,.sidebar-service-link,.sidebar-link):not(.base-resource-list-row) { min-height: var(--shell-control-mobile-min); }
   .base-ssr-shell :is(button,summary,.namespace-icon-action) { min-width: var(--shell-control-mobile-min); }
   .base-ssr-shell label:has(input[type='checkbox']), .base-ssr-shell label:has(input[type='radio']) { min-height: var(--shell-control-mobile-min); }
 }
