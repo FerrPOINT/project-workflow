@@ -15,6 +15,29 @@ Canonical quality runner готовит frozen Python 3.11.15/extras/constraints
 Между операциями uv заново проверяет определяющие inputs.
 Пользовательский WORKFLOW_QUALITY_UV сохраняет собственную семантику запуска.
 
+## Наблюдение Python environment без подготовки
+
+```bash
+python -B scripts/quality.py --inspect-environment
+```
+
+Команда читает metadata текущего interpreter и hashes pyproject.toml/uv.lock/
+constraints.txt, без uv bootstrap, install и тестов. Она показывает Python/ABI,
+первую видимую metadata-версию пакета, shadowed versions и соответствие requirements.
+Вывод не содержит environment values, source URLs или package metadata bodies.
+Это diagnostic, а не готовый test receipt: `automatic_reuse_eligible` всегда false;
+даже совпадение версий не проверяет установленные payloads, manager или test results.
+
+В данном runner файл constraints.txt передаётся как `--with-requirements`:
+[uv использует отдельный overlay](https://docs.astral.sh/uv/reference/cli/#uv-run),
+который может отличаться от основной `.local/quality-python` среды. Инспекция
+подложки не доказывает, какие версии использует quality operation. Для native
+qualification наблюдать тот же effective interpreter после штатной подготовки,
+под общим host admission; обычные cacheable flags от diagnostic не менять.
+Legacy custom prefix сохраняет свою семантику. Lockfiles и dependency pins
+данная команда не изменяет. Недоступная metadata даёт UNAVAILABLE/exit2,
+обнаруженное несовпадение — REQUIREMENTS_MISMATCH в корректном diagnostic JSON.
+
 `test-verbose` во всех helpers делегирует canonical runner и меняет только
 подробность unit-вывода. Reviewed files из `tests/lanes.json` передаются до
 collection; integration/slow модули не импортируются ради marker deselection.

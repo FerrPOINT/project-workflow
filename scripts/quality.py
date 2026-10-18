@@ -101,9 +101,36 @@ def commands(target: str, *, scoped: bool = False, prepared: bool = False) -> li
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--prepared", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument(
+        "--inspect-environment", action="store_true",
+        help="Observe current Python metadata without uv, install or tests",
+    )
     parser.add_argument("target", choices=TARGETS, default="quality", nargs="?")
     parser.add_argument("pytest_args", nargs=argparse.REMAINDER)
     args = parser.parse_args()
+    if args.inspect_environment:
+        if args.prepared or args.pytest_args or args.target != "quality":
+            parser.error("Environment inspection must be used alone")
+        previous = sys.dont_write_bytecode
+        sys.dont_write_bytecode = True
+        try:
+            from importlib import import_module
+
+            observer = import_module(f"{__package__}.quality_environment" if __package__ else "quality_environment")
+            try:
+                observation = observer.snapshot(Path(__file__).resolve().parents[1])
+                output = json.dumps(observation, sort_keys=True)
+                if len(output.encode("utf-8")) > observer.MAX_OBSERVATION_BYTES:
+                    raise ValueError("Quality environment observation exceeds its output budget")
+            except (OSError, ValueError, ImportError) as error:
+                print(json.dumps({"schema": "workflow-quality-environment-observation/v1",
+                                  "status": "UNAVAILABLE", "reason": type(error).__name__,
+                                  "automatic_reuse_eligible": False}, sort_keys=True))
+                return 2
+            print(output)
+        finally:
+            sys.dont_write_bytecode = previous
+        return 0
     extra = args.pytest_args[1:] if args.pytest_args[:1] == ["--"] else args.pytest_args
     if extra and args.target not in ("test", "unit", "integration", "slow"):
         parser.error("Scoped pytest arguments require a single test lane")

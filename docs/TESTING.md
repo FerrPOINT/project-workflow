@@ -33,6 +33,12 @@ Regression проверяет фактически импортированны�
 Для точечного запуска сохраняется `python scripts/quality.py test -- tests/test_quality_runner.py`.
 Docs-only CI выполняет stdlib README validator без uv bootstrap и pytest.
 
+`python -B scripts/quality.py --inspect-environment` наблюдает metadata текущего
+Python без подготовки/тестов; это не certificate пригодного environment или
+test receipt. Команда и overlay boundary описаны в [quality gate](quality-gate.md).
+Её model tests находятся в reviewed unit lane. Полный pytest/coverage ради
+этой команды не требуется; порог coverage 94% и ручные release gates сохраняются.
+
 ## Подготовка fixtures только для потребителя
 
 Root `tests/conftest.py` не импортирует DB/UoW/LLM и SQLite helpers при collection.
