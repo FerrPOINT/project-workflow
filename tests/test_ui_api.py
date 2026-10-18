@@ -782,17 +782,22 @@ class TestApiNamespacesCrud:
         assert response.json()["ok"] is False
         assert any(detail["field"] == "workflow_id" for detail in response.json()["details"])
 
-    def test_create_and_update_namespace(self, client):
+    @pytest.mark.parametrize("custom_workflow", [False, True])
+    def test_create_and_update_namespace(self, client, custom_workflow):
         from project_workflow.interfaces.ui import _app_state
 
         default_wf = next(w for w in _app_state.workflow_service().list_workflows() if w.get("is_default"))
+        selected_workflow = (
+            _app_state.workflow_service().create_workflow({"name": f"Custom flow {uuid.uuid4().hex[:6]}"})
+            if custom_workflow else default_wf
+        )
         command = f"workflow-test-{uuid.uuid4().hex[:6]}"
         resp = client.post(
             "/api/namespaces",
             json={
                 "name": "Test Namespace",
                 "description": "desc",
-                "workflow_id": default_wf["id"],
+                "workflow_id": selected_workflow["id"],
                 "theme_icon": "bug",
                 "theme_color": "22c55e",
                 "cli_command": command,
@@ -818,6 +823,7 @@ class TestApiNamespacesCrud:
         assert data["namespace"]["name"] == "Updated"
         assert data["namespace"]["theme_icon"] == "rocket"
         assert data["namespace"]["theme_color"] == "#0EA5E9"
+        assert data["namespace"]["workflow_id"] == selected_workflow["id"]
         assert client.put(f"/api/namespaces/{namespace_id}", json={"theme_icon": None}).status_code == 422
         assert client.put(f"/api/namespaces/{namespace_id}", json={"theme_color": None}).status_code == 422
 
