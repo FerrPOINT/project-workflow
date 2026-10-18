@@ -447,18 +447,26 @@ python -m pip install --constraint constraints.txt -e ".[dev,ui]"
 
 | Проверка | Команда |
 |---|---|
-| Full local gate | `make quality` |
+| Fast unit + static gate | `make quality` |
+| Full manual release gate | `make release` |
 | Warning-focused gate | `make warnings` |
 | Compose readiness | `make compose-ready` |
-| Documentation regression | `pytest -q tests/test_docs_quality.py --timeout=60` |
+| Manual documentation regression | `python scripts/quality.py integration -- tests/test_docs_quality.py` |
 | README assets и anchors | `python scripts/verify_readme.py` |
-| Unit/UI tests | `pytest -q --timeout=60` |
-| PostgreSQL integration | `pytest -q -m integration tests/test_postgres_integration.py --timeout=120` |
-| Coverage | `pytest --cov=project_workflow --cov-report=term --timeout=60` |
+| Unit tests | `python scripts/quality.py unit` |
+| PostgreSQL integration (manual) | `python scripts/quality.py test-integration` |
+| Full coverage XML + HTML (manual) | `make coverage coverage-html` |
 | Lint и типы | `ruff check .` и `mypy project_workflow scripts` |
 | Windows quality | `pwsh -File scripts/quality.ps1 quality` |
 
-`make quality` включает unit/UI-тесты, PostgreSQL integration tests, coverage, ruff и mypy. Тот же набор автоматически выполняет GitHub Actions на push и pull request в `master`.
+`make quality` выполняет reviewed unit tests, ruff и mypy; этот набор запускается
+автоматически на push и pull request в `master`. Ручной `make release` выполняет
+полный non-PostgreSQL coverage с порогом94%, включая docs/integration/slow, затем
+PostgreSQL отдельно. Compose smoke остаётся ручным release job. Docs contracts
+уже входят в полный coverage; docs job выполняет stdlib README validator.
+`make coverage coverage-html` и обратный порядок целей используют одну canonical
+подготовку и один pytest для XML+HTML. Команда `python scripts/quality.py coverage-html`
+доступна без Make и использует ту же постоянную quality Python среду.
 
 ## 🗺️ Roadmap
 

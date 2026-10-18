@@ -1,5 +1,7 @@
 """Quality must not duplicate tests or lose mandatory checks."""
 
+import unittest
+
 from scripts.quality import commands
 
 
@@ -263,3 +265,161 @@ def test_quality_bootstrap_prepares_once_for_multiple_tools(monkeypatch) -> None
     assert len(calls) == 1
     assert calls[0].count("--prepared") == 1
     assert calls[0][-1] == "quality"
+
+
+class CoverageEntrypointContracts(unittest.TestCase):
+    """Source/protocol controls without pytest collection, application imports or uv."""
+
+    def test_html_coverage_prepares_once_in_the_canonical_environment(self):
+        import os
+        import sys
+        from pathlib import Path
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        from scripts import quality
+
+        for override in (None, str(Path.cwd() / "owned-quality-fixture")):
+            with self.subTest(override=override):
+                preparation, executions = [], []
+                environment = dict(os.environ)
+                environment.pop("WORKFLOW_QUALITY_UV", None)
+                environment.pop("WORKFLOW_QUALITY_ENVIRONMENT", None)
+                environment.update(UV_PROJECT_ENVIRONMENT="foreign-workspace-underlay", VIRTUAL_ENV="foreign-venv")
+                if override:
+                    environment["WORKFLOW_QUALITY_ENVIRONMENT"] = override
+
+                def inert_run(command, **kwargs):
+                    if command[0] == "uv":
+                        preparation.append((command, kwargs["env"]))
+                        child_args = command[command.index("--prepared"):]
+                        with patch.object(sys, "argv", ["quality.py", *child_args]), \
+                                patch.object(sys, "version_info", (3, 11, 15)):
+                            return SimpleNamespace(returncode=quality.main())
+                    executions.append((command, kwargs["env"]))
+                    return SimpleNamespace(returncode=0)
+
+                with patch.dict(os.environ, environment, clear=True), \
+                        patch.object(sys, "argv", ["quality.py", "coverage-html"]), \
+                        patch.object(quality.subprocess, "run", side_effect=inert_run):
+                    self.assertEqual(0, quality.main())
+                self.assertEqual(1, len(preparation))
+                self.assertEqual(1, len(executions))
+                expected = override or str(
+                    Path(quality.__file__).resolve().parents[1] / ".local/quality-python" / os.name / "3.11.15"
+                )
+                for _, child_environment in preparation + executions:
+                    self.assertEqual(expected, child_environment["UV_PROJECT_ENVIRONMENT"])
+                    self.assertNotIn("VIRTUAL_ENV", child_environment)
+                command = executions[0][0]
+                self.assertEqual([sys.executable, "-m", "pytest"], command[:3])
+                self.assertIn("--cov-report=xml", command)
+                self.assertIn("--cov-report=html", command)
+                self.assertIn("error::ResourceWarning", command)
+                self.assertIn("error::pytest.PytestUnraisableExceptionWarning", command)
+                self.assertEqual("not postgres", command[command.index("-m", 2) + 1])
+
+    def test_make_coverage_goals_dispatch_one_canonical_operation_in_either_order(self):
+        import os
+        import shutil
+        import subprocess
+        import tempfile
+        from pathlib import Path
+
+        make = shutil.which("make")
+        bash = (Path(os.environ.get("ProgramFiles", "C:/Program Files")) / "Git/bin/bash.exe"
+                if os.name == "nt" else Path(shutil.which("bash") or "/missing"))
+        if not make or not bash.is_file():
+            self.skipTest("GNU Make and native Bash are required for the inert dispatch fixture")
+        source = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            shutil.copyfile(source / "Makefile", root / "Makefile")
+            (root / "scripts").mkdir()
+            (root / "scripts/quality.py").write_text(
+                "import sys\nfrom pathlib import Path\n"
+                "with Path('calls.txt').open('a') as stream: stream.write(sys.argv[1] + '\\n')\n",
+                encoding="utf-8",
+            )
+            for goals, expected in ((("coverage", "coverage-html"), "coverage-html"),
+                                    (("coverage-html", "coverage"), "coverage-html"),
+                                    (("coverage",), "coverage"), (("coverage-html",), "coverage-html")):
+                with self.subTest(goals=goals):
+                    (root / "calls.txt").unlink(missing_ok=True)
+                    result = subprocess.run([make, "--no-print-directory", "-j8", *goals, "SHELL=" + bash.as_posix()],
+                                            cwd=root, text=True, capture_output=True, timeout=10, check=False)
+                    self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+                    self.assertEqual([expected], (root / "calls.txt").read_text().splitlines())
+
+    def test_failed_coverage_preparation_does_not_retry_or_start_tests(self):
+        import os
+        import sys
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        from scripts import quality
+
+        environment = dict(os.environ)
+        environment.pop("WORKFLOW_QUALITY_UV", None)
+        with patch.dict(os.environ, environment, clear=True), \
+                patch.object(sys, "argv", ["quality.py", "coverage-html"]), \
+                patch.object(quality.subprocess, "run", return_value=SimpleNamespace(returncode=7)) as runner:
+            self.assertEqual(7, quality.main())
+        self.assertEqual(1, runner.call_count)
+        self.assertIn("--prepared", runner.call_args.args[0])
+
+    def test_docs_release_job_does_not_repeat_full_coverage_contracts(self):
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parents[1]
+        workflow = (root / ".github/workflows/release.yml").read_text(encoding="utf-8")
+        docs = workflow.split("\n  docs:\n", 1)[1].split("\n  quality:\n", 1)[0]
+        self.assertIn("python scripts/verify_readme.py", docs)
+        self.assertNotIn("setup-uv", docs)
+        self.assertNotIn("quality.py", docs)
+        self.assertNotIn("pytest", docs)
+        self.assertEqual(1, workflow.count("run: make release"))
+
+    def test_actual_marker_owner_keeps_docs_in_full_manual_coverage(self):
+        import ast
+        import json
+        import tomllib
+        from pathlib import Path
+        from types import SimpleNamespace
+
+        root = Path(__file__).resolve().parents[1]
+        tree = ast.parse((root / "tests/conftest.py").read_text(encoding="utf-8"))
+        owner = next(node for node in tree.body if isinstance(node, ast.FunctionDef)
+                     and node.name == "pytest_collection_modifyitems")
+        owner.decorator_list = []
+        lanes = json.loads((root / "tests/lanes.json").read_text(encoding="utf-8"))
+        namespace = {"Path": Path, "__file__": str(root / "tests/conftest.py"), "_LANES": lanes,
+                     "pytest": SimpleNamespace(mark=SimpleNamespace(unit="unit", integration="integration",
+                                                                    slow="slow", postgres="postgres"))}
+        exec(compile(ast.Module(body=[owner], type_ignores=[]), "marker-owner-fixture", "exec"), namespace)
+        observed = {}
+        for name in ("test_docs_quality.py", "test_quality_runner.py", lanes["postgres"], lanes["slow"][0]):
+            markers = []
+            namespace[owner.name]([SimpleNamespace(path=root / "tests" / name, add_marker=markers.append)])
+            observed[name] = markers
+        self.assertEqual(["integration"], observed["test_docs_quality.py"])
+        self.assertEqual(["unit"], observed["test_quality_runner.py"])
+        self.assertIn("postgres", observed[lanes["postgres"]])
+        self.assertIn("slow", observed[lanes["slow"][0]])
+        for target in ("coverage", "coverage-html", "release"):
+            command = next(command for command in commands(target) if "--cov=project_workflow" in command)
+            self.assertEqual("not postgres", command[command.index("-m") + 1])
+            self.assertFalse(any(argument.startswith("tests/") for argument in command))
+        policy = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
+        self.assertEqual(94, policy["tool"]["coverage"]["report"]["fail_under"])
+
+    def test_documented_ci_contract_matches_current_tiers(self):
+        import importlib.util
+        from pathlib import Path
+
+        spec = importlib.util.spec_from_file_location(
+            "workflow_docs_contract", Path(__file__).with_name("test_docs_quality.py")
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        module.test_hosted_ci_covers_quality_and_compose_readiness()

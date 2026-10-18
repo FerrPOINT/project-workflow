@@ -8,6 +8,16 @@
 `python scripts/quality.py unit` (или `quality` для unit + ruff/mypy).
 Ручные уровни: `integration`, `slow`, `test-integration` (PostgreSQL), `release`.
 Release выполняет единый coverage >=94% и PostgreSQL отдельно.
+`coverage-html` использует тот же canonical runner и prepared interpreter:
+`python scripts/quality.py coverage-html` либо `make coverage-html` добавляет
+HTML к прежним term/XML reports полного non-PostgreSQL coverage. Совместные
+`make coverage coverage-html` и `make coverage-html coverage` выполняют одну
+подготовку и один pytest, включая `make -j`; floor94%, strict warnings и два
+workers сохраняются. `WORKFLOW_QUALITY_ENVIRONMENT` применяется тем же owner,
+унаследованный workspace underlay не выбирается прямым uv вызовом из Make.
+Custom `WORKFLOW_QUALITY_UV` сохраняет прежнюю семантику override.
+Full release coverage включает docs contracts с integration marker; отдельный
+docs job не повторяет pytest/uv и выполняет только stdlib README validator.
 Классификация — tests/lanes.json; unit не инициализирует SQLite/UI fixture.
 По умолчанию unit/test/test-verbose/quality/warnings передают reviewed unit files в pytest
 до collection, не импортируя остальные integration modules. Пустой/неверный

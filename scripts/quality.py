@@ -12,7 +12,7 @@ from pathlib import Path
 
 UV = "uv run --python 3.11.15 --frozen --with-requirements constraints.txt --all-extras"
 TARGETS = (
-    "test", "test-verbose", "test-integration", "coverage", "lint", "quality", "warnings",
+    "test", "test-verbose", "test-integration", "coverage", "coverage-html", "lint", "quality", "warnings",
     "compose-ready", "unit", "integration", "slow", "release",
 )
 
@@ -84,6 +84,7 @@ def commands(target: str, *, scoped: bool = False, prepared: bool = False) -> li
         "slow": [prefix + test + ["-m", "slow and not postgres"]],
         "test-integration": [prefix + integration],
         "coverage": [prefix + coverage],
+        "coverage-html": [prefix + coverage + ["--cov-report=html"]],
         "lint": lint,
         "quality": [prefix + unit, *lint, ["git", "diff", "--check"]],
         "release": [prefix + coverage, prefix + integration, *lint, ["git", "diff", "--check"]],

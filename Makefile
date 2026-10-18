@@ -2,17 +2,22 @@
 
 WORKFLOW_QUALITY_UV ?= uv run --python 3.11.15 --frozen --with-requirements constraints.txt --all-extras
 UV ?= $(WORKFLOW_QUALITY_UV)
-PYTEST ?= $(UV) pytest
 
 .PHONY: test test-verbose test-integration coverage coverage-html lint lint-fix quality warnings compose-ready clean install-dev
 
+# A combined XML/HTML request owns one prepared operation, including make -j.
+COVERAGE_OWNER = $(or $(firstword $(filter coverage coverage-html,$(MAKECMDGOALS))),$@)
+COVERAGE_TARGET = $(if $(filter coverage-html,$(MAKECMDGOALS)),coverage-html,$@)
+
 # --- testing ---------------------------------------------------------------
 
-test unit test-verbose integration slow release test-integration coverage lint quality warnings compose-ready:
+test unit test-verbose integration slow release test-integration lint quality warnings compose-ready:
 	WORKFLOW_QUALITY_UV="$(WORKFLOW_QUALITY_UV)" python scripts/quality.py $@
 
-coverage-html:
-	$(PYTEST) --cov=project_workflow --cov-report=html --timeout=60 -m "not postgres"
+coverage coverage-html:
+	@if [ "$@" = "$(COVERAGE_OWNER)" ]; then \
+		WORKFLOW_QUALITY_UV="$(WORKFLOW_QUALITY_UV)" python scripts/quality.py $(COVERAGE_TARGET); \
+	fi
 
 lint-fix:
 	$(UV) ruff check --fix .

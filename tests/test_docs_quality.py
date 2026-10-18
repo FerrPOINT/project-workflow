@@ -73,19 +73,26 @@ def test_readme_does_not_advertise_absent_systemd_unit() -> None:
 def test_hosted_ci_covers_quality_and_compose_readiness() -> None:
     workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
 
-    assert "branches: [master]" in workflow
+    assert workflow.count("    branches:\n      - master") == 2
     assert "make quality" in workflow
     from scripts.quality import commands
     quality = commands("quality")
-    assert sum("--cov=project_workflow" in command for command in quality) == 1
-    assert any("tests/test_postgres_integration.py" in command for command in quality)
+    assert sum("--cov=project_workflow" in command for command in quality) == 0
+    assert not any("tests/test_postgres_integration.py" in command for command in quality)
     assert any("ruff" in command for command in quality)
     assert any("mypy" in command for command in quality)
     quality_job = workflow.split("  quality:\n", 1)[1].split("  compose-smoke:", 1)[0]
     assert "pytest -q tests/test_docs_quality.py" not in quality_job
     assert "needs.changes.outputs.backend != 'true' && needs.changes.outputs.frontend != 'true'" in workflow
-    # Fleet CI convention: light pipeline; E2E, coverage thresholds and
-    # compose readiness checks run locally via make quality / make compose.
+    release = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
+    assert "on:\n  workflow_dispatch:\n" in release
+    assert "run: make release" in release
+    assert "run: docker compose up --build -d --wait" in release
+    full = commands("release")
+    assert sum("--cov=project_workflow" in command for command in full) == 1
+    assert any("tests/test_postgres_integration.py" in command for command in full)
+    assert any("ruff" in command for command in full)
+    assert any("mypy" in command for command in full)
 
 
 def test_readme_cli_examples_use_configured_wrapper_commands() -> None:
