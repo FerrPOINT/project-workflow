@@ -8,11 +8,8 @@ PYTEST ?= $(UV) pytest
 
 # --- testing ---------------------------------------------------------------
 
-test unit integration slow release test-integration coverage lint quality warnings compose-ready:
+test unit test-verbose integration slow release test-integration coverage lint quality warnings compose-ready:
 	WORKFLOW_QUALITY_UV="$(WORKFLOW_QUALITY_UV)" python scripts/quality.py $@
-
-test-verbose:
-	$(PYTEST) -v --timeout=60 -m "unit and not integration and not slow"
 
 coverage-html:
 	$(PYTEST) --cov=project_workflow --cov-report=html --timeout=60 -m "not postgres"

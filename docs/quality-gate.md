@@ -15,6 +15,10 @@ Canonical quality runner готовит frozen Python 3.11.15/extras/constraints
 Между операциями uv заново проверяет определяющие inputs.
 Пользовательский WORKFLOW_QUALITY_UV сохраняет собственную семантику запуска.
 
+`test-verbose` во всех helpers делегирует canonical runner и меняет только
+подробность unit-вывода. Reviewed files из `tests/lanes.json` передаются до
+collection; integration/slow модули не импортируются ради marker deselection.
+
 ## Базовый gate
 
 Перед тестами проверить экспорт общего namespace из чистого sibling Base,

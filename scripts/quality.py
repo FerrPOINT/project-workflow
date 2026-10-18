@@ -12,7 +12,7 @@ from pathlib import Path
 
 UV = "uv run --python 3.11.15 --frozen --with-requirements constraints.txt --all-extras"
 TARGETS = (
-    "test", "test-integration", "coverage", "lint", "quality", "warnings",
+    "test", "test-verbose", "test-integration", "coverage", "lint", "quality", "warnings",
     "compose-ready", "unit", "integration", "slow", "release",
 )
 
@@ -36,10 +36,13 @@ def unit_test_paths() -> list[str]:
 
 def commands(target: str, *, scoped: bool = False, prepared: bool = False) -> list[list[str]]:
     prefix = [sys.executable, "-m"] if prepared else shlex.split(os.environ.get("WORKFLOW_QUALITY_UV", UV))
-    test = ["pytest", "-q", "--timeout=60", "--durations=25"]
+    test = ["pytest", "-v" if target == "test-verbose" else "-q", "--timeout=60", "--durations=25"]
     # Filtering markers after collecting every integration module still imports
     # its dependencies. Default builds collect only the reviewed unit files.
-    paths = unit_test_paths() if target in ("unit", "test", "quality", "warnings") and not scoped else []
+    paths = (
+        unit_test_paths()
+        if target in ("unit", "test", "test-verbose", "quality", "warnings") and not scoped else []
+    )
     unit = [*test, "-m", "unit and not integration and not slow", *paths]
     coverage = [
         "pytest",
@@ -71,6 +74,7 @@ def commands(target: str, *, scoped: bool = False, prepared: bool = False) -> li
     lint = [prefix + ["ruff", "check", "."], prefix + ["mypy", "project_workflow", "scripts"]]
     choices = {
         "test": [prefix + unit],
+        "test-verbose": [prefix + unit],
         "unit": [prefix + unit],
         "integration": [prefix + test + ["-m", "integration and not slow and not postgres"]],
         "slow": [prefix + test + ["-m", "slow and not postgres"]],
