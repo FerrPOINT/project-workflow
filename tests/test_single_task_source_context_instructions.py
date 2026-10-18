@@ -137,17 +137,8 @@ def test_devops_uses_accepted_descriptor_not_preloaded_or_new_build_substitute(g
 
 
 @pytest.mark.parametrize("role,mode", [("project_manager", "draft"), *MODES])
-def test_original_first_step_and_final_workflow_tracker_handoff_are_byte_identical(generated, role, mode):
-    # UTF-8 text digests of the shipped abe4 catalog, not execution or native proof.
-    terminal_hashes = {
-        "project_manager": "4b4e9c4cd49d85364321f5e7dbd14af77d828d89ff2351248178450516f63cc7",
-        "analyst": "7d7467473ec382e374cadb5ee233c2460030414c1730efcee10b421817c35862",
-        "architect": "1fca5c6eff98972d51251417186afc743ae53fcedf53de064916c35469cc95ef",
-        "developer": "8494c25be76b6a2181077e4ade19aacd9cc8bfd06a07a077efc7d4543681e5d2",
-        "reviewer": "bd31010b1cf6a8c7ee69987237fd07578ff3df5cc01e0b8890d8f40b8e0f8bd0",
-        "tester": "be6798e3386f9caa634f5e09df9ab1f923db792e956b3197812f203952debe11",
-        "devops": "9fc8dcb4dd1e42d601212dca572fb9f2acdcea47dcaef3b8fa90e0b2638c1882",
-    }
+def test_first_admission_is_unchanged_and_final_handoff_requires_the_actual_comment(generated, role, mode):
+    # Keep the shipped first admission; final text intentionally adds the real Tracker comment.
     catalog, _ = generated
     phases = mode_for(catalog, role, mode)["phases"]
     first = phases[0]["instructions"][0]["description"]
@@ -155,7 +146,25 @@ def test_original_first_step_and_final_workflow_tracker_handoff_are_byte_identic
     assert hashlib.sha256(first.encode()).hexdigest() == (
         "57d621e3ceb98b62cd1e8d2c5a329117c9b6b7a5b96dd983aa00a2a0442f162a"
     )
-    assert hashlib.sha256(terminal.encode()).hexdigest() == terminal_hashes[role]
+    ordered = [terminal.index(marker) for marker in (
+        "--report <report-text>", "Verify accepted Workflow complete=true",
+        "discussion publish --task", "discussion operation --task",
+    )]
+    assert ordered == sorted(ordered)
+    assert "actual comment_id" in terminal and "body_sha256" in terminal
+    assert "do not claim the transition has already happened" in terminal
+    if role == "project_manager":
+        assert terminal.index("confirmation receipt readback succeeds") < ordered[0]
+        assert ordered[-1] < terminal.index("Then finalize the PM run")
+        assert "Backlog / Ready, then Analysis / Ready" in terminal
+    else:
+        handoff = [terminal.index(marker) for marker in (
+            "sdlc result propose --task", "sdlc result operation --task",
+            "end the run", "After actual terminal", "schedulerComplete",
+        )]
+        assert ordered[-1] < handoff[0]
+        assert handoff == sorted(handoff)
+        assert f"result.role={role}" in terminal
 
 
 @pytest.mark.parametrize("role,mode", MODES)
@@ -240,13 +249,15 @@ def test_tester_and_devops_propagate_accepted_predecessor_reports_not_synthetic_
         assert terminal.index(source) < terminal.index("task-tracker attachment upload")
 
 
-def test_initial_pm_and_single_task_inventory_are_unchanged(generated):
+def test_pm_manifest_covers_current_instructions_and_single_task_inventory_is_unchanged(generated):
     catalog, manifest = generated
     assert manifest["inventory"] == {"namespaces": 7, "workflows": 7, "modes": 8, "phases": 24}
     assert manifest["task_identity"] == {"task_equals_root": True, "children": False, "decomposition_barriers": False}
-    assert manifest["roles"]["project_manager"]["role_instructions_sha256"] == (
-        "b363961b2a49d24a259d57f53e6febb06ff53a1605ffd9683a88eacd6ceabae1"
-    )
+    pm_workflow = next(w for w in catalog["workflows"] if w["role_key"] == "project_manager")
+    pm_bytes = json.dumps(
+        pm_workflow["modes"], ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+    ).encode("utf-8")
+    assert manifest["roles"]["project_manager"]["role_instructions_sha256"] == hashlib.sha256(pm_bytes).hexdigest()
     assert len(catalog["workflows"]) == 7
     assert sum(len(w["modes"]) for w in catalog["workflows"]) == 8
     assert sum(len(m["phases"]) for w in catalog["workflows"] for m in w["modes"]) == 24

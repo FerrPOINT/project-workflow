@@ -309,8 +309,8 @@ def test_pm_confirmation_precedes_final_report_in_actual_installed_phase(databas
             assert "until an accepted complete=true" not in " ".join(instructions)
         phase = phases[-1]
         instructions = [i["description"] for i in uow.phase_instructions.list(phase.id)]
-        assert len(instructions) == 5
-        present, checkpoint, feedback, readback, report = instructions
+        assert len(instructions) == 6
+        present, checkpoint, feedback, readback, summary, report = instructions
         assert "FULL server-saved requirements document" in present
         assert "exact revision" in present and "content_hash" in present
         assert "PM Workflow NOT completed" in checkpoint
@@ -329,8 +329,14 @@ def test_pm_confirmation_precedes_final_report_in_actual_installed_phase(databas
         assert "Missing" in checkpoint and "Missing" in readback
         assert "answer_event_ref" not in feedback
         assert "--report" not in " ".join(instructions[:-1])
+        assert "completion summary from actual role work" in summary
+        assert "PARTIAL/BLOCKED report still requires more work" in summary
+        assert "only after this final report is accepted" in summary
         assert "ONLY AFTER" in report and "--report <report-text>" in report
         assert report.index("confirmation receipt readback succeeds") < report.index("--report")
+        assert report.index("--report") < report.index("discussion publish --task")
+        assert report.index("discussion publish --task") < report.index("discussion operation --task")
+        assert report.index("discussion operation --task") < report.index("Then finalize the PM run")
         assert "Analyst reserve remains blocked" in report and "PM actual completion" in report
         assert "PM does not dispatch Analyst" in report
         assert "sdlc intent --task" not in " ".join(instructions)
