@@ -122,7 +122,9 @@ No-auth режим не должен требовать Central Auth.
 ### Запуск recorder
 
 Перед запуском явно настройте локальный `DATABASE_URL` и OpenAI-compatible provider.
-DSN обязан указывать на `localhost`/`127.0.0.1`, а не на Relevanter Dev.
+DSN обязан указывать на `localhost`/`127.0.0.1` внутри выбранного dev/test runtime.
+Основной dev — Firebat2 / PDLC4. Production `pdlc.acm-ai.ru` / `212.95.34.10`
+(legacy alias `relevanter-dev.acm-ai.ru`) для этой проверки запрещён.
 
 ```bash
 python scripts/live_e2e_recorder.py --root <session-dir> --task TASK-123 init --metadata '{"head":"<sha>"}'
