@@ -26,8 +26,10 @@ def test_first_effective_distribution_wins_over_shadowed_project_underlay(reques
     assert result["distributions"]["fixture"] == {"version": "2.0", "shadowed_versions": ["1.0"]}
     assert result["automatic_reuse_eligible"] is False
     assert result["package_payload_verified"] is False
+    assert result["interpreter_content_verified"] is False
     assert result["manager_identity_verified"] is False
     assert result["python"]["extension_suffix"]
+    assert result["python"]["executable"] and result["python"]["prefix"] and result["python"]["base_prefix"]
 
 
 @pytest.mark.parametrize("versions,observed", [(("1.0", "2.0"), "1.0"), ((), None)])

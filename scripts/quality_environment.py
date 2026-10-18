@@ -93,6 +93,7 @@ def snapshot(root: Path) -> dict:
         "status": "REQUIREMENTS_MISMATCH" if mismatches else "REQUIREMENTS_METADATA_MATCH_ONLY",
         "python": {"version": platform.python_version(), "implementation": sys.implementation.name,
                    "cache_tag": sys.implementation.cache_tag, "platform": sysconfig.get_platform(),
+                   "executable": sys.executable, "prefix": sys.prefix, "base_prefix": sys.base_prefix,
                    "extension_suffix": sysconfig.get_config_var("EXT_SUFFIX"),
                    "supported_quality_version": sys.version_info[:3] == (3, 11, 15)},
         "inputs": inputs,
@@ -101,6 +102,7 @@ def snapshot(root: Path) -> dict:
         "mismatches": sorted(mismatches, key=lambda row: row["name"]),
         "distributions": dict(sorted(selected.items())),
         "package_payload_verified": False,
+        "interpreter_content_verified": False,
         "manager_identity_verified": False,
         "automatic_reuse_eligible": False,
         "observation_scope": (
