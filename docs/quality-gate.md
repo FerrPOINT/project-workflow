@@ -18,6 +18,9 @@ Canonical quality runner готовит frozen Python 3.11.15/extras/constraints
 `test-verbose` во всех helpers делегирует canonical runner и меняет только
 подробность unit-вывода. Reviewed files из `tests/lanes.json` передаются до
 collection; integration/slow модули не импортируются ради marker deselection.
+При scoped unit с одними flags действует тот же reviewed default через
+`testpaths`; явные paths/node IDs выбирает parser pytest. Подробности и controls
+в [TESTING](TESTING.md).
 
 ## Базовый gate
 
@@ -85,9 +88,10 @@ JavaScript передаётся в Node через stdin с явным `encoding
 
 ## ResourceWarning Gate
 
-Канонический `quality` уже выполняет строгую проверку предупреждений внутри
-единственного coverage-прогона. После его успеха полный pytest повторно не запускать.
-Самостоятельная диагностика без coverage, когда общий quality не запускался:
+Ручной `release` выполняет строгую проверку предупреждений внутри единственного
+coverage-прогона. После его успеха полный pytest повторно не запускать.
+Обычный `quality` выполняет unit + lint/types без полного coverage.
+Самостоятельная строгая диагностика reviewed unit без coverage:
 
 ```bash
 python scripts/quality.py warnings

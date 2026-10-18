@@ -39,11 +39,15 @@ def commands(target: str, *, scoped: bool = False, prepared: bool = False) -> li
     test = ["pytest", "-v" if target == "test-verbose" else "-q", "--timeout=60", "--durations=25"]
     # Filtering markers after collecting every integration module still imports
     # its dependencies. Default builds collect only the reviewed unit files.
-    paths = (
+    reviewed = (
         unit_test_paths()
-        if target in ("unit", "test", "test-verbose", "quality", "warnings") and not scoped else []
+        if target in ("unit", "test", "test-verbose", "quality", "warnings") else []
     )
-    unit = [*test, "-m", "unit and not integration and not slow", *paths]
+    unit = [*test, "-m", "unit and not integration and not slow", *([] if scoped else reviewed)]
+    if scoped and reviewed:
+        # Pytest distinguishes positional paths from option values. Use its
+        # default collection for flags-only calls without widening explicit paths.
+        unit += ["-o", "testpaths=" + shlex.join(reviewed)]
     coverage = [
         "pytest",
         "-q",

@@ -14,6 +14,15 @@ Release выполняет единый coverage >=94% и PostgreSQL отдел�
 список завершает запуск ошибкой. `unit -- <test-path>` сохраняет явный выбор
 pytest; release coverage по-прежнему собирает полный non-PostgreSQL набор.
 
+Flags-only, например `python scripts/quality.py unit -- -k phase`, сохраняет
+reviewed collection через pytest `testpaths`. Pytest сам отличает пути от
+значений options: путь после флагов и `file.py::test_name` сужают collection,
+а похожее на путь значение `-k` не расширяет её до integration. Runner всегда
+работает из корня продукта; этот default относится только к unit/test lanes.
+Regression проверяет фактически импортированные модули в fresh pinned Python;
+14 runner tests PASS, четыре дополнительных subprocess collection controls.
+Ни app/runtime, ни полный coverage для этой qualification не запускаются.
+
 `make test-verbose`, `python scripts/quality.py test-verbose` и PowerShell target
 `test-verbose` используют тот же reviewed unit список с `-v`; дополнительная
 подробность вывода не включает collection integration-модулей. Явные scoped

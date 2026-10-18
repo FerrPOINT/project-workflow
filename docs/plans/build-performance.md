@@ -26,3 +26,12 @@ PostgreSQL около 10 минут. Общий CI budget — 40 минут; и�
 60/120 секунд и специальные 240-секундные E2E limits сохранены.
 Профилировать setup отдельно от call/teardown; миграционные и PostgreSQL gates
 не заменять snapshot-копией. Регрессия: tests/test_runtime_fixture_isolation.py.
+
+Scoped unit с одними pytest flags сохраняет reviewed default через `testpaths`.
+Ранее bool(extra) убирал явные files даже для `-k`, заставляя pytest импортировать
+integration modules до marker filtering. Новый regression останавливает первый
+не-unit import; RED на test_admission.py, затем GREEN на flags-only, явном пути
+после flags, node ID и file-shaped значении `-k`. 14 runner tests PASS; frozen
+Python 3.11.15/pytest 9.1.1, существующее окружение без install. Модель env/reuse
+не меняется: uv проверяет frozen inputs между операциями, unit cacheable=false
+сохраняется до отдельной qualification exact environment/receipt.
