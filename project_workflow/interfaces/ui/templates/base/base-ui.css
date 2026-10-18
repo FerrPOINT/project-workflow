@@ -330,6 +330,22 @@ dialog.base-shell-drawer::backdrop { background: rgb(0 0 0 / 65%); }
 .base-project-picker-menu { max-width:calc(100vw - 24px); width:320px; max-height:var(--radix-dropdown-menu-content-available-height); overflow-y:auto; }
 @media(max-width:767px) { .base-project-picker { min-height:44px; } }
 
+/* Explicit shell navigation uses the same expanded/compact widths as product sidebars. */
+.base-shell-sidebar-toolbar { display: flex; min-height: 44px; align-items: center; justify-content: space-between; gap: 4px; padding: 4px 12px; }
+@media (min-width: 768px) {
+  .base-app-shell[data-sidebar-mode="expanded"] .base-shell-sidebar { width: var(--shell-sidebar-expanded); }
+  .base-app-shell[data-sidebar-mode="expanded"] .base-shell-work { padding-left: var(--shell-sidebar-expanded); }
+  .base-app-shell[data-sidebar-mode="expanded"] .base-shell-nav-label { display: inline; }
+  .base-app-shell[data-sidebar-mode="expanded"] .base-shell-link { justify-content: flex-start; padding: 8px 12px; }
+  .base-app-shell[data-sidebar-mode="compact"] .base-shell-sidebar { width: var(--shell-sidebar-compact); }
+  .base-app-shell[data-sidebar-mode="compact"] .base-shell-work { padding-left: var(--shell-sidebar-compact); }
+  .base-app-shell[data-sidebar-mode="compact"] .base-shell-nav-label { display: none; }
+  .base-app-shell[data-sidebar-mode="compact"] .base-shell-link { justify-content: center; padding: 8px; }
+  .base-app-shell[data-sidebar-mode="compact"] .base-shell-sidebar-toolbar { justify-content: center; padding-inline: 4px; }
+}
+
+.base-shell-sidebar-label { min-width:0; overflow:hidden; text-overflow:ellipsis; font-size:12px; font-weight:500; text-transform:uppercase; color:var(--color-text-muted); }
+
 /* Adapter for server-rendered markup. Values come only from canonical tokens. */
 :root {
   --bg: var(--color-background); --panel: var(--color-surface);
