@@ -111,7 +111,7 @@
 {% macro phase_card(p) -%}
 <div class="timeline-item" id="phase-{{ p.id }}" data-phase-id="{{ p.id }}" data-phase-order="{{ p.phase_num }}" data-execution-type="{{ p.execution_type }}">
   <div class="phase-card-shell">
-    <a href="/phase/{{ p.id }}{% if selected_namespace %}?profession_id={{ selected_namespace.id }}{% endif %}{{ phase_scope_suffix }}" class="timeline-card">
+    <a href="{{ ui_base_path() }}/phase/{{ p.id }}{% if selected_namespace %}?profession_id={{ selected_namespace.id }}{% endif %}{{ phase_scope_suffix }}" class="timeline-card">
       <div class="phase-card-copy">
         <div class="timeline-name">{{ p.name }}</div>
         {% set description = p.description | default('') %}
@@ -208,7 +208,7 @@
           {% if selected_mode_id == mode.id %}aria-current="page"{% endif %}
           data-testid="workflow-mode-tab-{{ mode.key }}"
           data-mode-id="{{ mode.id }}"
-          href="/workflows?workflow_id={{ selected_workflow_id }}&mode_id={{ mode.id }}{% if selected_namespace %}&profession_id={{ selected_namespace.id }}{% endif %}{{ mode_scope_suffix }}"
+          href="{{ ui_base_path() }}/workflows?workflow_id={{ selected_workflow_id }}&mode_id={{ mode.id }}{% if selected_namespace %}&profession_id={{ selected_namespace.id }}{% endif %}{{ mode_scope_suffix }}"
         >{{ mode.name }}</a>
         {% endfor %}
       </div>
@@ -261,14 +261,14 @@ let workflowEditorVisible = selectedWorkflowId == null;
 let workflowWritePending = false;
 
 function workflowApiUrl(workflowId){
-  var url = new URL('/api/workflows' + (workflowId == null ? '' : '/' + workflowId), window.location.origin);
+  var url = new URL('{{ ui_base_path() }}/api/workflows' + (workflowId == null ? '' : '/' + workflowId), window.location.origin);
   if(professionId != null){ url.searchParams.set('namespace_id', String(professionId)); }
   return url.pathname + url.search;
 }
 function workflowById(id){ return workflowStore.find(function(workflow){ return workflow.id === id; }); }
 function workflowSelectionUrl(workflowId){
   var url = new URL(window.location.href);
-  url.pathname = '/workflows';
+  url.pathname = '{{ ui_base_path() }}/workflows';
   if(Number(url.searchParams.get('workflow_id') || initialWorkflowId) !== workflowId){ url.searchParams.delete('mode_id'); }
   if(workflowId == null){ url.searchParams.delete('workflow_id'); }
   else { url.searchParams.set('workflow_id', String(workflowId)); }
@@ -570,7 +570,7 @@ function selectMode(modeId){
   const parsed=Number(modeId);
   if(!Number.isInteger(parsed)||parsed<=0){showToast('Не удалось определить режим воркфлоу','error');return;}
   const url=new URL(window.location.href);
-  url.pathname='/workflows';
+  url.pathname='{{ ui_base_path() }}/workflows';
   url.searchParams.set('mode_id',String(parsed));
   window.PdlcPlatformNavigation.navigate(url.pathname+url.search);
 }
@@ -603,7 +603,7 @@ async function addPhaseAfter(button){
   if(!workflowId||!modeId||currentOrder<0){showToast('Не удалось определить позицию фазы','error');return;}
   button.disabled=true;
   try{
-    const resp=await fetch('/api/phases',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({workflow_id:parseInt(workflowId,10),mode_id:parseInt(modeId,10),phase_order:currentOrder+1})});
+    const resp=await fetch('{{ ui_base_path() }}/api/phases',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({workflow_id:parseInt(workflowId,10),mode_id:parseInt(modeId,10),phase_order:currentOrder+1})});
     const data=await resp.json().catch(()=>({}));
     if(!resp.ok||!data.ok){showToast(data.error||'Не удалось добавить фазу','error');return;}
     window.PdlcPlatformNavigation.reload();
@@ -620,7 +620,7 @@ async function deletePhase(button){
   if(!await window.PdlcBaseUI.requestConfirmation({eyebrow:'Удаление фазы',title:'Удалить фазу «'+phaseName+'»?',message:'Фаза «'+phaseName+'» и её настройки будут удалены.',confirmLabel:'Удалить'}))return;
   button.disabled=true;
   try{
-    const resp=await fetch('/api/phases/'+item.dataset.phaseId,{method:'DELETE'});
+    const resp=await fetch('{{ ui_base_path() }}/api/phases/'+item.dataset.phaseId,{method:'DELETE'});
     const data=await resp.json().catch(()=>({}));
     if(!resp.ok||!data.ok){showToast(data.error||'Не удалось удалить фазу','error');return;}
     window.PdlcPlatformNavigation.reload();
@@ -634,7 +634,7 @@ async function togglePhaseType(button){
   const nextType=(item.dataset.executionType||'sync')==='sync'?'parallel':'sync';
   button.disabled=true;
   try{
-    const resp=await fetch('/api/phases/'+item.dataset.phaseId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({execution_type:nextType})});
+    const resp=await fetch('{{ ui_base_path() }}/api/phases/'+item.dataset.phaseId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({execution_type:nextType})});
     const data=await resp.json().catch(()=>({}));
     if(!resp.ok||!data.ok){showToast(data.error||'Не удалось сменить режим','error');return;}
     window.PdlcPlatformNavigation.reload();
@@ -654,7 +654,7 @@ async function movePhase(button,direction){
   button.disabled=true;
   try{
     const orders=reordered.map((phase,index)=>({phase_id:Number(phase.dataset.phaseId),phase_order:index+1}));
-    const resp=await fetch('/api/phases/order',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({orders})});
+    const resp=await fetch('{{ ui_base_path() }}/api/phases/order',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({orders})});
     if(!resp.ok){showToast('Не удалось сохранить порядок фаз','error');return;}
     window.PdlcPlatformNavigation.reload();
   }catch(_error){showRequestError();

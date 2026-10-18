@@ -2,7 +2,7 @@
 
 {% block title %}Профессии — Workflow Engine{% endblock %}
 {% block header_title %}Профессии{% endblock %}
-{% block header_actions %}{% if not create_mode %}<a class="btn btn-primary" id="namespaceCreateLink" href="/namespaces/new{% if selected_namespace %}?profession_id={{ selected_namespace.id }}{% endif %}" title="Создать профессию" aria-label="Создать профессию">+ Новая профессия</a>{% endif %}{% endblock %}
+{% block header_actions %}{% if not create_mode %}<a class="btn btn-primary" id="namespaceCreateLink" href="{{ ui_base_path() }}/namespaces/new{% if selected_namespace %}?profession_id={{ selected_namespace.id }}{% endif %}" title="Создать профессию" aria-label="Создать профессию">+ Новая профессия</a>{% endif %}{% endblock %}
 
 {% block extra_style %}
 .namespace-crud{display:grid;grid-template-columns:320px minmax(0,1fr);gap:16px;align-items:start}
@@ -151,8 +151,8 @@ function namespaceScopedPath(path, id){
 function updateNamespaceHeaderLinks(id){
   var createLink = document.getElementById('namespaceCreateLink');
   var editLink = document.getElementById('namespaceEditLink');
-  if(createLink){ createLink.href = namespaceScopedPath('/namespaces/new', id); }
-  if(editLink){ editLink.href = namespaceScopedPath('/namespaces', id); }
+  if(createLink){ createLink.href = namespaceScopedPath('{{ ui_base_path() }}/namespaces/new', id); }
+  if(editLink){ editLink.href = namespaceScopedPath('{{ ui_base_path() }}/namespaces', id); }
 }
 function namespaceIconSvg(icon){
   var path = namespaceIconPaths[icon || defaultNamespaceThemeIcon] || namespaceIconPaths[defaultNamespaceThemeIcon];
@@ -211,8 +211,8 @@ function namespaceIdFromUrl(url){
 function syncNamespaceUrl(id, historyMode){
   if(id == null || historyMode === 'none'){ return; }
   var url = new URL(window.location.href);
-  if(url.pathname !== '/namespaces' && url.pathname !== '/namespaces/new'){ return; }
-  url.pathname = '/namespaces';
+  if(url.pathname !== '{{ ui_base_path() }}/namespaces' && url.pathname !== '{{ ui_base_path() }}/namespaces/new'){ return; }
+  url.pathname = '{{ ui_base_path() }}/namespaces';
   url.searchParams.set('profession_id', id);
   if(url.toString() === window.location.href){ return; }
   var method = historyMode === 'push' ? 'pushState' : 'replaceState';
@@ -287,7 +287,7 @@ function selectNamespace(id, historyMode){
 }
 function restoreNamespaceLocation(){
   var url = new URL(window.location.href);
-  if(url.pathname === '/namespaces/new'){
+  if(url.pathname === '{{ ui_base_path() }}/namespaces/new'){
     var contextId = namespaceIdFromUrl(url);
     if(contextId == null && namespaceById(previousNamespaceId)){ contextId = previousNamespaceId; }
     if(contextId == null && namespaceStore[0]){ contextId = namespaceStore[0].id; }
@@ -313,7 +313,7 @@ function restoreNamespaceLocation(){
   if(namespaceId != null){ selectNamespace(namespaceId, 'none'); }
 }
 function reloadNamespaces(nextId){
-  return fetch('/api/namespaces')
+  return fetch('{{ ui_base_path() }}/api/namespaces')
     .then(function(r){return r.json()})
     .then(function(d){
       if(!d.ok){showToast(d.error || 'Ошибка загрузки','error');return;}
@@ -425,7 +425,7 @@ function saveNamespace(){
   if(selectedNamespaceId == null){ showToast('Сначала выберите профессию','error'); return; }
   var namespaceId = selectedNamespaceId;
   var payload = currentPayload();
-  return fetch('/api/namespaces/' + namespaceId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+  return fetch('{{ ui_base_path() }}/api/namespaces/' + namespaceId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
     .then(function(r){return r.json()})
     .then(function(d){ if(d.ok){ window.PdlcPlatformNavigation.saved(document.getElementById('namespaceForm')); showToast('Профессия сохранён','success'); return reloadNamespaces(namespaceId); } showToast(d.error || 'Ошибка','error'); })
     .catch(showRequestError);
@@ -441,7 +441,7 @@ async function deleteNamespace(){
   var button = document.getElementById('deleteNamespaceButton');
   button.disabled = true;
   button.textContent = 'Удаление…';
-  return fetch('/api/namespaces/' + namespaceId,{method:'DELETE'})
+  return fetch('{{ ui_base_path() }}/api/namespaces/' + namespaceId,{method:'DELETE'})
     .then(function(r){return r.json()})
     .then(function(d){ if(d.ok){ showToast('Профессия удалена','success'); return reloadNamespaces(null); } showToast(d.error || 'Ошибка','error'); })
     .catch(showRequestError)
@@ -449,13 +449,13 @@ async function deleteNamespace(){
 }
 function createNamespace(){
   var payload = currentPayload();
-  return fetch('/api/namespaces',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+  return fetch('{{ ui_base_path() }}/api/namespaces',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
     .then(function(r){return r.json()})
     .then(function(d){
       if(d.ok){
         showToast('Профессия создан','success');
         window.PdlcPlatformNavigation.saved(document.getElementById('namespaceForm'));
-        window.PdlcPlatformNavigation.navigate(namespaceScopedPath('/namespaces', d.namespace_id));
+        window.PdlcPlatformNavigation.navigate(namespaceScopedPath('{{ ui_base_path() }}/namespaces', d.namespace_id));
       } else {
         showToast(d.error || 'Ошибка','error');
       }

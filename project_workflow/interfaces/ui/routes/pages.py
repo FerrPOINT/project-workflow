@@ -126,7 +126,7 @@ def _template_response(
     embedded = bool(get_settings().UI_PLATFORM_ORIGIN) and request.headers.get("sec-fetch-dest") == "iframe"
     if isinstance(selected_id, int) and not embedded:
         response.set_cookie(context["namespace_cookie_name"], str(selected_id), samesite="lax",
-                            secure=context["namespace_cookie_secure"])
+                            secure=context["namespace_cookie_secure"], path=get_settings().UI_BASE_PATH or "/")
     return response
 
 

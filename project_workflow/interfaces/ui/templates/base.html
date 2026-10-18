@@ -354,25 +354,25 @@ textarea{resize:vertical;min-height:60px}
 <aside class="sidebar" data-base-dialog-background id="sidebar">
   <div class="sidebar-header mobile-drawer-title"><strong>Project Workflow</strong><button class="sidebar-close" onclick="closeSidebar()" aria-label="Закрыть навигацию">&times;</button></div>
   <nav class="sidebar-nav" aria-label="Основная навигация">
-    <a class="sidebar-link {% if page == 'namespace' %}active{% endif %}" href="/namespaces{{ sidebar_scope_suffix }}" aria-label="Профессии" title="Профессии" {% if page == 'namespace' %}aria-current="page"{% endif %}>
+    <a class="sidebar-link {% if page == 'namespace' %}active{% endif %}" href="{{ ui_base_path() }}/namespaces{{ sidebar_scope_suffix }}" aria-label="Профессии" title="Профессии" {% if page == 'namespace' %}aria-current="page"{% endif %}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h18"/><path d="M5 7V5a2 2 0 0 1 2-2h3"/><path d="M19 7v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7"/><path d="M9 12h6"/><path d="M9 16h4"/></svg>
       <span class="sidebar-label">Профессии</span>
     </a>
     <div class="sidebar-section">ОБЗОР</div>
-    <a class="sidebar-link {% if page == 'dashboard' %}active{% endif %}" href="/{{ sidebar_scope_suffix }}" aria-label="Дашборд" title="Дашборд" {% if page == 'dashboard' %}aria-current="page"{% endif %}>
+    <a class="sidebar-link {% if page == 'dashboard' %}active{% endif %}" href="{{ ui_base_path() }}/{{ sidebar_scope_suffix }}" aria-label="Дашборд" title="Дашборд" {% if page == 'dashboard' %}aria-current="page"{% endif %}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
       <span class="sidebar-label">Дашборд</span>
     </a>
-    <a class="sidebar-link {% if page in ['workflows', 'phases'] %}active{% endif %}" href="/workflows{{ sidebar_scope_suffix }}" aria-label="Процессы" title="Процессы" {% if page in ['workflows', 'phases'] %}aria-current="page"{% endif %}>
+    <a class="sidebar-link {% if page in ['workflows', 'phases'] %}active{% endif %}" href="{{ ui_base_path() }}/workflows{{ sidebar_scope_suffix }}" aria-label="Процессы" title="Процессы" {% if page in ['workflows', 'phases'] %}aria-current="page"{% endif %}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><path d="M7 10v4"/><path d="M17 10v4"/></svg>
       <span class="sidebar-label">Процессы</span>
     </a>
-    <a class="sidebar-link {% if page == 'tasks' %}active{% endif %}" href="/tasks{{ sidebar_scope_suffix }}" aria-label="Выполнения задач" title="Выполнения задач" {% if page == 'tasks' %}aria-current="page"{% endif %}>
+    <a class="sidebar-link {% if page == 'tasks' %}active{% endif %}" href="{{ ui_base_path() }}/tasks{{ sidebar_scope_suffix }}" aria-label="Выполнения задач" title="Выполнения задач" {% if page == 'tasks' %}aria-current="page"{% endif %}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
       <span class="sidebar-label">Выполнения задач</span>
     </a>
     <div class="sidebar-section">УПРАВЛЕНИЕ</div>
-    <a class="sidebar-link {% if page == 'settings' %}active{% endif %}" href="/settings{{ sidebar_scope_suffix }}" aria-label="Команды CLI" title="Команды CLI" {% if page == 'settings' %}aria-current="page"{% endif %}>
+    <a class="sidebar-link {% if page == 'settings' %}active{% endif %}" href="{{ ui_base_path() }}/settings{{ sidebar_scope_suffix }}" aria-label="Команды CLI" title="Команды CLI" {% if page == 'settings' %}aria-current="page"{% endif %}>
       <span class="sidebar-cli-icon" aria-hidden="true">&gt;_</span>
       <span class="sidebar-label">Команды CLI</span>
     </a>
@@ -390,7 +390,7 @@ textarea{resize:vertical;min-height:60px}
   <div class="platform-header-leading" data-platform-header-slot="leading">
     <button class="burger" id="burgerBtn" onclick="openSidebar()" aria-label="Открыть навигацию" aria-controls="sidebar" aria-expanded="false">☰</button>
     {# Base service-switcher: project-workflow uses the Lucide Workflow mark. #}
-    <a class="brand-link" href="/" aria-label="Project Workflow" title="Project Workflow"><span class="brand-mark base-shell-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="8" x="3" y="3" rx="2"/><path d="M7 11v4a2 2 0 0 0 2 2h4"/><rect width="8" height="8" x="13" y="13" rx="2"/></svg></span></a>
+    <a class="brand-link" href="{{ ui_base_path() }}/" aria-label="Project Workflow" title="Project Workflow"><span class="brand-mark base-shell-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="8" x="3" y="3" rx="2"/><path d="M7 11v4a2 2 0 0 0 2 2h4"/><rect width="8" height="8" x="13" y="13" rx="2"/></svg></span></a>
   </div>
   <div class="platform-header-services" data-platform-header-slot="services">
       <details class="service-menu" id="serviceMenu">
@@ -399,7 +399,7 @@ textarea{resize:vertical;min-height:60px}
         <div class="service-menu-popover">
           <div role="menu" aria-label="Сервисы платформы">
         {% for service in other_services %}
-          <a class="service-menu-item" data-platform-service="{{ service.key }}" {% if service.key == 'project-workflow' %}href="/"{% elif services_source|default('') == 'runtime' %}href="{{ service.url }}"{% else %}aria-disabled="true" tabindex="-1" title="Адрес сервиса недоступен: дождитесь восстановления каталога своего стенда"{% endif %} role="menuitem" {% if service.key == 'project-workflow' %}aria-current="page"{% endif %}>
+          <a class="service-menu-item" data-platform-service="{{ service.key }}" {% if service.key == 'project-workflow' %}href="{{ ui_base_path() }}/"{% elif services_source|default('') == 'runtime' %}href="{{ service.url }}"{% else %}aria-disabled="true" tabindex="-1" title="Адрес сервиса недоступен: дождитесь восстановления каталога своего стенда"{% endif %} role="menuitem" {% if service.key == 'project-workflow' %}aria-current="page"{% endif %}>
             <span class="service-health {{ service.health }}" role="img" aria-label="{% if service.health == 'healthy' %}Работает{% elif service.health == 'unreachable' %}Недоступен{% else %}Состояние неизвестно{% endif %}"></span>
             <span>{{ service.label }}</span>
             {% if service.key == 'project-workflow' %}<span class="service-menu-current">Текущий</span>{% endif %}
@@ -591,23 +591,23 @@ function switchNamespace(namespaceId){
   if(!namespaceId){return;}
   if(!window.SdlcPlatformNavigation.embedded) document.cookie={{ namespace_cookie_name | tojson }}+'='+encodeURIComponent(namespaceId)+'; path=/; SameSite=Lax'{% if namespace_cookie_secure %}+'; Secure'{% endif %};
   var url=new URL(window.location.href);
-  if(url.pathname === '/phases' || url.pathname === '/workflows'){
+  if(url.pathname === '{{ ui_base_path() }}/phases' || url.pathname === '{{ ui_base_path() }}/workflows'){
     url.searchParams.delete('workflow_id');
     url.searchParams.delete('mode_id');
   }
   if(url.pathname.startsWith('/phase/')){
-    url.pathname='/phases';
+    url.pathname='{{ ui_base_path() }}/phases';
     url.searchParams.delete('workflow_id');
     url.searchParams.delete('mode_id');
   }
-  if(url.pathname === '/instructions'){
-    url.pathname='/phases';
+  if(url.pathname === '{{ ui_base_path() }}/instructions'){
+    url.pathname='{{ ui_base_path() }}/phases';
     url.searchParams.delete('phase_id');
     url.searchParams.delete('workflow_id');
     url.searchParams.delete('mode_id');
   }
-  if(url.pathname === '/namespaces/new'){
-    url.pathname='/namespaces';
+  if(url.pathname === '{{ ui_base_path() }}/namespaces/new'){
+    url.pathname='{{ ui_base_path() }}/namespaces';
   }
   url.searchParams.set('profession_id', namespaceId);
   window.SdlcPlatformNavigation.navigate(url.toString());
