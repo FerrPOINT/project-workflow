@@ -75,3 +75,10 @@ SDK и skills pins независимы. Обновлены каноническ
 получают собственный border-box и не зависят от reset продукта.
 Защита черновика и namespace-состояние сохраняют продуктового владельца.
 Source-проверки не означают установки в PDLC2.
+
+## Общий каркас Base, source 2026-10-18
+
+UI pin обновлён на `4b80fbfbfae48d95219011a4612dd9427a1a4b92`; SSR CSS и fingerprint
+получены штатным exporter Base и проверены на совпадение. Изменение не затрагивает
+Workflow state, запросы, Python/SDK/skills pins или installed runtime. React
+AppShell не переносится в SSR: здесь сохраняются канонические macros/JS/CSS Base.
