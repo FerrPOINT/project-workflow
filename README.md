@@ -109,12 +109,16 @@ python scripts/build_runtime_image.py build \
 SHA-256 source archive и канонический SHA-256 runtime bundle, добавляет manifest
 в копию archive и передаёт полученный immutable tar как Docker build context.
 Для команды archive закреплены `core.autocrlf=false` и `core.eol=lf`:
-пользовательские Git-настройки Windows/Linux не меняют bytes и digests одного
-commit. Явные правила EOL в committed `.gitattributes`, raw CRLF и бинарные
+эти пользовательские EOL-настройки не меняют bytes и digests одного commit.
+Другие archive inputs (`tar.umask`, attributes вне tree) этим не фиксируются.
+Явные правила EOL в committed `.gitattributes`, raw CRLF и бинарные
 файлы сохраняются; глобальная конфигурация Git не изменяется.
 Transport использует детерминированный gzip (`mtime=0`), чтобы Docker не
 принимал PAX-first tar на stdin за Dockerfile. Сжатие не меняет исходный
 archive digest, runtime bundle digest или содержимое immutable manifest.
+Для явной передачи уже проверенного transport без повторных archive, exporter
+и gzip есть [prepared context](docs/prepared-runtime-context.md). Он не включает
+автоматический cache lookup и не меняет legacy build по умолчанию.
 Dirty или ignored файлы рабочего каталога в candidate не попадают. Digest
 bundle включает path, regular-file type, executable mode и content hash;
 symlink и другие non-regular runtime inputs отклоняются. Dockerfile повторно

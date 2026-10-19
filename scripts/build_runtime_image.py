@@ -227,25 +227,153 @@ def resource_options(limits: list[str] | None) -> list[str]:
     return result + ["--build-arg", "PDLC_RUN_SLOT_SHARING=locked", "--build-arg", "BUILDKIT_CACHE_MOUNT_NS="]
 
 
-def build_image(root: Path, image: str, docker: str, revision: str = "HEAD",
-                *, skills_root: Path, catalog_variant: str = "legacy",
-                resource_limits: list[str] | None = None) -> None:
-    scheduling = resource_options(resource_limits)
-    snapshot = immutable_git_snapshot(root, revision)
-    if scheduling:
-        with tarfile.open(fileobj=io.BytesIO(snapshot.archive), mode="r:*") as archive:
-            recipe = archive.extractfile("Dockerfile")
-            if recipe is None or not recipe.read().startswith(
-                ("# syntax=" + RESOURCE_FRONTEND + "\n").encode()
-            ):
-                raise BuildProvenanceError(
-                    "Build resources require the qualified pinned Dockerfile frontend in the exact source revision"
-                )
-    provenance = snapshot.provenance
+def _bounded_blob(root: Path, name: str) -> bytes:
+    size = str(_run_git(root, "cat-file", "-s", name)).strip()
+    if not size.isdigit() or not 0 < int(size) <= 1024 * 1024:
+        raise BuildProvenanceError("Prepared context Git metadata exceeds its byte budget")
+    raw = _run_git(root, "show", name, text=False)
+    if not isinstance(raw, bytes) or len(raw) != int(size):
+        raise BuildProvenanceError("Prepared context Git metadata changed")
+    return raw
+
+
+def context_request(root: Path, revision: str, skills_root: Path,
+                    catalog_variant: str) -> dict[str, str]:
+    """Read immutable request metadata only; never export or import product dependencies."""
+    from scripts.prepared_context import sha, validate_request
+
+    if catalog_variant not in {"legacy", "base"}:
+        raise BuildProvenanceError("Unknown catalog variant")
+    exact = str(_run_git(root, "rev-parse", "--verify", f"{revision}^{{commit}}")).strip().lower()
+    tree = str(_run_git(root, "rev-parse", "--verify", f"{exact}^{{tree}}")).strip().lower()
+    catalog_path = BASE_CATALOG_PATH if catalog_variant == "base" else CATALOG_PATH
+    catalog = _bounded_blob(root, exact + ":" + catalog_path)
+    pin = json.loads(catalog)["skills_source"]
+    if not isinstance(pin, dict):
+        raise BuildProvenanceError("Prepared context catalog skills pin is invalid")
+    # Validate path/revision before passing the catalog's pin to Git.
+    provisional = {"source_revision": exact, "source_tree": tree,
+                   "catalog_variant": catalog_variant, "catalog_sha256": sha(catalog),
+                   "skills_repository": pin.get("repository"), "skills_revision": pin.get("revision"),
+                   "skills_manifest_path": pin.get("manifest_path"),
+                   "skills_manifest_blob": tree, "skills_manifest_sha256": "0" * 64}
+    validate_request(provisional)
+    entry = str(_run_git(skills_root, "ls-tree", pin["revision"], "--", pin["manifest_path"])).strip()
+    if not entry.startswith(("100644 blob ", "100755 blob ")) or "\n" in entry:
+        raise BuildProvenanceError("Prepared context requires a regular pinned skills blob")
+    blob = entry.split()[2]
+    manifest = _bounded_blob(skills_root, blob)
+    return validate_request({**provisional, "skills_manifest_blob": blob,
+                             "skills_manifest_sha256": sha(manifest)})
+
+
+def prepare_context(root: Path, revision: str, *, skills_root: Path, output: Path,
+                    max_transport_bytes: int, catalog_variant: str = "legacy"):
+    """Issue an explicit frozen transport once, without building an image."""
+    import zlib
+
+    from project_workflow import build_provenance
+    from project_workflow.build_provenance import validate_runtime_compatibility
+    from scripts import prepared_context as prepared
+
+    prepared.validate_budget(max_transport_bytes)
+    destination = prepared.plain(output)
+    if destination.exists() or not destination.parent.is_dir():
+        raise BuildProvenanceError("Prepared context requires a new output in an existing owned parent")
+    request = context_request(root, revision, skills_root, catalog_variant)
+    builder_digest = prepared.sha(Path(__file__).read_bytes())
+    provenance_digest = prepared.sha(Path(build_provenance.__file__).read_bytes())
+    helper_digest = prepared.sha(Path(prepared.__file__).read_bytes())
+    snapshot = immutable_git_snapshot(root, request["source_revision"])
     context = (compatible_build_context(snapshot, skills_root, catalog_variant)
                if catalog_variant != "legacy" else compatible_build_context(snapshot, skills_root))
-    # A PAX-first plain tar can be mistaken for a Dockerfile on stdin.
+    if len(context) > max_transport_bytes:
+        raise BuildProvenanceError("Prepared context exceeds its uncompressed byte budget")
+    catalog_path = BASE_CATALOG_PATH if catalog_variant == "base" else CATALOG_PATH
+    selected = {catalog_path, SKILLS_MANIFEST_PATH, COMPATIBILITY_PATH, "runtime-build-manifest.json", "Dockerfile"}
+    records: dict[str, bytes] = {}
+    names: set[str] = set()
+    with tarfile.open(fileobj=io.BytesIO(context)) as archive:
+        for member in archive:
+            path = PurePosixPath(member.name)
+            name = member.name.rstrip("/")
+            if (not name or path.is_absolute() or ".." in path.parts or "\\" in name
+                    or str(path) != name or name in names or not (member.isdir() or member.isfile())):
+                raise BuildProvenanceError("Prepared context requires unique safe regular archive entries")
+            names.add(name)
+            if name in selected:
+                if not member.isfile() or not 0 < member.size <= 1024 * 1024:
+                    raise BuildProvenanceError("Prepared context selected metadata is invalid")
+                source = archive.extractfile(member)
+                assert source is not None
+                records[name] = source.read()
+    if set(records) != selected:
+        raise BuildProvenanceError("Prepared context is missing required metadata")
+    if (prepared.sha(records[catalog_path]) != request["catalog_sha256"]
+            or prepared.sha(records[SKILLS_MANIFEST_PATH]) != request["skills_manifest_sha256"]
+            or validate_build_provenance(json.loads(records["runtime-build-manifest.json"])) != snapshot.provenance):
+        raise BuildProvenanceError("Prepared context archive and immutable request differ")
+    compatibility = validate_runtime_compatibility(json.loads(records[COMPATIBILITY_PATH]))
+    if (compatibility["catalogRevision"] != request["source_revision"]
+            or compatibility["skillsRevision"] != request["skills_revision"]):
+        raise BuildProvenanceError("Prepared context compatibility differs from its request")
     transport = gzip.compress(context, mtime=0)
+    receipt = {"schema": prepared.SCHEMA, "kind": "explicit-frozen-transport", "request": request,
+               "provenance": snapshot.provenance.to_dict(),
+               "transport": {"name": "context.tar.gz", "bytes": len(transport),
+                             "sha256": prepared.sha(transport), "assembled_tar_sha256": prepared.sha(context)},
+               "compatibility_sha256": prepared.sha(records[COMPATIBILITY_PATH]),
+               "resource_frontend": RESOURCE_FRONTEND if records["Dockerfile"].startswith(
+                   ("# syntax=" + RESOURCE_FRONTEND + "\n").encode()) else None,
+               "attestation": {"builder_sha256": builder_digest, "provenance_sha256": provenance_digest,
+                               "helper_sha256": helper_digest,
+                               "python": sys.version, "zlib_runtime": zlib.ZLIB_RUNTIME_VERSION,
+                               "environment_equivalence": "UNQUALIFIED",
+                               "skills_validation": "validated-base-package" if catalog_variant == "base"
+                               else "legacy-manifest"}}
+    if (context_request(root, request["source_revision"], skills_root, catalog_variant) != request
+            or prepared.sha(Path(__file__).read_bytes()) != builder_digest
+            or prepared.sha(Path(build_provenance.__file__).read_bytes()) != provenance_digest
+            or prepared.sha(Path(prepared.__file__).read_bytes()) != helper_digest):
+        raise BuildProvenanceError("Prepared context inputs changed during preparation")
+    return prepared.publish(destination, receipt, transport, max_transport_bytes=max_transport_bytes)
+
+
+def build_image(root: Path, image: str, docker: str, revision: str = "HEAD",
+                *, skills_root: Path, catalog_variant: str = "legacy",
+                resource_limits: list[str] | None = None, prepared_context=None,
+                max_transport_bytes: int | None = None) -> None:
+    scheduling = resource_options(resource_limits)
+    if prepared_context is not None:
+        from scripts.prepared_context import read_prepared_context
+
+        if max_transport_bytes is None:
+            raise BuildProvenanceError("Prepared context requires an explicit byte budget")
+        request = context_request(root, revision, skills_root, catalog_variant)
+        packet = read_prepared_context(prepared_context, expected_request=request,
+                                       max_transport_bytes=max_transport_bytes)
+        if scheduling and packet.receipt["resource_frontend"] != RESOURCE_FRONTEND:
+            raise BuildProvenanceError("Prepared context requires the qualified pinned Dockerfile frontend")
+        provenance = validate_build_provenance(packet.receipt["provenance"])
+        transport = packet.transport
+    else:
+        if max_transport_bytes is not None:
+            raise BuildProvenanceError("Context byte budget without a prepared context is unsupported")
+        snapshot = immutable_git_snapshot(root, revision)
+        if scheduling:
+            with tarfile.open(fileobj=io.BytesIO(snapshot.archive), mode="r:*") as archive:
+                recipe = archive.extractfile("Dockerfile")
+                if recipe is None or not recipe.read().startswith(
+                    ("# syntax=" + RESOURCE_FRONTEND + "\n").encode()
+                ):
+                    raise BuildProvenanceError(
+                        "Build resources require the qualified pinned Dockerfile frontend in the exact source revision"
+                    )
+        provenance = snapshot.provenance
+        context = (compatible_build_context(snapshot, skills_root, catalog_variant)
+                   if catalog_variant != "legacy" else compatible_build_context(snapshot, skills_root))
+        # A PAX-first plain tar can be mistaken for a Dockerfile on stdin.
+        transport = gzip.compress(context, mtime=0)
     subprocess.run(
         [
             docker,
@@ -271,6 +399,8 @@ def build_image(root: Path, image: str, docker: str, revision: str = "HEAD",
         check=True,
         input=transport,
     )
+    if prepared_context is not None and context_request(root, revision, skills_root, catalog_variant) != request:
+        raise BuildProvenanceError("Prepared context request changed during image build")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -287,6 +417,17 @@ def main(argv: list[str] | None = None) -> int:
     build.add_argument(
         "--build-resource", action="append", help="Explicit bounded NAME=VALUE hints from the Base host envelope"
     )
+    build.add_argument("--prepared-context", type=Path)
+    build.add_argument("--prepared-context-receipt-sha256")
+    build.add_argument("--context-max-bytes", type=int)
+
+    prepare = subparsers.add_parser("prepare-context")
+    prepare.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
+    prepare.add_argument("--revision", required=True)
+    prepare.add_argument("--skills-root", type=Path, required=True)
+    prepare.add_argument("--catalog-variant", choices=("legacy", "base"), default="legacy")
+    prepare.add_argument("--output", type=Path, required=True)
+    prepare.add_argument("--context-max-bytes", type=int, required=True)
 
     for name in ("derive-compatibility", "verify-compatibility"):
         subparsers.add_parser(name).add_argument("--root", type=Path, required=True)
@@ -301,9 +442,25 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "build":
+            fields = (args.prepared_context, args.prepared_context_receipt_sha256, args.context_max_bytes)
+            if any(value is not None for value in fields) and not all(value is not None for value in fields):
+                raise BuildProvenanceError(
+                    "Prepared context path, receipt digest and byte budget must be supplied together"
+                )
+            reference = None
+            if args.prepared_context is not None:
+                from scripts.prepared_context import PreparedContextRef
+
+                reference = PreparedContextRef(args.prepared_context, args.prepared_context_receipt_sha256)
             build_image(args.root.resolve(), args.image, args.docker, args.revision,
                         skills_root=args.skills_root.resolve(), catalog_variant=args.catalog_variant,
-                        resource_limits=args.build_resource)
+                        resource_limits=args.build_resource, prepared_context=reference,
+                        max_transport_bytes=args.context_max_bytes)
+        elif args.command == "prepare-context":
+            reference = prepare_context(args.root, args.revision, skills_root=args.skills_root,
+                                        catalog_variant=args.catalog_variant, output=args.output,
+                                        max_transport_bytes=args.context_max_bytes)
+            print(json.dumps({"directory": str(reference.directory), "receipt_sha256": reference.receipt_sha256}))
         elif args.command == "derive-compatibility":
             (args.root / COMPATIBILITY_PATH).write_bytes(_json_bytes(derive_compatibility(args.root)))
         elif args.command == "verify-compatibility":
