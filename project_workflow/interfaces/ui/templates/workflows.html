@@ -80,8 +80,9 @@
 .timeline-parallel-header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
 .timeline-parallel-label{border-color:var(--border-strong);background:var(--panel);color:var(--text-muted)}
 .timeline-parallel-count{font-size:12px;color:var(--text-dim)}
-.timeline-parallel-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-.timeline-parallel-grid .timeline-card{min-height:132px}
+.timeline-group-transition{margin:12px 0 0;padding-top:10px;border-top:1px solid var(--border);color:var(--text-secondary);font-size:12px;line-height:1.5}
+.timeline-parallel-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:10px}
+.timeline-parallel-grid .timeline-card{min-height:112px}
 .timeline-parallel-grid .badge-parallel{background:var(--panel);color:var(--text-muted);border-color:var(--border-strong)}
 .timeline-connector{height:52px;display:flex;align-items:center;justify-content:center;position:relative}
 .timeline-connector::before,.timeline-connector::after{content:'';position:absolute;left:50%;width:1px;transform:translateX(-50%);background:var(--border-strong)}
@@ -101,6 +102,7 @@
 .timeline.is-compact .timeline-parallel-group{padding:0;border:0;border-left:3px solid var(--orange);border-bottom:1px solid var(--border);border-radius:0;background:transparent;box-shadow:none}
 .timeline.is-compact .timeline-parallel-header{min-height:32px;padding:4px 12px;margin:0;background:var(--orange-soft)}
 .timeline.is-compact .timeline-parallel-grid{display:block}
+.timeline.is-compact .timeline-group-transition{margin:0;padding:8px 12px}
 .timeline.is-compact .timeline-parallel-grid .timeline-item:not(:last-child){border-bottom:1px solid var(--border)}
 .timeline.is-compact .timeline-connector{height:0}
 .timeline.is-compact .timeline-connector::before,.timeline.is-compact .timeline-connector::after{display:none}
@@ -111,7 +113,7 @@
 {% macro phase_card(p) -%}
 <div class="timeline-item" id="phase-{{ p.id }}" data-phase-id="{{ p.id }}" data-phase-order="{{ p.phase_num }}" data-execution-type="{{ p.execution_type }}">
   <div class="phase-card-shell">
-    <a href="/phase/{{ p.id }}{% if selected_namespace %}?profession_id={{ selected_namespace.id }}{% endif %}{{ phase_scope_suffix }}" class="timeline-card">
+    <a href="{{ ui_base_path() }}/phase/{{ p.id }}{% if selected_namespace %}?profession_id={{ selected_namespace.id }}{% endif %}{{ phase_scope_suffix }}" class="timeline-card">
       <div class="phase-card-copy">
         <div class="timeline-name">{{ p.name }}</div>
         {% set description = p.description | default('') %}
@@ -208,7 +210,7 @@
           {% if selected_mode_id == mode.id %}aria-current="page"{% endif %}
           data-testid="workflow-mode-tab-{{ mode.key }}"
           data-mode-id="{{ mode.id }}"
-          href="/workflows?workflow_id={{ selected_workflow_id }}&mode_id={{ mode.id }}{% if selected_namespace %}&profession_id={{ selected_namespace.id }}{% endif %}{{ mode_scope_suffix }}"
+          href="{{ ui_base_path() }}/workflows?workflow_id={{ selected_workflow_id }}&mode_id={{ mode.id }}{% if selected_namespace %}&profession_id={{ selected_namespace.id }}{% endif %}{{ mode_scope_suffix }}"
         >{{ mode.name }}</a>
         {% endfor %}
       </div>
@@ -226,12 +228,13 @@
     <div class="timeline{% if phase_count >= 8 %} is-compact{% endif %}" id="phasesTimeline"{% if selected_workflow_id %} data-workflow-id="{{ selected_workflow_id }}"{% endif %}{% if selected_mode_id %} data-mode-id="{{ selected_mode_id }}"{% endif %} data-testid="workflow-mode-phases" aria-live="polite" aria-busy="false">
       {% for block in phase_blocks %}
         {% if block.kind == 'parallel' %}
-        <section class="timeline-block timeline-parallel-group">
+        <section class="timeline-block timeline-parallel-group" aria-label="Параллельная группа: {{ block.phases | map(attribute='name') | join(', ') }}">
           <div class="timeline-parallel-header">
-            <div class="timeline-parallel-label">параллельно</div>
+            <div class="timeline-parallel-label">Параллельная группа</div>
             <div class="timeline-parallel-count">{{ block.phases | length }} одновременно</div>
           </div>
           <div class="timeline-parallel-grid">{% for p in block.phases %}{{ phase_card(p) }}{% endfor %}</div>
+          {% if not loop.last %}<p class="timeline-group-transition">Следующий этап — после завершения всех фаз группы.</p>{% endif %}
         </section>
         {% else %}<section class="timeline-block">{{ phase_card(block.phases[0]) }}</section>{% endif %}
         <div class="timeline-connector">
@@ -261,14 +264,14 @@ let workflowEditorVisible = selectedWorkflowId == null;
 let workflowWritePending = false;
 
 function workflowApiUrl(workflowId){
-  var url = new URL('/api/workflows' + (workflowId == null ? '' : '/' + workflowId), window.location.origin);
+  var url = new URL('{{ ui_base_path() }}/api/workflows' + (workflowId == null ? '' : '/' + workflowId), window.location.origin);
   if(professionId != null){ url.searchParams.set('namespace_id', String(professionId)); }
   return url.pathname + url.search;
 }
 function workflowById(id){ return workflowStore.find(function(workflow){ return workflow.id === id; }); }
 function workflowSelectionUrl(workflowId){
   var url = new URL(window.location.href);
-  url.pathname = '/workflows';
+  url.pathname = '{{ ui_base_path() }}/workflows';
   if(Number(url.searchParams.get('workflow_id') || initialWorkflowId) !== workflowId){ url.searchParams.delete('mode_id'); }
   if(workflowId == null){ url.searchParams.delete('workflow_id'); }
   else { url.searchParams.set('workflow_id', String(workflowId)); }
@@ -570,7 +573,7 @@ function selectMode(modeId){
   const parsed=Number(modeId);
   if(!Number.isInteger(parsed)||parsed<=0){showToast('Не удалось определить режим воркфлоу','error');return;}
   const url=new URL(window.location.href);
-  url.pathname='/workflows';
+  url.pathname='{{ ui_base_path() }}/workflows';
   url.searchParams.set('mode_id',String(parsed));
   window.PdlcPlatformNavigation.navigate(url.pathname+url.search);
 }
@@ -603,7 +606,7 @@ async function addPhaseAfter(button){
   if(!workflowId||!modeId||currentOrder<0){showToast('Не удалось определить позицию фазы','error');return;}
   button.disabled=true;
   try{
-    const resp=await fetch('/api/phases',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({workflow_id:parseInt(workflowId,10),mode_id:parseInt(modeId,10),phase_order:currentOrder+1})});
+    const resp=await fetch('{{ ui_base_path() }}/api/phases',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({workflow_id:parseInt(workflowId,10),mode_id:parseInt(modeId,10),phase_order:currentOrder+1})});
     const data=await resp.json().catch(()=>({}));
     if(!resp.ok||!data.ok){showToast(data.error||'Не удалось добавить фазу','error');return;}
     window.PdlcPlatformNavigation.reload();
@@ -620,7 +623,7 @@ async function deletePhase(button){
   if(!await window.PdlcBaseUI.requestConfirmation({eyebrow:'Удаление фазы',title:'Удалить фазу «'+phaseName+'»?',message:'Фаза «'+phaseName+'» и её настройки будут удалены.',confirmLabel:'Удалить'}))return;
   button.disabled=true;
   try{
-    const resp=await fetch('/api/phases/'+item.dataset.phaseId,{method:'DELETE'});
+    const resp=await fetch('{{ ui_base_path() }}/api/phases/'+item.dataset.phaseId,{method:'DELETE'});
     const data=await resp.json().catch(()=>({}));
     if(!resp.ok||!data.ok){showToast(data.error||'Не удалось удалить фазу','error');return;}
     window.PdlcPlatformNavigation.reload();
@@ -634,7 +637,7 @@ async function togglePhaseType(button){
   const nextType=(item.dataset.executionType||'sync')==='sync'?'parallel':'sync';
   button.disabled=true;
   try{
-    const resp=await fetch('/api/phases/'+item.dataset.phaseId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({execution_type:nextType})});
+    const resp=await fetch('{{ ui_base_path() }}/api/phases/'+item.dataset.phaseId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({execution_type:nextType})});
     const data=await resp.json().catch(()=>({}));
     if(!resp.ok||!data.ok){showToast(data.error||'Не удалось сменить режим','error');return;}
     window.PdlcPlatformNavigation.reload();
@@ -654,7 +657,7 @@ async function movePhase(button,direction){
   button.disabled=true;
   try{
     const orders=reordered.map((phase,index)=>({phase_id:Number(phase.dataset.phaseId),phase_order:index+1}));
-    const resp=await fetch('/api/phases/order',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({orders})});
+    const resp=await fetch('{{ ui_base_path() }}/api/phases/order',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({orders})});
     if(!resp.ok){showToast('Не удалось сохранить порядок фаз','error');return;}
     window.PdlcPlatformNavigation.reload();
   }catch(_error){showRequestError();

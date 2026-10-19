@@ -4,6 +4,7 @@ from project_workflow.application.base_source import load_base_source
 from project_workflow.domain.base_binding import BaseNamespaceBinding
 from project_workflow.domain.base_catalog import BASE_CATALOG_ARTIFACTS
 from project_workflow.domain.exceptions import ConflictError
+from project_workflow.domain.project_theme import MANAGED_PROFESSION_PRESENTATION
 from project_workflow.infrastructure.db.managed_catalog import ManagedCatalog, validate_managed_catalog_state
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
@@ -36,7 +37,9 @@ def _persisted_binding(
     if workflow is None or workflow.id is None or definition is None:
         raise ConflictError("Persisted workflow is not a Base candidate role")
     if (
-        (catalog.catalog_version == 3 and namespace["name"] != definition.hermes_namespace)
+        (catalog.catalog_version == 3 and namespace["name"] not in {
+            definition.hermes_namespace, MANAGED_PROFESSION_PRESENTATION[definition.role_key][0],
+        })
         or namespace["cli_command"] != f"workflow-{definition.role_key}"
         or namespace.get("launch_profile") != definition.hermes_profile
     ):

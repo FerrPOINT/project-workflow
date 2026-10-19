@@ -1553,3 +1553,70 @@ class TestPageRoutes:
     def test_phase_detail_page_not_found(self, client):
         resp = client.get("/phase/999999")
         assert resp.status_code == 404
+
+
+@pytest.mark.parametrize("rename", [False, True])
+def test_reconfigure_two_pairs_as_one_four_phase_group(client, rename):
+    from project_workflow.interfaces.ui.helpers import _build_parallel_phase_blocks
+    from project_workflow.supervisor.contracts import PhaseContractBuilder
+    from project_workflow.supervisor.models import Phase
+
+    original = client.get("/api/phases").json()["phases"]
+    by_code = {phase["code"]: phase for phase in original}
+    codes = ["5.RESEARCH", "5.PREFLIGHT", "6.SOLUTION", "6.TEST_PLAN"]
+    ids = {code: by_code[code]["id"] for code in by_code}
+
+    def update(code, payload):
+        return client.put(f"/api/phases/{ids[code]}", json=payload)
+
+    # Linking the pairs without aligning rollback targets must be atomic failure.
+    response = update("6.SOLUTION", {"parallel_with_phase_id": ids["5.PREFLIGHT"]})
+    assert response.status_code == 409
+    assert client.get("/api/phases").json()["phases"] == original
+
+    # Detach the second pair, then join each member with the common rollback.
+    updates = [
+        ("6.TEST_PLAN", {"parallel_with_phase_id": None}),
+        ("6.SOLUTION", {"parallel_with_phase_id": None}),
+        ("6.SOLUTION", {
+            "parallel_with_phase_id": ids["5.PREFLIGHT"],
+            "rollback_target_phase_id": ids["4.START"],
+        }),
+        ("6.TEST_PLAN", {
+            "parallel_with_phase_id": ids["6.SOLUTION"],
+            "rollback_target_phase_id": ids["4.START"],
+        }),
+    ]
+    for code, payload in updates:
+        assert update(code, payload).status_code == 200
+    if rename:
+        for index, code in enumerate(codes):
+            assert update(code, {"name": f"Independent activity {index}"}).status_code == 200
+
+    phases = client.get("/api/phases").json()["phases"]
+    groups = _build_parallel_phase_blocks(phases)
+    assert [[p["code"] for p in b["phases"]] for b in groups if b["kind"] == "parallel"] == [
+        codes, ["10.REVIEW", "10.QA", "10.DATAFLOW"],
+    ]
+    rendered = client.get("/workflows").text
+    assert "4 одновременно" in rendered
+    for phase in phases:
+        if phase["code"] not in {"6.SOLUTION", "6.TEST_PLAN"} and not (
+            rename and phase["code"] in codes
+        ):
+            assert phase == by_code[phase["code"]]
+    phase_codes = {p["id"]: p["code"] for p in phases}
+    runtime_phases = [
+        Phase(
+            id=p["id"], code=p["code"], name=p["name"], execution_type=p["execution_type"],
+            parallel_with_phase_code=phase_codes.get(p["parallel_with_phase_id"]),
+            rollback_target_phase_code=phase_codes.get(p["rollback_target_phase_id"]),
+        ) for p in phases
+    ]
+    builder = PhaseContractBuilder(runtime_phases)
+    for code in codes:
+        member = next(p for p in runtime_phases if p.code == code)
+        group = builder.get_parallel_group(member)
+        assert [p.code for p in group] == codes
+        assert builder.get_next_phase(code)[0] == "7.PLAN_GATE"
+        assert builder.build_parallel(group).group_phases == codes

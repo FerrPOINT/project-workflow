@@ -28,6 +28,7 @@ from project_workflow.domain.phase_graph import PhaseGraphNode, validate_phase_g
 from project_workflow.domain.project_theme import (
     DEFAULT_PROJECT_COLOR,
     DEFAULT_PROJECT_ICON,
+    MANAGED_PROFESSION_PRESENTATION,
     MANAGED_PROFESSION_THEMES,
     normalize_theme_color,
     normalize_theme_icon,
@@ -620,11 +621,15 @@ def _persist_mode(
 
 def _ensure_namespace(
     uow: UnitOfWork, workflow: ManagedWorkflow, workflow_id: int, *, preserve_presentation: bool = False,
+    localize_presentation: bool = True,
 ) -> None:
     cli_command = f"workflow-{workflow.role_key}"
     code = legacy_code_from_cli_command(cli_command)
     legacy_description = f"Managed namespace for {workflow.key}"
-    description = workflow.description if preserve_presentation else legacy_description
+    display_name, description = (
+        MANAGED_PROFESSION_PRESENTATION[workflow.role_key] if localize_presentation
+        else (workflow.hermes_namespace, legacy_description)
+    )
     theme_icon, theme_color = MANAGED_PROFESSION_THEMES[workflow.role_key]
     existing = uow.projects.get_by_cli_command(cli_command)
     if existing is None:
@@ -637,7 +642,7 @@ def _ensure_namespace(
             {
                 "workflow_id": workflow_id,
                 "code": code,
-                "name": workflow.hermes_namespace,
+                "name": display_name,
                 "description": description,
                 "theme_icon": theme_icon,
                 "theme_color": theme_color,
@@ -654,12 +659,15 @@ def _ensure_namespace(
             uow.projects.update(int(existing.id or 0), {"description": description})
         uow.workflows.assign_profession(workflow_id, int(existing.id or 0))
         return
+    # Recognize both the original packaged presentation and the localized
+    # defaults. Technical identity and arbitrary legacy drift remain guarded.
+    identity = uow.projects.get_persisted_identity(int(existing.id or 0))
     if not _namespace_has_identity(
-        uow.projects.get_persisted_identity(int(existing.id or 0)),
+        identity,
         workflow_id=workflow_id,
         code=code,
-        name=workflow.hermes_namespace,
-        description=description,
+        name=display_name if existing.name == display_name else workflow.hermes_namespace,
+        description=description if existing.description == description else legacy_description,
         cli_command=cli_command,
         key_prefixes=[],
         theme_icon=theme_icon,
@@ -670,6 +678,32 @@ def _ensure_namespace(
         )
 
     uow.workflows.assign_profession(workflow_id, int(existing.id or 0))
+
+
+def localize_managed_professions(uow: UnitOfWork, catalog: ManagedCatalog) -> None:
+    """Replace only known packaged labels; preserve editor-owned presentation."""
+    # Frozen v1/v3 execution recipes bind namespace labels as technical identity.
+    # Current v2/v4 defaults can localize presentation without changing that wire contract.
+    if catalog.catalog_version not in {2, 4}:
+        return
+    workflows = {workflow.key: workflow for workflow in uow.workflows.list()}
+    for definition in catalog.workflows:
+        workflow = workflows.get(definition.key)
+        if workflow is None or workflow.id is None:
+            raise ValueError(f"Managed workflow {definition.key!r} is missing")
+        _assert_existing_namespace(uow, definition, workflow.id)
+        namespace = uow.projects.get_by_cli_command(f"workflow-{definition.role_key}")
+        assert namespace is not None and namespace.id is not None
+        name, description = MANAGED_PROFESSION_PRESENTATION[definition.role_key]
+        updates = {}
+        if namespace.name == definition.hermes_namespace:
+            updates["name"] = name
+        if namespace.description in {
+            f"Managed namespace for {definition.key}", definition.description,
+        }:
+            updates["description"] = description
+        if updates:
+            uow.projects.update(namespace.id, updates)
 
 
 def _assert_existing_namespace(
@@ -977,7 +1011,11 @@ def ensure_managed_catalog(
                     mode=mode,
                     catalog_version=catalog.catalog_version,
                 )
-        _ensure_namespace(uow, definition, workflow_id, preserve_presentation=modern)
+        _ensure_namespace(
+            uow, definition, workflow_id, preserve_presentation=modern,
+            localize_presentation=catalog.catalog_version in {2, 4},
+        )
+    localize_managed_professions(uow, catalog)
     validate_managed_catalog_state(uow, catalog)
     return catalog
 
