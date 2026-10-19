@@ -814,6 +814,29 @@ class TestPhasesPage:
         assert ".timeline-connector::after{top:calc(50% + 21px);bottom:0}" in response.text
         assert ".timeline-connector::before{content:'';position:absolute;top:0;bottom:0" not in response.text
 
+    def test_parallel_groups_keep_their_members_and_explain_the_next_stage_barrier(self):
+        response = client.get("/phases")
+        assert response.status_code == 200
+        groups = re.findall(
+            r'<section class="timeline-block timeline-parallel-group"[^>]*>(.*?)</section>',
+            response.text,
+            re.DOTALL,
+        )
+        expected = [
+            ["5.RESEARCH", "5.PREFLIGHT"],
+            ["6.SOLUTION", "6.TEST_PLAN"],
+            ["10.REVIEW", "10.QA", "10.DATAFLOW"],
+        ]
+        assert [re.findall(r'data-phase-id="(\d+)"', group) for group in groups] == [
+            [str(_phase_id(code)) for code in codes] for codes in expected
+        ]
+        for group in groups:
+            assert "Параллельная группа" in group
+            assert "Следующий этап — после завершения всех фаз группы." in group
+        singles = re.findall(r'<section class="timeline-block">(.*?)</section>', response.text, re.DOTALL)
+        assert singles
+        assert all("timeline-group-transition" not in single for single in singles)
+
     def test_phase_card_reserves_space_for_menu_only_in_its_heading(self):
         response = client.get("/phases")
 

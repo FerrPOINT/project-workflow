@@ -72,7 +72,10 @@ def _auth_error(request: Request, status: int, message: str) -> Response:
         return _sso_entry(request, message=message, status_code=status)
     if status == 401:
         destination = _safe_next(request.url.path + (f"?{request.url.query}" if request.url.query else ""))
-        return RedirectResponse(f"{get_settings().UI_BASE_PATH}/login?{urlencode({'next': destination, 'silent': '1'})}", status_code=303)
+        return RedirectResponse(
+            f"{get_settings().UI_BASE_PATH}/login?{urlencode({'next': destination, 'silent': '1'})}",
+            status_code=303,
+        )
     return _sso_entry(request, message=message, status_code=status)
 
 
@@ -175,8 +178,13 @@ def install_sso(app: FastAPI) -> None:
             if error == "login_required" and transaction.get("silent") is True and not code:
                 response = _sso_entry(request, message="Требуется вход через SSO.",
                                       next_path=str(transaction["next"]), login_required=True)
-                response.delete_cookie(cookie_name(settings, _TRANSACTION_COOKIE), path=settings.UI_BASE_PATH + "/sso/callback",
-                                       httponly=True, samesite="lax", secure=settings.AUTH_COOKIE_SECURE)
+                response.delete_cookie(
+                    cookie_name(settings, _TRANSACTION_COOKIE),
+                    path=settings.UI_BASE_PATH + "/sso/callback",
+                    httponly=True,
+                    samesite="lax",
+                    secure=settings.AUTH_COOKIE_SECURE,
+                )
                 return response
             return _auth_error(request, 401, "Central Auth не подтвердил вход")
         if not code:
@@ -212,9 +220,15 @@ def install_sso(app: FastAPI) -> None:
             destination = settings.UI_PLATFORM_ORIGIN.rstrip("/") + _safe_next(platform_return)
         response = RedirectResponse(destination, status_code=303)
         session = {"token": access_token, "sub": claims["sub"], "issued": int(time.time())}
-        response.set_cookie(cookie_name(settings, _SESSION_COOKIE), _encode_cookie(settings, session),
-                            max_age=int(tokens["expires_in"]), path=settings.UI_BASE_PATH or "/", httponly=True, samesite="lax",
-                            secure=settings.AUTH_COOKIE_SECURE)
+        response.set_cookie(
+            cookie_name(settings, _SESSION_COOKIE),
+            _encode_cookie(settings, session),
+            max_age=int(tokens["expires_in"]),
+            path=settings.UI_BASE_PATH or "/",
+            httponly=True,
+            samesite="lax",
+            secure=settings.AUTH_COOKIE_SECURE,
+        )
         response.delete_cookie(cookie_name(settings, _TRANSACTION_COOKIE), path=settings.UI_BASE_PATH + "/sso/callback",
                                httponly=True, samesite="lax", secure=settings.AUTH_COOKIE_SECURE)
         response.headers["Cache-Control"] = "no-store"
