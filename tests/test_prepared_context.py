@@ -183,6 +183,42 @@ def test_legacy_and_prepared_build_have_identical_docker_invocations(captured):
     assert calls[0] == calls[1]
 
 
+def test_frozen_selection_preserves_modes_binary_and_export_attributes(tmp_path):
+    value = sources(tmp_path)
+    contents = {".gitattributes": (b"raw.txt -text\nbinary -text\n"
+                                   b"ignored.txt export-ignore\nrevision.txt export-subst\n"),
+                "raw.txt": b"raw\r\nlines\r\n", "binary": b"\0\xff\r\n", "ignored.txt": b"omit\n",
+                "revision.txt": b"commit=$Format:%H$\nrefs=$Format:%D$\n",
+                "scripts/executable.sh": b"#!/bin/sh\nexit 0\n"}
+    for name, data in contents.items():
+        (value.root / name).write_bytes(data)
+    git(value.root, "add", ".")
+    git(value.root, "update-index", "--chmod=+x", "scripts/executable.sh")
+    git(value.root, "commit", "-m", "archive attributes")
+    revision = git(value.root, "rev-parse", "HEAD")
+    reference = builder.prepare_context(value.root, revision, skills_root=value.skills,
+                                        output=tmp_path / "packet", max_transport_bytes=MAX_BYTES)
+    request = builder.context_request(value.root, revision, value.skills, "legacy")
+    frozen = read_prepared_context(reference, expected_request=request, max_transport_bytes=MAX_BYTES)
+    with tarfile.open(fileobj=io.BytesIO(frozen.transport), mode="r:gz") as archive:
+        assert archive.extractfile("raw.txt").read() == contents["raw.txt"]
+        assert archive.extractfile("binary").read() == contents["binary"]
+        assert "ignored.txt" not in archive.getnames()
+        assert archive.getmember("scripts/executable.sh").mode & 0o111
+        assert revision.encode() in archive.extractfile("revision.txt").read()
+    (value.root / ".git/info/attributes").write_bytes(b"raw.txt export-ignore\n")
+    git(value.root, "config", "tar.umask", "0077")
+    git(value.root, "tag", "fixture-approved")
+    current = builder.immutable_git_snapshot(value.root, revision)
+    assert current.provenance.source_archive_sha256 != frozen.receipt["provenance"]["source_archive_sha256"]
+    with tarfile.open(fileobj=io.BytesIO(current.archive)) as archive:
+        assert "raw.txt" not in archive.getnames()
+        assert archive.getmember("scripts/executable.sh").mode == 0o700
+        assert b"fixture-approved" in archive.extractfile("revision.txt").read()
+    assert read_prepared_context(reference, expected_request=request,
+                                  max_transport_bytes=MAX_BYTES).transport == frozen.transport
+
+
 @pytest.mark.parametrize("damage", ["tamper", "truncate", "missing", "extra", "receipt"])
 def test_packet_damage_is_rejected_without_fallback(packet, captured, damage):
     payload = packet.directory / "context.tar.gz"
