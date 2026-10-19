@@ -7,6 +7,7 @@ from project_workflow import config
 from project_workflow.domain.base_admission import BaseAdmission
 from project_workflow.domain.base_catalog import BASE_CATALOG_ARTIFACTS, BASE_CATALOG_SKILLS, FROZEN_BASE_CATALOG_V3
 from project_workflow.domain.exceptions import ConflictError
+from project_workflow.domain.project_theme import MANAGED_PROFESSION_PRESENTATION
 from project_workflow.domain.repositories import UnitOfWork
 from project_workflow.domain.runtime_assignment import RuntimeStepFence, payload_sha256
 from project_workflow.infrastructure.base_package import GitPackage, digest, load_pinned_package
@@ -50,7 +51,9 @@ def validate_base_admission(
         workflow is None or mode is None or workflow.key != workflow_key
         or execution_scope not in mode.execution_scopes
         or project is None or project.cli_command != f"workflow-{role_key}"
-        or (version == 3 and historical_mode_id is None and project.name != workflow.hermes_namespace)
+        or (version == 3 and historical_mode_id is None and project.name not in {
+            workflow.hermes_namespace, MANAGED_PROFESSION_PRESENTATION[workflow.role_key][0],
+        })
         or (historical_mode_id is None and project.launch_profile != workflow.hermes_profile)
     ):
         raise ConflictError("Base role/mode/scope/namespace/profile mismatch")
