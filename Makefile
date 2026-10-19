@@ -12,16 +12,23 @@ COVERAGE_OPTIONS = $(if $(and $(filter release,$(MAKECMDGOALS)),$(filter coverag
 
 # --- testing ---------------------------------------------------------------
 
-# Explicit quality already owns these identical checks. A shared prerequisite
-# runs once and propagates its failure to every alias, including make -j.
+# An explicit release owns its unit/static overlap; depend on the actual report
+# owner so goal order and make -j preserve one operation and its failure.
+ifneq ($(filter release,$(MAKECMDGOALS)),)
+test unit lint quality: $(COVERAGE_OWNER)
+else
 ifneq ($(filter quality,$(MAKECMDGOALS)),)
 test unit lint: quality
 else
-test unit lint:
+test: unit
+unit lint:
+	WORKFLOW_QUALITY_UV="$(WORKFLOW_QUALITY_UV)" python scripts/quality.py $@
+endif
+quality:
 	WORKFLOW_QUALITY_UV="$(WORKFLOW_QUALITY_UV)" python scripts/quality.py $@
 endif
 
-test-verbose integration slow test-integration quality warnings compose-ready:
+test-verbose integration slow test-integration warnings compose-ready:
 	WORKFLOW_QUALITY_UV="$(WORKFLOW_QUALITY_UV)" python scripts/quality.py $@
 
 release coverage coverage-html:

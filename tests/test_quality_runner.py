@@ -283,6 +283,18 @@ class QualityMakeContracts(unittest.TestCase):
         phony = next(line for line in source.splitlines() if line.startswith(".PHONY:"))
         self.assertTrue({"test", "unit", "lint", "quality"}.issubset(phony.split()))
 
+    def test_make_unit_alias_and_explicit_release_share_existing_owners(self):
+        from pathlib import Path
+
+        source = (Path(__file__).resolve().parents[1] / "Makefile").read_text(encoding="utf-8")
+        self.assertIn("ifneq ($(filter release,$(MAKECMDGOALS)),)\n"
+                      "test unit lint quality: $(COVERAGE_OWNER)\nelse\n", source)
+        self.assertIn("\nelse\ntest: unit\nunit lint:\n", source)
+        release = commands("release", prepared=True)
+        self.assertEqual(commands("quality", prepared=True)[1:], release[2:])
+        self.assertEqual("not postgres", release[0][release[0].index("-m", 2) + 1])
+        self.assertIn("--cov=project_workflow", release[0])
+
     def test_real_make_coalesces_quality_aliases_and_preserves_other_lanes(self):
         import itertools
         import json
@@ -314,14 +326,35 @@ class QualityMakeContracts(unittest.TestCase):
                          for goals in itertools.permutations(("quality", "test", "unit", "lint"), count)
                          if "quality" in goals]
             standalone = [(target,) for target in ("test", "unit", "lint", "quality")]
+            release_goals = [goals for alias in ("test", "unit", "lint", "quality")
+                             for goals in (("release", alias), (alias, "release"))]
+            release_goals += [goals for pair in itertools.combinations(("test", "unit", "lint", "quality"), 2)
+                              for goals in itertools.permutations(("release", *pair))]
+            release_goals += [("test", "unit", "lint", "quality", "release"),
+                              ("release", "quality", "lint", "unit", "test")]
+            # Co-goals must depend on the actual report owner, even when a report
+            # precedes release and therefore owns the existing coverage recipe.
+            release_goals += [("coverage", "quality", "release", "lint"),
+                              ("unit", "release", "test", "coverage"),
+                              ("coverage-html", "quality", "release", "lint"),
+                              ("unit", "release", "test", "coverage-html")]
             neighbors = [("quality", target) for target in (
                 "warnings", "test-verbose", "integration", "slow", "test-integration",
-                "release", "coverage", "coverage-html",
+                "coverage", "coverage-html",
             )]
-            for goals in [*coalesced, *standalone, *neighbors, ("test", "unit"), ("test", "lint")]:
-                expected = [["quality"]] if "quality" in goals and set(goals) <= {
-                    "quality", "test", "unit", "lint",
-                } else [[goal] for goal in goals]
+            neighbors += [("release", "warnings"), ("test-verbose", "release")]
+            for goals in [*coalesced, *release_goals, *standalone, *neighbors,
+                          ("test", "unit"), ("unit", "test"), ("test", "lint")]:
+                if "release" in goals and set(goals) <= {
+                    "release", "quality", "test", "unit", "lint", "coverage", "coverage-html",
+                }:
+                    expected = [["--html-report", "release"]] if "coverage-html" in goals else [["release"]]
+                elif "quality" in goals and set(goals) <= {"quality", "test", "unit", "lint"}:
+                    expected = [["quality"]]
+                else:
+                    expected = [list(goal) for goal in dict.fromkeys(
+                        ("unit" if goal == "test" else goal,) for goal in goals
+                    )]
                 for exit_code in ((0, 7) if len(expected) == 1 else (0,)):
                     with self.subTest(goals=goals, exit_code=exit_code):
                         (root / "calls.txt").unlink(missing_ok=True)

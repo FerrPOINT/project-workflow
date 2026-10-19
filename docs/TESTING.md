@@ -16,6 +16,14 @@ HTML к прежним term/XML reports полного non-PostgreSQL coverage. 
 workers сохраняются. `WORKFLOW_QUALITY_ENVIRONMENT` применяется тем же owner,
 унаследованный workspace underlay не выбирается прямым uv вызовом из Make.
 Custom `WORKFLOW_QUALITY_UV` сохраняет прежнюю семантику override.
+`make test unit` и обратный порядок используют один unit owner. При явно
+запрошенном `release` совместные `test`, `unit`, `lint`, `quality` принадлежат
+существующему release/report owner: один non-PG coverage, PostgreSQL, Ruff/mypy
+и diff check, включая `-j` и любую очередность report goals. Без явного release
+manual lane не добавляется. Самостоятельные цели сохраняются; `warnings`,
+`test-verbose`, integration/slow и PostgreSQL targets остаются отдельными.
+Inert GNU Make dispatch fixture явно пропускается, если Make отсутствует;
+source/Python controls не заменяют native dispatch или release acceptance.
 Full release coverage включает docs contracts с integration marker; отдельный
 docs job не повторяет pytest/uv и выполняет только stdlib README validator.
 Классификация — tests/lanes.json; unit не инициализирует SQLite/UI fixture.

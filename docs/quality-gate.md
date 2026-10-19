@@ -17,8 +17,11 @@ Canonical quality runner готовит frozen Python 3.11.15/extras/constraints
 
 При явном `make quality` вместе с `test`, `unit` или `lint` общий prerequisite
 выполняет quality один раз, независимо от порядка goals и `-j`; его ошибка
-передаётся всем aliases. Самостоятельные цели сохраняются. `warnings`,
-`test-verbose` и ручные integration/slow/release/report цели остаются отдельными.
+передаётся всем aliases. `make test unit` также использует один unit owner.
+При явно запрошенном release эти обычные цели принадлежат существующему
+release/report owner, сохраняя coverage, PostgreSQL, lint/types и diff check.
+Самостоятельные цели сохраняются; `warnings`, `test-verbose` и явно запрошенные
+integration/slow/PostgreSQL targets остаются отдельными.
 Inert GNU Make fixture проверяет dispatch без uv и pytest, но при отсутствии
 Make явно пропускается; это не native qualification приложения или env reuse.
 
