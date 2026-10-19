@@ -595,7 +595,7 @@ function switchNamespace(namespaceId){
     url.searchParams.delete('workflow_id');
     url.searchParams.delete('mode_id');
   }
-  if(url.pathname.startsWith('/phase/')){
+  if(url.pathname.startsWith('{{ ui_base_path() }}/phase/')){
     url.pathname='{{ ui_base_path() }}/phases';
     url.searchParams.delete('workflow_id');
     url.searchParams.delete('mode_id');
