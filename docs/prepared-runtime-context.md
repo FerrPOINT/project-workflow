@@ -62,6 +62,11 @@ Root/candidate CLI adoption не включён автоматически.
 Issuer и image build запускаются под существующим parent host admission.
 Эти product CLI не приобретают второй slot и не заменяют daemon cleanup owner.
 
+Reader сравнивает общую file identity между path/handle APIs; их `ctime` может
+иметь разную точность на Windows. Полные stamps, включая `ctime`, сравниваются
+до/после чтения отдельно для открытого handle и пути. Различие API не вызывает
+повторную подготовку, а изменение файла во время чтения остаётся ошибкой.
+
 ## Граница доказательства
 
 Receipt версии `workflow-prepared-context/v1` утверждает конкретные frozen bytes.

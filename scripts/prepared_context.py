@@ -83,7 +83,10 @@ def _read(path: Path, budget: int, *, retain: bool = True) -> tuple[bytes | None
     if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or not 0 < before.st_size <= budget:
         raise BuildProvenanceError("Prepared context requires bounded independently owned regular files")
     with path.open("rb") as stream:
-        if _stamp(os.fstat(stream.fileno())) != _stamp(before):
+        opened_before = os.fstat(stream.fileno())
+        # Windows path/handle APIs may expose different creation-time precision.
+        # Keep ctime in same-API bookends, but compare shared identity across APIs.
+        if _stamp(opened_before)[:-1] != _stamp(before)[:-1]:
             raise BuildProvenanceError("Prepared context opened file identity changed")
         if retain:
             raw = stream.read(before.st_size + 1)
@@ -97,7 +100,7 @@ def _read(path: Path, budget: int, *, retain: bool = True) -> tuple[bytes | None
                 count += len(chunk)
                 hasher.update(chunk)
             checksum = hasher.hexdigest()
-        if count != before.st_size or _stamp(os.fstat(stream.fileno())) != _stamp(before):
+        if count != before.st_size or _stamp(os.fstat(stream.fileno())) != _stamp(opened_before):
             raise BuildProvenanceError("Prepared context file changed during read")
     if _stamp(plain(path).lstat()) != _stamp(before) or ancestors != _ancestors(path):
         raise BuildProvenanceError("Prepared context path changed during read")

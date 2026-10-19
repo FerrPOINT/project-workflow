@@ -25,6 +25,43 @@ pytestmark = pytest.mark.unit
 MAX_BYTES = 2 * 1024 * 1024
 ROOT = Path(__file__).resolve().parents[1]
 SKILLS_MANIFEST = "manifests/hermes-workflow-role-skills.v1.json"
+
+
+@pytest.mark.parametrize("retain", [True, False])
+@pytest.mark.parametrize("mutation", [None, "handle", "path"])
+def test_reader_separates_path_handle_ctime_precision_and_mutation(tmp_path, retain, mutation):
+    payload = tmp_path / "metadata.json"
+    payload.write_bytes(b'{"fixture":true}\n')
+    real_fstat, real_lstat = os.fstat, Path.lstat
+    handle_reads = 0
+
+    def view(info, delta):
+        fields = ("st_dev", "st_ino", "st_size", "st_mode", "st_nlink", "st_mtime_ns", "st_ctime_ns")
+        result = SimpleNamespace(**{name: getattr(info, name) for name in fields})
+        result.st_ctime_ns += delta
+        return result
+
+    def handle_stat(descriptor):
+        nonlocal handle_reads
+        handle_reads += 1
+        # Deterministically reproduce the Windows cross-API precision difference.
+        return view(real_fstat(descriptor), 1 + (mutation == "handle" and handle_reads > 1))
+
+    def path_stat(path, *args, **kwargs):
+        info = real_lstat(path, *args, **kwargs)
+        return view(info, 1) if path == payload and mutation == "path" and handle_reads > 1 else info
+
+    with patch.object(prepared_context.os, "fstat", side_effect=handle_stat), \
+            patch.object(Path, "lstat", path_stat):
+        if mutation:
+            with pytest.raises(builder.BuildProvenanceError, match="changed during read"):
+                prepared_context._read(payload, 128, retain=retain)
+        else:
+            raw, checksum = prepared_context._read(payload, 128, retain=retain)
+            assert raw == (payload.read_bytes() if retain else None)
+            assert checksum == hashlib.sha256(payload.read_bytes()).hexdigest()
+
+
 EXPORTER = '''import hashlib,json,os,sys
 from pathlib import Path
 assert sys.argv[1] == "derive-compatibility"
