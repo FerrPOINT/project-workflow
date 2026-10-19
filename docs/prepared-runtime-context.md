@@ -26,6 +26,8 @@ role/skill hashes. Output содержит только `context.tar.gz` и `rec
 
 Budget ограничивает payload и cold uncompressed context по действующей политике
 владельца. Это предел размера данных, не измерение или лимит RAM приложения.
+Cold chain пока создаёт прежние in-memory archives/context; size check после
+получения данных не является предварительным ограничением peak RSS.
 Новый cache/index, автоматический поиск, очистка и замена готового output отсутствуют.
 Windows publication использует no-replace rename; Linux — `renameat2` с
 `RENAME_NOREPLACE`. Не поддерживающий atomic primitive host получает отказ.
