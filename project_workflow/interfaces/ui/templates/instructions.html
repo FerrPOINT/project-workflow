@@ -169,7 +169,7 @@ function updateMoveButtons() {
 async function persistOrder() {
   const ids = getRows().map(r => parseInt(r.dataset.instructionId, 10));
   try {
-    const resp = await fetch(instructionApiUrl('{{ ui_base_path() }}/api/phases/' + PHASE_ID + '{{ ui_base_path() }}/instructions/reorder'), {
+    const resp = await fetch(instructionApiUrl('{{ ui_base_path() }}/api/phases/' + PHASE_ID + '/instructions/reorder'), {
       method: 'PUT',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({instruction_ids: ids}),

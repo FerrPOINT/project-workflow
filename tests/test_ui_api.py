@@ -4,6 +4,7 @@ Uses TestClient to hit GET/POST/PUT endpoints.
 """
 
 import os
+import re
 import tempfile
 import uuid
 
@@ -1620,3 +1621,19 @@ def test_reconfigure_two_pairs_as_one_four_phase_group(client, rename):
         assert [p.code for p in group] == codes
         assert builder.get_next_phase(code)[0] == "7.PLAN_GATE"
         assert builder.build_parallel(group).group_phases == codes
+
+
+@pytest.mark.parametrize("prefix", ["", "/workflow"])
+def test_error_back_link_stays_under_public_prefix(client, monkeypatch, prefix):
+    from project_workflow.config import get_settings
+
+    monkeypatch.setenv("UI_BASE_PATH", prefix)
+    get_settings.cache_clear()
+    try:
+        response = client.get("/phase/2147483647")
+        assert response.status_code == 404
+        link = re.search(r'<a class="btn btn-secondary" href="([^"]+)">', response.text)
+        assert link is not None
+        assert link.group(1) == prefix + "/phases"
+    finally:
+        get_settings.cache_clear()
