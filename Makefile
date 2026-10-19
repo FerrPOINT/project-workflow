@@ -3,20 +3,21 @@
 WORKFLOW_QUALITY_UV ?= uv run --python 3.11.15 --frozen --with-requirements constraints.txt --all-extras
 UV ?= $(WORKFLOW_QUALITY_UV)
 
-.PHONY: test test-verbose test-integration coverage coverage-html lint lint-fix quality warnings compose-ready clean install-dev
+.PHONY: test test-verbose test-integration coverage coverage-html release lint lint-fix quality warnings compose-ready clean install-dev
 
-# A combined XML/HTML request owns one prepared operation, including make -j.
-COVERAGE_OWNER = $(or $(firstword $(filter coverage coverage-html,$(MAKECMDGOALS))),$@)
-COVERAGE_TARGET = $(if $(filter coverage-html,$(MAKECMDGOALS)),coverage-html,$@)
+# Release owns coverage prerequisites; report requests only add outputs to it.
+COVERAGE_OWNER = $(or $(firstword $(filter release coverage coverage-html,$(MAKECMDGOALS))),$@)
+COVERAGE_TARGET = $(if $(filter release,$(MAKECMDGOALS)),release,$(if $(filter coverage-html,$(MAKECMDGOALS)),coverage-html,$@))
+COVERAGE_OPTIONS = $(if $(and $(filter release,$(MAKECMDGOALS)),$(filter coverage-html,$(MAKECMDGOALS))),--html-report,)
 
 # --- testing ---------------------------------------------------------------
 
-test unit test-verbose integration slow release test-integration lint quality warnings compose-ready:
+test unit test-verbose integration slow test-integration lint quality warnings compose-ready:
 	WORKFLOW_QUALITY_UV="$(WORKFLOW_QUALITY_UV)" python scripts/quality.py $@
 
-coverage coverage-html:
+release coverage coverage-html:
 	@if [ "$@" = "$(COVERAGE_OWNER)" ]; then \
-		WORKFLOW_QUALITY_UV="$(WORKFLOW_QUALITY_UV)" python scripts/quality.py $(COVERAGE_TARGET); \
+		WORKFLOW_QUALITY_UV="$(WORKFLOW_QUALITY_UV)" python scripts/quality.py $(COVERAGE_OPTIONS) $(COVERAGE_TARGET); \
 	fi
 
 lint-fix:

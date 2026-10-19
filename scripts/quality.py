@@ -34,7 +34,10 @@ def unit_test_paths() -> list[str]:
     return ["tests/" + name for name in names]
 
 
-def commands(target: str, *, scoped: bool = False, prepared: bool = False) -> list[list[str]]:
+def commands(target: str, *, scoped: bool = False, prepared: bool = False,
+             html_report: bool = False) -> list[list[str]]:
+    if html_report and target != "release":
+        raise ValueError("HTML report option requires the release lane")
     prefix = [sys.executable, "-m"] if prepared else shlex.split(os.environ.get("WORKFLOW_QUALITY_UV", UV))
     test = ["pytest", "-v" if target == "test-verbose" else "-q", "--timeout=60", "--durations=25"]
     # Filtering markers after collecting every integration module still imports
@@ -66,6 +69,8 @@ def commands(target: str, *, scoped: bool = False, prepared: bool = False) -> li
         "-W",
         "error::pytest.PytestUnraisableExceptionWarning",
     ]
+    if html_report:
+        coverage.append("--cov-report=html")
     integration = [
         "pytest",
         "-q",
@@ -102,6 +107,7 @@ def commands(target: str, *, scoped: bool = False, prepared: bool = False) -> li
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--prepared", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--html-report", action="store_true", help="Add HTML coverage to the release lane")
     parser.add_argument(
         "--inspect-environment", action="store_true",
         help="Observe current Python metadata without uv, install or tests",
@@ -109,6 +115,8 @@ def main() -> int:
     parser.add_argument("target", choices=TARGETS, default="quality", nargs="?")
     parser.add_argument("pytest_args", nargs=argparse.REMAINDER)
     args = parser.parse_args()
+    if args.html_report and (args.target != "release" or args.inspect_environment):
+        parser.error("HTML report option requires the release lane")
     if args.inspect_environment:
         if args.prepared or args.pytest_args or args.target != "quality":
             parser.error("Environment inspection must be used alone")
@@ -151,11 +159,14 @@ def main() -> int:
     if not args.prepared and args.target != "compose-ready" and prefix == shlex.split(UV):
         # uv prepares the frozen/extras/constraints environment once. Every tool
         # then runs inside that operation with the prepared interpreter.
-        child = prefix + ["python", str(Path(__file__).resolve()), "--prepared", args.target]
+        child = prefix + ["python", str(Path(__file__).resolve()), "--prepared"]
+        if args.html_report:
+            child.append("--html-report")
+        child.append(args.target)
         if extra:
             child += ["--", *extra]
         return subprocess.run(child, cwd=root, env=environment, check=False).returncode
-    for command in commands(args.target, scoped=bool(extra), prepared=args.prepared):
+    for command in commands(args.target, scoped=bool(extra), prepared=args.prepared, html_report=args.html_report):
         if args.target in ("test", "unit", "integration", "slow"):
             command = [*command, *extra]
         result = subprocess.run(command, cwd=root, env=environment, check=False)

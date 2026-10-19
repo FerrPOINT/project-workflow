@@ -270,6 +270,71 @@ def test_quality_bootstrap_prepares_once_for_multiple_tools(monkeypatch) -> None
 class CoverageEntrypointContracts(unittest.TestCase):
     """Source/protocol controls without pytest collection, application imports or uv."""
 
+    def test_release_html_keeps_one_preparation_and_all_release_checks(self):
+        import itertools
+        import os
+        import sys
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        from scripts import quality
+
+        for html_report, failure in itertools.product(
+            (False, True), (None, "uv", "coverage", "postgres", "ruff", "mypy", "git")
+        ):
+            with self.subTest(html_report=html_report, failure=failure):
+                calls = []
+
+                def inert_run(command, **_kwargs):
+                    name = ("uv" if command[0] == "uv" else
+                            "coverage" if "--cov=project_workflow" in command else
+                            "postgres" if "postgres" in command else
+                            "git" if command[0] == "git" else command[2])
+                    calls.append((name, command))
+                    if name == failure:
+                        return SimpleNamespace(returncode=7)
+                    if name == "uv":
+                        child_args = command[command.index("--prepared"):]
+                        with patch.object(sys, "argv", ["quality.py", *child_args]), \
+                                patch.object(sys, "version_info", (3, 11, 15)):
+                            return SimpleNamespace(returncode=quality.main())
+                    return SimpleNamespace(returncode=0)
+
+                environment = dict(os.environ)
+                environment.pop("WORKFLOW_QUALITY_UV", None)
+                arguments = ["quality.py", *(["--html-report"] if html_report else []), "release"]
+                with patch.dict(os.environ, environment, clear=True), \
+                        patch.object(sys, "argv", arguments), \
+                        patch.object(quality.subprocess, "run", side_effect=inert_run):
+                    self.assertEqual(7 if failure else 0, quality.main())
+                expected = ["uv", "coverage", "postgres", "ruff", "mypy", "git"]
+                self.assertEqual(expected[:expected.index(failure) + 1] if failure else expected,
+                                 [name for name, _ in calls])
+                coverage = next((command for name, command in calls if name == "coverage"), None)
+                if coverage:
+                    for report in ("term", "xml"):
+                        self.assertEqual(1, coverage.count("--cov-report=" + report))
+                    self.assertEqual(int(html_report), coverage.count("--cov-report=html"))
+                    self.assertEqual("not postgres", coverage[coverage.index("-m", 2) + 1])
+                    self.assertIn("error::ResourceWarning", coverage)
+                    self.assertIn("error::pytest.PytestUnraisableExceptionWarning", coverage)
+                    self.assertEqual("2", coverage[coverage.index("-n") + 1])
+
+    def test_html_report_option_cannot_expand_an_unrelated_lane(self):
+        import sys
+        from unittest.mock import patch
+
+        from scripts import quality
+
+        for target in ("unit", "coverage", "coverage-html", "quality", "compose-ready"):
+            with self.subTest(target=target), \
+                    patch.object(sys, "argv", ["quality.py", "--html-report", target]), \
+                    patch.object(quality.subprocess, "run") as runner:
+                with self.assertRaises(SystemExit) as error:
+                    quality.main()
+                self.assertEqual(2, error.exception.code)
+                runner.assert_not_called()
+
     def test_html_coverage_prepares_once_in_the_canonical_environment(self):
         import os
         import sys
@@ -320,6 +385,8 @@ class CoverageEntrypointContracts(unittest.TestCase):
                 self.assertEqual("not postgres", command[command.index("-m", 2) + 1])
 
     def test_make_coverage_goals_dispatch_one_canonical_operation_in_either_order(self):
+        import itertools
+        import json
         import os
         import shutil
         import subprocess
@@ -335,21 +402,30 @@ class CoverageEntrypointContracts(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             shutil.copyfile(source / "Makefile", root / "Makefile")
+            (root / "release").write_text("A source file cannot suppress the phony release owner.\n")
             (root / "scripts").mkdir()
             (root / "scripts/quality.py").write_text(
-                "import sys\nfrom pathlib import Path\n"
-                "with Path('calls.txt').open('a') as stream: stream.write(sys.argv[1] + '\\n')\n",
+                "import json,os,sys\nfrom pathlib import Path\n"
+                "with Path('calls.txt').open('a') as stream: stream.write(json.dumps(sys.argv[1:]) + '\\n')\n"
+                "raise SystemExit(int(os.environ.get('WORKFLOW_DISPATCH_EXIT', '0')))\n",
                 encoding="utf-8",
             )
-            for goals, expected in ((("coverage", "coverage-html"), "coverage-html"),
-                                    (("coverage-html", "coverage"), "coverage-html"),
-                                    (("coverage",), "coverage"), (("coverage-html",), "coverage-html")):
-                with self.subTest(goals=goals):
-                    (root / "calls.txt").unlink(missing_ok=True)
-                    result = subprocess.run([make, "--no-print-directory", "-j8", *goals, "SHELL=" + bash.as_posix()],
-                                            cwd=root, text=True, capture_output=True, timeout=10, check=False)
-                    self.assertEqual(0, result.returncode, result.stdout + result.stderr)
-                    self.assertEqual([expected], (root / "calls.txt").read_text().splitlines())
+            for count in (1, 2, 3):
+                for goals in itertools.permutations(("release", "coverage", "coverage-html"), count):
+                    expected = (["--html-report", "release"] if "release" in goals and "coverage-html" in goals
+                                else ["release"] if "release" in goals
+                                else ["coverage-html"] if "coverage-html" in goals else ["coverage"])
+                    for exit_code in (0, 7):
+                        with self.subTest(goals=goals, exit_code=exit_code):
+                            (root / "calls.txt").unlink(missing_ok=True)
+                            result = subprocess.run(
+                                [make, "--no-print-directory", "-j8", *goals, "SHELL=" + bash.as_posix()],
+                                cwd=root, env={**os.environ, "WORKFLOW_DISPATCH_EXIT": str(exit_code)},
+                                text=True, capture_output=True, timeout=10, check=False,
+                            )
+                            self.assertEqual(exit_code == 0, result.returncode == 0, result.stdout + result.stderr)
+                            self.assertEqual([expected], [json.loads(line) for line in
+                                                        (root / "calls.txt").read_text().splitlines()])
 
     def test_failed_coverage_preparation_does_not_retry_or_start_tests(self):
         import os
