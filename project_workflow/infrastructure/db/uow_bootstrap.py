@@ -11,6 +11,10 @@ if TYPE_CHECKING:
 def bootstrap_default_project(uow: SAUnitOfWork) -> None:
     from project_workflow import config
 
+    # This explicit compatibility helper is only for an empty unmanaged editor.
+    # Never add a generic profession to an installation that already has roles.
+    if uow.projects.list():
+        return
     code = config.DEFAULT_PROJECT_CODE
     if uow.projects.get_by_code(code) is None:
         default_wf = uow.workflows.get_default()

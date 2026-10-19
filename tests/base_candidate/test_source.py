@@ -86,7 +86,8 @@ def test_installed_directory_ids_are_not_base_namespace_symbols(source):
     role = base_source.export_base_source()["roles"]["developer"]
     assert type(namespace["id"]) is int and namespace["id"] > 0
     assert namespace["namespace_id"] == namespace["id"]
-    assert namespace["name"] == namespace["namespace_name"] == role["namespace"] == "hermes-developer"
+    assert namespace["name"] == namespace["namespace_name"] == "Разработчик"
+    assert role["namespace"] == "hermes-developer"
     assert namespace["namespace_id"] != role["namespace"]
     assert namespace["workflow_id"] == workflow["id"]
     assert workflow["key"] == role["workflow"]

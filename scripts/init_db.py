@@ -7,7 +7,11 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from project_workflow import config
 from project_workflow.config import get_settings
-from project_workflow.infrastructure.db.managed_catalog import ensure_managed_catalog, load_managed_catalog
+from project_workflow.infrastructure.db.managed_catalog import (
+    ensure_managed_catalog,
+    load_managed_catalog,
+    localize_managed_professions,
+)
 from project_workflow.infrastructure.db.session import (
     DatabaseRecreateRequired,
     DatabaseUnavailable,
@@ -47,6 +51,7 @@ def main() -> int:
                     installed = {workflow.key: workflow.active_catalog_version for workflow in uow.workflows.list()}
                     if not all(installed.get(key, 0) >= catalog.catalog_version for key in managed_keys):
                         ensure_managed_catalog(uow)
+                    localize_managed_professions(uow, catalog)
     except DatabaseRecreateRequired as exc:
         print(str(exc), file=sys.stderr)
         return exc.exit_code

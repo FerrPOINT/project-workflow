@@ -171,10 +171,14 @@ def test_adoption_preserves_profession_edits_old_tasks_history_and_user_collecti
         assert catalog.catalog_version == 4
         for table in (m.Task.__table__, m.TaskStepHistoryEntry.__table__):
             assert rows(uow, table) == protected[table.name]
-        purposes = {w.role_key: w.description for w in catalog.workflows}
+        from project_workflow.domain.project_theme import MANAGED_PROFESSION_PRESENTATION
+
+        purposes = {role: value[1] for role, value in MANAGED_PROFESSION_PRESENTATION.items()}
         for before, after in zip(protected["projects"], rows(uow, m.Project.__table__), strict=True):
             role = before["cli_command"].removeprefix("workflow-")
             expected = dict(before)
+            if before["name"] == "hermes-" + role.replace("_", "-"):
+                expected["name"] = MANAGED_PROFESSION_PRESENTATION[role][0]
             if before["description"] == f"Managed namespace for hermes-sdlc:{role}":
                 expected["description"] = purposes[role]
             assert after == expected
