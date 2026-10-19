@@ -89,6 +89,7 @@
 }
 .base-resource-list > * + * { border-block-start: 1px solid var(--color-border); }
 .base-resource-list-row {
+  overflow-wrap: anywhere;
   box-sizing: border-box;
   min-width: 0;
   min-height: var(--resource-row-min-height, 48px);
@@ -324,11 +325,27 @@ dialog.base-shell-drawer::backdrop { background: rgb(0 0 0 / 65%); }
 .base-project-avatar[data-color='amber'] { background:#f59e0b; color:#09090b; }
 .base-project-avatar[data-color='rose'] { background:#f43f5e; color:#09090b; }
 .base-project-avatar[data-color='neutral'] { background:var(--color-surface-raised); color:var(--color-text-primary); }
-.base-project-picker { display:flex; align-items:center; gap:8px; min-width:0; min-height:40px; padding:6px 8px; border:1px solid var(--color-border-strong); border-radius:var(--radius-md); background:var(--color-surface); color:var(--color-text-primary); font-size:14px; text-align:start; cursor:pointer; }
+.base-project-picker { max-width:100%; display:flex; align-items:center; gap:8px; min-width:0; min-height:40px; padding:6px 8px; border:1px solid var(--color-border-strong); border-radius:var(--radius-md); background:var(--color-surface); color:var(--color-text-primary); font-size:14px; text-align:start; cursor:pointer; }
 .base-project-picker:focus-visible { outline:2px solid var(--color-focus); outline-offset:2px; }
 .base-project-picker:disabled { opacity:.5; cursor:default; }
 .base-project-picker-menu { max-width:calc(100vw - 24px); width:320px; max-height:var(--radix-dropdown-menu-content-available-height); overflow-y:auto; }
 @media(max-width:767px) { .base-project-picker { min-height:44px; } }
+
+/* Explicit shell navigation uses the same expanded/compact widths as product sidebars. */
+.base-shell-sidebar-toolbar { display: flex; min-height: 44px; align-items: center; justify-content: space-between; gap: 4px; padding: 4px 12px; }
+@media (min-width: 768px) {
+  .base-app-shell[data-sidebar-mode="expanded"] .base-shell-sidebar { width: var(--shell-sidebar-expanded); }
+  .base-app-shell[data-sidebar-mode="expanded"] .base-shell-work { padding-left: var(--shell-sidebar-expanded); }
+  .base-app-shell[data-sidebar-mode="expanded"] .base-shell-nav-label { display: inline; }
+  .base-app-shell[data-sidebar-mode="expanded"] .base-shell-link { justify-content: flex-start; padding: 8px 12px; }
+  .base-app-shell[data-sidebar-mode="compact"] .base-shell-sidebar { width: var(--shell-sidebar-compact); }
+  .base-app-shell[data-sidebar-mode="compact"] .base-shell-work { padding-left: var(--shell-sidebar-compact); }
+  .base-app-shell[data-sidebar-mode="compact"] .base-shell-nav-label { display: none; }
+  .base-app-shell[data-sidebar-mode="compact"] .base-shell-link { justify-content: center; padding: 8px; }
+  .base-app-shell[data-sidebar-mode="compact"] .base-shell-sidebar-toolbar { justify-content: center; padding-inline: 4px; }
+}
+
+.base-shell-sidebar-label { min-width:0; overflow:hidden; text-overflow:ellipsis; font-size:12px; font-weight:500; text-transform:uppercase; color:var(--color-text-muted); }
 
 /* Adapter for server-rendered markup. Values come only from canonical tokens. */
 :root {
@@ -354,7 +371,7 @@ dialog.base-shell-drawer::backdrop { background: rgb(0 0 0 / 65%); }
 .base-form-field label { font-weight: 500; }
 .base-form-field p { margin: 0; color: var(--color-text-muted); font-size: var(--base-font-label); }
 .base-form-field [role='alert'] { color: var(--color-danger); }
-.base-form-field > .base-control { width: 100%; min-width: 0; padding: 8px 12px; border: 1px solid var(--color-border); border-radius: var(--base-radius); background: var(--color-surface); color: var(--color-text-primary); font: inherit; }
+.base-form-field > .base-control { box-sizing: border-box; width: 100%; min-width: 0; padding: 8px 12px; border: 1px solid var(--color-border); border-radius: var(--base-radius); background: var(--color-surface); color: var(--color-text-primary); font: inherit; }
 .base-form-field > [aria-invalid='true'] { border-color: var(--color-danger); }
 .base-ssr-shell .base-control:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
 .base-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 8px 12px; border: 1px solid var(--color-border); border-radius: var(--base-radius); cursor: pointer; font: inherit; text-decoration: none; }
@@ -379,7 +396,8 @@ dialog.base-shell-drawer::backdrop { background: rgb(0 0 0 / 65%); }
 .base-ssr-account-menu { position: absolute; right: 0; top: calc(100% + 8px); min-width: 160px; padding: 8px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--base-radius); }
 .base-ssr-account-menu a { display: flex; align-items: center; min-height: var(--shell-control-min); padding: 8px; }
 .base-ssr-shell .base-shell-drawer .sidebar-nav { padding: 0; }
-.base-ssr-shell :is(button,select,input:not([type='checkbox']):not([type='radio']),.btn,summary,.namespace-icon-action,.brand-link,.sidebar-service-link) { min-height: var(--shell-control-min); }
+/* Resource rows own their density size; the shell minimum applies to other controls. */
+.base-ssr-shell :is(button,select,input:not([type='checkbox']):not([type='radio']),.btn,summary,.namespace-icon-action,.brand-link,.sidebar-service-link):not(.base-resource-list-row) { min-height: var(--shell-control-min); }
 .base-ssr-shell :is(button,summary,.namespace-icon-action) { min-width: var(--shell-control-min); }
 .base-ssr-shell label:has(input[type='checkbox']), .base-ssr-shell label:has(input[type='radio']) { min-height: var(--shell-control-min); display: flex; align-items: center; }
 .base-ssr-shell .btn-danger { background: var(--color-danger); color: var(--color-destructive-foreground); border-color: var(--color-danger); }
@@ -393,7 +411,7 @@ dialog.base-shell-drawer::backdrop { background: rgb(0 0 0 / 65%); }
   .base-ssr-shell { --shell-control-min: var(--shell-control-mobile-min); }
   .base-ssr-account summary { min-width: var(--shell-control-mobile-min); min-height: var(--shell-control-mobile-min); }
   .base-ssr-shell .main { width: 100%; margin-left: 0; }
-  .base-ssr-shell :is(button,select,input:not([type='checkbox']):not([type='radio']),.btn,summary,.namespace-icon-action,.brand-link,.sidebar-service-link,.sidebar-link) { min-height: var(--shell-control-mobile-min); }
+  .base-ssr-shell :is(button,select,input:not([type='checkbox']):not([type='radio']),.btn,summary,.namespace-icon-action,.brand-link,.sidebar-service-link,.sidebar-link):not(.base-resource-list-row) { min-height: var(--shell-control-mobile-min); }
   .base-ssr-shell :is(button,summary,.namespace-icon-action) { min-width: var(--shell-control-mobile-min); }
   .base-ssr-shell label:has(input[type='checkbox']), .base-ssr-shell label:has(input[type='radio']) { min-height: var(--shell-control-mobile-min); }
 }

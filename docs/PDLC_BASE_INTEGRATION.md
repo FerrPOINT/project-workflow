@@ -67,3 +67,26 @@ exporter — в `services-base/base-modules/ui`. Библиотека, Auth, о�
 остаются независимыми. SSR assets получаются штатным exporter и проверяются
 по fingerprints. Общие CSS/mechanisms не редактируются в продуктовой копии.
 Установка и authenticated межпродуктовая приёмка выполняются отдельно.
+
+## UI-кандидат 2026-10-18
+
+SSR/UI pin: `6f1c797a0b11380f7e36db5ced0360f25a0265a5`.
+SDK и skills pins независимы. Обновлены канонические SSR CSS и fingerprint штатным exporter Base: поля формы
+получают собственный border-box и не зависят от reset продукта.
+Защита черновика и namespace-состояние сохраняют продуктового владельца.
+Source-проверки не означают установки в PDLC2.
+
+## Общий каркас Base, source 2026-10-18
+
+UI pin обновлён на `4b80fbfbfae48d95219011a4612dd9427a1a4b92`; SSR CSS и fingerprint
+получены штатным exporter Base и проверены на совпадение. Изменение не затрагивает
+Workflow state, запросы, Python/SDK/skills pins или installed runtime. React
+AppShell не переносится в SSR: здесь сохраняются канонические macros/JS/CSS Base.
+
+## Справочник и общий каркас: 2026-10-18
+
+UI pin `1eb905ffe1d7d983af9464c98e67ee90ead20e18` обновляет подготовленный справочник, проверяемые API-примеры и инструменты проверки Base. Общий CSS ограничивает ширину ProjectPicker и переносит длинные идентификаторы ResourceList; логика React, HTTP API, SDK и skills не меняются. SSR CSS и fingerprint получены штатным exporter. CLI работает offline: `pdlc-ui check` в начале задачи или после смены pin → `search "задача"` → `show ExportName` → один `example`. Полный fingerprint не вычисляется на каждом поиске.
+
+Карточки и демонстрации поддерживаются [приложением Base](https://github.com/FerrPOINT/services-base/tree/main/components-dictionary). Общие каркас, навигация, темы и мобильное меню принадлежат Base; запросы, DTO, права и предметные состояния остаются у продукта. Приёмка source-кандидата не означает установку или production-приёмку.
+
+Workflow остаётся SSR-потребителем. Экспорт и fingerprints канонических macros/JS/CSS проверяются штатным exporter; React AppShell в серверные шаблоны не переносится.
