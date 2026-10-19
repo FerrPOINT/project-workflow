@@ -13,6 +13,7 @@
       "tests/**",
       "pyproject.toml",
       "constraints.txt",
+      "uv.lock",
       "Makefile",
       ".github/**",
       "openapi/**"
