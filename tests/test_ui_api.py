@@ -1632,6 +1632,9 @@ def test_error_back_link_stays_under_public_prefix(client, monkeypatch, prefix):
     try:
         response = client.get("/phase/2147483647")
         assert response.status_code == 404
+        headings = re.findall(r"<h1\b[^>]*>(.*?)</h1>", response.text, re.DOTALL)
+        assert headings == ["Фаза не найдена"]
+        assert 'class="base-page-header"' not in response.text
         link = re.search(r'<a class="btn btn-secondary" href="([^"]+)">', response.text)
         assert link is not None
         assert link.group(1) == prefix + "/phases"

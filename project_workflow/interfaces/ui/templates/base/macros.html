@@ -1,5 +1,7 @@
 {% macro page_header(title=none, context=none, actions=none, heading=none) -%}
-<div class="base-page-header"><div>{% if heading %}{{ heading }}{% else %}<h1 class="base-page-title">{{ title }}</h1>{% endif %}{% if context %}<p>{{ context }}</p>{% endif %}</div>{% if actions %}<div class="base-page-actions">{{ actions }}</div>{% endif %}</div>
+{% if heading or title is not none or context or actions -%}
+<div class="base-page-header"><div>{% if heading %}{{ heading }}{% elif title is not none %}<h1 class="base-page-title">{{ title }}</h1>{% endif %}{% if context %}<p>{{ context }}</p>{% endif %}</div>{% if actions %}<div class="base-page-actions">{{ actions }}</div>{% endif %}</div>
+{%- endif %}
 {%- endmacro %}
 
 {% macro frame(mode='wide') -%}
