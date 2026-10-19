@@ -3,7 +3,7 @@
 WORKFLOW_QUALITY_UV ?= uv run --python 3.11.15 --frozen --with-requirements constraints.txt --all-extras
 UV ?= $(WORKFLOW_QUALITY_UV)
 
-.PHONY: test test-verbose test-integration coverage coverage-html release lint lint-fix quality warnings compose-ready clean install-dev
+.PHONY: test unit test-verbose test-integration coverage coverage-html release lint lint-fix quality warnings compose-ready clean install-dev
 
 # Release owns coverage prerequisites; report requests only add outputs to it.
 COVERAGE_OWNER = $(or $(firstword $(filter release coverage coverage-html,$(MAKECMDGOALS))),$@)
@@ -12,7 +12,16 @@ COVERAGE_OPTIONS = $(if $(and $(filter release,$(MAKECMDGOALS)),$(filter coverag
 
 # --- testing ---------------------------------------------------------------
 
-test unit test-verbose integration slow test-integration lint quality warnings compose-ready:
+# Explicit quality already owns these identical checks. A shared prerequisite
+# runs once and propagates its failure to every alias, including make -j.
+ifneq ($(filter quality,$(MAKECMDGOALS)),)
+test unit lint: quality
+else
+test unit lint:
+	WORKFLOW_QUALITY_UV="$(WORKFLOW_QUALITY_UV)" python scripts/quality.py $@
+endif
+
+test-verbose integration slow test-integration quality warnings compose-ready:
 	WORKFLOW_QUALITY_UV="$(WORKFLOW_QUALITY_UV)" python scripts/quality.py $@
 
 release coverage coverage-html:

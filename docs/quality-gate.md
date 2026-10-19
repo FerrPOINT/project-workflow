@@ -15,6 +15,13 @@ Canonical quality runner готовит frozen Python 3.11.15/extras/constraints
 Между операциями uv заново проверяет определяющие inputs.
 Пользовательский WORKFLOW_QUALITY_UV сохраняет собственную семантику запуска.
 
+При явном `make quality` вместе с `test`, `unit` или `lint` общий prerequisite
+выполняет quality один раз, независимо от порядка goals и `-j`; его ошибка
+передаётся всем aliases. Самостоятельные цели сохраняются. `warnings`,
+`test-verbose` и ручные integration/slow/release/report цели остаются отдельными.
+Inert GNU Make fixture проверяет dispatch без uv и pytest, но при отсутствии
+Make явно пропускается; это не native qualification приложения или env reuse.
+
 ## Наблюдение Python environment без подготовки
 
 ```bash

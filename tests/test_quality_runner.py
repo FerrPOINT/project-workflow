@@ -96,7 +96,7 @@ def test_verbose_unit_uses_the_same_reviewed_collection_and_entrypoints() -> Non
     assert verbose == ["-v" if argument == "-q" else argument for argument in normal]
     root = Path(__file__).resolve().parents[1]
     make = (root / "Makefile").read_text(encoding="utf-8")
-    header = next(line for line in make.splitlines() if line.startswith("test unit "))
+    header = next(line for line in make.splitlines() if line.endswith(":") and "test-verbose" in line.split())
     assert "test-verbose" in header.split()
     assert "\ntest-verbose:\n" not in make
     assert "'test-verbose'" in (root / "scripts/quality.ps1").read_text(encoding="utf-8")
@@ -265,6 +265,74 @@ def test_quality_bootstrap_prepares_once_for_multiple_tools(monkeypatch) -> None
     assert len(calls) == 1
     assert calls[0].count("--prepared") == 1
     assert calls[0][-1] == "quality"
+
+
+class QualityMakeContracts(unittest.TestCase):
+    def test_quality_contains_the_identical_unit_and_lint_commands(self):
+        quality = commands("quality", prepared=True)
+        self.assertEqual(commands("test", prepared=True), commands("unit", prepared=True))
+        self.assertEqual(quality, [*commands("unit", prepared=True),
+                                  *commands("lint", prepared=True), ["git", "diff", "--check"]])
+
+    def test_make_aliases_depend_on_quality_only_when_explicitly_requested(self):
+        from pathlib import Path
+
+        source = (Path(__file__).resolve().parents[1] / "Makefile").read_text(encoding="utf-8")
+        # Keep failure propagation in Make's dependency graph, including make -j.
+        self.assertIn("ifneq ($(filter quality,$(MAKECMDGOALS)),)\ntest unit lint: quality\nelse\n", source)
+        phony = next(line for line in source.splitlines() if line.startswith(".PHONY:"))
+        self.assertTrue({"test", "unit", "lint", "quality"}.issubset(phony.split()))
+
+    def test_real_make_coalesces_quality_aliases_and_preserves_other_lanes(self):
+        import itertools
+        import json
+        import os
+        import shutil
+        import subprocess
+        import tempfile
+        from pathlib import Path
+
+        make = shutil.which("make")
+        bash = (Path(os.environ.get("ProgramFiles", "C:/Program Files")) / "Git/bin/bash.exe"
+                if os.name == "nt" else Path(shutil.which("bash") or "/missing"))
+        if not make or not bash.is_file():
+            self.skipTest("GNU Make and native Bash are required for the inert dispatch fixture")
+        source = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            shutil.copyfile(source / "Makefile", root / "Makefile")
+            for target in ("test", "unit", "lint", "quality"):
+                (root / target).touch()
+            (root / "scripts").mkdir()
+            (root / "scripts/quality.py").write_text(
+                "import json,os,sys\nfrom pathlib import Path\n"
+                "with Path('calls.txt').open('a') as stream: stream.write(json.dumps(sys.argv[1:]) + '\\n')\n"
+                "raise SystemExit(int(os.environ.get('WORKFLOW_DISPATCH_EXIT', '0')))\n",
+                encoding="utf-8",
+            )
+            coalesced = [goals for count in (2, 3, 4)
+                         for goals in itertools.permutations(("quality", "test", "unit", "lint"), count)
+                         if "quality" in goals]
+            standalone = [(target,) for target in ("test", "unit", "lint", "quality")]
+            neighbors = [("quality", target) for target in (
+                "warnings", "test-verbose", "integration", "slow", "test-integration",
+                "release", "coverage", "coverage-html",
+            )]
+            for goals in [*coalesced, *standalone, *neighbors, ("test", "unit"), ("test", "lint")]:
+                expected = [["quality"]] if "quality" in goals and set(goals) <= {
+                    "quality", "test", "unit", "lint",
+                } else [[goal] for goal in goals]
+                for exit_code in ((0, 7) if len(expected) == 1 else (0,)):
+                    with self.subTest(goals=goals, exit_code=exit_code):
+                        (root / "calls.txt").unlink(missing_ok=True)
+                        result = subprocess.run(
+                            [make, "--no-print-directory", "-j8", *goals, "SHELL=" + bash.as_posix()],
+                            cwd=root, env={**os.environ, "WORKFLOW_DISPATCH_EXIT": str(exit_code)},
+                            text=True, capture_output=True, timeout=10, check=False,
+                        )
+                        self.assertEqual(exit_code == 0, result.returncode == 0, result.stdout + result.stderr)
+                        self.assertCountEqual(expected, [json.loads(line) for line in
+                                                       (root / "calls.txt").read_text().splitlines()])
 
 
 class CoverageEntrypointContracts(unittest.TestCase):
