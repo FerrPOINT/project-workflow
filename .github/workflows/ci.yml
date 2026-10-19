@@ -70,9 +70,11 @@ jobs:
         with:
           path: project-workflow
       - name: Read independent Base SDK contract revision
+        if: needs.changes.outputs.backend == 'true'
         id: base-sdk
         run: echo "sha=$(cat .base-revision)" >> "$GITHUB_OUTPUT"
       - name: Check out pinned Base SDK source
+        if: needs.changes.outputs.backend == 'true'
         uses: actions/checkout@v4
         with:
           repository: FerrPOINT/services-base
@@ -81,14 +83,18 @@ jobs:
           ssh-key: ${{ secrets.SERVICES_BASE_DEPLOY_KEY }}
           persist-credentials: false
       - name: Verify generated dependency-free namespace contract
+        if: needs.changes.outputs.backend == 'true'
         run: |
           python ../services-base/scripts/verify_base_revision.py --base ../services-base --revision .base-revision
           python ../services-base/scripts/export_python_namespace.py --out project_workflow/infrastructure/platform_namespace.py --check
       - uses: astral-sh/setup-uv@v6
+        if: needs.changes.outputs.backend == 'true'
         with:
           version: 0.10.10
           enable-cache: true
       - name: Fast unit gate and static analysis (manual release checks separately)
+        if: needs.changes.outputs.backend == 'true'
         run: make quality
       - name: Profession and platform navigation regression
+        if: needs.changes.outputs.frontend == 'true'
         run: node scripts/test_profession_navigation.mjs

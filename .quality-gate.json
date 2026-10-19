@@ -8,18 +8,26 @@
       "LICENSE"
     ],
     "backend": [
-      "project_workflow/**",
-      "scripts/**",
+      "project_workflow/*.py",
+      "project_workflow/application/**",
+      "project_workflow/domain/**",
+      "project_workflow/infrastructure/**",
+      "project_workflow/interfaces/cli/**",
+      "project_workflow/references/**",
+      "project_workflow/supervisor/**",
+      "scripts/*.py",
       "tests/**",
       "pyproject.toml",
       "constraints.txt",
+      "uv.lock",
       "Makefile",
       ".github/**",
       "openapi/**"
     ],
     "frontend": [
-      "project_workflow/interfaces/ui/**",
+      "project_workflow/interfaces/ui/templates/**",
       "project_workflow/ui/**",
+      "scripts/test_profession_navigation.mjs",
       ".github/**",
       "openapi/**"
     ]

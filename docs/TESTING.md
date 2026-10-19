@@ -43,6 +43,16 @@ Regression проверяет фактически импортированны�
 Для точечного запуска сохраняется `python scripts/quality.py test -- tests/test_quality_runner.py`.
 Docs-only CI выполняет stdlib README validator без uv bootstrap и pytest.
 
+Пути для local selector и CI принадлежат `.quality-gate.json`: Python sources,
+backend data и Python runner/tests выбирают `backend:unit`; UI templates/assets
+и `scripts/test_profession_navigation.mjs` выбирают `frontend:navigation`.
+Python handlers UI остаются backend inputs. CI выполняет pinned Base SDK check,
+uv preparation и `make quality` только для backend; Node navigation — только
+для frontend. Смешанные изменения, CI/OpenAPI и неизвестные пути сохраняют оба
+набора. Ручной release остаётся полным, включая coverage94% и PostgreSQL.
+Source/selector regression без подготовки окружения:
+`python -B -m unittest tests.test_quality_runner.ComponentSelectionContracts -q`.
+
 `python -B scripts/quality.py --inspect-environment` наблюдает metadata текущего
 Python без подготовки/тестов; это не certificate пригодного environment или
 test receipt. Команда и overlay boundary описаны в [quality gate](quality-gate.md).

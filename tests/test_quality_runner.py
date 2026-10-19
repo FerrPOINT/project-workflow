@@ -383,9 +383,10 @@ class CoverageEntrypointContracts(unittest.TestCase):
     def test_actual_marker_owner_keeps_docs_in_full_manual_coverage(self):
         import ast
         import json
-        import tomllib
         from pathlib import Path
         from types import SimpleNamespace
+
+        import tomllib
 
         root = Path(__file__).resolve().parents[1]
         tree = ast.parse((root / "tests/conftest.py").read_text(encoding="utf-8"))
@@ -423,3 +424,102 @@ class CoverageEntrypointContracts(unittest.TestCase):
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         module.test_hosted_ci_covers_quality_and_compose_readiness()
+
+
+class ComponentSelectionContracts(unittest.TestCase):
+    """Use the packaged selector shared by local entrypoints and hosted CI."""
+
+    def test_frontend_assets_and_navigation_runner_select_only_node_units(self):
+        from pathlib import Path
+
+        from scripts.vendor import base_quality_selection as selection
+
+        root = Path(__file__).resolve().parents[1]
+        for path in (
+            "project_workflow/interfaces/ui/templates/profession-navigation.js",
+            "project_workflow/interfaces/ui/templates/namespaces.html",
+            "project_workflow/interfaces/ui/templates/base/base-ui.css",
+            "project_workflow/interfaces/ui/templates/base/platform-navigation.js",
+            "scripts/test_profession_navigation.mjs",
+        ):
+            with self.subTest(path=path):
+                plan = selection.plan(root, profile="unit", changed=[path])
+                self.assertEqual(["frontend"], plan["components"])
+                self.assertEqual(["frontend:navigation"], [gate["id"] for gate in plan["gates"]])
+
+    def test_python_and_backend_data_keep_units_without_navigation(self):
+        from pathlib import Path
+
+        from scripts.vendor import base_quality_selection as selection
+
+        root = Path(__file__).resolve().parents[1]
+        for path in (
+            "project_workflow/domain/entities.py",
+            "project_workflow/interfaces/ui/__main__.py",
+            "project_workflow/interfaces/ui/templates.py",
+            "project_workflow/interfaces/cli/commands.py",
+            "project_workflow/references/base_sdlc_catalog_v2.json",
+            "scripts/quality.py", "tests/test_quality_runner.py", "uv.lock",
+        ):
+            with self.subTest(path=path):
+                plan = selection.plan(root, profile="unit", changed=[path])
+                self.assertEqual(["backend"], plan["components"])
+                self.assertEqual(["backend:unit"], [gate["id"] for gate in plan["gates"]])
+
+    def test_shared_mixed_and_unknown_inputs_keep_both_consumers(self):
+        from pathlib import Path
+
+        from scripts.vendor import base_quality_selection as selection
+
+        root = Path(__file__).resolve().parents[1]
+        for paths in (
+            [".github/workflows/ci.yml"], ["openapi/openapi.json"],
+            ["project_workflow/new-component/unknown.bin"],
+            ["project_workflow/domain/entities.py", "scripts/test_profession_navigation.mjs"],
+        ):
+            with self.subTest(paths=paths):
+                plan = selection.plan(root, profile="unit", changed=paths)
+                self.assertEqual({"backend", "frontend"}, set(plan["components"]) - {"docs"})
+                self.assertEqual({"backend:unit", "frontend:navigation"}, {gate["id"] for gate in plan["gates"]})
+
+    def test_hosted_outputs_use_the_same_path_ownership(self):
+        from pathlib import Path
+        from unittest.mock import patch
+
+        from scripts.vendor import base_quality_selection as selection
+
+        root = Path(__file__).resolve().parents[1]
+        for path, expected in (
+            ("scripts/test_profession_navigation.mjs", {"backend": "false", "frontend": "true"}),
+            ("project_workflow/interfaces/ui/templates/profession-navigation.js",
+             {"backend": "false", "frontend": "true"}),
+            ("project_workflow/domain/entities.py", {"backend": "true", "frontend": "false"}),
+            (".github/workflows/ci.yml", {"backend": "true", "frontend": "true"}),
+            ("unknown-input.bin", {"backend": "true", "frontend": "true"}),
+        ):
+            with self.subTest(path=path), patch.object(selection, "git", return_value=path):
+                actual = selection.classify("pull_request", "1" * 40, "2" * 40, repo=root)
+                self.assertEqual(expected, actual)
+
+    def test_hosted_preparation_and_commands_follow_their_component(self):
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parents[1]
+        source = (root / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        steps = source.split("\n  quality:\n", 1)[1].split("\n      - ")[1:]
+        backend = "if: needs.changes.outputs.backend == 'true'"
+        frontend = "if: needs.changes.outputs.frontend == 'true'"
+        for identity in (
+            "Read independent Base SDK contract revision", "Check out pinned Base SDK source",
+            "Verify generated dependency-free namespace contract", "astral-sh/setup-uv@",
+            "Fast unit gate and static analysis",
+        ):
+            with self.subTest(step=identity):
+                step = next(step for step in steps if identity in step)
+                self.assertIn(backend, step)
+        navigation = next(step for step in steps if "Profession and platform navigation regression" in step)
+        self.assertIn(frontend, navigation)
+        self.assertIn("run: node scripts/test_profession_navigation.mjs", navigation)
+        self.assertEqual(1, source.count("run: make quality"))
+        self.assertIn("--revision .base-revision", source)
+        self.assertIn("export_python_namespace.py", source)

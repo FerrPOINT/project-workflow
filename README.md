@@ -460,7 +460,10 @@ python -m pip install --constraint constraints.txt -e ".[dev,ui]"
 | Windows quality | `pwsh -File scripts/quality.ps1 quality` |
 
 `make quality` выполняет reviewed unit tests, ruff и mypy; этот набор запускается
-автоматически на push и pull request в `master`. Ручной `make release` выполняет
+автоматически для backend inputs на push и pull request в `master`. Изменения
+UI templates/assets и Node navigation test выбирают только Node-проверку без
+Python quality/bootstrap; backend-only не запускает navigation. Общие CI/OpenAPI
+inputs и неизвестные пути сохраняют оба набора. Ручной `make release` выполняет
 полный non-PostgreSQL coverage с порогом94%, включая docs/integration/slow, затем
 PostgreSQL отдельно. Compose smoke остаётся ручным release job. Docs contracts
 уже входят в полный coverage; docs job выполняет stdlib README validator.

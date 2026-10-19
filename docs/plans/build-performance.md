@@ -35,3 +35,22 @@ integration modules до marker filtering. Новый regression останав�
 Python 3.11.15/pytest 9.1.1, существующее окружение без install. Модель env/reuse
 не меняется: uv проверяет frozen inputs между операциями, unit cacheable=false
 сохраняется до отдельной qualification exact environment/receipt.
+
+## Независимые Python и Node gates
+
+Причина лишней работы: общие `project_workflow/**` и `scripts/**` назначали
+UI assets и Node navigation test владельцу backend; единый CI job затем всегда
+выполнял `make quality` и Node navigation. `.quality-gate.json` теперь разделяет
+Python/backend data и UI templates/assets, сохраняя общие CI/OpenAPI inputs,
+смешанный выбор и conservative fallback для неизвестного пути. CI job сохраняет
+имя и обычные проверки, но каждый preparation/command запускает только нужный
+consumer: независимый Base SDK check, uv и Python quality для backend, Node
+navigation для frontend. Продуктовые Python, Node и dependency pins не меняются.
+
+Проверка среза — `ComponentSelectionContracts` в `tests/test_quality_runner.py`:
+реальные packaged selector/CI outputs, UI assets, Python UI neighbors, backend
+data, mixed/shared/unknown inputs и условия подготовки. До изменения source
+пять methods дали18 causal failures; после исправления тот же набор PASS.
+Это source/selection proof без install/build/полного pytest; ускорение в секундах
+и hosted execution отдельно не измерены. Coverage94%, полный manual release,
+PostgreSQL, Compose и необходимые security/data/live gates сохраняются.
