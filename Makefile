@@ -1,6 +1,6 @@
 # project-workflow — Makefile
 
-WORKFLOW_QUALITY_UV ?= uv run --python 3.11.15 --frozen --with-requirements constraints.txt --all-extras
+WORKFLOW_QUALITY_UV ?= uv run --python 3.11.15 --frozen --all-extras
 UV ?= $(WORKFLOW_QUALITY_UV)
 PYTEST ?= $(UV) pytest
 

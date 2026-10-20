@@ -10,7 +10,7 @@ Make, scripts/quality.ps1 и CI используют scripts/quality.py, frozen 
 Далее описаны ручные release/diagnostic сценарии, а не обязательная работа
 после каждого изменения. Unit fixture не создаёт SQLite/UI state.
 
-Canonical quality runner готовит frozen Python 3.11.15/extras/constraints один раз
+Canonical quality runner готовит frozen Python 3.11.15 project environment один раз
 на операцию; pytest, Ruff и mypy используют подготовленный interpreter.
 Между операциями uv заново проверяет определяющие inputs.
 Пользовательский WORKFLOW_QUALITY_UV сохраняет собственную семантику запуска.
@@ -225,3 +225,28 @@ python scripts/install_namespace_clis.py --bin-dir <dir>
 - [Architecture](architecture.md) — runtime and auth boundaries.
 - [Live Acceptance](../LIVE_TEST_PLAN.md) — executor-driven E2E evidence.
 - [Database Reset](database-reset.md) — clean local Compose baseline.
+
+## Одно frozen Python-окружение
+
+Canonical quality использует `uv run --python 3.11.15 --frozen --all-extras`:
+один постоянный project environment, затем pytest/Ruff/mypy через тот же
+interpreter. `uv.lock` согласован с версиями общих пакетов `constraints.txt`;
+requirements overlay не создаётся. Docker dependency locks и build isolation
+сохраняют свои прежние inputs; constraints-only build tools не становятся
+зависимостями тестов только из-за присутствия в constraints.
+
+Runner проверяет совпадение общих exact pins и нормализованные дубликаты до
+подготовки UV на Python >=3.11 и до первого tool в pinned child. Для launcher
+Python3.10 TOML-проверку выполняет pinned3.11 child. Проверка не заменяет
+freshness lock относительно pyproject и не доказывает полноту dependency graph.
+При сознательном обновлении зависимостей согласовать lock/constraints, сохранив
+markers/extras; не возвращать полный constraints как `--with-requirements`.
+Пользовательский override prefix сохраняет собственную семантику.
+
+Полезные UV cache и `.local/quality-python/<OS>/3.11.15` сохраняются. Warm run
+должен обходиться без повторного install/build неизменившихся packages.
+Существующий environment может содержать лишние пакеты: штатный `uv run`
+синхронизирует inexact. Не удалять общий cache ради проверки чистого состава;
+новое owned environment для qualification проверяется отдельно. Conditional
+dependencies сохраняются в universal lock; Windows package count не является
+контрактом Linux или всех поддерживаемых Python.

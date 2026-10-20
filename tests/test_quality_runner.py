@@ -2,6 +2,8 @@
 
 import unittest
 
+import pytest
+
 from scripts.quality import commands
 
 
@@ -32,7 +34,8 @@ def test_uv_binary_environment_does_not_replace_the_canonical_runner(monkeypatch
     monkeypatch.delenv("WORKFLOW_QUALITY_UV", raising=False)
     monkeypatch.setenv("UV", "/installed/uv")
     assert "--frozen" in commands("coverage")[0]
-    assert "--with-requirements" in commands("coverage")[0]
+    assert "--all-extras" in commands("coverage")[0]
+    assert "--with-requirements" not in commands("coverage")[0]
 
 
 def test_release_runs_full_coverage_once_and_postgres_separately() -> None:
@@ -265,6 +268,93 @@ def test_quality_bootstrap_prepares_once_for_multiple_tools(monkeypatch) -> None
     assert len(calls) == 1
     assert calls[0].count("--prepared") == 1
     assert calls[0][-1] == "quality"
+
+
+def test_shared_frozen_pins_allow_build_only_and_conditional_nodes() -> None:
+    from pathlib import Path
+
+    from scripts.quality import UV, verify_constraint_versions
+
+    root = Path(__file__).resolve().parents[1]
+    verify_constraint_versions(root)
+    assert f"WORKFLOW_QUALITY_UV ?= {UV}\n" in (root / "Makefile").read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("package", [
+    "anyio", "ast-serialize", "coverage", "psycopg", "psycopg-binary",
+    "pydantic", "pydantic-core", "ruff",
+])
+def test_each_former_overlay_version_mismatch_is_refused(tmp_path, package) -> None:
+    from pathlib import Path
+
+    from scripts.quality import verify_constraint_versions
+
+    root = Path(__file__).resolve().parents[1]
+    (tmp_path / "uv.lock").write_bytes((root / "uv.lock").read_bytes())
+    constraints = (root / "constraints.txt").read_text(encoding="utf-8")
+    lines = [f"{package}==0.0.0" if line.startswith(package + "==") else line
+             for line in constraints.splitlines()]
+    (tmp_path / "constraints.txt").write_text("\n".join(lines), encoding="utf-8")
+    with pytest.raises(ValueError, match=f"Quality pin mismatch: {package}:"):
+        verify_constraint_versions(tmp_path)
+
+
+def test_normalized_constraint_collision_and_multiple_lock_versions_are_not_hidden(tmp_path) -> None:
+    from scripts.quality import verify_constraint_versions
+
+    lock = '[[package]]\nname="pydantic-core"\nversion="1"\n'
+    (tmp_path / "uv.lock").write_text(lock, encoding="utf-8")
+    constraints = tmp_path / "constraints.txt"
+    constraints.write_text("pydantic-core==1\nPydantic_Core==2\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="Duplicate quality constraint: pydantic-core"):
+        verify_constraint_versions(tmp_path)
+    constraints.write_text("pydantic-core==1\n", encoding="utf-8")
+    (tmp_path / "uv.lock").write_text(lock + lock.replace('version="1"', 'version="2"'), encoding="utf-8")
+    with pytest.raises(ValueError, match="uv.lock=2, constraints=1"):
+        verify_constraint_versions(tmp_path)
+
+
+def test_pin_mismatch_blocks_bootstrap_before_subprocess(monkeypatch) -> None:
+    import sys
+
+    from scripts import quality
+
+    def mismatch(_root):
+        raise ValueError("Quality pin mismatch: pydantic: uv.lock=2, constraints=1")
+
+    def unexpected(*_args, **_kwargs):
+        pytest.fail("A mismatched canonical graph must not start uv or tests")
+
+    monkeypatch.delenv("WORKFLOW_QUALITY_UV", raising=False)
+    monkeypatch.setattr(sys, "argv", ["quality.py", "unit"])
+    monkeypatch.setattr(quality, "verify_constraint_versions", mismatch)
+    monkeypatch.setattr(quality.subprocess, "run", unexpected)
+    with pytest.raises(SystemExit) as error:
+        quality.main()
+    assert error.value.code == 2
+
+
+def test_python310_launcher_defers_toml_guard_to_pinned_child(monkeypatch) -> None:
+    import sys
+    from types import SimpleNamespace
+
+    from scripts import quality
+
+    calls = []
+    monkeypatch.delenv("WORKFLOW_QUALITY_UV", raising=False)
+    monkeypatch.setattr(sys, "version_info", (3, 10, 99))
+    monkeypatch.setattr(sys, "argv", ["quality.py", "unit"])
+    monkeypatch.setattr(quality.subprocess, "run", lambda command, **_kwargs: (
+        calls.append(command) or SimpleNamespace(returncode=0)))
+    monkeypatch.setattr(quality, "verify_constraint_versions", lambda _root: pytest.fail("No TOML dependency in 3.10"))
+    assert quality.main() == 0
+    assert len(calls) == 1 and "--prepared" in calls[0]
+    calls.clear()
+    monkeypatch.setattr(sys, "argv", ["quality.py", "--prepared", "unit"])
+    with pytest.raises(SystemExit) as error:
+        quality.main()
+    assert error.value.code == 2
+    assert calls == []
 
 
 class ComponentSelectionContracts(unittest.TestCase):
