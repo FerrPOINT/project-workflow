@@ -18,7 +18,7 @@ try {
   for (const id of ids) {
     await page.locator(`#namespaceNav [data-namespace-id="${id}"]`).click();
     assert.deepEqual(await selectedIds(), [id, id]);
-    const identity = await page.locator('.namespace-trigger').evaluateAll(nodes => nodes.map(node => ({ name: node.querySelector('.namespace-selector-name').textContent, color: node.style.getPropertyValue('--namespace-color'), icon: node.querySelector('path').getAttribute('d') })));
+    const identity = await page.locator('.namespace-switcher .base-choice-trigger').evaluateAll(nodes => nodes.map(node => ({ name: node.querySelector('.namespace-selector-name').textContent, color: node.querySelector('.namespace-selector-mark').style.getPropertyValue('--namespace-color'), icon: node.querySelector('path').getAttribute('d') })));
     assert.deepEqual(identity[0], identity[1], 'Desktop and mobile profession identity must agree');
     assert.deepEqual(await page.locator('.brand-mark').evaluate(node => ({ markup: node.innerHTML, color: getComputedStyle(node).color })), logoBefore, 'Profession selection must preserve the Base application logo');
   }
@@ -28,20 +28,20 @@ try {
   assert.deepEqual(await selectedIds(), [ids[1], ids[1]]);
   await page.reload();
   assert.deepEqual(await selectedIds(), [ids[1], ids[1]], 'Both selectors restore after reload');
-  const trigger = page.locator('.platform-header .namespace-trigger');
+  const trigger = page.locator('.platform-header .namespace-switcher .base-choice-trigger');
   await trigger.click();
   assert.equal(await trigger.getAttribute('aria-expanded'), 'true');
-  const options = page.locator('#namespaceSelectorOptions [role="option"]');
+  const options = page.locator('#namespaceSelector-trigger-options [role="option"]');
   assert.equal(await options.count(), await cards.count());
-  assert.equal(await page.locator('#namespaceSelectorOptions .namespace-selector-mark svg').count(), await cards.count());
+  assert.equal(await page.locator('#namespaceSelector-trigger-options .namespace-selector-mark svg').count(), await cards.count());
   await trigger.press('ArrowDown');
-  await page.locator('#namespaceSelectorOptions [aria-selected="true"]').press('Home');
+  await page.locator('#namespaceSelector-trigger-options [aria-selected="true"]').press('Home');
   assert.equal(await options.first().evaluate(node => node === document.activeElement), true);
   await options.first().press('Escape');
-  await page.waitForFunction(() => document.querySelector('.platform-header .namespace-trigger').getAttribute('aria-expanded') === 'false');
+  await page.waitForFunction(() => document.querySelector('.platform-header .namespace-switcher .base-choice-trigger').getAttribute('aria-expanded') === 'false');
   assert.equal(await trigger.getAttribute('aria-expanded'), 'false');
   await trigger.click();
-  await page.locator(`#namespaceSelectorOptions [data-value="${ids[0]}"]`).click();
+  await page.locator(`#namespaceSelector-trigger-options [data-value="${ids[0]}"]`).click();
   await page.waitForURL(`**/namespaces?namespace_id=${ids[0]}`);
   assert.deepEqual(await selectedIds(), [ids[0], ids[0]], 'Dropdown selection changes profession');
   await page.locator(`#namespaceNav [data-namespace-id="${ids[1]}"]`).click();
@@ -51,7 +51,7 @@ try {
       const sidebar = document.querySelector('#sidebar').getBoundingClientRect();
       const main = document.querySelector('.main').getBoundingClientRect();
       const label = document.querySelector('.sidebar-label').getBoundingClientRect();
-      const context = document.querySelector('.platform-header .namespace-trigger').getBoundingClientRect();
+      const context = document.querySelector('.platform-header .namespace-switcher .base-choice-trigger').getBoundingClientRect();
       const account = document.querySelector('.base-ssr-account').getBoundingClientRect();
       return { sidebarWidth: sidebar.width, mainLeft: main.left, labelWidth: label.width, contextRight: context.right, accountLeft: account.left };
     });
@@ -69,9 +69,9 @@ try {
     if (width < 768) {
       await page.locator('#burgerBtn').click();
       assert.equal(await page.locator('#mobileNamespaceSelector').inputValue(), ids[1]);
-      const mobileTrigger = page.locator('.sidebar-utilities .namespace-trigger');
+      const mobileTrigger = page.locator('.sidebar-utilities .namespace-switcher .base-choice-trigger');
       await mobileTrigger.click();
-      const professionList = await page.locator('#mobileNamespaceSelectorOptions').boundingBox();
+      const professionList = await page.locator('#mobileNamespaceSelector-trigger-options').boundingBox();
       assert.ok(professionList && professionList.x >= 0 && professionList.x + professionList.width <= width, `Profession list escapes viewport ${width}`);
       await mobileTrigger.press('Escape');
       assert.equal(await page.locator('#sidebar').getAttribute('aria-hidden'), 'false', 'First Escape closes the selector and keeps navigation open');

@@ -2220,7 +2220,7 @@ class TestProjectsPage:
         assert 'id="namespaceThemeControls"' in response.text
         assert 'aria-controls="namespaceForm"' in response.text
         assert 'aria-pressed="true"' in response.text
-        assert "document.querySelectorAll('.namespace-trigger')" in response.text
+        assert "document.querySelectorAll('[data-namespace-selector]')" in response.text
         assert "document.querySelector('.brand-mark')" not in response.text
         assert 'id="createProjectForm"' not in response.text
         assert 'id="projectForm"' not in response.text

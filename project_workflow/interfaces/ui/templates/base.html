@@ -107,24 +107,11 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .header-actions{display:flex;min-width:0;gap:10px;align-items:center}
 .header .btn{display:inline-flex;min-height:40px;align-items:center}
 .namespace-switcher{position:relative;min-width:0}
-.namespace-select{width:190px;max-width:26vw;min-height:40px;font-weight:600;color:var(--text);background:var(--surface)}
-.namespace-select[hidden]{display:none}
-.namespace-trigger{display:flex;align-items:center;gap:10px;min-height:40px;padding:5px 10px;border:1px solid var(--border-strong);border-radius:8px;background:var(--surface);color:var(--text);cursor:pointer;list-style:none;font-weight:600}
-.namespace-trigger::-webkit-details-marker{display:none}
-.namespace-trigger:hover,.namespace-switcher[open]>.namespace-trigger{background:var(--surface-hover);border-color:var(--accent)}
+
 .namespace-selector-mark{display:inline-flex;align-items:center;justify-content:center;flex:0 0 28px;width:28px;height:28px;border-radius:6px;background:color-mix(in srgb,var(--namespace-color,var(--accent)) 14%,transparent);color:var(--namespace-color,var(--accent));border:1px solid color-mix(in srgb,var(--namespace-color,var(--accent)) 45%,transparent)}
 .namespace-selector-mark[hidden]{display:none}
 .namespace-selector-mark svg{width:17px;height:17px}
 .namespace-selector-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
-.namespace-selector-chevron{flex:0 0 auto;color:var(--text-muted);transition:transform .15s}
-.namespace-switcher[open] .namespace-selector-chevron{transform:rotate(180deg)}
-.namespace-options{position:absolute;right:0;top:calc(100% + 8px);z-index:250;width:320px;max-width:calc(100vw - 24px);max-height:min(420px,calc(100dvh - var(--header-height) - 24px));overflow-y:auto;overscroll-behavior:contain;padding:6px;background:var(--surface);border:1px solid var(--border-strong);border-radius:10px;box-shadow:0 16px 40px rgba(0,0,0,.45)}
-.namespace-option{display:flex;align-items:center;gap:10px;width:100%;min-height:46px;padding:7px 10px;border:0;border-radius:6px;background:transparent;color:var(--text);font:inherit;cursor:pointer}
-.namespace-option:hover,.namespace-option:focus-visible{background:var(--surface-hover)}
-.namespace-option .namespace-selector-name{white-space:normal;overflow-wrap:anywhere}
-.namespace-option[aria-selected='true']{background:var(--accent-soft);font-weight:600}
-.namespace-selector-check{visibility:hidden;color:var(--text-secondary)}
-.namespace-option[aria-selected='true'] .namespace-selector-check{visibility:visible}
 .namespace-picker-label{margin-bottom:8px;color:var(--text-muted);font-size:11px;font-weight:600;text-transform:uppercase}
 .service-menu{position:relative}
 .theme-select{height:40px;max-width:110px;padding:0 8px;border:1px solid var(--border-strong);border-radius:6px;background:var(--surface);color:var(--text);font:inherit;font-size:12px}
@@ -190,8 +177,8 @@ tr:hover td{background:rgba(255,255,255,.02)}
 }
 
 /* ── Form elements ─────────────────────────────────────────────────── */
-input,textarea,select{background:var(--panel);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-family:inherit;font-size:13px;outline:none;width:100%}
-input:focus,textarea:focus,select:focus{border-color:var(--accent)}
+input,textarea{background:var(--panel);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-family:inherit;font-size:13px;outline:none;width:100%}
+input:focus,textarea:focus{border-color:var(--accent)}
 textarea{resize:vertical;min-height:60px}
 
 /* ── Toast ─────────────────────────────────────────────────────────── */
@@ -283,7 +270,7 @@ textarea{resize:vertical;min-height:60px}
   .header{padding-inline:16px}
   .header-actions{gap:6px}
   .theme-select{max-width:90px}
-  .namespace-select{width:140px;max-width:20vw}
+
 }
 @media(max-width:767px){
   .sidebar{width:min(320px,calc(100vw - 32px));transform:translateX(-100%)}
@@ -299,7 +286,7 @@ textarea{resize:vertical;min-height:60px}
 @media(max-width:767px){
   .header{flex-wrap:nowrap;align-items:center;height:var(--header-height)}
   .header-actions{width:auto;flex:1;min-width:0;gap:6px;flex-wrap:wrap;justify-content:flex-end}
-  .namespace-select{width:150px;max-width:42vw}
+
 }
 @media(max-width:640px){
   .sidebar-utilities{display:block}
@@ -310,10 +297,9 @@ textarea{resize:vertical;min-height:60px}
   .card-value{font-size:22px}
   .header-title{font-size:14px}
   .header-actions{min-width:200px}
-  .namespace-select{width:128px;min-width:0}
+
   .namespace-switcher{min-width:200px}
-  .namespace-select{max-width:38vw}
-  .namespace-switcher .namespace-select{flex:1 1 128px}
+
 }
 @media(max-width:350px){.header-actions{width:100%;flex:none}}
 
@@ -329,11 +315,11 @@ textarea{resize:vertical;min-height:60px}
 .page-actions:empty,.page-header:has(.page-actions:empty):has(h1:empty){display:none}
 .platform-header .service-menu summary{border:0;background:transparent;font-size:14px;padding-inline:8px}
 .platform-header .service-menu summary>span:first-of-type{max-width:160px;overflow:hidden;text-overflow:ellipsis}
-.platform-header .namespace-select{max-width:220px;width:100%;min-width:0}
+
 .platform-header-context .namespace-switcher{min-width:0;width:min(280px,100%)}
 .platform-header-context{justify-content:flex-end}
 .service-menu-trigger-icon{display:none}
-@media(max-width:767px){.sidebar{z-index:100;top:0;height:100dvh}.mobile-drawer-title{display:flex}.platform-header .platform-header-context{display:none}.sidebar-utilities{display:block;padding:12px 20px}.sidebar-utilities label{display:block;margin-bottom:8px}.sidebar-utilities .namespace-select{width:100%;max-width:none}.platform-header-leading{flex-shrink:0}.platform-header .service-menu summary{min-width:44px;min-height:44px;justify-content:center}.platform-header .service-menu-chevron{display:none}.platform-header .service-menu-trigger-icon{display:block}.platform-header .service-menu-popover{position:fixed;left:12px;right:12px;top:calc(var(--header-height) + 8px);width:auto;max-width:none}.page-header h1{font-size:22px}}
+@media(max-width:767px){.sidebar{z-index:100;top:0;height:100dvh}.mobile-drawer-title{display:flex}.platform-header .platform-header-context{display:none}.sidebar-utilities{display:block;padding:12px 20px}.sidebar-utilities label{display:block;margin-bottom:8px}.platform-header-leading{flex-shrink:0}.platform-header .service-menu summary{min-width:44px;min-height:44px;justify-content:center}.platform-header .service-menu-chevron{display:none}.platform-header .service-menu-trigger-icon{display:block}.platform-header .service-menu-popover{position:fixed;left:12px;right:12px;top:calc(var(--header-height) + 8px);width:auto;max-width:none}.page-header h1{font-size:22px}}
 
 {% block extra_style %}{% endblock %}
 </style>
@@ -342,7 +328,7 @@ textarea{resize:vertical;min-height:60px}
 .base-ssr-shell .main{min-height:calc(100dvh - var(--header-height))}
 .base-ssr-shell .mobile-drawer-title{display:none}
 @media(max-width:767px){.base-ssr-shell .mobile-drawer-title{display:flex}}
-@media(max-width:767px){.sidebar-utilities .namespace-switcher{width:100%;min-width:0}.sidebar-utilities .namespace-options{position:static;width:100%;max-width:none;max-height:320px;margin-top:8px;box-shadow:none}}
+@media(max-width:767px){.sidebar-utilities .namespace-switcher{width:100%;min-width:0}}
 </style>
 </head>
 <body class="base-ssr-shell">
@@ -420,7 +406,6 @@ textarea{resize:vertical;min-height:60px}
 </header>
 <main class="main" data-base-dialog-background>
 
-
   {% set layout_mode %}{% block page_layout %}wide{% endblock %}{% endset %}
   {% set layout_mode = layout_mode | trim %}
   <div class="container page-frame">
@@ -474,7 +459,7 @@ function openSidebar(){
   document.querySelector('.sidebar-close').focus();
 }
 function closeSidebar(){
-  document.querySelectorAll('.sidebar .namespace-switcher').forEach(function(picker){ picker.open = false; });
+
   document.getElementById('sidebar').classList.remove('open');
   document.getElementById('sidebarOverlay').classList.remove('show');
   document.getElementById('burgerBtn').setAttribute('aria-expanded','false');
@@ -524,72 +509,36 @@ function showToast(msg, type){
 function showRequestError(){
   showToast('Не удалось связаться с сервером','error');
 }
-function refreshNamespaceSelectors(){
+function renderNamespaceChoice(option, mode){
   var paths = {{ project_icon_paths | tojson }};
+  var label = document.createElement('span');
+  var icon = document.createElement('span');
+  icon.className = 'namespace-selector-mark';
+  icon.style.setProperty('--namespace-color', option.dataset.color);
+  icon.setAttribute('aria-hidden', 'true');
+  var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor'); svg.setAttribute('stroke-width', '2');
+  var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', paths[option.dataset.icon] || paths.folder);
+  svg.append(path); icon.append(svg);
+  var name = document.createElement('span'); name.className = 'namespace-selector-name'; name.textContent = option.label; if(mode === 'option') name.style.whiteSpace = 'normal';
+  label.append(icon, name); return label;
+}
+let confirmedProfessionId = {{ (active_namespace_id|string if active_namespace_id is not none else '')|tojson }};
+function refreshNamespaceSelectors(){
+  var controls = document.querySelectorAll('[data-namespace-selector]');
+  if(controls.length) confirmedProfessionId = controls[0].value;
   document.querySelectorAll('[data-namespace-selector]').forEach(function(select){
-    var picker = select.closest('.namespace-switcher');
-    var trigger = picker.querySelector('summary');
-    var current = select.selectedOptions[0];
-    picker.hidden = select.options.length === 0;
-    var mark = trigger.querySelector('.namespace-selector-mark');
-    mark.hidden = !current || !current.value;
-    trigger.querySelector('.namespace-selector-name').textContent = current ? current.textContent : 'Каталог воркфлоу';
-    if(current && current.value){
-      trigger.style.setProperty('--namespace-color', current.dataset.color);
-      mark.querySelector('path').setAttribute('d', paths[current.dataset.icon] || paths.folder);
-    }
-    var list = picker.querySelector('[role="listbox"]');
-    list.replaceChildren();
-    Array.from(select.options).filter(function(option){ return option.value; }).forEach(function(option){
-      var item = document.createElement('button');
-      item.type = 'button';
-      item.className = 'namespace-option';
-      item.dataset.value = option.value;
-      item.setAttribute('role', 'option');
-      item.setAttribute('aria-selected', String(option.selected));
-      item.tabIndex = -1;
-      item.style.setProperty('--namespace-color', option.dataset.color);
-      var icon = mark.cloneNode(true);
-      icon.hidden = false;
-      icon.querySelector('path').setAttribute('d', paths[option.dataset.icon] || paths.folder);
-      var name = document.createElement('span');
-      name.className = 'namespace-selector-name';
-      name.textContent = option.textContent;
-      var check = document.createElement('span');
-      check.className = 'namespace-selector-check';
-      check.setAttribute('aria-hidden', 'true');
-      check.textContent = '✓';
-      item.append(icon, name, check);
-      item.onclick = function(){ picker.open = false; switchNamespace(option.value); };
-      list.appendChild(item);
-    });
+    select.closest('.namespace-switcher').hidden = select.options.length === 0;
+    window.PdlcChoice?.refreshChoice(select);
   });
 }
-refreshNamespaceSelectors();
-document.querySelectorAll('.namespace-switcher').forEach(function(picker){
-  var trigger = picker.querySelector('summary');
-  function close(restoreFocus){ picker.open = false; if(restoreFocus){ trigger.focus(); } }
-  picker.addEventListener('toggle', function(){ trigger.setAttribute('aria-expanded', String(picker.open)); });
-  picker.addEventListener('keydown', function(event){
-    if(event.key === 'Escape' && picker.open){ event.preventDefault(); event.stopPropagation(); close(true); return; }
-    if(!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)){ return; }
-    event.preventDefault();
-    picker.open = true;
-    var items = Array.from(picker.querySelectorAll('[role="option"]'));
-    if(!items.length){ return; }
-    var index = items.indexOf(document.activeElement);
-    if(event.key === 'Home'){ index = 0; }
-    else if(event.key === 'End'){ index = items.length - 1; }
-    else if(index < 0){ index = Math.max(0, items.findIndex(function(item){ return item.getAttribute('aria-selected') === 'true'; })); }
-    else{ index = (index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length; }
-    items[index].focus();
-  });
-  document.addEventListener('click', function(event){ if(!picker.contains(event.target)){ close(false); } });
-  picker.addEventListener('focusout', function(event){ if(event.relatedTarget && !picker.contains(event.relatedTarget)){ close(false); } });
-});
 function switchNamespace(namespaceId){
   if(!namespaceId){return;}
-  if(!window.SdlcPlatformNavigation.embedded) document.cookie={{ namespace_cookie_name | tojson }}+'='+encodeURIComponent(namespaceId)+'; path=/; SameSite=Lax'{% if namespace_cookie_secure %}+'; Secure'{% endif %};
+  // Navigation can be cancelled by the draft guard; retain the confirmed context.
+  document.querySelectorAll('[data-namespace-selector]').forEach(function(control){ control.value = confirmedProfessionId; });
+  refreshNamespaceSelectors();
   var url=new URL(window.location.href);
   if(url.pathname === '{{ ui_base_path() }}/phases' || url.pathname === '{{ ui_base_path() }}/workflows'){
     url.searchParams.delete('workflow_id');
@@ -621,6 +570,13 @@ function pluralizeRu(n, one, few, many){
 </script>
 <script>{% include "base/base-ui.js" %}</script>
 <script type="module">
+{% include "base/choice-runtime.js" %}
+window.PdlcChoice = {initChoice, refreshChoice, destroyChoice};
+document.querySelectorAll('select[data-base-choice]').forEach(function(control){
+  try { initChoice(control, control.hasAttribute('data-namespace-selector') ? {renderOption: renderNamespaceChoice} : {}); }
+  catch(error) { console.error('Base choice initialization failed', error); }
+});
+refreshNamespaceSelectors();
 {% include "base/draft-state.js" %}
 {% include "base/platform-bridge.js" %}
 {% include "base/platform-ssr.js" %}

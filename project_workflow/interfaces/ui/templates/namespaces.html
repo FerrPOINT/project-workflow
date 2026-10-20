@@ -48,7 +48,7 @@
 <div class="namespace-crud{% if namespaces|length == 0 %} is-empty{% endif %}" id="namespaceCrud">
   <div class="namespace-picker" id="namespacePicker">
     <label class="label" for="namespaceSelect">Профессия</label>
-    <select id="namespaceSelect" onchange="selectNamespace(Number(this.value))">
+    <select data-base-choice id="namespaceSelect" onchange="selectNamespace(Number(this.value))">
       <option value="" disabled {% if create_mode %}selected{% endif %}>{{ 'Новая профессия' if create_mode else 'Выберите профессию' }}</option>
       {% for namespace in namespaces %}
       <option value="{{ namespace.id }}" {% if not create_mode and selected_namespace and selected_namespace.id == namespace.id %}selected{% endif %}>{{ namespace.name }}</option>
@@ -159,10 +159,11 @@ function namespaceIconSvg(icon){
   return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="' + path + '"></path></svg>';
 }
 function applyNamespaceIdentity(name, icon, color){
-  document.querySelectorAll('.namespace-trigger').forEach(function(trigger){
-    trigger.querySelector('.namespace-selector-name').textContent = name;
-    trigger.style.setProperty('--namespace-color', color || defaultNamespaceThemeColor);
-    trigger.querySelector('.namespace-selector-mark').innerHTML = namespaceIconSvg(icon);
+  document.querySelectorAll('[data-namespace-selector]').forEach(function(selector){
+    var option = selector.selectedOptions[0];
+    if (!option) return;
+    option.textContent = name; option.dataset.icon = icon; option.dataset.color = color || defaultNamespaceThemeColor;
+    window.PdlcChoice?.refreshChoice(selector);
   });
 }
 function updateNamespaceThemePreview(){
@@ -201,6 +202,7 @@ function syncNav(){
   var picker = document.getElementById('namespaceSelect');
   picker.options[0].textContent = namespaceFormMode === 'create' ? 'Новая профессия' : 'Выберите профессию';
   picker.value = selectedNamespaceId == null ? '' : String(selectedNamespaceId);
+  window.PdlcChoice?.refreshChoice(picker);
 }
 function namespaceIdFromUrl(url){
   var rawId = url.searchParams.get('profession_id');
@@ -221,7 +223,7 @@ function syncNamespaceUrl(id, historyMode){
 function rememberNamespaceSelection(id, historyMode){
   if(id == null){ return; }
   if(!window.PdlcPlatformNavigation.embedded || window.PdlcPlatformNavigation.active) document.cookie={{ namespace_cookie_name | tojson }}+'='+encodeURIComponent(id)+'; path=/; SameSite=Lax'{% if namespace_cookie_secure %}+'; Secure'{% endif %};
-  document.querySelectorAll('[data-namespace-selector]').forEach(function(selector){ selector.value = String(id); });
+  document.querySelectorAll('[data-namespace-selector]').forEach(function(selector){ selector.value = String(id); window.PdlcChoice?.refreshChoice(selector); });
   refreshNamespaceSelectors();
   updateNamespaceHeaderLinks(id);
   syncNamespaceUrl(id, historyMode || 'replace');
