@@ -173,3 +173,18 @@ proof. Финальный образ получает весь прежний ru
 Native qualification на вехе должна отдельно подтвердить inventory wheel, reuse
 при изменении только scripts/alembic и отказ на неверном manifest при прогретом
 wheel. Source checks не доказывают BuildKit cache hit или ускорение.
+
+## Проверки runner через отдельные процессы
+
+`tests/test_quality_process.py` сохраняет два прежних black-box controls: verbose
+collection и четыре scoped pytest cases с реальными fresh interpreters/plugins.
+Это integration boundary runner, поэтому обычный unit/build не запускает его.
+Файл по умолчанию относится к manual integration и собирается полным release
+coverage. Быстрые unit contracts выбора файлов, flags, frozen pins и prepared
+interpreter остаются в `tests/test_quality_runner.py`.
+
+Ручной scoped запуск: `python scripts/quality.py integration -- tests/test_quality_process.py`.
+Controls работают только с собственными temporary plugin files и child processes;
+локальная autouse fixture исключает ненужную подготовку DB/UI, assertions не меняются.
+Перенос tier не является новым PASS этих manual tests; прежний result сохраняется
+для прежнего source, release проверяет актуальный candidate отдельно.
