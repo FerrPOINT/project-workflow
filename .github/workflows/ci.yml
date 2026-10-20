@@ -97,4 +97,4 @@ jobs:
         run: make quality
       - name: Profession and platform navigation regression
         if: needs.changes.outputs.frontend == 'true'
-        run: node scripts/test_profession_navigation.mjs
+        run: node tests/node/test_navigation_inputs.mjs

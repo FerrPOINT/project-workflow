@@ -29,7 +29,9 @@
       "project_workflow/ui/**",
       "scripts/test_profession_navigation.mjs",
       ".github/**",
-      "openapi/**"
+      "openapi/**",
+      "scripts/test_profession_navigation.mjs",
+      "tests/node/**"
     ]
   },
   "gates": [
@@ -118,10 +120,33 @@
       ],
       "cwd": ".",
       "inputs": [
-        "**"
+        ".quality-gate.json",
+        "scripts/test_profession_navigation.mjs",
+        "project_workflow/interfaces/ui/templates/profession-navigation.js",
+        "project_workflow/interfaces/ui/templates/namespaces.html",
+        "project_workflow/interfaces/ui/templates/base/platform-navigation.js"
       ],
       "cacheable": true,
-      "test_tier": "unit"
+      "test_tier": "unit",
+      "tools": [
+        {
+          "argv": [
+            "node",
+            "--version"
+          ],
+          "pattern": "^v(?:2[0-9]|[3-9][0-9])\\.",
+          "context_argv": [
+            "node",
+            "scripts/test_profession_navigation.mjs",
+            "--context"
+          ],
+          "context_pattern": "\"schema\":\"workflow-navigation-context/v1\",\"version\":\"v(?:2[0-9]|[3-9][0-9])\\.",
+          "reuse_pattern": "\"version\":\"v24\\.19\\.0\",\"platform\":\"win32\",\"architecture\":\"x64\"",
+          "cwd": ".",
+          "recheck": true
+        }
+      ],
+      "execution_slot": "none"
     },
     {
       "id": "backend:unit",
