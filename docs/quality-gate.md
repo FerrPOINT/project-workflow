@@ -38,12 +38,12 @@ constraints.txt, без uv bootstrap, install и тестов. Она показ
 Это diagnostic, а не готовый test receipt: `automatic_reuse_eligible` всегда false;
 даже совпадение версий не проверяет установленные payloads, manager или test results.
 
-В данном runner файл constraints.txt передаётся как `--with-requirements`:
-[uv использует отдельный overlay](https://docs.astral.sh/uv/reference/cli/#uv-run),
-который может отличаться от основной `.local/quality-python` среды. Инспекция
-подложки не доказывает, какие версии использует quality operation. Для native
-qualification наблюдать тот же effective interpreter после штатной подготовки,
-под общим host admission; обычные cacheable flags от diagnostic не менять.
+Canonical runner использует одно frozen project environment. Diagnostic по-прежнему
+сравнивает полный constraints.txt: отсутствующие constraints-only build tools или
+неактивные conditional dependencies могут дать mismatch в корректном project env.
+Это не missing project requirement и не причина повторного install. Custom prefix
+может создавать overlay; наблюдать тот же effective interpreter после штатной
+подготовки под общим host admission. Cacheable flags от diagnostic не менять.
 Legacy custom prefix сохраняет свою семантику. Lockfiles и dependency pins
 данная команда не изменяет. Недоступная metadata даёт UNAVAILABLE/exit2,
 обнаруженное несовпадение — REQUIREMENTS_MISMATCH в корректном diagnostic JSON.
@@ -99,8 +99,8 @@ python scripts/quality.py release
 Make, PowerShell и CI делегируют `scripts/quality.py`. Он выполняет один полный
 pytest с coverage >=94%, XML, строгими ResourceWarning/unraisable flags и durations,
 отдельный PostgreSQL integration, ruff/mypy и git diff check. Окружение
-`.local/quality-python/<OS>/3.11.15` постоянно; frozen `uv.lock` и overlay
-`constraints.txt` сохраняются. Неизменившиеся зависимости повторно не устанавливаются.
+`.local/quality-python/<OS>/3.11.15` постоянно; frozen `uv.lock` и согласованные общие
+pins `constraints.txt` сохраняются. Неизменившиеся зависимости повторно не устанавливаются.
 Scoped пример: `python scripts/quality.py test -- tests/test_quality_runner.py`.
 Полный coverage запускает два worker в load mode с общим отчётом и прежним
 порогом 94%; scoped и PostgreSQL integration выполняются последовательно.

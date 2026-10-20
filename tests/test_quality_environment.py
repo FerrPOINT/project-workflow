@@ -28,6 +28,7 @@ def test_first_effective_distribution_wins_over_shadowed_project_underlay(reques
     assert result["package_payload_verified"] is False
     assert result["interpreter_content_verified"] is False
     assert result["manager_identity_verified"] is False
+    assert "absent constraints-only packages" in result["requirements_mode"]
     assert result["python"]["extension_suffix"]
     assert result["python"]["executable"] and result["python"]["prefix"] and result["python"]["base_prefix"]
 

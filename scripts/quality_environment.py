@@ -29,9 +29,9 @@ def input_hash(path: Path) -> str:
 def snapshot(root: Path) -> dict:
     """Report effective metadata and shadowed distributions without invoking uv.
 
-    uv --with-requirements may override the project environment. Preserve the
-    first distribution visible to importlib instead of overwriting it with a
-    later underlay version. No installed package contents are certified here.
+    Compare every constraint diagnostically; constraints-only packages need not
+    be project dependencies. Custom overlays may shadow packages: preserve the
+    first visible distribution. No installed package contents are certified.
     """
     from packaging.requirements import InvalidRequirement, Requirement
     from packaging.utils import canonicalize_name
@@ -74,7 +74,7 @@ def snapshot(root: Path) -> dict:
         try:
             requirement = Requirement(line)
         except InvalidRequirement:
-            raise ValueError("Overlay requirements need a supported PEP 508 observation format") from None
+            raise ValueError("Constraints need a supported PEP 508 observation format") from None
         if requirement.url or requirement.extras:
             raise ValueError("Direct references or requirement extras need a separate observation contract")
         if requirement.marker and not requirement.marker.evaluate():
@@ -85,7 +85,7 @@ def snapshot(root: Path) -> dict:
         if observed is None or not requirement.specifier.contains(observed, prereleases=True):
             mismatches.append({"name": name, "expected": str(requirement.specifier), "observed": observed})
     if not checked:
-        raise ValueError("Quality overlay requires a nonempty requirements inventory")
+        raise ValueError("Quality observation requires a nonempty constraints inventory")
     if inputs != {name: input_hash(root / name) for name in inputs}:
         raise ValueError("Quality environment request changed during observation")
     return {
@@ -97,7 +97,10 @@ def snapshot(root: Path) -> dict:
                    "extension_suffix": sysconfig.get_config_var("EXT_SUFFIX"),
                    "supported_quality_version": sys.version_info[:3] == (3, 11, 15)},
         "inputs": inputs,
-        "requirements_mode": "uv --with-requirements overlay; this observes the currently running interpreter",
+        "requirements_mode": (
+            "Full constraints comparison of the current interpreter; absent constraints-only packages "
+            "do not imply missing project dependencies"
+        ),
         "requirements_checked": checked,
         "mismatches": sorted(mismatches, key=lambda row: row["name"]),
         "distributions": dict(sorted(selected.items())),

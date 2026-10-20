@@ -63,7 +63,8 @@ Source/selector regression без подготовки окружения:
 
 `python -B scripts/quality.py --inspect-environment` наблюдает metadata текущего
 Python без подготовки/тестов; это не certificate пригодного environment или
-test receipt. Команда и overlay boundary описаны в [quality gate](quality-gate.md).
+test receipt. Полный constraints comparison и project dependency graph различаются;
+команда и diagnostic boundary описаны в [quality gate](quality-gate.md).
 Её model tests находятся в reviewed unit lane. Полный pytest/coverage ради
 этой команды не требуется; порог coverage 94% и ручные release gates сохраняются.
 
