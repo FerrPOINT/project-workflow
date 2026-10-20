@@ -21,7 +21,6 @@ SEED_PATH = REPO_ROOT / "project_workflow" / "references" / "legacy_unmanaged_se
 COMPOSE_PATH = REPO_ROOT / "docker-compose.yml"
 AGENTS_PATH = REPO_ROOT / "AGENTS.md"
 DOCKERFILE_PATH = REPO_ROOT / "Dockerfile"
-CONSTRAINTS_PATH = REPO_ROOT / "constraints.txt"
 LICENSE_PATH = REPO_ROOT / "LICENSE"
 QUALITY_SCRIPT_PATH = REPO_ROOT / "scripts" / "quality.ps1"
 
@@ -113,28 +112,6 @@ def test_windows_quality_helper_mirrors_local_gate():
     assert any(command[-3:] == ["ruff", "check", "."] for command in commands("lint"))
     assert any(command[-3:] == ["mypy", "project_workflow", "scripts"] for command in commands("lint"))
     assert "http://127.0.0.1:8812/health" in commands("compose-ready")[1]
-
-
-def test_dependency_constraints_are_exact_and_runtime_image_uses_isolated_venv():
-    constraints = [
-        line.strip()
-        for line in CONSTRAINTS_PATH.read_text(encoding="utf-8").splitlines()
-        if line.strip() and not line.lstrip().startswith("#")
-    ]
-    dockerfile = DOCKERFILE_PATH.read_text(encoding="utf-8")
-    pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    digest = "sha256:0bee7276f83efd4a1ee05bbbf4281d95ed28e079220a9457f25a93e3f1e3c31b"
-
-    assert constraints
-    assert all("==" in requirement for requirement in constraints)
-    assert 'requires = ["hatchling==1.32.0"]' in pyproject
-    assert dockerfile.count(digest) == 3
-    assert "ENV PIP_CONSTRAINT=/app/constraints.txt" in dockerfile
-    assert "--constraint constraints.txt" in dockerfile
-    assert "COPY --from=runtime-inputs /opt/venv /opt/venv" in dockerfile
-    assert "/usr/local/lib/python3.11/site-packages" not in dockerfile
-    assert "COPY --from=builder /usr/local/bin" not in dockerfile
-    assert "pip uninstall -y pip setuptools wheel" in dockerfile
 
 
 def test_repository_contains_declared_proprietary_license():

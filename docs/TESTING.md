@@ -155,6 +155,40 @@ Application layer по-прежнему проверяет immutable manifest д
 неверный manifest блокирует и прогретый слой. SHA сам по себе не является причиной
 повторной установки приложения, если он читается из отдельного runtime manifest.
 
+`dependency-wheels.json` фиксирует reviewed metadata closure для
+`cpython-311-bookworm-amd64`:37runtime/UI wheels и6build wheels. Версии остаются
+каноническими в constraints.txt; helper проверяет их против наблюдённых metadata
+и выпускает отдельные exact/hash requirement files. Это не перенос versions из
+uv.lock. Изменение selected pin, root, backend или dependency edges требует
+обновлённого metadata proof и явного reviewed contract digest в helper. Dev-only
+pins и package metadata не меняют install files. Новая JSON не входит в runtime
+payload; её читает только dependency-inputs stage.
+
+Runtime dependency stage проверенного target использует binary wheels без
+build-essential/libpq-dev. Для других архитектур helper явно возвращает полные
+constraints и прежнюю подготовку native build dependencies; это не qualified
+fast path. Corrupt/неизвестный metadata contract не превращается в fallback.
+Build tools готовятся отдельно в `/opt/build-venv`; wheel строится через
+`pip wheel --no-build-isolation --no-deps`, затем устанавливается в runtime venv.
+Wheel producer наследует только build-tools; runtime dependency layer не является
+его parent. Отдельный installed stage получает один готовый wheel и runtime venv.
+Изменение runtime dependency не должно повторять Hatchling build неизменного wheel.
+Не полагаться на наследование PIP_CONSTRAINT из isolated pip build: этот путь
+использует явно подготовленный backend. Финальный image сохраняет прежние шесть
+runtime payload paths, без build venv и без изменения source/provenance guards.
+
+Scope source unit:
+
+```bash
+python scripts/quality.py test -- tests/test_dependency_locks.py
+```
+
+В этот pure unit файл перенесён Docker/venv constraint guard из смешанного
+test_runtime_cleanup.py: build feedback не импортирует SQLAlchemy/DB tests ради
+проверки recipe. Native cache/installed/wheel/profile qualification нового
+recipe выполняется отдельно на согласованной вехе. Metadata observation и
+source guards сами по себе не доказывают pip target solve, cache hit или RAM.
+
 `wheel-inputs` содержит `pyproject.toml`, README, LICENSE и весь `project_workflow/`:
 текущий закреплённый Hatchling использует default package selection, без hooks,
 dynamic metadata или дополнительных include rules. `scripts/` и `alembic.ini`
@@ -163,7 +197,7 @@ builder. Миграции внутри Python package остаются вход�
 backend, metadata hooks или include rules требует новой квалификации этой границы.
 Unit guards проверяют конфигурацию и зависимости стадий, а не содержимое wheel.
 
-Поздний `runtime-inputs` наследует установленный и очищенный venv из builder,
+Поздний `runtime-inputs` наследует установленный и очищенный venv из installed,
 получает полный `/app` из `verified-inputs` и выполняет installed compatibility
 proof. Финальный образ получает весь прежний runtime payload только из этой стадии.
 Копировать venv поверх venv из dependency stage нельзя: directory merge может
