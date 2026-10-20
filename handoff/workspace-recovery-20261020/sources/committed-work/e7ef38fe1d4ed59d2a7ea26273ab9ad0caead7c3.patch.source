@@ -1,0 +1,2004 @@
+diff --cc .dockerignore
+index 02f81bc,28530f8..32d06a9
+--- a/.dockerignore
++++ b/.dockerignore
+@@@ -12,8 -10,7 +12,8 @@@ frontend/.pnpm-stor
+  htmlcov
+  tests
+  tools
+--docs
+++docs/**
+ +!docs/ui-routes.json
+  screenshots
+  **/__pycache__
+  **/*.py[cod]
+diff --cc Dockerfile
+index c8b0dc4,f30d057..d08e6f3
+--- a/Dockerfile
++++ b/Dockerfile
+@@@ -1,29 -1,10 +1,33 @@@
+  # syntax=docker/dockerfile:1
+ +FROM node:22.20.0-bookworm-slim@sha256:b21fe589dfbe5cc39365d0544b9be3f1f33f55f3c86c87a76ff65a02f8f5848e AS frontend
+ +
+ +RUN npm install --global pnpm@10.28.1
+ +WORKDIR /workspace/services-base/frontend
+ +COPY --from=sdlc_ui /package.json /pnpm-lock.yaml ./
+ +COPY --from=sdlc_ui /src ./src
+ +COPY --from=sdlc_ui /ssr ./ssr
+ +COPY --from=sdlc_ui /scripts ./scripts
+ +RUN pnpm install --frozen-lockfile
+ +
+ +WORKDIR /workspace/project-workflow
+ +COPY frontend/ ./frontend/
+ +COPY project_workflow/ ./project_workflow/
+ +COPY docs/ui-routes.json ./docs/ui-routes.json
+ +COPY Dockerfile pyproject.toml constraints.txt ./
+ +WORKDIR /workspace/project-workflow/frontend
+ +RUN pnpm install --frozen-lockfile && pnpm ssr:check && pnpm build
+ +
+ +ARG VCS_REF=unknown
+ +ARG BASE_VCS_REF=unknown
+ +RUN node ../../services-base/frontend/scripts/write-ui-build.mjs --repo .. \
+ +    --out /workspace/ui-build.json --product-sha "$VCS_REF" --base-sha "$BASE_VCS_REF"
+ +
+  FROM python:3.11-slim-bookworm@sha256:0bee7276f83efd4a1ee05bbbf4281d95ed28e079220a9457f25a93e3f1e3c31b AS builder
+  
++ ARG SOURCE_REVISION=""
++ ARG SOURCE_ARCHIVE_SHA256=""
++ ARG RUNTIME_BUNDLE_SHA256=""
++ 
+  WORKDIR /app
+  
+  ENV PYTHONDONTWRITEBYTECODE=1
+@@@ -35,8 -16,17 +39,22 @@@ RUN apt-get update && apt-get install -
+  COPY pyproject.toml constraints.txt README.md LICENSE alembic.ini ./
+  COPY scripts/ ./scripts/
+  COPY project_workflow/ ./project_workflow/
+++COPY frontend/ ./frontend/
+++COPY Dockerfile ./Dockerfile
+++COPY docs/ui-routes.json ./docs/ui-routes.json
++ COPY runtime-build-manifest.json ./runtime-build-manifest.json
++ 
++ RUN if [ -n "$SOURCE_REVISION" ] || [ -n "$SOURCE_ARCHIVE_SHA256" ] || [ -n "$RUNTIME_BUNDLE_SHA256" ]; then \
++         python -m scripts.build_runtime_image verify-manifest \
++             --root /app \
++             --manifest /app/runtime-build-manifest.json \
++             --source-revision "$SOURCE_REVISION" \
++             --source-archive-sha256 "$SOURCE_ARCHIVE_SHA256" \
++             --runtime-bundle-sha256 "$RUNTIME_BUNDLE_SHA256"; \
++     fi
++ 
+ +COPY --from=frontend /workspace/project-workflow/project_workflow/interfaces/ui/static/react ./project_workflow/interfaces/ui/static/react
+ +
+  ENV PIP_CONSTRAINT=/app/constraints.txt
+  
+  RUN python -m venv /opt/venv \
+@@@ -47,10 -37,12 +65,16 @@@
+  
+  FROM python:3.11-slim-bookworm@sha256:0bee7276f83efd4a1ee05bbbf4281d95ed28e079220a9457f25a93e3f1e3c31b AS runtime
+  
+- ARG VCS_REF=unknown
+ +ARG BASE_VCS_REF=unknown
+- LABEL org.opencontainers.image.revision=$VCS_REF
+ +LABEL org.sdlc.ui.base.revision=$BASE_VCS_REF
+++ARG BASE_UI_ARCHIVE_SHA256=""
+++LABEL org.sdlc.ui.base.archive-sha256=$BASE_UI_ARCHIVE_SHA256
++ ARG SOURCE_REVISION=""
++ ARG SOURCE_ARCHIVE_SHA256=""
++ ARG RUNTIME_BUNDLE_SHA256=""
++ LABEL org.opencontainers.image.revision=$SOURCE_REVISION \
++       io.relevanter.source.archive-sha256=$SOURCE_ARCHIVE_SHA256 \
++       io.relevanter.runtime.bundle-sha256=$RUNTIME_BUNDLE_SHA256
+  
+  WORKDIR /app
+  
+@@@ -63,7 -55,7 +87,8 @@@ COPY --from=builder /opt/venv /opt/ven
+  COPY --from=builder /app/alembic.ini /app/alembic.ini
+  COPY --from=builder /app/scripts /app/scripts
+  COPY --from=builder /app/project_workflow/infrastructure/db/migrations /app/project_workflow/infrastructure/db/migrations
+ +COPY --from=frontend /workspace/ui-build.json /app/ui-build.json
++ COPY --from=builder /app/runtime-build-manifest.json /app/runtime-build-manifest.json
+  
+  ENV PATH="/opt/venv/bin:$PATH"
+  ENV PYTHONUNBUFFERED=1
+diff --cc docs/UI_UX_MAP.md
+index 6a100a2,0000000..a448855
+mode 100644,000000..100644
+--- a/docs/UI_UX_MAP.md
++++ b/docs/UI_UX_MAP.md
+@@@ -1,39 -1,0 +1,47 @@@
+ +# UI/UX-карта Workflow
+ +
+ +Нормативный источник: [Base UI/UX Standard](../../services-base/docs/platform/UI_UX_STANDARD.md).
+ +Продуктовый маршрутный контракт: [ui-routes.json](ui-routes.json).
+ +
+ +Jinja остаётся основным интерфейсом. SSR assets и макросы обновляются только через `cd frontend && pnpm ssr:sync`; `pnpm ssr:check` проверяет byte-for-byte drift.
+ +Точки React-пилота объявлены вместе с Jinja, но доступны только при `WORKFLOW_REACT_UI_ENABLED=true`.
+ +Fixture IDs обозначают необходимые изолированные сценарии. `qa.status: not-run` не является доказательством приёмки.
+ +Согласованных геометрических исключений нет. Сравнение с Jinja и ограничения пилота описаны в [ADR](adr/2026-10-01-read-only-react-pilot.md).
+ +
+ +`/namespaces/new` использует `reading`: каталог не участвует в создании.
+ +`/phase/{phase_id}` использует общий fluid main + contextual aside 320 px.
+ +`/task/{task_key}` использует `wide`, поскольку этот экран не имеет aside;
+ +маркер `detail-with-aside` без фактической боковой колонки не допускается.
+ +
+ +## Локальный SSR-Кандидат
+ +
+ +Base snapshot `5a78740` (предыдущая проверка: `9df7dc3`): header расположен над всей рабочей областью;
+ +sidebar начинается ниже него. В Jinja main больше не содержит header,
+ +а подтверждения делают header inert вместе с main и sidebar.
+ +SSR export/fingerprint проверен через `pnpm ssr:check`; установленный React
+ +пакет проверен `pnpm ui:check` после frozen offline install.
+ +На объединённом Base повторно прошли installed fingerprint, SSR drift,
+ +frontend build, lint и 8 tests React-пилота.
+ +
+ +На этом исходнике прошли 1517 Python tests с coverage 94,31%, отдельные
+ +38 PostgreSQL integration tests, Ruff, mypy (83 файла) и frontend tests/build.
+ +Штатный capture-скрипт проверил нейтральную multi-namespace fixture на
+ +изолированном Python runtime: 14 desktop full-page и 3 responsive кадра.
+ +Эти source captures не заменяют README provenance фактического image.
+ +
+ +Текущая `ui-acceptance.json` остаётся pending и содержит предыдущие source
+ +fingerprints. Выпускной gate намеренно отклоняет её: новые immutable images,
+ +SSO, все роли/состояния и полная browser matrix ещё требуют приёмки.
+ +Сохранённый default `origin/master=7a720b1` содержит отдельный immutable
+- builder и новые runtime-контракты; текущая UI-ветка ещё не объединена с ним.
+- Новый launcher Base требует этого builder, поэтому текущий checkout нельзя
+- считать совместимым выпускным image. При объединении сохранить обе цепочки
+- provenance и включить воспроизводимую React/Base сборку в immutable context.
+++builder и новые runtime-контракты. Они включены в текущий integration-кандидат.
+++На объединённых исходниках прошли 1924 Python tests с coverage 94,12%
+++и ResourceWarning/unraisable warnings-as-errors, 49 PostgreSQL integration tests,
+++Ruff, mypy (92 файла), 13 frontend tests, lint/build, SSR drift и route gate.
+++Сохранены прежние domain/API/migration contracts из default; новые UI changes
+++не меняют их. Browser source evidence: 14 desktop и 3 responsive Jinja captures,
+++3 namespace/mode select/reload сценария и 180 React direct/reload observations
+++на 3 routes, в 3 themes и на 10 widths. Это не image/SSO release acceptance.
+++Builder теперь использует Git-архивы обоих продуктов, а runtime bundle digest
+++покрывает также frontend build inputs. Обе цепочки provenance сохраняются:
+++runtime-build-manifest и ui-build. Совместимость со штатным launcher и
+++выпускную приёмку подтверждать только новым фактическим image evidence.
+diff --cc docs/adr/2026-10-01-read-only-react-pilot.md
+index 7feb9e4,0000000..0eae389
+mode 100644,000000..100644
+--- a/docs/adr/2026-10-01-read-only-react-pilot.md
++++ b/docs/adr/2026-10-01-read-only-react-pilot.md
+@@@ -1,68 -1,0 +1,80 @@@
+ +# ADR: Read-only React-пилот
+ +
+- Статус: read-only пилот реализован, чистая Docker-сборка и packaged assets проверены;
+- полная workspace/browser/SSO acceptance не завершена.
+++Статус: read-only пилот реализован. Предыдущая Docker-сборка и packaged assets
+++проверены для версии из build evidence; новая объединённая immutable сборка
+++требует отдельного image evidence. Полная workspace/browser/SSO acceptance
+++не завершена.
+ +Решение о полном переносе не принято. Дата: 2026-10-01.
+ +
+ +## Решение
+ +
+ +Основной UI остаётся Jinja. Опциональный React/TypeScript/Vite consumer использует `@sdlc/ui`, существующие GET API и cookie-сессию на том же origin, под `/react/`. CRUD, новый login, bearer getter, CORS и второй auth store не добавляются.
+ +
+ +## Покрытие API и стоимость
+ +
+ +| Группа Jinja | Существующие данные и операции | Read-only перенос | Ограничения полного переноса |
+ +|---|---|---|---|
+ +| Задачи | GET /api/tasks | Низкая: список, namespace, ссылки в Jinja | Task detail не имеет отдельного JSON API; полная карточка требует отдельного решения |
+ +| Фазы | GET /api/phases, /api/phases/{id}; phase mutations | Средняя: список и detail входят в пилот | Reorder, инструкции, conflicts, namespace ownership и draft safety требуют отдельной acceptance matrix |
+ +| Неймспейсы | GET /api/namespaces и namespace mutations | Средняя: selector входит в пилот | Редактор, темы, workflow assignment и валидация остаются Jinja |
+ +| Воркфлоу | GET /api/workflows и mutations | Средняя | Редактор структуры и правила домена остаются Jinja |
+ +| Агенты | GET /api/agents и mutations | Средняя | Assignment/runtime integration и права должны сохраняться |
+ +| Инструкции | GET /api/phases/{id}/instructions и mutations | Средняя | Порядок, execution_type и удаление требуют поведенческих тестов |
+ +| Dashboard | Сейчас собирается серверными loaders | Высокая относительно списка | JSON summary не полностью эквивалентен dashboard; пилот его не добавляет |
+ +| Settings / CLI | GET /api/settings, /api/cli/history | Средняя | CLI/runtime bridge не должен переезжать в browser или дублироваться |
+ +
+ +Это сравнительная инженерная оценка по группам экранов, не календарные обещания. Полный перенос включает повторную проверку всех операций, browser states, SSO и контекста, а не только JSX.
+ +
+ +## Контекст и авторизация
+ +
+ +Серверный bootstrap содержит только identity и выбранный namespace из существующей cookie, без credentials. JSON экранирует script delimiters. Явный URL имеет приоритет над cookie. Смена namespace отражается в URL; task detail открывается в Jinja с namespace_id. При 401 Base API client направляет в действующий login с сохранением pathname и query. Assets защищены тем же SSO middleware.
+ +
+ +## Сборка и отключение
+ +
+ +Dockerfile собирает React из tracked sources в отдельном Node stage с pinned image
+ +и pnpm, frozen lockfiles Base и Workflow и обязательным `ssr:check`. Named context
+- `sdlc_ui` указывает на выбранный `services-base/frontend`; оба штатных Compose
+- build передают его. Локальный `static/react` исключён из Docker context: stale dist
+++`sdlc_ui` в локальном Compose указывает на выбранный `services-base/frontend`.
+++Выпускной `scripts/build_runtime_image.py build` вместо рабочей директории
+++использует два immutable Git-архива: точный commit Workflow и
+++Base commit с path filter `frontend`, сохраняющим commit timestamp архива.
+++Base задаётся `--base-root`/`--base-revision`
+++или `SDLC_SERVICES_BASE_DIR`; Workflow задаётся `--revision`.
+++Локальный `static/react` исключён из Docker context: stale dist
+ +не может попасть в image. Результат копируется в Python wheel детерминированным
+ +force-include. Для сборки Python package вне Docker по-прежнему выполнить
+ +`cd frontend && pnpm install --frozen-lockfile && pnpm ssr:check && pnpm build`.
+ +
+ +`/app/ui-build.json` хранит source SHA, Base/product fingerprints и SHA-256 каждого
+- React asset; OCI labels содержат product/Base revisions. Launcher передаёт текущие
+- SHA. Значение `unknown` допустимо для локального dev build, но не для выпуска.
+- Точные source/image версии и выполненные проверки:
+++React asset; OCI labels содержат product/Base revisions и digest Base archive.
+++`/app/runtime-build-manifest.json` отдельно фиксирует Workflow source revision,
+++source archive digest и runtime bundle digest. Последний включает frontend
+++sources/lockfile, Dockerfile и route manifest. Manifest проверяется до установки
+++Python package и до добавления сгенерированных React assets.
+++Выпускной builder передаёт точные SHA; dirty и untracked inputs не используются.
+++Значение `unknown` допустимо для локального dev build, но не для выпуска.
+++Предыдущие source/image версии и выполненные проверки:
+ +[build evidence](../ui-evidence/2026-10-01/workflow-image-build.json). Генерируемые
+ +SSR assets имеют `text eol=lf`: Git archive на Windows не меняет fingerprint bytes.
+ +При включённом флаге отсутствие build или bootstrap marker останавливает запуск.
+ +По умолчанию флаг выключен; /react и его assets недоступны. Флаг выключается без
+ +изменения Jinja URL, API, CLI или схем БД.
+ +
+ +## Сравнительная Acceptance Matrix
+ +
+ +| Сценарий | Jinja | React | Статус текущего пилота |
+ +|---|---|---|---|
+ +| Прямое открытие / reload | Основные URL | /react/tasks, /react/phases, /react/phases/{id} | Server route tests и direct-open на живом изолированном процессе пройдены; image/SSO reload matrix ещё обязательна |
+ +| Cookie SSO / login next | Существующий middleware | Тот же middleware и origin | Изолированный server test пройден; live SSO не принят |
+ +| Namespace из cookie / URL | Серверная композиция | Безопасный bootstrap и URL | Component tests проверяют cookie restore без unscoped GET; no-mock select, Back, Forward и reload сохраняют namespace на изолированном процессе |
+ +| Task detail | Полный Jinja экран | Ссылка в Jinja | Нового JSON endpoint нет |
+ +| CRUD / reorder / draft safety | Действующий функционал | Не предусмотрен | Намеренно вне пилота |
+ +| 403 / 404 / 5xx / пустые данные | Основной UI | Base ResourceStateView | Полная fixture matrix не исполнена |
+ +| Геометрия / темы / keyboard | SSR Base assets | Base AppShell / page patterns | 420 no-mock geometry observations: 14 routes, 3 themes, 10 widths; общий image/SSO/state gate ещё не исполнен |
+ +
+ +## Рекомендация
+ +
+ +Текущие результаты и незавершённые release checks: [UI evidence](../ui-acceptance.json).
+ +Escape/focus return и focus trap подтверждены для Jinja и React drawer на 375 px.
+ +Проверка каждого product dialog и live SSO этим проходом не закрыта.
+ +
+ +Не переключать основной интерфейс и не развивать второй набор domain services. Сначала завершить локальную browser acceptance пилота и Jinja, измерить реальные пробелы API и нагрузку двойной поддержки. Затем отдельно решать, окупает ли единый React renderer миграцию всех операций. Пока два UI означают две маршрутные/state матрицы и обязательную проверку parity при изменениях API или SSO.
+diff --cc docs/quality-gate.md
+index 457306d,658a097..51fa4a6
+--- a/docs/quality-gate.md
++++ b/docs/quality-gate.md
+@@@ -1,13 -1,11 +1,15 @@@
+  # Quality Gate
+  
+ -Этот файл фиксирует обязательный локальный quality gate для `project-workflow`.
+ -GitHub Actions в `.github/workflows/ci.yml` сохранён как опциональное зеркало:
+ -job `quality` запускает тесты и статический анализ с PostgreSQL 16, а
+ -`compose-smoke` собирает стек и проверяет `/health`. Для локального выпуска
+ -результаты оплачиваемых hosted jobs не требуются; `[skip ci]` предотвращает
+ -их запуск на push/PR. Перед commit и merge проверки ниже выполняются локально.
+ +Этот файл фиксирует локальный quality gate для `project-workflow`.
+ +Для программы стандартизации UI/UX от 2026-10-01 приёмка и интеграция выполняются
+ +локально, без зависимости от GitHub Actions, по решению владельца и
+ +[Base UI/UX Standard](../../services-base/docs/platform/UI_UX_STANDARD.md).
+ +Наличие `.github/workflows/ci.yml` не заменяет локальные проверки и не является
+ +дополнительным условием приёмки этой программы. Перед commit запускаются
+ +релевантные проверки; перед выпуском обязателен полный набор ниже, runtime
+ +health, согласованные product/Base fingerprints и no-mock browser/SSO evidence.
+++Сохранённый hosted pipeline остаётся опциональным зеркалом; `[skip ci]`
+++предотвращает его запуск. Его результаты для локального выпуска не требуются.
+  
+  ## Базовый gate
+  
+diff --cc frontend/src/jinjaNavigation.test.ts
+index 0000000,0000000..b74a7c2
+new file mode 100644
+--- /dev/null
++++ b/frontend/src/jinjaNavigation.test.ts
+@@@ -1,0 -1,0 +1,44 @@@
+++// @vitest-environment node
+++import { readFileSync } from 'node:fs'
+++import { resolve } from 'node:path'
+++import { cwd } from 'node:process'
+++import { runInNewContext } from 'node:vm'
+++import { describe, expect, it } from 'vitest'
+++
+++const template = readFileSync(resolve(cwd(), '../project_workflow/interfaces/ui/templates/base.html'), 'utf8')
+++const handler = template.match(/function switchNamespace\(namespaceId\)\{[\s\S]*?(?=function setPlatformTheme)/)?.[0]
+++if (!handler) throw new Error('Jinja namespace handler is missing')
+++
+++function switchNamespace(path: string, namespaceId: string) {
+++  const location = { href: `http://localhost${path}` }
+++  const document = { cookie: '' }
+++  runInNewContext(`${handler}\nswitchNamespace(namespaceId)`, { URL, window: { location }, document, namespaceId })
+++  return { url: new URL(location.href), cookie: document.cookie }
+++}
+++
+++describe('Jinja namespace navigation', () => {
+++  it.each(['/phases', '/phase/17', '/instructions'])('drops workflow-scoped context from %s', path => {
+++    const { url, cookie } = switchNamespace(`${path}?namespace_id=1&workflow_id=2&mode_id=3&phase_id=17&filter=active`, '9')
+++    expect(url.pathname).toBe('/phases')
+++    expect(url.searchParams.get('namespace_id')).toBe('9')
+++    expect(url.searchParams.has('workflow_id')).toBe(false)
+++    expect(url.searchParams.has('mode_id')).toBe(false)
+++    expect(url.searchParams.get('filter')).toBe('active')
+++    if (path === '/instructions') expect(url.searchParams.has('phase_id')).toBe(false)
+++    expect(cookie).toBe('workflow_namespace_id=9; path=/; SameSite=Lax')
+++  })
+++
+++  it('keeps task filters and returns namespace creation to the catalog', () => {
+++    const tasks = switchNamespace('/tasks?status=blocked&namespace_id=1', '9')
+++    expect(tasks.url.pathname).toBe('/tasks')
+++    expect(tasks.url.searchParams.get('status')).toBe('blocked')
+++    expect(tasks.url.searchParams.get('namespace_id')).toBe('9')
+++    expect(switchNamespace('/namespaces/new', '9').url.pathname).toBe('/namespaces')
+++  })
+++
+++  it('does not navigate or write a cookie without a namespace', () => {
+++    const { url, cookie } = switchNamespace('/phases?workflow_id=2&mode_id=3', '')
+++    expect(url.href).toBe('http://localhost/phases?workflow_id=2&mode_id=3')
+++    expect(cookie).toBe('')
+++  })
+++})
+diff --cc project_workflow/build_provenance.py
+index 0000000,3f90ff6..7f1b867
+mode 000000,100644..100644
+--- a/project_workflow/build_provenance.py
++++ b/project_workflow/build_provenance.py
+@@@ -1,0 -1,269 +1,271 @@@
++ """Validated immutable provenance for the packaged runtime image."""
++ 
++ from __future__ import annotations
++ 
++ import hashlib
++ import io
++ import json
++ import os
++ import re
++ import stat
++ import tarfile
++ from dataclasses import asdict, dataclass
++ from pathlib import Path, PurePosixPath
++ from typing import Any
++ 
++ MANIFEST_SCHEMA_VERSION = 1
++ DEFAULT_BUILD_MANIFEST_PATH = Path("/app/runtime-build-manifest.json")
++ _REVISION_PATTERN = re.compile(r"[0-9a-f]{40}(?:[0-9a-f]{24})?\Z")
++ _SHA256_PATTERN = re.compile(r"[0-9a-f]{64}\Z")
++ _BUNDLE_ROOT_FILES = (
+++    "Dockerfile",
++     "LICENSE",
++     "README.md",
++     "alembic.ini",
++     "constraints.txt",
++     "pyproject.toml",
+++    "docs/ui-routes.json",
++ )
+ -_BUNDLE_ROOT_DIRECTORIES = ("project_workflow", "scripts")
+++_BUNDLE_ROOT_DIRECTORIES = ("project_workflow", "scripts", "frontend")
++ _MANIFEST_CONTEXT_PATH = "runtime-build-manifest.json"
++ 
++ 
++ class BuildProvenanceError(ValueError):
++     """The runtime build provenance cannot be trusted."""
++ 
++ 
++ @dataclass(frozen=True)
++ class BuildProvenance:
++     schema_version: int
++     source_revision: str
++     source_archive_sha256: str
++     runtime_bundle_sha256: str
++ 
++     def to_dict(self) -> dict[str, str | int]:
++         return asdict(self)
++ 
++ 
++ def validate_build_provenance(value: Any) -> BuildProvenance:
++     """Validate the exact, intentionally small build-manifest contract."""
++     if not isinstance(value, dict) or set(value) != {
++         "schema_version",
++         "source_revision",
++         "source_archive_sha256",
++         "runtime_bundle_sha256",
++     }:
++         raise BuildProvenanceError("Некорректная схема build provenance")
++     schema_version = value.get("schema_version")
++     source_revision = value.get("source_revision")
++     source_archive_sha256 = value.get("source_archive_sha256")
++     runtime_bundle_sha256 = value.get("runtime_bundle_sha256")
++     if type(schema_version) is not int or schema_version != MANIFEST_SCHEMA_VERSION:
++         raise BuildProvenanceError("Неподдерживаемая версия build provenance")
++     if not isinstance(source_revision, str) or _REVISION_PATTERN.fullmatch(source_revision) is None:
++         raise BuildProvenanceError("Некорректная source revision")
++     if (
++         not isinstance(source_archive_sha256, str)
++         or _SHA256_PATTERN.fullmatch(source_archive_sha256) is None
++     ):
++         raise BuildProvenanceError("Некорректный source archive digest")
++     if (
++         not isinstance(runtime_bundle_sha256, str)
++         or _SHA256_PATTERN.fullmatch(runtime_bundle_sha256) is None
++     ):
++         raise BuildProvenanceError("Некорректный runtime bundle digest")
++     return BuildProvenance(
++         schema_version=schema_version,
++         source_revision=source_revision,
++         source_archive_sha256=source_archive_sha256,
++         runtime_bundle_sha256=runtime_bundle_sha256,
++     )
++ 
++ 
++ def load_build_provenance(path: Path | None = None) -> BuildProvenance:
++     """Read provenance from the immutable image file, never from environment values."""
++     manifest_path = path or DEFAULT_BUILD_MANIFEST_PATH
++     try:
++         raw = manifest_path.read_text(encoding="utf-8")
++         value = json.loads(raw)
++     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
++         raise BuildProvenanceError("Build provenance недоступен") from exc
++     return validate_build_provenance(value)
++ 
++ 
++ def _canonical_digest(records: list[dict[str, str]]) -> str:
++     canonical = json.dumps(records, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
++     return hashlib.sha256(canonical).hexdigest()
++ 
++ 
++ def _safe_archive_path(name: str) -> str:
++     path = PurePosixPath(name)
++     if not name or path.is_absolute() or ".." in path.parts or "\\" in name:
++         raise BuildProvenanceError("Git archive содержит небезопасный путь")
++     normalized = path.as_posix().removeprefix("./")
++     if not normalized or normalized == ".":
++         raise BuildProvenanceError("Git archive содержит пустой путь")
++     return normalized.rstrip("/")
++ 
++ 
++ def _is_bundle_path(path: str) -> bool:
++     return path in _BUNDLE_ROOT_FILES or any(
++         path.startswith(f"{directory}/") for directory in _BUNDLE_ROOT_DIRECTORIES
++     )
++ 
++ 
++ def runtime_bundle_sha256_from_archive(archive: bytes) -> str:
++     """Hash runtime inputs directly from one immutable ``git archive`` snapshot."""
++     records: list[dict[str, str]] = []
++     seen_files: set[str] = set()
++     seen_directories: set[str] = set()
++     try:
++         source = tarfile.open(fileobj=io.BytesIO(archive), mode="r:*")
++     except tarfile.TarError as exc:
++         raise BuildProvenanceError("Git archive повреждён") from exc
++     with source:
++         for member in source.getmembers():
++             path = _safe_archive_path(member.name)
++             if not _is_bundle_path(path):
++                 continue
++             if member.isdir():
++                 if path in _BUNDLE_ROOT_DIRECTORIES:
++                     seen_directories.add(path)
++                 continue
++             if not member.isfile():
++                 raise BuildProvenanceError(
++                     f"Runtime bundle содержит недопустимый тип entry: {path}"
++                 )
++             if path in seen_files:
++                 raise BuildProvenanceError(f"Runtime bundle содержит повторный путь: {path}")
++             fileobj = source.extractfile(member)
++             if fileobj is None:
++                 raise BuildProvenanceError(f"Runtime bundle не может прочитать {path}")
++             content_sha256 = hashlib.sha256(fileobj.read()).hexdigest()
++             records.append(
++                 {
++                     "type": "file",
++                     "executable_mode": f"{member.mode & 0o111:03o}",
++                     "path": path,
++                     "content_sha256": content_sha256,
++                 }
++             )
++             seen_files.add(path)
++             for directory in _BUNDLE_ROOT_DIRECTORIES:
++                 if path.startswith(f"{directory}/"):
++                     seen_directories.add(directory)
++     missing_files = set(_BUNDLE_ROOT_FILES) - seen_files
++     missing_directories = set(_BUNDLE_ROOT_DIRECTORIES) - seen_directories
++     if missing_files or missing_directories:
++         missing = sorted(missing_files | missing_directories)
++         raise BuildProvenanceError(f"Runtime bundle не содержит: {', '.join(missing)}")
++     records.sort(key=lambda item: item["path"])
++     return _canonical_digest(records)
++ 
++ 
++ def _bundle_files(root: Path) -> list[Path]:
++     files: list[Path] = []
++     for name in _BUNDLE_ROOT_FILES:
++         candidate = root / name
++         try:
++             candidate_stat = candidate.lstat()
++         except OSError as exc:
++             raise BuildProvenanceError(f"Runtime bundle не содержит {name}") from exc
++         if not stat.S_ISREG(candidate_stat.st_mode):
++             raise BuildProvenanceError(f"Runtime bundle не содержит {name}")
++         files.append(candidate)
++     for name in _BUNDLE_ROOT_DIRECTORIES:
++         directory = root / name
++         try:
++             directory_stat = directory.lstat()
++         except OSError as exc:
++             raise BuildProvenanceError(f"Runtime bundle не содержит {name}") from exc
++         if not stat.S_ISDIR(directory_stat.st_mode):
++             raise BuildProvenanceError(f"Runtime bundle не содержит {name}")
++         found_file = False
++         for current_root, directories, filenames in os.walk(directory, followlinks=False):
++             current = Path(current_root)
++             for child_name in directories:
++                 child = current / child_name
++                 if child.is_symlink():
++                     raise BuildProvenanceError(
++                         f"Runtime bundle содержит недопустимый symlink: {child.relative_to(root).as_posix()}"
++                     )
++             for child_name in filenames:
++                 child = current / child_name
++                 child_stat = child.lstat()
++                 if not stat.S_ISREG(child_stat.st_mode):
++                     raise BuildProvenanceError(
++                         f"Runtime bundle содержит недопустимый тип: {child.relative_to(root).as_posix()}"
++                     )
++                 files.append(child)
++                 found_file = True
++         if not found_file:
++             raise BuildProvenanceError(f"Runtime bundle не содержит файлы в {name}")
++     return sorted(set(files), key=lambda path: path.relative_to(root).as_posix())
++ 
++ 
++ def runtime_bundle_sha256(root: Path) -> str:
++     """Hash the exact source inputs copied by the runtime Dockerfile."""
++     records: list[dict[str, str]] = []
++     for path in _bundle_files(root):
++         mode = path.lstat().st_mode
++         records.append(
++             {
++                 "type": "file",
++                 "executable_mode": f"{mode & 0o111:03o}",
++                 "path": path.relative_to(root).as_posix(),
++                 "content_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
++             }
++         )
++     return _canonical_digest(records)
++ 
++ 
++ def verify_build_manifest(
++     path: Path,
++     root: Path,
++     *,
++     expected_source_revision: str,
++     expected_source_archive_sha256: str,
++     expected_runtime_bundle_sha256: str,
++ ) -> BuildProvenance:
++     """Verify that the immutable manifest describes the copied runtime inputs."""
++     provenance = load_build_provenance(path)
++     if provenance != validate_build_provenance(
++         {
++             "schema_version": MANIFEST_SCHEMA_VERSION,
++             "source_revision": expected_source_revision,
++             "source_archive_sha256": expected_source_archive_sha256,
++             "runtime_bundle_sha256": expected_runtime_bundle_sha256,
++         }
++     ):
++         raise BuildProvenanceError("Build arguments не совпадают с immutable manifest")
++     actual_bundle_sha256 = runtime_bundle_sha256(root)
++     if actual_bundle_sha256 != provenance.runtime_bundle_sha256:
++         raise BuildProvenanceError("Runtime bundle digest не совпадает с build context")
++     return provenance
++ 
++ 
++ def docker_context_with_manifest(archive: bytes, provenance: BuildProvenance) -> bytes:
++     """Add the generated manifest to the exact archive used as Docker context."""
++     output = io.BytesIO()
++     try:
++         source = tarfile.open(fileobj=io.BytesIO(archive), mode="r:*")
++     except tarfile.TarError as exc:
++         raise BuildProvenanceError("Git archive повреждён") from exc
++     with source, tarfile.open(fileobj=output, mode="w", format=tarfile.PAX_FORMAT) as target:
++         for member in source.getmembers():
++             path = _safe_archive_path(member.name)
++             if path == _MANIFEST_CONTEXT_PATH:
++                 continue
++             fileobj = source.extractfile(member) if member.isfile() else None
++             target.addfile(member, fileobj)
++         manifest = (
++             json.dumps(provenance.to_dict(), sort_keys=True, separators=(",", ":")) + "\n"
++         ).encode("utf-8")
++         manifest_info = tarfile.TarInfo(_MANIFEST_CONTEXT_PATH)
++         manifest_info.size = len(manifest)
++         manifest_info.mode = 0o444
++         manifest_info.mtime = 0
++         manifest_info.uid = 0
++         manifest_info.gid = 0
++         target.addfile(manifest_info, io.BytesIO(manifest))
++     return output.getvalue()
+diff --cc project_workflow/interfaces/ui/app.py
+index a743e11,89c19fc..f90879f
+--- a/project_workflow/interfaces/ui/app.py
++++ b/project_workflow/interfaces/ui/app.py
+@@@ -18,11 -17,11 +18,13 @@@ from starlette.exceptions import HTTPEx
+  from starlette.middleware.base import BaseHTTPMiddleware
+  
+  from ... import __version__
++ from ...infrastructure.db.managed_catalog import validate_managed_catalog_state
+  from ...infrastructure.db.session import DatabaseUnavailable, get_engine, reset_engine
++ from ...infrastructure.db.uow import SAUnitOfWork
+ +from .react_ui import install_react_ui
+  from .routes import api, cli_api, pages, runtime_api
+  from .sso import install_sso
+ +from .templates import BASE_DIR
+  
+  logger = logging.getLogger(__name__)
+  
+@@@ -85,7 -84,7 +87,9 @@@ class _UoWMiddleware(BaseHTTPMiddleware
+      async def dispatch(self, request: Request, call_next):
+          from ...application.state import _app_state, _uow_ctx
+  
+-         if request.url.path == "/health" or request.url.path.startswith("/static/base-ui/"):
+ -        if request.url.path in {"/health", "/internal/runtime/capabilities"}:
+++        if request.url.path in {"/health", "/internal/runtime/capabilities"} or request.url.path.startswith(
+++            "/static/base-ui/"
+++        ):
+              return await call_next(request)
+          try:
+              uow = _app_state.create_uow()
+@@@ -224,7 -243,12 +249,10 @@@ def create_app() -> FastAPI
+      app.get("/health")(_health)
+  
+      # Private bridge for isolated agent containers; separate from browser UI.
+ -    app.get("/internal/runtime/capabilities", response_model=None)(
+ -        runtime_api.runtime_capabilities
+ -    )
+++    app.get("/internal/runtime/capabilities", response_model=None)(runtime_api.runtime_capabilities)
+      app.post("/internal/runtime/step", response_model=None)(runtime_api.runtime_step)
++     app.post("/internal/runtime/assign", response_model=None)(runtime_api.runtime_assign)
++     app.post("/internal/runtime/bind", response_model=None)(runtime_api.runtime_bind)
+      app.get("/internal/runtime/history", response_model=None)(runtime_api.runtime_history)
+      app.get("/internal/runtime/catalog", response_model=None)(runtime_api.runtime_catalog)
+  
+diff --cc project_workflow/interfaces/ui/templates/base.html
+index c332fab,ccb0562..bdbd572
+--- a/project_workflow/interfaces/ui/templates/base.html
++++ b/project_workflow/interfaces/ui/templates/base.html
+@@@ -76,7 -114,7 +76,7 @@@ button:focus-visible,a:focus-visible,in
+  .service-menu-chevron{font-size:11px;color:var(--text-muted);transition:transform .15s}
+  .service-menu[open] .service-menu-chevron{transform:rotate(180deg)}
+  .service-menu-popover{position:absolute;left:0;right:auto;top:calc(100% + 8px);z-index:250;width:260px;max-width:calc(100vw - 24px);max-height:calc(100dvh - var(--header-height) - 16px);overflow-y:auto;overscroll-behavior:contain;padding:6px;background:var(--surface);border:1px solid var(--border-strong);border-radius:8px;box-shadow:0 16px 40px rgba(0,0,0,.45)}
+- .service-menu-item{padding:8px 10px;border-radius:6px;display:flex;align-items:center;gap:10px;color:var(--text-secondary);text-decoration:none}
+ -.service-menu-item{min-height:40px;padding:8px 10px;border-radius:6px;display:flex;align-items:center;gap:10px;color:var(--text-secondary);text-decoration:none}
+++.service-menu-item{min-height:var(--shell-control-min);padding:8px 10px;border-radius:6px;display:flex;align-items:center;gap:10px;color:var(--text-secondary);text-decoration:none}
+  .service-menu-item:hover,.service-menu-item:focus-visible{background:var(--surface-hover);color:var(--text);text-decoration:none}
+  .service-menu-item[aria-current="page"]{background:var(--accent-soft);color:var(--text);font-weight:600}
+  .service-health{width:8px;height:8px;border-radius:50%;flex:0 0 auto;background:var(--text-dim)}
+@@@ -310,54 -386,42 +310,50 @@@ textarea{resize:vertical;min-height:60p
+              <span>{{ service.label }}</span>
+            </a>
+            {% endfor %}
+-           <a class="sidebar-service-link" href="/" aria-current="page">
+-             <span class="service-health healthy" role="img" aria-label="Работает"></span>
+-             <span>Project Workflow</span>
+-           </a>
+          </div>
+        </details>
+ -    </div>
+ +      {% endif %}
+ +    </div>{% endif %}
+      </nav>
+ -    <div class="sidebar-footer">
+ -    <span class="dot green"></span>
+ -    <span class="sidebar-status-label">Сервис работает</span>
+ -    <a class="sidebar-logout" href="/logout">Выйти</a>
+ +{% endmacro %}
+ +{% call base.navigation_drawer('Project Workflow') %}{{ workflow_navigation(true) }}{% endcall %}
+ +{% call base.sidebar() %}
+ +  <div class="sidebar-header">
+ +    <div class="sidebar-logo">
+ +      <a class="brand-link" href="/" aria-label="Workflow Engine">
+ +        <span class="brand-mark" aria-hidden="true">
+ +          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+ +            <path d="{{ project_icon_path(active_namespace.theme_icon if active_namespace else default_project_icon) }}"></path>
+ +          </svg>
+ +        </span>
+ +        <span class="brand-text">
+ +          <span class="brand-name">{{ active_namespace.name if active_namespace else 'workflow' }}</span>
+ +          <span class="brand-subname">{{ active_namespace.cli_command if active_namespace and active_namespace.cli_command else 'engine' }}</span>
+ +        </span>
+ +      </a>
+      </div>
+ -</aside>
+ +  </div>
+ +{{ workflow_navigation() }}
+ +{% endcall %}
+  
+ -<!-- Main -->
+ -<main class="main">
+ -  <header class="header">
+ +  {% call base.header() %}
+      <div class="header-title-group">
+ -      <button class="burger" id="burgerBtn" type="button" aria-label="Открыть навигацию" aria-controls="sidebar" aria-expanded="false" onclick="openSidebar()">☰</button>
+ -      <h1 class="header-title">{% block header_title %}{% endblock %}</h1>
+ -    </div>
+ -    <div class="header-actions">
+ -      <select class="theme-select" id="themeSelector" aria-label="Тема" onchange="setPlatformTheme(this.value)">
+ -        <option value="dark">Тёмная</option>
+ -        <option value="gray">Серая</option>
+ -        <option value="light">Светлая</option>
+ -      </select>
+ +      <button class="burger base-shell-drawer-trigger" id="burgerBtn" type="button" aria-label="Открыть навигацию" aria-controls="base-mobile-navigation" aria-expanded="false" data-base-drawer-trigger>☰</button>
+ +      {% if show_service_switcher|default(false) %}
+        <details class="service-menu" id="serviceMenu">
+-         <summary aria-label="Project Workflow: открыть список сервисов">Project Workflow <span class="service-menu-chevron" aria-hidden="true">▾</span></summary>
+-         <div class="service-menu-popover" role="menu" aria-label="Сервисы платформы">
+ -        <summary aria-label="Открыть список сервисов платформы">Сервисы <span class="service-menu-chevron" aria-hidden="true">▾</span></summary>
+++        {% set current_service = other_services|selectattr('key', 'equalto', 'project-workflow')|first %}
+++        {% set current_service_label = current_service.label if current_service else 'Project Workflow' %}
+++        <summary aria-label="{{ current_service_label }}: открыть список сервисов">{{ current_service_label }} <span class="service-menu-chevron" aria-hidden="true">▾</span></summary>
++         <div class="service-menu-popover">
++           <div role="menu" aria-label="Сервисы платформы">
+          {% for service in other_services %}
+-           <a class="service-menu-item" href="{{ service.url }}" role="menuitem">
++           <a class="service-menu-item" href="{{ '/' if service.key == 'project-workflow' else service.url }}" role="menuitem" {% if service.key == 'project-workflow' %}aria-current="page"{% endif %}>
+              <span class="service-health {{ service.health }}" role="img" aria-label="{% if service.health == 'healthy' %}Работает{% elif service.health == 'unreachable' %}Недоступен{% else %}Состояние неизвестно{% endif %}"></span>
+              <span>{{ service.label }}</span>
++             {% if service.key == 'project-workflow' %}<span class="service-menu-current">Текущий</span>{% endif %}
+            </a>
+          {% endfor %}
+-           <a class="service-menu-item" href="/" role="menuitem" aria-current="page">
+-             <span class="service-health healthy" role="img" aria-label="Работает"></span>
+-             <span>Project Workflow</span>
+-             <span class="service-menu-current">Текущий</span>
+-           </a>
++           </div>
+            {% set catalog_source = services_source|default('fallback-unreachable') %}
+            <div class="service-menu-source" role="status">Источник: {{ 'каталог' if catalog_source == 'runtime' else 'резервный список' if catalog_source.startswith('fallback') else 'сохранённый каталог' }}</div>
+          </div>
+@@@ -494,17 -602,17 +490,16 @@@ function switchNamespace(namespaceId)
+    if(!namespaceId){return;}
+    document.cookie='workflow_namespace_id='+encodeURIComponent(namespaceId)+'; path=/; SameSite=Lax';
+    var url=new URL(window.location.href);
+--  if(url.pathname === '/phases'){
+--    url.searchParams.delete('workflow_id');
+--  }
+    if(url.pathname.startsWith('/phase/')){
+      url.pathname='/phases';
+--    url.searchParams.delete('workflow_id');
+    }
+    if(url.pathname === '/instructions'){
+      url.pathname='/phases';
+      url.searchParams.delete('phase_id');
+++  }
+++  if(url.pathname === '/phases'){
+      url.searchParams.delete('workflow_id');
+++    url.searchParams.delete('mode_id');
+    }
+    if(url.pathname === '/namespaces/new'){
+      url.pathname='/namespaces';
+diff --cc project_workflow/interfaces/ui/templates/phases.html
+index f70a950,7529296..90aea3f
+--- a/project_workflow/interfaces/ui/templates/phases.html
++++ b/project_workflow/interfaces/ui/templates/phases.html
+@@@ -18,12 -18,20 +18,20 @@@
+  .workflow-summary{background:transparent;border-width:0 0 1px;border-radius:0;padding:0 0 16px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+  .workflow-summary-copy{min-width:0}
+  .workflow-summary .card-title{font-size:20px;color:var(--text);text-transform:none;letter-spacing:0;margin-bottom:5px}
++ .mode-navigation{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0}
++ .mode-tabs{display:flex;align-items:center;gap:6px;min-width:0;overflow-x:auto;padding:2px;scrollbar-width:thin}
++ .mode-tab{display:inline-flex;align-items:center;min-height:40px;padding:8px 14px;border:1px solid var(--border-strong);border-radius:7px;background:var(--surface);color:var(--text-secondary);font-size:13px;font-weight:600;text-decoration:none;white-space:nowrap}
++ .mode-tab:hover{text-decoration:none;border-color:var(--accent);color:var(--text)}
++ .mode-tab[aria-current="page"]{border-color:var(--accent);background:var(--accent-soft);color:var(--accent-readable)}
++ .mode-tab:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
++ .mode-picker{display:none;width:100%}
++ .mode-picker select{min-height:40px;width:100%}
+  .phase-view-controls{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}
+  .phase-view-switch{display:inline-flex;align-items:center;padding:2px;border:1px solid var(--border-strong);border-radius:6px;background:var(--surface)}
+ -.phase-view-switch button{min-height:40px;padding:0 12px;border:0;border-radius:4px;background:transparent;color:var(--text-secondary);font:inherit;font-size:13px;cursor:pointer}
+ +.phase-view-switch button{min-height:var(--shell-control-min);padding:0 12px;border:0;border-radius:4px;background:transparent;color:var(--text-secondary);font:inherit;font-size:13px;cursor:pointer}
+  .phase-view-switch button[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent-readable);font-weight:600}
+  .phase-view-switch button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+ -.phase-jump-select{flex:0 1 240px;min-width:180px;min-height:40px;max-width:100%}
+ +.phase-jump-select{flex:0 1 240px;min-width:180px;min-height:var(--shell-control-min);max-width:100%}
+  .empty-note{color:var(--text-dim);font-size:13px;line-height:1.6}
+  .timeline{display:flex;flex-direction:column;align-items:stretch;max-width:none;gap:0}
+  .timeline-block,.timeline-item{width:100%}
+@@@ -76,8 -84,8 +84,8 @@@
+  .timeline.is-compact .timeline-connector::before,.timeline.is-compact .timeline-connector::after{display:none}
+  .timeline.is-compact .timeline-connector .phase-add-btn{position:absolute;right:58px;bottom:8px;border-style:solid;border-radius:6px}
+  @media(max-width:1050px){.phases-layout{grid-template-columns:1fr}.workflow-nav{position:static;max-height:none}}
+- @media(max-width:760px){.workflow-summary{flex-wrap:wrap}.phase-view-controls{width:100%;justify-content:space-between}.phase-jump-select{flex:1 1 100%}.timeline-parallel-grid{grid-template-columns:1fr}.timeline-parallel-group{padding:10px}.timeline-card,.timeline-parallel-grid .timeline-card{min-height:0}.timeline.is-compact .timeline-card{display:block;min-height:56px}.timeline.is-compact .timeline-desc{display:none}.timeline.is-compact .execution-row{width:auto;max-width:none;margin-top:4px;justify-content:flex-start}}
++ @media(max-width:760px){.workflow-summary{flex-wrap:wrap}.mode-tabs{display:none}.mode-picker{display:block}.phase-view-controls{width:100%;justify-content:space-between}.phase-jump-select{flex:1 1 100%}.timeline-parallel-grid{grid-template-columns:1fr}.timeline-parallel-group{padding:10px}.timeline-card,.timeline-parallel-grid .timeline-card{min-height:0}.timeline.is-compact .timeline-card{display:block;min-height:56px}.timeline.is-compact .timeline-desc{display:none}.timeline.is-compact .execution-row{width:auto;max-width:none;margin-top:4px;justify-content:flex-start}}
+ -@media(max-width:930px){.header .phases-header-action{display:none}.phases-mobile-actions{display:flex;justify-content:flex-end;margin-bottom:8px}.phases-mobile-actions .btn{display:inline-flex;align-items:center;min-height:40px}.phases-desktop-title{display:none}.phases-mobile-title{display:inline}}
+ +@media(max-width:930px){.header .phases-header-action{display:none}.phases-mobile-actions{display:flex;justify-content:flex-end;margin-bottom:8px}.phases-mobile-actions .btn{display:inline-flex;align-items:center;min-height:var(--shell-control-min)}.phases-desktop-title{display:none}.phases-mobile-title{display:inline}}
+  {% endblock %}
+  
+  {% macro phase_card(p) -%}
+diff --cc scripts/build_runtime_image.py
+index 0000000,17c0066..d4eb989
+mode 000000,100644..100644
+--- a/scripts/build_runtime_image.py
++++ b/scripts/build_runtime_image.py
+@@@ -1,0 -1,131 +1,214 @@@
++ """Build a project-workflow image with reproducible source provenance."""
++ 
++ from __future__ import annotations
++ 
++ import argparse
++ import gzip
++ import hashlib
+++import io
+++import os
++ import subprocess
++ import sys
+++import tarfile
+++import tempfile
++ from dataclasses import dataclass
+ -from pathlib import Path
+++from pathlib import Path, PurePosixPath
++ 
++ from project_workflow.build_provenance import (
++     MANIFEST_SCHEMA_VERSION,
++     BuildProvenance,
++     BuildProvenanceError,
++     docker_context_with_manifest,
++     runtime_bundle_sha256_from_archive,
++     validate_build_provenance,
++     verify_build_manifest,
++ )
++ 
++ 
++ def _run_git(root: Path, *args: str, text: bool = True) -> str | bytes:
++     result = subprocess.run(
++         ["git", *args],
++         cwd=root,
++         check=True,
++         capture_output=True,
++         text=text,
++     )
++     return result.stdout
++ 
++ 
++ @dataclass(frozen=True)
++ class GitSourceSnapshot:
++     revision: str
++     archive: bytes
++     provenance: BuildProvenance
++ 
++ 
++ def immutable_git_snapshot(root: Path, revision: str) -> GitSourceSnapshot:
+ -    exact_revision = str(
+ -        _run_git(root, "rev-parse", "--verify", f"{revision}^{{commit}}")
+ -    ).strip().lower()
+++    exact_revision = str(_run_git(root, "rev-parse", "--verify", f"{revision}^{{commit}}")).strip().lower()
++     archive = _run_git(root, "archive", "--format=tar", exact_revision, text=False)
++     if not isinstance(archive, bytes):  # defensive typing guard
++         raise BuildProvenanceError("Git archive не вернул бинарные данные")
++     provenance = validate_build_provenance(
++         {
++             "schema_version": MANIFEST_SCHEMA_VERSION,
++             "source_revision": exact_revision,
++             "source_archive_sha256": hashlib.sha256(archive).hexdigest(),
++             "runtime_bundle_sha256": runtime_bundle_sha256_from_archive(archive),
++         }
++     )
++     return GitSourceSnapshot(
++         revision=exact_revision,
++         archive=archive,
++         provenance=provenance,
++     )
++ 
++ 
+ -def build_image(root: Path, image: str, docker: str, revision: str = "HEAD") -> None:
+++@dataclass(frozen=True)
+++class BaseUiSnapshot:
+++    revision: str
+++    archive: bytes
+++
+++
+++def immutable_base_ui_snapshot(root: Path, revision: str) -> BaseUiSnapshot:
+++    exact_revision = str(_run_git(root, "rev-parse", "--verify", f"{revision}^{{commit}}")).strip().lower()
+++    # Archive a commit with a path filter: archiving a subtree uses wall-clock mtime.
+++    archive = _run_git(root, "archive", "--format=tar", exact_revision, "frontend", text=False)
+++    if not isinstance(archive, bytes):
+++        raise BuildProvenanceError("Base UI archive не вернул бинарные данные")
+++    return BaseUiSnapshot(revision=exact_revision, archive=archive)
+++
+++
+++def extract_base_ui(snapshot: BaseUiSnapshot, destination: Path) -> None:
+++    try:
+++        archive = tarfile.open(fileobj=io.BytesIO(snapshot.archive), mode="r:*")
+++    except tarfile.TarError as exc:
+++        raise BuildProvenanceError("Base UI archive повреждён") from exc
+++    required = {"package.json", "pnpm-lock.yaml", "src/ui/tokens.css", "scripts/write-ui-build.mjs", "ssr/macros.html"}
+++    paths: set[str] = set()
+++    files: set[str] = set()
+++    members: list[tarfile.TarInfo] = []
+++    with archive:
+++        for member in archive.getmembers():
+++            path = PurePosixPath(member.name)
+++            if path.is_absolute() or ".." in path.parts or "\\" in member.name:
+++                raise BuildProvenanceError("Base UI archive содержит небезопасный путь")
+++            if not path.parts or path.parts[0] != "frontend":
+++                raise BuildProvenanceError("Base UI archive содержит путь вне frontend")
+++            if len(path.parts) == 1 and member.isdir():
+++                continue
+++            name = path.relative_to("frontend").as_posix().rstrip("/")
+++            if name in paths or not (member.isdir() or member.isfile()):
+++                raise BuildProvenanceError("Base UI archive содержит повторный путь или недопустимый тип")
+++            paths.add(name)
+++            if member.isfile():
+++                files.add(name)
+++            member.name = name
+++            members.append(member)
+++        if not required <= files:
+++            raise BuildProvenanceError("Base UI archive не содержит обязательные package/build inputs")
+++        archive.extractall(destination, members=members, filter="data")
+++
+++
+++def build_image(
+++    root: Path,
+++    image: str,
+++    docker: str,
+++    revision: str = "HEAD",
+++    *,
+++    base_root: Path | None = None,
+++    base_revision: str = "HEAD",
+++) -> None:
++     snapshot = immutable_git_snapshot(root, revision)
+++    ui = immutable_base_ui_snapshot(
+++        base_root or Path(os.environ.get("SDLC_SERVICES_BASE_DIR", root.parent / "services-base")),
+++        base_revision,
+++    )
++     provenance = snapshot.provenance
++     context = docker_context_with_manifest(snapshot.archive, provenance)
++     # A PAX-first plain tar can be mistaken for a Dockerfile on stdin.
++     transport = gzip.compress(context, mtime=0)
+ -    subprocess.run(
+ -        [
+ -            docker,
+ -            "build",
+ -            "--build-arg",
+ -            f"SOURCE_REVISION={provenance.source_revision}",
+ -            "--build-arg",
+ -            f"SOURCE_ARCHIVE_SHA256={provenance.source_archive_sha256}",
+ -            "--build-arg",
+ -            f"RUNTIME_BUNDLE_SHA256={provenance.runtime_bundle_sha256}",
+ -            "--label",
+ -            f"org.opencontainers.image.revision={provenance.source_revision}",
+ -            "--label",
+ -            f"io.relevanter.source.archive-sha256={provenance.source_archive_sha256}",
+ -            "--label",
+ -            f"io.relevanter.runtime.bundle-sha256={provenance.runtime_bundle_sha256}",
+ -            "--tag",
+ -            image,
+ -            "-",
+ -        ],
+ -        check=True,
+ -        input=transport,
+ -    )
+++    with tempfile.TemporaryDirectory(prefix="workflow-base-ui-") as directory:
+++        extract_base_ui(ui, Path(directory))
+++        subprocess.run(
+++            [
+++                docker,
+++                "build",
+++                "--build-context",
+++                f"sdlc_ui={directory}",
+++                "--build-arg",
+++                f"BASE_VCS_REF={ui.revision}",
+++                "--build-arg",
+++                f"VCS_REF={provenance.source_revision}",
+++                "--build-arg",
+++                f"BASE_UI_ARCHIVE_SHA256={hashlib.sha256(ui.archive).hexdigest()}",
+++                "--build-arg",
+++                f"SOURCE_REVISION={provenance.source_revision}",
+++                "--build-arg",
+++                f"SOURCE_ARCHIVE_SHA256={provenance.source_archive_sha256}",
+++                "--build-arg",
+++                f"RUNTIME_BUNDLE_SHA256={provenance.runtime_bundle_sha256}",
+++                "--label",
+++                f"org.opencontainers.image.revision={provenance.source_revision}",
+++                "--label",
+++                f"io.relevanter.source.archive-sha256={provenance.source_archive_sha256}",
+++                "--label",
+++                f"io.relevanter.runtime.bundle-sha256={provenance.runtime_bundle_sha256}",
+++                "--label",
+++                f"org.sdlc.ui.base.revision={ui.revision}",
+++                "--label",
+++                f"org.sdlc.ui.base.archive-sha256={hashlib.sha256(ui.archive).hexdigest()}",
+++                "--tag",
+++                image,
+++                "-",
+++            ],
+++            check=True,
+++            input=transport,
+++        )
++ 
++ 
++ def main(argv: list[str] | None = None) -> int:
++     parser = argparse.ArgumentParser()
++     subparsers = parser.add_subparsers(dest="command", required=True)
++ 
++     build = subparsers.add_parser("build")
++     build.add_argument("--image", required=True)
++     build.add_argument("--docker", default="docker")
++     build.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
++     build.add_argument("--revision", default="HEAD")
+++    build.add_argument("--base-root", type=Path)
+++    build.add_argument("--base-revision", default="HEAD")
++ 
++     verify = subparsers.add_parser("verify-manifest")
++     verify.add_argument("--manifest", type=Path, required=True)
++     verify.add_argument("--root", type=Path, required=True)
++     verify.add_argument("--source-revision", required=True)
++     verify.add_argument("--source-archive-sha256", required=True)
++     verify.add_argument("--runtime-bundle-sha256", required=True)
++ 
++     args = parser.parse_args(argv)
++     try:
++         if args.command == "build":
+ -            build_image(args.root.resolve(), args.image, args.docker, args.revision)
+++            build_image(
+++                args.root.resolve(),
+++                args.image,
+++                args.docker,
+++                args.revision,
+++                base_root=args.base_root,
+++                base_revision=args.base_revision,
+++            )
++         else:
++             verify_build_manifest(
++                 args.manifest,
++                 args.root,
++                 expected_source_revision=args.source_revision,
++                 expected_source_archive_sha256=args.source_archive_sha256,
++                 expected_runtime_bundle_sha256=args.runtime_bundle_sha256,
++             )
++     except (BuildProvenanceError, OSError, subprocess.CalledProcessError) as exc:
++         print(f"provenance build failed: {exc}", file=sys.stderr)
++         return 2
++     return 0
++ 
++ 
++ if __name__ == "__main__":
++     raise SystemExit(main())
+diff --cc scripts/capture_ui_screenshots.mjs
+index a193cfc,a193cfc..d83c76e
+--- a/scripts/capture_ui_screenshots.mjs
++++ b/scripts/capture_ui_screenshots.mjs
+@@@ -318,7 -318,7 +318,10 @@@ async function assertTaskDetailHistory(
+  }
+  
+  async function capture(page, outputRoot, { name, url, expected = [], prepare, assertions = [] }) {
+--  await page.goto(`${baseUrl}${url}`, { waitUntil: "networkidle", timeout: 30000 });
+++  const response = await page.goto(`${baseUrl}${url}`, { waitUntil: "networkidle", timeout: 30000 });
+++  if (!response?.ok()) {
+++    throw new Error(`${name} direct open failed: ${response?.status() ?? "no response"}`);
+++  }
+    if (prepare) {
+      await prepare(page);
+      await page.waitForTimeout(1000);
+@@@ -352,6 -352,6 +355,36 @@@ async function fillNamespaceDraft(page
+    }
+  }
+  
+++async function assertNamespaceModeNavigation(page, dev, qa, phase) {
+++  if (!Number.isInteger(phase.mode_id)) {
+++    throw new Error("namespace navigation fixture requires a workflow mode");
+++  }
+++  for (const route of ["/phases", `/phase/${phase.id}`, `/instructions?phase_id=${phase.id}`]) {
+++    const source = new URL(route, baseUrl);
+++    source.searchParams.set("namespace_id", String(dev.id));
+++    source.searchParams.set("workflow_id", String(dev.workflow_id));
+++    source.searchParams.set("mode_id", String(phase.mode_id));
+++    const response = await page.goto(source.href, { waitUntil: "networkidle" });
+++    if (!response?.ok()) throw new Error(`namespace source failed: ${route}`);
+++    await Promise.all([
+++      page.waitForURL((url) => url.pathname === "/phases" && url.searchParams.get("namespace_id") === String(qa.id)),
+++      page.selectOption("#namespaceSelector", String(qa.id)),
+++    ]);
+++    const destination = new URL(page.url());
+++    if (destination.searchParams.has("workflow_id") || destination.searchParams.has("mode_id")) {
+++      throw new Error(`namespace switch retained foreign workflow/mode: ${route}`);
+++    }
+++    if (route.startsWith("/instructions") && destination.searchParams.has("phase_id")) {
+++      throw new Error("namespace switch retained foreign instruction phase");
+++    }
+++    const reload = await page.reload({ waitUntil: "networkidle" });
+++    if (!reload?.ok()) throw new Error(`namespace destination reload failed: ${route}`);
+++    const selected = await page.inputValue("#namespaceSelector");
+++    if (selected !== String(qa.id)) throw new Error("namespace selection was lost on reload");
+++  }
+++  console.log("namespace mode navigation: 3 direct/select/reload scenarios passed");
+++}
+++
+  function removeTempOutputDir(tempOutputDir) {
+    const relative = path.relative(outputDir, tempOutputDir);
+    const isInsideOutput = relative && !relative.startsWith("..") && !path.isAbsolute(relative);
+@@@ -392,6 -392,6 +425,7 @@@ async function captureAll(outputRoot) 
+      const dev = await namespaceByCommand(context.request, "workflow-dev");
+      const qa = await namespaceByCommand(context.request, "workflow-qa");
+      const devFirstPhase = await phaseByOrder(context.request, dev.workflow_id, 1);
+++    await assertNamespaceModeNavigation(page, dev, qa, devFirstPhase);
+      await capture(page, outputRoot, {
+        name: "dashboard.png",
+        url: `/?namespace_id=${dev.id}`,
+diff --cc tests/test_build_provenance.py
+index 0000000,60252c3..11b67f0
+mode 000000,100644..100644
+--- a/tests/test_build_provenance.py
++++ b/tests/test_build_provenance.py
+@@@ -1,0 -1,493 +1,631 @@@
++ from __future__ import annotations
++ 
++ import gzip
++ import hashlib
++ import importlib.util
++ import io
++ import json
++ import os
++ import re
++ import shlex
++ import shutil
++ import subprocess
++ import sys
++ import tarfile
++ from pathlib import Path
++ from types import ModuleType
++ from unittest.mock import MagicMock, patch
++ 
++ import pytest
++ 
++ from project_workflow.build_provenance import (
++     BuildProvenanceError,
++     docker_context_with_manifest,
++     load_build_provenance,
++     runtime_bundle_sha256,
++     runtime_bundle_sha256_from_archive,
++     validate_build_provenance,
++     verify_build_manifest,
++ )
++ 
++ 
+ -def _run_git(
+ -    root: Path, *args: str, input_bytes: bytes | None = None
+ -) -> subprocess.CompletedProcess[bytes]:
+++def _run_git(root: Path, *args: str, input_bytes: bytes | None = None) -> subprocess.CompletedProcess[bytes]:
++     return subprocess.run(
++         ["git", *args],
++         cwd=root,
++         input=input_bytes,
++         check=True,
++         capture_output=True,
++     )
++ 
++ 
++ def _builder_module() -> ModuleType:
++     script = Path(__file__).resolve().parents[1] / "scripts" / "build_runtime_image.py"
++     spec = importlib.util.spec_from_file_location("build_runtime_image_test", script)
++     assert spec is not None and spec.loader is not None
++     module = importlib.util.module_from_spec(spec)
++     sys.modules[spec.name] = module
++     spec.loader.exec_module(module)
++     return module
++ 
++ 
++ @pytest.fixture
++ def git_source(tmp_path: Path) -> Path:
++     root = tmp_path / "source"
++     root.mkdir()
++     files = {
++         "LICENSE": b"license\n",
++         "README.md": b"line-one\nline-two\n",
++         "alembic.ini": b"[alembic]\n",
++         "constraints.txt": b"click==8.1.8\n",
++         "pyproject.toml": b"[project]\nname='fixture'\n",
++         "Dockerfile": b"FROM scratch\n",
+++        "docs/ui-routes.json": b'{"product":"fixture"}\n',
+++        "frontend/package.json": b'{"name":"fixture"}\n',
+++        "frontend/pnpm-lock.yaml": b"lockfileVersion: '9.0'\n",
+++        "frontend/src/app.ts": b"export const fixture = true;\n",
++         "runtime-build-manifest.json": b'{"schema_version":0,"status":"unavailable"}\n',
++         ".gitignore": b"project_workflow/injected.py\n",
++         "project_workflow/source.py": b"VALUE = 1\n",
++         "scripts/source.py": b"print('source')\n",
++     }
++     for relative, content in files.items():
++         path = root / relative
++         path.parent.mkdir(parents=True, exist_ok=True)
++         path.write_bytes(content)
++     _run_git(root, "init")
++     _run_git(root, "config", "user.email", "fixture@example.invalid")
++     _run_git(root, "config", "user.name", "Fixture")
++     _run_git(root, "add", ".")
++     _run_git(root, "commit", "-m", "fixture")
++     return root
++ 
++ 
+++@pytest.fixture
+++def git_base(tmp_path: Path) -> Path:
+++    root = tmp_path / "services-base"
+++    root.mkdir()
+++    files = {
+++        "frontend/package.json": b'{"name":"@sdlc/ui"}\n',
+++        "frontend/pnpm-lock.yaml": b"lockfileVersion: '9.0'\n",
+++        "frontend/src/ui/tokens.css": b":root { --shell-header-height: 60px; }\n",
+++        "frontend/scripts/write-ui-build.mjs": b"export const fixture = true;\n",
+++        "frontend/ssr/macros.html": b"{% macro header() %}<header></header>{% endmacro %}\n",
+++    }
+++    for relative, content in files.items():
+++        path = root / relative
+++        path.parent.mkdir(parents=True, exist_ok=True)
+++        path.write_bytes(content)
+++    _run_git(root, "init")
+++    _run_git(root, "config", "user.email", "fixture@example.invalid")
+++    _run_git(root, "config", "user.name", "Fixture")
+++    _run_git(root, "add", ".")
+++    _run_git(root, "commit", "-m", "Base fixture")
+++    return root
+++
+++
++ def _member_bytes(archive: bytes, path: str) -> bytes:
++     with tarfile.open(fileobj=io.BytesIO(archive), mode="r:*") as source:
++         member = source.getmember(path)
++         fileobj = source.extractfile(member)
++         assert fileobj is not None
++         return fileobj.read()
++ 
++ 
++ def _extract_regular_context(archive: bytes, destination: Path) -> None:
++     with tarfile.open(fileobj=io.BytesIO(archive), mode="r:*") as source:
++         for member in source.getmembers():
++             relative = Path(member.name)
++             assert not relative.is_absolute() and ".." not in relative.parts
++             target = destination / relative
++             if member.isdir():
++                 target.mkdir(parents=True, exist_ok=True)
++                 continue
++             assert member.isfile()
++             target.parent.mkdir(parents=True, exist_ok=True)
++             fileobj = source.extractfile(member)
++             assert fileobj is not None
++             target.write_bytes(fileobj.read())
++             target.chmod(member.mode)
++ 
++ 
++ def test_same_commit_snapshot_is_deterministic(git_source: Path):
++     builder = _builder_module()
++ 
++     first = builder.immutable_git_snapshot(git_source, "HEAD")
++     second = builder.immutable_git_snapshot(git_source, first.revision)
++ 
++     assert first == second
++     assert first.provenance.source_archive_sha256 == hashlib.sha256(first.archive).hexdigest()
+ -    assert first.provenance.runtime_bundle_sha256 == runtime_bundle_sha256_from_archive(
+ -        first.archive
+ -    )
+++    assert first.provenance.runtime_bundle_sha256 == runtime_bundle_sha256_from_archive(first.archive)
++     assert len(first.provenance.source_archive_sha256) == 64
++     assert len(first.provenance.runtime_bundle_sha256) == 64
++ 
++ 
++ def test_dirty_and_ignored_worktree_files_cannot_change_snapshot(git_source: Path):
++     builder = _builder_module()
++     committed = builder.immutable_git_snapshot(git_source, "HEAD")
++     (git_source / "README.md").write_bytes(b"dirty tracked content\r\n")
++     (git_source / "project_workflow" / "injected.py").write_bytes(b"ignored injection\n")
++ 
++     rebuilt = builder.immutable_git_snapshot(git_source, "HEAD")
++ 
++     assert rebuilt == committed
++     assert b"dirty tracked content" not in rebuilt.archive
++     assert b"ignored injection" not in rebuilt.archive
++ 
++ 
++ def test_windows_style_worktree_eol_does_not_change_archive_digest(git_source: Path):
++     builder = _builder_module()
++     committed = builder.immutable_git_snapshot(git_source, "HEAD")
++     committed_content = _member_bytes(committed.archive, "README.md")
++     alternate_eol = (
++         committed_content.replace(b"\r\n", b"\n")
++         if b"\r\n" in committed_content
++         else committed_content.replace(b"\n", b"\r\n")
++     )
++     assert alternate_eol != committed_content
++     (git_source / "README.md").write_bytes(alternate_eol)
++ 
++     rebuilt = builder.immutable_git_snapshot(git_source, "HEAD")
++ 
++     assert rebuilt.provenance == committed.provenance
++     assert _member_bytes(rebuilt.archive, "README.md") == committed_content
++ 
++ 
+ -def test_post_snapshot_worktree_mutation_cannot_change_docker_context(git_source: Path):
+++def test_post_snapshot_worktree_mutation_cannot_change_docker_context(git_source: Path, git_base: Path):
++     builder = _builder_module()
++     snapshot = builder.immutable_git_snapshot(git_source, "HEAD")
+++    ui = builder.immutable_base_ui_snapshot(git_base, "HEAD")
++ 
++     def snapshot_then_mutate(_root: Path, _revision: str):
++         (git_source / "README.md").write_bytes(b"post-snapshot mutation\n")
++         return snapshot
++ 
++     docker_run = MagicMock()
++     with (
++         patch.object(builder, "immutable_git_snapshot", side_effect=snapshot_then_mutate),
+++        patch.object(builder, "immutable_base_ui_snapshot", return_value=ui),
++         patch.object(builder.subprocess, "run", docker_run),
++     ):
++         builder.build_image(git_source, "project-workflow:test", "docker")
++ 
++     command = docker_run.call_args.args[0]
++     context = docker_run.call_args.kwargs["input"]
++     assert command[-1] == "-"
+ -    assert _member_bytes(context, "README.md") == _member_bytes(
+ -        snapshot.archive, "README.md"
+ -    )
+++    assert _member_bytes(context, "README.md") == _member_bytes(snapshot.archive, "README.md")
++     assert b"post-snapshot mutation" not in context
+ -    assert runtime_bundle_sha256_from_archive(context) == (
+ -        snapshot.provenance.runtime_bundle_sha256
+ -    )
+++    assert runtime_bundle_sha256_from_archive(context) == (snapshot.provenance.runtime_bundle_sha256)
++ 
++ 
++ def test_executable_mode_change_changes_bundle_digest(git_source: Path):
++     builder = _builder_module()
++     before = builder.immutable_git_snapshot(git_source, "HEAD")
++     _run_git(git_source, "update-index", "--chmod=+x", "scripts/source.py")
++     _run_git(git_source, "commit", "-m", "make script executable")
++ 
++     after = builder.immutable_git_snapshot(git_source, "HEAD")
++ 
++     assert after.provenance.runtime_bundle_sha256 != before.provenance.runtime_bundle_sha256
++     with tarfile.open(fileobj=io.BytesIO(after.archive), mode="r:*") as source:
++         assert source.getmember("scripts/source.py").mode & 0o111
++ 
++ 
++ def test_real_git_symlink_in_runtime_inputs_fails_closed(git_source: Path):
++     builder = _builder_module()
+ -    blob = _run_git(
+ -        git_source,
+ -        "hash-object",
+ -        "-w",
+ -        "--stdin",
+ -        input_bytes=b"source.py",
+ -    ).stdout.decode("ascii").strip()
+++    blob = (
+++        _run_git(
+++            git_source,
+++            "hash-object",
+++            "-w",
+++            "--stdin",
+++            input_bytes=b"source.py",
+++        )
+++        .stdout.decode("ascii")
+++        .strip()
+++    )
++     _run_git(
++         git_source,
++         "update-index",
++         "--add",
++         "--cacheinfo",
++         "120000",
++         blob,
++         "project_workflow/link.py",
++     )
++     _run_git(git_source, "commit", "-m", "add runtime symlink")
++ 
++     with pytest.raises(BuildProvenanceError, match="недопустимый тип entry"):
++         builder.immutable_git_snapshot(git_source, "HEAD")
++ 
++ 
++ def test_nonregular_runtime_archive_entry_fails_closed(git_source: Path):
++     builder = _builder_module()
++     snapshot = builder.immutable_git_snapshot(git_source, "HEAD")
++     with tarfile.open(fileobj=io.BytesIO(snapshot.archive), mode="r:*") as source:
++         members = source.getmembers()
++         contents: dict[str, bytes] = {}
++         for member in members:
++             if not member.isfile():
++                 continue
++             fileobj = source.extractfile(member)
++             assert fileobj is not None
++             contents[member.name] = fileobj.read()
++     output = io.BytesIO()
++     with tarfile.open(fileobj=output, mode="w") as archive:
++         for member in members:
++             if member.name == "project_workflow/source.py":
++                 member.type = tarfile.FIFOTYPE
++                 member.size = 0
++                 archive.addfile(member)
++             else:
++                 payload = io.BytesIO(contents[member.name]) if member.isfile() else None
++                 archive.addfile(member, payload)
++ 
++     with pytest.raises(BuildProvenanceError, match="недопустимый тип entry"):
++         runtime_bundle_sha256_from_archive(output.getvalue())
++ 
++ 
++ def test_generated_manifest_verifies_extracted_snapshot(git_source: Path, tmp_path: Path):
++     builder = _builder_module()
++     snapshot = builder.immutable_git_snapshot(git_source, "HEAD")
++     context = docker_context_with_manifest(snapshot.archive, snapshot.provenance)
++     extracted = tmp_path / "context"
++     extracted.mkdir()
++     _extract_regular_context(context, extracted)
++ 
++     verified = verify_build_manifest(
++         extracted / "runtime-build-manifest.json",
++         extracted,
++         expected_source_revision=snapshot.provenance.source_revision,
++         expected_source_archive_sha256=snapshot.provenance.source_archive_sha256,
++         expected_runtime_bundle_sha256=snapshot.provenance.runtime_bundle_sha256,
++     )
++ 
++     assert verified == snapshot.provenance
++     assert load_build_provenance(extracted / "runtime-build-manifest.json") == verified
++ 
++ 
++ def test_manifest_verification_rejects_build_arg_drift(git_source: Path, tmp_path: Path):
++     builder = _builder_module()
++     snapshot = builder.immutable_git_snapshot(git_source, "HEAD")
++     context = docker_context_with_manifest(snapshot.archive, snapshot.provenance)
++     extracted = tmp_path / "context"
++     extracted.mkdir()
++     _extract_regular_context(context, extracted)
++ 
++     with pytest.raises(BuildProvenanceError, match="Build arguments"):
++         verify_build_manifest(
++             extracted / "runtime-build-manifest.json",
++             extracted,
++             expected_source_revision="f" * 40,
++             expected_source_archive_sha256=snapshot.provenance.source_archive_sha256,
++             expected_runtime_bundle_sha256=snapshot.provenance.runtime_bundle_sha256,
++         )
++ 
++ 
++ def test_dockerfile_manifest_and_oci_labels_use_same_build_args():
+ -    dockerfile = (Path(__file__).resolve().parents[1] / "Dockerfile").read_text(
+ -        encoding="utf-8"
+ -    )
+ -    assert "--source-revision \"$SOURCE_REVISION\"" in dockerfile
+ -    assert "--source-archive-sha256 \"$SOURCE_ARCHIVE_SHA256\"" in dockerfile
+ -    assert "--runtime-bundle-sha256 \"$RUNTIME_BUNDLE_SHA256\"" in dockerfile
+++    dockerfile = (Path(__file__).resolve().parents[1] / "Dockerfile").read_text(encoding="utf-8")
+++    assert '--source-revision "$SOURCE_REVISION"' in dockerfile
+++    assert '--source-archive-sha256 "$SOURCE_ARCHIVE_SHA256"' in dockerfile
+++    assert '--runtime-bundle-sha256 "$RUNTIME_BUNDLE_SHA256"' in dockerfile
++     assert "org.opencontainers.image.revision=$SOURCE_REVISION" in dockerfile
++     assert "io.relevanter.source.archive-sha256=$SOURCE_ARCHIVE_SHA256" in dockerfile
++     assert "io.relevanter.runtime.bundle-sha256=$RUNTIME_BUNDLE_SHA256" in dockerfile
++     assert "COPY runtime-build-manifest.json ./runtime-build-manifest.json" in dockerfile
++ 
++ 
+ -def test_image_builder_passes_one_snapshot_to_docker(git_source: Path):
+++def test_image_builder_passes_one_snapshot_to_docker(git_source: Path, git_base: Path):
++     builder = _builder_module()
++     snapshot = builder.immutable_git_snapshot(git_source, "HEAD")
+++    ui = builder.immutable_base_ui_snapshot(git_base, "HEAD")
++     docker_run = MagicMock()
++     with (
++         patch.object(builder, "immutable_git_snapshot", return_value=snapshot),
+++        patch.object(builder, "immutable_base_ui_snapshot", return_value=ui),
++         patch.object(builder.subprocess, "run", docker_run),
++     ):
++         builder.build_image(git_source, "project-workflow:test", "docker")
++ 
++     command = docker_run.call_args.args[0]
++     context = docker_run.call_args.kwargs["input"]
++     assert f"SOURCE_REVISION={snapshot.provenance.source_revision}" in command
+ -    assert (
+ -        f"SOURCE_ARCHIVE_SHA256={snapshot.provenance.source_archive_sha256}" in command
+ -    )
+ -    assert (
+ -        f"RUNTIME_BUNDLE_SHA256={snapshot.provenance.runtime_bundle_sha256}" in command
+ -    )
+ -    assert (
+ -        f"org.opencontainers.image.revision={snapshot.provenance.source_revision}"
+ -        in command
+ -    )
+ -    assert (
+ -        "io.relevanter.source.archive-sha256="
+ -        f"{snapshot.provenance.source_archive_sha256}" in command
+ -    )
+ -    assert (
+ -        "io.relevanter.runtime.bundle-sha256="
+ -        f"{snapshot.provenance.runtime_bundle_sha256}" in command
+ -    )
+++    assert f"SOURCE_ARCHIVE_SHA256={snapshot.provenance.source_archive_sha256}" in command
+++    assert f"RUNTIME_BUNDLE_SHA256={snapshot.provenance.runtime_bundle_sha256}" in command
+++    assert f"org.opencontainers.image.revision={snapshot.provenance.source_revision}" in command
+++    assert f"io.relevanter.source.archive-sha256={snapshot.provenance.source_archive_sha256}" in command
+++    assert f"io.relevanter.runtime.bundle-sha256={snapshot.provenance.runtime_bundle_sha256}" in command
++     assert command[-1] == "-"
+++    assert "--build-context" in command
+++    assert f"BASE_VCS_REF={ui.revision}" in command
+++    assert f"VCS_REF={snapshot.revision}" in command
+++    assert f"BASE_UI_ARCHIVE_SHA256={hashlib.sha256(ui.archive).hexdigest()}" in command
++     manifest = json.loads(_member_bytes(context, "runtime-build-manifest.json"))
++     assert manifest == snapshot.provenance.to_dict()
++ 
++ 
+ -def test_pax_context_uses_deterministic_gzip_transport(git_source: Path):
+++def test_pax_context_uses_deterministic_gzip_transport(git_source: Path, git_base: Path):
++     builder = _builder_module()
++     snapshot = builder.immutable_git_snapshot(git_source, "HEAD")
+++    ui = builder.immutable_base_ui_snapshot(git_base, "HEAD")
++     context = docker_context_with_manifest(snapshot.archive, snapshot.provenance)
++     assert context[156:157] == b"x"
++     docker_run = MagicMock()
++     with (
++         patch.object(builder, "immutable_git_snapshot", return_value=snapshot),
+++        patch.object(builder, "immutable_base_ui_snapshot", return_value=ui),
++         patch.object(builder.subprocess, "run", docker_run),
++     ):
++         builder.build_image(git_source, "project-workflow:test", "docker")
++         builder.build_image(git_source, "project-workflow:test", "docker")
++ 
++     first = docker_run.call_args_list[0].kwargs["input"]
++     second = docker_run.call_args_list[1].kwargs["input"]
++     assert first[:2] == b"\x1f\x8b"
++     assert first[4:8] == b"\x00\x00\x00\x00"
++     assert first == second
++     assert gzip.decompress(first) == context
++     assert runtime_bundle_sha256_from_archive(first) == snapshot.provenance.runtime_bundle_sha256
++     assert json.loads(_member_bytes(first, "runtime-build-manifest.json")) == snapshot.provenance.to_dict()
++ 
++ 
+++def test_base_ui_snapshot_ignores_dirty_and_untracked_content(git_base: Path, tmp_path: Path):
+++    builder = _builder_module()
+++    first = builder.immutable_base_ui_snapshot(git_base, "HEAD")
+++    (git_base / "frontend/src/ui/tokens.css").write_text("dirty", encoding="utf-8")
+++    (git_base / "frontend/src/private.txt").write_text("untracked", encoding="utf-8")
+++    assert builder.immutable_base_ui_snapshot(git_base, first.revision) == first
+++    destination = tmp_path / "ui-context"
+++    builder.extract_base_ui(first, destination)
+++    assert (destination / "src/ui/tokens.css").read_bytes() != b"dirty"
+++    assert not (destination / "src/private.txt").exists()
+++
+++
+++def test_base_ui_archive_has_deterministic_metadata(git_base: Path):
+++    snapshot = _builder_module().immutable_base_ui_snapshot(git_base, "HEAD")
+++    committed_at = int(_run_git(git_base, "show", "--no-patch", "--format=%ct", snapshot.revision).stdout)
+++    with tarfile.open(fileobj=io.BytesIO(snapshot.archive)) as archive:
+++        members = archive.getmembers()
+++        assert members
+++        assert {member.mtime for member in members} == {committed_at}
+++
+++
+++def test_base_context_is_immutable_during_build_and_removed_afterward(git_source: Path, git_base: Path):
+++    builder = _builder_module()
+++    ui = builder.immutable_base_ui_snapshot(git_base, "HEAD")
+++    copied: list[Path] = []
+++
+++    def docker_run(command, **kwargs):
+++        context = Path(command[command.index("--build-context") + 1].removeprefix("sdlc_ui="))
+++        copied.append(context)
+++        assert (context / "src/ui/tokens.css").read_bytes() == _member_bytes(ui.archive, "frontend/src/ui/tokens.css")
+++        (git_base / "frontend/src/ui/tokens.css").write_text("mutated while building", encoding="utf-8")
+++        assert (context / "src/ui/tokens.css").read_bytes() != b"mutated while building"
+++        raise subprocess.CalledProcessError(1, command)
+++
+++    snapshot = builder.immutable_git_snapshot(git_source, "HEAD")
+++    with (
+++        patch.object(builder, "immutable_git_snapshot", return_value=snapshot),
+++        patch.object(builder, "immutable_base_ui_snapshot", return_value=ui),
+++        patch.object(builder.subprocess, "run", side_effect=docker_run),
+++        pytest.raises(subprocess.CalledProcessError),
+++    ):
+++        builder.build_image(git_source, "fixture:failure", "docker")
+++    assert len(copied) == 1
+++    assert not copied[0].exists()
+++
+++
+++@pytest.mark.parametrize("path", ["../escape", "/absolute", "src\\escape"])
+++def test_base_ui_archive_rejects_unsafe_paths(path: str, tmp_path: Path):
+++    builder = _builder_module()
+++    output = io.BytesIO()
+++    with tarfile.open(fileobj=output, mode="w") as archive:
+++        archive.addfile(tarfile.TarInfo(path), io.BytesIO())
+++    with pytest.raises(BuildProvenanceError, match="небезопасный путь"):
+++        builder.extract_base_ui(builder.BaseUiSnapshot("a" * 40, output.getvalue()), tmp_path / "context")
+++
+++
+++@pytest.mark.parametrize("kind", [tarfile.SYMTYPE, tarfile.LNKTYPE, tarfile.FIFOTYPE])
+++def test_base_ui_archive_rejects_nonregular_entries(kind: bytes, tmp_path: Path):
+++    builder = _builder_module()
+++    output = io.BytesIO()
+++    with tarfile.open(fileobj=output, mode="w") as archive:
+++        entry = tarfile.TarInfo("frontend/src/injected")
+++        entry.type = kind
+++        entry.linkname = "outside"
+++        archive.addfile(entry)
+++    with pytest.raises(BuildProvenanceError, match="недопустимый тип"):
+++        builder.extract_base_ui(builder.BaseUiSnapshot("a" * 40, output.getvalue()), tmp_path / "context")
+++
+++
+++@pytest.mark.parametrize(
+++    "path", ["Dockerfile", "docs/ui-routes.json", "frontend/src/app.ts", "frontend/pnpm-lock.yaml"]
+++)
+++def test_runtime_bundle_covers_frontend_build_inputs(git_source: Path, path: str):
+++    before = runtime_bundle_sha256(git_source)
+++    (git_source / path).write_bytes(b"changed build input\n")
+++    assert runtime_bundle_sha256(git_source) != before
+++
+++
+++def test_base_ui_archive_rejects_corrupt_content(tmp_path: Path):
+++    builder = _builder_module()
+++    with pytest.raises(BuildProvenanceError, match="повреждён"):
+++        builder.extract_base_ui(builder.BaseUiSnapshot("a" * 40, b"not a tar archive"), tmp_path / "context")
+++    assert not (tmp_path / "context").exists()
+++
+++
+++def test_base_ui_archive_requires_all_build_inputs(tmp_path: Path):
+++    builder = _builder_module()
+++    output = io.BytesIO()
+++    with tarfile.open(fileobj=output, mode="w") as archive:
+++        archive.addfile(tarfile.TarInfo("frontend/package.json"), io.BytesIO())
+++    with pytest.raises(BuildProvenanceError, match="обязательные package/build inputs"):
+++        builder.extract_base_ui(builder.BaseUiSnapshot("a" * 40, output.getvalue()), tmp_path / "context")
+++    assert not (tmp_path / "context").exists()
+++
+++
+++def test_base_ui_archive_rejects_duplicate_paths(tmp_path: Path):
+++    builder = _builder_module()
+++    output = io.BytesIO()
+++    with tarfile.open(fileobj=output, mode="w") as archive:
+++        for _ in range(2):
+++            archive.addfile(tarfile.TarInfo("frontend/package.json"), io.BytesIO())
+++    with pytest.raises(BuildProvenanceError, match="повторный путь"):
+++        builder.extract_base_ui(builder.BaseUiSnapshot("a" * 40, output.getvalue()), tmp_path / "context")
+++    assert not (tmp_path / "context").exists()
+++
+++
++ @pytest.mark.parametrize(
++     "field,value",
++     [
++         ("schema_version", True),
++         ("schema_version", 1.0),
++         ("schema_version", 2),
++         ("source_revision", "a" * 39),
++         ("source_revision", 123),
++         ("source_archive_sha256", "A" * 64),
++         ("source_archive_sha256", None),
++         ("runtime_bundle_sha256", "b" * 63),
++         ("runtime_bundle_sha256", []),
++     ],
++ )
++ def test_build_manifest_rejects_malformed_identity(field, value):
++     raw = {
++         "schema_version": 1,
++         "source_revision": "a" * 40,
++         "source_archive_sha256": "b" * 64,
++         "runtime_bundle_sha256": "c" * 64,
++     }
++     raw[field] = value
++     with pytest.raises(BuildProvenanceError):
++         validate_build_provenance(raw)
++ 
++ 
++ @pytest.mark.parametrize("content", [b"not-json", b"\xff", b"{}"])
++ def test_build_manifest_rejects_unreadable_or_invalid_content(tmp_path, content):
++     manifest = tmp_path / "manifest.json"
++     manifest.write_bytes(content)
++     with pytest.raises(BuildProvenanceError):
++         load_build_provenance(manifest)
++ 
++ 
++ def test_build_manifest_missing_file_fails_closed(tmp_path):
++     with pytest.raises(BuildProvenanceError, match="недоступен"):
++         load_build_provenance(tmp_path / "missing.json")
++ 
++ 
++ @pytest.mark.parametrize("operation", [runtime_bundle_sha256_from_archive, docker_context_with_manifest])
++ def test_corrupt_source_archive_is_rejected(operation):
++     args = [] if operation is runtime_bundle_sha256_from_archive else [None]
++     with pytest.raises(BuildProvenanceError, match="повреждён"):
++         operation(b"not a tar archive", *args)
++ 
++ 
++ @pytest.mark.parametrize("name", ["../injected.py", "/absolute.py", "project_workflow\\injected.py", "."])
++ def test_archive_paths_cannot_escape_context(name):
++     output = io.BytesIO()
++     with tarfile.open(fileobj=output, mode="w") as archive:
++         entry = tarfile.TarInfo(name)
++         archive.addfile(entry, io.BytesIO())
++     with pytest.raises(BuildProvenanceError, match="путь"):
++         runtime_bundle_sha256_from_archive(output.getvalue())
++ 
++ 
++ def test_duplicate_archive_input_cannot_override_committed_file(git_source):
++     snapshot = _builder_module().immutable_git_snapshot(git_source, "HEAD")
++     output = io.BytesIO()
++     with (
++         tarfile.open(fileobj=io.BytesIO(snapshot.archive)) as source,
++         tarfile.open(fileobj=output, mode="w") as target,
++     ):
++         for member in source.getmembers():
++             target.addfile(member, source.extractfile(member) if member.isfile() else None)
++         entry = tarfile.TarInfo("project_workflow/source.py")
++         target.addfile(entry, io.BytesIO())
++     with pytest.raises(BuildProvenanceError, match="повторный путь"):
++         runtime_bundle_sha256_from_archive(output.getvalue())
++ 
++ 
++ @pytest.mark.parametrize("relative", ["LICENSE", "project_workflow", "scripts/source.py"])
++ def test_runtime_bundle_requires_all_packaged_source_inputs(git_source, relative):
++     missing = git_source / relative
++     if missing.is_dir():
++         for child in missing.iterdir():
++             child.unlink()
++         missing.rmdir()
++     else:
++         missing.unlink()
++     with pytest.raises(BuildProvenanceError, match="не содержит"):
++         runtime_bundle_sha256(git_source)
++ 
++ 
++ @pytest.mark.parametrize("relative", ["LICENSE", "project_workflow"])
++ def test_runtime_bundle_rejects_file_directory_type_substitution(git_source, relative):
++     target = git_source / relative
++     if target.is_dir():
++         for child in target.iterdir():
++             child.unlink()
++         target.rmdir()
++         target.write_text("substituted", encoding="utf-8")
++     else:
++         target.unlink()
++         target.mkdir()
++     with pytest.raises(BuildProvenanceError, match="не содержит"):
++         runtime_bundle_sha256(git_source)
++ 
++ 
++ def test_generated_manifest_rejects_modified_extracted_inputs(git_source, tmp_path):
++     snapshot = _builder_module().immutable_git_snapshot(git_source, "HEAD")
++     extracted = tmp_path / "modified-context"
++     extracted.mkdir()
++     _extract_regular_context(docker_context_with_manifest(snapshot.archive, snapshot.provenance), extracted)
++     (extracted / "project_workflow/source.py").write_text("VALUE = 'injected'", encoding="utf-8")
++     with pytest.raises(BuildProvenanceError, match="digest"):
++         verify_build_manifest(
++             extracted / "runtime-build-manifest.json",
++             extracted,
++             expected_source_revision=snapshot.provenance.source_revision,
++             expected_source_archive_sha256=snapshot.provenance.source_archive_sha256,
++             expected_runtime_bundle_sha256=snapshot.provenance.runtime_bundle_sha256,
++         )
++ 
++ 
++ def test_dockerfile_verifies_manifest_before_package_install(git_source, tmp_path):
++     """Exercise the real Dockerfile command with site packages unavailable."""
++     root = Path(__file__).resolve().parents[1]
++     shutil.copyfile(root / "scripts/build_runtime_image.py", git_source / "scripts/build_runtime_image.py")
++     shutil.copyfile(root / "project_workflow/build_provenance.py", git_source / "project_workflow/build_provenance.py")
++     _run_git(git_source, "add", ".")
++     _run_git(git_source, "commit", "-m", "include the uninstalled manifest verifier")
++     snapshot = _builder_module().immutable_git_snapshot(git_source, "HEAD")
++     extracted = tmp_path / "uninstalled-context"
++     extracted.mkdir()
++     _extract_regular_context(docker_context_with_manifest(snapshot.archive, snapshot.provenance), extracted)
++     dockerfile = (root / "Dockerfile").read_text(encoding="utf-8")
++     command = re.search(r"python (.+?) verify-manifest", dockerfile)
++     assert command is not None
++     environment = {key: value for key, value in os.environ.items() if key not in {"PYTHONPATH", "PYTHONHOME"}}
++     environment["PYTHONDONTWRITEBYTECODE"] = "1"  # Dockerfile builder ENV: hash only source inputs.
++     result = subprocess.run(
+ -        [sys.executable, "-S", *shlex.split(command.group(1)), "verify-manifest",
+ -         "--root", str(extracted), "--manifest", str(extracted / "runtime-build-manifest.json"),
+ -         "--source-revision", snapshot.provenance.source_revision,
+ -         "--source-archive-sha256", snapshot.provenance.source_archive_sha256,
+ -         "--runtime-bundle-sha256", snapshot.provenance.runtime_bundle_sha256],
+ -        cwd=extracted, env=environment, capture_output=True, text=True,
+++        [
+++            sys.executable,
+++            "-S",
+++            *shlex.split(command.group(1)),
+++            "verify-manifest",
+++            "--root",
+++            str(extracted),
+++            "--manifest",
+++            str(extracted / "runtime-build-manifest.json"),
+++            "--source-revision",
+++            snapshot.provenance.source_revision,
+++            "--source-archive-sha256",
+++            snapshot.provenance.source_archive_sha256,
+++            "--runtime-bundle-sha256",
+++            snapshot.provenance.runtime_bundle_sha256,
+++        ],
+++        cwd=extracted,
+++        env=environment,
+++        capture_output=True,
+++        text=True,
++     )
++     assert result.returncode == 0, result.stderr
+diff --cc tests/test_platform_services.py
+index 00e6705,48ac13e..0e5435a
+--- a/tests/test_platform_services.py
++++ b/tests/test_platform_services.py
+@@@ -163,3 -157,119 +172,124 @@@ def test_malformed_runtime_catalog_uses
+  
+      monkeypatch.setattr(ps, "urlopen", lambda *_args, **_kwargs: Response(b'{"services": []}'))
+      assert load_service_catalog("http://admin/api").source == "fallback-empty"
++ 
++ 
++ @pytest.fixture(autouse=True)
++ def isolated_catalog_cache(monkeypatch):
++     from project_workflow.interfaces.ui import platform_services as ps
++ 
++     monkeypatch.setattr(ps, "_cached_services", [])
++     monkeypatch.setattr(ps, "_cached_at", 0.0)
++     monkeypatch.setattr(ps, "_cached_url", None)
++ 
++ 
++ def test_catalog_fallback_contains_six_ordered_ui_with_unknown_current_health():
++     catalog = load_service_catalog(None)
++     assert catalog.source == "fallback-unreachable"
++     assert [service["key"] for service in catalog.services] == [
++         "admin-panel", "ci-cd", "task-tracker", "wiki", "fleet-control", "project-workflow",
++     ]
++     assert {service["health"] for service in catalog.services} == {"unknown"}
++     assert catalog.services[-1]["url"] == "http://localhost:7752"
++     assert len(load_other_services(None)) == 5
++ 
++ 
++ def _response(services):
++     return io.BytesIO(json.dumps({"services": services}).encode())
++ 
++ 
++ def _runtime_services():
++     return [
++         {"key": "project-workflow", "label": "PW", "ui_url": "http://localhost:7752", "health": "unreachable"},
++         {"key": "wiki", "label": "Wiki", "ui_url": "http://localhost:7732", "health": "healthy"},
++         {"key": "central-auth", "label": "Auth", "ui_url": None},
++     ]
++ 
++ 
++ @pytest.mark.parametrize("failure,expected_source", [
++     (None, "fallback-unreachable"),
++     ([], "fallback-empty"),
++     ([{"key": "bad"}], "fallback-invalid"),
++ ])
++ def test_expired_runtime_failure_uses_unknown_fallback_and_recovers(monkeypatch, failure, expected_source):
++     from project_workflow.interfaces.ui import platform_services as ps
++ 
++     now = [100.0]
++     monkeypatch.setattr(ps.time, "monotonic", lambda: now[0])
++     monkeypatch.setattr(ps, "urlopen", lambda *_args, **_kwargs: _response(_runtime_services()))
++     first = load_service_catalog("http://admin/api")
++     assert first.source == "runtime"
++     assert first.services[-1]["key"] == "project-workflow"
++     assert first.services[-1]["health"] == "unreachable"
++     now[0] += 61
++ 
++     def failed(*_args, **_kwargs):
++         if failure is None:
++             raise OSError("catalog unavailable")
++         return _response(failure)
++ 
++     monkeypatch.setattr(ps, "urlopen", failed)
++     fallback = load_service_catalog("http://admin/api")
++     assert fallback.source == expected_source
++     assert len(fallback.services) == 6
++     assert {service["health"] for service in fallback.services} == {"unknown"}
++     monkeypatch.setattr(ps, "urlopen", lambda *_args, **_kwargs: _response(_runtime_services()))
++     restored = load_service_catalog("http://admin/api")
++     assert restored == first
++ 
++ 
++ def test_catalog_cache_is_scoped_to_url_and_respects_ttl(monkeypatch):
++     from project_workflow.interfaces.ui import platform_services as ps
++ 
++     calls = []
++     now = [100.0]
++     monkeypatch.setattr(ps.time, "monotonic", lambda: now[0])
++ 
++     def response(url, **_kwargs):
++         calls.append(url)
++         return _response(_runtime_services())
++ 
++     monkeypatch.setattr(ps, "urlopen", response)
++     load_service_catalog("http://admin-a/api")
++     load_service_catalog("http://admin-a/api")
++     assert calls == ["http://admin-a/api"]
++     load_service_catalog("http://admin-b/api")
++     assert calls[-1] == "http://admin-b/api"
++     now[0] += 61
++     load_service_catalog("http://admin-b/api")
++     assert len(calls) == 3
++ 
++ 
++ @pytest.mark.parametrize("invalid", [None, {"key": "wiki", "label": "Duplicate", "ui_url": "http://x"},
++                                      {"key": "broken", "label": "Broken", "ui_url": "javascript:alert(1)"}])
++ def test_mixed_invalid_catalog_does_not_silently_drop_bad_rows(monkeypatch, invalid):
++     from project_workflow.interfaces.ui import platform_services as ps
++ 
++     monkeypatch.setattr(ps, "urlopen", lambda *_args, **_kwargs: _response([*_runtime_services(), invalid]))
++     catalog = load_service_catalog("http://admin/api")
++     assert catalog.source == "fallback-invalid"
++     assert len(catalog.services) == 6
++ 
++ 
++ def test_rendered_switcher_uses_current_runtime_health_without_duplicate(monkeypatch):
++     from project_workflow.interfaces.ui import platform_services as ps
++     from project_workflow.interfaces.ui.templates import templates
++ 
+ -    monkeypatch.setattr(ps, "urlopen", lambda *_args, **_kwargs: _response(_runtime_services()))
+++    services = [
+++        *_runtime_services(),
+++        {"key": "admin-panel", "label": "Admin Panel", "ui_url": "http://localhost:7772", "health": "healthy"},
+++    ]
+++    monkeypatch.setattr(ps, "urlopen", lambda *_args, **_kwargs: _response(services))
++     catalog = load_service_catalog("http://admin/api")
++     html = templates.get_template("base.html").render(
++         page="tasks", other_services=catalog.services, services_source=catalog.source,
+++        show_service_switcher=catalog.admin_console_connected,
++     )
++     menu = html.split('id="serviceMenu"', 1)[1].split("</details>", 1)[0]
++     assert menu.count('aria-current="page"') == 1
++     assert 'service-health unreachable' in menu
++     assert 'service-health healthy' in menu
++     assert 'service-health unknown' not in menu
++     assert 'Project Workflow' not in menu  # runtime label is PW, not a fabricated replacement
++     assert 'Central Auth' not in menu
++     assert 'href="/" role="menuitem" aria-current="page"' in menu
+diff --cc tests/test_ui.py
+index 47f1786,aa680b1..6baccca
+--- a/tests/test_ui.py
++++ b/tests/test_ui.py
+@@@ -501,34 -500,27 +501,39 @@@ class TestPhasesPage
+      def test_shared_shell_uses_desktop_rail_and_mobile_drawer_contract(self):
+          response = client.get("/workflows")
+          assert response.status_code == 200
+ -        assert (
+ -            "--sidebar-width:var(--shell-sidebar-expanded);"
+ -            "--header-height:var(--shell-header-height)"
+ -        ) in response.text
+ -        assert "@media(max-width:1279px) and (min-width:768px)" in response.text
+ -        assert ":root{--sidebar-width:var(--shell-sidebar-compact)}" in response.text
+ -        assert "@media(max-width:767px)" in response.text
+ -        assert "window.matchMedia('(max-width: 767px)')" in response.text
+ -        assert 'class="sidebar-logout" href="/logout"' in response.text
+ -        assert 'class="btn btn-secondary header-logout" href="/logout"' in response.text
+ -        assert ".header .header-logout{display:none}" in response.text
+ -        assert "sidebar.setAttribute('role','dialog')" in response.text
+ -        assert "sidebar.setAttribute('aria-modal','true')" in response.text
+ +        assert 'href="/static/base-ui/base-ui.css"' in response.text
+ +        css = client.get("/static/base-ui/base-ui.css")
+ +        assert css.status_code == 200
+ +        assert "--shell-sidebar-expanded: 264px" in css.text
+ +        assert "--shell-sidebar-compact: 72px" in css.text
+ +        assert "(min-width: 768px) and (max-width: 1279px)" in css.text
+ +        assert "--sidebar-width: var(--shell-sidebar-compact)" in css.text
+ +        assert "@theme" not in css.text
+ +        assert '<dialog id="base-mobile-navigation"' in response.text
+ +        assert 'aria-labelledby="base-drawer-title"' in response.text
+ +        assert response.text.count('href="/logout"') == 1
+ +        assert 'class="base-ssr-account"' in response.text
+ +        js = client.get("/static/base-ui/base-ui.js")
+ +        assert js.status_code == 200
+ +        assert "drawer.showModal()" in js.text
+ +        assert "drawer.addEventListener('cancel'" in js.text
+          assert "color:var(--accent-foreground);border-color:var(--accent)" in response.text
+          assert "color:var(--accent-hover-foreground)" in response.text
+ -        assert "--accent-foreground:" in response.text
+ -        assert "--shell-page-gutter:clamp(16px,2vw,32px)" in response.text
+ +        assert "--color-accent-foreground:" in response.text
+ +        assert "--shell-page-gutter: clamp(16px, 2vw, 32px)" in css.text
+          assert 'data-page-layout="wide"' in response.text
+ +        assert response.text.index('</header>') < response.text.index('<main class="main"')
+ +        assert 'inset: var(--shell-header-height) auto 0 0' in css.text
+ +        assert '.base-ssr-header { position: sticky; top: 0;' in css.text
+ +        assert "document.querySelector('[data-platform-header]').inert=dialogOpen" in response.text
+  
+      def test_mobile_shell_keeps_theme_and_services_in_drawer(self):
+--        response = client.get("/agents")
+++        admin = {"key": "admin-panel", "label": "Admin Panel", "url": "http://localhost:7772", "health": "healthy"}
+++        with patch(
+++            "project_workflow.interfaces.ui.routes.pages.load_service_catalog",
+++            return_value=ServiceCatalog([admin], "runtime"),
+++        ):
+++            response = client.get("/agents")
+  
+          assert response.status_code == 200
+          assert 'class="sidebar-utilities"' in response.text
+@@@ -580,7 -545,7 +585,7 @@@
+              r'<a class="sidebar-link active" href="/phases"[^>]*aria-current="page">',
+              response.text,
+          )
+--        assert sidebar_nav.group(1).count('aria-current="page"') == 2
+++        assert sidebar_nav.group(1).count('aria-current="page"') == 1
+  
+      def test_phases_page_hides_duplicate_nav_for_single_workflow(self):
+          response = client.get("/phases")

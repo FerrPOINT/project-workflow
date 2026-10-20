@@ -1,0 +1,18 @@
+diff --git a/tests/test_runtime_cleanup.py b/tests/test_runtime_cleanup.py
+index e94df67..9b9921b 100644
+--- a/tests/test_runtime_cleanup.py
++++ b/tests/test_runtime_cleanup.py
+@@ -127,9 +127,12 @@ def test_repository_runbook_uses_scoped_compose_readiness():
+ 
+ def test_windows_quality_helper_mirrors_local_gate():
+     script = QUALITY_SCRIPT_PATH.read_text(encoding="utf-8")
++    postgres_script = (REPO_ROOT / "scripts" / "qa_postgres.py").read_text(encoding="utf-8")
+     assert "--with-requirements\", \"constraints.txt\"" in script
+     assert "--timeout=60" in script
+-    assert "--timeout=120" in script
++    assert '"qa_postgres.py"' in script
++    assert "test-integration requires an explicit -DockerContext; no workspace database fallback" in script
++    assert "--timeout=120" in postgres_script
+     assert "test-integration" in script
+     assert "coverage" in script
+     assert "ruff\", \"check\", \".\"" in script

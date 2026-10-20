@@ -1,0 +1,231 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 58bbafd..778adef 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -13,6 +13,9 @@
+ - Standalone-режим: репозиторий собирается и запускается без соседнего `services-base` (убраны extra `cli-platform`, uv source, Docker additional_context и CI checkout). Token-режим CLI без `sdlc-cli-core` выдаёт понятную ошибку; запуск без `AUTH_ISSUER` работает без авторизации.
+ 
+ ### Fixed
++- Compose-сборка экспортирует точный Git-контекст и закреплённый native skills
++  manifest без зависимостей приложения. Provenance проверяется до установки,
++  compatibility — после; существующие descriptors и output не перезаписываются.
+ - SSR-переключатель берёт текущий Workflow и его health из runtime-каталога,
+   без hardcoded healthy. Полный fallback из шести UI остаётся unknown при
+   сетевой ошибке, пустом или невалидном ответе; TTL cache разделён по URL.
+diff --git a/Dockerfile b/Dockerfile
+index ae3c640..d65ce3a 100644
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -34,7 +34,8 @@ RUN python -m venv /opt/venv \
+         --constraint constraints.txt ".[ui]" \
+         && /opt/venv/bin/python -m pip check \
+         && if [ -n "$SOURCE_REVISION" ] || [ -n "$SOURCE_ARCHIVE_SHA256" ] || [ -n "$RUNTIME_BUNDLE_SHA256" ]; then \
+-            /opt/venv/bin/python -m scripts.build_runtime_image verify-compatibility --root /app; \
++            /opt/venv/bin/python -m scripts.build_runtime_image prepare-compatibility --root /app \
++            && /opt/venv/bin/python -m scripts.build_runtime_image verify-compatibility --root /app; \
+         fi \
+         && /opt/venv/bin/python -m pip uninstall -y pip setuptools wheel
+ 
+diff --git a/docs/build-provenance.md b/docs/build-provenance.md
+new file mode 100644
+index 0000000..3c93b6d
+--- /dev/null
++++ b/docs/build-provenance.md
+@@ -0,0 +1,30 @@
++# Неизменяемый контекст сборки
++
++Base собирает Workflow через Compose из точного source commit. Перед сборкой
++используется экспорт архива Git, а не копирование изменяемого рабочего каталога:
++
++```powershell
++python -B -m scripts.build_runtime_image export-context `
++  --root <workflow-checkout> --revision <source-sha> `
++  --skills-root <native-skills-git-root> --output <new-private-context.tar.gz>
++```
++
++Экспорт работает без установленных зависимостей приложения. Он возвращает JSON
++с source revision, SHA-256 исходного Git-архива и runtime bundle; эти значения
++передаются в `SOURCE_REVISION`, `SOURCE_ARCHIVE_SHA256` и `RUNTIME_BUNDLE_SHA256`.
++Образ хранит соответствующие labels и `runtime-build-manifest.json`. Существующий
++output не заменяется. Экспорт сам по себе не является приёмкой образа.
++
++Действующий каталог версии 2 сохраняет закреплённый native skills source.
++Экспорт читает его manifest только из указанного Git-коммита, включая проверку
++типа Git blob; dirty HEAD или файлы checkout не заменяют этот input. Base candidate
++из [Base candidate](base-sdlc-candidate.md) остаётся отдельным и не устанавливается.
++
++Docker проверяет runtime bundle до установки пакета. После установки зависимостей
++`prepare-compatibility` создаёт descriptor только вместо штатного маркера
++`{"status":"unavailable"}`. Уже переданный descriptor проверяется, а несовпадение
++завершает сборку ошибкой без его перезаписи. Затем обязательная
++`verify-compatibility` проверяет catalog, native manifest и capability hashes.
++
++Base подтверждает labels и manifest на точном image ID через временный, изолированный
++Compose probe. Credentials, Git administration и личные `.env` в образ не передаются.
+diff --git a/scripts/build_runtime_image.py b/scripts/build_runtime_image.py
+index 85074eb..bdc2bfb 100644
+--- a/scripts/build_runtime_image.py
++++ b/scripts/build_runtime_image.py
+@@ -103,6 +103,15 @@ def verify_compatibility(root: Path) -> None:
+         raise BuildProvenanceError("Runtime compatibility differs from immutable source inputs")
+ 
+ 
++def prepare_compatibility(root: Path) -> None:
++    """Generate only the committed unavailable marker; verify every supplied descriptor."""
++    path = root / COMPATIBILITY_PATH
++    if json.loads(path.read_bytes()) == {"status": "unavailable"}:
++        path.write_bytes(_json_bytes(derive_compatibility(root)))
++    else:
++        verify_compatibility(root)
++
++
+ def _add_context_files(context: bytes, files: dict[str, bytes]) -> bytes:
+     output = io.BytesIO()
+     with (tarfile.open(fileobj=io.BytesIO(context)) as source,
+@@ -118,7 +127,8 @@ def _add_context_files(context: bytes, files: dict[str, bytes]) -> bytes:
+     return output.getvalue()
+ 
+ 
+-def compatible_build_context(snapshot: GitSourceSnapshot, skills_root: Path) -> bytes:
++def pinned_build_context(snapshot: GitSourceSnapshot, skills_root: Path) -> bytes:
++    """Export exact Git inputs without requiring installed application dependencies."""
+     context = docker_context_with_manifest(snapshot.archive, snapshot.provenance)
+     with tarfile.open(fileobj=io.BytesIO(context)) as source:
+         catalog_file = source.extractfile(CATALOG_PATH)
+@@ -139,7 +149,11 @@ def compatible_build_context(snapshot: GitSourceSnapshot, skills_root: Path) ->
+     manifest = _run_git(skills_root, "show", f"{revision}:{manifest_path}", text=False)
+     if not isinstance(manifest, bytes):
+         raise BuildProvenanceError("Native skills manifest is unavailable")
+-    context = _add_context_files(context, {SKILLS_MANIFEST_PATH: manifest})
++    return _add_context_files(context, {SKILLS_MANIFEST_PATH: manifest})
++
++
++def compatible_build_context(snapshot: GitSourceSnapshot, skills_root: Path) -> bytes:
++    context = pinned_build_context(snapshot, skills_root)
+     # Execute the exporter from the same archived source that Docker will install.
+     # Neither a dirty builder checkout nor its installed policy can change pins.
+     with tempfile.TemporaryDirectory(prefix="workflow-compatibility-") as directory:
+@@ -167,6 +181,17 @@ def compatible_build_context(snapshot: GitSourceSnapshot, skills_root: Path) ->
+     return _add_context_files(context, {COMPATIBILITY_PATH: descriptor})
+ 
+ 
++def export_context(root: Path, revision: str, skills_root: Path, output: Path) -> BuildProvenance:
++    """Write one immutable transport for Compose; existing artifacts are never replaced."""
++    if output.exists() or output.is_symlink():
++        raise BuildProvenanceError("Context destination already exists")
++    snapshot = immutable_git_snapshot(root, revision)
++    context = pinned_build_context(snapshot, skills_root)
++    with output.open("xb") as stream:
++        stream.write(gzip.compress(context, mtime=0))
++    return snapshot.provenance
++
++
+ def build_image(root: Path, image: str, docker: str, revision: str = "HEAD",
+                 *, skills_root: Path) -> None:
+     snapshot = immutable_git_snapshot(root, revision)
+@@ -210,7 +235,13 @@ def main(argv: list[str] | None = None) -> int:
+     build.add_argument("--revision", default="HEAD")
+     build.add_argument("--skills-root", type=Path, required=True)
+ 
+-    for name in ("derive-compatibility", "verify-compatibility"):
++    export = subparsers.add_parser("export-context")
++    export.add_argument("--root", type=Path, required=True)
++    export.add_argument("--revision", required=True)
++    export.add_argument("--skills-root", type=Path, required=True)
++    export.add_argument("--output", type=Path, required=True)
++
++    for name in ("derive-compatibility", "verify-compatibility", "prepare-compatibility"):
+         subparsers.add_parser(name).add_argument("--root", type=Path, required=True)
+ 
+     verify = subparsers.add_parser("verify-manifest")
+@@ -225,10 +256,16 @@ def main(argv: list[str] | None = None) -> int:
+         if args.command == "build":
+             build_image(args.root.resolve(), args.image, args.docker, args.revision,
+                         skills_root=args.skills_root.resolve())
++        elif args.command == "export-context":
++            provenance = export_context(args.root.resolve(), args.revision,
++                                        args.skills_root.resolve(), args.output)
++            print(json.dumps(provenance.to_dict(), sort_keys=True))
+         elif args.command == "derive-compatibility":
+             (args.root / COMPATIBILITY_PATH).write_bytes(_json_bytes(derive_compatibility(args.root)))
+         elif args.command == "verify-compatibility":
+             verify_compatibility(args.root)
++        elif args.command == "prepare-compatibility":
++            prepare_compatibility(args.root)
+         else:
+             verify_build_manifest(
+                 args.manifest,
+diff --git a/tests/test_build_provenance.py b/tests/test_build_provenance.py
+index 510fd47..7b9f758 100644
+--- a/tests/test_build_provenance.py
++++ b/tests/test_build_provenance.py
+@@ -583,6 +583,69 @@ def test_compatible_image_delivers_descriptor_to_docker(compatible_sources):
+     assert "COPY --from=builder /app/runtime-compatibility.json /app/runtime-compatibility.json" in dockerfile
+ 
+ 
++def test_compose_context_export_is_stdlib_only_and_has_exact_provenance(compatible_sources, tmp_path):
++    source, skills, manifest, catalog = compatible_sources
++    builder = _builder_module()
++    snapshot = builder.immutable_git_snapshot(source, "HEAD")
++    output = tmp_path / "compose-context.tar.gz"
++    result = subprocess.run(
++        [sys.executable, "-S", "-m", "scripts.build_runtime_image", "export-context",
++         "--root", str(source), "--revision", snapshot.revision,
++         "--skills-root", str(skills), "--output", str(output)],
++        cwd=source, capture_output=True, text=True,
++    )
++    assert result.returncode == 0, result.stderr
++    assert json.loads(result.stdout) == snapshot.provenance.to_dict()
++    context = output.read_bytes()
++    assert json.loads(_member_bytes(context, "runtime-build-manifest.json")) == snapshot.provenance.to_dict()
++    assert _member_bytes(context, builder.SKILLS_MANIFEST_PATH) == _run_git(
++        skills, "show", f"{catalog['skills_source']['revision']}:{catalog['skills_source']['manifest_path']}"
++    ).stdout
++    assert runtime_bundle_sha256_from_archive(context) == snapshot.provenance.runtime_bundle_sha256
++    manifest.write_text("dirty native worktree", encoding="utf-8")
++    second = tmp_path / "same-inputs.tar.gz"
++    builder.export_context(source, snapshot.revision, skills, second)
++    assert second.read_bytes() == context
++
++
++def test_context_export_preserves_existing_destination_before_git_lookup(tmp_path):
++    builder = _builder_module()
++    output = tmp_path / "preserved.tar.gz"
++    output.write_bytes(b"existing artifact")
++    with patch.object(builder, "immutable_git_snapshot") as snapshot:
++        with pytest.raises(BuildProvenanceError, match="already exists"):
++            builder.export_context(tmp_path, "HEAD", tmp_path, output)
++        snapshot.assert_not_called()
++    assert output.read_bytes() == b"existing artifact"
++
++
++def test_context_export_missing_native_pin_allocates_no_output(compatible_sources, tmp_path):
++    source, _, _, _ = compatible_sources
++    unrelated = tmp_path / "unrelated-git"
++    unrelated.mkdir()
++    _run_git(unrelated, "init")
++    output = tmp_path / "must-not-exist.tar.gz"
++    with pytest.raises(subprocess.CalledProcessError):
++        _builder_module().export_context(source, "HEAD", unrelated, output)
++    assert not output.exists()
++
++
++def test_prepare_compatibility_generates_only_the_unavailable_marker(tmp_path):
++    builder = _builder_module()
++    path = tmp_path / builder.COMPATIBILITY_PATH
++    expected = {"catalogRevision": "a" * 40}
++    path.write_text('{"status":"unavailable"}', encoding="utf-8")
++    with patch.object(builder, "derive_compatibility", return_value=expected):
++        builder.prepare_compatibility(tmp_path)
++    assert json.loads(path.read_bytes()) == expected
++    path.write_text('{"catalogRevision":"forged"}', encoding="utf-8")
++    before = path.read_bytes()
++    with patch.object(builder, "derive_compatibility", return_value=expected):
++        with pytest.raises(BuildProvenanceError, match="immutable source inputs"):
++            builder.prepare_compatibility(tmp_path)
++    assert path.read_bytes() == before
++
++
+ def test_missing_pinned_skills_ref_fails_before_docker(compatible_sources):
+     source, skills, _, _ = compatible_sources
+     builder = _builder_module()

@@ -1,0 +1,92 @@
+diff --cc CHANGELOG.md
+index d2efff8,58bbafd..84727a5
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@@ -7,10 -7,6 +7,15 @@@
+  ## [Unreleased]
+  
+  ### Changed
+++- Локальный default с отдельным Base SDLC candidate и immutable Git verifier
+++  интегрирован с Base UI/UX-веткой. Candidate остаётся configuration-only:
+++  active catalog, bootstrap, migrations, основной Jinja UI, API и opt-in
+++  read-only React pilot не переключаются. Закреплённый skills SHA независим
+++  от UI SDK `.base-revision`; качество интеграции проверяется локально.
+ +- AGENTS, quality gate и README различают общий SDLC workspace, disposable QA
+ +  и standalone deployment вне workspace. Общий launcher/Compose ownership
+ +  принадлежат Base; legacy compose-ready не рекомендуется до миграции.
+ +  Документация не меняет empty-issuer auth default, UI/API или runtime pins.
+  - Standalone Compose forwards optional `AUTH_*` settings without changing the empty-issuer default; Central Auth SSO has a documented deployment matrix, container-reachability requirement and browser acceptance path.
+  - Documentation audit is clean: README has an H1; runtime/auth, quality, reset and historical plans have cross-links and explicit security/runtime boundaries.
+  - Added regression coverage that proves an empty `AUTH_ISSUER` leaves UI/API open in standalone mode.
+diff --cc docs/plans/2026-10-05-local-default-integration.md
+index 0000000,0000000..83abca4
+new file mode 100644
+--- /dev/null
++++ b/docs/plans/2026-10-05-local-default-integration.md
+@@@ -1,0 -1,0 +1,39 @@@
+++# Локальный Default И Base UI/UX
+++
+++Source parent b87fb2b7005574803feab1a80725864d658cb6ab; local default
+++6d9d54a9c69f98e240e6769984a2d1509915f487. Интеграция локальная, без GitHub.
+++Base UI SDK snapshot c0f175c67fc02ba0910a310b163b8032dac92d06 сохраняется.
+++
+++Default добавляет explicit Base candidate, builder/verifier, negative Git pin
+++tests и документацию. Он не меняет active legacy catalog, bootstrap, API,
+++SQLAlchemy/application services, migrations, Jinja templates/static assets,
+++SSR sync и read-only React pilot. Skills pin
+++4b9b4c9297a13fb28a6ba2039af2f7cb719f2f58 относится только к candidate content,
+++не переключает UI SDK и не устанавливает runtime config. Все прежние UI/UX
+++исправления, однострочный header, namespace/phase/task context, cookie session
+++и default-disabled pilot должны сохраняться.
+++
+++Обязательная приёмка: текущий validator и 24 candidate/Git negative tests;
+++проверка настоящих pinned Base Git blobs; Ruff/mypy, полный pytest,
+++изолированный PostgreSQL integration, coverage >=94% и ResourceWarning gate.
+++Frontend выполняет frozen offline install, tests/typecheck/lint/build и общий
+++Base pin/installed fingerprint/SSR drift gate. Не запускать builder в рабочем
+++дереве ради проверки: он перезаписывает candidate; deterministic render можно
+++сравнить в памяти, сохраняя committed bytes и active catalog.
+++
+++Отсутствие UI/runtime diff подтверждается Git path inventory и immutable
+++fingerprints. Browser evidence неизменного UI может наследоваться только после
+++проверки exact UI input hashes; это не новый browser run и не actual-image/live
+++SSO acceptance. Полный выпуск требует candidate images, launcher health,
+++same-origin SSO/roles/states и реальной desktop-only README gallery отдельно.
+++
+++Кандидат проверяется в отдельном owned temporary Compose project с task/purpose,
+++safe disposable DB и точным finally cleanup. Принятый runtime, images/pins,
+++snapshots, secrets/keys/volumes и чужие изменения сохраняются. Ошибки и пропуски
+++в gate не скрываются успешным focused test или прошлым native run.
+++
+++Первый полный Python прогон выявил один устаревший runbook assertion: он
+++требовал unprojected standalone Compose вместо уже принятого Base launcher.
+++Regression test теперь проверяет выбор workspace, Base ownership, published
+++health contract и isolated PostgreSQL; старый command не возвращается в docs.
+++После изменения теста полный Python gate повторяется на новом snapshot.
+diff --cc tests/test_runtime_cleanup.py
+index 8e29df6,6e47c40..ee8d84a
+--- a/tests/test_runtime_cleanup.py
++++ b/tests/test_runtime_cleanup.py
+@@@ -113,10 -113,10 +113,20 @@@ def test_compose_waits_for_api_readines
+      assert "data.get('ok') is True" in api_block
+  
+  
+--def test_repository_runbook_waits_for_compose_readiness():
+++def test_repository_runbook_uses_workspace_launcher_for_readiness():
+      agents = AGENTS_PATH.read_text(encoding="utf-8")
+--    assert "docker compose up --build -d --wait" in agents
+++    quality_gate = (REPO_ROOT / "docs" / "quality-gate.md").read_text(encoding="utf-8")
+++    assert "./start-local.ps1 -Workspace sdlc1" in agents
+++    assert "../services-base/deploy/LOCAL_GROUPS.md" in agents
+++    assert "docker compose up --build -d --wait" not in agents
+++    assert "docs/quality-gate.md" in agents
+      assert "scripts/quality.ps1" in agents
+++    assert "./start-local.ps1 -Workspace sdlc1 -Status" in quality_gate
+++    assert "database=ok" in quality_gate
+++    assert "schema=ok" in quality_gate
+++    assert "disposable QA PostgreSQL" in quality_gate
+++    assert "sdlc.task" in quality_gate
+++    assert "sdlc.purpose" in quality_gate
+  
+  
+  def test_windows_quality_helper_mirrors_local_gate():

@@ -1,0 +1,706 @@
+diff --git a/.base-revision b/.base-revision
+index 92948e1..23c71be 100644
+--- a/.base-revision
++++ b/.base-revision
+@@ -1 +1 @@
+-972a901050bd5092fb9e34d3aa7c7177297a5eae
++3aa329be3039332de81db5752a01fb6dc208debe
+diff --git a/.dockerignore b/.dockerignore
+index 28530f8..f287745 100644
+--- a/.dockerignore
++++ b/.dockerignore
+@@ -7,6 +7,7 @@
+ .coverage
+ .coverage.*
+ .artifacts
++.local
+ htmlcov
+ tests
+ tools
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 2c62518..c528198 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -18,30 +18,20 @@ jobs:
+     defaults:
+       run:
+         working-directory: project-workflow
+-    services:
+-      postgres:
+-        image: postgres:17.6-alpine
+-        env:
+-          POSTGRES_USER: project_workflow
+-          POSTGRES_PASSWORD: project_workflow
+-          POSTGRES_DB: project_workflow
+-        ports:
+-          - 5432:5432
+-        options: >-
+-          --health-cmd "pg_isready -U project_workflow -d project_workflow"
+-          --health-interval 5s
+-          --health-timeout 5s
+-          --health-retries 10
+-    env:
+-      PGHOST: 127.0.0.1
+-      PGPORT: "5432"
+-      PGUSER: project_workflow
+-      PGPASSWORD: project_workflow
+-      PGDATABASE: project_workflow
+     steps:
+       - uses: actions/checkout@v4
+         with:
+           path: project-workflow
++      - name: Read pinned Base revision
++        id: base
++        run: echo "sha=$(cat .base-revision)" >> "$GITHUB_OUTPUT"
++      - uses: actions/checkout@v4
++        with:
++          repository: FerrPOINT/services-base
++          path: services-base
++          ref: ${{ steps.base.outputs.sha }}
++          token: ${{ secrets.SERVICES_BASE_TOKEN }}
++          persist-credentials: false
+       - uses: astral-sh/setup-uv@v6
+         with:
+           version: "0.10.10"
+@@ -49,7 +39,7 @@ jobs:
+       - name: Unit and UI tests
+         run: uv run --isolated --with-requirements constraints.txt --all-extras pytest -q --timeout=60
+       - name: PostgreSQL integration tests
+-        run: uv run --isolated --with-requirements constraints.txt --all-extras pytest -q -m integration tests/test_postgres_integration.py --timeout=120
++        run: python3 scripts/qa_postgres.py --docker-context default --output .local/postgres-integration
+       - name: Lint
+         run: uv run --isolated --with-requirements constraints.txt --all-extras ruff check .
+       - name: Type check
+diff --git a/.gitignore b/.gitignore
+index cfae87c..6f2bb17 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -46,6 +46,7 @@ htmlcov/
+ Thumbs.db
+ 
+ # Project specific
++.local/
+ .artifacts/
+ .smoke/
+ *.log
+diff --git a/AGENTS.md b/AGENTS.md
+index e32a0d9..be0952c 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -29,9 +29,11 @@ Supervisor Engine перед commit выполнить следующие про
+    исключены и запускаются отдельно.
+ 
+ 2. **PostgreSQL integration**
+-   ```bash
+-   pytest -q -m integration tests/test_postgres_integration.py --timeout=120
++   ```powershell
++   ./scripts/quality.ps1 -Target test-integration -DockerContext desktop-linux
+    ```
++   Используется отдельный временный Compose-проект PostgreSQL 17.6, закреплённый Base
++   и защищённый журнал; default/fallback на рабочую БД запрещён.
+    Ожидается 0 падений и 0 ошибок. Набор включает реальный путь CLI subprocess →
+    PostgreSQL → тестовый OpenAI-compatible HTTP endpoint. Два multi-process E2E
+    теста имеют собственный timeout 240 секунд.
+diff --git a/Makefile b/Makefile
+index df3c0d6..2873117 100644
+--- a/Makefile
++++ b/Makefile
+@@ -2,6 +2,7 @@
+ 
+ UV ?= uv run --isolated --with-requirements constraints.txt --all-extras
+ PYTEST ?= $(UV) pytest
++BASE_DIRECTORY ?= ../services-base
+ 
+ .PHONY: test test-verbose test-integration coverage coverage-html lint lint-fix quality warnings compose-ready clean install-dev
+ 
+@@ -14,7 +15,8 @@ test-verbose:
+ 	$(PYTEST) -v --timeout=60
+ 
+ test-integration:
+-	$(PYTEST) -q -m integration tests/test_postgres_integration.py --timeout=120
++	@test -n "$(SDLC_DOCKER_CONTEXT)" || (echo 'Set SDLC_DOCKER_CONTEXT explicitly'; exit 1)
++	python scripts/qa_postgres.py --docker-context "$(SDLC_DOCKER_CONTEXT)" --base-directory "$(BASE_DIRECTORY)"
+ 
+ coverage:
+ 	$(PYTEST) --cov=project_workflow --cov-report=term --timeout=60
+diff --git a/docs/plans/2026-10-05-owned-postgres-integration.md b/docs/plans/2026-10-05-owned-postgres-integration.md
+new file mode 100644
+index 0000000..7622b2d
+--- /dev/null
++++ b/docs/plans/2026-10-05-owned-postgres-integration.md
+@@ -0,0 +1,25 @@
++# Изолированный PostgreSQL integration gate
++
++Локальный quality helper вызывал тесты с fallback на `127.0.0.1:5432` и
++стандартные credentials. Набор создаёт и удаляет временные базы, поэтому такой
++неявный выбор сервера недопустим. Документация также предлагала этот адрес.
++
++`scripts/qa_postgres.py` использует закреплённые Compose-helpers Base, явный
++Docker context, проверяемый daemon ID, уникальный QA project и отдельную сеть.
++PostgreSQL 17.6 запускается с tmpfs и автоматически выделенным loopback-портом.
++Пароль создаётся только для этого запуска; рабочие DB/model/auth параметры не
++наследуются. Manifest и диагностика защищены; cleanup выполняется в `finally`.
++
++PowerShell, Makefile и hosted quality job используют один helper. Сам integration
++fixture требует все параметры и идентификатор собственного QA project до
++первого подключения; URL кодирует специальные символы пароля. Отсутствующие
++параметры, чужой project, не-loopback host и неверный port вызывают ошибку.
++
++Проверки: отрицательные guard cases, password URL roundtrip, документационные
++тесты, PowerShell parsing, Docker invocation gate, lint/type check и полный
++PostgreSQL integration suite с прежними timeout. После suite подтвердить очистку
++собственных containers/networks. Принятый runtime и пользовательские данные не
++используются и не меняются.
++
++Штатные команды и отличие candidate acceptance от legacy SQLite preview:
++[Quality gate](../quality-gate.md).
+diff --git a/docs/plans/2026-10-05-ssr-page-region.md b/docs/plans/2026-10-05-ssr-page-region.md
+new file mode 100644
+index 0000000..f039b12
+--- /dev/null
++++ b/docs/plans/2026-10-05-ssr-page-region.md
+@@ -0,0 +1,19 @@
++# Связь Workflow content с заголовком страницы
++
++В actual-image QA шесть страниц вернули HTTP 200, но не прошли ожидание normal
++содержимого: единственный видимый heading находится в верхней панели вне
++Base frame. У Instructions дополнительный heading намеренно видим только на
++мобильной ширине. Снимки подтверждают загруженные страницы без network errors.
++
++Использовать новый необязательный `labelled_by` общего SSR frame Base. Единственный
++`h1` получает стабильный `id`; content region явно ссылается на него. Сохранить
++вёрстку, CSS, бизнес-содержимое и managed catalog, не добавлять дубли заголовков.
++Assets и fingerprint обновить штатным Base exporter; exact Base revision
++фиксируется до committed candidate image.
++
++Приёмка: HTML rendering всех affected routes и normal Instructions, полный
++quality/coverage, disposable PostgreSQL integration, SSR export/check и route
++contract. Затем новая сборка и actual-image themes/viewport/direct/reload/SSO,
++keyboard/geometry/console/network. До её прохождения evidence остаётся pending.
++
++Принятые workspace, данные, desired state агентов и наблюдение не меняются.
+diff --git a/docs/quality-gate.md b/docs/quality-gate.md
+index af4f7b4..5dfe41f 100644
+--- a/docs/quality-gate.md
++++ b/docs/quality-gate.md
+@@ -2,7 +2,7 @@
+ 
+ Этот файл фиксирует обязательный локальный quality gate для `project-workflow`.
+ GitHub Actions в `.github/workflows/ci.yml` сохранён как опциональное зеркало:
+-job `quality` запускает тесты и статический анализ с PostgreSQL 17.6, а
++job `quality` запускает тесты и статический анализ с собственным Compose PostgreSQL 17.6, а
+ `compose-smoke` собирает временный Compose-проект и проверяет `/health`. Для локального выпуска
+ результаты оплачиваемых hosted jobs не требуются; `[skip ci]` предотвращает
+ их запуск на push/PR. Перед commit и merge проверки ниже выполняются локально.
+@@ -11,7 +11,7 @@ job `quality` запускает тесты и статический анали
+ 
+ ```bash
+ uv run --isolated --with-requirements constraints.txt --all-extras pytest -q --timeout=60
+-uv run --isolated --with-requirements constraints.txt --all-extras pytest -q -m integration tests/test_postgres_integration.py --timeout=120
++pwsh -File scripts/quality.ps1 -Target test-integration -DockerContext desktop-linux
+ uv run --isolated --with-requirements constraints.txt --all-extras pytest --cov=project_workflow --cov-report=term --timeout=60
+ uv run --isolated --with-requirements constraints.txt --all-extras ruff check .
+ uv run --isolated --with-requirements constraints.txt --all-extras mypy project_workflow scripts
+@@ -26,8 +26,10 @@ git diff --check
+ - coverage остаётся не ниже текущего локального baseline `94%`;
+ - `ruff`, `mypy` и `git diff --check` не находят ошибок.
+ 
+-На Unix-like окружении тот же набор доступен через `make quality`; на Windows
+-без `make` используйте `pwsh -File scripts/quality.ps1 quality`. Дополнительные
++На Unix-like окружении тот же набор доступен через `make quality SDLC_DOCKER_CONTEXT=default`;
++основной переносимый путь — PowerShell 7:
++`pwsh -File scripts/quality.ps1 -Target quality -DockerContext desktop-linux`.
++Docker context выбирается явно; подставьте context своего QA daemon. Дополнительные
+ цели `warnings` и `compose-ready` есть и в `Makefile`, и в PowerShell helper.
+ 
+ ## ResourceWarning Gate
+@@ -47,17 +49,22 @@ manager или закрываться через общий pytest lifecycle в
+ 
+ ## PostgreSQL Integration
+ 
+-Integration tests требуют локальный PostgreSQL с правом создавать и удалять
+-временные базы:
++Штатный integration gate создаёт собственный `sdlc-qa-project-workflow-pg-<unique>`
++через закреплённые Compose-helpers Base. Перед запуском проверяются Base SHA,
++выбранный Docker context и daemon identity. PostgreSQL 17.6 использует tmpfs,
++отдельную сеть и автоматически выделенный loopback-порт; password генерируется
++для этого запуска. Рабочие `.env`, credentials и DB-параметры не наследуются.
+ 
+-```bash
+-PGHOST=127.0.0.1
+-PGPORT=5432
+-PGUSER=project_workflow
+-PGPASSWORD=project_workflow
+-PGDATABASE=project_workflow
++```powershell
++./scripts/quality.ps1 -Target test-integration -DockerContext desktop-linux
+ ```
+ 
++Каталог Base можно явно выбрать через `-BaseDirectory <clean-pinned-base>`.
++Диагностика и manifest остаются защищёнными в `.local/postgres-integration`;
++cleanup в `finally` удаляет только собственный Compose-проект. Сами тесты
++отказываются запускаться без полного набора явных параметров и идентификатора
++своего QA-проекта; fallback на localhost/workspace и пропуск вместо ошибки запрещены.
++
+ Набор `tests/test_postgres_integration.py` проверяет реальный путь CLI
+ subprocess -> PostgreSQL -> тестовый OpenAI-compatible HTTP endpoint ->
+ Supervisor -> PostgreSQL. Это deterministic runtime integration, а не полный
+@@ -84,6 +91,15 @@ business E2E с настоящим исполнителем.
+ 
+ ## UI Smoke
+ 
++Для приёмки UI нужен committed source SHA, actual candidate image и его QA receipt,
++SSO, роли/состояния из `docs/ui-routes.json`, viewport/theme matrix и безопасные
++screenshots. Проверка `check-ui-contract.mjs --acceptance` остаётся обязательной.
++Кандидат запускается через Base QA harness в собственном временном проекте.
++
++Следующий SQLite-рецепт — legacy developer preview нейтральной fixture. Он не
++подтверждает source-attested образ, SSO или эксплуатационную приёмку и не заменяет
++браузерную матрицу кандидата.
++
+ После любых изменений UI/templates/static JS:
+ 
+ Подготовить отдельную нейтральную smoke-базу, чтобы скриншоты не зависели от
+diff --git a/project_workflow/interfaces/ui/templates/base-assets/fingerprint.json b/project_workflow/interfaces/ui/templates/base-assets/fingerprint.json
+index 79fefc2..4b82e7b 100644
+--- a/project_workflow/interfaces/ui/templates/base-assets/fingerprint.json
++++ b/project_workflow/interfaces/ui/templates/base-assets/fingerprint.json
+@@ -4,6 +4,6 @@
+   "files": {
+     "base-ui.css": "6542d2657dd1373056c070e90e5cf46669316959f44ea6f937342d760f6295d6",
+     "base-ui.js": "1b1f3a527508108566c660c8d6af351ef5ad113096973a1c67bc9231609bd889",
+-    "macros.html": "02a5ce224504415b3f336cd65441373c414158dfa5e8a14bfe778b1a8b88c3a1"
++    "macros.html": "6cc44f84bd81279e370dc03e24d97cd0ebd3e66049e817542dacfdcb6c41f0f5"
+   }
+ }
+diff --git a/project_workflow/interfaces/ui/templates/base-assets/macros.html b/project_workflow/interfaces/ui/templates/base-assets/macros.html
+index 708603a..11e40e6 100644
+--- a/project_workflow/interfaces/ui/templates/base-assets/macros.html
++++ b/project_workflow/interfaces/ui/templates/base-assets/macros.html
+@@ -2,8 +2,8 @@
+ <div class="base-page-header"><div><h1 class="base-page-title">{{ title }}</h1>{% if context %}<p>{{ context }}</p>{% endif %}</div>{% if actions %}<div class="base-page-actions">{{ actions }}</div>{% endif %}</div>
+ {%- endmacro %}
+ 
+-{% macro frame(mode='wide') -%}
+-<div class="page-frame"><div class="{% if mode == 'reading' %}page-readable{% elif mode == 'detail-with-aside' %}page-detail{% else %}page-wide{% endif %}" data-page-layout="{{ mode }}">{{ caller() }}</div></div>
++{% macro frame(mode='wide', labelled_by=none) -%}
++<div class="page-frame"><div class="{% if mode == 'reading' %}page-readable{% elif mode == 'detail-with-aside' %}page-detail{% else %}page-wide{% endif %}" data-page-layout="{{ mode }}"{% if labelled_by %} role="region" aria-labelledby="{{ labelled_by }}"{% endif %}>{{ caller() }}</div></div>
+ {%- endmacro %}
+ 
+ {% macro sidebar() -%}
+diff --git a/project_workflow/interfaces/ui/templates/base.html b/project_workflow/interfaces/ui/templates/base.html
+index f334349..6f1996f 100644
+--- a/project_workflow/interfaces/ui/templates/base.html
++++ b/project_workflow/interfaces/ui/templates/base.html
+@@ -375,7 +375,7 @@ textarea{resize:vertical;min-height:60px}
+   {% call base.header() %}
+     <div class="header-title-group">
+       <button class="burger" id="burgerBtn" type="button" aria-label="Открыть навигацию" aria-controls="sidebar" aria-expanded="false" onclick="openSidebar()">☰</button>
+-      <h1 class="header-title">{% block header_title %}{% endblock %}</h1>
++      <h1 class="header-title" id="workflow-page-title">{% block header_title %}{% endblock %}</h1>
+     </div>
+     <div class="header-actions">
+       <select class="theme-select" id="themeSelector" aria-label="Тема" onchange="setPlatformTheme(this.value)">
+@@ -417,7 +417,7 @@ textarea{resize:vertical;min-height:60px}
+ 
+   {% set layout_mode %}{% block page_layout %}wide{% endblock %}{% endset %}
+   {% set layout_mode = layout_mode | trim %}
+-  {% call base.frame(layout_mode) %}
++  {% call base.frame(layout_mode, labelled_by='workflow-page-title') %}
+       {% block content %}{% endblock %}
+   {% endcall %}
+ 
+diff --git a/scripts/qa_postgres.py b/scripts/qa_postgres.py
+new file mode 100644
+index 0000000..1128714
+--- /dev/null
++++ b/scripts/qa_postgres.py
+@@ -0,0 +1,92 @@
++"""Run Workflow integration tests against an owned disposable PostgreSQL."""
++from __future__ import annotations
++
++import argparse
++import importlib
++import os
++import secrets
++import subprocess
++import sys
++import uuid
++from pathlib import Path
++
++
++def main() -> int:
++    root = Path(__file__).resolve().parents[1]
++    parser = argparse.ArgumentParser(description=__doc__)
++    parser.add_argument("--docker-context", required=True)
++    parser.add_argument("--daemon-id")
++    parser.add_argument("--base-directory", type=Path, default=root.parent / "services-base")
++    parser.add_argument("--output", type=Path, default=root / ".local/postgres-integration")
++    args = parser.parse_args()
++    if not args.docker_context.strip():
++        parser.error("A nonempty Docker context is required; no default endpoint fallback")
++    base = args.base_directory.resolve()
++    verifier = base / "scripts/verify_base_revision.py"
++    if not verifier.is_file():
++        parser.error("Pinned Base sources are required; set --base-directory")
++    subprocess.run(
++        [sys.executable, str(verifier), "--revision", str(root / ".base-revision"), "--base", str(base)],
++        stdin=subprocess.DEVNULL, check=True,
++    )
++    sys.path.insert(0, str(base))
++    helpers = importlib.import_module("scripts.compose_helpers")
++    postgres = importlib.import_module("scripts.platform_postgres")
++    docker = ["docker", "--context", args.docker_context]
++    identity = helpers.checked(docker + ["info", "--format", "{{.ID}}"], text=True).strip()
++    if args.daemon_id is not None and identity != args.daemon_id:
++        raise RuntimeError("Daemon identity mismatch; no fallback")
++    image = "postgres:17.6-alpine"
++    if subprocess.run(docker + ["image", "inspect", image], capture_output=True, timeout=30).returncode:
++        helpers.checked(docker + ["pull", image], timeout=300)
++    project = "sdlc-qa-project-workflow-pg-" + uuid.uuid4().hex[:12]
++    directory = args.output.resolve() / project
++    task, purpose = "workflow-postgres", "integration-tests"
++    with helpers.ComposeHelper(
++        project=project, task=task, purpose=purpose, docker=docker, directory=directory,
++        daemon_id=identity,
++    ) as helper:
++        networks = helpers.disposable_subnets(docker, {"default": {
++            "name": project + "_default", "labels": {"sdlc.task": task, "sdlc.purpose": purpose},
++        }})
++        password = secrets.token_urlsafe(32)
++        helper.write({"postgres": {
++            "image": image, "tmpfs": ["/var/lib/postgresql/data"],
++            "ports": [{"target": 5432, "published": "0", "host_ip": "127.0.0.1"}],
++            "environment": {"POSTGRES_USER": "project_workflow", "POSTGRES_PASSWORD": password,
++                            "POSTGRES_DB": "project_workflow"},
++            "healthcheck": {"test": ["CMD", "pg_isready", "-U", "project_workflow", "-d", "project_workflow"],
++                            "interval": "1s", "timeout": "3s", "retries": 30},
++        }}, networks=networks)
++        helper.validate_execution()
++        helpers.checked(helper.command + ["up", "-d", "--wait", "--wait-timeout", "60", "postgres"])
++        version = helpers.checked(helper.command + ["exec", "-T", "postgres", "psql", "-U", "project_workflow",
++                                                   "-Atc", "SHOW server_version_num"], text=True).strip()
++        if version != "170006":
++            raise RuntimeError("Integration PostgreSQL must be version 17.6")
++        address = helpers.checked(helper.command + ["port", "postgres", "5432"], text=True).strip()
++        host, port = address.rsplit(":", 1)
++        if host != "127.0.0.1":
++            raise RuntimeError("Disposable PostgreSQL must publish on loopback")
++        env = {key: value for key, value in os.environ.items()
++               if not key.startswith(("PG", "DATABASE_URL", "AUTH_", "OPENAI_", "AI_", "PROJECT_WORKFLOW_",
++                                      "SDLC_PG_TEST_"))}
++        env.update(PGHOST=host, PGPORT=port, PGUSER="project_workflow", PGPASSWORD=password,
++                   PGDATABASE="project_workflow", SDLC_PG_TEST_PROJECT=project)
++        command = ["uv", "run", "--isolated", "--with-requirements", "constraints.txt", "--all-extras",
++                   "pytest", "-q", "-m", "integration", "tests/test_postgres_integration.py", "--timeout=120"]
++        helper.record("tests-running")
++        with (directory / "tests.log").open("w", encoding="utf-8") as output:
++            result = subprocess.run(command, cwd=root, env=env, stdin=subprocess.DEVNULL,
++                                    stdout=output, stderr=subprocess.STDOUT, timeout=1800)
++        postgres.write_json(directory / "acceptance.json", {
++            "project": project, "daemon_id": helper.identity, "exit_code": result.returncode,
++            "test_database": "disposable", "runtime_changed": False,
++        })
++        print("Workflow PostgreSQL integration:", "passed" if result.returncode == 0 else "failed",
++              "(protected diagnostics:", directory, ")")
++        return result.returncode
++
++
++if __name__ == "__main__":
++    raise SystemExit(main())
+diff --git a/scripts/quality.ps1 b/scripts/quality.ps1
+index 98531e5..a2d7de8 100644
+--- a/scripts/quality.ps1
++++ b/scripts/quality.ps1
+@@ -23,7 +23,12 @@ function Invoke-Test {
+ }
+ 
+ function Invoke-TestIntegration {
+-    Invoke-Checked ($Uv + @("pytest", "-q", "-m", "integration", "tests/test_postgres_integration.py", "--timeout=120"))
++    if ([string]::IsNullOrWhiteSpace($DockerContext)) {
++        throw "test-integration requires an explicit -DockerContext; no workspace database fallback"
++    }
++    Invoke-Checked @("python", (Join-Path $PSScriptRoot "qa_postgres.py"),
++        "--docker-context", $DockerContext, "--base-directory", $BaseDirectory,
++        "--output", (Join-Path $PSScriptRoot "../.local/postgres-integration"))
+ }
+ 
+ function Invoke-Coverage {
+@@ -58,17 +63,23 @@ function Invoke-ComposeReady {
+         "--output", $ComposeOutput)
+ }
+ 
+-switch ($Target) {
+-    "test" { Invoke-Test }
+-    "test-integration" { Invoke-TestIntegration }
+-    "coverage" { Invoke-Coverage }
+-    "lint" { Invoke-Lint }
+-    "quality" {
+-        Invoke-Test
+-        Invoke-TestIntegration
+-        Invoke-Coverage
+-        Invoke-Lint
++Push-Location (Split-Path $PSScriptRoot)
++try {
++    switch ($Target) {
++        "test" { Invoke-Test }
++        "test-integration" { Invoke-TestIntegration }
++        "coverage" { Invoke-Coverage }
++        "lint" { Invoke-Lint }
++        "quality" {
++            Invoke-Test
++            Invoke-TestIntegration
++            Invoke-Coverage
++            Invoke-Lint
++        }
++        "warnings" { Invoke-Warnings }
++        "compose-ready" { Invoke-ComposeReady }
+     }
+-    "warnings" { Invoke-Warnings }
+-    "compose-ready" { Invoke-ComposeReady }
++}
++finally {
++    Pop-Location
+ }
+diff --git a/tests/test_docs_quality.py b/tests/test_docs_quality.py
+index 4201b19..bc67212 100644
+--- a/tests/test_docs_quality.py
++++ b/tests/test_docs_quality.py
+@@ -89,7 +89,13 @@ def test_hosted_ci_covers_quality_and_compose_readiness() -> None:
+ 
+     assert "branches: [master]" in workflow
+     assert "pytest -q --timeout=60" in workflow
+-    assert "pytest -q -m integration tests/test_postgres_integration.py --timeout=120" in workflow
++    quality = workflow.split("  compose-smoke:", 1)[0]
++    assert "scripts/qa_postgres.py --docker-context default" in quality
++    assert "services:" not in quality
++    assert "PGHOST:" not in quality
++    assert "services-base" in quality
++    assert ".local/" in (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
++    assert ".local" in (ROOT / ".dockerignore").read_text(encoding="utf-8").splitlines()
+     assert "ruff check ." in workflow
+     assert "mypy project_workflow scripts" in workflow
+     # Fleet CI convention: light pipeline; E2E, coverage thresholds and
+diff --git a/tests/test_postgres_integration.py b/tests/test_postgres_integration.py
+index d7d8e5c..344e109 100644
+--- a/tests/test_postgres_integration.py
++++ b/tests/test_postgres_integration.py
+@@ -9,6 +9,7 @@ from __future__ import annotations
+ 
+ import json
+ import os
++import re
+ import subprocess
+ import sys
+ from concurrent.futures import ThreadPoolExecutor
+@@ -24,7 +25,7 @@ import pytest
+ from alembic.autogenerate import compare_metadata
+ from alembic.migration import MigrationContext
+ from fastapi.testclient import TestClient
+-from sqlalchemy import inspect, text
++from sqlalchemy import URL, inspect, text
+ from sqlalchemy.exc import IntegrityError
+ from sqlalchemy.orm import close_all_sessions
+ 
+@@ -56,12 +57,25 @@ from project_workflow.interfaces.ui.app import create_app
+ 
+ REPO_ROOT = Path(__file__).resolve().parents[1]
+ 
+-PG_HOST = os.environ.get("PGHOST", "127.0.0.1")
+-PG_PORT = int(os.environ.get("PGPORT", "5432"))
+-PG_USER = os.environ.get("PGUSER", "project_workflow")
+-PG_PASSWORD = os.environ.get("PGPASSWORD", "project_workflow")
+-PG_ADMIN_DB = os.environ.get("PGDATABASE", "project_workflow")
+-PG_CONNECT_TIMEOUT = int(os.environ.get("PGCONNECT_TIMEOUT", "10"))
++def _postgres_config():
++    required = ("PGHOST", "PGPORT", "PGUSER", "PGPASSWORD", "PGDATABASE", "SDLC_PG_TEST_PROJECT")
++    values = {key: os.environ.get(key, "") for key in required}
++    missing = [key for key, value in values.items() if not value.strip()]
++    if missing:
++        pytest.fail("Explicit disposable PostgreSQL parameters required: " + ", ".join(missing), pytrace=False)
++    if not re.fullmatch(r"sdlc-qa-project-workflow-pg-[a-f0-9]{12}", values["SDLC_PG_TEST_PROJECT"]):
++        pytest.fail("PostgreSQL integration requires its owned QA project", pytrace=False)
++    if (values["PGHOST"] != "127.0.0.1" or not values["PGPORT"].isdigit()
++            or not 1 <= int(values["PGPORT"]) <= 65535):
++        pytest.fail("Disposable PostgreSQL must use an explicit loopback port", pytrace=False)
++    return {"host": values["PGHOST"], "port": int(values["PGPORT"]), "user": values["PGUSER"],
++            "password": values["PGPASSWORD"], "dbname": values["PGDATABASE"], "connect_timeout": 10}
++
++
++def _test_database_url(settings, database):
++    return URL.create("postgresql+psycopg", username=settings["user"], password=settings["password"],
++                      host=settings["host"], port=settings["port"], database=database).render_as_string(
++                          hide_password=False)
+ 
+ 
+ @pytest.fixture(autouse=True)
+@@ -139,20 +153,12 @@ def _fixture_default_mode(connection, workflow_id: int) -> int:
+ @pytest.fixture(scope="function")
+ def pg_url(monkeypatch):
+     """Create a fresh PostgreSQL database and yield a SQLAlchemy URL for it."""
+-    if not PG_PASSWORD:
+-        pytest.skip("PGPASSWORD is not set")
++    settings = _postgres_config()
+     pid = os.getpid()
+     db_name = f"project_workflow_test_{pid}"
+-    base_url = f"postgresql+psycopg://{PG_USER}:{PG_PASSWORD}@{PG_HOST}:{PG_PORT}/{db_name}"
+-
+-    admin_conn = psycopg.connect(
+-        host=PG_HOST,
+-        port=PG_PORT,
+-        dbname=PG_ADMIN_DB,
+-        user=PG_USER,
+-        password=PG_PASSWORD,
+-        connect_timeout=PG_CONNECT_TIMEOUT,
+-    )
++    base_url = _test_database_url(settings, db_name)
++
++    admin_conn = psycopg.connect(**settings)
+     admin_conn.autocommit = True
+     with admin_conn.cursor() as cur:
+         cur.execute("SET idle_in_transaction_session_timeout = 0")
+@@ -170,14 +176,7 @@ def pg_url(monkeypatch):
+     # sessions before DROP DATABASE so its cleanup never sees AdminShutdown.
+     close_all_sessions()
+     reset_engine()
+-    admin_conn = psycopg.connect(
+-        host=PG_HOST,
+-        port=PG_PORT,
+-        dbname=PG_ADMIN_DB,
+-        user=PG_USER,
+-        password=PG_PASSWORD,
+-        connect_timeout=PG_CONNECT_TIMEOUT,
+-    )
++    admin_conn = psycopg.connect(**settings)
+     admin_conn.autocommit = True
+     with admin_conn.cursor() as cur:
+         cur.execute(f"DROP DATABASE IF EXISTS {db_name} WITH (FORCE)")
+diff --git a/tests/test_postgres_test_guards.py b/tests/test_postgres_test_guards.py
+new file mode 100644
+index 0000000..a13fe9d
+--- /dev/null
++++ b/tests/test_postgres_test_guards.py
+@@ -0,0 +1,45 @@
++"""The integration suite must refuse implicit or foreign PostgreSQL targets."""
++import pytest
++from sqlalchemy import make_url
++
++from tests import test_postgres_integration as integration
++
++
++@pytest.fixture
++def explicit_postgres(monkeypatch):
++    values = {"PGHOST": "127.0.0.1", "PGPORT": "24567", "PGUSER": "qa_user",
++              "PGPASSWORD": "synthetic:@/ password", "PGDATABASE": "qa_admin",
++              "SDLC_PG_TEST_PROJECT": "sdlc-qa-project-workflow-pg-012345abcdef"}
++    for key, value in values.items():
++        monkeypatch.setenv(key, value)
++    monkeypatch.setattr(integration.psycopg, "connect", lambda **_: pytest.fail("No network call allowed"))
++    return values
++
++
++@pytest.mark.parametrize("missing", ["PGHOST", "PGPORT", "PGUSER", "PGPASSWORD", "PGDATABASE",
++                                     "SDLC_PG_TEST_PROJECT"])
++def test_missing_explicit_parameter_refuses_before_connection(explicit_postgres, monkeypatch, missing):
++    monkeypatch.delenv(missing)
++    with pytest.raises(pytest.fail.Exception, match="Explicit disposable PostgreSQL parameters required"):
++        integration._postgres_config()
++
++
++@pytest.mark.parametrize("field,value,message", [
++    ("PGHOST", "database.internal", "loopback"),
++    ("PGPORT", "abc", "loopback"),
++    ("PGPORT", "0", "loopback"),
++    ("PGPORT", "65536", "loopback"),
++    ("SDLC_PG_TEST_PROJECT", "sdlc1", "owned QA project"),
++    ("SDLC_PG_TEST_PROJECT", "sdlc-qa-foreign-012345abcdef", "owned QA project"),
++])
++def test_foreign_or_invalid_target_is_refused(explicit_postgres, monkeypatch, field, value, message):
++    monkeypatch.setenv(field, value)
++    with pytest.raises(pytest.fail.Exception, match=message):
++        integration._postgres_config()
++
++
++def test_test_url_preserves_reserved_password_characters(explicit_postgres):
++    settings = integration._postgres_config()
++    url = make_url(integration._test_database_url(settings, "qa_test_database"))
++    assert (url.host, url.port, url.username, url.password, url.database) == (
++        "127.0.0.1", 24567, "qa_user", explicit_postgres["PGPASSWORD"], "qa_test_database")
+diff --git a/tests/test_ui.py b/tests/test_ui.py
+index 5858970..387b5a7 100644
+--- a/tests/test_ui.py
++++ b/tests/test_ui.py
+@@ -4,6 +4,7 @@ import json
+ import re
+ import sqlite3
+ import uuid
++from html.parser import HTMLParser
+ from pathlib import Path
+ from unittest.mock import patch
+ 
+@@ -147,6 +148,47 @@ def test_ui_templates_do_not_use_negative_letter_spacing():
+     assert offenders == []
+ 
+ 
++class _PageRegions(HTMLParser):
++    def __init__(self):
++        super().__init__()
++        self.headings: list[dict] = []
++        self.frames: list[dict] = []
++
++    def handle_starttag(self, tag, attrs):
++        attributes = dict(attrs)
++        if tag == "h1":
++            self.headings.append(attributes)
++        if "data-page-layout" in attributes:
++            self.frames.append(attributes)
++
++
++@pytest.mark.parametrize("route", ["/", "/agents", "/instructions", "/namespaces", "/namespaces/new",
++                                  "/phases", "/tasks", "/workflows", "/settings"])
++def test_ssr_content_region_is_named_by_its_page_heading(route):
++    response = client.get(route)
++    assert response.status_code == 200
++    parsed = _PageRegions()
++    parsed.feed(response.text)
++    assert len(parsed.frames) == 1
++    frame = parsed.frames[0]
++    assert frame["role"] == "region"
++    heading_id = frame["aria-labelledby"]
++    assert [heading for heading in parsed.headings if heading.get("id") == heading_id] == [
++        {"class": "header-title", "id": "workflow-page-title"}
++    ]
++    assert response.text.count('id="workflow-page-title"') == 1
++
++
++def test_selected_phase_instructions_keeps_the_named_reading_region():
++    phase = _phase_row("4.START")
++    response = client.get(f"/instructions?phase_id={phase['id']}")
++    assert response.status_code == 200
++    parsed = _PageRegions()
++    parsed.feed(response.text)
++    assert parsed.frames == [{"class": "page-readable", "data-page-layout": "reading",
++                              "role": "region", "aria-labelledby": "workflow-page-title"}]
++
++
+ @pytest.fixture(autouse=True)
+ def setup_db(isolate_ui_runtime_state, request):
+     """Populate DB with seed.json + sample task before UI tests."""
+@@ -2210,7 +2252,7 @@ class TestProjectsPage:
+     def test_namespace_create_page_uses_plus_without_duplicate_add_label(self):
+         response = client.get("/namespaces/new")
+         assert response.status_code == 200
+-        assert '<h1 class="header-title">Неймспейсы</h1>' in response.text
++        assert '<h1 class="header-title" id="workflow-page-title">Неймспейсы</h1>' in response.text
+         assert 'href="/namespaces/new' in response.text
+         assert 'title="Создать пространство" aria-label="Создать пространство">+</a>' in response.text
+         assert '<div class="card-title" id="namespaceFormMode">Создание</div>' in response.text
+@@ -2699,7 +2741,7 @@ def test_workflows_list_scrolls_with_page_and_labels_fields():
+     assert "max-height:calc(100vh - 100px);overflow-y:auto" not in response.text
+     assert 'class="workflow-nav side-nav-scroll" id="workflowNav"' in response.text
+     assert "html{scrollbar-width:thin;scrollbar-color:var(--surface-active) transparent}" in response.text
+-    assert '<h1 class="header-title">Воркфлоу</h1>' in response.text
++    assert '<h1 class="header-title" id="workflow-page-title">Воркфлоу</h1>' in response.text
+     assert '<label class="label" for="workflowName">Название</label>' in response.text
+     assert '<label class="label" for="workflowDescription">Описание</label>' in response.text
+ 
