@@ -544,7 +544,10 @@ class TestPhasesPage:
         assert 'id="sidebarThemeSelector"' not in response.text
         assert response.text.count('data-base-theme-option') >= 3
         assert 'window.PdlcThemePreference.read("workflow-theme")' in response.text
-        assert len(re.findall(r'<select\b(?=[^>]*data-base-choice)(?=[^>]*data-namespace-selector)[^>]*>', response.text)) == 2
+        controls = re.findall(
+            r'<select\b(?=[^>]*data-base-choice)(?=[^>]*data-namespace-selector)[^>]*>', response.text,
+        )
+        assert len(controls) == 2
         assert re.search(r'<select\b[^>]*id="namespaceSelector"[^>]*data-namespace-selector', response.text)
         assert '.platform-header .service-menu-popover{position:fixed;left:12px;right:12px;' in response.text
 
@@ -2323,7 +2326,8 @@ class TestProjectsPage:
         )
         assert (
             "document.querySelectorAll('[data-namespace-selector]')"
-            ".forEach(function(selector){ selector.value = String(id); window.PdlcChoice?.refreshChoice(selector); });" in response.text
+            ".forEach(function(selector){ selector.value = String(id); "
+            "window.PdlcChoice?.refreshChoice(selector); });" in response.text
         )
         assert "url.pathname = '/namespaces';" in response.text
         assert "var method = historyMode === 'push' ? 'pushState' : 'replaceState';" in response.text
