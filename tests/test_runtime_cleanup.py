@@ -128,10 +128,10 @@ def test_dependency_constraints_are_exact_and_runtime_image_uses_isolated_venv()
     assert constraints
     assert all("==" in requirement for requirement in constraints)
     assert 'requires = ["hatchling==1.32.0"]' in pyproject
-    assert dockerfile.count(digest) == 2
+    assert dockerfile.count(digest) == 3
     assert "ENV PIP_CONSTRAINT=/app/constraints.txt" in dockerfile
     assert "--constraint constraints.txt" in dockerfile
-    assert "COPY --from=builder /opt/venv /opt/venv" in dockerfile
+    assert "COPY --from=runtime-inputs /opt/venv /opt/venv" in dockerfile
     assert "/usr/local/lib/python3.11/site-packages" not in dockerfile
     assert "COPY --from=builder /usr/local/bin" not in dockerfile
     assert "pip uninstall -y pip setuptools wheel" in dockerfile
