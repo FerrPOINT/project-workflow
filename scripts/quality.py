@@ -5,16 +5,47 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shlex
 import subprocess
 import sys
 from pathlib import Path
 
-UV = "uv run --python 3.11.15 --frozen --with-requirements constraints.txt --all-extras"
+UV = "uv run --python 3.11.15 --frozen --all-extras"
 TARGETS = (
     "test", "test-verbose", "test-integration", "coverage", "lint", "quality", "warnings",
     "compose-ready", "unit", "integration", "slow", "release",
 )
+
+
+def verify_constraint_versions(root: Path) -> None:
+    """Shared pins must agree; conditional lock-only/build-only nodes are valid."""
+    import tomllib
+
+    def normalize(name: str) -> str:
+        return re.sub(r"[-_.]+", "-", name).lower()
+
+    pins: dict[str, str] = {}
+    for line in (root / "constraints.txt").read_text(encoding="utf-8").splitlines():
+        line = line.split("#", 1)[0].strip()
+        if not line:
+            continue
+        match = re.fullmatch(r"([A-Za-z0-9_.-]+)==([^\s;]+)", line)
+        if not match:
+            raise ValueError("Quality constraints require exact name==version pins")
+        name, version = normalize(match[1]), match[2]
+        if name in pins:
+            raise ValueError(f"Duplicate quality constraint: {name}")
+        pins[name] = version
+    packages = tomllib.loads((root / "uv.lock").read_text(encoding="utf-8"))["package"]
+    if not pins or not packages:
+        raise ValueError("Quality lock and constraints must be nonempty")
+    for package in packages:
+        name = normalize(package["name"])
+        if name in pins and package["version"] != pins[name]:
+            raise ValueError(
+                f"Quality pin mismatch: {name}: uv.lock={package['version']}, constraints={pins[name]}"
+            )
 
 
 def unit_test_paths() -> list[str]:
@@ -120,8 +151,16 @@ def main() -> int:
     if args.prepared and sys.version_info[:3] != (3, 11, 15):
         parser.error("Prepared quality operation requires the pinned Python 3.11.15")
     prefix = shlex.split(os.environ.get("WORKFLOW_QUALITY_UV", UV))
+    if args.target != "compose-ready" and (args.prepared or prefix == shlex.split(UV)):
+        # A Python 3.10 launcher has no stdlib TOML reader; its pinned 3.11 child
+        # validates before any tool. Newer launchers also refuse before uv sync.
+        if args.prepared or sys.version_info >= (3, 11):
+            try:
+                verify_constraint_versions(root)
+            except (OSError, ValueError, KeyError, TypeError) as error:
+                parser.error(str(error))
     if not args.prepared and args.target != "compose-ready" and prefix == shlex.split(UV):
-        # uv prepares the frozen/extras/constraints environment once. Every tool
+        # uv prepares one frozen project environment. Every tool
         # then runs inside that operation with the prepared interpreter.
         child = prefix + ["python", str(Path(__file__).resolve()), "--prepared", args.target]
         if extra:
