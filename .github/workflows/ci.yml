@@ -76,4 +76,4 @@ jobs:
       - name: Fast unit gate and static analysis (manual release checks separately)
         run: make quality
       - name: Profession and platform navigation regression
-        run: node scripts/test_profession_navigation.mjs
+        run: node tests/node/test_navigation_inputs.mjs

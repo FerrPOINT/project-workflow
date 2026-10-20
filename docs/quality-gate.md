@@ -15,6 +15,28 @@ Canonical quality runner готовит frozen Python 3.11.15/extras/constraints
 Между операциями uv заново проверяет определяющие inputs.
 Пользовательский WORKFLOW_QUALITY_UV сохраняет собственную семантику запуска.
 
+## Navigation unit contract
+
+`node scripts/test_profession_navigation.mjs` выполняет шесть изолированных
+unit cases без Python, browser, install, network или application build. Его
+четыре входа — descriptor, сам executor и два template — заданы общим списком
+в executor и проверяются против `frontend:navigation`. Не расширять чтение,
+не обновив этот контракт. Independent unit gate использует `execution_slot: none`.
+
+`node scripts/test_profession_navigation.mjs --context` наблюдает version,
+platform/architecture и SHA-256 фактического Node executable; Base повторно
+проверяет context до reuse и после исполнения. Injected modules/Node flags
+отклоняются. Receipt reuse квалифицируется отдельно для Node24.19.0/Windows x64;
+остальные поддерживаемые Node выполняют свежую проверку. Base сохраняет полный
+environment digest и ограничивает unit receipt тем же commit и clean tree.
+
+`node tests/node/test_navigation_inputs.mjs` — CI entrypoint для изменений:
+он один раз выполняет те же шесть кейсов в закрытой file fixture и добавляет
+пять contract controls, включая отказ при повреждённых inputs и assertion failure.
+Не запускать оба entrypoint подряд без отдельной диагностической причины.
+Изменение backend/docs вне inputs не меняет content portion ключа; новый commit
+всё равно требует нового unit receipt. Это не cross-commit artifact reuse.
+
 ## Базовый gate
 
 ```bash
