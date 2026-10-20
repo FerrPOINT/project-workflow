@@ -10,6 +10,7 @@ click==8.5.0
 colorama==0.4.6
 coverage==7.15.4
 cryptography==50.0.1
+execnet==2.1.1
 fastapi==0.141.1
 greenlet==3.5.5
 h11==0.16.0
@@ -42,6 +43,7 @@ pyjwt==2.14.0
 pytest==9.1.1
 pytest-cov==7.1.0
 pytest-timeout==2.4.0
+pytest-xdist==3.8.0
 python-dotenv==1.2.3
 requests==2.34.2
 rich==15.0.0

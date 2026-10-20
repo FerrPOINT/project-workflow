@@ -71,6 +71,10 @@ def immutable_git_snapshot(root: Path, revision: str) -> GitSourceSnapshot:
 
 
 CATALOG_PATH = "project_workflow/references/hermes_sdlc_catalog_v1.json"
+RESOURCE_FRONTEND = (
+    "docker/dockerfile:1.27.1@sha256:"
+    "4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e"
+)
 BASE_CATALOG_PATH = "project_workflow/references/base_sdlc_catalog_v2.json"
 COMPATIBILITY_PATH = "runtime-compatibility.json"
 SKILLS_MANIFEST_PATH = "runtime-skills-manifest.json"
@@ -199,9 +203,44 @@ def compatible_build_context(snapshot: GitSourceSnapshot, skills_root: Path,
     return _add_context_files(context, {COMPATIBILITY_PATH: descriptor})
 
 
+def resource_options(limits: list[str] | None) -> list[str]:
+    """Translate explicit Base scheduling hints, without changing source inputs."""
+    if not limits:
+        return []
+    values = {}
+    for entry in limits:
+        name, separator, value = entry.partition("=")
+        if not separator or name in values or name not in {"memory", "memory-swap", "cpu-period", "cpu-quota"}:
+            raise ValueError("Build resources require distinct supported NAME=VALUE entries")
+        values[name] = value
+    if (set(values) != {"memory", "memory-swap", "cpu-period", "cpu-quota"}
+            or values["memory"] not in {str(size) + "g" for size in range(1, 9)}
+            or values["memory-swap"] != values["memory"]
+            or values["cpu-period"] != "100000"
+            or values["cpu-quota"] not in {str(cpus * 100000) for cpus in range(1, 9)}):
+        raise ValueError("Build resources require bounded RAM/CPU and no additional swap")
+    if os.environ.get("DOCKER_DEFAULT_PLATFORM", "linux/amd64") != "linux/amd64":
+        raise ValueError("Build resource profile is qualified only for linux/amd64")
+    result = ["--platform", "linux/amd64"]
+    for name, value in values.items():
+        result += ["--resource", name + "=" + value]
+    return result + ["--build-arg", "PDLC_RUN_SLOT_SHARING=locked", "--build-arg", "BUILDKIT_CACHE_MOUNT_NS="]
+
+
 def build_image(root: Path, image: str, docker: str, revision: str = "HEAD",
-                *, skills_root: Path, catalog_variant: str = "legacy") -> None:
+                *, skills_root: Path, catalog_variant: str = "legacy",
+                resource_limits: list[str] | None = None) -> None:
+    scheduling = resource_options(resource_limits)
     snapshot = immutable_git_snapshot(root, revision)
+    if scheduling:
+        with tarfile.open(fileobj=io.BytesIO(snapshot.archive), mode="r:*") as archive:
+            recipe = archive.extractfile("Dockerfile")
+            if recipe is None or not recipe.read().startswith(
+                ("# syntax=" + RESOURCE_FRONTEND + "\n").encode()
+            ):
+                raise BuildProvenanceError(
+                    "Build resources require the qualified pinned Dockerfile frontend in the exact source revision"
+                )
     provenance = snapshot.provenance
     context = (compatible_build_context(snapshot, skills_root, catalog_variant)
                if catalog_variant != "legacy" else compatible_build_context(snapshot, skills_root))
@@ -210,7 +249,7 @@ def build_image(root: Path, image: str, docker: str, revision: str = "HEAD",
     subprocess.run(
         [
             docker,
-            "build",
+            *(["buildx", "build", "--load", *scheduling] if scheduling else ["build"]),
             "--build-arg",
             f"CATALOG_VARIANT={catalog_variant}",
             "--build-arg",
@@ -245,6 +284,9 @@ def main(argv: list[str] | None = None) -> int:
     build.add_argument("--revision", default="HEAD")
     build.add_argument("--skills-root", type=Path, required=True)
     build.add_argument("--catalog-variant", choices=("legacy", "base"), default="legacy")
+    build.add_argument(
+        "--build-resource", action="append", help="Explicit bounded NAME=VALUE hints from the Base host envelope"
+    )
 
     for name in ("derive-compatibility", "verify-compatibility"):
         subparsers.add_parser(name).add_argument("--root", type=Path, required=True)
@@ -260,7 +302,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "build":
             build_image(args.root.resolve(), args.image, args.docker, args.revision,
-                        skills_root=args.skills_root.resolve(), catalog_variant=args.catalog_variant)
+                        skills_root=args.skills_root.resolve(), catalog_variant=args.catalog_variant,
+                        resource_limits=args.build_resource)
         elif args.command == "derive-compatibility":
             (args.root / COMPATIBILITY_PATH).write_bytes(_json_bytes(derive_compatibility(args.root)))
         elif args.command == "verify-compatibility":

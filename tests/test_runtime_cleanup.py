@@ -99,15 +99,19 @@ def test_repository_runbook_waits_for_compose_readiness():
 
 def test_windows_quality_helper_mirrors_local_gate():
     script = QUALITY_SCRIPT_PATH.read_text(encoding="utf-8")
-    assert "--with-requirements\", \"constraints.txt\"" in script
-    assert "--timeout=60" in script
-    assert "--timeout=120" in script
+    from scripts.quality import commands
+
+    assert "quality.py" in script
+    coverage = commands("coverage")[0]
+    assert coverage[coverage.index("--with-requirements") + 1] == "constraints.txt"
+    assert "--frozen" in coverage
+    assert "--timeout=60" in coverage
+    assert "--timeout=120" in commands("test-integration")[0]
     assert "test-integration" in script
     assert "coverage" in script
-    assert "ruff\", \"check\", \".\"" in script
-    assert "mypy\", \"project_workflow\", \"scripts\"" in script
-    assert "curl.exe" in script
-    assert "http://127.0.0.1:8812/health" in script
+    assert any(command[-3:] == ["ruff", "check", "."] for command in commands("lint"))
+    assert any(command[-3:] == ["mypy", "project_workflow", "scripts"] for command in commands("lint"))
+    assert "http://127.0.0.1:8812/health" in commands("compose-ready")[1]
 
 
 def test_repository_contains_declared_proprietary_license():

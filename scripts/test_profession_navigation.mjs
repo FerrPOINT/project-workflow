@@ -1,10 +1,56 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { closeSync, fstatSync, openSync, readFileSync, readSync, realpathSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import vm from 'node:vm';
-import test from 'node:test';
 
-const source = readFileSync(new URL('../project_workflow/interfaces/ui/templates/profession-navigation.js', import.meta.url), 'utf8');
-const bootstrap = readFileSync(new URL('../project_workflow/interfaces/ui/templates/base/platform-navigation.js', import.meta.url), 'utf8');
+// This inventory drives both actual reads and Base's receipt inputs.
+const inputs = {
+  descriptor: '.quality-gate.json',
+  executor: 'scripts/test_profession_navigation.mjs',
+  navigation: 'project_workflow/interfaces/ui/templates/profession-navigation.js',
+  namespaces: 'project_workflow/interfaces/ui/templates/namespaces.html',
+  bootstrap: 'project_workflow/interfaces/ui/templates/base/platform-navigation.js',
+};
+const readInput = key => readFileSync(new URL('../' + inputs[key], import.meta.url), 'utf8');
+const descriptor = JSON.parse(readInput('descriptor'));
+const gate = descriptor.gates.find(value => value.id === 'frontend:navigation');
+assert.deepEqual(gate?.inputs, Object.values(inputs));
+assert.deepEqual(gate.argv, ['node', inputs.executor]);
+assert.equal(gate.cwd, '.');
+assert.deepEqual(gate.exclude_inputs ?? [], []);
+
+if (process.env.NODE_OPTIONS || process.env.NODE_PATH || process.execArgv.length) {
+  throw new Error('Navigation executor requires Node builtins without injected modules or flags');
+}
+const mode = process.argv.slice(2);
+if (mode.length) {
+  assert.deepEqual(mode, ['--context']);
+  const executable = realpathSync(process.execPath);
+  const fd = openSync(executable, 'r');
+  const hash = createHash('sha256');
+  try {
+    const before = fstatSync(fd, { bigint: true });
+    const buffer = Buffer.alloc(64 * 1024);
+    let size;
+    while ((size = readSync(fd, buffer, 0, buffer.length, null))) hash.update(buffer.subarray(0, size));
+    const after = fstatSync(fd, { bigint: true });
+    for (const field of ['dev', 'ino', 'mode', 'size', 'mtimeNs', 'ctimeNs']) {
+      assert.equal(after[field], before[field], 'Node changed during observation: ' + field);
+    }
+  } finally {
+    closeSync(fd);
+  }
+  console.log(JSON.stringify({
+    schema: 'workflow-navigation-context/v1', version: process.version,
+    platform: process.platform, architecture: process.arch,
+    executable, sha256: hash.digest('hex'),
+  }));
+  process.exit(0);
+}
+
+const { default: test } = await import('node:test');
+const source = readInput('navigation');
+const bootstrap = readInput('bootstrap');
 const registry = '11111111-1111-4111-8111-111111111111';
 const namespace = '22222222-2222-4222-8222-222222222222';
 function page(search) {
@@ -58,7 +104,7 @@ test('invalid legacy profession is not silently converted into all projects', ()
 });
 
 test('loading stored profession fields resets the leave guard after the form is populated', () => {
-  const template = readFileSync(new URL('../project_workflow/interfaces/ui/templates/namespaces.html', import.meta.url), 'utf8');
+  const template = readInput('namespaces');
   const fill = template.match(/function fillNamespaceForm\(namespace\)\{([\s\S]*?)\n\}/)[1];
   const fields = new Map(['namespaceIconSelect', 'namespaceName', 'namespaceCliCommand', 'namespaceDescription', 'namespaceLaunchProfile', 'namespaceThemeColor', 'namespaceForm'].map(id => [id, {}]));
   const saved = [];

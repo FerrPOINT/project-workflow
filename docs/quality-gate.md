@@ -1,11 +1,50 @@
 # Quality Gate
 
-Этот файл фиксирует обязательный локальный quality gate для `project-workflow`.
-GitHub Actions в `.github/workflows/ci.yml` сохранён как опциональное зеркало:
-job `quality` запускает тесты и статический анализ с PostgreSQL 16, а
-`compose-smoke` собирает стек и проверяет `/health`. Для локального выпуска
-результаты оплачиваемых hosted jobs не требуются; `[skip ci]` предотвращает
-их запуск на push/PR. Перед commit и merge проверки ниже выполняются локально.
+Обязательная политика уровней: [TESTING](TESTING.md).
+Автоматический ci.yml выполняет `make quality`: unit + ruff/mypy, без БД.
+Ручной release.yml выполняет `make release`: один полный non-PostgreSQL pytest
+с coverage >=94%, XML, strict warnings и двумя workers; затем PostgreSQL 16
+отдельно, serial, с прежними timeout и integration assertions.
+Make, scripts/quality.ps1 и CI используют scripts/quality.py, frozen uv.lock
+и constraints.txt. `coverage` — ручная полная non-PostgreSQL проверка.
+Далее описаны ручные release/diagnostic сценарии, а не обязательная работа
+после каждого изменения. Unit fixture не создаёт SQLite/UI state.
+
+Canonical quality runner готовит frozen Python 3.11.15/extras/constraints один раз
+на операцию; pytest, Ruff и mypy используют подготовленный interpreter.
+Между операциями uv заново проверяет определяющие inputs.
+Пользовательский WORKFLOW_QUALITY_UV сохраняет собственную семантику запуска.
+
+`test-verbose` во всех helpers делегирует canonical runner и меняет только
+подробность unit-вывода. Reviewed files из `tests/lanes.json` передаются до
+collection; integration/slow модули не импортируются ради marker deselection.
+При scoped unit с одними flags действует тот же reviewed default через
+`testpaths`; явные paths/node IDs выбирает parser pytest. Подробности и controls
+в [TESTING](TESTING.md).
+
+## Navigation unit contract
+
+`node scripts/test_profession_navigation.mjs` выполняет шесть изолированных
+unit cases без Python, browser, install, network или application build. Его
+пять входов — descriptor, сам executor и три template — заданы общим списком
+в executor и проверяются против `frontend:navigation`. Не расширять чтение,
+не обновив этот контракт. Independent unit gate использует `execution_slot: none`.
+
+`node scripts/test_profession_navigation.mjs --context` наблюдает version,
+platform/architecture и SHA-256 фактического Node executable; Base повторно
+проверяет context до reuse и после исполнения. Injected modules/Node flags
+отклоняются. PDLC3 сохраняет дополнительный platform-navigation bootstrap в inputs.
+Его новый пятифайловый профиль выполняется свежим (`cacheable=false`) до
+отдельной exact caller/receipt qualification; прежний четырёхфайловый proof
+не переносится автоматически. Base сохраняет полный
+environment digest и ограничивает unit receipt тем же commit и clean tree.
+
+`node tests/node/test_navigation_inputs.mjs` — CI entrypoint для изменений:
+он один раз выполняет те же шесть кейсов в закрытой file fixture и добавляет
+пять contract controls, включая отказ при повреждённых inputs и assertion failure.
+Не запускать оба entrypoint подряд без отдельной диагностической причины.
+Изменение backend/docs вне inputs не меняет content portion ключа; новый commit
+всё равно требует нового unit receipt. Это не cross-commit artifact reuse.
 
 ## Базовый gate
 
@@ -23,13 +62,20 @@ python ../services-base/scripts/export_python_namespace.py --out project_workflo
 или чтения env. В CI checkout SDK использует read-only deploy key `SERVICES_BASE_DEPLOY_KEY`.
 
 ```bash
-uv run --isolated --with-requirements constraints.txt --all-extras pytest -q --timeout=60
-uv run --isolated --with-requirements constraints.txt --all-extras pytest -q -m integration tests/test_postgres_integration.py --timeout=120
-uv run --isolated --with-requirements constraints.txt --all-extras pytest --cov=project_workflow --cov-report=term --timeout=60
-uv run --isolated --with-requirements constraints.txt --all-extras ruff check .
-uv run --isolated --with-requirements constraints.txt --all-extras mypy project_workflow scripts
-git diff --check
+python scripts/quality.py release
 ```
+
+Make, PowerShell и CI делегируют `scripts/quality.py`. Он выполняет один полный
+pytest с coverage >=94%, XML, строгими ResourceWarning/unraisable flags и durations,
+отдельный PostgreSQL integration, ruff/mypy и git diff check. Окружение
+`.local/quality-python/<OS>/3.11.15` постоянно; frozen `uv.lock` и overlay
+`constraints.txt` сохраняются. Неизменившиеся зависимости повторно не устанавливаются.
+Scoped пример: `python scripts/quality.py test -- tests/test_quality_runner.py`.
+Полный coverage запускает два worker в load mode с общим отчётом и прежним
+порогом 94%; scoped и PostgreSQL integration выполняются последовательно.
+Для явного override prefix использовать WORKFLOW_QUALITY_UV; переменная UV
+может содержать только путь binary, выставленный самим uv.
+
 
 Ожидаемый результат:
 
@@ -39,17 +85,19 @@ git diff --check
 - coverage остаётся не ниже текущего локального baseline `94%`;
 - `ruff`, `mypy` и `git diff --check` не находят ошибок.
 
-На Unix-like окружении тот же набор доступен через `make quality`; на Windows
-без `make` используйте `pwsh -File scripts/quality.ps1 quality`. Дополнительные
+На Unix-like окружении тот же набор доступен через `make release`; на Windows
+без `make` используйте `pwsh -File scripts/quality.ps1 release`. Дополнительные
 цели `warnings` и `compose-ready` есть и в `Makefile`, и в PowerShell helper.
 
 ## ResourceWarning Gate
 
-После изменений в тестовой инфраструктуре, SQLAlchemy layer, UI request
-lifecycle или CLI session lifecycle дополнительно запускать:
+Ручной `release` выполняет строгую проверку предупреждений внутри единственного
+coverage-прогона. После его успеха полный pytest повторно не запускать.
+Обычный `quality` выполняет unit + lint/types без полного coverage.
+Самостоятельная строгая диагностика reviewed unit без coverage:
 
 ```bash
-uv run --isolated --with-requirements constraints.txt --all-extras pytest -q --timeout=60 -W error::ResourceWarning -W error::pytest.PytestUnraisableExceptionWarning
+python scripts/quality.py warnings
 ```
 
 Этот прогон должен проходить без SQLite connection warnings, включая
