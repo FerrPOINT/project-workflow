@@ -8,11 +8,22 @@
       "LICENSE"
     ],
     "backend": [
-      "project_workflow/**",
-      "scripts/**",
-      "tests/**",
+      "project_workflow/*.py",
+      "project_workflow/application/**",
+      "project_workflow/domain/**",
+      "project_workflow/infrastructure/**",
+      "project_workflow/interfaces/cli/**",
+      "project_workflow/interfaces/ui/*.py",
+      "project_workflow/references/**",
+      "project_workflow/supervisor/**",
+      "scripts/*.py",
+      "scripts/quality.ps1",
+      "tests/*.py",
+      "tests/**/*.py",
+      "tests/lanes.json",
       "pyproject.toml",
       "constraints.txt",
+      "uv.lock",
       "dependency-wheels.json",
       "Dockerfile",
       ".dockerignore",
@@ -21,12 +32,12 @@
       "openapi/**"
     ],
     "frontend": [
-      "project_workflow/interfaces/ui/**",
+      "project_workflow/interfaces/ui/templates/**",
       "project_workflow/ui/**",
-      ".github/**",
-      "openapi/**",
       "scripts/test_profession_navigation.mjs",
-      "tests/node/**"
+      "tests/node/**",
+      ".github/**",
+      "openapi/**"
     ]
   },
   "gates": [
