@@ -31,6 +31,7 @@ RUN --mount=type=cache,id=pdlc-host-run-slot-v1,target=/.__pdlc_build_slot__,sha
 
 FROM python:3.11-slim-bookworm@sha256:0bee7276f83efd4a1ee05bbbf4281d95ed28e079220a9457f25a93e3f1e3c31b AS build-tools
 ARG PDLC_RUN_SLOT_SHARING=locked
+ENV PYTHONDONTWRITEBYTECODE=1
 ARG TARGETARCH
 ARG PIP_CACHE_ID=pdlc-operator-downloads-v1-pip-cp311
 COPY --from=dependency-inputs /inputs/build-deps.txt /tmp/build-deps.txt

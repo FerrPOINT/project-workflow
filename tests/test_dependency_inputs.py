@@ -106,6 +106,7 @@ def test_wheel_inputs_exclude_runtime_tooling_without_hiding_package_inputs():
     stages = docker_stages()
     parent, wheel = stages['wheel-inputs']
     assert parent == 'build-tools'
+    assert 'ENV PYTHONDONTWRITEBYTECODE=1' in stages['build-tools'][1]
     assert re.findall(r'^COPY (.+)$', wheel, re.MULTILINE) == [
         'pyproject.toml README.md LICENSE ./', 'project_workflow/ ./project_workflow/',
     ]
