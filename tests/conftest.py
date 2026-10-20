@@ -2,20 +2,56 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from project_workflow import config
-from project_workflow.infrastructure.db.uow import SAUnitOfWork
-from project_workflow.infrastructure.llm import OpenAICompatibleClient
-from tests._db_helpers import prepare_sqlite_uow
+# An explicit reviewed allowlist prevents new boundary tests entering the build lane.
+_LANES = json.loads((Path(__file__).with_name("lanes.json")).read_text(encoding="utf-8"))
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_collection_modifyitems(items):
+    for item in items:
+        relative = Path(item.path).relative_to(Path(__file__).parent).as_posix()
+        tier = "unit" if relative in _LANES["unit"] else "integration"
+        item.add_marker(getattr(pytest.mark, tier))
+        if relative in _LANES["slow"]:
+            item.add_marker(pytest.mark.slow)
+        if relative == _LANES["postgres"]:
+            item.add_marker(pytest.mark.postgres)
+
+
+@pytest.fixture(scope="session")
+def ui_runtime_templates(tmp_path_factory):
+    """Cache only the immutable initial fixture, never a test's modified database."""
+    return tmp_path_factory.mktemp("ui-runtime-templates"), {}
 
 
 @pytest.fixture(autouse=True)
-def isolate_ui_runtime_state(tmp_path, monkeypatch):
+def isolate_ui_runtime_state(request: pytest.FixtureRequest):
     """Keep tests away from the user's real runtime DB/settings and mutable seed file."""
+    if request.node.get_closest_marker("unit") and not request.node.get_closest_marker("integration"):
+        # Pure tests must not pay for or silently depend on the SQLite/UI fixture.
+        yield
+        return
+    # Resolve integration fixtures only after classification. Function arguments
+    # would eagerly prepare them even when the unit branch returns immediately.
+    tmp_path = request.getfixturevalue("tmp_path")
+    monkeypatch = request.getfixturevalue("monkeypatch")
+    ui_runtime_templates = request.getfixturevalue("ui_runtime_templates")
+
+    import hashlib
+    import shutil
+    import sqlite3
+    from contextlib import closing
+
+    from project_workflow import config
+    from project_workflow.infrastructure.db.uow import SAUnitOfWork
+    from tests._db_helpers import prepare_sqlite_uow
+
     created_uows: list[SAUnitOfWork] = []
     original_uow_init = SAUnitOfWork.__init__
 
@@ -58,9 +94,20 @@ def isolate_ui_runtime_state(tmp_path, monkeypatch):
     ui_state._app_state = sqlite_app_state
     ui_package._app_state = sqlite_app_state
 
-    uow = SAUnitOfWork(database_url)
-    prepare_sqlite_uow(uow)
-    uow.close()
+    template_directory, templates = ui_runtime_templates
+    seed_digest = hashlib.sha256(seed_path.read_bytes()).hexdigest()
+    template = templates.get(seed_digest)
+    if template is None:
+        uow = SAUnitOfWork(database_url)
+        prepare_sqlite_uow(uow)
+        uow.close()
+        template = template_directory / (seed_digest + ".db")
+        # SQLite backup includes committed WAL data; plain copying a live DB does not.
+        with closing(sqlite3.connect(test_db)) as source, closing(sqlite3.connect(template)) as target:
+            source.backup(target)
+        templates[seed_digest] = template
+    else:
+        shutil.copyfile(template, test_db)
 
     yield
 
@@ -77,6 +124,7 @@ def isolate_ui_runtime_state(tmp_path, monkeypatch):
 @pytest.fixture
 def supervisor_llm(monkeypatch):
     """Install an explicit LLM verdict for tests that evaluate reports."""
+    from project_workflow.infrastructure.llm import OpenAICompatibleClient
 
     def install(
         verdict: str,
