@@ -617,7 +617,7 @@ class ComponentSelectionContracts(unittest.TestCase):
             "project_workflow/interfaces/ui/templates/namespaces.html",
             "project_workflow/interfaces/ui/templates/base/base-ui.css",
             "project_workflow/interfaces/ui/templates/base/platform-navigation.js",
-            "scripts/test_profession_navigation.mjs",
+            "scripts/test_profession_navigation.mjs", "tests/node/test_navigation_inputs.mjs",
         ):
             with self.subTest(path=path):
                 plan = selection.plan(root, profile="unit", changed=[path])
@@ -636,7 +636,8 @@ class ComponentSelectionContracts(unittest.TestCase):
             "project_workflow/interfaces/ui/templates.py",
             "project_workflow/interfaces/cli/commands.py",
             "project_workflow/references/base_sdlc_catalog_v2.json",
-            "scripts/quality.py", "tests/test_quality_runner.py", "uv.lock",
+            "scripts/quality.py", "scripts/quality.ps1", "tests/test_quality_runner.py", "uv.lock",
+            "Dockerfile", "dependency-wheels.json", "tests/lanes.json",
         ):
             with self.subTest(path=path):
                 plan = selection.plan(root, profile="unit", changed=[path])
@@ -696,7 +697,7 @@ class ComponentSelectionContracts(unittest.TestCase):
                 self.assertIn(backend, step)
         navigation = next(step for step in steps if "Profession and platform navigation regression" in step)
         self.assertIn(frontend, navigation)
-        self.assertIn("run: node scripts/test_profession_navigation.mjs", navigation)
+        self.assertIn("run: node tests/node/test_navigation_inputs.mjs", navigation)
         self.assertEqual(1, source.count("run: make quality"))
         self.assertIn("--revision .base-revision", source)
         self.assertIn("export_python_namespace.py", source)

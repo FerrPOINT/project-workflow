@@ -13,13 +13,20 @@
       "project_workflow/domain/**",
       "project_workflow/infrastructure/**",
       "project_workflow/interfaces/cli/**",
+      "project_workflow/interfaces/ui/*.py",
       "project_workflow/references/**",
       "project_workflow/supervisor/**",
       "scripts/*.py",
-      "tests/**",
+      "scripts/quality.ps1",
+      "tests/*.py",
+      "tests/**/*.py",
+      "tests/lanes.json",
       "pyproject.toml",
       "constraints.txt",
       "uv.lock",
+      "dependency-wheels.json",
+      "Dockerfile",
+      ".dockerignore",
       "Makefile",
       ".github/**",
       "openapi/**"
@@ -28,10 +35,9 @@
       "project_workflow/interfaces/ui/templates/**",
       "project_workflow/ui/**",
       "scripts/test_profession_navigation.mjs",
+      "tests/node/**",
       ".github/**",
-      "openapi/**",
-      "scripts/test_profession_navigation.mjs",
-      "tests/node/**"
+      "openapi/**"
     ]
   },
   "gates": [
