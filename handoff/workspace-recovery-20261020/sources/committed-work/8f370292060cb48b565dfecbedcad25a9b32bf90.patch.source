@@ -1,0 +1,26 @@
+diff --git a/project_workflow/interfaces/ui/static/base-ui/base-ui.css b/project_workflow/interfaces/ui/static/base-ui/base-ui.css
+index 778432b..1f89af2 100644
+--- a/project_workflow/interfaces/ui/static/base-ui/base-ui.css
++++ b/project_workflow/interfaces/ui/static/base-ui/base-ui.css
+@@ -69,7 +69,7 @@ dialog.base-shell-drawer::backdrop { background: rgb(0 0 0 / 65%); }
+ .base-page-header { display: flex; min-width: 0; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; }
+ .base-page-title { overflow-wrap: anywhere; font-size: var(--base-font-page-title); font-weight: 600; line-height: 1.25; letter-spacing: 0; }
+ .base-page-actions, .base-filter-row { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 8px; }
+-.base-form-field { display: flex; min-width: 0; flex-direction: column; gap: 6px; }
++.base-form-field { display: flex; min-width: 0; flex-direction: column; gap: 6px; overflow-wrap: anywhere; }
+ 
+ @media (min-width: 768px) and (max-width: 1279px) {
+   .base-shell-sidebar { width: var(--shell-sidebar-compact); }
+diff --git a/project_workflow/interfaces/ui/static/base-ui/fingerprint.json b/project_workflow/interfaces/ui/static/base-ui/fingerprint.json
+index fb4ebb2..9c6c3db 100644
+--- a/project_workflow/interfaces/ui/static/base-ui/fingerprint.json
++++ b/project_workflow/interfaces/ui/static/base-ui/fingerprint.json
+@@ -2,7 +2,7 @@
+   "schemaVersion": 1,
+   "package": "@sdlc/ui",
+   "files": {
+-    "base-ui.css": "73c6ca8181b6b618412c31cf08993459d3ccc86ede6b3fd2c47a5d2fa31b1dfb",
++    "base-ui.css": "f5b4464ca700e97c4ae24006ec9004ffee1a76cbd3960c75c6a598dfa10e2078",
+     "base-ui.js": "b653e40f48efadf50c0190ef3c461ad4db93c49f02577057696fe5a1fe8546eb",
+     "macros.html": "c05468472093617fc6e9d565a597dabe2209f11be78c82c983c2c7412ecbab51"
+   }

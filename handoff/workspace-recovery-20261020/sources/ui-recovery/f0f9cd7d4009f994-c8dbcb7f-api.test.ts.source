@@ -1,0 +1,10 @@
+import { describe, expect, it } from 'vitest'
+import { scopedPath, taskHref } from './api'
+
+describe('read-only navigation', () => {
+  it('preserves namespace context and escapes task keys for Jinja', () => {
+    expect(taskHref({ task_key: 'RUN/42', namespace_id: 8 })).toBe('/task/RUN%2F42?namespace_id=8')
+    expect(scopedPath('/api/tasks', '8')).toBe('/api/tasks?namespace_id=8')
+    expect(scopedPath('/api/tasks', '')).toBe('/api/tasks')
+  })
+})

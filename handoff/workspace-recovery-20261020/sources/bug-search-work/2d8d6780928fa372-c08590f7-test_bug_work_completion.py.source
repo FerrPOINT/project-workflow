@@ -1,0 +1,63 @@
+"""Owner SQL readback constraints; synthetic rows do not claim SDK/LLM qualification."""
+import json
+
+from sqlalchemy import select
+
+from project_workflow.application.bug_work import BugWorkService
+from project_workflow.domain.runtime_assignment import payload_sha256
+from project_workflow.infrastructure import bug_work_authority as authority
+from project_workflow.infrastructure.db import models as m
+from project_workflow.infrastructure.db.uow import SAUnitOfWork
+from project_workflow.infrastructure.namespace_auth import NamespaceAuthError
+from tests.test_bug_work import source as source
+from tests.test_bug_work_attestation import bind_actual
+
+
+def test_completion_requires_real_final_history_and_preserves_protective_readback_after_revoke(source, monkeypatch):
+    request, principal, bind, _bound, _ = bind_actual(source, monkeypatch)
+    with SAUnitOfWork() as uow:
+        service = BugWorkService(uow)
+        initial = service.read(request.assignment_id, request.tracker_instance_uuid, principal)
+        assert initial["completed_execution"] is None
+        row = service._row(request.assignment_id, request.tracker_instance_uuid)
+        task = uow.session.scalar(select(m.Task).where(m.Task.id == row.task_id))
+        assert task is not None
+        catalog = service._retained(row)["catalog"]
+        task.current_phase_id = catalog["phases"][-1]["id"]
+        task.status = "done"
+        uow.commit()
+        # A done status alone does not mint an engine receipt.
+        assert service.projection(row)["completed_execution"] is None
+        response = {"status": "done", "bug_resolved": False}
+        last = m.TaskStepHistoryEntry(
+            task_id=row.task_id, workflow_id=row.workflow_id, mode_id=row.mode_id, cycle_number=0,
+            phase_id=task.current_phase_id, verdict="pass", worker_report="Synthetic final history fixture",
+            step_operation_key="actual-final-step", request_sha256="a" * 64,
+            assignment_revision=row.assignment_revision, assignment_operation_key=row.operation_key,
+            assignment_ref=row.assignment_ref, binding_ref=bind.binding_ref, hermes_run_ref=bind.hermes_run_ref,
+            attempt_number=1, role_key="developer", supervisor_response=json.dumps(response),
+        )
+        uow.session.add(last)
+        uow.commit()
+        receipt = service.projection(row)["completed_execution"]
+        assert receipt["step_history_id"] == last.id
+        assert receipt["step_response_sha256"] == payload_sha256(response)
+        assert receipt["bind_request_sha256"] == row.bind_request_sha256
+        assert receipt["source_context_sha256"] == bind.runtime_attestation.source_origin_sha256
+        for field, changed in (("binding_ref", "foreign"), ("hermes_run_ref", "foreign"),
+                               ("request_sha256", "g" * 64), ("verdict", "blocked")):
+            original = getattr(last, field)
+            setattr(last, field, changed)
+            uow.commit()
+            assert service.projection(row)["completed_execution"] is None
+            setattr(last, field, original)
+            uow.commit()
+
+    def revoked(_):
+        raise NamespaceAuthError(403)
+
+    monkeypatch.setattr(authority, "read_grant", revoked)
+    with SAUnitOfWork() as uow:
+        observed = BugWorkService(uow).read(request.assignment_id, request.tracker_instance_uuid, principal)
+        assert observed["completed_execution"] == receipt
+        assert observed["bug_resolved"] is False

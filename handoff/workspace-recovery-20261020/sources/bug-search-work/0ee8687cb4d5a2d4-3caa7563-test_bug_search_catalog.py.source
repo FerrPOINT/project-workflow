@@ -1,0 +1,91 @@
+"""Product profession source hashes and immutable phase contracts, without task admission."""
+
+import hashlib
+import json
+from pathlib import Path
+
+import pytest
+from pydantic import ValidationError
+
+from project_workflow.application.bug_search_catalog import observe_bug_search_catalog, phase_contracts, phase_models
+from project_workflow.domain.bug_search_catalog import BugSearchCatalog
+from project_workflow.domain.exceptions import ConflictError
+from project_workflow.domain.runtime_assignment import canonical_json, payload_sha256
+from project_workflow.infrastructure.db import models as m
+from project_workflow.infrastructure.db.bug_search_profession import ensure_bug_search_profession
+from project_workflow.infrastructure.db.uow import SAUnitOfWork
+
+
+def test_fleet_canonical_hash_vectors_are_copied_and_match_exact_utf8():
+    fixture = Path(__file__).with_name("fixtures") / "bug_search_v1.json"
+    assert hashlib.sha256(fixture.read_bytes()).hexdigest() == (
+        "fb38b1b6de14585af4d240487598c0e530adeaedc514ecc26f7a34a12ed7ab15"
+    )
+    for vector in json.loads(fixture.read_text(encoding="utf-8"))["vectors"]:
+        assert canonical_json(vector["value"]) == vector["canonical_json"]
+        assert payload_sha256(vector["value"]) == vector["sha256"]
+
+
+@pytest.fixture
+def catalog():
+    with SAUnitOfWork() as uow:
+        profession_id = ensure_bug_search_profession(uow)
+    with SAUnitOfWork() as uow:
+        return observe_bug_search_catalog(uow, profession_id)
+
+
+def test_catalog_qualifies_actual_numeric_modes_and_existing_phase_contracts(catalog):
+    assert catalog.profession.code == "BUG_SEARCHER"
+    assert catalog.profession.profession_id > 0
+    assert catalog.profession.profile_revision.startswith("sha256:")
+    assert catalog.profession.catalog_sha256 == payload_sha256(catalog.catalog_content())
+    for mode in catalog.modes:
+        phases = phase_models(mode)
+        builder = phase_contracts(mode, catalog.profession.catalog_sha256)
+        assert len(phases) == 3
+        assert all(phase.delegate is None for phase in phases)
+        assert builder.get_next_phase(phases[-1].code) == (None, None)
+        assert all(builder.build_evaluation_items(phase) for phase in phases)
+
+
+def test_catalog_edits_do_not_mutate_already_frozen_source(catalog):
+    before = catalog.model_dump_json()
+    instruction = catalog.modes[0].phases[0].instructions[0]
+    with SAUnitOfWork() as uow:
+        uow.phase_instructions.update(instruction.id, {"description": "Изменённый контекст"})
+    with SAUnitOfWork() as uow:
+        after = observe_bug_search_catalog(uow, catalog.profession.profession_id)
+    assert catalog.model_dump_json() == before
+    assert after.profession.catalog_sha256 != catalog.profession.catalog_sha256
+    assert after.profession.profile_revision == catalog.profession.profile_revision
+    with pytest.raises(ValidationError):
+        instruction.description = "Cannot mutate the accepted context"
+
+
+def test_profile_revision_changes_on_real_profile_edit(catalog):
+    with SAUnitOfWork() as uow:
+        uow.projects.update(catalog.profession.profession_id, {"launch_profile": "another-search-profile"})
+    with SAUnitOfWork() as uow:
+        after = observe_bug_search_catalog(uow, catalog.profession.profession_id)
+    assert after.launch_profile == "another-search-profile"
+    assert after.profession.profile_revision != catalog.profession.profile_revision
+    assert after.profession.catalog_sha256 != catalog.profession.catalog_sha256
+
+
+@pytest.mark.parametrize("field", ["profile_revision", "catalog_sha256"])
+def test_catalog_rejects_self_declared_hashes(catalog, field):
+    payload = catalog.model_dump(mode="json")
+    payload["profession"][field] = "sha256:" + "0" * 64 if field == "profile_revision" else "0" * 64
+    with pytest.raises(ValidationError):
+        BugSearchCatalog.model_validate_json(json.dumps(payload))
+
+
+def test_task_mode_policy_cannot_be_repurposed_as_project_execution(catalog):
+    with SAUnitOfWork() as uow:
+        mode = uow.session.get(m.WorkflowMode, catalog.modes[0].mode_id)
+        mode.role_key = "tester"
+        mode.execution_scope = "business"
+        mode.tech_workspace_policy = "forbidden"
+    with SAUnitOfWork() as uow:
+        with pytest.raises(ConflictError, match="Task assignment policy"):
+            observe_bug_search_catalog(uow, catalog.profession.profession_id)

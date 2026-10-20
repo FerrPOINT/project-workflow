@@ -1,0 +1,135 @@
+diff --git a/docs/UI_UX_MAP.md b/docs/UI_UX_MAP.md
+index fb89208..d54289e 100644
+--- a/docs/UI_UX_MAP.md
++++ b/docs/UI_UX_MAP.md
+@@ -12,3 +12,21 @@ Fixture IDs обозначают необходимые изолированны
+ `/phase/{phase_id}` использует общий fluid main + contextual aside 320 px.
+ `/task/{task_key}` использует `wide`, поскольку этот экран не имеет aside;
+ маркер `detail-with-aside` без фактической боковой колонки не допускается.
++
++## Локальный SSR-Кандидат
++
++Base snapshot `9df7dc3`: header расположен над всей рабочей областью;
++sidebar начинается ниже него. В Jinja main больше не содержит header,
++а подтверждения делают header inert вместе с main и sidebar.
++SSR export/fingerprint проверен через `pnpm ssr:check`; установленный React
++пакет проверен `pnpm ui:check` после frozen offline install.
++
++На этом исходнике прошли 1517 Python tests с coverage 94,31%, отдельные
++38 PostgreSQL integration tests, Ruff, mypy (83 файла) и frontend tests/build.
++Штатный capture-скрипт проверил нейтральную multi-namespace fixture на
++изолированном Python runtime: 14 desktop full-page и 3 responsive кадра.
++Эти source captures не заменяют README provenance фактического image.
++
++Текущая `ui-acceptance.json` остаётся pending и содержит предыдущие source
++fingerprints. Выпускной gate намеренно отклоняет её: новые immutable images,
++SSO, все роли/состояния и полная browser matrix ещё требуют приёмки.
+diff --git a/project_workflow/interfaces/ui/static/base-ui/base-ui.css b/project_workflow/interfaces/ui/static/base-ui/base-ui.css
+index 46abea2..c43f66f 100644
+--- a/project_workflow/interfaces/ui/static/base-ui/base-ui.css
++++ b/project_workflow/interfaces/ui/static/base-ui/base-ui.css
+@@ -46,7 +46,7 @@
+ .base-control { min-height: var(--shell-control-min); }
+ .base-icon-control { min-width: var(--shell-control-min); }
+ .base-app-shell { min-height: 100dvh; background: var(--color-background); color: var(--color-text-primary); font-size: var(--base-font-body); letter-spacing: 0; }
+-.base-shell-sidebar { position: fixed; inset: 0 auto 0 0; z-index: 30; display: flex; width: var(--shell-sidebar-expanded); flex-direction: column; border-right: 1px solid var(--color-border); background: var(--color-surface); }
++.base-shell-sidebar { position: fixed; inset: var(--shell-header-height) auto 0 0; z-index: 20; display: flex; width: var(--shell-sidebar-expanded); flex-direction: column; border-right: 1px solid var(--color-border); background: var(--color-surface); }
+ .base-shell-brand { display: flex; height: var(--shell-header-height); flex-shrink: 0; align-items: center; padding: 0 20px; border-bottom: 1px solid var(--color-border); }
+ .base-shell-identity { display: flex; min-width: 0; align-items: center; gap: 12px; }
+ .base-shell-identity-text { min-width: 0; }
+@@ -233,7 +233,7 @@ dialog.base-shell-drawer::backdrop { background: rgb(0 0 0 / 65%); }
+   --orange-soft: color-mix(in srgb, var(--color-warning) 12%, transparent); --yellow-soft: var(--orange-soft);
+   --sidebar-width: var(--shell-sidebar-expanded); --header-height: var(--shell-header-height);
+ }
+-.base-ssr-shell { font-size: var(--base-font-body); letter-spacing: 0; }
++.base-ssr-shell { display: block; font-size: var(--base-font-body); letter-spacing: 0; }
+ .base-form-field { display: grid; gap: 8px; min-width: 0; }
+ .base-form-field label { font-weight: 500; }
+ .base-form-field p { margin: 0; color: var(--color-text-muted); font-size: var(--base-font-label); }
+@@ -247,8 +247,8 @@ dialog.base-shell-drawer::backdrop { background: rgb(0 0 0 / 65%); }
+ .base-button-danger { background: var(--color-danger); color: var(--color-destructive-foreground); border-color: var(--color-danger); }
+ .base-button:disabled { opacity: .5; cursor: not-allowed; }
+ .base-resource-state { padding: 20px 0; }
+-.base-ssr-shell .main { min-width: 0; min-height: 100dvh; width: calc(100% - var(--sidebar-width)); margin-left: var(--sidebar-width); }
+-.base-ssr-header { position: sticky; top: 0; z-index: 30; display: flex; height: var(--shell-header-height); align-items: center; justify-content: space-between; gap: 8px; padding: 0 var(--shell-page-gutter); border-bottom: 1px solid var(--color-border); background: var(--color-surface); }
++.base-ssr-shell .main { min-width: 0; min-height: calc(100dvh - var(--shell-header-height)); width: calc(100% - var(--sidebar-width)); margin-left: var(--sidebar-width); }
++.base-ssr-header { position: sticky; top: 0; z-index: 30; display: flex; min-width: 0; width: 100%; height: var(--shell-header-height); align-items: center; justify-content: space-between; gap: 8px; padding: 0 var(--shell-page-gutter); border-bottom: 1px solid var(--color-border); background: var(--color-surface); }
+ .base-ssr-shell .sidebar-header { height: var(--shell-header-height); flex: 0 0 auto; display: flex; align-items: center; padding: 0 20px; border-bottom: 1px solid var(--color-border); }
+ .base-ssr-shell .sidebar-nav { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; }
+ .base-ssr-shell .sidebar-link { display: flex; min-height: var(--shell-control-min); align-items: center; gap: 12px; padding: 8px 12px; border-radius: var(--base-radius); color: var(--color-text-secondary); text-decoration: none; }
+diff --git a/project_workflow/interfaces/ui/static/base-ui/fingerprint.json b/project_workflow/interfaces/ui/static/base-ui/fingerprint.json
+index 81504cf..c61ef8c 100644
+--- a/project_workflow/interfaces/ui/static/base-ui/fingerprint.json
++++ b/project_workflow/interfaces/ui/static/base-ui/fingerprint.json
+@@ -2,7 +2,7 @@
+   "schemaVersion": 1,
+   "package": "@sdlc/ui",
+   "files": {
+-    "base-ui.css": "f65ba817c7c01a6b6bde3ba4da7ab5b8fff0bd09f7572eec8aadb6072d016110",
++    "base-ui.css": "acb403156c16c9cad4b8025d5dab8213670ad741a30ccb1dc4cad02c376185c5",
+     "base-ui.js": "b653e40f48efadf50c0190ef3c461ad4db93c49f02577057696fe5a1fe8546eb",
+     "macros.html": "c05468472093617fc6e9d565a597dabe2209f11be78c82c983c2c7412ecbab51"
+   }
+diff --git a/project_workflow/interfaces/ui/templates/base.html b/project_workflow/interfaces/ui/templates/base.html
+index dfc39d2..c332fab 100644
+--- a/project_workflow/interfaces/ui/templates/base.html
++++ b/project_workflow/interfaces/ui/templates/base.html
+@@ -23,7 +23,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--surface-active) transparent}
+ ::-webkit-scrollbar-corner{background:transparent}
+ /* Скроллящиеся области приложения наследуют тот же стиль */
+ *{scrollbar-width:thin;scrollbar-color:var(--surface-active) transparent}
+-body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,-apple-system,sans-serif;line-height:1.5;font-size:14px;min-height:100vh;display:flex}
++body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,-apple-system,sans-serif;line-height:1.5;font-size:14px;min-height:100vh}
+ a{color:var(--accent-readable);text-decoration:none}a:hover{text-decoration:underline}
+ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid var(--accent-hover);outline-offset:2px}
+ 
+@@ -340,8 +340,6 @@ textarea{resize:vertical;min-height:60px}
+ {{ workflow_navigation() }}
+ {% endcall %}
+ 
+-<!-- Main -->
+-<main class="main" tabindex="-1">
+   {% call base.header() %}
+     <div class="header-title-group">
+       <button class="burger base-shell-drawer-trigger" id="burgerBtn" type="button" aria-label="Открыть навигацию" aria-controls="base-mobile-navigation" aria-expanded="false" data-base-drawer-trigger>☰</button>
+@@ -389,6 +387,8 @@ textarea{resize:vertical;min-height:60px}
+     </div>
+   {% endcall %}
+ 
++<!-- Main -->
++<main class="main" tabindex="-1">
+   {% set layout_mode %}{% block page_layout %}wide{% endblock %}{% endset %}
+   {% set layout_mode = layout_mode | trim %}
+   {% call base.frame(layout_mode) %}
+@@ -414,6 +414,7 @@ textarea{resize:vertical;min-height:60px}
+ function syncSidebarLayout(){
+   var dialogOpen=!document.getElementById('confirmDialog').hidden;
+   document.getElementById('sidebar').inert=dialogOpen;
++  document.querySelector('[data-platform-header]').inert=dialogOpen;
+   document.querySelector('.main').inert=dialogOpen;
+ }
+ var serviceMenu=document.getElementById('serviceMenu');
+@@ -445,7 +446,7 @@ function requestConfirmation(options){
+   var cancel = document.getElementById('confirmDialogCancel');
+   var accept = document.getElementById('confirmDialogAccept');
+   var trigger = document.activeElement;
+-  var background = [document.querySelector('.sidebar'), document.querySelector('.main')];
++  var background = [document.querySelector('.sidebar'), document.querySelector('.main'), document.querySelector('[data-platform-header]')];
+   var previousInert = background.map(function(element){ return element.inert; });
+   document.getElementById('confirmDialogEyebrow').textContent = options.eyebrow || 'Подтверждение';
+   document.getElementById('confirmDialogTitle').textContent = options.title || 'Подтвердите действие';
+diff --git a/tests/test_ui.py b/tests/test_ui.py
+index 0e5232f..47f1786 100644
+--- a/tests/test_ui.py
++++ b/tests/test_ui.py
+@@ -522,6 +522,10 @@ class TestPhasesPage:
+         assert "--color-accent-foreground:" in response.text
+         assert "--shell-page-gutter: clamp(16px, 2vw, 32px)" in css.text
+         assert 'data-page-layout="wide"' in response.text
++        assert response.text.index('</header>') < response.text.index('<main class="main"')
++        assert 'inset: var(--shell-header-height) auto 0 0' in css.text
++        assert '.base-ssr-header { position: sticky; top: 0;' in css.text
++        assert "document.querySelector('[data-platform-header]').inert=dialogOpen" in response.text
+ 
+     def test_mobile_shell_keeps_theme_and_services_in_drawer(self):
+         response = client.get("/agents")

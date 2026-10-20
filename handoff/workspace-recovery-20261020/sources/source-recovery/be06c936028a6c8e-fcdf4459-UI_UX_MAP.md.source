@@ -1,0 +1,14 @@
+# UI/UX-карта Workflow
+
+Нормативный источник: [Base UI/UX Standard](../../services-base/docs/platform/UI_UX_STANDARD.md).
+Продуктовый маршрутный контракт: [ui-routes.json](ui-routes.json).
+
+Jinja остаётся основным интерфейсом. SSR assets и макросы обновляются только через `cd frontend && pnpm ssr:sync`; `pnpm ssr:check` проверяет byte-for-byte drift.
+Точки React-пилота объявлены вместе с Jinja, но доступны только при `WORKFLOW_REACT_UI_ENABLED=true`.
+Fixture IDs обозначают необходимые изолированные сценарии. `qa.status: not-run` не является доказательством приёмки.
+Согласованных геометрических исключений нет. Сравнение с Jinja и ограничения пилота описаны в [ADR](adr/2026-10-01-read-only-react-pilot.md).
+
+`/namespaces/new` использует `reading`: каталог не участвует в создании.
+`/phase/{phase_id}` использует общий fluid main + contextual aside 320 px.
+`/task/{task_key}` использует `wide`, поскольку этот экран не имеет aside;
+маркер `detail-with-aside` без фактической боковой колонки не допускается.

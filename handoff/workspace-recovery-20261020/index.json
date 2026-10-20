@@ -1,0 +1,3180 @@
+{
+  "schema": "pdlc/workspace-source-recovery/v1",
+  "repository": "project-workflow",
+  "status": "inert source recovery; not installed; not merge qualification",
+  "base": "e2abddf4d1833a6758032621110d978a955b1e51",
+  "normalization": "CRLF to LF, otherwise exact original bytes",
+  "versions": [
+    {
+      "original_path": ".dockerignore",
+      "sha256": "2ef522c4b0a39092f61a5586d54edab71acee46668fb0f5b8f3f8643fc6f5972",
+      "payload": "sources/source-recovery/2ef522c4b0a39092-2f754321-.dockerignore.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        },
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": ".gitignore",
+      "sha256": "ce84bf7a804450104b33913ad22590414ee9455467243679dd30498f0ad32f7a",
+      "payload": "sources/source-recovery/ce84bf7a80445010-bc37d034-.gitignore.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        },
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "AGENTS.md",
+      "sha256": "1a48aec637da3d32772b30e75d84eb0bbf0857f1f6dde43ab2f93c8cc6dd2faa",
+      "payload": "sources/source-recovery/1a48aec637da3d32-a54ff182-AGENTS.md.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        },
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "LIVE_TEST_PLAN.md",
+      "sha256": "0e2326811ce951d8164d76607ef8ae3696c61e0f3ff536989034b49fa136c719",
+      "payload": "sources/source-recovery/0e2326811ce951d8-bbf75e1c-LIVE_TEST_PLAN.md.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        },
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "README.md",
+      "sha256": "87634dd8a56220414306b3946c906181974c646d6bc94cb95a22d1ca929c1255",
+      "payload": "sources/source-recovery/87634dd8a5622041-b3356305-README.md.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        },
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "docker-compose.yml",
+      "sha256": "8dd46d49a144ad4a412765e3d26e3a983c587718a910c06bdd7e543e7dfc3da5",
+      "payload": "sources/source-recovery/8dd46d49a144ad4a-e45e45ba-docker-compose.yml.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        },
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "docs/database-reset.md",
+      "sha256": "74388c1575ebd35d0762c75bbad78c0ac613ad356dd3f8f83a1e4049f05bf105",
+      "payload": "sources/source-recovery/74388c1575ebd35d-2905f38c-database-reset.md.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        },
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/config.py",
+      "sha256": "cd51d5ea42e247dcdaea0cfc1bdff51e59cc9872811b7ee3b92da1de84f997fa",
+      "payload": "sources/source-recovery/cd51d5ea42e247dc-57fd84a4-config.py.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/interfaces/ui/app.py",
+      "sha256": "b06b9f744bf9aacf0444f46727aacb080aa05478482edd8cd2b12b80a13b36ff",
+      "payload": "sources/source-recovery/b06b9f744bf9aacf-aea2e96c-app.py.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/interfaces/ui/templates.py",
+      "sha256": "9ced1cc2185106d8bf99e92d1e515a78999e47179aa7cf320570b051447a0341",
+      "payload": "sources/source-recovery/9ced1cc2185106d8-d19dbe25-templates.py.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        },
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        },
+        {
+          "worktree": "sdlc/.local/branding-publish-20261007/project-workflow",
+          "head": "41327ae3c91adeb30dc6c70bb77c4eab9b7be8ad"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/interfaces/ui/templates/agents.html",
+      "sha256": "578630a46ee41a569306adc9be4b7c6815055053a820231515d86f81951a6207",
+      "payload": "sources/source-recovery/578630a46ee41a56-249e9f0e-agents.html.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        },
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/interfaces/ui/templates/base.html",
+      "sha256": "b449097ba998c81c8640bd4c2d778ff54b0f1a4df64dc734be14d7a084a9014b",
+      "payload": "sources/source-recovery/b449097ba998c81c-ec851146-base.html.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/interfaces/ui/templates/instructions.html",
+      "sha256": "7bb317c8ea8937378510efbcdd1fba5c5233d14ab8f73e41a6b77015c2505cc6",
+      "payload": "sources/source-recovery/7bb317c8ea893737-8925911f-instructions.html.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        },
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/interfaces/ui/templates/namespaces.html",
+      "sha256": "4935cc76afc6b6ce03cc4f772602d060bb1f39432cbfbf636ec8c997d58b234f",
+      "payload": "sources/source-recovery/4935cc76afc6b6ce-c7a95abd-namespaces.html.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        },
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/interfaces/ui/templates/phase_detail.html",
+      "sha256": "41dc725696e677d8ea58d6a4629fb2a5d66089e992d95b09bf07c4a7d3a0eb18",
+      "payload": "sources/source-recovery/41dc725696e677d8-648b97dd-phase_detail.html.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        },
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/interfaces/ui/templates/phases.html",
+      "sha256": "cad1a733d1010022b9bd55905c038a9ec1fd8402a7181828092866d4f65468e4",
+      "payload": "sources/source-recovery/cad1a733d1010022-08f19d2b-phases.html.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/interfaces/ui/templates/settings.html",
+      "sha256": "3d07edb7ddc23d26a02c3bd43f52965baac031a35e4635b0ff92244890470b13",
+      "payload": "sources/source-recovery/3d07edb7ddc23d26-e6ae97b5-settings.html.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        },
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/interfaces/ui/templates/task_detail.html",
+      "sha256": "07f4ebdb76bb8a0ea693323bfa372e58d5b3eea02681e3335c5dbdd32d2ba2a0",
+      "payload": "sources/source-recovery/07f4ebdb76bb8a0e-7538ae9a-task_detail.html.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        },
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/interfaces/ui/templates/workflows.html",
+      "sha256": "272286c110f6c6fa81c14977f3212832e5fb931803373e97bd5065f47f521a1a",
+      "payload": "sources/source-recovery/272286c110f6c6fa-f1eec533-workflows.html.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        },
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "tests/conftest.py",
+      "sha256": "9a75c508e42ee16bb85f2eebc128cde0e5ffb6aef4d92dbd4222ebdb4e7d9b21",
+      "payload": "sources/source-recovery/9a75c508e42ee16b-e52e4ddd-conftest.py.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "tests/test_platform_services.py",
+      "sha256": "22cda38d971ed7dd1344157efe315cc01c015fc532ba4cc368c22fcce2b15bd6",
+      "payload": "sources/source-recovery/22cda38d971ed7dd-9fed4e77-test_platform_services.py.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "tests/test_task_detail_template.py",
+      "sha256": "2fdc4bdd64c301e2769838f436a5e2123a5b6a899a30452ae0a18a804f254b97",
+      "payload": "sources/source-recovery/2fdc4bdd64c301e2-4ee43e61-test_task_detail_template.py.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        },
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "tests/test_ui.py",
+      "sha256": "28a5bb97b67f34a54617978d01ccaff88097d25d69b704511d77e8e7c935b771",
+      "payload": "sources/source-recovery/28a5bb97b67f34a5-9baffeee-test_ui.py.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "tests/test_ui_api.py",
+      "sha256": "c9e89dee5029f22412ab7c34d6a1b592bd140059020e89afa7054f41ab7d4428",
+      "payload": "sources/source-recovery/c9e89dee5029f224-15dfc97f-test_ui_api.py.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        },
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "docs/UI_UX_MAP.md",
+      "sha256": "be06c936028a6c8e7cb9e848b2058574024445482ee3921f03d896a431140cbb",
+      "payload": "sources/source-recovery/be06c936028a6c8e-fcdf4459-UI_UX_MAP.md.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        },
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "docs/adr/2026-10-01-read-only-react-pilot.md",
+      "sha256": "5cf206c7c1e18d4dd09cb45e4b4a47f0cec71fc8e6ea3cea811a6cce53c4555a",
+      "payload": "sources/source-recovery/5cf206c7c1e18d4d-379fb496-2026-10-01-read-only-react-pilot.md.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        },
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "docs/ui-routes.json",
+      "sha256": "c8bad4f40e039f44259554d1156bf3a673621ca21c96fd941c114587ae0441d5",
+      "payload": "sources/source-recovery/c8bad4f40e039f44-35a0d76d-ui-routes.json.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        },
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "frontend/eslint.config.js",
+      "sha256": "1f33c93b850295c81134721dbff4d16a2dda8c19a306a72f569f9539d9b82c12",
+      "payload": "sources/ui-recovery/1f33c93b850295c8-8b60be22-eslint.config.js.source",
+      "group": "ui-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        },
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        },
+        {
+          "worktree": "sdlc/.local/branding-publish-20261007/project-workflow",
+          "head": "41327ae3c91adeb30dc6c70bb77c4eab9b7be8ad"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "frontend/index.html",
+      "sha256": "8f38c7d25fa686a80b98244b050d34a2cd434496c8b2ea82d944cbbe53605c05",
+      "payload": "sources/ui-recovery/8f38c7d25fa686a8-959f9cad-index.html.source",
+      "group": "ui-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        },
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        },
+        {
+          "worktree": "sdlc/.local/branding-publish-20261007/project-workflow",
+          "head": "41327ae3c91adeb30dc6c70bb77c4eab9b7be8ad"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "frontend/package.json",
+      "sha256": "c9dd91fa49b333618b8db1ad266b63672178acf63f4b7136382ae71126c4bf79",
+      "payload": "sources/ui-recovery/c9dd91fa49b33361-da649826-package.json.source",
+      "group": "ui-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        },
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        },
+        {
+          "worktree": "sdlc/.local/branding-publish-20261007/project-workflow",
+          "head": "41327ae3c91adeb30dc6c70bb77c4eab9b7be8ad"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "frontend/pnpm-lock.yaml",
+      "sha256": "345f7c2bda9353af0ad2b4d967e1ad6c9b085b8313ce46ec8777946d6a30ffef",
+      "payload": "sources/ui-recovery/345f7c2bda9353af-41b1ff3a-pnpm-lock.yaml.source",
+      "group": "ui-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        },
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        },
+        {
+          "worktree": "sdlc/.local/branding-publish-20261007/project-workflow",
+          "head": "41327ae3c91adeb30dc6c70bb77c4eab9b7be8ad"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "frontend/src/App.test.tsx",
+      "sha256": "5dc63285f9e6afb04dda3c1cbd943c65938afb3baa5d09c2deb77a7892409cc6",
+      "payload": "sources/ui-recovery/5dc63285f9e6afb0-e0a1beb2-App.test.tsx.source",
+      "group": "ui-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        },
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        },
+        {
+          "worktree": "sdlc/.local/branding-publish-20261007/project-workflow",
+          "head": "41327ae3c91adeb30dc6c70bb77c4eab9b7be8ad"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "frontend/src/App.tsx",
+      "sha256": "e9cbe609b8636a18429ecc835ed8f3bda2c1ee0c488250d47aa928d705c45bc9",
+      "payload": "sources/ui-recovery/e9cbe609b8636a18-e56cb915-App.tsx.source",
+      "group": "ui-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        },
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        },
+        {
+          "worktree": "sdlc/.local/branding-publish-20261007/project-workflow",
+          "head": "41327ae3c91adeb30dc6c70bb77c4eab9b7be8ad"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "frontend/src/api.test.ts",
+      "sha256": "f0f9cd7d4009f994cbce69ffd953e41e7e6423b1d3df91df15696c29fe31b84f",
+      "payload": "sources/ui-recovery/f0f9cd7d4009f994-c8dbcb7f-api.test.ts.source",
+      "group": "ui-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        },
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        },
+        {
+          "worktree": "sdlc/.local/branding-publish-20261007/project-workflow",
+          "head": "41327ae3c91adeb30dc6c70bb77c4eab9b7be8ad"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "frontend/src/api.ts",
+      "sha256": "bbe1c9831854c9a964858080c2b79faa74a389e3fcda408be56faf9230148736",
+      "payload": "sources/ui-recovery/bbe1c9831854c9a9-aee57981-api.ts.source",
+      "group": "ui-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        },
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        },
+        {
+          "worktree": "sdlc/.local/branding-publish-20261007/project-workflow",
+          "head": "41327ae3c91adeb30dc6c70bb77c4eab9b7be8ad"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "frontend/src/main.tsx",
+      "sha256": "95dfece45d839c4abd4f39f8e6d62cb2ecb14e02e8ad75b6957b0eeb9215364d",
+      "payload": "sources/ui-recovery/95dfece45d839c4a-f687de21-main.tsx.source",
+      "group": "ui-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "frontend/src/style.css",
+      "sha256": "8968608fdc0efff5347c4ccd133045a197c105dd913622f32aae29eb3e9e9a7b",
+      "payload": "sources/ui-recovery/8968608fdc0efff5-d9055451-style.css.source",
+      "group": "ui-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        },
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        },
+        {
+          "worktree": "sdlc/.local/branding-publish-20261007/project-workflow",
+          "head": "41327ae3c91adeb30dc6c70bb77c4eab9b7be8ad"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "frontend/tsconfig.json",
+      "sha256": "9114692f2c7fbe79dfe4116d9183fbc527b217df92c6717099a9f405d9c040df",
+      "payload": "sources/ui-recovery/9114692f2c7fbe79-5c19f37d-tsconfig.json.source",
+      "group": "ui-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        },
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        },
+        {
+          "worktree": "sdlc/.local/branding-publish-20261007/project-workflow",
+          "head": "41327ae3c91adeb30dc6c70bb77c4eab9b7be8ad"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "frontend/vite.config.ts",
+      "sha256": "45ff4757b7cb2853f889d192c326916beee5b89388e0d8064a5df8be53892b01",
+      "payload": "sources/ui-recovery/45ff4757b7cb2853-97c6e2c4-vite.config.ts.source",
+      "group": "ui-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        },
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        },
+        {
+          "worktree": "sdlc/.local/branding-publish-20261007/project-workflow",
+          "head": "41327ae3c91adeb30dc6c70bb77c4eab9b7be8ad"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "frontend/vitest.config.ts",
+      "sha256": "5ab104e29e2bb038e1243af268f648e4f0388edf75eedc7b6882210f3863c652",
+      "payload": "sources/ui-recovery/5ab104e29e2bb038-6e3dd65e-vitest.config.ts.source",
+      "group": "ui-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        },
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        },
+        {
+          "worktree": "sdlc/.local/branding-publish-20261007/project-workflow",
+          "head": "41327ae3c91adeb30dc6c70bb77c4eab9b7be8ad"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/interfaces/ui/react_ui.py",
+      "sha256": "b41728ac7d6c2673d8e72cc2437462f0763046bb55578b49aef25a015d212efc",
+      "payload": "sources/source-recovery/b41728ac7d6c2673-5d1a79d6-react_ui.py.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        },
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        },
+        {
+          "worktree": "sdlc/.local/branding-publish-20261007/project-workflow",
+          "head": "41327ae3c91adeb30dc6c70bb77c4eab9b7be8ad"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/interfaces/ui/static/base-ui/base-ui.css",
+      "sha256": "9e373d5a6c73a0faa01a62a60ff58d2659033e4a381dd3fc0f264ec3774d14c5",
+      "payload": "sources/source-recovery/9e373d5a6c73a0fa-8a0fa336-base-ui.css.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/interfaces/ui/static/base-ui/base-ui.js",
+      "sha256": "b653e40f48efadf50c0190ef3c461ad4db93c49f02577057696fe5a1fe8546eb",
+      "payload": "sources/source-recovery/b653e40f48efadf5-bdb01408-base-ui.js.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/interfaces/ui/static/base-ui/fingerprint.json",
+      "sha256": "279994ac915a0b9012590c611094d83908bc80be092da9440c6274eb699de2c3",
+      "payload": "sources/source-recovery/279994ac915a0b90-efa58fd7-fingerprint.json.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/interfaces/ui/static/base-ui/macros.html",
+      "sha256": "02a5ce224504415b3f336cd65441373c414158dfa5e8a14bfe778b1a8b88c3a1",
+      "payload": "sources/source-recovery/02a5ce224504415b-bad93d40-macros.html.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        },
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "tests/test_base_ssr.py",
+      "sha256": "c8e4127e485b4d93ec92094dbcd1baec7a1b0fc9b9cda4282a1fbd9d6a60e47c",
+      "payload": "sources/source-recovery/c8e4127e485b4d93-e790b5c5-test_base_ssr.py.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        },
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        },
+        {
+          "worktree": "sdlc/.local/branding-publish-20261007/project-workflow",
+          "head": "41327ae3c91adeb30dc6c70bb77c4eab9b7be8ad"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "tests/test_react_ui.py",
+      "sha256": "6ec8bfed33d52ff3cda29092fca7a5af2ca05ed99a7ee99662ad72101055a88e",
+      "payload": "sources/source-recovery/6ec8bfed33d52ff3-f16bec5e-test_react_ui.py.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/project-workflow",
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7"
+        },
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        },
+        {
+          "worktree": "sdlc/.local/branding-publish-20261007/project-workflow",
+          "head": "41327ae3c91adeb30dc6c70bb77c4eab9b7be8ad"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": ".env.example",
+      "sha256": "10a6308812dcefd7274e16f36e00b8e86930cbc65074ccc89edbb87bcfffa0fb",
+      "payload": "sources/source-recovery/10a6308812dcefd7-a3046da0-.env.example.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "README.md",
+      "sha256": "d55fff8f96b1e0691f5a03d145119843c3cecd26473f5e942d65b6b0ed1061ef",
+      "payload": "sources/source-recovery/d55fff8f96b1e069-b3356305-README.md.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "docs/architecture.md",
+      "sha256": "500fdcb913bb8fe988c43e0ec576cbd0198c0f7ba8ffc904914236c8ca9f5aa4",
+      "payload": "sources/source-recovery/500fdcb913bb8fe9-140eef3b-architecture.md.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/application/task.py",
+      "sha256": "39476be8a3d0b58a40b577b7fe927821f702f98fc912136a2eac419c3054924f",
+      "payload": "sources/source-recovery/39476be8a3d0b58a-b6538283-task.py.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/config.py",
+      "sha256": "c275e7b4978679bbc4d051c1c112c737f3d3cd29c768dab0cc04f8247dc05f24",
+      "payload": "sources/source-recovery/c275e7b4978679bb-57fd84a4-config.py.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/infrastructure/db/models.py",
+      "sha256": "8eafef0261ff989d803cde1a8da678eb2843ba01b8e7754ebf5914dab4016e99",
+      "payload": "sources/source-recovery/8eafef0261ff989d-16ad2e45-models.py.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/infrastructure/db/session.py",
+      "sha256": "6616fb6c9d2b387a51f963b5d0c23002b8ca21da9cb3d16ee442a93bd20c6d35",
+      "payload": "sources/source-recovery/6616fb6c9d2b387a-47116d8b-session.py.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/infrastructure/llm.py",
+      "sha256": "12b4f1639605f5a315a751a21f6d8500ebbb13f71401dc720ed531807746609b",
+      "payload": "sources/source-recovery/12b4f1639605f5a3-b73011c1-llm.py.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/interfaces/cli/ui.py",
+      "sha256": "64a3cd8229a8b014bbd38c8043c2e08d04c9324949a20884cc3e6ae183a3744c",
+      "payload": "sources/source-recovery/64a3cd8229a8b014-0014e421-ui.py.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/interfaces/ui/app.py",
+      "sha256": "2e7dcb924bfb94bfd0c9a1e2f640e546624fcf9fc16c26ac74c8f2026fa96a87",
+      "payload": "sources/source-recovery/2e7dcb924bfb94bf-aea2e96c-app.py.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/interfaces/ui/sso.py",
+      "sha256": "e832fbe8505e9ebdbed6829f0b351a05143141b0351a089802c8128af9881f7a",
+      "payload": "sources/source-recovery/e832fbe8505e9ebd-e7919092-sso.py.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/supervisor/core.py",
+      "sha256": "d8da4f3e433e12d9f99a335acc5411d57a3b7513d13445ed5da78cc702c8cb18",
+      "payload": "sources/source-recovery/d8da4f3e433e12d9-bc1b7965-core.py.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/supervisor/evaluate.py",
+      "sha256": "69a07813bf852dd095dd641e17a566a975ce52b577991f0a4fb9185470e6f5d4",
+      "payload": "sources/source-recovery/69a07813bf852dd0-7709e8fb-evaluate.py.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "scripts/init_db.py",
+      "sha256": "7440951f98919b7558e69cb9c24d0d9d686330465ca4e955dc6ea6d4c1799ed5",
+      "payload": "sources/workspace-operations/7440951f98919b75-ec698caf-init_db.py.source",
+      "group": "workspace-operations",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "tests/test_initial_migration.py",
+      "sha256": "98b8253299a984c09b56eeb796d329dc5d9588bbb53c2286b3a9f8a2d0e18d7a",
+      "payload": "sources/source-recovery/98b8253299a984c0-a8e307c0-test_initial_migration.py.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "tests/test_namespace_default_migration.py",
+      "sha256": "758f07d25c79012d35005d3aa76218af0f23fce1466642f53baae8b45e63ddee",
+      "payload": "sources/source-recovery/758f07d25c79012d-6c10ff26-test_namespace_default_migration.py.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "tests/test_postgres_integration.py",
+      "sha256": "05639b44d78a8fa4aeb54c88568755f45082f487068cf5e3b637537b1574bc50",
+      "payload": "sources/source-recovery/05639b44d78a8fa4-09116c09-test_postgres_integration.py.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "tests/test_session_and_templates.py",
+      "sha256": "b2d975ae6328736d8cd8d6627d5f4cf47a298e7ae7abc5f9c1ba6bceffecc5d0",
+      "payload": "sources/source-recovery/b2d975ae6328736d-35da40e2-test_session_and_templates.py.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "tests/test_ui.py",
+      "sha256": "c9bb8b779d4f640402f56af5ecf3b107a0ea2d6fa909d36be5bb6242e61cf1ba",
+      "payload": "sources/source-recovery/c9bb8b779d4f6404-9baffeee-test_ui.py.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "docs/BUG_SEARCH_EXECUTION.md",
+      "sha256": "6370a8b520ba66f57c68e6c69ab40638eb6917fcb58a49a94e238698f47c643b",
+      "payload": "sources/bug-search-work/6370a8b520ba66f5-44e96cd5-BUG_SEARCH_EXECUTION.md.source",
+      "group": "bug-search-work",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "docs/BUG_SEARCH_GUIDANCE.md",
+      "sha256": "24dfafad3f343b74cee0ab5b9cbe1df3ddbe8c89ae439d09c864ea840749d38d",
+      "payload": "sources/bug-search-work/24dfafad3f343b74-3cb7df79-BUG_SEARCH_GUIDANCE.md.source",
+      "group": "bug-search-work",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "docs/BUG_SEARCH_PROFESSION.md",
+      "sha256": "8e92b9edae02b71b57d20cdd7dd77dd775bb5414bd34831312935f42c68ab5a2",
+      "payload": "sources/bug-search-work/8e92b9edae02b71b-40f35c7c-BUG_SEARCH_PROFESSION.md.source",
+      "group": "bug-search-work",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "docs/BUG_WORK_EXECUTION.md",
+      "sha256": "1e01ba39b1ebeed857b17c348a790292dffdc981a586087732ccead739a03404",
+      "payload": "sources/bug-search-work/1e01ba39b1ebeed8-31d3984c-BUG_WORK_EXECUTION.md.source",
+      "group": "bug-search-work",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/application/bug_search_catalog.py",
+      "sha256": "365b0922315d0ec9d6f1547df36b56bdfe7ac12bd67abb0950cad345f8ed4d29",
+      "payload": "sources/bug-search-work/365b0922315d0ec9-040c8f74-bug_search_catalog.py.source",
+      "group": "bug-search-work",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/application/bug_search_execution.py",
+      "sha256": "3a96a3dc22f87fdde71b4e146c26790e7442ce205cfbc0fa8b385c172544be1d",
+      "payload": "sources/bug-search-work/3a96a3dc22f87fdd-695cb90c-bug_search_execution.py.source",
+      "group": "bug-search-work",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/application/bug_work.py",
+      "sha256": "ef22be825422368be219038e54c1686804c78b4a8c87a32cd625caf78c7e632d",
+      "payload": "sources/bug-search-work/ef22be825422368b-b3dd39fb-bug_work.py.source",
+      "group": "bug-search-work",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/application/bug_work_completion.py",
+      "sha256": "fd2ace7d000ead9b4ed33f23f0428a5e2017f8080463380f35b91f69a2d50407",
+      "payload": "sources/bug-search-work/fd2ace7d000ead9b-595eecb0-bug_work_completion.py.source",
+      "group": "bug-search-work",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/application/bug_work_runtime.py",
+      "sha256": "8953a735f4289d76c8f416d72844b85bdbdb65fbae96b6c1a2c54c887ba711a4",
+      "payload": "sources/bug-search-work/8953a735f4289d76-de8993fb-bug_work_runtime.py.source",
+      "group": "bug-search-work",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/domain/bug_search_catalog.py",
+      "sha256": "558454ce5a14a8704317502bcbe2b8fd74fbde50a7aaac4d1c0484d1921afb4c",
+      "payload": "sources/bug-search-work/558454ce5a14a870-2f3433a3-bug_search_catalog.py.source",
+      "group": "bug-search-work",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/domain/bug_search_execution.py",
+      "sha256": "c4cf3b525912a640baa55d74d34ada0ee8ec627c2b31f258062acaa21a514aaf",
+      "payload": "sources/bug-search-work/c4cf3b525912a640-cacff429-bug_search_execution.py.source",
+      "group": "bug-search-work",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/domain/bug_target_source.py",
+      "sha256": "910ed040e52ab300855a9c23568d05314d30d217df496b0e7e086b6cb6195e3c",
+      "payload": "sources/bug-search-work/910ed040e52ab300-8d6632a0-bug_target_source.py.source",
+      "group": "bug-search-work",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/domain/bug_work.py",
+      "sha256": "acb58922ad4084bf72a24bab95d85d66642717bc822a09ba03d6dad4371af9e3",
+      "payload": "sources/bug-search-work/acb58922ad4084bf-6fc81f7e-bug_work.py.source",
+      "group": "bug-search-work",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/domain/bug_work_attestation.py",
+      "sha256": "62d9534bd110966c786d0a1afc8a77e4686a5a52c06350d83c285ae67f554901",
+      "payload": "sources/bug-search-work/62d9534bd110966c-450d6c71-bug_work_attestation.py.source",
+      "group": "bug-search-work",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/domain/bug_work_origin.py",
+      "sha256": "21b4d0822b4e274e3b4b6ae558663b903dffe8526733fa961fb417c458221df2",
+      "payload": "sources/bug-search-work/21b4d0822b4e274e-94060cb4-bug_work_origin.py.source",
+      "group": "bug-search-work",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/infrastructure/bug_search_authority.py",
+      "sha256": "4420078eed26fcae6a454520ffb14b2179b05daf00ef1b8f850d4e11539d7d33",
+      "payload": "sources/bug-search-work/4420078eed26fcae-b16ad579-bug_search_authority.py.source",
+      "group": "bug-search-work",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/infrastructure/bug_search_targets.py",
+      "sha256": "9ad55b3b2995a9412c3c84ded8783988c12034e8a5bc92d25f988ac9debd6ac3",
+      "payload": "sources/bug-search-work/9ad55b3b2995a941-cc3efebf-bug_search_targets.py.source",
+      "group": "bug-search-work",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/infrastructure/bug_work_authority.py",
+      "sha256": "2c91ed6f4327d5c0b2fc1c39b28a8eabebf113aafcf5094f5fde89f0f0a07c70",
+      "payload": "sources/bug-search-work/2c91ed6f4327d5c0-150b1e2f-bug_work_authority.py.source",
+      "group": "bug-search-work",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/infrastructure/db/bug_search_profession.py",
+      "sha256": "4ae5d4379f7ad054e4fca3af2fe28335e1a1f7acb9d57719c70d1207478cf3dd",
+      "payload": "sources/bug-search-work/4ae5d4379f7ad054-8db7cc9b-bug_search_profession.py.source",
+      "group": "bug-search-work",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/infrastructure/db/bug_work_constraints.py",
+      "sha256": "056fb0288126358c114ed7142c17205967939b282a2830f7cf788b743c955f8f",
+      "payload": "sources/bug-search-work/056fb0288126358c-73504545-bug_work_constraints.py.source",
+      "group": "bug-search-work",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/infrastructure/db/migrations/versions/0015_bug_search_execution.py",
+      "sha256": "e2858bd1d1468f2fbf30c55737304feaf9c1e16621533f0ef1750ba37311763f",
+      "payload": "sources/bug-search-work/e2858bd1d1468f2f-e3add1c5-0015_bug_search_execution.py.source",
+      "group": "bug-search-work",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/infrastructure/db/migrations/versions/0016_bug_work_assignment.py",
+      "sha256": "6679e9c91f457a8881f517dee63e57f831a173d482e70095c165fefe05bde45c",
+      "payload": "sources/bug-search-work/6679e9c91f457a88-f61db0d3-0016_bug_work_assignment.py.source",
+      "group": "bug-search-work",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/interfaces/cli/bug_work_execution.py",
+      "sha256": "d0acd71a5704ae062e880e474aa010db1c4425e758ce72c4bcddc5ad3f102fad",
+      "payload": "sources/bug-search-work/d0acd71a5704ae06-d0a43d4f-bug_work_execution.py.source",
+      "group": "bug-search-work",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/interfaces/cli/project_execution.py",
+      "sha256": "6e58b88ca268b5948a2576c1e3b78bd561af792143fb30a5e949d2fdb3a685d8",
+      "payload": "sources/source-recovery/6e58b88ca268b594-c0d804c8-project_execution.py.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/interfaces/ui/routes/bug_search_api.py",
+      "sha256": "1639e05a10c4f4bfa9d276ef3493a5dbca4b56524feb50ceede81e500c3d55f2",
+      "payload": "sources/bug-search-work/1639e05a10c4f4bf-6c56cdec-bug_search_api.py.source",
+      "group": "bug-search-work",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/interfaces/ui/routes/bug_work_api.py",
+      "sha256": "7f939ca9a00f934628960555ddb77c6e4d0949c1ec0ec45cf24bca5761a51214",
+      "payload": "sources/bug-search-work/7f939ca9a00f9346-545fd422-bug_work_api.py.source",
+      "group": "bug-search-work",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "tests/fixtures/bug-finding-source-repository-v1.json",
+      "sha256": "8826acca2c211499bda993126824c2f25b07f3cf77e9134bb923818cd34b0ac4",
+      "payload": "sources/bug-search-work/8826acca2c211499-028002fb-bug-finding-source-repository-v1.json.source",
+      "group": "bug-search-work",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "tests/fixtures/bug-target-source-v1.json",
+      "sha256": "270e15fffe59d35ef821acbd67d6aab71d52bc191358e9b27cfad0de4a8e337e",
+      "payload": "sources/bug-search-work/270e15fffe59d35e-1ae09565-bug-target-source-v1.json.source",
+      "group": "bug-search-work",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "tests/fixtures/bug_search_v1.json",
+      "sha256": "ac5838bcca5dbed20cc4b32d3907fa4240e7099ebcd7408cc8120d43aae8ac52",
+      "payload": "sources/bug-search-work/ac5838bcca5dbed2-1a1df7ef-bug_search_v1.json.source",
+      "group": "bug-search-work",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "tests/fixtures/bug_search_v1.origin.json",
+      "sha256": "a4c1a3815da6c1644ceedbf3432a5388295e99a73469317717f1b3748b293577",
+      "payload": "sources/bug-search-work/a4c1a3815da6c164-5b6bfa45-bug_search_v1.origin.json.source",
+      "group": "bug-search-work",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "tests/test_bug_repository_identity.py",
+      "sha256": "5159fec6cf6ac9da6ea1b0cb96cbf6beabb08a73ea6cc34becb0b9eb839f3df7",
+      "payload": "sources/bug-search-work/5159fec6cf6ac9da-6f93b24a-test_bug_repository_identity.py.source",
+      "group": "bug-search-work",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "tests/test_bug_search_api_cli.py",
+      "sha256": "a5bbbd1e038ff1394c19873f1c4628e3f3eb42807518a78dcf90e70c4d2c3cc3",
+      "payload": "sources/bug-search-work/a5bbbd1e038ff139-74e94ad9-test_bug_search_api_cli.py.source",
+      "group": "bug-search-work",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "tests/test_bug_search_authority.py",
+      "sha256": "3c71c0a2753f4a185e9fed4475129fe20c8470d8162356a58da15c273d80dc14",
+      "payload": "sources/bug-search-work/3c71c0a2753f4a18-0cfdb42a-test_bug_search_authority.py.source",
+      "group": "bug-search-work",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "tests/test_bug_search_catalog.py",
+      "sha256": "0ee8687cb4d5a2d4674fd6afaaa46964136bb06938987eff6c7c09a8d44c0341",
+      "payload": "sources/bug-search-work/0ee8687cb4d5a2d4-3caa7563-test_bug_search_catalog.py.source",
+      "group": "bug-search-work",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "tests/test_bug_search_execution.py",
+      "sha256": "4145adfca4fce215c3c947a74340e99f7ae0448afd5e35b8fdbc5a0b140a9f15",
+      "payload": "sources/bug-search-work/4145adfca4fce215-0eca6206-test_bug_search_execution.py.source",
+      "group": "bug-search-work",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "tests/test_bug_search_profession.py",
+      "sha256": "28231cce4329caa61766b9f3cfa92ee6026fc0b720f33937880714030008490e",
+      "payload": "sources/bug-search-work/28231cce4329caa6-862ca473-test_bug_search_profession.py.source",
+      "group": "bug-search-work",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "tests/test_bug_search_wire.py",
+      "sha256": "1a2fa0b8ea20805cb9fd00d1f94fe28f208ad2dae8b91d59401b2c796616b742",
+      "payload": "sources/bug-search-work/1a2fa0b8ea20805c-2e94beff-test_bug_search_wire.py.source",
+      "group": "bug-search-work",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "tests/test_bug_target_source.py",
+      "sha256": "77e3ff2d05ac840b4767883eb9fa87e087da82d10129789babce776407ede0f0",
+      "payload": "sources/bug-search-work/77e3ff2d05ac840b-c0d65cd2-test_bug_target_source.py.source",
+      "group": "bug-search-work",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "tests/test_bug_work.py",
+      "sha256": "8ce67d38ab38c2249656d7808058b919818c1c5ab75eb232f68cc0a128130ccf",
+      "payload": "sources/bug-search-work/8ce67d38ab38c224-662286ef-test_bug_work.py.source",
+      "group": "bug-search-work",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "tests/test_bug_work_api_cli.py",
+      "sha256": "b7b17bfdcd7dd24d552ff991fbfa482c0960c28325a2fd2f1842dfedcc61206e",
+      "payload": "sources/bug-search-work/b7b17bfdcd7dd24d-d5cc4809-test_bug_work_api_cli.py.source",
+      "group": "bug-search-work",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "tests/test_bug_work_attestation.py",
+      "sha256": "f599e9937d970f3a197a1577b8f78ed859e066f1cfbda9ed843dfda766affc6b",
+      "payload": "sources/bug-search-work/f599e9937d970f3a-5f71de31-test_bug_work_attestation.py.source",
+      "group": "bug-search-work",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "tests/test_bug_work_authority.py",
+      "sha256": "975215c15d9cc3570ad48fe9c66a966d2f555f98210ca75446414a3c06641a01",
+      "payload": "sources/bug-search-work/975215c15d9cc357-e2198594-test_bug_work_authority.py.source",
+      "group": "bug-search-work",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "tests/test_bug_work_catalog_api.py",
+      "sha256": "96200a9004ddc7539ba9bc4e8854d55c061ff528b14f3b411859c1b6acebb72e",
+      "payload": "sources/bug-search-work/96200a9004ddc753-52e71056-test_bug_work_catalog_api.py.source",
+      "group": "bug-search-work",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "tests/test_bug_work_completion.py",
+      "sha256": "2d8d6780928fa372f366658cd74d10c111b1085bdafd330c61a96a25c278bb9d",
+      "payload": "sources/bug-search-work/2d8d6780928fa372-c08590f7-test_bug_work_completion.py.source",
+      "group": "bug-search-work",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "tests/test_bug_work_origin.py",
+      "sha256": "5b1e52e63a79448a51126ed16f0d452f221ee4d441215785430d45cd11278016",
+      "payload": "sources/bug-search-work/5b1e52e63a79448a-0bd86a0f-test_bug_work_origin.py.source",
+      "group": "bug-search-work",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "tests/test_bug_work_origin_alias_reader.py",
+      "sha256": "3ce8104d1852ac57392c00fe85cec2f8fd27c276a3f43005257d85b00d5f21f4",
+      "payload": "sources/bug-search-work/3ce8104d1852ac57-12f1fbcc-test_bug_work_origin_alias_reader.py.source",
+      "group": "bug-search-work",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "tests/test_bug_work_origin_authority.py",
+      "sha256": "a0afbf29590a1a8124b5dfc0c427ba232be21a362ababba0402800443bc5776c",
+      "payload": "sources/bug-search-work/a0afbf29590a1a81-1b639013-test_bug_work_origin_authority.py.source",
+      "group": "bug-search-work",
+      "origins": [
+        {
+          "worktree": "sdlc3/project-workflow",
+          "head": "c303686c47656672fcf08c1e86308ff6f2d439ef"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "docs/quality-gate.md",
+      "sha256": "c8083b3d39855cdc99031368d75a39b612d39306d7c348a1a365ad6b4d83daa1",
+      "payload": "sources/source-recovery/c8083b3d39855cdc-f0a06998-quality-gate.md.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/config.py",
+      "sha256": "eb30b1af95f81fd95cd63b0f4656539b0891634e91047d7393e3aa27d6838ffb",
+      "payload": "sources/source-recovery/eb30b1af95f81fd9-57fd84a4-config.py.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/interfaces/ui/app.py",
+      "sha256": "aed456dbdf90b3bd71eec1ec93a44f58462f65de0fb326d9c92d864b8d815489",
+      "payload": "sources/source-recovery/aed456dbdf90b3bd-aea2e96c-app.py.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/interfaces/ui/routes/pages.py",
+      "sha256": "0b79a693fcd73a1a924e5b147c36a71181fc28d13714237004345cd1dca17c09",
+      "payload": "sources/source-recovery/0b79a693fcd73a1a-14146011-pages.py.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/interfaces/ui/sso.py",
+      "sha256": "0476485033d14eaac3794f79f7ffde4ff0b65a360667105c8a077ce638b19ac0",
+      "payload": "sources/source-recovery/0476485033d14eaa-e7919092-sso.py.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/interfaces/ui/templates/base.html",
+      "sha256": "3f4b32255cb314c785bded338d93c0d17a1cc482f9c03eac87af21ebaff0b254",
+      "payload": "sources/source-recovery/3f4b32255cb314c7-ec851146-base.html.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/interfaces/ui/templates/phases.html",
+      "sha256": "13b89914de5580d9fb7cc28fbe634bf5ad38540208a4c95f61c60ad26cbf1a85",
+      "payload": "sources/source-recovery/13b89914de5580d9-08f19d2b-phases.html.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "pyproject.toml",
+      "sha256": "c5ecec53f3137c2c2414de7a3c48d44c9f90a42fb24690e679713fe9853fdb8b",
+      "payload": "sources/source-recovery/c5ecec53f3137c2c-50c86b7e-pyproject.toml.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        },
+        {
+          "worktree": "sdlc/.local/branding-publish-20261007/project-workflow",
+          "head": "41327ae3c91adeb30dc6c70bb77c4eab9b7be8ad"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "tests/test_platform_services.py",
+      "sha256": "eb44c68d092c3359eb6126e4bbb3aa2780382b12802abc02167fa2f335416ba8",
+      "payload": "sources/source-recovery/eb44c68d092c3359-9fed4e77-test_platform_services.py.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "tests/test_runtime_cleanup.py",
+      "sha256": "978da2c3b127a2e8ac80f5ddb72da35bb752c13eeef3d15d7e5da5043dc7a553",
+      "payload": "sources/source-recovery/978da2c3b127a2e8-994c12a8-test_runtime_cleanup.py.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "tests/test_sso.py",
+      "sha256": "8875093f971b65f05324804c984f0f44e2bcf0f62990f44bf95293804e91b977",
+      "payload": "sources/source-recovery/8875093f971b65f0-780dd773-test_sso.py.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "tests/test_ui.py",
+      "sha256": "10f77161a6109f66ab4a4799674bd1e804c55a12694467117adbc72c5d9cbd25",
+      "payload": "sources/source-recovery/10f77161a6109f66-9baffeee-test_ui.py.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "frontend/src/main.tsx",
+      "sha256": "00ab53acf0d14933bd0dd84a1b84220484cf09e767c0ef0358b42053cbf931ec",
+      "payload": "sources/ui-recovery/00ab53acf0d14933-f687de21-main.tsx.source",
+      "group": "ui-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        },
+        {
+          "worktree": "sdlc/.local/branding-publish-20261007/project-workflow",
+          "head": "41327ae3c91adeb30dc6c70bb77c4eab9b7be8ad"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/interfaces/ui/platform_branding.py",
+      "sha256": "ef5a5ffcbef5ec4cfde6266cce16ff875479ab0053c9433ee2502f32bc4117c0",
+      "payload": "sources/ui-recovery/ef5a5ffcbef5ec4c-6978936c-platform_branding.py.source",
+      "group": "ui-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        },
+        {
+          "worktree": "sdlc/.local/branding-publish-20261007/project-workflow",
+          "head": "41327ae3c91adeb30dc6c70bb77c4eab9b7be8ad"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/interfaces/ui/static/base-ui/base-ui.css",
+      "sha256": "40ea011589f93e0585727db792d52c3c54823b4cb14f5431c2f6524886aad16d",
+      "payload": "sources/source-recovery/40ea011589f93e05-8a0fa336-base-ui.css.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/interfaces/ui/static/base-ui/base-ui.js",
+      "sha256": "7e27ac39ebbbb34b7da6a5bd73638de9def8cc496b8cb9846ee314bd3e00e960",
+      "payload": "sources/source-recovery/7e27ac39ebbbb34b-bdb01408-base-ui.js.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/interfaces/ui/static/base-ui/fingerprint.json",
+      "sha256": "29e5f39228f27f24eaf600b39b2601f10777a21842bc82aa5cbcb236a29e9c09",
+      "payload": "sources/source-recovery/29e5f39228f27f24-efa58fd7-fingerprint.json.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "tests/test_platform_branding.py",
+      "sha256": "1038f0661ddca25e146e8fb293289bb92554ef52eafb6ec1499fe1d54784a479",
+      "payload": "sources/ui-recovery/1038f0661ddca25e-f1e7b8f5-test_platform_branding.py.source",
+      "group": "ui-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc/project-workflow",
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23"
+        },
+        {
+          "worktree": "sdlc/.local/branding-publish-20261007/project-workflow",
+          "head": "41327ae3c91adeb30dc6c70bb77c4eab9b7be8ad"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "CHANGELOG.md",
+      "sha256": "dfd0354850e96ab04ef1cc4c24e489caa9a2a66b56c2591d4bfc0c8cb9e9004e",
+      "payload": "sources/source-recovery/dfd0354850e96ab0-06572a96-CHANGELOG.md.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/.local/goal-workflow128-fix-20261019/current/project-workflow",
+          "head": "242c1f418e4375677ba27ff28e4b4b64415b2b7f"
+        },
+        {
+          "worktree": "sdlc2/.local/goal-workflow128-fix-20261019/sources/project-workflow",
+          "head": "e9225abbee9f6c704e76f20c4baf9c95de9bb072"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "tests/test_deployment_prefix.py",
+      "sha256": "bcdd4571631999a9dc78c8aec09d8304009db624afa982fbc68907b78cff933b",
+      "payload": "sources/source-recovery/bcdd4571631999a9-4ffcbccf-test_deployment_prefix.py.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc2/.local/goal-workflow128-fix-20261019/current/project-workflow",
+          "head": "242c1f418e4375677ba27ff28e4b4b64415b2b7f"
+        },
+        {
+          "worktree": "sdlc2/.local/goal-workflow128-fix-20261019/sources/project-workflow",
+          "head": "e9225abbee9f6c704e76f20c4baf9c95de9bb072"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/config.py",
+      "sha256": "f3b887acebad9f4d9334bb3f149fd303ae08dd3a6d265c2f001729bd3e6b42a8",
+      "payload": "sources/source-recovery/f3b887acebad9f4d-57fd84a4-config.py.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc/.local/branding-publish-20261007/project-workflow",
+          "head": "41327ae3c91adeb30dc6c70bb77c4eab9b7be8ad"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/interfaces/ui/app.py",
+      "sha256": "7855907ba4aacf276aaf14804124c93f6cd43d804a609668d3b0b1faa63192b5",
+      "payload": "sources/source-recovery/7855907ba4aacf27-aea2e96c-app.py.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc/.local/branding-publish-20261007/project-workflow",
+          "head": "41327ae3c91adeb30dc6c70bb77c4eab9b7be8ad"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/interfaces/ui/routes/pages.py",
+      "sha256": "15558c7f285257ffd9fbde6b1d50cabd59eda4a1dabcdb682f29240be81a55b5",
+      "payload": "sources/source-recovery/15558c7f285257ff-14146011-pages.py.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc/.local/branding-publish-20261007/project-workflow",
+          "head": "41327ae3c91adeb30dc6c70bb77c4eab9b7be8ad"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/interfaces/ui/templates/base.html",
+      "sha256": "9eb7c28b89fd3d7b0e50c850708573c6b9d81752817243dd3b7874bca75a466b",
+      "payload": "sources/source-recovery/9eb7c28b89fd3d7b-ec851146-base.html.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc/.local/branding-publish-20261007/project-workflow",
+          "head": "41327ae3c91adeb30dc6c70bb77c4eab9b7be8ad"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": ".base-revision",
+      "sha256": "69b062b3c2cb0587935c485c72b18a83ead39e3e59db1e133f1f43db2196071c",
+      "payload": "sources/source-recovery/69b062b3c2cb0587-b9adec86-.base-revision.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc/.local/uiux-drawer-workspace-20261006/project-workflow",
+          "head": "cc6650b70c3844608945fd603298a7dcad7c5e58"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "CHANGELOG.md",
+      "sha256": "52b20aa0e8c8ce625f6c5b8cbbc5bde2392ae77fe35f8a307a3ea21e5c521406",
+      "payload": "sources/source-recovery/52b20aa0e8c8ce62-06572a96-CHANGELOG.md.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc/.local/uiux-drawer-workspace-20261006/project-workflow",
+          "head": "cc6650b70c3844608945fd603298a7dcad7c5e58"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/interfaces/ui/static/base-ui/base-ui.js",
+      "sha256": "4a84d485ea64a5d01a707e95e4a4419d065c28a06c97257d3f453d7978d1280a",
+      "payload": "sources/source-recovery/4a84d485ea64a5d0-bdb01408-base-ui.js.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc/.local/uiux-drawer-workspace-20261006/project-workflow",
+          "head": "cc6650b70c3844608945fd603298a7dcad7c5e58"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/interfaces/ui/static/base-ui/fingerprint.json",
+      "sha256": "0b6ed5617aee22aadb7a4523705650f1392aa934875143285e6b31f138e2010a",
+      "payload": "sources/source-recovery/0b6ed5617aee22aa-efa58fd7-fingerprint.json.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc/.local/uiux-drawer-workspace-20261006/project-workflow",
+          "head": "cc6650b70c3844608945fd603298a7dcad7c5e58"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/interfaces/ui/templates/base.html",
+      "sha256": "5d9d021ab1e51a14741887ecd1774254e2dfcde2886ccff1fd8c0b128af0e2a7",
+      "payload": "sources/source-recovery/5d9d021ab1e51a14-ec851146-base.html.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc/.local/uiux-drawer-workspace-20261006/project-workflow",
+          "head": "cc6650b70c3844608945fd603298a7dcad7c5e58"
+        },
+        {
+          "worktree": "sdlc/.local/uiux-state-workspace-20261006/project-workflow-phase-candidate",
+          "head": "cc6650b70c3844608945fd603298a7dcad7c5e58"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "project_workflow/interfaces/ui/templates/phase_detail.html",
+      "sha256": "43f3c57d91a9f603bbc50facc610f4a3b827e31ea7c7545438da31df4eb88324",
+      "payload": "sources/source-recovery/43f3c57d91a9f603-648b97dd-phase_detail.html.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc/.local/uiux-drawer-workspace-20261006/project-workflow",
+          "head": "cc6650b70c3844608945fd603298a7dcad7c5e58"
+        },
+        {
+          "worktree": "sdlc/.local/uiux-state-workspace-20261006/project-workflow-phase-candidate",
+          "head": "cc6650b70c3844608945fd603298a7dcad7c5e58"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "tests/test_ui_agent_fields.py",
+      "sha256": "604c083ec1a45fcefd1a2cfc2de91e6f7656bdcb39f3f2525708ae60eaaca848",
+      "payload": "sources/source-recovery/604c083ec1a45fce-4c1928d8-test_ui_agent_fields.py.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc/.local/uiux-drawer-workspace-20261006/project-workflow",
+          "head": "cc6650b70c3844608945fd603298a7dcad7c5e58"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "frontend/e2e/base-shell-section-fields.spec.ts",
+      "sha256": "0178dc6a97c0d92e399fd982562bf971536b1ad82b333c40ce9a46b6c606ad3b",
+      "payload": "sources/ui-recovery/0178dc6a97c0d92e-f12ce2c2-base-shell-section-fields.spec.ts.source",
+      "group": "ui-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc/.local/uiux-drawer-workspace-20261006/project-workflow",
+          "head": "cc6650b70c3844608945fd603298a7dcad7c5e58"
+        },
+        {
+          "worktree": "sdlc/.local/uiux-state-workspace-20261006/project-workflow-phase-candidate",
+          "head": "cc6650b70c3844608945fd603298a7dcad7c5e58"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "tests/test_ui_shell_section_fields.py",
+      "sha256": "c8db306d0ba580f5af75d36efc032d0106010100b7c3add36356924a42eb6dca",
+      "payload": "sources/source-recovery/c8db306d0ba580f5-96b167dd-test_ui_shell_section_fields.py.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc/.local/uiux-drawer-workspace-20261006/project-workflow",
+          "head": "cc6650b70c3844608945fd603298a7dcad7c5e58"
+        },
+        {
+          "worktree": "sdlc/.local/uiux-state-workspace-20261006/project-workflow-phase-candidate",
+          "head": "cc6650b70c3844608945fd603298a7dcad7c5e58"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "CHANGELOG.md",
+      "sha256": "57a932f994214326a7bfaa2f46c802a591f72fd4d656c62ff05c2f643db30f7c",
+      "payload": "sources/source-recovery/57a932f994214326-06572a96-CHANGELOG.md.source",
+      "group": "source-recovery",
+      "origins": [
+        {
+          "worktree": "sdlc/.local/uiux-state-workspace-20261006/project-workflow-phase-candidate",
+          "head": "cc6650b70c3844608945fd603298a7dcad7c5e58"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false
+    },
+    {
+      "original_path": "commit/3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7",
+      "sha256": "a5b0b82d04849cbd8450f82cd2498d97257bbde39b04328d1b7709102e453bc5",
+      "payload": "sources/committed-work/3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7.patch.source",
+      "group": "committed-work",
+      "origins": [
+        {
+          "head": "3d04ebb99a4f575aa4a3fa6d59f5fa17f3be61c7",
+          "worktree": "project-workflow"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false,
+      "included_paths": [
+        ".env.example",
+        "project_workflow/interfaces/ui/platform_services.py",
+        "project_workflow/interfaces/ui/templates/base.html",
+        "tests/test_docs_quality.py",
+        "tests/test_platform_services.py",
+        "tests/test_runtime_cleanup.py"
+      ],
+      "commit_subject": "fix(ui): repair Workflow service menu and local navigation"
+    },
+    {
+      "original_path": "commit/cd57df660983b2f1c92c46e898683e29324c01e7",
+      "sha256": "db2625efa1befa02275e0c01210e282af92895f4838e2fc48691756598585c75",
+      "payload": "sources/committed-work/cd57df660983b2f1c92c46e898683e29324c01e7.patch.source",
+      "group": "committed-work",
+      "origins": [
+        {
+          "head": "cd57df660983b2f1c92c46e898683e29324c01e7",
+          "worktree": "project-workflow"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false,
+      "included_paths": [
+        "docker-compose.yml",
+        "project_workflow/interfaces/ui/platform_services.py",
+        "project_workflow/interfaces/ui/routes/pages.py",
+        "project_workflow/interfaces/ui/templates/base.html",
+        "tests/test_platform_services.py",
+        "tests/test_ui.py"
+      ],
+      "commit_subject": "Show Workflow switcher only with live Admin Panel"
+    },
+    {
+      "original_path": "commit/9b58fb958480108abcb82db310c1aaa2c3a83e23",
+      "sha256": "18c9cba600b06ef9fa02ed304b1860183732610db5be51da03daa6ada7e48536",
+      "payload": "sources/committed-work/9b58fb958480108abcb82db310c1aaa2c3a83e23.patch.source",
+      "group": "committed-work",
+      "origins": [
+        {
+          "head": "9b58fb958480108abcb82db310c1aaa2c3a83e23",
+          "worktree": "project-workflow"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false,
+      "included_paths": [
+        "project_workflow/interfaces/ui/templates/base.html",
+        "tests/test_local_fonts.py"
+      ],
+      "commit_subject": "fix(ui): keep Workflow fonts local"
+    },
+    {
+      "original_path": "commit/a797a9a33be779695e5ebbe857fa412db028f86a",
+      "sha256": "60c3cd6c11ac44bcd72e51b76db2730bfc1e8f1749ef53b1f5c1426c1ef47ec7",
+      "payload": "sources/committed-work/a797a9a33be779695e5ebbe857fa412db028f86a.patch.source",
+      "group": "committed-work",
+      "origins": [
+        {
+          "head": "a797a9a33be779695e5ebbe857fa412db028f86a",
+          "worktree": "project-workflow"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false,
+      "included_paths": [
+        "frontend/AGENTS.md",
+        "project_workflow/interfaces/ui/AGENTS.md"
+      ],
+      "commit_subject": "docs(ui): adopt shared Base frontend principles"
+    },
+    {
+      "original_path": "commit/cc6650b70c3844608945fd603298a7dcad7c5e58",
+      "sha256": "8c02da620976fea13637b562a6d01e9e31014587bfa3fa5f9506a59c0dcbbd70",
+      "payload": "sources/committed-work/cc6650b70c3844608945fd603298a7dcad7c5e58.patch.source",
+      "group": "committed-work",
+      "origins": [
+        {
+          "head": "cc6650b70c3844608945fd603298a7dcad7c5e58",
+          "worktree": "project-workflow"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false,
+      "included_paths": [
+        "CHANGELOG.md",
+        "frontend/e2e/base-agent-fields.spec.ts",
+        "project_workflow/interfaces/ui/templates/agents.html",
+        "tests/test_ui_agent_fields.py"
+      ],
+      "commit_subject": "fix(ui): use Base fields for agent editors"
+    },
+    {
+      "original_path": "commit/fcdde644bae7443196febdbdee66d5513ea5f236",
+      "sha256": "cb116fcf4a626a2ffffbaf2e6cd245bdca0ded7f6268d98d22e26ecd03849bc2",
+      "payload": "sources/committed-work/fcdde644bae7443196febdbdee66d5513ea5f236.patch.source",
+      "group": "committed-work",
+      "origins": [
+        {
+          "head": "fcdde644bae7443196febdbdee66d5513ea5f236",
+          "worktree": "project-workflow"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false,
+      "included_paths": [
+        ".base-revision",
+        "CHANGELOG.md",
+        "frontend/e2e/base-list-feedback.spec.ts",
+        "project_workflow/interfaces/ui/static/base-ui/base-ui.css",
+        "project_workflow/interfaces/ui/static/base-ui/fingerprint.json"
+      ],
+      "commit_subject": "fix(ui): pin the shared Base SSR state snapshot"
+    },
+    {
+      "original_path": "commit/0921b2699dcb16d8b4a0a83d7e657e6ea0c10aff",
+      "sha256": "c6eabd81ee4aa0002de67c518171ae35670f208e212362bfd805210b22840956",
+      "payload": "sources/committed-work/0921b2699dcb16d8b4a0a83d7e657e6ea0c10aff.patch.source",
+      "group": "committed-work",
+      "origins": [
+        {
+          "head": "0921b2699dcb16d8b4a0a83d7e657e6ea0c10aff",
+          "worktree": "project-workflow"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false,
+      "included_paths": [
+        "CHANGELOG.md",
+        "frontend/e2e/agent-drafts.spec.ts",
+        "frontend/e2e/base-list-feedback.spec.ts",
+        "frontend/e2e/instruction-drafts.spec.ts",
+        "frontend/e2e/phase-detail-save.spec.ts",
+        "frontend/e2e/phase-instruction-lifecycle.spec.ts",
+        "frontend/e2e/phase-namespace.spec.ts",
+        "frontend/e2e/workflow-editor.spec.ts",
+        "frontend/src/App.test.tsx",
+        "frontend/src/App.tsx",
+        "frontend/src/style.css",
+        "project_workflow/interfaces/ui/templates/agents.html",
+        "project_workflow/interfaces/ui/templates/base.html",
+        "project_workflow/interfaces/ui/templates/instructions.html",
+        "project_workflow/interfaces/ui/templates/namespaces.html",
+        "project_workflow/interfaces/ui/templates/phase_instructions.js",
+        "project_workflow/interfaces/ui/templates/phase_save.js",
+        "project_workflow/interfaces/ui/templates/phases.html",
+        "project_workflow/interfaces/ui/templates/settings.html",
+        "project_workflow/interfaces/ui/templates/workflows.html",
+        "tests/test_ui.py"
+      ],
+      "commit_subject": "fix(ui): use Base tables and inline SSR feedback"
+    },
+    {
+      "original_path": "commit/ba0492603b3a9f4de475bc03f6197745b98e004a",
+      "sha256": "c41a1f82da3da1341d0efe012dea95091f4d81831c62a4e261213080c5e3ef6e",
+      "payload": "sources/committed-work/ba0492603b3a9f4de475bc03f6197745b98e004a.patch.source",
+      "group": "committed-work",
+      "origins": [
+        {
+          "head": "ba0492603b3a9f4de475bc03f6197745b98e004a",
+          "worktree": "project-workflow"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false,
+      "included_paths": [
+        "CHANGELOG.md",
+        "frontend/e2e/phase-detail-save.spec.ts",
+        "frontend/e2e/phase-instruction-lifecycle.spec.ts",
+        "project_workflow/interfaces/ui/templates/phase_detail.html",
+        "project_workflow/interfaces/ui/templates/phase_instructions.js",
+        "project_workflow/interfaces/ui/templates/phase_save.js",
+        "tests/test_ui.py",
+        "tests/test_ui_api.py",
+        "tests/test_ui_instructions.py"
+      ],
+      "commit_subject": "fix(ui): reconcile phase instruction lifecycle without replay"
+    },
+    {
+      "original_path": "commit/4511e357f7c997859f7e3d54195cc9443da31f66",
+      "sha256": "9f2a1891ce327ebfc55721744cd0de47c308a5eb63fd5d54af536fa1728f4e8e",
+      "payload": "sources/committed-work/4511e357f7c997859f7e3d54195cc9443da31f66.patch.source",
+      "group": "committed-work",
+      "origins": [
+        {
+          "head": "4511e357f7c997859f7e3d54195cc9443da31f66",
+          "worktree": "project-workflow"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false,
+      "included_paths": [
+        "CHANGELOG.md",
+        "frontend/e2e/phase-namespace.spec.ts",
+        "project_workflow/interfaces/ui/routes/pages.py",
+        "project_workflow/interfaces/ui/templates/instructions.html",
+        "project_workflow/interfaces/ui/templates/phase_catalog.js",
+        "project_workflow/interfaces/ui/templates/phase_detail.html",
+        "tests/test_ui.py"
+      ],
+      "commit_subject": "fix(ui): separate phase API scope from navigation namespace"
+    },
+    {
+      "original_path": "commit/f39eddb2d8403406f1a75ea018fce56e326168b5",
+      "sha256": "e38a148fd3c676622a663c39c9a88a8ec4e65f428b60fc04785f2b0feaa2705b",
+      "payload": "sources/committed-work/f39eddb2d8403406f1a75ea018fce56e326168b5.patch.source",
+      "group": "committed-work",
+      "origins": [
+        {
+          "head": "f39eddb2d8403406f1a75ea018fce56e326168b5",
+          "worktree": "project-workflow"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false,
+      "included_paths": [
+        "CHANGELOG.md",
+        "frontend/e2e/phase-detail-save.spec.ts",
+        "project_workflow/interfaces/ui/templates/phase_detail.html",
+        "project_workflow/interfaces/ui/templates/phase_save.js",
+        "tests/test_ui.py",
+        "tests/test_ui_api.py"
+      ],
+      "commit_subject": "fix(ui): make phase autosave atomic and protect instruction drafts"
+    },
+    {
+      "original_path": "commit/c343c0f00fbc172606413e38ff005e2470028cba",
+      "sha256": "fac2498139211b480d3dc4df1a92d8cec70db1cedf627d53b52c08f3c181f5fa",
+      "payload": "sources/committed-work/c343c0f00fbc172606413e38ff005e2470028cba.patch.source",
+      "group": "committed-work",
+      "origins": [
+        {
+          "head": "c343c0f00fbc172606413e38ff005e2470028cba",
+          "worktree": "project-workflow"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false,
+      "included_paths": [
+        "CHANGELOG.md",
+        "frontend/e2e/phase-catalog.spec.ts",
+        "project_workflow/interfaces/ui/platform_services.py",
+        "project_workflow/interfaces/ui/templates/phase_catalog.js",
+        "project_workflow/interfaces/ui/templates/phases.html",
+        "tests/test_platform_services.py",
+        "tests/test_ui.py"
+      ],
+      "commit_subject": "fix(workflow): standardize phase catalog lifecycle"
+    },
+    {
+      "original_path": "commit/42b203bb1672c851df54ad9becbbdf19b6464750",
+      "sha256": "a742e276ac03a772389957c09bdcc8af2ee15ac2bee5d874e2be70dc83e87ca0",
+      "payload": "sources/committed-work/42b203bb1672c851df54ad9becbbdf19b6464750.patch.source",
+      "group": "committed-work",
+      "origins": [
+        {
+          "head": "42b203bb1672c851df54ad9becbbdf19b6464750",
+          "worktree": "project-workflow"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false,
+      "included_paths": [
+        "CHANGELOG.md",
+        "frontend/e2e/namespace-drafts.spec.ts",
+        "project_workflow/interfaces/ui/templates/base.html",
+        "project_workflow/interfaces/ui/templates/namespaces.html",
+        "tests/test_ui.py"
+      ],
+      "commit_subject": "fix(ui): unify namespace form and keep Workflow product identity"
+    },
+    {
+      "original_path": "commit/742e19fef2c4c4c973672510a45d701e88504545",
+      "sha256": "db5f2ec3940ed27817bceeb61390e087cc448abf4cc9c154058b078790034a13",
+      "payload": "sources/committed-work/742e19fef2c4c4c973672510a45d701e88504545.patch.source",
+      "group": "committed-work",
+      "origins": [
+        {
+          "head": "742e19fef2c4c4c973672510a45d701e88504545",
+          "worktree": "project-workflow"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false,
+      "included_paths": [
+        ".base-revision"
+      ],
+      "commit_subject": "fix(ui): align Workflow pilot with verified Base focus snapshot"
+    },
+    {
+      "original_path": "commit/c28114db665bdf4a4e27eba8367ca8f326cedc08",
+      "sha256": "d4d370ab706b183502a8d58a4448baf31e078829bd6f347676770ee70d777685",
+      "payload": "sources/committed-work/c28114db665bdf4a4e27eba8367ca8f326cedc08.patch.source",
+      "group": "committed-work",
+      "origins": [
+        {
+          "head": "c28114db665bdf4a4e27eba8367ca8f326cedc08",
+          "worktree": "project-workflow"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false,
+      "included_paths": [
+        "CHANGELOG.md",
+        "frontend/e2e/workflow-editor.spec.ts",
+        "project_workflow/interfaces/ui/templates/workflows.html"
+      ],
+      "commit_subject": "fix(ui): retain Base destructive contrast in Workflow editor"
+    },
+    {
+      "original_path": "commit/1d20ce5cb79df76d0097f676791d222f7a01af93",
+      "sha256": "110de5d50debfc7d29ab964032b888150600df672f8373bc3c9f7eabd81cb84a",
+      "payload": "sources/committed-work/1d20ce5cb79df76d0097f676791d222f7a01af93.patch.source",
+      "group": "committed-work",
+      "origins": [
+        {
+          "head": "1d20ce5cb79df76d0097f676791d222f7a01af93",
+          "worktree": "project-workflow"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false,
+      "included_paths": [
+        ".base-revision",
+        "CHANGELOG.md",
+        "docs/UI_UX_MAP.md",
+        "docs/plans/2026-10-06-workflow-editor-instructions.md",
+        "frontend/e2e/instruction-drafts.spec.ts",
+        "frontend/e2e/workflow-editor.spec.ts",
+        "project_workflow/interfaces/ui/routes/pages.py",
+        "project_workflow/interfaces/ui/static/base-ui/base-ui.css",
+        "project_workflow/interfaces/ui/static/base-ui/fingerprint.json",
+        "project_workflow/interfaces/ui/templates/base.html",
+        "project_workflow/interfaces/ui/templates/confirm_deletion.js",
+        "project_workflow/interfaces/ui/templates/instructions.html",
+        "project_workflow/interfaces/ui/templates/workflows.html",
+        "tests/test_ui.py",
+        "tests/test_ui_api.py",
+        "tests/test_ui_instructions.py"
+      ],
+      "commit_subject": "fix(ui): preserve Workflow editor drafts and reconcile uncertain writes"
+    },
+    {
+      "original_path": "commit/d8da8f8512779b63a21090add7fa16e464e679df",
+      "sha256": "b328212c64671ce7fdde98500861f333cfd9e82d60232ef1f5b5ed88e80938ff",
+      "payload": "sources/committed-work/d8da8f8512779b63a21090add7fa16e464e679df.patch.source",
+      "group": "committed-work",
+      "origins": [
+        {
+          "head": "d8da8f8512779b63a21090add7fa16e464e679df",
+          "worktree": "project-workflow"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false,
+      "included_paths": [
+        "CHANGELOG.md",
+        "docs/UI_UX_MAP.md",
+        "docs/plans/2026-10-06-agent-write-lifecycle.md",
+        "frontend/e2e/agent-drafts.spec.ts",
+        "project_workflow/interfaces/ui/templates/agents.html",
+        "tests/test_application_localization.py",
+        "tests/test_ui.py",
+        "tests/test_ui_api.py",
+        "tests/test_ui_smoke_data.py",
+        "tests/ui_markup.py"
+      ],
+      "commit_subject": "fix(ui): reconcile uncertain Workflow agent writes without replay"
+    },
+    {
+      "original_path": "commit/27844b3948b682f6118bc4c02b35212f0d6b172f",
+      "sha256": "e6fb2afb0bb400efd3bb857aa9659e2f1318e6e9689f9209f912e109be599a0c",
+      "payload": "sources/committed-work/27844b3948b682f6118bc4c02b35212f0d6b172f.patch.source",
+      "group": "committed-work",
+      "origins": [
+        {
+          "head": "27844b3948b682f6118bc4c02b35212f0d6b172f",
+          "worktree": "project-workflow"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false,
+      "included_paths": [
+        ".base-revision",
+        "CHANGELOG.md",
+        "frontend/pnpm-lock.yaml"
+      ],
+      "commit_subject": "chore(ui): pin verified common Base profile and UI snapshot"
+    },
+    {
+      "original_path": "commit/f97c44a386efc67d807f3f128dc35c92356287ec",
+      "sha256": "3feb6b0c835363d0d9674500f9aeb60ec250a1f28ebb2a803e5d5caeccf61d39",
+      "payload": "sources/committed-work/f97c44a386efc67d807f3f128dc35c92356287ec.patch.source",
+      "group": "committed-work",
+      "origins": [
+        {
+          "head": "f97c44a386efc67d807f3f128dc35c92356287ec",
+          "worktree": "project-workflow"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false,
+      "included_paths": [
+        "CHANGELOG.md",
+        "Dockerfile",
+        "docs/adr/2026-10-01-read-only-react-pilot.md",
+        "tests/test_build_provenance.py"
+      ],
+      "commit_subject": "fix(build): preserve Base pin in Workflow frontend attestation"
+    },
+    {
+      "original_path": "commit/b87fb2b7005574803feab1a80725864d658cb6ab",
+      "sha256": "c3d8b9969c12196520736f046a703fa3670a1e18793ed97ba0c99ad02b4d23cb",
+      "payload": "sources/committed-work/b87fb2b7005574803feab1a80725864d658cb6ab.patch.source",
+      "group": "committed-work",
+      "origins": [
+        {
+          "head": "b87fb2b7005574803feab1a80725864d658cb6ab",
+          "worktree": "project-workflow"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false,
+      "included_paths": [
+        "AGENTS.md",
+        "CHANGELOG.md",
+        "README.md",
+        "docs/quality-gate.md",
+        "tests/test_docs_quality.py"
+      ],
+      "commit_subject": "docs(ui): align Workflow launch guidance with Base"
+    },
+    {
+      "original_path": "commit/ad80739390926172e196f68294b6ef438845c9eb",
+      "sha256": "f8d5aac72f14413b21c77d82865264fee8d8561ceed25109be384b0056864846",
+      "payload": "sources/committed-work/ad80739390926172e196f68294b6ef438845c9eb.patch.source",
+      "group": "committed-work",
+      "origins": [
+        {
+          "head": "ad80739390926172e196f68294b6ef438845c9eb",
+          "worktree": "project-workflow"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false,
+      "included_paths": [
+        ".base-revision"
+      ],
+      "commit_subject": "chore(ui): pin locally reconciled Base snapshot"
+    },
+    {
+      "original_path": "commit/c331d4318808bd4c572975fd15d7c88b22feb63c",
+      "sha256": "3789c3025f8e05a09de1bdfc0d87a6b58ca7b018b0bc2c709fa78c2420c60e6f",
+      "payload": "sources/committed-work/c331d4318808bd4c572975fd15d7c88b22feb63c.patch.source",
+      "group": "committed-work",
+      "origins": [
+        {
+          "head": "c331d4318808bd4c572975fd15d7c88b22feb63c",
+          "worktree": "project-workflow"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false,
+      "included_paths": [
+        ".base-revision"
+      ],
+      "commit_subject": "chore(ui): pin Base notification ownership gate"
+    },
+    {
+      "original_path": "commit/e8a251d793c81619a1d6caa759f48ca64e14e081",
+      "sha256": "6b412d757c3fdccec1f1c70b78eddbc1b4465b88470df97b4e1f96bdd1930f9c",
+      "payload": "sources/committed-work/e8a251d793c81619a1d6caa759f48ca64e14e081.patch.source",
+      "group": "committed-work",
+      "origins": [
+        {
+          "head": "e8a251d793c81619a1d6caa759f48ca64e14e081",
+          "worktree": "project-workflow"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false,
+      "included_paths": [
+        ".base-revision",
+        "CHANGELOG.md",
+        "docs/UI_UX_MAP.md",
+        "docs/plans/2026-10-05-agent-drafts.md",
+        "frontend/e2e/agent-drafts.spec.ts",
+        "project_workflow/interfaces/ui/templates/agents.html",
+        "tests/test_ui.py"
+      ],
+      "commit_subject": "fix(ui): use Base controls and protect Workflow agent drafts"
+    },
+    {
+      "original_path": "commit/aebca425735d5e38044fbb1190f195ece0e3dc3c",
+      "sha256": "25fe063927350ece644ab52b8c33067c186a18278b7c4c88f2c9a622914aca79",
+      "payload": "sources/committed-work/aebca425735d5e38044fbb1190f195ece0e3dc3c.patch.source",
+      "group": "committed-work",
+      "origins": [
+        {
+          "head": "aebca425735d5e38044fbb1190f195ece0e3dc3c",
+          "worktree": "project-workflow"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false,
+      "included_paths": [
+        "CHANGELOG.md",
+        "docs/UI_UX_MAP.md",
+        "docs/quality-gate.md",
+        "frontend/e2e/deletion-confirmation.spec.ts",
+        "project_workflow/interfaces/ui/static/base-ui/base-ui.css",
+        "project_workflow/interfaces/ui/static/base-ui/base-ui.js",
+        "project_workflow/interfaces/ui/static/base-ui/fingerprint.json",
+        "project_workflow/interfaces/ui/static/base-ui/macros.html",
+        "project_workflow/interfaces/ui/templates/agents.html",
+        "project_workflow/interfaces/ui/templates/base.html",
+        "project_workflow/interfaces/ui/templates/confirm_deletion.js",
+        "project_workflow/interfaces/ui/templates/instructions.html",
+        "project_workflow/interfaces/ui/templates/namespaces.html",
+        "project_workflow/interfaces/ui/templates/phase_detail.html",
+        "project_workflow/interfaces/ui/templates/phases.html",
+        "project_workflow/interfaces/ui/templates/workflows.html",
+        "tests/test_ui.py",
+        "tests/test_ui_page_header.py"
+      ],
+      "commit_subject": "fix(ui): migrate deletion confirmations to Base SSR"
+    },
+    {
+      "original_path": "commit/2afba26e1628cda0896eb8ea4f701ea1b4046d23",
+      "sha256": "d64d4d94493281dabae84bb30b408668b8b78206e1acd9255daf5b74694a2aa9",
+      "payload": "sources/committed-work/2afba26e1628cda0896eb8ea4f701ea1b4046d23.patch.source",
+      "group": "committed-work",
+      "origins": [
+        {
+          "head": "2afba26e1628cda0896eb8ea4f701ea1b4046d23",
+          "worktree": "project-workflow"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false,
+      "included_paths": [
+        "CHANGELOG.md",
+        "docs/UI_UX_MAP.md",
+        "docs/quality-gate.md",
+        "frontend/e2e/namespace-drafts.spec.ts",
+        "frontend/package.json",
+        "frontend/playwright.config.ts",
+        "frontend/pnpm-lock.yaml",
+        "frontend/src/jinjaNavigation.test.ts",
+        "frontend/tsconfig.e2e.json",
+        "frontend/vitest.config.ts",
+        "project_workflow/interfaces/ui/static/base-ui/base-ui.css",
+        "project_workflow/interfaces/ui/static/base-ui/base-ui.js",
+        "project_workflow/interfaces/ui/static/base-ui/fingerprint.json",
+        "project_workflow/interfaces/ui/static/base-ui/macros.html",
+        "project_workflow/interfaces/ui/templates/base.html",
+        "project_workflow/interfaces/ui/templates/namespaces.html",
+        "tests/test_base_ssr.py",
+        "tests/test_ui.py"
+      ],
+      "commit_subject": "fix(ui): protect namespace drafts and acknowledge writes safely"
+    },
+    {
+      "original_path": "commit/f666f6482f94b6b3bfd66e0e26705c4e04ce1a0a",
+      "sha256": "a63df2fac41e24ba0a68f62bd7a155b3d4ffd50cc3d42a3e9cde4b1a00a90b38",
+      "payload": "sources/committed-work/f666f6482f94b6b3bfd66e0e26705c4e04ce1a0a.patch.source",
+      "group": "committed-work",
+      "origins": [
+        {
+          "head": "f666f6482f94b6b3bfd66e0e26705c4e04ce1a0a",
+          "worktree": "project-workflow"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false,
+      "included_paths": [
+        "CHANGELOG.md",
+        "docs/UI_UX_MAP.md",
+        "docs/adr/2026-10-01-read-only-react-pilot.md",
+        "docs/ui-routes.json",
+        "frontend/src/App.test.tsx",
+        "frontend/src/App.tsx",
+        "frontend/src/api.ts",
+        "project_workflow/interfaces/ui/templates/base.html",
+        "project_workflow/interfaces/ui/templates/error.html",
+        "project_workflow/interfaces/ui/templates/instructions.html",
+        "project_workflow/interfaces/ui/templates/namespaces.html",
+        "project_workflow/interfaces/ui/templates/phase_detail.html",
+        "project_workflow/interfaces/ui/templates/phases.html",
+        "project_workflow/interfaces/ui/templates/settings.html",
+        "project_workflow/interfaces/ui/templates/task_detail.html",
+        "project_workflow/interfaces/ui/templates/tasks.html",
+        "project_workflow/interfaces/ui/templates/workflows.html",
+        "tests/test_ui.py",
+        "tests/test_ui_page_header.py"
+      ],
+      "commit_subject": "fix(ui): unify SSR page headers and retain explicit pilot scope"
+    },
+    {
+      "original_path": "commit/86621072f0559ae0b7043d1e2ec31cd86d525dbe",
+      "sha256": "5eaa3afc7d6260c18844d83127ede2e917dd06f692d11049f79cf7ec68b39807",
+      "payload": "sources/committed-work/86621072f0559ae0b7043d1e2ec31cd86d525dbe.patch.source",
+      "group": "committed-work",
+      "origins": [
+        {
+          "head": "86621072f0559ae0b7043d1e2ec31cd86d525dbe",
+          "worktree": "project-workflow"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false,
+      "included_paths": [
+        "CHANGELOG.md",
+        "docs/adr/2026-10-01-read-only-react-pilot.md",
+        "frontend/AGENTS.md",
+        "frontend/src/App.test.tsx",
+        "frontend/src/App.tsx",
+        "frontend/src/api.test.ts",
+        "frontend/src/api.ts",
+        "frontend/src/main.tsx",
+        "project_workflow/interfaces/ui/AGENTS.md"
+      ],
+      "commit_subject": "fix(ui): adopt Base URL context navigation in React pilot"
+    },
+    {
+      "original_path": "commit/8f370292060cb48b565dfecbedcad25a9b32bf90",
+      "sha256": "6516ccaae51c5811bbadb2885cc903eeac0ff9d62a15dd3a097721dbf4ecc007",
+      "payload": "sources/committed-work/8f370292060cb48b565dfecbedcad25a9b32bf90.patch.source",
+      "group": "committed-work",
+      "origins": [
+        {
+          "head": "8f370292060cb48b565dfecbedcad25a9b32bf90",
+          "worktree": "project-workflow"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false,
+      "included_paths": [
+        "project_workflow/interfaces/ui/static/base-ui/base-ui.css",
+        "project_workflow/interfaces/ui/static/base-ui/fingerprint.json"
+      ],
+      "commit_subject": "fix(ui): sync Base form text wrapping for SSR"
+    },
+    {
+      "original_path": "commit/23d923720b99b074ac4dc470802c667b12fc565c",
+      "sha256": "1c4dec2da67a63519566a141c18923c8bd1e1642f78e0ba8df81c101512d748c",
+      "payload": "sources/committed-work/23d923720b99b074ac4dc470802c667b12fc565c.patch.source",
+      "group": "committed-work",
+      "origins": [
+        {
+          "head": "23d923720b99b074ac4dc470802c667b12fc565c",
+          "worktree": "project-workflow"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false,
+      "included_paths": [
+        "docs/UI_UX_MAP.md",
+        "docs/quality-gate.md",
+        "tests/test_docs_quality.py"
+      ],
+      "commit_subject": "docs(ui): clarify local acceptance and runtime integration gaps"
+    },
+    {
+      "original_path": "commit/54dbb8af9ecc4dc0233e560cf5d564ad4a274469",
+      "sha256": "60f02c6f55f20b7a4ba5c73252b1d66c747382d6047ff57ce0a053332caf343a",
+      "payload": "sources/committed-work/54dbb8af9ecc4dc0233e560cf5d564ad4a274469.patch.source",
+      "group": "committed-work",
+      "origins": [
+        {
+          "head": "54dbb8af9ecc4dc0233e560cf5d564ad4a274469",
+          "worktree": "project-workflow"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false,
+      "included_paths": [
+        "docs/UI_UX_MAP.md",
+        "project_workflow/interfaces/ui/static/base-ui/base-ui.css",
+        "project_workflow/interfaces/ui/static/base-ui/fingerprint.json",
+        "project_workflow/interfaces/ui/templates/base.html",
+        "tests/test_ui.py"
+      ],
+      "commit_subject": "fix(ui): align Workflow SSR header with the shared shell"
+    },
+    {
+      "original_path": "commit/4448c402bcaebe9954c7d426c9a8acd181300b4c",
+      "sha256": "73e21e6f2338867ed9291517cab83c8285ceb76674efb54084d9779be66a51ee",
+      "payload": "sources/committed-work/4448c402bcaebe9954c7d426c9a8acd181300b4c.patch.source",
+      "group": "committed-work",
+      "origins": [
+        {
+          "head": "4448c402bcaebe9954c7d426c9a8acd181300b4c",
+          "worktree": "project-workflow"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false,
+      "included_paths": [
+        "docs/adr/2026-10-01-read-only-react-pilot.md",
+        "docs/ui-evidence/2026-10-01/workflow-image-build.json"
+      ],
+      "commit_subject": "docs(ui): record clean image fingerprints and packaged pilot checks"
+    },
+    {
+      "original_path": "commit/5ceaacb0de7991c432cafd0029a4c6383ab7cdb7",
+      "sha256": "befcc153e4cf43fa3d4c4742db0b75ee1c6a6e036a6f57c4dec39b329915fc51",
+      "payload": "sources/committed-work/5ceaacb0de7991c432cafd0029a4c6383ab7cdb7.patch.source",
+      "group": "committed-work",
+      "origins": [
+        {
+          "head": "5ceaacb0de7991c432cafd0029a4c6383ab7cdb7",
+          "worktree": "project-workflow"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false,
+      "included_paths": [
+        ".gitattributes",
+        "tests/test_base_ssr.py"
+      ],
+      "commit_subject": "fix(ui): preserve generated SSR fingerprints in Windows Git archives"
+    },
+    {
+      "original_path": "commit/16fbb74124c753bfca3bbf7fe774a2cab926a277",
+      "sha256": "77e9ee1beb7581ce783c8207e7c16d5a587405f57f4cee607d449262fc1122fd",
+      "payload": "sources/committed-work/16fbb74124c753bfca3bbf7fe774a2cab926a277.patch.source",
+      "group": "committed-work",
+      "origins": [
+        {
+          "head": "16fbb74124c753bfca3bbf7fe774a2cab926a277",
+          "worktree": "project-workflow"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false,
+      "included_paths": [
+        ".dockerignore",
+        "Dockerfile",
+        "docker-compose.yml",
+        "docs/adr/2026-10-01-read-only-react-pilot.md",
+        "docs/ui-routes.json",
+        "pyproject.toml",
+        "scripts/verify_ui_image.py",
+        "tests/test_runtime_cleanup.py",
+        "tests/test_ui_image.py"
+      ],
+      "commit_subject": "fix(ui): build and verify read-only React assets in immutable images"
+    },
+    {
+      "original_path": "commit/5651fadc36220b184ef29b002df6ab58152d236b",
+      "sha256": "25c848bf43cd82a0a0d7926c36f236dea2de37150c86209d56903561aff20910",
+      "payload": "sources/committed-work/5651fadc36220b184ef29b002df6ab58152d236b.patch.source",
+      "group": "committed-work",
+      "origins": [
+        {
+          "head": "5651fadc36220b184ef29b002df6ab58152d236b",
+          "worktree": "project-workflow"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false,
+      "included_paths": [
+        "README.md",
+        "docs/adr/2026-10-01-read-only-react-pilot.md",
+        "docs/ui-acceptance.json",
+        "docs/ui-evidence/2026-10-01/workflow-isolated-geometry-jinja.json",
+        "docs/ui-evidence/2026-10-01/workflow-isolated-geometry-rest.json",
+        "docs/ui-evidence/2026-10-01/workflow-isolated-interactions.json",
+        "scripts/verify_readme.py",
+        "tests/test_docs_quality.py"
+      ],
+      "commit_subject": "docs(ui): refresh desktop gallery and record verified Workflow QA"
+    },
+    {
+      "original_path": "commit/fa449ca23d4df8ba82666e086dedfc75d28c4466",
+      "sha256": "44dc440083240d18edd2e277a06b2e8e0edafe6cf2ba49d58cb9ee54e048d709",
+      "payload": "sources/committed-work/fa449ca23d4df8ba82666e086dedfc75d28c4466.patch.source",
+      "group": "committed-work",
+      "origins": [
+        {
+          "head": "fa449ca23d4df8ba82666e086dedfc75d28c4466",
+          "worktree": "project-workflow"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false,
+      "included_paths": [
+        "project_workflow/interfaces/ui/static/base-ui/fingerprint.json",
+        "project_workflow/interfaces/ui/static/base-ui/macros.html"
+      ],
+      "commit_subject": "fix(ui): synchronize Base SSR header acceptance marker"
+    },
+    {
+      "original_path": "commit/a2671a7857adb03ed229b7e52b614269c4e16fd1",
+      "sha256": "15499a3b629f443febfb2a682a7b3359d8986ef2d37dbf6dc01351427808fe6e",
+      "payload": "sources/committed-work/a2671a7857adb03ed229b7e52b614269c4e16fd1.patch.source",
+      "group": "committed-work",
+      "origins": [
+        {
+          "head": "a2671a7857adb03ed229b7e52b614269c4e16fd1",
+          "worktree": "project-workflow"
+        }
+      ],
+      "unresolved_markers": false,
+      "synthetic_credential_fixture_reviewed": false,
+      "included_paths": [
+        ".dockerignore",
+        ".gitignore",
+        "docs/UI_UX_MAP.md",
+        "docs/adr/2026-10-01-read-only-react-pilot.md",
+        "docs/ui-routes.json",
+        "frontend/eslint.config.js",
+        "frontend/index.html",
+        "frontend/package.json",
+        "frontend/pnpm-lock.yaml",
+        "frontend/src/App.test.tsx",
+        "frontend/src/App.tsx",
+        "frontend/src/api.test.ts",
+        "frontend/src/api.ts",
+        "frontend/src/main.tsx",
+        "frontend/src/style.css",
+        "frontend/tsconfig.json",
+        "frontend/vite.config.ts",
+        "frontend/vitest.config.ts",
+        "project_workflow/config.py",
+        "project_workflow/interfaces/ui/app.py",
+        "project_workflow/interfaces/ui/react_ui.py",
+        "project_workflow/interfaces/ui/static/base-ui/base-ui.css",
+        "project_workflow/interfaces/ui/static/base-ui/base-ui.js",
+        "project_workflow/interfaces/ui/static/base-ui/fingerprint.json",
+        "project_workflow/interfaces/ui/static/base-ui/macros.html",
+        "project_workflow/interfaces/ui/templates.py",
+        "project_workflow/interfaces/ui/templates/agents.html",
+        "project_workflow/interfaces/ui/templates/base.html",
+        "project_workflow/interfaces/ui/templates/instructions.html",
+        "project_workflow/interfaces/ui/templates/namespaces.html",
+        "project_workflow/interfaces/ui/templates/phase_detail.html",
+        "project_workflow/interfaces/ui/templates/phases.html",
+        "project_workflow/interfaces/ui/templates/settings.html",
+        "project_workflow/interfaces/ui/templates/task_detail.html",
+        "project_workflow/interfaces/ui/templates/workflows.html",
+        "pyproject.toml",
+        "tests/test_base_ssr.py",
+        "tests/test_platform_services.py",
+        "tests/test_react_ui.py",
+        "tests/test_task_detail_template.py",
+        "tests/test_ui.py",
+        "tests/test_ui_api.py"
+      ],
+      "commit_subject": "feat(ui): adopt Base SSR assets and optional read-only React pilot"
+    }
+  ]
+}

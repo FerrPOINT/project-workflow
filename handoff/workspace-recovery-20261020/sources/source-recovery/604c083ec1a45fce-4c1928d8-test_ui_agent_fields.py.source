@@ -1,0 +1,64 @@
+from html.parser import HTMLParser
+
+import pytest
+
+from project_workflow.interfaces.ui.templates import env
+
+
+class AgentFields(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.fields = 0
+        self.labels: set[str | None] = set()
+        self.controls: dict[str, dict[str, str | None]] = {}
+        self.agent_form = False
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attributes = dict(attrs)
+        if tag == "form":
+            self.agent_form = "agent-editor" in (attributes.get("class") or "").split()
+        if not self.agent_form:
+            return
+        if "base-form-field" in (attributes.get("class") or "").split():
+            self.fields += 1
+        if tag == "label":
+            self.labels.add(attributes.get("for"))
+        if tag in {"input", "textarea"} and attributes.get("name") in {"name", "launch_profile", "description"}:
+            identifier = attributes.get("id")
+            assert identifier and identifier not in self.controls
+            self.controls[identifier] = attributes
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "form":
+            self.agent_form = False
+
+
+@pytest.mark.parametrize("count", [0, 1, 2])
+def test_agent_fields_share_base_labels_and_preserve_native_constraints(count: int) -> None:
+    agents = [
+        {
+            "id": index + 41, "name": f"Agent <{index}>",
+            "launch_profile": f"safe_profile_{index}", "description": "Safe text",
+        }
+        for index in range(count)
+    ]
+    html = env.get_template("agents.html").render(page="agents", agents=agents)
+    fields = AgentFields()
+    fields.feed(html)
+    fields.close()
+    assert fields.fields == (count + 1) * 3
+    assert set(fields.controls) <= fields.labels
+    assert "agent-field-label" not in html
+    for suffix in ["new", *(str(agent["id"]) for agent in agents)]:
+        name = fields.controls["newName" if suffix == "new" else f"agentName{suffix}"]
+        profile = fields.controls["newLaunchProfile" if suffix == "new" else f"agentLaunchProfile{suffix}"]
+        description = fields.controls["newDescription" if suffix == "new" else f"agentDescription{suffix}"]
+        assert "required" in name
+        assert profile["pattern"] == r"[a-z0-9][a-z0-9_\-]*"
+        assert profile["maxlength"] == "251"
+        assert "251" in (profile["title"] or "")
+        assert "required" not in profile
+        assert description["rows"] == "3"
+    for agent in agents:
+        assert fields.controls[f"agentName{agent['id']}"]["value"] == agent["name"]
+        assert fields.controls[f"agentLaunchProfile{agent['id']}"]["value"] == agent["launch_profile"]

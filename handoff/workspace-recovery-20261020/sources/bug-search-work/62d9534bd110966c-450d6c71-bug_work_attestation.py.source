@@ -1,0 +1,103 @@
+"""Closed facts issued by the registered Fleet producer, never a user verified flag."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Annotated, Literal
+
+from pydantic import Field, StringConstraints, field_validator
+
+from project_workflow.domain.bug_search_catalog import FrozenCatalogModel
+from project_workflow.domain.bug_search_execution import Sha256, UUIDRef, Version
+from project_workflow.domain.bug_work_origin import BugWorkOriginReadback
+
+if TYPE_CHECKING:
+    from project_workflow.domain.bug_work import BugWorkBind, BugWorkGrant
+
+SDK5_SOURCES = (
+    "60c42effca40659eeadd128f10ee839d493f3c1fec790308795f1e81ad575f82",
+    "4e37e6a388bec0ba7b4ed401cde68abc9e5228b5e7ebb543c84fa458dc57272e",
+    "fc24fd94f29b37a58526a055a7f5694e386ef752598abc8f99c2a7bdfc4de850",
+    "31dfe33c0a0b27a10511df594a3ee4713a46cc7bbca40bb08c923609ecfb1111",
+    "9d22101e48343eda661a60105e41115a203cb619dfa52e055c4524b0672b500c",
+)
+Commit = Annotated[str, StringConstraints(strict=True, pattern=r"^[0-9a-f]{40}([0-9a-f]{24})?$")]
+NativeRef = Annotated[str, StringConstraints(strict=True, min_length=1, max_length=512, pattern=r"^[A-Za-z0-9_:/.-]+$")]
+
+
+class OriginalCheckout(FrozenCatalogModel):
+    repository_id: UUIDRef
+    commit_sha: Commit
+    clone_url_sha256: Sha256
+    tree_sha256: Sha256
+    intent_sha256: Sha256
+
+
+class NativeIdentity(FrozenCatalogModel):
+    session_id: UUIDRef
+    session_run_id: UUIDRef
+    actual_session_ref: NativeRef
+    actual_run_ref: NativeRef
+    request_sha256: Sha256
+    original_journal_ref: Annotated[str, StringConstraints(
+        strict=True, pattern=r"^fleet:hermes-dispatch:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+    )]
+
+
+class BugWorkRuntimeAttestation(FrozenCatalogModel):
+    contract_version: Literal[1]
+    assignment_id: UUIDRef
+    assignment_sha256: Sha256
+    fence: Version
+    source_origin_sha256: Sha256
+    context_id: UUIDRef
+    generation: UUIDRef
+    agent_id: UUIDRef
+    configuration_revision: Version
+    configuration_sha256: Sha256
+    catalog_sha256: Sha256
+    sdk_adapter: Literal["replacement5"]
+    sdk_source_sha256: tuple[Sha256, ...] = Field(strict=False, min_length=5, max_length=5)
+    sdk_prepare_sha256: Sha256
+    sdk_attachment_sha256: Sha256
+    sdk_running_sha256: Sha256
+    checkout_targets: tuple[OriginalCheckout, ...] = Field(strict=False, min_length=1, max_length=16)
+    native: NativeIdentity
+
+    @field_validator("contract_version", mode="before")
+    @classmethod
+    def integer_version(cls, value: object) -> object:
+        if type(value) is not int:
+            raise ValueError("Требуется целая версия producer attestation")
+        return value
+
+    def require_original(
+        self, grant: BugWorkGrant, origin: BugWorkOriginReadback, catalog_sha256: str, binding: BugWorkBind,
+    ) -> None:
+        assignment = grant.assignment
+        if (
+            self.assignment_id != assignment.assignment_id
+            or self.assignment_sha256 != grant.assignment_sha256
+            or self.fence != assignment.fence
+            or assignment.origin is None
+            or self.source_origin_sha256 != assignment.origin.source_context_sha256
+            or self.source_origin_sha256 != origin.origin.source_context_sha256
+            or self.agent_id != assignment.worker_runtime.agent_id
+            or self.configuration_revision != assignment.worker_runtime.agent_config_revision
+            or self.catalog_sha256 != catalog_sha256
+            or self.sdk_source_sha256 != SDK5_SOURCES
+            or self.context_id != binding.runtime_context_id
+            or self.generation != binding.runtime_generation
+            or self.native.session_id != binding.session_id
+            or self.native.session_run_id != binding.session_run_id
+            or self.native.actual_run_ref != binding.hermes_run_ref
+            or len(self.checkout_targets) != len(origin.source_context.targets)
+        ):
+            raise ValueError("Producer attestation не совпадает с исходным Bug/SDK/binding")
+        for receipt, target in zip(self.checkout_targets, origin.source_context.targets, strict=True):
+            if (
+                target.source is None
+                or receipt.repository_id != target.source.repository_id
+                or receipt.commit_sha != target.commit_sha
+                or receipt.clone_url_sha256 != target.source.clone_url_sha256
+            ):
+                raise ValueError("Checkout attestation относится к другому исходному репозиторию/commit")

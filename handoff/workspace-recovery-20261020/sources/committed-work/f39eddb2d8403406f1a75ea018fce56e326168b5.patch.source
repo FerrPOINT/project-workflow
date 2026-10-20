@@ -1,0 +1,1363 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 2a3eb22..fe1aa70 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -7,6 +7,18 @@
+ ## [Unreleased]
+ 
+ ### Changed
++- Автосохранение деталей фазы использует снимок одной попытки и стабильные
++  локальные ключи checks/evidence вместо позднего чтения DOM и очереди функций.
++  Общий pending/unknown lock защищает controls и переходы через Base draft guard.
++  Подтверждение требует scoped GET; ID новых строк берутся только из проверенного
++  ACK, потерянный ACK не заменяется поиском по имени. Ошибка сохраняет черновик,
++  403/404 отключают запись; API, схема БД и runtime pins не меняются.
++  Запись инструкций и порядка разделяет тот же pending lock; черновики текста
++  и навыков защищены Base navigation guard. Ошибка текста не сбрасывает ввод,
++  reload-based действия не затирают другой draft. Unknown reconciliation
++  инструкций/reorder остаётся отдельным открытым пунктом.
++  Отложенный metadata autosave возобновляется после settlement инструкции,
++  без параллельного PUT и повторной записи неизменённой фазы.
+ - Каталог фаз использует Base SSR controls/states и общий navigation guard.
+   Создание, порядок, режим и удаление имеют единую блокировку записи. Создание,
+   порядок и режим подтверждаются scoped GET-каталогом; неизвестный результат не повторяется,
+diff --git a/frontend/e2e/phase-detail-save.spec.ts b/frontend/e2e/phase-detail-save.spec.ts
+new file mode 100644
+index 0000000..67e72f8
+--- /dev/null
++++ b/frontend/e2e/phase-detail-save.spec.ts
+@@ -0,0 +1,502 @@
++import { expect, test, type Page } from '@playwright/test'
++
++if (process.env.WORKFLOW_UI_QA_MUTATIONS !== 'isolated-fixture') throw new Error('Phase detail QA requires an isolated fixture')
++
++let workflowId: number
++let phaseId: number
++let namespaceId: number
++const pageUrl = () => `/phase/${phaseId}?namespace_id=${namespaceId}&foreign=keep`
++const saveState = (page: Page) => page.locator('#phaseSaveStatus')
++const name = (page: Page) => page.locator('.wiki-header [data-field="name"]')
++const save = (page: Page) => page.evaluate(() => (window as unknown as { savePhase: () => Promise<boolean> }).savePhase())
++
++test.beforeEach(async ({ request }) => {
++  workflowId = 0
++  namespaceId = 0
++  const created = await request.post('/api/workflows', { data: { name: `Phase save ${crypto.randomUUID()}` } })
++  expect(created.ok()).toBeTruthy()
++  workflowId = (await created.json()).workflow_id as number
++  const namespace = await request.post('/api/namespaces', { data: { name: `Phase save QA ${crypto.randomUUID()}`, cli_command: `save-${crypto.randomUUID()}`, workflow_id: workflowId } })
++  expect(namespace.ok()).toBeTruthy()
++  namespaceId = (await namespace.json()).namespace_id as number
++  const phases = await request.get(`/api/phases?workflow_id=${workflowId}`)
++  phaseId = (await phases.json()).phases[0].id as number
++  const updated = await request.put(`/api/phases/${phaseId}`, { data: { name: 'Phase baseline', checks: [{ id: null, description: 'First check' }], evidence: [] } })
++  expect(updated.ok(), await updated.text()).toBeTruthy()
++})
++
++for (const theme of ['dark', 'gray', 'light']) {
++  test(`phase detail aggregate native rows, geometry and focus (${theme})`, async ({ page, request }, testInfo) => {
++    expect((await request.put(`/api/phases/${phaseId}`, { data: { name: 'Длинное название фазы '.repeat(10), description: 'Длинное описание '.repeat(60) } })).ok()).toBeTruthy()
++    for (const step of [1, 2]) expect((await request.post(`/api/instructions?namespace_id=${namespaceId}`, { data: { phase_id: phaseId, description: 'Длинное описание инструкции '.repeat(12), step_num: step } })).ok()).toBeTruthy()
++    await page.addInitScript(value => localStorage.setItem('workflow-theme', value), theme)
++    const errors: string[] = []
++    page.on('pageerror', error => errors.push(error.message))
++    const widths = testInfo.project.name === 'desktop' ? [1023, 1024, 1279, 1280, 1440, 1920, 2560] : [375, 767, 768]
++    for (const width of widths) {
++      await page.setViewportSize({ width, height: 1080 })
++      await page.goto(pageUrl())
++      await page.reload()
++      await expect(page.locator('[data-page-layout]')).toHaveAttribute('data-page-layout', 'detail-with-aside')
++      expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBe(0)
++      const geometry = await page.evaluate(() => ({ left: document.querySelector('.page-frame')!.getBoundingClientRect().left, header: document.querySelector('.base-ssr-header')!.getBoundingClientRect().height }))
++      expect(geometry.left).toBe(width >= 1280 ? 264 : width >= 768 ? 72 : 0)
++      expect(geometry.header).toBe(60)
++      for (const control of [name(page), page.locator('#checks-list .item-delete').first()]) {
++        const bounds = (await control.boundingBox())!
++        expect(bounds.height).toBeGreaterThanOrEqual(width < 768 ? 44 : 40)
++      }
++      if ([375, 1920].includes(width)) await page.screenshot({ path: testInfo.outputPath(`phase-detail-${theme}-${width}.png`), fullPage: true })
++    }
++    await page.getByRole('button', { name: '+ Добавить проверку', exact: true }).click()
++    await page.locator('#checks-list textarea').last().fill('New stable check')
++    await page.getByRole('button', { name: '+ Добавить подтверждение', exact: true }).click()
++    await page.locator('#evidence-list textarea').last().fill('New stable evidence')
++    await expect(name(page)).toBeEnabled()
++    expect(await save(page)).toBe(true)
++    const after = (await (await request.get(`/api/phases/${phaseId}`)).json()).phase
++    expect(after.checks.map((row: { description: string }) => row.description)).toEqual(['First check', 'New stable check'])
++    expect(after.evidence.map((row: { description: string }) => row.description)).toEqual(['New stable evidence'])
++    await expect(page.locator('#checks-list li').last()).toHaveAttribute('data-id', String(after.checks[1].id))
++    await expect(page.locator('#evidence-list li').first()).toHaveAttribute('data-id', String(after.evidence[0].id))
++    await page.locator('.wiki-header a').click()
++    await expect(page).toHaveURL(/\/phases\?/)
++    expect(errors).toEqual([])
++  })
++}
++
++for (const status of [401, 403, 404, 409, 422, 408, 500]) {
++  test(`phase detail aggregate preserves draft and classifies HTTP ${status}`, async ({ page, request }) => {
++    await page.goto(pageUrl())
++    let writes = 0
++    await page.route(`**/api/phases/${phaseId}*`, async route => {
++      if (route.request().method() !== 'PUT') return route.continue()
++      writes++
++      await route.fulfill({ status, json: { ok: false, error: 'Fixture response' } })
++    })
++    await name(page).fill('Retained draft')
++    expect(await save(page)).toBe(false)
++    await expect(name(page)).toHaveValue('Retained draft')
++    const terminal = [401, 403, 404].includes(status)
++    const unknown = [408, 500].includes(status)
++    await expect(saveState(page)).toHaveAttribute('data-page-state', status === 404 ? 'not-found' : terminal ? 'permission-denied' : unknown ? 'partial-error' : 'error')
++    if (terminal || unknown) {
++      await expect(name(page)).toBeDisabled()
++      await expect(page.locator('#checks-list .item-delete')).toBeDisabled()
++    } else await expect(name(page)).toBeEnabled()
++    if (unknown) {
++      expect(await save(page)).toBe(false)
++      await page.locator('#phaseSaveReconcile').click()
++      await expect(saveState(page)).toHaveAttribute('data-page-state', 'partial-error')
++    }
++    expect(writes).toBe(1)
++    expect((await (await request.get(`/api/phases/${phaseId}`)).json()).phase.name).toBe('Phase baseline')
++  })
++}
++
++test('phase detail aggregate lost ACK recovers existing IDs without replay', async ({ page, request }) => {
++  await page.goto(pageUrl())
++  let writes = 0
++  await page.route(`**/api/phases/${phaseId}*`, async route => {
++    if (route.request().method() !== 'PUT') return route.continue()
++    writes++
++    await route.fetch()
++    await route.abort('failed')
++  })
++  await name(page).fill('Confirmed by GET')
++  expect(await save(page)).toBe(true)
++  await expect(name(page)).toBeEnabled()
++  await expect(saveState(page)).toBeHidden()
++  expect(writes).toBe(1)
++  expect((await (await request.get(`/api/phases/${phaseId}`)).json()).phase.name).toBe('Confirmed by GET')
++})
++
++test('phase detail aggregate lost create ACK never infers a new row ID', async ({ page, request }) => {
++  await page.goto(pageUrl())
++  await page.getByRole('button', { name: '+ Добавить проверку', exact: true }).click()
++  await page.locator('#checks-list textarea').last().fill('Unique new check')
++  let writes = 0
++  await page.route(`**/api/phases/${phaseId}*`, async route => {
++    if (route.request().method() !== 'PUT') return route.continue()
++    writes++
++    await route.fetch()
++    await route.fulfill({ status: 200, json: { ok: true } })
++  })
++  expect(await save(page)).toBe(false)
++  await expect(saveState(page)).toHaveAttribute('data-page-state', 'partial-error')
++  await expect(page.locator('#checks-list li').last()).not.toHaveAttribute('data-id')
++  await page.locator('#phaseSaveReconcile').click()
++  await expect(saveState(page)).toHaveAttribute('data-page-state', 'partial-error')
++  expect(await save(page)).toBe(false)
++  expect(writes).toBe(1)
++  expect((await (await request.get(`/api/phases/${phaseId}`)).json()).phase.checks).toHaveLength(2)
++})
++
++test('phase detail aggregate valid ACK waits for GET and preserves original row identity', async ({ page }) => {
++  await page.goto(pageUrl())
++  let getRelease!: () => void
++  let readStarted = false
++  const pending = new Promise<void>(resolve => { getRelease = resolve })
++  await page.route(`**/api/phases/${phaseId}*`, async route => {
++    if (route.request().method() !== 'GET') return route.continue()
++    readStarted = true
++    await pending
++    await route.continue()
++  })
++  await name(page).fill('Pending GET')
++  const result = save(page)
++  try {
++    await expect.poll(() => readStarted).toBe(true)
++    await expect(name(page)).toBeDisabled()
++    await expect(saveState(page)).toHaveAttribute('data-page-state', 'loading')
++    await page.evaluate(() => {
++      const original = document.querySelector('#checks-list li')!
++      const replacement = original.cloneNode(true) as HTMLElement
++      delete replacement.dataset.id
++      delete replacement.dataset.phaseRowKey
++      original.replaceWith(replacement)
++    })
++  } finally { getRelease() }
++  expect(await result).toBe(false)
++  await expect(saveState(page)).toHaveAttribute('data-page-state', 'partial-error')
++  await expect(page.locator('#checks-list li').first()).not.toHaveAttribute('data-id')
++})
++
++test('phase detail aggregate malformed success never marks an unchanged server as saved', async ({ page }) => {
++  await page.goto(pageUrl())
++  let writes = 0
++  await page.route(`**/api/phases/${phaseId}*`, async route => {
++    if (route.request().method() !== 'PUT') return route.continue()
++    writes++
++    await route.fulfill({ status: 200, json: { message: 'Not an ACK' } })
++  })
++  await name(page).fill('Unsaved input')
++  expect(await save(page)).toBe(false)
++  await expect(saveState(page)).toHaveAttribute('data-page-state', 'partial-error')
++  await expect(name(page)).toHaveValue('Unsaved input')
++  expect(await save(page)).toBe(false)
++  expect(writes).toBe(1)
++})
++
++for (const invalid of ['id', 'workflow_id', 'mode_id', 'checks']) {
++  test(`phase detail aggregate rejects an authoritative response with invalid ${invalid}`, async ({ page }) => {
++    await page.goto(pageUrl())
++    await page.route(`**/api/phases/${phaseId}*`, async route => {
++      if (route.request().method() !== 'GET') return route.continue()
++      const result = await route.fetch()
++      const data = await result.json()
++      if (invalid === 'checks') data.phase.checks[0].id = -1
++      else data.phase[invalid] = -1
++      await route.fulfill({ response: result, json: data })
++    })
++    await name(page).fill('Validated scope')
++    expect(await save(page)).toBe(false)
++    await expect(saveState(page)).toHaveAttribute('data-page-state', 'partial-error')
++    await expect(name(page)).toBeDisabled()
++    await page.unroute(`**/api/phases/${phaseId}*`)
++    await page.locator('#phaseSaveReconcile').click()
++    await expect(name(page)).toBeEnabled()
++    await expect(saveState(page)).toBeHidden()
++  })
++}
++
++test('phase detail aggregate known create ACK recovers from failed GET with one PUT', async ({ page, request }) => {
++  await page.goto(pageUrl())
++  await page.getByRole('button', { name: '+ Добавить проверку', exact: true }).click()
++  await page.locator('#checks-list textarea').last().fill('Known created check')
++  let writes = 0
++  await page.route(`**/api/phases/${phaseId}*`, async route => {
++    if (route.request().method() === 'PUT') { writes++; return route.continue() }
++    await route.fulfill({ status: 500, json: { ok: false } })
++  })
++  expect(await save(page)).toBe(false)
++  await expect(page.locator('#checks-list li').last()).not.toHaveAttribute('data-id')
++  await expect(saveState(page)).toHaveAttribute('data-page-state', 'partial-error')
++  await page.unroute(`**/api/phases/${phaseId}*`)
++  await page.locator('#phaseSaveReconcile').click()
++  await expect(name(page)).toBeEnabled()
++  const after = (await (await request.get(`/api/phases/${phaseId}`)).json()).phase
++  await expect(page.locator('#checks-list li').last()).toHaveAttribute('data-id', String(after.checks[1].id))
++  expect(after.checks).toHaveLength(2)
++  expect(writes).toBe(1)
++})
++
++test('phase detail aggregate snapshot never consumes a later DOM draft', async ({ page, request }) => {
++  await page.goto(pageUrl())
++  let release!: () => void
++  let started = false
++  const pending = new Promise<void>(resolve => { release = resolve })
++  await page.route(`**/api/phases/${phaseId}*`, async route => {
++    if (route.request().method() !== 'GET') return route.continue()
++    started = true
++    await pending
++    await route.continue()
++  })
++  await name(page).fill('Original attempt')
++  const result = save(page)
++  try {
++    await expect.poll(() => started).toBe(true)
++    await page.evaluate(() => { document.querySelector<HTMLInputElement>('.wiki-header [data-field="name"]')!.value = 'Later retained draft' })
++  } finally { release() }
++  expect(await result).toBe(true)
++  await expect(name(page)).toHaveValue('Later retained draft')
++  expect((await (await request.get(`/api/phases/${phaseId}`)).json()).phase.name).toBe('Original attempt')
++  await page.locator('.wiki-header a').click()
++  await expect(page.locator('[data-base-draft-dialog]')).toBeVisible()
++  await page.keyboard.press('Escape')
++  await expect(name(page)).toHaveValue('Later retained draft')
++})
++
++test('phase detail aggregate coordinates instruction and metadata control ownership', async ({ page, request }) => {
++  const created = await request.post(`/api/instructions?namespace_id=${namespaceId}`, { data: { phase_id: phaseId, description: 'Instruction baseline', step_num: 1 } })
++  expect(created.ok(), await created.text()).toBeTruthy()
++  const instructionId = (await created.json()).instruction.id as number
++  await page.goto(pageUrl())
++  const description = page.locator('.timeline-name-input').first()
++  let release!: () => void
++  let started = false
++  let phaseWrites = 0
++  const pending = new Promise<void>(resolve => { release = resolve })
++  await page.route(`**/api/instructions/${instructionId}*`, async route => {
++    if (route.request().method() !== 'PUT') return route.continue()
++    started = true
++    await pending
++    await route.continue()
++  })
++  await page.route(`**/api/phases/${phaseId}*`, async route => {
++    if (route.request().method() === 'PUT') phaseWrites++
++    await route.continue()
++  })
++  await description.fill('Confirmed instruction')
++  const instructionSave = page.evaluate(() => (window as unknown as { saveInstructionDescription: (input: Element) => Promise<void> }).saveInstructionDescription(document.querySelector('.timeline-name-input')!))
++  try {
++    await expect.poll(() => started).toBe(true)
++    await expect(name(page)).toBeDisabled()
++    expect(await save(page)).toBe(false)
++    expect(phaseWrites).toBe(0)
++    await expect(page.locator('.move-up-btn').first()).toBeDisabled()
++    await expect(page.locator('.wiki-header a').first()).toBeVisible()
++    await page.locator('.wiki-header a').first().click()
++    await expect(page.locator('[data-base-draft-dialog]')).toBeVisible()
++    await page.keyboard.press('Escape')
++  } finally { release() }
++  await instructionSave
++  await expect(description).toBeEnabled()
++  await expect(name(page)).toBeEnabled()
++  await expect(description).toHaveValue('Confirmed instruction')
++  await expect(page.locator('.move-up-btn').first()).toBeDisabled()
++  await name(page).fill('Metadata after instruction')
++  expect(await save(page)).toBe(true)
++  await expect(description).toBeEnabled()
++  expect(phaseWrites).toBe(1)
++})
++
++for (const status of [409, 500]) {
++  test(`phase detail aggregate retains rejected instruction draft (${status})`, async ({ page, request }) => {
++    expect((await request.post(`/api/instructions?namespace_id=${namespaceId}`, { data: { phase_id: phaseId, description: 'Instruction baseline', step_num: 1 } })).ok()).toBeTruthy()
++    await page.goto(pageUrl())
++    const description = page.locator('.timeline-name-input').first()
++    await page.route('**/api/instructions/*', route => route.fulfill({ status, json: { ok: false, error: 'Isolated rejection' } }))
++    await description.fill('Retained instruction draft')
++    await page.evaluate(() => (window as unknown as { saveInstructionDescription: (input: Element) => Promise<void> }).saveInstructionDescription(document.querySelector('.timeline-name-input')!))
++    await expect(description).toHaveValue('Retained instruction draft')
++    await expect(description).toBeEnabled()
++    await expect(name(page)).toBeEnabled()
++    await page.locator('.wiki-header a').first().click()
++    await expect(page.locator('[data-base-draft-dialog]')).toBeVisible()
++    await page.keyboard.press('Escape')
++    await expect(description).toHaveValue('Retained instruction draft')
++  })
++}
++
++test('phase detail aggregate does not deadlock multiple instruction drafts', async ({ page, request }) => {
++  for (const step of [1, 2]) expect((await request.post(`/api/instructions?namespace_id=${namespaceId}`, { data: { phase_id: phaseId, description: `Instruction ${step}`, step_num: step } })).ok()).toBeTruthy()
++  await page.goto(pageUrl())
++  await page.evaluate(() => {
++    const fields = document.querySelectorAll<HTMLTextAreaElement>('.timeline-name-input')
++    fields[0].value = 'First retained draft'
++    fields[1].value = 'Second retained draft'
++  })
++  for (const index of [0, 1]) {
++    await page.evaluate(index => (window as unknown as { saveInstructionDescription: (input: Element) => Promise<void> }).saveInstructionDescription(document.querySelectorAll('.timeline-name-input')[index]), index)
++    await expect(page.locator('.timeline-name-input').nth(index)).toHaveAttribute('data-original-description', index === 0 ? 'First retained draft' : 'Second retained draft')
++  }
++  await expect(name(page)).toBeEnabled()
++  await expect(page.locator('.move-up-btn').first()).toBeDisabled()
++  await expect(page.locator('.move-down-btn').first()).toBeEnabled()
++})
++
++test('phase detail aggregate blocks reload-based actions with another unsaved draft', async ({ page, request }) => {
++  expect((await request.post(`/api/instructions?namespace_id=${namespaceId}`, { data: { phase_id: phaseId, description: 'Instruction baseline', step_num: 1 } })).ok()).toBeTruthy()
++  await page.goto(pageUrl())
++  let writes = 0
++  await page.route('**/api/instructions*', async route => {
++    if (route.request().method() !== 'GET') writes++
++    await route.continue()
++  })
++  await page.evaluate(() => {
++    document.querySelector<HTMLInputElement>('.wiki-header [data-field="name"]')!.value = 'Other retained draft'
++    return (window as unknown as { addInstructionLast: () => Promise<void> }).addInstructionLast()
++  })
++  expect(writes).toBe(0)
++  await expect(saveState(page)).toHaveAttribute('data-page-state', 'error')
++  await expect(name(page)).toHaveValue('Other retained draft')
++  await expect(name(page)).toBeEnabled()
++})
++
++test('phase detail aggregate protects an instruction draft after metadata ACK', async ({ page, request }) => {
++  expect((await request.post(`/api/instructions?namespace_id=${namespaceId}`, { data: { phase_id: phaseId, description: 'Instruction baseline', step_num: 1 } })).ok()).toBeTruthy()
++  await page.goto(pageUrl())
++  await page.evaluate(() => {
++    document.querySelector<HTMLTextAreaElement>('.timeline-name-input')!.value = 'Unsaved instruction draft'
++    document.querySelector<HTMLInputElement>('.wiki-header [data-field="name"]')!.value = 'Confirmed metadata'
++  })
++  expect(await save(page)).toBe(true)
++  await expect(page.locator('.timeline-name-input').first()).toHaveValue('Unsaved instruction draft')
++  await page.locator('.wiki-header a').first().click()
++  await expect(page.locator('[data-base-draft-dialog]')).toBeVisible()
++  await page.keyboard.press('Escape')
++  await expect(page.locator('.timeline-name-input').first()).toHaveValue('Unsaved instruction draft')
++})
++
++test('phase detail aggregate keeps reorder controls locked and restores boundary targets', async ({ page, request }) => {
++  for (const step of [1, 2]) expect((await request.post(`/api/instructions?namespace_id=${namespaceId}`, { data: { phase_id: phaseId, description: `Instruction ${step}`, step_num: step } })).ok()).toBeTruthy()
++  await page.goto(pageUrl())
++  let release!: () => void
++  let writes = 0
++  const pending = new Promise<void>(resolve => { release = resolve })
++  await page.route(`**/api/phases/${phaseId}/instructions/reorder*`, async route => {
++    writes++
++    await pending
++    await route.continue()
++  })
++  const action = page.evaluate(() => (window as unknown as { moveInstruction: (button: Element, direction: number) => Promise<void> }).moveInstruction(document.querySelector('.move-down-btn')!, 1))
++  try {
++    await expect.poll(() => writes).toBe(1)
++    await expect(name(page)).toBeDisabled()
++    for (const button of await page.locator('.move-up-btn,.move-down-btn').all()) await expect(button).toBeDisabled()
++    expect(await save(page)).toBe(false)
++  } finally { release() }
++  await action
++  await expect(name(page)).toBeEnabled()
++  await expect(page.locator('.move-up-btn').first()).toBeDisabled()
++  await expect(page.locator('.move-down-btn').first()).toBeEnabled()
++  await expect(page.locator('.move-up-btn').last()).toBeEnabled()
++  await expect(page.locator('.move-down-btn').last()).toBeDisabled()
++  await expect(page.locator('.timeline-name-input').first()).toHaveValue('Instruction 2')
++  expect(writes).toBe(1)
++})
++
++test('phase detail aggregate locks writes while instruction confirmation is open', async ({ page, request }) => {
++  expect((await request.post(`/api/instructions?namespace_id=${namespaceId}`, { data: { phase_id: phaseId, description: 'Instruction baseline', step_num: 1 } })).ok()).toBeTruthy()
++  await page.goto(pageUrl())
++  const trigger = page.locator('.phase-delete-btn').first()
++  await trigger.click()
++  await expect(page.locator('#confirmDialog')).toBeVisible()
++  await expect(name(page)).toBeDisabled()
++  expect(await save(page)).toBe(false)
++  await page.keyboard.press('Escape')
++  await expect(page.locator('#confirmDialog')).not.toBeVisible()
++  await expect(name(page)).toBeEnabled()
++  await expect(trigger).toBeFocused()
++})
++
++test('phase detail aggregate preserves later instruction input after a valid ACK', async ({ page, request }) => {
++  const created = await request.post(`/api/instructions?namespace_id=${namespaceId}`, { data: { phase_id: phaseId, description: 'Instruction baseline', step_num: 1 } })
++  const instructionId = (await created.json()).instruction.id as number
++  await page.goto(pageUrl())
++  let release!: () => void
++  let started = false
++  const pending = new Promise<void>(resolve => { release = resolve })
++  await page.route(`**/api/instructions/${instructionId}*`, async route => {
++    started = true
++    await pending
++    await route.continue()
++  })
++  await page.locator('.timeline-name-input').first().fill('Original instruction attempt')
++  const action = page.evaluate(() => (window as unknown as { saveInstructionDescription: (input: Element) => Promise<void> }).saveInstructionDescription(document.querySelector('.timeline-name-input')!))
++  try {
++    await expect.poll(() => started).toBe(true)
++    await page.evaluate(() => { document.querySelector<HTMLTextAreaElement>('.timeline-name-input')!.value = 'Later retained instruction draft' })
++  } finally { release() }
++  await action
++  const description = page.locator('.timeline-name-input').first()
++  await expect(description).toHaveValue('Later retained instruction draft')
++  await expect(description).toHaveAttribute('data-original-description', 'Original instruction attempt')
++  await expect(description).toBeEnabled()
++})
++
++test('phase detail aggregate resumes deferred autosave after instruction settlement', async ({ page, request }) => {
++  for (const step of [1, 2]) expect((await request.post(`/api/instructions?namespace_id=${namespaceId}`, { data: { phase_id: phaseId, description: `Instruction ${step}`, step_num: step } })).ok()).toBeTruthy()
++  await page.goto(pageUrl())
++  let release!: () => void
++  let instructionStarted = false
++  let phaseWrites = 0
++  const pending = new Promise<void>(resolve => { release = resolve })
++  await page.route(`**/api/phases/${phaseId}/instructions/reorder*`, async route => {
++    instructionStarted = true
++    await pending
++    await route.continue()
++  })
++  await page.route(`**/api/phases/${phaseId}?*`, async route => {
++    if (route.request().method() === 'PUT') phaseWrites++
++    await route.continue()
++  })
++  const action = page.evaluate(() => {
++    const controller = window as unknown as { scheduleSave: () => void, moveInstruction: (button: Element, direction: number) => Promise<void> }
++    document.querySelector<HTMLInputElement>('.wiki-header [data-field="name"]')!.value = 'Deferred metadata draft'
++    controller.scheduleSave()
++    return controller.moveInstruction(document.querySelector('.move-down-btn')!, 1)
++  })
++  try {
++    await expect.poll(() => instructionStarted).toBe(true)
++    await page.waitForTimeout(750)
++    expect(phaseWrites).toBe(0)
++    await expect(name(page)).toBeDisabled()
++  } finally { release() }
++  await action
++  await expect.poll(() => phaseWrites).toBe(1)
++  await expect(name(page)).toBeEnabled()
++  await expect(saveState(page)).toBeHidden()
++  expect((await (await request.get(`/api/phases/${phaseId}`)).json()).phase.name).toBe('Deferred metadata draft')
++})
++
++test.afterEach(async ({ request }) => {
++  if (namespaceId) expect((await request.delete(`/api/namespaces/${namespaceId}`)).ok()).toBeTruthy()
++  if (workflowId) expect((await request.delete(`/api/workflows/${workflowId}`)).ok()).toBeTruthy()
++})
++
++test('phase detail aggregate same-tick lock protects original rows and pending navigation', async ({ page }) => {
++  await page.goto(pageUrl())
++  let writes = 0
++  let release!: () => void
++  const pending = new Promise<void>(resolve => { release = resolve })
++  await page.route(`**/api/phases/${phaseId}*`, async route => {
++    if (route.request().method() !== 'PUT') return route.continue()
++    writes++
++    await pending
++    await route.fulfill({ status: 422, json: { ok: false, error: 'Validation fixture' } })
++  })
++  try {
++    await page.locator('.wiki-header [data-field="name"]').fill('Retained draft')
++    await page.evaluate(() => {
++      const controller = window as unknown as { savePhase: () => Promise<boolean> }
++      void controller.savePhase()
++      void controller.savePhase()
++    })
++    await expect.poll(() => writes).toBe(1)
++    await expect(page.locator('#checks-list .item-delete').first()).toBeDisabled()
++    await expect(page.locator('#checks-list textarea').first()).toBeDisabled()
++    await expect(page.locator('.wiki-header [data-field="name"]')).toBeDisabled()
++    await expect(page.locator('#phaseSaveStatus')).toHaveAttribute('data-page-state', 'loading')
++    await page.locator('.wiki-header a').click()
++    await expect(page.locator('[data-base-draft-dialog]')).toBeVisible()
++    await page.keyboard.press('Escape')
++    expect(new URL(page.url()).pathname).toBe(`/phase/${phaseId}`)
++  } finally {
++    release()
++  }
++  await expect(page.locator('.wiki-header [data-field="name"]')).toBeEnabled()
++  await expect(page.locator('.wiki-header [data-field="name"]')).toHaveValue('Retained draft')
++  expect(writes).toBe(1)
++})
+diff --git a/project_workflow/interfaces/ui/templates/phase_detail.html b/project_workflow/interfaces/ui/templates/phase_detail.html
+index ed674ea..8138117 100644
+--- a/project_workflow/interfaces/ui/templates/phase_detail.html
++++ b/project_workflow/interfaces/ui/templates/phase_detail.html
+@@ -41,7 +41,7 @@
+ 
+ /* Wiki sections */
+ .wiki-section{margin-bottom:36px}
+-.wiki-section-title{font-size:13px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
++.wiki-section-title{font-size:13px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0;margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+ .wiki-section-title .count{font-size:11px;font-weight:500;color:var(--text-dim);background:var(--panel);padding:1px 7px;border-radius:4px;text-transform:none;letter-spacing:0}
+ 
+ /* Check list */
+@@ -115,6 +115,8 @@
+       </select>
+     </div>
+ 
++    <div class="base-resource-state" id="phaseSaveStatus" data-page-state="error" role="alert" hidden><p></p></div>
++    <div class="base-page-actions">{{ base.button('Проверить сохранение', id='phaseSaveReconcile') }}</div>
+     <div class="wiki-page">
+ 
+   <!-- Header -->
+@@ -276,6 +278,8 @@
+ 
+ {% block extra_script %}
+ const phaseId = {{ phase.id }};
++const phaseWorkflowId = {{ phase.workflow_id | tojson }};
++const phaseModeId = {{ phase.mode_id | tojson }};
+ const selectedNamespaceId = {{ selected_namespace.id if selected_namespace else 'null' }};
+ const phaseSectionIds = ['phase-overview', 'phase-instructions', 'phase-checks', 'phase-evidence'];
+ let phaseSectionNavigationLock = null;
+@@ -419,7 +423,7 @@ function setPhaseMode(el, mode) {
+ }
+ 
+ async function togglePhaseMode(el) {
+-  if (el.dataset.saving === 'true') return;
++  if (phaseAggregateLocked() || el.dataset.saving === 'true') return;
+   const previousMode = el.dataset.mode || 'sync';
+   const partnerSelect = document.getElementById('parallelPartnerSelect');
+   const previousPartner = partnerSelect?.value || '';
+@@ -429,7 +433,7 @@ async function togglePhaseMode(el) {
+   el.setAttribute('aria-busy', 'true');
+   try {
+     const saved = await savePhase();
+-    if (!saved) {
++    if (!saved && !phaseUnknownSave && !phaseSaveTerminal) {
+       setPhaseMode(el, previousMode);
+       if (partnerSelect) partnerSelect.value = previousPartner;
+     }
+@@ -489,8 +493,8 @@ function updateInstructionControls() {
+   items.forEach((item, idx) => {
+     const up = item.querySelector('.move-up-btn');
+     const down = item.querySelector('.move-down-btn');
+-    if (up) up.disabled = idx === 0;
+-    if (down) down.disabled = idx === items.length - 1;
++    if (up) up.disabled = phaseAggregateLocked() || idx === 0;
++    if (down) down.disabled = phaseAggregateLocked() || idx === items.length - 1;
+   });
+ }
+ 
+@@ -515,21 +519,25 @@ async function persistInstructionOrder() {
+ }
+ 
+ async function moveInstruction(button, direction) {
++  if (phaseAggregateLocked()) return;
+   const item = button.closest('.timeline-item');
+   if (!item) return;
+   const items = getInstructionItems();
+   const currentIndex = items.indexOf(item);
+   const targetIndex = currentIndex + direction;
+   if (currentIndex < 0 || targetIndex < 0 || targetIndex >= items.length) return;
+-  const reordered = [...items];
+-  const [moved] = reordered.splice(currentIndex, 1);
+-  reordered.splice(targetIndex, 0, moved);
+-  renderInstructionTimeline(reordered);
+-  updateInstructionControls();
+-  if (!await persistInstructionOrder()) {
+-    renderInstructionTimeline(items);
++  if (!beginPhaseInstructionChange(null, false)) return;
++  try {
++    const reordered = [...items];
++    const [moved] = reordered.splice(currentIndex, 1);
++    reordered.splice(targetIndex, 0, moved);
++    renderInstructionTimeline(reordered);
+     updateInstructionControls();
+-  }
++    if (!await persistInstructionOrder()) {
++      renderInstructionTimeline(items);
++      updateInstructionControls();
++    }
++  } finally { endPhaseInstructionChange(); }
+ }
+ 
+ async function requestPhaseDetail(url, options) {
+@@ -544,11 +552,12 @@ async function requestPhaseDetail(url, options) {
+ }
+ 
+ async function addInstructionAfter(button) {
++  if (phaseAggregateLocked()) return;
+   const item = button.closest('.timeline-item');
+   if (!item) return;
+   const currentStep = parseInt(item.dataset.stepNum || '0', 10);
+   const stepNum = currentStep > 0 ? currentStep + 1 : 1;
+-  button.disabled = true;
++  if (!beginPhaseInstructionChange()) return;
+   try {
+     const result = await requestPhaseDetail(phaseApiUrl('/api/instructions'), {
+       method: 'POST',
+@@ -561,18 +570,17 @@ async function addInstructionAfter(button) {
+       showToast(data.error || 'Не удалось добавить инструкцию', 'error');
+       return;
+     }
+-    window.location.reload();
++    await reloadPhaseAfterInstruction();
+   } finally {
+-    button.disabled = false;
++    endPhaseInstructionChange();
+   }
+ }
+ 
+ async function addInstructionLast() {
+-  const timeline = document.getElementById('instructionsTimeline');
++  if (phaseAggregateLocked()) return;
+   const items = getInstructionItems();
+   const stepNum = items.length > 0 ? items.length + 1 : 1;
+-  const btn = timeline?.nextElementSibling;
+-  if (btn) btn.disabled = true;
++  if (!beginPhaseInstructionChange()) return;
+   try {
+     const result = await requestPhaseDetail(phaseApiUrl('/api/instructions'), {
+       method: 'POST',
+@@ -585,29 +593,39 @@ async function addInstructionLast() {
+       showToast(data.error || 'Не удалось добавить инструкцию', 'error');
+       return;
+     }
+-    window.location.reload();
++    await reloadPhaseAfterInstruction();
+   } finally {
+-    if (btn) btn.disabled = false;
++    endPhaseInstructionChange();
+   }
+ }
+ 
+ async function deleteInstruction(button) {
++  if (phaseAggregateLocked()) return;
+   const item = button.closest('.timeline-item');
+   if (!item) return;
+   const id = Number(item.dataset.instructionId);
+-  if (await requestWorkflowDeletion({
+-    url:phaseApiUrl('/api/instructions/' + id),title:'Удалить инструкцию?',
+-    message:'Инструкция будет удалена без возможности восстановления.',returnFocus:button,
+-    exists:()=>workflowCollectionContains(phaseApiUrl('/api/phases/' + phaseId + '/instructions'),'instructions',id),
+-  })) window.location.reload();
++  if (!beginPhaseInstructionChange()) return;
++  let deleted = false;
++  try {
++    deleted = await requestWorkflowDeletion({
++      url:phaseApiUrl('/api/instructions/' + id),title:'Удалить инструкцию?',
++      message:'Инструкция будет удалена без возможности восстановления.',returnFocus:button,
++      exists:()=>workflowCollectionContains(phaseApiUrl('/api/phases/' + phaseId + '/instructions'),'instructions',id),
++    });
++    if (deleted) await reloadPhaseAfterInstruction();
++  } finally {
++    endPhaseInstructionChange();
++    if (!deleted && button.isConnected && !button.disabled) button.focus();
++  }
+ }
+ 
+ async function toggleInstructionType(badge) {
++  if (phaseAggregateLocked()) return;
+   const card = badge.closest('.timeline-card');
+   const id = card.dataset.instructionId;
+   const isSync = (card.dataset.type || 'sync') === 'sync';
+   const nextType = isSync ? 'parallel' : 'sync';
+-  badge.disabled = true;
++  if (!beginPhaseInstructionChange()) return;
+   try {
+     const result = await requestPhaseDetail(phaseApiUrl('/api/instructions/' + id), {
+       method: 'PUT',
+@@ -620,50 +638,53 @@ async function toggleInstructionType(badge) {
+       showToast('Не удалось сменить режим', 'error');
+       return;
+     }
+-    window.location.reload();
++    await reloadPhaseAfterInstruction();
+   } finally {
+-    badge.disabled = false;
++    endPhaseInstructionChange();
+   }
+ }
+ 
+ async function saveInstructionDescription(input) {
++  if (phaseAggregateLocked()) return;
+   const card = input.closest('.timeline-card');
+   const id = card.dataset.instructionId;
+   const previousDescription = input.dataset.originalDescription || '';
+-  const description = input.value.trim();
++  if (input.value === previousDescription) return;
++  const rawDescription = input.value;
++  const description = rawDescription.trim();
+   if (!description) {
+-    input.value = previousDescription;
+     resizeInlineTextarea(input);
+     showToast('Описание инструкции обязательно', 'error');
+     return;
+   }
+-  input.disabled = true;
++  if (!beginPhaseInstructionChange(input, false)) return;
+   try {
+     const result = await requestPhaseDetail(phaseApiUrl('/api/instructions/' + id), {
+       method: 'PUT',
+       headers: {'Content-Type': 'application/json'},
+       body: JSON.stringify({description: description}),
+     });
+-    if (!result) {
+-      input.value = previousDescription;
+-      return;
+-    }
++    if (!result) return;
+     const {resp, data} = result;
+     if (!resp.ok || !data.ok) {
+-      input.value = previousDescription;
+       showToast(data.error || 'Не удалось сохранить описание', 'error');
+       return;
+     }
+-    const savedDescription = data.instruction?.description || description;
+-    input.value = savedDescription;
++    if (data.instruction?.id !== Number(id) || data.instruction.phase_id !== phaseId || data.instruction.description !== description) {
++      showToast('Сохранение инструкции не подтверждено. Черновик сохранён.', 'error');
++      return;
++    }
++    const savedDescription = data.instruction.description;
++    if (input.value === rawDescription) input.value = savedDescription;
+     input.dataset.originalDescription = savedDescription;
+   } finally {
+-    input.disabled = false;
++    endPhaseInstructionChange();
+     resizeInlineTextarea(input);
+   }
+ }
+ 
+ async function addSkillToInstruction(input) {
++  if (phaseAggregateLocked()) return;
+   const card = input.closest('.timeline-card');
+   const id = card.dataset.instructionId;
+   const skill = String(input.value || '').trim();
+@@ -672,7 +693,7 @@ async function addSkillToInstruction(input) {
+     .filter((b) => !b.classList.contains('badge-sync') && !b.classList.contains('badge-parallel'))
+     .map((b) => b.textContent.replace('×', '').trim());
+   const skills = normalizeSkillNames([...existing, skill]);
+-  input.disabled = true;
++  if (!beginPhaseInstructionChange(input)) return;
+   try {
+     const result = await requestPhaseDetail(phaseApiUrl('/api/instructions/' + id), {
+       method: 'PUT',
+@@ -685,13 +706,15 @@ async function addSkillToInstruction(input) {
+       showToast('Не удалось добавить навык', 'error');
+       return;
+     }
+-    window.location.reload();
++    input.value = '';
++    await reloadPhaseAfterInstruction();
+   } finally {
+-    input.disabled = false;
++    endPhaseInstructionChange();
+   }
+ }
+ 
+ async function removeSkillFromInstruction(button) {
++  if (phaseAggregateLocked()) return;
+   const card = button.closest('.timeline-card');
+   const id = card.dataset.instructionId;
+   const skillName = button.dataset.skill;
+@@ -699,18 +722,21 @@ async function removeSkillFromInstruction(button) {
+     .filter((b) => !b.classList.contains('badge-sync') && !b.classList.contains('badge-parallel'))
+     .map((b) => b.textContent.replace('×', '').trim());
+   const skills = normalizeSkillNames(existing.filter((s) => s !== skillName));
+-  const result = await requestPhaseDetail(phaseApiUrl('/api/instructions/' + id), {
+-    method: 'PUT',
+-    headers: {'Content-Type': 'application/json'},
+-    body: JSON.stringify({skills: skills}),
+-  });
+-  if (!result) return;
+-  const {resp} = result;
+-  if (!resp.ok) {
+-    showToast('Не удалось убрать навык', 'error');
+-    return;
+-  }
+-  window.location.reload();
++  if (!beginPhaseInstructionChange()) return;
++  try {
++    const result = await requestPhaseDetail(phaseApiUrl('/api/instructions/' + id), {
++      method: 'PUT',
++      headers: {'Content-Type': 'application/json'},
++      body: JSON.stringify({skills: skills}),
++    });
++    if (!result) return;
++    const {resp} = result;
++    if (!resp.ok) {
++      showToast('Не удалось убрать навык', 'error');
++      return;
++    }
++    await reloadPhaseAfterInstruction();
++  } finally { endPhaseInstructionChange(); }
+ }
+ 
+ /* ---------- Checks & Evidence ---------- */
+@@ -727,6 +753,7 @@ function syncTextItemList(list) {
+ }
+ 
+ async function saveNewTextItem(input) {
++  if (phaseAggregateLocked()) return;
+   if (!input.value.trim()) {
+     await deleteItem(input);
+     return;
+@@ -735,13 +762,14 @@ async function saveNewTextItem(input) {
+ }
+ 
+ async function deleteItem(btn) {
++  if (phaseAggregateLocked()) return;
+   const li = btn.closest('li');
+   const list = li?.closest('ul');
+   if (!li || !list) return;
+   const nextSibling = li.nextSibling;
+   li.remove();
+   syncTextItemList(list);
+-  if (!await savePhase()) {
++  if (!await savePhase() && !phaseUnknownSave && !phaseSaveTerminal) {
+     const empty = list.querySelector('.empty-state');
+     if (empty) empty.remove();
+     if (nextSibling && nextSibling.parentNode === list) list.insertBefore(li, nextSibling);
+@@ -751,6 +779,7 @@ async function deleteItem(btn) {
+ }
+ 
+ function addCheck() {
++  if (phaseAggregateLocked()) return;
+   const list = document.getElementById('checks-list');
+   const empty = list.querySelector('.empty-state');
+   if (empty) empty.remove();
+@@ -767,6 +796,7 @@ function addCheck() {
+ }
+ 
+ function addEvidence() {
++  if (phaseAggregateLocked()) return;
+   const list = document.getElementById('evidence-list');
+   const empty = list.querySelector('.empty-state');
+   if (empty) empty.remove();
+@@ -783,85 +813,7 @@ function addEvidence() {
+ }
+ 
+ /* ---------- Debounced phase meta save ---------- */
+-let _saveTimer = null;
+-let _phaseSaveQueue = Promise.resolve(true);
+-function scheduleSave() {
+-  if (_saveTimer) clearTimeout(_saveTimer);
+-  _saveTimer = setTimeout(savePhase, 400);
+-}
+-
+-function savePhase() {
+-  const queued = _phaseSaveQueue.then(() => persistPhase());
+-  _phaseSaveQueue = queued.catch(() => false);
+-  return queued;
+-}
+-
+-async function persistPhase() {
+-  const header = document.querySelector('.wiki-header');
+-  const meta = {};
+-  header.querySelectorAll('[data-field]').forEach((inp) => {
+-    meta[inp.dataset.field] = inp.value;
+-  });
+-
+-  const data = {
+-    name: meta.name,
+-    description: meta.description || '',
+-    checks: [],
+-    evidence: [],
+-    execution_type: document.querySelector('.execution-toggle')?.dataset.mode || 'sync',
+-    parallel_with_phase_id: (document.querySelector('.execution-toggle')?.dataset.mode || 'sync') === 'parallel'
+-      ? (document.getElementById('parallelPartnerSelect')?.value
+-        ? Number(document.getElementById('parallelPartnerSelect').value)
+-        : null)
+-      : null,
+-    agent_id: document.getElementById('agentSelect')?.value
+-      ? Number(document.getElementById('agentSelect').value)
+-      : null,
+-  };
+-
+-  document.querySelectorAll('#checks-list li').forEach((li) => {
+-    if (li.classList.contains('empty-state')) return;
+-    const inp = li.querySelector('[data-field="description"]');
+-    if (inp && inp.value.trim()) data.checks.push({
+-      id: li.dataset.id ? Number(li.dataset.id) : null,
+-      description: inp.value.trim(),
+-    });
+-  });
+-
+-  document.querySelectorAll('#evidence-list li').forEach((li) => {
+-    if (li.classList.contains('empty-state')) return;
+-    const inp = li.querySelector('[data-field="description"]');
+-    if (inp && inp.value.trim()) data.evidence.push({
+-      id: li.dataset.id ? Number(li.dataset.id) : null,
+-      description: inp.value.trim(),
+-    });
+-  });
+-
+-  try {
+-    const resp = await fetch(phaseApiUrl('/api/phases/' + phaseId), {
+-      method: 'PUT',
+-      headers: {'Content-Type': 'application/json'},
+-      body: JSON.stringify(data),
+-    });
+-    if (!resp.ok) { showToast('Ошибка сохранения', 'error'); return false; }
+-    const result = await resp.json();
+-    showToast('Сохранено', 'success');
+-    if (result.ids) {
+-      const checks = document.querySelectorAll('#checks-list li:not(.empty-state)');
+-      (result.ids.checks || []).forEach((id, i) => {
+-        if (checks[i]) checks[i].setAttribute('data-id', String(id));
+-      });
+-      const evs = document.querySelectorAll('#evidence-list li:not(.empty-state)');
+-      (result.ids.evidence || []).forEach((id, i) => {
+-        if (evs[i]) evs[i].setAttribute('data-id', String(id));
+-      });
+-    }
+-    return true;
+-  } catch (_error) {
+-    showToast('Ошибка сохранения', 'error');
+-    return false;
+-  }
+-}
++{% include 'phase_save.js' %}
+ 
+ document.addEventListener('DOMContentLoaded', () => {
+   initializePhaseOutline();
+diff --git a/project_workflow/interfaces/ui/templates/phase_save.js b/project_workflow/interfaces/ui/templates/phase_save.js
+new file mode 100644
+index 0000000..1de71f7
+--- /dev/null
++++ b/project_workflow/interfaces/ui/templates/phase_save.js
+@@ -0,0 +1,259 @@
++let phaseSavePending = false;
++let phaseInstructionPending = false;
++let phaseSaveDeferred = false;
++let phaseUnknownSave = null;
++let phaseSaveTerminal = null;
++let phaseSaveBaseline;
++let phaseRowSequence = 0;
++let _saveTimer = null;
++const phaseDisabledControls = new Map();
++
++function phaseAggregateLocked() {
++  return phaseSavePending || phaseInstructionPending || Boolean(phaseUnknownSave || phaseSaveTerminal);
++}
++
++function phaseTextRows(kind) {
++  return Array.from(document.querySelectorAll(`#${kind}-list li:not(.empty-state)`)).map((node) => {
++    if (!node.dataset.phaseRowKey) node.dataset.phaseRowKey = String(++phaseRowSequence);
++    return {node, key: node.dataset.phaseRowKey, id: node.dataset.id ? Number(node.dataset.id) : null,
++      value: node.querySelector('[data-field="description"]').value};
++  });
++}
++
++function phaseDraftSnapshot() {
++  const header = document.querySelector('.wiki-header');
++  const raw = {
++    name: header.querySelector('[data-field="name"]').value,
++    description: header.querySelector('[data-field="description"]').value,
++    execution_type: header.querySelector('.execution-toggle').dataset.mode || 'sync',
++    parallel_with_phase_id: document.getElementById('parallelPartnerSelect')?.value || '',
++    agent_id: document.getElementById('agentSelect').value,
++  };
++  for (const kind of ['checks', 'evidence']) raw[kind] = phaseTextRows(kind).map(({key, id, value}) => ({key, id, value}));
++  return raw;
++}
++
++function phaseMetadataDirty() {
++  return Boolean(phaseUnknownSave) || JSON.stringify(phaseDraftSnapshot()) !== phaseSaveBaseline;
++}
++
++function phaseInstructionsDirty(except = null) {
++  return Array.from(document.querySelectorAll('.timeline-name-input,.skill-candidate')).some((input) => input !== except
++    && (input.classList.contains('skill-candidate') ? Boolean(input.value.trim()) : input.value !== input.dataset.originalDescription));
++}
++
++function phaseDraftDirty() {
++  return phaseMetadataDirty() || phaseInstructionsDirty();
++}
++
++function beginPhaseInstructionChange(draft = null, reloads = true) {
++  if (phaseAggregateLocked()) return false;
++  // Reload-based instruction actions must not discard another editor's draft.
++  if (reloads && (phaseMetadataDirty() || phaseInstructionsDirty(draft))) {
++    showPhaseSaveState('error', 'Сначала сохраните остальные изменения. Черновик сохранён на странице.');
++    refreshWorkflowDraftGuard();
++    return false;
++  }
++  phaseInstructionPending = true;
++  showPhaseSaveState('loading', 'Сохранение инструкции…');
++  updatePhaseSaveControls();
++  return true;
++}
++
++function endPhaseInstructionChange() {
++  phaseInstructionPending = false;
++  if (document.getElementById('phaseSaveStatus').dataset.pageState === 'loading') showPhaseSaveState('empty', '');
++  updatePhaseSaveControls();
++  updateInstructionControls();
++  if (phaseSaveDeferred) {
++    phaseSaveDeferred = false;
++    if (phaseMetadataDirty()) scheduleSave();
++  }
++}
++
++function reloadPhaseAfterInstruction() {
++  endPhaseInstructionChange();
++  return navigateWorkflow(window.location.href);
++}
++
++function showPhaseSaveState(kind, message) {
++  const state = document.getElementById('phaseSaveStatus');
++  state.hidden = !message;
++  state.dataset.pageState = kind;
++  state.setAttribute('role', ['error', 'partial-error'].includes(kind) ? 'alert' : 'status');
++  state.setAttribute('aria-busy', String(kind === 'loading'));
++  state.querySelector('p').textContent = message || '';
++}
++
++function updatePhaseSaveControls() {
++  const locked = phaseAggregateLocked();
++  const controls = document.querySelectorAll('.wiki-page input,.wiki-page textarea,.wiki-page select,.wiki-page button');
++  for (const control of controls) {
++    if (locked) {
++      if (!phaseDisabledControls.has(control)) phaseDisabledControls.set(control, control.disabled);
++      control.disabled = true;
++    } else if (phaseDisabledControls.has(control)) {
++      control.disabled = phaseDisabledControls.get(control);
++    }
++  }
++  if (!locked) phaseDisabledControls.clear();
++  document.querySelector('.wiki-page').setAttribute('aria-busy', String(phaseSavePending || phaseInstructionPending));
++  const reconcile = document.getElementById('phaseSaveReconcile');
++  reconcile.hidden = !phaseUnknownSave || Boolean(phaseSaveTerminal);
++  reconcile.disabled = phaseSavePending;
++  refreshWorkflowDraftGuard();
++}
++
++function capturePhaseSave() {
++  const raw = phaseDraftSnapshot();
++  const rows = {};
++  const data = {name: raw.name.trim(), description: raw.description, execution_type: raw.execution_type,
++    parallel_with_phase_id: raw.execution_type === 'parallel' && raw.parallel_with_phase_id ? Number(raw.parallel_with_phase_id) : null,
++    agent_id: raw.agent_id ? Number(raw.agent_id) : null};
++  if (!data.name) throw new Error('Название фазы обязательно');
++  for (const kind of ['checks', 'evidence']) {
++    rows[kind] = phaseTextRows(kind).filter((row) => row.value.trim());
++    if (phaseTextRows(kind).some((row) => row.id !== null && !row.value.trim())) throw new Error('Описание обязательно');
++    data[kind] = rows[kind].map(({id, value}) => ({id, description: value.trim()}));
++  }
++  return {raw, rows, data, ids: null, returnFocus: document.activeElement};
++}
++
++function validPhaseSaveIds(attempt, ids) {
++  if (!ids || typeof ids !== 'object') return false;
++  return ['checks', 'evidence'].every((kind) => Array.isArray(ids[kind]) && ids[kind].length === attempt.rows[kind].length
++    && new Set(ids[kind]).size === ids[kind].length && ids[kind].every((id, index) => Number.isInteger(id) && id > 0
++      && (attempt.rows[kind][index].id === null || attempt.rows[kind][index].id === id)));
++}
++
++function phaseSaveMatches(attempt, phase) {
++  if (!phase || phase.id !== phaseId || phase.workflow_id !== phaseWorkflowId || phase.mode_id !== phaseModeId) return false;
++  for (const key of ['name', 'description', 'execution_type', 'parallel_with_phase_id', 'agent_id']) {
++    if (phase[key] !== attempt.data[key]) return false;
++  }
++  for (const kind of ['checks', 'evidence']) {
++    const saved = phase[kind];
++    if (!Array.isArray(saved) || saved.length !== attempt.rows[kind].length || new Set(saved.map((row) => row.id)).size !== saved.length) return false;
++    for (let index = 0; index < attempt.rows[kind].length; index++) {
++      const id = attempt.ids ? attempt.ids[kind][index] : attempt.rows[kind][index].id;
++      // A missing create ACK cannot identify a new entity by name or list position.
++      if (!Number.isInteger(id) || id <= 0) return false;
++      const row = saved.find((item) => item.id === id);
++      if (!row || row.phase_id !== phaseId || row.description !== attempt.data[kind][index].description) return false;
++    }
++  }
++  return true;
++}
++
++function finishPhaseSave(attempt) {
++  for (const kind of ['checks', 'evidence']) {
++    if (attempt.rows[kind].some((row) => !row.node.isConnected || row.node.dataset.phaseRowKey !== row.key
++      || (row.node.dataset.id ? Number(row.node.dataset.id) : null) !== row.id)) return false;
++  }
++  const baseline = structuredClone(attempt.raw);
++  for (const kind of ['checks', 'evidence']) {
++    attempt.rows[kind].forEach((row, index) => {
++      const id = attempt.ids ? attempt.ids[kind][index] : row.id;
++      row.node.dataset.id = String(id);
++      baseline[kind].find((item) => item.key === row.key).id = id;
++    });
++  }
++  phaseSaveBaseline = JSON.stringify(baseline);
++  phaseUnknownSave = null;
++  showPhaseSaveState('empty', '');
++  showToast('Сохранено', 'success');
++  return true;
++}
++
++function phaseSaveTerminalResponse(status) {
++  if (![401, 403, 404].includes(status)) return false;
++  phaseSaveTerminal = status === 404 ? 'not-found' : 'permission-denied';
++  showPhaseSaveState(phaseSaveTerminal, status === 404 ? 'Фаза не найдена. Черновик сохранён на странице.' : 'Нет доступа к сохранению. Черновик сохранён на странице.');
++  return true;
++}
++
++async function readPhaseSave(attempt) {
++  try {
++    const response = await fetch(phaseApiUrl(`/api/phases/${phaseId}`));
++    if (phaseSaveTerminalResponse(response.status)) return false;
++    const result = await response.json();
++    if (response.ok && result.ok === true && phaseSaveMatches(attempt, result.phase) && finishPhaseSave(attempt)) return true;
++  } catch (_error) {}
++  showPhaseSaveState('partial-error', 'Результат сохранения не подтверждён. Проверьте состояние; повторная запись заблокирована, черновик сохранён.');
++  return false;
++}
++
++function scheduleSave() {
++  if (_saveTimer) clearTimeout(_saveTimer);
++  if (phaseInstructionPending) { phaseSaveDeferred = true; return; }
++  if (phaseAggregateLocked()) return;
++  _saveTimer = setTimeout(savePhase, 400);
++  refreshWorkflowDraftGuard();
++}
++
++async function savePhase() {
++  if (_saveTimer) clearTimeout(_saveTimer);
++  _saveTimer = null;
++  if (phaseInstructionPending) { phaseSaveDeferred = true; return false; }
++  if (phaseAggregateLocked()) return false;
++  let attempt;
++  try { attempt = capturePhaseSave(); }
++  catch (error) { showPhaseSaveState('error', error.message); refreshWorkflowDraftGuard(); return false; }
++  phaseSavePending = true;
++  showPhaseSaveState('loading', 'Сохранение фазы…');
++  updatePhaseSaveControls();
++  try {
++    const response = await fetch(phaseApiUrl(`/api/phases/${phaseId}`), {
++      method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(attempt.data),
++    });
++    if (phaseSaveTerminalResponse(response.status)) return false;
++    if (response.status >= 400 && response.status < 500 && response.status !== 408) {
++      showPhaseSaveState('error', 'Не удалось сохранить фазу. Исправьте данные; черновик сохранён.');
++      return false;
++    }
++    const result = await response.json().catch(() => null);
++    if (response.ok && result?.ok === true && validPhaseSaveIds(attempt, result.ids)) attempt.ids = structuredClone(result.ids);
++  } catch (_error) {}
++  finally {
++    // The lock remains held while the authoritative GET runs below.
++    if (phaseSaveTerminal || document.getElementById('phaseSaveStatus').dataset.pageState === 'error') {
++      phaseSavePending = false;
++      updatePhaseSaveControls();
++      if (!phaseAggregateLocked()) restorePhaseSaveFocus(attempt);
++    }
++  }
++  phaseUnknownSave = attempt;
++  try { return await readPhaseSave(attempt); }
++  finally {
++    phaseSavePending = false;
++    updatePhaseSaveControls();
++    if (!phaseAggregateLocked()) restorePhaseSaveFocus(attempt);
++  }
++}
++
++function restorePhaseSaveFocus(attempt) {
++  const target = attempt.returnFocus;
++  if (target?.isConnected && !target.disabled && target !== document.body) target.focus();
++  else document.querySelector('.wiki-header [data-field="name"]').focus();
++}
++
++async function reconcilePhaseSave() {
++  if (phaseSavePending || phaseSaveTerminal || !phaseUnknownSave) return;
++  const attempt = phaseUnknownSave;
++  phaseSavePending = true;
++  showPhaseSaveState('loading', 'Проверка сохранения…');
++  updatePhaseSaveControls();
++  try { await readPhaseSave(attempt); }
++  finally {
++    phaseSavePending = false;
++    updatePhaseSaveControls();
++    if (!phaseAggregateLocked()) restorePhaseSaveFocus(attempt);
++  }
++}
++
++document.addEventListener('DOMContentLoaded', () => {
++  phaseSaveBaseline = JSON.stringify(phaseDraftSnapshot());
++  document.getElementById('phaseSaveReconcile').addEventListener('click', reconcilePhaseSave);
++  updatePhaseSaveControls();
++});
++registerWorkflowDraftGuard({isDirty: phaseDraftDirty, isPending: () => phaseSavePending || phaseInstructionPending});
+diff --git a/tests/test_ui.py b/tests/test_ui.py
+index 5b4ab1b..913ea38 100644
+--- a/tests/test_ui.py
++++ b/tests/test_ui.py
+@@ -1364,7 +1364,7 @@ class TestPhaseDetail:
+         phase = _phase_row("4.START")
+ 
+         assert f"const phaseId = {phase['id']};" in response.text
+-        assert "fetch(phaseApiUrl('/api/phases/' + phaseId)" in response.text
++        assert "fetch(phaseApiUrl(`/api/phases/${phaseId}`)" in response.text
+         assert "fetch('/api/phases/4.START'" not in response.text
+ 
+     def test_phase_detail_has_responsive_structured_outline(self):
+@@ -1403,12 +1403,13 @@ class TestPhaseDetail:
+         assert "window.addEventListener('popstate', restorePhaseSectionFromLocation);" in response.text
+         assert "window.addEventListener('wheel', releasePhaseSectionNavigationLock" in response.text
+ 
+-    def test_phase_detail_empty_name_is_sent_to_backend_validation(self):
++    def test_phase_detail_empty_name_is_not_replaced_with_a_default(self):
+         response = client.get(_phase_detail_path("4.START"))
+         assert response.status_code == 200
+ 
+         assert "name: meta.name ||" not in response.text
+-        assert "name: meta.name," in response.text
++        assert "name: raw.name.trim()" in response.text
++        assert "if (!data.name) throw new Error('Название фазы обязательно');" in response.text
+ 
+     def test_phase_detail_allows_deleting_last_instruction_like_api(self):
+         phase_response = client.get(_phase_api_path("1.INTAKE"))
+@@ -1469,8 +1470,9 @@ class TestPhaseDetail:
+         response = client.get(_phase_detail_path("1.INTAKE"))
+ 
+         assert response.status_code == 200
+-        assert response.text.count("if (inp && inp.value.trim()) data.") == 2
+-        assert response.text.count("description: inp.value.trim(),") == 2
++        assert "rows[kind] = phaseTextRows(kind).filter((row) => row.value.trim());" in response.text
++        assert "row.id !== null && !row.value.trim()" in response.text
++        assert "data[kind] = rows[kind].map(({id, value}) => ({id, description: value.trim()}));" in response.text
+ 
+     def test_phase_detail_javascript_uses_per_instruction_api_calls(self):
+         response = client.get(_phase_detail_path("1.INTAKE"))
+@@ -1500,29 +1502,40 @@ class TestPhaseDetail:
+ 
+         assert response.status_code == 200
+         assert "async function togglePhaseMode(el)" in response.text
+-        assert "if (el.dataset.saving === 'true') return;" in response.text
++        assert "if (phaseAggregateLocked() || el.dataset.saving === 'true') return;" in response.text
+         assert "const saved = await savePhase();" in response.text
+         assert "el.setAttribute('aria-busy', 'true');" in response.text
+         assert "const previousPartner = partnerSelect?.value || '';" in response.text
+         assert "partnerSelect.value = previousPartner;" in response.text
++        assert "if (!saved && !phaseUnknownSave && !phaseSaveTerminal)" in response.text
+         assert "return true;" in response.text
+ 
+     def test_phase_detail_sends_strict_nested_ids_and_stores_returned_ids(self):
+         response = client.get(_phase_detail_path("1.INTAKE"))
+ 
+         assert response.status_code == 200
+-        assert "id: li.dataset.id ? Number(li.dataset.id) : null" in response.text
+-        assert "checks[i].setAttribute('data-id', String(id));" in response.text
+-        assert "evs[i].setAttribute('data-id', String(id));" in response.text
++        assert "id: node.dataset.id ? Number(node.dataset.id) : null" in response.text
++        assert "row.node.dataset.id = String(id);" in response.text
++        assert "row.node.dataset.phaseRowKey !== row.key" in response.text
++        assert "validPhaseSaveIds(attempt, result.ids)" in response.text
+ 
+     def test_phase_detail_serializes_all_phase_aggregate_saves(self):
+         response = client.get(_phase_detail_path("1.INTAKE"))
+ 
+         assert response.status_code == 200
+-        assert "let _phaseSaveQueue = Promise.resolve(true);" in response.text
+-        assert "const queued = _phaseSaveQueue.then(() => persistPhase());" in response.text
+-        assert "_phaseSaveQueue = queued.catch(() => false);" in response.text
+-        assert "async function persistPhase()" in response.text
++        assert "_phaseSaveQueue" not in response.text
++        assert "if (phaseAggregateLocked()) return false;" in response.text
++        assert "phaseSavePending = true;" in response.text
++        assert "attempt = capturePhaseSave();" in response.text
++        assert "body: JSON.stringify(attempt.data)" in response.text
++        assert "phaseUnknownSave = attempt;" in response.text
++        assert "registerWorkflowDraftGuard({isDirty: phaseDraftDirty" in response.text
++        assert "async function reconcilePhaseSave()" in response.text
++        assert "phaseSavePending || phaseInstructionPending" in response.text
++        assert "function phaseInstructionsDirty(except = null)" in response.text
++        assert "function beginPhaseInstructionChange(draft = null, reloads = true)" in response.text
++        assert "await reloadPhaseAfterInstruction();" in response.text
++        assert "window.location.reload();" not in response.text
+ 
+     def test_new_check_and_evidence_wait_for_user_input_before_saving(self):
+         response = client.get(_phase_detail_path("1.INTAKE"))
+@@ -1565,14 +1578,17 @@ class TestPhaseDetail:
+         finally:
+             client.put(_phase_api_path("1.INTAKE"), json=restore_payload)
+ 
+-    def test_phase_detail_instruction_description_reverts_after_rejected_save(self):
++    def test_phase_detail_instruction_description_preserves_rejected_and_later_drafts(self):
+         response = client.get(_phase_detail_path("1.INTAKE"))
+ 
+         assert response.status_code == 200
+         assert 'data-original-description="' in response.text
+         assert "const previousDescription = input.dataset.originalDescription || '';" in response.text
+-        assert "const description = input.value.trim();" in response.text
+-        assert "input.value = previousDescription;" in response.text
++        assert "const rawDescription = input.value;" in response.text
++        assert "const description = rawDescription.trim();" in response.text
++        assert "input.value = previousDescription;" not in response.text
++        assert "if (input.value === rawDescription) input.value = savedDescription;" in response.text
++        assert "data.instruction.phase_id !== phaseId" in response.text
+         assert "input.dataset.originalDescription = savedDescription;" in response.text
+         assert "showToast('Описание инструкции обязательно', 'error');" in response.text
+ 
+@@ -3151,7 +3167,7 @@ class TestUiNetworkFailures:
+         assert "showInstructionError('Результат записи неизвестен." in instructions_page.text
+         assert detail_page.status_code == 200
+         assert "async function requestPhaseDetail(url, options)" in detail_page.text
+-        assert "if (!await savePhase())" in detail_page.text
++        assert "if (!await savePhase() && !phaseUnknownSave && !phaseSaveTerminal)" in detail_page.text
+         assert "list.insertBefore(li, nextSibling)" in detail_page.text
+         assert "await deleteItem(input);" in detail_page.text
+ 
+diff --git a/tests/test_ui_api.py b/tests/test_ui_api.py
+index 543e950..923528c 100644
+--- a/tests/test_ui_api.py
++++ b/tests/test_ui_api.py
+@@ -126,7 +126,7 @@ class TestIndex:
+         assert f"const selectedNamespaceId = {namespace['id']};" in resp.text
+         assert "function phaseApiUrl(path)" in resp.text
+         assert "url.searchParams.set('namespace_id', String(selectedNamespaceId));" in resp.text
+-        assert "fetch(phaseApiUrl('/api/phases/' + phaseId)" in resp.text
++        assert resp.text.count("fetch(phaseApiUrl(`/api/phases/${phaseId}`)") == 2
+ 
+     def test_phase_detail_page_scopes_instruction_api_to_selected_namespace(self, client):
+         namespace = next(item for item in client.get("/api/namespaces").json()["namespaces"])

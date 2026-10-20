@@ -1,0 +1,15 @@
+import { createApiClient } from '@sdlc/ui/lib'
+
+export interface Namespace { id: number; name: string; code: string; theme_color?: string }
+export interface Task { task_key: string; namespace_id: number; title: string; current_phase_name: string; status_label: string }
+export interface Phase { id: number; name: string; description?: string; agent_name?: string; instructions?: { id: number; description: string; execution_type: string }[] }
+export const client = createApiClient({ onUnauthorized: () => {
+  window.location.assign(`/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`)
+} })
+
+export function scopedPath(path: string, namespace: string) {
+  return `${path}${namespace ? `?${new URLSearchParams({ namespace_id: namespace })}` : ''}`
+}
+export function taskHref(task: Pick<Task, 'task_key' | 'namespace_id'>) {
+  return `/task/${encodeURIComponent(task.task_key)}?${new URLSearchParams({ namespace_id: String(task.namespace_id) })}`
+}

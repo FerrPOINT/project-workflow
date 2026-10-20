@@ -1,0 +1,146 @@
+"""Actual fixed origin reader with synthetic HTTP owner replies; no live services."""
+
+import copy
+
+import httpx
+import pytest
+
+from project_workflow.infrastructure import bug_work_authority as authority
+from project_workflow.infrastructure.namespace_auth import NamespaceAuthError, NamespacePrincipal
+from tests.test_bug_work import source as source
+from tests.test_bug_work import uid
+from tests.test_bug_work_authority import settings
+from tests.test_bug_work_origin import with_origin
+
+READ_ORIGIN = authority.read_origin
+READ_GRANT = authority.read_grant
+
+
+def configure(source, monkeypatch):
+    request, fleet, observed = source
+    origin = with_origin(observed, qa=True, provenance=True)
+    request = request.model_copy(update={"assignment_sha256": observed["assignment_sha256"]})
+    reader = uid()
+    settings(monkeypatch, request, reader, fleet.subject)
+    monkeypatch.setattr(
+        authority,
+        "introspect",
+        lambda _: (
+            NamespacePrincipal(issuer=fleet.issuer, subject=reader),
+            ["task-tracker:read"],
+        ),
+    )
+    return request, observed, origin, reader
+
+
+def test_104_fixed_reader_uses_registered_owner_scope_and_preserves_exact_origin(source, monkeypatch):
+    request, observed, origin, _ = configure(source, monkeypatch)
+    calls = []
+
+    def handle(outgoing):
+        calls.append(outgoing)
+        prefix = f"/api/v1/projects/{request.project_id}/sdlc/bug-intake/assignments/{request.assignment_id}"
+        assert outgoing.url.path in {prefix + "/grant", prefix + "/origin"}
+        assert not outgoing.url.query
+        assert outgoing.headers["authorization"] == "Bearer synthetic-workflow-own-reader"
+        assert outgoing.headers["accept-encoding"] == "identity"
+        return httpx.Response(200, json=copy.deepcopy(origin if outgoing.url.path.endswith("/origin") else observed))
+
+    client = httpx.Client
+    monkeypatch.setattr(
+        authority.httpx, "Client", lambda **kwargs: client(**kwargs, transport=httpx.MockTransport(handle))
+    )
+    assert READ_GRANT(request) == observed
+    assert READ_ORIGIN(request, observed) == origin
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "project",
+        "hash",
+        "changed_pin",
+        "unavailable",
+        "forbidden",
+        "not_found",
+        "redirect",
+        "oversized",
+        "duplicate",
+        "encoding",
+        "reader",
+        "scope",
+    ],
+)
+def test_104_owner_origin_reader_rejects_unavailable_or_changed_authority(source, monkeypatch, bad):
+    request, observed, origin, reader = configure(source, monkeypatch)
+    if bad in {"reader", "scope"}:
+        monkeypatch.setattr(
+            authority,
+            "introspect",
+            lambda _: (
+                NamespacePrincipal(issuer="http://central.invalid", subject=uid() if bad == "reader" else reader),
+                ["*"] if bad == "scope" else ["task-tracker:read"],
+            ),
+        )
+    if bad == "project":
+        origin["source_context"]["project"]["project_id"] = uid()
+    elif bad == "hash":
+        origin["assignment_sha256"] = "0" * 64
+    elif bad == "changed_pin":
+        origin["source_context"]["targets"][0]["commit_sha"] = "d" * 40
+    calls = []
+
+    def handle(outgoing):
+        calls.append(outgoing)
+        if bad in {"unavailable", "forbidden", "not_found", "redirect"}:
+            return httpx.Response(
+                {"unavailable": 503, "forbidden": 403, "not_found": 404, "redirect": 302}[bad],
+                headers={"Location": "http://foreign.invalid"},
+                content=b"private-owner-secret",
+            )
+        if bad == "oversized":
+            return httpx.Response(200, content=b"x" * 98_305)
+        if bad == "duplicate":
+            return httpx.Response(200, content=b'{"contract_version":1,"contract_version":1}')
+        if bad == "encoding":
+            return httpx.Response(200, headers={"Content-Encoding": "br"}, content=b"private-owner-secret")
+        return httpx.Response(200, json=origin)
+
+    client = httpx.Client
+    monkeypatch.setattr(
+        authority.httpx, "Client", lambda **kwargs: client(**kwargs, transport=httpx.MockTransport(handle))
+    )
+    with pytest.raises(NamespaceAuthError) as error:
+        READ_ORIGIN(request, observed)
+    assert "private-owner-secret" not in str(error.value)
+    assert len(calls) == (0 if bad in {"reader", "scope"} else 1)
+
+
+def test_103_origin_missing_never_probes_owner_or_infers_report_urls(source, monkeypatch):
+    request, fleet, observed = source
+    settings(monkeypatch, request, uid(), fleet.subject)
+    monkeypatch.setattr(authority.httpx, "Client", lambda **_: pytest.fail("No origin exists in retained103"))
+    with pytest.raises(NamespaceAuthError):
+        READ_ORIGIN(request, observed)
+
+
+@pytest.mark.parametrize("suffix", ["grant", "origin"])
+def test_small_owner_chunks_check_deadline_without_waiting_for_one_kib(source, monkeypatch, suffix):
+    request, observed, _, _ = configure(source, monkeypatch)
+    clock = [0.0]
+    monkeypatch.setattr(authority.time, "monotonic", lambda: clock[0])
+
+    class Drip(httpx.SyncByteStream):
+        def __iter__(self):
+            clock[0] = 6.0
+            yield b"{"
+            pytest.fail("Expired first byte must be checked before buffering further body")
+
+    client = httpx.Client
+    monkeypatch.setattr(authority.httpx, "Client", lambda **kwargs: client(
+        **kwargs, transport=httpx.MockTransport(lambda _: httpx.Response(200, stream=Drip())),
+    ))
+    with pytest.raises(NamespaceAuthError) as error:
+        READ_GRANT(request) if suffix == "grant" else READ_ORIGIN(request, observed)
+    assert error.value.status == 503

@@ -1,0 +1,530 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 58bbafd..0a981f7 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -13,6 +13,10 @@
+ - Standalone-режим: репозиторий собирается и запускается без соседнего `services-base` (убраны extra `cli-platform`, uv source, Docker additional_context и CI checkout). Token-режим CLI без `sdlc-cli-core` выдаёт понятную ошибку; запуск без `AUTH_ISSUER` работает без авторизации.
+ 
+ ### Fixed
++- Read-only React-пилот использует Base URL helper и data router: namespace
++  changes сохраняют hash и принятые query patches, detail -> list выполняется
++  одним history transition, login next сохраняет полный адрес. Catalogue errors
++  различают 403/404 и повторяемые сбои, не скрывая успешно загруженные задачи.
+ - SSR-переключатель берёт текущий Workflow и его health из runtime-каталога,
+   без hardcoded healthy. Полный fallback из шести UI остаётся unknown при
+   сетевой ошибке, пустом или невалидном ответе; TTL cache разделён по URL.
+diff --git a/docs/adr/2026-10-01-read-only-react-pilot.md b/docs/adr/2026-10-01-read-only-react-pilot.md
+index 0c0c774..f262964 100644
+--- a/docs/adr/2026-10-01-read-only-react-pilot.md
++++ b/docs/adr/2026-10-01-read-only-react-pilot.md
+@@ -27,7 +27,13 @@
+ 
+ ## Контекст и авторизация
+ 
+-Серверный bootstrap содержит только identity и выбранный namespace из существующей cookie, без credentials. JSON экранирует script delimiters. Явный URL имеет приоритет над cookie. Смена namespace отражается в URL; task detail открывается в Jinja с namespace_id. При 401 Base API client направляет в действующий login с сохранением pathname и query. Assets защищены тем же SSO middleware.
++Серверный bootstrap содержит только identity и выбранный namespace из существующей cookie, без credentials. JSON экранирует script delimiters. Явный URL имеет приоритет над cookie. Смена namespace отражается в URL; task detail открывается в Jinja с namespace_id. При 401 Base API client направляет в действующий login с сохранением pathname, query и hash. Assets защищены тем же SSO middleware.
++
++React использует data router с basename `/react` и Base `useUrlSearchParams`.
++Namespace patch сохраняет unrelated query/hash и сбрасывает page; bootstrap
++восстанавливает namespace через replacement и не применяется снова после reset.
++Переход detail -> list задаёт destination общему helper, не копирует router state
++или собственную optimistic query в продукт. Новые auth/API/CRUD контуры не нужны.
+ 
+ ## Сборка и отключение
+ 
+diff --git a/frontend/AGENTS.md b/frontend/AGENTS.md
+new file mode 100644
+index 0000000..8d9a357
+--- /dev/null
++++ b/frontend/AGENTS.md
+@@ -0,0 +1,115 @@
++# AGENTS.md - Workflow React frontend
++
++## Локальный контекст
++
++- Это параллельный read-only пилот; Jinja остаётся основным интерфейсом.
++  Не превращать пилот в CRUD или полный перенос без отдельного решения.
++- `/react/` находится на том же origin, за `WORKFLOW_REACT_UI_ENABLED`,
++  по умолчанию выключенным. Использовать существующую cookie-сессию и безопасный
++  server bootstrap без tokens; не создавать новый login/auth store/CORS-контур.
++- Сохранять namespace/phase/task context. Task detail открывается в Jinja;
++  не добавлять domain API ради пилота. Использовать существующие GET endpoints.
++- Frontend scripts: `pnpm test`, `pnpm lint`, `pnpm typecheck`, `pnpm build`,
++  `pnpm ui:check`, `pnpm ssr:check`. Root Python gate обязателен при затрагивании
++  серверного поведения. Готовые изменения коммитить по root-инструкциям.
++
++<!-- base-frontend-principles:start -->
++
++<!-- prettier-ignore-start -->
++
++## Общие принципы фронтенда
++
++Блок поддерживается Base. Не править его локально: изменить Base-шаблон и
++выполнить sync. Применяются родительские `AGENTS.md`; эти правила дополняют их
++для UI, не меняют доменные границы и не разрешают commit/push/deploy сами по себе.
++
++Источники: [UI/UX Standard](../../services-base/docs/platform/UI_UX_STANDARD.md),
++[Shell Standard](../../services-base/docs/platform/UI_SHELL_STANDARD.md),
++[Принципы и примеры](../../services-base/docs/platform/FRONTEND_PRINCIPLES.md).
++
++### Композиция и геометрия
++
++- Один визуальный язык: shell, tokens, controls, states и общие композиции
++  принадлежат Base. React использует `@sdlc/ui`, Jinja - его SSR assets/macros.
++  Локальная обёртка допустима для доменного адаптера, но не как второй UI-kit.
++- Новую страницу начинать с Base-паттерна list/form/detail/dashboard/audit.
++  Один `AppShell` и один `PageFrame`; `data-page-layout` только `wide`,
++  `reading` или `detail-with-aside`. Общую композицию менять сначала в Base.
++- Ровное выравнивание через общие gutter, spacing и grid tracks. Flex/Grid
++  распределяют доступное место; fluid children имеют `min-width: 0`, а fluid
++  grid tracks - `minmax(0, 1fr)`. Не вводить собственный page max-width или
++  фиксированную ширину всего body. Точные размеры и breakpoints - в Base.
++- Длинные заголовки, значения и локализованные подписи не ломают сетку:
++  разрешать перенос, осознанно задавать truncation с доступом к полному значению.
++  Размер шрифта не зависит от viewport. Не исправлять layout отрицательными
++  отступами, absolute positioning основного потока или скрытием overflow body.
++- Стабильные размеры toolbar, icon buttons, колонок, boards и repeated items:
++  hover, pending, counters и пустые состояния не должны двигать соседний UI.
++  Широкие таблицы, логи и доски имеют именованный local scroll, не scroll body.
++
++### Минимализм и удобство
++
++- Рабочий интерфейс, не landing page: сначала данные и действия, без hero,
++  декоративных орбов, лишних рамок и текста, рекламирующего возможности UI.
++  Секции не оформлять плавающими карточками; карточки нужны повторяемым объектам,
++  диалогам и действительно обособленным инструментам. Не вкладывать card в card.
++- Компактность - ясная иерархия и разумные интервалы, не теснота и мелкие targets.
++  Использовать Base typography, spacing, radius и semantic colors. Проверять
++  контраст во всех темах; status обозначать не только цветом. Product/namespace
++  accent допустим через согласованный branding-контракт, не через CSS-форк.
++- Выбирать control по смыслу: tabs для views, select/menu для вариантов,
++  checkbox/switch для binary, input/stepper для чисел, swatch для цвета.
++  Familiar icon commands брать из существующей библиотеки (React: lucide),
++  давать accessible name и tooltip. Обычные команды могут быть icon+text.
++  Targets минимум 40 px desktop / 44 px mobile; glyph checkbox не равен target.
++- Один владелец каждого действия: platform actions в shell, CRUD в странице.
++  Не дублировать context/profile между header/sidebar и локальными controls.
++  Таблицы для сравнения строк, cards для самостоятельных объектов; выбор
++  определяется сценарием, а не декоративным предпочтением.
++
++### Поведение, данные и доступность
++
++- Явно различать loading, empty, error, not-found, permission-denied и partial
++  failure. Ошибка не равна пустому списку. Сохранять успешно загруженные данные
++  при refetch/partial error; retry только для повторяемого сбоя. 404 не предлагает
++  CRUD отсутствующего объекта или родителя. Success - только подтверждённый.
++- Формы: label/help/error, required и API bounds; ошибка сохраняет draft,
++  pending защищает handler и control от двойной отправки. Dirty draft защищать
++  при переходе, reload и закрытии. Не повторять автоматически неидемпотентную
++  мутацию с неизвестным исходом; сверить состояние с сервером.
++- Search/filter/sort/pagination/tab хранить в URL через Base helpers; direct
++  open, reload и Back/Forward восстанавливают состояние. Filter change сбрасывает
++  page/cursor. Не помещать credentials и приватные drafts в URL/localStorage.
++- HTML semantics и клавиатура обязательны: один page h1, видимый focus,
++  label связи, accessible names. Modal/drawer управляет focus, Escape и возвратом
++  к инициатору; при его удалении - к безопасному fallback. Disabled/hover/active
++  не единственные носители смысла. Actions не теряются на узкой ширине.
++- API и permissions остаются доменными; скрытая кнопка не заменяет backend authZ.
++  Использовать существующий типизированный API client, session и cache.
++  Не заводить второй auth store, ручные DTO-копии, дублирующие запросы или
++  derived state в нескольких stores. Новая библиотека/абстракция требует
++  реальной необходимости; pagination/virtualization - по объёму и измерениям.
++- System strings через существующую локализацию; user content не переводить.
++  Не хардкодить язык, тему, статусные цвета или геометрию продукта в shared UI.
++
++### Проверка и изменения
++
++- Desktop-first, но не desktop-only поведение. Для изменённого UI проверять
++  1440/1920/2560 px, responsive 375 px и границы shell/detail из Base, все темы,
++  длинные данные и page states. Нет overlap, document overflow, потерянных
++  действий и необъяснённых console/network errors; проверить keyboard/focus.
++- Запускать штатные проверки затронутой области и общий UI gate. Для поведения
++  нужны component/state tests и browser evidence реальных страниц: mocks и
++  статический CSS gate не доказывают фактическую геометрию или интеграцию.
++  Для docs-only изменений проверить ссылки, coverage инструкций и drift;
++  не выдавать это за прохождение UI/runtime QA.
++- README показывает только реальные desktop full-page captures 1920x1080,
++  по представителю применимого mode в default theme; mobile остаётся в QA.
++  Evidence фиксирует route, viewport, theme, product/Base версии и результат.
++- Сохранять чужой dirty work; исправления узкие, заменённые локальные реализации
++  удаляются в той же миграции. Исключение из стандарта требует причины, владельца,
++  scope, условия пересмотра и теста, а не скрытого CSS override.
++
++<!-- prettier-ignore-end -->
++
++<!-- base-frontend-principles:end -->
+diff --git a/frontend/src/App.test.tsx b/frontend/src/App.test.tsx
+index 0b819cc..0c7eee3 100644
+--- a/frontend/src/App.test.tsx
++++ b/frontend/src/App.test.tsx
+@@ -1,9 +1,9 @@
+ // @vitest-environment jsdom
+ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
++import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+-import { MemoryRouter, useLocation, useNavigate } from 'react-router'
+-import { PlatformProvider, ThemeProvider } from '@sdlc/ui/lib'
++import { RouterProvider, createMemoryRouter, useLocation, useNavigate } from 'react-router'
++import { PlatformProvider, ThemeProvider, updateQuery, useUrlSearchParams } from '@sdlc/ui/lib'
+ import { I18nextProvider } from 'react-i18next'
+ import { createInstance } from 'i18next'
+ import { App } from './App'
+@@ -26,25 +26,36 @@ vi.mock('./api', async importOriginal => ({
+ function LocationProbe() {
+   const location = useLocation()
+   const navigate = useNavigate()
+-  return <><output data-testid="location">{location.pathname}{location.search}</output><button onClick={() => void navigate(-1)}>Fixture Back</button></>
++  const [, setParams] = useUrlSearchParams()
++  return <><output data-testid="location">{location.pathname}{location.search}{location.hash}</output><button onClick={() => void navigate(-1)}>Fixture Back</button><button onClick={() => void navigate(1)}>Fixture Forward</button><button onClick={() => setParams(current => updateQuery(current, { q: 'release' }))}>Fixture filter</button></>
+ }
++const routers: ReturnType<typeof createMemoryRouter>[] = []
++const clients: QueryClient[] = []
+ function mount(path: string, initialNamespace?: number) {
+   const i18n = createInstance()
+-  void i18n.init({ lng: 'ru', resources: { ru: { translation: {} } } })
++  void i18n.init({ lng: 'ru', resources: { ru: { translation: { common: { loading: 'Загрузка...', retry: 'Повторить' } } } } })
+   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+-  return render(<QueryClientProvider client={queryClient}><I18nextProvider i18n={i18n}><ThemeProvider><PlatformProvider configUrl={null}><MemoryRouter initialEntries={[path]}><App initialNamespace={initialNamespace} /><LocationProbe /></MemoryRouter></PlatformProvider></ThemeProvider></I18nextProvider></QueryClientProvider>)
++  const router = createMemoryRouter([{ path: '*', element: <><App initialNamespace={initialNamespace} /><LocationProbe /></> }], { basename: '/react', initialEntries: [`/react${path}`] })
++  routers.push(router)
++  clients.push(queryClient)
++  return { router, ...render(<QueryClientProvider client={queryClient}><I18nextProvider i18n={i18n}><ThemeProvider><PlatformProvider configUrl={null}><RouterProvider router={router} /></PlatformProvider></ThemeProvider></I18nextProvider></QueryClientProvider>) }
+ }
+ beforeEach(() => {
+   vi.stubGlobal('localStorage', new MemoryStorage())
+   get.mockReset()
+   get.mockImplementation(async (path: string) => {
+-    if (path === '/api/namespaces') return { namespaces: [{ id: 7, name: 'Fixture', code: 'fixture' }] }
++    if (path === '/api/namespaces') return { namespaces: [{ id: 7, name: 'Fixture', code: 'fixture' }, { id: 8, name: 'Another', code: 'another' }] }
+     if (path.startsWith('/api/tasks')) return { tasks: [{ task_key: 'QA/42', namespace_id: 7, title: 'Read-only task', current_phase_name: 'Review', status_label: 'Active' }] }
+     if (path.startsWith('/api/phases/')) return { phase: { id: 1, name: 'Review', description: 'Phase detail', instructions: [{ id: 2, description: 'Inspect evidence', execution_type: 'sync' }] } }
+     return { phases: [{ id: 1, name: 'Review' }] }
+   })
+ })
+-afterEach(() => { cleanup(); vi.unstubAllGlobals() })
++afterEach(() => {
++  cleanup()
++  for (const router of routers.splice(0)) router.dispose()
++  for (const client of clients.splice(0)) client.clear()
++  vi.unstubAllGlobals()
++})
+ 
+ describe('read-only React pilot', () => {
+   it('restores cookie namespace once and links task detail to Jinja', async () => {
+@@ -66,6 +77,74 @@ describe('read-only React pilot', () => {
+     await waitFor(() => expect(selector.value).toBe('7'))
+     expect(screen.getByTestId('location').textContent).toBe('/tasks?namespace_id=7')
+   })
++  it('preserves unrelated query and hash, resets page and traverses namespace history', async () => {
++    mount('/tasks?source=qa&namespace_id=7&page=3#context')
++    await screen.findByRole('link', { name: /Read-only task/ })
++    const selector = screen.getByLabelText('Неймспейс') as HTMLSelectElement
++    fireEvent.change(selector, { target: { value: '8' } })
++    await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/tasks?source=qa&namespace_id=8#context'))
++    fireEvent.click(screen.getByRole('button', { name: 'Fixture Back' }))
++    await waitFor(() => expect(selector.value).toBe('7'))
++    expect(screen.getByTestId('location').textContent).toBe('/tasks?source=qa&namespace_id=7&page=3#context')
++    fireEvent.click(screen.getByRole('button', { name: 'Fixture Forward' }))
++    await waitFor(() => expect(selector.value).toBe('8'))
++    expect(screen.getByTestId('location').textContent).toBe('/tasks?source=qa&namespace_id=8#context')
++  })
++  it('composes a sibling URL patch and namespace change before React commits', async () => {
++    const { router } = mount('/tasks?source=qa&namespace_id=7&page=3#context')
++    await screen.findByRole('link', { name: /Read-only task/ })
++    const selector = screen.getByLabelText('Неймспейс')
++    act(() => {
++      fireEvent.click(screen.getByRole('button', { name: 'Fixture filter' }))
++      fireEvent.change(selector, { target: { value: '8' } })
++    })
++    await waitFor(() => expect(router.state.location.search).toBe('?source=qa&namespace_id=8&q=release'))
++    expect(router.state.location.hash).toBe('#context')
++  })
++  it('restores cookie namespace without losing hash or reapplying it after explicit reset', async () => {
++    mount('/tasks?source=qa&page=4#context', 7)
++    await screen.findByRole('link', { name: /Read-only task/ })
++    expect(screen.getByTestId('location').textContent).toBe('/tasks?source=qa&page=4&namespace_id=7#context')
++    const selector = screen.getByLabelText('Неймспейс') as HTMLSelectElement
++    fireEvent.change(selector, { target: { value: '' } })
++    await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/tasks?source=qa#context'))
++    expect(selector.value).toBe('')
++    expect(get.mock.calls.some(([path]) => path === '/api/tasks')).toBe(true)
++  })
++  it('resets phase detail to the phase list in one history entry while preserving context', async () => {
++    mount('/phases/1?source=qa&namespace_id=7&page=3#instructions')
++    await screen.findByText('Inspect evidence')
++    const selector = screen.getByLabelText('Неймспейс') as HTMLSelectElement
++    fireEvent.change(selector, { target: { value: '8' } })
++    await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/phases?source=qa&namespace_id=8#instructions'))
++    expect(get.mock.calls.some(([path]) => path === '/api/phases?namespace_id=8')).toBe(true)
++    expect(get.mock.calls.some(([path]) => path === '/api/phases/1?namespace_id=8')).toBe(false)
++    fireEvent.click(screen.getByRole('button', { name: 'Fixture Back' }))
++    await screen.findByText('Inspect evidence')
++    expect(screen.getByTestId('location').textContent).toBe('/phases/1?source=qa&namespace_id=7&page=3#instructions')
++  })
++  it('preserves an accepted sibling patch when namespace navigation leaves phase detail', async () => {
++    const { router } = mount('/phases/1?source=qa&namespace_id=7&page=3#instructions')
++    await screen.findByText('Inspect evidence')
++    act(() => {
++      fireEvent.click(screen.getByRole('button', { name: 'Fixture filter' }))
++      fireEvent.change(screen.getByLabelText('Неймспейс'), { target: { value: '8' } })
++    })
++    await waitFor(() => expect(router.state.location.pathname).toBe('/react/phases'))
++    expect(router.state.location.search).toBe('?source=qa&namespace_id=8&q=release')
++    expect(router.state.location.hash).toBe('#instructions')
++  })
++  it.each([403, 404, 503])('keeps loaded tasks when the namespace catalogue returns %s', async status => {
++    get.mockImplementation(async (path: string) => {
++      if (path === '/api/namespaces') throw Object.assign(new Error('Catalogue unavailable'), { status })
++      return { tasks: [{ task_key: 'QA/42', namespace_id: 7, title: 'Read-only task', current_phase_name: 'Review', status_label: 'Active' }] }
++    })
++    mount('/tasks?namespace_id=7#context')
++    await screen.findByRole('link', { name: /Read-only task/ })
++    await screen.findByText('Неймспейсы не загружены')
++    expect((screen.getByLabelText('Неймспейс') as HTMLSelectElement).disabled).toBe(true)
++    expect(screen.queryByRole('button', { name: /Повторить/ }) !== null).toBe(status === 503)
++  })
+   it.each(['-1', 'abc', '9007199254740992'])('rejects invalid namespace %s without a domain request', async namespace => {
+     mount(`/tasks?namespace_id=${namespace}`)
+     await screen.findByText(/Некорректный namespace_id/)
+diff --git a/frontend/src/App.tsx b/frontend/src/App.tsx
+index 956dc8b..2135b6f 100644
+--- a/frontend/src/App.tsx
++++ b/frontend/src/App.tsx
+@@ -1,9 +1,9 @@
+ import { ListChecks, Layers } from 'lucide-react'
+ import { useEffect, useState } from 'react'
+-import { Link, Navigate, Route, Routes, useLocation, useParams, useSearchParams } from 'react-router'
++import { Link, Navigate, Route, Routes, useLocation, useParams } from 'react-router'
+ import { useQuery } from '@tanstack/react-query'
+ import { AppShell, DetailPage, ListPage, ResourceStateView, Select, resourceErrorState } from '@sdlc/ui/ui'
+-import { positiveIntegerQuery } from '@sdlc/ui/lib'
++import { positiveIntegerQuery, updateQuery, useUrlSearchParams } from '@sdlc/ui/lib'
+ import { client, scopedPath, taskHref, type Namespace, type Phase, type Task } from './api'
+ 
+ const identifier = positiveIntegerQuery(0)
+@@ -11,7 +11,7 @@ function validIdentifier(value: string) {
+   return /^\d+$/.test(value) && identifier.parse(value) > 0
+ }
+ function useNamespace() {
+-  const [params] = useSearchParams()
++  const [params] = useUrlSearchParams()
+   const id = params.get('namespace_id') ?? ''
+   return validIdentifier(id) ? id : ''
+ }
+@@ -38,20 +38,29 @@ function PhaseDetail() {
+ }
+ export function App({ identity, initialNamespace }: { identity?: { name?: string; subject?: string }; initialNamespace?: number }) {
+   const location = useLocation()
+-  const [params, setParams] = useSearchParams()
++  const [params, setParams] = useUrlSearchParams()
++  const [, setPhaseListParams] = useUrlSearchParams('/phases')
+   const namespace = useNamespace()
+   const hasNamespace = params.has('namespace_id')
+   const [restoreNamespace, setRestoreNamespace] = useState(() => Boolean(!params.has('namespace_id') && initialNamespace && identifier.parse(String(initialNamespace)) > 0))
+   const invalidNamespace = params.has('namespace_id') && !namespace && params.get('namespace_id') !== ''
+   useEffect(() => {
+     if (restoreNamespace && !hasNamespace) {
+-      setParams(current => { const next = new URLSearchParams(current); next.set('namespace_id', String(initialNamespace)); return next }, { replace: true })
++      setParams(current => updateQuery(current, { namespace_id: String(initialNamespace) }), { replace: true })
+     } else if (restoreNamespace) {
+       setRestoreNamespace(false)
+     }
+   }, [restoreNamespace, initialNamespace, hasNamespace, setParams])
+   const namespaces = useQuery({ queryKey: ['namespaces'], queryFn: ({ signal }) => client.get<{ namespaces: Namespace[] }>('/api/namespaces', signal) })
+   const navigation = [{ to: scopedPath('/tasks', namespace), label: 'Задачи', icon: ListChecks }, { to: scopedPath('/phases', namespace), label: 'Фазы', icon: Layers }]
+-  const context = <><label htmlFor="namespace" className="sr-only">Неймспейс</label><Select id="namespace" className="max-w-48" value={namespace} onChange={event => { const next = new URLSearchParams(params); if (event.target.value) next.set('namespace_id', event.target.value); else next.delete('namespace_id'); next.delete('page'); if (/^\/phases\//.test(location.pathname)) window.location.assign(`/react/phases?${next}`); else setParams(next) }} disabled={namespaces.isLoading || namespaces.isError}><option value="">{location.pathname.startsWith('/phases') ? 'Воркфлоу по умолчанию' : 'Все неймспейсы'}</option>{namespaces.data?.namespaces.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></>
+-  return <AppShell currentServiceKey="project-workflow" title="Workflow" navigation={navigation} layout={/^\/phases\//.test(location.pathname) ? 'detail-with-aside' : 'wide'} context={context} account={identity?.subject ? { label: identity.name ?? 'Project Workflow', secondary: identity.subject, onLogout: () => window.location.assign('/logout') } : undefined}>{namespaces.error && <ResourceStateView state={{ kind: 'partial-error', message: 'Неймспейсы не загружены', onRetry: () => void namespaces.refetch() }} />}{restoreNamespace ? <ResourceStateView state={{ kind: 'loading' }} /> : invalidNamespace ? <ResourceStateView state={{ kind: 'error', message: 'Некорректный namespace_id: ожидается положительное целое число.' }} /> : <Routes><Route path="/tasks" element={<Tasks />} /><Route path="/phases" element={<Phases />} /><Route path="/phases/:id" element={<PhaseDetail />} /><Route path="/" element={<Navigate to={scopedPath('/tasks', namespace)} replace />} /><Route path="*" element={<ResourceStateView state={{ kind: 'not-found' }} />} /></Routes>}</AppShell>
++  function changeNamespace(value: string) {
++    const patch = { namespace_id: value }
++    if (/^\/phases\//.test(location.pathname)) {
++      setPhaseListParams(current => updateQuery(current, patch, true))
++    } else {
++      setParams(current => updateQuery(current, patch, true))
++    }
++  }
++  const context = <><label htmlFor="namespace" className="sr-only">Неймспейс</label><Select id="namespace" className="max-w-48" value={namespace} onChange={event => changeNamespace(event.target.value)} disabled={namespaces.isLoading || namespaces.isError}><option value="">{location.pathname.startsWith('/phases') ? 'Воркфлоу по умолчанию' : 'Все неймспейсы'}</option>{namespaces.data?.namespaces.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></>
++  return <AppShell currentServiceKey="project-workflow" title="Workflow" navigation={navigation} layout={/^\/phases\//.test(location.pathname) ? 'detail-with-aside' : 'wide'} context={context} account={identity?.subject ? { label: identity.name ?? 'Project Workflow', secondary: identity.subject, onLogout: () => window.location.assign('/logout') } : undefined}>{namespaces.error && <ResourceStateView state={resourceErrorState(namespaces.error, () => void namespaces.refetch(), { hasData: true, message: 'Неймспейсы не загружены' })} />}{restoreNamespace ? <ResourceStateView state={{ kind: 'loading' }} /> : invalidNamespace ? <ResourceStateView state={{ kind: 'error', message: 'Некорректный namespace_id: ожидается положительное целое число.' }} /> : <Routes><Route path="/tasks" element={<Tasks />} /><Route path="/phases" element={<Phases />} /><Route path="/phases/:id" element={<PhaseDetail />} /><Route path="/" element={<Navigate to={scopedPath('/tasks', namespace)} replace />} /><Route path="*" element={<ResourceStateView state={{ kind: 'not-found' }} />} /></Routes>}</AppShell>
+ }
+diff --git a/frontend/src/api.test.ts b/frontend/src/api.test.ts
+index 5d40a04..9dbea66 100644
+--- a/frontend/src/api.test.ts
++++ b/frontend/src/api.test.ts
+@@ -1,5 +1,7 @@
+-import { describe, expect, it } from 'vitest'
+-import { scopedPath, taskHref } from './api'
++import { afterEach, describe, expect, it, vi } from 'vitest'
++import { client, scopedPath, taskHref } from './api'
++
++afterEach(() => vi.unstubAllGlobals())
+ 
+ describe('read-only navigation', () => {
+   it('preserves namespace context and escapes task keys for Jinja', () => {
+@@ -7,4 +9,12 @@ describe('read-only navigation', () => {
+     expect(scopedPath('/api/tasks', '8')).toBe('/api/tasks?namespace_id=8')
+     expect(scopedPath('/api/tasks', '')).toBe('/api/tasks')
+   })
++  it('returns through the existing login with pilot pathname, namespace and fragment on 401', async () => {
++    const assign = vi.fn()
++    vi.stubGlobal('window', { location: { pathname: '/react/tasks', search: '?namespace_id=7', hash: '#context', assign } })
++    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 401 })))
++    await expect(client.get('/api/tasks?namespace_id=7')).rejects.toMatchObject({ status: 401 })
++    expect(assign).toHaveBeenCalledOnce()
++    expect(assign).toHaveBeenCalledWith(`/login?next=${encodeURIComponent('/react/tasks?namespace_id=7#context')}`)
++  })
+ })
+diff --git a/frontend/src/api.ts b/frontend/src/api.ts
+index fa8944a..01cabba 100644
+--- a/frontend/src/api.ts
++++ b/frontend/src/api.ts
+@@ -4,7 +4,7 @@ export interface Namespace { id: number; name: string; code: string; theme_color
+ export interface Task { task_key: string; namespace_id: number; title: string; current_phase_name: string; status_label: string }
+ export interface Phase { id: number; name: string; description?: string; agent_name?: string; instructions?: { id: number; description: string; execution_type: string }[] }
+ export const client = createApiClient({ onUnauthorized: () => {
+-  window.location.assign(`/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`)
++  window.location.assign(`/login?next=${encodeURIComponent(window.location.pathname + window.location.search + window.location.hash)}`)
+ } })
+ 
+ export function scopedPath(path: string, namespace: string) {
+diff --git a/frontend/src/main.tsx b/frontend/src/main.tsx
+index 1f0e1f7..e43907f 100644
+--- a/frontend/src/main.tsx
++++ b/frontend/src/main.tsx
+@@ -1,6 +1,6 @@
+ import { StrictMode } from 'react'
+ import { createRoot } from 'react-dom/client'
+-import { BrowserRouter } from 'react-router'
++import { RouterProvider, createBrowserRouter } from 'react-router'
+ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+ import { PlatformProvider, ThemeProvider } from '@sdlc/ui/lib'
+ import { I18nextProvider } from 'react-i18next'
+@@ -12,4 +12,5 @@ void i18next.init({ lng: 'ru', fallbackLng: 'ru', resources: { ru: { translation
+ const queryClient = new QueryClient({ defaultOptions: { queries: { retry: (count, error) => count < 1 && (!('status' in error) || Number(error.status) >= 500) } } })
+ const node = document.getElementById('workflow-bootstrap')
+ const bootstrap: { identity?: { name?: string; subject?: string }; namespaceId?: number } = node ? JSON.parse(node.textContent ?? '{}') : {}
+-createRoot(document.getElementById('root')!).render(<StrictMode><QueryClientProvider client={queryClient}><I18nextProvider i18n={i18next}><ThemeProvider><PlatformProvider configUrl={null}><BrowserRouter basename="/react"><App identity={bootstrap.identity} initialNamespace={bootstrap.namespaceId} /></BrowserRouter></PlatformProvider></ThemeProvider></I18nextProvider></QueryClientProvider></StrictMode>)
++const router = createBrowserRouter([{ path: '*', element: <App identity={bootstrap.identity} initialNamespace={bootstrap.namespaceId} /> }], { basename: '/react' })
++createRoot(document.getElementById('root')!).render(<StrictMode><QueryClientProvider client={queryClient}><I18nextProvider i18n={i18next}><ThemeProvider><PlatformProvider configUrl={null}><RouterProvider router={router} /></PlatformProvider></ThemeProvider></I18nextProvider></QueryClientProvider></StrictMode>)
+diff --git a/project_workflow/interfaces/ui/AGENTS.md b/project_workflow/interfaces/ui/AGENTS.md
+new file mode 100644
+index 0000000..2562410
+--- /dev/null
++++ b/project_workflow/interfaces/ui/AGENTS.md
+@@ -0,0 +1,117 @@
++# AGENTS.md - Workflow Jinja UI
++
++## Локальный контекст
++
++- Основной UI Workflow: server routes, Jinja templates и static assets.
++  Использовать Base SSR macros/CSS/JS, не импортировать React в Jinja и не
++  загружать исходный Tailwind `@theme` как браузерный CSS.
++- Из корня репозитория sync/check: `pnpm --dir frontend ssr:sync` и
++  `pnpm --dir frontend ssr:check`. Generated `static/base-ui` с fingerprint
++  не править вручную. Не поддерживать второй набор shell tokens в product CSS.
++- Сохранять cookie-session, namespace/phase/task context, действующие Jinja URL,
++  API и CLI. Header однострочный по Base-контракту, actions доступны на узкой ширине.
++- Server-side validation сохраняет значения формы и показывает field errors.
++  После changes UI state/handlers выполнять полный root Python gate и браузерную
++  проверку. Docs-only инструкции не являются изменением runtime поведения.
++- Готовые изменения коммитить по root-инструкциям; не merge/deploy без команды.
++
++<!-- base-frontend-principles:start -->
++
++<!-- prettier-ignore-start -->
++
++## Общие принципы фронтенда
++
++Блок поддерживается Base. Не править его локально: изменить Base-шаблон и
++выполнить sync. Применяются родительские `AGENTS.md`; эти правила дополняют их
++для UI, не меняют доменные границы и не разрешают commit/push/deploy сами по себе.
++
++Источники: [UI/UX Standard](../../../../services-base/docs/platform/UI_UX_STANDARD.md),
++[Shell Standard](../../../../services-base/docs/platform/UI_SHELL_STANDARD.md),
++[Принципы и примеры](../../../../services-base/docs/platform/FRONTEND_PRINCIPLES.md).
++
++### Композиция и геометрия
++
++- Один визуальный язык: shell, tokens, controls, states и общие композиции
++  принадлежат Base. React использует `@sdlc/ui`, Jinja - его SSR assets/macros.
++  Локальная обёртка допустима для доменного адаптера, но не как второй UI-kit.
++- Новую страницу начинать с Base-паттерна list/form/detail/dashboard/audit.
++  Один `AppShell` и один `PageFrame`; `data-page-layout` только `wide`,
++  `reading` или `detail-with-aside`. Общую композицию менять сначала в Base.
++- Ровное выравнивание через общие gutter, spacing и grid tracks. Flex/Grid
++  распределяют доступное место; fluid children имеют `min-width: 0`, а fluid
++  grid tracks - `minmax(0, 1fr)`. Не вводить собственный page max-width или
++  фиксированную ширину всего body. Точные размеры и breakpoints - в Base.
++- Длинные заголовки, значения и локализованные подписи не ломают сетку:
++  разрешать перенос, осознанно задавать truncation с доступом к полному значению.
++  Размер шрифта не зависит от viewport. Не исправлять layout отрицательными
++  отступами, absolute positioning основного потока или скрытием overflow body.
++- Стабильные размеры toolbar, icon buttons, колонок, boards и repeated items:
++  hover, pending, counters и пустые состояния не должны двигать соседний UI.
++  Широкие таблицы, логи и доски имеют именованный local scroll, не scroll body.
++
++### Минимализм и удобство
++
++- Рабочий интерфейс, не landing page: сначала данные и действия, без hero,
++  декоративных орбов, лишних рамок и текста, рекламирующего возможности UI.
++  Секции не оформлять плавающими карточками; карточки нужны повторяемым объектам,
++  диалогам и действительно обособленным инструментам. Не вкладывать card в card.
++- Компактность - ясная иерархия и разумные интервалы, не теснота и мелкие targets.
++  Использовать Base typography, spacing, radius и semantic colors. Проверять
++  контраст во всех темах; status обозначать не только цветом. Product/namespace
++  accent допустим через согласованный branding-контракт, не через CSS-форк.
++- Выбирать control по смыслу: tabs для views, select/menu для вариантов,
++  checkbox/switch для binary, input/stepper для чисел, swatch для цвета.
++  Familiar icon commands брать из существующей библиотеки (React: lucide),
++  давать accessible name и tooltip. Обычные команды могут быть icon+text.
++  Targets минимум 40 px desktop / 44 px mobile; glyph checkbox не равен target.
++- Один владелец каждого действия: platform actions в shell, CRUD в странице.
++  Не дублировать context/profile между header/sidebar и локальными controls.
++  Таблицы для сравнения строк, cards для самостоятельных объектов; выбор
++  определяется сценарием, а не декоративным предпочтением.
++
++### Поведение, данные и доступность
++
++- Явно различать loading, empty, error, not-found, permission-denied и partial
++  failure. Ошибка не равна пустому списку. Сохранять успешно загруженные данные
++  при refetch/partial error; retry только для повторяемого сбоя. 404 не предлагает
++  CRUD отсутствующего объекта или родителя. Success - только подтверждённый.
++- Формы: label/help/error, required и API bounds; ошибка сохраняет draft,
++  pending защищает handler и control от двойной отправки. Dirty draft защищать
++  при переходе, reload и закрытии. Не повторять автоматически неидемпотентную
++  мутацию с неизвестным исходом; сверить состояние с сервером.
++- Search/filter/sort/pagination/tab хранить в URL через Base helpers; direct
++  open, reload и Back/Forward восстанавливают состояние. Filter change сбрасывает
++  page/cursor. Не помещать credentials и приватные drafts в URL/localStorage.
++- HTML semantics и клавиатура обязательны: один page h1, видимый focus,
++  label связи, accessible names. Modal/drawer управляет focus, Escape и возвратом
++  к инициатору; при его удалении - к безопасному fallback. Disabled/hover/active
++  не единственные носители смысла. Actions не теряются на узкой ширине.
++- API и permissions остаются доменными; скрытая кнопка не заменяет backend authZ.
++  Использовать существующий типизированный API client, session и cache.
++  Не заводить второй auth store, ручные DTO-копии, дублирующие запросы или
++  derived state в нескольких stores. Новая библиотека/абстракция требует
++  реальной необходимости; pagination/virtualization - по объёму и измерениям.
++- System strings через существующую локализацию; user content не переводить.
++  Не хардкодить язык, тему, статусные цвета или геометрию продукта в shared UI.
++
++### Проверка и изменения
++
++- Desktop-first, но не desktop-only поведение. Для изменённого UI проверять
++  1440/1920/2560 px, responsive 375 px и границы shell/detail из Base, все темы,
++  длинные данные и page states. Нет overlap, document overflow, потерянных
++  действий и необъяснённых console/network errors; проверить keyboard/focus.
++- Запускать штатные проверки затронутой области и общий UI gate. Для поведения
++  нужны component/state tests и browser evidence реальных страниц: mocks и
++  статический CSS gate не доказывают фактическую геометрию или интеграцию.
++  Для docs-only изменений проверить ссылки, coverage инструкций и drift;
++  не выдавать это за прохождение UI/runtime QA.
++- README показывает только реальные desktop full-page captures 1920x1080,
++  по представителю применимого mode в default theme; mobile остаётся в QA.
++  Evidence фиксирует route, viewport, theme, product/Base версии и результат.
++- Сохранять чужой dirty work; исправления узкие, заменённые локальные реализации
++  удаляются в той же миграции. Исключение из стандарта требует причины, владельца,
++  scope, условия пересмотра и теста, а не скрытого CSS override.
++
++<!-- prettier-ignore-end -->
++
++<!-- base-frontend-principles:end -->

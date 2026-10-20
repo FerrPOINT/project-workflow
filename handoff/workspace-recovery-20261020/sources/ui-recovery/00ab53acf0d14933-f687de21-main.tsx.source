@@ -1,0 +1,15 @@
+import { StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
+import { BrowserRouter } from 'react-router'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { PlatformProvider, ThemeProvider } from '@sdlc/ui/lib'
+import { I18nextProvider } from 'react-i18next'
+import i18next from 'i18next'
+import { App } from './App'
+import './style.css'
+
+void i18next.init({ lng: 'ru', fallbackLng: 'ru', resources: { ru: { translation: { common: { loading: 'Загрузка...', retry: 'Повторить', cancel: 'Отмена', confirm: 'Подтвердить', empty: 'Нет данных' } } } } })
+const queryClient = new QueryClient({ defaultOptions: { queries: { retry: (count, error) => count < 1 && (!('status' in error) || Number(error.status) >= 500) } } })
+const node = document.getElementById('workflow-bootstrap')
+const bootstrap: { identity?: { name?: string; subject?: string }; namespaceId?: number } = node ? JSON.parse(node.textContent ?? '{}') : {}
+createRoot(document.getElementById('root')!).render(<StrictMode><QueryClientProvider client={queryClient}><I18nextProvider i18n={i18next}><ThemeProvider storageKey="workflow-theme"><PlatformProvider serviceName="Project Workflow" configUrl="/api/platform/branding"><BrowserRouter basename="/react"><App identity={bootstrap.identity} initialNamespace={bootstrap.namespaceId} /></BrowserRouter></PlatformProvider></ThemeProvider></I18nextProvider></QueryClientProvider></StrictMode>)

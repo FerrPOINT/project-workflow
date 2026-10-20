@@ -1,0 +1,119 @@
+"""A real profession preset without modifying managed roles or inventing task admission."""
+
+import pytest
+from sqlalchemy import create_engine, select
+
+from project_workflow import config
+from project_workflow.application.project import ProjectService
+from project_workflow.application.task import TaskService
+from project_workflow.domain.exceptions import ConflictError
+from project_workflow.domain.runtime_assignment import MANAGED_ROLE_MODE_SCOPES
+from project_workflow.infrastructure.db import models as m
+from project_workflow.infrastructure.db.bug_search_profession import (
+    CLI_COMMAND,
+    PROFESSION_CODE,
+    WORKFLOW_KEY,
+    ensure_bug_search_profession,
+)
+from project_workflow.infrastructure.db.managed_catalog import ensure_managed_catalog, validate_managed_catalog_state
+from project_workflow.infrastructure.db.session import ensure_migrated, reset_engine
+from project_workflow.infrastructure.db.uow import SAUnitOfWork
+
+
+@pytest.fixture
+def database(tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path / 'bug-search.db'}")
+    ensure_migrated(engine)
+    yield engine
+    engine.dispose()
+
+
+@pytest.mark.parametrize("variant", ["legacy", "base"])
+def test_init_provisions_separate_profession_and_preserves_seven_managed_roles(tmp_path, monkeypatch, variant):
+    from scripts.init_db import main
+
+    filename = "hermes_sdlc_catalog_v1.json" if variant == "legacy" else "base_sdlc_catalog_v2.json"
+    monkeypatch.setattr(config, "MANAGED_CATALOG_PATH", config.MANAGED_CATALOG_PATH.with_name(filename))
+    url = f"sqlite:///{tmp_path / 'init-search.db'}"
+    monkeypatch.setenv("DATABASE_URL", url)
+    config.get_settings.cache_clear()
+    reset_engine()
+    try:
+        assert main() == 0
+        assert main() == 0
+        with SAUnitOfWork(url) as uow:
+            profession = uow.projects.get_by_code(PROFESSION_CODE)
+            assert profession.name == "Поиск багов"
+            assert profession.cli_command == CLI_COMMAND
+            assert profession.launch_profile == "bug_searcher"
+            assert len(uow.projects.list()) == 8
+            assert len(MANAGED_ROLE_MODE_SCOPES) == 7
+            assert validate_managed_catalog_state(uow)
+            assert uow.workflows.belongs_to_profession(profession.workflow_id, profession.id)
+            modes = uow.workflows.list_modes(profession.workflow_id)
+            assert [mode.key for mode in modes] == ["search", "verification"]
+            for mode in modes:
+                phases = uow.phases.list(profession.workflow_id, mode.id)
+                assert len(phases) == 3
+                assert all(uow.phase_instructions.list(p.id) for p in phases)
+                assert all(uow.phase_checks.list(p.id) for p in phases)
+                assert all(uow.phase_evidence_requirements.list(p.id) for p in phases)
+                with pytest.raises(ConflictError, match="backend-owned assignment policy"):
+                    TaskService._validate_mode_policy(
+                        mode=mode, role_key="bug_searcher", execution_scope="business",
+                        tech_execution_workspace_ref=None, tech_execution_attempt_ref=None,
+                    )
+    finally:
+        reset_engine()
+        config.get_settings.cache_clear()
+
+
+def test_restart_preserves_customized_profession_workflow_and_instructions(database):
+    with SAUnitOfWork(database) as uow:
+        ensure_managed_catalog(uow)
+        pid = ensure_bug_search_profession(uow)
+        profession = uow.projects.get_by_id(pid)
+        mode = uow.workflows.get_mode_by_key(profession.workflow_id, "search")
+        phase = uow.phases.list(profession.workflow_id, mode.id)[0]
+        instruction = uow.phase_instructions.list(phase.id)[0]
+        uow.projects.update(pid, {"name": "Мой поиск", "launch_profile": "custom-search"})
+        uow.workflows.update(profession.workflow_id, {"description": "Saved user instructions"})
+        uow.phase_instructions.update(instruction["id"], {"description": "Saved context guidance"})
+        other_default = uow.workflows.create({"name": "Другой выбранный workflow"})
+        ProjectService(uow).update_project(pid, {"workflow_id": other_default})
+        identities = (pid, profession.workflow_id, mode.id, phase.id, instruction["id"])
+    with SAUnitOfWork(database) as uow:
+        assert ensure_bug_search_profession(uow) == identities[0]
+        profession = uow.projects.get_by_id(identities[0])
+        assert profession.name == "Мой поиск"
+        assert profession.launch_profile == "custom-search"
+        assert profession.workflow_id == other_default
+        assert uow.workflows.belongs_to_profession(identities[1], profession.id)
+        assert uow.workflows.get_by_id(identities[1]).description == "Saved user instructions"
+        assert uow.phase_instructions.get_by_id(identities[4])["description"] == "Saved context guidance"
+        assert len(uow.workflows.list_modes(identities[1])) == 2
+
+
+@pytest.mark.parametrize("collision", ["code", "cli", "workflow", "membership"])
+def test_reserved_identity_collision_preserves_existing_records(database, collision):
+    with SAUnitOfWork(database) as uow:
+        if collision == "workflow":
+            uow.workflows.create({"key": WORKFLOW_KEY, "name": "Existing unrelated workflow"})
+        elif collision == "membership":
+            pid = ensure_bug_search_profession(uow)
+            profession = uow.projects.get_by_id(pid)
+            uow.session.execute(m.ProfessionWorkflow.__table__.delete().where(
+                m.ProfessionWorkflow.profession_id == pid,
+                m.ProfessionWorkflow.workflow_id == profession.workflow_id,
+            ))
+        else:
+            ProjectService(uow).create_project({
+                "code": PROFESSION_CODE if collision == "code" else "OTHER",
+                "cli_command": CLI_COMMAND if collision == "cli" else "workflow-other",
+                "name": "Existing unrelated profession",
+            })
+        before = [dict(row) for row in uow.session.execute(select(m.Project.__table__)).mappings()]
+    with SAUnitOfWork(database) as uow:
+        with pytest.raises(ValueError, match="Конфликт профессии Поиск багов"):
+            ensure_bug_search_profession(uow)
+        assert [dict(row) for row in uow.session.execute(select(m.Project.__table__)).mappings()] == before
