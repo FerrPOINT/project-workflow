@@ -13,6 +13,9 @@
       "tests/**",
       "pyproject.toml",
       "constraints.txt",
+      "dependency-wheels.json",
+      "Dockerfile",
+      ".dockerignore",
       "Makefile",
       ".github/**",
       "openapi/**"

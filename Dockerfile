@@ -2,8 +2,11 @@
 FROM python:3.11-slim-bookworm@sha256:0bee7276f83efd4a1ee05bbbf4281d95ed28e079220a9457f25a93e3f1e3c31b AS dependency-inputs
 ARG PDLC_RUN_SLOT_SHARING=locked
 WORKDIR /inputs
-COPY pyproject.toml scripts/dependency_inputs.py ./
-RUN --mount=type=cache,id=pdlc-host-run-slot-v1,target=/.__pdlc_build_slot__,sharing=${PDLC_RUN_SLOT_SHARING} python dependency_inputs.py --project pyproject.toml --extra ui --output runtime-deps.txt
+COPY pyproject.toml constraints.txt dependency-wheels.json scripts/dependency_inputs.py ./
+ARG TARGETARCH
+RUN --mount=type=cache,id=pdlc-host-run-slot-v1,target=/.__pdlc_build_slot__,sharing=${PDLC_RUN_SLOT_SHARING} python dependency_inputs.py --project pyproject.toml --extra ui \
+    --constraints constraints.txt --contract dependency-wheels.json --target "cpython-311-bookworm-${TARGETARCH}" \
+    --output runtime-deps.txt --build-output build-deps.txt --constraint-output install-constraints.txt --allow-legacy-target
 
 FROM python:3.11-slim-bookworm@sha256:0bee7276f83efd4a1ee05bbbf4281d95ed28e079220a9457f25a93e3f1e3c31b AS runtime-dependencies
 ARG PDLC_RUN_SLOT_SHARING=locked
@@ -12,35 +15,48 @@ WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1
 
-RUN --mount=type=cache,id=pdlc-host-run-slot-v1,target=/.__pdlc_build_slot__,sharing=${PDLC_RUN_SLOT_SHARING} apt-get update && apt-get install -y --no-install-recommends \
-    build-essential libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY constraints.txt ./
 COPY --from=dependency-inputs /inputs/runtime-deps.txt /tmp/runtime-deps.txt
-ENV PIP_CONSTRAINT=/app/constraints.txt
+COPY --from=dependency-inputs /inputs/install-constraints.txt /tmp/install-constraints.txt
 ARG TARGETARCH
 ARG PIP_CACHE_ID=pdlc-operator-downloads-v1-pip-cp311
 RUN --mount=type=cache,id=pdlc-host-run-slot-v1,target=/.__pdlc_build_slot__,sharing=${PDLC_RUN_SLOT_SHARING} --mount=type=cache,id=${PIP_CACHE_ID}-${TARGETARCH},target=/root/.cache/pip,sharing=locked \
-    python -m venv /opt/venv \
-    && /opt/venv/bin/python -m pip install --no-compile --constraint constraints.txt -r /tmp/runtime-deps.txt
+    if grep -q '^# workflow-legacy-target:' /tmp/install-constraints.txt; then \
+        export PIP_CONSTRAINT=/tmp/install-constraints.txt; \
+        apt-get update && apt-get install -y --no-install-recommends build-essential libpq-dev \
+        && rm -rf /var/lib/apt/lists/*; \
+    fi \
+    && python -m venv /opt/venv \
+    && /opt/venv/bin/python -m pip install --no-compile --constraint /tmp/install-constraints.txt -r /tmp/runtime-deps.txt \
+    && /opt/venv/bin/python -m pip check
 
-FROM runtime-dependencies AS wheel-inputs
+FROM python:3.11-slim-bookworm@sha256:0bee7276f83efd4a1ee05bbbf4281d95ed28e079220a9457f25a93e3f1e3c31b AS build-tools
 ARG PDLC_RUN_SLOT_SHARING=locked
+ARG TARGETARCH
+ARG PIP_CACHE_ID=pdlc-operator-downloads-v1-pip-cp311
+COPY --from=dependency-inputs /inputs/build-deps.txt /tmp/build-deps.txt
+COPY --from=dependency-inputs /inputs/install-constraints.txt /tmp/install-constraints.txt
+RUN --mount=type=cache,id=pdlc-host-run-slot-v1,target=/.__pdlc_build_slot__,sharing=${PDLC_RUN_SLOT_SHARING} --mount=type=cache,id=${PIP_CACHE_ID}-${TARGETARCH},target=/root/.cache/pip,sharing=locked \
+    python -m venv /opt/build-venv \
+    && /opt/build-venv/bin/python -m pip install --no-compile --constraint /tmp/install-constraints.txt -r /tmp/build-deps.txt \
+    && /opt/build-venv/bin/python -m pip check
+
+FROM build-tools AS wheel-inputs
+ARG PDLC_RUN_SLOT_SHARING=locked
+WORKDIR /app
 COPY pyproject.toml README.md LICENSE ./
 COPY project_workflow/ ./project_workflow/
 
 # Runtime inputs are non-executable Git files; normalize NTFS transport modes
 # without removing directory search permissions or relaxing digest verification.
 RUN --mount=type=cache,id=pdlc-host-run-slot-v1,target=/.__pdlc_build_slot__,sharing=${PDLC_RUN_SLOT_SHARING} find project_workflow -type f -exec chmod 0644 {} + \
-    && chmod 0644 pyproject.toml constraints.txt README.md LICENSE
+    && chmod 0644 pyproject.toml README.md LICENSE
 
 FROM wheel-inputs AS application-inputs
 ARG PDLC_RUN_SLOT_SHARING=locked
-COPY alembic.ini ./
+COPY alembic.ini constraints.txt ./
 COPY scripts/ ./scripts/
 RUN --mount=type=cache,id=pdlc-host-run-slot-v1,target=/.__pdlc_build_slot__,sharing=${PDLC_RUN_SLOT_SHARING} find scripts -type f -exec chmod 0644 {} + \
-    && chmod 0644 alembic.ini
+    && chmod 0644 alembic.ini constraints.txt
 
 FROM application-inputs AS verified-inputs
 ARG PDLC_RUN_SLOT_SHARING=locked
@@ -62,12 +78,17 @@ FROM wheel-inputs AS builder
 ARG PDLC_RUN_SLOT_SHARING=locked
 RUN --mount=type=cache,id=pdlc-host-run-slot-v1,target=/.__pdlc_build_slot__,sharing=${PDLC_RUN_SLOT_SHARING} --mount=type=bind,from=verified-inputs,source=/tmp/runtime-inputs-verified,target=/tmp/runtime-inputs-verified,ro \
     --mount=type=cache,id=${PIP_CACHE_ID}-${TARGETARCH},target=/root/.cache/pip,sharing=locked \
-    /opt/venv/bin/python -m pip install --no-compile --no-deps \
-        --constraint constraints.txt ".[ui]" \
+    /opt/build-venv/bin/python -m pip wheel --no-build-isolation --no-deps --wheel-dir /tmp/app-wheel .
+
+FROM runtime-dependencies AS installed
+ARG PDLC_RUN_SLOT_SHARING=locked
+COPY --from=builder /tmp/app-wheel/ /tmp/app-wheel/
+RUN --mount=type=cache,id=pdlc-host-run-slot-v1,target=/.__pdlc_build_slot__,sharing=${PDLC_RUN_SLOT_SHARING} \
+    /opt/venv/bin/python -m pip install --no-compile --no-deps /tmp/app-wheel/*.whl \
         && /opt/venv/bin/python -m pip check \
         && /opt/venv/bin/python -m pip uninstall -y pip setuptools wheel
 
-FROM builder AS runtime-inputs
+FROM installed AS runtime-inputs
 ARG PDLC_RUN_SLOT_SHARING=locked
 # Keep the installed/stripped venv; merging it over the dependency-stage venv
 # would restore removed pip files. Verification tooling is only needed here.
