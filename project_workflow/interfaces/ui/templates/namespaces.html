@@ -18,25 +18,14 @@
 .namespace-name{font-size:15px;font-weight:600;color:var(--text)}
 .namespace-meta{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:var(--text-dim)}
 .namespace-panel{display:flex;flex-direction:column;gap:16px;max-width:760px;min-width:0}
-.namespace-panel input,.namespace-panel select,.namespace-panel .btn{min-height:40px}
 .form-stack{display:flex;flex-direction:column;gap:12px}
 .profession-execution-settings{border:0;border-top:1px solid var(--border);margin-top:8px;padding:14px 0 0;display:grid;gap:12px}
 .label{display:block;font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0}
 .field-help,.namespace-delete-hint{font-size:12px;color:var(--text-muted);line-height:1.5;margin-top:6px}
 .namespace-description{min-height:96px;resize:vertical}
 .theme-controls{display:flex;align-items:center;gap:12px;min-width:0}
-.theme-icon-select{position:relative}
-.theme-icon-select summary{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:40px;padding:3px 10px;cursor:pointer;list-style:none;border:1px solid var(--border);border-radius:8px;background:var(--panel);color:var(--namespace-color)}
-.theme-icon-select summary::-webkit-details-marker{display:none}
-.theme-icon-select summary:focus-visible{outline:2px solid var(--text);outline-offset:2px}
-.theme-icon-select summary svg{width:19px;height:19px}
-.theme-icon-select .theme-selected-icon{display:flex;align-items:center}
-.theme-icons{position:absolute;top:calc(100% + 6px);left:0;z-index:10;display:grid;grid-template-columns:repeat(6,36px);gap:8px;padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--surface);box-shadow:0 8px 24px #0006}
-.theme-icon-option{position:relative;cursor:pointer;flex:0 0 auto}
-.theme-icon-option input{position:absolute;opacity:0;width:1px;height:1px;min-height:0}
-.theme-icon-option .namespace-mark{width:36px;height:36px;background:var(--panel);border-color:var(--border)}
-.theme-icon-option input:checked + .namespace-mark{border-color:var(--namespace-color);background:color-mix(in srgb,var(--namespace-color) 16%,transparent);box-shadow:0 0 0 1px var(--namespace-color)}
-.theme-icon-option input:focus-visible + .namespace-mark{outline:2px solid var(--text);outline-offset:2px}
+.namespace-icon-choice{display:inline-flex;align-items:center;gap:8px}
+.namespace-icon-choice svg{width:20px;height:20px;flex:none}
 .theme-color-input{width:44px;height:40px;padding:2px;cursor:pointer;flex:0 0 auto}
 .panel-actions{display:flex;gap:10px;flex-wrap:wrap}
 .namespace-delete{margin-left:auto}
@@ -94,22 +83,12 @@
       <div>
         <div class="label" id="namespaceThemeLabel">Иконка и цвет</div>
         <div class="theme-controls" id="namespaceThemeControls" role="group" aria-labelledby="namespaceThemeLabel" style="--namespace-color:{{ edited_namespace.theme_color if edited_namespace else '#5E6AD2' }}">
-          <details class="theme-icon-select" id="namespaceIconSelect">
-            <summary aria-label="Выбрать иконку">
-              <span class="theme-selected-icon" id="namespaceSelectedIcon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ project_icon_path(edited_namespace.theme_icon if edited_namespace else default_project_icon) }}"></path></svg></span>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
-            </summary>
-            <div class="theme-icons" role="radiogroup" aria-label="Иконка">
-            {% for option in project_icon_options %}
-            <label class="theme-icon-option" title="{{ option.label }}">
-              <input type="radio" name="namespaceThemeIcon" value="{{ option.key }}" aria-label="{{ option.label }}" {% if (edited_namespace.theme_icon if edited_namespace else default_project_icon) == option.key %}checked{% endif %} onchange="selectNamespaceThemeIcon()">
-              <span class="namespace-mark" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ option.path }}"></path></svg>
-              </span>
-            </label>
-            {% endfor %}
-            </div>
-          </details>
+          <label class="sr-only" for="namespaceThemeIcon">Иконка</label>
+          {% call base_ui.select_control('namespaceThemeIcon', 'namespaceThemeIcon', required=true) %}
+          {% for option in project_icon_options %}
+          <option value="{{ option.key }}"{% if (edited_namespace.theme_icon if edited_namespace else default_project_icon) == option.key %} selected{% endif %}>{{ option.label }}</option>
+          {% endfor %}
+          {% endcall %}
           <input type="color" id="namespaceThemeColor" name="namespaceThemeColor" class="theme-color-input" aria-label="Цвет" title="Цвет" value="{{ edited_namespace.theme_color if edited_namespace else '#5E6AD2' }}" oninput="updateNamespaceThemePreview()">
         </div>
       </div>
@@ -167,20 +146,22 @@ function applyNamespaceIdentity(name, icon, color){
   });
 }
 function updateNamespaceThemePreview(){
-  var icon = document.querySelector('input[name="namespaceThemeIcon"]:checked').value || defaultNamespaceThemeIcon;
+  var icon = document.getElementById('namespaceThemeIcon').value || defaultNamespaceThemeIcon;
   var color = document.getElementById('namespaceThemeColor').value || defaultNamespaceThemeColor;
   var command = document.getElementById('namespaceCliCommand').value.trim() || 'engine';
   var name = document.getElementById('namespaceName').value.trim() || (command === 'engine' ? '' : command) || 'Без названия';
   document.getElementById('namespaceThemeControls').style.setProperty('--namespace-color', color);
-  document.getElementById('namespaceSelectedIcon').innerHTML = namespaceIconSvg(icon);
+  window.PdlcChoice?.refreshChoice(document.getElementById('namespaceThemeIcon'));
   if(namespaceFormMode === 'create'){ return; }
   applyNamespaceIdentity(name, icon, color);
 }
-function selectNamespaceThemeIcon(){
-  updateNamespaceThemePreview();
-  var picker = document.getElementById('namespaceIconSelect');
-  picker.open = false;
-  picker.querySelector('summary').focus();
+function renderNamespaceIconChoice(option){
+  var visual = document.createElement('span');
+  visual.className = 'namespace-icon-choice';
+  visual.style.color = document.getElementById('namespaceThemeColor').value || defaultNamespaceThemeColor;
+  visual.innerHTML = namespaceIconSvg(option.value);
+  visual.appendChild(document.createTextNode(option.label));
+  return visual;
 }
 function currentPayload(){
   var payload = {
@@ -188,7 +169,7 @@ function currentPayload(){
     cli_command: document.getElementById('namespaceCliCommand').value.trim(),
     description: document.getElementById('namespaceDescription').value.trim(),
     launch_profile: document.getElementById('namespaceLaunchProfile').value.trim() || null,
-    theme_icon: document.querySelector('input[name="namespaceThemeIcon"]:checked').value || defaultNamespaceThemeIcon,
+    theme_icon: document.getElementById('namespaceThemeIcon').value || defaultNamespaceThemeIcon,
     theme_color: document.getElementById('namespaceThemeColor').value || defaultNamespaceThemeColor,
   };
   return payload;
@@ -229,13 +210,12 @@ function rememberNamespaceSelection(id, historyMode){
   syncNamespaceUrl(id, historyMode || 'replace');
 }
 function fillNamespaceForm(namespace){
-  document.getElementById('namespaceIconSelect').open = false;
   document.getElementById('namespaceName').value = namespace ? namespace.name : '';
   document.getElementById('namespaceCliCommand').value = namespace ? (namespace.cli_command || '') : '';
   document.getElementById('namespaceDescription').value = namespace ? (namespace.description || '') : '';
   document.getElementById('namespaceLaunchProfile').value = namespace ? (namespace.launch_profile || '') : '';
   var icon = namespace ? (namespace.theme_icon || defaultNamespaceThemeIcon) : defaultNamespaceThemeIcon;
-  document.querySelectorAll('input[name="namespaceThemeIcon"]').forEach(function(input){ input.checked = input.value === icon; });
+  document.getElementById('namespaceThemeIcon').value = icon;
   document.getElementById('namespaceThemeColor').value = namespace ? (namespace.theme_color || defaultNamespaceThemeColor) : defaultNamespaceThemeColor;
   updateNamespaceThemePreview();
   window.PdlcPlatformNavigation.saved(document.getElementById('namespaceForm'));
@@ -484,16 +464,7 @@ function submitNamespace(){
   var operation = namespaceFormMode === 'create' ? createNamespace() : saveNamespace();
   Promise.resolve(operation).finally(function(){ button.disabled = false; setNamespaceFormMode(namespaceFormMode); });
 }
-document.getElementById('namespaceIconSelect').addEventListener('keydown', function(event){
-  if(event.key === 'Escape'){
-    this.open = false;
-    this.querySelector('summary').focus();
-  }
-});
-document.addEventListener('click', function(event){
-  var picker = document.getElementById('namespaceIconSelect');
-  if(!picker.contains(event.target)){ picker.open = false; }
-});
+document.getElementById('namespaceThemeIcon').addEventListener('change', updateNamespaceThemePreview);
 updateNamespaceThemePreview();
 renderNamespaceNav();
 renderNamespacePagePicker();

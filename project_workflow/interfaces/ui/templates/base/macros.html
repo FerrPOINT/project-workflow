@@ -17,7 +17,7 @@
 {%- endmacro %}
 
 {% macro account(logout='/logout') -%}
-<details class="base-ssr-account"><summary aria-label="Аккаунт" title="Аккаунт"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 22v-2a8 8 0 0 1 16 0v2"/></svg></summary><div class="base-ssr-account-menu"><fieldset class="base-ssr-theme"><legend>Тема</legend>{% for value, label in [('light', 'Светлая'), ('dark', 'Тёмная'), ('gray', 'Серая')] %}<label><input type="radio" name="platform-theme" value="{{ value }}" data-base-theme-option> {{ label }}</label>{% endfor %}</fieldset><a href="{{ logout }}">Выйти</a></div></details>
+<details class="base-ssr-account"><summary aria-label="Аккаунт" title="Аккаунт"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 22v-2a8 8 0 0 1 16 0v2"/></svg></summary><div class="base-ssr-account-menu"><fieldset class="base-ssr-theme"><legend>Тема</legend>{% for value, label in [('light', 'Светлая'), ('dark', 'Тёмная'), ('gray', 'Серая')] %}<label>{{ radio_control('base-account-theme-' ~ value, 'platform-theme', value, label=label, theme_option=true) }} {{ label }}</label>{% endfor %}</fieldset><a href="{{ logout }}">Выйти</a></div></details>
 {%- endmacro %}
 
 {% macro navigation_drawer(title) -%}
@@ -73,4 +73,19 @@
   </section>
 </div>
 
+{%- endmacro %}
+
+{% macro checkbox_control(id, name, label, checked=false, required=false, disabled=false, value='on', switch=false) -%}
+<label class="base-check-field" for="{{ id }}"><input class="base-check-input" type="checkbox" id="{{ id }}" name="{{ name }}" value="{{ value }}"{% if checked %} checked{% endif %}{% if required %} required{% endif %}{% if disabled %} disabled{% endif %}{% if switch %} role="switch"{% endif %}><span aria-hidden="true" class="{{ 'base-switch-indicator' if switch else 'base-check-indicator' }}"></span><span>{{ label }}</span></label>
+{%- endmacro %}
+{% macro radio_group(id, name, label, options, value='', required=false, disabled=false) -%}
+<div role="radiogroup" aria-label="{{ label }}" id="{{ id }}" class="base-radio-group">{% for option in options %}<label class="base-check-field"><input class="base-check-input" type="radio" name="{{ name }}" value="{{ option.value }}"{% if option.value == value %} checked{% endif %}{% if required %} required{% endif %}{% if disabled or option.disabled|default(false) %} disabled{% endif %}><span aria-hidden="true" class="base-radio-indicator"></span><span>{{ option.label }}</span></label>{% endfor %}</div>
+{%- endmacro %}
+
+{% macro radio_control(id, name, value, label=none, checked=false, disabled=false, onchange=none, theme_option=false) -%}
+<span class="base-check-field"><input class="base-check-input" type="radio"{% if theme_option %} data-base-theme-option{% endif %} id="{{ id }}" name="{{ name }}" value="{{ value }}"{% if label %} aria-label="{{ label }}"{% endif %}{% if checked %} checked{% endif %}{% if disabled %} disabled{% endif %}{% if onchange %} onchange="{{ onchange }}"{% endif %}><span class="base-radio-indicator" aria-hidden="true"></span></span>
+{%- endmacro %}
+
+{% macro platform_mark(with_name=false) -%}
+<span class="base-platform-mark" data-base-platform-mark><img hidden alt="" aria-hidden="true"><span data-base-brand-initials aria-hidden="true">PD</span>{% if with_name %}<span data-base-brand-name>PDLC</span>{% endif %}</span>
 {%- endmacro %}

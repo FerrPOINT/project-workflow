@@ -115,6 +115,7 @@ def _accent_foreground(color: str | None) -> str:
 
 
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+templates.env.globals["platform_branding_url"] = lambda: get_settings().PLATFORM_BRANDING_URL
 templates.env.globals["ui_base_path"] = lambda: get_settings().UI_BASE_PATH
 templates.env.filters["group_instructions"] = _group_instructions
 templates.env.filters["pluralize"] = _pluralize

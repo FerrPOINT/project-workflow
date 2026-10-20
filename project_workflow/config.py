@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     OPENAI_REASONING_EFFORT: str = "none"
 
     PLATFORM_SERVICES_URL: str = "http://localhost:7771/api/v1/runtime/services"
+    PLATFORM_BRANDING_URL: str = ""
     UI_PLATFORM_ORIGIN: str = ""
 
     AUTH_ISSUER: str = ""
