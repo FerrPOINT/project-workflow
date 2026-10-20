@@ -154,3 +154,21 @@ Application layer по-прежнему проверяет immutable manifest д
 прежних application inputs. Проверка всё равно выполняется для нового manifest;
 неверный manifest блокирует и прогретый слой. SHA сам по себе не является причиной
 повторной установки приложения, если он читается из отдельного runtime manifest.
+
+`wheel-inputs` содержит `pyproject.toml`, README, LICENSE и весь `project_workflow/`:
+текущий закреплённый Hatchling использует default package selection, без hooks,
+dynamic metadata или дополнительных include rules. `scripts/` и `alembic.ini`
+добавляются только в `application-inputs`; их изменение не меняет parent wheel
+builder. Миграции внутри Python package остаются входами wheel. Изменение build
+backend, metadata hooks или include rules требует новой квалификации этой границы.
+Unit guards проверяют конфигурацию и зависимости стадий, а не содержимое wheel.
+
+Поздний `runtime-inputs` наследует установленный и очищенный venv из builder,
+получает полный `/app` из `verified-inputs` и выполняет installed compatibility
+proof. Финальный образ получает весь прежний runtime payload только из этой стадии.
+Копировать venv поверх venv из dependency stage нельзя: directory merge может
+восстановить удалённые pip/setuptools/wheel. Перенос scripts после установки в
+одной стадии не подходит: manifest должен проверяться до установки пакета.
+Native qualification на вехе должна отдельно подтвердить inventory wheel, reuse
+при изменении только scripts/alembic и отказ на неверном manifest при прогретом
+wheel. Source checks не доказывают BuildKit cache hit или ускорение.
