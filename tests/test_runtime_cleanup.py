@@ -104,7 +104,8 @@ def test_windows_quality_helper_mirrors_local_gate():
 
     assert "quality.py" in script
     coverage = commands("coverage")[0]
-    assert coverage[coverage.index("--with-requirements") + 1] == "constraints.txt"
+    assert "--with-requirements" not in coverage
+    assert "--all-extras" in coverage
     assert "--frozen" in coverage
     assert "--timeout=60" in coverage
     assert "--timeout=120" in commands("test-integration")[0]

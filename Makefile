@@ -1,6 +1,6 @@
 # project-workflow — Makefile
 
-WORKFLOW_QUALITY_UV ?= uv run --python 3.11.15 --frozen --with-requirements constraints.txt --all-extras
+WORKFLOW_QUALITY_UV ?= uv run --python 3.11.15 --frozen --all-extras
 UV ?= $(WORKFLOW_QUALITY_UV)
 
 .PHONY: test unit test-verbose test-integration coverage coverage-html release lint lint-fix quality warnings compose-ready clean install-dev
