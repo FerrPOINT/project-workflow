@@ -1,6 +1,7 @@
 {% macro profession_selector(id, namespaces, active) -%}
 <div class="namespace-switcher">
   <select id="{{ id }}" data-base-choice data-namespace-selector aria-label="Выбор профессии" onchange="switchNamespace(this.value)">
+    {% if not active %}<option value="" disabled selected>Каталог воркфлоу</option>{% endif %}
     {% for namespace in namespaces %}
     <option value="{{ namespace.id }}" data-icon="{{ namespace.theme_icon }}" data-color="{{ namespace.theme_color }}"{% if active and active.id == namespace.id %} selected{% endif %}>{{ namespace.name }}</option>
     {% endfor %}

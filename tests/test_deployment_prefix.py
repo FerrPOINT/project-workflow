@@ -49,11 +49,12 @@ def test_deployment_prefix_rejects_nonlocal_or_ambiguous_paths(prefix):
 def test_switch_profession_from_phase_discards_phase_scope_and_keeps_project(prefix):
     template = (Path(__file__).resolve().parents[1] /
                 "project_workflow/interfaces/ui/templates/base.html").read_text(encoding="utf-8")
-    function = template[template.index("function switchNamespace("):template.index("\nfunction pluralizeRu(")]
+    function = template[template.index("let confirmedProfessionId ="):template.index("\nfunction pluralizeRu(")]
     script = Template(function).render(
         ui_base_path=lambda: prefix,
         namespace_cookie_name="workflow_namespace",
         namespace_cookie_secure=True,
+        active_namespace_id=1,
     )
     location = (
         "https://workflow.example.test" + prefix + "/phase/77"
@@ -62,7 +63,7 @@ def test_switch_profession_from_phase_discards_phase_scope_and_keeps_project(pre
         "&namespace_id=22222222-2222-4222-8222-222222222222&project_scope=all#details"
     )
     scenario = (
-        "let destination;const document={cookie:''};const window={location:{href:"
+        "let destination;const document={cookie:'',querySelectorAll:()=>[]};const window={location:{href:"
         + json.dumps(location)
         + "},SdlcPlatformNavigation:{embedded:false,navigate:value=>{destination=value}}};\n"
         + script

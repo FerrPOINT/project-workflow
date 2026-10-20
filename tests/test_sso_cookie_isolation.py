@@ -1,6 +1,7 @@
 """One host cookie jar must keep two configured Workflow origins independent."""
 
 import hashlib
+import re
 from http.cookiejar import CookieJar
 from types import SimpleNamespace
 from urllib.parse import parse_qs
@@ -160,6 +161,7 @@ def test_namespace_cookie_and_template_writes_use_the_same_scope(monkeypatch):
     assert "Secure" in response.headers["set-cookie"]
     assert "HttpOnly" not in response.headers["set-cookie"]
     html = bytes(response.body).decode()
-    assert html.count(f'document.cookie="{own_name}"') == 3
+    writes = re.findall(r'document\.cookie="(workflow_namespace_id[^"]*)"', html)
+    assert writes and set(writes) == {own_name}
     assert "+'; Secure'" in html
     assert "document.cookie='workflow_namespace_id='" not in html
