@@ -9,10 +9,24 @@
 Ручные уровни: `integration`, `slow`, `test-integration` (PostgreSQL), `release`.
 Release выполняет единый coverage >=94% и PostgreSQL отдельно.
 Классификация — tests/lanes.json; unit не инициализирует SQLite/UI fixture.
-По умолчанию unit/test/quality/warnings передают reviewed unit files в pytest
+По умолчанию unit/test/test-verbose/quality/warnings передают reviewed unit files в pytest
 до collection, не импортируя остальные integration modules. Пустой/неверный
 список завершает запуск ошибкой. `unit -- <test-path>` сохраняет явный выбор
 pytest; release coverage по-прежнему собирает полный non-PostgreSQL набор.
+
+Flags-only, например `python scripts/quality.py unit -- -k phase`, сохраняет
+reviewed collection через pytest `testpaths`. Pytest сам отличает пути от
+значений options: путь после флагов и `file.py::test_name` сужают collection,
+а похожее на путь значение `-k` не расширяет её до integration. Runner всегда
+работает из корня продукта; этот default относится только к unit/test lanes.
+Regression проверяет фактически импортированные модули в fresh pinned Python;
+14 runner tests PASS, четыре дополнительных subprocess collection controls.
+Ни app/runtime, ни полный coverage для этой qualification не запускаются.
+
+`make test-verbose`, `python scripts/quality.py test-verbose` и PowerShell target
+`test-verbose` используют тот же reviewed unit список с `-v`; дополнительная
+подробность вывода не включает collection integration-модулей. Явные scoped
+аргументы передавать через `test -- <test-path>`, а не через verbose target.
 
 `tests/test_quality_runner.py` имеет одного владельца — `backend:unit`;
 изменения runner/Makefile/его тестов выбирают этот lane без второго tooling gate.
