@@ -27,9 +27,26 @@
   const trigger = /** @type {HTMLElement} */ (document.querySelector('[data-base-drawer-trigger]'));
   const drawer = /** @type {HTMLDialogElement} */ (document.querySelector('[data-base-drawer]'));
   if (!trigger || !drawer) return;
-  const focusable = () => /** @type {HTMLElement[]} */ ([...drawer.querySelectorAll('a[href],button,input,select,textarea,[tabindex="0"]')]).filter((item) => !/** @type {HTMLButtonElement} */ (item).disabled && item.getClientRects().length);
-  function close() { drawer.close(); trigger.setAttribute('aria-expanded', 'false'); const target = trigger.getClientRects().length ? trigger : /** @type {HTMLElement} */ (document.querySelector('main[tabindex="-1"]')); target?.focus(); }
-  trigger.addEventListener('click', () => { drawer.showModal(); trigger.setAttribute('aria-expanded', 'true'); focusable()[0]?.focus(); });
+  const focusable = () => /** @type {HTMLElement[]} */ ([...drawer.querySelectorAll('a[href],button,input,select,textarea,summary,[tabindex]')]).filter((item) => item.tabIndex >= 0 && !/** @type {HTMLButtonElement} */ (item).disabled && !item.closest('[inert]') && item.getClientRects().length);
+  let previousOverflow = '';
+  function finishClose() {
+    if (trigger.getAttribute('aria-expanded') !== 'true') return;
+    trigger.setAttribute('aria-expanded', 'false');
+    document.body.style.overflow = previousOverflow;
+    for (const disclosure of drawer.querySelectorAll('details[open]')) disclosure.removeAttribute('open');
+    const target = trigger.getClientRects().length ? trigger : /** @type {HTMLElement} */ (document.querySelector('main[tabindex="-1"]'));
+    target?.focus();
+  }
+  function close() { if (drawer.open) drawer.close(); finishClose(); }
+  trigger.addEventListener('click', () => {
+    if (drawer.open) return;
+    previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    trigger.setAttribute('aria-expanded', 'true');
+    drawer.showModal();
+    focusable()[0]?.focus();
+  });
+  drawer.addEventListener('close', finishClose);
   drawer.addEventListener('cancel', (event) => { event.preventDefault(); close(); });
   drawer.addEventListener('click', (event) => { if (event.target instanceof Element && event.target.closest('[data-base-drawer-close],a[href]')) close(); });
   drawer.addEventListener('keydown', (event) => {
@@ -39,11 +56,33 @@
     if (event.shiftKey && document.activeElement === items[0]) { event.preventDefault(); items.at(-1).focus(); }
     else if (!event.shiftKey && document.activeElement === items.at(-1)) { event.preventDefault(); items[0].focus(); }
   });
-  window.matchMedia('(min-width: 768px)').addEventListener('change', (event) => { if (event.matches && drawer.open) close(); });
+  const desktop = window.matchMedia('(min-width: 768px)');
+  const navigation = document.querySelector('[data-base-navigation-content]');
+  const navigationHome = document.querySelector('[data-base-desktop-navigation]');
+  const navigationSlot = drawer.querySelector('[data-base-navigation-slot]');
+  const context = document.querySelector('[data-base-responsive-context]');
+  const contextHome = document.querySelector('[data-base-context-home]');
+  const contextSlot = drawer.querySelector('[data-base-navigation-context-slot]');
+  function syncNavigation() {
+    const hadFocus = navigation?.contains(document.activeElement) || context?.contains(document.activeElement);
+    if (desktop.matches && drawer.open) close();
+    for (const [content, home, mobileSlot] of [[navigation, navigationHome, navigationSlot], [context, contextHome, contextSlot]]) {
+      const target = desktop.matches ? home : mobileSlot;
+      if (content && target && content.parentElement !== target) {
+        for (const disclosure of content.querySelectorAll('details[open]')) disclosure.removeAttribute('open');
+        target.appendChild(content);
+      }
+    }
+    if (!desktop.matches && hadFocus && !drawer.open) trigger.focus();
+  }
+  syncNavigation();
+  desktop.addEventListener('change', syncNavigation);
+  window.PdlcBaseUI = window.SdlcBaseUI = { ...(window.PdlcBaseUI || window.SdlcBaseUI), closeNavigation: close };
 })();
 
 (() => {
 function requestConfirmation(options){
+  if(document.querySelector('[data-base-drawer][open]')) window.PdlcBaseUI?.closeNavigation?.();
   var dialog = document.getElementById('confirmDialog');
   var cancel = document.getElementById('confirmDialogCancel');
   var accept = document.getElementById('confirmDialogAccept');
@@ -69,6 +108,7 @@ function requestConfirmation(options){
       dialog.removeEventListener('click', onBackdrop);
       document.removeEventListener('keydown', onKeyDown);
       if(trigger && typeof trigger.focus === 'function'){ trigger.focus(); }
+      if(document.activeElement !== trigger) /** @type {HTMLElement} */ (document.querySelector('main[tabindex="-1"]'))?.focus();
       resolve(value);
     }
     function onCancel(){ close(false); }

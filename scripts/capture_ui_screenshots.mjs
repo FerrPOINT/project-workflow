@@ -337,8 +337,11 @@ async function fillNamespaceDraft(page) {
   await page.fill("#namespaceName", "Релизный прогон");
   await page.fill("#namespaceCliCommand", "workflow-release");
   await page.fill("#namespaceDescription", "Проверка заполненной формы создания, выбора и визуального стиля.");
-  await page.locator("#namespaceThemeControls summary").click();
-  await page.locator('input[name="namespaceThemeIcon"][value="rocket"]').check();
+  await page.locator("#namespaceThemeIcon-trigger").click();
+  await page.locator('#namespaceThemeIcon-trigger-options [data-value="rocket"]').click();
+  if (await page.locator("#namespaceThemeIcon").inputValue() !== "rocket") {
+    throw new Error("Shared icon selection did not update its backing control");
+  }
   await page.fill("#namespaceThemeColor", "#F59E0B");
   const values = await page.evaluate(() => ({
     name: document.getElementById("namespaceName").value,
