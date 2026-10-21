@@ -172,7 +172,7 @@ def test_pm_confirmation_uses_current_typed_input_and_direct_cli_before_final_re
                      "Answer.id", "PmFeedbackReceipt.message_id", "Confirmation.id", "old run terminal",
                      "Any document change invalidates earlier consent", "same execution/assignment/cycle",
                      "direct GET requirements/{revision}/confirmation", "owner_subject", "Backlog",
-                     "Backlog / Ready", "Analysis / Ready", "PM does not dispatch Analyst"):
+                     "Backlog / Ready only", "PM does not dispatch Analyst"):
         assert required in text
     assert "answer_event_ref" not in text
     assert "worker is preparing" not in text and "existing answer-only" not in text
@@ -182,6 +182,24 @@ def test_pm_confirmation_uses_current_typed_input_and_direct_cli_before_final_re
         "--report <report-text>")
     assert "ONLY AFTER" in terminal and "confirmation receipt readback succeeds" in terminal
     assert "--report" not in " ".join(i["description"] for i in final["instructions"][:-1])
+
+
+def test_pm_final_contract_stops_at_backlog_without_analysis_or_pickup_prerequisites(catalog):
+    mode = ManagedMode.model_validate(mode_for(catalog, "project_manager", "draft"))
+    phases = [_phase_item_to_supervisor(phase) for phase in mode.phases]
+    builder = PhaseContractBuilder(phases)
+    final = builder.build(phases[-1])
+    terminal = final.instructions[-1]
+    assert "ONLY AFTER the preceding exact owner confirmation receipt readback succeeds" in terminal
+    assert "stage AND status are Backlog / Ready only" in terminal
+    assert "do not request an Analysis intent, wait for Analyst pickup" in terminal
+    assert "sdlc confirmation read --task <task-uuid> --revision <confirmed-revision>" in terminal
+    assert terminal.index("confirmation receipt readback succeeds") < terminal.index("--report <report-text>")
+    criteria = " ".join(final.required_checks + final.required_evidence)
+    assert "No Analysis intent or Analyst pickup is required" in criteria
+    for text in (terminal, criteria):
+        for obsolete in ("then Analysis / Ready", "server-created Analysis intent", "Tracker/Fleet pickup"):
+            assert obsolete not in text
 
 
 def test_architecture_rework_and_devops_keep_the_single_task_boundaries(catalog):

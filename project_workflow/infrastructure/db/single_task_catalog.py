@@ -18,8 +18,7 @@ from project_workflow.domain.single_task_profile import (
     CATALOG_SHA256,
     MANIFEST_SHA256,
     PROFILE,
-    RETAINED_CATALOG_SHA256,
-    RETAINED_MANIFEST_SHA256,
+    RETAINED_PROFILE_CATALOGS,
     ROLE_MODES,
     SUPPORTED_MANIFESTS,
     SingleTaskInstallation,
@@ -91,9 +90,9 @@ def runtime_catalog_read(uow: SAUnitOfWork):
 def load_profile(manifest_sha256: str = MANIFEST_SHA256) -> tuple[dict, dict]:
     if manifest_sha256 not in SUPPORTED_MANIFESTS:
         raise ValueError("Unsupported single-task profile manifest")
-    retained = manifest_sha256 == RETAINED_MANIFEST_SHA256
-    root = REFERENCES / "retained" / RETAINED_MANIFEST_SHA256 if retained else REFERENCES
-    catalog_sha256 = RETAINED_CATALOG_SHA256 if retained else CATALOG_SHA256
+    retained = manifest_sha256 in RETAINED_PROFILE_CATALOGS
+    root = REFERENCES / "retained" / manifest_sha256 if retained else REFERENCES
+    catalog_sha256 = RETAINED_PROFILE_CATALOGS[manifest_sha256] if retained else CATALOG_SHA256
     values = []
     for filename, expected in (("single_task_catalog_v1.json", catalog_sha256),
                                ("single_task_manifest_v1.json", manifest_sha256)):
@@ -151,7 +150,10 @@ def observe_installation(uow: SAUnitOfWork) -> SingleTaskInstallation:
 
 def _observe_profile(uow: SAUnitOfWork, catalog: dict, manifest: dict) -> SingleTaskInstallation:
     catalog_sha256 = manifest["workflow_catalog"]["sha256"]
-    manifest_sha256 = RETAINED_MANIFEST_SHA256 if catalog_sha256 == RETAINED_CATALOG_SHA256 else MANIFEST_SHA256
+    manifest_sha256 = {
+        CATALOG_SHA256: MANIFEST_SHA256,
+        **{digest: key for key, digest in RETAINED_PROFILE_CATALOGS.items()},
+    }[catalog_sha256]
     installed_workflows = {workflow.key: workflow for workflow in uow.workflows.list()}
     if {key for key in installed_workflows if is_single_task_key(key)} != {w["key"] for w in catalog["workflows"]}:
         raise ValueError("Single-task installed workflow inventory mismatch")

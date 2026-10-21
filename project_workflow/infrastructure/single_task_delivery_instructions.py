@@ -440,7 +440,8 @@ PM_CONFIRMATION_CHECKS = [
     "or extra PM cycles were used. Clarification questions are not a prerequisite for confirmation.",
     "Direct PM confirmation readback dependencies and any authorized typed checkpoint/resume actually used "
     "are satisfied; no blockers remain.",
-    "PM finalizes only; allowed next stage/status are Backlog / Ready then Analysis / Ready, not PM dispatch.",
+    "PM finalizes only after exact owner confirmation; the allowed result is Backlog / Ready. "
+    "No Analysis intent or Analyst pickup is required for this PM handoff.",
 ]
 PM_CONFIRMATION_EVIDENCE = [
     "FULL saved requirements document, exact revision/content_hash and owner presentation reference.",
@@ -462,9 +463,9 @@ def terminal_instruction(role: str) -> str:
             "confirmation receipt refs, revision/content_hash, owner_subject and check/evidence coverage; "
             "never invent authority fields. Reconcile uncertain effects using the exact original key/body "
             "before retry. Verify accepted Workflow complete=true, then finalize the PM run. The allowed next "
-            "stage AND status are Backlog / Ready, then Analysis / Ready through Tracker/Fleet pickup. "
-            "Tracker may create an Analysis / Ready intent at consent, but Analyst reserve remains blocked "
-            "until PM actual completion is observed. PM does not dispatch Analyst or create another PM cycle. "
+            "stage AND status are Backlog / Ready only. Stop at Backlog / Ready; do not request an Analysis "
+            "intent, wait for Analyst pickup or treat either as a PM completion prerequisite. "
+            "PM does not dispatch Analyst or create another PM cycle. "
             "Installed instructions alone do not authorize live routing; use only the actually authorized API/policy. "
             "Generic patch/issue transition/board move are forbidden substitutes."
         )
