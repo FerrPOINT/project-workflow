@@ -2,7 +2,7 @@
 
 ## Текущая UI-поставка
 
-UI закреплён на `068e2fa33bbbb9444a5128660c12c46bc0e73ff5` ([pin](../.base-ui-revision)); зависит от [Base #295](https://github.com/FerrPOINT/services-base/pull/295).
+UI закреплён на `633ebc146553a64e5cad4d8f179aec63c741d04c` ([pin](../.base-ui-revision)); включает [Base #297](https://github.com/FerrPOINT/services-base/pull/297), #298 и стабильный SSR exporter из [#301](https://github.com/FerrPOINT/services-base/pull/301).
 SDK и skills pins независимы и этим обновлением не меняются. Общая типографика,
 плотность и отдельные радиусы применяются в Base к React, Portal и SSR;
 продукт сохраняет данные, права, запросы и действия. Штатные SSR-ресурсы Workflow
