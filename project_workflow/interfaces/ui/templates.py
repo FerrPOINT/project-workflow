@@ -14,6 +14,7 @@ from project_workflow.domain.project_theme import (
     PROJECT_THEME_ICONS,
     normalize_theme_color,
 )
+from project_workflow.interfaces.ui.project_admission import display_window
 
 BASE_DIR = Path(__file__).parent
 
@@ -115,6 +116,7 @@ def _accent_foreground(color: str | None) -> str:
 
 
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+templates.env.globals["project_access_window"] = display_window
 templates.env.globals["ui_base_path"] = lambda: get_settings().UI_BASE_PATH
 templates.env.filters["group_instructions"] = _group_instructions
 templates.env.filters["pluralize"] = _pluralize

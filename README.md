@@ -522,3 +522,9 @@ Proprietary source-available. Not open source. Viewing/evaluation only.
 Commercial, production, resale, redistribution, SaaS/hosting use require written license from FerrPOINT. См. [LICENSE](LICENSE), [NOTICE](NOTICE) и [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 Нормативные термины и зависимости: [PDLC и интеграция с Base](docs/PDLC_BASE_INTEGRATION.md).
+
+## Единое пространство PDLC
+
+[Согласованная M:N-модель и план](docs/plans/unified-spaces-20261019.md): реализация в работе. Source, tests,
+миграция, образы и live dev acceptance учитываются раздельно; документация цели
+не подтверждает установленную политику.
