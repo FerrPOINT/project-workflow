@@ -2,7 +2,7 @@
   "catalog_version": 1,
   "instruction_overlay": {
     "path": "project_workflow/infrastructure/single_task_delivery_instructions.py",
-    "sha256": "b1c880a112793780bf8845cb7adf9808a9d4de20a9cbce2c3011d28b57a7f512"
+    "sha256": "a596ef12f8aa7c60e0e016a5581761f09403e01f450ae31b75ae54558945d6ce"
   },
   "instruction_profile": "single-task-v1",
   "instruction_source": {
@@ -152,7 +152,7 @@
                 "Actual owner confirmation has a real authorized readback receipt matching task, latest revision/hash and owner.",
                 "Any feedback that occurred was resolved within the same execution; no stale consent, fake answer IDs or extra PM cycles were used. Clarification questions are not a prerequisite for confirmation.",
                 "Direct PM confirmation readback dependencies and any authorized typed checkpoint/resume actually used are satisfied; no blockers remain.",
-                "PM finalizes only; allowed next stage/status are Backlog / Ready then Analysis / Ready, not PM dispatch."
+                "PM finalizes only after exact owner confirmation; the allowed result is Backlog / Ready. No Analysis intent or Analyst pickup is required for this PM handoff."
               ],
               "code": "PM-DRAFT-03",
               "description": "single-task-v1: project_manager/draft; confirmation within the same execution.",
@@ -191,7 +191,7 @@
                   ]
                 },
                 {
-                  "description": "ONLY AFTER the preceding exact owner confirmation receipt readback succeeds and all feedback is resolved, reconcile task-tracker sdlc confirmation read --task <task-uuid> --revision <confirmed-revision>, then submit the FINAL phase report via terminal -> project-workflow --json step --task <workflow-task-key> --report <report-text> with the supplied --operation-key, --runtime-request and --execution-token-file. body.report must equal --report. Include actual saved document and confirmation receipt refs, revision/content_hash, owner_subject and check/evidence coverage; never invent authority fields. Reconcile uncertain effects using the exact original key/body before retry. Verify accepted Workflow complete=true, then finalize the PM run. The allowed next stage AND status are Backlog / Ready, then Analysis / Ready through Tracker/Fleet pickup. Tracker may create an Analysis / Ready intent at consent, but Analyst reserve remains blocked until PM actual completion is observed. PM does not dispatch Analyst or create another PM cycle. Installed instructions alone do not authorize live routing; use only the actually authorized API/policy. Generic patch/issue transition/board move are forbidden substitutes.",
+                  "description": "ONLY AFTER the preceding exact owner confirmation receipt readback succeeds and all feedback is resolved, reconcile task-tracker sdlc confirmation read --task <task-uuid> --revision <confirmed-revision>, then submit the FINAL phase report via terminal -> project-workflow --json step --task <workflow-task-key> --report <report-text> with the supplied --operation-key, --runtime-request and --execution-token-file. body.report must equal --report. Include actual saved document and confirmation receipt refs, revision/content_hash, owner_subject and check/evidence coverage; never invent authority fields. Reconcile uncertain effects using the exact original key/body before retry. Verify accepted Workflow complete=true, then finalize the PM run. The allowed next stage AND status are Backlog / Ready only. Stop at Backlog / Ready; do not request an Analysis intent, wait for Analyst pickup or treat either as a PM completion prerequisite. PM does not dispatch Analyst or create another PM cycle. Installed instructions alone do not authorize live routing; use only the actually authorized API/policy. Generic patch/issue transition/board move are forbidden substitutes.",
                   "skills": [
                     "project-workflow-executor",
                     "tracker-operator"

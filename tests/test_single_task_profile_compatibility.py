@@ -13,6 +13,7 @@ from project_workflow.domain.single_task_profile import (
     MANIFEST_SHA256,
     RETAINED_CATALOG_SHA256,
     RETAINED_MANIFEST_SHA256,
+    RETAINED_PROFILE_CATALOGS,
 )
 from project_workflow.domain.single_task_runtime import SingleTaskContext
 from project_workflow.infrastructure.db import models as m
@@ -23,11 +24,11 @@ from tests import test_single_task_installation as installation
 from tests import test_single_task_runtime as runtime
 
 
-def install_retained(monkeypatch):
+def install_retained(monkeypatch, manifest=RETAINED_MANIFEST_SHA256):
     # Seed the exact published family as a7 did, then restore the current loader.
     reader = catalog.load_profile
     with monkeypatch.context() as seed:
-        seed.setattr(catalog, "load_profile", lambda digest=RETAINED_MANIFEST_SHA256: reader(digest))
+        seed.setattr(catalog, "load_profile", lambda digest=manifest: reader(digest))
         with SAUnitOfWork() as uow:
             return catalog.ensure_single_task_catalog(uow)
 
@@ -47,7 +48,7 @@ def retained_bridge(monkeypatch):
     yield from runtime.bridge.__wrapped__(monkeypatch)
 
 
-@pytest.mark.parametrize("manifest", [RETAINED_MANIFEST_SHA256, MANIFEST_SHA256])
+@pytest.mark.parametrize("manifest", [MANIFEST_SHA256, *RETAINED_PROFILE_CATALOGS])
 def test_exact_published_and_conditional_contexts_parse_without_relabeling(manifest):
     payload = installation.assignment_payload()
     fields = SingleTaskContext.model_fields
@@ -72,14 +73,20 @@ def test_retained_artifacts_are_the_exact_published_family():
         catalog.load_profile("0" * 64)
 
 
-def test_retained_artifact_tampering_is_not_a_compatibility_fallback(tmp_path, monkeypatch):
+@pytest.mark.parametrize("manifest", RETAINED_PROFILE_CATALOGS)
+@pytest.mark.parametrize("filename", ["single_task_catalog_v1.json", "single_task_manifest_v1.json"])
+@pytest.mark.parametrize("mutation", ["extra_lf", "crlf"])
+def test_retained_artifact_tampering_is_not_a_compatibility_fallback(
+    tmp_path, monkeypatch, manifest, filename, mutation,
+):
     references = tmp_path / "references"
     shutil.copytree(catalog.REFERENCES, references)
-    path = references / "retained" / RETAINED_MANIFEST_SHA256 / "single_task_catalog_v1.json"
-    path.write_bytes(path.read_bytes() + b"\n")
+    path = references / "retained" / manifest / filename
+    original = path.read_bytes()
+    path.write_bytes(original + b"\n" if mutation == "extra_lf" else original.replace(b"\n", b"\r\n"))
     monkeypatch.setattr(catalog, "REFERENCES", references)
     with pytest.raises(ValueError, match="source hash mismatch"):
-        catalog.load_profile(RETAINED_MANIFEST_SHA256)
+        catalog.load_profile(manifest)
 
 
 def test_current_bootstrap_preserves_every_retained_row_and_reports_original_hashes(monkeypatch):
@@ -92,6 +99,27 @@ def test_current_bootstrap_preserves_every_retained_row_and_reports_original_has
         assert observed.workflow_catalog_sha256 == RETAINED_CATALOG_SHA256
         assert all(binding.instruction_manifest_sha256 == RETAINED_MANIFEST_SHA256 for binding in observed.bindings)
         assert all_rows(uow) == before
+
+
+def test_pre_backlog_profile_is_retained_without_rewriting_existing_instructions(monkeypatch):
+    manifest = "19d3228270bc76959f91a06f3b946a39b4509b14a2c29b62acc8762dd5cc3fe2"
+    original = install_retained(monkeypatch, manifest)
+    with SAUnitOfWork() as uow:
+        before = all_rows(uow)
+        observed = catalog.ensure_single_task_catalog(uow)
+        assert observed == original
+        assert observed.instruction_manifest_sha256 == manifest
+        assert observed.workflow_catalog_sha256 == RETAINED_PROFILE_CATALOGS[manifest]
+        assert all_rows(uow) == before
+    old, _ = catalog.load_profile(manifest)
+    current, _ = catalog.load_profile()
+    assert [w for w in old["workflows"] if w["role_key"] != "project_manager"] == [
+        w for w in current["workflows"] if w["role_key"] != "project_manager"
+    ]
+    for profile, expected in ((old, True), (current, False)):
+        pm = next(w for w in profile["workflows"] if w["role_key"] == "project_manager")
+        terminal = pm["modes"][0]["phases"][-1]["instructions"][-1]["description"]
+        assert ("then Analysis / Ready" in terminal) is expected
 
 
 def test_mixed_old_new_phase_content_is_denied_without_repair(monkeypatch):

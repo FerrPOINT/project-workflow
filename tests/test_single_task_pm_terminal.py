@@ -1,5 +1,6 @@
 """PM completion seals reuse the accepted step and typed confirmation ledgers."""
 
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -12,6 +13,7 @@ from sqlalchemy import select
 from project_workflow.application import single_task_terminal
 from project_workflow.domain.exceptions import ConflictError
 from project_workflow.domain.runtime_assignment import canonical_json, payload_sha256
+from project_workflow.domain.single_task_profile import MANIFEST_SHA256
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.repositories.task_step_history import SATaskStepHistoryRepository
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
@@ -19,13 +21,31 @@ from project_workflow.infrastructure.llm import OpenAICompatibleClient
 from project_workflow.interfaces.ui.app import create_app
 from tests import test_single_task_runtime as runtime_fixture
 from tests.test_single_task_runtime import API, PM, PROFILE, RUNNER, SESSION, WRITER, enroll_pm
-from tests.test_single_task_runtime import bridge as bridge
 
 READBACK = API + "terminal-receipt/readback"
 FIXTURE = Path(__file__).parent / "fixtures" / "single_task_pm_terminal_readback.json"
+PRE_BACKLOG_MANIFEST = "19d3228270bc76959f91a06f3b946a39b4509b14a2c29b62acc8762dd5cc3fe2"
+
+
 CHECKPOINT = "11111111-1111-4111-8111-111111111101"
 CONFIRMATION = "11111111-1111-4111-8111-111111111102"
 CURRENT_RUN = "11111111-1111-4111-8111-111111111103"
+
+
+@pytest.fixture
+def bridge(monkeypatch, request):
+    manifest = getattr(request, "param", MANIFEST_SHA256)
+    if manifest != MANIFEST_SHA256:
+        from tests import test_single_task_installation as installation_fixture
+        from tests.test_single_task_profile_compatibility import install_retained
+
+        install_retained(monkeypatch, manifest)
+        profile = {**runtime_fixture.PROFILE, "instruction_manifest_sha256": manifest}
+        monkeypatch.setattr(runtime_fixture, "PROFILE", profile)
+        monkeypatch.setattr(installation_fixture, "MANIFEST_SHA256", manifest)
+        monkeypatch.setitem(globals(), "PROFILE", profile)
+        monkeypatch.setitem(globals(), "FIXTURE", FIXTURE.parent / "retained" / manifest / FIXTURE.name)
+    yield from runtime_fixture.bridge.__wrapped__(monkeypatch)
 
 
 def advance(client, monkeypatch, supervisor_llm):
@@ -112,6 +132,8 @@ def test_pm_direct_cli_completion_is_discovered_by_current_run_without_fleet_rep
     assert bridge.post(READBACK, json=by_run, headers=headers).status_code == 409
 
 
+@pytest.mark.parametrize("bridge", [MANIFEST_SHA256, PRE_BACKLOG_MANIFEST],
+                         indirect=True, ids=["current", "retained19"])
 def test_pm_actual_seal_readback_replay_restart_and_exact_wire_fixture(bridge, monkeypatch, supervisor_llm):
     final, lookup, headers, old_headers, resumed_input, response = complete(bridge, monkeypatch, supervisor_llm)
     artifact = response["result"]["workflow_receipt"]
@@ -146,7 +168,12 @@ def test_pm_actual_seal_readback_replay_restart_and_exact_wire_fixture(bridge, m
                             "X-Workflow-Execution-Token: <current PM scoped token>"],
                 "final_step_request": final, "readback_request": lookup,
                 "reference_readback_request": by_reference, "readback_response": expected}
-    if os.environ.get("WORKFLOW_UPDATE_PM_TERMINAL_FIXTURE") == "1":
+    if PROFILE["instruction_manifest_sha256"] == PRE_BACKLOG_MANIFEST:
+        assert hashlib.sha256(FIXTURE.read_bytes()).hexdigest() == (
+            "2edde85c660f729325841a7b3bc5a3b2dbfdc90fa836622d46f3764a36172309"
+        )
+    if (PROFILE["instruction_manifest_sha256"] == MANIFEST_SHA256
+        and os.environ.get("WORKFLOW_UPDATE_PM_TERMINAL_FIXTURE") == "1"):
         FIXTURE.write_text(json.dumps(captured, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     assert captured == json.loads(FIXTURE.read_text(encoding="utf-8"))
 

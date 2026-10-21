@@ -13,11 +13,13 @@ from project_workflow.application.namespace_ownership import NamespaceOwnershipS
 from project_workflow.domain.namespace_ownership import NamespaceOwnershipRequest
 from project_workflow.domain.pm_execution import RuntimeObservation
 from project_workflow.domain.runtime_assignment import canonical_json
+from project_workflow.domain.single_task_profile import MANIFEST_SHA256
 from project_workflow.infrastructure import pm_readback
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.infrastructure.llm import OpenAICompatibleClient
 from project_workflow.infrastructure.namespace_auth import NamespacePrincipal
+from tests import test_single_task_runtime as runtime_fixture
 from tests.test_single_task_installation import assignment_payload
 from tests.test_single_task_runtime import (
     API,
@@ -27,12 +29,28 @@ from tests.test_single_task_runtime import (
     SESSION,
     WRITER,
 )
-from tests.test_single_task_runtime import (
-    bridge as bridge,
-)
 
 FIXTURE = Path(__file__).parent / "fixtures" / "single_task_pm_initial_dispatch.json"
+PRE_BACKLOG_MANIFEST = "19d3228270bc76959f91a06f3b946a39b4509b14a2c29b62acc8762dd5cc3fe2"
+
+
 ORIGINAL_INPUT = {"title": "Owner goal", "description": "Exact original input"}
+
+
+@pytest.fixture
+def bridge(monkeypatch, request):
+    manifest = getattr(request, "param", MANIFEST_SHA256)
+    if manifest != MANIFEST_SHA256:
+        from tests import test_single_task_installation as installation_fixture
+        from tests.test_single_task_profile_compatibility import install_retained
+
+        install_retained(monkeypatch, manifest)
+        profile = {**runtime_fixture.PROFILE, "instruction_manifest_sha256": manifest}
+        monkeypatch.setattr(runtime_fixture, "PROFILE", profile)
+        monkeypatch.setattr(installation_fixture, "MANIFEST_SHA256", manifest)
+        monkeypatch.setitem(globals(), "PROFILE", profile)
+        monkeypatch.setitem(globals(), "FIXTURE", FIXTURE.parent / "retained" / manifest / FIXTURE.name)
+    yield from runtime_fixture.bridge.__wrapped__(monkeypatch)
 
 
 @pytest.fixture
@@ -110,6 +128,8 @@ def exchange(client, path, body, headers, token_marker=None):
     return {"path": path, "request": body, "status_code": response.status_code, "response": captured}, response.json()
 
 
+@pytest.mark.parametrize("bridge", [MANIFEST_SHA256, PRE_BACKLOG_MANIFEST],
+                         indirect=True, ids=["current", "retained19"])
 def test_pm_initial_dispatch_actual_producer_fixture(bridge, initial_pm):
     assignment, binding, step, general_headers, command, observation, assign_exchange, bind_exchange = initial_pm
     accepted = assign_exchange["response"]
@@ -161,7 +181,12 @@ def test_pm_initial_dispatch_actual_producer_fixture(bridge, initial_pm):
         "runtime_observation": observation, "assign": assign_exchange, "bind": bind_exchange,
         "pm_bind": pm_exchange, "first_step": first_exchange, "pm_readback": readback_exchange,
     }
-    if os.environ.get("WORKFLOW_UPDATE_PM_INITIAL_FIXTURE") == "1":
+    if PROFILE["instruction_manifest_sha256"] == PRE_BACKLOG_MANIFEST:
+        assert hashlib.sha256(FIXTURE.read_bytes()).hexdigest() == (
+            "b7bbea38b215cdcb27f70bd1197f9dbb39f8d66a6a9c87899b4a1b13a586ca73"
+        )
+    if (PROFILE["instruction_manifest_sha256"] == MANIFEST_SHA256
+        and os.environ.get("WORKFLOW_UPDATE_PM_INITIAL_FIXTURE") == "1"):
         FIXTURE.write_text(json.dumps(captured, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     assert captured == json.loads(FIXTURE.read_text(encoding="utf-8"))
 
