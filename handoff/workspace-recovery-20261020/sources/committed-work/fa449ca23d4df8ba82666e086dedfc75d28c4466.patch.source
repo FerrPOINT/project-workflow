@@ -1,0 +1,25 @@
+diff --git a/project_workflow/interfaces/ui/static/base-ui/fingerprint.json b/project_workflow/interfaces/ui/static/base-ui/fingerprint.json
+index a1f6392..81504cf 100644
+--- a/project_workflow/interfaces/ui/static/base-ui/fingerprint.json
++++ b/project_workflow/interfaces/ui/static/base-ui/fingerprint.json
+@@ -4,6 +4,6 @@
+   "files": {
+     "base-ui.css": "f65ba817c7c01a6b6bde3ba4da7ab5b8fff0bd09f7572eec8aadb6072d016110",
+     "base-ui.js": "b653e40f48efadf50c0190ef3c461ad4db93c49f02577057696fe5a1fe8546eb",
+-    "macros.html": "02a5ce224504415b3f336cd65441373c414158dfa5e8a14bfe778b1a8b88c3a1"
++    "macros.html": "c05468472093617fc6e9d565a597dabe2209f11be78c82c983c2c7412ecbab51"
+   }
+ }
+diff --git a/project_workflow/interfaces/ui/static/base-ui/macros.html b/project_workflow/interfaces/ui/static/base-ui/macros.html
+index 708603a..fb60149 100644
+--- a/project_workflow/interfaces/ui/static/base-ui/macros.html
++++ b/project_workflow/interfaces/ui/static/base-ui/macros.html
+@@ -11,7 +11,7 @@
+ {%- endmacro %}
+ 
+ {% macro header() -%}
+-<header class="header base-ssr-header">{{ caller() }}</header>
++<header class="header base-ssr-header" data-platform-header>{{ caller() }}</header>
+ {%- endmacro %}
+ 
+ {% macro account(logout='/logout') -%}

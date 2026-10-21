@@ -12,6 +12,14 @@ unit/UI и PostgreSQL наборы со статическими проверк�
 тестов остаются 60/120 секунд, два multi-process E2E — 240 секунд; локальный
 порог coverage остаётся 94%.
 
+CI измеряет существующий line coverage через `sysmon` в закреплённом Coverage
+7.15.4 на Python 3.12+. Эта настройка относится только к шагу coverage; branch
+coverage, plugins и dynamic contexts в текущей конфигурации не включены.
+Source/omit, порог 94%, состав тестов и их индивидуальные таймауты сохраняются.
+Режим описан в [Coverage configuration](https://coverage.readthedocs.io/en/7.15.4/config.html#run-core).
+Первый полный прогон с обычным tracer дошёл до 69% за 35 минут и был отменён
+лимитом job; он не считается успешным измерением покрытия.
+
 ## Базовый gate
 
 Перед тестами проверить экспорт общего namespace из чистого sibling Base,

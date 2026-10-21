@@ -18,6 +18,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from ... import __version__
 from ...infrastructure.db.session import DatabaseUnavailable, get_engine, reset_engine
+from .platform_branding import platform_branding
 from .routes import api, cli_api, namespace_ownership_api, pages, pm_api, resource_context, runtime_api
 from .sso import install_sso
 
@@ -232,6 +233,7 @@ def create_app() -> FastAPI:
         return _database_not_ready_response(request)
 
     app.get("/health")(_health)
+    app.get("/api/platform/branding", response_model=None)(platform_branding)
 
     # Private bridge for isolated agent containers; separate from browser UI.
     app.get("/internal/runtime/capabilities", response_model=None)(

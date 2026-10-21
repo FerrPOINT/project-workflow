@@ -1,0 +1,66 @@
+# Virtual environment
+.venv/
+venv/
+env/
+ENV/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Testing
+.coverage*
+.pytest_cache/
+.pytest-strict-tmp/
+htmlcov/
+.tox/
+.nox/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+.artifacts/
+.smoke/
+*.log
+screenshots/
+!docs/screenshots/
+!docs/screenshots/*.png
+.workflow.db
+info/
+data/state/
+data/workflow.db
+**/data/workflow.db
+data/workflow.db-*
+tmp/
+.env
+
+# Built opt-in React UI
+frontend/node_modules/
+project_workflow/interfaces/ui/static/react/

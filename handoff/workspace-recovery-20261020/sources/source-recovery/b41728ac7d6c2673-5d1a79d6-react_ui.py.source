@@ -1,0 +1,52 @@
+"""Opt-in read-only React pages, using the existing server-side SSO session."""
+
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
+
+from project_workflow.config import get_settings
+
+FRONTEND_DIST = Path(__file__).parent / "static" / "react"
+BOOTSTRAP_MARKER = "<!--workflow-bootstrap-->"
+
+
+def bootstrap_json(request: Request) -> str:
+    identity = {"subject": getattr(request.state, "central_subject", ""), "name": "Project Workflow"}
+    namespace = request.cookies.get("workflow_namespace_id", "")
+    namespace_id = int(namespace) if len(namespace) <= 15 and namespace.isdecimal() and int(namespace) > 0 else None
+    value = json.dumps({"identity": identity, "namespaceId": namespace_id}, ensure_ascii=False, separators=(",", ":"))
+    return value.replace("&", "\\u0026").replace("<", "\\u003c").replace(">", "\\u003e")
+
+
+def install_react_ui(app: FastAPI) -> None:
+    if not os.environ.get("WORKFLOW_REACT_UI_ENABLED"):
+        return
+    if not get_settings().WORKFLOW_REACT_UI_ENABLED:
+        return
+    index = FRONTEND_DIST / "index.html"
+    if not index.is_file():
+        raise RuntimeError("WORKFLOW_REACT_UI_ENABLED requires a built frontend (pnpm build)")
+    html = index.read_text(encoding="utf-8")
+    if html.count(BOOTSTRAP_MARKER) != 1:
+        raise RuntimeError("React frontend is missing its safe bootstrap marker")
+
+    async def page(request: Request, phase_id: int | None = None) -> HTMLResponse:
+        _ = phase_id
+        bootstrap = f'<script id="workflow-bootstrap" type="application/json">{bootstrap_json(request)}</script>'
+        return HTMLResponse(html.replace(BOOTSTRAP_MARKER, bootstrap), headers={"Cache-Control": "no-store"})
+
+    async def root(request: Request) -> RedirectResponse:
+        query = f"?{request.url.query}" if request.url.query else ""
+        return RedirectResponse(f"/react/tasks{query}", status_code=307)
+
+    app.add_api_route("/react", root, methods=["GET"], include_in_schema=False)
+    app.add_api_route("/react/", root, methods=["GET"], include_in_schema=False)
+    for path in ("/react/tasks", "/react/phases", "/react/phases/{phase_id:int}"):
+        app.add_api_route(path, page, methods=["GET"], include_in_schema=False)
+    app.mount("/react/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="workflow-react-assets")

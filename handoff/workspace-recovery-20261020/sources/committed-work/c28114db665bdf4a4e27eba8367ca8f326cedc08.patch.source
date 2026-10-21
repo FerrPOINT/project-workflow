@@ -1,0 +1,66 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index ebf8041..cc4ab22 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -26,6 +26,8 @@
+ 
+ ### Fixed
+ 
++- Workflow delete inherits Base destructive foreground and hover styling;
++  effective text contrast is checked in all themes at every shell breakpoint.
+ - Base 7e27713 supplies shared label/control typography through generated SSR
+   assets and the pinned React package; no hand-copied tokens or runtime rollout.
+ - Agent create/update keeps drafts frozen after lost responses, 5xx and malformed
+diff --git a/frontend/e2e/workflow-editor.spec.ts b/frontend/e2e/workflow-editor.spec.ts
+index 17b0c6e..eff429c 100644
+--- a/frontend/e2e/workflow-editor.spec.ts
++++ b/frontend/e2e/workflow-editor.spec.ts
+@@ -81,6 +81,34 @@ for (const theme of ['dark', 'gray', 'light']) {
+         expect(geometry.form.right).toBeLessThanOrEqual(geometry.stack.right + 0.1)
+         expect(geometry.form.top).toBeGreaterThanOrEqual(geometry.titleBottom + 19)
+         expect(geometry.fontSize).toBe('14px')
++        if (!create) {
++          const remove = page.locator('#deleteWorkflowButton')
++          for (const interaction of ['normal', 'hover', 'focus']) {
++            if (interaction === 'normal') await page.mouse.move(0, 0)
++            if (interaction === 'hover') await remove.hover()
++            if (interaction === 'focus') {
++              await page.mouse.move(0, 0)
++              await remove.focus()
++              await expect(remove).toBeFocused()
++            }
++            const colors = await remove.evaluate(element => {
++              const style = getComputedStyle(element)
++              const luminance = (value: string) => {
++                const match = value.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)$/)
++                if (!match || (match[4] !== undefined && Number(match[4]) !== 1)) throw new Error(`Expected opaque RGB: ${value}`)
++                const [red, green, blue] = match.slice(1, 4).map(value => {
++                  const channel = Number(value) / 255
++                  return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
++                })
++                return 0.2126 * red + 0.7152 * green + 0.0722 * blue
++              }
++              const values = [luminance(style.color), luminance(style.backgroundColor)].sort((a, b) => b - a)
++              return { foreground: style.color, background: style.backgroundColor, ratio: (values[0] + 0.05) / (values[1] + 0.05) }
++            })
++            expect(colors.ratio, `${theme}/${width}/${interaction}: ${colors.foreground} on ${colors.background}`).toBeGreaterThanOrEqual(4.5)
++          }
++          await page.locator('#workflowName').focus()
++        }
+         for (const selector of ['#workflowName', '#workflowDescription', '#workflowSubmitButton', '#newWorkflowButton', '#workflowSelect']) {
+           const box = await page.locator(selector).boundingBox()
+           if (box) {
+diff --git a/project_workflow/interfaces/ui/templates/workflows.html b/project_workflow/interfaces/ui/templates/workflows.html
+index a6c38bd..3da7f48 100644
+--- a/project_workflow/interfaces/ui/templates/workflows.html
++++ b/project_workflow/interfaces/ui/templates/workflows.html
+@@ -25,8 +25,7 @@
+ #workflowReadbackCandidates{display:flex;flex-wrap:wrap;gap:12px;min-width:0}
+ #workflowReadbackCandidates a{max-width:100%;white-space:normal;overflow-wrap:anywhere;text-align:left}
+ .panel-actions{display:flex;gap:10px;flex-wrap:wrap}
+-.workflow-delete{margin-left:auto;color:var(--text);border-color:var(--red)}
+-.workflow-delete:hover{color:var(--text);background:var(--red-soft)}
++.workflow-delete{margin-left:auto}
+ .workflow-delete-hint{font-size:12px;color:var(--text-muted);line-height:1.5}
+ .empty-note{color:var(--text-dim);font-size:13px;line-height:1.6}
+ @media (max-width: 980px){

@@ -1,0 +1,81 @@
+diff --git a/.base-revision b/.base-revision
+index d53a43f..783f253 100644
+--- a/.base-revision
++++ b/.base-revision
+@@ -1 +1 @@
+-9fb8444cd7cd7479cc17a881a6e45fbe6441b35b
++a434ee2226ee0532367e86ea0196441444239139
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 1044828..1cbd95f 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -7,6 +7,11 @@
+ ## [Unreleased]
+ 
+ ### Changed
++
++- Base snapshot обновлён до a434ee2; SSR assets экспортированы штатным
++  sync с fingerprint. Длинные непрерывные ошибки не растягивают страницу;
++  значения формы и защита повторной отправки сохранены. API и runtime прежние.
++
+ - Read-only React-пилот использует Base Table внутри одного ListPage content
+   block: общие колонки, подписи, keyboard local scroll и Base link targets.
+   Удалена локальная сетка строк; namespace context и Jinja task links сохранены.
+diff --git a/frontend/e2e/base-list-feedback.spec.ts b/frontend/e2e/base-list-feedback.spec.ts
+index 37b841b..83f432a 100644
+--- a/frontend/e2e/base-list-feedback.spec.ts
++++ b/frontend/e2e/base-list-feedback.spec.ts
+@@ -89,9 +89,9 @@ for (const theme of ['dark', 'gray', 'light']) {
+       await page.screenshot({ path: testInfo.outputPath(`base-cli-${outcome}-${theme}-${page.viewportSize()!.width}.png`), fullPage: true })
+     })
+   }
+-  test(`SSR long validation stays inline and retains the agent draft (${theme})`, async ({ page }) => {
++  test(`SSR long validation stays inline and retains the agent draft (${theme})`, async ({ page }, testInfo) => {
+     await page.addInitScript(value => localStorage.setItem('workflow-theme', value), theme)
+-    const message = 'Длинное сообщение об ошибке проверки полей. '.repeat(40)
++    const message = 'ДлинноеСообщениеОбОшибкеБезПробелов'.repeat(40)
+     let writes = 0
+     await page.route('**/api/agents', route => {
+       expect(route.request().method()).toBe('POST')
+@@ -107,7 +107,14 @@ for (const theme of ['dark', 'gray', 'light']) {
+     await expect(page.locator('#newName')).toHaveValue('Retained draft')
+     await expect(page.locator('#newName')).toBeEnabled()
+     await expect(page.locator('#toast')).toHaveCount(0)
+-    expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1)
++    const widths = testInfo.project.name === 'desktop' ? [1023, 1024, 1279, 1280, 1440, 1920, 2560] : [375, 767, 768]
++    for (const width of widths) {
++      await page.setViewportSize({ width, height: 1080 })
++      await expect(form.getByRole('alert')).toHaveText(message)
++      expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1)
++      expect(await form.getByRole('alert').evaluate(element => getComputedStyle(element).overflowWrap)).toBe('anywhere')
++      if ([375, 1920].includes(width)) await page.screenshot({ path: testInfo.outputPath(`base-validation-${theme}-${width}.png`), fullPage: true })
++    }
+     expect(writes).toBe(1)
+     await page.locator('#newName').fill('Edited retained draft')
+     await expect(form.locator('.agent-write-state')).not.toBeVisible()
+diff --git a/project_workflow/interfaces/ui/static/base-ui/base-ui.css b/project_workflow/interfaces/ui/static/base-ui/base-ui.css
+index 91a9576..844ae4c 100644
+--- a/project_workflow/interfaces/ui/static/base-ui/base-ui.css
++++ b/project_workflow/interfaces/ui/static/base-ui/base-ui.css
+@@ -261,7 +261,7 @@ dialog.base-shell-drawer::backdrop { background: rgb(0 0 0 / 65%); }
+ .base-confirm-dialog [data-base-confirm-content] { margin: 12px 0; padding: 0; min-width: 0; border: 0; }
+ .base-confirm-dialog [data-base-confirm-error] { color: var(--color-danger); }
+ .base-confirm-dialog [data-base-confirm-pending] { color: var(--color-text-muted); }
+-.base-resource-state { padding: 20px 0; }
++.base-resource-state { min-width: 0; padding: 20px 0; overflow-wrap: anywhere; }
+ .base-ssr-shell .main { min-width: 0; min-height: calc(100dvh - var(--shell-header-height)); width: calc(100% - var(--sidebar-width)); margin-left: var(--sidebar-width); }
+ .base-ssr-header { position: sticky; top: 0; z-index: 30; display: flex; min-width: 0; width: 100%; height: var(--shell-header-height); align-items: center; justify-content: space-between; gap: 8px; padding: 0 var(--shell-page-gutter); border-bottom: 1px solid var(--color-border); background: var(--color-surface); }
+ .base-ssr-shell .sidebar-header { height: var(--shell-header-height); flex: 0 0 auto; display: flex; align-items: center; padding: 0 20px; border-bottom: 1px solid var(--color-border); }
+diff --git a/project_workflow/interfaces/ui/static/base-ui/fingerprint.json b/project_workflow/interfaces/ui/static/base-ui/fingerprint.json
+index efa0031..91b43c4 100644
+--- a/project_workflow/interfaces/ui/static/base-ui/fingerprint.json
++++ b/project_workflow/interfaces/ui/static/base-ui/fingerprint.json
+@@ -2,7 +2,7 @@
+   "schemaVersion": 1,
+   "package": "@sdlc/ui",
+   "files": {
+-    "base-ui.css": "9cf1475c0e0d65a64bcd7b81924ad2f3288e07314a8328a0e2ab707c36a08342",
++    "base-ui.css": "b48cf2f2baa919c4ab86769e72e4112095c600bd2836c50717443df0e36307a0",
+     "base-ui.js": "02a46637c9c340b1330263b48e986ee3fae2c326834f3bef481257eaab8eae06",
+     "macros.html": "fe53deccef37163bfb4fae61c1c29f1275d78f79bf0fb743d2f6fec7801445bc"
+   }

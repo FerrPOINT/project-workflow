@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     OPENAI_REASONING_EFFORT: str = "none"
 
+    PLATFORM_BRANDING_URL: str | None = None
     PLATFORM_SERVICES_URL: str = "http://localhost:7771/api/v1/runtime/services"
     UI_PLATFORM_ORIGIN: str = ""
 

@@ -1,0 +1,105 @@
+import { expect, test, type Locator } from '@playwright/test'
+
+if (process.env.WORKFLOW_UI_QA_MUTATIONS !== 'isolated-fixture') throw new Error('UI QA requires an isolated fixture')
+
+async function sharedField(control: Locator, width: number) {
+  const field = control.locator('..')
+  await expect(field).toHaveClass(/base-form-field/)
+  await expect(control).toHaveClass(/base-control/)
+  const label = field.locator('label')
+  const metrics = await label.evaluate(element => {
+    const control = (element as HTMLLabelElement).control!
+    const style = getComputedStyle(element)
+    return { fontSize: style.fontSize, textTransform: style.textTransform,
+      associated: control.id === element.getAttribute('for'),
+      labelBottom: element.getBoundingClientRect().bottom, controlTop: control.getBoundingClientRect().top,
+      height: control.getBoundingClientRect().height }
+  })
+  expect(metrics.fontSize).toBe('12px')
+  expect(metrics.textTransform).toBe('none')
+  expect(metrics.associated).toBe(true)
+  expect(metrics.labelBottom).toBeLessThanOrEqual(metrics.controlTop)
+  expect(metrics.height).toBeGreaterThanOrEqual(width < 768 ? 44 : 40)
+  await label.click()
+  await expect(control).toBeFocused()
+}
+
+for (const theme of ['dark', 'gray', 'light']) {
+  test(`Base shell and section fields preserve theme, drawer and URL navigation (${theme})`, async ({ page }, testInfo) => {
+    await page.addInitScript(value => {
+      if (!localStorage.getItem('workflow-theme')) localStorage.setItem('workflow-theme', value)
+    }, theme)
+    const errors: string[] = []
+    page.on('pageerror', error => errors.push(error.message))
+    page.on('console', message => { if (message.type() === 'error') errors.push(message.text()) })
+    page.on('request', request => {
+      if (!['GET', 'HEAD'].includes(request.method())) errors.push(`Unexpected write: ${request.method()} ${request.url()}`)
+    })
+    page.on('response', response => { if (response.status() >= 400) errors.push(`${response.status()} ${response.url()}`) })
+    await page.goto('/phases?namespace_id=1')
+    const phase = await page.locator('a[href^="/phase/"]').first().getAttribute('href')
+    expect(phase).toBeTruthy()
+    const phaseUrl = new URL(phase!, page.url())
+    phaseUrl.searchParams.set('namespace_id', '1')
+    phaseUrl.searchParams.set('foreign', 'keep')
+    const widths = testInfo.project.name === 'desktop' ? [1023, 1024, 1279, 1280, 1440, 1920, 2560] : [375, 640, 641, 767, 768]
+    for (const width of widths) {
+      await page.setViewportSize({ width, height: 1080 })
+      await page.goto('/settings?namespace_id=1')
+      await page.reload()
+      const themeControl = page.locator(width <= 640 ? '#sidebarThemeSelector' : '#themeSelector')
+      const drawer = page.locator('#base-mobile-navigation')
+      if (width <= 640) {
+        await page.locator('#burgerBtn').click()
+        await sharedField(themeControl, width)
+        await expect(page.locator('#themeSelector')).toBeHidden()
+        for (let index = 0; index < 3; index++) {
+          await page.keyboard.press('Tab')
+          expect(await drawer.evaluate(element => element.contains(document.activeElement))).toBe(true)
+        }
+      } else {
+        await expect(themeControl).toBeVisible()
+        await expect(page.locator('#sidebarThemeSelector')).toBeHidden()
+      }
+      const nextTheme = theme === 'light' ? 'dark' : 'light'
+      await themeControl.selectOption(nextTheme)
+      await expect(page.locator('html')).toHaveAttribute('data-theme', nextTheme)
+      if ([375, 1920].includes(width)) await page.screenshot({ path: testInfo.outputPath(`base-theme-field-${theme}-${width}.png`), fullPage: true })
+      if (width <= 640) {
+        await page.keyboard.press('Escape')
+        await expect(drawer).toBeHidden()
+        await expect(page.locator('#burgerBtn')).toBeFocused()
+      }
+      await page.reload()
+      await expect(page.locator('html')).toHaveAttribute('data-theme', nextTheme)
+      if (width <= 640) await page.locator('#burgerBtn').click()
+      await themeControl.selectOption(theme)
+      if (width <= 640) await page.keyboard.press('Escape')
+      await page.goto(phaseUrl.toString())
+      await page.reload()
+      const section = page.locator('#phaseSectionSelect')
+      if (width < 1024) {
+        await sharedField(section, width)
+        await expect(section.locator('option')).toHaveText(['Основное', /Инструкции \(\d+\)/, /Проверки \(\d+\)/, /Подтверждения \(\d+\)/])
+        for (const id of ['phase-instructions', 'phase-checks', 'phase-evidence', 'phase-overview']) {
+          await section.selectOption(id)
+          await expect(page).toHaveURL(new RegExp(`#${id}$`))
+          expect(new URL(page.url()).searchParams.get('namespace_id')).toBe('1')
+          expect(new URL(page.url()).searchParams.get('foreign')).toBe('keep')
+          await expect(page.locator(`[data-phase-section-link="${id}"]`)).toHaveAttribute('aria-current', 'location')
+        }
+        await section.selectOption('phase-checks')
+        await page.reload()
+        await expect(section).toHaveValue('phase-checks')
+        await section.selectOption('phase-overview')
+      } else await expect(section).toBeHidden()
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1)
+      await expect(page.locator('.base-ssr-header')).toHaveCSS('height', '60px')
+      if ([375, 1023, 1920].includes(width)) {
+        await page.evaluate(() => window.scrollTo(0, 0))
+        await page.screenshot({ path: testInfo.outputPath(`base-section-field-${theme}-${width}.png`), fullPage: true })
+      }
+    }
+    expect(errors).toEqual([])
+  })
+}

@@ -1,0 +1,52 @@
+"""Execute the synced Base Jinja controls instead of checking copied CSS literals."""
+
+from project_workflow.interfaces.ui.templates import env
+
+
+def render(source: str, **context: object) -> str:
+    return env.from_string("{% import 'macros.html' as base %}" + source).render(**context)
+
+
+def test_field_escapes_values_and_connects_help_and_validation():
+    html = render(
+        "{% call base.field('interval', 'Interval', hint='Seconds', error='Too small', required=true) %}"
+        "{{ base.input_control('interval', 'interval', value=value, type='number', required=true, "
+        "hint='Seconds', error='Too small', min=10, max=86400, step=1) }}{% endcall %}",
+        value='\"><script>alert(1)</script>',
+    )
+    assert '<label for="interval">Interval' in html
+    assert '<script>' not in html
+    assert 'aria-describedby="interval-hint interval-error"' in html
+    assert 'aria-invalid="true"' in html
+    assert 'role="alert" id="interval-error"' in html
+    assert 'min="10" max="86400" step="1"' in html
+    assert ' required' in html
+
+
+def test_pending_button_disables_submission_without_changing_command_name():
+    html = render("{{ base.button('Save', type='submit', pending=true, variant='primary') }}")
+    assert 'type="submit" disabled aria-busy="true"' in html
+    assert '>Save</button>' in html
+
+
+def test_select_options_and_textarea_preserve_domain_content_safely():
+    html = render(
+        "{% call base.select_control('namespace', 'namespace', required=true, disabled=true) %}"
+        "<option value='1' selected>{{ value }}</option>{% endcall %}"
+        "{{ base.textarea_control('description', 'description', value=value, error='Invalid') }}",
+        value='</textarea><script>alert(1)</script>',
+    )
+    assert '<script>' not in html
+    assert ' required disabled' in html
+    assert 'aria-describedby="description-error"' in html
+    assert '<option value=\'1\' selected>&lt;/textarea&gt;' in html
+
+
+def test_terminal_states_do_not_offer_retry_but_repeatable_errors_can():
+    for kind in ('not-found', 'permission-denied', 'empty'):
+        html = render("{{ base.state(kind, 'Unavailable', retry_url='/items') }}", kind=kind)
+        assert '<a ' not in html
+    html = render("{{ base.state('partial-error', 'One request failed', retry_url='/items') }}")
+    assert 'role="alert"' in html
+    assert 'href="/items"' in html
+    assert 'aria-busy="true"' in render("{{ base.state('loading', 'Loading') }}")

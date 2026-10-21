@@ -1,0 +1,106 @@
+"""Product-owned profession preset; independent of the pinned seven-role catalog."""
+
+from project_workflow.domain.repositories import UnitOfWork
+
+PROFESSION_CODE = "BUG_SEARCHER"
+CLI_COMMAND = "workflow-bug_searcher"
+LAUNCH_PROFILE = "bug_searcher"
+WORKFLOW_KEY = "fleet:bug_searcher"
+
+_CONTEXT = (
+    "Прочитать неизменяемый контекст поиска: Tracker instance + project ID, owner, execution ID, "
+    "редакции policy/config/instructions, разрешённые repository/target refs, SHA, scope и исключения. "
+    "Проверить актуальные полномочия. Не подставлять фиктивный task/Bug ID: поиск начинается до Bug. "
+    "Если project-scoped admission или авторизованный target недоступны, сохранить конкретный blocker."
+)
+_SEARCH = (
+    "Проверить выбранную область на зафиксированной версии. Баг — воспроизводимое нарушение "
+    "требования или контракта; пожелание новой возможности не регистрировать как Bug. "
+    "Сохранить основание, expected/actual, воспроизведение и очищенные evidence. "
+    "Исходники не менять; тесты с записью выполнять только на разрешённой QA-цели с cleanup."
+)
+_VERIFY = (
+    "Прочитать Bug и ожидаемую исправленную доставленную версию. Проверить фактическую идентичность "
+    "QA deployment у владельца CI: commit/PR и pipeline success сами по себе не доказывают доставку. "
+    "Повторить воспроизведение. Неизвестная или изменившаяся версия означает inconclusive; "
+    "passed допускается только на требуемой фактически проверенной сборке."
+)
+_REPORT = (
+    "Сохранить bounded отчёт, checked version и coverage complete/partial/inconclusive. "
+    "Передать находки структурированным результатом Workflow: для каждой сохранить исходный finding_id "
+    "и typed source identity, основание, expected/actual, воспроизведение и evidence. "
+    "Для source identity передать machine-readable repository_id: canonical repository UUID "
+    "из owner snapshot target.source.repository_id; checked_version равен commit_sha этого target. "
+    "rule_key и stable_defect_key сохраняют прежний смысл внутри данного репозитория. "
+    "Регистрацию register-or-link выполняет владелец Fleet после сохранения результата; "
+    "эта фаза не требует downstream receipt. При повторе сохранять прежние occurrence IDs."
+)
+_VERIFY_REPORT = (
+    "Сохранить структурированный результат Workflow с coverage, находками, исходными finding_id "
+    "и typed source identity, checked deployment и evidence. "
+    "Source identity каждой находки содержит repository_id из исходного owner target.source.repository_id "
+    "и checked_version равен commit_sha того же target; не угадывать UUID по пути или prompt. "
+    "Обязательно передать explicit verification с bug_id, basis_sha256 исходного verification_basis, "
+    "delivery_ref, verdict passed/failed/inconclusive "
+    "и actual/evidence. Ноль находок не означает passed; смена или неизвестная версия — inconclusive. "
+    "Владелец Fleet доставляет результат "
+    "в Tracker после его сохранения; эта фаза не требует downstream verification receipt. "
+    "Не закрывать Bug обычным edit и не считать текст ответа или terminal runtime подтверждением бизнес-перехода."
+)
+
+
+def ensure_bug_search_profession(uow: UnitOfWork) -> int:
+    """Provision once in the caller's initialization transaction; preserve saved edits.
+
+    This preset has no backend-owned task assignment policy. It cannot be used as
+    an eighth managed role or admit a project search via a fabricated business task.
+    Project execution uses its own versioned authority and frozen contract.
+    """
+    uow.lock_catalog_state()
+    by_code = uow.projects.get_by_code(PROFESSION_CODE)
+    by_cli = uow.projects.get_by_cli_command(CLI_COMMAND)
+    workflow = next((row for row in uow.workflows.list() if row.key == WORKFLOW_KEY), None)
+    if by_code is not None or by_cli is not None or workflow is not None:
+        if (by_code is None or by_cli is None or workflow is None or by_code.id is None or workflow.id is None
+                or by_cli.id != by_code.id
+                or not uow.workflows.belongs_to_profession(workflow.id, by_code.id)):
+            raise ValueError(
+                "Конфликт профессии Поиск багов: BUG_SEARCHER, workflow-bug_searcher и fleet:bug_searcher "
+                "должны принадлежать одной установленной профессии; существующие записи сохранены"
+            )
+        return by_code.id
+
+    workflow_id = uow.workflows.create({
+        "key": WORKFLOW_KEY, "name": "Дефолтный", "create_default_mode": False,
+        "description": (
+            "Поиск багов и перепроверка в выбранном проекте по отдельному project-scoped execution contract."
+        ),
+    })
+    for order, (key, title, check, report) in enumerate([
+        ("search", "Поиск", _SEARCH, _REPORT),
+        ("verification", "Перепроверка", _VERIFY, _VERIFY_REPORT),
+    ], start=1):
+        # Null task-role/scope policy keeps generic /internal/runtime/assign fail-closed.
+        mode_id = uow.workflows.create_mode({
+            "workflow_id": workflow_id, "key": key, "name": title, "mode_order": order,
+        })
+        for phase_order, (name, instruction, evidence) in enumerate([
+            ("Контекст", _CONTEXT, "Неизменяемый ProjectRef, execution snapshot, scope и разрешённая версия цели"),
+            ("Проверка", check, "Фактически выполненное воспроизведение, checked version и очищенные доказательства"),
+            ("Отчёт", report, "Сохранённый typed coverage/findings результат Workflow с устойчивыми occurrence IDs"),
+        ], start=1):
+            phase_id = uow.phases.create({
+                "workflow_id": workflow_id, "mode_id": mode_id,
+                "code": f"BS-{key.upper()}-{phase_order:02}", "name": name, "phase_order": phase_order,
+            })
+            uow.phase_instructions.create(phase_id, {"description": instruction})
+            uow.phase_checks.create(phase_id, {"description": evidence})
+            uow.phase_evidence_requirements.create(phase_id, {"description": evidence})
+    profession_id = uow.projects.create({
+        "workflow_id": workflow_id, "code": PROFESSION_CODE, "name": "Поиск багов",
+        "description": "Баг-серчер: поиск воспроизводимых дефектов и перепроверка доставленных исправлений.",
+        "cli_command": CLI_COMMAND, "launch_profile": LAUNCH_PROFILE,
+        "theme_icon": "search", "theme_color": "#EAB308", "key_prefixes": [],
+    })
+    uow.workflows.assign_profession(workflow_id, profession_id)
+    return profession_id

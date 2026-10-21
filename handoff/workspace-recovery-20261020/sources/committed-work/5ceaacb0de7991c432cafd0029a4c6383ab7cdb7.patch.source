@@ -1,0 +1,40 @@
+diff --git a/.gitattributes b/.gitattributes
+new file mode 100644
+index 0000000..6601d98
+--- /dev/null
++++ b/.gitattributes
+@@ -0,0 +1,2 @@
++# Generated SSR bytes must match Base fingerprints in checkouts and Git archives.
++project_workflow/interfaces/ui/static/base-ui/* text eol=lf
+diff --git a/tests/test_base_ssr.py b/tests/test_base_ssr.py
+index 828f222..f0dd781 100644
+--- a/tests/test_base_ssr.py
++++ b/tests/test_base_ssr.py
+@@ -1,5 +1,9 @@
+ """Execute the synced Base Jinja controls instead of checking copied CSS literals."""
+ 
++import hashlib
++import json
++from pathlib import Path
++
+ from project_workflow.interfaces.ui.templates import env
+ 
+ 
+@@ -7,6 +11,17 @@ def render(source: str, **context: object) -> str:
+     return env.from_string("{% import 'macros.html' as base %}" + source).render(**context)
+ 
+ 
++def test_synced_ssr_files_have_the_exact_embedded_digests():
++    root = Path(__file__).resolve().parents[1]
++    assets = root / "project_workflow/interfaces/ui/static/base-ui"
++    fingerprint = json.loads((assets / "fingerprint.json").read_text(encoding="utf-8"))
++    assert fingerprint["package"] == "@sdlc/ui"
++    for name, expected in fingerprint["files"].items():
++        assert hashlib.sha256((assets / name).read_bytes()).hexdigest() == expected
++    attributes = (root / ".gitattributes").read_text(encoding="utf-8")
++    assert "project_workflow/interfaces/ui/static/base-ui/* text eol=lf" in attributes
++
++
+ def test_field_escapes_values_and_connects_help_and_validation():
+     html = render(
+         "{% call base.field('interval', 'Interval', hint='Seconds', error='Too small', required=true) %}"

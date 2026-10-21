@@ -1,0 +1,101 @@
+[build-system]
+requires = ["hatchling==1.32.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["project_workflow"]
+artifacts = ["project_workflow/interfaces/ui/static/**"]
+
+[project]
+name = "project-workflow"
+version = "1.0.0"
+description = "project-workflow — жёсткий пофазовый клиент"
+readme = "README.md"
+license = "LicenseRef-FerrPOINT-Proprietary"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+dependencies = [
+    "click>=8.0",
+    "rich>=13.0",
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "sqlalchemy>=2.0,<3.0",
+    "alembic>=1.13,<2.0",
+    "psycopg[binary]>=3.0",
+    "requests>=2.30",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=4.0",
+    "pytest-timeout>=2.3,<3.0",
+    "httpx2>=2.0,<3.0",
+    "ruff>=0.3",
+    "mypy>=1.7",
+]
+ui  = ["fastapi>=0.100", "uvicorn>=0.23", "jinja2>=3.1,<4", "httpx>=0.27,<1", "PyJWT[crypto]>=2.10,<3"]
+
+[project.scripts]
+project-workflow = "project_workflow.interfaces.cli:main"
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "W"]
+per-file-ignores = { "tests/**/*.py" = ["E402"] }
+
+[tool.mypy]
+python_version = "3.10"
+strict = false
+warn_unused_ignores = true
+ignore_missing_imports = true
+# disallow_untyped_defs disabled: the project mixes strict domain code with SQLAlchemy
+# ORM models and auto-generated Alembic boilerplate where full annotation is impractical.
+
+[[tool.mypy.overrides]]
+module = [
+    "project_workflow.infrastructure.db.migrations.env",
+    "project_workflow.infrastructure.db.migrations.versions.*",
+]
+ignore_errors = true
+
+[tool.coverage.run]
+parallel = true
+source = ["project_workflow"]
+omit = [
+    "*/tests/*",
+    "*/templates/*",
+    "*/references/*",
+]
+
+[tool.pytest.ini_options]
+timeout = 60
+markers = [
+    "unit: fast domain/application tests without DB",
+    "ui: UI and API tests using TestClient",
+    "supervisor: supervisor/supervisor logic",
+    "cli: CLI command tests",
+    "integration: tests requiring a local PostgreSQL instance",
+    "slow: tests that take more than 10 seconds",
+]
+filterwarnings = [
+    "ignore:The default datetime adapter is deprecated as of Python 3.12.*:DeprecationWarning:sqlalchemy.engine.default",
+]
+addopts = "-m 'not integration'"
+
+[tool.coverage.report]
+fail_under = 94
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]
+
+[tool.coverage.html]
+directory = "htmlcov"

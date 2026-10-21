@@ -1,0 +1,357 @@
+"""Real assignment journal/state boundaries with explicitly synthetic Tracker103 owner replies."""
+
+import copy
+import json
+import sqlite3
+from contextlib import closing
+from datetime import datetime, timedelta, timezone
+from uuid import uuid4
+
+import pytest
+from pydantic import ValidationError
+from sqlalchemy import select, text
+from sqlalchemy.exc import IntegrityError
+
+from project_workflow import config
+from project_workflow.application import bug_work as app_work
+from project_workflow.application.bug_work import BugWorkService
+from project_workflow.domain.bug_work import BugWorkBind, BugWorkPrepare, BugWorkStep, BugWorkStop, checked_grant
+from project_workflow.domain.exceptions import ConflictError
+from project_workflow.domain.runtime_assignment import payload_sha256
+from project_workflow.infrastructure import bug_work_authority as authority
+from project_workflow.infrastructure.db import models as m
+from project_workflow.infrastructure.db.bug_work_constraints import BUG_WORK_SCOPE_TECH_REFS
+from project_workflow.infrastructure.db.managed_catalog import ensure_managed_catalog
+from project_workflow.infrastructure.db.session import ensure_migrated, get_engine, reset_engine
+from project_workflow.infrastructure.db.uow import SAUnitOfWork
+from project_workflow.infrastructure.namespace_auth import NamespaceAuthError, NamespacePrincipal
+from project_workflow.supervisor import SupervisorEngine
+
+
+def uid():
+    return str(uuid4())
+
+
+def test_bug_work_tech_reference_predicate_preserves_every_ordinary_scope_and_only_real_bug_branch():
+    columns = (
+        "bug_work_assignment_id", "bug_work_tracker_uuid", "workflow_key", "role_key", "stage_key",
+        "execution_scope", "tech_execution_workspace_ref", "tech_execution_attempt_ref",
+    )
+    with closing(sqlite3.connect(":memory:")) as db:
+        db.execute("CREATE TABLE scope_fixture (" + ",".join(columns) + ",CHECK(" + BUG_WORK_SCOPE_TECH_REFS + "))")
+        for scope in (None, "business", "delivery", "aggregate"):
+            for workspace in (None, "workspace"):
+                for attempt in (None, "attempt"):
+                    expected = scope is None or (
+                        scope == "business" and workspace is None and attempt is None
+                    ) or (scope in ("delivery", "aggregate") and workspace is not None and attempt is not None)
+                    row = (None, None, "ordinary", "developer", "delivery", scope, workspace, attempt)
+                    if expected:
+                        db.execute("INSERT INTO scope_fixture VALUES (?,?,?,?,?,?,?,?)", row)
+                    else:
+                        with pytest.raises(sqlite3.IntegrityError):
+                            db.execute("INSERT INTO scope_fixture VALUES (?,?,?,?,?,?,?,?)", row)
+        genuine = (uid(), uid(), "hermes-sdlc:developer", "developer", "bug_work", "delivery", None, None)
+        db.execute("INSERT INTO scope_fixture VALUES (?,?,?,?,?,?,?,?)", genuine)
+        for position, value in ((1, None), (2, "hermes-sdlc:project_manager"), (3, "tester"),
+                                (4, "ordinary"), (5, "business"), (6, "fake-workspace"), (7, "fake-attempt")):
+            invalid = list(genuine)
+            invalid[position] = value
+            with pytest.raises(sqlite3.IntegrityError):
+                db.execute("INSERT INTO scope_fixture VALUES (?,?,?,?,?,?,?,?)", invalid)
+
+
+def owner_state(subject):
+    source = {
+        "schema_version": 1,
+        "producer": "synthetic-search",
+        "rule_key": "fixture",
+        "stable_defect_key": "known-defect",
+    }
+    basis = {
+        "title": "Actual existing Bug",
+        "basis": "Retained original report",
+        "expected": "Expected",
+        "actual": "Observed",
+        "reproducer": "Original exact reproducer",
+        "checked_version": "opaque:original-version",
+        "evidence_refs": [],
+    }
+    assignment = {
+        "contract_version": 1,
+        "assignment_id": uid(),
+        "tracker_instance_id": "tracker-test",
+        "tracker_instance_uuid": uid(),
+        "project_id": uid(),
+        "bug_id": uid(),
+        "owner_subject": uid(),
+        "machine_subject": subject,
+        "worker_runtime": {"fleet_instance_id": uid(), "agent_id": uid(), "agent_config_revision": 3},
+        "fleet_journal_ref": "fleet:synthetic-original-claim",
+        "preference_revision": 2,
+        "fence": 1,
+        "purpose": "bug_fix",
+        "role": "developer",
+        "mode": "initial",
+        "source_identity": source,
+        "source_sha256": payload_sha256(source),
+        "verification_basis": basis,
+        "verification_basis_sha256": payload_sha256(basis),
+        "canonical_basis_sha256": "a" * 64,
+        "created_at": (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat(),
+    }
+    return {
+        "assignment": assignment,
+        "assignment_sha256": payload_sha256(assignment),
+        "binding": None,
+        "closure": None,
+        "capacity_held": True,
+        "can_take_bugs": False,
+        "blocked_reasons": ["bug_work_runtime_consumer_not_available"],
+    }
+
+
+def build_source(monkeypatch):
+    principal = NamespacePrincipal(issuer="http://central.invalid", subject=uid())
+    observed = owner_state(principal.subject)
+    monkeypatch.setattr(app_work, "runtime_compatibility_descriptor", lambda: {"fixture": "synthetic-runtime"})
+    with SAUnitOfWork() as uow:
+        ensure_managed_catalog(uow)
+        profession = uow.projects.get_by_cli_command("workflow-developer")
+        catalog = BugWorkService(uow).catalog(profession.id)
+    a = observed["assignment"]
+    request = BugWorkPrepare.model_validate_json(
+        json.dumps(
+            {
+                "contract_version": 1,
+                "operation_key": "bug-work:prepare",
+                "tracker_instance_id": a["tracker_instance_id"],
+                "tracker_instance_uuid": a["tracker_instance_uuid"],
+                "project_id": a["project_id"],
+                "assignment_id": a["assignment_id"],
+                "assignment_sha256": observed["assignment_sha256"],
+                "workflow_project_id": profession.id,
+                "expected_catalog_sha256": catalog["catalog_sha256"],
+                "runtime_compatibility": {"fixture": "synthetic-runtime"},
+            }
+        )
+    )
+    monkeypatch.setattr(authority, "read_grant", lambda _: copy.deepcopy(observed))
+    monkeypatch.setenv("PROJECT_WORKFLOW_BUG_WORK_SCOPE_SECRET", "synthetic-independent-work-secret-" + "x" * 32)
+    config.get_settings.cache_clear()
+    return request, principal, observed
+
+
+@pytest.fixture
+def source(monkeypatch, tmp_path):
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'bug-work.db'}")
+    config.get_settings.cache_clear()
+    reset_engine()
+    ensure_migrated(get_engine())
+    return build_source(monkeypatch)
+
+
+def prepare(source):
+    request, principal, _ = source
+    with SAUnitOfWork() as uow:
+        return BugWorkService(uow).prepare(request, principal)
+
+
+def bind_command():
+    return BugWorkBind(
+        operation_key="bug-work:bind",
+        expected_assignment_revision=1,
+        expected_fence=1,
+        runtime_context_id=uid(),
+        runtime_generation=uid(),
+        session_id=uid(),
+        session_run_id=uid(),
+        hermes_run_ref=uid(),
+        binding_ref="fleet:actual-bug-work-binding",
+    )
+
+
+def assert_real_cursor_and_protective_stop(source, monkeypatch):
+    request, principal, _ = source
+    initial = prepare(source)
+    assert initial["state"] == "prepared" and initial["can_execute"] is False
+    assert initial["blocked_reasons"] == [app_work.SOURCE_UNAVAILABLE]
+    assert prepare(source) == initial
+    with SAUnitOfWork() as uow:
+        row = BugWorkService(uow)._row(request.assignment_id, request.tracker_instance_uuid)
+        assert row.business_task_ref is None and row.root_task_ref is None
+        assert row.work_item_ref is None and row.queue_item_ref is None and row.decomposition_revision_ref is None
+        assert row.task_workspace_ref is None and row.workspace_revision is None
+        task = uow.tasks.get_by_id(row.task_id)
+        assert task.task_key == "bug-work:" + request.assignment_id
+        assert row.role_key == "developer" and row.workflow_key == "hermes-sdlc:developer"
+        assert row.mode.key == "initial"
+        with pytest.raises(ConflictError, match="scoped fence"):
+            SupervisorEngine(task.task_key, uow=uow, project_id=row.project_id, create_if_missing=False)
+    command = bind_command()
+    with SAUnitOfWork() as uow:
+        service = BugWorkService(uow)
+        bound = service.bind(request.assignment_id, request.tracker_instance_uuid, command, principal)
+        row = service._row(request.assignment_id, request.tracker_instance_uuid)
+        token = "Bearer " + authority.scope_token(service.claims(row))
+    assert bound["binding"] == command.model_dump(mode="json")
+    with SAUnitOfWork() as uow:
+        assert (
+            BugWorkService(uow).bind(request.assignment_id, request.tracker_instance_uuid, command, principal) == bound
+        )
+    changed = command.model_copy(update={"hermes_run_ref": uid()})
+    with pytest.raises(ConflictError, match="неизменяем"):
+        with SAUnitOfWork() as uow:
+            BugWorkService(uow).bind(request.assignment_id, request.tracker_instance_uuid, changed, principal)
+    with pytest.raises(ConflictError, match=app_work.SOURCE_UNAVAILABLE):
+        with SAUnitOfWork() as uow:
+            BugWorkService(uow).step(
+                request.assignment_id,
+                request.tracker_instance_uuid,
+                BugWorkStep(
+                    operation_key="step:1",
+                    expected_assignment_revision=1,
+                    expected_fence=1,
+                    expected_phase_code=bound["current_phase_code"],
+                    expected_status="active",
+                    report="Do not execute",
+                ),
+                token,
+            )
+    monkeypatch.setattr(authority, "read_grant", lambda _: (_ for _ in ()).throw(NamespaceAuthError(503)))
+    stop = BugWorkStop(operation_key="bug-work:stop", expected_assignment_revision=1, expected_fence=1)
+    with SAUnitOfWork() as uow:
+        service = BugWorkService(uow)
+        receipt = service.stop(request.assignment_id, request.tracker_instance_uuid, stop, principal)
+        assert receipt["runtime_terminal_confirmed"] is False and receipt["bug_resolved"] is False
+        assert service.read(request.assignment_id, request.tracker_instance_uuid, principal)["state"] == "stopped"
+        assert service.history(request.assignment_id, request.tracker_instance_uuid, token)["records"] == []
+    with SAUnitOfWork() as uow:
+        assert (
+            BugWorkService(uow).stop(request.assignment_id, request.tracker_instance_uuid, stop, principal) == receipt
+        )
+    with pytest.raises(ConflictError):
+        with SAUnitOfWork() as uow:
+            BugWorkService(uow).stop(
+                request.assignment_id,
+                request.tracker_instance_uuid,
+                stop.model_copy(update={"expected_fence": 2}),
+                principal,
+            )
+    return initial, bound
+
+
+def test_real_bug_cursor_no_fake_business_resources_and_stop_after_owner_revoke(source, monkeypatch):
+    assert_real_cursor_and_protective_stop(source, monkeypatch)
+
+
+@pytest.mark.parametrize(
+    "change", ["foreign_bug", "foreign_tracker", "report_hash", "source_hash", "closed", "bool_version"]
+)
+def test_strict_owner_grant_rejects_forged_or_unavailable_authority(change):
+    state = owner_state(uid())
+    if change == "foreign_bug":
+        state["assignment"]["bug_id"] = uid()
+    elif change == "foreign_tracker":
+        state["assignment"]["tracker_instance_uuid"] = uid()
+    elif change == "report_hash":
+        state["assignment"]["verification_basis"]["reproducer"] = "Altered scenario"
+    elif change == "source_hash":
+        state["assignment"]["source_identity"]["rule_key"] = "Another rule"
+    elif change == "closed":
+        state["capacity_held"] = False
+    else:
+        state["assignment"]["contract_version"] = True
+    with pytest.raises((ValidationError, ValueError)):
+        checked_grant(state)
+
+
+def test_retained_assignment_and_actual_tuple_are_database_immutable(source):
+    request, principal, _ = source
+    prepare(source)
+    command = bind_command()
+    with SAUnitOfWork() as uow:
+        BugWorkService(uow).bind(request.assignment_id, request.tracker_instance_uuid, command, principal)
+    for clause in [
+        "payload='{}'",
+        "bug_work_assignment_id=NULL",
+        "hermes_run_ref='another-run'",
+        "bug_work_binding_json=NULL",
+    ]:
+        with pytest.raises(IntegrityError):
+            with SAUnitOfWork() as uow:
+                uow.session.execute(
+                    text("UPDATE task_runtime_assignments SET " + clause + " WHERE bug_work_assignment_id=:id"),
+                    {"id": request.assignment_id},
+                )
+    with pytest.raises(IntegrityError):
+        with SAUnitOfWork() as uow:
+            uow.session.execute(
+                text("DELETE FROM task_runtime_assignments WHERE bug_work_assignment_id=:id"),
+                {"id": request.assignment_id},
+            )
+
+
+def test_same_key_cannot_rebind_another_bug_or_owner_and_generic_supervisor_is_denied(source):
+    request, principal, _ = source
+    prepare(source)
+    wrong = NamespacePrincipal(issuer=principal.issuer, subject=uid())
+    with pytest.raises(ConflictError):
+        with SAUnitOfWork() as uow:
+            BugWorkService(uow).read(request.assignment_id, request.tracker_instance_uuid, wrong)
+    with pytest.raises(ConflictError):
+        with SAUnitOfWork() as uow:
+            BugWorkService(uow).prepare(request.model_copy(update={"operation_key": "another-key"}), principal)
+    with pytest.raises(ConflictError):
+        with SAUnitOfWork() as uow:
+            BugWorkService(uow).prepare(request.model_copy(update={"runtime_compatibility": {}}), principal)
+
+
+def test_tracker_preexisting_different_actual_binding_is_rejected(source):
+    request, principal, observed = source
+    prepare(source)
+    observed["binding"] = {
+        "runtime_context_id": uid(),
+        "runtime_generation": uid(),
+        "session_id": uid(),
+        "session_run_id": uid(),
+        "hermes_run_ref": uid(),
+        "workflow_task_id": 999,
+        "workflow_assignment_revision": 1,
+        "workflow_operation_key": request.operation_key,
+        "workflow_binding_ref": "foreign",
+    }
+    with pytest.raises(ConflictError, match="другую"):
+        with SAUnitOfWork() as uow:
+            BugWorkService(uow).bind(request.assignment_id, request.tracker_instance_uuid, bind_command(), principal)
+
+
+def test_scope_token_binds_bug_owner_assignment_and_actual_run(source):
+    request, principal, _ = source
+    prepare(source)
+    with SAUnitOfWork() as uow:
+        service = BugWorkService(uow)
+        service.bind(request.assignment_id, request.tracker_instance_uuid, bind_command(), principal)
+        claims = service.claims(service._row(request.assignment_id, request.tracker_instance_uuid))
+    token = "Bearer " + authority.scope_token(claims)
+    authority.require_scope(claims, token)
+    for field in ["assignment_id", "assignment_sha256", "binding_sha256", "fence", "issuer", "machine_subject"]:
+        with pytest.raises(NamespaceAuthError):
+            authority.require_scope({**claims, field: "foreign"}, token)
+    with pytest.raises(NamespaceAuthError):
+        authority.require_scope(claims, "Bearer wf_bug_v1_" + "a" * 64)
+
+
+def test_workflow_state_cannot_claim_repository_from_source_rule_or_evidence(source):
+    request, _, observed = source
+    assert "repository_ref" not in observed["assignment"]["source_identity"]
+    assert observed["assignment"]["verification_basis"]["checked_version"].startswith("opaque:")
+    result = prepare(source)
+    assert result["can_execute"] is False and result["blocked_reasons"] == [app_work.SOURCE_UNAVAILABLE]
+    with SAUnitOfWork() as uow:
+        row = uow.session.scalar(
+            select(m.TaskRuntimeAssignment).where(
+                m.TaskRuntimeAssignment.bug_work_assignment_id == request.assignment_id
+            )
+        )
+        assert row.task_workspace_ref is None and row.tech_execution_workspace_ref is None

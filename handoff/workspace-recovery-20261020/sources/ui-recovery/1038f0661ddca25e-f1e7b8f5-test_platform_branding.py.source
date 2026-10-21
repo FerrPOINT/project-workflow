@@ -1,0 +1,68 @@
+"""The SSR bridge forwards only a bounded public branding response."""
+
+from types import SimpleNamespace
+from unittest.mock import patch
+
+import httpx
+import pytest
+from starlette.requests import Request
+
+from project_workflow.interfaces.ui import platform_branding as bridge
+
+
+def request(etag=None):
+    return Request({"type": "http", "headers": [(b"if-none-match", etag.encode())] if etag else []})
+
+
+@pytest.mark.parametrize("configured,catalog,expected", [
+    (None, "http://admin/api/v1/runtime/services", "http://admin/api/v1/runtime/branding"),
+    (None, "http://admin/custom", None),
+    ("", "http://admin/api/v1/runtime/services", None),
+    ("http://admin/brand", "http://admin/custom", "http://admin/brand"),
+])
+def test_branding_source_is_explicit_or_derived_only_from_known_contract(configured, catalog, expected):
+    settings = SimpleNamespace(PLATFORM_BRANDING_URL=configured, PLATFORM_SERVICES_URL=catalog)
+    with patch.object(bridge, "get_settings", return_value=settings):
+        assert bridge.branding_url() == expected
+
+
+@pytest.mark.parametrize("status", [200, 304, 404, 500, 302])
+def test_public_response_and_validator_are_forwarded_without_credentials(status):
+    import asyncio
+
+    calls = []
+
+    def upstream(req):
+        calls.append(req)
+        return httpx.Response(status, content=b'{"revision":2}' if status == 200 else b"",
+                              headers={"ETag": '"r2"', "Set-Cookie": "private=secret"})
+
+    factory = httpx.AsyncClient
+    with patch.object(bridge, "branding_url", return_value="http://admin/brand"), \
+         patch.object(bridge.httpx, "AsyncClient", side_effect=lambda **kw: factory(
+             transport=httpx.MockTransport(upstream), **kw)):
+        response = asyncio.run(bridge.platform_branding(request('"r1"')))
+    assert response.status_code == (status if status in {200, 304, 404} else 502)
+    assert "set-cookie" not in response.headers
+    assert calls[0].headers["if-none-match"] == '"r1"'
+    assert "authorization" not in calls[0].headers
+    if status == 200:
+        assert response.body == b'{"revision":2}'
+        assert response.headers["etag"] == '"r2"'
+
+
+@pytest.mark.parametrize("kind,expected", [("unavailable", 503), ("oversized", 502), ("disabled", 404)])
+def test_failures_do_not_replace_cached_configuration(kind, expected):
+    import asyncio
+
+    def upstream(req):
+        if kind == "unavailable":
+            raise httpx.ConnectError("unavailable", request=req)
+        return httpx.Response(200, content=b"x" * 65537)
+
+    factory = httpx.AsyncClient
+    with patch.object(bridge, "branding_url", return_value=None if kind == "disabled" else "http://admin/brand"), \
+         patch.object(bridge.httpx, "AsyncClient", side_effect=lambda **kw: factory(
+             transport=httpx.MockTransport(upstream), **kw)):
+        response = asyncio.run(bridge.platform_branding(request()))
+    assert response.status_code == expected

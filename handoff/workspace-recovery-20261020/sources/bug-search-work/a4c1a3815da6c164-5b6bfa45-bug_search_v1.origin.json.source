@@ -1,0 +1,7 @@
+{
+  "repository": "fleet-control",
+  "path": "backend/domain/tests/fixtures/bug_search_v1.json",
+  "source_sha256": "fb38b1b6de14585af4d240487598c0e530adeaedc514ecc26f7a34a12ed7ab15",
+  "algorithm": "sha256-canonical-json-utf8-v1",
+  "copied_as_standalone_input": true
+}

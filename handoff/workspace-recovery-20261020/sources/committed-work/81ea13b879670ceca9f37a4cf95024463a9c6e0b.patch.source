@@ -1,0 +1,810 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index 57c1416..e32a0d9 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -4,8 +4,9 @@
+ 
+ 1. После завершения задачи нельзя оставлять готовую работу в незакоммиченном состоянии.
+    - Сначала прогнать релевантные проверки.
+-   - Для UI-изменений обязательно сделать браузерную проверку и скриншот.
+-   - Затем сразу сделать git commit по выполненной задаче.
++   - Для UI-кандидата выполнить source contract/unit/build gates и source commit.
++   - Затем собрать образ из этого SHA, выполнить браузерную матрицу и сохранить
++     скриншоты/evidence отдельным коммитом до готовности PR к ревью.
+ 
+ 2. Не считать задачу завершённой, если рабочее дерево осталось dirty по её изменениям.
+ 
+@@ -55,14 +56,15 @@ Supervisor Engine перед commit выполнить следующие про
+ 
+ 6. **Readiness локального Compose**
+    ```bash
+-   docker compose up --build -d --wait
+-   curl --fail http://127.0.0.1:8812/health
++   ./scripts/quality.ps1 -Target compose-ready -DockerContext desktop-linux
+    ```
+    Ожидается HTTP `200` и `database=ok`, `schema=ok`.
+ 
+ 7. **Браузерная проверка** для изменений UI
+-   - Открыть `http://127.0.0.1:8812/` и `http://127.0.0.1:8812/phases`.
+-   - Сохранить скриншот.
++   - Адрес кандидата взять из receipt временного QA-проекта, не из порта workspace.
++   - Проверить source-attested image, SSO, роли/состояния и layout modes из
++     `docs/ui-routes.json`; сохранить viewport/theme matrix и безопасные screenshots.
++   - Порты и issuer действующего стенда определяет выбранный workspace profile.
+ 
+ ## Примечания
+ 
+diff --git a/README.md b/README.md
+index 998741f..0b99d76 100644
+--- a/README.md
++++ b/README.md
+@@ -118,9 +118,9 @@ symlink и другие non-regular runtime inputs отклоняются. Docke
+ Те же значения
+ записываются в OCI labels `org.opencontainers.image.revision`,
+ `io.relevanter.source.archive-sha256` и
+-`io.relevanter.runtime.bundle-sha256`. Обычный `docker compose up --build`
+-остаётся доступен для локальной разработки, но намеренно не считается
+-поставляемым candidate и его capability endpoint остаётся not ready.
++`io.relevanter.runtime.bundle-sha256`. Изолированная Compose smoke-сборка
++проверяет локальную разработку отдельно от поставляемого candidate. Без
++подтверждённого bundle capability endpoint остаётся not ready.
+ 
+ Browser UI поддерживает общий Central Auth Authorization Code + PKCE. При
+ заданном `AUTH_ISSUER` все UI и human API routes требуют активную центральную
+@@ -129,10 +129,10 @@ Browser UI поддерживает общий Central Auth Authorization Code +
+ `AUTH_INTERNAL_BASE_URL`.
+ 
+ **Режим без авторизации (по умолчанию):** если `AUTH_ISSUER` не задан, SSO
+-middleware не активируется — UI и API работают без входа. Для standalone
+-запуска достаточно одного репозитория: `docker compose up -d --wait` поднимает
+-db + migrate + api на `127.0.0.1:8812` без Central Auth и без соседних
+-репозиториев.
++middleware не активируется — UI и API работают без входа. Standalone Compose
++содержит db, migrate и backend; для локальной контейнерной проверки используется
++временный QA-project через Base helper с явным Docker context и cleanup.
++Дополнительный постоянный standalone workspace не создаётся.
+ 
+ Runtime-источник данных — **PostgreSQL**. SQLite используется только для изолированных тестов и локальных smoke-сценариев.
+ 
+@@ -142,39 +142,43 @@ Runtime-источник данных — **PostgreSQL**. SQLite использ
+ 
+ | Режим | Когда использовать | Настройки | Поведение |
+ |---|---|---|---|
+-| Standalone без авторизации | Локальная разработка, loopback/VPN, один репозиторий | Не задавать `AUTH_*` | `docker compose up --build -d --wait` запускает db, migrate и backend; UI/API открыты без входа. |
++| Standalone QA без авторизации | Изолированная проверка продукта | Helper очищает `AUTH_*`; нужен checkout Base для Compose tooling | Собственный временный project запускает db, migrate и backend без входа и удаляется в finally. |
+ | Central Auth SSO | Общий private-контур и несколько пользователей | `AUTH_ISSUER`, `AUTH_INTERNAL_BASE_URL`, `AUTH_PUBLIC_ORIGIN`, `AUTH_SESSION_SECRET` | UI и human API требуют Central Auth через Authorization Code + PKCE; при недоступности Auth запросы fail closed с `503`. |
+ | Personal-token CLI | CLI запускается вне БД сервиса | `SDLC_API_TOKEN`, `PROJECT_WORKFLOW_URL`, отдельно установленный `sdlc-cli-core` | Central Auth интроспектирует token и scopes `project-workflow:read/write`; token не хранится приложением. |
+ 
+ ### Standalone без авторизации
+ 
+-Это default-режим: пустой `AUTH_ISSUER` не устанавливает SSO middleware. Для
+-старта не нужны Central Auth, `services-base` или дополнительные Docker build
+-contexts:
++Пустой `AUTH_ISSUER` не устанавливает SSO middleware. Проверка ниже не требует
++Central Auth или других приложений; соседний checkout Base предоставляет общие
++Compose tooling. Из корня продукта через PowerShell 7:
+ 
+-```bash
+-cp .env.example .env
+-docker compose up --build -d --wait
+-curl --fail http://127.0.0.1:8812/health
++```powershell
++./scripts/quality.ps1 -Target compose-ready -DockerContext desktop-linux
+ ```
+ 
+-UI: `http://127.0.0.1:8812`. Стандартный Compose публикует API и PostgreSQL
+-только на loopback; не делайте этот режим общедоступным без отдельного security
+-review.
++Helper выделяет loopback-порт, проверяет `/health` и записывает защищённый receipt
++в `.local/compose-smoke`; собственные контейнеры, сети и disposable storage
++удаляются в finally. Постоянные runtime данные и secrets не используются.
++Standalone default UI-порт `8812` не определяет адрес QA или полного workspace.
++Для browser evidence использовать source-attested image и synthetic QA harness,
++как описано в [контракте приёмки](docs/plans/2026-10-05-ui-acceptance-contract.md).
+ 
+ ### Central Auth SSO
+ 
+-В `services-base` зарегистрирован OIDC client `project-workflow` с redirect URI
+-`http://localhost:8812/sso/callback`. Для локального общего контура API должен
+-быть подключён к сети `sdlc-ux_platform` через версионируемый
+-`services-base/deploy/project-workflow.local.override.yml`. В этом режиме
+-адреса, достижимые с браузера и из контейнера API, выглядят так:
++Постоянный workspace запускается из его корня через PowerShell 7:
++`./start-local.ps1 -Workspace sdlc1` или `sdlc2`. Выбранные profile/runtime
++snapshot определяют UI URL, issuer, OIDC callback и инфраструктуру. Installer
++согласует client `project-workflow` с этим публичным URL. Не подключать старую
++сеть `sdlc-ux_platform` и legacy overrides к новой установке.
++
++Параметры существующей установки сохраняются, значения не выводятся из первого
++workspace или standalone defaults:
+ 
+ ```dotenv
+-AUTH_ISSUER=http://localhost:7701
+-AUTH_INTERNAL_BASE_URL=http://auth-backend:7701
+-AUTH_PUBLIC_ORIGIN=http://localhost:8812
+-AUTH_SESSION_SECRET=[CHANGE_ME_AT_LEAST_32_CHARACTERS]
++AUTH_ISSUER=[PUBLIC_ISSUER_FROM_PROFILE]
++AUTH_INTERNAL_BASE_URL=[INTERNAL_AUTH_URL_FROM_SNAPSHOT]
++AUTH_PUBLIC_ORIGIN=[WORKFLOW_PUBLIC_ORIGIN_FROM_PROFILE]
++AUTH_SESSION_SECRET=[EXISTING_PROTECTED_SECRET]
+ AUTH_COOKIE_SECURE=false
+ ```
+ 
+@@ -219,7 +223,7 @@ bridge `/internal/runtime/*` не использует browser SSO и защищ
+ | Append-only history | История фаз и `step`-проверок не затирается. |
+ | CLI freeze | Публичный CLI остаётся управляемым и предсказуемым: `step` / `history`. |
+ | Wrapper commands | `workflow-qa`, `workflow-dev` и другие команды генерируются из записей PostgreSQL. |
+-| Automatic baseline | `docker compose up` поднимает Postgres, применяет миграции и загружает versioned managed-каталог v2: 7 workflow / 11 modes с независимыми scope sets. |
++| Automatic baseline новой установки/QA | Migrate service применяет миграции и устанавливает versioned managed-каталог v2: 7 workflow / 11 modes с независимыми scope sets. Restore сравнивает сохранённые данные до запуска; пересборка и повторный bootstrap не восстанавливают пользовательское состояние. |
+ 
+ ## 🔧 Стек
+ 
+diff --git a/docs/plans/2026-10-05-ui-acceptance-contract.md b/docs/plans/2026-10-05-ui-acceptance-contract.md
+new file mode 100644
+index 0000000..473eddf
+--- /dev/null
++++ b/docs/plans/2026-10-05-ui-acceptance-contract.md
+@@ -0,0 +1,27 @@
++# Контракт SSR UI-приёмки — 5 октября 2026
++
++Workflow использует SSR, а не React runtime. Route contract schemaVersion 2
++перечисляет один текущий human actor `central_user` по SSO middleware: Central
++Auth подтверждает immutable subject; human roles не разделяют доступ к страницам.
++PAT read/write scopes и origin protection сохраняются отдельно, они не являются
++browser identity roles. Публичные SSO redirects перечислены по фактическим routes.
++
++Initial HTML формируется сервером. Общего React loading-state нет; pending
++mutation controls проверяются на страницах с inline JS. Empty states описывают
++действующие списки и independent sections. Settings — read-only CLI reference,
++а не форма редактирования конфигурации. Отсутствие task/phase возвращает 404,
++не пустую detail page. Ошибки namespace/query используют shared error template
++с layout wide; detail-with-aside/reading сохраняются на нормальных страницах.
++Отсутствие phase_id у instructions — HTTP 200 empty state с переходом к фазам.
++
++Shared error template явно маркирует empty/not-found/permission-denied/error,
++не показывает fake HTTP error в empty state и не выводит недоступные editor
++controls. API status/body и SSO не изменяются. PostgreSQL managed-catalog policy
++сохраняется; browser contract не объявляет несуществующий managed read-only UI.
++
++Base SSR assets экспортируются штатным export-ssr.mjs; fingerprint проверяется
++route gate. Source commit предшествует candidate image и browser evidence.
++acceptanceStatus остаётся pending до полного browser gate на synthetic QA
++профилях. Standalone infrastructure-failure fallback и полный state evidence
++проверяются отдельно, unit tests не заменяют их. Рабочие images, данные,
++snapshots, secrets, Hermes desired state и наблюдение не изменяются.
+diff --git a/docs/ui-routes.json b/docs/ui-routes.json
+index f2c41e4..f3d12b0 100644
+--- a/docs/ui-routes.json
++++ b/docs/ui-routes.json
+@@ -1,9 +1,10 @@
+ {
+-  "schemaVersion": 1,
++  "schemaVersion": 2,
+   "product": "project-workflow",
+   "acceptanceStatus": "pending",
+   "serverRouteSources": [
+-    "project_workflow/interfaces/ui/app.py"
++    "project_workflow/interfaces/ui/app.py",
++    "project_workflow/interfaces/ui/sso.py"
+   ],
+   "runtimeSources": [
+     "project_workflow"
+@@ -16,220 +17,438 @@
+       "kind": "operational",
+       "layout": "wide",
+       "roles": [
+-        "authenticated",
+-        "system-admin"
++        "central_user"
+       ],
+       "fixture": "synthetic:project-workflow:/",
+       "states": [
+         "normal",
+-        "loading",
+         "empty",
+-        "permission-denied",
++        "not-found",
+         "error"
+       ],
+       "qa": {
+         "status": "not-run"
+-      }
++      },
++      "roleSources": [
++        "project_workflow/interfaces/ui/sso.py"
++      ],
++      "roleStates": {
++        "central_user": [
++          "normal",
++          "empty",
++          "not-found",
++          "error"
++        ]
++      },
++      "stateSources": [
++        "project_workflow/interfaces/ui/routes/pages.py",
++        "project_workflow/interfaces/ui/templates/dashboard.html",
++        "project_workflow/interfaces/ui/templates/error.html"
++      ],
++      "stateLayouts": {
++        "not-found": "wide",
++        "error": "wide"
++      },
++      "stateNotes": "Пусты независимые списки незавершённых задач и неймспейсов; нулевые метрики сами по себе остаются нормальным содержимым. Human SSO имеет одну effective policy; initial HTML не содержит React loading-state. Error fixture использует некорректный namespace_id (422) без внешнего provider call."
+     },
+     {
+       "pattern": "/agents",
+       "kind": "operational",
+       "layout": "wide",
+       "roles": [
+-        "authenticated",
+-        "system-admin"
++        "central_user"
+       ],
+       "fixture": "synthetic:project-workflow:/agents",
+       "states": [
+         "normal",
+-        "loading",
+         "empty",
+-        "permission-denied",
++        "not-found",
+         "error"
+       ],
+       "qa": {
+         "status": "not-run"
+-      }
++      },
++      "roleSources": [
++        "project_workflow/interfaces/ui/sso.py"
++      ],
++      "roleStates": {
++        "central_user": [
++          "normal",
++          "empty",
++          "not-found",
++          "error"
++        ]
++      },
++      "stateSources": [
++        "project_workflow/interfaces/ui/routes/pages.py",
++        "project_workflow/interfaces/ui/templates/agents.html",
++        "project_workflow/interfaces/ui/templates/error.html"
++      ],
++      "stateLayouts": {
++        "not-found": "wide",
++        "error": "wide"
++      },
++      "stateNotes": "Пустой каталог агентов сохраняет форму создания; pending controls относятся к mutation, а не initial SSR loading. Human SSO имеет одну effective policy; initial HTML не содержит React loading-state. Error fixture использует некорректный namespace_id (422) без внешнего provider call."
+     },
+     {
+       "pattern": "/instructions",
+       "kind": "operational",
+       "layout": "reading",
+       "roles": [
+-        "authenticated",
+-        "system-admin"
++        "central_user"
+       ],
+       "fixture": "synthetic:project-workflow:/instructions",
+       "states": [
+         "normal",
+-        "loading",
+         "empty",
+-        "permission-denied",
++        "not-found",
+         "error"
+       ],
+       "qa": {
+         "status": "not-run"
+-      }
++      },
++      "roleSources": [
++        "project_workflow/interfaces/ui/sso.py"
++      ],
++      "roleStates": {
++        "central_user": [
++          "normal",
++          "empty",
++          "not-found",
++          "error"
++        ]
++      },
++      "stateSources": [
++        "project_workflow/interfaces/ui/routes/pages.py",
++        "project_workflow/interfaces/ui/templates/instructions.html",
++        "project_workflow/interfaces/ui/templates/error.html"
++      ],
++      "stateLayouts": {
++        "not-found": "wide",
++        "error": "wide",
++        "empty": "wide"
++      },
++      "stateNotes": "Empty без phase_id использует wide. Выбранная фаза без инструкций остаётся нормальной редактируемой страницей; отсутствующая фаза возвращает 404. Human SSO имеет одну effective policy; initial HTML не содержит React loading-state. Error fixture использует некорректный namespace_id (422) без внешнего provider call."
+     },
+     {
+       "pattern": "/namespaces",
+       "kind": "operational",
+       "layout": "wide",
+       "roles": [
+-        "authenticated",
+-        "system-admin"
++        "central_user"
+       ],
+       "fixture": "synthetic:project-workflow:/namespaces",
+       "states": [
+         "normal",
+-        "loading",
+         "empty",
+-        "permission-denied",
++        "not-found",
+         "error"
+       ],
+       "qa": {
+         "status": "not-run"
+-      }
++      },
++      "roleSources": [
++        "project_workflow/interfaces/ui/sso.py"
++      ],
++      "roleStates": {
++        "central_user": [
++          "normal",
++          "empty",
++          "not-found",
++          "error"
++        ]
++      },
++      "stateSources": [
++        "project_workflow/interfaces/ui/routes/pages.py",
++        "project_workflow/interfaces/ui/templates/namespaces.html",
++        "project_workflow/interfaces/ui/templates/error.html"
++      ],
++      "stateLayouts": {
++        "not-found": "wide",
++        "error": "wide"
++      },
++      "stateNotes": "Пустая навигация сохраняет редактор/создание; выбор неймспейса и запрет удаления при наличии задач сохраняют действующую политику. Human SSO имеет одну effective policy; initial HTML не содержит React loading-state. Error fixture использует некорректный namespace_id (422) без внешнего provider call."
+     },
+     {
+       "pattern": "/namespaces/new",
+       "kind": "operational",
+       "layout": "wide",
+       "roles": [
+-        "authenticated",
+-        "system-admin"
++        "central_user"
+       ],
+       "fixture": "synthetic:project-workflow:/namespaces/new",
+       "states": [
+         "normal",
+-        "loading",
+-        "empty",
+-        "permission-denied",
++        "not-found",
+         "error"
+       ],
+       "qa": {
+         "status": "not-run"
+-      }
++      },
++      "roleSources": [
++        "project_workflow/interfaces/ui/sso.py"
++      ],
++      "roleStates": {
++        "central_user": [
++          "normal",
++          "not-found",
++          "error"
++        ]
++      },
++      "stateSources": [
++        "project_workflow/interfaces/ui/routes/pages.py",
++        "project_workflow/interfaces/ui/templates/namespaces.html",
++        "project_workflow/interfaces/ui/templates/error.html"
++      ],
++      "stateLayouts": {
++        "not-found": "wide",
++        "error": "wide"
++      },
++      "stateNotes": "Форма создания остаётся normal до появления первого неймспейса; это не отсутствие primary resource. Human SSO имеет одну effective policy; initial HTML не содержит React loading-state. Error fixture использует некорректный namespace_id (422) без внешнего provider call."
+     },
+     {
+       "pattern": "/phase/{phase_id}",
+       "kind": "operational",
+       "layout": "detail-with-aside",
+       "roles": [
+-        "authenticated",
+-        "system-admin"
++        "central_user"
+       ],
+       "fixture": "synthetic:project-workflow:/phase/{phase_id}",
+       "states": [
+         "normal",
+-        "loading",
+-        "empty",
+-        "permission-denied",
++        "not-found",
+         "error"
+       ],
+       "qa": {
+         "status": "not-run"
+-      }
++      },
++      "roleSources": [
++        "project_workflow/interfaces/ui/sso.py"
++      ],
++      "roleStates": {
++        "central_user": [
++          "normal",
++          "not-found",
++          "error"
++        ]
++      },
++      "stateSources": [
++        "project_workflow/interfaces/ui/routes/pages.py",
++        "project_workflow/interfaces/ui/templates/phase_detail.html",
++        "project_workflow/interfaces/ui/templates/error.html"
++      ],
++      "stateLayouts": {
++        "not-found": "wide",
++        "error": "wide"
++      },
++      "stateNotes": "Primary phase должен существовать; пустые инструкции/checks/evidence — независимые разделы normal content. Отсутствующая фаза возвращает 404 wide без редактора. Human SSO имеет одну effective policy; initial HTML не содержит React loading-state. Error fixture использует некорректный namespace_id (422) без внешнего provider call."
+     },
+     {
+       "pattern": "/phases",
+       "kind": "operational",
+       "layout": "wide",
+       "roles": [
+-        "authenticated",
+-        "system-admin"
++        "central_user"
+       ],
+       "fixture": "synthetic:project-workflow:/phases",
+       "states": [
+         "normal",
+-        "loading",
+         "empty",
+-        "permission-denied",
++        "not-found",
+         "error"
+       ],
+       "qa": {
+         "status": "not-run"
+-      }
++      },
++      "roleSources": [
++        "project_workflow/interfaces/ui/sso.py"
++      ],
++      "roleStates": {
++        "central_user": [
++          "normal",
++          "empty",
++          "not-found",
++          "error"
++        ]
++      },
++      "stateSources": [
++        "project_workflow/interfaces/ui/routes/pages.py",
++        "project_workflow/interfaces/ui/templates/phases.html",
++        "project_workflow/interfaces/ui/templates/error.html"
++      ],
++      "stateLayouts": {
++        "not-found": "wide",
++        "error": "wide"
++      },
++      "stateNotes": "Пустой каталог фаз отличается от отсутствующего явно выбранного workflow/mode (404). Pending actions — inline mutation controls. Human SSO имеет одну effective policy; initial HTML не содержит React loading-state. Error fixture использует некорректный namespace_id (422) без внешнего provider call."
+     },
+     {
+       "pattern": "/settings",
+       "kind": "operational",
+       "layout": "reading",
+       "roles": [
+-        "authenticated",
+-        "system-admin"
++        "central_user"
+       ],
+       "fixture": "synthetic:project-workflow:/settings",
+       "states": [
+         "normal",
+-        "loading",
+         "empty",
+-        "permission-denied",
+-        "error"
++        "not-found",
++        "error",
++        "read-only"
+       ],
+       "qa": {
+         "status": "not-run"
+-      }
++      },
++      "roleSources": [
++        "project_workflow/interfaces/ui/sso.py"
++      ],
++      "roleStates": {
++        "central_user": [
++          "normal",
++          "empty",
++          "not-found",
++          "error",
++          "read-only"
++        ]
++      },
++      "stateSources": [
++        "project_workflow/interfaces/ui/routes/pages.py",
++        "project_workflow/interfaces/ui/templates/settings.html",
++        "project_workflow/interfaces/ui/templates/error.html"
++      ],
++      "stateLayouts": {
++        "not-found": "wide",
++        "error": "wide"
++      },
++      "stateNotes": "Read-only справочник CLI с copy buttons; empty означает отсутствие доступных команд. Страница не изменяет runtime settings. Human SSO имеет одну effective policy; initial HTML не содержит React loading-state. Error fixture использует некорректный namespace_id (422) без внешнего provider call."
+     },
+     {
+       "pattern": "/task/{task_key}",
+       "kind": "operational",
+       "layout": "detail-with-aside",
+       "roles": [
+-        "authenticated",
+-        "system-admin"
++        "central_user"
+       ],
+       "fixture": "synthetic:project-workflow:/task/{task_key}",
+       "states": [
+         "normal",
+-        "loading",
+-        "empty",
+-        "permission-denied",
++        "not-found",
+         "error"
+       ],
+       "qa": {
+         "status": "not-run"
+-      }
++      },
++      "roleSources": [
++        "project_workflow/interfaces/ui/sso.py"
++      ],
++      "roleStates": {
++        "central_user": [
++          "normal",
++          "not-found",
++          "error"
++        ]
++      },
++      "stateSources": [
++        "project_workflow/interfaces/ui/routes/pages.py",
++        "project_workflow/interfaces/ui/templates/task_detail.html",
++        "project_workflow/interfaces/ui/templates/error.html"
++      ],
++      "stateLayouts": {
++        "not-found": "wide",
++        "error": "wide"
++      },
++      "stateNotes": "Primary task должен существовать; пустые history/run — разделы normal detail. Отсутствующая задача возвращает 404, несовместимая execution identity — 409; оба используют wide. Human SSO имеет одну effective policy; initial HTML не содержит React loading-state. Error fixture использует некорректный namespace_id (422) без внешнего provider call."
+     },
+     {
+       "pattern": "/tasks",
+       "kind": "operational",
+       "layout": "wide",
+       "roles": [
+-        "authenticated",
+-        "system-admin"
++        "central_user"
+       ],
+       "fixture": "synthetic:project-workflow:/tasks",
+       "states": [
+         "normal",
+-        "loading",
+         "empty",
+-        "permission-denied",
++        "not-found",
+         "error"
+       ],
+       "qa": {
+         "status": "not-run"
+-      }
++      },
++      "roleSources": [
++        "project_workflow/interfaces/ui/sso.py"
++      ],
++      "roleStates": {
++        "central_user": [
++          "normal",
++          "empty",
++          "not-found",
++          "error"
++        ]
++      },
++      "stateSources": [
++        "project_workflow/interfaces/ui/routes/pages.py",
++        "project_workflow/interfaces/ui/templates/tasks.html",
++        "project_workflow/interfaces/ui/templates/error.html"
++      ],
++      "stateLayouts": {
++        "not-found": "wide",
++        "error": "wide"
++      },
++      "stateNotes": "Пустой список означает отсутствие задач; повреждённая execution identity возвращает 409 error, а не успешный пустой список. Human SSO имеет одну effective policy; initial HTML не содержит React loading-state. Error fixture использует некорректный namespace_id (422) без внешнего provider call."
+     },
+     {
+       "pattern": "/workflows",
+       "kind": "operational",
+       "layout": "wide",
+       "roles": [
+-        "authenticated",
+-        "system-admin"
++        "central_user"
+       ],
+       "fixture": "synthetic:project-workflow:/workflows",
+       "states": [
+         "normal",
+-        "loading",
+         "empty",
+-        "permission-denied",
++        "not-found",
+         "error"
+       ],
+       "qa": {
+         "status": "not-run"
+-      }
++      },
++      "roleSources": [
++        "project_workflow/interfaces/ui/sso.py"
++      ],
++      "roleStates": {
++        "central_user": [
++          "normal",
++          "empty",
++          "not-found",
++          "error"
++        ]
++      },
++      "stateSources": [
++        "project_workflow/interfaces/ui/routes/pages.py",
++        "project_workflow/interfaces/ui/templates/workflows.html",
++        "project_workflow/interfaces/ui/templates/error.html"
++      ],
++      "stateLayouts": {
++        "not-found": "wide",
++        "error": "wide"
++      },
++      "stateNotes": "Пустая навигация сохраняет create editor; удаление default workflow защищено. Managed catalog fencing остаётся backend policy. Human SSO имеет одну effective policy; initial HTML не содержит React loading-state. Error fixture использует некорректный namespace_id (422) без внешнего provider call."
++    },
++    {
++      "pattern": "/login",
++      "kind": "redirect"
++    },
++    {
++      "pattern": "/logout",
++      "kind": "redirect"
++    },
++    {
++      "pattern": "/sso/callback",
++      "kind": "public"
+     }
+   ]
+ }
+diff --git a/project_workflow/interfaces/ui/templates/base-assets/fingerprint.json b/project_workflow/interfaces/ui/templates/base-assets/fingerprint.json
+index 284636c..c71aebf 100644
+--- a/project_workflow/interfaces/ui/templates/base-assets/fingerprint.json
++++ b/project_workflow/interfaces/ui/templates/base-assets/fingerprint.json
+@@ -2,8 +2,8 @@
+   "schemaVersion": 1,
+   "package": "@sdlc/ui",
+   "files": {
+-    "base-ui.css": "bf2baeb201bd5e7dba07912bcd7f304cddac3c904b7939b073a77d050525cab6",
+-    "base-ui.js": "3f7dc10011e9a44f0dec03cf3f17ff156d094a844d89dde037fa95bd14f0a6ae",
+-    "macros.html": "c665c7bb85bc4ed41a1d6fda26eda8a9dfe0472911493d3a2d2c79332ca97d6c"
++    "base-ui.css": "6542d2657dd1373056c070e90e5cf46669316959f44ea6f937342d760f6295d6",
++    "base-ui.js": "b653e40f48efadf50c0190ef3c461ad4db93c49f02577057696fe5a1fe8546eb",
++    "macros.html": "02a5ce224504415b3f336cd65441373c414158dfa5e8a14bfe778b1a8b88c3a1"
+   }
+ }
+diff --git a/project_workflow/interfaces/ui/templates/error.html b/project_workflow/interfaces/ui/templates/error.html
+index be14584..ba6b4e3 100644
+--- a/project_workflow/interfaces/ui/templates/error.html
++++ b/project_workflow/interfaces/ui/templates/error.html
+@@ -11,8 +11,9 @@
+ {% endblock %}
+ 
+ {% block content %}
+-<section class="card error-state">
+-  <div class="error-code">HTTP {{ status_code }}</div>
++{% set state_kind = 'empty' if empty_state | default(false) else 'not-found' if status_code == 404 else 'permission-denied' if status_code == 403 else 'error' %}
++<section class="card error-state" data-page-state="{{ state_kind }}" role="{{ 'alert' if state_kind == 'error' else 'status' }}">
++  {% if not empty_state | default(false) %}<div class="error-code">HTTP {{ status_code }}</div>{% endif %}
+   <h1>{{ title }}</h1>
+   <p>{{ message }}</p>
+   <a class="btn btn-secondary" href="{{ back_url }}">← {{ back_label }}</a>
+diff --git a/tests/test_docs_quality.py b/tests/test_docs_quality.py
+index 47ff208..4201b19 100644
+--- a/tests/test_docs_quality.py
++++ b/tests/test_docs_quality.py
+@@ -68,7 +68,20 @@ def test_readme_does_not_advertise_absent_systemd_unit() -> None:
+     assert "project-workflow-ui.service" not in readme
+     assert "sudo systemctl" not in readme
+     assert "curl --fail http://127.0.0.1:8811/health" not in readme
+-    assert "curl --fail http://127.0.0.1:8812/health" in readme
++    assert "./scripts/quality.ps1 -Target compose-ready -DockerContext desktop-linux" in readme
++
++
++def test_current_startup_instructions_use_scoped_qa_and_workspace_profiles() -> None:
++    readme = (ROOT / "README.md").read_text(encoding="utf-8")
++    agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
++
++    assert "docker compose up" not in readme
++    assert "docker compose up" not in agents
++    assert "./start-local.ps1 -Workspace sdlc1" in readme
++    assert "profile/runtime" in readme
++    assert "EXISTING_PROTECTED_SECRET" in readme
++    assert "standalone defaults" in readme
++    assert "удаляются в finally" in readme
+ 
+ 
+ def test_hosted_ci_covers_quality_and_compose_readiness() -> None:
+diff --git a/tests/test_runtime_cleanup.py b/tests/test_runtime_cleanup.py
+index 3866329..e94df67 100644
+--- a/tests/test_runtime_cleanup.py
++++ b/tests/test_runtime_cleanup.py
+@@ -113,10 +113,16 @@ def test_compose_waits_for_api_readiness():
+     assert "data.get('ok') is True" in api_block
+ 
+ 
+-def test_repository_runbook_waits_for_compose_readiness():
++def test_repository_runbook_uses_scoped_compose_readiness():
+     agents = AGENTS_PATH.read_text(encoding="utf-8")
+-    assert "docker compose up --build -d --wait" in agents
+-    assert "scripts/quality.ps1" in agents
++    script = QUALITY_SCRIPT_PATH.read_text(encoding="utf-8")
++    assert "./scripts/quality.ps1 -Target compose-ready -DockerContext desktop-linux" in agents
++    assert "docker compose up" not in agents
++    assert '"compose-ready" { Invoke-ComposeReady }' in script
++    assert '"--docker-context", $DockerContext' in script
++    assert "compose-ready requires an explicit -DockerContext" in script
++    assert '"--output", $ComposeOutput' in script
++    assert "qa_product_compose.py" in script
+ 
+ 
+ def test_windows_quality_helper_mirrors_local_gate():
+diff --git a/tests/test_ui_edge_cases.py b/tests/test_ui_edge_cases.py
+index df3d8f8..0c807fc 100644
+--- a/tests/test_ui_edge_cases.py
++++ b/tests/test_ui_edge_cases.py
+@@ -442,12 +442,34 @@ class TestPageEdgeCases:
+         assert response.status_code == 404
+         assert "Задача не найдена" in response.text
+         assert "К списку задач" in response.text
++        assert 'data-page-state="not-found"' in response.text
++        assert 'data-page-layout="wide"' in response.text
++        assert 'class="task-detail' not in response.text
+ 
+     def test_phase_detail_missing(self):
+         response = client.get("/phase/999999")
+         assert response.status_code == 404
+         assert "Фаза не найдена" in response.text
+         assert "К фазам" in response.text
++        assert 'data-page-state="not-found"' in response.text
++        assert 'data-page-layout="wide"' in response.text
++        assert 'class="phase-editor-layout"' not in response.text
++
++    def test_instructions_without_phase_is_empty_instead_of_http_error(self):
++        response = client.get("/instructions")
++        assert response.status_code == 200
++        assert 'data-page-state="empty"' in response.text
++        assert 'data-page-layout="wide"' in response.text
++        assert "Выберите фазу" in response.text
++        assert 'class="error-code"' not in response.text
++        assert 'id="instructionsLayout"' not in response.text
++
++    def test_invalid_namespace_is_error_instead_of_normal_page(self):
++        response = client.get("/tasks?namespace_id=invalid")
++        assert response.status_code == 422
++        assert 'data-page-state="error" role="alert"' in response.text
++        assert 'data-page-layout="wide"' in response.text
++        assert 'data-task-key=' not in response.text
+ 
+ 
+ # ═══════════════════════════════════════════════════════════

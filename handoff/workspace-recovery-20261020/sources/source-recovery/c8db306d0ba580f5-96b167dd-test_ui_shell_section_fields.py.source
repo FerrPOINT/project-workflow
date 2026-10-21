@@ -1,0 +1,65 @@
+from html.parser import HTMLParser
+
+from project_workflow.interfaces.ui.templates import env
+
+
+class SelectFields(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.divs: list[str] = []
+        self.labels: set[str | None] = set()
+        self.controls: dict[str, dict[str, str | None]] = {}
+        self.options: dict[str, list[str | None]] = {}
+        self.current: str | None = None
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attributes = dict(attrs)
+        if tag == "div":
+            self.divs.append(attributes.get("class") or "")
+        if tag == "label" and "base-form-field" in self.divs:
+            self.labels.add(attributes.get("for"))
+        if tag == "select":
+            identifier = attributes.get("id")
+            self.current = identifier if identifier in {"sidebarThemeSelector", "phaseSectionSelect"} else None
+            if self.current:
+                assert "base-form-field" in self.divs
+                assert self.current not in self.controls
+                self.controls[self.current] = attributes
+                self.options[self.current] = []
+        if tag == "option" and self.current:
+            self.options[self.current].append(attributes.get("value"))
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "div":
+            self.divs.pop()
+        if tag == "select":
+            self.current = None
+
+
+def fields(html: str) -> SelectFields:
+    parser = SelectFields()
+    parser.feed(html)
+    parser.close()
+    assert set(parser.controls) <= parser.labels
+    for control in parser.controls.values():
+        assert "base-control" in (control["class"] or "").split()
+    return parser
+
+
+def test_drawer_theme_uses_base_field_and_preserves_theme_callback() -> None:
+    parser = fields(env.get_template("base.html").render())
+    assert parser.controls["sidebarThemeSelector"]["onchange"] == "setPlatformTheme(this.value)"
+    assert "theme-select" in (parser.controls["sidebarThemeSelector"]["class"] or "").split()
+    assert parser.options["sidebarThemeSelector"] == ["dark", "gray", "light"]
+
+
+def test_phase_section_uses_base_field_and_preserves_section_values() -> None:
+    phase = {
+        "id": 7, "workflow_id": 1, "mode_id": None, "name": "Safe phase",
+        "instructions": [], "checks": [], "evidence": [],
+    }
+    parser = fields(env.get_template("phase_detail.html").render(page="phases", phase=phase))
+    assert parser.options["phaseSectionSelect"] == [
+        "phase-overview", "phase-instructions", "phase-checks", "phase-evidence",
+    ]
+    assert "onchange" not in parser.controls["phaseSectionSelect"]

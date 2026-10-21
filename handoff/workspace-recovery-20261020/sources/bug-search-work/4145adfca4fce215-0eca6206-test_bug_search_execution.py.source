@@ -1,0 +1,404 @@
+"""Project scope authority, immutable recovery and stop during an evaluator request."""
+
+import json
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
+from threading import Event
+from uuid import uuid4
+
+import pytest
+from pydantic import ValidationError
+from sqlalchemy import func, select, text
+from sqlalchemy.exc import IntegrityError
+
+from project_workflow import config
+from project_workflow.application.bug_search_catalog import observe_bug_search_catalog
+from project_workflow.application.bug_search_execution import BugSearchExecutionService, ExecutionActor
+from project_workflow.domain.bug_search_execution import (
+    BindExecution,
+    ExecutionBinding,
+    ExecutionCommand,
+    ExecutionResult,
+    ExecutionSnapshot,
+    GrantReadback,
+    PrepareExecution,
+    StepExecution,
+)
+from project_workflow.domain.exceptions import ConflictError
+from project_workflow.domain.runtime_assignment import payload_sha256
+from project_workflow.infrastructure import bug_search_authority as authority
+from project_workflow.infrastructure import bug_search_targets as targets
+from project_workflow.infrastructure.db import models as m
+from project_workflow.infrastructure.db.bug_search_profession import ensure_bug_search_profession
+from project_workflow.infrastructure.db.session import ensure_migrated, get_engine, reset_engine
+from project_workflow.infrastructure.db.uow import SAUnitOfWork
+from project_workflow.infrastructure.llm import OpenAICompatibleClient
+from project_workflow.infrastructure.namespace_auth import NamespaceAuthError, NamespacePrincipal
+
+
+def uid():
+    return str(uuid4())
+
+
+def grant(binding, *, admitted=True, **overrides):
+    return GrantReadback(**{
+        "contract_version": 1, "binding": binding, "expires_at": datetime.now(timezone.utc) + timedelta(minutes=5),
+        "revoked": False, "admission_state": "admitted" if admitted else "reserved", "authorization_valid": True,
+        "dispatch_allowed": admitted, "blocked_reasons": () if admitted else ("awaiting_admission",), **overrides,
+    })
+
+
+@pytest.fixture
+def source(monkeypatch, tmp_path):
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'project-execution.db'}")
+    config.get_settings.cache_clear()
+    reset_engine()
+    ensure_migrated(get_engine())
+    return build_source(monkeypatch)
+
+
+def build_source(monkeypatch):
+    with SAUnitOfWork() as uow:
+        identity = ensure_bug_search_profession(uow)
+    with SAUnitOfWork() as uow:
+        catalog = observe_bug_search_catalog(uow, identity)
+    snapshot = ExecutionSnapshot.model_validate_json(json.dumps({
+        "project": {"tracker_instance_id": "tracker-local", "project_id": uid()},
+        "owner_subject": uid(), "agent_id": uid(), "profession": catalog.profession.model_dump(mode="json"),
+        "agent_config_revision": "agent:1", "instruction_revision": "instructions:1", "policy_revision": 1,
+        "kind": "search", "trigger": "manual", "mode": "source_only",
+        "targets": [{"repository_ref": "repo:portal", "commit_sha": "a" * 40,
+                     "target_ref": None, "deployment_ref": None}],
+        "scope": ["src/**"], "excluded_paths": [], "bug_id": None, "expected_fixed_deployment_ref": None,
+    }))
+    principal = NamespacePrincipal(issuer="http://central.invalid", subject=uid())
+    binding = ExecutionBinding(
+        contract_version=1, tracker_instance_id=snapshot.project.tracker_instance_id, tracker_instance_uuid=uid(),
+        project_id=snapshot.project.project_id, owner_subject=snapshot.owner_subject, execution_id=uid(),
+        agent_id=snapshot.agent_id, purpose="search", snapshot_sha256=payload_sha256(snapshot.content()),
+        policy_revision=1, fence=1, machine_subject=principal.subject, grant_ref=uid(), bug_id=None,
+        expected_delivery_ref=None,
+    )
+    monkeypatch.setattr(authority, "read_grant", lambda binding: grant(binding))
+    monkeypatch.setenv("PROJECT_WORKFLOW_BUG_SEARCH_SCOPE_SECRET", "independent-bug-search-secret-" + "x" * 32)
+    config.get_settings.cache_clear()
+    return PrepareExecution(operation_key="prepare:1", binding=binding, snapshot=snapshot), principal, catalog
+
+
+def prepare(source):
+    payload, principal, _ = source
+    with SAUnitOfWork() as uow:
+        return BugSearchExecutionService(uow).prepare(payload, principal)
+
+
+def bind(source):
+    payload, principal, _ = source
+    command = BindExecution(operation_key="bind:1", expected_version=1, expected_fence=1,
+                            session_id=uid(), session_run_id=uid(), hermes_run_ref="hermes:actual-accepted-run")
+    with SAUnitOfWork() as uow:
+        service = BugSearchExecutionService(uow)
+        result = service.bind(payload.binding.execution_id, command, principal)
+        token = authority.scope_token(service.claims(service._load(payload.binding.execution_id)))
+    return result, "Bearer " + token
+
+
+def step(execution_id, token, *, version, report=None, result=None, key=None):
+    with SAUnitOfWork() as uow:
+        return BugSearchExecutionService(uow).step(execution_id, StepExecution(
+            operation_key=key or f"step:{version}", expected_version=version, expected_fence=1,
+            report=report, result=result,
+        ), token)
+
+
+def test_prepared_execution_has_actual_mode_pins_without_any_task(source, monkeypatch):
+    payload, principal, catalog = source
+    monkeypatch.setattr(authority, "read_grant", lambda binding: grant(binding, admitted=False))
+    with SAUnitOfWork() as uow:
+        before = uow.session.scalar(select(func.count()).select_from(m.Task))
+    receipt = prepare(source)
+    assert receipt["profession"] == catalog.profession.model_dump(mode="json")
+    assert receipt["mode_id"] == catalog.mode("search").mode_id
+    assert receipt["mode_key"] == "search"
+    assert receipt["state"] == "prepared" and receipt["session_run_id"] is None
+    assert receipt["target_observations"] is None and receipt["runtime_terminal_confirmed"] is False
+    with SAUnitOfWork() as uow:
+        assert uow.session.scalar(select(func.count()).select_from(m.Task)) == before
+    with pytest.raises(ValueError, match="authority unavailable"):
+        bind(source)
+    with SAUnitOfWork() as uow:
+        assert BugSearchExecutionService(uow).readback(payload.binding.execution_id, ExecutionActor(
+            principal=principal,
+        )) == receipt
+
+
+def test_replay_uses_frozen_catalog_but_rejects_different_request_and_revocation(source, monkeypatch):
+    payload, principal, catalog = source
+    expected = prepare(source)
+    with SAUnitOfWork() as uow:
+        uow.phase_instructions.update(catalog.modes[0].phases[0].instructions[0].id, {"description": "Edited source"})
+    assert prepare(source) == expected
+    changed = payload.model_copy(update={"operation_key": "another"})
+    with SAUnitOfWork() as uow, pytest.raises(ConflictError, match="already prepared"):
+        BugSearchExecutionService(uow).prepare(changed, principal)
+    changed = payload.model_copy(update={
+        "snapshot": payload.snapshot.model_copy(update={"instruction_revision": "new"}),
+    })
+    with SAUnitOfWork() as uow, pytest.raises(ConflictError, match="Idempotency"):
+        BugSearchExecutionService(uow).prepare(changed, principal)
+    monkeypatch.setattr(authority, "read_grant", lambda binding: grant(binding, revoked=True))
+    with pytest.raises(ValueError, match="authority unavailable"):
+        prepare(source)
+
+
+def test_complete_three_frozen_phases_and_stable_typed_result_recovery(source, supervisor_llm):
+    payload, principal, _ = source
+    prepare(source)
+    accepted, token = bind(source)
+    identity = payload.binding.execution_id
+    assert accepted["version"] == 2 and token.startswith("Bearer wf_bug_v1_")
+    initial = step(identity, token, version=2)
+    assert initial["phase_index"] == 0 and initial["snapshot"] == payload.snapshot.content()
+    supervisor_llm("PASS")
+    assert step(identity, token, version=2, report="Контекст получен")["phase_index"] == 1
+    assert step(identity, token, version=3, report="Проверка закончена")["phase_index"] == 2
+    result = ExecutionResult(coverage="complete", findings=())
+    final = step(identity, token, version=4, report="Отчёт сформирован", result=result)
+    assert final["state"] == "completed" and final["phase_index"] == 3
+    assert final["result"] == {"coverage": "complete", "findings": []}
+    assert final["runtime_terminal_confirmed"] is False
+    assert final["result_qualification"] == "source_pinned"
+    assert step(identity, token, version=4, report="Отчёт сформирован", result=result) == final
+    with SAUnitOfWork() as uow:
+        service = BugSearchExecutionService(uow)
+        assert service.readback(identity, ExecutionActor(principal=principal))["result"] == final["result"]
+        first = service.history(identity, ExecutionActor(runtime_authorization=token))
+        assert len(first["entries"]) == 4 and first["next_cursor"] is not None
+        last = service.history(identity, ExecutionActor(runtime_authorization=token), first["next_cursor"])
+        assert len(last["entries"]) == 1 and last["next_cursor"] is None
+
+
+def test_stop_during_model_io_fences_late_result_without_tracker_dependency(source, monkeypatch, supervisor_llm):
+    payload, principal, _ = source
+    prepare(source)
+    _, token = bind(source)
+    supervisor_llm("PASS")
+    actual_chat = OpenAICompatibleClient.chat
+
+    def stop_during_chat(*args, **kwargs):
+        with SAUnitOfWork() as uow:
+            stopped = BugSearchExecutionService(uow).stop(payload.binding.execution_id, ExecutionCommand(
+                operation_key="stop:1", expected_version=2, expected_fence=1,
+            ), principal)
+        assert stopped["state"] == "stopped" and stopped["fence"] == 2
+        return actual_chat(*args, **kwargs)
+
+    monkeypatch.setattr(OpenAICompatibleClient, "chat", stop_during_chat)
+    with pytest.raises(NamespaceAuthError):
+        step(payload.binding.execution_id, token, version=2, report="Late result")
+    monkeypatch.setattr(authority, "read_grant", lambda _: (_ for _ in ()).throw(RuntimeError("offline")))
+    with SAUnitOfWork() as uow:
+        service = BugSearchExecutionService(uow)
+        replay = service.stop(payload.binding.execution_id, ExecutionCommand(
+            operation_key="stop:1", expected_version=2, expected_fence=1,
+        ), principal)
+        assert replay["fence"] == 2 and replay["runtime_terminal_confirmed"] is False
+        assert service.readback(payload.binding.execution_id, ExecutionActor(principal=principal))["phase_index"] == 0
+
+
+def test_foreign_actor_and_stale_cas_cannot_use_execution(source):
+    payload, _, _ = source
+    prepare(source)
+    _, token = bind(source)
+    with SAUnitOfWork() as uow, pytest.raises(NamespaceAuthError):
+        BugSearchExecutionService(uow).readback(payload.binding.execution_id, ExecutionActor(
+            principal=NamespacePrincipal(issuer="http://central.invalid", subject=uid()),
+        ))
+    with pytest.raises(ConflictError, match="Stale"):
+        step(payload.binding.execution_id, token, version=1)
+    with pytest.raises(NamespaceAuthError):
+        step(payload.binding.execution_id, "Bearer wf_bug_v1_" + "0" * 64, version=2)
+
+
+@pytest.mark.parametrize("mutation", [
+    "UPDATE bug_search_executions SET snapshot_json='{}'",
+    "DELETE FROM bug_search_executions",
+    "UPDATE bug_search_operations SET kind='stop'",
+    "DELETE FROM bug_search_operations",
+])
+def test_database_retains_immutable_execution_authority_and_operation_results(source, mutation):
+    prepare(source)
+    with pytest.raises(IntegrityError):
+        with SAUnitOfWork() as uow:
+            uow.session.execute(text(mutation))
+
+
+@pytest.mark.parametrize("field,value", [("contract_version", True), ("fence", 1.0), ("policy_revision", False)])
+def test_tracker_binding_rejects_coercion_and_unknown_authority(source, field, value):
+    binding = source[0].binding.model_dump(mode="json")
+    binding[field] = value
+    with pytest.raises(ValidationError):
+        ExecutionBinding.model_validate_json(json.dumps(binding))
+
+
+def verification_source(source, monkeypatch):
+    from tests.test_bug_search_authority import owner_readback
+    from tests.test_bug_search_wire import verification_snapshot
+
+    payload, principal, catalog = source
+    snapshot = ExecutionSnapshot.model_validate_json(json.dumps(verification_snapshot(source)))
+    binding = payload.binding.model_copy(update={
+        "purpose": "verification", "bug_id": snapshot.bug_id,
+        "expected_delivery_ref": snapshot.expected_fixed_deployment_ref,
+        "snapshot_sha256": payload_sha256(snapshot.content()),
+    })
+    payload = PrepareExecution(operation_key=payload.operation_key, binding=binding, snapshot=snapshot)
+    owner = owner_readback(snapshot, binding, {
+        "configuration_id": uid(), "repository_id": uid(), "environment_id": uid(),
+    })
+    monkeypatch.setattr(targets, "observe_targets", lambda *_args, **_kwargs: [owner])
+    return (payload, principal, catalog), owner
+
+
+def final_verification_result(source, *, verdict="passed", coverage="complete"):
+    snapshot = source[0].snapshot
+    return ExecutionResult.model_validate_json(json.dumps({
+        "coverage": coverage, "findings": [], "verification": {
+            "bug_id": snapshot.bug_id,
+            "basis_sha256": payload_sha256(snapshot.verification_basis.model_dump(mode="json")),
+            "delivery_ref": snapshot.expected_fixed_deployment_ref, "verdict": verdict,
+            "actual": "Original reproducer checked on pinned delivered version", "evidence_refs": ["qa:evidence"],
+        },
+    }))
+
+
+@pytest.mark.parametrize("verdict", ["passed", "failed", "inconclusive"])
+def test_verification_requires_explicit_bound_verdict_and_retains_real_target_bracket(
+    source, monkeypatch, supervisor_llm, verdict,
+):
+    source, _ = verification_source(source, monkeypatch)
+    prepare(source)
+    _, token = bind(source)
+    supervisor_llm("PASS")
+    identity = source[0].binding.execution_id
+    step(identity, token, version=2, report="Context")
+    step(identity, token, version=3, report="Reproducer")
+    result = final_verification_result(source, verdict=verdict)
+    final = step(identity, token, version=4, report="Typed verification", result=result)
+    assert final["result"]["verification"]["verdict"] == verdict
+    assert final["target_observations"]["before"] and final["target_observations"]["after"]
+    assert final["target_observations"]["after_available"] is True
+    assert final["result_qualification"] == "qa_same_version"
+
+
+def test_changed_target_never_confirms_fix_and_can_be_recorded_as_explicit_inconclusive(
+    source, monkeypatch, supervisor_llm,
+):
+    source, owner = verification_source(source, monkeypatch)
+    prepare(source)
+    _, token = bind(source)
+    supervisor_llm("PASS")
+    identity = source[0].binding.execution_id
+    step(identity, token, version=2, report="Context")
+    step(identity, token, version=3, report="Reproducer")
+    changed = json.loads(json.dumps(owner))
+    changed["target"]["generation"] = "1"
+    monkeypatch.setattr(targets, "observe_targets", lambda *_args, **_kwargs: [changed])
+    with pytest.raises(ConflictError, match="target changed"):
+        step(identity, token, version=4, report="Claims passed", result=final_verification_result(source))
+    final = step(identity, token, version=4, report="Version changed; inconclusive", key="step:inconclusive",
+                 result=final_verification_result(source, verdict="inconclusive", coverage="partial"))
+    assert final["result"]["verification"]["verdict"] == "inconclusive"
+    assert final["result_qualification"] == "qa_unconfirmed"
+    assert not targets.same_targets(final["target_observations"]["before"], final["target_observations"]["after"])
+
+
+def test_verification_cannot_infer_pass_from_zero_findings(source, monkeypatch, supervisor_llm):
+    source, _ = verification_source(source, monkeypatch)
+    prepare(source)
+    _, token = bind(source)
+    supervisor_llm("PASS")
+    identity = source[0].binding.execution_id
+    step(identity, token, version=2, report="Context")
+    step(identity, token, version=3, report="Reproducer")
+    with pytest.raises(ValueError, match="Verification verdict"):
+        step(identity, token, version=4, report="No findings", result=ExecutionResult(coverage="complete", findings=()))
+
+
+def test_qa_search_preserves_unqualified_findings_when_owner_target_becomes_unavailable(
+    source, monkeypatch, supervisor_llm,
+):
+    from tests.test_bug_search_authority import owner_readback, qa_context
+    from tests.test_bug_search_wire import report_value
+
+    payload, principal, catalog = source
+    snapshot, binding = qa_context(source)
+    binding = binding.model_copy(update={"snapshot_sha256": payload_sha256(snapshot.content())})
+    source = (
+        PrepareExecution(operation_key=payload.operation_key, binding=binding, snapshot=snapshot), principal, catalog,
+    )
+    owner = owner_readback(snapshot, binding, {
+        "configuration_id": uid(), "repository_id": uid(), "environment_id": uid(),
+    })
+    monkeypatch.setattr(targets, "observe_targets", lambda *_args, **_kwargs: [owner])
+    prepare(source)
+    _, token = bind(source)
+    supervisor_llm("PASS")
+    step(binding.execution_id, token, version=2, report="Context")
+    step(binding.execution_id, token, version=3, report="Reproducer")
+
+    def unavailable(*_args, **_kwargs):
+        raise NamespaceAuthError(503)
+
+    monkeypatch.setattr(targets, "observe_targets", unavailable)
+    occurrence_id = uid()
+    result = ExecutionResult.model_validate_json(json.dumps({"coverage": "inconclusive", "findings": [
+        {"finding_id": occurrence_id, "report": report_value()},
+    ]}))
+    final = step(binding.execution_id, token, version=4, report="Owner target became unavailable", result=result)
+    assert final["state"] == "completed" and final["result_qualification"] == "qa_unconfirmed"
+    assert final["result"]["findings"][0]["finding_id"] == occurrence_id
+    assert final["target_observations"]["after_available"] is False
+
+
+@pytest.mark.parametrize("stage", ["bind", "final"])
+def test_stop_during_held_target_probe_rejects_late_binding_or_result(source, monkeypatch, supervisor_llm, stage):
+    assert_stop_during_held_target_probe(source, monkeypatch, supervisor_llm, stage)
+
+
+def assert_stop_during_held_target_probe(source, monkeypatch, supervisor_llm, stage):
+    source, owner = verification_source(source, monkeypatch)
+    prepare(source)
+    identity = source[0].binding.execution_id
+    token = None
+    version = 1
+    if stage == "final":
+        _, token = bind(source)
+        supervisor_llm("PASS")
+        step(identity, token, version=2, report="Context")
+        step(identity, token, version=3, report="Reproducer")
+        version = 4
+    entered, release = Event(), Event()
+
+    def held_probe(*_args, **_kwargs):
+        entered.set()
+        assert release.wait(timeout=10)
+        return [owner]
+
+    monkeypatch.setattr(targets, "observe_targets", held_probe)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        if stage == "bind":
+            operation = pool.submit(bind, source)
+        else:
+            operation = pool.submit(step, identity, token, version=4, report="Final",
+                                    result=final_verification_result(source))
+        try:
+            assert entered.wait(timeout=10)
+            with SAUnitOfWork() as uow:
+                receipt = BugSearchExecutionService(uow).stop(identity, ExecutionCommand(
+                    operation_key="stop:held-probe", expected_version=version, expected_fence=1,
+                ), source[1])
+            assert receipt["state"] == "stopped" and receipt["fence"] == 2
+        finally:
+            release.set()
+        with pytest.raises((ConflictError, NamespaceAuthError)):
+            operation.result(timeout=10)

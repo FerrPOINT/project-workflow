@@ -1,0 +1,203 @@
+diff --git a/docs/quality-gate.md b/docs/quality-gate.md
+index 1ac47a9..132f0f3 100644
+--- a/docs/quality-gate.md
++++ b/docs/quality-gate.md
+@@ -65,6 +65,26 @@ business E2E с настоящим исполнителем.
+ Полный executor-driven acceptance описан отдельно в
+ [`LIVE_TEST_PLAN.md`](../LIVE_TEST_PLAN.md).
+ 
++## Human HTTP CLI
++
++`tests/test_cli_api.py` проходит через серверные `/api/cli/step` и
++`/api/cli/history` с изолированной тестовой БД. Проверяются отсутствие оценки
++при получении назначения, строгий положительный integer `namespace_id` в JSON,
++отказы невалидных запросов без создания задач, недоступность/таймаут/HTTP-ошибка
++Supervisor, редактирование технических ошибок и повтор после восстановления.
++Тестовый evaluator используется только в этих тестах, не как evidence демо.
++
++Недоступный Supervisor возвращает HTTP 200 с `ok=false`, `exit_code=1`,
++`verdict=BLOCKED`, `retryable=true`; фаза не продвигается. Повтор технического
++отказа вызывает новую попытку оценки, а не воспроизводит закэшированный отказ.
++Повтор успешного PARTIAL в неизменённой фазе может возвращать `replayed=true`
++без новой записи. После PASS задача уже в следующей фазе: тот же текст отчёта
++оценивается для её контракта заново, поэтому повтор POST не является глобальным
++идемпотентным запросом. Перед новым отчётом нужно получить актуальное назначение.
++
++`/health` подтверждает готовность БД и схемы, но не доступность внешнего
++Supervisor. Зелёный health не является доказательством рабочего перехода фазы.
++
+ ## Compose Readiness
+ 
+ Для проверки локального runtime:
+diff --git a/project_workflow/interfaces/ui/routes/cli_api.py b/project_workflow/interfaces/ui/routes/cli_api.py
+index 149e7ec..fe54b9e 100644
+--- a/project_workflow/interfaces/ui/routes/cli_api.py
++++ b/project_workflow/interfaces/ui/routes/cli_api.py
+@@ -14,7 +14,7 @@ from project_workflow.interfaces.ui.schemas import RuntimeStepRequest
+ 
+ 
+ class CliStepRequest(RuntimeStepRequest):
+-    namespace_id: int | None = Field(default=None, gt=0)
++    namespace_id: int | None = Field(default=None, gt=0, strict=True)
+ 
+ 
+ def _cli_namespace_id(uow: SAUnitOfWork, task: str, requested: int | None) -> int:
+diff --git a/tests/test_cli_api.py b/tests/test_cli_api.py
+new file mode 100644
+index 0000000..0773377
+--- /dev/null
++++ b/tests/test_cli_api.py
+@@ -0,0 +1,153 @@
++"""Human HTTP CLI contracts; evaluator fixtures are not live demo evidence."""
++
++from unittest.mock import patch
++
++import pytest
++import requests
++from fastapi.testclient import TestClient
++
++from project_workflow.infrastructure.db.uow import SAUnitOfWork
++from project_workflow.infrastructure.llm import OpenAICompatibleClient
++from project_workflow.interfaces.ui.app import create_app
++
++
++def _step(client, *, report=None, namespace_id=1):
++    return client.post(
++        "/api/cli/step",
++        json={"task": "RUN-901", "report": report, "namespace_id": namespace_id},
++    )
++
++
++def _history(client, **params):
++    return client.get("/api/cli/history", params={"task": "RUN-901", "namespace_id": 1, **params})
++
++
++def test_assignment_and_unknown_history_do_not_evaluate_or_create_history():
++    with TestClient(create_app()) as client, patch.object(OpenAICompatibleClient, "chat") as provider:
++        unknown = _history(client)
++        with SAUnitOfWork() as uow:
++            assert uow.tasks.get_by_key("RUN-901", project_id=1) is None
++        assignment = _step(client)
++        repeated = _step(client)
++        history = _history(client)
++
++    assert unknown.status_code == assignment.status_code == repeated.status_code == history.status_code == 200
++    assert unknown.json()["result"]["count"] == history.json()["result"]["count"] == 0
++    assert assignment.json()["result"] == repeated.json()["result"]
++    assert assignment.json()["result"]["phase_contract"]["required_checks"]
++    provider.assert_not_called()
++
++
++@pytest.mark.parametrize("namespace_id", [True, 1.0, "1", 0, -1])
++def test_step_rejects_invalid_namespace_id_without_creating_task(namespace_id):
++    with TestClient(create_app()) as client, patch.object(OpenAICompatibleClient, "chat") as provider:
++        response = _step(client, namespace_id=namespace_id)
++
++    assert response.status_code == 422
++    provider.assert_not_called()
++    with SAUnitOfWork() as uow:
++        assert uow.tasks.get_by_key("RUN-901", project_id=1) is None
++
++
++@pytest.mark.parametrize(
++    "payload", [{"task": " "}, {"task": "RUN-901", "report": " "}, {"task": "RUN-901", "verdict": "PASS"}]
++)
++def test_invalid_step_payload_has_no_side_effects(payload):
++    with TestClient(create_app()) as client, patch.object(OpenAICompatibleClient, "chat") as provider:
++        response = client.post("/api/cli/step", json=payload)
++
++    assert response.status_code == 422
++    provider.assert_not_called()
++    with SAUnitOfWork() as uow:
++        assert uow.tasks.get_by_key("RUN-901", project_id=1) is None
++
++
++def test_missing_or_ambiguous_namespace_is_conflict_without_creating_task():
++    with SAUnitOfWork() as uow:
++        workflow = uow.workflows.list()[0]
++        uow.projects.create(
++            {"code": "QA", "name": "QA", "workflow_id": workflow.id, "cli_command": "workflow-qa", "key_prefixes": []}
++        )
++    with TestClient(create_app()) as client, patch.object(OpenAICompatibleClient, "chat") as provider:
++        missing = _step(client, namespace_id=999999)
++        ambiguous = client.post("/api/cli/step", json={"task": "RUN-901"})
++
++    assert missing.status_code == ambiguous.status_code == 409
++    provider.assert_not_called()
++    with SAUnitOfWork() as uow:
++        assert uow.tasks.get_by_key("RUN-901") is None
++
++
++@pytest.mark.parametrize("error_type", [requests.ConnectionError, requests.Timeout, requests.HTTPError])
++def test_provider_failure_is_retryable_redacted_and_never_replayed(error_type):
++    report = "Current phase action and evidence, not a predetermined verdict."
++    secret = "sentinel-private-provider-credential"
++    with TestClient(create_app()) as client:
++        initial = _step(client).json()["result"]["phase_code"]
++        with patch.object(OpenAICompatibleClient, "chat", side_effect=error_type(secret)) as provider:
++            failed = _step(client, report=report)
++            retried = _step(client, report=report)
++        history = _history(client)
++        current = _step(client)
++
++    assert provider.call_count == 2
++    for response in (failed, retried):
++        assert response.status_code == 200
++        payload = response.json()
++        assert payload["ok"] is False and payload["exit_code"] == 1
++        result = payload["result"]
++        assert result["verdict"] == "BLOCKED"
++        assert result["retryable"] is True and result["replayed"] is False
++        assert result["current_phase_code"] == initial and result["next_phase_code"] is None
++        assert secret not in response.text
++    assert current.json()["result"]["phase_code"] == initial
++    assert current.json()["result"]["status"] == "blocked"
++    records = history.json()["result"]["records"]
++    assert len(records) == 2 and all(row["retryable"] for row in records)
++    assert all(row["worker_report"] == report for row in records)
++    with SAUnitOfWork() as uow:
++        runs = uow.step_history.list(task_key="RUN-901", project_id=1)
++        assert len(runs) == 2 and all(run.replay_fingerprint is None for run in runs)
++
++
++def test_recovery_partial_replays_once_without_duplicate_history(supervisor_llm):
++    report = "Isolated test report with evaluator fixture."
++    with TestClient(create_app()) as client:
++        initial = _step(client).json()["result"]["phase_code"]
++        with patch.object(OpenAICompatibleClient, "chat", side_effect=requests.ConnectionError("unavailable")):
++            assert _step(client, report=report).json()["result"]["retryable"] is True
++        supervisor_llm("PARTIAL")
++        accepted = _step(client, report=report)
++        with patch.object(OpenAICompatibleClient, "chat") as provider:
++            repeated = _step(client, report=report)
++        history = _history(client)
++        limited = _history(client, n=1)
++        invalid_limit = _history(client, n=0)
++
++    assert accepted.status_code == repeated.status_code == 200
++    assert accepted.json()["ok"] is repeated.json()["ok"] is True
++    first, replay = accepted.json()["result"], repeated.json()["result"]
++    assert first["verdict"] == replay["verdict"] == "PARTIAL"
++    assert first["replayed"] is False and replay["replayed"] is True
++    assert first["phase_code"] == initial
++    assert first["current_phase_code"] == replay["current_phase_code"] == initial
++    provider.assert_not_called()
++    assert history.json()["result"]["count"] == 2
++    assert limited.json()["result"]["count"] == 1
++    assert limited.json()["result"]["records"][0]["verdict"] == "partial"
++    assert invalid_limit.status_code == 422
++
++
++def test_report_after_pass_is_evaluated_again_for_new_phase(supervisor_llm):
++    supervisor_llm("PASS")
++    fixture_chat = OpenAICompatibleClient.chat
++    with TestClient(create_app()) as client:
++        _step(client)
++        with patch.object(OpenAICompatibleClient, "chat", side_effect=fixture_chat) as provider:
++            first = _step(client, report="Isolated phase report.").json()["result"]
++            second = _step(client, report="Isolated phase report.").json()["result"]
++
++    assert first["verdict"] == second["verdict"] == "PASS"
++    assert first["replayed"] is second["replayed"] is False
++    assert first["phase_code"] != second["phase_code"]
++    assert provider.call_count == 2

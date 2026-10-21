@@ -1,0 +1,339 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index cc4ab22..61eed8e 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -26,6 +26,10 @@
+ 
+ ### Fixed
+ 
++- Namespace create/edit uses unframed Base form fields, spacing and actions;
++  accessible form naming, validation, theme preview and draft safety are preserved.
++- Jinja sidebar keeps the Workflow product identity while namespace context stays
++  in the header; editing or switching a namespace no longer replaces the brand.
+ - Workflow delete inherits Base destructive foreground and hover styling;
+   effective text contrast is checked in all themes at every shell breakpoint.
+ - Base 7e27713 supplies shared label/control typography through generated SSR
+diff --git a/frontend/e2e/namespace-drafts.spec.ts b/frontend/e2e/namespace-drafts.spec.ts
+index 88f21e4..71ce169 100644
+--- a/frontend/e2e/namespace-drafts.spec.ts
++++ b/frontend/e2e/namespace-drafts.spec.ts
+@@ -44,9 +44,13 @@ for (const theme of ['dark', 'gray', 'light']) {
+       localStorage.setItem('workflow-theme', value)
+     }, theme)
+     await openEditor(page)
++    await expect(page.locator('.brand-name')).toHaveText('Workflow')
+     const url = page.url()
+     const cookie = await page.context().cookies()
+     await page.locator('#namespaceName').fill('Unsaved namespace')
++    await page.locator('#namespaceThemeColor').fill('#008060')
++    await expect(page.locator('#namespaceThemePreviewName')).toHaveText('Unsaved namespace')
++    await expect(page.locator('.brand-name')).toHaveText('Workflow')
+     await selectNamespace(page, qa.id)
+     await expect(dialog(page)).toBeVisible()
+     await expect(cancel(page)).toBeFocused()
+@@ -54,6 +58,7 @@ for (const theme of ['dark', 'gray', 'light']) {
+     await expect(dialog(page)).not.toBeVisible()
+     await expect(page.locator('#namespaceName')).toHaveValue('Unsaved namespace')
+     expect(page.url()).toBe(url)
++    await expect(page.locator('.brand-name')).toHaveText('Workflow')
+     expect(await page.context().cookies()).toEqual(cookie)
+     await expect(page.locator('#namespaceSelector')).toHaveValue(String(dev.id))
+     await page.locator('#namespaceSelector').focus()
+@@ -67,6 +72,40 @@ for (const theme of ['dark', 'gray', 'light']) {
+   })
+ }
+ 
++for (const theme of ['dark', 'gray', 'light']) {
++  for (const create of [false, true]) {
++    test(`namespace Base form composition and product identity (${theme}, ${create ? 'create' : 'edit'})`, async ({ page }) => {
++      await page.addInitScript(value => {
++        localStorage.setItem('theme', value)
++        localStorage.setItem('workflow-theme', value)
++      }, theme)
++      await openEditor(page, create)
++      await expect(page.locator('.brand-name')).toHaveText('Workflow')
++      await expect(page.locator('.brand-subname')).toHaveCount(0)
++      const form = page.locator('#namespaceForm')
++      await expect(form).toHaveClass('base-page-stack')
++      await expect(page.locator('#namespaceFormMode')).toBeHidden()
++      await expect(page.locator('h1')).toHaveCount(1)
++      for (const id of ['namespaceName', 'namespaceCliCommand', 'namespaceDescription', 'namespaceThemeIcon', 'namespaceThemeColor', 'namespaceWorkflowId']) {
++        const field = form.locator('.base-form-field').filter({ has: page.locator(`#${id}`) })
++        await expect(field.locator('label')).toHaveAttribute('for', id)
++        const style = await field.locator('label').evaluate(node => {
++          const css = getComputedStyle(node)
++          return { size: css.fontSize, transform: css.textTransform }
++        })
++        expect(style).toEqual({ size: '12px', transform: 'none' })
++      }
++      expect(await page.locator('#namespaceThemeColor').evaluate(node => node.getBoundingClientRect().height)).toBeGreaterThanOrEqual(test.info().project.name.includes('mobile') ? 44 : 40)
++      await expect(page.locator('#namespaceCliCommand')).toHaveAttribute('aria-describedby', 'namespaceCliCommand-hint')
++      await expect(form).toHaveAccessibleName(create ? 'Новый неймспейс' : 'Редактирование неймспейса')
++      await page.screenshot({ path: test.info().outputPath(`namespace-composition-${theme}-${create ? 'create' : 'edit'}.png`), fullPage: true })
++      await page.reload()
++      await expect(page.locator('.brand-name')).toHaveText('Workflow')
++      await expect(form).toHaveAccessibleName(create ? 'Новый неймспейс' : 'Редактирование неймспейса')
++    })
++  }
++}
++
+ test('accepted global context transition has no second native prompt', async ({ page }) => {
+   await openEditor(page)
+   await page.locator('#namespaceName').fill('Unsaved context')
+@@ -77,6 +116,7 @@ test('accepted global context transition has no second native prompt', async ({
+   await discard(page).click()
+   await expect(page).toHaveURL(new RegExp(`namespace_id=${qa.id}`))
+   await expect(page.locator('#namespaceName')).toHaveValue(qa.name)
++  await expect(page.locator('.brand-name')).toHaveText('Workflow')
+   expect(nativeDialogs).toEqual([])
+ })
+ 
+@@ -97,9 +137,11 @@ test('Back cancellation restores the accepted URL; confirmed Back and Forward re
+   await expect(dialog(page)).toBeVisible()
+   await discard(page).click()
+   await expect(page.locator('#namespaceName')).toHaveValue(dev.name)
++  await expect(page.locator('.brand-name')).toHaveText('Workflow')
+   await expect(page).toHaveURL(new RegExp(`namespace_id=${dev.id}`))
+   await page.evaluate(() => history.forward())
+   await expect(page.locator('#namespaceName')).toHaveValue(qa.name)
++  await expect(page.locator('.brand-name')).toHaveText('Workflow')
+   expect(await page.evaluate(() => history.length)).toBe(length)
+ })
+ 
+diff --git a/project_workflow/interfaces/ui/templates/base.html b/project_workflow/interfaces/ui/templates/base.html
+index 47835c4..9c12226 100644
+--- a/project_workflow/interfaces/ui/templates/base.html
++++ b/project_workflow/interfaces/ui/templates/base.html
+@@ -34,7 +34,6 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
+ .brand-mark svg{width:18px;height:18px}
+ .brand-text{display:flex;flex-direction:column;min-width:0;line-height:1.1}
+ .brand-name{font-size:14px;font-weight:700;color:var(--text);max-width:148px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+-.brand-subname{font-size:11px;font-weight:600;color:var(--text-secondary);max-width:148px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ .sidebar-close{display:none;background:none;border:none;color:var(--text-muted);font-size:20px;cursor:pointer;padding:0;width:40px;height:40px;align-items:center;justify-content:center}
+ .sidebar-nav:focus-visible{outline:2px solid var(--accent-hover);outline-offset:-2px}
+ .sidebar-section{padding:8px 20px;font-size:10px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;margin-top:8px}
+@@ -314,12 +313,11 @@ textarea{resize:vertical;min-height:60px}
+       <a class="brand-link" href="/" aria-label="Workflow Engine">
+         <span class="brand-mark" aria-hidden="true">
+           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+-            <path d="{{ project_icon_path(active_namespace.theme_icon if active_namespace else default_project_icon) }}"></path>
++            <path d="{{ project_icon_path(default_project_icon) }}"></path>
+           </svg>
+         </span>
+         <span class="brand-text">
+-          <span class="brand-name">{{ active_namespace.name if active_namespace else 'workflow' }}</span>
+-          <span class="brand-subname">{{ active_namespace.cli_command if active_namespace and active_namespace.cli_command else 'engine' }}</span>
++          <span class="brand-name">Workflow</span>
+         </span>
+       </a>
+     </div>
+diff --git a/project_workflow/interfaces/ui/templates/namespaces.html b/project_workflow/interfaces/ui/templates/namespaces.html
+index cf6884a..2398e5f 100644
+--- a/project_workflow/interfaces/ui/templates/namespaces.html
++++ b/project_workflow/interfaces/ui/templates/namespaces.html
+@@ -21,17 +21,12 @@
+ .namespace-panel{display:flex;flex-direction:column;gap:var(--shell-page-block-gap);min-width:0}
+ .namespace-crud.is-create{display:block}
+ .namespace-crud.is-create .namespace-nav,.namespace-crud.is-create .namespace-picker{display:none}
+-.form-stack{display:flex;flex-direction:column;gap:12px}
+-.namespace-fields{display:flex;flex-direction:column;gap:12px;min-width:0;padding:0;margin:0;border:0}
+-.label{display:block;font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0}
+-.field-help,.namespace-delete-hint{font-size:12px;color:var(--text-muted);line-height:1.5;margin-top:6px}
+-.namespace-description{min-height:96px;resize:vertical}
++.namespace-fields{padding:0;margin:0;border:0}
++.namespace-delete-hint{font-size:12px;color:var(--text-muted);line-height:1.5;margin-top:6px}
+ .theme-grid{display:grid;grid-template-columns:minmax(0,1fr) 120px;gap:12px}
+-.theme-color-input{height:34px;padding:2px;cursor:pointer}
+ .theme-preview{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--panel)}
+ .theme-preview .namespace-mark{width:30px;height:30px}
+ .theme-preview-name{font-weight:600;color:var(--text)}
+-.panel-actions{display:flex;gap:10px;flex-wrap:wrap}
+ .namespace-delete{margin-left:auto;color:var(--text);border-color:var(--red)}
+ .namespace-delete:hover{color:var(--text);background:var(--red-soft)}
+ .empty-note{color:var(--text-dim);font-size:13px;line-height:1.6}
+@@ -42,13 +37,14 @@
+ {% block content %}
+ <div class="namespace-crud {{ 'is-create' if create_mode else '' }}">
+   <div class="namespace-picker" id="namespacePicker">
+-    <label class="label" for="namespaceSelect">Неймспейс</label>
++    {% call base.field('namespaceSelect', 'Неймспейс') %}
+     <select id="namespaceSelect" onchange="selectNamespace(Number(this.value))">
+       <option value="" disabled {% if create_mode %}selected{% endif %}>{{ 'Новый неймспейс' if create_mode else 'Выберите неймспейс' }}</option>
+       {% for namespace in namespaces %}
+       <option value="{{ namespace.id }}" {% if not create_mode and selected_namespace and selected_namespace.id == namespace.id %}selected{% endif %}>{{ namespace.name }}</option>
+       {% endfor %}
+     </select>
++    {% endcall %}
+   </div>
+   <section class="namespace-nav side-nav-scroll" id="namespaceNav">
+     {% for namespace in namespaces %}
+@@ -73,47 +69,42 @@
+   </section>
+ 
+   <section class="namespace-panel page-readable">
+-    <form id="namespaceForm" class="card form-stack" aria-labelledby="namespaceFormMode" onsubmit="event.preventDefault(); submitNamespace();">
+-      <div class="card-title" id="namespaceFormMode">{{ 'Создание' if create_mode else 'Редактирование' }}</div>
+-      <fieldset id="namespaceFields" class="namespace-fields">
++    <form id="namespaceForm" class="base-page-stack" aria-labelledby="namespaceFormMode" onsubmit="event.preventDefault(); submitNamespace();">
++      <span id="namespaceFormMode" hidden>{{ 'Создание' if create_mode else 'Редактирование' }}</span>
++      <fieldset id="namespaceFields" class="base-page-stack namespace-fields">
+       {% call base.field('namespaceName', 'Название', required=true) %}
+         {{ base.input_control('namespaceName', 'name', value=edited_namespace.name if edited_namespace else '', required=true) }}
+       {% endcall %}
+-      <div>
+-        <label class="label" for="namespaceCliCommand">CLI-команда</label>
+-        <input type="text" id="namespaceCliCommand" name="cli_command" value="{{ edited_namespace.cli_command if edited_namespace else '' }}" placeholder="workflow-qa" required minlength="2" maxlength="64" pattern="[a-z][a-z0-9_\-]{1,63}" aria-describedby="namespaceCliHelp">
+-        <p class="field-help" id="namespaceCliHelp">От 2 до 64 символов: строчные латинские буквы, цифры, дефис и подчёркивание; первый символ — буква.</p>
+-      </div>
++      {% call base.field('namespaceCliCommand', 'CLI-команда', required=true, hint='От 2 до 64 символов: строчные латинские буквы, цифры, дефис и подчёркивание; первый символ — буква.') %}
++        <input class="base-control" type="text" id="namespaceCliCommand" name="cli_command" value="{{ edited_namespace.cli_command if edited_namespace else '' }}" placeholder="workflow-qa" required minlength="2" maxlength="64" pattern="[a-z][a-z0-9_\-]{1,63}" aria-describedby="namespaceCliCommand-hint">
++      {% endcall %}
+       {% call base.field('namespaceDescription', 'Описание') %}
+         {{ base.textarea_control('namespaceDescription', 'description', value=edited_namespace.description if edited_namespace else '') }}
+       {% endcall %}
+       <div class="theme-grid">
+-        <div>
+-          <label class="label" for="namespaceThemeIcon">Иконка</label>
+-          <select id="namespaceThemeIcon" name="theme_icon" onchange="updateNamespaceThemePreview()">
++        {% call base.field('namespaceThemeIcon', 'Иконка') %}
++          <select class="base-control" id="namespaceThemeIcon" name="theme_icon" onchange="updateNamespaceThemePreview()">
+             {% for option in project_icon_options %}
+             <option value="{{ option.key }}" {% if edited_namespace and edited_namespace.theme_icon == option.key %}selected{% endif %}>{{ option.label }}</option>
+             {% endfor %}
+           </select>
+-        </div>
+-        <div>
+-          <label class="label" for="namespaceThemeColor">Цвет</label>
+-          <input type="color" id="namespaceThemeColor" name="theme_color" class="theme-color-input" value="{{ edited_namespace.theme_color if edited_namespace else '#5E6AD2' }}" oninput="updateNamespaceThemePreview()">
+-        </div>
++        {% endcall %}
++        {% call base.field('namespaceThemeColor', 'Цвет') %}
++          <input type="color" id="namespaceThemeColor" name="theme_color" class="base-control" value="{{ edited_namespace.theme_color if edited_namespace else '#5E6AD2' }}" oninput="updateNamespaceThemePreview()">
++        {% endcall %}
+       </div>
+       <div class="theme-preview" id="namespaceThemePreview">
+         <span class="namespace-mark" id="namespaceThemePreviewIcon" aria-hidden="true"></span>
+         <span class="theme-preview-name" id="namespaceThemePreviewName">{{ edited_namespace.name if edited_namespace else 'Без названия' }}</span>
+       </div>
+-      <div>
+-        <label class="label" for="namespaceWorkflowId">Воркфлоу</label>
+-        <select id="namespaceWorkflowId" name="workflow_id" required>
++      {% call base.field('namespaceWorkflowId', 'Воркфлоу', required=true) %}
++        <select class="base-control" id="namespaceWorkflowId" name="workflow_id" required>
+           {% for workflow in workflows %}
+           <option value="{{ workflow.id }}" {% if edited_namespace and edited_namespace.workflow_id == workflow.id %}selected{% endif %}>{{ workflow.name }}</option>
+           {% endfor %}
+         </select>
+-      </div>
+-      <div class="panel-actions">
++      {% endcall %}
++      <div class="base-page-actions">
+         {{ base.button('Создать' if create_mode else 'Сохранить', id='namespaceSubmitButton', type='submit', variant='primary') }}
+         <button class="btn btn-secondary" type="button" id="cancelCreateButton" onclick="cancelCreateNamespace()" style="display:none">Отмена</button>
+         <button class="btn btn-secondary namespace-delete" type="button" id="deleteNamespaceButton" onclick="deleteNamespace()"{% if create_mode %} style="display:none"{% endif %}>Удалить</button>
+@@ -199,15 +190,6 @@ function applyPageTheme(color){
+   document.documentElement.style.setProperty('--color-accent-hover', resolved);
+   document.documentElement.style.setProperty('--color-accent-foreground', foreground);
+ }
+-function applyNamespaceIdentity(name, command, icon, color){
+-  applyPageTheme(color);
+-  var brandName = document.querySelector('.brand-name');
+-  var brandSubname = document.querySelector('.brand-subname');
+-  var brandMark = document.querySelector('.brand-mark');
+-  if(brandName){ brandName.textContent = name; }
+-  if(brandSubname){ brandSubname.textContent = command; }
+-  if(brandMark){ brandMark.innerHTML = namespaceIconSvg(icon); }
+-}
+ function updateNamespaceThemePreview(){
+   var icon = document.getElementById('namespaceThemeIcon').value || defaultNamespaceThemeIcon;
+   var color = document.getElementById('namespaceThemeColor').value || defaultNamespaceThemeColor;
+@@ -219,7 +201,7 @@ function updateNamespaceThemePreview(){
+   previewIcon.innerHTML = namespaceIconSvg(icon);
+   document.getElementById('namespaceThemePreviewName').textContent = name;
+   if(namespaceFormMode === 'create'){ return; }
+-  applyNamespaceIdentity(name, command, icon, color);
++  applyPageTheme(color);
+ }
+ function currentPayload(){
+   return {
+@@ -340,12 +322,7 @@ function restoreNamespaceLocation(){
+     renderNamespaceSelector();
+     var contextNamespace = namespaceById(contextId);
+     if(contextNamespace){
+-      applyNamespaceIdentity(
+-        contextNamespace.name,
+-        contextNamespace.cli_command,
+-        contextNamespace.theme_icon,
+-        contextNamespace.theme_color
+-      );
++      applyPageTheme(contextNamespace.theme_color);
+     }
+     return;
+   }
+diff --git a/tests/test_ui.py b/tests/test_ui.py
+index 974507e..f33e449 100644
+--- a/tests/test_ui.py
++++ b/tests/test_ui.py
+@@ -2230,8 +2230,9 @@ class TestProjectsPage:
+         assert 'id="namespaceThemePreview"' in response.text
+         assert 'aria-controls="namespaceForm"' in response.text
+         assert 'aria-pressed="true"' in response.text
+-        assert "document.querySelector('.brand-name')" in response.text
+-        assert "document.querySelector('.brand-mark')" in response.text
++        assert '<span class="brand-name">Workflow</span>' in response.text
++        assert "document.querySelector('.brand-name')" not in response.text
++        assert "document.querySelector('.brand-mark')" not in response.text
+         assert 'id="createProjectForm"' not in response.text
+         assert 'id="projectForm"' not in response.text
+         assert 'id="newProjectButton"' not in response.text
+@@ -2242,7 +2243,8 @@ class TestProjectsPage:
+         assert response.status_code == 200
+         assert re.search(r'id="namespaceName"[^>]* value="[^"]*" required', response.text)
+         assert 'required minlength="2" maxlength="64" pattern="[a-z][a-z0-9_\\-]{1,63}"' in response.text
+-        assert 'aria-describedby="namespaceCliHelp"' in response.text
++        assert 'aria-describedby="namespaceCliCommand-hint"' in response.text
++        assert 'id="namespaceCliCommand-hint"' in response.text
+         assert 'id="namespaceWorkflowId" name="workflow_id" required' in response.text
+         assert 'id="namespaceDeleteHint" hidden' in response.text
+         assert "var protectedByTasks = !createMode && Boolean(namespace && Number(namespace.task_count) > 0);" in (
+@@ -2254,7 +2256,7 @@ class TestProjectsPage:
+             "method === 'POST' ? 'Создание…' : 'Сохранение…';"
+             in response.text
+         )
+-        assert 'id="namespaceFields" class="namespace-fields"' in response.text
++        assert 'id="namespaceFields" class="base-page-stack namespace-fields"' in response.text
+         assert "isPending:function(){ return namespaceMutationPending; }" in response.text
+         assert "'Удалить неймспейс «' + namespace.name + '»?'" in response.text
+ 
+@@ -2272,7 +2274,10 @@ class TestProjectsPage:
+         assert '<h1 class="base-page-title">Создать пространство</h1>' in response.text
+         assert 'href="/namespaces/new' in response.text
+         assert 'title="Создать пространство" aria-label="Создать пространство">+</a>' in response.text
+-        assert '<div class="card-title" id="namespaceFormMode">Создание</div>' in response.text
++        assert '<span id="namespaceFormMode" hidden>Создание</span>' in response.text
++        assert 'id="namespaceForm" class="base-page-stack"' in response.text
++        assert 'class="card form-stack"' not in response.text
++        assert 'text-transform:uppercase' not in response.text.split(".namespace-crud", 1)[1].split("</style>", 1)[0]
+         assert 'id="deleteNamespaceButton" onclick="deleteNamespace()" style="display:none"' in response.text
+         assert "Добавить" not in response.text
+ 
+@@ -2367,12 +2372,15 @@ class TestProjectsPage:
+         assert "updateNamespaceHeaderLinks(id);" in response.text
+         assert "updateNamespaceHeaderLinks(selectorNamespaceId);" in response.text
+ 
+-    def test_namespace_editor_refreshes_header_selector_and_brand_identity(self):
++    def test_namespace_editor_refreshes_context_without_replacing_product_identity(self):
+         response = client.get("/namespaces")
+         assert response.status_code == 200
+-        assert "document.querySelector('.brand-name')" in response.text
+-        assert "document.querySelector('.brand-subname')" in response.text
+-        assert "brandSubname.textContent = command;" in response.text
++        assert '<span class="brand-name">Workflow</span>' in response.text
++        assert 'class="brand-subname"' not in response.text
++        assert "document.querySelector('.brand-name')" not in response.text
++        assert "document.querySelector('.brand-subname')" not in response.text
++        assert "applyNamespaceIdentity" not in response.text
++        assert "applyPageTheme(contextNamespace.theme_color);" in response.text
+         assert "function renderNamespaceSelector()" in response.text
+         assert "selector.replaceChildren();" in response.text
+         assert "option.textContent = namespace.name;" in response.text

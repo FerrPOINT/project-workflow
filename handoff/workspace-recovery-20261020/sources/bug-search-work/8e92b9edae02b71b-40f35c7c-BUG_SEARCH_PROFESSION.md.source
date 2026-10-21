@@ -1,0 +1,40 @@
+# Профессия «Поиск багов»
+
+При штатном `python -m scripts.init_db` после миграций и managed-каталога
+создаётся отдельная профессия:
+
+| Поле | Значение |
+| --- | --- |
+| Имя | Поиск багов |
+| Внутренний code | `BUG_SEARCHER` |
+| Профиль запуска | `bug_searcher` |
+| CLI entrypoint | `workflow-bug_searcher` |
+| Workflow key | `fleet:bug_searcher` |
+| Режимы | `search`, `verification` |
+
+Это продуктовый preset в существующих таблицах профессий, workflow, режимов и
+фаз. Каждый режим содержит контекст, проверку и отчёт, инструкции, проверки и
+требования evidence. Каталог семи managed SDLC-ролей, его pins и старые задачи
+не изменяются. Профессия доступна существующему selector и редактору Workflow.
+Отдельный agent runtime во Fleet имеет имя «Баг-серчер».
+
+Инициализация использует общую транзакцию и catalog lock. Повторный запуск
+сохраняет ID и пользовательские изменения профессии, профиля и инструкций.
+Совпадение зарезервированного code/CLI/workflow с несвязанной записью или
+разорванная membership останавливает инициализацию с понятной ошибкой;
+чужие записи не перезаписываются. Сам preset использует существующую схему;
+отдельный execution ledger создаёт миграция `0015_bug_search_execution`.
+
+Preset не запускает агентов и не разрешает выдачу задач. В новых режимах
+отсутствует backend-owned task assignment policy: общий runtime assignment
+отвергается. Поиск до появления Bug использует отдельный project-scoped execution
+contract с Tracker ProjectRef, owner, execution identity и immutable target
+snapshot; фиктивные business/root task IDs недопустимы. Для verification нужен
+фактически доставленный target, а для регистрации — register-or-link владельца.
+Недоступный producer сохраняется как blocker, а не успешный бизнес-переход.
+
+Контракт API, доверенные владельцы, HMAC runtime и границы технического delivery
+readback описаны в [BUG_SEARCH_EXECUTION.md](BUG_SEARCH_EXECUTION.md).
+
+Установка preset в тестовой БД не означает rollout действующего Workflow или
+готовность автоматического поиска. Production init/deploy выполняется отдельно.
