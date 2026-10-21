@@ -4,6 +4,10 @@ Source review: `e2abddf4d1833a6758032621110d978a955b1e51`. Это предлож
 для согласования C/Main, не реализованный retry API и не installed/live proof.
 Workflow production, DTO, схема и generated catalog этим пакетом не изменяются.
 
+Уточнение Main после исходного review: canonical Tracker assignment/execution и
+owner_version сохраняются; создаётся linked Fleet bootstrap attempt. Реализация
+незарегистрированного reader/internal метода описана в [pm-bootstrap-recovery.md](pm-bootstrap-recovery.md).
+
 ## Конкретный пробел
 
 - `application/task.py:454` запрещает replacement enrolled PM даже при новом

@@ -104,6 +104,15 @@ class PMExecutionService:
         authority_revision = (
             review.tracker_assignment_revision if review is not None else assignment.assignment_revision
         )
+        if payload.get("pm_bootstrap_context") is not None:
+            from project_workflow.application.pm_bootstrap import canonical_revision
+
+            if review is not None or payload.get("single_task_context") is None:
+                raise ConflictError("Bootstrap mapping is only for initial single-task PM")
+            record = self.uow.tasks.get_assignment_by_operation_key(assignment.operation_key)
+            if record is None:
+                raise ConflictError("Bootstrap assignment is missing")
+            authority_revision = canonical_revision(self.uow, record.to_dict())
         if (
             task.assignment_operation_key != identity.assignment_operation_key
             or task.assignment_revision != assignment.assignment_revision
