@@ -1,3 +1,6 @@
 # Packaged Base tool checksums bind the literal transported bytes.
 scripts/vendor/base_quality_selection.py -text
 scripts/vendor/base-quality-tooling.json -text
+
+# Canonical bytes for the exact Base selector.
+scripts/vendor/base_quality_selection.py text eol=lf
