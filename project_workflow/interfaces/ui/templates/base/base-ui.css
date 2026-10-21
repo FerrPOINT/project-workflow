@@ -286,7 +286,7 @@
 
 :root {
   --shell-sidebar-expanded: 264px;
-  --shell-sidebar-compact: var(--shell-header-height);
+  --shell-sidebar-compact: 72px;
   --shell-header-height: 60px;
   --shell-platform-mark-size: 40px;
   --shell-page-gutter: clamp(16px, 2vw, 32px);
@@ -961,7 +961,7 @@ body > .base-loading-state {
   gap: 4px;
   padding: 4px 12px;
 }
-@media (min-width: 768px) {
+@media (min-width: 1280px) {
   .base-app-shell[data-sidebar-mode="expanded"] .base-shell-sidebar {
     width: var(--shell-sidebar-expanded);
   }
@@ -1701,12 +1701,14 @@ body {
 .base-form-field > [aria-invalid="true"] {
   border-color: var(--color-danger);
 }
-.base-ssr-shell .base-control:focus-visible {
+.base-ssr-shell :is(.base-control, .btn):focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;
 }
-.base-button {
+.base-button,
+.base-ssr-shell .btn {
   display: inline-flex;
+  max-width: 100%;
   align-items: center;
   justify-content: center;
   gap: 8px;
@@ -1716,22 +1718,36 @@ body {
   cursor: pointer;
   font: inherit;
   text-decoration: none;
+  text-align: center;
+  overflow-wrap: anywhere;
 }
-.base-button-secondary {
+.base-button-secondary,
+.base-ssr-shell .btn-secondary {
   background: var(--color-surface);
   color: var(--color-text-primary);
 }
-.base-button-primary {
+.base-button-secondary:hover,
+.base-ssr-shell .btn-secondary:hover {
+  background: var(--color-surface-raised);
+}
+.base-button-primary,
+.base-ssr-shell .btn-primary {
   background: var(--color-accent);
   color: var(--color-accent-foreground);
   border-color: var(--color-accent);
 }
-.base-button-danger {
+.base-button-primary:hover,
+.base-ssr-shell .btn-primary:hover {
+  background: var(--color-accent-hover);
+}
+.base-button-danger,
+.base-ssr-shell .btn-danger {
   background: var(--color-danger);
   color: var(--color-destructive-foreground);
   border-color: var(--color-danger);
 }
-.base-button:disabled {
+.base-button:disabled,
+.base-ssr-shell .btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -1846,6 +1862,91 @@ body {
 .base-ssr-shell .base-shell-drawer .sidebar-nav {
   padding: 0;
 }
+.base-ssr-app .main {
+  min-height: calc(100dvh - var(--shell-header-height));
+}
+.base-detail-main,
+.base-detail-aside {
+  min-width: 0;
+}
+.base-detail-aside {
+  overflow-wrap: anywhere;
+}
+.base-ssr-app [data-base-navigation-content],
+.base-ssr-app [data-base-navigation-slot] {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+.base-ssr-app .base-shell-drawer > .base-shell-navigation-scroll {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+.base-ssr-app .base-shell-drawer .sidebar-nav {
+  padding: 12px;
+}
+.base-ssr-app [data-base-navigation-context-slot]:not(:empty) {
+  padding: 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+.base-ssr-app [data-base-responsive-context] {
+  min-width: 0;
+  max-width: 100%;
+}
+.base-ssr-app .sidebar-link > svg {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+}
+.base-ssr-app .sidebar-section {
+  padding: 8px 12px;
+  margin-top: 8px;
+  color: var(--color-text-muted);
+  font-size: var(--base-font-label);
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.base-ssr-app .base-shell-drawer-title h2 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: var(--base-font-body);
+  font-weight: 600;
+}
+.base-ssr-app .base-shell-drawer-trigger {
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 20px;
+}
+.base-ssr-app .main:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
+}
+@media (min-width: 768px) and (max-width: 1279px) {
+  .base-ssr-app [data-base-desktop-navigation] .sidebar-section {
+    display: none;
+  }
+  .base-ssr-app [data-base-desktop-navigation] .sidebar-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+}
+@media (max-width: 767px) {
+  .base-ssr-app .platform-header-context {
+    display: none;
+  }
+}
 /* Resource rows own their density size; the shell minimum applies to other controls. */
 .base-ssr-shell
   :is(
@@ -1868,11 +1969,6 @@ body {
   min-height: var(--shell-control-min);
   display: flex;
   align-items: center;
-}
-.base-ssr-shell .btn-danger {
-  background: var(--color-danger);
-  color: var(--color-destructive-foreground);
-  border-color: var(--color-danger);
 }
 @media (min-width: 768px) and (max-width: 1279px) {
   .base-ssr-shell {
