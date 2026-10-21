@@ -2,7 +2,7 @@
   "catalog_version": 1,
   "instruction_overlay": {
     "path": "project_workflow/infrastructure/single_task_delivery_instructions.py",
-    "sha256": "12a66e086bf1a5de727cf47d196a528aeee44e84ded8480ff6799925fdafba64"
+    "sha256": "b1c880a112793780bf8845cb7adf9808a9d4de20a9cbce2c3011d28b57a7f512"
   },
   "instruction_profile": "single-task-v1",
   "instruction_source": {
@@ -82,39 +82,40 @@
             {
               "checks": [
                 "Draft has a server-saved exact revision/hash, clear scope and measurable acceptance criteria.",
-                "Alternatives, tradeoffs and contradictions were reviewed without preselection or implied consent.",
-                "Unanswered business questions remain explicit; owner confirmation is a separate exact action.",
+                "Clarifications were requested only for incomplete or contradictory input; a complete, consistent brief proceeds directly to requirements with no clarification questions or mandatory alternatives.",
+                "Actual blocking gaps/contradictions were resolved without invented answers or preselection; if none exist, no question/answer evidence is required. Owner confirmation remains a separate exact action.",
                 "Unresolved blockers remain explicit; no additional Tracker tasks were created."
               ],
               "code": "PM-DRAFT-02",
               "description": "single-task-v1: project_manager/draft; Role work on one task.",
               "evidence": [
-                "Saved Draft revision/hash, agreed choices, open questions and owner review presentation."
+                "Saved Draft revision/hash, source brief, scope/acceptance criteria and owner review presentation.",
+                "For incomplete/contradictory input only: actual clarification and resolution references. For a complete, consistent brief: requirements derived from that brief, with no question/answer references required."
               ],
               "instructions": [
                 {
-                  "description": "Be a full brainstorming partner within Draft / InProgress: start from the owner's idea, reflect the goal and explore in small iterations. Offer a few meaningful alternatives with tradeoffs; surface contradictions and test assumptions together. Ask one useful question at a time and accept free-form answers. No long mandatory questionnaire, preselection, default selected answer or implied consent.",
+                  "description": "Be a full brainstorming partner, not a mandatory questionnaire. Clarify ONLY when the initial input is incomplete or contradictory for the requirements: identify the concrete gap, ask one useful question at a time, and accept free-form answers in small iterations. Offer alternatives with tradeoffs only when an unresolved choice needs the owner; do not reopen choices already explicit in the brief. No long mandatory questionnaire, preselection, default selected answer or implied consent.",
                   "skills": [
                     "project-workflow-executor",
                     "tracker-operator"
                   ]
                 },
                 {
-                  "description": "Brainstorming, clarification and requirements review all remain inside draft mode and Draft stage. Do not advance the task to Analysis merely because a question was answered. Read the immutable initial request through task-tracker sdlc input --task <task-uuid>; distinguish facts, preferences and open choices.",
+                  "description": "If the initial input is complete and consistent, ask no clarification questions: proceed directly to the real requirements document using the supplied scope, constraints and acceptance criteria. Do not invent a question, missing detail or alternative solely to complete a phase. Brainstorming, clarification and requirements review all remain inside draft mode and Draft stage. Read the immutable initial request and distinguish facts, preferences and actual open choices.",
                   "skills": [
                     "project-workflow-executor",
                     "tracker-operator"
                   ]
                 },
                 {
-                  "description": "Converge on the business result, actors, scope/non-goals, constraints and measurable acceptance criteria at the owner's pace. Keep a concise evolving Draft with a clear title. Record agreed choices and unresolved contradictions without selecting a solution on the owner's behalf.",
+                  "description": "Converge on one clear in-scope requirements document without selecting a solution on the owner's behalf. Preserve explicit choices from a complete brief. Resolve blocking gaps or contradictions with the owner before claiming the requirements are ready; keep unresolved issues explicit. A complete brief is not owner confirmation: present the saved requirements for exact confirmation in phase 3.",
                   "skills": [
                     "project-workflow-executor",
                     "tracker-operator"
                   ]
                 },
                 {
-                  "description": "Brainstorm in small free-form iterations before a document exists; never create a placeholder revision or question solely for checkpointing. When the agreed draft is ready, publish the real requirements using task-tracker sdlc revision publish --task <task-uuid> --from-file <revision.json>. Formal clarification requires an existing requirements revision: only then publish a focused question using task-tracker sdlc question publish --task <task-uuid> --from-file <question.json>. Use actual strict MachineFence, revision/version and idempotency fields from the supplied context; never invent IDs. Read questions/requirements back and match the actual server revision/content_hash. Reconcile uncertain publication through those supported reads before retry with the exact original key/body.",
+                  "description": "When clarification is needed, brainstorm in small free-form iterations before a document exists; never create a placeholder revision or question solely for checkpointing. When the agreed draft is ready, publish the real requirements using task-tracker sdlc revision publish --task <task-uuid> --from-file <revision.json>. Formal clarification is conditional on an actual unresolved gap and requires an existing requirements revision: only then publish a focused question using task-tracker sdlc question publish --task <task-uuid> --from-file <question.json>. Use actual strict MachineFence, revision/version and idempotency fields from the supplied context; never invent IDs. Read questions/requirements back and match the actual server revision/content_hash. Reconcile uncertain publication through those supported reads before retry with the exact original key/body.",
                   "skills": [
                     "project-workflow-executor",
                     "tracker-operator"
@@ -149,8 +150,8 @@
               "checks": [
                 "The FULL latest server-saved requirements document and exact revision/content_hash were presented to the owner.",
                 "Actual owner confirmation has a real authorized readback receipt matching task, latest revision/hash and owner.",
-                "Feedback was resolved within the same execution; no stale consent, fake answer IDs or extra PM cycles were used.",
-                "Authorized typed checkpoint/resume and direct PM confirmation readback dependencies are satisfied; no blockers remain.",
+                "Any feedback that occurred was resolved within the same execution; no stale consent, fake answer IDs or extra PM cycles were used. Clarification questions are not a prerequisite for confirmation.",
+                "Direct PM confirmation readback dependencies and any authorized typed checkpoint/resume actually used are satisfied; no blockers remain.",
                 "PM finalizes only; allowed next stage/status are Backlog / Ready then Analysis / Ready, not PM dispatch."
               ],
               "code": "PM-DRAFT-03",
@@ -158,7 +159,7 @@
               "evidence": [
                 "FULL saved requirements document, exact revision/content_hash and owner presentation reference.",
                 "Actual owner confirmation receipt ID/reference and readback matching task/revision/hash/owner_subject.",
-                "Same-execution typed checkpoint/input references and feedback-to-revision history without fabricated answers."
+                "Same-execution typed checkpoint/input references and feedback-to-revision history only when they occurred; no fabricated answers or mandatory clarification history for a complete brief."
               ],
               "instructions": [
                 {

@@ -314,3 +314,34 @@ and strict workspace all-target Clippy PASS. Fleet d5 backend tree equals 0db;
 The exact d5 release startup delta and final image smoke remain main-owned build
 checks, not completed image/live evidence in this document. No tests/builds were
 repeated for this docs-only update; no model/provider input or native live run is inferred.
+
+## Conditional PM Clarification (21 October)
+
+The installable PM draft overlay now distinguishes two paths. Incomplete or
+contradictory input requires a focused clarification of the actual gap, not a
+questionnaire. A complete, consistent brief proceeds directly to real requirements
+without clarification questions or mandatory alternatives. Evaluator checks and
+evidence carry the same condition; no question/answer history is required when no
+clarification occurred.
+
+Both paths still present the full saved requirements and require the owner's
+explicit exact revision/hash confirmation before the final Workflow report and
+Backlog / Ready. First step, phase-report handling, confirmation instructions and
+final terminal ordering are unchanged. Other six professions/seven modes are
+byte-equivalent within the generated catalog. No protocol, runtime, Hermes or
+installation behavior changes are introduced.
+
+Current generated catalog: `91b34be1fb3057476954d4947d86bae117c3eafd6abfe8d0b46333d38678c6fb`.
+Current manifest: `19d3228270bc76959f91a06f3b946a39b4509b14a2c29b62acc8762dd5cc3fe2`.
+These supersede the earlier source hashes above, not historical qualification
+receipts. New regressions exercise the real generated `PhaseContractBuilder`
+instructions and evaluator criteria for both paths; this is source-contract
+evidence, not an observed model conversation or live installed acceptance.
+
+Bounded validation: 77 instruction/artifact tests, 14 catalog tests and two actual
+isolated SQLite PM producer/terminal fixture tests PASS (93 distinct cases).
+The two fixtures were regenerated through their existing producer tests, then
+passed again without update mode; their hashes were not hand-edited. Generator
+`--check`, scoped Ruff and diff-check PASS. No full gate, PG, build or live run was
+repeated. Existing installed catalog hashes/history are not rewritten; normal
+coordinated profile publication remains separate.
