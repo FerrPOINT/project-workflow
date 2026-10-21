@@ -331,7 +331,10 @@ def test_pm_confirmation_precedes_final_report_in_actual_installed_phase(databas
         assert "--report" not in " ".join(instructions[:-1])
         assert "ONLY AFTER" in report and "--report <report-text>" in report
         assert report.index("confirmation receipt readback succeeds") < report.index("--report")
-        assert "Analyst reserve remains blocked" in report and "PM actual completion" in report
+        assert "stage AND status are Backlog / Ready only" in report
+        assert "do not request an Analysis intent, wait for Analyst pickup" in report
+        assert "or treat either as a PM completion prerequisite" in report
+        assert "then Analysis / Ready" not in report and "Analyst reserve remains blocked" not in report
         assert "PM does not dispatch Analyst" in report
         assert "sdlc intent --task" not in " ".join(instructions)
         checks = uow.phase_checks.list(phase.id)

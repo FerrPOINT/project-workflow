@@ -74,11 +74,16 @@ def test_retained_artifacts_are_the_exact_published_family():
 
 
 @pytest.mark.parametrize("manifest", RETAINED_PROFILE_CATALOGS)
-def test_retained_artifact_tampering_is_not_a_compatibility_fallback(tmp_path, monkeypatch, manifest):
+@pytest.mark.parametrize("filename", ["single_task_catalog_v1.json", "single_task_manifest_v1.json"])
+@pytest.mark.parametrize("mutation", ["extra_lf", "crlf"])
+def test_retained_artifact_tampering_is_not_a_compatibility_fallback(
+    tmp_path, monkeypatch, manifest, filename, mutation,
+):
     references = tmp_path / "references"
     shutil.copytree(catalog.REFERENCES, references)
-    path = references / "retained" / manifest / "single_task_catalog_v1.json"
-    path.write_bytes(path.read_bytes() + b"\n")
+    path = references / "retained" / manifest / filename
+    original = path.read_bytes()
+    path.write_bytes(original + b"\n" if mutation == "extra_lf" else original.replace(b"\n", b"\r\n"))
     monkeypatch.setattr(catalog, "REFERENCES", references)
     with pytest.raises(ValueError, match="source hash mismatch"):
         catalog.load_profile(manifest)
