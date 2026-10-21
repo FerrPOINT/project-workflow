@@ -5,3 +5,6 @@ project_workflow/references/single_task_manifest_v1.json text eol=lf
 # Packaged Base tool checksums bind literal transported bytes.
 scripts/vendor/base_quality_selection.py -text
 scripts/vendor/base-quality-tooling.json -text
+
+# Canonical bytes for the exact Base selector.
+scripts/vendor/base_quality_selection.py text eol=lf

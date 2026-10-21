@@ -701,3 +701,31 @@ class ComponentSelectionContracts(unittest.TestCase):
         self.assertEqual(1, source.count("run: make quality"))
         self.assertIn("--revision .base-revision", source)
         self.assertIn("export_python_namespace.py", source)
+
+
+def test_independent_checks_precede_artifact_in_standalone_plan(tmp_path, monkeypatch) -> None:
+    import json
+
+    from scripts.vendor import base_quality_selection as selection
+
+    def gate(identifier, component, tier):
+        return {
+            "id": identifier, "component": component, "test_tier": tier,
+            "profiles": ["build"], "argv": ["fixture-never-executed"], "cwd": ".",
+            "inputs": ["source.txt"], "cacheable": False,
+            **({"kind": "artifact", "outputs": [".local/ready"]} if tier == "artifact" else {}),
+        }
+
+    manifest = {
+        "schema": "base-quality-product/v1", "product": "fixture",
+        "components": {"app": ["source.txt"], "docs": ["docs/**"]},
+        "gates": [gate("bundle:build", "app", "artifact"),
+                  gate("source:unit", "app", "unit"), gate("docs:static", "docs", "static")],
+    }
+    (tmp_path / ".quality-gate.json").write_text(json.dumps(manifest), encoding="utf-8")
+    (tmp_path / "source.txt").write_text("never compiled\n", encoding="utf-8")
+    monkeypatch.setattr(selection, "git", lambda *_: "a" * 40)
+    candidate = selection.plan(tmp_path, "build", components=["app", "docs"])
+    assert [gate["id"] for gate in candidate["gates"]] == [
+        "source:unit", "docs:static", "bundle:build",
+    ]
