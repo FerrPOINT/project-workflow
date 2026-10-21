@@ -503,6 +503,8 @@ project-workflow/
 
 ## 📚 Документы
 
+[Общий UI и управляемый брендинг Base](docs/shared-design-system.md).
+
 - [docs/architecture.md](docs/architecture.md) — CLI/UI/Supervisor boundaries, state/audit model и runtime scope.
 - [PM continuation contract](docs/pm-continuation-contract.md) and [verification](docs/pm-continuation-verification.md) describe the opt-in persistent PM checkpoint/resume API and its remaining Fleet integration gaps.
 - [Critical PM migration boundary](docs/critical-pm-review-migrations.md) and [PostgreSQL preservation qualification](docs/critical-pm-preservation-postgres-20261015.md): nine passing synthetic legacy-upgrade cases; accepted database upgrade and live subsequent-PM execution remain separate.

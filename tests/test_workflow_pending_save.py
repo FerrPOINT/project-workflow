@@ -29,14 +29,16 @@ def test_pending_workflow_write_locks_fields_identity_and_duplicate_submit(mode,
 const mode=MODE,outcome=OUTCOME;
 let selectedWorkflowId=mode==='edit'?1:null,workflowFormMode=mode,workflowWritePending=false;
 let workflowEditorVisible=true;
-const field=value=>({value,disabled:false,setAttribute(){}});
+const field=(value,kind='input')=>({value,disabled:false,setAttribute(){},
+ matches:selector=>kind==='select'&&selector==='select[data-base-choice]'});
 const name=field('Submitted name'),description=field('Submitted description');
 const submit=field(''),cancel=field(''),remove=field('');
-const picker=field(''),create=field(''),nav=field('');
+const picker=field('','select'),create=field(''),nav=field('');const choiceStates=[];
 const form={setAttribute(){},querySelectorAll:()=>[name,description,submit,cancel,remove]};
 const elements={workflowName:name,workflowDescription:description,workflowSubmitButton:submit,workflowForm:form};
 const document={getElementById:id=>elements[id],querySelectorAll:()=>[picker,create,nav]};
-const window={PdlcPlatformNavigation:{saved(){},navigate(){}}};
+const window={PdlcPlatformNavigation:{saved(){},navigate(){}},
+ PdlcChoice:{refreshChoice:control=>{if(control===picker)choiceStates.push(control.disabled)}}};
 const showToast=()=>{},showRequestError=()=>{},setWorkflowFormMode=()=>{};
 const currentWorkflowId=selectedWorkflowId;
 const workflowApiUrl=id=>'/api/workflows'+(id==null?'':'/'+id);
@@ -51,7 +53,7 @@ startCreateWorkflow();selectWorkflow(2);cancelWorkflowForm();
 const pending={locked:[name,description,submit,cancel,remove,picker,create,nav].every(c=>c.disabled),
  identityUnchanged:selectedWorkflowId===currentWorkflowId,writes};
 ack();await new Promise(setImmediate);await new Promise(setImmediate);
-console.log(JSON.stringify({pending,unlocked:[name,description,submit,cancel,remove,picker,create,nav]
+console.log(JSON.stringify({pending,choiceStates,unlocked:[name,description,submit,cancel,remove,picker,create,nav]
  .every(c=>!c.disabled),name:name.value,description:description.value}));
 """.replace("MODE", json.dumps(mode)).replace("OUTCOME", json.dumps(outcome)).replace("SOURCE", source)
     completed = subprocess.run(
@@ -61,5 +63,6 @@ console.log(JSON.stringify({pending,unlocked:[name,description,submit,cancel,rem
     assert completed.returncode == 0, completed.stderr
     assert json.loads(completed.stdout) == {
         "pending": {"locked": True, "identityUnchanged": True, "writes": 1},
-        "unlocked": True, "name": "Submitted name", "description": "Submitted description",
+        "choiceStates": [True, False], "unlocked": True,
+        "name": "Submitted name", "description": "Submitted description",
     }
