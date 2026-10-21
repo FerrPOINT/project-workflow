@@ -257,11 +257,21 @@
   --base-radius-menu: 6px;
 }
 
+/* Resolve aliases at the consuming element, including nested draft scopes and portals. */
 :root {
+  --font-sans: var(--base-font-sans);
+  --text-base: calc(var(--base-font-body) + 2px);
+  --text-base--line-height: calc(var(--base-line-body) + 4px);
+  --text-lg: calc(var(--base-font-body) + 4px);
+  --text-lg--line-height: calc(var(--base-line-body) + 4px);
+  --text-xl: calc(var(--base-font-body) + 6px);
+  --text-xl--line-height: calc(var(--base-line-body) + 8px);
   --text-sm: var(--base-font-body);
   --text-sm--line-height: var(--base-line-body);
   --text-xs: var(--base-font-label);
+  --text-xs--line-height: calc(var(--base-line-body) - 4px);
   --text-2xl: var(--base-font-page-title);
+  --text-2xl--line-height: calc(var(--base-line-body) + 12px);
   --color-danger-foreground: var(--color-destructive-foreground);
   --color-danger-strong: var(--color-danger);
   /* Compatibility aliases for one release. */
@@ -345,9 +355,9 @@
 }
 /* Resource rows share geometry with SSR, but flex/grid remains product-owned. */
 .base-resource-list {
-  --resource-row-padding-inline: 16px;
-  --resource-row-padding-block: 8px;
-  --resource-row-min-height: 48px;
+  --resource-row-padding-inline: var(--base-control-padding-inline);
+  --resource-row-padding-block: var(--base-control-padding-block);
+  --resource-row-min-height: var(--base-row-height);
   min-width: 0;
   margin: 0;
   padding: 0;
@@ -510,7 +520,7 @@
   min-width: 0;
   align-items: center;
   gap: 12px;
-  padding: 8px 12px;
+  padding: var(--base-control-padding-block) var(--base-control-padding-inline);
   border: 0;
   border-radius: var(--base-radius);
   background: transparent;
@@ -518,7 +528,7 @@
   font-family: var(--base-font-sans);
   font-size: var(--base-font-body);
   font-weight: 400;
-  line-height: 20px;
+  line-height: var(--base-line-body);
   text-align: left;
   text-decoration: none;
   cursor: pointer;
@@ -821,10 +831,10 @@ dialog.base-shell-drawer::backdrop {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px;
+  padding: var(--base-panel-padding);
   text-align: center;
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: var(--base-font-body);
+  line-height: var(--base-line-body);
   color: var(--color-text-muted);
 }
 /* Initial product checks keep meaningful status text in the viewport. */
@@ -963,7 +973,8 @@ body > .base-loading-state {
   }
   .base-app-shell[data-sidebar-mode="expanded"] .base-shell-link {
     justify-content: flex-start;
-    padding: 8px 12px;
+    padding: var(--base-control-padding-block)
+      var(--base-control-padding-inline);
   }
   .base-app-shell[data-sidebar-mode="compact"] .base-shell-sidebar {
     width: var(--shell-sidebar-compact);
@@ -988,7 +999,7 @@ body > .base-loading-state {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 12px;
+  font-size: var(--base-font-label);
   font-weight: 500;
   text-transform: uppercase;
   color: var(--color-text-muted);
@@ -1003,9 +1014,9 @@ body > .base-loading-state {
   width: 100%;
   min-width: 0;
   height: 40px;
-  padding: 0 12px;
+  padding: var(--base-control-padding-block) var(--base-control-padding-inline);
   border: 1px solid var(--color-border-strong);
-  border-radius: var(--base-radius-menu, var(--base-radius, 6px));
+  border-radius: var(--base-radius, 6px);
   background: var(--color-surface);
   color: var(--color-text-primary);
   font: inherit;
@@ -1054,12 +1065,13 @@ body > .base-loading-state {
   overflow: hidden;
   padding: 4px;
   border: 1px solid var(--color-border-strong);
-  border-radius: var(--base-radius, 6px);
+  border-radius: var(--base-radius-menu, var(--base-radius, 6px));
   background: var(--color-surface);
   color: var(--color-text-primary);
   box-shadow: 0 8px 24px #0003;
   font: inherit;
   font-size: var(--base-font-body, 14px);
+  line-height: var(--base-line-body);
 }
 .base-choice-multiple {
   overflow-y: auto;
@@ -1207,6 +1219,7 @@ body {
 .base-table th,
 .base-table td {
   font-size: var(--base-font-body);
+  line-height: var(--base-line-body);
   padding-inline: var(--base-control-padding-inline);
   height: var(--base-row-height);
   padding-block: var(--base-control-padding-block);
@@ -1366,6 +1379,12 @@ body {
   border-top: 1px solid var(--color-border);
 }
 @media (max-width: 767px) {
+  .base-resource-list-row[data-interactive="true"] {
+    min-height: max(
+      var(--resource-row-min-height, 48px),
+      var(--shell-control-mobile-min)
+    );
+  }
   .base-control:not(textarea),
   .base-check-field,
   .base-disclosure > summary {
@@ -1578,6 +1597,7 @@ body {
   border-radius: var(--base-radius-card, var(--base-radius));
 }
 .base-dialog {
+  padding: var(--base-panel-padding);
   border-radius: var(--base-radius-dialog, var(--radius-lg));
 }
 .base-menu {
@@ -1599,7 +1619,7 @@ body {
   --accent-hover: var(--color-accent-hover);
   --accent-readable: var(--color-highlight);
   --accent-foreground: var(--color-accent-foreground);
-  --accent-hover-foreground: var(--color-accent-foreground);
+  --accent-hover-foreground: var(--color-accent-hover-foreground);
   --accent-soft: color-mix(in srgb, var(--color-accent) 15%, transparent);
   --border: var(--color-border);
   --border-strong: var(--color-border-strong);
@@ -1616,7 +1636,9 @@ body {
   --header-height: var(--shell-header-height);
 }
 .base-ssr-shell {
+  font-family: var(--base-font-sans);
   font-size: var(--base-font-body);
+  line-height: var(--base-line-body);
   letter-spacing: 0;
 }
 .base-ssr-theme {
@@ -1669,7 +1691,7 @@ body {
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
-  padding: 8px 12px;
+  padding: var(--base-control-padding-block) var(--base-control-padding-inline);
   border: 1px solid var(--color-border);
   border-radius: var(--base-radius);
   background: var(--color-surface);
@@ -1688,7 +1710,7 @@ body {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 8px 12px;
+  padding: var(--base-control-padding-block) var(--base-control-padding-inline);
   border: 1px solid var(--color-border);
   border-radius: var(--base-radius);
   cursor: pointer;
@@ -1754,7 +1776,7 @@ body {
   min-height: var(--shell-control-min);
   align-items: center;
   gap: 12px;
-  padding: 8px 12px;
+  padding: var(--base-control-padding-block) var(--base-control-padding-inline);
   border-radius: var(--base-radius);
   color: var(--color-text-secondary);
   text-decoration: none;
@@ -1813,7 +1835,7 @@ body {
   padding: 8px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--base-radius);
+  border-radius: var(--base-radius-menu, var(--base-radius));
 }
 .base-ssr-account-menu a {
   display: flex;
@@ -1917,12 +1939,12 @@ body {
   width: min(100%, 420px);
   background: var(--surface);
   border: 1px solid var(--border-strong);
-  border-radius: 14px;
-  padding: 22px;
+  border-radius: var(--base-radius-dialog, var(--radius-lg));
+  padding: var(--base-panel-padding);
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.48);
 }
 .modal-eyebrow {
-  font-size: 11px;
+  font-size: var(--base-font-label);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1930,7 +1952,7 @@ body {
 }
 .modal-title {
   margin: 8px 0 0;
-  font-size: 20px;
+  font-size: calc(var(--base-font-body) + 6px);
   line-height: 1.25;
   color: var(--text);
 }

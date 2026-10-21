@@ -2,7 +2,12 @@
 
 ## Текущая UI-поставка
 
-UI закреплён на `424bcc5a0f7706f48fc75210dd3fe5215acbe829` ([pin](../.base-ui-revision)). SDK и skills pins независимы и этим обновлением не меняются. SSR macros, JS, CSS и fingerprint идентичны прежнему UI pin; штатный exporter проверяет их без перезаписи. React-форма брендинга и offline search входят в UI-пакет, но не добавляются в SSR runtime Workflow.
+UI закреплён на `06f2f8d2b6e87262b7f3b6d4034884cdff2c5197` ([pin](../.base-ui-revision)); зависит от [Base #295](https://github.com/FerrPOINT/services-base/pull/295).
+SDK и skills pins независимы и этим обновлением не меняются. Общая типографика,
+плотность и отдельные радиусы применяются в Base к React, Portal и SSR;
+продукт сохраняет данные, права, запросы и действия. Штатные SSR-ресурсы Workflow
+обновлены из того же UI SHA. Это source-кандидат, а не установка платформы.
+
 
 Датированные разделы ниже описывают историю квалификаций. Текущий pin сам по себе не подтверждает установку или authenticated-приёмку.
 
