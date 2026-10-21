@@ -1,0 +1,295 @@
+{
+  "schemaVersion": 1,
+  "product": "project-workflow",
+  "serverRouteSources": [
+    "project_workflow/interfaces/ui/app.py",
+    "project_workflow/interfaces/ui/react_ui.py"
+  ],
+  "ssrAssets": "project_workflow/interfaces/ui/static/base-ui",
+  "shellTemplate": "project_workflow/interfaces/ui/templates/base.html",
+  "acceptanceStatus": "pending",
+  "routes": [
+    {
+      "pattern": "/",
+      "kind": "operational",
+      "layout": "wide",
+      "roles": [
+        "authenticated"
+      ],
+      "fixture": "isolated:/",
+      "states": [
+        "normal",
+        "loading",
+        "empty",
+        "permission-denied",
+        "error"
+      ],
+      "qa": {
+        "status": "not-run"
+      }
+    },
+    {
+      "pattern": "/agents",
+      "kind": "operational",
+      "layout": "wide",
+      "roles": [
+        "authenticated"
+      ],
+      "fixture": "isolated:/agents",
+      "states": [
+        "normal",
+        "loading",
+        "empty",
+        "permission-denied",
+        "error"
+      ],
+      "qa": {
+        "status": "not-run"
+      }
+    },
+    {
+      "pattern": "/instructions",
+      "kind": "operational",
+      "layout": "reading",
+      "roles": [
+        "authenticated"
+      ],
+      "fixture": "isolated:/instructions",
+      "states": [
+        "normal",
+        "loading",
+        "empty",
+        "permission-denied",
+        "error"
+      ],
+      "qa": {
+        "status": "not-run"
+      }
+    },
+    {
+      "pattern": "/namespaces",
+      "kind": "operational",
+      "layout": "wide",
+      "roles": [
+        "authenticated"
+      ],
+      "fixture": "isolated:/namespaces",
+      "states": [
+        "normal",
+        "loading",
+        "empty",
+        "permission-denied",
+        "error"
+      ],
+      "qa": {
+        "status": "not-run"
+      }
+    },
+    {
+      "pattern": "/namespaces/new",
+      "kind": "operational",
+      "layout": "reading",
+      "roles": [
+        "authenticated"
+      ],
+      "fixture": "isolated:/namespaces/new",
+      "states": [
+        "normal",
+        "loading",
+        "empty",
+        "permission-denied",
+        "error"
+      ],
+      "qa": {
+        "status": "not-run"
+      }
+    },
+    {
+      "pattern": "/phase/{phase_id}",
+      "kind": "operational",
+      "layout": "detail-with-aside",
+      "roles": [
+        "authenticated"
+      ],
+      "fixture": "isolated:/phase/{phase_id}",
+      "states": [
+        "normal",
+        "loading",
+        "empty",
+        "permission-denied",
+        "error",
+        "not-found"
+      ],
+      "qa": {
+        "status": "not-run"
+      }
+    },
+    {
+      "pattern": "/phases",
+      "kind": "operational",
+      "layout": "wide",
+      "roles": [
+        "authenticated"
+      ],
+      "fixture": "isolated:/phases",
+      "states": [
+        "normal",
+        "loading",
+        "empty",
+        "permission-denied",
+        "error"
+      ],
+      "qa": {
+        "status": "not-run"
+      }
+    },
+    {
+      "pattern": "/react",
+      "kind": "redirect",
+      "featureFlag": "WORKFLOW_REACT_UI_ENABLED"
+    },
+    {
+      "pattern": "/react/",
+      "kind": "redirect",
+      "featureFlag": "WORKFLOW_REACT_UI_ENABLED"
+    },
+    {
+      "pattern": "/react/phases",
+      "kind": "operational",
+      "layout": "wide",
+      "roles": [
+        "authenticated"
+      ],
+      "fixture": "isolated:/react/phases",
+      "states": [
+        "normal",
+        "loading",
+        "empty",
+        "permission-denied",
+        "error"
+      ],
+      "featureFlag": "WORKFLOW_REACT_UI_ENABLED",
+      "qa": {
+        "status": "not-run"
+      }
+    },
+    {
+      "pattern": "/react/phases/{phase_id:int}",
+      "kind": "operational",
+      "layout": "detail-with-aside",
+      "roles": [
+        "authenticated"
+      ],
+      "fixture": "isolated:/react/phases/{phase_id:int}",
+      "states": [
+        "normal",
+        "loading",
+        "empty",
+        "permission-denied",
+        "error",
+        "not-found"
+      ],
+      "featureFlag": "WORKFLOW_REACT_UI_ENABLED",
+      "qa": {
+        "status": "not-run"
+      }
+    },
+    {
+      "pattern": "/react/tasks",
+      "kind": "operational",
+      "layout": "wide",
+      "roles": [
+        "authenticated"
+      ],
+      "fixture": "isolated:/react/tasks",
+      "states": [
+        "normal",
+        "loading",
+        "empty",
+        "permission-denied",
+        "error"
+      ],
+      "featureFlag": "WORKFLOW_REACT_UI_ENABLED",
+      "qa": {
+        "status": "not-run"
+      }
+    },
+    {
+      "pattern": "/settings",
+      "kind": "operational",
+      "layout": "reading",
+      "roles": [
+        "authenticated"
+      ],
+      "fixture": "isolated:/settings",
+      "states": [
+        "normal",
+        "loading",
+        "empty",
+        "permission-denied",
+        "error"
+      ],
+      "qa": {
+        "status": "not-run"
+      }
+    },
+    {
+      "pattern": "/task/{task_key}",
+      "kind": "operational",
+      "layout": "wide",
+      "roles": [
+        "authenticated"
+      ],
+      "fixture": "isolated:/task/{task_key}",
+      "states": [
+        "normal",
+        "loading",
+        "empty",
+        "permission-denied",
+        "error",
+        "not-found"
+      ],
+      "qa": {
+        "status": "not-run"
+      }
+    },
+    {
+      "pattern": "/tasks",
+      "kind": "operational",
+      "layout": "wide",
+      "roles": [
+        "authenticated"
+      ],
+      "fixture": "isolated:/tasks",
+      "states": [
+        "normal",
+        "loading",
+        "empty",
+        "permission-denied",
+        "error"
+      ],
+      "qa": {
+        "status": "not-run"
+      }
+    },
+    {
+      "pattern": "/workflows",
+      "kind": "operational",
+      "layout": "wide",
+      "roles": [
+        "authenticated"
+      ],
+      "fixture": "isolated:/workflows",
+      "states": [
+        "normal",
+        "loading",
+        "empty",
+        "permission-denied",
+        "error"
+      ],
+      "qa": {
+        "status": "not-run"
+      }
+    }
+  ]
+}

@@ -1,0 +1,66 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: project_workflow
+      POSTGRES_PASSWORD: project_workflow
+      POSTGRES_DB: project_workflow
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U project_workflow -d project_workflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "127.0.0.1:5432:5432"
+
+  migrate:
+    build:
+      context: .
+    command: ["python", "scripts/init_db.py"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://project_workflow:project_workflow@db:5432/project_workflow
+      DB_SCHEMA: project_workflow
+    depends_on:
+      db:
+        condition: service_healthy
+
+  backend:
+    build:
+      context: .
+    ports:
+      - "127.0.0.1:8812:8811"
+    environment:
+      DATABASE_URL: postgresql+psycopg://project_workflow:project_workflow@db:5432/project_workflow
+      DB_SCHEMA: project_workflow
+      UI_HOST: 0.0.0.0
+      UI_PORT: 8811
+      LOG_LEVEL: INFO
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-http://192.168.10.1:4000/v1}
+      OPENAI_MODEL: ${OPENAI_MODEL:-app-test}
+      OPENAI_TIMEOUT: ${OPENAI_TIMEOUT:-120}
+      OPENAI_MAX_TOKENS: ${OPENAI_MAX_TOKENS:-4000}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_REASONING_EFFORT: ${OPENAI_REASONING_EFFORT:-none}
+      PLATFORM_SERVICES_URL: ${PLATFORM_SERVICES_URL:-http://host.docker.internal:7771/api/v1/runtime/services}
+      PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON: ${PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON:-}
+      AUTH_ISSUER: ${AUTH_ISSUER:-}
+      AUTH_INTERNAL_BASE_URL: ${AUTH_INTERNAL_BASE_URL:-}
+      AUTH_PUBLIC_ORIGIN: ${AUTH_PUBLIC_ORIGIN:-http://localhost:8812}
+      AUTH_SESSION_SECRET: ${AUTH_SESSION_SECRET:-}
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import json, urllib.request; data = json.load(urllib.request.urlopen('http://127.0.0.1:8811/health', timeout=3)); assert data.get('ok') is True"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  postgres_data:

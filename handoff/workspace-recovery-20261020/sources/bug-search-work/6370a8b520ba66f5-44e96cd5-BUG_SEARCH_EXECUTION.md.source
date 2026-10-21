@@ -1,0 +1,179 @@
+# Project execution поиска багов
+
+Этот source contract отделён от Task/SupervisorEngine и каталога семи managed
+SDLC-ролей. Поиск начинается до появления Bug. `BUG_SEARCHER` — настоящий numeric
+profession; workflow key `fleet:bug_searcher`, launch profile `bug_searcher`.
+Полный rollout и автоматический поиск этим изменением не выполняются.
+
+## Источники полномочий
+
+Входящий адаптер Fleet использует собственный Central PAT и свежую introspection.
+Его subject должен точно совпадать с
+`PROJECT_WORKFLOW_BUG_SEARCH_FLEET_SUBJECT`; разрешены только scopes
+`project-workflow:read`/`project-workflow:write`, соответствующий scope обязателен.
+Human session, общий runtime token и роль из свободного текста не подходят.
+
+Workflow читает Tracker по фиксированному `/api/v1/projects/{project_id}/sdlc/bug-search/executions/{execution_id}/grant`
+через собственный PAT со scope ровно `task-tracker:read`. Оператор задаёт
+`PROJECT_WORKFLOW_BUG_SEARCH_TRACKER_ROOT`, точный opaque `..._TRACKER_INSTANCE_ID`,
+независимый canonical `..._TRACKER_INSTANCE_UUID`, `..._TRACKER_READER_SUBJECT` и
+`..._TRACKER_TOKEN`. UUID не выводится преобразованием alias.
+Входящий PAT Fleet не пересылается. Доверенный Central root/issuer — существующие
+`AUTH_INTERNAL_BASE_URL`/`AUTH_ISSUER`.
+
+Grant сравнивается целиком: owner, project, execution, agent, purpose, snapshot
+hash, policy revision, fence, registrar subject и grant ref. Reserved допускает
+только подготовку; informational reason `awaiting_admission` разрешён только
+для reserved prepare. Bind и шаг требуют admitted, authorization_valid,
+dispatch_allowed, отсутствия blocked reasons и неистёкшего grant.
+Ошибка, неизвестный ответ и отзыв блокируют действие. Expiry не доказывает
+завершение процесса и не освобождает reservation.
+
+## Порядок операций
+
+Все ответы имеют `{ok:true,result:<receipt>}`; ошибки возвращают код без private
+body/credentials. Заголовок Cache-Control запрещает caching.
+
+| Операция | Фиксированный путь после `/internal/bug-search/v1` |
+| --- | --- |
+| Реальный frozen каталог | `GET /catalog/{profession_id}` |
+| Подготовка | `POST /executions` |
+| Readback Fleet | `GET /executions/{execution_id}` |
+| Bind actual run Fleet | `POST /executions/{execution_id}/bind` |
+| Stop Fleet | `POST /executions/{execution_id}/stop` |
+| HMAC worker step | `POST /executions/{execution_id}/step` |
+| HMAC worker history | `GET /executions/{execution_id}/history` |
+
+Prepare принимает `{operation_key,binding,snapshot}`. Snapshot — exact immutable
+Fleet value со всеми nulls, без дополнительной оболочки. SHA-256 использует
+рекурсивную сортировку ключей, порядок массивов, compact UTF-8 JSON и запрещает
+coercion numeric fields. Golden vectors скопированы в tests/fixtures с origin
+hash; build не зависит от соседнего checkout.
+
+Каталог публикует profession_id, profile_revision, catalog_version/catalog_sha256,
+launch_profile, workflow_id и actual mode IDs/keys. Snapshot сохраняет пять
+profession pins; catalog_sha256 + purpose однозначно выбирают mode. Подготовка
+замораживает весь трёхфазный контракт с actual source IDs, инструкциями, checks
+и evidence. Общие редакторские locks обеспечивают согласованное чтение.
+Поздние правки источника не меняют принятый запуск; replay возвращает старый
+receipt после свежей проверки полномочий, до CAS и повторного чтения каталога.
+Same-key POST replay подготовки и bind также требует свежий Tracker grant;
+он не обходит его отзыв или недоступность. Неопределённый ответ Fleet сверяет
+через retained GET execution по exact binding, snapshot SHA, actual run IDs и
+состоянию. Этот readback не требует grant, но не разрешает новый dispatch.
+
+Tracker admit получает exact inner prepared receipt и его canonical hash.
+Далее Fleet допускает и принимает actual Hermes run. Bind передаёт
+`operation_key,expected_version,expected_fence,session_id,session_run_id,hermes_run_ref`.
+Workflow доверяет свежему зарегистрированному Fleet как владельцу runtime;
+независимый Hermes readback он не выполняет. Token появляется только после
+durable bind. Fleet доставляет token через существующий continuation после bind;
+поддельного prebind token или запуска на task fallback нет.
+
+`PROJECT_WORKFLOW_BUG_SEARCH_SCOPE_SECRET` — отдельный секрет не короче 32 bytes.
+Worker получает только execution/run HMAC, не PAT/secret. HMAC связывает issuer,
+registrar, profession, Tracker instance UUID/locator/project, owner, agent,
+execution, purpose, snapshot SHA, fence и actual session/run. Он детерминирован
+для восстановления bind; active state, fresh grant и CAS проверяются отдельно.
+Stop увеличивает fence, инвалидируя прежний token. Stop требует fresh Fleet PAT
+и retained local binding; независимый отказ Tracker не препятствует остановке.
+Readback `runtime_terminal_confirmed:false` явно не выдаёт остановку Workflow за
+доказательство остановки Hermes или освобождения общего лимита Tracker.
+
+Worker сохраняет report по существующим frozen PhaseContractBuilder checks.
+Worker step с report/result null возвращает current contract и exact retained
+snapshot со scope, исключениями, targets и исходным verification basis; чужой
+контекст из обычной Task не подставляется. Prepare/terminal receipt хранит
+snapshot SHA и не дублирует полный контекст.
+Tracker/CI и LLM I/O выполняются без DB row/advisory lock; после них повторяются
+fresh grant, local auth/replay/CAS, поэтому конкурентный stop не пропускает
+поздний bind или результат. Три последовательные фазы
+не используют rollback/delegate или фиктивный Task. Ошибка модели не заменяется
+успешной оценкой. Terminal carrier — `{coverage,findings:[{finding_id,report}]}`:
+coverage complete/partial/inconclusive, до 100 findings и весь carrier не более
+64 KiB, bounded reports с typed source и
+`source_identity == canonical_hash(source)`. Occurrence IDs сохраняет producer;
+восстановление не генерирует новые IDs и не разбирает Markdown transcript.
+Текст source не даёт полномочий на правило или бизнес-переход.
+Checked version каждой находки должна точно совпасть с immutable commit SHA
+или delivery ref одного из targets; повторные source identities запрещены.
+Fleet доставляет retained findings после Workflow completion через владельца
+Tracker; final phase не требует downstream receipt и не создаёт цикл admission.
+
+Verification snapshot дополнительно содержит исходный producer-qualified
+`verification_basis:FindingReport`. Для search отсутствующее поле не сериализуется,
+поэтому исторический golden search hash сохраняется. Verification carrier обязан
+содержать `verification:{bug_id,basis_sha256,delivery_ref,verdict,actual,evidence_refs}`.
+Basis SHA — canonical hash exact snapshot basis; verdict passed/failed/inconclusive
+не выводится из числа находок. Passed/failed требуют coverage complete и прежнюю
+фактически доставленную версию в обоих owner observations. Inconclusive можно
+сохранить при смене или недоступности цели; он не подтверждает исправление Bug.
+Workflow сам выводит `result_qualification` из retained owner observations:
+not_available, source_pinned, qa_same_version либо qa_unconfirmed. Caller не задаёт
+этот флаг. QA search может сохранить coverage inconclusive при смене цели.
+QA unconfirmed findings остаются для review и не разрешают автоматический
+register-or-link, даже если carrier содержит findings. Fleet и Tracker обязаны
+проверить qualification вместе с полным producer receipt.
+
+## Фактически доставленная QA-цель
+
+Source-only не обращается к CI. Для QA оператор отдельно задаёт
+`PROJECT_WORKFLOW_BUG_SEARCH_CI_ROOT`, `..._CI_TOKENS_JSON` (configuration UUID ->
+private project-bound `forge_sat_*`) и `..._DELIVERED_TARGETS_JSON`:
+`{targets:[{tracker_instance_id,tracker_instance_uuid,project_id,repository_ref,target_ref,configuration_id,repository_id,environment_id}]}`.
+Каждый PAT принадлежит dedicated Forge reader с api:read и exact configuration;
+общий workspace credential не подходит. Секреты и mapping не попадают в receipt.
+
+Workflow сам читает Forge delivered-target endpoint по configured locator,
+проверяя exact project/config/repository/environment, deployment deliveryRef,
+commit и hashes фактических version/artifact response bodies. Caller URL и
+verified boolean не принимаются. До передачи worker token bind сохраняет
+before observation. Перед принятием final результата fresh after observation
+должна совпасть по stable target, generation, operation, manifest, artifact и
+serving identity. Decimal generation остаётся string, включая u64 range.
+Оба observedAt должны попасть в UTC окно соответствующего HTTP запроса ±5s;
+30s aggregate observation budget и HTTP timeouts ограничивают внешнее I/O.
+Изменение, legacy pointer или недоступность не подтверждают проверку исправления.
+Retained target_observations содержат owner DTO; observed timestamps не должны
+совпадать между двумя свежими наблюдениями.
+
+Новый необязательный `target.source` сохраняет точные исходные canonical
+Tracker/project UUID и CI configuration/repository IDs, ветку, observed HEAD и
+SHA256 clone URL в схеме `forge/source-snapshot/v1`. В QA original HEAD может
+отличаться от checked commit. При наличии этих pins Workflow проверяет mapping
+до HTTP и оба owner observations против исходных UUID/IDs; два одинаковых ответа
+после remap не подтверждают исходную цель. Legacy targets без source читаются с
+прежними historical semantics; `source:null` не добавляется в старый hash.
+
+Для новых находок на targets с исходным source identity typed defect source также
+содержит `repository_id` того же target, а checked_version равен его commit_sha.
+Одинаковые rule/path/report и commit в двух репозиториях дают разные source hashes.
+QA deliveryRef не заменяет checked commit. Старый source без repository_id
+сериализуется без дополнительного null и сохраняет свой hash; legacy result
+проверяется по прежним правилам только при отсутствии source у всех targets.
+
+## Хранение и CLI
+
+Миграция 0015 добавляет только bug_search_executions и bug_search_operations.
+Frozen authority, snapshots и operation results защищены от UPDATE/DELETE;
+cursor/version/fence и run tuple ограничены DDL. Состояние и operation receipt
+фиксируются одной транзакцией. Подготовленный receipt ограничен 64 KiB,
+readback — 262 KiB. History использует retained монотонный sequence, читает
+bounded страницы по четыре записи; next_cursor передаётся как after_operation_key.
+Retained ledger не имеет
+неявного TTL; runtime/backups и общие Task таблицы не удаляются.
+
+CLI сохраняет ровно step/history. Для project branch используются
+`--project-execution-request <json> --execution-token-file <private-file>`.
+Request: `{execution_id,profession_id,step:<versioned StepExecution>|null,after_operation_key:null|<history cursor>}`.
+В step command `step` обязателен; history не принимает step. Existing profession
+wrapper задаёт actual PROJECT_WORKFLOW_NAMESPACE_ID, который должен совпасть с
+profession_id. Явный PROJECT_WORKFLOW_URL обязателен. Task/report/runtime-request
+параметры и SDLC_API_TOKEN не смешиваются с project branch; локального DB fallback,
+redirects и автоматического retry после неизвестного принятия нет.
+
+The adapter resolves the installed unique `profession.code=BUG_SEARCHER` through
+`GET /internal/bug-search/v1/catalog`; this returns the same frozen catalog as the
+existing numeric `/catalog/{profession_id}` route. Fleet verifies the returned
+workflow ID against the agent's actual persisted workflow binding before context
+preparation. Numeric profession IDs are owner observations, never guessed defaults.

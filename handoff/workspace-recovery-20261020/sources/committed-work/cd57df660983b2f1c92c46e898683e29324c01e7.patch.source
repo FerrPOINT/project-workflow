@@ -1,0 +1,221 @@
+diff --git a/docker-compose.yml b/docker-compose.yml
+index 4efc1d6..6dd6649 100644
+--- a/docker-compose.yml
++++ b/docker-compose.yml
+@@ -43,7 +43,7 @@ services:
+       OPENAI_MAX_TOKENS: ${OPENAI_MAX_TOKENS:-4000}
+       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+       OPENAI_REASONING_EFFORT: ${OPENAI_REASONING_EFFORT:-none}
+-      PLATFORM_SERVICES_URL: ${PLATFORM_SERVICES_URL:-http://localhost:7771/api/v1/runtime/services}
++      PLATFORM_SERVICES_URL: ${PLATFORM_SERVICES_URL:-http://host.docker.internal:7771/api/v1/runtime/services}
+       PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON: ${PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON:-}
+       AUTH_ISSUER: ${AUTH_ISSUER:-}
+       AUTH_INTERNAL_BASE_URL: ${AUTH_INTERNAL_BASE_URL:-}
+diff --git a/project_workflow/interfaces/ui/platform_services.py b/project_workflow/interfaces/ui/platform_services.py
+index 20f021c..2a21131 100644
+--- a/project_workflow/interfaces/ui/platform_services.py
++++ b/project_workflow/interfaces/ui/platform_services.py
+@@ -34,6 +34,12 @@ class ServiceCatalog:
+     services: list[dict[str, Any]]
+     source: str
+ 
++    @property
++    def admin_console_connected(self) -> bool:
++        return self.source == "runtime" and any(
++            service["key"] == "admin-panel" for service in self.services
++        )
++
+ 
+ def _normalize(entry: dict[str, Any]) -> dict[str, Any] | None:
+     key = entry.get("key")
+diff --git a/project_workflow/interfaces/ui/routes/pages.py b/project_workflow/interfaces/ui/routes/pages.py
+index e86f2e3..2d43328 100644
+--- a/project_workflow/interfaces/ui/routes/pages.py
++++ b/project_workflow/interfaces/ui/routes/pages.py
+@@ -84,6 +84,7 @@ def _namespace_context(
+         "missing_namespace_id": missing_namespace_id,
+         "other_services": catalog.services,
+         "services_source": catalog.source,
++        "show_service_switcher": catalog.admin_console_connected,
+         **_theme_context(selected_namespace),
+     }
+ 
+diff --git a/project_workflow/interfaces/ui/templates/base.html b/project_workflow/interfaces/ui/templates/base.html
+index 824cd6b..9220657 100644
+--- a/project_workflow/interfaces/ui/templates/base.html
++++ b/project_workflow/interfaces/ui/templates/base.html
+@@ -100,7 +100,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
+ /* ── Main ──────────────────────────────────────────────────────────── */
+ .main{flex:1;margin-left:var(--sidebar-width);min-width:0;min-height:100vh;width:calc(100% - var(--sidebar-width))}
+ .header{height:var(--header-height);background:var(--panel);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 var(--shell-page-gutter);position:sticky;top:0;z-index:50}
+-.header-title-group{display:flex;align-items:center;flex:0 0 auto}
++.header-title-group{display:flex;align-items:center;flex:0 0 auto;gap:8px}
+ .header-title{font-size:15px;font-weight:600}
+ .header-actions{display:flex;min-width:0;gap:10px;align-items:center}
+ .header .btn{display:inline-flex;min-height:40px;align-items:center}
+@@ -284,26 +284,26 @@ textarea{resize:vertical;min-height:60px}
+   .header .header-logout{display:none}
+ }
+ @media(max-width:767px){
+-  .header{flex-wrap:wrap;align-items:flex-start;height:auto;min-height:var(--header-height);row-gap:8px;padding-block:8px}
+-  .header-actions{width:auto;flex:1;min-width:0;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+-  .namespace-select{width:150px;max-width:42vw}
++  .header{flex-wrap:nowrap;align-items:center;height:var(--header-height);min-height:var(--header-height);gap:8px;padding-block:0}
++  .header-title-group{min-width:0;flex:1 1 auto}
++  .header-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
++  .burger{flex:0 0 44px}
++  .header-actions{width:auto;flex:0 1 auto;min-width:0;gap:6px;flex-wrap:nowrap;justify-content:flex-end}
++  .namespace-switcher{flex:0 1 auto;max-width:45vw;gap:4px}
++  .namespace-select{width:clamp(72px,29vw,108px);max-width:none}
++  .namespace-icon-action{width:32px;height:32px;flex-basis:32px}
+ }
+ @media(max-width:640px){
+   .sidebar-utilities{display:block}
+-  .header-actions > .theme-select,.header-actions > .service-menu{display:none}
++  .header-actions > .theme-select,.header-title-group > .service-menu{display:none}
+ }
+ @media(max-width:480px){
+   .card{padding:14px}
+   .card-value{font-size:22px}
+   .header-title{font-size:14px}
+-  .header-actions{min-width:200px}
+-  .namespace-select{width:128px;min-width:0}
+-  .namespace-switcher{min-width:200px}
+-  .namespace-select{max-width:38vw}
+-  .namespace-switcher .namespace-select{flex:1 1 128px}
++  .namespace-switcher .namespace-select{min-width:0;flex:1 1 72px}
+   .service-menu-popover{left:0;right:auto}
+ }
+-@media(max-width:350px){.header-actions{width:100%;flex:none}}
+ 
+ /* ── Side nav lists (workflows / namespaces / phases) ────────────────
+    Скроллбар наследует глобальный тематический стиль (см. шапку стилей). */
+@@ -378,6 +378,7 @@ textarea{resize:vertical;min-height:60px}
+           <option value="light">Светлая</option>
+         </select>
+       </div>
++      {% if show_service_switcher|default(false) %}
+       <details class="sidebar-service-menu">
+         <summary class="sidebar-link"><span class="sidebar-label">Сервисы</span></summary>
+         <div class="sidebar-service-links">
+@@ -393,6 +394,7 @@ textarea{resize:vertical;min-height:60px}
+           </a>
+         </div>
+       </details>
++      {% endif %}
+     </div>
+     </nav>
+     <div class="sidebar-footer">
+@@ -407,16 +409,9 @@ textarea{resize:vertical;min-height:60px}
+   <header class="header">
+     <div class="header-title-group">
+       <button class="burger" id="burgerBtn" type="button" aria-label="Открыть навигацию" aria-controls="sidebar" aria-expanded="false" onclick="openSidebar()">☰</button>
+-      <h1 class="header-title">{% block header_title %}{% endblock %}</h1>
+-    </div>
+-    <div class="header-actions">
+-      <select class="theme-select" id="themeSelector" aria-label="Тема" onchange="setPlatformTheme(this.value)">
+-        <option value="dark">Тёмная</option>
+-        <option value="gray">Серая</option>
+-        <option value="light">Светлая</option>
+-      </select>
++      {% if show_service_switcher|default(false) %}
+       <details class="service-menu" id="serviceMenu">
+-        <summary aria-label="Открыть список сервисов платформы">Сервисы <span class="service-menu-chevron" aria-hidden="true">▾</span></summary>
++        <summary aria-label="Project Workflow: открыть список сервисов">Project Workflow <span class="service-menu-chevron" aria-hidden="true">▾</span></summary>
+         <div class="service-menu-popover" role="menu" aria-label="Сервисы платформы">
+         {% for service in other_services %}
+           <a class="service-menu-item" href="{{ service.url }}" role="menuitem">
+@@ -433,6 +428,15 @@ textarea{resize:vertical;min-height:60px}
+           <div class="service-menu-source" role="status">Источник: {{ 'каталог' if catalog_source == 'runtime' else 'резервный список' if catalog_source.startswith('fallback') else 'сохранённый каталог' }}</div>
+         </div>
+       </details>
++      {% endif %}
++      <h1 class="header-title">{% block header_title %}{% endblock %}</h1>
++    </div>
++    <div class="header-actions">
++      <select class="theme-select" id="themeSelector" aria-label="Тема" onchange="setPlatformTheme(this.value)">
++        <option value="dark">Тёмная</option>
++        <option value="gray">Серая</option>
++        <option value="light">Светлая</option>
++      </select>
+       {% if namespaces is defined and namespaces %}
+       <div class="namespace-switcher">
+         <select class="namespace-select" id="namespaceSelector" aria-label="Выбор пространства" onchange="switchNamespace(this.value)">
+diff --git a/tests/test_platform_services.py b/tests/test_platform_services.py
+index 2effc02..25aeeb4 100644
+--- a/tests/test_platform_services.py
++++ b/tests/test_platform_services.py
+@@ -4,6 +4,7 @@ import json
+ from pathlib import Path
+ 
+ from project_workflow.interfaces.ui.platform_services import (
++    ServiceCatalog,
+     _normalize,
+     load_other_services,
+     load_service_catalog,
+@@ -27,6 +28,15 @@ def test_fallback_without_catalog_url():
+     services = load_other_services(None)
+     assert all(s["key"] != "project-workflow" for s in services)
+     assert len(services) >= 5
++    assert not load_service_catalog(None).admin_console_connected
++
++
++def test_admin_console_visibility_requires_live_catalog_entry():
++    admin_service = {"key": "admin-panel", "label": "Admin Panel", "url": "http://admin"}
++
++    assert ServiceCatalog([admin_service], "runtime").admin_console_connected
++    assert not ServiceCatalog([admin_service], "runtime-cached").admin_console_connected
++    assert not ServiceCatalog([], "runtime").admin_console_connected
+ 
+ 
+ def test_fallback_reuses_remote_request_host():
+diff --git a/tests/test_ui.py b/tests/test_ui.py
+index f5c0315..5a2dabc 100644
+--- a/tests/test_ui.py
++++ b/tests/test_ui.py
+@@ -19,6 +19,7 @@ from project_workflow.infrastructure.db.uow import SAUnitOfWork
+ from project_workflow.interfaces.cli.core import cli
+ from project_workflow.interfaces.ui import _app_state as ui_app_state
+ from project_workflow.interfaces.ui import _load_cli_reference, app
++from project_workflow.interfaces.ui.platform_services import ServiceCatalog
+ from tests._db_helpers import phase_by_code
+ 
+ client = TestClient(app)
+@@ -527,10 +528,35 @@ class TestPhasesPage:
+         assert 'class="sidebar-service-menu"' in response.text
+         assert 'id="sidebarThemeSelector"' in response.text
+         assert 'id="themeSelector"' in response.text
+-        assert ".header-actions > .theme-select,.header-actions > .service-menu{display:none}" in response.text
+-        assert ".header-actions{width:auto;flex:1;min-width:0" in response.text
++        assert ".header-actions > .theme-select,.header-title-group > .service-menu{display:none}" in response.text
++        assert ".header-actions{width:auto;flex:0 1 auto;min-width:0;gap:6px;flex-wrap:nowrap" in response.text
++        assert ".header{flex-wrap:nowrap;align-items:center;height:var(--header-height)" in response.text
++        assert ".header-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}" in response.text
+         assert response.text.count("document.querySelectorAll('.theme-select').forEach") == 2
+ 
++    def test_service_switcher_is_left_aligned_and_requires_admin_console(self):
++        admin = {"key": "admin-panel", "label": "Admin Panel", "url": "http://localhost:7772", "health": "healthy"}
++        with patch(
++            "project_workflow.interfaces.ui.routes.pages.load_service_catalog",
++            return_value=ServiceCatalog([admin], "runtime"),
++        ):
++            connected = client.get("/")
++
++        assert connected.status_code == 200
++        assert 'id="serviceMenu"' in connected.text
++        assert connected.text.index('id="serviceMenu"') < connected.text.index('<h1 class="header-title">')
++        assert "Project Workflow" in connected.text
++
++        with patch(
++            "project_workflow.interfaces.ui.routes.pages.load_service_catalog",
++            return_value=ServiceCatalog([admin], "fallback-unreachable"),
++        ):
++            disconnected = client.get("/")
++
++        assert disconnected.status_code == 200
++        assert 'id="serviceMenu"' not in disconnected.text
++        assert 'class="sidebar-service-menu"' not in disconnected.text
++
+     def test_sidebar_places_namespaces_first(self):
+         response = client.get("/phases")
+         assert response.status_code == 200

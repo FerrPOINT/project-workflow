@@ -1,0 +1,67 @@
+"""Original CI repository identity; no raw URL, credentials or timestamp."""
+
+from __future__ import annotations
+
+import re
+from typing import Annotated, Literal
+
+from pydantic import Field, StringConstraints, field_validator
+
+from project_workflow.domain.bug_search_catalog import FrozenCatalogModel, Sha256
+from project_workflow.domain.namespace_ownership import UUIDRef
+
+
+class BugTargetSourceProject(FrozenCatalogModel):
+    tracker_instance_id: UUIDRef
+    project_id: UUIDRef
+
+
+class BugTargetSourceIdentity(FrozenCatalogModel):
+    contract_version: Literal[1]
+    schema_name: Literal["forge/source-snapshot/v1"] = Field(alias="schema")
+    producer_version: Annotated[str, StringConstraints(strict=True, min_length=1, max_length=128)]
+    project: BugTargetSourceProject
+    configuration_id: UUIDRef
+    repository_id: UUIDRef
+    branch_ref: Annotated[str, StringConstraints(strict=True)]
+    observed_head_sha: Annotated[str, StringConstraints(strict=True, pattern=r"^[0-9a-f]{40}([0-9a-f]{24})?$")]
+    clone_url_sha256: Sha256
+
+    @field_validator("contract_version", mode="before")
+    @classmethod
+    def integer_version(cls, value: object) -> object:
+        if type(value) is not int:
+            raise ValueError("Требуется целая версия source identity")
+        return value
+
+    @field_validator("producer_version")
+    @classmethod
+    def producer_text(cls, value: str) -> str:
+        if (
+            not value.strip()
+            or len(value.encode("utf-8")) > 128
+            or any(ord(c) < 32 or 127 <= ord(c) <= 159 for c in value)
+        ):
+            raise ValueError("Требуется исходная bounded producer version")
+        return value
+
+    @field_validator("branch_ref")
+    @classmethod
+    def original_branch(cls, value: str) -> str:
+        prefix = "refs/heads/"
+        name = value[len(prefix) :] if value.startswith(prefix) else ""
+        if (
+            not name
+            or len(name) > 256
+            or ".." in name
+            or re.fullmatch(r"[a-zA-Z0-9_./-]+", name) is None
+            or any(not part or part.startswith(".") or part.endswith((".", ".lock")) for part in name.split("/"))
+        ):
+            raise ValueError("Требуется исходная canonical refs/heads ветка")
+        return value
+
+    def require_target(self, project_id: str, mode: str, checked_commit: str) -> None:
+        if self.project.project_id != project_id or (
+            mode == "source_only" and self.observed_head_sha != checked_commit
+        ):
+            raise ValueError("Source identity не совпадает с исходным project/checked commit")

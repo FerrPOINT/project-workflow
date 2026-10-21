@@ -2,3 +2,4 @@ docs/proposals/single-task-v1.catalog.json text eol=lf
 docs/proposals/single-task-v1.manifest.json text eol=lf
 project_workflow/references/single_task_catalog_v1.json text eol=lf
 project_workflow/references/single_task_manifest_v1.json text eol=lf
+project_workflow/references/retained/652a38c0f7bdb48a569aa3fcd5c2e81e153db6e22b5201cfb6ce15c988dd57f3/*.json text eol=lf

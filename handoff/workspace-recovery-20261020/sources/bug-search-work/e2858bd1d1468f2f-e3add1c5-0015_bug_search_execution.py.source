@@ -1,0 +1,121 @@
+"""Add a separate project-scoped Bug Search execution ledger."""
+
+import sqlalchemy as sa
+from alembic import op
+
+revision = "0015_bug_search_execution"
+down_revision = "0014_launch_profile_only"
+branch_labels = None
+depends_on = None
+
+IMMUTABLE = (
+    "execution_id", "profession_id", "issuer", "machine_subject", "tracker_instance_id",
+    "tracker_instance_uuid", "tracker_project_id", "owner_subject", "agent_id", "purpose",
+    "snapshot_sha256", "binding_json", "snapshot_json", "catalog_json", "created_at",
+)
+
+
+def upgrade() -> None:
+    op.create_table(
+        "bug_search_executions",
+        sa.Column("execution_id", sa.String(36), primary_key=True),
+        sa.Column("profession_id", sa.Integer(), sa.ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False),
+        *[sa.Column(name, sa.String(size), nullable=False) for name, size in (
+            ("issuer", 512), ("machine_subject", 256), ("tracker_instance_id", 128),
+            ("tracker_instance_uuid", 36), ("tracker_project_id", 36), ("owner_subject", 256),
+            ("agent_id", 36), ("purpose", 16), ("snapshot_sha256", 64), ("state", 16),
+        )],
+        *[sa.Column(name, sa.Text(), nullable=False) for name in ("binding_json", "snapshot_json", "catalog_json")],
+        sa.Column("version", sa.BigInteger(), nullable=False),
+        sa.Column("fence", sa.BigInteger(), nullable=False),
+        sa.Column("phase_index", sa.Integer(), nullable=False),
+        sa.Column("session_id", sa.String(36)),
+        sa.Column("session_run_id", sa.String(36), unique=True),
+        sa.Column("hermes_run_ref", sa.String(512)),
+        sa.Column("result_json", sa.Text()),
+        sa.Column("target_observations_json", sa.Text()),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa.CheckConstraint("purpose IN ('search', 'verification')", name="ck_bug_execution_purpose"),
+        sa.CheckConstraint("state IN ('prepared', 'active', 'completed', 'failed', 'stopped')",
+                           name="ck_bug_execution_state"),
+        sa.CheckConstraint("version BETWEEN 1 AND 9007199254740991 AND fence BETWEEN 1 AND 9007199254740991",
+                           name="ck_bug_execution_versions"),
+        sa.CheckConstraint("phase_index BETWEEN 0 AND 3", name="ck_bug_execution_cursor"),
+        sa.CheckConstraint("(state != 'prepared' OR phase_index = 0) AND (phase_index < 3 OR state = 'completed')",
+                           name="ck_bug_execution_cursor_state"),
+        sa.CheckConstraint("length(snapshot_sha256) = 64", name="ck_bug_execution_hash"),
+        sa.CheckConstraint("length(binding_json) <= 16384 AND length(snapshot_json) <= 262144 "
+                           "AND length(catalog_json) <= 262144", name="ck_bug_execution_input_bounds"),
+        sa.CheckConstraint("(session_id IS NULL AND session_run_id IS NULL AND hermes_run_ref IS NULL) OR "
+                           "(session_id IS NOT NULL AND session_run_id IS NOT NULL AND hermes_run_ref IS NOT NULL)",
+                           name="ck_bug_execution_run_tuple"),
+        sa.CheckConstraint("state != 'active' OR session_run_id IS NOT NULL", name="ck_bug_execution_active_run"),
+        sa.CheckConstraint("state != 'prepared' OR session_run_id IS NULL", name="ck_bug_execution_prepared_run"),
+        sa.CheckConstraint("(state = 'completed' AND phase_index = 3 AND result_json IS NOT NULL) OR "
+                           "(state != 'completed' AND result_json IS NULL)", name="ck_bug_execution_result"),
+    )
+    op.create_index("ix_bug_execution_project", "bug_search_executions",
+                    ["tracker_instance_id", "tracker_project_id", "created_at"])
+    op.create_table(
+        "bug_search_operations",
+        sa.Column("operation_key", sa.String(128), primary_key=True),
+        sa.Column("execution_id", sa.String(36),
+                  sa.ForeignKey("bug_search_executions.execution_id", ondelete="RESTRICT"), nullable=False),
+        sa.Column("kind", sa.String(16), nullable=False),
+        sa.Column("sequence", sa.BigInteger(), nullable=False),
+        sa.Column("request_sha256", sa.String(64), nullable=False),
+        sa.Column("request_json", sa.Text(), nullable=False),
+        sa.Column("result_json", sa.Text(), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa.CheckConstraint("kind IN ('prepare', 'bind', 'step', 'stop')", name="ck_bug_operation_kind"),
+        sa.CheckConstraint("length(request_sha256) = 64", name="ck_bug_operation_hash"),
+        sa.CheckConstraint("sequence BETWEEN 1 AND 9007199254740991", name="ck_bug_operation_sequence"),
+        sa.UniqueConstraint("execution_id", "sequence", name="uq_bug_operation_sequence"),
+        sa.CheckConstraint("length(result_json) <= 1048576", name="ck_bug_operation_result_bound"),
+        sa.CheckConstraint("length(request_json) <= 262144", name="ck_bug_operation_request_bound"),
+    )
+    if op.get_bind().dialect.name == "postgresql":
+        comparisons = " OR ".join(f"NEW.{name} IS DISTINCT FROM OLD.{name}" for name in IMMUTABLE)
+        op.execute("""
+            CREATE FUNCTION bug_search_immutable_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+            BEGIN
+              IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'Bug Search ledger is retained'; END IF;
+        """ + f"IF {comparisons} THEN RAISE EXCEPTION 'Immutable Bug Search execution'; END IF;" + """
+              IF OLD.state IN ('completed','failed','stopped') OR NEW.version != OLD.version + 1
+                 OR NEW.phase_index < OLD.phase_index OR NEW.phase_index > OLD.phase_index + 1
+                 OR (OLD.session_run_id IS NOT NULL AND
+                     (NEW.session_id IS DISTINCT FROM OLD.session_id OR
+                      NEW.session_run_id IS DISTINCT FROM OLD.session_run_id OR
+                      NEW.hermes_run_ref IS DISTINCT FROM OLD.hermes_run_ref))
+                 OR (NEW.state = 'stopped' AND NEW.fence != OLD.fence + 1)
+                 OR (NEW.state != 'stopped' AND NEW.fence != OLD.fence)
+              THEN RAISE EXCEPTION 'Invalid Bug Search execution transition'; END IF;
+              RETURN NEW;
+            END; $$;
+            CREATE TRIGGER bug_search_execution_guard BEFORE UPDATE OR DELETE ON bug_search_executions
+              FOR EACH ROW EXECUTE FUNCTION bug_search_immutable_guard();
+            CREATE FUNCTION bug_search_operation_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+            BEGIN RAISE EXCEPTION 'Bug Search operations are immutable and retained'; END; $$;
+            CREATE TRIGGER bug_search_operation_guard BEFORE UPDATE OR DELETE ON bug_search_operations
+              FOR EACH ROW EXECUTE FUNCTION bug_search_operation_guard();
+        """)
+    else:
+        comparisons = " OR ".join(f"NEW.{name} IS NOT OLD.{name}" for name in IMMUTABLE)
+        op.execute("CREATE TRIGGER bug_search_execution_guard BEFORE UPDATE ON bug_search_executions "
+                   "WHEN " + comparisons + " OR OLD.state IN ('completed','failed','stopped') "
+                   "OR NEW.version != OLD.version + 1 OR NEW.phase_index < OLD.phase_index "
+                   "OR NEW.phase_index > OLD.phase_index + 1 OR (OLD.session_run_id IS NOT NULL AND "
+                   "(NEW.session_id IS NOT OLD.session_id OR NEW.session_run_id IS NOT OLD.session_run_id "
+                   "OR NEW.hermes_run_ref IS NOT OLD.hermes_run_ref)) "
+                   "OR (NEW.state = 'stopped' AND NEW.fence != OLD.fence + 1) "
+                   "OR (NEW.state != 'stopped' AND NEW.fence != OLD.fence) "
+                   "BEGIN SELECT RAISE(ABORT, 'Invalid immutable Bug Search transition'); END")
+        for table in ("bug_search_executions", "bug_search_operations"):
+            op.execute(f"CREATE TRIGGER {table}_retain BEFORE DELETE ON {table} "
+                       "BEGIN SELECT RAISE(ABORT, 'Bug Search ledger is retained'); END")
+        op.execute("CREATE TRIGGER bug_search_operation_guard BEFORE UPDATE ON bug_search_operations "
+                   "BEGIN SELECT RAISE(ABORT, 'Bug Search operations are immutable'); END")
+
+
+def downgrade() -> None:
+    raise RuntimeError("Retained execution authority; restore a pre-migration backup")

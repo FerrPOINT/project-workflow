@@ -1,0 +1,203 @@
+"""Strict Tracker103/104 Issue-backed Developer authority. No Business/PM surrogate IDs."""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import Annotated, Any, Literal
+
+from pydantic import (
+    Field,
+    SerializerFunctionWrapHandler,
+    StringConstraints,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
+
+from project_workflow.domain.bug_search_catalog import FrozenCatalogModel
+from project_workflow.domain.bug_search_execution import (
+    BugSourceIdentity,
+    Reference,
+    Sha256,
+    Subject,
+    UUIDRef,
+    Version,
+    wire_text,
+)
+from project_workflow.domain.bug_work_attestation import BugWorkRuntimeAttestation
+from project_workflow.domain.bug_work_origin import BugWorkOriginRef
+from project_workflow.domain.runtime_assignment import RuntimeStepFence, canonical_json, payload_sha256
+
+
+class BugWorkReport(FrozenCatalogModel):
+    title: Annotated[str, StringConstraints(strict=True), wire_text(500)]
+    basis: Annotated[str, StringConstraints(strict=True), wire_text(8192, controls=True)]
+    expected: Annotated[str, StringConstraints(strict=True), wire_text(8192, controls=True)]
+    actual: Annotated[str, StringConstraints(strict=True), wire_text(8192, controls=True)]
+    reproducer: Annotated[str, StringConstraints(strict=True), wire_text(16384, controls=True)]
+    checked_version: Annotated[str, StringConstraints(strict=True), wire_text(512)]
+    evidence_refs: tuple[Annotated[str, StringConstraints(strict=True), wire_text(1024)], ...] = Field(
+        strict=False,
+        max_length=32,
+    )
+
+
+    @model_validator(mode="after")
+    def report_bound(self) -> BugWorkReport:
+        if len(json.dumps(self.model_dump(mode="json"), ensure_ascii=False, indent=2).encode("utf-8")) > 65_536:
+            raise ValueError("Исходный отчёт Bug превышает допустимый размер")
+        return self
+
+
+class BugWorkRuntime(FrozenCatalogModel):
+    fleet_instance_id: UUIDRef
+    agent_id: UUIDRef
+    agent_config_revision: Version
+
+
+class BugWorkAssignment(FrozenCatalogModel):
+    contract_version: Literal[1]
+    assignment_id: UUIDRef
+    tracker_instance_id: Reference
+    tracker_instance_uuid: UUIDRef
+    project_id: UUIDRef
+    bug_id: UUIDRef
+    owner_subject: Subject
+    machine_subject: Subject
+    worker_runtime: BugWorkRuntime
+    fleet_journal_ref: Reference
+    preference_revision: Version
+    fence: Version
+    purpose: Literal["bug_fix"]
+    role: Literal["developer"]
+    mode: Literal["initial"]
+    source_identity: BugSourceIdentity
+    source_sha256: Sha256
+    verification_basis: BugWorkReport
+    verification_basis_sha256: Sha256
+    canonical_basis_sha256: Sha256
+    origin: BugWorkOriginRef | None = None
+    created_at: datetime
+
+    @model_serializer(mode="wrap")
+    def original_wire(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        value: dict[str, Any] = handler(self)
+        if self.origin is None:
+            value.pop("origin", None)
+        return value
+
+    @field_validator("contract_version", mode="before")
+    @classmethod
+    def integer_version(cls, value: object) -> object:
+        if type(value) is not int:
+            raise ValueError("Требуется целая версия контракта")
+        return value
+
+    @model_validator(mode="after")
+    def immutable_input(self) -> BugWorkAssignment:
+        if self.owner_subject == self.machine_subject or self.created_at.tzinfo is None:
+            raise ValueError("Неверная authority назначения Bug")
+        if self.source_sha256 != payload_sha256(self.source_identity.model_dump(mode="json")):
+            raise ValueError("Изменён исходный source identity")
+        if self.verification_basis_sha256 != payload_sha256(self.verification_basis.model_dump(mode="json")):
+            raise ValueError("Изменён полный исходный сценарий Bug")
+        return self
+
+
+class BugWorkRuntimeBinding(FrozenCatalogModel):
+    runtime_context_id: UUIDRef
+    runtime_generation: UUIDRef
+    session_id: UUIDRef
+    session_run_id: UUIDRef
+    hermes_run_ref: Reference
+    workflow_task_id: Version
+    workflow_assignment_revision: Version
+    workflow_operation_key: Annotated[str, StringConstraints(strict=True), wire_text(128)]
+    workflow_binding_ref: Reference
+
+
+class BugWorkGrant(FrozenCatalogModel):
+    assignment: BugWorkAssignment
+    assignment_sha256: Sha256
+    binding: BugWorkRuntimeBinding | None
+    # A closed grant never authorizes a new transition. Protective reads use the
+    # retained local ledger and exact registered Fleet, without remote owner ACL.
+    closure: None
+    capacity_held: bool
+    can_take_bugs: bool
+    blocked_reasons: tuple[Reference, ...] = Field(strict=False, max_length=32)
+
+
+class BugWorkPrepare(FrozenCatalogModel):
+    contract_version: Literal[1]
+    operation_key: Annotated[str, StringConstraints(strict=True), wire_text(128)]
+    tracker_instance_id: Reference
+    tracker_instance_uuid: UUIDRef
+    project_id: UUIDRef
+    assignment_id: UUIDRef
+    assignment_sha256: Sha256
+    workflow_project_id: Version
+    expected_catalog_sha256: Sha256
+    runtime_compatibility: dict[str, Any]
+
+    @field_validator("contract_version", mode="before")
+    @classmethod
+    def integer_version(cls, value: object) -> object:
+        return BugWorkAssignment.integer_version(value)
+
+
+class BugWorkBind(FrozenCatalogModel):
+    operation_key: Annotated[str, StringConstraints(strict=True), wire_text(128)]
+    expected_assignment_revision: Version
+    expected_fence: Version
+    runtime_context_id: UUIDRef
+    runtime_generation: UUIDRef
+    session_id: UUIDRef
+    session_run_id: UUIDRef
+    hermes_run_ref: Reference
+    binding_ref: Reference
+    runtime_attestation: BugWorkRuntimeAttestation | None = None
+
+    @model_serializer(mode="wrap")
+    def original_wire(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        value: dict[str, Any] = handler(self)
+        if self.runtime_attestation is None:
+            value.pop("runtime_attestation", None)
+        return value
+
+
+class BugWorkStop(FrozenCatalogModel):
+    operation_key: Annotated[str, StringConstraints(strict=True), wire_text(128)]
+    expected_assignment_revision: Version
+    expected_fence: Version
+
+
+class BugWorkStep(BugWorkStop):
+    expected_phase_code: Annotated[str, StringConstraints(strict=True), wire_text(128)]
+    expected_status: Literal["active", "blocked"]
+    report: Annotated[str, StringConstraints(strict=True), wire_text(131072, controls=True)] | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class BugWorkStepFence(RuntimeStepFence):
+    """Only the BugWork service constructs this exact retained assignment/run fence."""
+
+    bug_work_assignment_id: str
+    bug_work_assignment_sha256: str
+    bug_work_binding_sha256: str
+    bug_work_fence: int
+    # This mutable private holder can renew its fresh observation only before
+    # SQL locks. It is not serialized or exposed to the worker.
+    custody: Any
+
+
+def checked_grant(raw: dict[str, Any]) -> BugWorkGrant:
+    grant = BugWorkGrant.model_validate_json(canonical_json(raw))
+    original = raw.get("assignment")
+    if not isinstance(original, dict) or payload_sha256(original) != grant.assignment_sha256 or not grant.capacity_held:
+        raise ValueError("Нет исходной authority существующего Bug")
+    if grant.assignment.created_at > datetime.now(timezone.utc):
+        raise ValueError("Назначение Bug выдано в будущем")
+    return grant

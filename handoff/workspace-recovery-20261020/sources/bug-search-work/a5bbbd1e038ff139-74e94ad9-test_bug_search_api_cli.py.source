@@ -1,0 +1,132 @@
+"""Actual project routes and HMAC-only CLI do not fall back to ordinary Task execution."""
+
+import json
+
+import httpx
+import pytest
+from click.testing import CliRunner
+from fastapi.testclient import TestClient
+
+from project_workflow import config
+from project_workflow.infrastructure import bug_search_authority as authority
+from project_workflow.infrastructure.llm import OpenAICompatibleClient
+from project_workflow.infrastructure.namespace_auth import NamespaceAuthError
+from project_workflow.interfaces.cli.core import cli
+from project_workflow.interfaces.ui.app import create_app
+from tests.test_bug_search_execution import source as source
+
+BASE = "/internal/bug-search/v1"
+ADAPTER = {"Authorization": "Bearer sdlc_pat_fleet"}
+
+
+@pytest.fixture
+def api(source, monkeypatch):
+    payload, principal, _ = source
+    monkeypatch.setenv("PROJECT_WORKFLOW_BUG_SEARCH_FLEET_SUBJECT", principal.subject)
+    config.get_settings.cache_clear()
+
+    def introspect(header):
+        if header != ADAPTER["Authorization"]:
+            raise NamespaceAuthError(401)
+        return principal, ["project-workflow:read", "project-workflow:write"]
+
+    monkeypatch.setattr(authority, "introspect", introspect)
+    with TestClient(create_app()) as client:
+        yield client, payload
+
+
+def accepted(api):
+    client, payload = api
+    response = client.post(BASE + "/executions", headers=ADAPTER, json=payload.model_dump(mode="json"))
+    assert response.status_code == 200, response.json()
+    identity = payload.binding.execution_id
+    from tests.test_bug_search_execution import uid
+
+    response = client.post(BASE + f"/executions/{identity}/bind", headers=ADAPTER, json={
+        "operation_key": "bind:1", "expected_version": 1, "expected_fence": 1,
+        "session_id": uid(), "session_run_id": uid(), "hermes_run_ref": "hermes:accepted",
+    })
+    assert response.status_code == 200, response.json()
+    return identity, response.json()["execution_token"]
+
+
+def test_actual_api_catalog_prepare_bind_and_worker_only_three_phase_path(api, supervisor_llm):
+    client, payload = api
+    profession = payload.snapshot.profession
+    assert client.get(BASE + f"/catalog/{profession.profession_id}").status_code == 401
+    assert client.get(BASE + "/catalog").status_code == 401
+    catalog = client.get(BASE + f"/catalog/{profession.profession_id}", headers=ADAPTER)
+    assert catalog.status_code == 200 and catalog.json()["result"]["profession"] == profession.model_dump(mode="json")
+    installed = client.get(BASE + "/catalog", headers=ADAPTER)
+    assert installed.status_code == 200 and installed.json() == catalog.json()
+    identity, token = accepted(api)
+    assert token.startswith("wf_bug_v1_")
+    readback = client.get(BASE + f"/executions/{identity}", headers=ADAPTER)
+    assert readback.status_code == 200 and readback.headers["cache-control"] == "no-store"
+    assert "execution_token" not in readback.json()
+    supervisor_llm("PASS")
+    runtime = {"Authorization": "Bearer " + token}
+    for version in (2, 3, 4):
+        body = {"operation_key": f"step:{version}", "expected_version": version, "expected_fence": 1,
+                "report": "Фаза выполнена с evidence", "result": {"coverage": "complete", "findings": []}
+                if version == 4 else None}
+        assert client.post(BASE + f"/executions/{identity}/step", headers=ADAPTER, json=body).status_code == 401
+        result = client.post(BASE + f"/executions/{identity}/step", headers=runtime, json=body)
+        assert result.status_code == 200, result.json()
+    assert result.json()["result"]["state"] == "completed"
+    history = client.get(BASE + f"/executions/{identity}/history", headers=runtime)
+    assert history.status_code == 200 and len(history.json()["result"]["entries"]) == 4
+    assert client.get(BASE + f"/executions/{identity}", headers=runtime).status_code == 401
+
+
+def test_model_dependency_error_leaves_cursor_and_original_operation_unaccepted(api, monkeypatch):
+    client, _ = api
+    identity, token = accepted(api)
+    monkeypatch.setattr(OpenAICompatibleClient, "chat", lambda *_args, **_kwargs: {"verdict": "invented"})
+    response = client.post(BASE + f"/executions/{identity}/step", headers={"Authorization": "Bearer " + token}, json={
+        "operation_key": "model:failed", "expected_version": 2, "expected_fence": 1,
+        "report": "Отчёт", "result": None,
+    })
+    assert response.status_code == 503
+    current = client.get(BASE + f"/executions/{identity}", headers=ADAPTER).json()["result"]
+    assert current["version"] == 2 and current["phase_index"] == 0
+
+
+def test_cli_project_branch_sends_only_hmac_to_fixed_endpoint_and_checks_wrapper(source, monkeypatch, tmp_path):
+    from project_workflow.interfaces.cli import project_execution
+
+    monkeypatch.delenv("SDLC_API_TOKEN", raising=False)
+    payload, _, catalog = source
+    monkeypatch.setenv("PROJECT_WORKFLOW_NAMESPACE_ID", str(catalog.profession.profession_id))
+    monkeypatch.setenv("PROJECT_WORKFLOW_URL", "http://workflow.invalid")
+    request = {"execution_id": payload.binding.execution_id, "profession_id": catalog.profession.profession_id,
+               "step": {"operation_key": "step:original", "expected_version": 2, "expected_fence": 1,
+                        "report": None, "result": None}}
+    request_path = tmp_path / "project-request.json"
+    request_path.write_text(json.dumps(request), encoding="utf-8")
+    token_path = tmp_path / "execution-token"
+    token_path.write_text("wf_bug_v1_" + "a" * 64, encoding="ascii")
+    calls = []
+
+    def handle(outgoing):
+        calls.append(outgoing)
+        assert outgoing.headers["authorization"] == "Bearer wf_bug_v1_" + "a" * 64
+        assert outgoing.url.path == BASE + f"/executions/{payload.binding.execution_id}/step"
+        assert json.loads(outgoing.content) == request["step"]
+        return httpx.Response(200, json={"ok": True, "result": {"state": "active"}})
+
+    actual_client = httpx.Client
+    monkeypatch.setattr(project_execution.httpx, "Client", lambda **kwargs: actual_client(
+        **kwargs, transport=httpx.MockTransport(handle),
+    ))
+    args = ["--json", "step", "--project-execution-request", str(request_path),
+            "--execution-token-file", str(token_path)]
+    result = CliRunner().invoke(cli, args)
+    assert result.exit_code == 0, result.output
+    assert len(calls) == 1
+    monkeypatch.setenv("SDLC_API_TOKEN", "sdlc_pat_must_not_forward")
+    result = CliRunner().invoke(cli, args)
+    assert result.exit_code == 1 and "PAT" in result.output
+    assert len(calls) == 1
+    result = CliRunner().invoke(cli, [*args, "--task", "RUN-42"])
+    assert result.exit_code != 0 and len(calls) == 1

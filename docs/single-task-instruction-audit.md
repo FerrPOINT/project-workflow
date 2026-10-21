@@ -345,3 +345,45 @@ passed again without update mode; their hashes were not hand-edited. Generator
 `--check`, scoped Ruff and diff-check PASS. No full gate, PG, build or live run was
 repeated. Existing installed catalog hashes/history are not rewritten; normal
 coordinated profile publication remains separate.
+
+## Retained Family Compatibility
+
+Current source retains the exact published catalog86e6/manifest652a files under
+`project_workflow/references/retained/652a38c0f7bdb48a569aa3fcd5c2e81e153db6e22b5201cfb6ce15c988dd57f3/`.
+Their bytes are original Git artifacts, not reconstructed or relabelled content;
+LF checkout rules preserve their seals on Windows. Context validation accepts
+only these two exact manifest hashes, not arbitrary prior versions.
+
+Installation readback reuses the complete existing validator to match one of the
+two sealed seven-profession families. Existing old installation rows, namespace
+IDs, mode/phase IDs, assignment context and bindings are not upgraded by startup.
+Fresh installation uses the conditional PM family. Partial, mixed or tampered
+catalogs still fail without repair, and a new manifest cannot authorize retry of
+an old assignment against its retained namespace. Canonical root key, task/run
+history and predecessor payload remain unchanged; only the already-guarded retry
+successor is inserted. No API shape, migration or caller-selected version flag
+was added.
+
+This supports latest code with an existing old family; it is not an in-place
+promotion or simultaneous old/new content in one namespace. Installing latest
+code does not itself change active Fleet agent config revisions or apply the new
+conditional instructions to FLEETQA3. The original family remains authoritative
+for that old assignment. No live FLEETQA3 eligibility or successful retry is
+inferred from synthetic tests.
+
+The branch was merged with master `c7854f1f40e4b7020f317cf45b6d330a472e29a5`,
+preserving both upstream branding and bootstrap route registrations. Focused host
+validation selected 101 cases: 100 PASS in the first batch; one old installation
+assertion expected the former unconditional dependency wording. Only that
+assertion was changed to require exact confirmation-readback dependencies plus
+conditional checkpoint evidence, then its exact case passed separately. Eight
+compatibility cases are included in the 100, not additional passes: old/new parse,
+closed artifacts/tamper, unchanged installed rows, mixed-family denial and actual
+old-family bound/unbound bind/retry ledgers. All native readbacks are synthetic.
+Scoped Ruff, mypy (four source files), generator parity and owned-source diff
+checks PASS. Raw recovery handoff artifacts inherited from master were preserved,
+including their existing whitespace; they were not rewritten for diff cleanup.
+
+The historical PG6 remains bound to a7, not this modified validator/loader/app
+closure. No fresh PostgreSQL, image build, install or full quality gate is claimed
+for the merged source by these host results.

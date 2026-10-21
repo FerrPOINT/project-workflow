@@ -1,0 +1,1211 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 7095927..cb53fb9 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -13,6 +13,11 @@
+ - Standalone-режим: репозиторий собирается и запускается без соседнего `services-base` (убраны extra `cli-platform`, uv source, Docker additional_context и CI checkout). Token-режим CLI без `sdlc-cli-core` выдаёт понятную ошибку; запуск без `AUTH_ISSUER` работает без авторизации.
+ 
+ ### Fixed
++- Jinja deletion confirmations use the shared Base SSR native dialog instead
++  of a local modal shell. Pending callbacks keep the dialog locked until API
++  acknowledgement; uncertain deletes block repeat writes across cancel/reopen
++  and require an explicit read-only catalogue check. Namespace deletion defers
++  navigation until confirmed success, and the initial namespace icon renders.
+ - Namespace forms use the Base SSR draft guard for links, context selectors,
+   create cancellation and indexed Back/Forward. Pending writes block duplicates;
+   rejected writes retain fields, while unknown outcomes require read-only
+diff --git a/docs/UI_UX_MAP.md b/docs/UI_UX_MAP.md
+index 39870d2..849a9b9 100644
+--- a/docs/UI_UX_MAP.md
++++ b/docs/UI_UX_MAP.md
+@@ -73,3 +73,13 @@ Preview задаёт canonical accent tokens, не переопределяя re
+ Нет новых endpoint, auth store или изменений основного Jinja/runtime bridge.
+ Актуальные source gates и browser evidence фиксируются отдельно; immutable image,
+ SSO/roles/states/drafts и release provenance остаются обязательной отдельной проверкой.
++
++Ordinary Jinja confirmation использует Base `confirm_dialog`/`BaseConfirmDialog`;
++заменённые modal markup, CSS и ручное inert/focus управление удалены.
++DELETE ожидает подтверждённый ACK; unknown outcome запрещает повтор, включая
++cancel/reopen, и предоставляет только явную GET-сверку существующего каталога.
++Ошибки доступа/отсутствующего объекта не предлагают новую запись. Namespace
++сохраняет собственную domain reconciliation и выполняет departure после ACK.
++Начальный preview namespace получает SVG без дополнительного ввода в форму.
++Это не завершение backlog: workflows/agents create/update draft safety,
++pending/unknown/ACK lifecycle и оставшиеся controls требуют отдельной миграции.
+diff --git a/docs/quality-gate.md b/docs/quality-gate.md
+index bc0f67c..2828452 100644
+--- a/docs/quality-gate.md
++++ b/docs/quality-gate.md
+@@ -154,21 +154,26 @@ node scripts/capture_ui_screenshots.mjs
+ Для backend-only тестовых или документационных изменений browser smoke не
+ обязателен.
+ 
+-## Namespace SSR State Tests
++## Namespace And Confirmation SSR State Tests
+ 
+ Start the documented source preview with an isolated neutral SQLite smoke
+ fixture (never a runtime database). In another terminal run:
+ 
+ ```powershell
+ $env:WORKFLOW_UI_QA_ORIGIN = "http://127.0.0.1:8812"
++$env:WORKFLOW_UI_QA_MUTATIONS = "isolated-fixture"
+ pnpm --dir frontend test:ssr
+ ```
+ 
+ The runner requires an already-started loopback fixture with `workflow-dev`
+-and `workflow-qa` namespaces. It does not launch containers or mutate fixture
+-data: unexpected API writes are blocked; write/error scenarios use explicit
+-route fixtures. It checks desktop/mobile draft, context/history, pending,
+-reconciliation and focus behavior. Captures and JSON results are stored in
++and `workflow-qa` namespaces. The mutation opt-in is mandatory; never point it
++at a runtime database. It does not launch containers. Namespace draft tests
++block unexpected API writes and use explicit route fixtures for write/error
++scenarios. Confirmation tests create uniquely named disposable agents and
++namespaces through the real API, then remove only their own IDs in teardown;
++the existing seeded records are not deleted. Both suites check desktop/mobile
++draft, context/history, pending, reconciliation and focus behavior.
++Captures and JSON results are stored in
+ `.smoke/namespace-drafts`; archive them with source/Base fingerprints before
+ another run. These tests supplement, not replace, no-mock route smoke, full
+ Python/PostgreSQL gates and actual-image/SSO acceptance.
+diff --git a/frontend/e2e/deletion-confirmation.spec.ts b/frontend/e2e/deletion-confirmation.spec.ts
+new file mode 100644
+index 0000000..84593cf
+--- /dev/null
++++ b/frontend/e2e/deletion-confirmation.spec.ts
+@@ -0,0 +1,251 @@
++import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
++
++if (process.env.WORKFLOW_UI_QA_MUTATIONS !== 'isolated-fixture') {
++  throw new Error('Confirmation QA requires WORKFLOW_UI_QA_MUTATIONS=isolated-fixture and an isolated database')
++}
++
++const dialog = (page: Page) => page.locator('#confirmDialog')
++const accept = (page: Page) => page.locator('[data-base-confirm-accept]')
++const cancel = (page: Page) => page.locator('[data-base-confirm-cancel]')
++
++let id: number
++let name: string
++
++test.beforeEach(async ({ request }) => {
++  id = 0
++  name = `confirmation-${crypto.randomUUID()}`
++  const response = await request.post('/api/agents', { data: { name, description: 'Disposable confirmation fixture' } })
++  expect(response.ok()).toBeTruthy()
++  id = (await response.json()).agent_id
++  expect(id).toBeGreaterThan(0)
++})
++
++test.afterEach(async ({ request }) => {
++  if (id <= 0) return
++  const response = await request.get('/api/agents')
++  expect(response.ok()).toBeTruthy()
++  if ((await response.json()).agents.some((item: { id: number }) => item.id === id)) {
++    expect((await request.delete(`/api/agents/${id}`)).ok()).toBeTruthy()
++  }
++})
++
++async function openDeletion(page: Page) {
++  await page.goto('/agents?namespace_id=1')
++  await page.locator(`.agent-entry[data-id="${id}"] summary`).click()
++  await page.locator(`.agent-entry[data-id="${id}"] .agent-delete`).click()
++  await expect(dialog(page)).toBeVisible()
++  await expect(cancel(page)).toBeFocused()
++}
++
++test('Escape dismisses phase confirmation without closing its owning action menu', async ({ page }) => {
++  await page.goto('/phases?namespace_id=1')
++  const menu = page.locator('.phase-card-actions').first()
++  await menu.locator('summary').click()
++  const trigger = menu.locator('button[onclick="deletePhase(this)"]')
++  await expect(trigger).toBeEnabled()
++  await trigger.click()
++  await expect(cancel(page)).toBeFocused()
++  await page.keyboard.press('Escape')
++  await expect(dialog(page)).not.toBeVisible()
++  await expect(trigger).toBeFocused()
++  await expect(menu).toHaveAttribute('open', '')
++})
++
++for (const theme of ['dark', 'gray', 'light']) {
++  test(`Base modal geometry, keyboard and focus (${theme})`, async ({ page }) => {
++    await page.addInitScript(value => localStorage.setItem('workflow-theme', value), theme)
++    for (const width of [375, 767, 768, 1023, 1024, 1279, 1280, 1440, 1920, 2560]) {
++      await page.setViewportSize({ width, height: 1080 })
++      await openDeletion(page)
++      const bounds = await dialog(page).boundingBox()
++      expect(bounds!.x).toBeGreaterThanOrEqual(15)
++      expect(bounds!.width).toBeLessThanOrEqual(Math.min(480, width - 32) + 1)
++      expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width - 15)
++      expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBe(0)
++      expect(await page.locator('main').evaluate(node => (node as HTMLElement).inert)).toBe(false)
++      // Native modal inertness is browser-managed, not a product-owned inert attribute.
++      await page.locator('#newName').evaluate(node => (node as HTMLElement).focus())
++      await expect(cancel(page)).toBeFocused()
++      await page.keyboard.press('Shift+Tab')
++      await expect(accept(page)).toBeFocused()
++      await page.keyboard.press('Tab')
++      await expect(cancel(page)).toBeFocused()
++      if ([375, 1920, 2560].includes(width)) {
++        await page.screenshot({ path: test.info().outputPath(`confirm-${theme}-${width}.png`), fullPage: true })
++      }
++      await page.keyboard.press('Escape')
++      await expect(dialog(page)).not.toBeVisible()
++      await expect(page.locator(`.agent-entry[data-id="${id}"] .agent-delete`)).toBeFocused()
++      await expect(page.locator('main')).not.toHaveAttribute('inert', '')
++    }
++  })
++}
++
++for (const status of [409, 422, 401, 403, 404]) {
++  test(`rejected DELETE ${status} stays open; unavailable objects cannot retry`, async ({ page }) => {
++    let writes = 0
++    await page.route(`**/api/agents/${id}`, async route => {
++      expect(route.request().method()).toBe('DELETE')
++      writes++
++      await route.fulfill({ status, json: { ok: false, error: `Rejected ${status}` } })
++    })
++    await openDeletion(page)
++    await accept(page).click()
++    await expect(dialog(page)).toBeVisible()
++    await expect(page.locator('[data-base-confirm-error]')).toHaveText(`Rejected ${status}`)
++    await expect(page.locator(`.agent-entry[data-id="${id}"]`)).toBeVisible()
++    if ([401, 403, 404].includes(status)) await expect(accept(page)).toBeDisabled()
++    else await expect(accept(page)).toBeEnabled()
++    await expect(cancel(page)).toBeEnabled()
++    await expect(page.locator('#confirmReconcile')).not.toBeVisible()
++    expect(writes).toBe(1)
++    await cancel(page).click()
++  })
++}
++
++test('pending DELETE locks modal and duplicate handlers until acknowledged success', async ({ page }) => {
++  let writes = 0
++  let release!: () => void
++  const held = new Promise<void>(resolve => { release = resolve })
++  await page.route(`**/api/agents/${id}`, async route => {
++    writes++
++    await held
++    await route.fulfill({ json: { ok: true } })
++  })
++  try {
++    await openDeletion(page)
++    await accept(page).click()
++    await expect(dialog(page)).toHaveAttribute('aria-busy', 'true')
++    await expect(accept(page)).toBeDisabled()
++    await expect(cancel(page)).toBeDisabled()
++    await page.keyboard.press('Escape')
++    await expect(dialog(page)).toBeVisible()
++    await page.evaluate(agentId => {
++      const ui = window as unknown as { deleteAgent: (button: HTMLElement) => void }
++      const button = document.querySelector<HTMLElement>(`.agent-entry[data-id="${agentId}"] .agent-delete`)!
++      ui.deleteAgent(button)
++      ui.deleteAgent(button)
++    }, id)
++    expect(writes).toBe(1)
++    release()
++    await expect(dialog(page)).not.toBeVisible()
++    await expect(page.locator(`.agent-entry[data-id="${id}"]`)).toHaveCount(0)
++    expect(await page.evaluate(() => document.activeElement !== document.body)).toBe(true)
++    expect(writes).toBe(1)
++  } finally { release() }
++})
++
++for (const outcome of ['server-error', 'network-error', 'invalid-ack']) {
++  test(`unknown DELETE ${outcome}: cancel/reopen preserves lock; only GET can reconcile`, async ({ page }) => {
++    let writes = 0
++    await page.route(`**/api/agents/${id}`, async route => {
++      writes++
++      if (outcome === 'network-error') await route.abort('failed')
++      else await route.fulfill({ status: outcome === 'server-error' ? 503 : 200, json: {} })
++    })
++    await openDeletion(page)
++    await accept(page).click()
++    await expect(accept(page)).toBeDisabled()
++    await expect(page.locator('#confirmReconcile')).toBeVisible()
++    await cancel(page).click()
++    await page.locator(`.agent-entry[data-id="${id}"] .agent-delete`).click()
++    await expect(accept(page)).toBeDisabled()
++    await page.locator('#confirmReconcile').click()
++    await expect(page.locator('[data-base-confirm-error]')).toContainText('Удаление пока не подтверждено')
++    expect(writes).toBe(1)
++    await page.route('**/api/agents', route => route.fulfill({ status: 503, json: { ok: false } }))
++    await page.locator('#confirmReconcile').click()
++    await expect(page.locator('[data-base-confirm-error]')).toContainText('Не удалось проверить результат')
++    await page.route('**/api/agents', route => route.fulfill({ json: { ok: true, agents: [null] } }))
++    await page.locator('#confirmReconcile').click()
++    await expect(accept(page)).toBeDisabled()
++    await expect(dialog(page)).toBeVisible()
++    await page.route('**/api/agents', route => route.fulfill({ json: { ok: true, agents: [] } }))
++    await page.locator('#confirmReconcile').click()
++    await expect(dialog(page)).not.toBeVisible()
++    await expect(page.locator(`.agent-entry[data-id="${id}"]`)).toHaveCount(0)
++    expect(writes).toBe(1)
++  })
++}
++
++async function namespaceFixture(request: APIRequestContext) {
++  const workflows = await request.get('/api/workflows')
++  expect(workflows.ok()).toBeTruthy()
++  const workflowId = (await workflows.json()).workflows.find((item: { is_default: boolean }) => item.is_default).id
++  const response = await request.post('/api/namespaces', { data: {
++    name: 'Disposable confirmation namespace', cli_command: `confirm-${crypto.randomUUID().slice(0, 8)}`, workflow_id: workflowId,
++  } })
++  expect(response.ok()).toBeTruthy()
++  return (await response.json()).namespace_id as number
++}
++
++async function removeNamespaceFixture(request: APIRequestContext, namespaceId: number) {
++  const response = await request.get('/api/namespaces')
++  expect(response.ok()).toBeTruthy()
++  if ((await response.json()).namespaces.some((item: { id: number }) => item.id === namespaceId)) {
++    expect((await request.delete(`/api/namespaces/${namespaceId}`)).ok()).toBeTruthy()
++  }
++}
++
++for (const outcome of ['server-error', 'network-error', 'invalid-ack']) {
++  test(`namespace DELETE ${outcome} never fulfills confirmation without ACK`, async ({ page, request }) => {
++    const namespaceId = await namespaceFixture(request)
++    let writes = 0
++    try {
++      await page.route(`**/api/namespaces/${namespaceId}`, async route => {
++        expect(route.request().method()).toBe('DELETE')
++        writes++
++        if (outcome === 'network-error') await route.abort('failed')
++        else await route.fulfill({ status: outcome === 'server-error' ? 503 : 200, json: {} })
++      })
++      await page.goto(`/namespaces?namespace_id=${namespaceId}`)
++      await expect(page.locator('#namespaceThemePreviewIcon svg path')).toBeVisible()
++      await page.locator('#deleteNamespaceButton').click()
++      await expect(cancel(page)).toBeFocused()
++      await accept(page).click()
++      await expect(dialog(page)).toBeVisible()
++      await expect(accept(page)).toBeDisabled()
++      await expect(cancel(page)).toBeEnabled()
++      await expect(page.locator('#confirmReconcile')).toBeVisible()
++      await expect(page.locator('#namespaceName')).toBeDisabled()
++      await page.locator('#confirmReconcile').click()
++      await expect(page.locator('[data-base-confirm-error]')).toContainText('Сохранение пока не подтверждено')
++      expect(writes).toBe(1)
++      const catalogue = await request.get('/api/namespaces')
++      const rows = (await catalogue.json()).namespaces
++      await page.route('**/api/namespaces', route => route.fulfill({ json: { ok: true, namespaces: rows.filter((item: { id: number }) => item.id !== namespaceId) } }))
++      await page.locator('#confirmReconcile').click()
++      await expect(dialog(page)).not.toBeVisible()
++      await expect(page).not.toHaveURL(new RegExp(`namespace_id=${namespaceId}$`))
++      expect(writes).toBe(1)
++    } finally { await removeNamespaceFixture(request, namespaceId) }
++  })
++}
++
++test('namespace pending DELETE keeps confirmation locked and defers departure until ACK', async ({ page, request }) => {
++  const namespaceId = await namespaceFixture(request)
++  let release!: () => void
++  const held = new Promise<void>(resolve => { release = resolve })
++  let writes = 0
++  try {
++    await page.route(`**/api/namespaces/${namespaceId}`, async route => {
++      writes++
++      await held
++      await route.fulfill({ json: { ok: true } })
++    })
++    await page.goto(`/namespaces?namespace_id=${namespaceId}`)
++    await page.locator('#deleteNamespaceButton').click()
++    await accept(page).click()
++    await expect(dialog(page)).toHaveAttribute('aria-busy', 'true')
++    await expect(page.locator('#namespaceName')).toBeDisabled()
++    await expect(cancel(page)).toBeDisabled()
++    await page.keyboard.press('Escape')
++    await expect(dialog(page)).toBeVisible()
++    await expect(page).toHaveURL(new RegExp(`namespace_id=${namespaceId}$`))
++    expect(writes).toBe(1)
++    release()
++    await expect(page).not.toHaveURL(new RegExp(`namespace_id=${namespaceId}$`))
++    await expect(dialog(page)).not.toBeVisible()
++    expect(writes).toBe(1)
++  } finally { release(); await removeNamespaceFixture(request, namespaceId) }
++})
+diff --git a/project_workflow/interfaces/ui/static/base-ui/base-ui.css b/project_workflow/interfaces/ui/static/base-ui/base-ui.css
+index f265a3f..d6e3330 100644
+--- a/project_workflow/interfaces/ui/static/base-ui/base-ui.css
++++ b/project_workflow/interfaces/ui/static/base-ui/base-ui.css
+@@ -251,12 +251,15 @@ dialog.base-shell-drawer::backdrop { background: rgb(0 0 0 / 65%); }
+ .base-button-primary { background: var(--color-accent); color: var(--color-accent-foreground); border-color: var(--color-accent); }
+ .base-button-danger { background: var(--color-danger); color: var(--color-destructive-foreground); border-color: var(--color-danger); }
+ .base-button:disabled { opacity: .5; cursor: not-allowed; }
+-.base-draft-dialog { box-sizing: border-box; width: min(480px, calc(100% - 32px)); max-height: calc(100dvh - 32px); padding: 20px; border: 1px solid var(--color-border); border-radius: var(--base-radius); background: var(--color-surface); color: var(--color-text-primary); overflow-y: auto; font: inherit; }
+-.base-draft-dialog::backdrop { background: rgb(0 0 0 / 65%); }
+-.base-draft-dialog h2 { margin: 0; font-size: 18px; line-height: 1.4; overflow-wrap: anywhere; }
+-.base-draft-dialog p { margin: 12px 0; overflow-wrap: anywhere; }
+-.base-draft-dialog .base-page-actions { justify-content: flex-end; }
++.base-draft-dialog, .base-confirm-dialog { box-sizing: border-box; margin: auto; width: min(480px, calc(100% - 32px)); max-height: calc(100dvh - 32px); padding: 20px; border: 1px solid var(--color-border); border-radius: var(--base-radius); background: var(--color-surface); color: var(--color-text-primary); overflow-y: auto; font: inherit; }
++.base-draft-dialog::backdrop, .base-confirm-dialog::backdrop { background: rgb(0 0 0 / 65%); }
++.base-draft-dialog h2, .base-confirm-dialog h2 { margin: 0; font-size: 18px; line-height: 1.4; overflow-wrap: anywhere; }
++.base-draft-dialog p, .base-confirm-dialog p { margin: 12px 0; overflow-wrap: anywhere; }
++.base-draft-dialog .base-page-actions, .base-confirm-dialog .base-page-actions { justify-content: flex-end; }
+ .base-draft-dialog [data-base-draft-pending] { color: var(--color-text-muted); }
++.base-confirm-dialog [data-base-confirm-content] { margin: 12px 0; padding: 0; min-width: 0; border: 0; }
++.base-confirm-dialog [data-base-confirm-error] { color: var(--color-danger); }
++.base-confirm-dialog [data-base-confirm-pending] { color: var(--color-text-muted); }
+ .base-resource-state { padding: 20px 0; }
+ .base-ssr-shell .main { min-width: 0; min-height: calc(100dvh - var(--shell-header-height)); width: calc(100% - var(--sidebar-width)); margin-left: var(--sidebar-width); }
+ .base-ssr-header { position: sticky; top: 0; z-index: 30; display: flex; min-width: 0; width: 100%; height: var(--shell-header-height); align-items: center; justify-content: space-between; gap: 8px; padding: 0 var(--shell-page-gutter); border-bottom: 1px solid var(--color-border); background: var(--color-surface); }
+diff --git a/project_workflow/interfaces/ui/static/base-ui/base-ui.js b/project_workflow/interfaces/ui/static/base-ui/base-ui.js
+index 8abdd6d..24ad61b 100644
+--- a/project_workflow/interfaces/ui/static/base-ui/base-ui.js
++++ b/project_workflow/interfaces/ui/static/base-ui/base-ui.js
+@@ -80,7 +80,7 @@
+       on(dialog, 'close', () => { if (!dialog.open) finish(false); });
+       on(dialog, 'click', (event) => { if (event.target === dialog) finish(false); });
+       on(dialog, 'keydown', (event) => {
+-        if (event.key === 'Escape') { event.preventDefault(); finish(false); return; }
++        if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); finish(false); return; }
+         if (event.key !== 'Tab') return;
+         const controls = discard.disabled ? [cancel] : [cancel, discard];
+         if (event.shiftKey && document.activeElement === controls[0]) { event.preventDefault(); controls.at(-1).focus(); }
+@@ -132,6 +132,149 @@
+   };
+ })();
+ 
++(() => {
++  const owners = new WeakMap();
++  const configurations = new WeakMap();
++  window.BaseConfirmDialog = {
++    attach({ dialog, fallbackFocus = () => document.querySelector('main[tabindex="-1"]') }) {
++      if (!(dialog instanceof HTMLDialogElement)) throw new TypeError('Base confirmation requires a native dialog');
++      if (owners.has(dialog)) throw new Error('Base confirmation already attached');
++      const find = (name) => dialog.querySelector(`[data-base-confirm-${name}]`);
++      const title = find('title');
++      const description = find('description');
++      const cancel = find('cancel');
++      const confirm = find('accept');
++      const error = find('error');
++      const pending = find('pending');
++      const content = find('content');
++      if (![title, description, cancel, confirm, error, pending, content].every(Boolean)) throw new Error('Use the Base confirm_dialog macro');
++      const defaults = configurations.get(dialog) ?? { title: title.textContent, message: description.textContent, cancelLabel: cancel.textContent, confirmLabel: confirm.textContent, error: error.textContent };
++      configurations.set(dialog, defaults);
++      const listeners = new AbortController();
++      let attempt = null;
++      let destroyed = false;
++      const busy = () => Boolean(attempt && (attempt.submitting || attempt.options.isPending()));
++      const usable = (node) => node instanceof HTMLElement && node.isConnected && !node.disabled && !node.closest('[inert]') && node.getClientRects().length;
++      const controls = () => [...dialog.querySelectorAll('button,a[href],input,select,textarea,[tabindex]')]
++        .filter((node) => usable(node) && node.tabIndex >= 0 && !node.matches(':disabled'));
++      const focusTarget = (target) => typeof target === 'function' ? target() : target;
++      function restoreFocus(current) {
++        const preferred = focusTarget(current.options.returnFocus) || current.trigger;
++        if (usable(preferred)) preferred.focus();
++        if (document.activeElement !== preferred) {
++          const fallback = focusTarget(current.options.fallbackFocus ?? fallbackFocus);
++          if (usable(fallback)) fallback.focus();
++        }
++      }
++      function finish(confirmed) {
++        if (!attempt) return;
++        const current = attempt;
++        attempt = null;
++        if (dialog.open) dialog.close();
++        restoreFocus(current);
++        current.resolve(confirmed);
++      }
++      function refresh() {
++        if (!attempt || destroyed) return;
++        const locked = busy();
++        confirm.disabled = locked || attempt.options.confirmDisabled();
++        cancel.disabled = locked;
++        content.disabled = locked;
++        pending.hidden = !locked;
++        dialog.setAttribute('aria-busy', String(locked));
++        const message = attempt.options.error() || (attempt.failed ? defaults.error : '');
++        error.textContent = message;
++        error.hidden = !message;
++        if (locked && dialog.contains(document.activeElement) && document.activeElement.matches(':disabled')) dialog.focus();
++      }
++      function close(confirmed = false) {
++        if (!attempt || busy()) { refresh(); return false; }
++        finish(confirmed);
++        return true;
++      }
++      function request(options = {}) {
++        if (destroyed || attempt) return Promise.resolve(false);
++        const callbacks = { onConfirm: () => {}, isPending: () => false, confirmDisabled: () => false, error: () => '', ...options };
++        for (const name of ['onConfirm', 'isPending', 'confirmDisabled', 'error']) {
++          if (typeof callbacks[name] !== 'function') throw new TypeError(`Base confirmation ${name} must be a callback`);
++        }
++        title.textContent = options.title ?? defaults.title;
++        description.textContent = options.message ?? defaults.message;
++        cancel.textContent = options.cancelLabel ?? defaults.cancelLabel;
++        confirm.textContent = options.confirmLabel ?? defaults.confirmLabel;
++        return new Promise((resolve, reject) => {
++          attempt = { options: callbacks, resolve, trigger: document.activeElement, submitting: false, failed: false };
++          try {
++            refresh();
++            dialog.showModal();
++            if (!cancel.disabled) cancel.focus(); else dialog.focus();
++          } catch (failure) {
++            const current = attempt;
++            attempt = null;
++            if (dialog.open) dialog.close();
++            restoreFocus(current);
++            reject(failure);
++          }
++        });
++      }
++      async function accept() {
++        if (!attempt || busy() || attempt.options.confirmDisabled()) { refresh(); return; }
++        const current = attempt;
++        current.submitting = true;
++        refresh();
++        try {
++          await current.options.onConfirm();
++          if (attempt !== current || destroyed) return;
++          current.submitting = false;
++          current.failed = false;
++          if (current.options.closeOnConfirm !== false && !current.options.isPending()) finish(true);
++          else refresh();
++        } catch (_failure) {
++          // Products own classification/reconciliation; never replay an uncertain write.
++          if (attempt !== current || destroyed) return;
++          current.submitting = false;
++          current.failed = true;
++          refresh();
++        }
++      }
++      const on = (type, callback) => dialog.addEventListener(type, callback, { signal: listeners.signal });
++      confirm.addEventListener('click', () => { void accept(); }, { signal: listeners.signal });
++      cancel.addEventListener('click', () => close(), { signal: listeners.signal });
++      on('cancel', (event) => { event.preventDefault(); close(); });
++      on('close', () => {
++        if (!attempt || dialog.open) return;
++        if (busy()) { dialog.showModal(); dialog.focus(); }
++        else finish(false);
++      });
++      on('click', (event) => {
++        if (event.target !== dialog) return;
++        const rect = dialog.getBoundingClientRect();
++        if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) close();
++      });
++      on('keydown', (event) => {
++        if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); return; }
++        if (event.key !== 'Tab') return;
++        const items = controls();
++        if (!items.length) { event.preventDefault(); dialog.focus(); return; }
++        if (event.shiftKey && (document.activeElement === items[0] || !items.includes(document.activeElement))) { event.preventDefault(); items.at(-1).focus(); }
++        else if (!event.shiftKey && (document.activeElement === items.at(-1) || !items.includes(document.activeElement))) { event.preventDefault(); items[0].focus(); }
++      });
++      const controller = {
++        request, refresh, close,
++        destroy() {
++          if (destroyed) return;
++          destroyed = true;
++          listeners.abort();
++          finish(false);
++          owners.delete(dialog);
++        },
++      };
++      owners.set(dialog, controller);
++      return controller;
++    },
++  };
++})();
++
+ (() => {
+   for (const account of document.querySelectorAll('.base-ssr-account')) {
+     const toggle = account.querySelector('summary');
+diff --git a/project_workflow/interfaces/ui/static/base-ui/fingerprint.json b/project_workflow/interfaces/ui/static/base-ui/fingerprint.json
+index 075611c..21c7dc2 100644
+--- a/project_workflow/interfaces/ui/static/base-ui/fingerprint.json
++++ b/project_workflow/interfaces/ui/static/base-ui/fingerprint.json
+@@ -2,8 +2,8 @@
+   "schemaVersion": 1,
+   "package": "@sdlc/ui",
+   "files": {
+-    "base-ui.css": "7eb1f00e6db1d66d04d5d5c59b5c9d3d00d3268ec5327113cbfaf208b8e7f6df",
+-    "base-ui.js": "ef8f28cf52229d8ba31987912ff071a441c0f2a4e5555d8228e562816abcb7a2",
+-    "macros.html": "27ab99b664dcda2f1da21ea6f35e811808c588143fa91c5b59ed3b69938984d0"
++    "base-ui.css": "bbc1da8dda5e081dd44c418f101c81eb349c21344edc00c89bbecdf04d93b868",
++    "base-ui.js": "02a46637c9c340b1330263b48e986ee3fae2c326834f3bef481257eaab8eae06",
++    "macros.html": "fe53deccef37163bfb4fae61c1c29f1275d78f79bf0fb743d2f6fec7801445bc"
+   }
+ }
+diff --git a/project_workflow/interfaces/ui/static/base-ui/macros.html b/project_workflow/interfaces/ui/static/base-ui/macros.html
+index adfab3b..cf2bab5 100644
+--- a/project_workflow/interfaces/ui/static/base-ui/macros.html
++++ b/project_workflow/interfaces/ui/static/base-ui/macros.html
+@@ -46,6 +46,10 @@
+ <section class="base-resource-state" data-page-state="{{ kind }}" {% if kind in ['error', 'partial-error'] %}role="alert"{% else %}role="status"{% endif %}{% if kind == 'loading' %} aria-busy="true"{% endif %}><p>{{ message }}</p>{% if retry_url and kind in ['error', 'partial-error'] %}<a class="base-control base-button base-button-secondary" href="{{ retry_url }}">{{ retry_label }}</a>{% endif %}</section>
+ {%- endmacro %}
+ 
++{% macro confirm_dialog(id='base-confirm-dialog', title='Подтвердите действие', message='', cancel_label='Отмена', confirm_label='Подтвердить', pending_message='Дождитесь завершения действия.', error_message='Не удалось выполнить действие.', variant='danger') -%}
++<dialog id="{{ id }}" class="base-confirm-dialog" data-base-confirm-dialog role="alertdialog" tabindex="-1" aria-labelledby="{{ id }}-title" aria-describedby="{{ id }}-description"><h2 id="{{ id }}-title" data-base-confirm-title>{{ title }}</h2><p id="{{ id }}-description" data-base-confirm-description>{{ message }}</p><p data-base-confirm-error role="alert" hidden>{{ error_message }}</p><p data-base-confirm-pending role="status" hidden>{{ pending_message }}</p><fieldset data-base-confirm-content{% if caller is not defined %} hidden{% endif %}>{% if caller is defined %}{{ caller() }}{% endif %}</fieldset><div class="base-page-actions"><button type="button" class="base-control base-button base-button-secondary" data-base-confirm-cancel>{{ cancel_label }}</button><button type="button" class="base-control base-button base-button-{{ variant }}" data-base-confirm-accept>{{ confirm_label }}</button></div></dialog>
++{%- endmacro %}
++
+ {% macro draft_guard_dialog(id='base-draft-guard', title='Несохранённые изменения', message='При переходе изменения будут потеряны.', cancel_label='Продолжить редактирование', discard_label='Перейти без сохранения', pending_message='Дождитесь завершения сохранения.') -%}
+ <dialog id="{{ id }}" class="base-draft-dialog" data-base-draft-dialog role="alertdialog" aria-labelledby="{{ id }}-title" aria-describedby="{{ id }}-description"><h2 id="{{ id }}-title">{{ title }}</h2><p id="{{ id }}-description">{{ message }}</p><p data-base-draft-pending role="status" hidden>{{ pending_message }}</p><div class="base-page-actions"><button type="button" class="base-control base-button base-button-secondary" data-base-draft-cancel>{{ cancel_label }}</button><button type="button" class="base-control base-button base-button-danger" data-base-draft-discard>{{ discard_label }}</button></div></dialog>
+ {%- endmacro %}
+diff --git a/project_workflow/interfaces/ui/templates/agents.html b/project_workflow/interfaces/ui/templates/agents.html
+index 45ae2a6..aa48396 100644
+--- a/project_workflow/interfaces/ui/templates/agents.html
++++ b/project_workflow/interfaces/ui/templates/agents.html
+@@ -132,12 +132,11 @@ async function saveAgent(event,form){
+ async function deleteAgent(button){
+   var entry=button.closest('.agent-entry');
+   var name=entry.querySelector('.agent-name').textContent.trim();
+-  if(!await requestConfirmation({eyebrow:'Удаление агента',title:'Удалить агента «'+name+'»?',message:'Агент «'+name+'» будет удалён из списка.',confirmLabel:'Удалить'}))return;
+-  button.disabled=true;
+-  try{
+-    var response=await fetch('/api/agents/'+entry.dataset.id,{method:'DELETE'});
+-    var data=await response.json();
+-    if(!data.ok){showToast(data.error||'Ошибка','error');return;}
++  if(await requestWorkflowDeletion({
++    url:'/api/agents/'+entry.dataset.id,title:'Удалить агента «'+name+'»?',
++    message:'Агент «'+name+'» будет удалён из списка.',returnFocus:button,
++    exists:function(){ return workflowCollectionContains('/api/agents','agents',Number(entry.dataset.id)); },
++  })){
+     var next=entry.nextElementSibling;
+     var previous=entry.previousElementSibling;
+     var focusTarget=(next&&next.matches('.agent-entry')&&next.querySelector('summary'))
+@@ -149,7 +148,7 @@ async function deleteAgent(button){
+     document.getElementById('agentsEmpty').hidden=count>0;
+     if(focusTarget)focusTarget.focus();
+     showToast('Удалено','success');
+-  }catch(error){showRequestError(error)}finally{button.disabled=false}
++  }
+ }
+ async function addAgent(event){
+   event.preventDefault();
+diff --git a/project_workflow/interfaces/ui/templates/base.html b/project_workflow/interfaces/ui/templates/base.html
+index bce6476..ca9f5d0 100644
+--- a/project_workflow/interfaces/ui/templates/base.html
++++ b/project_workflow/interfaces/ui/templates/base.html
+@@ -93,14 +93,6 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
+ .btn-secondary:hover{background:var(--surface-hover);color:var(--text)}
+ .btn-danger{background:#b42332;color:#fff;border-color:#b42332}
+ .btn-danger:hover{filter:brightness(1.08)}
+-.modal-backdrop[hidden]{display:none}
+-.modal-backdrop{position:fixed;inset:0;z-index:300;display:grid;place-items:center;padding:20px;background:rgba(5,6,10,.72);backdrop-filter:blur(5px)}
+-.modal-card{width:min(100%,420px);background:var(--surface);border:1px solid var(--border-strong);border-radius:14px;padding:22px;box-shadow:0 24px 64px rgba(0,0,0,.48)}
+-.modal-eyebrow{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--red)}
+-html[data-theme='dark'] .modal-eyebrow{color:#ff6b6b}
+-.modal-title{margin:8px 0 0;font-size:20px;line-height:1.25;color:var(--text)}
+-.modal-copy{margin-top:10px;color:var(--text-muted);line-height:1.55}
+-.modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;flex-wrap:wrap}
+ .burger{display:none;background:none;border:none;color:var(--text-muted);font-size:22px;cursor:pointer;padding:0;width:44px;height:44px;align-items:center;justify-content:center;margin-right:4px}
+ 
+ /* ── Cards ─────────────────────────────────────────────────────────── */
+@@ -399,21 +391,15 @@ textarea{resize:vertical;min-height:60px}
+ </main>
+ 
+ <div class="toast toast-success" id="toast" aria-hidden="true">Сохранено</div>
+-<div class="modal-backdrop" id="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="confirmDialogTitle" aria-hidden="true" hidden>
+-  <section class="modal-card" role="document">
+-    <div class="modal-eyebrow" id="confirmDialogEyebrow">Подтверждение</div>
+-    <h2 class="modal-title" id="confirmDialogTitle">Подтвердите действие</h2>
+-    <p class="modal-copy" id="confirmDialogCopy"></p>
+-    <div class="modal-actions">
+-      <button type="button" class="btn btn-secondary" id="confirmDialogCancel">Отмена</button>
+-      <button type="button" class="btn btn-danger" id="confirmDialogAccept">Удалить</button>
+-    </div>
+-  </section>
+-</div>
++{% call base.confirm_dialog(id='confirmDialog', confirm_label='Удалить') %}
++  {{ base.button('Проверить результат', id='confirmReconcile') }}
++{% endcall %}
+ 
+ <script src="/static/base-ui/base-ui.js" defer></script>
+ <script>
+ var workflowDraftGuard = null;
++var workflowConfirmation = null;
++var workflowConfirmationState = null;
+ function registerWorkflowDraftGuard(state){
+   function attach(){
+     workflowDraftGuard = BaseDraftGuard.attach(Object.assign({}, state, {
+@@ -436,17 +422,12 @@ function navigateWorkflow(url, beforeNavigate){
+   return Promise.resolve(true);
+ }
+ function refreshWorkflowDraftGuard(){ if(workflowDraftGuard){ workflowDraftGuard.refresh(); } }
+-function syncSidebarLayout(){
+-  var dialogOpen=!document.getElementById('confirmDialog').hidden;
+-  document.getElementById('sidebar').inert=dialogOpen;
+-  document.querySelector('[data-platform-header]').inert=dialogOpen;
+-  document.querySelector('.main').inert=dialogOpen;
+-}
+ var serviceMenu=document.getElementById('serviceMenu');
+ document.addEventListener('click',function(event){
+   if(serviceMenu&&serviceMenu.open&&!serviceMenu.contains(event.target)){serviceMenu.open=false;}
+ });
+ document.addEventListener('keydown',function(event){
++  if(document.getElementById('confirmDialog').open)return;
+   if(event.key==='Escape'&&serviceMenu&&serviceMenu.open){
+     serviceMenu.open=false;
+     serviceMenu.querySelector('summary').focus();
+@@ -466,53 +447,24 @@ function showToast(msg, type){
+ function showRequestError(){
+   showToast('Не удалось связаться с сервером','error');
+ }
++function refreshWorkflowConfirmation(){
++  if(!workflowConfirmationState)return;
++  document.getElementById('confirmReconcile').hidden = !workflowConfirmationState.reconcileVisible();
++  workflowConfirmation.refresh();
++}
+ function requestConfirmation(options){
+-  var dialog = document.getElementById('confirmDialog');
+-  var cancel = document.getElementById('confirmDialogCancel');
+-  var accept = document.getElementById('confirmDialogAccept');
+-  var trigger = document.activeElement;
+-  var background = [document.querySelector('.sidebar'), document.querySelector('.main'), document.querySelector('[data-platform-header]')];
+-  var previousInert = background.map(function(element){ return element.inert; });
+-  document.getElementById('confirmDialogEyebrow').textContent = options.eyebrow || 'Подтверждение';
+-  document.getElementById('confirmDialogTitle').textContent = options.title || 'Подтвердите действие';
+-  document.getElementById('confirmDialogCopy').textContent = options.message || '';
+-  accept.textContent = options.confirmLabel || 'Удалить';
+-  dialog.hidden = false;
+-  dialog.setAttribute('aria-hidden', 'false');
+-  background.forEach(function(element){ element.inert = true; });
+-  accept.focus();
+-  return new Promise(function(resolve){
+-    function close(value){
+-      dialog.hidden = true;
+-      dialog.setAttribute('aria-hidden', 'true');
+-      background.forEach(function(element,index){ element.inert = previousInert[index]; });
+-      syncSidebarLayout();
+-      cancel.removeEventListener('click', onCancel);
+-      accept.removeEventListener('click', onAccept);
+-      dialog.removeEventListener('click', onBackdrop);
+-      document.removeEventListener('keydown', onKeyDown);
+-      if(trigger && trigger.isConnected && typeof trigger.focus === 'function'){ trigger.focus(); }else{ document.querySelector('.main').focus(); }
+-      resolve(value);
+-    }
+-    function onCancel(){ close(false); }
+-    function onAccept(){ close(true); }
+-    function onBackdrop(event){ if(event.target === dialog){ close(false); } }
+-    function onKeyDown(event){
+-      if(event.key === 'Escape'){ close(false); }
+-      if(event.key === 'Tab'){
+-        if(event.shiftKey && (document.activeElement === cancel || !dialog.contains(document.activeElement))){
+-          event.preventDefault();
+-          accept.focus();
+-        }else if(!event.shiftKey && (document.activeElement === accept || !dialog.contains(document.activeElement))){
+-          event.preventDefault();
+-          cancel.focus();
+-        }
+-      }
+-    }
+-    cancel.addEventListener('click', onCancel);
+-    accept.addEventListener('click', onAccept);
+-    dialog.addEventListener('click', onBackdrop);
+-    document.addEventListener('keydown', onKeyDown);
++  if(workflowConfirmationState)return Promise.resolve(false);
++  if(!workflowConfirmation){
++    workflowConfirmation = BaseConfirmDialog.attach({dialog:document.getElementById('confirmDialog')});
++  }
++  workflowConfirmationState = Object.assign({reconcileVisible:function(){ return false; }}, options);
++  var button = document.getElementById('confirmReconcile');
++  button.hidden = !workflowConfirmationState.reconcileVisible();
++  button.onclick = options.reconcile || null;
++  return workflowConfirmation.request(options).finally(function(){
++    workflowConfirmationState = null;
++    button.onclick = null;
++    button.hidden = true;
+   });
+ }
+ function switchNamespace(namespaceId){
+@@ -556,6 +508,7 @@ function pluralizeRu(n, one, few, many){
+   if(n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20)){ return n + ' ' + few; }
+   return n + ' ' + many;
+ }
++{% include "confirm_deletion.js" %}
+ {% block extra_script %}{% endblock %}
+ </script>
+ </body>
+diff --git a/project_workflow/interfaces/ui/templates/confirm_deletion.js b/project_workflow/interfaces/ui/templates/confirm_deletion.js
+new file mode 100644
+index 0000000..4bcb453
+--- /dev/null
++++ b/project_workflow/interfaces/ui/templates/confirm_deletion.js
+@@ -0,0 +1,61 @@
++(() => {
++  // Product-owned API lifecycle; Base owns the modal and its interactions.
++  const attempts = new Map();
++  window.workflowCollectionContains = async (url, collection, id) => {
++    const response = await fetch(url, { cache: 'no-store' });
++    const data = await response.json();
++    const rows = data[collection];
++    if (!response.ok || data.ok !== true || !Array.isArray(rows) ||
++        !rows.every(row => row && Number.isInteger(row.id) && row.id > 0)) {
++      throw new Error('Catalogue unavailable');
++    }
++    return rows.some(row => row.id === id);
++  };
++  window.requestWorkflowDeletion = async ({ url, title, message, exists, returnFocus, fallbackFocus }) => {
++    let state = attempts.get(url) || { kind: 'ready', error: '' };
++    let pending = false;
++    const unknown = () => {
++      state = { kind: 'unknown', error: 'Результат удаления неизвестен. Повтор заблокирован до проверки.' };
++      attempts.set(url, state);
++    };
++    const confirmed = await requestConfirmation({
++      title, message, confirmLabel: 'Удалить', returnFocus, fallbackFocus,
++      isPending: () => pending,
++      confirmDisabled: () => state.kind !== 'ready',
++      error: () => state.error,
++      reconcileVisible: () => state.kind === 'unknown',
++      async onConfirm() {
++        if (state.kind !== 'ready') throw new Error('Delete unavailable');
++        pending = true;
++        state.error = '';
++        try {
++          const response = await fetch(url, { method: 'DELETE' });
++          const data = await response.json().catch(() => null);
++          if (response.ok && data && data.ok === true) return;
++          if (response.ok || response.status >= 500 || response.status === 408) unknown();
++          else {
++            state.kind = [401, 403, 404].includes(response.status) ? 'terminal' : 'ready';
++            state.error = data && typeof data.error === 'string' ? data.error : 'Удаление отклонено. Проверьте доступ и состояние объекта.';
++            attempts.set(url, state);
++          }
++        } catch (_error) { unknown(); }
++        finally { pending = false; refreshWorkflowConfirmation(); }
++        throw new Error('Delete not acknowledged');
++      },
++      async reconcile() {
++        if (pending || state.kind !== 'unknown') return;
++        pending = true;
++        refreshWorkflowConfirmation();
++        let absent = false;
++        try {
++          absent = !(await exists());
++          state.error = absent ? '' : 'Удаление пока не подтверждено. Повторная запись заблокирована.';
++        } catch (_error) { state.error = 'Не удалось проверить результат. Повторная запись заблокирована.'; }
++        finally { pending = false; refreshWorkflowConfirmation(); }
++        if (absent) workflowConfirmation.close(true);
++      },
++    });
++    if (confirmed) attempts.delete(url);
++    return confirmed;
++  };
++})();
+diff --git a/project_workflow/interfaces/ui/templates/instructions.html b/project_workflow/interfaces/ui/templates/instructions.html
+index 00290a1..196525c 100644
+--- a/project_workflow/interfaces/ui/templates/instructions.html
++++ b/project_workflow/interfaces/ui/templates/instructions.html
+@@ -275,16 +275,14 @@ async function toggleType(badge) {
+ async function deleteInstruction(button) {
+   const row = button.closest('.instruction-row');
+   const id = parseInt(row.dataset.instructionId, 10);
+-  if (!await requestConfirmation({eyebrow:'Удаление инструкции',title:'Удалить инструкцию?',message:'Инструкция будет удалена без возможности восстановления.',confirmLabel:'Удалить'})) return;
+-  const result = await requestInstruction(instructionApiUrl('/api/instructions/' + id), {method: 'DELETE'});
+-  if (!result) return;
+-  const {resp, data} = result;
+-  if (!resp.ok || !data.ok) {
+-    showToast(data.error || 'Ошибка удаления', 'error');
+-    return;
+-  }
++  if (!await requestWorkflowDeletion({
++    url:instructionApiUrl('/api/instructions/' + id),title:'Удалить инструкцию?',
++    message:'Инструкция будет удалена без возможности восстановления.',returnFocus:button,
++    exists:()=>workflowCollectionContains(instructionApiUrl('/api/phases/' + PHASE_ID + '/instructions'),'instructions',id),
++  })) return;
+   row.remove();
+   updateTimeline();
++  document.querySelector('main[tabindex="-1"]').focus();
+ }
+ 
+ async function addInstruction() {
+diff --git a/project_workflow/interfaces/ui/templates/namespaces.html b/project_workflow/interfaces/ui/templates/namespaces.html
+index 9891daf..cf6884a 100644
+--- a/project_workflow/interfaces/ui/templates/namespaces.html
++++ b/project_workflow/interfaces/ui/templates/namespaces.html
+@@ -156,6 +156,7 @@ function updateNamespaceWriteControls(){
+   document.getElementById('namespaceReconcileButton').hidden = !namespaceUnknownWrite;
+   document.getElementById('namespaceReconcileButton').disabled = namespaceMutationPending;
+   refreshWorkflowDraftGuard();
++  refreshWorkflowConfirmation();
+ }
+ function showNamespaceWriteError(message, state){
+   var root = document.getElementById('namespaceWriteError');
+@@ -494,13 +495,25 @@ async function deleteNamespace(){
+   if(namespace && Number(namespace.task_count) > 0){ showToast('Сначала удалите или перенесите задачи','error'); return; }
+   var title = namespace ? 'Удалить неймспейс «' + namespace.name + '»?' : 'Удалить неймспейс?';
+   var message = namespace ? '«' + namespace.name + '» будет удалён без возможности восстановления.' : 'Неймспейс будет удалён без возможности восстановления.';
+-  namespaceMutationPending = true;
+-  updateNamespaceWriteControls();
+-  var confirmed;
+-  try { confirmed = await requestConfirmation({eyebrow:'Удаление неймспейса',title:title,message:message,confirmLabel:'Удалить'}); }
+-  finally { namespaceMutationPending = false; updateNamespaceWriteControls(); }
+-  if(!confirmed){ document.getElementById('deleteNamespaceButton').focus(); return; }
+-  return performNamespaceWrite('DELETE', selectedNamespaceId);
++  var id = selectedNamespaceId;
++  var destination;
++  var confirmed = await requestConfirmation({
++    title:title,message:message,confirmLabel:'Удалить',returnFocus:document.getElementById('deleteNamespaceButton'),
++    isPending:function(){ return namespaceMutationPending; },
++    confirmDisabled:function(){ return Boolean(namespaceUnknownWrite || namespaceTerminalState); },
++    error:function(){ return document.querySelector('#namespaceWriteError p').textContent; },
++    reconcileVisible:function(){ return Boolean(namespaceUnknownWrite); },
++    onConfirm:async function(){
++      var result = await performNamespaceWrite('DELETE', id, undefined, {deferDeparture:true});
++      if(!result || !result.acknowledged){ throw new Error('Delete not acknowledged'); }
++      destination = result.destination;
++    },
++    reconcile:async function(){
++      var result = await reconcileNamespaceWrite({deferDeparture:true});
++      if(result && result.acknowledged){ destination = result.destination; workflowConfirmation.close(true); }
++    },
++  });
++  if(confirmed){ return finishNamespaceDeparture(destination); }
+ }
+ function createNamespace(){
+   return performNamespaceWrite('POST', null, currentPayload());
+@@ -548,10 +561,11 @@ function finishNamespaceDeparture(destination){
+     else { document.cookie='workflow_namespace_id=; path=/; SameSite=Lax; Max-Age=0'; }
+   });
+ }
+-async function performNamespaceWrite(method, id, payload){
++async function performNamespaceWrite(method, id, payload, options){
+   if(namespaceMutationPending || namespaceUnknownWrite || namespaceTerminalState){ return; }
+   var attempt = {method:method,id:id,payload:payload};
+   var destination;
++  var acknowledged = false;
+   namespaceMutationPending = true;
+   showNamespaceWriteError('');
+   updateNamespaceWriteControls();
+@@ -575,18 +589,21 @@ async function performNamespaceWrite(method, id, payload){
+       (method === 'PUT' && data.namespace.id !== id) || (method === 'POST' && data.namespace_id !== data.namespace.id) ||
+       !namespaceMatchesPayload(data.namespace, payload))){ unknownNamespaceWrite(attempt); return; }
+     destination = acknowledgeNamespaceWrite(attempt, data.namespace);
++    acknowledged = true;
+   } catch(_error){ unknownNamespaceWrite(attempt); }
+   finally {
+     namespaceMutationPending = false;
+     setNamespaceFormMode(namespaceFormMode);
+     updateNamespaceWriteControls();
+   }
+-  return finishNamespaceDeparture(destination);
++  if(!acknowledged){ return; }
++  return options && options.deferDeparture ? {acknowledged:true,destination:destination} : finishNamespaceDeparture(destination);
+ }
+-async function reconcileNamespaceWrite(){
++async function reconcileNamespaceWrite(options){
+   if(namespaceMutationPending || !namespaceUnknownWrite){ return; }
+   var attempt = namespaceUnknownWrite;
+   var destination;
++  var acknowledged = false;
+   namespaceMutationPending = true;
+   updateNamespaceWriteControls();
+   try {
+@@ -596,12 +613,13 @@ async function reconcileNamespaceWrite(){
+     var saved = data.namespaces.find(function(item){ return attempt.method === 'POST' ? item.cli_command === attempt.payload.cli_command : item.id === attempt.id; });
+     if(attempt.method === 'DELETE' ? !saved : saved && namespaceMatchesPayload(saved, attempt.payload)){
+       destination = acknowledgeNamespaceWrite(attempt, saved);
++      acknowledged = true;
+     } else {
+       showNamespaceWriteError('Сохранение пока не подтверждено. Повторная запись заблокирована.');
+     }
+   } catch(_error){ showNamespaceWriteError('Не удалось проверить сохранение. Значения сохранены в форме, повторная запись заблокирована.'); }
+   finally { namespaceMutationPending = false; updateNamespaceWriteControls(); }
+-  return finishNamespaceDeparture(destination);
++  return options && options.deferDeparture ? {acknowledged:acknowledged,destination:destination} : finishNamespaceDeparture(destination);
+ }
+ function submitNamespace(){
+   if(namespaceMutationPending || namespaceUnknownWrite || namespaceTerminalState){ return; }
+@@ -637,6 +655,7 @@ if(selectedNamespaceId == null){
+   rememberNamespaceSelection(selectedNamespaceId, 'replace');
+ }
+ syncNav();
++updateNamespaceThemePreview();
+ namespaceDraftBaseline = JSON.stringify(namespaceDraftValues());
+ var initialIndex = window.history.state && window.history.state.workflowNamespaceIndex;
+ if(!Number.isInteger(initialIndex)){ initialIndex = 0; }
+diff --git a/project_workflow/interfaces/ui/templates/phase_detail.html b/project_workflow/interfaces/ui/templates/phase_detail.html
+index 9bb3b9c..ed674ea 100644
+--- a/project_workflow/interfaces/ui/templates/phase_detail.html
++++ b/project_workflow/interfaces/ui/templates/phase_detail.html
+@@ -594,21 +594,12 @@ async function addInstructionLast() {
+ async function deleteInstruction(button) {
+   const item = button.closest('.timeline-item');
+   if (!item) return;
+-  if (!await requestConfirmation({eyebrow:'Удаление инструкции',title:'Удалить инструкцию?',message:'Инструкция будет удалена без возможности восстановления.',confirmLabel:'Удалить'})) return;
+-  button.disabled = true;
+-  try {
+-    const id = item.dataset.instructionId;
+-    const result = await requestPhaseDetail(phaseApiUrl('/api/instructions/' + id), {method: 'DELETE'});
+-    if (!result) return;
+-    const {resp, data} = result;
+-    if (!resp.ok || !data.ok) {
+-      showToast(data.error || 'Не удалось удалить инструкцию', 'error');
+-      return;
+-    }
+-    window.location.reload();
+-  } finally {
+-    button.disabled = false;
+-  }
++  const id = Number(item.dataset.instructionId);
++  if (await requestWorkflowDeletion({
++    url:phaseApiUrl('/api/instructions/' + id),title:'Удалить инструкцию?',
++    message:'Инструкция будет удалена без возможности восстановления.',returnFocus:button,
++    exists:()=>workflowCollectionContains(phaseApiUrl('/api/phases/' + phaseId + '/instructions'),'instructions',id),
++  })) window.location.reload();
+ }
+ 
+ async function toggleInstructionType(badge) {
+diff --git a/project_workflow/interfaces/ui/templates/phases.html b/project_workflow/interfaces/ui/templates/phases.html
+index 0a23192..0ade0a5 100644
+--- a/project_workflow/interfaces/ui/templates/phases.html
++++ b/project_workflow/interfaces/ui/templates/phases.html
+@@ -255,15 +255,13 @@ async function deletePhase(button){
+   if(!item)return;
+   if(items.length<=1){showToast('Нельзя удалить единственную фазу воркфлоу','error');return;}
+   const phaseName=item.querySelector('.timeline-name')?.textContent.trim()||'эту фазу';
+-  if(!await requestConfirmation({eyebrow:'Удаление фазы',title:'Удалить фазу «'+phaseName+'»?',message:'Фаза «'+phaseName+'» и её настройки будут удалены.',confirmLabel:'Удалить'}))return;
+-  button.disabled=true;
+-  try{
+-    const resp=await fetch('/api/phases/'+item.dataset.phaseId,{method:'DELETE'});
+-    const data=await resp.json().catch(()=>({}));
+-    if(!resp.ok||!data.ok){showToast(data.error||'Не удалось удалить фазу','error');return;}
+-    window.location.reload();
+-  }catch(_error){showRequestError();
+-  }finally{button.disabled=false;}
++  const timeline=document.getElementById('phasesTimeline');
++  const catalogue='/api/phases?workflow_id='+encodeURIComponent(timeline.dataset.workflowId)+'&mode_id='+encodeURIComponent(timeline.dataset.modeId);
++  if(await requestWorkflowDeletion({
++    url:'/api/phases/'+item.dataset.phaseId,title:'Удалить фазу «'+phaseName+'»?',
++    message:'Фаза «'+phaseName+'» и её настройки будут удалены.',returnFocus:button,
++    exists:()=>workflowCollectionContains(catalogue,'phases',Number(item.dataset.phaseId)),
++  }))window.location.reload();
+ }
+ 
+ async function togglePhaseType(button){
+@@ -321,7 +319,7 @@ document.addEventListener('DOMContentLoaded',()=>{
+     menus.forEach(menu=>{if(menu.open&&!menu.contains(event.target))menu.open=false;});
+   });
+   document.addEventListener('keydown',event=>{
+-    if(event.key!=='Escape'||!confirmationDialog.hidden)return;
++    if(event.key!=='Escape'||confirmationDialog.open)return;
+     const open=menus.find(menu=>menu.open);
+     if(open){open.open=false;open.querySelector('summary')?.focus();}
+   });
+diff --git a/project_workflow/interfaces/ui/templates/workflows.html b/project_workflow/interfaces/ui/templates/workflows.html
+index ab75874..a3fc6ff 100644
+--- a/project_workflow/interfaces/ui/templates/workflows.html
++++ b/project_workflow/interfaces/ui/templates/workflows.html
+@@ -292,23 +292,15 @@ async function deleteWorkflow(){
+   var message = workflow
+     ? '«' + workflow.name + '» будет удалён. Пустые неймспейсы будут переведены на воркфлоу по умолчанию.'
+     : 'Воркфлоу будет удалён.';
+-  if(!await requestConfirmation({eyebrow:'Удаление воркфлоу',title:title,message:message,confirmLabel:'Удалить'})) return;
+   var workflowId = selectedWorkflowId;
+   var button = document.getElementById('deleteWorkflowButton');
+-  button.disabled = true;
+-  button.textContent = 'Удаление…';
+-  return fetch('/api/workflows/' + workflowId,{method:'DELETE'})
+-    .then(function(r){return r.json()})
+-    .then(function(d){
+-      if(d.ok){
+-        showToast('Воркфлоу удалён','success');
+-        return reloadWorkflows(null);
+-      } else {
+-        showToast(d.error || 'Ошибка','error');
+-      }
+-    })
+-    .catch(showRequestError)
+-    .finally(function(){ setWorkflowFormMode(workflowFormMode); });
++  if(await requestWorkflowDeletion({
++    url:'/api/workflows/' + workflowId,title:title,message:message,returnFocus:button,
++    exists:function(){ return workflowCollectionContains('/api/workflows','workflows',workflowId); },
++  })){
++    showToast('Воркфлоу удалён','success');
++    return reloadWorkflows(null);
++  }
+ }
+ function submitWorkflow(){
+   var nameInput = document.getElementById('workflowName');
+diff --git a/tests/test_ui.py b/tests/test_ui.py
+index 1a58c59..0fa6516 100644
+--- a/tests/test_ui.py
++++ b/tests/test_ui.py
+@@ -524,7 +524,9 @@ class TestPhasesPage:
+         assert response.text.index('</header>') < response.text.index('<main class="main"')
+         assert 'inset: var(--shell-header-height) auto 0 0' in css.text
+         assert '.base-ssr-header { position: sticky; top: 0;' in css.text
+-        assert "document.querySelector('[data-platform-header]').inert=dialogOpen" in response.text
++        assert "BaseConfirmDialog.attach" in response.text
++        assert "dialog.showModal()" in js.text
++        assert "inert=dialogOpen" not in response.text
+ 
+     def test_mobile_shell_keeps_theme_and_services_in_drawer(self):
+         admin = {"key": "admin-panel", "label": "Admin Panel", "url": "http://localhost:7772", "health": "healthy"}
+@@ -821,7 +823,7 @@ class TestPhasesPage:
+         assert "const phaseName=item.querySelector('.timeline-name')?.textContent.trim()||'эту фазу'" in response.text
+         assert "title:'Удалить фазу «'+phaseName+'»?'" in response.text
+         assert "if(confirmationDialog.contains(event.target))return" in response.text
+-        assert "if(event.key!=='Escape'||!confirmationDialog.hidden)return" in response.text
++        assert "if(event.key!=='Escape'||confirmationDialog.open)return" in response.text
+ 
+     def test_long_phase_list_has_named_jump_to_phase_control(self):
+         response = client.get("/phases")
+@@ -2547,7 +2549,8 @@ class TestWorkflowsPage:
+         assert "title = workflow ? 'Удалить воркфлоу «' + workflow.name + '»?'" in response.text
+         assert "Promise.resolve(operation).finally" in response.text
+         assert "button.textContent = workflowFormMode === 'create' ? 'Создание…' : 'Сохранение…'" in response.text
+-        assert "button.textContent = 'Удаление…'" in response.text
++        assert 'data-base-confirm-pending role="status" hidden' in response.text
++        assert "requestWorkflowDeletion({" in response.text
+         assert 'spellcheck="false"' not in response.text
+         assert 'id="workflowThemeIcon"' not in response.text
+         assert 'id="workflowThemeColor"' not in response.text
+@@ -2743,12 +2746,14 @@ class TestWorkflowsPage:
+         assert delete.status_code == 409
+ 
+ 
+-def test_workflows_page_uses_product_modal_not_browser_confirm():
++def test_workflows_page_uses_base_confirmation_and_acknowledged_delete():
+     response = client.get("/workflows")
+ 
+     assert response.status_code == 200
+     assert "id=\"confirmDialog\"" in response.text
+-    assert "requestConfirmation({eyebrow:'Удаление воркфлоу'" in response.text
++    assert 'data-base-confirm-dialog' in response.text
++    assert "requestWorkflowDeletion({" in response.text
++    assert "workflowCollectionContains('/api/workflows','workflows',workflowId)" in response.text
+     assert "confirm('Удалить воркфлоу?')" not in response.text
+ 
+ 
+@@ -2765,7 +2770,7 @@ def test_workflows_list_scrolls_with_page_and_labels_fields():
+     assert '<label class="label" for="workflowDescription">Описание</label>' in response.text
+ 
+ 
+-def test_ui_deletions_use_product_modal_not_browser_confirm():
++def test_ui_deletions_use_base_confirmation_not_a_local_modal():
+     templates = {
+         name: (TEMPLATES_DIR / name).read_text(encoding="utf-8")
+         for name in (
+@@ -2779,17 +2784,17 @@ def test_ui_deletions_use_product_modal_not_browser_confirm():
+     }
+     base = (TEMPLATES_DIR / "base.html").read_text(encoding="utf-8")
+ 
+-    assert 'id="confirmDialog"' in base
++    assert "base.confirm_dialog(id='confirmDialog'" in base
+     assert "function requestConfirmation" in base
+-    assert "background.forEach(function(element){ element.inert = true; })" in base
+-    assert "background.forEach(function(element,index){ element.inert = previousInert[index]; })" in base
+-    assert "if(event.key === 'Tab')" in base
+-    assert "var dialogOpen=!document.getElementById('confirmDialog').hidden" in base
+-    assert "document.getElementById('sidebar').inert=dialogOpen" in base
+-    assert "document.querySelector('.main').inert=dialogOpen" in base
+-    assert "document.querySelector('.main').focus()" in base
+-    assert ".btn-danger{background:#b42332;color:#fff" in base
+-    assert "html[data-theme='dark'] .modal-eyebrow{color:#ff6b6b}" in base
++    assert "BaseConfirmDialog.attach" in base
++    assert '{% include "confirm_deletion.js" %}' in base
++    assert "modal-backdrop" not in base
++    assert "modal-card" not in base
++    assert "previousInert" not in base
++    assert "syncSidebarLayout" not in base
++    assert "confirmDialog').hidden" not in base
++    assert all("onConfirm:async function()" in template if name == "namespaces.html"
++               else "requestWorkflowDeletion({" in template for name, template in templates.items())
+     assert all("confirm(" not in template for template in templates.values())
+ 
+ 
+@@ -2825,7 +2830,10 @@ class TestAgentsPage:
+         response = client.get("/agents")
+ 
+         assert response.status_code == 200
+-        assert response.text.count("catch(error){showRequestError(error)}") == 3
++        assert response.text.count("catch(error){showRequestError(error)}") == 2
++        assert "requestWorkflowDeletion({" in response.text
++        assert "catch (_error) { unknown(); }" in response.text
++        assert "attempts.set(url, state)" in response.text
+ 
+     def test_agents_page_uses_compact_explicit_editor(self):
+         response = client.get("/agents")
+@@ -2996,7 +3004,10 @@ class TestUiNetworkFailures:
+             assert "catch(_error){ showNamespaceWriteError('Не удалось проверить сохранение." in response.text
+             return
+         handler = "catch(error){showRequestError(error)}" if path == "/agents" else ".catch(showRequestError)"
+-        assert response.text.count(handler) >= minimum_handlers
++        assert response.text.count(handler) + response.text.count("requestWorkflowDeletion({") >= minimum_handlers
++        assert "catch (_error) { unknown(); }" in response.text
++        assert "state.kind !== 'ready'" in response.text
++        assert "throw new Error('Delete not acknowledged')" in response.text
+         assert "Не удалось связаться с сервером" in response.text
+ 
+     def test_task_deletion_is_absent_from_ui_and_routes(self):
+@@ -3024,7 +3035,10 @@ class TestUiNetworkFailures:
+         detail_page = client.get(f"/phase/{phase_id}")
+ 
+         assert phases_page.status_code == 200
+-        assert phases_page.text.count("catch(_error){showRequestError();") >= 4
++        assert phases_page.text.count("catch(_error){showRequestError();") >= 3
++        assert "requestWorkflowDeletion({" in phases_page.text
++        assert "requestWorkflowDeletion({" in instructions_page.text
++        assert "requestWorkflowDeletion({" in detail_page.text
+         assert instructions_page.status_code == 200
+         assert "async function requestInstruction(url, options)" in instructions_page.text
+         assert "showRequestError();" in instructions_page.text
+diff --git a/tests/test_ui_page_header.py b/tests/test_ui_page_header.py
+index 2b7b28a..0f06e26 100644
+--- a/tests/test_ui_page_header.py
++++ b/tests/test_ui_page_header.py
+@@ -15,13 +15,15 @@ class PageStructure(HTMLParser):
+         self.stack: list[tuple[str, dict[str, str | None]]] = []
+         self.headings: list[list[tuple[str, dict[str, str | None]]]] = []
+         self.page_actions: list[list[tuple[str, dict[str, str | None]]]] = []
++        self.dialog_actions: list[list[tuple[str, dict[str, str | None]]]] = []
+ 
+     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+         attributes = dict(attrs)
+         if tag == "h1":
+             self.headings.append([*self.stack, (tag, attributes)])
+         if "base-page-actions" in (attributes.get("class") or "").split():
+-            self.page_actions.append([*self.stack, (tag, attributes)])
++            actions = self.dialog_actions if any(tag == "dialog" for tag, _ in self.stack) else self.page_actions
++            actions.append([*self.stack, (tag, attributes)])
+         if tag not in {
+             "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source",
+             "track", "wbr",
+@@ -46,6 +48,42 @@ def assert_page_header(html: str) -> None:
+     for action in structure.page_actions:
+         assert any(tag == "main" for tag, _ in action)
+         assert not any(tag == "header" for tag, _ in action)
++    for action in structure.dialog_actions:
++        assert any(
++            tag == "dialog" and ("data-base-confirm-dialog" in attrs or "data-base-draft-dialog" in attrs)
++            for tag, attrs in action
++        )
++        assert not any(tag == "header" for tag, _ in action)
++
++
++def test_confirmation_actions_are_not_page_header_actions() -> None:
++    html = env.get_template("error.html").render(
++        title="Fixture error", message="Safe explanation", status_code=404,
++        back_url="/tasks", back_label="Задачи",
++    )
++    structure = PageStructure()
++    structure.feed(html)
++    assert len(structure.dialog_actions) == 2
++    assert_page_header(html)
++
++
++@pytest.mark.parametrize("container", ["header", "aside", "dialog"])
++def test_unowned_page_actions_still_fail_structure_gate(container: str) -> None:
++    html = (
++        '<main><div class="base-page-header"><h1>Page</h1></div></main>'
++        f'<{container}><div class="base-page-actions"></div></{container}>'
++    )
++    with pytest.raises(AssertionError):
++        assert_page_header(html)
++
++
++def test_base_dialog_does_not_allow_page_actions_in_platform_header() -> None:
++    html = (
++        '<main><div class="base-page-header"><h1>Page</h1></div></main>'
++        '<header><dialog data-base-confirm-dialog><div class="base-page-actions"></div></dialog></header>'
++    )
++    with pytest.raises(AssertionError):
++        assert_page_header(html)
+ 
+ 
+ @pytest.mark.ui

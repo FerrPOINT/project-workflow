@@ -1,0 +1,171 @@
+"""Producer contract fixtures, not a claim of installed SDK/native E2E proof."""
+
+import copy
+import json
+
+import pytest
+from pydantic import ValidationError
+
+from project_workflow.application.bug_work import BugWorkService
+from project_workflow.domain.bug_work import BugWorkBind, BugWorkStep, checked_grant
+from project_workflow.domain.bug_work_attestation import SDK5_SOURCES, BugWorkRuntimeAttestation
+from project_workflow.domain.bug_work_origin import BugWorkOriginReadback
+from project_workflow.domain.exceptions import ConflictError
+from project_workflow.domain.runtime_assignment import canonical_json, payload_sha256
+from project_workflow.infrastructure import bug_work_authority as authority
+from project_workflow.infrastructure.db.uow import SAUnitOfWork
+from project_workflow.infrastructure.namespace_auth import NamespaceAuthError, NamespacePrincipal
+from tests.test_bug_work import bind_command, uid
+from tests.test_bug_work import source as source
+from tests.test_bug_work_origin import with_origin
+
+
+def attested(source, monkeypatch):
+    request, principal, observed = source
+    origin = with_origin(observed, qa=True, provenance=True)
+    assignment = observed["assignment"]
+    first = origin["source_context"]["targets"][0]
+    assignment["source_identity"]["repository_id"] = first["source"]["repository_id"]
+    assignment["source_sha256"] = payload_sha256(assignment["source_identity"])
+    assignment["verification_basis"]["checked_version"] = first["commit_sha"]
+    assignment["verification_basis_sha256"] = payload_sha256(assignment["verification_basis"])
+    observed["assignment_sha256"] = payload_sha256(assignment)
+    origin["assignment_sha256"] = observed["assignment_sha256"]
+    request = request.model_copy(update={"assignment_sha256": observed["assignment_sha256"]})
+    monkeypatch.setattr(authority, "read_origin", lambda *_: copy.deepcopy(origin))
+    with SAUnitOfWork() as uow:
+        prepared = BugWorkService(uow).prepare(request, principal)
+    bind = bind_command()
+    raw = {
+        "contract_version": 1, "assignment_id": assignment["assignment_id"],
+        "assignment_sha256": observed["assignment_sha256"], "fence": assignment["fence"],
+        "source_origin_sha256": assignment["origin"]["source_context_sha256"],
+        "context_id": bind.runtime_context_id, "generation": bind.runtime_generation,
+        "agent_id": assignment["worker_runtime"]["agent_id"],
+        "configuration_revision": assignment["worker_runtime"]["agent_config_revision"],
+        "configuration_sha256": "1" * 64, "catalog_sha256": prepared["catalog_sha256"],
+        "sdk_adapter": "replacement5", "sdk_source_sha256": list(SDK5_SOURCES),
+        "sdk_prepare_sha256": "2" * 64, "sdk_attachment_sha256": "3" * 64, "sdk_running_sha256": "4" * 64,
+        "checkout_targets": [{
+            "repository_id": t["source"]["repository_id"], "commit_sha": t["commit_sha"],
+            "clone_url_sha256": t["source"]["clone_url_sha256"], "tree_sha256": "5" * 64,
+            "intent_sha256": "6" * 64,
+        } for t in origin["source_context"]["targets"]],
+        "native": {
+            "session_id": bind.session_id, "session_run_id": bind.session_run_id,
+            "actual_session_ref": "actual-session-not-requested-alias", "actual_run_ref": bind.hermes_run_ref,
+            "request_sha256": "7" * 64, "original_journal_ref": "fleet:hermes-dispatch:" + uid(),
+        },
+    }
+    command = BugWorkBind.model_validate_json(canonical_json({
+        **bind.model_dump(mode="json"), "runtime_attestation": raw,
+    }))
+    return request, principal, observed, origin, command
+
+
+def test_runtime_attestation_binds_original104_checked_commit_and_exact_sdk5(source, monkeypatch):
+    request, _, observed, origin, command = attested(source, monkeypatch)
+    attestation = command.runtime_attestation
+    assert attestation is not None
+    original = BugWorkOriginReadback.model_validate_json(canonical_json(origin))
+    attestation.require_original(checked_grant(observed), original, request.expected_catalog_sha256, command)
+    for path, changed in (
+        (("context_id",), uid()), (("agent_id",), uid()), (("source_origin_sha256",), "f" * 64),
+        (("configuration_revision",), 4), (("native", "actual_run_ref"), uid()),
+        (("checkout_targets", 0, "commit_sha"), "f" * 40),
+        (("checkout_targets", 0, "repository_id"), uid()),
+        (("checkout_targets", 0, "clone_url_sha256"), "f" * 64),
+        (("sdk_source_sha256", 1), "f" * 64),
+    ):
+        raw = copy.deepcopy(attestation.model_dump(mode="json"))
+        target = raw
+        for key in path[:-1]:
+            target = target[key]
+        target[path[-1]] = changed
+        with pytest.raises((ValidationError, ValueError)):
+            candidate = BugWorkRuntimeAttestation.model_validate_json(canonical_json(raw))
+            candidate.require_original(checked_grant(observed), original, request.expected_catalog_sha256, command)
+    old = bind_command().model_dump(mode="json")
+    assert "runtime_attestation" not in old
+    raw = attestation.model_dump(mode="json")
+    raw["verified"] = True
+    with pytest.raises(ValidationError):
+        BugWorkRuntimeAttestation.model_validate_json(canonical_json(raw))
+
+
+def bind_actual(source, monkeypatch):
+    request, principal, observed, _, command = attested(source, monkeypatch)
+    with SAUnitOfWork() as uow:
+        service = BugWorkService(uow)
+        bound = service.bind(request.assignment_id, request.tracker_instance_uuid, command, principal)
+        row = service._row(request.assignment_id, request.tracker_instance_uuid)
+        token = "Bearer " + authority.scope_token(service.claims(row))
+    observed["binding"] = {
+        **{key: value for key, value in command.model_dump(mode="json").items() if key in {
+            "runtime_context_id", "runtime_generation", "session_id", "session_run_id", "hermes_run_ref",
+        }},
+        "workflow_task_id": bound["workflow_task_id"], "workflow_assignment_revision": 1,
+        "workflow_operation_key": request.operation_key, "workflow_binding_ref": command.binding_ref,
+    }
+    return request, principal, command, bound, token
+
+
+def test_original_bind_ack_replay_after_revoke_is_exact_producer_only(source, monkeypatch):
+    request, principal, command, bound, token = bind_actual(source, monkeypatch)
+
+    def revoked(_):
+        raise NamespaceAuthError(403)
+
+    monkeypatch.setattr(authority, "read_grant", revoked)
+    with SAUnitOfWork() as uow:
+        service = BugWorkService(uow)
+        assert service.bind(request.assignment_id, request.tracker_instance_uuid, command, principal) == bound
+        assert "Bearer " + authority.scope_token(service.claims(service._row(
+            request.assignment_id, request.tracker_instance_uuid,
+        ))) == token
+    for bad, actor in (
+        (command.model_copy(update={"operation_key": "another-key"}), principal),
+        (command.model_copy(update={"hermes_run_ref": uid()}), principal),
+        (command, NamespacePrincipal(issuer=principal.issuer, subject=uid())),
+        (command, NamespacePrincipal(issuer="http://other.invalid", subject=principal.subject)),
+    ):
+        with pytest.raises(ConflictError):
+            with SAUnitOfWork() as uow:
+                BugWorkService(uow).bind(request.assignment_id, request.tracker_instance_uuid, bad, actor)
+    with pytest.raises(NamespaceAuthError):
+        with SAUnitOfWork() as uow:
+            BugWorkService(uow).step(request.assignment_id, request.tracker_instance_uuid, BugWorkStep(
+                operation_key="revoked-step", expected_assignment_revision=1, expected_fence=1,
+                expected_phase_code=bound["current_phase_code"], expected_status="active",
+            ), token)
+
+
+def test_real_developer_engine_uses_attested_bug_and_rechecks_revoke_before_persistence(source, monkeypatch):
+    request, _, _, bound, token = bind_actual(source, monkeypatch)
+    with SAUnitOfWork() as uow:
+        result = BugWorkService(uow).step(request.assignment_id, request.tracker_instance_uuid, BugWorkStep(
+            operation_key="phase-read", expected_assignment_revision=1, expected_fence=1,
+            expected_phase_code=bound["current_phase_code"], expected_status="active",
+        ), token)
+        assert result["phase_code"] == bound["current_phase_code"] and result["instructions"]
+        assert result["bug_resolved"] is False and result["phase_contract"]
+    from project_workflow.supervisor import evaluate
+
+    monkeypatch.setattr(evaluate, "OpenAICompatibleClient", lambda: object())
+
+    def llm_then_revoke(*_, **__):
+        monkeypatch.setattr(authority, "read_grant", lambda _: (_ for _ in ()).throw(NamespaceAuthError(403)))
+        raise ValueError("synthetic provider response")
+
+    monkeypatch.setattr(evaluate, "_evaluate_strict_response", llm_then_revoke)
+    with pytest.raises(NamespaceAuthError):
+        with SAUnitOfWork() as uow:
+            BugWorkService(uow).step(request.assignment_id, request.tracker_instance_uuid, BugWorkStep(
+                operation_key="phase-report", expected_assignment_revision=1, expected_fence=1,
+                expected_phase_code=bound["current_phase_code"], expected_status="active", report="Real Bug report",
+            ), token)
+    with SAUnitOfWork() as uow:
+        row = BugWorkService(uow)._row(request.assignment_id, request.tracker_instance_uuid)
+        assert uow.tasks.get_by_id(row.task_id).to_dict()["current_phase_code"] == bound["current_phase_code"]
+        assert uow.step_history.list(task_id=row.task_id, limit=10) == []
+        assert json.loads(row.bug_work_binding_json)["runtime_attestation"]

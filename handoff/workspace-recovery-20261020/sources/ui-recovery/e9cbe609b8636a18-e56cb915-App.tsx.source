@@ -1,0 +1,57 @@
+import { ListChecks, Layers } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Link, Navigate, Route, Routes, useLocation, useParams, useSearchParams } from 'react-router'
+import { useQuery } from '@tanstack/react-query'
+import { AppShell, DetailPage, ListPage, ResourceStateView, Select, resourceErrorState } from '@sdlc/ui/ui'
+import { positiveIntegerQuery } from '@sdlc/ui/lib'
+import { client, scopedPath, taskHref, type Namespace, type Phase, type Task } from './api'
+
+const identifier = positiveIntegerQuery(0)
+function validIdentifier(value: string) {
+  return /^\d+$/.test(value) && identifier.parse(value) > 0
+}
+function useNamespace() {
+  const [params] = useSearchParams()
+  const id = params.get('namespace_id') ?? ''
+  return validIdentifier(id) ? id : ''
+}
+function Tasks() {
+  const namespace = useNamespace()
+  const query = useQuery({ queryKey: ['tasks', namespace], queryFn: ({ signal }) => client.get<{ tasks: Task[] }>(scopedPath('/api/tasks', namespace), signal) })
+  const state = query.isLoading ? { kind: 'loading' as const } : query.error ? resourceErrorState(query.error, () => void query.refetch()) : !query.data?.tasks.length ? { kind: 'empty' as const, message: 'Задач пока нет' } : undefined
+  return <ListPage title="Задачи" state={state}>{query.data?.tasks.map(task => <a className="workflow-row" key={`${task.namespace_id}:${task.task_key}`} href={taskHref(task)}><span><strong>{task.task_key}</strong> · {task.title}</span><span>{task.current_phase_name}</span><span>{task.status_label}</span></a>)}</ListPage>
+}
+function Phases() {
+  const namespace = useNamespace()
+  const query = useQuery({ queryKey: ['phases', namespace], queryFn: ({ signal }) => client.get<{ phases: Phase[] }>(scopedPath('/api/phases', namespace), signal) })
+  const state = query.isLoading ? { kind: 'loading' as const } : query.error ? resourceErrorState(query.error, () => void query.refetch()) : !query.data?.phases.length ? { kind: 'empty' as const, message: 'Фаз пока нет' } : undefined
+  return <ListPage title="Фазы" state={state}>{query.data?.phases.map(phase => <Link className="workflow-row" key={phase.id} to={scopedPath(`/phases/${phase.id}`, namespace)}><strong>{phase.name}</strong><span>{phase.agent_name ?? 'Без агента'}</span><span>{phase.description}</span></Link>)}</ListPage>
+}
+function PhaseDetail() {
+  const { id } = useParams()
+  const namespace = useNamespace()
+  const validId = validIdentifier(id ?? '')
+  const query = useQuery({ queryKey: ['phase', id, namespace], enabled: validId, queryFn: ({ signal }) => client.get<{ phase: Phase }>(scopedPath(`/api/phases/${id}`, namespace), signal) })
+  const phase = query.data?.phase
+  const state = !validId ? { kind: 'not-found' as const } : query.isLoading ? { kind: 'loading' as const } : query.error ? resourceErrorState(query.error, () => void query.refetch()) : undefined
+  return <DetailPage title={phase?.name ?? 'Фаза'} state={state} aside={<a href={scopedPath(`/phase/${id}`, namespace)}>Открыть редактор фазы</a>}><p className="mb-5 whitespace-pre-wrap">{phase?.description}</p><h2 className="mb-3 text-lg font-semibold">Инструкции</h2>{phase?.instructions?.length ? phase.instructions.map(item => <article className="border-b border-border py-3" key={item.id}><p className="whitespace-pre-wrap">{item.description}</p></article>) : <p className="text-text-muted">Инструкций пока нет</p>}</DetailPage>
+}
+export function App({ identity, initialNamespace }: { identity?: { name?: string; subject?: string }; initialNamespace?: number }) {
+  const location = useLocation()
+  const [params, setParams] = useSearchParams()
+  const namespace = useNamespace()
+  const hasNamespace = params.has('namespace_id')
+  const [restoreNamespace, setRestoreNamespace] = useState(() => Boolean(!params.has('namespace_id') && initialNamespace && identifier.parse(String(initialNamespace)) > 0))
+  const invalidNamespace = params.has('namespace_id') && !namespace && params.get('namespace_id') !== ''
+  useEffect(() => {
+    if (restoreNamespace && !hasNamespace) {
+      setParams(current => { const next = new URLSearchParams(current); next.set('namespace_id', String(initialNamespace)); return next }, { replace: true })
+    } else if (restoreNamespace) {
+      setRestoreNamespace(false)
+    }
+  }, [restoreNamespace, initialNamespace, hasNamespace, setParams])
+  const namespaces = useQuery({ queryKey: ['namespaces'], queryFn: ({ signal }) => client.get<{ namespaces: Namespace[] }>('/api/namespaces', signal) })
+  const navigation = [{ to: scopedPath('/tasks', namespace), label: 'Задачи', icon: ListChecks }, { to: scopedPath('/phases', namespace), label: 'Фазы', icon: Layers }]
+  const context = <><label htmlFor="namespace" className="sr-only">Неймспейс</label><Select id="namespace" className="max-w-48" value={namespace} onChange={event => { const next = new URLSearchParams(params); if (event.target.value) next.set('namespace_id', event.target.value); else next.delete('namespace_id'); next.delete('page'); if (/^\/phases\//.test(location.pathname)) window.location.assign(`/react/phases?${next}`); else setParams(next) }} disabled={namespaces.isLoading || namespaces.isError}><option value="">{location.pathname.startsWith('/phases') ? 'Воркфлоу по умолчанию' : 'Все неймспейсы'}</option>{namespaces.data?.namespaces.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></>
+  return <AppShell currentServiceKey="project-workflow" title="Workflow" navigation={navigation} layout={/^\/phases\//.test(location.pathname) ? 'detail-with-aside' : 'wide'} context={context} account={identity?.subject ? { label: identity.name ?? 'Project Workflow', secondary: identity.subject, onLogout: () => window.location.assign('/logout') } : undefined}>{namespaces.error && <ResourceStateView state={{ kind: 'partial-error', message: 'Неймспейсы не загружены', onRetry: () => void namespaces.refetch() }} />}{restoreNamespace ? <ResourceStateView state={{ kind: 'loading' }} /> : invalidNamespace ? <ResourceStateView state={{ kind: 'error', message: 'Некорректный namespace_id: ожидается положительное целое число.' }} /> : <Routes><Route path="/tasks" element={<Tasks />} /><Route path="/phases" element={<Phases />} /><Route path="/phases/:id" element={<PhaseDetail />} /><Route path="/" element={<Navigate to={scopedPath('/tasks', namespace)} replace />} /><Route path="*" element={<ResourceStateView state={{ kind: 'not-found' }} />} /></Routes>}</AppShell>
+}

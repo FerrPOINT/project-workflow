@@ -1,0 +1,91 @@
+// @vitest-environment jsdom
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { MemoryRouter, useLocation, useNavigate } from 'react-router'
+import { PlatformProvider, ThemeProvider } from '@sdlc/ui/lib'
+import { I18nextProvider } from 'react-i18next'
+import { createInstance } from 'i18next'
+import { App } from './App'
+
+const { get } = vi.hoisted(() => ({ get: vi.fn() }))
+class MemoryStorage implements Storage {
+  private readonly items = new Map<string, string>()
+  get length() { return this.items.size }
+  clear() { this.items.clear() }
+  getItem(key: string) { return this.items.get(key) ?? null }
+  key(index: number) { return Array.from(this.items.keys())[index] ?? null }
+  removeItem(key: string) { this.items.delete(key) }
+  setItem(key: string, value: string) { this.items.set(key, String(value)) }
+}
+vi.mock('./api', async importOriginal => ({
+  ...await importOriginal<typeof import('./api')>(),
+  client: { get },
+}))
+
+function LocationProbe() {
+  const location = useLocation()
+  const navigate = useNavigate()
+  return <><output data-testid="location">{location.pathname}{location.search}</output><button onClick={() => void navigate(-1)}>Fixture Back</button></>
+}
+function mount(path: string, initialNamespace?: number) {
+  const i18n = createInstance()
+  void i18n.init({ lng: 'ru', resources: { ru: { translation: {} } } })
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return render(<QueryClientProvider client={queryClient}><I18nextProvider i18n={i18n}><ThemeProvider><PlatformProvider configUrl={null}><MemoryRouter initialEntries={[path]}><App initialNamespace={initialNamespace} /><LocationProbe /></MemoryRouter></PlatformProvider></ThemeProvider></I18nextProvider></QueryClientProvider>)
+}
+beforeEach(() => {
+  vi.stubGlobal('localStorage', new MemoryStorage())
+  get.mockReset()
+  get.mockImplementation(async (path: string) => {
+    if (path === '/api/namespaces') return { namespaces: [{ id: 7, name: 'Fixture', code: 'fixture' }] }
+    if (path.startsWith('/api/tasks')) return { tasks: [{ task_key: 'QA/42', namespace_id: 7, title: 'Read-only task', current_phase_name: 'Review', status_label: 'Active' }] }
+    if (path.startsWith('/api/phases/')) return { phase: { id: 1, name: 'Review', description: 'Phase detail', instructions: [{ id: 2, description: 'Inspect evidence', execution_type: 'sync' }] } }
+    return { phases: [{ id: 1, name: 'Review' }] }
+  })
+})
+afterEach(() => { cleanup(); vi.unstubAllGlobals() })
+
+describe('read-only React pilot', () => {
+  it('restores cookie namespace once and links task detail to Jinja', async () => {
+    mount('/tasks', 7)
+    const task = await screen.findByRole('link', { name: /Read-only task/ })
+    expect(task.getAttribute('href')).toBe('/task/QA%2F42?namespace_id=7')
+    expect(screen.getByTestId('location').textContent).toBe('/tasks?namespace_id=7')
+    expect(get.mock.calls.some(([path]) => path === '/api/tasks?namespace_id=7')).toBe(true)
+    expect(get.mock.calls.some(([path]) => path === '/api/tasks')).toBe(false)
+  })
+  it('keeps explicit URL context and restores selector on browser Back', async () => {
+    mount('/tasks?namespace_id=7', 99)
+    await screen.findByRole('link', { name: /Read-only task/ })
+    const selector = screen.getByLabelText('Неймспейс') as HTMLSelectElement
+    expect(selector.value).toBe('7')
+    fireEvent.change(selector, { target: { value: '' } })
+    await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/tasks'))
+    fireEvent.click(screen.getByRole('button', { name: 'Fixture Back' }))
+    await waitFor(() => expect(selector.value).toBe('7'))
+    expect(screen.getByTestId('location').textContent).toBe('/tasks?namespace_id=7')
+  })
+  it.each(['-1', 'abc', '9007199254740992'])('rejects invalid namespace %s without a domain request', async namespace => {
+    mount(`/tasks?namespace_id=${namespace}`)
+    await screen.findByText(/Некорректный namespace_id/)
+    expect(get.mock.calls.every(([path]) => path === '/api/namespaces')).toBe(true)
+  })
+  it('shows existing phase instructions and a contextual Jinja editor link', async () => {
+    mount('/phases/1?namespace_id=7')
+    await screen.findByText('Inspect evidence')
+    expect(screen.getByRole('link', { name: 'Открыть редактор фазы' }).getAttribute('href')).toBe('/phase/1?namespace_id=7')
+    expect(document.querySelector('[data-page-layout]')?.getAttribute('data-page-layout')).toBe('detail-with-aside')
+    expect(screen.queryByRole('button', { name: 'Сохранить' })).toBeNull()
+  })
+  it('does not offer an editor or retry for a missing phase', async () => {
+    get.mockImplementation(async path => {
+      if (path === '/api/namespaces') return { namespaces: [] }
+      throw Object.assign(new Error('Missing'), { status: 404 })
+    })
+    mount('/phases/99')
+    await screen.findByRole('heading', { name: 'Объект не найден' })
+    expect(screen.queryByRole('link', { name: 'Открыть редактор фазы' })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Повторить/ })).toBeNull()
+  })
+})

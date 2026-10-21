@@ -1,0 +1,246 @@
+"""Direct read-only Forge observations at operator configured exact target locators."""
+
+import json
+import time
+from datetime import datetime, timedelta, timezone
+from typing import Annotated, Literal
+from urllib.parse import urlsplit
+
+import httpx
+from pydantic import Field, StringConstraints, field_validator, model_validator
+
+from project_workflow import config
+from project_workflow.domain.bug_search_catalog import FrozenCatalogModel, Sha256
+from project_workflow.domain.bug_search_execution import ExecutionBinding, ExecutionSnapshot, Reference, SnapshotTarget
+from project_workflow.domain.namespace_ownership import InstanceRef, UUIDRef, canonical_uuid
+from project_workflow.domain.runtime_assignment import canonical_json
+from project_workflow.infrastructure.namespace_auth import NamespaceAuthError, _root, unique_object
+
+TargetRef = Annotated[str, StringConstraints(strict=True, pattern=r"^[a-zA-Z0-9_.:-]{1,128}$")]
+
+
+class TargetMapping(FrozenCatalogModel):
+    tracker_instance_id: InstanceRef
+    tracker_instance_uuid: UUIDRef
+    project_id: UUIDRef
+    repository_ref: Reference
+    target_ref: TargetRef
+    configuration_id: UUIDRef
+    repository_id: UUIDRef
+    environment_id: UUIDRef
+
+
+class TargetMappings(FrozenCatalogModel):
+    targets: tuple[TargetMapping, ...] = Field(strict=False, min_length=1, max_length=32)
+
+    @model_validator(mode="after")
+    def unique_targets(self) -> "TargetMappings":
+        keys = {(item.tracker_instance_id, item.project_id, item.repository_ref, item.target_ref)
+                for item in self.targets}
+        if len(keys) != len(self.targets):
+            raise ValueError("Duplicate configured delivered target")
+        return self
+
+
+class DeliveredProject(FrozenCatalogModel):
+    trackerInstanceId: UUIDRef
+    projectId: UUIDRef
+
+
+class ServingIdentity(FrozenCatalogModel):
+    versionBodySha256: Sha256
+    artifactBodySha256: Sha256
+    observedAt: datetime
+
+    @field_validator("observedAt")
+    @classmethod
+    def timezone_required(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("Timezone-aware owner observation required")
+        return value
+
+
+class DeliveredTarget(FrozenCatalogModel):
+    deliveryRef: Annotated[str, StringConstraints(strict=True, pattern=r"^forge:delivered:[0-9a-f]{64}$")]
+    operationKey: Reference
+    generation: Annotated[str, StringConstraints(strict=True, pattern=r"^[1-9][0-9]{0,19}$")]
+    manifestSha256: Sha256
+    commitSha: Annotated[str, StringConstraints(strict=True, pattern=r"^[0-9a-f]{40}([0-9a-f]{24})?$")]
+    artifactId: UUIDRef
+    artifactDigest: Annotated[str, StringConstraints(strict=True, pattern=r"^sha256:[0-9a-f]{64}$")]
+    targetUrl: Annotated[str, StringConstraints(strict=True, max_length=2048)]
+    servingIdentity: ServingIdentity
+
+    @model_validator(mode="after")
+    def confirmed_bodies(self) -> "DeliveredTarget":
+        parsed = urlsplit(self.targetUrl)
+        if (int(self.generation) > (1 << 64) - 1 or parsed.scheme not in {"http", "https"}
+                or not parsed.hostname or parsed.username or parsed.password or parsed.fragment
+                or self.servingIdentity.versionBodySha256 != self.manifestSha256
+                or "sha256:" + self.servingIdentity.artifactBodySha256 != self.artifactDigest):
+            raise ValueError("Invalid owner delivered identity")
+        return self
+
+    def stable_content(self) -> dict[str, object]:
+        value = self.model_dump(mode="json", exclude={"servingIdentity": {"observedAt"}})
+        return value
+
+
+class DeliveredReadback(FrozenCatalogModel):
+    schema_name: Literal["forge/delivered-target/v1"] = Field(alias="schema")
+    producerVersion: Reference
+    project: DeliveredProject
+    configurationId: UUIDRef
+    repositoryId: UUIDRef
+    environmentId: UUIDRef
+    targetRef: TargetRef
+    status: Literal["confirmed", "unavailable", "changed"]
+    observedAt: datetime
+    blockedReasons: tuple[Reference, ...] = Field(strict=False, max_length=32)
+    target: DeliveredTarget | None
+
+    @field_validator("observedAt")
+    @classmethod
+    def timezone_required(cls, value: datetime) -> datetime:
+        return ServingIdentity.timezone_required(value)
+
+    @model_validator(mode="after")
+    def confirmed_only_identity(self) -> "DeliveredReadback":
+        if ((self.status == "confirmed") != (self.target is not None)
+                or (self.status == "confirmed" and self.blockedReasons)):
+            raise ValueError("Only an unblocked confirmed owner result carries serving identity")
+        return self
+
+
+def observe_targets(
+    snapshot: ExecutionSnapshot, binding: ExecutionBinding, *, require_expected: bool = True,
+) -> list[dict[str, object]]:
+    if snapshot.mode != "qa":
+        return []
+    settings = config.get_settings()
+    try:
+        root = _root(settings.PROJECT_WORKFLOW_BUG_SEARCH_CI_ROOT)
+        raw_mappings = settings.PROJECT_WORKFLOW_BUG_SEARCH_DELIVERED_TARGETS_JSON
+        if len(raw_mappings.encode("utf-8")) > 65_536:
+            raise ValueError("Oversized owner target mapping")
+        mappings = TargetMappings.model_validate_json(canonical_json(json.loads(
+            raw_mappings, object_pairs_hook=unique_object,
+        )))
+        raw_tokens = settings.PROJECT_WORKFLOW_BUG_SEARCH_CI_TOKENS_JSON
+        if len(raw_tokens.encode("utf-8")) > 131_072:
+            raise ValueError("Bounded owner credential configuration required")
+        tokens = json.loads(raw_tokens, object_pairs_hook=unique_object)
+        if not isinstance(tokens, dict) or not 1 <= len(tokens) <= 32:
+            raise ValueError("Project-bound Forge reader credentials required")
+        for identity, token in tokens.items():
+            canonical_uuid(identity)
+            if (not isinstance(token, str) or not token.startswith("forge_sat_") or len(token) > 4096
+                    or any(not 33 <= ord(c) <= 126 for c in token)):
+                raise ValueError("Separate Forge project-bound service account credential required")
+        results: list[dict[str, object]] = []
+        deadline = time.monotonic() + 30
+        for target in snapshot.targets:
+            mapping = next((entry for entry in mappings.targets if (
+                entry.tracker_instance_id, entry.tracker_instance_uuid, entry.project_id,
+                entry.repository_ref, entry.target_ref,
+            ) == (binding.tracker_instance_id, binding.tracker_instance_uuid, binding.project_id,
+                  target.repository_ref, target.target_ref)), None)
+            if mapping is None:
+                raise ValueError("Unregistered exact delivered target")
+            if target.source is not None and (
+                mapping.tracker_instance_uuid, mapping.project_id, mapping.configuration_id, mapping.repository_id,
+            ) != (
+                target.source.project.tracker_instance_id, target.source.project.project_id,
+                target.source.configuration_id, target.source.repository_id,
+            ):
+                raise ValueError("Configured delivered mapping differs from original source identity")
+            token = tokens.get(mapping.configuration_id)
+            if token is None:
+                raise ValueError("Configured Forge project reader unavailable")
+            path = f"/api/v1/projects/{mapping.configuration_id}/delivered-targets/{mapping.target_ref}"
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise ValueError("Aggregate owner observation deadline exceeded")
+            request_started = datetime.now(timezone.utc)
+            with httpx.Client(timeout=remaining, follow_redirects=False, trust_env=False) as client:
+                with client.stream("GET", root + path, params={
+                    "tracker_instance_id": binding.tracker_instance_uuid,
+                    "project_id": binding.project_id, "repository_id": mapping.repository_id,
+                }, headers={"Authorization": "Bearer " + token, "Accept-Encoding": "identity",
+                            "Cache-Control": "no-cache, no-store"}) as response:
+                    if (response.status_code != 200
+                            or response.headers.get("Content-Encoding", "identity") != "identity"):
+                        raise ValueError("Owner did not confirm delivered target")
+                    body = bytearray()
+                    for chunk in response.iter_bytes():
+                        body.extend(chunk)
+                        if len(body) > 32_768 or time.monotonic() > deadline:
+                            raise ValueError("Bounded owner observation unavailable")
+            request_finished = datetime.now(timezone.utc)
+            value = json.loads(body, object_pairs_hook=unique_object)
+            observed = DeliveredReadback.model_validate_json(canonical_json(value))
+            timestamps = [observed.observedAt]
+            if observed.target is not None:
+                timestamps.append(observed.target.servingIdentity.observedAt)
+            if any(not request_started - timedelta(seconds=5) <= timestamp <= request_finished + timedelta(seconds=5)
+                   for timestamp in timestamps):
+                raise ValueError("Owner observation was not made within the fresh request window")
+            if ((observed.project.trackerInstanceId, observed.project.projectId, observed.configurationId,
+                        observed.repositoryId, observed.environmentId, observed.targetRef) != (
+                            binding.tracker_instance_uuid, binding.project_id, mapping.configuration_id,
+                            mapping.repository_id, mapping.environment_id, mapping.target_ref,
+                        )):
+                raise ValueError("Owner observation belongs to another exact target")
+            if not _matches_original_source(observed, target):
+                raise ValueError("Owner observation differs from original source identity")
+            if require_expected and (
+                observed.status != "confirmed" or observed.target is None or observed.blockedReasons
+                or observed.target.deliveryRef != target.deployment_ref
+                or observed.target.commitSha != target.commit_sha
+            ):
+                raise ValueError("Delivered target differs from immutable execution target")
+            results.append(observed.model_dump(mode="json", by_alias=True))
+            if len(canonical_json(results).encode("utf-8")) > 65_536:
+                raise ValueError("Bounded aggregate target observations required")
+        return results
+    except (httpx.HTTPError, ValueError, TypeError):
+        raise NamespaceAuthError(503) from None
+
+
+def _matches_original_source(observed: DeliveredReadback, target: SnapshotTarget) -> bool:
+    source = target.source
+    return source is None or (
+        observed.project.trackerInstanceId, observed.project.projectId,
+        observed.configurationId, observed.repositoryId,
+    ) == (
+        source.project.tracker_instance_id, source.project.project_id,
+        source.configuration_id, source.repository_id,
+    )
+
+
+def same_targets(
+    before: list[dict[str, object]], after: list[dict[str, object]], snapshot: ExecutionSnapshot | None = None,
+) -> bool:
+    def stable(values: list[dict[str, object]]) -> list[tuple[object, ...]]:
+        result: list[tuple[object, ...]] = []
+        pinned = snapshot is not None and any(target.source is not None for target in snapshot.targets)
+        if pinned and snapshot is not None and len(values) != len(snapshot.targets):
+            raise ValueError("Original snapshot target observations required")
+        for index, raw in enumerate(values):
+            item = DeliveredReadback.model_validate_json(canonical_json(raw))
+            if item.status != "confirmed" or item.blockedReasons or item.target is None:
+                raise ValueError("Confirmed same-version owner observations required")
+            if pinned and snapshot is not None:
+                target = snapshot.targets[index]
+                if target.source is not None and (
+                    not _matches_original_source(item, target) or item.targetRef != target.target_ref
+                    or item.target.commitSha != target.commit_sha or item.target.deliveryRef != target.deployment_ref
+                ):
+                    raise ValueError("Same-version observations do not match original snapshot authority")
+            result.append((item.project.trackerInstanceId, item.project.projectId, item.configurationId,
+                           item.repositoryId, item.environmentId, item.targetRef, item.target.stable_content()))
+        return result
+    try:
+        return bool(before) and len(before) == len(after) and stable(before) == stable(after)
+    except (ValueError, TypeError):
+        return False

@@ -1,0 +1,168 @@
+"""Immutable product-owned profession catalog, independent of managed task roles."""
+
+from typing import Annotated, Literal
+
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
+
+from project_workflow.domain.runtime_assignment import canonical_json, payload_sha256
+
+MAX_CATALOG_BYTES = 262_144
+DatabaseId = Annotated[int, Field(strict=True, gt=0, le=(1 << 53) - 1)]
+CatalogVersion = Annotated[int, Field(strict=True, gt=0, le=(1 << 32) - 1)]
+Sha256 = Annotated[str, StringConstraints(strict=True, pattern=r"^[0-9a-f]{64}$")]
+ShortText = Annotated[str, StringConstraints(strict=True, min_length=1, max_length=256)]
+Description = Annotated[str, StringConstraints(strict=True, max_length=16_384)]
+LaunchProfile = Annotated[str, StringConstraints(strict=True, pattern=r"^[a-z0-9][a-z0-9_-]{0,250}$")]
+Purpose = Literal["search", "verification"]
+
+
+class FrozenCatalogModel(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+
+
+class FrozenInstruction(FrozenCatalogModel):
+    id: DatabaseId
+    step_num: Annotated[int, Field(strict=True, gt=0)]
+    description: Description
+    execution_type: Literal["sync"]
+    skills: tuple[ShortText, ...] = Field(max_length=32)
+
+
+class FrozenCriterion(FrozenCatalogModel):
+    id: DatabaseId
+    description: Description
+
+
+class FrozenPhase(FrozenCatalogModel):
+    id: DatabaseId
+    code: ShortText
+    name: ShortText
+    description: Description
+    phase_order: Annotated[int, Field(strict=True, gt=0)]
+    execution_type: Literal["sync"]
+    parallel_with_phase_id: None = None
+    rollback_target_phase_id: None = None
+    instructions: tuple[FrozenInstruction, ...] = Field(min_length=1, max_length=64)
+    checks: tuple[FrozenCriterion, ...] = Field(min_length=1, max_length=64)
+    evidence: tuple[FrozenCriterion, ...] = Field(min_length=1, max_length=64)
+
+    @model_validator(mode="after")
+    def complete_contract(self) -> "FrozenPhase":
+        if not self.code.strip() or not self.name.strip():
+            raise ValueError("Nonblank phase identity required")
+        descriptions = [item.description for item in self.instructions]
+        descriptions.extend(item.description for item in self.checks)
+        descriptions.extend(item.description for item in self.evidence)
+        if any(not description.strip() for description in descriptions):
+            raise ValueError("Empty project execution contract item")
+        for items in (self.instructions, self.checks, self.evidence):
+            if len({item.id for item in items}) != len(items):
+                raise ValueError("Duplicate frozen contract item ID")
+        if [item.step_num for item in self.instructions] != list(range(1, len(self.instructions) + 1)):
+            raise ValueError("Complete ordered instruction sequence required")
+        return self
+
+
+class FrozenMode(FrozenCatalogModel):
+    mode_id: DatabaseId
+    mode_key: Purpose
+    catalog_version: CatalogVersion
+    phases: tuple[FrozenPhase, ...] = Field(min_length=3, max_length=3)
+
+    @model_validator(mode="after")
+    def three_phases(self) -> "FrozenMode":
+        if len({phase.id for phase in self.phases}) != 3 or len({phase.code for phase in self.phases}) != 3:
+            raise ValueError("Three distinct project execution phases required")
+        if [phase.phase_order for phase in self.phases] != [1, 2, 3]:
+            raise ValueError("Three sequential project execution phases required")
+        return self
+
+
+class BugSearchProfessionPins(FrozenCatalogModel):
+    """Exactly the profession pins consumed by Fleet BugSearchProfession."""
+
+    code: Literal["BUG_SEARCHER"]
+    profession_id: DatabaseId
+    profile_revision: Annotated[str, StringConstraints(strict=True, pattern=r"^sha256:[0-9a-f]{64}$")]
+    catalog_version: CatalogVersion
+    catalog_sha256: Sha256
+
+
+class BugSearchCatalog(FrozenCatalogModel):
+    contract_version: Literal[1]
+    profession: BugSearchProfessionPins
+    launch_profile: LaunchProfile
+    workflow_id: DatabaseId
+    workflow_key: Literal["fleet:bug_searcher"]
+    modes: tuple[FrozenMode, ...] = Field(min_length=2, max_length=2)
+
+    @field_validator("contract_version", mode="before")
+    @classmethod
+    def integer_version(cls, value: object) -> object:
+        if type(value) is not int:
+            raise ValueError("Integer contract version required")
+        return value
+
+    def profile_content(self) -> dict[str, object]:
+        return {
+            "profession_id": self.profession.profession_id,
+            "code": self.profession.code,
+            "launch_profile": self.launch_profile,
+        }
+
+    def catalog_content(self) -> dict[str, object]:
+        return {
+            "contract_version": self.contract_version,
+            **self.profile_content(),
+            "profile_revision": self.profession.profile_revision,
+            "workflow_id": self.workflow_id,
+            "workflow_key": self.workflow_key,
+            "catalog_version": self.profession.catalog_version,
+            "modes": [mode.model_dump(mode="json") for mode in self.modes],
+        }
+
+    @model_validator(mode="after")
+    def qualified_hashes(self) -> "BugSearchCatalog":
+        if type(self.contract_version) is not int or [mode.mode_key for mode in self.modes] != [
+            "search", "verification",
+        ]:
+            raise ValueError("Exact version and purpose modes required")
+        if any(mode.catalog_version != self.profession.catalog_version for mode in self.modes):
+            raise ValueError("Mode does not belong to the active frozen catalog version")
+        if (len({mode.mode_id for mode in self.modes}) != 2
+                or len({phase.id for mode in self.modes for phase in mode.phases}) != 6):
+            raise ValueError("Distinct catalog mode and phase IDs required")
+        if self.profession.profile_revision != "sha256:" + payload_sha256(self.profile_content()):
+            raise ValueError("Profession profile revision does not match its immutable content")
+        content = self.catalog_content()
+        if (len(canonical_json(content).encode("utf-8")) > MAX_CATALOG_BYTES
+                or self.profession.catalog_sha256 != payload_sha256(content)):
+            raise ValueError("Frozen catalog size/hash mismatch")
+        return self
+
+    def mode(self, purpose: Purpose) -> FrozenMode:
+        return next(mode for mode in self.modes if mode.mode_key == purpose)
+
+
+def qualified_catalog(
+    *, profession_id: int, launch_profile: str, workflow_id: int, catalog_version: int,
+    modes: tuple[FrozenMode, ...],
+) -> BugSearchCatalog:
+    """Qualify actual source rows; never mint a version for missing source data."""
+    profile: dict[str, object] = {
+        "profession_id": profession_id, "code": "BUG_SEARCHER", "launch_profile": launch_profile,
+    }
+    revision = "sha256:" + payload_sha256(profile)
+    content = {
+        "contract_version": 1, **profile, "profile_revision": revision,
+        "workflow_id": workflow_id, "workflow_key": "fleet:bug_searcher", "catalog_version": catalog_version,
+        "modes": [mode.model_dump(mode="json") for mode in modes],
+    }
+    return BugSearchCatalog(
+        contract_version=1,
+        profession=BugSearchProfessionPins(
+            code="BUG_SEARCHER", profession_id=profession_id, profile_revision=revision,
+            catalog_version=catalog_version, catalog_sha256=payload_sha256(content),
+        ),
+        launch_profile=launch_profile, workflow_id=workflow_id, workflow_key="fleet:bug_searcher", modes=modes,
+    )

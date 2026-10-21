@@ -1,0 +1,885 @@
+{% extends "base.html" %}
+{% block page_layout %}detail-with-aside{% endblock %}
+
+{% block title %}{{ phase.name }} — Workflow Engine{% endblock %}
+{% block header_title %}<span class="phase-detail-desktop-title">Детали фазы</span><span class="phase-detail-mobile-title">Фаза</span>{% endblock %}
+
+{% block extra_style %}
+/* ── Structured phase editor ───────────────────────────────────────── */
+.phase-editor-layout{align-items:start}
+.phase-outline{position:sticky;top:76px;max-height:calc(100vh - 96px);overflow:auto;border-left:1px solid var(--border);padding:8px 0 8px 20px}
+.phase-outline-title{margin:0 0 10px;font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0}
+.phase-outline-list{display:grid;gap:2px;margin:0;padding:0;list-style:none}
+.phase-outline-link{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:var(--shell-control-min);padding:7px 8px 7px 12px;border-left:3px solid transparent;color:var(--text-secondary);text-decoration:none;font-size:14px}
+.phase-outline-link:hover{color:var(--text);background:var(--surface-hover);text-decoration:none}
+.phase-outline-link[aria-current="location"]{border-left-color:var(--accent);color:var(--text);background:var(--accent-soft);font-weight:600}
+.phase-outline-count{font-size:11px;font-weight:500;color:var(--text-dim)}
+.phase-editor-main{min-width:0}
+@media(max-width:767px){.phase-outline-link{min-height:var(--shell-control-mobile-min)}}
+.phase-section-picker{display:none;margin-bottom:16px}
+.phase-section-select{width:100%}
+.phase-editor-section{scroll-margin-top:84px}
+.wiki-page{max-width:none;margin:0;padding:0}
+.phase-detail-mobile-title{display:none}
+@media(max-width:480px){.phase-detail-desktop-title{display:none}.phase-detail-mobile-title{display:inline}}
+@media(max-width:1023px){.phase-outline{position:static;max-height:none;border-left:0;border-top:1px solid var(--border);padding:20px 0 0}.phase-section-picker{display:block}}
+
+/* Phase header */
+.wiki-header{margin-bottom:28px;padding-bottom:16px;border-bottom:1px solid var(--border-strong)}
+.wiki-header h1{font-size:26px;font-weight:600;margin:0 0 10px;letter-spacing:0;word-break:break-word}
+.wiki-header .wiki-subtitle{color:var(--text-muted);font-size:15px;line-height:1.5;word-break:break-word}
+.wiki-header .wiki-meta{display:flex;gap:16px;margin-top:14px;flex-wrap:wrap;font-size:12px;color:var(--text-dim)}
+.wiki-header .wiki-meta span{display:flex;align-items:center;gap:6px}
+.wiki-header .wiki-meta b{color:var(--text-secondary);font-weight:500}
+
+/* Skills / Tools — card catalog */
+.catalog{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 24px}
+.catalog-card{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:7px 14px;font-size:13px;font-weight:500;color:var(--text-secondary);display:flex;align-items:center;gap:8px;transition:background-color .12s,border-color .12s,color .12s;cursor:default;white-space:nowrap}
+.catalog-card:hover{background:var(--surface-hover);border-color:var(--accent);color:var(--text)}
+.catalog-card .card-icon{font-size:14px}
+
+/* Wiki sections */
+.wiki-section{margin-bottom:36px}
+.wiki-section-title{font-size:13px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+.wiki-section-title .count{font-size:11px;font-weight:500;color:var(--text-dim);background:var(--panel);padding:1px 7px;border-radius:4px;text-transform:none;letter-spacing:0}
+
+/* Check list */
+.check-list{list-style:none;padding:0;margin:0}
+.check-list>li{padding:10px 0;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:12px}
+.check-list>li:last-child{border-bottom:none}
+.check-list .status-icon{flex-shrink:0;font-size:18px;width:24px;text-align:center}
+.check-list .status-icon.ok{color:var(--green)}
+.check-list .status-icon.fail{color:var(--red)}
+.check-list .status-icon.wait{color:var(--text-dim)}
+.check-list .check-text{flex:1;min-width:0;font-size:14px;color:var(--text-secondary);word-break:break-word}
+.check-list .check-meta{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-dim);flex-shrink:0;white-space:nowrap}
+.check-list .item-delete{flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:18px;border-radius:4px}
+.check-list .item-delete:hover{color:var(--red)}
+
+/* Evidence */
+.evidence-list{list-style:none;padding:0;margin:0}
+.evidence-list>li{padding:10px 0;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:12px}
+.evidence-list>li:last-child{border-bottom:none}
+.evidence-list .file-icon{flex-shrink:0;font-size:18px}
+.evidence-list .file-name{flex:1;min-width:0;font-size:14px;color:var(--text-secondary);word-break:break-word}
+.evidence-list .file-status{font-size:11px;color:var(--text-dim);flex-shrink:0;white-space:nowrap}
+.evidence-list .item-delete{flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:18px;border-radius:4px}
+.evidence-list .item-delete:hover{color:var(--red)}
+
+/* Add buttons */
+.wiki-add-btn{display:inline-flex;align-items:center;min-height:var(--shell-control-min);gap:6px;padding:8px 14px;border:1px dashed var(--border);border-radius:6px;color:var(--text-muted);font-size:13px;font-weight:500;cursor:pointer;background:transparent;margin-top:10px;transition:background-color .12s,border-color .12s,color .12s}
+.wiki-add-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+
+/* Inline edit */
+.inline-input{background:transparent;border:1px solid transparent;min-height:var(--shell-control-min);padding:6px 10px;border-radius:4px;color:var(--text);font-size:14px;width:100%;font-family:inherit;outline:none;word-break:break-word}
+.inline-input:hover{background:var(--panel)}
+.inline-input:focus{background:var(--panel);border-color:var(--accent)}
+.wiki-page textarea.inline-input,.wiki-page textarea.timeline-name-input{display:block;min-height:var(--shell-control-min);box-sizing:border-box;overflow:hidden;resize:none;overflow-wrap:anywhere}
+
+.timeline-name-input{font-size:14px;font-weight:500;color:var(--text);line-height:1.4;background:transparent;border:none;border-bottom:1px dashed var(--border);min-height:var(--shell-control-min);padding:2px 0;width:100%;font-family:inherit;outline:none}
+.timeline-name-input:hover{background:var(--panel)}
+.timeline-name-input:focus{background:var(--panel);border-bottom-color:var(--accent);padding:2px 8px}
+.empty-state{color:var(--text-dim);font-size:13px;padding:16px 0}
+
+/* Phase execution mode toggle */
+.execution-toggle{display:inline-flex;align-items:center;min-height:var(--shell-control-min);gap:6px;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;transition:background-color .12s,border-color .12s,color .12s;font-size:12px;user-select:none}
+.execution-toggle:hover{background:var(--panel);border-color:var(--accent)}
+.execution-toggle[aria-busy="true"]{opacity:.55;cursor:wait;pointer-events:none}
+.mode-sync{color:var(--green)}
+.mode-parallel{color:var(--orange)}
+/* Skill remove inside badge */
+.timeline-badges .badge{max-width:100%;overflow-wrap:anywhere}
+.timeline-badges .badge .skill-remove-btn{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;flex:0 0 40px;border:none;border-radius:6px;background:transparent;color:var(--text-muted);cursor:pointer;font-size:16px;line-height:1;padding:0;margin-left:2px}
+.timeline-badges .badge .skill-remove-btn:hover{color:var(--red);background:rgba(239,68,68,.12)}
+.timeline-badges input.skill-candidate{width:180px;height:40px;font-size:13px;padding:0 8px;background:var(--panel);border:1px solid var(--border);border-radius:4px;color:var(--text-secondary)}
+.wiki-header .btn{display:inline-flex;align-items:center;min-height:var(--shell-control-min)}
+.wiki-page .timeline-row{grid-template-columns:minmax(0,1fr);gap:8px}
+.wiki-page .phase-order-controls{width:100%;flex-direction:row;flex-wrap:nowrap;justify-content:flex-start;gap:4px;padding-top:0}
+.wiki-page .phase-order-controls .phase-move-btn,.wiki-page .phase-order-controls .phase-add-btn,.wiki-page .phase-order-controls .phase-delete-btn{width:40px;height:40px;flex:0 0 40px}
+.wiki-page .timeline-card button.badge{min-height:var(--shell-control-min)}
+
+{% endblock %}
+
+{% block content %}
+<div class="phase-editor-layout page-split">
+
+  <div class="phase-editor-main">
+    <div class="phase-section-picker">
+      <label class="sr-only" for="phaseSectionSelect">Раздел редактора</label>
+      <select class="phase-section-select" id="phaseSectionSelect">
+        <option value="phase-overview">Основное</option>
+        <option value="phase-instructions">Инструкции ({{ phase.instructions|length }})</option>
+        <option value="phase-checks">Проверки ({{ phase.checks|length }})</option>
+        <option value="phase-evidence">Подтверждения ({{ phase.evidence|length }})</option>
+      </select>
+    </div>
+
+    <div class="wiki-page">
+
+  <!-- Header -->
+  <div class="wiki-header phase-editor-section" id="phase-overview" data-phase-section tabindex="-1">
+    <div style="margin-bottom:10px"><a href="/phases?workflow_id={{ phase.workflow_id }}{% if selected_namespace %}&namespace_id={{ selected_namespace.id }}{% endif %}" class="btn btn-secondary">← Назад к фазам</a></div>
+    <input type="text" class="inline-input" value="{{ phase.name }}" data-field="name" aria-label="Название фазы" onblur="scheduleSave()" style="font-size:26px;font-weight:600;margin:0 0 10px;width:100%">
+    <textarea class="inline-input wiki-subtitle" rows="1" data-field="description" aria-label="Описание фазы" onblur="scheduleSave()">{{ phase.description or '' }}</textarea>
+
+    <div class="wiki-meta">
+      <span><label for="agentSelect">Агент:</label> <select id="agentSelect" class="inline-input" style="width:180px;display:inline" onchange="scheduleSave()">
+        <option value="">—</option>
+        {% for a in agents %}
+        <option value="{{ a.id }}" {% if phase.agent_id == a.id %}selected{% endif %}>{{ a.name }}</option>
+        {% endfor %}
+      </select></span>
+      {% if rollback_target_phase %}
+      <span>Откат: {{ rollback_target_phase.name }} · {{ rollback_target_phase.code }}</span>
+      {% endif %}
+    </div>
+    <div class="execution-row" style="margin-top:12px">
+      <button type="button" class="execution-toggle" data-mode="{{ phase.execution_type or 'sync' }}" aria-pressed="{{ 'true' if phase.execution_type == 'parallel' else 'false' }}" onclick="togglePhaseMode(this)">
+        {% if phase.execution_type == 'parallel' %}
+        <b class="mode-parallel">⚡ параллельно</b>
+        {% else %}
+        <b class="mode-sync">⏱ последовательно</b>
+        {% endif %}
+      </button>
+      <label id="parallelPartnerRow" {% if phase.execution_type != 'parallel' %}hidden{% endif %}>
+        Связать с:
+        <select id="parallelPartnerSelect" class="inline-input" onchange="scheduleSave()">
+          <option value="">— изолированная фаза —</option>
+          {% for candidate in parallel_candidates %}
+          <option value="{{ candidate.id }}" {% if phase.parallel_with_phase_id == candidate.id %}selected{% endif %}>{{ candidate.name }} · {{ candidate.code }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
+  </div>
+
+  <!-- Instructions — managed like phases list with inline edit, reorder, add, delete -->
+  <div class="wiki-section phase-editor-section" id="phase-instructions" data-phase-section tabindex="-1">
+    <div class="wiki-section-title">
+      📋 Инструкции
+      <span class="count">{{ phase.instructions|length }}</span>
+    </div>
+
+    {% macro instruction_body(i, instruction_count) %}
+    <div class="timeline-row" >
+      <div class="phase-order-controls">
+        <button type="button" class="phase-move-btn move-up-btn" onclick="moveInstruction(this, -1)" aria-label="Поднять инструкцию {{ i.step_num }} выше">↑</button>
+        <button type="button" class="phase-add-btn" onclick="addInstructionAfter(this)" aria-label="Добавить инструкцию после {{ i.step_num }}">+</button>
+        <button type="button" class="phase-move-btn move-down-btn" onclick="moveInstruction(this, 1)" aria-label="Опустить инструкцию {{ i.step_num }} ниже">↓</button>
+        <button type="button" class="phase-delete-btn" onclick="deleteInstruction(this)" aria-label="Удалить инструкцию {{ i.step_num }}">×</button>
+      </div>
+      <div class="timeline-card" data-instruction-id="{{ i.id }}" data-step-num="{{ i.step_num }}" data-type="{{ i.execution_type }}">
+        <textarea class="timeline-name-input" rows="1" data-field="description" data-original-description="{{ i.description }}" aria-label="Описание инструкции {{ i.step_num }}" onblur="saveInstructionDescription(this)">{{ i.description }}</textarea>
+        <div class="execution-row">
+          <button type="button" class="badge {{ 'badge-parallel' if i.execution_type == 'parallel' else 'badge-sync' }}" onclick="toggleInstructionType(this)" aria-label="Режим выполнения: {{ 'параллельно' if i.execution_type == 'parallel' else 'последовательно' }}">
+            {% if i.execution_type == 'parallel' %}⚡ параллельно{% else %}⏱ последовательно{% endif %}
+          </button>
+        </div>
+        <div class="timeline-badges">
+          {% for s in i.skills or [] %}
+          <span class="badge" style="background:var(--accent-soft);color:var(--accent-readable)">
+            {{ s }}
+            <button type="button" class="skill-remove-btn" data-skill="{{ s }}" onclick="removeSkillFromInstruction(this)" aria-label="Убрать навык {{ s }} из инструкции {{ i.step_num }}">×</button>
+          </span>
+          {% endfor %}
+          <input class="skill-candidate" type="text" placeholder="Добавить навык" aria-label="Добавить навык к инструкции {{ i.step_num }}" onchange="addSkillToInstruction(this)">
+        </div>
+      </div>
+    </div>
+    {% endmacro %}
+
+    <div class="timeline" id="instructionsTimeline">
+      {% set runs = phase.instructions|group_instructions %}
+      {% for run in runs %}
+        {% if run|length > 1 %}
+          <div class="timeline-block timeline-parallel-group">
+            <div class="timeline-parallel-label">⚡ параллельно</div>
+            {% for i in run %}
+              <div class="timeline-item" data-instruction-id="{{ i.id }}" data-step-num="{{ i.step_num }}" data-type="{{ i.execution_type }}">
+                {{ instruction_body(i, phase.instructions|length) }}
+                <div class="timeline-arrow"{% if loop.last %} hidden{% endif %}>↓</div>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          {% set i = run[0] %}
+          <div class="timeline-block">
+            <div class="timeline-item" data-instruction-id="{{ i.id }}" data-step-num="{{ i.step_num }}" data-type="{{ i.execution_type }}">
+              {{ instruction_body(i, phase.instructions|length) }}
+              <div class="timeline-arrow" hidden>↓</div>
+            </div>
+          </div>
+        {% endif %}
+        <div class="timeline-arrow timeline-arrow-block"{% if loop.last %} hidden{% endif %}>↓</div>
+      {% else %}
+        <div class="empty-state">Нет инструкций</div>
+      {% endfor %}
+    </div>
+    <button class="wiki-add-btn" onclick="addInstructionLast()">+ Добавить шаг</button>
+  </div>
+
+  <!-- Checks -->
+  <div class="wiki-section phase-editor-section" id="phase-checks" data-phase-section tabindex="-1">
+    <div class="wiki-section-title">
+      ✅ Проверки
+      <span class="count">{{ phase.checks|length }}</span>
+    </div>
+    <ul class="check-list" id="checks-list">
+      {% for c in phase.checks %}
+      <li data-id="{{ c.id }}">
+        <span class="status-icon wait">○</span>
+        <textarea class="inline-input check-text" rows="1" data-field="description" aria-label="Описание проверки {{ loop.index }}" onblur="scheduleSave()">{{ c.description }}</textarea>
+        <button type="button" class="item-delete" aria-label="Удалить проверку {{ loop.index }}" onclick="deleteItem(this)">×</button>
+      </li>
+      {% else %}
+      <li class="empty-state">Нет проверок</li>
+      {% endfor %}
+    </ul>
+    <button class="wiki-add-btn" onclick="addCheck()">+ Добавить проверку</button>
+  </div>
+
+  <!-- Evidence -->
+  <div class="wiki-section phase-editor-section" id="phase-evidence" data-phase-section tabindex="-1">
+    <div class="wiki-section-title">
+      📎 Подтверждения
+      <span class="count">{{ phase.evidence|length }}</span>
+    </div>
+    <ul class="evidence-list" id="evidence-list">
+      {% for e in phase.evidence %}
+      <li data-id="{{ e.id }}">
+        <span class="file-icon">📄</span>
+        <textarea class="inline-input file-name" rows="1" data-field="description" aria-label="Описание подтверждения {{ loop.index }}" onblur="scheduleSave()">{{ e.description }}</textarea>
+        <button type="button" class="item-delete" aria-label="Удалить подтверждение {{ loop.index }}" onclick="deleteItem(this)">×</button>
+      </li>
+      {% else %}
+      <li class="empty-state">Нет подтверждений</li>
+      {% endfor %}
+    </ul>
+    <button class="wiki-add-btn" onclick="addEvidence()">+ Добавить подтверждение</button>
+  </div>
+
+    </div>
+  </div>
+  <nav class="phase-outline" aria-labelledby="phase-outline-title">
+    <h2 class="phase-outline-title" id="phase-outline-title">Структура фазы</h2>
+    <ul class="phase-outline-list">
+      <li><a class="phase-outline-link" href="#phase-overview" data-phase-section-link="phase-overview" aria-current="location"><span>Основное</span></a></li>
+      <li><a class="phase-outline-link" href="#phase-instructions" data-phase-section-link="phase-instructions"><span>Инструкции</span><span class="phase-outline-count">{{ phase.instructions|length }}</span></a></li>
+      <li><a class="phase-outline-link" href="#phase-checks" data-phase-section-link="phase-checks"><span>Проверки</span><span class="phase-outline-count">{{ phase.checks|length }}</span></a></li>
+      <li><a class="phase-outline-link" href="#phase-evidence" data-phase-section-link="phase-evidence"><span>Подтверждения</span><span class="phase-outline-count">{{ phase.evidence|length }}</span></a></li>
+    </ul>
+  </nav>
+
+</div>
+{% endblock %}
+
+{% block extra_script %}
+const phaseId = {{ phase.id }};
+const selectedNamespaceId = {{ selected_namespace.id if selected_namespace else 'null' }};
+const phaseSectionIds = ['phase-overview', 'phase-instructions', 'phase-checks', 'phase-evidence'];
+let phaseSectionNavigationLock = null;
+
+function setActivePhaseSection(sectionId) {
+  if (!phaseSectionIds.includes(sectionId)) return;
+  document.querySelectorAll('[data-phase-section-link]').forEach((link) => {
+    if (link.dataset.phaseSectionLink === sectionId) link.setAttribute('aria-current', 'location');
+    else link.removeAttribute('aria-current');
+  });
+  const select = document.getElementById('phaseSectionSelect');
+  if (select && select.value !== sectionId) select.value = sectionId;
+}
+
+function syncPhaseSectionUrl(sectionId, historyMode) {
+  if (historyMode === 'none') return;
+  const url = new URL(window.location.href);
+  url.hash = sectionId;
+  const nextUrl = url.pathname + url.search + url.hash;
+  const currentUrl = window.location.pathname + window.location.search + window.location.hash;
+  if (nextUrl === currentUrl) return;
+  const method = historyMode === 'replace' ? 'replaceState' : 'pushState';
+  window.history[method](null, '', nextUrl);
+}
+
+function jumpToPhaseSection(sectionId, historyMode = 'push') {
+  if (!phaseSectionIds.includes(sectionId)) return;
+  const section = document.getElementById(sectionId);
+  if (!section) return;
+  phaseSectionNavigationLock = sectionId;
+  section.scrollIntoView({behavior: 'auto', block: 'start'});
+  setActivePhaseSection(sectionId);
+  syncPhaseSectionUrl(sectionId, historyMode);
+}
+
+function releasePhaseSectionNavigationLock() {
+  phaseSectionNavigationLock = null;
+}
+
+function restorePhaseSectionFromLocation() {
+  const requestedSection = window.location.hash.slice(1);
+  const sectionId = phaseSectionIds.includes(requestedSection)
+    ? requestedSection
+    : 'phase-overview';
+  jumpToPhaseSection(sectionId, 'none');
+}
+
+function initializePhaseOutline() {
+  document.querySelectorAll('[data-phase-section-link]').forEach((link) => {
+    link.addEventListener('click', (event) => {
+      event.preventDefault();
+      jumpToPhaseSection(link.dataset.phaseSectionLink);
+    });
+  });
+  document.getElementById('phaseSectionSelect')?.addEventListener('change', (event) => {
+    jumpToPhaseSection(event.target.value);
+  });
+  const sections = phaseSectionIds.map((id) => document.getElementById(id)).filter(Boolean);
+  const observer = new IntersectionObserver(() => {
+    if (phaseSectionNavigationLock) {
+      setActivePhaseSection(phaseSectionNavigationLock);
+      return;
+    }
+    const anchor = 96;
+    const atPageEnd = window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2;
+    const activeSection = atPageEnd
+      ? sections[sections.length - 1]
+      : sections.reduce((current, section) => (
+          section.getBoundingClientRect().top <= anchor ? section : current
+        ), sections[0]);
+    if (activeSection) setActivePhaseSection(activeSection.id);
+  }, {rootMargin: '-84px 0px -58% 0px', threshold: [0, .1, .5]});
+  sections.forEach((section) => observer.observe(section));
+  const requestedSection = window.location.hash.slice(1);
+  if (phaseSectionIds.includes(requestedSection)) {
+    requestAnimationFrame(() => jumpToPhaseSection(requestedSection, 'replace'));
+  }
+  window.addEventListener('popstate', restorePhaseSectionFromLocation);
+  window.addEventListener('wheel', releasePhaseSectionNavigationLock, {passive: true});
+  window.addEventListener('touchstart', releasePhaseSectionNavigationLock, {passive: true});
+  window.addEventListener('pointerdown', releasePhaseSectionNavigationLock, {passive: true});
+  window.addEventListener('keydown', releasePhaseSectionNavigationLock);
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function normalizeSkillNames(raw = []) {
+  const seen = new Set();
+  const normalized = [];
+  for (const item of raw || []) {
+    const name = String(item || '').trim();
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    normalized.push(name);
+  }
+  return normalized;
+}
+
+function resizeInlineTextarea(field) {
+  field.style.height = 'auto';
+  field.style.height = `${field.scrollHeight + field.offsetHeight - field.clientHeight}px`;
+}
+
+function resizeAllInlineTextareas() {
+  document.querySelectorAll('.wiki-page textarea').forEach(resizeInlineTextarea);
+}
+
+function phaseApiUrl(path) {
+  const url = new URL(path, window.location.origin);
+  if (selectedNamespaceId !== null) {
+    url.searchParams.set('namespace_id', String(selectedNamespaceId));
+  }
+  return url.pathname + url.search;
+}
+
+/* ---------- Phase header ---------- */
+function setPhaseMode(el, mode) {
+  const b = el.querySelector('b');
+  el.dataset.mode = mode;
+  el.setAttribute('aria-pressed', String(mode === 'parallel'));
+  if (mode === 'parallel') {
+    b.className = 'mode-parallel';
+    b.textContent = '⚡ параллельно';
+  } else {
+    b.className = 'mode-sync';
+    b.textContent = '⏱ последовательно';
+  }
+  const partnerRow = document.getElementById('parallelPartnerRow');
+  if (partnerRow) partnerRow.hidden = mode !== 'parallel';
+  if (mode !== 'parallel') {
+    const partnerSelect = document.getElementById('parallelPartnerSelect');
+    if (partnerSelect) partnerSelect.value = '';
+  }
+}
+
+async function togglePhaseMode(el) {
+  if (el.dataset.saving === 'true') return;
+  const previousMode = el.dataset.mode || 'sync';
+  const partnerSelect = document.getElementById('parallelPartnerSelect');
+  const previousPartner = partnerSelect?.value || '';
+  const nextMode = previousMode === 'sync' ? 'parallel' : 'sync';
+  setPhaseMode(el, nextMode);
+  el.dataset.saving = 'true';
+  el.setAttribute('aria-busy', 'true');
+  try {
+    const saved = await savePhase();
+    if (!saved) {
+      setPhaseMode(el, previousMode);
+      if (partnerSelect) partnerSelect.value = previousPartner;
+    }
+  } finally {
+    delete el.dataset.saving;
+    el.removeAttribute('aria-busy');
+  }
+}
+
+/* ---------- Instructions list (like phases) ---------- */
+function getInstructionItems() {
+  return Array.from(document.querySelectorAll('#instructionsTimeline .timeline-item'));
+}
+
+function renderInstructionTimeline(items) {
+  const timeline = document.getElementById('instructionsTimeline');
+  if (!timeline) return;
+  const emptyNode = timeline.querySelector('.empty-state');
+  if (items.length === 0) {
+    if (emptyNode) timeline.replaceChildren(emptyNode);
+    return;
+  }
+  timeline.innerHTML = '';
+  let idx = 0;
+  while (idx < items.length) {
+    const group = [items[idx]];
+    idx++;
+    while (idx < items.length && (items[idx].dataset.type || 'sync') === 'parallel') {
+      group.push(items[idx]);
+      idx++;
+    }
+    const isParallelGroup = group.length > 1;
+    const block = document.createElement('div');
+    block.className = 'timeline-block' + (isParallelGroup ? ' timeline-parallel-group' : '');
+    if (isParallelGroup) {
+      const label = document.createElement('div');
+      label.className = 'timeline-parallel-label';
+      label.textContent = '⚡ параллельно';
+      block.appendChild(label);
+    }
+    group.forEach((item, groupIndex) => {
+      const innerArrow = item.querySelector('.timeline-arrow');
+      if (innerArrow) innerArrow.hidden = !(isParallelGroup && groupIndex < group.length - 1);
+      block.appendChild(item);
+    });
+    timeline.appendChild(block);
+    const blockArrow = document.createElement('div');
+    blockArrow.className = 'timeline-arrow timeline-arrow-block';
+    blockArrow.textContent = '↓';
+    blockArrow.hidden = idx >= items.length;
+    timeline.appendChild(blockArrow);
+  }
+}
+
+function updateInstructionControls() {
+  const items = getInstructionItems();
+  items.forEach((item, idx) => {
+    const up = item.querySelector('.move-up-btn');
+    const down = item.querySelector('.move-down-btn');
+    if (up) up.disabled = idx === 0;
+    if (down) down.disabled = idx === items.length - 1;
+  });
+}
+
+async function persistInstructionOrder() {
+  const ids = getInstructionItems().map((item) => parseInt(item.dataset.instructionId, 10));
+  try {
+    const resp = await fetch(phaseApiUrl(`/api/phases/${phaseId}/instructions/reorder`), {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({instruction_ids: ids}),
+    });
+    if (!resp.ok) {
+      showToast('Не удалось сохранить порядок инструкций', 'error');
+      return false;
+    }
+    showToast('Порядок инструкций сохранён', 'success');
+    return true;
+  } catch (_error) {
+    showToast('Не удалось сохранить порядок инструкций', 'error');
+    return false;
+  }
+}
+
+async function moveInstruction(button, direction) {
+  const item = button.closest('.timeline-item');
+  if (!item) return;
+  const items = getInstructionItems();
+  const currentIndex = items.indexOf(item);
+  const targetIndex = currentIndex + direction;
+  if (currentIndex < 0 || targetIndex < 0 || targetIndex >= items.length) return;
+  const reordered = [...items];
+  const [moved] = reordered.splice(currentIndex, 1);
+  reordered.splice(targetIndex, 0, moved);
+  renderInstructionTimeline(reordered);
+  updateInstructionControls();
+  if (!await persistInstructionOrder()) {
+    renderInstructionTimeline(items);
+    updateInstructionControls();
+  }
+}
+
+async function requestPhaseDetail(url, options) {
+  try {
+    const resp = await fetch(url, options);
+    const data = await resp.json().catch(() => ({}));
+    return {resp, data};
+  } catch (_error) {
+    showRequestError();
+    return null;
+  }
+}
+
+async function addInstructionAfter(button) {
+  const item = button.closest('.timeline-item');
+  if (!item) return;
+  const currentStep = parseInt(item.dataset.stepNum || '0', 10);
+  const stepNum = currentStep > 0 ? currentStep + 1 : 1;
+  button.disabled = true;
+  try {
+    const result = await requestPhaseDetail(phaseApiUrl('/api/instructions'), {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({phase_id: phaseId, description: 'Новая инструкция', step_num: stepNum}),
+    });
+    if (!result) return;
+    const {resp, data} = result;
+    if (!resp.ok || !data.ok) {
+      showToast(data.error || 'Не удалось добавить инструкцию', 'error');
+      return;
+    }
+    window.location.reload();
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function addInstructionLast() {
+  const timeline = document.getElementById('instructionsTimeline');
+  const items = getInstructionItems();
+  const stepNum = items.length > 0 ? items.length + 1 : 1;
+  const btn = timeline?.nextElementSibling;
+  if (btn) btn.disabled = true;
+  try {
+    const result = await requestPhaseDetail(phaseApiUrl('/api/instructions'), {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({phase_id: phaseId, description: 'Новая инструкция', step_num: stepNum}),
+    });
+    if (!result) return;
+    const {resp, data} = result;
+    if (!resp.ok || !data.ok) {
+      showToast(data.error || 'Не удалось добавить инструкцию', 'error');
+      return;
+    }
+    window.location.reload();
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function deleteInstruction(button) {
+  const item = button.closest('.timeline-item');
+  if (!item) return;
+  if (!await requestConfirmation({eyebrow:'Удаление инструкции',title:'Удалить инструкцию?',message:'Инструкция будет удалена без возможности восстановления.',confirmLabel:'Удалить'})) return;
+  button.disabled = true;
+  try {
+    const id = item.dataset.instructionId;
+    const result = await requestPhaseDetail(phaseApiUrl('/api/instructions/' + id), {method: 'DELETE'});
+    if (!result) return;
+    const {resp, data} = result;
+    if (!resp.ok || !data.ok) {
+      showToast(data.error || 'Не удалось удалить инструкцию', 'error');
+      return;
+    }
+    window.location.reload();
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function toggleInstructionType(badge) {
+  const card = badge.closest('.timeline-card');
+  const id = card.dataset.instructionId;
+  const isSync = (card.dataset.type || 'sync') === 'sync';
+  const nextType = isSync ? 'parallel' : 'sync';
+  badge.disabled = true;
+  try {
+    const result = await requestPhaseDetail(phaseApiUrl('/api/instructions/' + id), {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({execution_type: nextType}),
+    });
+    if (!result) return;
+    const {resp} = result;
+    if (!resp.ok) {
+      showToast('Не удалось сменить режим', 'error');
+      return;
+    }
+    window.location.reload();
+  } finally {
+    badge.disabled = false;
+  }
+}
+
+async function saveInstructionDescription(input) {
+  const card = input.closest('.timeline-card');
+  const id = card.dataset.instructionId;
+  const previousDescription = input.dataset.originalDescription || '';
+  const description = input.value.trim();
+  if (!description) {
+    input.value = previousDescription;
+    resizeInlineTextarea(input);
+    showToast('Описание инструкции обязательно', 'error');
+    return;
+  }
+  input.disabled = true;
+  try {
+    const result = await requestPhaseDetail(phaseApiUrl('/api/instructions/' + id), {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({description: description}),
+    });
+    if (!result) {
+      input.value = previousDescription;
+      return;
+    }
+    const {resp, data} = result;
+    if (!resp.ok || !data.ok) {
+      input.value = previousDescription;
+      showToast(data.error || 'Не удалось сохранить описание', 'error');
+      return;
+    }
+    const savedDescription = data.instruction?.description || description;
+    input.value = savedDescription;
+    input.dataset.originalDescription = savedDescription;
+  } finally {
+    input.disabled = false;
+    resizeInlineTextarea(input);
+  }
+}
+
+async function addSkillToInstruction(input) {
+  const card = input.closest('.timeline-card');
+  const id = card.dataset.instructionId;
+  const skill = String(input.value || '').trim();
+  if (!skill) return;
+  const existing = Array.from(card.querySelectorAll('.timeline-badges .badge'))
+    .filter((b) => !b.classList.contains('badge-sync') && !b.classList.contains('badge-parallel'))
+    .map((b) => b.textContent.replace('×', '').trim());
+  const skills = normalizeSkillNames([...existing, skill]);
+  input.disabled = true;
+  try {
+    const result = await requestPhaseDetail(phaseApiUrl('/api/instructions/' + id), {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({skills: skills}),
+    });
+    if (!result) return;
+    const {resp} = result;
+    if (!resp.ok) {
+      showToast('Не удалось добавить навык', 'error');
+      return;
+    }
+    window.location.reload();
+  } finally {
+    input.disabled = false;
+  }
+}
+
+async function removeSkillFromInstruction(button) {
+  const card = button.closest('.timeline-card');
+  const id = card.dataset.instructionId;
+  const skillName = button.dataset.skill;
+  const existing = Array.from(card.querySelectorAll('.timeline-badges .badge'))
+    .filter((b) => !b.classList.contains('badge-sync') && !b.classList.contains('badge-parallel'))
+    .map((b) => b.textContent.replace('×', '').trim());
+  const skills = normalizeSkillNames(existing.filter((s) => s !== skillName));
+  const result = await requestPhaseDetail(phaseApiUrl('/api/instructions/' + id), {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({skills: skills}),
+  });
+  if (!result) return;
+  const {resp} = result;
+  if (!resp.ok) {
+    showToast('Не удалось убрать навык', 'error');
+    return;
+  }
+  window.location.reload();
+}
+
+/* ---------- Checks & Evidence ---------- */
+function syncTextItemList(list) {
+  const count = list.closest('.wiki-section')?.querySelector('.count');
+  const itemCount = list.querySelectorAll('li:not(.empty-state)').length;
+  if (count) count.textContent = String(itemCount);
+  if (itemCount === 0 && !list.querySelector('.empty-state')) {
+    const empty = document.createElement('li');
+    empty.className = 'empty-state';
+    empty.textContent = list.id === 'checks-list' ? 'Нет проверок' : 'Нет подтверждений';
+    list.appendChild(empty);
+  }
+}
+
+async function saveNewTextItem(input) {
+  if (!input.value.trim()) {
+    await deleteItem(input);
+    return;
+  }
+  scheduleSave();
+}
+
+async function deleteItem(btn) {
+  const li = btn.closest('li');
+  const list = li?.closest('ul');
+  if (!li || !list) return;
+  const nextSibling = li.nextSibling;
+  li.remove();
+  syncTextItemList(list);
+  if (!await savePhase()) {
+    const empty = list.querySelector('.empty-state');
+    if (empty) empty.remove();
+    if (nextSibling && nextSibling.parentNode === list) list.insertBefore(li, nextSibling);
+    else list.appendChild(li);
+    syncTextItemList(list);
+  }
+}
+
+function addCheck() {
+  const list = document.getElementById('checks-list');
+  const empty = list.querySelector('.empty-state');
+  if (empty) empty.remove();
+  const li = document.createElement('li');
+  li.innerHTML = `
+    <span class="status-icon wait">○</span>
+    <textarea class="inline-input check-text" rows="1" data-field="description" aria-label="Описание новой проверки" onblur="saveNewTextItem(this)"></textarea>
+    <span class="check-meta">—</span>
+    <button type="button" class="item-delete" aria-label="Удалить новую проверку" onclick="deleteItem(this)">×</button>
+  `;
+  list.appendChild(li);
+  syncTextItemList(list);
+  li.querySelector('textarea')?.focus();
+}
+
+function addEvidence() {
+  const list = document.getElementById('evidence-list');
+  const empty = list.querySelector('.empty-state');
+  if (empty) empty.remove();
+  const li = document.createElement('li');
+  li.innerHTML = `
+    <span class="file-icon">📄</span>
+    <textarea class="inline-input file-name" rows="1" data-field="description" aria-label="Описание нового подтверждения" onblur="saveNewTextItem(this)"></textarea>
+    <span class="file-status">—</span>
+    <button type="button" class="item-delete" aria-label="Удалить новое подтверждение" onclick="deleteItem(this)">×</button>
+  `;
+  list.appendChild(li);
+  syncTextItemList(list);
+  li.querySelector('textarea')?.focus();
+}
+
+/* ---------- Debounced phase meta save ---------- */
+let _saveTimer = null;
+let _phaseSaveQueue = Promise.resolve(true);
+function scheduleSave() {
+  if (_saveTimer) clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(savePhase, 400);
+}
+
+function savePhase() {
+  const queued = _phaseSaveQueue.then(() => persistPhase());
+  _phaseSaveQueue = queued.catch(() => false);
+  return queued;
+}
+
+async function persistPhase() {
+  const header = document.querySelector('.wiki-header');
+  const meta = {};
+  header.querySelectorAll('[data-field]').forEach((inp) => {
+    meta[inp.dataset.field] = inp.value;
+  });
+
+  const data = {
+    name: meta.name,
+    description: meta.description || '',
+    checks: [],
+    evidence: [],
+    execution_type: document.querySelector('.execution-toggle')?.dataset.mode || 'sync',
+    parallel_with_phase_id: (document.querySelector('.execution-toggle')?.dataset.mode || 'sync') === 'parallel'
+      ? (document.getElementById('parallelPartnerSelect')?.value
+        ? Number(document.getElementById('parallelPartnerSelect').value)
+        : null)
+      : null,
+    agent_id: document.getElementById('agentSelect')?.value
+      ? Number(document.getElementById('agentSelect').value)
+      : null,
+  };
+
+  document.querySelectorAll('#checks-list li').forEach((li) => {
+    if (li.classList.contains('empty-state')) return;
+    const inp = li.querySelector('[data-field="description"]');
+    if (inp && inp.value.trim()) data.checks.push({
+      id: li.dataset.id ? Number(li.dataset.id) : null,
+      description: inp.value.trim(),
+    });
+  });
+
+  document.querySelectorAll('#evidence-list li').forEach((li) => {
+    if (li.classList.contains('empty-state')) return;
+    const inp = li.querySelector('[data-field="description"]');
+    if (inp && inp.value.trim()) data.evidence.push({
+      id: li.dataset.id ? Number(li.dataset.id) : null,
+      description: inp.value.trim(),
+    });
+  });
+
+  try {
+    const resp = await fetch(phaseApiUrl('/api/phases/' + phaseId), {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(data),
+    });
+    if (!resp.ok) { showToast('Ошибка сохранения', 'error'); return false; }
+    const result = await resp.json();
+    showToast('Сохранено', 'success');
+    if (result.ids) {
+      const checks = document.querySelectorAll('#checks-list li:not(.empty-state)');
+      (result.ids.checks || []).forEach((id, i) => {
+        if (checks[i]) checks[i].setAttribute('data-id', String(id));
+      });
+      const evs = document.querySelectorAll('#evidence-list li:not(.empty-state)');
+      (result.ids.evidence || []).forEach((id, i) => {
+        if (evs[i]) evs[i].setAttribute('data-id', String(id));
+      });
+    }
+    return true;
+  } catch (_error) {
+    showToast('Ошибка сохранения', 'error');
+    return false;
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  initializePhaseOutline();
+  renderInstructionTimeline(getInstructionItems());
+  updateInstructionControls();
+  resizeAllInlineTextareas();
+  if (document.fonts) document.fonts.ready.then(resizeAllInlineTextareas);
+});
+document.addEventListener('input', (event) => {
+  if (event.target.matches('.wiki-page textarea')) resizeInlineTextarea(event.target);
+});
+window.addEventListener('resize', resizeAllInlineTextareas);
+{% endblock %}

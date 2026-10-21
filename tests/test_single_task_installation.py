@@ -337,8 +337,11 @@ def test_pm_confirmation_precedes_final_report_in_actual_installed_phase(databas
         checks = uow.phase_checks.list(phase.id)
         evidence = uow.phase_evidence_requirements.list(phase.id)
         assert any("real authorized readback receipt" in row["description"] for row in checks)
-        assert any("dependencies are satisfied" in row["description"] for row in checks)
+        assert any("Direct PM confirmation readback dependencies" in row["description"]
+                   and "any authorized typed checkpoint/resume actually used" in row["description"]
+                   and "are satisfied" in row["description"] for row in checks)
         assert any("Actual owner confirmation receipt" in row["description"] for row in evidence)
+        assert any("only when they occurred" in row["description"] for row in evidence)
 
 
 def assignment_payload():

@@ -1,0 +1,59 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 84727a5..811ea57 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -22,6 +22,9 @@
+ - Standalone-режим: репозиторий собирается и запускается без соседнего `services-base` (убраны extra `cli-platform`, uv source, Docker additional_context и CI checkout). Token-режим CLI без `sdlc-cli-core` выдаёт понятную ошибку; запуск без `AUTH_ISSUER` работает без авторизации.
+ 
+ ### Fixed
++- Docker frontend stage includes the pinned `.base-revision` before recording
++  product fingerprints; container metadata now attests the same runtime inputs
++  as the clean checkout. Jinja/React routes and the active skills catalog are unchanged.
+ - Agent editors use Base SSR controls and draft protection for navigation and
+   disclosure/cancel. Pending create/update locks fields and actions and rejects
+   direct duplicate handlers; rejected HTTP responses cannot announce success.
+diff --git a/Dockerfile b/Dockerfile
+index 1c4c2c5..5fd4410 100644
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -10,6 +10,7 @@ COPY --from=sdlc_ui /scripts ./scripts
+ RUN pnpm install --frozen-lockfile
+ 
+ WORKDIR /workspace/project-workflow
++COPY .base-revision ./.base-revision
+ COPY frontend/ ./frontend/
+ COPY project_workflow/ ./project_workflow/
+ COPY docs/ui-routes.json ./docs/ui-routes.json
+diff --git a/docs/adr/2026-10-01-read-only-react-pilot.md b/docs/adr/2026-10-01-read-only-react-pilot.md
+index 5ea52e3..d161bf3 100644
+--- a/docs/adr/2026-10-01-read-only-react-pilot.md
++++ b/docs/adr/2026-10-01-read-only-react-pilot.md
+@@ -64,6 +64,10 @@ Base задаётся `--base-root`/`--base-revision`
+ force-include. Для сборки Python package вне Docker по-прежнему выполнить
+ `cd frontend && pnpm install --frozen-lockfile && pnpm ssr:check && pnpm build`.
+ 
++Frontend stage также копирует закреплённый `.base-revision` до вычисления
++product fingerprint. Отсутствие этого файла не разрешается маскировать другим
++набором fingerprint inputs: source и image должны аттестовать одинаковые данные.
++
+ `/app/ui-build.json` хранит source SHA, Base/product fingerprints и SHA-256 каждого
+ React asset; OCI labels содержат product/Base revisions и digest Base archive.
+ `/app/runtime-build-manifest.json` отдельно фиксирует Workflow source revision,
+diff --git a/tests/test_build_provenance.py b/tests/test_build_provenance.py
+index baa9662..2589576 100644
+--- a/tests/test_build_provenance.py
++++ b/tests/test_build_provenance.py
+@@ -317,6 +317,13 @@ def test_dockerfile_manifest_and_oci_labels_use_same_build_args():
+     assert "COPY runtime-*.json ./" in dockerfile
+ 
+ 
++def test_frontend_stage_copies_pinned_base_revision_before_attestation():
++    dockerfile = (Path(__file__).resolve().parents[1] / "Dockerfile").read_text(encoding="utf-8")
++    frontend = dockerfile.split(" AS builder", maxsplit=1)[0]
++    assert "WORKDIR /workspace/project-workflow\nCOPY .base-revision ./.base-revision" in frontend
++    assert frontend.index("COPY .base-revision") < frontend.index("write-ui-build.mjs")
++
++
+ def test_image_builder_passes_one_snapshot_to_docker(git_source: Path, git_base: Path):
+     builder = _builder_module()
+     snapshot = builder.immutable_git_snapshot(git_source, "HEAD")

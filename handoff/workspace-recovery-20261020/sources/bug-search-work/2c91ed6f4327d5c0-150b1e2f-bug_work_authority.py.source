@@ -1,0 +1,142 @@
+"""Fresh fixed Tracker103 reader and a separate assignment/run-scoped HMAC."""
+
+import hashlib
+import hmac
+import json
+import time
+from typing import Any
+
+import httpx
+
+from project_workflow import config
+from project_workflow.domain.bug_work import BugWorkGrant, BugWorkPrepare, checked_grant
+from project_workflow.domain.bug_work_origin import BugWorkOriginReadback, original_tracker_locator
+from project_workflow.domain.namespace_ownership import canonical_uuid
+from project_workflow.domain.runtime_assignment import canonical_json
+from project_workflow.infrastructure.bug_search_authority import authorize_fleet
+from project_workflow.infrastructure.namespace_auth import NamespaceAuthError, _root, introspect, unique_object
+
+__all__ = ["authorize_fleet", "read_grant", "read_origin", "require_scope", "scope_token"]
+
+
+def _read_owner(request: BugWorkPrepare, suffix: str) -> dict[str, Any]:
+    settings = config.get_settings()
+    try:
+        root = _root(settings.PROJECT_WORKFLOW_BUG_SEARCH_TRACKER_ROOT)
+        if original_tracker_locator(request.tracker_instance_id) != original_tracker_locator(
+            settings.PROJECT_WORKFLOW_BUG_SEARCH_TRACKER_INSTANCE_ID
+        ) or request.tracker_instance_uuid != canonical_uuid(
+            settings.PROJECT_WORKFLOW_BUG_SEARCH_TRACKER_INSTANCE_UUID
+        ):
+            raise ValueError("Незарегистрированный Tracker")
+        reader = canonical_uuid(settings.PROJECT_WORKFLOW_BUG_SEARCH_TRACKER_READER_SUBJECT)
+        if reader == canonical_uuid(settings.PROJECT_WORKFLOW_BUG_SEARCH_FLEET_SUBJECT):
+            raise ValueError("Требуется отдельный Tracker reader")
+        token = settings.PROJECT_WORKFLOW_BUG_SEARCH_TRACKER_TOKEN
+        principal, scopes = introspect("Bearer " + token)
+        if principal.subject != reader or scopes != ["task-tracker:read"]:
+            raise NamespaceAuthError(503)
+        if suffix not in {"grant", "origin"}:
+            raise NamespaceAuthError(503)
+        path = f"/api/v1/projects/{request.project_id}/sdlc/bug-intake/assignments/{request.assignment_id}/{suffix}"
+        with httpx.Client(timeout=5, follow_redirects=False, trust_env=False) as client:
+            started = time.monotonic()
+            with client.stream(
+                "GET",
+                root + path,
+                headers={
+                    "Authorization": "Bearer " + token,
+                    "Accept-Encoding": "identity",
+                    "Cache-Control": "no-cache, no-store",
+                },
+            ) as response:
+                if response.status_code != 200 or response.headers.get("Content-Encoding", "identity") != "identity":
+                    raise NamespaceAuthError(503)
+                body = bytearray()
+                # Check each transport chunk: 1 KiB buffering would hide a slow byte drip.
+                for chunk in response.iter_bytes():
+                    body.extend(chunk)
+                    if len(body) > 98_304 or time.monotonic() - started > 5:
+                        raise NamespaceAuthError(503)
+        value = json.loads(body, object_pairs_hook=unique_object)
+        if not isinstance(value, dict):
+            raise ValueError("Требуется исходный объект owner readback")
+        return dict(value)
+    except (httpx.HTTPError, ValueError, TypeError):
+        raise NamespaceAuthError(503) from None
+
+
+def _request_grant(request: BugWorkPrepare, value: dict[str, Any]) -> BugWorkGrant:
+    grant = checked_grant(value)
+    assignment = grant.assignment
+    if (
+        assignment.tracker_instance_id != request.tracker_instance_id
+        or assignment.tracker_instance_uuid != request.tracker_instance_uuid
+        or assignment.project_id != request.project_id
+        or assignment.assignment_id != request.assignment_id
+        or value["assignment_sha256"] != request.assignment_sha256
+    ):
+        raise ValueError("Назначение Bug относится к другой authority")
+    return grant
+
+
+def _require_grant(request: BugWorkPrepare, value: dict[str, Any]) -> None:
+    if _request_grant(request, value).assignment.machine_subject != (
+        config.get_settings().PROJECT_WORKFLOW_BUG_SEARCH_FLEET_SUBJECT
+    ):
+        raise ValueError("Назначение Bug относится к другому producer")
+
+
+def read_grant(request: BugWorkPrepare) -> dict[str, Any]:
+    value = _read_owner(request, "grant")
+    try:
+        _require_grant(request, value)
+        return value
+    except (ValueError, TypeError):
+        raise NamespaceAuthError(503) from None
+
+
+def checked_origin(request: BugWorkPrepare, grant_raw: dict[str, Any], raw: dict[str, Any]) -> None:
+    """Offline retained identity check; never substitute current source HEAD."""
+    assignment = _request_grant(request, grant_raw).assignment
+    origin = BugWorkOriginReadback.model_validate_json(canonical_json(raw))
+    origin.require_assignment(
+        assignment_id=request.assignment_id, assignment_sha256=request.assignment_sha256,
+        origin=assignment.origin, project_id=request.project_id, tracker_instance_id=request.tracker_instance_id,
+        tracker_instance_uuid=request.tracker_instance_uuid,
+    )
+
+
+def read_origin(request: BugWorkPrepare, grant_raw: dict[str, Any]) -> dict[str, Any]:
+    try:
+        _require_grant(request, grant_raw)
+        if checked_grant(grant_raw).assignment.origin is None:
+            raise ValueError("Исходный Tracker103 grant не содержит source context")
+        value = _read_owner(request, "origin")
+        checked_origin(request, grant_raw, value)
+        return value
+    except (ValueError, TypeError):
+        raise NamespaceAuthError(503) from None
+
+
+def scope_token(claims: dict[str, Any]) -> str:
+    settings = config.get_settings()
+    secret = settings.PROJECT_WORKFLOW_BUG_WORK_SCOPE_SECRET
+    if len(secret.encode("utf-8")) < 32 or secret in {
+        settings.PROJECT_WORKFLOW_BUG_SEARCH_SCOPE_SECRET,
+        settings.PROJECT_WORKFLOW_PM_SCOPE_SECRET,
+        settings.PROJECT_WORKFLOW_BUG_SEARCH_TRACKER_TOKEN,
+        settings.PROJECT_WORKFLOW_PM_READBACK_TOKEN,
+    }:
+        raise NamespaceAuthError(503)
+    return (
+        "wf_bug_work_v1_"
+        + hmac.new(secret.encode("utf-8"), canonical_json(claims).encode("utf-8"), hashlib.sha256).hexdigest()
+    )
+
+
+def require_scope(claims: dict[str, Any], authorization: str | None) -> None:
+    if not authorization or not authorization.startswith("Bearer wf_bug_work_v1_"):
+        raise NamespaceAuthError(401)
+    if not hmac.compare_digest(authorization[7:].encode("utf-8"), scope_token(claims).encode("utf-8")):
+        raise NamespaceAuthError(403)

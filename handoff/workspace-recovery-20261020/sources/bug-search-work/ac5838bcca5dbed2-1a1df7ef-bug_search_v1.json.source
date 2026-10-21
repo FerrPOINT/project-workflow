@@ -1,0 +1,66 @@
+{
+  "contract_version": 1,
+  "algorithm": "sha256-canonical-json-utf8-v1",
+  "rules": "Recursively sort object keys; retain array order; compact UTF-8 JSON; no Unicode normalization; no floating-point or non-finite numbers; hash exact value including nulls, excluding only explicitly defined transport fields before calling this hash.",
+  "vectors": [
+    {
+      "id": "scalar-order-and-utf8",
+      "value": {
+        "z": [
+          true,
+          null,
+          3
+        ],
+        "a": {
+          "text": "Поиск багов\nстрока 2",
+          "quote": "\"\\/"
+        }
+      },
+      "canonical_json": "{\"a\":{\"quote\":\"\\\"\\\\/\",\"text\":\"Поиск багов\\nстрока 2\"},\"z\":[true,null,3]}",
+      "sha256": "c35492b705d5b61193f2588753c356ed79c540b9ccc7050f36e5b84389c146ad"
+    },
+    {
+      "id": "immutable-search-snapshot",
+      "value": {
+        "project": {
+          "tracker_instance_id": "00000000-0000-4000-8000-000000000040",
+          "project_id": "00000000-0000-4000-8000-000000000010"
+        },
+        "owner_subject": "00000000-0000-4000-8000-000000000001",
+        "agent_id": "00000000-0000-4000-8000-000000000020",
+        "profession": {
+          "code": "BUG_SEARCHER",
+          "profession_id": 12,
+          "profile_revision": "fixture:profile:1",
+          "catalog_version": 1,
+          "catalog_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "agent_config_revision": "fixture:config:1",
+        "instruction_revision": "fixture:инструкции:1",
+        "policy_revision": 3,
+        "kind": "search",
+        "trigger": "manual",
+        "mode": "source_only",
+        "targets": [
+          {
+            "repository_ref": "repo:portal",
+            "commit_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "target_ref": null,
+            "deployment_ref": null
+          }
+        ],
+        "scope": [
+          "src/счета/**",
+          "tests/**"
+        ],
+        "excluded_paths": [
+          "dist/**"
+        ],
+        "bug_id": null,
+        "expected_fixed_deployment_ref": null
+      },
+      "canonical_json": "{\"agent_config_revision\":\"fixture:config:1\",\"agent_id\":\"00000000-0000-4000-8000-000000000020\",\"bug_id\":null,\"excluded_paths\":[\"dist/**\"],\"expected_fixed_deployment_ref\":null,\"instruction_revision\":\"fixture:инструкции:1\",\"kind\":\"search\",\"mode\":\"source_only\",\"owner_subject\":\"00000000-0000-4000-8000-000000000001\",\"policy_revision\":3,\"profession\":{\"catalog_sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"catalog_version\":1,\"code\":\"BUG_SEARCHER\",\"profession_id\":12,\"profile_revision\":\"fixture:profile:1\"},\"project\":{\"project_id\":\"00000000-0000-4000-8000-000000000010\",\"tracker_instance_id\":\"00000000-0000-4000-8000-000000000040\"},\"scope\":[\"src/счета/**\",\"tests/**\"],\"targets\":[{\"commit_sha\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"deployment_ref\":null,\"repository_ref\":\"repo:portal\",\"target_ref\":null}],\"trigger\":\"manual\"}",
+      "sha256": "b9265f60ae74ee0be74c820ea9d25744f0dc021c0874411858d0df3f9bbff996"
+    }
+  ]
+}

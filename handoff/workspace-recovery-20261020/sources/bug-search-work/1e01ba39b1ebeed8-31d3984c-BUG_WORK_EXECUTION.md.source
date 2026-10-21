@@ -1,0 +1,160 @@
+# Исполнение существующего Bug через Developer
+
+Source candidate использует настоящий `BugWorkAssignment` Tracker103/104, существующую
+профессию Developer, её workflow `hermes-sdlc:developer` и режим `initial`.
+Новая профессия, очередь или PM/Analysis lease не создаются. Внутренний Workflow
+cursor `bug-work:<assignment UUID>` ссылается на реально выданное назначение;
+он не является новым issue в Tracker.
+
+Полный quality gate этого нового среза ещё не выполнен. Стенды, pins и фактическое
+включение автоматического исправления не менялись. Исторический frozen36 gate
+не квалифицирует этот новый контракт. Подготовленный metadata103 freeze
+`sdlc-qa-workflow-bugs103-2280876a649f` остаётся отдельным immutable кандидатом;
+он не включает чтение Tracker104 origin и не переносит на него квалификацию.
+
+## Authority и источник
+
+Private Fleet adapter использует свежий Central PAT зарегистрированного
+`PROJECT_WORKFLOW_BUG_SEARCH_FLEET_SUBJECT` с точными Workflow read/write scopes.
+Workflow читает Tracker фиксированным отдельным reader subject/token с единственным
+`task-tracker:read`; URL и признак verified не принимаются из запроса.
+
+Перед новым prepare/bind выполняется
+`GET /api/v1/projects/{project UUID}/sdlc/bug-intake/assignments/{assignment UUID}/grant`.
+Проверяются canonical Tracker UUID и отдельный opaque locator, проект, существующий
+Bug, owner/machine, worker/Fleet/config, fence, удерживаемая capacity, исходный
+assignment SHA256, source identity и полный original verification report SHA256.
+Проектная доступность, active Namespace/owner и открытый Bug удостоверяются свежим
+Tracker grant; знание UUID само по себе не разрешает работу.
+
+`source_identity` в103 содержит producer/rule/defect identity. Это **не** repository
+locator. `checked_version` остаётся opaque текстом; evidence URL не разрешает доступ
+к файловой системе. Retained103 без нового поля продолжает читаться с
+`origin=None`; сериализация не добавляет `origin:null` в старый assignment/hash.
+Ответ содержит `can_execute:false` и `bug_work_source_context_not_available`.
+
+Новый104 grant может содержать `origin` с contract_version, original execution/finding
+UUID, full snapshot SHA256 и source-context SHA256. Workflow читает фиксированный
+`GET /api/v1/projects/{project UUID}/sdlc/bug-intake/assignments/{assignment UUID}/origin`
+тем же отдельным зарегистрированным Tracker reader. Проверяются исходные assignment
+ID/hash, точное равенство origin, project/opaque Tracker locator и canonical SHA256
+всего context. DTO закрыт; context ограничен 64 КиБ, содержит не более 16 repository
+pins, относительные scope/excluded_paths. Mode и nullable target/deployment refs
+сохраняются из исходного поиска, включая QA; commit не заменяется новым HEAD.
+Ни URL, ни caller verified flag не участвуют в выборе репозитория.
+
+Каждый новый target может содержать исходный `source` с закрытой схемой
+`forge/source-snapshot/v1`: canonical Tracker/project UUID, configuration/repository
+UUID, исходная `refs/heads/...` ветка, original observed HEAD и SHA256 clone URL.
+Сам URL не передаётся. Эти поля берутся из исходного trusted CI readback, а не
+из текущего сопоставления repository_ref. В SourceOnly observed HEAD равен checked
+commit; QA допускает другой original HEAD. Более новый текущий HEAD не меняет
+исходный commit. Внутренние canonical UUID не подменяют внешний opaque Tracker locator.
+Старый target читается без `source`, и сериализация не добавляет `source:null`;
+обязательные nullable target/deployment refs сохраняются в canonical hash.
+Такой retained104 source context остаётся без filesystem authority с причиной
+`bug_work_original_source_identity_not_available`.
+
+Readback104 сохраняется вместе с raw grant в существующем immutable payload до
+начала effects; HTTP выполняется до SQL locks. Ошибка/отзыв доступа/неизвестный
+context не создают metadata cursor. Защитные read/history/stop сверяют сохранённый
+receipt offline и не требуют повторного запроса origin после отзыва owner.
+
+Наличие корректного origin не создаёт фактический Fleet fixer context и его
+SDK-bound filesystem authority. Поэтому `can_execute` остаётся false, а причина
+после положительного source readback с исходными CI pins —
+`bug_work_runtime_context_not_available`.
+Phase effects и Developer filesystem tools остаются закрыты даже при принятом
+runtime binding и корректном HMAC/fence. Source context нельзя заменить строкой
+версии, evidence URL или prompt.
+
+## Private API
+
+Prefix: `/internal/bug-work/v1`.
+
+- `GET /catalog/{profession_id}` — актуальная существующая Developer profession,
+  workflow, initial mode и bounded каталог фаз с canonical SHA256.
+- `POST /assignments` — `BugWorkPrepare`: contract_version, original operation_key,
+  tracker_instance_id, tracker_instance_uuid, project_id, assignment_id,
+  assignment_sha256, workflow_project_id, expected_catalog_sha256,
+  runtime_compatibility. Все UUID внешней authority отличны от числовых Workflow IDs.
+- `GET /assignments/{assignment_id}?tracker_instance_uuid=...` — retained metadata
+  и actual binding. Это protective read зарегистрированного исходного Fleet producer
+  после owner revoke или Tracker outage; current human/admin не получает этот путь.
+- `POST /assignments/{assignment_id}/bind?tracker_instance_uuid=...` — original
+  operation_key, expected_assignment_revision/fence, реальные context/generation,
+  Fleet session/run UUID, Hermes run и binding_ref. Полная пара неизменяема.
+- `POST /assignments/{assignment_id}/stop?tracker_instance_uuid=...` — original
+  operation_key и expected assignment revision/fence. Останавливает только Workflow
+  progress. Не доказывает Hermes terminal/namespace exit и не снимает Tracker capacity.
+- `POST /assignments/{assignment_id}/step?tracker_instance_uuid=...` — отдельный
+  scoped worker вход с полным expected phase/status/revision/fence. До owner source
+  context возвращает conflict; ordinary runtime/CLI обход не разрешён.
+- `GET /assignments/{assignment_id}/history?tracker_instance_uuid=...` — не более 50
+  собственных retained step receipts через assignment/run HMAC, включая после revoke.
+
+Readback возвращает исходные prepare operation_key, bind operation_key/request hash,
+exact binding и stop receipt. После потерянного ответа сначала читается этот
+retained результат; новый ключ/другая фактическая пара не создают повторный эффект.
+Raw credentials и dependency response bodies в ответ или ошибку не попадают.
+
+## Хранение и guards
+
+Миграция0016 расширяет существующий `task_runtime_assignments` отдельной строго
+обозначенной BugWork веткой. Старое complete CHECK выражение сохранено внутри
+ветки с NULL BugWork marker. Новая ветка требует Developer/delivery/bug_work и
+положительные существующие assignment refs; неприменимые Business, root,
+work-item, queue, decomposition и generic workspace refs остаются NULL.
+
+Prepare command, исходный grant и квалифицированный каталог сохраняются вместе
+с Task cursor и SHA256 в одной транзакции. Bind и stop используют тот же retained
+ledger. PostgreSQL/SQLite guards запрещают переименовать purpose, изменить original
+payload/identity, заменить accepted tuple/stop receipt или удалить назначение.
+Уникальность native agent/run не позволяет привязать одну реальную пару повторно.
+
+HTTP выполняется вне SQL locks. Короткие транзакции повторно проверяют catalog,
+original identity и CAS; grant observation для нового эффекта ограничена 5 секундами.
+Защитные read/stop не требуют заново выдать уже отозванную owner permission.
+
+Обычные Supervisor, generic bind/step/rebind и CLI task entry отвергают BugWork.
+Собственный `BugWorkStepFence` фиксирует assignment/hash/fence и original binding.
+Существующие Developer фазовые определения, Base catalog и pins не меняются.
+Base catalog v3 без настоящего отдельного Base admission закрыт; версия runtime
+или membership не подменяет это доказательство.
+
+## Worker CLI
+
+Сохраняются две существующие команды `step` и `history`. Отдельный параметр:
+
+```text
+workflow-developer --json step --bug-work-request <private-request.json> --execution-token-file <private-token>
+workflow-developer --json history --bug-work-request <private-request.json> --execution-token-file <private-token>
+```
+
+Request фиксирует assignment_id, tracker_instance_uuid, profession_id и полный
+step body для команды step. Wrapper проверяет числовой profession namespace.
+HMAC имеет отдельный prefix `wf_bug_work_v1_`; token связан с issuer/machine,
+assignment/hash/fence, Workflow cursor и фактическим binding. Настройка
+`PROJECT_WORKFLOW_BUG_WORK_SCOPE_SECRET` по умолчанию пуста; секрет должен быть
+отдельным от Search/PM/Tracker credentials. Токен не принимает generic PAT права.
+Смешивание с `--task`, project execution или `SDLC_API_TOKEN` запрещено.
+Автоматический retry и DB fallback отсутствуют.
+
+Workflow stop/terminal никогда автоматически не переводит Bug в resolved и не
+включает rework. Исправление и независимая проверка остаются разными полномочиями.
+# Дополнительные owner reads для Fleet context producer
+
+Source candidate: `GET /internal/bug-work/v1/catalog` разрешает существующую
+профессию `workflow-developer` на стороне владельца; Fleet не угадывает numeric
+profession ID из workflow ID. `GET /internal/bug-work/v1/compatibility` читает
+packaged runtime descriptor. Оба используют существующую fresh Fleet machine
+authorization с read scope и не включают исполнение. Catalog3/4 по-прежнему
+требует отдельный настоящий Base admission. Эти новые маршруты не входят в
+исторические frozen QA-срезы104scope/104tests.
+
+
+## Committed completion readback (следующий source-срез, UNRUN)
+
+Существующий registered Fleet readback назначения дополнен `completed_execution`, по умолчанию null. Legacy consumer должен трактовать отсутствие поля как unavailable. Some формируется только из действительного retained producer attestation и последней committed записи существующего `task_step_history`: actual Developer cursor `done`, последняя фаза оригинального каталога, `pass` без next/rollback и точный mode/cycle/assignment/ref/binding/native tuple. Сам `done`, native completed или последняя фаза не являются receipt. Поля закрытого carrier: contract_version, assignment_id/sha256, fence, bind_request_sha256, source_context_sha256, catalog_sha256, step_history_id, step_operation_key, step_request_sha256, step_response_sha256. Worker report и токены не выдаются.
+
+Readback после отзыва project grant остаётся protective для исходного registered Fleet principal; он не даёт новой step authority, не подтверждает Git commit/artifact/deployment и не закрывает Bug. Fleet обязан самостоятельно собрать фактический B из original checkout, получить immutable CI Accepted до normal successful103 release, затем Tracker отдельно связывает candidate revision и проверку. Новые helper/test source прошли только AST/Ruff, не pytest/mypy/PG; предыдущие immutable QA exports не изменены.
