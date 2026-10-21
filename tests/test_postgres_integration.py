@@ -468,7 +468,7 @@ def test_pm_ownership_catalog_lock_order_and_incomplete_schema(pg_url, winner):
     assert not schema_is_ready(engine)
     with pytest.raises(DatabaseRecreateRequired):
         ensure_migrated(engine)
-    assert database_revisions(engine) == {"0015_single_task_assignments"}
+    assert database_revisions(engine) == {"0016_human_project_commit_guard"}
 
 
 @pytest.mark.integration
@@ -1195,7 +1195,7 @@ class TestPostgresInitialMigration:
             version = conn.execute(
                 text("SELECT version_num FROM project_workflow.alembic_version")
             ).scalar_one()
-        assert version == migration_head() == "0015_single_task_assignments"
+        assert version == migration_head() == "0016_human_project_commit_guard"
         assert schema_is_ready(engine) is True
 
     def test_managed_bootstrap_serializes_with_public_catalog_creation(self, pg_url):
@@ -1311,6 +1311,7 @@ class TestPostgresInitialMigration:
         ("0004_wide_work_item_revision", "Downgrade from wide Business revisions"),
         ("0008_pm_execution", "PM execution downgrade refused"),
         ("0009_pm_draft_assignment", "PM Draft assignment downgrade refused"),
+        ("0016_human_project_commit_guard", "Human policy requires a compatible guarded rollback cohort"),
     ])
     def test_downgrade_refuses_lossy_mode_collapse(self, pg_url, revision, message):
         engine = get_engine(pg_url)
@@ -1318,7 +1319,7 @@ class TestPostgresInitialMigration:
         with pytest.raises(RuntimeError, match=message):
             run_alembic_command("downgrade", engine, "base")
         assert database_revisions(engine) == {revision}
-        assert schema_is_ready(engine) is (revision == "0015_single_task_assignments")
+        assert schema_is_ready(engine) is (revision == "0016_human_project_commit_guard")
 
     def test_populated_0001_upgrade_preserves_rows_and_backfills_per_workflow(self, pg_url):
         engine = get_engine(pg_url)

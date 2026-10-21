@@ -534,3 +534,9 @@ Commercial, production, resale, redistribution, SaaS/hosting use require written
 адрес; пустое значение отключает bridge, отсутствие выводит адрес из канонического
 `PLATFORM_SERVICES_URL`. Принимается JSON до 64 KiB; redirects/HTML/ошибки источника
 не передаются как успешная конфигурация. Подключение SSR renderer выполняется отдельно.
+
+## Единое пространство PDLC
+
+[Согласованная M:N-модель и план](docs/plans/unified-spaces-20261019.md): реализация в работе. Source, tests,
+миграция, образы и live dev acceptance учитываются раздельно; документация цели
+не подтверждает установленную политику.

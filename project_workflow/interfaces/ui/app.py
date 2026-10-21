@@ -199,6 +199,12 @@ def create_app() -> FastAPI:
     app.add_middleware(_RequestLoggingMiddleware)
     app.add_middleware(_UoWMiddleware)
     install_sso(app)
+    from project_workflow.domain.project_admission import SpaceAccessDenied
+
+    @app.exception_handler(SpaceAccessDenied)
+    async def _project_access_denied(request: Request, exc: SpaceAccessDenied) -> JSONResponse:
+        return JSONResponse({"ok": False, "error": "Project access denied"}, status_code=403,
+                            headers={"Cache-Control": "private, no-store"})
 
     @app.exception_handler(RequestValidationError)
     async def _validation_error(request: Request, exc: RequestValidationError) -> JSONResponse | HTMLResponse:
@@ -334,6 +340,8 @@ def create_app() -> FastAPI:
     app.get("/settings", response_class=HTMLResponse)(pages.settings_page)
 
     # API
+    from .project_admission import space_admission
+    app.get("/api/v1/space-admission", response_model=None)(space_admission)
     app.get("/api/v2/execution-contexts/{identity}")(resource_context.read)
     app.put("/api/v2/execution-contexts/{identity}")(resource_context.bind)
     app.post("/api/cli/step", response_model=None)(cli_api.cli_step)

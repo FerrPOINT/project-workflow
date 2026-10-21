@@ -83,6 +83,10 @@ class HumanAccess:
     def is_current(self) -> bool:
         return time.monotonic() < self._deadline and (self.proof is None or self.proof.is_current())
 
+    def monotonic_deadline(self) -> float:
+        """Compose another owner permit without creating a new confirmation window."""
+        return self._deadline
+
     def permits(self, required: Iterable[str], *, administration: bool = False) -> bool:
         if not self.is_current() or (administration and self.role != "admin"):
             return False
