@@ -522,3 +522,11 @@ Proprietary source-available. Not open source. Viewing/evaluation only.
 Commercial, production, resale, redistribution, SaaS/hosting use require written license from FerrPOINT. См. [LICENSE](LICENSE), [NOTICE](NOTICE) и [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 Нормативные термины и зависимости: [PDLC и интеграция с Base](docs/PDLC_BASE_INTEGRATION.md).
+
+`GET /api/platform/branding` — ограниченный same-origin адаптер опубликованного
+брендинга. Он использует обычные SSO/UoW middleware Workflow и читает только
+настроенный public источник, передавая upstream один `If-None-Match`. Credentials
+браузера и `Set-Cookie` источника не проксируются. `PLATFORM_BRANDING_URL` задаёт
+адрес; пустое значение отключает bridge, отсутствие выводит адрес из канонического
+`PLATFORM_SERVICES_URL`. Принимается JSON до 64 KiB; redirects/HTML/ошибки источника
+не передаются как успешная конфигурация. Подключение SSR renderer выполняется отдельно.

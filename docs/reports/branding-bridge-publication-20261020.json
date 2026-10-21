@@ -1,0 +1,12 @@
+{
+  "python": "3.13.13",
+  "targeted_tests": 21,
+  "bridge_module_line_coverage_percent": 100,
+  "ruff": "pass: repository",
+  "mypy": "pass: 139 source files",
+  "documentation_tests": 13,
+  "base_sdk_and_namespace_checks": "pass: pinned SDK 2ad0834d",
+  "full_native_suite": "unqualified: SQLite commit timeout; identical collection prefix subsequently passed on baseline and candidate (113 passed, 1 skipped each)",
+  "linux_postgresql_full_coverage": "not run",
+  "runtime_modified": false
+}
