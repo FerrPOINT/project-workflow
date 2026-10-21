@@ -31,27 +31,30 @@ async def platform_branding(request: Request) -> Response:
     if validator:
         headers["If-None-Match"] = validator
     try:
-        async with asyncio.timeout(BRANDING_TIMEOUT_SECONDS):
-            async with httpx.AsyncClient(timeout=BRANDING_TIMEOUT_SECONDS, follow_redirects=False) as client:
-                async with client.stream("GET", url, headers=headers) as upstream:
-                    if upstream.status_code not in {200, 304, 404}:
-                        return Response(status_code=502)
-                    forwarded = {
-                        key: value
-                        for key, value in upstream.headers.items()
-                        if key.lower() in {"etag", "cache-control"}
-                        or (upstream.status_code == 200 and key.lower() == "content-type")
-                    }
-                    if upstream.status_code in {304, 404}:
-                        return Response(status_code=upstream.status_code, headers=forwarded)
-                    media_type = upstream.headers.get("content-type", "").partition(";")[0].strip().lower()
-                    if media_type != "application/json" and not media_type.endswith("+json"):
-                        return Response(status_code=502)
-                    body = bytearray()
-                    async for chunk in upstream.aiter_bytes():
-                        body.extend(chunk)
-                        if len(body) > 65536:
-                            return Response(status_code=502)
-                    return Response(bytes(body), status_code=upstream.status_code, headers=forwarded)
-    except (httpx.HTTPError, ValueError, TimeoutError):
+        return await asyncio.wait_for(_read_branding(url, headers), timeout=BRANDING_TIMEOUT_SECONDS)
+    except (httpx.HTTPError, ValueError, asyncio.TimeoutError, TimeoutError):
         return Response(status_code=503)
+
+
+async def _read_branding(url: str, headers: dict[str, str]) -> Response:
+    async with httpx.AsyncClient(timeout=BRANDING_TIMEOUT_SECONDS, follow_redirects=False) as client:
+        async with client.stream("GET", url, headers=headers) as upstream:
+            if upstream.status_code not in {200, 304, 404}:
+                return Response(status_code=502)
+            forwarded = {
+                key: value
+                for key, value in upstream.headers.items()
+                if key.lower() in {"etag", "cache-control"}
+                or (upstream.status_code == 200 and key.lower() == "content-type")
+            }
+            if upstream.status_code in {304, 404}:
+                return Response(status_code=upstream.status_code, headers=forwarded)
+            media_type = upstream.headers.get("content-type", "").partition(";")[0].strip().lower()
+            if media_type != "application/json" and not media_type.endswith("+json"):
+                return Response(status_code=502)
+            body = bytearray()
+            async for chunk in upstream.aiter_bytes():
+                body.extend(chunk)
+                if len(body) > 65536:
+                    return Response(status_code=502)
+            return Response(bytes(body), status_code=upstream.status_code, headers=forwarded)

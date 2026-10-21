@@ -253,3 +253,30 @@ def test_total_deadline_bounds_a_slow_stream_even_when_each_chunk_is_timely(monk
         response = asyncio.run(bridge.platform_branding(request()))
     assert response.status_code == 503
     assert response.body == b""
+
+
+@pytest.mark.parametrize("slow", [False, True])
+def test_total_deadline_uses_the_python310_asyncio_contract(monkeypatch, slow):
+    import asyncio
+
+    # Do not modify the event loop module globally: emulate only the API
+    # available to the bridge on the declared minimum Python version.
+    monkeypatch.setattr(
+        bridge, "asyncio", SimpleNamespace(wait_for=asyncio.wait_for, TimeoutError=asyncio.TimeoutError)
+    )
+    monkeypatch.setattr(bridge, "BRANDING_TIMEOUT_SECONDS", 0.01)
+    factory = httpx.AsyncClient
+
+    async def upstream(req):
+        if slow:
+            await asyncio.sleep(0.1)
+        return httpx.Response(200, json={"revision": 2})
+
+    with (
+        patch.object(bridge, "branding_url", return_value="http://admin/brand"),
+        patch.object(
+            bridge.httpx, "AsyncClient", side_effect=lambda **kw: factory(transport=httpx.MockTransport(upstream), **kw)
+        ),
+    ):
+        response = asyncio.run(bridge.platform_branding(request()))
+    assert response.status_code == (503 if slow else 200)
