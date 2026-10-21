@@ -8,7 +8,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import ValidationError
@@ -31,7 +31,7 @@ from .routes import (
     resource_context,
     runtime_api,
 )
-from .sso import install_sso
+from .sso import install_sso, require_administrator
 
 logger = logging.getLogger(__name__)
 
@@ -219,6 +219,9 @@ def create_app() -> FastAPI:
     async def _http_error(request: Request, exc: StarletteHTTPException) -> JSONResponse | HTMLResponse:
         path_parts = request.url.path.strip("/").split("/")
         if not request.url.path.startswith("/api/"):
+            if exc.status_code == 403:
+                return pages.http_error_page(request, title="Нет доступа",
+                                             message="Требуются права администратора PDLC", status_code=403)
             if exc.status_code == 404:
                 return pages.http_error_page(
                     request,
@@ -315,14 +318,17 @@ def create_app() -> FastAPI:
         namespace_ownership_api.readback
     )
 
+    # Configuration writes declare their administration dependency at registration.
+    admin_access = [Depends(require_administrator)]
+
     # Pages
     app.get("/", response_class=HTMLResponse)(pages.index)
     app.get("/phases", response_class=HTMLResponse)(pages.phases_page)
     app.get("/phase/{phase_id}", response_class=HTMLResponse)(pages.phase_detail)
-    app.get("/instructions", response_class=HTMLResponse)(pages.instructions_page)
+    app.get("/instructions", response_class=HTMLResponse, dependencies=admin_access)(pages.instructions_page)
     app.get("/tasks", response_class=HTMLResponse)(pages.tasks_page)
     app.get("/namespaces", response_class=HTMLResponse)(pages.namespace_page)
-    app.get("/namespaces/new", response_class=HTMLResponse)(pages.namespace_new_page)
+    app.get("/namespaces/new", response_class=HTMLResponse, dependencies=admin_access)(pages.namespace_new_page)
     app.get("/workflows", response_class=HTMLResponse)(pages.workflows_page)
     app.get("/task/{task_key}", response_class=HTMLResponse)(pages.task_detail_page)
     app.get("/settings", response_class=HTMLResponse)(pages.settings_page)
@@ -335,29 +341,37 @@ def create_app() -> FastAPI:
     app.get("/api/settings", response_model=None)(api.api_settings_get)
     app.get("/api/phases", response_model=None)(api.api_phases)
     app.get("/api/phases/{phase_id:int}", response_model=None)(api.api_phase_detail)
-    app.post("/api/phases", response_model=None)(api.api_phase_create)
-    app.delete("/api/phases/{phase_id:int}", response_model=None)(api.api_phase_delete)
+    app.post("/api/phases", response_model=None, dependencies=admin_access)(api.api_phase_create)
+    app.delete("/api/phases/{phase_id:int}", response_model=None, dependencies=admin_access)(api.api_phase_delete)
     app.get("/api/tasks", response_model=None)(api.api_tasks)
     app.get("/api/workflows", response_model=None)(api.api_workflows)
-    app.post("/api/workflows", response_model=None)(api.api_workflow_create)
-    app.put("/api/workflows/{workflow_id}", response_model=None)(api.api_workflow_update)
-    app.delete("/api/workflows/{workflow_id}", response_model=None)(api.api_workflow_delete)
+    app.post("/api/workflows", response_model=None, dependencies=admin_access)(api.api_workflow_create)
+    app.put("/api/workflows/{workflow_id}", response_model=None, dependencies=admin_access)(api.api_workflow_update)
+    app.delete("/api/workflows/{workflow_id}", response_model=None, dependencies=admin_access)(api.api_workflow_delete)
     app.get("/api/namespaces", response_model=None)(api.api_namespaces)
     app.get("/api/namespaces/{namespace_id}", response_model=None)(api.api_namespace_get)
-    app.post("/api/namespaces", response_model=None)(api.api_namespace_create)
-    app.put("/api/namespaces/{namespace_id}", response_model=None)(api.api_namespace_update)
-    app.delete("/api/namespaces/{namespace_id}", response_model=None)(api.api_namespace_delete)
+    app.post("/api/namespaces", response_model=None, dependencies=admin_access)(api.api_namespace_create)
+    app.put("/api/namespaces/{namespace_id}", response_model=None, dependencies=admin_access)(api.api_namespace_update)
+    app.delete(
+        "/api/namespaces/{namespace_id}", response_model=None, dependencies=admin_access,
+    )(api.api_namespace_delete)
 
     # Phase order update must be registered before /{phase_id} to avoid shadowing.
-    app.put("/api/phases/order", response_model=None)(api.api_phase_batch_order)
-    app.put("/api/phases/{phase_id:int}", response_model=None)(api.api_phase_update)
+    app.put("/api/phases/order", response_model=None, dependencies=admin_access)(api.api_phase_batch_order)
+    app.put("/api/phases/{phase_id:int}", response_model=None, dependencies=admin_access)(api.api_phase_update)
 
     # Instructions management
     app.get("/api/phases/{phase_id:int}/instructions", response_model=None)(api.api_instructions_list)
-    app.post("/api/instructions", response_model=None)(api.api_instruction_create)
-    app.put("/api/instructions/{instruction_id}", response_model=None)(api.api_instruction_update)
-    app.delete("/api/instructions/{instruction_id}", response_model=None)(api.api_instruction_delete)
-    app.put("/api/phases/{phase_id:int}/instructions/reorder", response_model=None)(api.api_instructions_reorder)
+    app.post("/api/instructions", response_model=None, dependencies=admin_access)(api.api_instruction_create)
+    app.put(
+        "/api/instructions/{instruction_id}", response_model=None, dependencies=admin_access,
+    )(api.api_instruction_update)
+    app.delete(
+        "/api/instructions/{instruction_id}", response_model=None, dependencies=admin_access,
+    )(api.api_instruction_delete)
+    app.put(
+        "/api/phases/{phase_id:int}/instructions/reorder", response_model=None, dependencies=admin_access,
+    )(api.api_instructions_reorder)
 
     return app
 

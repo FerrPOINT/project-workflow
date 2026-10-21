@@ -25,6 +25,7 @@ from project_workflow.interfaces.ui.services import (
     _load_tasks,
     _load_workflows,
 )
+from project_workflow.interfaces.ui.sso import can_administer
 from project_workflow.interfaces.ui.state import _app_state
 from project_workflow.interfaces.ui.templates import _group_instructions, templates
 
@@ -91,6 +92,7 @@ def _namespace_context(
     )
     return {
         "request": request,
+        "can_administer": can_administer(request),
         "page": page,
         "ui_port": get_settings().UI_PORT,
         "platform_origin": settings.UI_PLATFORM_ORIGIN,

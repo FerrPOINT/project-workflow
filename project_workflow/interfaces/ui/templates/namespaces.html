@@ -2,7 +2,7 @@
 
 {% block title %}Профессии — Workflow Engine{% endblock %}
 {% block header_title %}Профессии{% endblock %}
-{% block header_actions %}{% if not create_mode %}<a class="btn btn-primary" id="namespaceCreateLink" href="{{ ui_base_path() }}/namespaces/new{% if selected_namespace %}?profession_id={{ selected_namespace.id }}{% endif %}" title="Создать профессию" aria-label="Создать профессию">+ Новая профессия</a>{% endif %}{% endblock %}
+{% block header_actions %}{% if can_administer and not create_mode %}<a class="btn btn-primary" id="namespaceCreateLink" href="{{ ui_base_path() }}/namespaces/new{% if selected_namespace %}?profession_id={{ selected_namespace.id }}{% endif %}" title="Создать профессию" aria-label="Создать профессию">+ Новая профессия</a>{% endif %}{% endblock %}
 
 {% block extra_style %}
 .namespace-crud{display:grid;grid-template-columns:320px minmax(0,1fr);gap:16px;align-items:start}
@@ -65,6 +65,7 @@
   </section>
 
   <section class="namespace-panel">
+{% if can_administer %}
     <form id="namespaceForm" data-platform-draft class="card form-stack" aria-labelledby="namespaceFormMode" onsubmit="event.preventDefault(); submitNamespace();">
       <div class="card-title" id="namespaceFormMode">{{ 'Создание' if create_mode else 'Редактирование' }}</div>
       <div>
@@ -107,11 +108,20 @@
       </div>
       <p class="namespace-delete-hint" id="namespaceDeleteHint" hidden>Профессию с задачами нельзя удалить.</p>
     </form>
+{% elif edited_namespace %}
+    <article class="card form-stack" id="professionSummary">
+      <h2>{{ edited_namespace.name }}</h2>
+      <p>{{ edited_namespace.description or '' }}</p>
+      <p>CLI-команда: <code>{{ edited_namespace.cli_command }}</code></p>
+    </article>
+{% else %}<p class="empty-note">Выберите профессию для просмотра.</p>{% endif %}
+
   </section>
 </div>
 {% endblock %}
 
 {% block extra_script %}
+{% if can_administer %}
 const namespaceStore = {{ namespaces | tojson }};
 const namespaceIconPaths = {{ project_icon_paths | tojson }};
 const defaultNamespaceThemeIcon = {{ default_project_icon | tojson }};
@@ -481,4 +491,12 @@ syncNav();
 window.addEventListener('popstate', restoreNamespaceLocation);
 document.getElementById('namespaceName').addEventListener('input', updateNamespaceThemePreview);
 document.getElementById('namespaceCliCommand').addEventListener('input', updateNamespaceThemePreview);
+{% else %}
+function selectNamespace(id){
+  if(!Number.isInteger(id)||id<=0)return;
+  const url=new URL(window.location.href);
+  url.searchParams.set('profession_id',String(id));
+  window.PdlcPlatformNavigation.navigate(window.WorkflowNavigation.withProjectContext(url.toString()));
+}
+{% endif %}
 {% endblock %}

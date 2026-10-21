@@ -74,8 +74,12 @@ def introspect(authorization: str | None) -> tuple[NamespacePrincipal, list[str]
                         raise NamespaceAuthError(503)
                 value = json.loads(body, object_pairs_hook=unique_object)
         required_fields = {"sub", "email", "scopes"}
-        if not isinstance(value, dict) or not required_fields <= set(value) <= required_fields | {"display_name"}:
+        optional_fields = {"display_name", "role"}
+        if not isinstance(value, dict) or not required_fields <= set(value) <= required_fields | optional_fields:
             raise ValueError("Invalid introspection")
+        # Additive Auth role metadata never lets a human use a registered machine path.
+        if "role" in value and value["role"] != "service_account":
+            raise NamespaceAuthError(403)
         subject = canonical_uuid(value["sub"]) if isinstance(value["sub"], str) else ""
         scopes = value["scopes"]
         if (

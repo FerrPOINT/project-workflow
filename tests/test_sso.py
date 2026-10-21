@@ -342,3 +342,67 @@ def test_canonical_loopback_does_not_redirect_to_itself(monkeypatch):
         response = client.get("/phases?namespace_id=7")
         assert response.status_code == 307
         assert response.headers["location"] == "http://127.0.0.1:8812/phases?namespace_id=7"
+
+
+def test_current_role_and_apps_apply_to_the_same_open_session(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+
+    from fastapi import Depends
+    app, settings = _app(monkeypatch, AUTH_APPLICATION_ACCESS_REQUIRED=True)
+    app.post("/api/configuration", dependencies=[Depends(sso.require_administrator)])(lambda: {"ok": True})
+    state = {"role": "user", "apps": ["project-workflow"], "proof": True, "enforced": True}
+    original_client = httpx.AsyncClient
+
+    def identity(_request):
+        now = datetime.now(timezone.utc)
+        value = {"id": "central-user", "role": state["role"]}
+        if state["proof"]:
+            value["application_access"] = {"schema_version": 1, "issuer": settings.AUTH_ISSUER,
+                "subject": "central-user", "role": state["role"], "applications": state["apps"],
+                "revision": 1, "enforced": state["enforced"], "observed_at": now.isoformat(),
+                "expires_at": (now+timedelta(seconds=60)).isoformat()}
+        return httpx.Response(200, json=value)
+
+    monkeypatch.setattr(sso.httpx, "AsyncClient", lambda **kwargs: original_client(
+        transport=httpx.MockTransport(identity), **kwargs))
+    with TestClient(app, follow_redirects=False) as client:
+        headers = {"authorization": "Bearer one-verified-session"}
+        assert client.get("/api/tasks", headers=headers).status_code == 200
+        assert client.post("/api/configuration", headers=headers).status_code == 403
+        state["role"] = "admin"
+        assert client.post("/api/configuration", headers=headers).status_code == 200
+        state["role"] = "user"
+        assert client.post("/api/configuration", headers=headers).status_code == 403
+        state["apps"] = []
+        assert client.get("/api/tasks", headers=headers).status_code == 403
+        page = client.get("/", headers=headers)
+        assert page.status_code == 403
+        assert "Нет доступа" in page.text
+        assert "Войти через SSO" not in page.text
+        assert "location" not in page.headers
+        state["apps"] = ["project-workflow"]
+        state["proof"] = False
+        assert client.get("/api/tasks", headers=headers).status_code == 403
+        state["proof"] = True
+        state["enforced"] = False
+        assert client.get("/api/tasks", headers=headers).status_code == 403
+        state["enforced"] = True
+        state["apps"] = ["wrong/path"]
+        assert client.get("/api/tasks", headers=headers).status_code == 503
+
+
+def test_real_configuration_routes_declare_administrator_dependency():
+    from project_workflow.interfaces.ui.app import create_app
+    app = create_app()
+    methods = {"POST", "PUT", "DELETE"}
+    configuration = {"api_phase_create", "api_phase_delete", "api_phase_batch_order", "api_phase_update",
+        "api_workflow_create", "api_workflow_update", "api_workflow_delete", "api_namespace_create",
+        "api_namespace_update", "api_namespace_delete", "api_instruction_create", "api_instruction_update",
+        "api_instruction_delete", "api_instructions_reorder"}
+    seen = set()
+    for route in app.routes:
+        if getattr(route, "name", None) in configuration:
+            assert methods.intersection(route.methods)
+            assert any(dependency.call is sso.require_administrator for dependency in route.dependant.dependencies)
+            seen.add(route.name)
+    assert seen == configuration

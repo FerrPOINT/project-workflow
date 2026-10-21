@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     UI_PLATFORM_ORIGIN: str = ""
 
     AUTH_ISSUER: str = ""
+    AUTH_APPLICATION_ACCESS_REQUIRED: bool = False
     AUTH_INTERNAL_BASE_URL: str = ""
     AUTH_PUBLIC_ORIGIN: str = "http://localhost:8812"
     AUTH_SESSION_SECRET: str = ""
