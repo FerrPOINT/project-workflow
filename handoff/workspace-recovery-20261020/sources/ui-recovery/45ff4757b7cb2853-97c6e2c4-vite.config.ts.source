@@ -1,0 +1,10 @@
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
+
+export default defineConfig({
+  base: '/react/',
+  plugins: [react(), tailwindcss()],
+  build: { outDir: '../project_workflow/interfaces/ui/static/react', emptyOutDir: true },
+  server: { proxy: { '/api': { target: 'http://localhost:7752', changeOrigin: true } } },
+})

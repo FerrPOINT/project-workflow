@@ -1,0 +1,187 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index 0b62d3a..79ab202 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -54,14 +54,18 @@ Supervisor Engine перед commit выполнить следующие про
+    Ожидается `Success: no issues found`.
+ 
+ 6. **Readiness локального Compose**
+-   ```bash
+-   docker compose up --build -d --wait
+-   curl --fail http://127.0.0.1:8812/health
++   Из корня общего workspace, после проверки кандидатов и pinned runtime:
++   ```powershell
++   ./start-local.ps1 -Workspace sdlc1
+    ```
+-   Ожидается HTTP `200` и `database=ok`, `schema=ok`.
++   Health проверять по опубликованному адресу выбранного стенда, не по
++   standalone-порту. Compose grouping, сохранность snapshots/keys/volumes и
++   owned QA cleanup принадлежат `../services-base/deploy/LOCAL_GROUPS.md`.
++   PostgreSQL integration запускается только на отдельной disposable QA-БД,
++   не на runtime-БД. Legacy compose-ready helpers до миграции не запускать.
+ 
+ 7. **Браузерная проверка** для изменений UI
+-   - Открыть `http://127.0.0.1:8812/` и `http://127.0.0.1:8812/phases`.
++   - Открыть `/` и `/phases` на адресе выбранного workspace или owned QA fixture.
+    - Сохранить скриншот.
+ 
+ ## Примечания
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 269aef8..d2efff8 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -7,6 +7,10 @@
+ ## [Unreleased]
+ 
+ ### Changed
++- AGENTS, quality gate и README различают общий SDLC workspace, disposable QA
++  и standalone deployment вне workspace. Общий launcher/Compose ownership
++  принадлежат Base; legacy compose-ready не рекомендуется до миграции.
++  Документация не меняет empty-issuer auth default, UI/API или runtime pins.
+ - Standalone Compose forwards optional `AUTH_*` settings without changing the empty-issuer default; Central Auth SSO has a documented deployment matrix, container-reachability requirement and browser acceptance path.
+ - Documentation audit is clean: README has an H1; runtime/auth, quality, reset and historical plans have cross-links and explicit security/runtime boundaries.
+ - Added regression coverage that proves an empty `AUTH_ISSUER` leaves UI/API open in standalone mode.
+diff --git a/README.md b/README.md
+index 5beca7c..94bce20 100644
+--- a/README.md
++++ b/README.md
+@@ -140,6 +140,16 @@ Runtime-источник данных — **PostgreSQL**. SQLite использ
+ 
+ ## Режимы запуска и авторизации
+ 
++В общем SDLC workspace постоянные контейнеры запускаются только корневым
++`start-local.ps1 -Workspace sdlc1` или `sdlc2`; правила принадлежат
++[Base LOCAL_GROUPS](../services-base/deploy/LOCAL_GROUPS.md).
++Standalone-примеры ниже описывают возможность продукта вне общего workspace,
++не дополнительный локальный стенд. В workspace не запускать отдельный Workflow,
++не копировать `.env.example` поверх runtime config и не сбрасывать volumes.
++QA использует временный owned Compose project с owner/purpose и cleanup.
++Фактический адрес Workflow в sdlc1 — `http://127.0.0.1:7752`; `8812` ниже —
++standalone или изолированный source preview, не адрес общего стенда.
++
+ | Режим | Когда использовать | Настройки | Поведение |
+ |---|---|---|---|
+ | Standalone без авторизации | Локальная разработка, loopback/VPN, один репозиторий | Не задавать `AUTH_*` | `docker compose up --build -d --wait` запускает db, migrate и api; UI/API открыты без входа. |
+@@ -185,9 +195,10 @@ Auth опубликован только на host, сначала провер
+ `AUTH_ISSUER` должен точно совпадать с issuer Central Auth, а
+ `AUTH_PUBLIC_ORIGIN` — с зарегистрированным redirect URI. После смены
+ настроек общего стенда повторите
+-`pwsh -File services-base/deploy/start-workspace.ps1` из корня workspace:
+-скрипт применяет оба Compose-файла и сохраняет volumes. Для отдельного
+-Compose перезапускайте API с тем же набором `-f`, с которым он был поднят.
++`./start-local.ps1 -Workspace sdlc1` из корня workspace после проверки принятого
++runtime и кандидатов по Base LOCAL_GROUPS. Адреса/Auth config общего стенда
++принадлежат launcher, а не standalone-примерам выше. Для standalone deployment
++вне workspace сохраняйте исходный явный Compose project и набор `-f`.
+ 
+ Проверка: открыть `/` → redirect на Central Auth → завершить login → callback
+ возвращает на исходную страницу. Без cookie `/api/*` отвечает `401`; runtime
+diff --git a/docs/quality-gate.md b/docs/quality-gate.md
+index 2828452..a085089 100644
+--- a/docs/quality-gate.md
++++ b/docs/quality-gate.md
+@@ -11,6 +11,13 @@ health, согласованные product/Base fingerprints и no-mock browser/
+ Сохранённый hosted pipeline остаётся опциональным зеркалом; `[skip ci]`
+ предотвращает его запуск. Его результаты для локального выпуска не требуются.
+ 
++В общем SDLC workspace контейнерные проверки подчиняются
++[Base LOCAL_GROUPS](../../services-base/deploy/LOCAL_GROUPS.md): постоянные
++группы только `sdlc1`, `sdlc2`, `sdlc-common`; QA использует owned временный
++`sdlc-qa-<task>-<unique>` с `sdlc.task`/`sdlc.purpose`, отдельными сетями/БД и
++точным cleanup в finally. Runtime volumes/snapshots/secrets/keys не заменяются.
++Standalone deployment вне этого workspace не меняет этих локальных правил.
++
+ ## Базовый gate
+ 
+ ```bash
+@@ -32,7 +39,9 @@ git diff --check
+ 
+ На Unix-like окружении тот же набор доступен через `make quality`; на Windows
+ без `make` используйте `pwsh -File scripts/quality.ps1 quality`. Дополнительные
+-цели `warnings` и `compose-ready` есть и в `Makefile`, и в PowerShell helper.
++цель `warnings` есть и в `Makefile`, и в PowerShell helper. Legacy
++`compose-ready` пока не соответствует owned Compose lifecycle: не запускать
++его в общем workspace до миграции. Readiness выполняется способом ниже.
+ 
+ ## ResourceWarning Gate
+ 
+@@ -51,16 +60,10 @@ manager или закрываться через общий pytest lifecycle в
+ 
+ ## PostgreSQL Integration
+ 
+-Integration tests требуют локальный PostgreSQL с правом создавать и удалять
+-временные базы:
+-
+-```bash
+-PGHOST=127.0.0.1
+-PGPORT=5432
+-PGUSER=project_workflow
+-PGPASSWORD=project_workflow
+-PGDATABASE=project_workflow
+-```
++Integration tests требуют отдельный disposable QA PostgreSQL с правом создавать
++и удалять только тестовые базы. `PGHOST`/`PGPORT`/`PGUSER`/`PGPASSWORD`/`PGDATABASE`
++передаются из owned fixture; не использовать runtime DB, её credentials или
++предполагаемый свободный порт5432. Пароль не публиковать в evidence/labels/logs.
+ 
+ Набор `tests/test_postgres_integration.py` проверяет реальный путь CLI
+ subprocess -> PostgreSQL -> тестовый OpenAI-compatible HTTP endpoint ->
+@@ -72,18 +75,19 @@ business E2E с настоящим исполнителем.
+ 
+ ## Compose Readiness
+ 
+-Для проверки локального runtime:
++Для существующего SDLC runtime из корня общего workspace:
+ 
+-```bash
+-docker compose up --build -d --wait
+-curl --fail http://127.0.0.1:8812/health
++```powershell
++./start-local.ps1 -Workspace sdlc1
++./start-local.ps1 -Workspace sdlc1 -Status
+ ```
+ 
+-Ожидается HTTP `200`, `database=ok`, `schema=ok`. Стандартный Compose публикует
+-PostgreSQL и API только на loopback. Для стандартного compose-ready должны быть
+-свободны `127.0.0.1:5432` и `127.0.0.1:8812`; если порт 5432 занят другим
+-PostgreSQL, integration gate можно запускать с `PGPORT`, указывающим на
+-отдельный тестовый PostgreSQL.
++Не менять pinned images до candidate/migration/data acceptance. Адрес `/health`
++берётся из выбранного стенда (sdlc1: `http://127.0.0.1:7752/health`), а не из
++standalone defaults. Ожидается HTTP `200`, `database=ok`, `schema=ok`; это не
++доказательство совпадения UI fingerprints или live SSO/role acceptance.
++Отдельный постоянный Compose Workflow не поднимать. Контейнерный QA допускается
++только с owned Compose project и точным cleanup по Base LOCAL_GROUPS.
+ 
+ ## UI Smoke
+ 
+diff --git a/tests/test_docs_quality.py b/tests/test_docs_quality.py
+index 52afcde..8f69d3c 100644
+--- a/tests/test_docs_quality.py
++++ b/tests/test_docs_quality.py
+@@ -98,6 +98,25 @@ def test_ui_standardization_acceptance_is_local_and_keeps_the_full_gate() -> Non
+     assert "mypy project_workflow scripts" in quality_gate
+ 
+ 
++def test_workspace_launch_guidance_uses_base_and_keeps_runtime_separate_from_qa() -> None:
++    agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
++    quality_gate = (ROOT / "docs" / "quality-gate.md").read_text(encoding="utf-8")
++    readme = (ROOT / "README.md").read_text(encoding="utf-8")
++
++    for content in (agents, quality_gate, readme):
++        assert "start-local.ps1 -Workspace sdlc1" in content
++        assert "LOCAL_GROUPS.md" in content
++    assert "docker compose up --build -d --wait" not in agents
++    assert "docker compose up --build -d --wait" not in quality_gate
++    assert "sdlc-qa-<task>-<unique>" in quality_gate
++    assert "runtime DB" in quality_gate
++    assert "compose-ready" in quality_gate
++    assert "до миграции" in quality_gate
++    assert "7752/health" in quality_gate
++    assert "Standalone-примеры ниже" in readme
++    assert "вне общего workspace" in readme
++
++
+ def test_readme_cli_examples_use_configured_wrapper_commands() -> None:
+     readme = (ROOT / "README.md").read_text(encoding="utf-8")
+ 

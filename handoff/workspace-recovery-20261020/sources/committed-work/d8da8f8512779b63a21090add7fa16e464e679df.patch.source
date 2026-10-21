@@ -1,0 +1,795 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 56f1479..e4cd128 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -25,13 +25,17 @@
+ - Standalone-режим: репозиторий собирается и запускается без соседнего `services-base` (убраны extra `cli-platform`, uv source, Docker additional_context и CI checkout). Token-режим CLI без `sdlc-cli-core` выдаёт понятную ошибку; запуск без `AUTH_ISSUER` работает без авторизации.
+ 
+ ### Fixed
++- Agent create/update keeps drafts frozen after lost responses, 5xx and malformed
++  or mismatched ACKs. Explicit no-cache catalogue readback reconciles the result
++  without replay; confirmed 401/403/404 disables CRUD and retains the values.
++  Validation/conflict errors remain editable. No API or runtime changes.
+ - Docker frontend stage includes the pinned `.base-revision` before recording
+   product fingerprints; container metadata now attests the same runtime inputs
+   as the clean checkout. Jinja/React routes and the active skills catalog are unchanged.
+ - Agent editors use Base SSR controls and draft protection for navigation and
+   disclosure/cancel. Pending create/update locks fields and actions and rejects
+   direct duplicate handlers; rejected HTTP responses cannot announce success.
+-  Unknown create/update outcome reconciliation remains a separate follow-up.
++  Unknown create/update outcome reconciliation is covered by the subsequent fix above.
+ - Jinja deletion confirmations use the shared Base SSR native dialog instead
+   of a local modal shell. Pending callbacks keep the dialog locked until API
+   acknowledgement; uncertain deletes block repeat writes across cancel/reopen
+diff --git a/docs/UI_UX_MAP.md b/docs/UI_UX_MAP.md
+index 7d02a12..db26692 100644
+--- a/docs/UI_UX_MAP.md
++++ b/docs/UI_UX_MAP.md
+@@ -99,3 +99,21 @@ SSR assets сохраняют собственную byte-for-byte drift про
+ Это узкий кандидат, не закрытие полного agent/workflow lifecycle. Unknown outcome,
+ read-only reconcile, authoritative ACK payload и terminal 401/403/404 create/update
+ ещё OPEN. Release/images/SSO и полный quality gate фиксируются отдельным evidence.
++
++## Agent Write Lifecycle Candidate 2026-10-06
++
++Последующий source-кандидат закрывает create/update unknown lifecycle редакторов
++агентов: поля и CRUD остаются заблокированными после потерянного ответа, 5xx,
++неполного ACK или несовпадения id/значений. Отдельное действие сверяет существующий
++GET `/api/agents` без cache и никогда не повторяет запись. Отрицательная сверка и
++ошибка каталога сохраняют черновик и блокировку. Create не подтверждается старым
++id из исходного списка; ACK проверяет совпадение `agent_id` и возвращённого объекта.
++401/403/404 показываются отдельными Base states без CRUD/retry записи; 409/422
++сохраняют редактируемый черновик. Доступная проверка получает фокус после unknown,
++после подтверждённого update фокус возвращается summary редактора.
++
++Используются существующие Base SSR controls/states/draft guard; доменная сверка
++остаётся в продукте. Публичные API, схема БД, SSO и runtime pins не меняются.
++Это source/fixture acceptance, не приёмка фактических images или SSO. Lifecycle
++редактора workflows и общая image/route/theme/README matrix остаются отдельными
++незавершёнными пунктами программы.
+diff --git a/docs/plans/2026-10-06-agent-write-lifecycle.md b/docs/plans/2026-10-06-agent-write-lifecycle.md
+new file mode 100644
+index 0000000..1716915
+--- /dev/null
++++ b/docs/plans/2026-10-06-agent-write-lifecycle.md
+@@ -0,0 +1,39 @@
++# Agent Write Lifecycle Source Candidate
++
++## Scope
++
++Use Base SSR states, controls and draft guard for the existing agent editor.
++Keep domain reconciliation in Workflow; do not change API, database or auth.
++This follows the previous agent draft candidate and does not imply runtime release.
++
++## Acceptance
++
++- Pending locks fields/actions and rejects duplicate direct handlers.
++- Transport failures, 408/5xx, invalid JSON and incomplete/mismatched successful
++  responses freeze the draft. Cancel/reopen cannot unlock or replay the write.
++- An explicit GET catalogue check uses no-store; only matching authoritative
++  fields and a valid id acknowledge persistence. Create excludes original ids.
++- Negative/failed readback retains the draft; no automatic write retry.
++- Confirmed 401/403/404 disables CRUD; validation/conflict rejection keeps edits.
++- Whitespace-only names show a persistent localized validation error; invalid
++  launch keys cannot submit through either the form or direct handlers. HTML
++  patterns compile with the native `v` flag; escaping changes no API value set.
++- Acknowledged update sets field defaults from the server and returns focus.
++  Acknowledged create keeps the existing navigation guard for other dirty forms.
++- Browser tests cover desktop/mobile, three themes, actual disposable POST with
++  a lost/malformed response, direct duplicate calls, stale and failed GET readback.
++- Run the full Python/PostgreSQL/coverage/Ruff/mypy/resource-warning gate,
++  frontend checks, SSR drift and complete isolated browser suite before commit.
++- Localization checks parse Jinja/HTML page labels (including macro arguments),
++  excluding script/style identifiers. Existing API DTO names are not UI labels;
++  regression cases preserve the prohibition on executor-specific visible names.
++  Rendered HTML is not reinterpreted as Jinja; literal template syntax stays
++  visible. Known errors use one persistent inline state, not a duplicate toast.
++
++## Remaining Release Work
++
++Workflow editor lifecycle remains separate. Actual immutable runtime images,
++SSO/roles, all route/theme/width checks, README capture provenance and mirror
++refresh require fresh evidence; fixture screenshots are not README release images.
++
++Pattern syntax follows the [HTML Standard](https://html.spec.whatwg.org/multipage/input.html#the-pattern-attribute).
+diff --git a/frontend/e2e/agent-drafts.spec.ts b/frontend/e2e/agent-drafts.spec.ts
+index 6686100..d272d52 100644
+--- a/frontend/e2e/agent-drafts.spec.ts
++++ b/frontend/e2e/agent-drafts.spec.ts
+@@ -83,12 +83,45 @@ test('pending create protects fields, disclosure and direct duplicate handlers',
+     await expect(form).toHaveAttribute('aria-busy', 'false')
+     await expect(page.locator('#newName')).toBeEnabled()
+     await expect(page.locator('#newName')).toHaveValue('Unsaved agent draft')
+-    await expect(page.locator('#toast')).toHaveText('Fixture validation rejected')
++    await expect(form.locator('[data-page-state]')).toHaveText('Fixture validation rejected')
++    await expect(page.locator('#toast')).not.toHaveText('Fixture validation rejected')
+     expect(writes).toBe(1)
+   } finally { release() }
+ })
+ 
+-test('cancelled update preserves server values and draft; HTTP failure cannot announce success', async ({ page, request }) => {
++test('blank trimmed name and invalid launch key do not submit; editing clears stale validation', async ({ page }) => {
++  let writes = 0
++  await page.route('**/api/agents', async route => {
++    expect(route.request().method()).toBe('POST')
++    writes++
++    await route.fulfill({ status: 422, json: { ok: false, error: 'Fixture validation rejected' } })
++  })
++  await openCreate(page)
++  const form = page.locator('#agentCreatePanel form')
++  const name = page.locator('#newName')
++  await name.fill('   ')
++  await form.locator('[type="submit"]').click()
++  await expect(form.locator('[data-page-state]')).toHaveText('Имя агента обязательно')
++  await expect(name).toBeFocused()
++  await expect(name).toBeEnabled()
++  expect(writes).toBe(0)
++  await name.fill('Valid agent name')
++  await expect(form.locator('.agent-write-state')).not.toBeVisible()
++  await page.locator('#newLaunchProfile').fill('Invalid_KEY')
++  await form.locator('[type="submit"]').click()
++  expect(writes).toBe(0)
++  await page.evaluate(async () => {
++    const ui = window as unknown as { addAgent: (event: { preventDefault: () => void; target: HTMLFormElement }) => Promise<void> }
++    await ui.addAgent({ target: document.querySelector<HTMLFormElement>('#agentCreatePanel form')!, preventDefault() {} })
++  })
++  expect(writes).toBe(0)
++  await page.locator('#newLaunchProfile').fill('valid-key')
++  await form.locator('[type="submit"]').click()
++  await expect(form.locator('[data-page-state]')).toHaveText('Fixture validation rejected')
++  expect(writes).toBe(1)
++})
++
++test('uncertain update freezes the draft until readback; no replay or false success', async ({ page, request }) => {
+   const response = await request.post('/api/agents', { data: { name: `agent-draft-${crypto.randomUUID()}`, description: 'Disposable agent editor fixture' } })
+   expect(response.ok()).toBeTruthy()
+   const id = (await response.json()).agent_id as number
+@@ -112,12 +145,154 @@ test('cancelled update preserves server values and draft; HTTP failure cannot an
+     await expect(entry.locator('form')).toHaveAttribute('aria-busy', 'false')
+     await expect(input).toHaveValue('Unsaved updated agent')
+     await expect(entry.locator('.agent-name')).toHaveText(original)
+-    await expect(page.locator('#toast')).toHaveClass(/toast-error/)
++    await expect(input).toBeDisabled()
++    await expect(entry.locator('[data-page-state]')).toHaveText(/Результат записи неизвестен/)
++    const reconcile = entry.locator('[data-agent-reconcile]')
++    await expect(reconcile).toBeFocused()
++    expect(writes).toBe(1)
++    await page.evaluate(async () => {
++      const ui = window as unknown as { saveAgent: (event: { preventDefault: () => void }, form: HTMLFormElement) => Promise<void>; cancelAgent: (button: HTMLElement) => Promise<void>; deleteAgent: (button: HTMLElement) => Promise<void> }
++      const form = document.querySelector<HTMLFormElement>('.agent-entry[open] form')!
++      await ui.saveAgent({ preventDefault() {} }, form)
++      await ui.cancelAgent(form.querySelector('button')!)
++      await ui.deleteAgent(form.querySelector('button')!)
++    })
++    expect(writes).toBe(1)
++    await reconcile.click()
++    await expect(entry.locator('[data-page-state]')).toHaveText(/Сохранение пока не подтверждено/)
++    await expect(input).toBeDisabled()
++    let reads = 0
++    await page.route('**/api/agents', async route => {
++      expect(route.request().method()).toBe('GET')
++      reads++
++      await route.fulfill({ status: 503, json: { ok: false } })
++    })
++    await reconcile.click()
++    await expect(entry.locator('[data-page-state]')).toHaveText(/Не удалось проверить сохранение/)
++    await expect(input).toHaveValue('Unsaved updated agent')
++    await page.unroute('**/api/agents')
++    expect((await request.put(`/api/agents/${id}`, { data: { name: 'Unsaved updated agent' } })).ok()).toBeTruthy()
++    await reconcile.click()
++    await expect(entry).not.toHaveAttribute('open', '')
++    await expect(entry.locator('.agent-name')).toHaveText('Unsaved updated agent')
++    await expect(entry.locator('summary')).toBeFocused()
++    await entry.locator('summary').click()
++    await expect(input).toBeEnabled()
++    await expect(input).toHaveValue('Unsaved updated agent')
++    expect(reads).toBe(1)
+     expect(writes).toBe(1)
+-    await entry.getByRole('button', { name: 'Отмена', exact: true }).click()
+-    await page.locator('[data-base-confirm-accept]').click()
+-    await expect(input).toHaveValue(original)
+   } finally {
+     expect((await request.delete(`/api/agents/${id}`)).ok()).toBeTruthy()
+   }
+ })
++
++for (const status of [401, 403, 404, 409, 422]) {
++  test(`agent create distinguishes confirmed HTTP ${status} from unknown outcome`, async ({ page }) => {
++    let writes = 0
++    await page.route('**/api/agents', async route => {
++      expect(route.request().method()).toBe('POST')
++      writes++
++      await route.fulfill({ status, json: { ok: false, error: `Confirmed rejection ${status}` } })
++    })
++    await openCreate(page)
++    const form = page.locator('#agentCreatePanel form')
++    await form.locator('[type="submit"]').click()
++    const state = form.locator('[data-page-state]')
++    await expect(state).toHaveText(`Confirmed rejection ${status}`)
++    await expect(form).toHaveAttribute('aria-busy', 'false')
++    await expect(form.locator('[data-agent-reconcile]')).not.toBeVisible()
++    await expect(page.locator('#newName')).toHaveValue('Unsaved agent draft')
++    if (status === 401 || status === 403 || status === 404) {
++      await expect(state).toHaveAttribute('data-page-state', status === 404 ? 'not-found' : 'permission-denied')
++      await expect(state).toBeFocused()
++      await expect(page.locator('#newName')).toBeDisabled()
++      await expect(form.locator('[type="submit"]')).toBeDisabled()
++      await page.evaluate(() => {
++        const ui = window as unknown as { addAgent: (event: { preventDefault: () => void; target: HTMLFormElement }) => Promise<void> }
++        void ui.addAgent({ target: document.querySelector<HTMLFormElement>('#agentCreatePanel form')!, preventDefault() {} })
++      })
++      expect(writes).toBe(1)
++    } else {
++      await expect(page.locator('#newName')).toBeEnabled()
++      await expect(form.locator('[type="submit"]')).toBeEnabled()
++    }
++  })
++}
++
++for (const failure of ['lost-response', 'malformed-ack', 'wrong-id-ack']) {
++  test(`created agent with ${failure} is reconciled by GET, never replayed`, async ({ page, request }) => {
++    let writes = 0
++    let id: number | undefined
++    const name = `agent-reconcile-${crypto.randomUUID()}`
++    try {
++      await page.route('**/api/agents', async route => {
++        if (route.request().method() === 'GET') { await route.continue(); return }
++        expect(route.request().method()).toBe('POST')
++        writes++
++        const result = await route.fetch()
++        expect(result.ok()).toBeTruthy()
++        const data = await result.json()
++        id = data.agent_id as number
++        if (failure === 'lost-response') await route.abort('failed')
++        else if (failure === 'malformed-ack') await route.fulfill({ status: 200, body: '{invalid', contentType: 'application/json' })
++        else await route.fulfill({ status: 200, json: { ...data, agent_id: id + 1 } })
++      })
++      await openCreate(page)
++      await page.locator('#newName').fill(name)
++      const form = page.locator('#agentCreatePanel form')
++      await form.locator('[type="submit"]').click()
++      await expect(form.locator('[data-page-state]')).toHaveText(/Результат записи неизвестен/)
++      await expect(page.locator('#newName')).toBeDisabled()
++      await expect(form.locator('[data-agent-reconcile]')).toBeFocused()
++      await page.locator('#agentCreatePanel > summary').click()
++      await expect(page.locator('#agentCreatePanel')).toHaveAttribute('open', '')
++      await page.evaluate(() => {
++        const ui = window as unknown as { addAgent: (event: { preventDefault: () => void; target: HTMLFormElement }) => Promise<void> }
++        void ui.addAgent({ target: document.querySelector<HTMLFormElement>('#agentCreatePanel form')!, preventDefault() {} })
++      })
++      expect(writes).toBe(1)
++      await page.screenshot({ path: test.info().outputPath(`agent-unknown-${failure}-${page.viewportSize()!.width}.png`), fullPage: true })
++      await form.locator('[data-agent-reconcile]').click()
++      await expect(page.locator(`.agent-entry[data-id="${id}"] .agent-name`)).toHaveText(name)
++      expect(writes).toBe(1)
++    } finally {
++      if (id !== undefined) expect((await request.delete(`/api/agents/${id}`)).ok()).toBeTruthy()
++    }
++  })
++}
++
++for (const status of [403, 404]) {
++  test(`agent readback HTTP ${status} stops reconciliation without unlocking CRUD`, async ({ page }) => {
++    let writes = 0
++    let reads = 0
++    await page.route('**/api/agents', async route => {
++      if (route.request().method() === 'POST') {
++        writes++
++        await route.fulfill({ status: 503, json: { ok: false } })
++      } else {
++        expect(route.request().method()).toBe('GET')
++        reads++
++        await route.fulfill({ status, json: { ok: false, error: `Readback rejection ${status}` } })
++      }
++    })
++    await openCreate(page)
++    const form = page.locator('#agentCreatePanel form')
++    await form.locator('[type="submit"]').click()
++    await expect(form.locator('[data-page-state]')).toHaveText(/Результат записи неизвестен/)
++    await form.locator('[data-agent-reconcile]').click()
++    await expect(form.locator('[data-page-state]')).toHaveText(`Readback rejection ${status}`)
++    await expect(form.locator('[data-page-state]')).toHaveAttribute('data-page-state', status === 404 ? 'not-found' : 'permission-denied')
++    await expect(form.locator('[data-page-state]')).toBeFocused()
++    await expect(form.locator('[data-agent-reconcile]')).not.toBeVisible()
++    await expect(page.locator('#newName')).toBeDisabled()
++    await expect(page.locator('#newName')).toHaveValue('Unsaved agent draft')
++    await page.evaluate(async () => {
++      const ui = window as unknown as { reconcileAgent: (form: HTMLFormElement) => Promise<void>; addAgent: (event: { preventDefault: () => void; target: HTMLFormElement }) => Promise<void> }
++      const form = document.querySelector<HTMLFormElement>('#agentCreatePanel form')!
++      await ui.reconcileAgent(form)
++      await ui.addAgent({ target: form, preventDefault() {} })
++    })
++    expect(writes).toBe(1)
++    expect(reads).toBe(1)
++  })
++}
+diff --git a/project_workflow/interfaces/ui/templates/agents.html b/project_workflow/interfaces/ui/templates/agents.html
+index 1be828f..e8e24ed 100644
+--- a/project_workflow/interfaces/ui/templates/agents.html
++++ b/project_workflow/interfaces/ui/templates/agents.html
+@@ -5,7 +5,7 @@
+ 
+ {% block extra_style %}
+ .agent-layout{display:grid;gap:20px}
+-.agent-section-title{font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px}
++.agent-section-title{font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0;margin-bottom:8px}
+ .agent-list{border-top:1px solid var(--border)}
+ .agent-list-header,.agent-summary{display:grid;grid-template-columns:minmax(130px,1fr) minmax(130px,1fr) minmax(0,2fr) 16px;gap:12px;align-items:center}
+ .agent-list-header{padding:8px;color:var(--text-muted);font-size:11px;font-weight:600;text-transform:uppercase}
+@@ -20,7 +20,7 @@
+ .agent-profile{font-family:'JetBrains Mono',monospace}
+ .agent-editor{background:var(--surface);border-top:1px solid var(--border);padding:14px 12px}
+ .agent-fields{display:grid;grid-template-columns:minmax(150px,1fr) minmax(150px,1fr) minmax(0,2fr);gap:12px}
+-.agent-field-label{display:block;font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px}
++.agent-field-label{display:block;font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0;margin-bottom:5px}
+ .agent-editor-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px;flex-wrap:wrap}
+ .agent-delete{margin-right:auto}
+ .agent-create{border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+@@ -60,9 +60,11 @@
+         <form class="agent-editor" onsubmit="saveAgent(event,this)">
+           <div class="agent-fields">
+             <label><span class="agent-field-label">Имя</span>{{ base.input_control('agentName' ~ a.id, 'name', value=a.name, required=true) }}</label>
+-            <label><span class="agent-field-label">Ключ запуска</span><input class="base-control" type="text" name="launch_profile" value="{{ a.launch_profile or '' }}" pattern="[a-z0-9][a-z0-9_-]*" maxlength="251"></label>
++            <label><span class="agent-field-label">Ключ запуска</span><input class="base-control" type="text" name="launch_profile" value="{{ a.launch_profile or '' }}" pattern="[a-z0-9][a-z0-9_\-]*" maxlength="251" title="Строчные латинские буквы, цифры, дефис и подчёркивание. Начните с буквы или цифры; до 251 символа."></label>
+             <label class="agent-description-field"><span class="agent-field-label">Описание</span>{{ base.textarea_control('agentDescription' ~ a.id, 'description', value=a.description or '', rows=3) }}</label>
+           </div>
++          <div class="agent-write-state" hidden>{{ base.state('error', '') }}</div>
++          <button class="base-control base-button base-button-secondary" type="button" data-agent-reconcile hidden onclick="reconcileAgent(this.closest('form'))">Проверить сохранение</button>
+           <div class="agent-editor-actions">
+             <button class="base-control base-button base-button-danger agent-delete" type="button" onclick="deleteAgent(this)">Удалить</button>
+             <button class="base-control base-button base-button-secondary" type="button" onclick="cancelAgent(this)">Отмена</button>
+@@ -81,9 +83,11 @@
+       <form class="agent-editor" onsubmit="addAgent(event)">
+         <div class="agent-fields">
+           <label><span class="agent-field-label">Имя</span>{{ base.input_control('newName', 'name', required=true) }}</label>
+-          <label><span class="agent-field-label">Ключ запуска</span><input class="base-control" type="text" id="newLaunchProfile" name="launch_profile" pattern="[a-z0-9][a-z0-9_-]*" maxlength="251"></label>
++          <label><span class="agent-field-label">Ключ запуска</span><input class="base-control" type="text" id="newLaunchProfile" name="launch_profile" pattern="[a-z0-9][a-z0-9_\-]*" maxlength="251" title="Строчные латинские буквы, цифры, дефис и подчёркивание. Начните с буквы или цифры; до 251 символа."></label>
+           <label class="agent-description-field"><span class="agent-field-label">Описание</span>{{ base.textarea_control('newDescription', 'description', rows=3) }}</label>
+         </div>
++        <div class="agent-write-state" hidden>{{ base.state('error', '') }}</div>
++        <button class="base-control base-button base-button-secondary" type="button" data-agent-reconcile hidden onclick="reconcileAgent(this.closest('form'))">Проверить сохранение</button>
+         <div class="agent-editor-actions">
+           <button class="base-control base-button base-button-secondary" type="button" onclick="cancelAgent(this)">Отмена</button>
+           {{ base.button('Добавить', type='submit', variant='primary') }}
+@@ -98,72 +102,160 @@
+ var agentDraftBaselines=new WeakMap();
+ var agentPendingForms=new Set();
+ var agentDisabledControls=new WeakMap();
++var agentUnknownWrites=new WeakMap();
++var agentTerminalStates=new WeakMap();
++var agentKnownIds=new Set(Array.from(document.querySelectorAll('.agent-entry')).map(function(entry){ return Number(entry.dataset.id); }));
+ function agentDraftSnapshot(form){
+   return JSON.stringify(Array.from(form.querySelectorAll('input,textarea')).map(function(field){ return field.value; }));
+ }
+-function agentFormDirty(form){ return agentDraftSnapshot(form)!==agentDraftBaselines.get(form); }
++function agentFormDirty(form){ return agentUnknownWrites.has(form)||agentDraftSnapshot(form)!==agentDraftBaselines.get(form); }
++function showAgentState(form,message,kind){
++  var container=form.querySelector('.agent-write-state');
++  var state=container.querySelector('[data-page-state]');
++  container.hidden=!message;
++  state.dataset.pageState=kind||'error';
++  state.setAttribute('role',kind==='permission-denied'||kind==='not-found'?'status':'alert');
++  state.querySelector('p').textContent=message;
++}
+ function setAgentPending(form,pending){
+-  if(pending){
+-    agentPendingForms.add(form);
+-    agentDisabledControls.set(form,Array.from(form.querySelectorAll('input,textarea,button')).map(function(control){
++  if(pending)agentPendingForms.add(form);
++  else agentPendingForms.delete(form);
++  var frozen=pending||agentUnknownWrites.has(form)||agentTerminalStates.has(form);
++  if(frozen){
++    if(!agentDisabledControls.has(form))agentDisabledControls.set(form,Array.from(form.querySelectorAll('input,textarea,button:not([data-agent-reconcile])')).map(function(control){
+       var state={control:control,disabled:control.disabled};
+       control.disabled=true;
+       return state;
+     }));
+   }else{
+-    agentPendingForms.delete(form);
+     (agentDisabledControls.get(form)||[]).forEach(function(state){ state.control.disabled=state.disabled; });
+     agentDisabledControls.delete(form);
+   }
++  var reconcile=form.querySelector('[data-agent-reconcile]');
++  reconcile.hidden=!agentUnknownWrites.has(form)||agentTerminalStates.has(form);
++  reconcile.disabled=pending;
+   form.setAttribute('aria-busy',String(pending));
+   refreshWorkflowDraftGuard();
+ }
+ async function cancelAgent(button){
+   var entry=button.closest('.agent-entry,.agent-create');
+   var form=entry.querySelector('form');
+-  if(agentPendingForms.size)return;
++  if(agentPendingForms.size||agentUnknownWrites.has(form)||agentTerminalStates.has(form))return;
+   if(agentFormDirty(form)&&!await requestConfirmation({
+     title:'Отменить изменения агента?',message:'Несохранённые значения этой формы будут потеряны.',
+     confirmLabel:'Отменить изменения',returnFocus:button,fallbackFocus:entry.querySelector('summary'),
+     onConfirm:function(){},
+   }))return;
+   form.reset();
++  showAgentState(form,'');
+   agentDraftBaselines.set(form,agentDraftSnapshot(form));
+   entry.open=false;
+   entry.querySelector('summary').focus();
+   refreshWorkflowDraftGuard();
+ }
+-async function saveAgent(event,form){
+-  event.preventDefault();
+-  if(agentPendingForms.has(form))return;
+-  var entry=form.closest('.agent-entry');
+-  var name=form.elements.namedItem('name').value.trim();
+-  var launchProfile=form.elements.namedItem('launch_profile').value.trim();
+-  var description=form.elements.namedItem('description').value.trim();
+-  if(!name){showToast('Имя агента обязательно','error');return;}
+-  setAgentPending(form,true);
+-  try{
+-    var response=await fetch('/api/agents/'+entry.dataset.id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,description:description,launch_profile:launchProfile||null})});
+-    var data=await response.json();
+-    if(!response.ok||!data.ok){showToast(data.error||'Ошибка','error');return;}
+-    [['name',name],['launch_profile',launchProfile],['description',description]].forEach(function(item){
++function agentMatchesAttempt(agent,attempt){
++  return agent&&Number.isInteger(agent.id)&&agent.id>0
++    &&(attempt.id==null?!agentKnownIds.has(agent.id):agent.id===attempt.id)
++    &&agent.name===attempt.payload.name&&agent.description===attempt.payload.description
++    &&(agent.hermes_profile===null||typeof agent.hermes_profile==='string')
++    &&(agent.hermes_profile||null)===attempt.payload.launch_profile;
++}
++function acknowledgeAgent(form,agent,attempt){
++  agentUnknownWrites.delete(form);
++  showAgentState(form,'');
++  if(attempt.id==null){
++    agentKnownIds.add(agent.id);
++    form.reset();
++  }else{
++    var entry=form.closest('.agent-entry');
++    [['name',agent.name],['launch_profile',agent.hermes_profile||''],['description',agent.description]].forEach(function(item){
+       var field=form.elements.namedItem(item[0]);
+       field.value=item[1];
+       field.defaultValue=item[1];
+     });
+-    agentDraftBaselines.set(form,agentDraftSnapshot(form));
+-    entry.querySelector('.agent-name').textContent=name;
+-    entry.querySelector('.agent-profile').textContent=launchProfile||'Без ключа';
+-    entry.querySelector('.agent-description').textContent=description||'Без описания';
+-    entry.querySelector('summary').setAttribute('aria-label','Редактировать агента '+name);
++    entry.querySelector('.agent-name').textContent=agent.name;
++    entry.querySelector('.agent-profile').textContent=agent.hermes_profile||'Без ключа';
++    entry.querySelector('.agent-description').textContent=agent.description||'Без описания';
++    entry.querySelector('summary').setAttribute('aria-label','Редактировать агента '+agent.name);
+     entry.open=false;
+     entry.querySelector('summary').focus();
+-    showToast('Сохранено','success');
+-  }catch(error){showRequestError(error)}finally{setAgentPending(form,false)}
++  }
++  agentDraftBaselines.set(form,agentDraftSnapshot(form));
++  showToast(attempt.id==null?'Добавлено':'Сохранено','success');
++}
++function unknownAgentWrite(form,attempt){
++  agentUnknownWrites.set(form,attempt);
++  showAgentState(form,'Результат записи неизвестен. Повтор заблокирован до проверки сохранения.');
++}
++function rejectAgentWrite(form,response,data){
++  var kind=response.status===401||response.status===403?'permission-denied':response.status===404?'not-found':null;
++  if(kind)agentTerminalStates.set(form,kind);
++  var message=data&&typeof data.error==='string'?data.error:response.status===401?'Сессия истекла. Войдите снова.':response.status===403?'Недостаточно прав.':response.status===404?'Агент или ресурс больше не существует.':'Изменения не сохранены. Проверьте поля и доступ.';
++  showAgentState(form,message,kind);
++}
++function focusAgentRecovery(form){
++  if(agentTerminalStates.has(form)){
++    var state=form.querySelector('[data-page-state]');
++    state.tabIndex=-1;
++    state.focus();
++  }else if(agentUnknownWrites.has(form))form.querySelector('[data-agent-reconcile]').focus();
++}
++async function writeAgent(form,id){
++  if(agentPendingForms.has(form)||agentUnknownWrites.has(form)||agentTerminalStates.has(form))return;
++  var payload={name:form.elements.namedItem('name').value.trim(),description:form.elements.namedItem('description').value.trim(),launch_profile:form.elements.namedItem('launch_profile').value.trim()||null};
++  if(!payload.name){
++    showAgentState(form,'Имя агента обязательно');
++    form.elements.namedItem('name').focus();
++    return;
++  }
++  if(!form.reportValidity())return;
++  var attempt={id:id,payload:payload};
++  var acknowledged=false;
++  showAgentState(form,'');
++  setAgentPending(form,true);
++  try{
++    var response=await fetch('/api/agents'+(id==null?'':'/'+id),{method:id==null?'POST':'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
++    var data;
++    try{data=await response.json();}catch(_error){data=null;}
++    if(!response.ok||!data||data.ok!==true){
++      if(response.ok||response.status>=500||response.status===408)unknownAgentWrite(form,attempt);
++      else rejectAgentWrite(form,response,data);
++    }else if(!agentMatchesAttempt(data.agent,attempt)||(id==null&&data.agent_id!==data.agent.id)){
++      unknownAgentWrite(form,attempt);
++    }else{
++      acknowledgeAgent(form,data.agent,attempt);
++      acknowledged=true;
++    }
++  }catch(_error){unknownAgentWrite(form,attempt);}
++  finally{setAgentPending(form,false);}
++  focusAgentRecovery(form);
++  if(acknowledged&&id==null)return navigateWorkflow(window.location.href);
++}
++async function reconcileAgent(form){
++  if(agentPendingForms.has(form)||!agentUnknownWrites.has(form)||agentTerminalStates.has(form))return;
++  var attempt=agentUnknownWrites.get(form);
++  var acknowledged=false;
++  setAgentPending(form,true);
++  try{
++    var response=await fetch('/api/agents',{cache:'no-store'});
++    var data;
++    try{data=await response.json();}catch(_error){data=null;}
++    if(response.status===401||response.status===403||response.status===404){rejectAgentWrite(form,response,data);return;}
++    if(!response.ok||!data||data.ok!==true||!Array.isArray(data.agents))throw new Error('Catalogue unavailable');
++    var saved=data.agents.find(function(agent){return agentMatchesAttempt(agent,attempt);});
++    if(saved){acknowledgeAgent(form,saved,attempt);acknowledged=true;}
++    else showAgentState(form,'Сохранение пока не подтверждено. Повторная запись заблокирована.');
++  }catch(_error){showAgentState(form,'Не удалось проверить сохранение. Значения сохранены в форме, повторная запись заблокирована.');}
++  finally{setAgentPending(form,false);focusAgentRecovery(form);}
++  if(acknowledged&&attempt.id==null)return navigateWorkflow(window.location.href);
++}
++function saveAgent(event,form){
++  event.preventDefault();
++  return writeAgent(form,Number(form.closest('.agent-entry').dataset.id));
+ }
+ async function deleteAgent(button){
+   var entry=button.closest('.agent-entry');
+-  if(agentPendingForms.size)return;
++  if(agentPendingForms.size||agentUnknownWrites.has(entry.querySelector('form'))||agentTerminalStates.has(entry.querySelector('form')))return;
+   var name=entry.querySelector('.agent-name').textContent.trim();
+   if(await requestWorkflowDeletion({
+     url:'/api/agents/'+entry.dataset.id,title:'Удалить агента «'+name+'»?',
+@@ -184,35 +276,20 @@ async function deleteAgent(button){
+     showToast('Удалено','success');
+   }
+ }
+-async function addAgent(event){
++function addAgent(event){
+   event.preventDefault();
+-  var form=event.target;
+-  if(agentPendingForms.has(form))return;
+-  var name=document.getElementById('newName').value.trim();
+-  var description=document.getElementById('newDescription').value.trim();
+-  var launchProfile=document.getElementById('newLaunchProfile').value.trim();
+-  if(!name){showToast('Имя агента обязательно','error');return;}
+-  var added=false;
+-  setAgentPending(form,true);
+-  try{
+-    var response=await fetch('/api/agents',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,description:description,launch_profile:launchProfile||null})});
+-    var data=await response.json();
+-    if(response.ok&&data.ok){
+-      form.reset();
+-      agentDraftBaselines.set(form,agentDraftSnapshot(form));
+-      added=true;
+-      showToast('Добавлено','success');
+-    }else showToast(data.error||'Ошибка','error');
+-  }catch(error){showRequestError(error)}finally{setAgentPending(form,false)}
+-  if(added)return navigateWorkflow(window.location.href);
++  return writeAgent(event.target,null);
+ }
+ document.querySelectorAll('.agent-editor').forEach(function(form){
+   agentDraftBaselines.set(form,agentDraftSnapshot(form));
+-  form.addEventListener('input',refreshWorkflowDraftGuard);
++  form.addEventListener('input',function(){
++    if(!agentUnknownWrites.has(form)&&!agentTerminalStates.has(form))showAgentState(form,'');
++    refreshWorkflowDraftGuard();
++  });
+   var entry=form.closest('.agent-entry,.agent-create');
+   entry.querySelector('summary').addEventListener('click',function(event){
+     if(!entry.open)return;
+-    if(agentPendingForms.size){event.preventDefault();return;}
++    if(agentPendingForms.size||agentUnknownWrites.has(form)||agentTerminalStates.has(form)){event.preventDefault();return;}
+     if(agentFormDirty(form)){event.preventDefault();cancelAgent(event.currentTarget);}
+   });
+ });
+diff --git a/tests/test_application_localization.py b/tests/test_application_localization.py
+index ef8e8e4..80539e1 100644
+--- a/tests/test_application_localization.py
++++ b/tests/test_application_localization.py
+@@ -12,14 +12,30 @@ from project_workflow.domain.validation import TaskKeyValidator
+ from project_workflow.infrastructure.llm import LlmConfigurationError
+ from project_workflow.supervisor.evaluate import _blocked
+ from project_workflow.supervisor.formatting import format_result
++from tests.ui_markup import markup_html, markup_source
+ 
+ ROOT = Path(__file__).parents[1]
+ TEMPLATES = ROOT / "project_workflow" / "interfaces" / "ui" / "templates"
+ 
+ 
++@pytest.mark.parametrize(
++    ("source", "contains_internal_label"),
++    [
++        ('<label>Ключ запуска</label><script>const key = agent.hermes_profile;</script>', False),
++        ('{% block extra_script %}const key = agent.hermes_profile;{% endblock %}<label>Ключ запуска</label>', False),
++        ("{{ base.button('Профиль Hermes') }}<label>Ключ запуска</label>", True),
++    ],
++)
++def test_localization_gate_separates_labels_from_script_identifiers(source: str, contains_internal_label: bool) -> None:
++    markup = markup_source(source)
++
++    assert "Ключ запуска" in markup
++    assert ("hermes" in markup.lower()) is contains_internal_label
++
++
+ def test_primary_ui_labels_do_not_expose_internal_english_enums() -> None:
+     sources = "\n".join(
+-        (TEMPLATES / name).read_text(encoding="utf-8")
++        markup_source((TEMPLATES / name).read_text(encoding="utf-8"))
+         for name in (
+             "base.html",
+             "phases.html",
+@@ -63,6 +79,13 @@ def test_primary_ui_labels_do_not_expose_internal_english_enums() -> None:
+     assert "Ключ запуска" in sources
+ 
+ 
++def test_rendered_markup_keeps_literal_template_syntax_as_visible_text() -> None:
++    markup = markup_html("<label>{{ Hermes profile }}</label><script>const key = agent.hermes_profile;</script>")
++
++    assert "{{ Hermes profile }}" in markup
++    assert "hermes_profile" not in markup
++
++
+ def test_working_pages_do_not_render_internal_launch_profile_values() -> None:
+     phase_detail = (TEMPLATES / "phase_detail.html").read_text(encoding="utf-8")
+     task_detail = (TEMPLATES / "task_detail.html").read_text(encoding="utf-8")
+diff --git a/tests/test_ui.py b/tests/test_ui.py
+index 704f841..4fc6a1f 100644
+--- a/tests/test_ui.py
++++ b/tests/test_ui.py
+@@ -2833,7 +2833,9 @@ class TestAgentsPage:
+         response = client.get("/agents")
+ 
+         assert response.status_code == 200
+-        assert response.text.count("catch(error){showRequestError(error)}") == 2
++        assert "catch(_error){unknownAgentWrite(form,attempt);}" in response.text
++        assert "catch(_error){showAgentState(form,'Не удалось проверить сохранение." in response.text
++        assert "if(!response.ok||!data||data.ok!==true||!Array.isArray(data.agents))" in response.text
+         assert "requestWorkflowDeletion({" in response.text
+         assert "catch (_error) { unknown(); }" in response.text
+         assert "attempts.set(url, state)" in response.text
+@@ -2855,8 +2857,24 @@ class TestAgentsPage:
+         assert ".agent-editor input,.agent-editor .btn" not in response.text
+         assert 'class="base-control base-button base-button-secondary"' in response.text
+         assert "registerWorkflowDraftGuard({" in response.text
+-        assert "if(agentPendingForms.has(form))return;" in response.text
+-        assert "if(!response.ok||!data.ok)" in response.text
++        assert (
++            "if(agentPendingForms.has(form)||agentUnknownWrites.has(form)||agentTerminalStates.has(form))return;"
++            in response.text
++        )
++        assert "if(!response.ok||!data||data.ok!==true)" in response.text
++
++    def test_agents_page_exposes_base_state_and_read_only_reconciliation(self):
++        response = client.get("/agents")
++
++        assert response.status_code == 200
++        assert 'class="agent-write-state" hidden' in response.text
++        assert 'class="base-resource-state" data-page-state="error"' in response.text
++        assert 'data-agent-reconcile hidden onclick="reconcileAgent(this.closest(\'form\'))"' in response.text
++        assert "fetch('/api/agents',{cache:'no-store'})" in response.text
++        assert "data.agent_id!==data.agent.id" in response.text
++        assert "agent.id===attempt.id" in response.text
++        assert "!agentKnownIds.has(agent.id)" in response.text
++        assert "response.status===401||response.status===403||response.status===404" in response.text
+ 
+     def test_agents_api_create_and_update_description(self):
+         create = client.post(
+@@ -3011,7 +3029,12 @@ class TestUiNetworkFailures:
+             assert "Сохранение пока не подтверждено. Повторная запись заблокирована." in response.text
+             assert "catch(_error){ showNamespaceWriteError('Не удалось проверить сохранение." in response.text
+             return
+-        handler = "catch(error){showRequestError(error)}" if path == "/agents" else ".catch(showRequestError)"
++        if path == "/agents":
++            assert "catch(_error){unknownAgentWrite(form,attempt);}" in response.text
++            assert "catch(_error){showAgentState(form,'Не удалось проверить сохранение." in response.text
++            assert "requestWorkflowDeletion({" in response.text
++            return
++        handler = ".catch(showRequestError)"
+         assert response.text.count(handler) + response.text.count("requestWorkflowDeletion({") >= minimum_handlers
+         assert "catch (_error) { unknown(); }" in response.text
+         assert "state.kind !== 'ready'" in response.text
+diff --git a/tests/test_ui_api.py b/tests/test_ui_api.py
+index c8a9b90..0055940 100644
+--- a/tests/test_ui_api.py
++++ b/tests/test_ui_api.py
+@@ -15,6 +15,7 @@ pytestmark = [pytest.mark.ui]
+ from project_workflow.infrastructure.db.uow import SAUnitOfWork
+ from tests._db_helpers import phase_by_code, prepare_sqlite_uow
+ from tests._phase_helpers import create_empty_workflow
++from tests.ui_markup import markup_html
+ 
+ UNKNOWN_NAMESPACE_ID = 999999
+ UNKNOWN_WORKFLOW_ID = 999998
+@@ -1009,8 +1010,9 @@ class TestApiAgents:
+         html = client.get("/agents").text
+         assert 'name="launch_profile"' in html
+         assert "form.elements.namedItem('launch_profile')" in html
+-        assert "launch_profile:launchProfile||null" in html
+-        assert "hermes" not in html.casefold()
++        assert "launch_profile:form.elements.namedItem('launch_profile').value.trim()||null" in html
++        assert "(agent.hermes_profile||null)===attempt.payload.launch_profile" in html
++        assert "hermes" not in markup_html(html).casefold()
+ 
+     def test_list_agents(self, client):
+         resp = client.get("/api/agents")
+diff --git a/tests/test_ui_smoke_data.py b/tests/test_ui_smoke_data.py
+index 7d9d897..52a0db0 100644
+--- a/tests/test_ui_smoke_data.py
++++ b/tests/test_ui_smoke_data.py
+@@ -24,6 +24,7 @@ from scripts.prepare_ui_smoke_data import (
+     TASK_SCENARIOS,
+     prepare_smoke_data,
+ )
++from tests.ui_markup import markup_html
+ 
+ 
+ def test_prepare_ui_smoke_data_creates_neutral_parallel_namespace_fixture(tmp_path, monkeypatch) -> None:
+@@ -273,7 +274,7 @@ def test_ui_smoke_pages_render_neutral_screenshot_fixture(tmp_path, monkeypatch)
+         reset_engine()
+         config.get_settings.cache_clear()
+ 
+-    rendered = "\n".join(rendered_pages)
++    rendered = "\n".join(markup_html(page) for page in rendered_pages)
+     assert "hermes" not in rendered.casefold()
+     assert "project-workflow" not in rendered.casefold()
+     assert "relevanter" not in rendered.casefold()
+diff --git a/tests/ui_markup.py b/tests/ui_markup.py
+new file mode 100644
+index 0000000..adeabe6
+--- /dev/null
++++ b/tests/ui_markup.py
+@@ -0,0 +1,53 @@
++"""Extract UI markup, including Jinja macro labels, without JS/CSS identifiers."""
++
++from html.parser import HTMLParser
++
++from jinja2 import Environment, nodes
++
++
++def markup_html(source: str) -> str:
++    class MarkupParser(HTMLParser):
++        def __init__(self) -> None:
++            super().__init__(convert_charrefs=False)
++            self.in_script = False
++            self.parts: list[str] = []
++
++        def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
++            if tag in {"script", "style"}:
++                self.in_script = True
++            elif not self.in_script:
++                self.parts.append(self.get_starttag_text() or "")
++
++        def handle_endtag(self, tag: str) -> None:
++            if tag in {"script", "style"}:
++                self.in_script = False
++            elif not self.in_script:
++                self.parts.append(f"</{tag}>")
++
++        def handle_data(self, data: str) -> None:
++            if not self.in_script:
++                self.parts.append(data)
++
++        def handle_entityref(self, name: str) -> None:
++            self.handle_data(f"&{name};")
++
++        def handle_charref(self, name: str) -> None:
++            self.handle_data(f"&#{name};")
++
++    parser = MarkupParser()
++    parser.feed(source)
++    parser.close()
++    return "".join(parser.parts)
++
++
++def markup_source(source: str) -> str:
++    def fragments(node: nodes.Node) -> list[str]:
++        if isinstance(node, nodes.Block) and node.name in {"extra_script", "extra_style"}:
++            return []
++        if isinstance(node, nodes.TemplateData):
++            return [node.data]
++        if isinstance(node, nodes.Const) and isinstance(node.value, str):
++            return [node.value]
++        return [text for child in node.iter_child_nodes() for text in fragments(child)]
++
++    return markup_html("".join(fragments(Environment().parse(source))))

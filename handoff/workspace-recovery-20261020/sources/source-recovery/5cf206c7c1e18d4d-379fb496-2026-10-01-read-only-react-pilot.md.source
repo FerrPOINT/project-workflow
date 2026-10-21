@@ -1,0 +1,46 @@
+# ADR: Read-only React-пилот
+
+Статус: пилот реализуется; решение о полном переносе не принято. Дата: 2026-10-01.
+
+## Решение
+
+Основной UI остаётся Jinja. Опциональный React/TypeScript/Vite consumer использует `@sdlc/ui`, существующие GET API и cookie-сессию на том же origin, под `/react/`. CRUD, новый login, bearer getter, CORS и второй auth store не добавляются.
+
+## Покрытие API и стоимость
+
+| Группа Jinja | Существующие данные и операции | Read-only перенос | Ограничения полного переноса |
+|---|---|---|---|
+| Задачи | GET /api/tasks | Низкая: список, namespace, ссылки в Jinja | Task detail не имеет отдельного JSON API; полная карточка требует отдельного решения |
+| Фазы | GET /api/phases, /api/phases/{id}; phase mutations | Средняя: список и detail входят в пилот | Reorder, инструкции, conflicts, namespace ownership и draft safety требуют отдельной acceptance matrix |
+| Неймспейсы | GET /api/namespaces и namespace mutations | Средняя: selector входит в пилот | Редактор, темы, workflow assignment и валидация остаются Jinja |
+| Воркфлоу | GET /api/workflows и mutations | Средняя | Редактор структуры и правила домена остаются Jinja |
+| Агенты | GET /api/agents и mutations | Средняя | Assignment/runtime integration и права должны сохраняться |
+| Инструкции | GET /api/phases/{id}/instructions и mutations | Средняя | Порядок, execution_type и удаление требуют поведенческих тестов |
+| Dashboard | Сейчас собирается серверными loaders | Высокая относительно списка | JSON summary не полностью эквивалентен dashboard; пилот его не добавляет |
+| Settings / CLI | GET /api/settings, /api/cli/history | Средняя | CLI/runtime bridge не должен переезжать в browser или дублироваться |
+
+Это сравнительная инженерная оценка по группам экранов, не календарные обещания. Полный перенос включает повторную проверку всех операций, browser states, SSO и контекста, а не только JSX.
+
+## Контекст и авторизация
+
+Серверный bootstrap содержит только identity и выбранный namespace из существующей cookie, без credentials. JSON экранирует script delimiters. Явный URL имеет приоритет над cookie. Смена namespace отражается в URL; task detail открывается в Jinja с namespace_id. При 401 Base API client направляет в действующий login с сохранением pathname и query. Assets защищены тем же SSO middleware.
+
+## Сборка и отключение
+
+Выполнить `cd frontend && pnpm install --frozen-lockfile && pnpm ssr:check && pnpm build` до сборки Python package/image. Static resources включаются в wheel детерминированным force-include. При включённом флаге отсутствие build или bootstrap marker останавливает запуск. По умолчанию флаг выключен; /react и его assets недоступны. Флаг выключается без изменения Jinja URL, API, CLI или схем БД.
+
+## Сравнительная Acceptance Matrix
+
+| Сценарий | Jinja | React | Статус текущего пилота |
+|---|---|---|---|
+| Прямое открытие / reload | Основные URL | /react/tasks, /react/phases, /react/phases/{id} | Server route tests пройдены; no-mock browser QA ещё обязательна |
+| Cookie SSO / login next | Существующий middleware | Тот же middleware и origin | Изолированный server test пройден; live SSO не принят |
+| Namespace из cookie / URL | Серверная композиция | Безопасный bootstrap и URL | Реализовано, browser Back/Forward ещё не принят |
+| Task detail | Полный Jinja экран | Ссылка в Jinja | Нового JSON endpoint нет |
+| CRUD / reorder / draft safety | Действующий функционал | Не предусмотрен | Намеренно вне пилота |
+| 403 / 404 / 5xx / пустые данные | Основной UI | Base ResourceStateView | Полная fixture matrix не исполнена |
+| Геометрия / темы / keyboard | SSR Base assets | Base AppShell / page patterns | Общий no-mock gate ещё не исполнен |
+
+## Рекомендация
+
+Не переключать основной интерфейс и не развивать второй набор domain services. Сначала завершить локальную browser acceptance пилота и Jinja, измерить реальные пробелы API и нагрузку двойной поддержки. Затем отдельно решать, окупает ли единый React renderer миграцию всех операций. Пока два UI означают две маршрутные/state матрицы и обязательную проверку parity при изменениях API или SSO.

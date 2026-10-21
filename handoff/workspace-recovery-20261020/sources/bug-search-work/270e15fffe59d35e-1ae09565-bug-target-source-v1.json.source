@@ -1,0 +1,20 @@
+{
+  "repository_ref": "repo:app",
+  "commit_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "target_ref": "qa:app",
+  "deployment_ref": "deployment:original",
+  "source": {
+    "contract_version": 1,
+    "schema": "forge/source-snapshot/v1",
+    "producer_version": "fixture-v1",
+    "project": {
+      "tracker_instance_id": "11111111-1111-4111-8111-111111111111",
+      "project_id": "22222222-2222-4222-8222-222222222222"
+    },
+    "configuration_id": "33333333-3333-4333-8333-333333333333",
+    "repository_id": "44444444-4444-4444-8444-444444444444",
+    "branch_ref": "refs/heads/main",
+    "observed_head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "clone_url_sha256": "d48b555539a54a65d97774dba06be0ae1e0f0fa16e29e7bb972706d5960a85f9"
+  }
+}

@@ -1,0 +1,515 @@
+"""Existing Developer cursor for real Tracker BugWork; no fabricated Business resources."""
+
+from __future__ import annotations
+
+import json
+import time
+from dataclasses import asdict
+from typing import Any
+
+from sqlalchemy import select, text
+
+from project_workflow.application.task import TaskService
+from project_workflow.build_provenance import runtime_compatibility_descriptor
+from project_workflow.domain.bug_work import (
+    BugWorkBind,
+    BugWorkPrepare,
+    BugWorkStep,
+    BugWorkStepFence,
+    BugWorkStop,
+    checked_grant,
+)
+from project_workflow.domain.bug_work_origin import BugWorkOriginReadback
+from project_workflow.domain.exceptions import ConflictError, NotFoundError
+from project_workflow.domain.runtime_assignment import canonical_json, payload_sha256
+from project_workflow.infrastructure import bug_work_authority as authority
+from project_workflow.infrastructure.db import models as m
+from project_workflow.infrastructure.db import schema
+from project_workflow.infrastructure.db.managed_catalog import validate_managed_catalog_state
+from project_workflow.infrastructure.db.uow import SAUnitOfWork
+from project_workflow.infrastructure.namespace_auth import NamespacePrincipal
+
+SOURCE_UNAVAILABLE = "bug_work_source_context_not_available"
+SOURCE_IDENTITY_UNAVAILABLE = "bug_work_original_source_identity_not_available"
+RUNTIME_UNAVAILABLE = "bug_work_runtime_context_not_available"
+
+
+def execution_blocker(context: dict[str, Any]) -> str:
+    if "source_origin" not in context:
+        return SOURCE_UNAVAILABLE
+    if any(target.get("source") is None for target in context["source_origin"]["source_context"]["targets"]):
+        return SOURCE_IDENTITY_UNAVAILABLE
+    return RUNTIME_UNAVAILABLE
+
+
+class BugWorkService:
+    def __init__(self, uow: SAUnitOfWork):
+        self.uow = uow
+        self.session = uow.session
+
+    def _advisory(self, key: str) -> None:
+        if self.session.get_bind().dialect.name == "postgresql":
+            self.session.execute(
+                text("SELECT pg_advisory_xact_lock(hashtextextended(:key,0))"), {"key": "workflow:bug-work:" + key}
+            )
+
+    def catalog(self, profession_id: int) -> dict[str, Any]:
+        self.uow.lock_catalog_state(shared=True)
+        if not validate_managed_catalog_state(self.uow, role_key="developer"):
+            raise ConflictError("Каталог Developer недоступен")
+        profession = self.uow.projects.get_by_id(profession_id)
+        if profession is None or profession.workflow_id is None or profession.cli_command != "workflow-developer":
+            raise ConflictError("Требуется существующая профессия Developer")
+        self.uow.workflows.lock(profession.workflow_id)
+        self.uow.projects.lock(profession_id)
+        self.uow.refresh()
+        profession = self.uow.projects.get_by_id(profession_id)
+        if profession is None or profession.workflow_id is None or not profession.launch_profile:
+            raise ConflictError("Профессия Developer изменена")
+        workflow = self.uow.workflows.get_by_id(profession.workflow_id)
+        mode = self.uow.workflows.get_mode_by_key(profession.workflow_id, "initial")
+        if (
+            workflow is None
+            or workflow.key != "hermes-sdlc:developer"
+            or mode is None
+            or mode.id is None
+            or mode.role_key != "developer"
+            or "delivery" not in (mode.execution_scopes or ())
+        ):
+            raise ConflictError("Режим Developer initial не подтверждён")
+        phases = schema.load_phases_from_db(
+            self.uow,
+            workflow.id,
+            mode.id,
+            profession_settings={
+                "code": profession.code,
+                "launch_profile": profession.launch_profile,
+            },
+        )
+        content = {
+            "contract_version": 1,
+            "purpose": "bug_fix",
+            "profession_id": profession_id,
+            "profession_code": profession.code,
+            "launch_profile": profession.launch_profile,
+            "workflow_id": workflow.id,
+            "workflow_key": workflow.key,
+            "mode_id": mode.id,
+            "mode_key": "initial",
+            "catalog_version": mode.catalog_version,
+            "phases": [asdict(phase) for phase in phases],
+        }
+        if len(phases) != 3 or len(canonical_json(content).encode("utf-8")) > 131_072:
+            raise ConflictError("Неподдерживаемый каталог Developer")
+        return {**content, "catalog_sha256": payload_sha256(content)}
+
+    def _row(self, assignment_id: str, tracker_uuid: str, *, locked: bool = False) -> m.TaskRuntimeAssignment:
+        query = (
+            select(m.TaskRuntimeAssignment)
+            .where(
+                m.TaskRuntimeAssignment.bug_work_assignment_id == assignment_id,
+                m.TaskRuntimeAssignment.bug_work_tracker_uuid == tracker_uuid,
+            )
+            .execution_options(populate_existing=True)
+        )
+        if locked:
+            query = query.with_for_update()
+        row = self.session.scalar(query)
+        if row is None:
+            raise NotFoundError("Назначение Bug не найдено")
+        self._retained(row)
+        return row
+
+    def _retained(self, row: m.TaskRuntimeAssignment) -> dict[str, Any]:
+        payload = json.loads(row.payload)
+        if row.payload_sha256 != payload_sha256(payload) or not isinstance(payload.get("bug_work"), dict):
+            raise ConflictError("Сохранённое назначение Bug изменено")
+        context: dict[str, Any] = payload["bug_work"]
+        request = BugWorkPrepare.model_validate_json(canonical_json(context["request"]))
+        grant = checked_grant(context["grant"])
+        if grant.assignment.origin is not None:
+            original = context.get("source_origin")
+            if not isinstance(original, dict):
+                raise ConflictError("Отсутствует исходный owner source context Bug")
+            try:
+                authority.checked_origin(request, context["grant"], original)
+            except (ValueError, TypeError):
+                raise ConflictError("Сохранённый owner source context Bug изменён") from None
+        elif "source_origin" in context:
+            raise ConflictError("Tracker103 не предоставлял owner source context Bug")
+        if (
+            row.bug_work_assignment_id != request.assignment_id
+            or row.bug_work_tracker_uuid != request.tracker_instance_uuid
+            or request.assignment_sha256 != grant.assignment_sha256
+            or row.project_id != request.workflow_project_id
+            or row.operation_key != request.operation_key
+            or row.assignment_ref != f"tracker:bug-work:{request.tracker_instance_uuid}:{request.assignment_id}"
+            or context["catalog"]["catalog_sha256"] != request.expected_catalog_sha256
+        ):
+            raise ConflictError("Неверный сохранённый scope Bug")
+        return context
+
+    def _principal(self, row: m.TaskRuntimeAssignment, principal: NamespacePrincipal) -> None:
+        identity = self._retained(row)
+        if identity["issuer"] != principal.issuer or identity["machine_subject"] != principal.subject:
+            raise ConflictError("Назначение Bug принадлежит другому producer")
+
+    def _fresh(self, row: m.TaskRuntimeAssignment) -> dict[str, Any]:
+        context = self._retained(row)
+        # Read-only transaction is released before fixed remote authorization.
+        self.uow.commit()
+        observed = authority.read_grant(BugWorkPrepare.model_validate_json(canonical_json(context["request"])))
+        if observed["assignment"] != context["grant"]["assignment"]:
+            raise ConflictError("Исходное назначение Bug изменено")
+        return observed
+
+    def prepare(self, request: BugWorkPrepare, principal: NamespacePrincipal) -> dict[str, Any]:
+        if request.runtime_compatibility != runtime_compatibility_descriptor():
+            raise ConflictError("Неверная версия runtime")
+        # This initial read never holds SQL locks across the owner call.
+        grant_raw = authority.read_grant(request)
+        grant = checked_grant(grant_raw)
+        if grant.assignment.machine_subject != principal.subject:
+            raise ConflictError("Другой producer назначения Bug")
+        source_origin = authority.read_origin(request, grant_raw) if grant.assignment.origin is not None else None
+        if source_origin is not None:
+            authority.checked_origin(request, grant_raw, source_origin)
+        observed_at = time.monotonic()
+        self._advisory("operation:" + request.operation_key)
+        replay = self.session.scalar(
+            select(m.TaskRuntimeAssignment)
+            .where(m.TaskRuntimeAssignment.operation_key == request.operation_key)
+            .with_for_update()
+        )
+        if replay is not None:
+            self._principal(replay, principal)
+            if self._retained(replay)["request"] != request.model_dump(mode="json"):
+                raise ConflictError("Исходный ключ использован другим запросом")
+            return self.projection(replay)
+        if grant.binding is not None:
+            raise ConflictError("Tracker уже хранит actual binding без исходного локального cursor")
+        self._advisory("assignment:" + request.tracker_instance_uuid + ":" + request.assignment_id)
+        duplicate = self.session.scalar(
+            select(m.TaskRuntimeAssignment.id).where(
+                m.TaskRuntimeAssignment.bug_work_tracker_uuid == request.tracker_instance_uuid,
+                m.TaskRuntimeAssignment.bug_work_assignment_id == request.assignment_id,
+            )
+        )
+        if duplicate is not None:
+            raise ConflictError("Назначение Bug уже принято другим ключом")
+        catalog = self.catalog(request.workflow_project_id)
+        if catalog["catalog_sha256"] != request.expected_catalog_sha256:
+            raise ConflictError("Каталог Developer изменён")
+        # v3 Base execution needs its genuine Base admission; it is not implied
+        # by BugWork membership. No synthetic Base receipt is manufactured here.
+        if catalog["catalog_version"] != 2:
+            raise ConflictError("Для Base Developer требуется отдельная фактическая admission")
+        context = {
+            "request": request.model_dump(mode="json"),
+            "grant": grant_raw,
+            "catalog": catalog,
+            "issuer": principal.issuer,
+            "machine_subject": principal.subject,
+        }
+        if source_origin is not None:
+            context["source_origin"] = source_origin
+        empty_refs = {
+            key: None
+            for key in (
+                "business_task_ref",
+                "root_task_ref",
+                "work_item_ref",
+                "work_item_revision",
+                "queue_item_ref",
+                "task_workspace_ref",
+                "workspace_revision",
+                "tech_execution_workspace_ref",
+                "tech_execution_attempt_ref",
+                "decomposition_revision_ref",
+                "workspace_generation",
+                "lease_generation",
+            )
+        }
+        assignment_payload = {
+            **empty_refs,
+            "project_id": request.workflow_project_id,
+            "workflow_key": catalog["workflow_key"],
+            "role_key": "developer",
+            "execution_scope": "delivery",
+            "stage_key": "bug_work",
+            "stage_revision": str(grant.assignment.fence),
+            "attempt_number": 1,
+            "assignment_ref": f"tracker:bug-work:{request.tracker_instance_uuid}:{request.assignment_id}",
+            "exact_input_refs": [],
+            "runtime_compatibility": request.runtime_compatibility,
+            "bug_work": context,
+        }
+        if len(canonical_json(assignment_payload).encode("utf-8")) > 262_144:
+            raise ConflictError("Назначение Bug превышает допустимый размер")
+        task_id = self.uow.tasks.create(
+            {
+                "project_id": request.workflow_project_id,
+                "workflow_id": catalog["workflow_id"],
+                "mode_id": catalog["mode_id"],
+                "mode_key": "initial",
+                "cycle_number": 0,
+                "assignment_revision": 1,
+                "assignment_operation_key": request.operation_key,
+                "task_key": f"bug-work:{request.assignment_id}",
+                "title": grant.assignment.verification_basis.title,
+                "current_phase_id": catalog["phases"][0]["id"],
+                "status": "active",
+            }
+        )
+        record = TaskService._assignment_record(
+            assignment_payload,
+            operation_key=request.operation_key,
+            task_id=task_id,
+            project_id=request.workflow_project_id,
+            workflow_id=catalog["workflow_id"],
+            mode_id=catalog["mode_id"],
+            cycle_number=0,
+            assignment_revision=1,
+        )
+        row = m.TaskRuntimeAssignment(
+            **{key: value for key, value in record.items() if key not in {"payload", "exact_input_refs"}},
+            payload=canonical_json(record["payload"]),
+            exact_input_refs="[]",
+            bug_work_assignment_id=request.assignment_id,
+            bug_work_tracker_uuid=request.tracker_instance_uuid,
+        )
+        self.session.add(row)
+        if time.monotonic() - observed_at > 5:
+            raise ConflictError("Свежая authority назначения Bug устарела")
+        self.uow.commit()
+        return self.projection(row)
+
+    def projection(self, row: m.TaskRuntimeAssignment) -> dict[str, Any]:
+        context = self._retained(row)
+        grant = checked_grant(context["grant"])
+        task = self.uow.tasks.get_by_id(row.task_id)
+        if task is None:
+            raise ConflictError("Исходный cursor Bug отсутствует")
+        from project_workflow.application.bug_work_completion import completed_execution
+
+        return {
+            "contract_version": 1,
+            "purpose": "bug_fix",
+            "assignment_id": row.bug_work_assignment_id,
+            "tracker_instance_uuid": row.bug_work_tracker_uuid,
+            "project_id": grant.assignment.project_id,
+            "bug_id": grant.assignment.bug_id,
+            "owner_subject": grant.assignment.owner_subject,
+            "assignment_sha256": grant.assignment_sha256,
+            "fence": grant.assignment.fence,
+            "workflow_project_id": row.project_id,
+            "workflow_task_id": row.task_id,
+            "workflow_id": row.workflow_id,
+            "mode_id": row.mode_id,
+            "mode_key": "initial",
+            "assignment_revision": row.assignment_revision,
+            "operation_key": row.operation_key,
+            "catalog_sha256": context["catalog"]["catalog_sha256"],
+            "state": "stopped" if row.bug_work_stop_receipt else "bound" if row.bug_work_binding_json else "prepared",
+            "binding": json.loads(row.bug_work_binding_json) if row.bug_work_binding_json else None,
+            "bind_operation_key": row.bind_operation_key,
+            "bind_request_sha256": row.bind_request_sha256,
+            "stop_receipt": json.loads(row.bug_work_stop_receipt) if row.bug_work_stop_receipt else None,
+            "current_phase_code": task.to_dict().get("current_phase_code"),
+            "can_execute": False,
+            "blocked_reasons": [execution_blocker(context)],
+            "bug_resolved": False,
+            "completed_execution": completed_execution(self, row),
+        }
+
+    def read(self, assignment_id: str, tracker_uuid: str, principal: NamespacePrincipal) -> dict[str, Any]:
+        row = self._row(assignment_id, tracker_uuid)
+        self._principal(row, principal)
+        return self.projection(row)
+
+    def bind(
+        self, assignment_id: str, tracker_uuid: str, command: BugWorkBind, principal: NamespacePrincipal
+    ) -> dict[str, Any]:
+        seed = self._row(assignment_id, tracker_uuid)
+        self._principal(seed, principal)
+        if seed.bind_operation_key is not None:
+            # Exact positive custody readback needs the original registered
+            # machine, never renewed owner permission or a new binding effect.
+            self._advisory("assignment:" + tracker_uuid + ":" + assignment_id)
+            retained = self._row(assignment_id, tracker_uuid, locked=True)
+            self._principal(retained, principal)
+            body = command.model_dump(mode="json")
+            if (
+                retained.bind_operation_key != command.operation_key
+                or retained.bind_request_sha256 != payload_sha256(body)
+                or retained.bug_work_binding_json is None
+                or json.loads(retained.bug_work_binding_json) != body
+            ):
+                raise ConflictError("Фактический runtime binding неизменяем")
+            context = self._retained(retained)
+            if command.runtime_attestation is not None:
+                if "source_origin" not in context:
+                    raise ConflictError(SOURCE_UNAVAILABLE)
+                command.runtime_attestation.require_original(
+                    checked_grant(context["grant"]),
+                    BugWorkOriginReadback.model_validate_json(canonical_json(context["source_origin"])),
+                    context["catalog"]["catalog_sha256"], command,
+                )
+            return self.projection(retained)
+        observed = self._fresh(seed)
+        observed_at = time.monotonic()
+        self._advisory("assignment:" + tracker_uuid + ":" + assignment_id)
+        row = self._row(assignment_id, tracker_uuid, locked=True)
+        context = self._retained(row)
+        grant = checked_grant(observed)
+        body = command.model_dump(mode="json")
+        request_hash = payload_sha256(body)
+        if row.bind_operation_key is not None:
+            if row.bind_operation_key != command.operation_key or row.bind_request_sha256 != request_hash:
+                raise ConflictError("Фактический runtime binding неизменяем")
+            return self.projection(row)
+        if (
+            row.bug_work_stop_receipt is not None
+            or command.expected_assignment_revision != row.assignment_revision
+            or command.expected_fence != grant.assignment.fence
+        ):
+            raise ConflictError("Устаревший fence назначения Bug")
+        current_catalog = self.catalog(row.project_id)
+        if current_catalog != context["catalog"]:
+            raise ConflictError("Исходный каталог Developer изменён")
+        if command.runtime_attestation is not None:
+            original = context.get("source_origin")
+            if not isinstance(original, dict):
+                raise ConflictError(SOURCE_UNAVAILABLE)
+            command.runtime_attestation.require_original(
+                grant, BugWorkOriginReadback.model_validate_json(canonical_json(original)),
+                context["catalog"]["catalog_sha256"], command,
+            )
+        # A Tracker binding may have been retained after a lost Fleet response.
+        # In that case it must be this exact actual tuple, never another run.
+        expected_tracker = {
+            "runtime_context_id": command.runtime_context_id,
+            "runtime_generation": command.runtime_generation,
+            "session_id": command.session_id,
+            "session_run_id": command.session_run_id,
+            "hermes_run_ref": command.hermes_run_ref,
+            "workflow_task_id": row.task_id,
+            "workflow_assignment_revision": row.assignment_revision,
+            "workflow_operation_key": row.operation_key,
+            "workflow_binding_ref": command.binding_ref,
+        }
+        if observed["binding"] is not None and observed["binding"] != expected_tracker:
+            raise ConflictError("Tracker уже хранит другую фактическую пару")
+        row.binding_ref = command.binding_ref
+        row.hermes_run_ref = command.hermes_run_ref
+        row.concrete_agent_ref = grant.assignment.worker_runtime.agent_id
+        row.bind_operation_key = command.operation_key
+        row.bind_request_sha256 = request_hash
+        row.bug_work_binding_json = canonical_json(body)
+        if time.monotonic() - observed_at > 5:
+            raise ConflictError("Свежая authority назначения Bug устарела")
+        self.uow.commit()
+        return self.projection(row)
+
+    def claims(self, row: m.TaskRuntimeAssignment) -> dict[str, Any]:
+        context = self._retained(row)
+        return {
+            "purpose": "bug_fix",
+            "issuer": context["issuer"],
+            "machine_subject": context["machine_subject"],
+            "tracker_instance_uuid": row.bug_work_tracker_uuid,
+            "assignment_id": row.bug_work_assignment_id,
+            "assignment_sha256": context["request"]["assignment_sha256"],
+            "workflow_task_id": row.task_id,
+            "assignment_revision": row.assignment_revision,
+            "fence": checked_grant(context["grant"]).assignment.fence,
+            "binding_sha256": payload_sha256(json.loads(row.bug_work_binding_json))
+            if row.bug_work_binding_json
+            else None,
+        }
+
+    def stop(
+        self, assignment_id: str, tracker_uuid: str, command: BugWorkStop, principal: NamespacePrincipal
+    ) -> dict[str, Any]:
+        self._advisory("assignment:" + tracker_uuid + ":" + assignment_id)
+        row = self._row(assignment_id, tracker_uuid, locked=True)
+        self._principal(row, principal)
+        context = self._retained(row)
+        body = command.model_dump(mode="json")
+        if row.bug_work_stop_receipt is not None:
+            receipt = json.loads(row.bug_work_stop_receipt)
+            if row.bug_work_stop_key != command.operation_key or receipt["request_sha256"] != payload_sha256(body):
+                raise ConflictError("Исходный stop key относится к другому запросу")
+            return receipt
+        if (
+            command.expected_assignment_revision != row.assignment_revision
+            or command.expected_fence != checked_grant(context["grant"]).assignment.fence
+        ):
+            raise ConflictError("Устаревший stop fence Bug")
+        receipt = {
+            "contract_version": 1,
+            "assignment_id": assignment_id,
+            "tracker_instance_uuid": tracker_uuid,
+            "request_sha256": payload_sha256(body),
+            "state": "stopped",
+            "runtime_terminal_confirmed": False,
+            "bug_resolved": False,
+        }
+        row.bug_work_stop_key = command.operation_key
+        row.bug_work_stop_receipt = canonical_json(receipt)
+        # This revokes Workflow progress only. Native stop and Tracker capacity
+        # release remain separately attested by their actual owners.
+        self.uow.commit()
+        return receipt
+
+    def step(
+        self, assignment_id: str, tracker_uuid: str, command: BugWorkStep, authorization: str | None
+    ) -> dict[str, Any]:
+        row = self._row(assignment_id, tracker_uuid)
+        authority.require_scope(self.claims(row), authorization)
+        self._fresh(row)
+        if row.bug_work_stop_receipt is not None or row.bug_work_binding_json is None:
+            raise ConflictError("Нет действующего фактического BugWork binding")
+        if (
+            command.expected_assignment_revision != row.assignment_revision
+            or command.expected_fence != checked_grant(self._retained(row)["grant"]).assignment.fence
+        ):
+            raise ConflictError("Устаревший step fence Bug")
+        from project_workflow.application.bug_work_runtime import execute
+
+        return execute(self,row,command)
+
+    def history(self, assignment_id: str, tracker_uuid: str, authorization: str | None) -> dict[str, Any]:
+        row = self._row(assignment_id, tracker_uuid)
+        authority.require_scope(self.claims(row), authorization)
+        # Protective own history is local retained evidence, available after revoke.
+        # There is no remote call and no generic task-key fallback.
+        rows = self.uow.step_history.list(task_id=row.task_id, limit=50)
+        return {"contract_version": 1, "assignment_id": assignment_id, "records": [item.to_dict() for item in rows]}
+
+
+def assert_bug_work_supervisor(uow: SAUnitOfWork, task: dict[str, Any], fence: Any) -> None:
+    row = uow.session.scalar(
+        select(m.TaskRuntimeAssignment).where(
+            m.TaskRuntimeAssignment.task_id == task["id"], m.TaskRuntimeAssignment.bug_work_assignment_id.is_not(None)
+        )
+    )
+    if row is None:
+        return
+    if not isinstance(fence, BugWorkStepFence):
+        raise ConflictError("BugWork требует собственный scoped fence; ordinary entry запрещён")
+    context = BugWorkService(uow)._retained(row)
+    if (
+        fence.bug_work_assignment_id != row.bug_work_assignment_id
+        or fence.bug_work_assignment_sha256 != context["request"]["assignment_sha256"]
+        or fence.bug_work_fence != checked_grant(context["grant"]).assignment.fence
+        or row.bug_work_binding_json is None
+        or row.bug_work_stop_receipt is not None
+        or fence.bug_work_binding_sha256 != payload_sha256(json.loads(row.bug_work_binding_json))
+    ):
+        raise ConflictError("BugWork fence не совпадает с исходным binding")
+    from project_workflow.application.bug_work_runtime import BugWorkCustody
+
+    if not isinstance(fence.custody,BugWorkCustody):
+        raise ConflictError(execution_blocker(context))
+    fence.custody.require(row)

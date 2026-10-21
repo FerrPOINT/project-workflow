@@ -1,0 +1,1114 @@
+diff --cc AGENTS.md
+index 60dbaf9,60dbaf9..0b62d3a
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@@ -83,7 -83,7 +83,7 @@@ Supervisor Engine перед commit в�
+  
+  | Возможность | Решение | Причина |
+  |---|---|---|
+--| CI/CD pipeline (GitHub) | **Использовать** | Quality, coverage, PostgreSQL integration и Compose smoke воспроизводят обязательный локальный gate. |
+++| CI/CD pipeline (GitHub) | **Опциональное зеркало** | Для программы UI/UX приёмка и интеграция локальные по `docs/quality-gate.md`; hosted CI не является условием выпуска. |
+  | Security middleware (CORS, CSP, HTTPS redirect, rate limits) | **Не добавлять** | UI доступен только на loopback либо в защищённом private/VPN-контуре. |
+  | Локальные credentials в `docker-compose.yml` | **Допустимо только локально** | Compose публикуется только на loopback; внешний runtime обязан передавать собственный `DATABASE_URL`. |
+  | Observability / metrics / structured JSON logs | **Не добавлять** | Request logging и `/health` достаточны для внутренней утилиты. |
+diff --cc Dockerfile
+index d08e6f3,b06ca5a..1c4c2c5
+--- a/Dockerfile
++++ b/Dockerfile
+@@@ -39,10 -16,7 +39,10 @@@ RUN apt-get update && apt-get install -
+  COPY pyproject.toml constraints.txt README.md LICENSE alembic.ini ./
+  COPY scripts/ ./scripts/
+  COPY project_workflow/ ./project_workflow/
+ +COPY frontend/ ./frontend/
+ +COPY Dockerfile ./Dockerfile
+ +COPY docs/ui-routes.json ./docs/ui-routes.json
+- COPY runtime-build-manifest.json ./runtime-build-manifest.json
++ COPY runtime-*.json ./
+  
+  RUN if [ -n "$SOURCE_REVISION" ] || [ -n "$SOURCE_ARCHIVE_SHA256" ] || [ -n "$RUNTIME_BUNDLE_SHA256" ]; then \
+          python -m scripts.build_runtime_image verify-manifest \
+@@@ -87,8 -58,8 +90,9 @@@ COPY --from=builder /opt/venv /opt/ven
+  COPY --from=builder /app/alembic.ini /app/alembic.ini
+  COPY --from=builder /app/scripts /app/scripts
+  COPY --from=builder /app/project_workflow/infrastructure/db/migrations /app/project_workflow/infrastructure/db/migrations
+ +COPY --from=frontend /workspace/ui-build.json /app/ui-build.json
+  COPY --from=builder /app/runtime-build-manifest.json /app/runtime-build-manifest.json
++ COPY --from=builder /app/runtime-compatibility.json /app/runtime-compatibility.json
+  
+  ENV PATH="/opt/venv/bin:$PATH"
+  ENV PYTHONUNBUFFERED=1
+diff --cc docs/adr/2026-10-01-read-only-react-pilot.md
+index 0eae389,0000000..0c0c774
+mode 100644,000000..100644
+--- a/docs/adr/2026-10-01-read-only-react-pilot.md
++++ b/docs/adr/2026-10-01-read-only-react-pilot.md
+@@@ -1,80 -1,0 +1,87 @@@
+ +# ADR: Read-only React-пилот
+ +
+ +Статус: read-only пилот реализован. Предыдущая Docker-сборка и packaged assets
+ +проверены для версии из build evidence; новая объединённая immutable сборка
+ +требует отдельного image evidence. Полная workspace/browser/SSO acceptance
+ +не завершена.
+ +Решение о полном переносе не принято. Дата: 2026-10-01.
+ +
+ +## Решение
+ +
+ +Основной UI остаётся Jinja. Опциональный React/TypeScript/Vite consumer использует `@sdlc/ui`, существующие GET API и cookie-сессию на том же origin, под `/react/`. CRUD, новый login, bearer getter, CORS и второй auth store не добавляются.
+ +
+ +## Покрытие API и стоимость
+ +
+ +| Группа Jinja | Существующие данные и операции | Read-only перенос | Ограничения полного переноса |
+ +|---|---|---|---|
+ +| Задачи | GET /api/tasks | Низкая: список, namespace, ссылки в Jinja | Task detail не имеет отдельного JSON API; полная карточка требует отдельного решения |
+ +| Фазы | GET /api/phases, /api/phases/{id}; phase mutations | Средняя: список и detail входят в пилот | Reorder, инструкции, conflicts, namespace ownership и draft safety требуют отдельной acceptance matrix |
+ +| Неймспейсы | GET /api/namespaces и namespace mutations | Средняя: selector входит в пилот | Редактор, темы, workflow assignment и валидация остаются Jinja |
+ +| Воркфлоу | GET /api/workflows и mutations | Средняя | Редактор структуры и правила домена остаются Jinja |
+ +| Агенты | GET /api/agents и mutations | Средняя | Assignment/runtime integration и права должны сохраняться |
+ +| Инструкции | GET /api/phases/{id}/instructions и mutations | Средняя | Порядок, execution_type и удаление требуют поведенческих тестов |
+ +| Dashboard | Сейчас собирается серверными loaders | Высокая относительно списка | JSON summary не полностью эквивалентен dashboard; пилот его не добавляет |
+ +| Settings / CLI | GET /api/settings, /api/cli/history | Средняя | CLI/runtime bridge не должен переезжать в browser или дублироваться |
+ +
+ +Это сравнительная инженерная оценка по группам экранов, не календарные обещания. Полный перенос включает повторную проверку всех операций, browser states, SSO и контекста, а не только JSX.
+ +
+ +## Контекст и авторизация
+ +
+ +Серверный bootstrap содержит только identity и выбранный namespace из существующей cookie, без credentials. JSON экранирует script delimiters. Явный URL имеет приоритет над cookie. Смена namespace отражается в URL; task detail открывается в Jinja с namespace_id. При 401 Base API client направляет в действующий login с сохранением pathname и query. Assets защищены тем же SSO middleware.
+ +
+ +## Сборка и отключение
+ +
+ +Dockerfile собирает React из tracked sources в отдельном Node stage с pinned image
+ +и pnpm, frozen lockfiles Base и Workflow и обязательным `ssr:check`. Named context
+ +`sdlc_ui` в локальном Compose указывает на выбранный `services-base/frontend`.
+ +Выпускной `scripts/build_runtime_image.py build` вместо рабочей директории
+ +использует два immutable Git-архива: точный commit Workflow и
+ +Base commit с path filter `frontend`, сохраняющим commit timestamp архива.
+ +Base задаётся `--base-root`/`--base-revision`
+ +или `SDLC_SERVICES_BASE_DIR`; Workflow задаётся `--revision`.
+++После интеграции versioned runtime catalog builder также требует `--skills-root`.
+++Из этого Git checkout читается только manifest blob по точному revision/path
+++канонического catalog pin, без fetch и dirty inputs. Descriptor
+++`runtime-compatibility.json` вычисляется архивированным Workflow exporter и
+++проверяется после установки package. Этот шаг дополняет immutable Base context,
+++а не заменяет его. Для выпуска передавать согласованный Base SHA явно;
+++значение `HEAD` по умолчанию не является доказательством согласованности версий.
+ +Локальный `static/react` исключён из Docker context: stale dist
+ +не может попасть в image. Результат копируется в Python wheel детерминированным
+ +force-include. Для сборки Python package вне Docker по-прежнему выполнить
+ +`cd frontend && pnpm install --frozen-lockfile && pnpm ssr:check && pnpm build`.
+ +
+ +`/app/ui-build.json` хранит source SHA, Base/product fingerprints и SHA-256 каждого
+ +React asset; OCI labels содержат product/Base revisions и digest Base archive.
+ +`/app/runtime-build-manifest.json` отдельно фиксирует Workflow source revision,
+ +source archive digest и runtime bundle digest. Последний включает frontend
+ +sources/lockfile, Dockerfile и route manifest. Manifest проверяется до установки
+ +Python package и до добавления сгенерированных React assets.
+ +Выпускной builder передаёт точные SHA; dirty и untracked inputs не используются.
+ +Значение `unknown` допустимо для локального dev build, но не для выпуска.
+ +Предыдущие source/image версии и выполненные проверки:
+ +[build evidence](../ui-evidence/2026-10-01/workflow-image-build.json). Генерируемые
+ +SSR assets имеют `text eol=lf`: Git archive на Windows не меняет fingerprint bytes.
+ +При включённом флаге отсутствие build или bootstrap marker останавливает запуск.
+ +По умолчанию флаг выключен; /react и его assets недоступны. Флаг выключается без
+ +изменения Jinja URL, API, CLI или схем БД.
+ +
+ +## Сравнительная Acceptance Matrix
+ +
+ +| Сценарий | Jinja | React | Статус текущего пилота |
+ +|---|---|---|---|
+ +| Прямое открытие / reload | Основные URL | /react/tasks, /react/phases, /react/phases/{id} | Server route tests и direct-open на живом изолированном процессе пройдены; image/SSO reload matrix ещё обязательна |
+ +| Cookie SSO / login next | Существующий middleware | Тот же middleware и origin | Изолированный server test пройден; live SSO не принят |
+ +| Namespace из cookie / URL | Серверная композиция | Безопасный bootstrap и URL | Component tests проверяют cookie restore без unscoped GET; no-mock select, Back, Forward и reload сохраняют namespace на изолированном процессе |
+ +| Task detail | Полный Jinja экран | Ссылка в Jinja | Нового JSON endpoint нет |
+ +| CRUD / reorder / draft safety | Действующий функционал | Не предусмотрен | Намеренно вне пилота |
+ +| 403 / 404 / 5xx / пустые данные | Основной UI | Base ResourceStateView | Полная fixture matrix не исполнена |
+ +| Геометрия / темы / keyboard | SSR Base assets | Base AppShell / page patterns | 420 no-mock geometry observations: 14 routes, 3 themes, 10 widths; общий image/SSO/state gate ещё не исполнен |
+ +
+ +## Рекомендация
+ +
+ +Текущие результаты и незавершённые release checks: [UI evidence](../ui-acceptance.json).
+ +Escape/focus return и focus trap подтверждены для Jinja и React drawer на 375 px.
+ +Проверка каждого product dialog и live SSO этим проходом не закрыта.
+ +
+ +Не переключать основной интерфейс и не развивать второй набор domain services. Сначала завершить локальную browser acceptance пилота и Jinja, измерить реальные пробелы API и нагрузку двойной поддержки. Затем отдельно решать, окупает ли единый React renderer миграцию всех операций. Пока два UI означают две маршрутные/state матрицы и обязательную проверку parity при изменениях API или SSO.
+diff --cc frontend/package.json
+index 3b21329,0000000..025dec4
+mode 100644,000000..100644
+--- a/frontend/package.json
++++ b/frontend/package.json
+@@@ -1,47 -1,0 +1,48 @@@
+ +{
+ +  "name": "project-workflow-react-pilot",
+ +  "version": "0.1.0",
+ +  "private": true,
+ +  "type": "module",
+++  "packageManager": "pnpm@10.28.1",
+ +  "scripts": {
+ +    "dev": "vite --host 127.0.0.1 --port 17753",
+ +    "typecheck": "tsc --noEmit",
+ +    "build": "tsc --noEmit && vite build",
+ +    "test": "vitest run",
+ +    "lint": "eslint src --max-warnings=0",
+ +    "ssr:sync": "node ../../services-base/frontend/scripts/export-ssr.mjs --out ../project_workflow/interfaces/ui/static/base-ui",
+ +    "ssr:check": "node ../../services-base/frontend/scripts/export-ssr.mjs --out ../project_workflow/interfaces/ui/static/base-ui --check",
+ +    "ui:check": "node ../../services-base/frontend/scripts/check-ui-contract.mjs --repo .. --require-installed"
+ +  },
+ +  "dependencies": {
+ +    "@sdlc/ui": "file:../../services-base/frontend",
+ +    "@tanstack/react-query": "5.103.2",
+ +    "i18next": "25.10.10",
+ +    "lucide-react": "0.545.0",
+ +    "react": "19.3.0",
+ +    "react-dom": "19.3.0",
+ +    "react-i18next": "16.6.6",
+ +    "react-router": "8.4.0",
+ +    "yaml": "2.9.1",
+ +    "zustand": "5.0.15"
+ +  },
+ +  "devDependencies": {
+ +    "@eslint/js": "9.39.5",
+ +    "@tailwindcss/vite": "4.3.3",
+ +    "@testing-library/react": "16.3.3",
+ +    "@types/node": "22.20.4",
+ +    "@types/react": "19.3.0",
+ +    "@types/react-dom": "19.3.0",
+ +    "@vitejs/plugin-react": "4.7.0",
+ +    "eslint": "9.39.5",
+ +    "eslint-plugin-react-hooks": "5.2.0",
+ +    "eslint-plugin-react-refresh": "0.4.26",
+ +    "globals": "16.5.0",
+ +    "jsdom": "27.4.0",
+ +    "tailwindcss": "4.3.3",
+ +    "typescript": "5.9.3",
+ +    "typescript-eslint": "8.70.1",
+ +    "vite": "6.4.3",
+ +    "vitest": "4.1.11"
+ +  }
+ +}
+diff --cc project_workflow/interfaces/ui/static/base-ui/base-ui.css
+index c43f66f,0000000..778432b
+mode 100644,000000..100644
+--- a/project_workflow/interfaces/ui/static/base-ui/base-ui.css
++++ b/project_workflow/interfaces/ui/static/base-ui/base-ui.css
+@@@ -1,283 -1,0 +1,285 @@@
+ +:root {
+ +  --color-background: #09090b;
+ +  --color-surface: #18181b;
+ +  --color-surface-raised: #27272a;
+ +  --color-border: #27272a;
+ +  --color-border-strong: #3f3f46;
+ +  --color-text-primary: #fafafa;
+ +  --color-text-secondary: #d4d4d8;
+ +  --color-text-muted: #a1a1aa;
+ +  --color-accent: #818cf8;
+ +  --color-accent-foreground: #18181b;
+ +  --color-accent-hover: #a5b4fc;
+ +  --color-danger: #f87171;
+ +  --color-success: #4ade80;
+ +  --color-warning: #fbbf24;
+ +  --color-focus: var(--color-accent);
+ +  --color-popover: var(--color-surface);
+ +  --color-popover-foreground: var(--color-text-primary);
+ +  /* Compatibility aliases for one release. */
+ +  --color-primary: var(--color-accent);
+ +  --color-primary-foreground: var(--color-accent-foreground);
+ +  --color-secondary: var(--color-surface-raised);
+ +  --color-secondary-foreground: var(--color-text-primary);
+ +  --color-muted: var(--color-surface-raised);
+ +  --color-muted-foreground: var(--color-text-muted);
+ +  --color-destructive: var(--color-danger);
+ +  --color-destructive-foreground: #18181b;
+ +}
+ +
+ +:root {
+ +  --shell-sidebar-expanded: 264px;
+ +  --shell-sidebar-compact: 72px;
+ +  --shell-header-height: 60px;
+ +  --shell-page-gutter: clamp(16px, 2vw, 32px);
+ +  --shell-page-block-gap: 20px;
+ +  --shell-control-min: 40px;
+ +  --shell-control-mobile-min: 44px;
+ +  --shell-readable-width: 760px;
+ +  --shell-aside-width: 320px;
+ +  --base-font-body: 14px;
+ +  --base-font-label: 12px;
+ +  --base-font-page-title: 24px;
+ +  --base-radius: 6px;
+ +}
+ +
+- .base-control { min-height: var(--shell-control-min); }
+++.base-control:not(textarea) { min-height: var(--shell-control-min); }
+ +.base-icon-control { min-width: var(--shell-control-min); }
+ +.base-app-shell { min-height: 100dvh; background: var(--color-background); color: var(--color-text-primary); font-size: var(--base-font-body); letter-spacing: 0; }
+ +.base-shell-sidebar { position: fixed; inset: var(--shell-header-height) auto 0 0; z-index: 20; display: flex; width: var(--shell-sidebar-expanded); flex-direction: column; border-right: 1px solid var(--color-border); background: var(--color-surface); }
+ +.base-shell-brand { display: flex; height: var(--shell-header-height); flex-shrink: 0; align-items: center; padding: 0 20px; border-bottom: 1px solid var(--color-border); }
+ +.base-shell-identity { display: flex; min-width: 0; align-items: center; gap: 12px; }
+ +.base-shell-identity-text { min-width: 0; }
+ +.base-shell-navigation-scroll { min-height: 0; flex: 1; overflow-y: auto; padding: 12px; }
+ +.base-shell-navigation { display: flex; flex-direction: column; gap: 4px; }
+++.base-shell-drawer-actions { display: flex; min-width: 0; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+ +.base-shell-link { display: flex; min-height: var(--shell-control-min); min-width: 0; align-items: center; gap: 12px; padding: 8px 12px; border-radius: var(--base-radius); color: var(--color-text-secondary); }
+ +.base-shell-nav-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+ +.base-shell-link:hover, .base-shell-link.is-active { background: var(--color-surface-raised); color: var(--color-text-primary); }
+ +.base-shell-link:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+ +.base-shell-work { min-width: 0; padding-left: var(--shell-sidebar-expanded); }
+ +.base-shell-main { min-height: calc(100dvh - var(--shell-header-height)); outline: none; }
+ +.base-shell-drawer-trigger, .base-shell-mobile-title { display: none; }
+ +.base-shell-drawer { left: 0; top: 0; display: flex; height: 100dvh; max-height: 100dvh; width: min(320px, calc(100% - 2rem)); max-width: none; transform: none; flex-direction: column; gap: 0; border-radius: 0; border-top: 0; border-bottom: 0; border-left: 0; padding: 0; }
+ +dialog.base-shell-drawer { position: fixed; margin: 0; color: var(--color-text-primary); background: var(--color-surface); border-color: var(--color-border); }
+ +dialog.base-shell-drawer:not([open]) { display: none; }
+ +dialog.base-shell-drawer::backdrop { background: rgb(0 0 0 / 65%); }
+ +.base-shell-drawer-title { display: flex; height: var(--shell-header-height); flex-shrink: 0; align-items: center; border-bottom: 1px solid var(--color-border); padding: 0 56px 0 16px; }
+ +.base-page-stack { display: flex; min-width: 0; flex-direction: column; gap: var(--shell-page-block-gap); }
+ +.base-page-header { display: flex; min-width: 0; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; }
+ +.base-page-title { overflow-wrap: anywhere; font-size: var(--base-font-page-title); font-weight: 600; line-height: 1.25; letter-spacing: 0; }
+ +.base-page-actions, .base-filter-row { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 8px; }
+ +.base-form-field { display: flex; min-width: 0; flex-direction: column; gap: 6px; }
+ +
+ +@media (min-width: 768px) and (max-width: 1279px) {
+ +  .base-shell-sidebar { width: var(--shell-sidebar-compact); }
+ +  .base-shell-brand { justify-content: center; padding: 0 8px; }
+ +  .base-shell-identity-text, .base-shell-nav-label { display: none; }
+ +  .base-shell-navigation-scroll { padding: 12px 8px; }
+ +  .base-shell-link { justify-content: center; padding: 8px; }
+ +  .base-shell-work { padding-left: var(--shell-sidebar-compact); }
+ +}
+ +@media (max-width: 767px) {
+-   .base-control, .base-shell-link { min-height: var(--shell-control-mobile-min); }
+++  .base-control:not(textarea), .base-shell-link { min-height: var(--shell-control-mobile-min); }
+ +  .base-icon-control { min-width: var(--shell-control-mobile-min); }
+ +  .base-shell-sidebar { display: none; }
+ +  .base-shell-work { padding-left: 0; }
+ +  .base-shell-drawer-trigger { display: inline-flex; }
+ +  .base-shell-mobile-title { display: block; max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+ +  .base-page-header, .base-page-actions { width: 100%; }
+ +}
+ +
+ +.shell-main {
+ +  min-width: 0;
+ +  width: 100%;
+ +}
+ +
+ +.platform-header {
+ +  position: sticky;
+ +  top: 0;
+ +  z-index: 30;
+ +  display: flex;
+ +  min-width: 0;
+ +  height: var(--shell-header-height);
+ +  align-items: center;
+ +  gap: 8px;
+ +  padding-inline: 12px;
+ +  border-bottom: 1px solid var(--color-border);
+ +  background: var(--color-surface);
+ +}
+ +
+ +.platform-header-leading,
+ +.platform-header-context,
+ +.platform-header-actions {
+ +  display: flex;
+ +  min-width: 0;
+ +  align-items: center;
+ +  gap: 8px;
+ +}
+ +
+ +.platform-header-context {
+ +  flex: 1;
+ +}
+ +
+ +.platform-header-services,
+ +.platform-header-actions {
+ +  flex-shrink: 0;
+ +}
+ +
+ +.platform-header-actions {
+ +  margin-left: auto;
+ +}
+ +
+ +.platform-header [data-platform-header-slot] :is(button, a, input, select) {
+ +  min-height: var(--shell-control-mobile-min);
+ +  min-width: var(--shell-control-mobile-min);
+ +}
+ +
+ +.service-switcher-label {
+ +  max-width: 160px;
+ +  overflow: hidden;
+ +  text-overflow: ellipsis;
+ +  white-space: nowrap;
+ +}
+ +
+ +@media (min-width: 768px) {
+ +  .platform-header {
+ +    padding-inline: 16px;
+ +  }
+ +
+ +  .platform-header [data-platform-header-slot] :is(button, a, input, select) {
+ +    min-height: var(--shell-control-min);
+ +    min-width: var(--shell-control-min);
+ +  }
+ +}
+ +
+ +.page-frame {
+ +  min-width: 0;
+ +  width: 100%;
+ +  padding: var(--shell-page-gutter);
+ +}
+ +
+ +.page-wide,
+ +.page-detail {
+ +  min-width: 0;
+ +  width: 100%;
+ +}
+ +
+ +.page-readable {
+ +  min-width: 0;
+ +  width: min(100%, var(--shell-readable-width));
+ +}
+ +
+ +.page-split {
+ +  display: grid;
+ +  min-width: 0;
+ +  width: 100%;
+ +  grid-template-columns: minmax(0, 1fr) var(--shell-aside-width);
+ +  gap: var(--shell-page-block-gap);
+ +}
+ +
+ +@media (max-width: 1023px) {
+ +  .page-split {
+ +    grid-template-columns: minmax(0, 1fr);
+ +  }
+ +}
+ +
+ +[data-theme='gray'] {
+ +  --color-background: #1f1f23;
+ +  --color-surface: #2a2a2f;
+ +  --color-surface-raised: #3f3f46;
+ +  --color-border: #3f3f46;
+ +  --color-border-strong: #52525b;
+ +  --color-text-primary: #f4f4f5;
+ +  --color-text-secondary: #e4e4e7;
+ +  --color-text-muted: #b4b4bd;
+ +  --color-accent: #a5b4fc;
+ +  --color-accent-foreground: #18181b;
+ +  --color-accent-hover: #818cf8;
+ +  --color-danger: #fca5a5;
+ +  --color-destructive-foreground: #18181b;
+ +  --color-success: #86efac;
+ +  --color-warning: #fde047;
+ +}
+ +
+ +[data-theme='light'] {
+ +  --color-background: #f4f4f5;
+ +  --color-surface: #ffffff;
+ +  --color-surface-raised: #f4f4f5;
+ +  --color-border: #e4e4e7;
+ +  --color-border-strong: #d4d4d8;
+ +  --color-text-primary: #18181b;
+ +  --color-text-secondary: #3f3f46;
+ +  --color-text-muted: #52525b;
+ +  --color-accent: #4f46e5;
+ +  --color-accent-foreground: #ffffff;
+ +  --color-accent-hover: #4338ca;
+ +  --color-danger: #b91c1c;
+ +  --color-destructive-foreground: #ffffff;
+ +  --color-success: #166534;
+ +  --color-warning: #92400e;
+ +}
+ +
+ +/* Adapter for server-rendered markup. Values come only from canonical tokens. */
+ +:root {
+ +  --bg: var(--color-background); --panel: var(--color-surface);
+ +  --surface: var(--color-surface-raised); --surface-hover: var(--color-surface-raised); --surface-active: var(--color-surface-raised);
+ +  --text: var(--color-text-primary); --text-secondary: var(--color-text-secondary); --text-muted: var(--color-text-muted); --text-dim: var(--color-text-muted);
+ +  --accent: var(--color-accent); --accent-hover: var(--color-accent-hover); --accent-readable: var(--color-accent);
+ +  --accent-foreground: var(--color-accent-foreground); --accent-hover-foreground: var(--color-accent-foreground);
+ +  --accent-soft: color-mix(in srgb, var(--color-accent) 15%, transparent);
+ +  --border: var(--color-border); --border-strong: var(--color-border-strong);
+ +  --green: var(--color-success); --red: var(--color-danger); --orange: var(--color-warning); --yellow: var(--color-warning); --blue: var(--color-accent);
+ +  --green-soft: color-mix(in srgb, var(--color-success) 12%, transparent); --red-soft: color-mix(in srgb, var(--color-danger) 12%, transparent);
+ +  --orange-soft: color-mix(in srgb, var(--color-warning) 12%, transparent); --yellow-soft: var(--orange-soft);
+ +  --sidebar-width: var(--shell-sidebar-expanded); --header-height: var(--shell-header-height);
+ +}
+ +.base-ssr-shell { display: block; font-size: var(--base-font-body); letter-spacing: 0; }
+ +.base-form-field { display: grid; gap: 8px; min-width: 0; }
+ +.base-form-field label { font-weight: 500; }
+ +.base-form-field p { margin: 0; color: var(--color-text-muted); font-size: var(--base-font-label); }
+ +.base-form-field [role='alert'] { color: var(--color-danger); }
+ +.base-form-field > .base-control { width: 100%; min-width: 0; padding: 8px 12px; border: 1px solid var(--color-border); border-radius: var(--base-radius); background: var(--color-surface); color: var(--color-text-primary); font: inherit; }
+++.base-ssr-shell textarea.base-control { min-height: 80px; }
+ +.base-form-field > [aria-invalid='true'] { border-color: var(--color-danger); }
+ +.base-ssr-shell .base-control:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+ +.base-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 8px 12px; border: 1px solid var(--color-border); border-radius: var(--base-radius); cursor: pointer; font: inherit; text-decoration: none; }
+ +.base-button-secondary { background: var(--color-surface); color: var(--color-text-primary); }
+ +.base-button-primary { background: var(--color-accent); color: var(--color-accent-foreground); border-color: var(--color-accent); }
+ +.base-button-danger { background: var(--color-danger); color: var(--color-destructive-foreground); border-color: var(--color-danger); }
+ +.base-button:disabled { opacity: .5; cursor: not-allowed; }
+ +.base-resource-state { padding: 20px 0; }
+ +.base-ssr-shell .main { min-width: 0; min-height: calc(100dvh - var(--shell-header-height)); width: calc(100% - var(--sidebar-width)); margin-left: var(--sidebar-width); }
+ +.base-ssr-header { position: sticky; top: 0; z-index: 30; display: flex; min-width: 0; width: 100%; height: var(--shell-header-height); align-items: center; justify-content: space-between; gap: 8px; padding: 0 var(--shell-page-gutter); border-bottom: 1px solid var(--color-border); background: var(--color-surface); }
+ +.base-ssr-shell .sidebar-header { height: var(--shell-header-height); flex: 0 0 auto; display: flex; align-items: center; padding: 0 20px; border-bottom: 1px solid var(--color-border); }
+ +.base-ssr-shell .sidebar-nav { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; }
+ +.base-ssr-shell .sidebar-link { display: flex; min-height: var(--shell-control-min); align-items: center; gap: 12px; padding: 8px 12px; border-radius: var(--base-radius); color: var(--color-text-secondary); text-decoration: none; }
+ +.base-ssr-shell .sidebar-link:hover, .base-ssr-shell .sidebar-link.active { background: var(--color-surface-raised); color: var(--color-text-primary); }
+ +.base-ssr-shell .sidebar-link:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+ +.base-ssr-shell .base-shell-drawer .sidebar-label { position: static; width: auto; height: auto; margin: 0; clip: auto; white-space: normal; overflow: visible; }
+ +.base-ssr-shell .base-shell-drawer .sidebar-section { display: block; }
+ +.base-drawer-close { position: absolute; right: 8px; top: 8px; background: transparent; color: inherit; border: 0; cursor: pointer; font-size: 24px; }
+ +.base-ssr-account { position: relative; }
+ +.base-ssr-account summary { display: flex; min-width: var(--shell-control-min); align-items: center; justify-content: center; cursor: pointer; list-style: none; }
+ +.base-ssr-account summary::-webkit-details-marker { display: none; }
+ +.base-ssr-account-menu { position: absolute; right: 0; top: calc(100% + 8px); min-width: 160px; padding: 8px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--base-radius); }
+ +.base-ssr-account-menu a { display: flex; align-items: center; min-height: var(--shell-control-min); padding: 8px; }
+ +.base-ssr-shell .base-shell-drawer .sidebar-nav { padding: 0; }
+ +.base-ssr-shell :where(button,select,textarea,input:not([type='checkbox']):not([type='radio']),.btn,summary,.namespace-icon-action,.brand-link,.sidebar-service-link) { min-height: var(--shell-control-min); }
+ +.base-ssr-shell :where(button,.namespace-icon-action) { min-width: var(--shell-control-min); }
+ +.base-ssr-shell label:has(input[type='checkbox']), .base-ssr-shell label:has(input[type='radio']) { min-height: var(--shell-control-min); display: flex; align-items: center; }
+ +.base-ssr-shell .btn-danger { background: var(--color-danger); color: var(--color-destructive-foreground); border-color: var(--color-danger); }
+ +@media (min-width: 768px) and (max-width: 1279px) {
+ +  .base-ssr-shell { --sidebar-width: var(--shell-sidebar-compact); }
+ +  .base-ssr-shell .sidebar-header { justify-content: center; padding: 0 8px; }
+ +  .base-ssr-shell .sidebar-nav { padding: 12px 8px; }
+ +  .base-ssr-shell .sidebar-link { justify-content: center; padding: 8px; }
+ +}
+ +@media (max-width: 767px) {
+ +  .base-ssr-shell { --shell-control-min: var(--shell-control-mobile-min); }
+ +  .base-ssr-account summary { min-width: var(--shell-control-mobile-min); }
+ +  .base-ssr-shell .main { width: 100%; margin-left: 0; }
+ +  .base-ssr-shell :where(button,select,textarea,input:not([type='checkbox']):not([type='radio']),.btn,summary,.namespace-icon-action,.brand-link,.sidebar-service-link,.sidebar-link) { min-height: var(--shell-control-mobile-min); }
+ +  .base-ssr-shell :where(button,.namespace-icon-action) { min-width: var(--shell-control-mobile-min); }
+ +  .base-ssr-shell label:has(input[type='checkbox']), .base-ssr-shell label:has(input[type='radio']) { min-height: var(--shell-control-mobile-min); }
+ +}
+diff --cc project_workflow/interfaces/ui/static/base-ui/fingerprint.json
+index c61ef8c,0000000..fb4ebb2
+mode 100644,000000..100644
+--- a/project_workflow/interfaces/ui/static/base-ui/fingerprint.json
++++ b/project_workflow/interfaces/ui/static/base-ui/fingerprint.json
+@@@ -1,9 -1,0 +1,9 @@@
+ +{
+ +  "schemaVersion": 1,
+ +  "package": "@sdlc/ui",
+ +  "files": {
+-     "base-ui.css": "acb403156c16c9cad4b8025d5dab8213670ad741a30ccb1dc4cad02c376185c5",
+++    "base-ui.css": "73c6ca8181b6b618412c31cf08993459d3ccc86ede6b3fd2c47a5d2fa31b1dfb",
+ +    "base-ui.js": "b653e40f48efadf50c0190ef3c461ad4db93c49f02577057696fe5a1fe8546eb",
+ +    "macros.html": "c05468472093617fc6e9d565a597dabe2209f11be78c82c983c2c7412ecbab51"
+ +  }
+ +}
+diff --cc scripts/build_runtime_image.py
+index d4eb989,85074eb..4044da0
+--- a/scripts/build_runtime_image.py
++++ b/scripts/build_runtime_image.py
+@@@ -63,107 -67,136 +65,209 @@@ def immutable_git_snapshot(root: Path, 
+      )
+  
+  
+ +@dataclass(frozen=True)
+ +class BaseUiSnapshot:
+ +    revision: str
+ +    archive: bytes
+ +
+ +
+ +def immutable_base_ui_snapshot(root: Path, revision: str) -> BaseUiSnapshot:
+ +    exact_revision = str(_run_git(root, "rev-parse", "--verify", f"{revision}^{{commit}}")).strip().lower()
+ +    # Archive a commit with a path filter: archiving a subtree uses wall-clock mtime.
+ +    archive = _run_git(root, "archive", "--format=tar", exact_revision, "frontend", text=False)
+ +    if not isinstance(archive, bytes):
+ +        raise BuildProvenanceError("Base UI archive не вернул бинарные данные")
+ +    return BaseUiSnapshot(revision=exact_revision, archive=archive)
+ +
+ +
+ +def extract_base_ui(snapshot: BaseUiSnapshot, destination: Path) -> None:
+ +    try:
+ +        archive = tarfile.open(fileobj=io.BytesIO(snapshot.archive), mode="r:*")
+ +    except tarfile.TarError as exc:
+ +        raise BuildProvenanceError("Base UI archive повреждён") from exc
+ +    required = {"package.json", "pnpm-lock.yaml", "src/ui/tokens.css", "scripts/write-ui-build.mjs", "ssr/macros.html"}
+ +    paths: set[str] = set()
+ +    files: set[str] = set()
+ +    members: list[tarfile.TarInfo] = []
+ +    with archive:
+ +        for member in archive.getmembers():
+ +            path = PurePosixPath(member.name)
+ +            if path.is_absolute() or ".." in path.parts or "\\" in member.name:
+ +                raise BuildProvenanceError("Base UI archive содержит небезопасный путь")
+ +            if not path.parts or path.parts[0] != "frontend":
+ +                raise BuildProvenanceError("Base UI archive содержит путь вне frontend")
+ +            if len(path.parts) == 1 and member.isdir():
+ +                continue
+ +            name = path.relative_to("frontend").as_posix().rstrip("/")
+ +            if name in paths or not (member.isdir() or member.isfile()):
+ +                raise BuildProvenanceError("Base UI archive содержит повторный путь или недопустимый тип")
+ +            paths.add(name)
+ +            if member.isfile():
+ +                files.add(name)
+ +            member.name = name
+ +            members.append(member)
+ +        if not required <= files:
+ +            raise BuildProvenanceError("Base UI archive не содержит обязательные package/build inputs")
+ +        archive.extractall(destination, members=members, filter="data")
+ +
+ +
++ CATALOG_PATH = "project_workflow/references/hermes_sdlc_catalog_v1.json"
++ COMPATIBILITY_PATH = "runtime-compatibility.json"
++ SKILLS_MANIFEST_PATH = "runtime-skills-manifest.json"
++ 
++ 
++ def _json_bytes(value: object) -> bytes:
++     return (json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode()
++ 
++ 
++ def derive_compatibility(root: Path) -> dict[str, object]:
++     # Imported only after package installation; verify-manifest stays stdlib-only.
++     from project_workflow.infrastructure.db.managed_catalog import (
++         export_runtime_catalog,
++         load_managed_catalog,
++     )
++ 
++     catalog = load_managed_catalog(root / CATALOG_PATH)
++     if catalog.catalog_version != 2:
++         raise BuildProvenanceError("Compatible image requires canonical catalog version 2")
++     manifest = json.loads((root / SKILLS_MANIFEST_PATH).read_bytes())
++     if manifest.get("schema") != catalog.skills_source.manifest_schema:
++         raise BuildProvenanceError("Native skills manifest schema differs from canonical pin")
++     provenance = load_build_provenance(root / "runtime-build-manifest.json")
++     exported, _ = export_runtime_catalog(
++         catalog, manifest=manifest, workflow_revision=provenance.source_revision,
++         skills_revision=catalog.skills_source.revision, source_artifacts={},
++     )
++     return exported["runtimeCompatibility"]
++ 
++ 
++ def verify_compatibility(root: Path) -> None:
++     actual = json.loads((root / COMPATIBILITY_PATH).read_bytes())
++     if actual != derive_compatibility(root):
++         raise BuildProvenanceError("Runtime compatibility differs from immutable source inputs")
++ 
++ 
++ def _add_context_files(context: bytes, files: dict[str, bytes]) -> bytes:
++     output = io.BytesIO()
++     with (tarfile.open(fileobj=io.BytesIO(context)) as source,
++           tarfile.open(fileobj=output, mode="w", format=tarfile.PAX_FORMAT) as target):
++         for member in source.getmembers():
++             if member.name not in files:
++                 target.addfile(member, source.extractfile(member) if member.isfile() else None)
++         for name, content in sorted(files.items()):
++             member = tarfile.TarInfo(name)
++             member.size = len(content)
++             member.mode = 0o444
++             target.addfile(member, io.BytesIO(content))
++     return output.getvalue()
++ 
++ 
++ def compatible_build_context(snapshot: GitSourceSnapshot, skills_root: Path) -> bytes:
++     context = docker_context_with_manifest(snapshot.archive, snapshot.provenance)
++     with tarfile.open(fileobj=io.BytesIO(context)) as source:
++         catalog_file = source.extractfile(CATALOG_PATH)
++         if catalog_file is None:
++             raise BuildProvenanceError("Canonical catalog missing from immutable archive")
++         catalog = json.load(catalog_file)
++     pin = catalog["skills_source"]
++     revision = pin["revision"]
++     manifest_path = pin["manifest_path"]
++     path = PurePosixPath(manifest_path)
++     if (len(revision) != 40 or any(ch not in "0123456789abcdef" for ch in revision)
++             or path.is_absolute() or ".." in path.parts
++             or str(path) != manifest_path or "\\" in manifest_path):
++         raise BuildProvenanceError("Invalid canonical skills source pin")
++     entry = str(_run_git(skills_root, "ls-tree", revision, "--", manifest_path)).strip()
++     if not entry.startswith(("100644 blob ", "100755 blob ")) or "\n" in entry:
++         raise BuildProvenanceError("Pinned native skills manifest must be a regular Git blob")
++     manifest = _run_git(skills_root, "show", f"{revision}:{manifest_path}", text=False)
++     if not isinstance(manifest, bytes):
++         raise BuildProvenanceError("Native skills manifest is unavailable")
++     context = _add_context_files(context, {SKILLS_MANIFEST_PATH: manifest})
++     # Execute the exporter from the same archived source that Docker will install.
++     # Neither a dirty builder checkout nor its installed policy can change pins.
++     with tempfile.TemporaryDirectory(prefix="workflow-compatibility-") as directory:
++         root = Path(directory)
++         with tarfile.open(fileobj=io.BytesIO(context)) as source:
++             for member in source.getmembers():
++                 if not member.isfile():
++                     continue
++                 relative = PurePosixPath(member.name)
++                 if relative.is_absolute() or ".." in relative.parts or "\\" in member.name:
++                     raise BuildProvenanceError("Invalid context path")
++                 target = root.joinpath(*relative.parts)
++                 target.parent.mkdir(parents=True, exist_ok=True)
++                 fileobj = source.extractfile(member)
++                 assert fileobj is not None
++                 target.write_bytes(fileobj.read())
++         environment = dict(os.environ)
++         environment.pop("PYTHONPATH", None)
++         environment["PYTHONDONTWRITEBYTECODE"] = "1"
++         subprocess.run(
++             [sys.executable, "-m", "scripts.build_runtime_image", "derive-compatibility",
++              "--root", str(root)], cwd=root, env=environment, check=True,
++         )
++         descriptor = (root / COMPATIBILITY_PATH).read_bytes()
++     return _add_context_files(context, {COMPATIBILITY_PATH: descriptor})
++ 
++ 
+ -def build_image(root: Path, image: str, docker: str, revision: str = "HEAD",
+ -                *, skills_root: Path) -> None:
+++
+ +def build_image(
+ +    root: Path,
+ +    image: str,
+ +    docker: str,
+ +    revision: str = "HEAD",
+ +    *,
+++    skills_root: Path,
+ +    base_root: Path | None = None,
+ +    base_revision: str = "HEAD",
+ +) -> None:
+      snapshot = immutable_git_snapshot(root, revision)
+ +    ui = immutable_base_ui_snapshot(
+ +        base_root or Path(os.environ.get("SDLC_SERVICES_BASE_DIR", root.parent / "services-base")),
+ +        base_revision,
+ +    )
+      provenance = snapshot.provenance
+-     context = docker_context_with_manifest(snapshot.archive, provenance)
++     context = compatible_build_context(snapshot, skills_root)
+      # A PAX-first plain tar can be mistaken for a Dockerfile on stdin.
+      transport = gzip.compress(context, mtime=0)
+ -    subprocess.run(
+ -        [
+ -            docker,
+ -            "build",
+ -            "--build-arg",
+ -            f"SOURCE_REVISION={provenance.source_revision}",
+ -            "--build-arg",
+ -            f"SOURCE_ARCHIVE_SHA256={provenance.source_archive_sha256}",
+ -            "--build-arg",
+ -            f"RUNTIME_BUNDLE_SHA256={provenance.runtime_bundle_sha256}",
+ -            "--label",
+ -            f"org.opencontainers.image.revision={provenance.source_revision}",
+ -            "--label",
+ -            f"io.relevanter.source.archive-sha256={provenance.source_archive_sha256}",
+ -            "--label",
+ -            f"io.relevanter.runtime.bundle-sha256={provenance.runtime_bundle_sha256}",
+ -            "--tag",
+ -            image,
+ -            "-",
+ -        ],
+ -        check=True,
+ -        input=transport,
+ -    )
+ +    with tempfile.TemporaryDirectory(prefix="workflow-base-ui-") as directory:
+ +        extract_base_ui(ui, Path(directory))
+ +        subprocess.run(
+ +            [
+ +                docker,
+ +                "build",
+ +                "--build-context",
+ +                f"sdlc_ui={directory}",
+ +                "--build-arg",
+ +                f"BASE_VCS_REF={ui.revision}",
+ +                "--build-arg",
+ +                f"VCS_REF={provenance.source_revision}",
+ +                "--build-arg",
+ +                f"BASE_UI_ARCHIVE_SHA256={hashlib.sha256(ui.archive).hexdigest()}",
+ +                "--build-arg",
+ +                f"SOURCE_REVISION={provenance.source_revision}",
+ +                "--build-arg",
+ +                f"SOURCE_ARCHIVE_SHA256={provenance.source_archive_sha256}",
+ +                "--build-arg",
+ +                f"RUNTIME_BUNDLE_SHA256={provenance.runtime_bundle_sha256}",
+ +                "--label",
+ +                f"org.opencontainers.image.revision={provenance.source_revision}",
+ +                "--label",
+ +                f"io.relevanter.source.archive-sha256={provenance.source_archive_sha256}",
+ +                "--label",
+ +                f"io.relevanter.runtime.bundle-sha256={provenance.runtime_bundle_sha256}",
+ +                "--label",
+ +                f"org.sdlc.ui.base.revision={ui.revision}",
+ +                "--label",
+ +                f"org.sdlc.ui.base.archive-sha256={hashlib.sha256(ui.archive).hexdigest()}",
+ +                "--tag",
+ +                image,
+ +                "-",
+ +            ],
+ +            check=True,
+ +            input=transport,
+ +        )
+  
+  
+  def main(argv: list[str] | None = None) -> int:
+@@@ -175,8 -208,10 +279,12 @@@
+      build.add_argument("--docker", default="docker")
+      build.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
+      build.add_argument("--revision", default="HEAD")
+ +    build.add_argument("--base-root", type=Path)
+ +    build.add_argument("--base-revision", default="HEAD")
++     build.add_argument("--skills-root", type=Path, required=True)
++ 
++     for name in ("derive-compatibility", "verify-compatibility"):
++         subparsers.add_parser(name).add_argument("--root", type=Path, required=True)
+  
+      verify = subparsers.add_parser("verify-manifest")
+      verify.add_argument("--manifest", type=Path, required=True)
+@@@ -188,14 -223,12 +296,19 @@@
+      args = parser.parse_args(argv)
+      try:
+          if args.command == "build":
+ -            build_image(args.root.resolve(), args.image, args.docker, args.revision,
+ -                        skills_root=args.skills_root.resolve())
+ +            build_image(
+ +                args.root.resolve(),
+ +                args.image,
+ +                args.docker,
+ +                args.revision,
+++                skills_root=args.skills_root.resolve(),
+ +                base_root=args.base_root,
+ +                base_revision=args.base_revision,
+ +            )
++         elif args.command == "derive-compatibility":
++             (args.root / COMPATIBILITY_PATH).write_bytes(_json_bytes(derive_compatibility(args.root)))
++         elif args.command == "verify-compatibility":
++             verify_compatibility(args.root)
+          else:
+              verify_build_manifest(
+                  args.manifest,
+diff --cc tests/test_build_provenance.py
+index 11b67f0,510fd47..baa9662
+--- a/tests/test_build_provenance.py
++++ b/tests/test_build_provenance.py
+@@@ -185,10 -161,11 +185,12 @@@ def test_post_snapshot_worktree_mutatio
+      docker_run = MagicMock()
+      with (
+          patch.object(builder, "immutable_git_snapshot", side_effect=snapshot_then_mutate),
+ +        patch.object(builder, "immutable_base_ui_snapshot", return_value=ui),
+          patch.object(builder.subprocess, "run", docker_run),
++         patch.object(builder, "compatible_build_context",
++                      return_value=docker_context_with_manifest(snapshot.archive, snapshot.provenance)),
+      ):
+-         builder.build_image(git_source, "project-workflow:test", "docker")
++         builder.build_image(git_source, "project-workflow:test", "docker", skills_root=git_source)
+  
+      command = docker_run.call_args.args[0]
+      context = docker_run.call_args.kwargs["input"]
+@@@ -312,20 -291,20 +314,22 @@@ def test_dockerfile_manifest_and_oci_la
+      assert "org.opencontainers.image.revision=$SOURCE_REVISION" in dockerfile
+      assert "io.relevanter.source.archive-sha256=$SOURCE_ARCHIVE_SHA256" in dockerfile
+      assert "io.relevanter.runtime.bundle-sha256=$RUNTIME_BUNDLE_SHA256" in dockerfile
+-     assert "COPY runtime-build-manifest.json ./runtime-build-manifest.json" in dockerfile
++     assert "COPY runtime-*.json ./" in dockerfile
+  
+  
+ -def test_image_builder_passes_one_snapshot_to_docker(git_source: Path):
+ +def test_image_builder_passes_one_snapshot_to_docker(git_source: Path, git_base: Path):
+      builder = _builder_module()
+      snapshot = builder.immutable_git_snapshot(git_source, "HEAD")
+ +    ui = builder.immutable_base_ui_snapshot(git_base, "HEAD")
+      docker_run = MagicMock()
+      with (
+          patch.object(builder, "immutable_git_snapshot", return_value=snapshot),
+ +        patch.object(builder, "immutable_base_ui_snapshot", return_value=ui),
+          patch.object(builder.subprocess, "run", docker_run),
++         patch.object(builder, "compatible_build_context",
++                      return_value=docker_context_with_manifest(snapshot.archive, snapshot.provenance)),
+      ):
+-         builder.build_image(git_source, "project-workflow:test", "docker")
++         builder.build_image(git_source, "project-workflow:test", "docker", skills_root=git_source)
+  
+      command = docker_run.call_args.args[0]
+      context = docker_run.call_args.kwargs["input"]
+@@@ -353,11 -340,12 +357,13 @@@ def test_pax_context_uses_deterministic
+      docker_run = MagicMock()
+      with (
+          patch.object(builder, "immutable_git_snapshot", return_value=snapshot),
+ +        patch.object(builder, "immutable_base_ui_snapshot", return_value=ui),
+          patch.object(builder.subprocess, "run", docker_run),
++         patch.object(builder, "compatible_build_context",
++                      return_value=docker_context_with_manifest(snapshot.archive, snapshot.provenance)),
+      ):
+-         builder.build_image(git_source, "project-workflow:test", "docker")
+-         builder.build_image(git_source, "project-workflow:test", "docker")
++         builder.build_image(git_source, "project-workflow:test", "docker", skills_root=git_source)
++         builder.build_image(git_source, "project-workflow:test", "docker", skills_root=git_source)
+  
+      first = docker_run.call_args_list[0].kwargs["input"]
+      second = docker_run.call_args_list[1].kwargs["input"]
+@@@ -369,112 -357,6 +375,114 @@@
+      assert json.loads(_member_bytes(first, "runtime-build-manifest.json")) == snapshot.provenance.to_dict()
+  
+  
+ +def test_base_ui_snapshot_ignores_dirty_and_untracked_content(git_base: Path, tmp_path: Path):
+ +    builder = _builder_module()
+ +    first = builder.immutable_base_ui_snapshot(git_base, "HEAD")
+ +    (git_base / "frontend/src/ui/tokens.css").write_text("dirty", encoding="utf-8")
+ +    (git_base / "frontend/src/private.txt").write_text("untracked", encoding="utf-8")
+ +    assert builder.immutable_base_ui_snapshot(git_base, first.revision) == first
+ +    destination = tmp_path / "ui-context"
+ +    builder.extract_base_ui(first, destination)
+ +    assert (destination / "src/ui/tokens.css").read_bytes() != b"dirty"
+ +    assert not (destination / "src/private.txt").exists()
+ +
+ +
+ +def test_base_ui_archive_has_deterministic_metadata(git_base: Path):
+ +    snapshot = _builder_module().immutable_base_ui_snapshot(git_base, "HEAD")
+ +    committed_at = int(_run_git(git_base, "show", "--no-patch", "--format=%ct", snapshot.revision).stdout)
+ +    with tarfile.open(fileobj=io.BytesIO(snapshot.archive)) as archive:
+ +        members = archive.getmembers()
+ +        assert members
+ +        assert {member.mtime for member in members} == {committed_at}
+ +
+ +
+ +def test_base_context_is_immutable_during_build_and_removed_afterward(git_source: Path, git_base: Path):
+ +    builder = _builder_module()
+ +    ui = builder.immutable_base_ui_snapshot(git_base, "HEAD")
+ +    copied: list[Path] = []
+ +
+ +    def docker_run(command, **kwargs):
+ +        context = Path(command[command.index("--build-context") + 1].removeprefix("sdlc_ui="))
+ +        copied.append(context)
+ +        assert (context / "src/ui/tokens.css").read_bytes() == _member_bytes(ui.archive, "frontend/src/ui/tokens.css")
+ +        (git_base / "frontend/src/ui/tokens.css").write_text("mutated while building", encoding="utf-8")
+ +        assert (context / "src/ui/tokens.css").read_bytes() != b"mutated while building"
+ +        raise subprocess.CalledProcessError(1, command)
+ +
+ +    snapshot = builder.immutable_git_snapshot(git_source, "HEAD")
+ +    with (
+ +        patch.object(builder, "immutable_git_snapshot", return_value=snapshot),
+ +        patch.object(builder, "immutable_base_ui_snapshot", return_value=ui),
+ +        patch.object(builder.subprocess, "run", side_effect=docker_run),
+++        patch.object(builder, "compatible_build_context",
+++                     return_value=docker_context_with_manifest(snapshot.archive, snapshot.provenance)),
+ +        pytest.raises(subprocess.CalledProcessError),
+ +    ):
+-         builder.build_image(git_source, "fixture:failure", "docker")
+++        builder.build_image(git_source, "fixture:failure", "docker", skills_root=git_source)
+ +    assert len(copied) == 1
+ +    assert not copied[0].exists()
+ +
+ +
+ +@pytest.mark.parametrize("path", ["../escape", "/absolute", "src\\escape"])
+ +def test_base_ui_archive_rejects_unsafe_paths(path: str, tmp_path: Path):
+ +    builder = _builder_module()
+ +    output = io.BytesIO()
+ +    with tarfile.open(fileobj=output, mode="w") as archive:
+ +        archive.addfile(tarfile.TarInfo(path), io.BytesIO())
+ +    with pytest.raises(BuildProvenanceError, match="небезопасный путь"):
+ +        builder.extract_base_ui(builder.BaseUiSnapshot("a" * 40, output.getvalue()), tmp_path / "context")
+ +
+ +
+ +@pytest.mark.parametrize("kind", [tarfile.SYMTYPE, tarfile.LNKTYPE, tarfile.FIFOTYPE])
+ +def test_base_ui_archive_rejects_nonregular_entries(kind: bytes, tmp_path: Path):
+ +    builder = _builder_module()
+ +    output = io.BytesIO()
+ +    with tarfile.open(fileobj=output, mode="w") as archive:
+ +        entry = tarfile.TarInfo("frontend/src/injected")
+ +        entry.type = kind
+ +        entry.linkname = "outside"
+ +        archive.addfile(entry)
+ +    with pytest.raises(BuildProvenanceError, match="недопустимый тип"):
+ +        builder.extract_base_ui(builder.BaseUiSnapshot("a" * 40, output.getvalue()), tmp_path / "context")
+ +
+ +
+ +@pytest.mark.parametrize(
+ +    "path", ["Dockerfile", "docs/ui-routes.json", "frontend/src/app.ts", "frontend/pnpm-lock.yaml"]
+ +)
+ +def test_runtime_bundle_covers_frontend_build_inputs(git_source: Path, path: str):
+ +    before = runtime_bundle_sha256(git_source)
+ +    (git_source / path).write_bytes(b"changed build input\n")
+ +    assert runtime_bundle_sha256(git_source) != before
+ +
+ +
+ +def test_base_ui_archive_rejects_corrupt_content(tmp_path: Path):
+ +    builder = _builder_module()
+ +    with pytest.raises(BuildProvenanceError, match="повреждён"):
+ +        builder.extract_base_ui(builder.BaseUiSnapshot("a" * 40, b"not a tar archive"), tmp_path / "context")
+ +    assert not (tmp_path / "context").exists()
+ +
+ +
+ +def test_base_ui_archive_requires_all_build_inputs(tmp_path: Path):
+ +    builder = _builder_module()
+ +    output = io.BytesIO()
+ +    with tarfile.open(fileobj=output, mode="w") as archive:
+ +        archive.addfile(tarfile.TarInfo("frontend/package.json"), io.BytesIO())
+ +    with pytest.raises(BuildProvenanceError, match="обязательные package/build inputs"):
+ +        builder.extract_base_ui(builder.BaseUiSnapshot("a" * 40, output.getvalue()), tmp_path / "context")
+ +    assert not (tmp_path / "context").exists()
+ +
+ +
+ +def test_base_ui_archive_rejects_duplicate_paths(tmp_path: Path):
+ +    builder = _builder_module()
+ +    output = io.BytesIO()
+ +    with tarfile.open(fileobj=output, mode="w") as archive:
+ +        for _ in range(2):
+ +            archive.addfile(tarfile.TarInfo("frontend/package.json"), io.BytesIO())
+ +    with pytest.raises(BuildProvenanceError, match="повторный путь"):
+ +        builder.extract_base_ui(builder.BaseUiSnapshot("a" * 40, output.getvalue()), tmp_path / "context")
+ +    assert not (tmp_path / "context").exists()
+ +
+ +
+  @pytest.mark.parametrize(
+      "field,value",
+      [
+@@@ -607,25 -489,135 +615,157 @@@ def test_dockerfile_verifies_manifest_b
+      environment = {key: value for key, value in os.environ.items() if key not in {"PYTHONPATH", "PYTHONHOME"}}
+      environment["PYTHONDONTWRITEBYTECODE"] = "1"  # Dockerfile builder ENV: hash only source inputs.
+      result = subprocess.run(
+ -        [sys.executable, "-S", *shlex.split(command.group(1)), "verify-manifest",
+ -         "--root", str(extracted), "--manifest", str(extracted / "runtime-build-manifest.json"),
+ -         "--source-revision", snapshot.provenance.source_revision,
+ -         "--source-archive-sha256", snapshot.provenance.source_archive_sha256,
+ -         "--runtime-bundle-sha256", snapshot.provenance.runtime_bundle_sha256],
+ -        cwd=extracted, env=environment, capture_output=True, text=True,
+ +        [
+ +            sys.executable,
+ +            "-S",
+ +            *shlex.split(command.group(1)),
+ +            "verify-manifest",
+ +            "--root",
+ +            str(extracted),
+ +            "--manifest",
+ +            str(extracted / "runtime-build-manifest.json"),
+ +            "--source-revision",
+ +            snapshot.provenance.source_revision,
+ +            "--source-archive-sha256",
+ +            snapshot.provenance.source_archive_sha256,
+ +            "--runtime-bundle-sha256",
+ +            snapshot.provenance.runtime_bundle_sha256,
+ +        ],
+ +        cwd=extracted,
+ +        env=environment,
+ +        capture_output=True,
+ +        text=True,
+      )
+      assert result.returncode == 0, result.stderr
++ 
++ 
++ @pytest.fixture
++ def compatible_sources(git_source, tmp_path):
++     root = Path(__file__).resolve().parents[1]
++     shutil.copytree(root / "project_workflow", git_source / "project_workflow",
++                     dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
++     shutil.copyfile(root / "scripts/build_runtime_image.py", git_source / "scripts/build_runtime_image.py")
++     catalog_path = git_source / "project_workflow/references/hermes_sdlc_catalog_v1.json"
++     catalog = json.loads(catalog_path.read_bytes())
++     skills = tmp_path / "skills"
++     skills.mkdir()
++     native = {"schema": catalog["skills_source"]["manifest_schema"], "roles": {
++         workflow["role_key"]: {"physicalSkills": workflow["skill_allowlist"]}
++         for workflow in catalog["workflows"]}}
++     manifest = skills / catalog["skills_source"]["manifest_path"]
++     manifest.parent.mkdir(parents=True)
++     manifest.write_text(json.dumps(native), encoding="utf-8")
++     _run_git(skills, "init")
++     _run_git(skills, "config", "user.email", "fixture@example.invalid")
++     _run_git(skills, "config", "user.name", "Fixture")
++     _run_git(skills, "add", ".")
++     _run_git(skills, "commit", "-m", "native skills")
++     catalog["skills_source"]["revision"] = _run_git(skills, "rev-parse", "HEAD").stdout.decode().strip()
++     catalog_path.write_text(json.dumps(catalog), encoding="utf-8")
++     _run_git(git_source, "add", ".")
++     _run_git(git_source, "commit", "-m", "compatible source")
++     return git_source, skills, manifest, catalog
++ 
++ 
++ def test_compatible_context_uses_exact_commits_and_is_verified(compatible_sources, tmp_path):
++     source, skills, manifest, catalog = compatible_sources
++     builder = _builder_module()
++     snapshot = builder.immutable_git_snapshot(source, "HEAD")
++     context = builder.compatible_build_context(snapshot, skills)
++     (source / builder.CATALOG_PATH).write_text("dirty catalog", encoding="utf-8")
++     manifest.write_text("dirty skills", encoding="utf-8")
++     assert builder.compatible_build_context(snapshot, skills) == context
++     descriptor = json.loads(_member_bytes(context, builder.COMPATIBILITY_PATH))
++     assert descriptor["catalogRevision"] == snapshot.provenance.source_revision
++     assert descriptor["skillsRevision"] == catalog["skills_source"]["revision"]
++     assert descriptor["catalogVersion"] == 2
++     assert len(descriptor) == 7
++     assert runtime_bundle_sha256_from_archive(context) == snapshot.provenance.runtime_bundle_sha256
++     extracted = tmp_path / "compatible-context"
++     extracted.mkdir()
++     _extract_regular_context(context, extracted)
++     # Actual Docker verification command, with its source package on sys.path.
++     result = subprocess.run([sys.executable, "-m", "scripts.build_runtime_image",
++                              "verify-compatibility", "--root", str(extracted)],
++                             cwd=extracted, capture_output=True, text=True)
++     assert result.returncode == 0, result.stderr
++     descriptor["catalogRevision"] = "f" * 40
++     # The release context deliberately carries read-only generated inputs.
++     # Permit the adversarial fixture edit on Windows as well as POSIX.
++     (extracted / builder.COMPATIBILITY_PATH).chmod(0o644)
++     (extracted / builder.COMPATIBILITY_PATH).write_text(json.dumps(descriptor), encoding="utf-8")
++     result = subprocess.run([sys.executable, "-m", "scripts.build_runtime_image",
++                              "verify-compatibility", "--root", str(extracted)],
++                             cwd=extracted, capture_output=True, text=True)
++     assert result.returncode == 2 and "immutable source inputs" in result.stderr
++ 
++ 
+ -def test_compatible_image_delivers_descriptor_to_docker(compatible_sources):
+++def test_compatible_image_delivers_descriptor_to_docker(compatible_sources, git_base):
++     source, skills, _, _ = compatible_sources
++     builder = _builder_module()
++     actual_run = subprocess.run
++     docker_calls = []
++ 
++     def run(command, **kwargs):
++         if command[0] == "fixture-docker":
+++            ui_context = Path(command[command.index("--build-context") + 1].removeprefix("sdlc_ui="))
+++            assert (ui_context / "src/ui/tokens.css").is_file()
+++            assert (ui_context / "ssr/macros.html").is_file()
++             docker_calls.append((command, kwargs))
++             return subprocess.CompletedProcess(command, 0)
++         return actual_run(command, **kwargs)
++ 
++     with patch.object(builder.subprocess, "run", side_effect=run):
+ -        builder.build_image(source, "workflow:test", "fixture-docker", skills_root=skills)
+++        builder.build_image(source, "workflow:test", "fixture-docker", skills_root=skills,
+++                            base_root=git_base)
++     assert len(docker_calls) == 1
++     command, kwargs = docker_calls[0]
++     descriptor = json.loads(_member_bytes(kwargs["input"], builder.COMPATIBILITY_PATH))
++     assert f"SOURCE_REVISION={descriptor['catalogRevision']}" in command
+++    base_sha = _run_git(git_base, "rev-parse", "HEAD").stdout.decode().strip()
+++    assert f"BASE_VCS_REF={base_sha}" in command
+++    assert f"VCS_REF={descriptor['catalogRevision']}" in command
++     dockerfile = (Path(__file__).resolve().parents[1] / "Dockerfile").read_text()
++     assert "verify-compatibility --root /app" in dockerfile
++     assert "COPY --from=builder /app/runtime-compatibility.json /app/runtime-compatibility.json" in dockerfile
++ 
++ 
+ -def test_missing_pinned_skills_ref_fails_before_docker(compatible_sources):
+++def test_missing_pinned_skills_ref_fails_before_docker(compatible_sources, git_base):
++     source, skills, _, _ = compatible_sources
++     builder = _builder_module()
++     catalog_path = source / builder.CATALOG_PATH
++     catalog = json.loads(catalog_path.read_bytes())
++     catalog["skills_source"]["revision"] = "f" * 40
++     catalog_path.write_text(json.dumps(catalog), encoding="utf-8")
++     _run_git(source, "add", ".")
++     _run_git(source, "commit", "-m", "unavailable native pin")
++     with pytest.raises(subprocess.CalledProcessError):
+ -        builder.build_image(source, "workflow:test", "fixture-docker", skills_root=skills)
+++        builder.build_image(source, "workflow:test", "fixture-docker", skills_root=skills,
+++                            base_root=git_base)
++ 
++ 
++ def test_frozen_runtime_compatibility_rejects_missing_and_source_mismatch(tmp_path):
++     from types import SimpleNamespace
++ 
++     from project_workflow.build_provenance import (
++         BuildProvenanceError,
++         runtime_compatibility_descriptor,
++     )
++ 
++     path = tmp_path / "runtime-compatibility.json"
++     provenance = SimpleNamespace(source_revision="a" * 40)
++     with pytest.raises(BuildProvenanceError, match="unavailable"):
++         runtime_compatibility_descriptor(path, provenance)
++     descriptor = {
++         "catalogVersion": 2, "catalogRevision": "a" * 40, "catalogSha256": "b" * 64,
++         "skillsRevision": "c" * 40, "skillsManifestSha256": "d" * 64,
++         "capabilityRevision": "hermes-sdlc-runtime/v2", "capabilitySha256": "e" * 64,
++     }
++     path.write_text(json.dumps(descriptor), encoding="utf-8")
++     assert runtime_compatibility_descriptor(path, provenance) == descriptor
++     path.write_text(json.dumps({**descriptor, "catalogRevision": "f" * 40}), encoding="utf-8")
++     with pytest.raises(BuildProvenanceError, match="source revision mismatch"):
++         runtime_compatibility_descriptor(path, provenance)
++     path.write_text(json.dumps({**descriptor, "injected": True}), encoding="utf-8")
++     with pytest.raises(BuildProvenanceError, match="schema"):
++         runtime_compatibility_descriptor(path, provenance)

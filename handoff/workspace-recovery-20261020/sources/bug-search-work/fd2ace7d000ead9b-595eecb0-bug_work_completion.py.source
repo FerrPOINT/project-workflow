@@ -1,0 +1,67 @@
+"""Read the existing Developer engine's final committed step, never a worker flag."""
+from __future__ import annotations
+
+import json
+from typing import TYPE_CHECKING, Any
+
+from sqlalchemy import select
+
+from project_workflow.domain.exceptions import ConflictError
+from project_workflow.domain.runtime_assignment import payload_sha256
+from project_workflow.infrastructure.db import models as m
+
+if TYPE_CHECKING:
+    from project_workflow.application.bug_work import BugWorkService
+
+
+def completed_execution(service: BugWorkService, row: m.TaskRuntimeAssignment) -> dict[str, Any] | None:
+    # No new owner I/O/effects: this is protective readback of the exact retained
+    # producer binding and the engine's already committed SQL history.
+    task = service.uow.tasks.get_by_id(row.task_id)
+    if task is None or task.to_dict().get("status") != "done" or row.bug_work_stop_receipt is not None:
+        return None
+    from project_workflow.application.bug_work_runtime import attested_binding
+
+    try:
+        binding = attested_binding(service, row)
+    except (ConflictError, ValueError, TypeError, KeyError):
+        return None
+    context = service._retained(row)
+    phases = context["catalog"]["phases"]
+    if not phases or task.to_dict().get("current_phase_id") != phases[-1]["id"]:
+        return None
+    last = service.session.scalar(select(m.TaskStepHistoryEntry).where(
+        m.TaskStepHistoryEntry.task_id == row.task_id,
+    ).order_by(m.TaskStepHistoryEntry.id.desc()).limit(1))
+    if last is None:
+        return None
+    if (
+        last.workflow_id != row.workflow_id or last.mode_id != row.mode_id or last.cycle_number != 0
+        or last.phase_id != task.to_dict().get("current_phase_id") or last.verdict != "pass"
+        or last.next_phase_id is not None or last.rollback_phase_id is not None
+        or last.assignment_revision != row.assignment_revision or last.assignment_operation_key != row.operation_key
+        or last.assignment_ref != row.assignment_ref or last.binding_ref != binding.binding_ref
+        or last.hermes_run_ref != binding.hermes_run_ref or last.attempt_number != 1 or last.role_key != "developer"
+        or not last.step_operation_key or not last.request_sha256 or len(last.request_sha256) != 64
+        or any(c not in "0123456789abcdef" for c in last.request_sha256)
+    ):
+        return None
+    try:
+        response = json.loads(last.supervisor_response)
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(response, dict) or response.get("status") != "done":
+        return None
+    origin_hash = context["request"]["assignment_sha256"]
+    attestation = binding.runtime_attestation
+    if attestation is None:
+        return None
+    return {
+        "contract_version": 1, "assignment_id": row.bug_work_assignment_id,
+        "assignment_sha256": origin_hash, "fence": binding.expected_fence,
+        "bind_request_sha256": row.bind_request_sha256,
+        "source_context_sha256": attestation.source_origin_sha256,
+        "catalog_sha256": context["catalog"]["catalog_sha256"],
+        "step_history_id": last.id, "step_operation_key": last.step_operation_key,
+        "step_request_sha256": last.request_sha256, "step_response_sha256": payload_sha256(response),
+    }

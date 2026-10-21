@@ -1,0 +1,92 @@
+"""Equal rule/path/report/SHA in two repositories remains two defects."""
+import copy
+import json
+from pathlib import Path
+from uuid import uuid4
+
+import pytest
+
+from project_workflow.domain.bug_search_execution import (
+    BugSourceIdentity,
+    ExecutionResult,
+    ExecutionSnapshot,
+    FindingReport,
+)
+from project_workflow.domain.runtime_assignment import payload_sha256
+from tests.test_bug_search_execution import source as source
+from tests.test_bug_search_wire import report_value
+from tests.test_bug_target_source import identity, runtime_value
+
+
+def pinned(source):
+    raw = runtime_value(source)
+    target = raw["targets"][0]
+    target["source"] = identity(
+        raw["project"]["project_id"], raw["project"]["tracker_instance_id"], target["commit_sha"],
+    )
+    second = copy.deepcopy(target)
+    second["repository_ref"] = "repo:second"
+    second["source"]["repository_id"] = str(uuid4())
+    raw["targets"].append(second)
+    return ExecutionSnapshot.model_validate_json(json.dumps(raw))
+
+
+def result(report):
+    return ExecutionResult.model_validate_json(json.dumps({"coverage": "complete", "findings": [
+        {"finding_id": str(uuid4()), "report": report},
+    ]}))
+
+
+def test_legacy_source_repository_none_is_omitted_and_old_hash_unchanged(source):
+    raw = report_value()
+    report = FindingReport.model_validate_json(json.dumps(raw))
+    assert report.model_dump(mode="json") == raw
+    assert report.source.repository_id is None
+    snapshot = ExecutionSnapshot.model_validate_json(json.dumps(runtime_value(source)))
+    result(raw).require_snapshot(snapshot)
+
+
+def test_cross_service_repository_source_golden_roundtrips_exact_hash():
+    raw = json.loads((Path(__file__).parent / "fixtures/bug-finding-source-repository-v1.json").read_text())
+    source = BugSourceIdentity.model_validate_json(json.dumps(raw))
+    assert source.model_dump(mode="json") == raw
+    assert payload_sha256(source.model_dump(mode="json")) == (
+        "fd25e608cb20dc5313f57d0cd83866ec7f77723f4322783065c5170ebc9cf02a"
+    )
+
+
+def test_equal_rule_sha_and_report_are_scoped_by_original_repository_uuid(source):
+    snapshot = pinned(source)
+    reports = []
+    for target in snapshot.targets:
+        raw = report_value()
+        raw["source"]["repository_id"] = target.source.repository_id
+        raw["source_identity"] = payload_sha256(raw["source"])
+        result(raw).require_snapshot(snapshot)
+        reports.append(raw)
+    assert reports[0]["source_identity"] != reports[1]["source_identity"]
+
+
+@pytest.mark.parametrize("bad", ["missing", "foreign", "version", "deployment"])
+def test_new_findings_require_exact_repository_and_that_repository_commit(bad, source):
+    snapshot = pinned(source)
+    raw = report_value()
+    raw["source"]["repository_id"] = snapshot.targets[0].source.repository_id
+    if bad == "missing":
+        raw["source"].pop("repository_id")
+    elif bad == "foreign":
+        raw["source"]["repository_id"] = str(uuid4())
+    else:
+        snapshot_raw = snapshot.content()
+        if bad == "version":
+            snapshot_raw["targets"][1]["commit_sha"] = "b" * 40
+            snapshot_raw["targets"][1]["source"]["observed_head_sha"] = "b" * 40
+        else:
+            snapshot_raw["mode"] = "qa"
+            for target in snapshot_raw["targets"]:
+                target.update(target_ref="qa:original", deployment_ref="forge:delivered:original")
+        snapshot = ExecutionSnapshot.model_validate_json(json.dumps(snapshot_raw))
+        raw["checked_version"] = "b" * 40 if bad == "version" else "forge:delivered:original"
+    raw["source_identity"] = payload_sha256(raw["source"])
+    with pytest.raises(ValueError):
+        result(raw).require_snapshot(snapshot)

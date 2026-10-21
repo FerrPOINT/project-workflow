@@ -1,0 +1,1480 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 80a7d06..7095927 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -13,6 +13,13 @@
+ - Standalone-режим: репозиторий собирается и запускается без соседнего `services-base` (убраны extra `cli-platform`, uv source, Docker additional_context и CI checkout). Token-режим CLI без `sdlc-cli-core` выдаёт понятную ошибку; запуск без `AUTH_ISSUER` работает без авторизации.
+ 
+ ### Fixed
++- Namespace forms use the Base SSR draft guard for links, context selectors,
++  create cancellation and indexed Back/Forward. Pending writes block duplicates;
++  rejected writes retain fields, while unknown outcomes require read-only
++  reconciliation instead of another mutation. Acknowledged create/delete reload
++  the correct SSR composition; cancelled deletion restores trigger focus.
++- Namespace previews update canonical accent tokens, retaining the Base readable
++  foreground across themes instead of overriding its legacy aliases.
+ - Jinja pages use the Base page header in the work area: one h1, one owner of
+   page actions across desktop/mobile, and shared error/403/404 states. Phase mode
+   controls use the Base responsive target token instead of a fixed 40 px height.
+diff --git a/docs/UI_UX_MAP.md b/docs/UI_UX_MAP.md
+index d52f48a..39870d2 100644
+--- a/docs/UI_UX_MAP.md
++++ b/docs/UI_UX_MAP.md
+@@ -50,7 +50,8 @@ runtime-build-manifest и ui-build. Совместимость со штатны
+ 
+ ## Текущая Композиция Страниц
+ 
+-Base snapshot `94169d1` поставляет React primitives и SSR `page_header`/`state`.
++Base поставляет React primitives и SSR `page_header`/`state`; фактическая версия
++определяется build fingerprint, а не историческим SHA из описания композиции.
+ Jinja показывает единственный `h1` в рабочей области; верхний header содержит
+ контекст, а действия страницы находятся в общем page header без мобильных дублей.
+ Task title/context используют Base scale; error/403/404 используют Base states,
+@@ -61,6 +62,14 @@ React URL `namespace_id=` означает явный default/all scope и не
+ старую cookie после reload. Этот маркер сохраняется в pilot navigation, но не
+ передаётся в numeric API/Jinja query. Ссылка Jinja редактора получает существующий
+ namespace с matching workflow; при неразрешённом default context она скрыта.
++
++Редактор namespace использует Base SSR draft guard: ссылки, selector, отмена
++создания и indexed Back/Forward не сбрасывают черновик без подтверждения.
++Pending блокирует повтор и уход, известные ошибки сохраняют значения, 403/404
++блокируют CRUD. Неизвестный исход записи блокирует повтор до read-only сверки
++с существующим namespace catalogue; отрицательная сверка не считается успехом.
++После подтверждённого create/delete загружается соответствующая SSR-композиция.
++Preview задаёт canonical accent tokens, не переопределяя readable alias Base.
+ Нет новых endpoint, auth store или изменений основного Jinja/runtime bridge.
+ Актуальные source gates и browser evidence фиксируются отдельно; immutable image,
+ SSO/roles/states/drafts и release provenance остаются обязательной отдельной проверкой.
+diff --git a/docs/quality-gate.md b/docs/quality-gate.md
+index 51fa4a6..bc0f67c 100644
+--- a/docs/quality-gate.md
++++ b/docs/quality-gate.md
+@@ -154,6 +154,25 @@ node scripts/capture_ui_screenshots.mjs
+ Для backend-only тестовых или документационных изменений browser smoke не
+ обязателен.
+ 
++## Namespace SSR State Tests
++
++Start the documented source preview with an isolated neutral SQLite smoke
++fixture (never a runtime database). In another terminal run:
++
++```powershell
++$env:WORKFLOW_UI_QA_ORIGIN = "http://127.0.0.1:8812"
++pnpm --dir frontend test:ssr
++```
++
++The runner requires an already-started loopback fixture with `workflow-dev`
++and `workflow-qa` namespaces. It does not launch containers or mutate fixture
++data: unexpected API writes are blocked; write/error scenarios use explicit
++route fixtures. It checks desktop/mobile draft, context/history, pending,
++reconciliation and focus behavior. Captures and JSON results are stored in
++`.smoke/namespace-drafts`; archive them with source/Base fingerprints before
++another run. These tests supplement, not replace, no-mock route smoke, full
++Python/PostgreSQL gates and actual-image/SSO acceptance.
++
+ ## CLI Wrappers
+ 
+ После изменений в CRUD неймспейсов, bootstrap или CLI selector path дополнительно
+diff --git a/frontend/e2e/namespace-drafts.spec.ts b/frontend/e2e/namespace-drafts.spec.ts
+new file mode 100644
+index 0000000..88f21e4
+--- /dev/null
++++ b/frontend/e2e/namespace-drafts.spec.ts
+@@ -0,0 +1,267 @@
++import { expect, test, type Page } from '@playwright/test'
++
++type Namespace = { id: number; cli_command: string; name: string; [key: string]: unknown }
++let namespaces: Namespace[]
++let dev: Namespace
++let qa: Namespace
++
++const dialog = (page: Page) => page.locator('[data-base-draft-dialog]')
++const cancel = (page: Page) => page.locator('[data-base-draft-cancel]')
++const discard = (page: Page) => page.locator('[data-base-draft-discard]')
++
++test.beforeEach(async ({ page, request }) => {
++  const response = await request.get('/api/namespaces')
++  expect(response.ok()).toBeTruthy()
++  namespaces = (await response.json()).namespaces
++  dev = namespaces.find(item => item.cli_command === 'workflow-dev')!
++  qa = namespaces.find(item => item.cli_command === 'workflow-qa')!
++  expect(dev).toBeDefined()
++  expect(qa).toBeDefined()
++  await page.route('**/api/**', async route => {
++    if (route.request().method() === 'GET') return route.continue()
++    throw new Error(`Unplanned mutation: ${route.request().method()} ${route.request().url()}`)
++  })
++})
++
++async function openEditor(page: Page, create = false) {
++  await page.goto(`/namespaces${create ? '/new' : ''}?namespace_id=${dev.id}`)
++  await expect(page.locator('#namespaceName')).toBeEnabled()
++  await expect(dialog(page)).not.toBeVisible()
++}
++
++async function selectNamespace(page: Page, id: number) {
++  if (await page.locator('#namespaceSelect').isVisible()) {
++    await page.locator('#namespaceSelect').selectOption(String(id))
++  } else {
++    await page.locator(`[data-namespace-id="${id}"]`).click()
++  }
++}
++
++for (const theme of ['dark', 'gray', 'light']) {
++  test(`context cancellation preserves draft, cookie and focus (${theme})`, async ({ page }) => {
++    await page.addInitScript(value => {
++      localStorage.setItem('theme', value)
++      localStorage.setItem('workflow-theme', value)
++    }, theme)
++    await openEditor(page)
++    const url = page.url()
++    const cookie = await page.context().cookies()
++    await page.locator('#namespaceName').fill('Unsaved namespace')
++    await selectNamespace(page, qa.id)
++    await expect(dialog(page)).toBeVisible()
++    await expect(cancel(page)).toBeFocused()
++    await page.keyboard.press('Escape')
++    await expect(dialog(page)).not.toBeVisible()
++    await expect(page.locator('#namespaceName')).toHaveValue('Unsaved namespace')
++    expect(page.url()).toBe(url)
++    expect(await page.context().cookies()).toEqual(cookie)
++    await expect(page.locator('#namespaceSelector')).toHaveValue(String(dev.id))
++    await page.locator('#namespaceSelector').focus()
++    await page.locator('#namespaceSelector').selectOption(String(qa.id))
++    await expect(dialog(page)).toBeVisible()
++    await cancel(page).click()
++    await expect(page.locator('#namespaceSelector')).toBeFocused()
++    await expect(page.locator('#namespaceSelector')).toHaveValue(String(dev.id))
++    expect(page.url()).toBe(url)
++    await page.screenshot({ path: test.info().outputPath(`namespace-${theme}.png`), fullPage: true })
++  })
++}
++
++test('accepted global context transition has no second native prompt', async ({ page }) => {
++  await openEditor(page)
++  await page.locator('#namespaceName').fill('Unsaved context')
++  const nativeDialogs: string[] = []
++  page.on('dialog', async prompt => { nativeDialogs.push(prompt.type()); await prompt.dismiss() })
++  await page.locator('#namespaceSelector').selectOption(String(qa.id))
++  await expect(dialog(page)).toBeVisible()
++  await discard(page).click()
++  await expect(page).toHaveURL(new RegExp(`namespace_id=${qa.id}`))
++  await expect(page.locator('#namespaceName')).toHaveValue(qa.name)
++  expect(nativeDialogs).toEqual([])
++})
++
++test('Back cancellation restores the accepted URL; confirmed Back and Forward restore fields', async ({ page }) => {
++  await openEditor(page)
++  await selectNamespace(page, qa.id)
++  await expect(page.locator('#namespaceName')).toHaveValue(qa.name)
++  const accepted = page.url()
++  const length = await page.evaluate(() => history.length)
++  await page.locator('#namespaceName').fill('Unsaved history')
++  await page.evaluate(() => history.back())
++  await expect(dialog(page)).toBeVisible()
++  expect(page.url()).toBe(accepted)
++  await cancel(page).click()
++  await expect(page.locator('#namespaceName')).toHaveValue('Unsaved history')
++  expect(await page.evaluate(() => history.length)).toBe(length)
++  await page.evaluate(() => history.back())
++  await expect(dialog(page)).toBeVisible()
++  await discard(page).click()
++  await expect(page.locator('#namespaceName')).toHaveValue(dev.name)
++  await expect(page).toHaveURL(new RegExp(`namespace_id=${dev.id}`))
++  await page.evaluate(() => history.forward())
++  await expect(page.locator('#namespaceName')).toHaveValue(qa.name)
++  expect(await page.evaluate(() => history.length)).toBe(length)
++})
++
++test('create cancellation protects draft and reloads the catalogue composition on discard', async ({ page }) => {
++  await openEditor(page, true)
++  await expect(page.locator('[data-page-layout="reading"]')).toBeVisible()
++  await page.locator('#namespaceName').fill('Unsaved creation')
++  await page.locator('#cancelCreateButton').click()
++  await expect(dialog(page)).toBeVisible()
++  await cancel(page).click()
++  await expect(page.locator('#namespaceName')).toHaveValue('Unsaved creation')
++  await page.locator('#cancelCreateButton').click()
++  await discard(page).click()
++  await expect(page.locator('[data-page-layout="wide"]')).toBeVisible()
++  await expect(page.locator('#namespaceName')).toHaveValue(dev.name)
++})
++
++test('sidebar and native reload cancellation retain the draft', async ({ page }) => {
++  await openEditor(page)
++  await page.locator('#namespaceName').fill('Protected navigation')
++  const url = page.url()
++  if (await page.locator('#burgerBtn').isVisible()) await page.locator('#burgerBtn').click()
++  const link = page.locator('.sidebar-link:visible[href^="/tasks"]').first()
++  await link.click()
++  await expect(dialog(page)).toBeVisible()
++  await page.keyboard.press('Escape')
++  await expect(link).toBeFocused()
++  await expect(page.locator('#namespaceName')).toHaveValue('Protected navigation')
++  expect(page.url()).toBe(url)
++  if (await page.locator('[data-base-drawer]:open').count()) {
++    await page.locator('[data-base-drawer-close]').click()
++  }
++  const nativeDialog = page.waitForEvent('dialog')
++  await page.evaluate(() => { setTimeout(() => location.reload(), 0) })
++  const prompt = await nativeDialog
++  expect(prompt.type()).toBe('beforeunload')
++  await prompt.dismiss()
++  await expect(page.locator('#namespaceName')).toHaveValue('Protected navigation')
++  expect(page.url()).toBe(url)
++})
++
++test('hash navigation preserves draft and does not remove reload protection', async ({ page }) => {
++  await openEditor(page)
++  await page.locator('#namespaceName').fill('Fragment draft')
++  await page.evaluate(() => { location.hash = 'namespaceForm' })
++  await expect(page).toHaveURL(/#namespaceForm$/)
++  await page.evaluate(() => history.back())
++  await expect(page).toHaveURL(new RegExp(`namespace_id=${dev.id}$`))
++  await expect(page.locator('#namespaceName')).toHaveValue('Fragment draft')
++  await expect(dialog(page)).not.toBeVisible()
++})
++
++test('cancelled deletion restores focus without a mutation', async ({ page }) => {
++  await page.route('**/namespaces?**', async route => {
++    const response = await route.fetch()
++    const body = await response.text()
++    // Only change this isolated page's catalogue fixture, never the server data.
++    const match = body.match(/const namespaceStore = (\[[^\n]*\]);/)
++    expect(match).not.toBeNull()
++    const catalogue: Namespace[] = JSON.parse(match![1])
++    const fixture = catalogue.map(item => ({ ...item, task_count: 0 }))
++    await route.fulfill({ response, body: body.replace(match![0], `const namespaceStore = ${JSON.stringify(fixture)};`) })
++  })
++  await openEditor(page)
++  const trigger = page.locator('#deleteNamespaceButton')
++  await expect(trigger).toBeEnabled()
++  await trigger.click()
++  await expect(page.locator('#confirmDialog')).toBeVisible()
++  await page.keyboard.press('Escape')
++  await expect(page.locator('#confirmDialog')).not.toBeVisible()
++  await expect(trigger).toBeFocused()
++  await expect(page.locator('#namespaceName')).toBeEnabled()
++})
++
++for (const status of [409, 422, 403, 404]) {
++  test(`rejected write ${status} preserves values and classifies state`, async ({ page }) => {
++    await openEditor(page)
++    let writes = 0
++    await page.route(`**/api/namespaces/${dev.id}`, async route => {
++      expect(route.request().method()).toBe('PUT')
++      writes++
++      await route.fulfill({ status, json: { ok: false, error: `Fixture rejection ${status}` } })
++    })
++    await page.locator('#namespaceName').fill('Rejected draft')
++    await page.locator('#namespaceDescription').fill('Retained description')
++    await page.locator('#namespaceSubmitButton').click()
++    await expect(page.locator('#namespaceWriteError')).toContainText(`Fixture rejection ${status}`)
++    await expect(page.locator('#namespaceName')).toHaveValue('Rejected draft')
++    await expect(page.locator('#namespaceDescription')).toHaveValue('Retained description')
++    const kind = status === 403 ? 'permission-denied' : status === 404 ? 'not-found' : 'error'
++    await expect(page.locator(`#namespaceWriteError [data-page-state="${kind}"]`)).toBeVisible()
++    if (status === 403 || status === 404) await expect(page.locator('#namespaceName')).toBeDisabled()
++    else await expect(page.locator('#namespaceName')).toBeEnabled()
++    await expect(page.locator('#namespaceReconcileButton')).not.toBeVisible()
++    expect(writes).toBe(1)
++  })
++}
++
++test('pending save blocks duplicate submission and departure; acknowledged save clears the stale dialog', async ({ page }) => {
++  await openEditor(page)
++  let writes = 0
++  let release!: () => void
++  const held = new Promise<void>(resolve => { release = resolve })
++  await page.route(`**/api/namespaces/${dev.id}`, async route => {
++    writes++
++    const payload = route.request().postDataJSON()
++    await held
++    await route.fulfill({ json: { ok: true, namespace: { ...dev, ...payload } } })
++  })
++  try {
++    await page.locator('#namespaceName').fill('Acknowledged draft')
++    await page.locator('#namespaceSubmitButton').click()
++    await expect(page.locator('#namespaceName')).toBeDisabled()
++    await expect(page.locator('#namespaceForm')).toHaveAttribute('aria-busy', 'true')
++    await page.evaluate(() => { const ui = window as unknown as { submitNamespace: () => void }; ui.submitNamespace(); ui.submitNamespace() })
++    await selectNamespace(page, qa.id)
++    await expect(dialog(page)).toBeVisible()
++    await expect(discard(page)).toBeDisabled()
++    release()
++    await expect(dialog(page)).not.toBeVisible()
++    await expect(page.locator('#namespaceName')).toBeEnabled()
++    await expect(page.locator('#namespaceName')).toHaveValue('Acknowledged draft')
++    await expect(page).toHaveURL(new RegExp(`namespace_id=${dev.id}`))
++    expect(writes).toBe(1)
++    await selectNamespace(page, qa.id)
++    await expect(dialog(page)).not.toBeVisible()
++    await expect(page.locator('#namespaceName')).toHaveValue(qa.name)
++  } finally { release() }
++})
++
++for (const outcome of ['server-error', 'network-error', 'invalid-ack']) {
++  test(`unknown ${outcome} blocks retries until read-only reconciliation`, async ({ page }) => {
++    await openEditor(page)
++    let writes = 0
++    let payload: Record<string, unknown>
++    await page.route(`**/api/namespaces/${dev.id}`, async route => {
++      writes++
++      payload = route.request().postDataJSON()
++      if (outcome === 'network-error') await route.abort('failed')
++      else await route.fulfill({ status: outcome === 'server-error' ? 503 : 200, json: { ok: true } })
++    })
++    await page.locator('#namespaceName').fill('Unknown outcome')
++    await page.locator('#namespaceSubmitButton').click()
++    await expect(page.locator('#namespaceReconcileButton')).toBeVisible()
++    await expect(page.locator('#namespaceName')).toBeDisabled()
++    await page.evaluate(() => (window as unknown as { submitNamespace: () => void }).submitNamespace())
++    expect(writes).toBe(1)
++    await page.locator('#namespaceReconcileButton').click()
++    await expect(page.locator('#namespaceWriteError')).toContainText('Сохранение пока не подтверждено')
++    await expect(page.locator('#namespaceName')).toBeDisabled()
++    await expect(page.locator('#namespaceName')).toHaveValue('Unknown outcome')
++    await page.route('**/api/namespaces', route => route.fulfill({ status: 503, json: { ok: false } }))
++    await page.locator('#namespaceReconcileButton').click()
++    await expect(page.locator('#namespaceWriteError')).toContainText('Не удалось проверить сохранение')
++    await expect(page.locator('#namespaceName')).toBeDisabled()
++    await page.route('**/api/namespaces', route => route.fulfill({ json: {
++      ok: true, namespaces: namespaces.map(item => item.id === dev.id ? { ...item, ...payload } : item),
++    } }))
++    await page.locator('#namespaceReconcileButton').click()
++    await expect(page.locator('#namespaceName')).toBeEnabled()
++    await expect(page.locator('#namespaceReconcileButton')).not.toBeVisible()
++    await expect(page.locator('#namespaceName')).toHaveValue('Unknown outcome')
++    expect(writes).toBe(1)
++  })
++}
+diff --git a/frontend/package.json b/frontend/package.json
+index 025dec4..5580b9b 100644
+--- a/frontend/package.json
++++ b/frontend/package.json
+@@ -9,6 +9,7 @@
+     "typecheck": "tsc --noEmit",
+     "build": "tsc --noEmit && vite build",
+     "test": "vitest run",
++    "test:ssr": "tsc -p tsconfig.e2e.json && playwright test --config playwright.config.ts",
+     "lint": "eslint src --max-warnings=0",
+     "ssr:sync": "node ../../services-base/frontend/scripts/export-ssr.mjs --out ../project_workflow/interfaces/ui/static/base-ui",
+     "ssr:check": "node ../../services-base/frontend/scripts/export-ssr.mjs --out ../project_workflow/interfaces/ui/static/base-ui --check",
+@@ -28,6 +29,7 @@
+   },
+   "devDependencies": {
+     "@eslint/js": "9.39.5",
++    "@playwright/test": "1.62.1",
+     "@tailwindcss/vite": "4.3.3",
+     "@testing-library/react": "16.3.3",
+     "@types/node": "22.20.4",
+diff --git a/frontend/playwright.config.ts b/frontend/playwright.config.ts
+new file mode 100644
+index 0000000..4dec879
+--- /dev/null
++++ b/frontend/playwright.config.ts
+@@ -0,0 +1,20 @@
++import { defineConfig } from '@playwright/test'
++
++const origin = process.env.WORKFLOW_UI_QA_ORIGIN
++if (!origin) throw new Error('WORKFLOW_UI_QA_ORIGIN must identify an isolated, already-started Workflow fixture')
++const url = new URL(origin)
++if (!['127.0.0.1', 'localhost'].includes(url.hostname)) throw new Error('SSR state QA is loopback-only')
++
++export default defineConfig({
++  testDir: './e2e',
++  fullyParallel: false,
++  workers: 1,
++  retries: 0,
++  reporter: [['list'], ['json', { outputFile: '../.smoke/namespace-drafts/result.json' }]],
++  outputDir: '../.smoke/namespace-drafts/captures',
++  use: { baseURL: url.origin, screenshot: 'only-on-failure', trace: 'retain-on-failure' },
++  projects: [
++    { name: 'desktop', use: { viewport: { width: 1920, height: 1080 } } },
++    { name: 'mobile', use: { viewport: { width: 375, height: 1080 } } },
++  ],
++})
+diff --git a/frontend/pnpm-lock.yaml b/frontend/pnpm-lock.yaml
+index 4f02fff..adc9bd1 100644
+--- a/frontend/pnpm-lock.yaml
++++ b/frontend/pnpm-lock.yaml
+@@ -10,7 +10,7 @@ importers:
+     dependencies:
+       '@sdlc/ui':
+         specifier: file:../../services-base/frontend
+-        version: file:../../services-base/frontend(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(i18next@25.10.10(typescript@5.9.3))(react-dom@19.3.0(react@19.3.0))(react-i18next@16.6.6(i18next@25.10.10(typescript@5.9.3))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@5.9.3))(react-router@8.4.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0)(yaml@2.9.1)(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0)(use-sync-external-store@1.7.0(react@19.3.0)))
++        version: file:../../services-base/frontend(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(i18next@25.10.10(typescript@5.9.3))(react-dom@19.3.0(react@19.3.0))(react-i18next@16.6.6(i18next@25.10.10(typescript@5.9.3))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@5.9.3))(react-router@8.4.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0)(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0)(use-sync-external-store@1.7.0(react@19.3.0)))
+       '@tanstack/react-query':
+         specifier: 5.103.2
+         version: 5.103.2(react@19.3.0)
+@@ -42,6 +42,9 @@ importers:
+       '@eslint/js':
+         specifier: 9.39.5
+         version: 9.39.5
++      '@playwright/test':
++        specifier: 1.62.1
++        version: 1.62.1
+       '@tailwindcss/vite':
+         specifier: 4.3.3
+         version: 4.3.3(vite@6.4.3(@types/node@22.20.4)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.1))
+@@ -488,6 +491,11 @@ packages:
+     cpu: [x64]
+     os: [linux]
+ 
++  '@playwright/test@1.62.1':
++    resolution: {integrity: sha512-DTcUc8qii+cpHvtOwggMtBRMjKZHXYWdw8syRYu2vtzuq4Wxphqq4NfCs5Zt44L6mA8rfDfj+PHnxFc/FeK6mQ==}
++    engines: {node: '>=20'}
++    hasBin: true
++
+   '@radix-ui/primitive@1.1.7':
+     resolution: {integrity: sha512-rqWnm76nYT8HoNNqEjpgJ7Pw/DrBj5iBTrmEPo6HTX5+VJyBNOqTdv4g89G63HuR5g0AaENoAcH7Is5fF2kZ8Q==}
+ 
+@@ -944,8 +952,7 @@ packages:
+       react: '>=19 <20'
+       react-dom: '>=19 <20'
+       react-i18next: '>=15 <17'
+-      react-router: ^8.4.0
+-      yaml: ^2.0.0
++      react-router: '>=8.1 <9'
+       zustand: ^5.0.0
+ 
+   '@standard-schema/spec@1.1.0':
+@@ -1481,6 +1488,11 @@ packages:
+   flatted@3.4.4:
+     resolution: {integrity: sha512-5+ybhBZANEJxaH3X5evAFatUxLfEHSr7n6kYJ+1Qd0mUqr4eu9gIf6GDbWHf8RJijHrjjO8G+la14SlL2SeS1Q==}
+ 
++  fsevents@2.3.2:
++    resolution: {integrity: sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==}
++    engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
++    os: [darwin]
++
+   fsevents@2.3.3:
+     resolution: {integrity: sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==}
+     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
+@@ -1786,6 +1798,16 @@ packages:
+     resolution: {integrity: sha512-qcJu88Q2IWqJsDD529JKMdwGm/dvInW4HvQnRwiH9JtihJvzGOscDtHE3x1pBKeUOTysQ8kVmLnJ2kJu7yhcGA==}
+     engines: {node: '>=12'}
+ 
++  playwright-core@1.62.1:
++    resolution: {integrity: sha512-wPYSwEBJY9GHraISXqyqtx0na0LpO3XEX7jNDhntbex7tzUS7kLnZsOlFruFJB4Hi/rhDMjXGqHewDZ68nYZVw==}
++    engines: {node: '>=20'}
++    hasBin: true
++
++  playwright@1.62.1:
++    resolution: {integrity: sha512-0M+L3LAD8/nm554LOla9Ayx0j0tmFZ0FBcoQ7F1VuVHpM/XpiC8RcDzBQB8W5+hA8L22THxELzeF+2WcUzvcLg==}
++    engines: {node: '>=20'}
++    hasBin: true
++
+   postcss@8.5.28:
+     resolution: {integrity: sha512-RRuzqDtt5Y9h3quz5hWhK+TPnsmVs6WwSU6LkJMeY4HstUEDuYTG8UJSdawMRzmzAtV+KEoG8N3Qg2qLy5vM/A==}
+     engines: {node: ^10 || ^12 || >=14}
+@@ -2546,6 +2568,10 @@ snapshots:
+   '@napi-rs/lzma-linux-x64-gnu@1.5.1':
+     optional: true
+ 
++  '@playwright/test@1.62.1':
++    dependencies:
++      playwright: 1.62.1
++
+   '@radix-ui/primitive@1.1.7': {}
+ 
+   '@radix-ui/react-alert-dialog@1.1.23(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
+@@ -2927,9 +2953,10 @@ snapshots:
+   '@rollup/rollup-win32-x64-msvc@4.63.5':
+     optional: true
+ 
+-  '@sdlc/ui@file:../../services-base/frontend(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(i18next@25.10.10(typescript@5.9.3))(react-dom@19.3.0(react@19.3.0))(react-i18next@16.6.6(i18next@25.10.10(typescript@5.9.3))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@5.9.3))(react-router@8.4.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0)(yaml@2.9.1)(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0)(use-sync-external-store@1.7.0(react@19.3.0)))':
++  '@sdlc/ui@file:../../services-base/frontend(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(i18next@25.10.10(typescript@5.9.3))(react-dom@19.3.0(react@19.3.0))(react-i18next@16.6.6(i18next@25.10.10(typescript@5.9.3))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@5.9.3))(react-router@8.4.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0)(zustand@5.0.15(@types/react@19.3.0)(react@19.3.0)(use-sync-external-store@1.7.0(react@19.3.0)))':
+     dependencies:
+       '@radix-ui/react-alert-dialog': 1.1.23(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
++      '@radix-ui/react-compose-refs': 1.1.5(@types/react@19.3.0)(react@19.3.0)
+       '@radix-ui/react-dialog': 1.1.23(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+       '@radix-ui/react-dropdown-menu': 2.1.24(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+       '@radix-ui/react-label': 2.1.15(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+@@ -2945,7 +2972,6 @@ snapshots:
+       react-i18next: 16.6.6(i18next@25.10.10(typescript@5.9.3))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@5.9.3)
+       react-router: 8.4.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+       tailwind-merge: 3.7.0
+-      yaml: 2.9.1
+       zustand: 5.0.15(@types/react@19.3.0)(react@19.3.0)(use-sync-external-store@1.7.0(react@19.3.0))
+     transitivePeerDependencies:
+       - '@types/react'
+@@ -3525,6 +3551,9 @@ snapshots:
+ 
+   flatted@3.4.4: {}
+ 
++  fsevents@2.3.2:
++    optional: true
++
+   fsevents@2.3.3:
+     optional: true
+ 
+@@ -3784,6 +3813,14 @@ snapshots:
+ 
+   picomatch@4.0.7: {}
+ 
++  playwright-core@1.62.1: {}
++
++  playwright@1.62.1:
++    dependencies:
++      playwright-core: 1.62.1
++    optionalDependencies:
++      fsevents: 2.3.2
++
+   postcss@8.5.28:
+     dependencies:
+       nanoid: 3.3.19
+diff --git a/frontend/src/jinjaNavigation.test.ts b/frontend/src/jinjaNavigation.test.ts
+index b74a7c2..dd406d8 100644
+--- a/frontend/src/jinjaNavigation.test.ts
++++ b/frontend/src/jinjaNavigation.test.ts
+@@ -9,11 +9,18 @@ const template = readFileSync(resolve(cwd(), '../project_workflow/interfaces/ui/
+ const handler = template.match(/function switchNamespace\(namespaceId\)\{[\s\S]*?(?=function setPlatformTheme)/)?.[0]
+ if (!handler) throw new Error('Jinja namespace handler is missing')
+ 
+-function switchNamespace(path: string, namespaceId: string) {
++function switchNamespace(path: string, namespaceId: string, allow = true) {
+   const location = { href: `http://localhost${path}` }
+-  const document = { cookie: '' }
+-  runInNewContext(`${handler}\nswitchNamespace(namespaceId)`, { URL, window: { location }, document, namespaceId })
+-  return { url: new URL(location.href), cookie: document.cookie }
++  const selector = { value: namespaceId, dataset: { currentNamespace: '1' } }
++  const document = { cookie: '', getElementById: () => selector }
++  const navigateWorkflow = (url: string, updateContext: () => void) => {
++    if (!allow) return Promise.resolve(false)
++    updateContext()
++    location.href = url
++    return Promise.resolve(true)
++  }
++  runInNewContext(`${handler}\nswitchNamespace(namespaceId)`, { URL, window: { location }, document, namespaceId, navigateWorkflow })
++  return { url: new URL(location.href), cookie: document.cookie, selector: selector.value }
+ }
+ 
+ describe('Jinja namespace navigation', () => {
+@@ -41,4 +48,11 @@ describe('Jinja namespace navigation', () => {
+     expect(url.href).toBe('http://localhost/phases?workflow_id=2&mode_id=3')
+     expect(cookie).toBe('')
+   })
++
++  it('restores the selector without changing context when navigation is rejected', () => {
++    const result = switchNamespace('/namespaces?namespace_id=1#editor', '9', false)
++    expect(result.url.href).toBe('http://localhost/namespaces?namespace_id=1#editor')
++    expect(result.cookie).toBe('')
++    expect(result.selector).toBe('1')
++  })
+ })
+diff --git a/frontend/tsconfig.e2e.json b/frontend/tsconfig.e2e.json
+new file mode 100644
+index 0000000..7997c42
+--- /dev/null
++++ b/frontend/tsconfig.e2e.json
+@@ -0,0 +1,5 @@
++{
++  "extends": "./tsconfig.json",
++  "compilerOptions": { "types": ["node"] },
++  "include": ["e2e", "playwright.config.ts"]
++}
+diff --git a/frontend/vitest.config.ts b/frontend/vitest.config.ts
+index dacfb7c..744d2be 100644
+--- a/frontend/vitest.config.ts
++++ b/frontend/vitest.config.ts
+@@ -1,4 +1,4 @@
+-import { defineConfig, mergeConfig } from 'vitest/config'
++import { configDefaults, defineConfig, mergeConfig } from 'vitest/config'
+ import viteConfig from './vite.config'
+ 
+-export default mergeConfig(viteConfig, defineConfig({ test: { environment: 'jsdom' } }))
++export default mergeConfig(viteConfig, defineConfig({ test: { environment: 'jsdom', exclude: [...configDefaults.exclude, 'e2e/**'] } }))
+diff --git a/project_workflow/interfaces/ui/static/base-ui/base-ui.css b/project_workflow/interfaces/ui/static/base-ui/base-ui.css
+index 1f89af2..f265a3f 100644
+--- a/project_workflow/interfaces/ui/static/base-ui/base-ui.css
++++ b/project_workflow/interfaces/ui/static/base-ui/base-ui.css
+@@ -8,6 +8,7 @@
+   --color-text-secondary: #d4d4d8;
+   --color-text-muted: #a1a1aa;
+   --color-accent: #818cf8;
++  --color-accent-readable: color-mix(in srgb, var(--color-accent) 25%, var(--color-text-primary));
+   --color-accent-foreground: #18181b;
+   --color-accent-hover: #a5b4fc;
+   --color-danger: #f87171;
+@@ -38,6 +39,7 @@
+   --shell-readable-width: 760px;
+   --shell-aside-width: 320px;
+   --base-font-body: 14px;
++  --base-font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+   --base-font-label: 12px;
+   --base-font-page-title: 24px;
+   --base-radius: 6px;
+@@ -45,7 +47,7 @@
+ 
+ .base-control:not(textarea) { min-height: var(--shell-control-min); }
+ .base-icon-control { min-width: var(--shell-control-min); }
+-.base-app-shell { min-height: 100dvh; background: var(--color-background); color: var(--color-text-primary); font-size: var(--base-font-body); letter-spacing: 0; }
++.base-app-shell { min-height: 100dvh; background: var(--color-background); color: var(--color-text-primary); font-family: var(--base-font-family); font-size: var(--base-font-body); letter-spacing: 0; }
+ .base-shell-sidebar { position: fixed; inset: var(--shell-header-height) auto 0 0; z-index: 20; display: flex; width: var(--shell-sidebar-expanded); flex-direction: column; border-right: 1px solid var(--color-border); background: var(--color-surface); }
+ .base-shell-brand { display: flex; height: var(--shell-header-height); flex-shrink: 0; align-items: center; padding: 0 20px; border-bottom: 1px solid var(--color-border); }
+ .base-shell-identity { display: flex; min-width: 0; align-items: center; gap: 12px; }
+@@ -225,7 +227,7 @@ dialog.base-shell-drawer::backdrop { background: rgb(0 0 0 / 65%); }
+   --bg: var(--color-background); --panel: var(--color-surface);
+   --surface: var(--color-surface-raised); --surface-hover: var(--color-surface-raised); --surface-active: var(--color-surface-raised);
+   --text: var(--color-text-primary); --text-secondary: var(--color-text-secondary); --text-muted: var(--color-text-muted); --text-dim: var(--color-text-muted);
+-  --accent: var(--color-accent); --accent-hover: var(--color-accent-hover); --accent-readable: var(--color-accent);
++  --accent: var(--color-accent); --accent-hover: var(--color-accent-hover); --accent-readable: var(--color-accent-readable);
+   --accent-foreground: var(--color-accent-foreground); --accent-hover-foreground: var(--color-accent-foreground);
+   --accent-soft: color-mix(in srgb, var(--color-accent) 15%, transparent);
+   --border: var(--color-border); --border-strong: var(--color-border-strong);
+@@ -234,7 +236,8 @@ dialog.base-shell-drawer::backdrop { background: rgb(0 0 0 / 65%); }
+   --orange-soft: color-mix(in srgb, var(--color-warning) 12%, transparent); --yellow-soft: var(--orange-soft);
+   --sidebar-width: var(--shell-sidebar-expanded); --header-height: var(--shell-header-height);
+ }
+-.base-ssr-shell { display: block; font-size: var(--base-font-body); letter-spacing: 0; }
++.base-ssr-shell { display: block; font-family: var(--base-font-family); font-size: var(--base-font-body); letter-spacing: 0; }
++.base-ssr-shell [hidden]:not([hidden='until-found']) { display: none !important; }
+ .base-form-field { display: grid; gap: 8px; min-width: 0; }
+ .base-form-field label { font-weight: 500; }
+ .base-form-field p { margin: 0; color: var(--color-text-muted); font-size: var(--base-font-label); }
+@@ -248,6 +251,12 @@ dialog.base-shell-drawer::backdrop { background: rgb(0 0 0 / 65%); }
+ .base-button-primary { background: var(--color-accent); color: var(--color-accent-foreground); border-color: var(--color-accent); }
+ .base-button-danger { background: var(--color-danger); color: var(--color-destructive-foreground); border-color: var(--color-danger); }
+ .base-button:disabled { opacity: .5; cursor: not-allowed; }
++.base-draft-dialog { box-sizing: border-box; width: min(480px, calc(100% - 32px)); max-height: calc(100dvh - 32px); padding: 20px; border: 1px solid var(--color-border); border-radius: var(--base-radius); background: var(--color-surface); color: var(--color-text-primary); overflow-y: auto; font: inherit; }
++.base-draft-dialog::backdrop { background: rgb(0 0 0 / 65%); }
++.base-draft-dialog h2 { margin: 0; font-size: 18px; line-height: 1.4; overflow-wrap: anywhere; }
++.base-draft-dialog p { margin: 12px 0; overflow-wrap: anywhere; }
++.base-draft-dialog .base-page-actions { justify-content: flex-end; }
++.base-draft-dialog [data-base-draft-pending] { color: var(--color-text-muted); }
+ .base-resource-state { padding: 20px 0; }
+ .base-ssr-shell .main { min-width: 0; min-height: calc(100dvh - var(--shell-header-height)); width: calc(100% - var(--sidebar-width)); margin-left: var(--sidebar-width); }
+ .base-ssr-header { position: sticky; top: 0; z-index: 30; display: flex; min-width: 0; width: 100%; height: var(--shell-header-height); align-items: center; justify-content: space-between; gap: 8px; padding: 0 var(--shell-page-gutter); border-bottom: 1px solid var(--color-border); background: var(--color-surface); }
+diff --git a/project_workflow/interfaces/ui/static/base-ui/base-ui.js b/project_workflow/interfaces/ui/static/base-ui/base-ui.js
+index e0d0b10..8abdd6d 100644
+--- a/project_workflow/interfaces/ui/static/base-ui/base-ui.js
++++ b/project_workflow/interfaces/ui/static/base-ui/base-ui.js
+@@ -1,3 +1,137 @@
++(() => {
++  let owner = null;
++
++  window.BaseDraftGuard = {
++    attach({ dialog, isDirty, isPending = () => false, fallbackFocus = () => document.querySelector('main[tabindex="-1"]') }) {
++      if (owner) throw new Error('Base draft guard already attached');
++      if (!(dialog instanceof HTMLDialogElement) || typeof isDirty !== 'function' || typeof isPending !== 'function') {
++        throw new TypeError('Base draft guard requires a dialog and dirty/pending callbacks');
++      }
++      const cancel = dialog.querySelector('[data-base-draft-cancel]');
++      const discard = dialog.querySelector('[data-base-draft-discard]');
++      const pendingMessage = dialog.querySelector('[data-base-draft-pending]');
++      if (!cancel || !discard || !pendingMessage) throw new Error('Use the Base draft_guard_dialog macro');
++      const listeners = new AbortController();
++      let destroyed = false;
++      let attempt = null;
++      let permittedUnload = false;
++      let replayAnchor = null;
++      let replayEvent = null;
++
++      function restoreFocus(target) {
++        const usable = (node) => node instanceof HTMLElement && node.isConnected && !node.disabled && node.getClientRects().length;
++        if (!usable(target)) target = fallbackFocus();
++        if (usable(target)) target.focus();
++      }
++      function finish(allowed) {
++        if (!attempt) return;
++        const current = attempt;
++        attempt = null;
++        if (dialog.open) dialog.close();
++        restoreFocus(current.trigger);
++        current.resolve(allowed);
++      }
++      function refresh() {
++        if (destroyed) return;
++        const pending = isPending();
++        discard.disabled = pending;
++        pendingMessage.hidden = !pending;
++        if (pending && document.activeElement === discard) cancel.focus();
++        if (attempt && !pending && !isDirty()) finish(false);
++      }
++      async function requestLeave(transition) {
++        if (destroyed || attempt) return false;
++        if (typeof transition !== 'function') throw new TypeError('Base draft transition must be a callback');
++        if (!isDirty() && !isPending()) { transition(); return true; }
++        const allowed = await new Promise((resolve) => {
++          attempt = { resolve, trigger: document.activeElement };
++          refresh();
++          try { dialog.showModal(); cancel.focus(); }
++          catch (error) { finish(false); throw error; }
++        });
++        if (!allowed || destroyed || isPending()) return false;
++        transition();
++        return true;
++      }
++      function documentDeparture(target, transition) {
++        const current = new URL(location.href);
++        permittedUnload = target.origin !== current.origin || target.pathname !== current.pathname || target.search !== current.search || (!target.hash && !current.hash);
++        try { transition(); }
++        catch (error) { permittedUnload = false; throw error; }
++      }
++      function navigate(url, beforeNavigate = () => {}) {
++        const target = new URL(url, location.href);
++        if (!['http:', 'https:'].includes(target.protocol) || typeof beforeNavigate !== 'function') {
++          throw new TypeError('Base draft navigation requires an HTTP(S) URL and optional callback');
++        }
++        return requestLeave(() => {
++          beforeNavigate();
++          documentDeparture(target, () => location.assign(target.href));
++        });
++      }
++      const on = (target, type, callback, options = {}) => target.addEventListener(type, callback, { ...options, signal: listeners.signal });
++      on(cancel, 'click', () => finish(false));
++      on(discard, 'click', () => {
++        // Recheck synchronously: a save may start before the product refreshes controls.
++        if (isPending()) { refresh(); return; }
++        finish(true);
++      });
++      on(dialog, 'cancel', (event) => { event.preventDefault(); finish(false); });
++      on(dialog, 'close', () => { if (!dialog.open) finish(false); });
++      on(dialog, 'click', (event) => { if (event.target === dialog) finish(false); });
++      on(dialog, 'keydown', (event) => {
++        if (event.key === 'Escape') { event.preventDefault(); finish(false); return; }
++        if (event.key !== 'Tab') return;
++        const controls = discard.disabled ? [cancel] : [cancel, discard];
++        if (event.shiftKey && document.activeElement === controls[0]) { event.preventDefault(); controls.at(-1).focus(); }
++        else if (!event.shiftKey && document.activeElement === controls.at(-1)) { event.preventDefault(); controls[0].focus(); }
++      });
++      on(window, 'beforeunload', (event) => {
++        if (permittedUnload) { permittedUnload = false; return; }
++        if (!isDirty() && !isPending()) return;
++        event.preventDefault();
++        event.returnValue = '';
++      });
++      on(document, 'click', (event) => {
++        if (replayAnchor && event.target === replayAnchor) { replayEvent = event; return; }
++        if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
++        const anchor = event.target instanceof Element ? event.target.closest('a[href]') : null;
++        const browsingTarget = anchor?.target || document.querySelector('base[target]')?.target || '_self';
++        if (!anchor || anchor.hasAttribute('download') || browsingTarget !== '_self') return;
++        const target = new URL(anchor.href, location.href);
++        if (!['http:', 'https:'].includes(target.protocol) || (!isDirty() && !isPending())) return;
++        event.preventDefault();
++        event.stopImmediatePropagation();
++        void requestLeave(() => {
++          // Only the accepted document navigation bypasses its native unload prompt.
++          try { documentDeparture(target, () => {
++            if (anchor.isConnected && anchor.href === target.href) {
++              // Preserve SSR context handlers; the intercepted click never reached them.
++              replayAnchor = anchor;
++              replayEvent = null;
++              anchor.click();
++              if (replayEvent?.defaultPrevented) permittedUnload = false;
++            } else location.assign(target.href);
++          }); }
++          finally { replayAnchor = null; replayEvent = null; }
++        });
++      }, { capture: true });
++      const guard = {
++        requestLeave, navigate, refresh,
++        destroy() {
++          if (destroyed) return;
++          destroyed = true;
++          listeners.abort();
++          finish(false);
++          owner = null;
++        },
++      };
++      owner = guard;
++      return guard;
++    },
++  };
++})();
++
+ (() => {
+   for (const account of document.querySelectorAll('.base-ssr-account')) {
+     const toggle = account.querySelector('summary');
+diff --git a/project_workflow/interfaces/ui/static/base-ui/fingerprint.json b/project_workflow/interfaces/ui/static/base-ui/fingerprint.json
+index 9c6c3db..075611c 100644
+--- a/project_workflow/interfaces/ui/static/base-ui/fingerprint.json
++++ b/project_workflow/interfaces/ui/static/base-ui/fingerprint.json
+@@ -2,8 +2,8 @@
+   "schemaVersion": 1,
+   "package": "@sdlc/ui",
+   "files": {
+-    "base-ui.css": "f5b4464ca700e97c4ae24006ec9004ffee1a76cbd3960c75c6a598dfa10e2078",
+-    "base-ui.js": "b653e40f48efadf50c0190ef3c461ad4db93c49f02577057696fe5a1fe8546eb",
+-    "macros.html": "c05468472093617fc6e9d565a597dabe2209f11be78c82c983c2c7412ecbab51"
++    "base-ui.css": "7eb1f00e6db1d66d04d5d5c59b5c9d3d00d3268ec5327113cbfaf208b8e7f6df",
++    "base-ui.js": "ef8f28cf52229d8ba31987912ff071a441c0f2a4e5555d8228e562816abcb7a2",
++    "macros.html": "27ab99b664dcda2f1da21ea6f35e811808c588143fa91c5b59ed3b69938984d0"
+   }
+ }
+diff --git a/project_workflow/interfaces/ui/static/base-ui/macros.html b/project_workflow/interfaces/ui/static/base-ui/macros.html
+index fb60149..adfab3b 100644
+--- a/project_workflow/interfaces/ui/static/base-ui/macros.html
++++ b/project_workflow/interfaces/ui/static/base-ui/macros.html
+@@ -46,6 +46,10 @@
+ <section class="base-resource-state" data-page-state="{{ kind }}" {% if kind in ['error', 'partial-error'] %}role="alert"{% else %}role="status"{% endif %}{% if kind == 'loading' %} aria-busy="true"{% endif %}><p>{{ message }}</p>{% if retry_url and kind in ['error', 'partial-error'] %}<a class="base-control base-button base-button-secondary" href="{{ retry_url }}">{{ retry_label }}</a>{% endif %}</section>
+ {%- endmacro %}
+ 
++{% macro draft_guard_dialog(id='base-draft-guard', title='Несохранённые изменения', message='При переходе изменения будут потеряны.', cancel_label='Продолжить редактирование', discard_label='Перейти без сохранения', pending_message='Дождитесь завершения сохранения.') -%}
++<dialog id="{{ id }}" class="base-draft-dialog" data-base-draft-dialog role="alertdialog" aria-labelledby="{{ id }}-title" aria-describedby="{{ id }}-description"><h2 id="{{ id }}-title">{{ title }}</h2><p id="{{ id }}-description">{{ message }}</p><p data-base-draft-pending role="status" hidden>{{ pending_message }}</p><div class="base-page-actions"><button type="button" class="base-control base-button base-button-secondary" data-base-draft-cancel>{{ cancel_label }}</button><button type="button" class="base-control base-button base-button-danger" data-base-draft-discard>{{ discard_label }}</button></div></dialog>
++{%- endmacro %}
++
+ {% macro nav(items, current_path) -%}
+ <nav aria-label="Основная навигация" class="base-shell-navigation">{% for item in items %}<a class="base-shell-link{% if current_path == item.href %} is-active{% endif %}" href="{{ item.href }}"{% if current_path == item.href %} aria-current="page"{% endif %}>{{ item.label }}</a>{% endfor %}</nav>
+ {%- endmacro %}
+diff --git a/project_workflow/interfaces/ui/templates/base.html b/project_workflow/interfaces/ui/templates/base.html
+index b1c64aa..bce6476 100644
+--- a/project_workflow/interfaces/ui/templates/base.html
++++ b/project_workflow/interfaces/ui/templates/base.html
+@@ -369,7 +369,7 @@ textarea{resize:vertical;min-height:60px}
+       </select>
+       {% if namespaces is defined and namespaces %}
+       <div class="namespace-switcher">
+-        <select class="namespace-select" id="namespaceSelector" aria-label="Выбор пространства" onchange="switchNamespace(this.value)">
++        <select class="namespace-select" id="namespaceSelector" data-current-namespace="{{ active_namespace_id or '' }}" aria-label="Выбор пространства" onchange="switchNamespace(this.value)">
+           {% for namespace in namespaces %}
+           <option value="{{ namespace.id }}" {% if active_namespace_id == namespace.id %}selected{% endif %}>{{ namespace.name }}</option>
+           {% endfor %}
+@@ -395,6 +395,7 @@ textarea{resize:vertical;min-height:60px}
+       {% block content %}{% endblock %}
+     </section>
+   {% endcall %}
++  {{ base.draft_guard_dialog() }}
+ </main>
+ 
+ <div class="toast toast-success" id="toast" aria-hidden="true">Сохранено</div>
+@@ -412,6 +413,29 @@ textarea{resize:vertical;min-height:60px}
+ 
+ <script src="/static/base-ui/base-ui.js" defer></script>
+ <script>
++var workflowDraftGuard = null;
++function registerWorkflowDraftGuard(state){
++  function attach(){
++    workflowDraftGuard = BaseDraftGuard.attach(Object.assign({}, state, {
++      dialog: document.querySelector('[data-base-draft-dialog]'),
++      fallbackFocus: function(){ return document.querySelector('main[tabindex="-1"]'); },
++    }));
++  }
++  if(document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', attach, {once:true}); }
++  else { attach(); }
++}
++function requestWorkflowTransition(transition){
++  if(workflowDraftGuard){ return workflowDraftGuard.requestLeave(transition); }
++  transition();
++  return Promise.resolve(true);
++}
++function navigateWorkflow(url, beforeNavigate){
++  if(workflowDraftGuard){ return workflowDraftGuard.navigate(url, beforeNavigate); }
++  if(beforeNavigate){ beforeNavigate(); }
++  window.location.assign(url);
++  return Promise.resolve(true);
++}
++function refreshWorkflowDraftGuard(){ if(workflowDraftGuard){ workflowDraftGuard.refresh(); } }
+ function syncSidebarLayout(){
+   var dialogOpen=!document.getElementById('confirmDialog').hidden;
+   document.getElementById('sidebar').inert=dialogOpen;
+@@ -492,8 +516,9 @@ function requestConfirmation(options){
+   });
+ }
+ function switchNamespace(namespaceId){
+-  if(!namespaceId){return;}
+-  document.cookie='workflow_namespace_id='+encodeURIComponent(namespaceId)+'; path=/; SameSite=Lax';
++  if(!/^[1-9]\d*$/.test(namespaceId)){return;}
++  var selector = document.getElementById('namespaceSelector');
++  if(selector){ selector.value = selector.dataset.currentNamespace || ''; }
+   var url=new URL(window.location.href);
+   if(url.pathname.startsWith('/phase/')){
+     url.pathname='/phases';
+@@ -510,7 +535,9 @@ function switchNamespace(namespaceId){
+     url.pathname='/namespaces';
+   }
+   url.searchParams.set('namespace_id', namespaceId);
+-  window.location.href=url.toString();
++  return navigateWorkflow(url.toString(), function(){
++    document.cookie='workflow_namespace_id='+encodeURIComponent(namespaceId)+'; path=/; SameSite=Lax';
++  });
+ }
+ function setPlatformTheme(theme){
+   if(!['dark','gray','light'].includes(theme)){return;}
+diff --git a/project_workflow/interfaces/ui/templates/namespaces.html b/project_workflow/interfaces/ui/templates/namespaces.html
+index 64b3f56..9891daf 100644
+--- a/project_workflow/interfaces/ui/templates/namespaces.html
++++ b/project_workflow/interfaces/ui/templates/namespaces.html
+@@ -22,6 +22,7 @@
+ .namespace-crud.is-create{display:block}
+ .namespace-crud.is-create .namespace-nav,.namespace-crud.is-create .namespace-picker{display:none}
+ .form-stack{display:flex;flex-direction:column;gap:12px}
++.namespace-fields{display:flex;flex-direction:column;gap:12px;min-width:0;padding:0;margin:0;border:0}
+ .label{display:block;font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0}
+ .field-help,.namespace-delete-hint{font-size:12px;color:var(--text-muted);line-height:1.5;margin-top:6px}
+ .namespace-description{min-height:96px;resize:vertical}
+@@ -74,12 +75,13 @@
+   <section class="namespace-panel page-readable">
+     <form id="namespaceForm" class="card form-stack" aria-labelledby="namespaceFormMode" onsubmit="event.preventDefault(); submitNamespace();">
+       <div class="card-title" id="namespaceFormMode">{{ 'Создание' if create_mode else 'Редактирование' }}</div>
++      <fieldset id="namespaceFields" class="namespace-fields">
+       {% call base.field('namespaceName', 'Название', required=true) %}
+         {{ base.input_control('namespaceName', 'name', value=edited_namespace.name if edited_namespace else '', required=true) }}
+       {% endcall %}
+       <div>
+         <label class="label" for="namespaceCliCommand">CLI-команда</label>
+-        <input type="text" id="namespaceCliCommand" value="{{ edited_namespace.cli_command if edited_namespace else '' }}" placeholder="workflow-qa" required minlength="2" maxlength="64" pattern="[a-z][a-z0-9_\-]{1,63}" aria-describedby="namespaceCliHelp">
++        <input type="text" id="namespaceCliCommand" name="cli_command" value="{{ edited_namespace.cli_command if edited_namespace else '' }}" placeholder="workflow-qa" required minlength="2" maxlength="64" pattern="[a-z][a-z0-9_\-]{1,63}" aria-describedby="namespaceCliHelp">
+         <p class="field-help" id="namespaceCliHelp">От 2 до 64 символов: строчные латинские буквы, цифры, дефис и подчёркивание; первый символ — буква.</p>
+       </div>
+       {% call base.field('namespaceDescription', 'Описание') %}
+@@ -88,7 +90,7 @@
+       <div class="theme-grid">
+         <div>
+           <label class="label" for="namespaceThemeIcon">Иконка</label>
+-          <select id="namespaceThemeIcon" onchange="updateNamespaceThemePreview()">
++          <select id="namespaceThemeIcon" name="theme_icon" onchange="updateNamespaceThemePreview()">
+             {% for option in project_icon_options %}
+             <option value="{{ option.key }}" {% if edited_namespace and edited_namespace.theme_icon == option.key %}selected{% endif %}>{{ option.label }}</option>
+             {% endfor %}
+@@ -96,7 +98,7 @@
+         </div>
+         <div>
+           <label class="label" for="namespaceThemeColor">Цвет</label>
+-          <input type="color" id="namespaceThemeColor" class="theme-color-input" value="{{ edited_namespace.theme_color if edited_namespace else '#5E6AD2' }}" oninput="updateNamespaceThemePreview()">
++          <input type="color" id="namespaceThemeColor" name="theme_color" class="theme-color-input" value="{{ edited_namespace.theme_color if edited_namespace else '#5E6AD2' }}" oninput="updateNamespaceThemePreview()">
+         </div>
+       </div>
+       <div class="theme-preview" id="namespaceThemePreview">
+@@ -105,7 +107,7 @@
+       </div>
+       <div>
+         <label class="label" for="namespaceWorkflowId">Воркфлоу</label>
+-        <select id="namespaceWorkflowId" required>
++        <select id="namespaceWorkflowId" name="workflow_id" required>
+           {% for workflow in workflows %}
+           <option value="{{ workflow.id }}" {% if edited_namespace and edited_namespace.workflow_id == workflow.id %}selected{% endif %}>{{ workflow.name }}</option>
+           {% endfor %}
+@@ -117,6 +119,9 @@
+         <button class="btn btn-secondary namespace-delete" type="button" id="deleteNamespaceButton" onclick="deleteNamespace()"{% if create_mode %} style="display:none"{% endif %}>Удалить</button>
+       </div>
+       <p class="namespace-delete-hint" id="namespaceDeleteHint" hidden>Неймспейс с задачами нельзя удалить.</p>
++      </fieldset>
++      <div id="namespaceWriteError" hidden>{{ base.state('error', '') }}</div>
++      {{ base.button('Проверить сохранение', id='namespaceReconcileButton') }}
+     </form>
+   </section>
+ </div>
+@@ -131,6 +136,35 @@ const defaultNamespaceThemeColor = '#5E6AD2';
+ let selectedNamespaceId = {{ 'null' if create_mode else (edited_namespace.id if edited_namespace else 'null') }};
+ let previousNamespaceId = {% if create_mode and selected_namespace %}{{ selected_namespace.id }}{% else %}selectedNamespaceId{% endif %};
+ let namespaceFormMode = selectedNamespaceId == null ? 'create' : 'edit';
++let namespaceDraftBaseline;
++let namespaceMutationPending = false;
++let namespaceUnknownWrite = null;
++let namespaceTerminalState = null;
++let namespaceAcceptedLocation;
++let namespaceHistoryAttempt = null;
++
++function namespaceDraftValues(){
++  return ['namespaceName','namespaceCliCommand','namespaceDescription','namespaceThemeIcon','namespaceThemeColor','namespaceWorkflowId']
++    .map(function(id){ return document.getElementById(id).value; });
++}
++function namespaceDraftDirty(){
++  return Boolean(namespaceUnknownWrite) || JSON.stringify(namespaceDraftValues()) !== namespaceDraftBaseline;
++}
++function updateNamespaceWriteControls(){
++  document.getElementById('namespaceFields').disabled = namespaceMutationPending || Boolean(namespaceUnknownWrite) || Boolean(namespaceTerminalState);
++  document.getElementById('namespaceForm').setAttribute('aria-busy', String(namespaceMutationPending));
++  document.getElementById('namespaceReconcileButton').hidden = !namespaceUnknownWrite;
++  document.getElementById('namespaceReconcileButton').disabled = namespaceMutationPending;
++  refreshWorkflowDraftGuard();
++}
++function showNamespaceWriteError(message, state){
++  var root = document.getElementById('namespaceWriteError');
++  root.hidden = !message;
++  var section = root.querySelector('[data-page-state]');
++  section.dataset.pageState = state || 'error';
++  section.setAttribute('role', state === 'not-found' || state === 'permission-denied' ? 'status' : 'alert');
++  section.querySelector('p').textContent = message || '';
++}
+ 
+ function namespaceById(id){ return namespaceStore.find(function(namespace){ return namespace.id === id; }); }
+ function workflowNameById(id){ var workflow = workflowStore.find(function(item){ return item.id === id; }); return workflow ? workflow.name : '—'; }
+@@ -160,11 +194,9 @@ function accentForeground(color){
+ function applyPageTheme(color){
+   var resolved = color || defaultNamespaceThemeColor;
+   var foreground = accentForeground(resolved);
+-  document.documentElement.style.setProperty('--accent', resolved);
+-  document.documentElement.style.setProperty('--accent-hover', resolved);
+-  document.documentElement.style.setProperty('--accent-soft', resolved + '26');
+-  document.documentElement.style.setProperty('--accent-foreground', foreground);
+-  document.documentElement.style.setProperty('--accent-hover-foreground', foreground);
++  document.documentElement.style.setProperty('--color-accent', resolved);
++  document.documentElement.style.setProperty('--color-accent-hover', resolved);
++  document.documentElement.style.setProperty('--color-accent-foreground', foreground);
+ }
+ function applyNamespaceIdentity(name, command, icon, color){
+   applyPageTheme(color);
+@@ -222,13 +254,16 @@ function syncNamespaceUrl(id, historyMode){
+   url.searchParams.set('namespace_id', id);
+   if(url.toString() === window.location.href){ return; }
+   var method = historyMode === 'push' ? 'pushState' : 'replaceState';
+-  window.history[method](null, '', url.toString());
++  var index = namespaceAcceptedLocation ? namespaceAcceptedLocation.index : 0;
++  if(method === 'pushState'){ index++; }
++  window.history[method](Object.assign({}, window.history.state, {workflowNamespaceIndex:index}), '', url.toString());
++  namespaceAcceptedLocation = {href:window.location.href,index:index,state:window.history.state};
+ }
+ function rememberNamespaceSelection(id, historyMode){
+   if(id == null){ return; }
+   document.cookie='workflow_namespace_id='+encodeURIComponent(id)+'; path=/; SameSite=Lax';
+   var selector = document.getElementById('namespaceSelector');
+-  if(selector){ selector.value = String(id); }
++  if(selector){ selector.value = String(id); selector.dataset.currentNamespace = String(id); }
+   updateNamespaceHeaderLinks(id);
+   syncNamespaceUrl(id, historyMode || 'replace');
+ }
+@@ -240,6 +275,11 @@ function fillNamespaceForm(namespace){
+   document.getElementById('namespaceThemeColor').value = namespace ? (namespace.theme_color || defaultNamespaceThemeColor) : defaultNamespaceThemeColor;
+   document.getElementById('namespaceWorkflowId').value = namespace && namespace.workflow_id ? String(namespace.workflow_id) : (workflowStore[0] ? String(workflowStore[0].id) : '');
+   updateNamespaceThemePreview();
++  namespaceDraftBaseline = JSON.stringify(namespaceDraftValues());
++  namespaceUnknownWrite = null;
++  namespaceTerminalState = null;
++  showNamespaceWriteError('');
++  updateNamespaceWriteControls();
+ }
+ function setNamespaceFormMode(mode){
+   namespaceFormMode = mode;
+@@ -257,14 +297,7 @@ function setNamespaceFormMode(mode){
+   document.getElementById('cancelCreateButton').style.display = createMode && namespaceStore.length ? '' : 'none';
+ }
+ function startCreateNamespace(){
+-  if(selectedNamespaceId != null){
+-    previousNamespaceId = selectedNamespaceId;
+-  }
+-  selectedNamespaceId = null;
+-  setNamespaceFormMode('create');
+-  fillNamespaceForm(null);
+-  syncNav();
+-  document.getElementById('namespaceName').focus();
++  return navigateWorkflow(namespaceScopedPath('/namespaces/new', selectedNamespaceId || previousNamespaceId));
+ }
+ function cancelCreateNamespace(){
+   if(namespaceStore.length === 0){
+@@ -275,12 +308,16 @@ function cancelCreateNamespace(){
+   if(!namespaceById(fallbackId)){
+     fallbackId = namespaceStore[0].id;
+   }
+-  selectNamespace(fallbackId);
+-  document.getElementById('namespaceName').focus();
++  return navigateWorkflow(namespaceScopedPath('/namespaces', fallbackId));
+ }
+ function selectNamespace(id, historyMode){
+   var namespace = namespaceById(Number(id));
+   if(!namespace){ return; }
++  if(namespace.id === selectedNamespaceId && namespaceFormMode === 'edit'){ syncNav(); return Promise.resolve(false); }
++  syncNav();
++  return requestWorkflowTransition(function(){ applyNamespaceSelection(namespace, historyMode); });
++}
++function applyNamespaceSelection(namespace, historyMode){
+   selectedNamespaceId = namespace.id;
+   previousNamespaceId = namespace.id;
+   setNamespaceFormMode('edit');
+@@ -314,38 +351,54 @@ function restoreNamespaceLocation(){
+   var namespaceId = namespaceIdFromUrl(url);
+   if(namespaceId == null && namespaceById(previousNamespaceId)){ namespaceId = previousNamespaceId; }
+   if(namespaceId == null && namespaceStore[0]){ namespaceId = namespaceStore[0].id; }
+-  if(namespaceId != null){ selectNamespace(namespaceId, 'none'); }
+-}
+-function reloadNamespaces(nextId){
+-  return fetch('/api/namespaces')
+-    .then(function(r){return r.json()})
+-    .then(function(d){
+-      if(!d.ok){showToast(d.error || 'Ошибка загрузки','error');return;}
+-      namespaceStore.length = 0;
+-      d.namespaces.forEach(function(namespace){ namespaceStore.push(namespace); });
+-      if(namespaceStore.length === 0){
+-        selectedNamespaceId = null;
+-        previousNamespaceId = null;
+-        setNamespaceFormMode('create');
+-        fillNamespaceForm(null);
+-        renderNamespaceNav();
+-        renderNamespacePagePicker();
+-        renderNamespaceSelector();
+-        syncNav();
+-        return;
+-      }
+-      selectedNamespaceId = nextId || selectedNamespaceId || previousNamespaceId || namespaceStore[0].id;
+-      if(!namespaceById(selectedNamespaceId)){ selectedNamespaceId = namespaceStore[0].id; }
+-      previousNamespaceId = selectedNamespaceId;
+-      renderNamespaceNav();
+-      renderNamespacePagePicker();
+-      renderNamespaceSelector();
+-      setNamespaceFormMode('edit');
+-      fillNamespaceForm(namespaceById(selectedNamespaceId));
+-      syncNav();
+-      rememberNamespaceSelection(selectedNamespaceId, 'replace');
+-    })
+-    .catch(showRequestError);
++  if(namespaceId != null){ applyNamespaceSelection(namespaceById(namespaceId), 'none'); }
++}
++function namespaceLocationContext(href){
++  var url = new URL(href);
++  return url.pathname + ':' + (url.searchParams.get('namespace_id') || '');
++}
++function onNamespaceHistory(event){
++  var target = {href:window.location.href,index:event.state && event.state.workflowNamespaceIndex,state:event.state};
++  if(namespaceHistoryAttempt){
++    var attempt = namespaceHistoryAttempt;
++    if(attempt.stage === 'replay' && target.href === attempt.target.href){
++      namespaceHistoryAttempt = null;
++      namespaceAcceptedLocation = target;
++      restoreNamespaceLocation();
++      return;
++    }
++    if(target.href !== namespaceAcceptedLocation.href){
++      if(Number.isInteger(target.index)){ window.history.go(namespaceAcceptedLocation.index - target.index); }
++      else { window.history.replaceState(namespaceAcceptedLocation.state, '', namespaceAcceptedLocation.href); }
++      return;
++    }
++    if(attempt.stage !== 'restore'){ return; }
++    attempt.stage = 'confirm';
++    requestWorkflowTransition(function(){
++      attempt.stage = 'replay';
++      window.history.go(attempt.target.index - namespaceAcceptedLocation.index);
++    }).then(function(allowed){ if(!allowed && namespaceHistoryAttempt === attempt){ namespaceHistoryAttempt = null; } });
++    return;
++  }
++  if(namespaceLocationContext(target.href) === namespaceLocationContext(namespaceAcceptedLocation.href)){
++    var index = Number.isInteger(target.index) ? target.index : namespaceAcceptedLocation.index;
++    window.history.replaceState(Object.assign({}, target.state, {workflowNamespaceIndex:index}), '', target.href);
++    namespaceAcceptedLocation = {href:target.href,index:index,state:window.history.state};
++    return;
++  }
++  if(!namespaceDraftDirty() && !namespaceMutationPending){
++    namespaceAcceptedLocation = target;
++    restoreNamespaceLocation();
++    return;
++  }
++  if(!Number.isInteger(target.index)){
++    // Unindexed same-document entries cannot be traversed safely: retain the draft.
++    window.history.replaceState(namespaceAcceptedLocation.state, '', namespaceAcceptedLocation.href);
++    showNamespaceWriteError('Переход не выполнен: сохраните изменения или выберите пространство.');
++    return;
++  }
++  namespaceHistoryAttempt = {stage:'restore',target:target};
++  window.history.go(namespaceAcceptedLocation.index - target.index);
+ }
+ function renderNamespaceNav(){
+   var nav = document.getElementById('namespaceNav');
+@@ -421,6 +474,7 @@ function renderNamespaceSelector(){
+   var selectorNamespaceId = selectedNamespaceId == null ? previousNamespaceId : selectedNamespaceId;
+   updateNamespaceHeaderLinks(selectorNamespaceId);
+   selector.replaceChildren();
++  selector.dataset.currentNamespace = selectorNamespaceId == null ? '' : String(selectorNamespaceId);
+   namespaceStore.forEach(function(namespace){
+     var option = document.createElement('option');
+     option.value = String(namespace.id);
+@@ -431,45 +485,126 @@ function renderNamespaceSelector(){
+ }
+ function saveNamespace(){
+   if(selectedNamespaceId == null){ showToast('Сначала выберите неймспейс','error'); return; }
+-  var namespaceId = selectedNamespaceId;
+-  var payload = currentPayload();
+-  return fetch('/api/namespaces/' + namespaceId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+-    .then(function(r){return r.json()})
+-    .then(function(d){ if(d.ok){ showToast('Неймспейс сохранён','success'); return reloadNamespaces(namespaceId); } showToast(d.error || 'Ошибка','error'); })
+-    .catch(showRequestError);
++  return performNamespaceWrite('PUT', selectedNamespaceId, currentPayload());
+ }
+ async function deleteNamespace(){
++  if(namespaceMutationPending || namespaceUnknownWrite || namespaceTerminalState){ return; }
+   if(selectedNamespaceId == null){ showToast('Сначала выберите неймспейс','error'); return; }
+   var namespace = namespaceById(selectedNamespaceId);
+   if(namespace && Number(namespace.task_count) > 0){ showToast('Сначала удалите или перенесите задачи','error'); return; }
+   var title = namespace ? 'Удалить неймспейс «' + namespace.name + '»?' : 'Удалить неймспейс?';
+   var message = namespace ? '«' + namespace.name + '» будет удалён без возможности восстановления.' : 'Неймспейс будет удалён без возможности восстановления.';
+-  if(!await requestConfirmation({eyebrow:'Удаление неймспейса',title:title,message:message,confirmLabel:'Удалить'})) return;
+-  var namespaceId = selectedNamespaceId;
+-  var button = document.getElementById('deleteNamespaceButton');
+-  button.disabled = true;
+-  button.textContent = 'Удаление…';
+-  return fetch('/api/namespaces/' + namespaceId,{method:'DELETE'})
+-    .then(function(r){return r.json()})
+-    .then(function(d){ if(d.ok){ showToast('Неймспейс удалён','success'); return reloadNamespaces(null); } showToast(d.error || 'Ошибка','error'); })
+-    .catch(showRequestError)
+-    .finally(function(){ setNamespaceFormMode(namespaceFormMode); });
++  namespaceMutationPending = true;
++  updateNamespaceWriteControls();
++  var confirmed;
++  try { confirmed = await requestConfirmation({eyebrow:'Удаление неймспейса',title:title,message:message,confirmLabel:'Удалить'}); }
++  finally { namespaceMutationPending = false; updateNamespaceWriteControls(); }
++  if(!confirmed){ document.getElementById('deleteNamespaceButton').focus(); return; }
++  return performNamespaceWrite('DELETE', selectedNamespaceId);
+ }
+ function createNamespace(){
+-  var payload = currentPayload();
+-  return fetch('/api/namespaces',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+-    .then(function(r){return r.json()})
+-    .then(function(d){
+-      if(d.ok){
+-        showToast('Неймспейс создан','success');
+-        window.location.href = '/namespaces?namespace_id=' + encodeURIComponent(d.namespace_id);
+-      } else {
+-        showToast(d.error || 'Ошибка','error');
++  return performNamespaceWrite('POST', null, currentPayload());
++}
++function unknownNamespaceWrite(attempt){
++  namespaceUnknownWrite = attempt;
++  showNamespaceWriteError('Результат записи неизвестен. Повтор заблокирован до проверки сохранения.');
++}
++function namespaceMatchesPayload(namespace, payload){
++  return Object.keys(payload).every(function(key){
++    var saved = namespace[key];
++    if(key === 'theme_color'){ return typeof saved === 'string' && saved.toLowerCase() === payload[key].toLowerCase(); }
++    return saved === payload[key];
++  });
++}
++function acknowledgeNamespaceWrite(attempt, namespace){
++  namespaceUnknownWrite = null;
++  showNamespaceWriteError('');
++  if(attempt.method === 'PUT'){
++    var stored = namespaceById(attempt.id);
++    Object.assign(stored, namespace, {workflow_name:workflowNameById(namespace.workflow_id)});
++    fillNamespaceForm(stored);
++    renderNamespaceNav();
++    renderNamespacePagePicker();
++    renderNamespaceSelector();
++    syncNav();
++    rememberNamespaceSelection(attempt.id, 'replace');
++    showToast('Неймспейс сохранён', 'success');
++    return null;
++  }
++  // Acknowledged create/delete changes the page's identity; reload its SSR composition.
++  namespaceDraftBaseline = JSON.stringify(namespaceDraftValues());
++  if(attempt.method === 'POST'){
++    showToast('Неймспейс создан', 'success');
++    return {id:namespace.id,url:namespaceScopedPath('/namespaces', namespace.id)};
++  }
++  var next = namespaceStore.find(function(item){ return item.id !== attempt.id; });
++  showToast('Неймспейс удалён', 'success');
++  return {id:next ? next.id : null,url:namespaceScopedPath('/namespaces', next ? next.id : null)};
++}
++function finishNamespaceDeparture(destination){
++  if(!destination){ return; }
++  return navigateWorkflow(destination.url, function(){
++    if(destination.id != null){ document.cookie='workflow_namespace_id='+encodeURIComponent(destination.id)+'; path=/; SameSite=Lax'; }
++    else { document.cookie='workflow_namespace_id=; path=/; SameSite=Lax; Max-Age=0'; }
++  });
++}
++async function performNamespaceWrite(method, id, payload){
++  if(namespaceMutationPending || namespaceUnknownWrite || namespaceTerminalState){ return; }
++  var attempt = {method:method,id:id,payload:payload};
++  var destination;
++  namespaceMutationPending = true;
++  showNamespaceWriteError('');
++  updateNamespaceWriteControls();
++  document.getElementById('namespaceSubmitButton').textContent = method === 'POST' ? 'Создание…' : 'Сохранение…';
++  if(method === 'DELETE'){ document.getElementById('deleteNamespaceButton').textContent = 'Удаление…'; }
++  try {
++    var response = await fetch('/api/namespaces' + (id == null ? '' : '/' + id), {
++      method:method,headers:{'Content-Type':'application/json'},body:payload ? JSON.stringify(payload) : undefined,
++    });
++    var data;
++    try { data = await response.json(); } catch(_error){ data = null; }
++    if(!response.ok || !data || data.ok !== true){
++      if(response.status >= 500 || response.status === 408 || response.ok){ unknownNamespaceWrite(attempt); }
++      else {
++        namespaceTerminalState = response.status === 403 ? 'permission-denied' : response.status === 404 ? 'not-found' : null;
++        showNamespaceWriteError(data && typeof data.error === 'string' ? data.error : 'Изменения не сохранены. Проверьте поля и доступ.', namespaceTerminalState);
+       }
+-    })
+-    .catch(showRequestError);
++      return;
++    }
++    if(method !== 'DELETE' && (!data.namespace || !Number.isInteger(data.namespace.id) || data.namespace.id <= 0 ||
++      (method === 'PUT' && data.namespace.id !== id) || (method === 'POST' && data.namespace_id !== data.namespace.id) ||
++      !namespaceMatchesPayload(data.namespace, payload))){ unknownNamespaceWrite(attempt); return; }
++    destination = acknowledgeNamespaceWrite(attempt, data.namespace);
++  } catch(_error){ unknownNamespaceWrite(attempt); }
++  finally {
++    namespaceMutationPending = false;
++    setNamespaceFormMode(namespaceFormMode);
++    updateNamespaceWriteControls();
++  }
++  return finishNamespaceDeparture(destination);
++}
++async function reconcileNamespaceWrite(){
++  if(namespaceMutationPending || !namespaceUnknownWrite){ return; }
++  var attempt = namespaceUnknownWrite;
++  var destination;
++  namespaceMutationPending = true;
++  updateNamespaceWriteControls();
++  try {
++    var response = await fetch('/api/namespaces');
++    var data = await response.json();
++    if(!response.ok || !data.ok || !Array.isArray(data.namespaces)){ throw new Error('Catalogue unavailable'); }
++    var saved = data.namespaces.find(function(item){ return attempt.method === 'POST' ? item.cli_command === attempt.payload.cli_command : item.id === attempt.id; });
++    if(attempt.method === 'DELETE' ? !saved : saved && namespaceMatchesPayload(saved, attempt.payload)){
++      destination = acknowledgeNamespaceWrite(attempt, saved);
++    } else {
++      showNamespaceWriteError('Сохранение пока не подтверждено. Повторная запись заблокирована.');
++    }
++  } catch(_error){ showNamespaceWriteError('Не удалось проверить сохранение. Значения сохранены в форме, повторная запись заблокирована.'); }
++  finally { namespaceMutationPending = false; updateNamespaceWriteControls(); }
++  return finishNamespaceDeparture(destination);
+ }
+ function submitNamespace(){
++  if(namespaceMutationPending || namespaceUnknownWrite || namespaceTerminalState){ return; }
+   var nameInput = document.getElementById('namespaceName');
+   if(!nameInput.value.trim()){
+     showToast('Введите название неймспейса','error');
+@@ -488,12 +623,7 @@ function submitNamespace(){
+     workflowInput.focus();
+     return;
+   }
+-  var button = document.getElementById('namespaceSubmitButton');
+-  if(button.disabled){ return; }
+-  button.disabled = true;
+-  button.textContent = namespaceFormMode === 'create' ? 'Создание…' : 'Сохранение…';
+-  var operation = namespaceFormMode === 'create' ? createNamespace() : saveNamespace();
+-  Promise.resolve(operation).finally(function(){ button.disabled = false; setNamespaceFormMode(namespaceFormMode); });
++  return namespaceFormMode === 'create' ? createNamespace() : saveNamespace();
+ }
+ renderNamespaceNav();
+ renderNamespacePagePicker();
+@@ -507,7 +637,15 @@ if(selectedNamespaceId == null){
+   rememberNamespaceSelection(selectedNamespaceId, 'replace');
+ }
+ syncNav();
+-window.addEventListener('popstate', restoreNamespaceLocation);
++namespaceDraftBaseline = JSON.stringify(namespaceDraftValues());
++var initialIndex = window.history.state && window.history.state.workflowNamespaceIndex;
++if(!Number.isInteger(initialIndex)){ initialIndex = 0; }
++window.history.replaceState(Object.assign({}, window.history.state, {workflowNamespaceIndex:initialIndex}), '', window.location.href);
++namespaceAcceptedLocation = {href:window.location.href,index:initialIndex,state:window.history.state};
++updateNamespaceWriteControls();
++registerWorkflowDraftGuard({isDirty:namespaceDraftDirty,isPending:function(){ return namespaceMutationPending; }});
++window.addEventListener('popstate', onNamespaceHistory);
++document.getElementById('namespaceReconcileButton').addEventListener('click', reconcileNamespaceWrite);
+ document.getElementById('namespaceName').addEventListener('input', updateNamespaceThemePreview);
+ document.getElementById('namespaceCliCommand').addEventListener('input', updateNamespaceThemePreview);
+ {% endblock %}
+diff --git a/tests/test_base_ssr.py b/tests/test_base_ssr.py
+index f0dd781..4598127 100644
+--- a/tests/test_base_ssr.py
++++ b/tests/test_base_ssr.py
+@@ -65,3 +65,15 @@ def test_terminal_states_do_not_offer_retry_but_repeatable_errors_can():
+     assert 'role="alert"' in html
+     assert 'href="/items"' in html
+     assert 'aria-busy="true"' in render("{{ base.state('loading', 'Loading') }}")
++
++
++def test_draft_warning_uses_the_synced_native_modal_and_escapes_product_copy():
++    html = render("{{ base.draft_guard_dialog(title=title) }}", title='<script>unsafe</script>')
++    assert '<dialog' in html
++    assert 'role="alertdialog"' in html
++    assert 'aria-labelledby="base-draft-guard-title"' in html
++    assert 'aria-describedby="base-draft-guard-description"' in html
++    assert 'data-base-draft-cancel' in html
++    assert 'data-base-draft-discard' in html
++    assert '<script>' not in html
++    assert '&lt;script&gt;' in html
+diff --git a/tests/test_ui.py b/tests/test_ui.py
+index 14887a2..1a58c59 100644
+--- a/tests/test_ui.py
++++ b/tests/test_ui.py
+@@ -2239,21 +2239,28 @@ class TestProjectsPage:
+         assert re.search(r'id="namespaceName"[^>]* value="[^"]*" required', response.text)
+         assert 'required minlength="2" maxlength="64" pattern="[a-z][a-z0-9_\\-]{1,63}"' in response.text
+         assert 'aria-describedby="namespaceCliHelp"' in response.text
+-        assert 'id="namespaceWorkflowId" required' in response.text
++        assert 'id="namespaceWorkflowId" name="workflow_id" required' in response.text
+         assert 'id="namespaceDeleteHint" hidden' in response.text
+         assert "var protectedByTasks = !createMode && Boolean(namespace && Number(namespace.task_count) > 0);" in (
+             response.text
+         )
+-        assert "button.textContent = 'Удаление…';" in response.text
+-        assert "button.textContent = namespaceFormMode === 'create' ? 'Создание…' : 'Сохранение…';" in response.text
++        assert "document.getElementById('deleteNamespaceButton').textContent = 'Удаление…';" in response.text
++        assert (
++            "document.getElementById('namespaceSubmitButton').textContent = "
++            "method === 'POST' ? 'Создание…' : 'Сохранение…';"
++            in response.text
++        )
++        assert 'id="namespaceFields" class="namespace-fields"' in response.text
++        assert "isPending:function(){ return namespaceMutationPending; }" in response.text
+         assert "'Удалить неймспейс «' + namespace.name + '»?'" in response.text
+ 
+     def test_namespace_theme_preview_keeps_primary_action_text_readable(self):
+         response = client.get("/namespaces")
+         assert response.status_code == 200
+         assert "function accentForeground(color)" in response.text
+-        assert "document.documentElement.style.setProperty('--accent-foreground', foreground);" in response.text
+-        assert "document.documentElement.style.setProperty('--accent-hover-foreground', foreground);" in response.text
++        assert "document.documentElement.style.setProperty('--color-accent-foreground', foreground);" in response.text
++        assert "document.documentElement.style.setProperty('--color-accent', resolved);" in response.text
++        assert "style.setProperty('--accent-foreground'" not in response.text
+ 
+     def test_namespace_create_page_uses_plus_without_duplicate_add_label(self):
+         response = client.get("/namespaces/new")
+@@ -2307,13 +2314,16 @@ class TestProjectsPage:
+             "document.cookie='workflow_namespace_id='+encodeURIComponent(id)+'; path=/; SameSite=Lax';"
+             in response.text
+         )
+-        assert "if(selector){ selector.value = String(id); }" in response.text
++        assert "selector.value = String(id); selector.dataset.currentNamespace = String(id);" in response.text
+         assert "url.pathname = '/namespaces';" in response.text
+         assert "var method = historyMode === 'push' ? 'pushState' : 'replaceState';" in response.text
+-        assert "window.history[method](null, '', url.toString());" in response.text
++        assert "{workflowNamespaceIndex:index}" in response.text
++        assert (
++            "return requestWorkflowTransition(function(){ applyNamespaceSelection(namespace, historyMode); });"
++            in response.text
++        )
+         assert re.search(
+-            r"function selectNamespace\(id, historyMode\)\{\s*"
+-            r"var namespace = namespaceById\(Number\(id\)\);\s*if\(!namespace\)\{ return; \}\s*"
++            r"function applyNamespaceSelection\(namespace, historyMode\)\{\s*"
+             r"selectedNamespaceId = namespace.id;\s*previousNamespaceId = namespace.id;",
+             response.text,
+         )
+@@ -2324,8 +2334,12 @@ class TestProjectsPage:
+         assert "function namespaceIdFromUrl(url)" in response.text
+         assert "rememberNamespaceSelection(namespace.id, historyMode || 'push');" in response.text
+         assert "rememberNamespaceSelection(selectedNamespaceId, 'replace');" in response.text
+-        assert "window.addEventListener('popstate', restoreNamespaceLocation);" in response.text
+-        assert "if(namespaceId != null){ selectNamespace(namespaceId, 'none'); }" in response.text
++        assert "window.addEventListener('popstate', onNamespaceHistory);" in response.text
++        assert "window.history.go(namespaceAcceptedLocation.index - target.index);" in response.text
++        assert (
++            "if(namespaceId != null){ applyNamespaceSelection(namespaceById(namespaceId), 'none'); }"
++            in response.text
++        )
+ 
+     def test_namespace_history_restores_create_mode_and_cancel_context(self):
+         uow = ui_app_state.get_db()
+@@ -2363,10 +2377,9 @@ class TestProjectsPage:
+     def test_namespace_create_redirects_to_edit_page_after_success(self):
+         response = client.get("/namespaces/new")
+         assert response.status_code == 200
+-        assert (
+-            "window.location.href = '/namespaces?namespace_id=' + encodeURIComponent(d.namespace_id);"
+-            in response.text
+-        )
++        assert "!namespaceMatchesPayload(data.namespace, payload)" in response.text
++        assert "return {id:namespace.id,url:namespaceScopedPath('/namespaces', namespace.id)};" in response.text
++        assert "return navigateWorkflow(destination.url, function(){" in response.text
+ 
+     def test_namespace_page_exposes_workflow_selector(self):
+         response = client.get("/namespaces")
+@@ -2973,6 +2986,15 @@ class TestUiNetworkFailures:
+         response = client.get(path)
+ 
+         assert response.status_code == 200
++        if path == "/namespaces":
++            assert "catch(_error){ unknownNamespaceWrite(attempt); }" in response.text
++            assert (
++                "if(namespaceMutationPending || namespaceUnknownWrite || namespaceTerminalState){ return; }"
++                in response.text
++            )
++            assert "Сохранение пока не подтверждено. Повторная запись заблокирована." in response.text
++            assert "catch(_error){ showNamespaceWriteError('Не удалось проверить сохранение." in response.text
++            return
+         handler = "catch(error){showRequestError(error)}" if path == "/agents" else ".catch(showRequestError)"
+         assert response.text.count(handler) >= minimum_handlers
+         assert "Не удалось связаться с сервером" in response.text

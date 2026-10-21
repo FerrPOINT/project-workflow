@@ -1,0 +1,1350 @@
+diff --git a/.base-revision b/.base-revision
+new file mode 100644
+index 0000000..3620eda
+--- /dev/null
++++ b/.base-revision
+@@ -0,0 +1 @@
++bff9bfa8b7669ef23bd64dba36e78eb750eb43d4
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 8480f87..2c62518 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -20,7 +20,7 @@ jobs:
+         working-directory: project-workflow
+     services:
+       postgres:
+-        image: postgres:16-alpine
++        image: postgres:17.6-alpine
+         env:
+           POSTGRES_USER: project_workflow
+           POSTGRES_PASSWORD: project_workflow
+@@ -59,9 +59,8 @@ jobs:
+       - name: Diff hygiene
+         run: git diff --check
+   compose-smoke:
+-    if: github.actor != 'dependabot[bot]'
+     runs-on: ubuntu-latest
+-    timeout-minutes: 20
++    timeout-minutes: 40
+     defaults:
+       run:
+         working-directory: project-workflow
+@@ -69,15 +68,56 @@ jobs:
+       - uses: actions/checkout@v4
+         with:
+           path: project-workflow
+-      - name: Compose config
+-        run: docker compose config -q
+-      - name: Build and start
+-        run: docker compose up --build -d --wait
+-      - name: Readiness
+-        run: curl --fail --retry 10 --retry-connrefused http://127.0.0.1:8812/health
+-      - name: Compose logs
+-        if: failure()
+-        run: docker compose logs --no-color
+-      - name: Compose cleanup
+-        if: always()
+-        run: docker compose down -v --remove-orphans
++      - name: Read pinned Base revision
++        id: base
++        run: echo "sha=$(cat .base-revision)" >> "$GITHUB_OUTPUT"
++      - uses: actions/checkout@v4
++        with:
++          repository: FerrPOINT/services-base
++          path: services-base
++          ref: ${{ steps.base.outputs.sha }}
++          token: ${{ secrets.SERVICES_BASE_TOKEN }}
++          persist-credentials: false
++      - name: Verify pinned Base checkout
++        run: python3 ../services-base/scripts/verify_base_revision.py --revision .base-revision --base ../services-base
++      - name: Owned Compose smoke with cleanup on every outcome
++        run: python3 ../services-base/scripts/qa_product_compose.py --product-root . --docker-context default --output .local/compose-smoke
++
++  ui-contract:
++    runs-on: ubuntu-latest
++    timeout-minutes: 15
++    defaults:
++      run:
++        working-directory: project-workflow
++    steps:
++      - uses: actions/checkout@v4
++        with:
++          path: project-workflow
++      - name: Read pinned Base revision
++        id: base
++        run: echo "sha=$(cat .base-revision)" >> "$GITHUB_OUTPUT"
++      - uses: actions/checkout@v4
++        with:
++          repository: FerrPOINT/services-base
++          path: services-base
++          ref: ${{ steps.base.outputs.sha }}
++          token: ${{ secrets.SERVICES_BASE_TOKEN }}
++          persist-credentials: false
++      - name: Verify pinned Base checkout
++        run: python3 ../services-base/scripts/verify_base_revision.py --revision .base-revision --base ../services-base
++      - uses: pnpm/action-setup@v4
++        with:
++          version: 10.28.1
++      - uses: actions/setup-node@v4
++        with:
++          node-version: "22.20.0"
++      - name: Install pinned Base validators
++        run: pnpm --dir ../services-base/frontend install --frozen-lockfile
++        env:
++          CI: "true"
++      - name: SSR export, route contract and committed browser evidence
++        run: |
++          node ../services-base/frontend/scripts/export-ssr.mjs --out project_workflow/interfaces/ui/templates/base-assets --check
++          node ../services-base/frontend/scripts/check-ui-contract.mjs --repo . --acceptance
++          python3 ../services-base/scripts/build_provenance.py --recipe Dockerfile
++          python3 ../services-base/scripts/check_docker_invocations.py --repo .
+diff --git a/Dockerfile b/Dockerfile
+index b06ca5a..ae3c640 100644
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -50,7 +50,7 @@ LABEL org.opencontainers.image.revision=$SOURCE_REVISION \
+ WORKDIR /app
+ 
+ RUN apt-get update && apt-get install -y --no-install-recommends \
+-    libpq5 \
++    libpq5 curl \
+     && rm -rf /var/lib/apt/lists/* \
+     && python -m pip uninstall -y pip setuptools wheel
+ 
+diff --git a/LIVE_TEST_PLAN.md b/LIVE_TEST_PLAN.md
+index d656789..a2d857e 100644
+--- a/LIVE_TEST_PLAN.md
++++ b/LIVE_TEST_PLAN.md
+@@ -62,7 +62,7 @@ pwsh -File services-base/deploy/start-workspace.ps1
+ Из корня workspace preflight для общего стенда:
+ 
+ ```powershell
+-docker compose --env-file .local/local.env --project-directory project-workflow -p project-workflow-local -f project-workflow/docker-compose.yml -f services-base/deploy/project-workflow.local.override.yml exec -T backend python -c "import urllib.request; urllib.request.urlopen('http://auth-backend:7701/health', timeout=3)"
++docker compose --env-file .local/local.env --project-directory project-workflow -p project-workflow-local -f project-workflow/docker-compose.yml -f services-base/deploy/project-workflow.local.override.yml exec -T project-workflow-backend python -c "import urllib.request; urllib.request.urlopen('http://auth-backend:7701/health', timeout=3)"
+ ```
+ 
+ E2E evidence обязано подтвердить: anonymous `/` редиректит на `/login`, login
+diff --git a/Makefile b/Makefile
+index f1e6cba..df3c0d6 100644
+--- a/Makefile
++++ b/Makefile
+@@ -37,8 +37,8 @@ lint-fix:
+ quality: test test-integration coverage lint
+ 
+ compose-ready:
+-	docker compose up --build -d --wait
+-	curl --fail http://127.0.0.1:8812/health
++	@test -n "$(SDLC_DOCKER_CONTEXT)" || (echo 'Set SDLC_DOCKER_CONTEXT explicitly'; exit 1)
++	python ../services-base/scripts/qa_product_compose.py --product-root . --docker-context "$(SDLC_DOCKER_CONTEXT)" --output .local/compose-smoke
+ 
+ # --- dev setup -------------------------------------------------------------
+ 
+diff --git a/README.md b/README.md
+index 910bd43..998741f 100644
+--- a/README.md
++++ b/README.md
+@@ -308,17 +308,22 @@ Wrapper выставляет `PROJECT_WORKFLOW_NAMESPACE_ID=<id>` и вызыв
+ 
+ ## 🌐 Web UI
+ 
+-Docker Compose mode:
++Workspace запускается из его корня через PowerShell 7 по профилю и snapshot:
+ 
+-```bash
+-cp .env.example .env
+-docker compose up --build -d --wait
+-curl --fail http://127.0.0.1:8812/health
++```powershell
++./start-local.ps1 -Workspace sdlc1
+ ```
+ 
+-UI: `http://127.0.0.1:8812`.
++Изолированная проверка продуктового Compose из `project-workflow`:
++
++```powershell
++./scripts/quality.ps1 -Target compose-ready -DockerContext desktop-linux
++```
+ 
+-Compose привязывает PostgreSQL и API к `127.0.0.1`. Перед стартом свежего baseline поверх старого dev-тома следуйте [docs/database-reset.md](docs/database-reset.md).
++Helper создаёт отдельный `sdlc-qa-project-workflow-*` с synthetic PostgreSQL 17.6,
++выбирает свободный loopback-порт и очищает собственные контейнеры и volume
++в `finally`. Рабочие базы и secrets не используются. Legacy адрес UI —
++`http://127.0.0.1:8812`; адрес текущего workspace определяет выбранный профиль.
+ 
+ Локальный app mode использует БД из `DATABASE_URL` и порт приложения из CLI-флагов:
+ 
+diff --git a/docker-compose.yml b/docker-compose.yml
+index c10bd04..b2fcf55 100644
+--- a/docker-compose.yml
++++ b/docker-compose.yml
+@@ -26,7 +26,10 @@ services:
+       db:
+         condition: service_healthy
+ 
+-  backend:
++  project-workflow-backend:
++    networks:
++      default:
++        aliases: [backend]
+     build:
+       context: .
+     ports:
+diff --git a/docs/database-reset.md b/docs/database-reset.md
+index efdf84c..bf0489b 100644
+--- a/docs/database-reset.md
++++ b/docs/database-reset.md
+@@ -31,12 +31,12 @@ baseline migration `0001_initial`.
+ Для стандартного Compose-окружения:
+ 
+ ```bash
+-docker compose stop backend
++docker compose stop project-workflow-backend
+ docker compose exec -T db psql \
+   -U project_workflow -d project_workflow -v ON_ERROR_STOP=1 \
+   -c 'DROP SCHEMA IF EXISTS project_workflow CASCADE;'
+ docker compose run --rm migrate
+-docker compose up -d --wait backend
++docker compose up -d --wait project-workflow-backend
+ ```
+ 
+ Для внешнего PostgreSQL выполните эквивалентный `DROP SCHEMA` только после
+diff --git a/docs/plans/2026-10-04-compose-service-names.md b/docs/plans/2026-10-04-compose-service-names.md
+index ecd4728..23c78ce 100644
+--- a/docs/plans/2026-10-04-compose-service-names.md
++++ b/docs/plans/2026-10-04-compose-service-names.md
+@@ -1,7 +1,8 @@
+ # Унификация Compose-процессов
+ 
+-Серверный сервис самостоятельного Compose — `backend`; имя продукта задаёт
+-project. Полный workspace использует `<product>-backend` и `<product>-web`.
++Самостоятельный продуктовый Compose и полный workspace используют
++`<product>-backend` и `<product>-web`. Старые DNS aliases сохраняются; смешанные
++старые/новые ключи одного процесса запрещены.
+ API-маршруты, имена крейтов, БД, volumes и публичные порты сохраняются.
+ Правила и безопасная процедура для действующих snapshots принадлежат Base:
+ `services-base/deploy/LOCAL_GROUPS.md`. Принятые runtime images не пересобираются.
+diff --git a/docs/plans/2026-10-04-unification-completion.md b/docs/plans/2026-10-04-unification-completion.md
+new file mode 100644
+index 0000000..140ca22
+--- /dev/null
++++ b/docs/plans/2026-10-04-unification-completion.md
+@@ -0,0 +1,7 @@
++# План унификации — 4 октября 2026
++
++Работа выполняется в отдельной task ветке. Закрываем Docker/naming, readiness собственной БД и схемы, request correlation, воспроизводимость сборки и UI contract/acceptance без доменных миграций. Существующие маршруты и wire formats совместимы; данные, secrets, snapshots и работающие контейнеры не меняются.
++
++Проверки: обязательные gates репозитория, PostgreSQL 17.6 в собственном временном Compose проекте, отрицательные HTTP/readiness contracts, выбранные workspace profiles, browser evidence после фиксации исходников. Изменения Base потребляются по exact SHA. Merge/deploy выполняются отдельно. Средства проверки не запускают production agents или внешние dispatch.
++
++Приёмка: окончательные task SHA проверены, результаты отражены в PR и обезличенном отчёте Base. Непроверенные пункты не отмечаются завершёнными.
+diff --git a/docs/quality-gate.md b/docs/quality-gate.md
+index 658a097..af4f7b4 100644
+--- a/docs/quality-gate.md
++++ b/docs/quality-gate.md
+@@ -2,8 +2,8 @@
+ 
+ Этот файл фиксирует обязательный локальный quality gate для `project-workflow`.
+ GitHub Actions в `.github/workflows/ci.yml` сохранён как опциональное зеркало:
+-job `quality` запускает тесты и статический анализ с PostgreSQL 16, а
+-`compose-smoke` собирает стек и проверяет `/health`. Для локального выпуска
++job `quality` запускает тесты и статический анализ с PostgreSQL 17.6, а
++`compose-smoke` собирает временный Compose-проект и проверяет `/health`. Для локального выпуска
+ результаты оплачиваемых hosted jobs не требуются; `[skip ci]` предотвращает
+ их запуск на push/PR. Перед commit и merge проверки ниже выполняются локально.
+ 
+@@ -68,18 +68,19 @@ business E2E с настоящим исполнителем.
+ 
+ ## Compose Readiness
+ 
+-Для проверки локального runtime:
++Для проверки кандидата в отдельном временном проекте через PowerShell 7:
+ 
+-```bash
+-docker compose up --build -d --wait
+-curl --fail http://127.0.0.1:8812/health
++```powershell
++./scripts/quality.ps1 -Target compose-ready -DockerContext desktop-linux
+ ```
+ 
+-Ожидается HTTP `200`, `database=ok`, `schema=ok`. Стандартный Compose публикует
+-PostgreSQL и API только на loopback. Для стандартного compose-ready должны быть
+-свободны `127.0.0.1:5432` и `127.0.0.1:8812`; если порт 5432 занят другим
+-PostgreSQL, integration gate можно запускать с `PGPORT`, указывающим на
+-отдельный тестовый PostgreSQL.
++Ожидается HTTP `200`, `database=ok`, `schema=ok`. Helper создаёт собственный
++`sdlc-qa-project-workflow-*`, PostgreSQL 17.6 и disposable volume; порт приложения
++выбирается автоматически на loopback. Внешние модели и dispatch отключены.
++Контейнеры и собственный volume удаляются в `finally`, диагностика сохраняется
++в защищённом `.local/compose-smoke`. Тесты не используют рабочую базу.
++Штатный workspace запускается корневым `start-local.ps1` по выбранному профилю
++и snapshot; QA helper не обновляет эту установку.
+ 
+ ## UI Smoke
+ 
+diff --git a/docs/ui-routes.json b/docs/ui-routes.json
+new file mode 100644
+index 0000000..f2c41e4
+--- /dev/null
++++ b/docs/ui-routes.json
+@@ -0,0 +1,235 @@
++{
++  "schemaVersion": 1,
++  "product": "project-workflow",
++  "acceptanceStatus": "pending",
++  "serverRouteSources": [
++    "project_workflow/interfaces/ui/app.py"
++  ],
++  "runtimeSources": [
++    "project_workflow"
++  ],
++  "ssrAssets": "project_workflow/interfaces/ui/templates/base-assets",
++  "shellTemplate": "project_workflow/interfaces/ui/templates/base.html",
++  "routes": [
++    {
++      "pattern": "/",
++      "kind": "operational",
++      "layout": "wide",
++      "roles": [
++        "authenticated",
++        "system-admin"
++      ],
++      "fixture": "synthetic:project-workflow:/",
++      "states": [
++        "normal",
++        "loading",
++        "empty",
++        "permission-denied",
++        "error"
++      ],
++      "qa": {
++        "status": "not-run"
++      }
++    },
++    {
++      "pattern": "/agents",
++      "kind": "operational",
++      "layout": "wide",
++      "roles": [
++        "authenticated",
++        "system-admin"
++      ],
++      "fixture": "synthetic:project-workflow:/agents",
++      "states": [
++        "normal",
++        "loading",
++        "empty",
++        "permission-denied",
++        "error"
++      ],
++      "qa": {
++        "status": "not-run"
++      }
++    },
++    {
++      "pattern": "/instructions",
++      "kind": "operational",
++      "layout": "reading",
++      "roles": [
++        "authenticated",
++        "system-admin"
++      ],
++      "fixture": "synthetic:project-workflow:/instructions",
++      "states": [
++        "normal",
++        "loading",
++        "empty",
++        "permission-denied",
++        "error"
++      ],
++      "qa": {
++        "status": "not-run"
++      }
++    },
++    {
++      "pattern": "/namespaces",
++      "kind": "operational",
++      "layout": "wide",
++      "roles": [
++        "authenticated",
++        "system-admin"
++      ],
++      "fixture": "synthetic:project-workflow:/namespaces",
++      "states": [
++        "normal",
++        "loading",
++        "empty",
++        "permission-denied",
++        "error"
++      ],
++      "qa": {
++        "status": "not-run"
++      }
++    },
++    {
++      "pattern": "/namespaces/new",
++      "kind": "operational",
++      "layout": "wide",
++      "roles": [
++        "authenticated",
++        "system-admin"
++      ],
++      "fixture": "synthetic:project-workflow:/namespaces/new",
++      "states": [
++        "normal",
++        "loading",
++        "empty",
++        "permission-denied",
++        "error"
++      ],
++      "qa": {
++        "status": "not-run"
++      }
++    },
++    {
++      "pattern": "/phase/{phase_id}",
++      "kind": "operational",
++      "layout": "detail-with-aside",
++      "roles": [
++        "authenticated",
++        "system-admin"
++      ],
++      "fixture": "synthetic:project-workflow:/phase/{phase_id}",
++      "states": [
++        "normal",
++        "loading",
++        "empty",
++        "permission-denied",
++        "error"
++      ],
++      "qa": {
++        "status": "not-run"
++      }
++    },
++    {
++      "pattern": "/phases",
++      "kind": "operational",
++      "layout": "wide",
++      "roles": [
++        "authenticated",
++        "system-admin"
++      ],
++      "fixture": "synthetic:project-workflow:/phases",
++      "states": [
++        "normal",
++        "loading",
++        "empty",
++        "permission-denied",
++        "error"
++      ],
++      "qa": {
++        "status": "not-run"
++      }
++    },
++    {
++      "pattern": "/settings",
++      "kind": "operational",
++      "layout": "reading",
++      "roles": [
++        "authenticated",
++        "system-admin"
++      ],
++      "fixture": "synthetic:project-workflow:/settings",
++      "states": [
++        "normal",
++        "loading",
++        "empty",
++        "permission-denied",
++        "error"
++      ],
++      "qa": {
++        "status": "not-run"
++      }
++    },
++    {
++      "pattern": "/task/{task_key}",
++      "kind": "operational",
++      "layout": "detail-with-aside",
++      "roles": [
++        "authenticated",
++        "system-admin"
++      ],
++      "fixture": "synthetic:project-workflow:/task/{task_key}",
++      "states": [
++        "normal",
++        "loading",
++        "empty",
++        "permission-denied",
++        "error"
++      ],
++      "qa": {
++        "status": "not-run"
++      }
++    },
++    {
++      "pattern": "/tasks",
++      "kind": "operational",
++      "layout": "wide",
++      "roles": [
++        "authenticated",
++        "system-admin"
++      ],
++      "fixture": "synthetic:project-workflow:/tasks",
++      "states": [
++        "normal",
++        "loading",
++        "empty",
++        "permission-denied",
++        "error"
++      ],
++      "qa": {
++        "status": "not-run"
++      }
++    },
++    {
++      "pattern": "/workflows",
++      "kind": "operational",
++      "layout": "wide",
++      "roles": [
++        "authenticated",
++        "system-admin"
++      ],
++      "fixture": "synthetic:project-workflow:/workflows",
++      "states": [
++        "normal",
++        "loading",
++        "empty",
++        "permission-denied",
++        "error"
++      ],
++      "qa": {
++        "status": "not-run"
++      }
++    }
++  ]
++}
+diff --git a/project_workflow/interfaces/ui/AGENTS.md b/project_workflow/interfaces/ui/AGENTS.md
+new file mode 100644
+index 0000000..0adfc50
+--- /dev/null
++++ b/project_workflow/interfaces/ui/AGENTS.md
+@@ -0,0 +1,19 @@
++<!-- BEGIN BASE FRONTEND RULES -->
++## Общий UI-контракт Base
++
++- Использовать общий shell, branding и tokens Base. Контент и доменные решения
++  принадлежат продукту; страницы входа Auth не требуют доступности Admin.
++- Описать маршруты, роли, состояния и layout modes в route contract. Приватный
++  operational route сохраняет SSO; fixtures используют synthetic данные.
++- Перед коммитом выполнить route/acceptance gates и матрицу viewport, тем,
++  direct/reload, keyboard/focus, geometry, console/network.
++- Browser evidence относится к committed source SHA и реальному candidate image.
++  После evidence допускаются документационные коммиты, если runtime fingerprints
++  не изменились. Secrets и реальные пользовательские данные исключить.
++- Изменение публичных контрактов сверять с backend/OpenAPI; SDK сохраняет HTTP
++  status, бизнес-код и correlation id, включая пустые error responses.
++- Compose-кандидаты работают только в собственном временном project; cleanup
++  выполняется при успехе, ошибке и отмене. Runtime workspace не пересоздавать.
++
++Этот блок обновляется `services-base/scripts/sync_frontend_agents.mjs`.
++<!-- END BASE FRONTEND RULES -->
+diff --git a/project_workflow/interfaces/ui/app.py b/project_workflow/interfaces/ui/app.py
+index 6cbb8c2..00fb538 100644
+--- a/project_workflow/interfaces/ui/app.py
++++ b/project_workflow/interfaces/ui/app.py
+@@ -2,14 +2,17 @@
+ 
+ from __future__ import annotations
+ 
++import asyncio
+ import logging
+ import time
+ from collections.abc import AsyncIterator
+ from contextlib import asynccontextmanager
++from threading import BoundedSemaphore
++from uuid import UUID, uuid4
+ 
+ from fastapi import FastAPI, Request
+ from fastapi.exceptions import RequestValidationError
+-from fastapi.responses import HTMLResponse, JSONResponse
++from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
+ from pydantic import ValidationError
+ from sqlalchemy import text
+ from sqlalchemy.exc import SQLAlchemyError
+@@ -24,6 +27,7 @@ from .routes import api, cli_api, pages, runtime_api
+ from .sso import install_sso
+ 
+ logger = logging.getLogger(__name__)
++_readiness_worker = BoundedSemaphore(1)
+ 
+ _VALIDATION_MESSAGES = {
+     "missing": "Обязательное поле не указано",
+@@ -107,10 +111,29 @@ class _RequestLoggingMiddleware(BaseHTTPMiddleware):
+ 
+     async def dispatch(self, request: Request, call_next):
+         start = time.perf_counter()
+-        response = await call_next(request)
++        supplied = request.headers.get("X-Request-Id", "")
++        try:
++            if len(supplied) != 36:
++                raise ValueError("Non-canonical UUID")
++            UUID(supplied)
++            request_id = supplied
++        except ValueError:
++            request_id = str(uuid4())
++        request.state.request_id = request_id
++        try:
++            response = await call_next(request)
++        except Exception as error:
++            logger.error("request_id=%s unhandled_error=%s", request_id, type(error).__name__)
++            response = PlainTextResponse("Internal Server Error", status_code=500)
++        response.headers["X-Request-Id"] = request_id
++        exposed = response.headers.get("Access-Control-Expose-Headers", "")
++        response.headers["Access-Control-Expose-Headers"] = ", ".join(
++            value for value in (exposed, "X-Request-Id") if value
++        )
+         duration = (time.perf_counter() - start) * 1000
+         logger.info(
+-            "%s %s %s %.2fms",
++            "request_id=%s %s %s %s %.2fms",
++            request_id,
+             request.method,
+             request.url.path,
+             response.status_code,
+@@ -119,7 +142,7 @@ class _RequestLoggingMiddleware(BaseHTTPMiddleware):
+         return response
+ 
+ 
+-async def _health() -> JSONResponse:
++def _health_sync() -> JSONResponse:
+     """Readiness probe for connectivity, schema presence, and migration head."""
+     from ...infrastructure.db import session as _session
+ 
+@@ -160,6 +183,34 @@ async def _health() -> JSONResponse:
+     return JSONResponse(health, status_code=status)
+ 
+ 
++async def _health() -> JSONResponse:
++    """Bound the probe, including pool acquisition, without blocking the ASGI loop."""
++    def unavailable() -> JSONResponse:
++        return JSONResponse({"ok": False, "version": __version__, "database": "error",
++                             "schema": "unknown", "catalog": "unknown",
++                             "error_code": "database-unavailable", "db_latency_ms": 2000}, status_code=503)
++
++    if not _readiness_worker.acquire(blocking=False):
++        return unavailable()
++
++    def check() -> JSONResponse:
++        try:
++            return _health_sync()
++        except Exception:
++            logger.warning("Readiness worker failed")
++            return unavailable()
++        finally:
++            _readiness_worker.release()
++
++    # Retain the worker until JDBC/DBAPI actually returns: repeated probes must
++    # not accumulate blocked threads/connections after their response timeout.
++    work = asyncio.create_task(asyncio.to_thread(check))
++    try:
++        return await asyncio.wait_for(asyncio.shield(work), timeout=2)
++    except asyncio.TimeoutError:
++        return unavailable()
++
++
+ @asynccontextmanager
+ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
+     """Verify reachable managed state before accepting traffic."""
+@@ -188,9 +239,9 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
+ 
+ def create_app() -> FastAPI:
+     app = FastAPI(title="Интерфейс project-workflow", version=__version__, lifespan=_lifespan)
+-    app.add_middleware(_RequestLoggingMiddleware)
+     app.add_middleware(_UoWMiddleware)
+     install_sso(app)
++    app.add_middleware(_RequestLoggingMiddleware)
+ 
+     @app.exception_handler(RequestValidationError)
+     async def _validation_error(request: Request, exc: RequestValidationError) -> JSONResponse | HTMLResponse:
+diff --git a/project_workflow/interfaces/ui/templates.py b/project_workflow/interfaces/ui/templates.py
+index e7c9468..34e0917 100644
+--- a/project_workflow/interfaces/ui/templates.py
++++ b/project_workflow/interfaces/ui/templates.py
+@@ -6,6 +6,7 @@ from pathlib import Path
+ from typing import Any
+ 
+ from fastapi.templating import Jinja2Templates
++from jinja2 import FileSystemLoader
+ 
+ from project_workflow.domain.project_theme import (
+     DEFAULT_PROJECT_COLOR,
+@@ -84,6 +85,7 @@ def _accent_foreground(color: str | None) -> str:
+ 
+ 
+ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
++templates.env.loader = FileSystemLoader([str(BASE_DIR / "templates"), str(BASE_DIR / "templates/base-assets")])
+ templates.env.filters["group_instructions"] = _group_instructions
+ templates.env.filters["pluralize"] = _pluralize
+ templates.env.filters["accent_foreground"] = _accent_foreground
+diff --git a/project_workflow/interfaces/ui/templates/base-assets/base-ui.css b/project_workflow/interfaces/ui/templates/base-assets/base-ui.css
+new file mode 100644
+index 0000000..574669c
+--- /dev/null
++++ b/project_workflow/interfaces/ui/templates/base-assets/base-ui.css
+@@ -0,0 +1,291 @@
++:root {
++  --color-background: #09090b;
++  --color-surface: #18181b;
++  --color-surface-raised: #27272a;
++  --color-border: #27272a;
++  --color-border-strong: #3f3f46;
++  --color-text-primary: #fafafa;
++  --color-text-secondary: #d4d4d8;
++  --color-text-muted: #a1a1aa;
++  --color-accent: #818cf8;
++  --color-accent-foreground: #18181b;
++  --color-accent-hover: #a5b4fc;
++  --color-danger: #f87171;
++  --color-success: #4ade80;
++  --color-warning: #fbbf24;
++  --color-focus: var(--color-accent);
++  --color-popover: var(--color-surface);
++  --color-popover-foreground: var(--color-text-primary);
++  /* Compatibility aliases for one release. */
++  --color-primary: var(--color-accent);
++  --color-primary-foreground: var(--color-accent-foreground);
++  --color-secondary: var(--color-surface-raised);
++  --color-secondary-foreground: var(--color-text-primary);
++  --color-muted: var(--color-surface-raised);
++  --color-muted-foreground: var(--color-text-muted);
++  --color-destructive: var(--color-danger);
++  --color-destructive-foreground: #18181b;
++}
++
++:root {
++  --shell-sidebar-expanded: 264px;
++  --shell-sidebar-compact: 72px;
++  --shell-header-height: 60px;
++  --shell-page-gutter: clamp(16px, 2vw, 32px);
++  --shell-page-block-gap: 20px;
++  --shell-control-min: 40px;
++  --shell-control-mobile-min: 44px;
++  --shell-readable-width: 760px;
++  --shell-aside-width: 320px;
++  --base-font-body: 14px;
++  --base-font-label: 12px;
++  --base-font-page-title: 24px;
++  --base-radius: 6px;
++}
++
++.base-control { min-height: var(--shell-control-min); }
++.base-icon-control { min-width: var(--shell-control-min); }
++.base-app-shell { min-height: 100dvh; background: var(--color-background); color: var(--color-text-primary); font-size: var(--base-font-body); letter-spacing: 0; }
++.base-shell-sidebar { position: fixed; inset: var(--shell-header-height) auto 0 0; z-index: 20; display: flex; width: var(--shell-sidebar-expanded); flex-direction: column; border-right: 1px solid var(--color-border); background: var(--color-surface); }
++.base-shell-brand { display: flex; height: var(--shell-header-height); flex-shrink: 0; align-items: center; padding: 0 20px; border-bottom: 1px solid var(--color-border); }
++.base-shell-identity { display: flex; min-width: 0; align-items: center; gap: 12px; }
++.base-shell-identity-text { min-width: 0; }
++.base-shell-navigation-scroll { min-height: 0; flex: 1; overflow-y: auto; padding: 12px; }
++.base-shell-navigation { display: flex; flex-direction: column; gap: 4px; }
++.base-shell-link { display: flex; min-height: var(--shell-control-min); min-width: 0; align-items: center; gap: 12px; padding: 8px 12px; border-radius: var(--base-radius); color: var(--color-text-secondary); }
++.base-shell-nav-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
++.base-shell-link:hover, .base-shell-link.is-active { background: var(--color-surface-raised); color: var(--color-text-primary); }
++.base-shell-link:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
++.base-shell-work { min-width: 0; padding-left: var(--shell-sidebar-expanded); }
++.base-shell-main { min-height: calc(100dvh - var(--shell-header-height)); outline: none; }
++.base-shell-drawer-trigger, .base-shell-mobile-title { display: none; }
++.base-shell-collapse { align-self: center; margin-top: 8px; }
++@media (min-width: 1280px) {
++  .base-app-shell[data-sidebar-collapsed="true"] .base-shell-sidebar { width: var(--shell-sidebar-compact); }
++  .base-app-shell[data-sidebar-collapsed="true"] .base-shell-work { padding-left: var(--shell-sidebar-compact); }
++  .base-app-shell[data-sidebar-collapsed="true"] .base-shell-nav-label { display: none; }
++  .base-app-shell[data-sidebar-collapsed="true"] .base-shell-link { justify-content: center; padding: 8px; }
++}
++@media (max-width: 1279px) { .base-shell-collapse { display: none; } }
++.base-shell-drawer { left: 0; top: 0; display: flex; height: 100dvh; max-height: 100dvh; width: min(320px, calc(100% - 2rem)); max-width: none; transform: none; flex-direction: column; gap: 0; border-radius: 0; border-top: 0; border-bottom: 0; border-left: 0; padding: 0; }
++dialog.base-shell-drawer { position: fixed; margin: 0; color: var(--color-text-primary); background: var(--color-surface); border-color: var(--color-border); }
++dialog.base-shell-drawer:not([open]) { display: none; }
++dialog.base-shell-drawer::backdrop { background: rgb(0 0 0 / 65%); }
++.base-shell-drawer-title { display: flex; height: var(--shell-header-height); flex-shrink: 0; align-items: center; border-bottom: 1px solid var(--color-border); padding: 0 56px 0 16px; }
++.base-page-stack { display: flex; min-width: 0; flex-direction: column; gap: var(--shell-page-block-gap); }
++.base-page-header { display: flex; min-width: 0; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; }
++.base-page-title { overflow-wrap: anywhere; font-size: var(--base-font-page-title); font-weight: 600; line-height: 1.25; letter-spacing: 0; }
++.base-page-actions, .base-filter-row { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 8px; }
++.base-form-field { display: flex; min-width: 0; flex-direction: column; gap: 6px; }
++
++@media (min-width: 768px) and (max-width: 1279px) {
++  .base-shell-sidebar { width: var(--shell-sidebar-compact); }
++  .base-shell-brand { justify-content: center; padding: 0 8px; }
++  .base-shell-identity-text, .base-shell-nav-label { display: none; }
++  .base-shell-navigation-scroll { padding: 12px 8px; }
++  .base-shell-link { justify-content: center; padding: 8px; }
++  .base-shell-work { padding-left: var(--shell-sidebar-compact); }
++}
++@media (max-width: 767px) {
++  .base-control, .base-shell-link { min-height: var(--shell-control-mobile-min); }
++  .base-icon-control { min-width: var(--shell-control-mobile-min); }
++  .base-shell-sidebar { display: none; }
++  .base-shell-work { padding-left: 0; }
++  .base-shell-drawer-trigger { display: inline-flex; }
++  .base-shell-mobile-title { display: block; max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
++  .base-page-header, .base-page-actions { width: 100%; }
++}
++
++.shell-main {
++  min-width: 0;
++  width: 100%;
++}
++
++.platform-header {
++  position: sticky;
++  top: 0;
++  z-index: 30;
++  display: flex;
++  min-width: 0;
++  height: var(--shell-header-height);
++  align-items: center;
++  gap: 8px;
++  padding-inline: 12px;
++  border-bottom: 1px solid var(--color-border);
++  background: var(--color-surface);
++}
++
++.platform-header-leading,
++.platform-header-context,
++.platform-header-actions {
++  display: flex;
++  min-width: 0;
++  align-items: center;
++  gap: 8px;
++}
++
++.platform-header-context {
++  flex: 1;
++}
++
++.platform-header-services,
++.platform-header-actions {
++  flex-shrink: 0;
++}
++
++.platform-header-actions {
++  margin-left: auto;
++}
++
++.platform-header [data-platform-header-slot] :is(button, a, input, select) {
++  min-height: var(--shell-control-mobile-min);
++  min-width: var(--shell-control-mobile-min);
++}
++
++.service-switcher-label {
++  max-width: 160px;
++  overflow: hidden;
++  text-overflow: ellipsis;
++  white-space: nowrap;
++}
++
++@media (min-width: 768px) {
++  .platform-header {
++    padding-inline: 16px;
++  }
++
++  .platform-header [data-platform-header-slot] :is(button, a, input, select) {
++    min-height: var(--shell-control-min);
++    min-width: var(--shell-control-min);
++  }
++}
++
++.page-frame {
++  min-width: 0;
++  width: 100%;
++  padding: var(--shell-page-gutter);
++}
++
++.page-wide,
++.page-detail {
++  min-width: 0;
++  width: 100%;
++}
++
++.page-readable {
++  min-width: 0;
++  width: min(100%, var(--shell-readable-width));
++}
++
++.page-split {
++  display: grid;
++  min-width: 0;
++  width: 100%;
++  grid-template-columns: minmax(0, 1fr) var(--shell-aside-width);
++  gap: var(--shell-page-block-gap);
++}
++
++@media (max-width: 1023px) {
++  .page-split {
++    grid-template-columns: minmax(0, 1fr);
++  }
++}
++
++[data-theme='gray'] {
++  --color-background: #1f1f23;
++  --color-surface: #2a2a2f;
++  --color-surface-raised: #3f3f46;
++  --color-border: #3f3f46;
++  --color-border-strong: #52525b;
++  --color-text-primary: #f4f4f5;
++  --color-text-secondary: #e4e4e7;
++  --color-text-muted: #b4b4bd;
++  --color-accent: #a5b4fc;
++  --color-accent-foreground: #18181b;
++  --color-accent-hover: #818cf8;
++  --color-danger: #fca5a5;
++  --color-destructive-foreground: #18181b;
++  --color-success: #86efac;
++  --color-warning: #fde047;
++}
++
++[data-theme='light'] {
++  --color-background: #f4f4f5;
++  --color-surface: #ffffff;
++  --color-surface-raised: #f4f4f5;
++  --color-border: #e4e4e7;
++  --color-border-strong: #d4d4d8;
++  --color-text-primary: #18181b;
++  --color-text-secondary: #3f3f46;
++  --color-text-muted: #52525b;
++  --color-accent: #4f46e5;
++  --color-accent-foreground: #ffffff;
++  --color-accent-hover: #4338ca;
++  --color-danger: #b91c1c;
++  --color-destructive-foreground: #ffffff;
++  --color-success: #166534;
++  --color-warning: #92400e;
++}
++
++/* Adapter for server-rendered markup. Values come only from canonical tokens. */
++:root {
++  --bg: var(--color-background); --panel: var(--color-surface);
++  --surface: var(--color-surface-raised); --surface-hover: var(--color-surface-raised); --surface-active: var(--color-surface-raised);
++  --text: var(--color-text-primary); --text-secondary: var(--color-text-secondary); --text-muted: var(--color-text-muted); --text-dim: var(--color-text-muted);
++  --accent: var(--color-accent); --accent-hover: var(--color-accent-hover); --accent-readable: var(--color-accent);
++  --accent-foreground: var(--color-accent-foreground); --accent-hover-foreground: var(--color-accent-foreground);
++  --accent-soft: color-mix(in srgb, var(--color-accent) 15%, transparent);
++  --border: var(--color-border); --border-strong: var(--color-border-strong);
++  --green: var(--color-success); --red: var(--color-danger); --orange: var(--color-warning); --yellow: var(--color-warning); --blue: var(--color-accent);
++  --green-soft: color-mix(in srgb, var(--color-success) 12%, transparent); --red-soft: color-mix(in srgb, var(--color-danger) 12%, transparent);
++  --orange-soft: color-mix(in srgb, var(--color-warning) 12%, transparent); --yellow-soft: var(--orange-soft);
++  --sidebar-width: var(--shell-sidebar-expanded); --header-height: var(--shell-header-height);
++}
++.base-ssr-shell { font-size: var(--base-font-body); letter-spacing: 0; }
++.base-form-field { display: grid; gap: 8px; min-width: 0; }
++.base-form-field label { font-weight: 500; }
++.base-form-field p { margin: 0; color: var(--color-text-muted); font-size: var(--base-font-label); }
++.base-form-field [role='alert'] { color: var(--color-danger); }
++.base-form-field > .base-control { width: 100%; min-width: 0; padding: 8px 12px; border: 1px solid var(--color-border); border-radius: var(--base-radius); background: var(--color-surface); color: var(--color-text-primary); font: inherit; }
++.base-form-field > [aria-invalid='true'] { border-color: var(--color-danger); }
++.base-ssr-shell .base-control:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
++.base-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 8px 12px; border: 1px solid var(--color-border); border-radius: var(--base-radius); cursor: pointer; font: inherit; text-decoration: none; }
++.base-button-secondary { background: var(--color-surface); color: var(--color-text-primary); }
++.base-button-primary { background: var(--color-accent); color: var(--color-accent-foreground); border-color: var(--color-accent); }
++.base-button-danger { background: var(--color-danger); color: var(--color-destructive-foreground); border-color: var(--color-danger); }
++.base-button:disabled { opacity: .5; cursor: not-allowed; }
++.base-resource-state { padding: 20px 0; }
++.base-ssr-shell .main { min-width: 0; min-height: 100dvh; width: calc(100% - var(--sidebar-width)); margin-left: var(--sidebar-width); }
++.base-ssr-header { position: sticky; top: 0; z-index: 30; display: flex; height: var(--shell-header-height); align-items: center; justify-content: space-between; gap: 8px; padding: 0 var(--shell-page-gutter); border-bottom: 1px solid var(--color-border); background: var(--color-surface); }
++.base-ssr-shell .sidebar-header { height: var(--shell-header-height); flex: 0 0 auto; display: flex; align-items: center; padding: 0 20px; border-bottom: 1px solid var(--color-border); }
++.base-ssr-shell .sidebar-nav { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; }
++.base-ssr-shell .sidebar-link { display: flex; min-height: var(--shell-control-min); align-items: center; gap: 12px; padding: 8px 12px; border-radius: var(--base-radius); color: var(--color-text-secondary); text-decoration: none; }
++.base-ssr-shell .sidebar-link:hover, .base-ssr-shell .sidebar-link.active { background: var(--color-surface-raised); color: var(--color-text-primary); }
++.base-ssr-shell .sidebar-link:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
++.base-ssr-shell .base-shell-drawer .sidebar-label { position: static; width: auto; height: auto; margin: 0; clip: auto; white-space: normal; overflow: visible; }
++.base-ssr-shell .base-shell-drawer .sidebar-section { display: block; }
++.base-drawer-close { position: absolute; right: 8px; top: 8px; background: transparent; color: inherit; border: 0; cursor: pointer; font-size: 24px; }
++.base-ssr-account { position: relative; }
++.base-ssr-account summary { display: flex; min-width: var(--shell-control-min); align-items: center; justify-content: center; cursor: pointer; list-style: none; }
++.base-ssr-account summary::-webkit-details-marker { display: none; }
++.base-ssr-account-menu { position: absolute; right: 0; top: calc(100% + 8px); min-width: 160px; padding: 8px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--base-radius); }
++.base-ssr-account-menu a { display: flex; align-items: center; min-height: var(--shell-control-min); padding: 8px; }
++.base-ssr-shell .base-shell-drawer .sidebar-nav { padding: 0; }
++.base-ssr-shell :where(button,select,textarea,input:not([type='checkbox']):not([type='radio']),.btn,summary,.namespace-icon-action,.brand-link,.sidebar-service-link) { min-height: var(--shell-control-min); }
++.base-ssr-shell :where(button,.namespace-icon-action) { min-width: var(--shell-control-min); }
++.base-ssr-shell label:has(input[type='checkbox']), .base-ssr-shell label:has(input[type='radio']) { min-height: var(--shell-control-min); display: flex; align-items: center; }
++.base-ssr-shell .btn-danger { background: var(--color-danger); color: var(--color-destructive-foreground); border-color: var(--color-danger); }
++@media (min-width: 768px) and (max-width: 1279px) {
++  .base-ssr-shell { --sidebar-width: var(--shell-sidebar-compact); }
++  .base-ssr-shell .sidebar-header { justify-content: center; padding: 0 8px; }
++  .base-ssr-shell .sidebar-nav { padding: 12px 8px; }
++  .base-ssr-shell .sidebar-link { justify-content: center; padding: 8px; }
++}
++@media (max-width: 767px) {
++  .base-ssr-shell { --shell-control-min: var(--shell-control-mobile-min); }
++  .base-ssr-account summary { min-width: var(--shell-control-mobile-min); }
++  .base-ssr-shell .main { width: 100%; margin-left: 0; }
++  .base-ssr-shell :where(button,select,textarea,input:not([type='checkbox']):not([type='radio']),.btn,summary,.namespace-icon-action,.brand-link,.sidebar-service-link,.sidebar-link) { min-height: var(--shell-control-mobile-min); }
++  .base-ssr-shell :where(button,.namespace-icon-action) { min-width: var(--shell-control-mobile-min); }
++  .base-ssr-shell label:has(input[type='checkbox']), .base-ssr-shell label:has(input[type='radio']) { min-height: var(--shell-control-mobile-min); }
++}
+diff --git a/project_workflow/interfaces/ui/templates/base-assets/base-ui.js b/project_workflow/interfaces/ui/templates/base-assets/base-ui.js
+new file mode 100644
+index 0000000..e0d0b10
+--- /dev/null
++++ b/project_workflow/interfaces/ui/templates/base-assets/base-ui.js
+@@ -0,0 +1,25 @@
++(() => {
++  for (const account of document.querySelectorAll('.base-ssr-account')) {
++    const toggle = account.querySelector('summary');
++    function closeAccount(restoreFocus) { account.open = false; if (restoreFocus) toggle?.focus(); }
++    account.addEventListener('keydown', (event) => { if (event.key === 'Escape' && account.open) { event.preventDefault(); closeAccount(true); } });
++    document.addEventListener('click', (event) => { if (event.target instanceof Node && !account.contains(event.target)) closeAccount(false); });
++    account.addEventListener('focusout', (event) => { if (event.relatedTarget instanceof Node && !account.contains(event.relatedTarget)) closeAccount(false); });
++  }
++  const trigger = document.querySelector('[data-base-drawer-trigger]');
++  const drawer = document.querySelector('[data-base-drawer]');
++  if (!trigger || !drawer) return;
++  const focusable = () => [...drawer.querySelectorAll('a[href],button,input,select,textarea,[tabindex="0"]')].filter((item) => !item.disabled && item.getClientRects().length);
++  function close() { drawer.close(); trigger.setAttribute('aria-expanded', 'false'); const target = trigger.getClientRects().length ? trigger : document.querySelector('main[tabindex="-1"]'); target?.focus(); }
++  trigger.addEventListener('click', () => { drawer.showModal(); trigger.setAttribute('aria-expanded', 'true'); focusable()[0]?.focus(); });
++  drawer.addEventListener('cancel', (event) => { event.preventDefault(); close(); });
++  drawer.addEventListener('click', (event) => { if (event.target instanceof Element && event.target.closest('[data-base-drawer-close],a[href]')) close(); });
++  drawer.addEventListener('keydown', (event) => {
++    if (event.key !== 'Tab') return;
++    const items = focusable();
++    if (!items.length) { event.preventDefault(); return; }
++    if (event.shiftKey && document.activeElement === items[0]) { event.preventDefault(); items.at(-1).focus(); }
++    else if (!event.shiftKey && document.activeElement === items.at(-1)) { event.preventDefault(); items[0].focus(); }
++  });
++  window.matchMedia('(min-width: 768px)').addEventListener('change', (event) => { if (event.matches && drawer.open) close(); });
++})();
+diff --git a/project_workflow/interfaces/ui/templates/base-assets/fingerprint.json b/project_workflow/interfaces/ui/templates/base-assets/fingerprint.json
+new file mode 100644
+index 0000000..284636c
+--- /dev/null
++++ b/project_workflow/interfaces/ui/templates/base-assets/fingerprint.json
+@@ -0,0 +1,9 @@
++{
++  "schemaVersion": 1,
++  "package": "@sdlc/ui",
++  "files": {
++    "base-ui.css": "bf2baeb201bd5e7dba07912bcd7f304cddac3c904b7939b073a77d050525cab6",
++    "base-ui.js": "3f7dc10011e9a44f0dec03cf3f17ff156d094a844d89dde037fa95bd14f0a6ae",
++    "macros.html": "c665c7bb85bc4ed41a1d6fda26eda8a9dfe0472911493d3a2d2c79332ca97d6c"
++  }
++}
+diff --git a/project_workflow/interfaces/ui/templates/base-assets/macros.html b/project_workflow/interfaces/ui/templates/base-assets/macros.html
+new file mode 100644
+index 0000000..708603a
+--- /dev/null
++++ b/project_workflow/interfaces/ui/templates/base-assets/macros.html
+@@ -0,0 +1,55 @@
++{% macro page_header(title, context=none, actions=none) -%}
++<div class="base-page-header"><div><h1 class="base-page-title">{{ title }}</h1>{% if context %}<p>{{ context }}</p>{% endif %}</div>{% if actions %}<div class="base-page-actions">{{ actions }}</div>{% endif %}</div>
++{%- endmacro %}
++
++{% macro frame(mode='wide') -%}
++<div class="page-frame"><div class="{% if mode == 'reading' %}page-readable{% elif mode == 'detail-with-aside' %}page-detail{% else %}page-wide{% endif %}" data-page-layout="{{ mode }}">{{ caller() }}</div></div>
++{%- endmacro %}
++
++{% macro sidebar() -%}
++<aside class="sidebar base-shell-sidebar" id="sidebar">{{ caller() }}</aside>
++{%- endmacro %}
++
++{% macro header() -%}
++<header class="header base-ssr-header">{{ caller() }}</header>
++{%- endmacro %}
++
++{% macro account(logout='/logout') -%}
++<details class="base-ssr-account"><summary aria-label="Аккаунт" title="Аккаунт"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 22v-2a8 8 0 0 1 16 0v2"/></svg></summary><div class="base-ssr-account-menu"><a href="{{ logout }}">Выйти</a></div></details>
++{%- endmacro %}
++
++{% macro navigation_drawer(title) -%}
++<dialog id="base-mobile-navigation" class="base-shell-drawer" data-base-drawer aria-labelledby="base-drawer-title"><div class="base-shell-drawer-title"><h2 id="base-drawer-title">{{ title }}</h2><button type="button" class="base-control base-icon-control base-drawer-close" data-base-drawer-close aria-label="Закрыть навигацию" title="Закрыть навигацию">&times;</button></div><div class="base-shell-navigation-scroll">{{ caller() }}</div></dialog>
++{%- endmacro %}
++
++{% macro field(id, label, hint=none, error=none, required=false) -%}
++<div class="base-form-field"><label for="{{ id }}">{{ label }}{% if required %}<span aria-hidden="true"> *</span>{% endif %}</label>{{ caller() }}{% if hint %}<p id="{{ id }}-hint">{{ hint }}</p>{% endif %}{% if error %}<p role="alert" id="{{ id }}-error">{{ error }}</p>{% endif %}</div>
++{%- endmacro %}
++
++{% macro input_control(id, name, value='', type='text', required=false, hint=none, error=none, disabled=false, min=none, max=none, step=none, autocomplete=none) -%}
++<input class="base-control" id="{{ id }}" name="{{ name }}" type="{{ type }}" value="{{ value }}"{% if required %} required{% endif %}{% if disabled %} disabled{% endif %}{% if error %} aria-invalid="true"{% endif %}{% if hint or error %} aria-describedby="{% if hint %}{{ id }}-hint{% endif %}{% if hint and error %} {% endif %}{% if error %}{{ id }}-error{% endif %}"{% endif %}{% if min is not none %} min="{{ min }}"{% endif %}{% if max is not none %} max="{{ max }}"{% endif %}{% if step is not none %} step="{{ step }}"{% endif %}{% if autocomplete %} autocomplete="{{ autocomplete }}"{% endif %}>
++{%- endmacro %}
++
++{% macro select_control(id, name, required=false, hint=none, error=none, disabled=false) -%}
++<select class="base-control" id="{{ id }}" name="{{ name }}"{% if required %} required{% endif %}{% if disabled %} disabled{% endif %}{% if error %} aria-invalid="true"{% endif %}{% if hint or error %} aria-describedby="{% if hint %}{{ id }}-hint{% endif %}{% if hint and error %} {% endif %}{% if error %}{{ id }}-error{% endif %}"{% endif %}>{{ caller() }}</select>
++{%- endmacro %}
++
++{% macro textarea_control(id, name, value='', required=false, hint=none, error=none, disabled=false, rows=4) -%}
++<textarea class="base-control" id="{{ id }}" name="{{ name }}" rows="{{ rows }}"{% if required %} required{% endif %}{% if disabled %} disabled{% endif %}{% if error %} aria-invalid="true"{% endif %}{% if hint or error %} aria-describedby="{% if hint %}{{ id }}-hint{% endif %}{% if hint and error %} {% endif %}{% if error %}{{ id }}-error{% endif %}"{% endif %}>{{ value }}</textarea>
++{%- endmacro %}
++
++{% macro button(label, id=none, type='button', variant='secondary', disabled=false, pending=false) -%}
++<button class="base-control base-button base-button-{{ variant }}" type="{{ type }}"{% if id %} id="{{ id }}"{% endif %}{% if disabled or pending %} disabled{% endif %}{% if pending %} aria-busy="true"{% endif %}>{{ label }}</button>
++{%- endmacro %}
++
++{% macro state(kind, message, retry_url=none, retry_label='Повторить') -%}
++<section class="base-resource-state" data-page-state="{{ kind }}" {% if kind in ['error', 'partial-error'] %}role="alert"{% else %}role="status"{% endif %}{% if kind == 'loading' %} aria-busy="true"{% endif %}><p>{{ message }}</p>{% if retry_url and kind in ['error', 'partial-error'] %}<a class="base-control base-button base-button-secondary" href="{{ retry_url }}">{{ retry_label }}</a>{% endif %}</section>
++{%- endmacro %}
++
++{% macro nav(items, current_path) -%}
++<nav aria-label="Основная навигация" class="base-shell-navigation">{% for item in items %}<a class="base-shell-link{% if current_path == item.href %} is-active{% endif %}" href="{{ item.href }}"{% if current_path == item.href %} aria-current="page"{% endif %}>{{ item.label }}</a>{% endfor %}</nav>
++{%- endmacro %}
++
++{% macro drawer(title, items, current_path) -%}
++<button type="button" class="base-control base-icon-control base-shell-drawer-trigger" data-base-drawer-trigger aria-expanded="false" aria-controls="base-mobile-navigation">Меню</button><dialog id="base-mobile-navigation" class="base-shell-drawer" data-base-drawer aria-labelledby="base-drawer-title"><div class="base-shell-drawer-title"><h2 id="base-drawer-title">{{ title }}</h2><button type="button" class="base-control" data-base-drawer-close aria-label="Закрыть навигацию">Закрыть</button></div><div class="base-shell-navigation-scroll">{{ nav(items, current_path) }}</div></dialog>
++{%- endmacro %}
+diff --git a/project_workflow/interfaces/ui/templates/base.html b/project_workflow/interfaces/ui/templates/base.html
+index ccb0562..ce0c22f 100644
+--- a/project_workflow/interfaces/ui/templates/base.html
++++ b/project_workflow/interfaces/ui/templates/base.html
+@@ -1,3 +1,4 @@
++{% import 'macros.html' as base %}
+ {% set active_namespace = theme_namespace if theme_namespace is defined else none %}
+ {% set active_namespace_id = active_namespace.id if active_namespace else none %}
+ {% set accent_text = active_namespace.theme_color | accent_foreground if active_namespace else none %}
+@@ -9,35 +10,6 @@
+ <title>{% block title %}Workflow Engine{% endblock %}</title>
+ <script>try{var savedTheme=localStorage.getItem('workflow-theme');if(['dark','gray','light'].includes(savedTheme)){document.documentElement.dataset.theme=savedTheme}}catch(_error){}</script>
+ <style>
+-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+-:root{
+-  --bg:#111217;--panel:#17181d;--surface:#202126;--surface-hover:#27282e;--surface-active:#2d2e35;
+-  --text:#f7f8f8;--text-secondary:#d0d6e0;--text-muted:#969ba5;--text-dim:#a1a6af;
+-  --accent:#5e6ad2;--accent-hover:#828fff;--accent-soft:rgba(94,106,210,.15);--accent-readable:#aab3ff;
+-  --accent-foreground:#fff;--accent-hover-foreground:#000;
+-  --border:rgba(255,255,255,.06);--border-strong:rgba(255,255,255,.10);
+-  --green:#22c55e;--green-soft:rgba(34,197,94,.12);--red:#ef4444;--red-soft:rgba(239,68,68,.12);
+-  --orange:#f59e0b;--orange-soft:rgba(245,158,11,.12);--yellow:#eab308;--yellow-soft:rgba(234,179,8,.12);--blue:#3b82f6;
+-  --shell-sidebar-expanded:264px;--shell-sidebar-compact:72px;--shell-header-height:60px;
+-  --shell-page-gutter:clamp(16px,2vw,32px);--shell-page-block-gap:20px;--shell-readable-width:760px;--shell-aside-width:320px;
+-  --sidebar-width:var(--shell-sidebar-expanded);--header-height:var(--shell-header-height);
+-}
+-html[data-theme='gray']{
+-  --bg:#23242a;--panel:#2d2e35;--surface:#373941;--surface-hover:#43464f;--surface-active:#50535c;
+-  --text:#f4f4f5;--text-secondary:#e4e4e7;--text-muted:#c4c6ce;--text-dim:#b4b8c1;
+-  --accent-readable:#c7ccff;
+-  --border:rgba(255,255,255,.15);--border-strong:rgba(255,255,255,.24);
+-  --green:#86efac;--red:#fca5a5;--orange:#fdba74;--yellow:#fde047;--blue:#93c5fd;
+-}
+-html[data-theme='light']{
+-  --bg:#f4f4f5;--panel:#fff;--surface:#fff;--surface-hover:#eeeef0;--surface-active:#e4e4e7;
+-  --text:#18181b;--text-secondary:#3f3f46;--text-muted:#52525b;--text-dim:#52525b;
+-  --accent:#4f46e5;--accent-hover:#4338ca;--accent-soft:rgba(79,70,229,.12);--accent-readable:#3730a3;
+-  --accent-foreground:#fff;--accent-hover-foreground:#fff;
+-  --border:rgba(24,24,27,.16);--border-strong:rgba(24,24,27,.28);
+-  --green:#166534;--green-soft:rgba(21,128,61,.12);--red:#b91c1c;--red-soft:rgba(185,28,28,.1);
+-  --orange:#9a3412;--orange-soft:rgba(154,52,18,.1);--yellow:#a16207;--yellow-soft:rgba(161,98,7,.12);--blue:#1d4ed8;
+-}
+ *{box-sizing:border-box;margin:0;padding:0}
+ html{font-feature-settings:"cv01","ss03"}
+ /* ── Единый скроллбар всего приложения в стиле темы ─────────────────── */
+@@ -312,8 +284,9 @@ textarea{resize:vertical;min-height:60px}
+ /* ── Kanban ───────────────────────────────────────────────────────── */
+ {% block extra_style %}{% endblock %}
+ </style>
++<style>{% include 'base-assets/base-ui.css' %}</style>
+ </head>
+-<body>
++<body class="base-ssr-shell">
+ 
+ <!-- Sidebar overlay (mobile) -->
+ <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+@@ -399,7 +372,7 @@ textarea{resize:vertical;min-height:60px}
+ 
+ <!-- Main -->
+ <main class="main">
+-  <header class="header">
++  {% call base.header() %}
+     <div class="header-title-group">
+       <button class="burger" id="burgerBtn" type="button" aria-label="Открыть навигацию" aria-controls="sidebar" aria-expanded="false" onclick="openSidebar()">☰</button>
+       <h1 class="header-title">{% block header_title %}{% endblock %}</h1>
+@@ -440,15 +413,14 @@ textarea{resize:vertical;min-height:60px}
+       {% block header_actions %}{% endblock %}
+       <a class="btn btn-secondary header-logout" href="/logout">Выйти</a>
+     </div>
+-  </header>
++  {% endcall %}
+ 
+   {% set layout_mode %}{% block page_layout %}wide{% endblock %}{% endset %}
+   {% set layout_mode = layout_mode | trim %}
+-  <div class="container page-frame">
+-    <div class="{% if layout_mode == 'reading' %}page-readable{% elif layout_mode == 'detail-with-aside' %}page-detail{% else %}page-wide{% endif %}" data-page-layout="{{ layout_mode }}">
++  {% call base.frame(layout_mode) %}
+       {% block content %}{% endblock %}
+-    </div>
+-  </div>
++  {% endcall %}
++
+ </main>
+ 
+ <div class="toast toast-success" id="toast" aria-hidden="true">Сохранено</div>
+diff --git a/scripts/quality.ps1 b/scripts/quality.ps1
+index b050ac5..98531e5 100644
+--- a/scripts/quality.ps1
++++ b/scripts/quality.ps1
+@@ -1,6 +1,9 @@
+ param(
+     [ValidateSet("test", "test-integration", "coverage", "lint", "quality", "warnings", "compose-ready")]
+-    [string]$Target = "quality"
++    [string]$Target = "quality",
++    [string]$DockerContext,
++    [string]$BaseDirectory = (Join-Path $PSScriptRoot "../../services-base"),
++    [string]$ComposeOutput = (Join-Path $PSScriptRoot "../.local/compose-smoke")
+ )
+ 
+ $ErrorActionPreference = "Stop"
+@@ -47,8 +50,12 @@ function Invoke-Warnings {
+ }
+ 
+ function Invoke-ComposeReady {
+-    Invoke-Checked @("docker", "compose", "up", "--build", "-d", "--wait")
+-    Invoke-Checked @("curl.exe", "--fail", "http://127.0.0.1:8812/health")
++    if ([string]::IsNullOrWhiteSpace($DockerContext)) {
++        throw "compose-ready requires an explicit -DockerContext; no workspace database fallback"
++    }
++    Invoke-Checked @("python", (Join-Path $BaseDirectory "scripts/qa_product_compose.py"),
++        "--product-root", (Split-Path $PSScriptRoot), "--docker-context", $DockerContext,
++        "--output", $ComposeOutput)
+ }
+ 
+ switch ($Target) {
+diff --git a/tests/test_readiness_correlation.py b/tests/test_readiness_correlation.py
+new file mode 100644
+index 0000000..da13a20
+--- /dev/null
++++ b/tests/test_readiness_correlation.py
+@@ -0,0 +1,48 @@
++import asyncio
++import time
++from threading import Event
++from unittest.mock import patch
++from uuid import UUID, uuid4
++
++from fastapi.testclient import TestClient
++
++from project_workflow.interfaces.ui.app import _health, create_app
++
++
++def test_readiness_timeout_does_not_queue_more_workers():
++    release = Event()
++    entered = Event()
++
++    def blocked():
++        entered.set()
++        release.wait(10)
++        raise RuntimeError("synthetic blocked database")
++
++    async def check():
++        with patch("project_workflow.interfaces.ui.app._health_sync", side_effect=blocked) as probe:
++            started = time.monotonic()
++            try:
++                result = await _health()
++                assert result.status_code == 503
++                assert time.monotonic() - started < 4
++                assert entered.is_set()
++                second = await _health()
++                assert second.status_code == 503
++                assert probe.call_count == 1
++            finally:
++                release.set()
++                await asyncio.sleep(0.05)
++
++    asyncio.run(check())
++
++
++def test_error_response_preserves_uuid_and_old_json_shape():
++    client = TestClient(create_app(), raise_server_exceptions=False)
++    request_id = str(uuid4())
++    response = client.get("/api/unknown-page", headers={"X-Request-Id": request_id})
++    assert response.status_code == 404
++    assert response.headers["X-Request-Id"] == request_id
++    assert response.json() == {"ok": False, "error": "Ресурс не найден"}
++    assert "X-Request-Id" in response.headers["Access-Control-Expose-Headers"]
++    response = client.get("/api/unknown-page", headers={"X-Request-Id": "invalid"})
++    assert UUID(response.headers["X-Request-Id"])
+diff --git a/tests/test_runtime_cleanup.py b/tests/test_runtime_cleanup.py
+index 6e47c40..3866329 100644
+--- a/tests/test_runtime_cleanup.py
++++ b/tests/test_runtime_cleanup.py
+@@ -107,7 +107,7 @@ def test_compose_publishes_database_and_api_on_loopback_only():
+ 
+ def test_compose_waits_for_api_readiness():
+     compose = COMPOSE_PATH.read_text(encoding="utf-8")
+-    api_block = compose.split("\n  api:\n", maxsplit=1)[1]
++    api_block = compose.split("\n  project-workflow-backend:\n", maxsplit=1)[1]
+     assert "healthcheck:" in api_block
+     assert "http://127.0.0.1:8811/health" in api_block
+     assert "data.get('ok') is True" in api_block
+@@ -128,8 +128,11 @@ def test_windows_quality_helper_mirrors_local_gate():
+     assert "coverage" in script
+     assert "ruff\", \"check\", \".\"" in script
+     assert "mypy\", \"project_workflow\", \"scripts\"" in script
+-    assert "curl.exe" in script
+-    assert "http://127.0.0.1:8812/health" in script
++    assert "qa_product_compose.py" in script
++    assert '"--docker-context", $DockerContext' in script
++    assert "compose-ready requires an explicit -DockerContext" in script
++    assert 'Invoke-Checked @("docker", "compose", "up"' not in script
++    assert '"--product-root", (Split-Path $PSScriptRoot)' in script
+ 
+ 
+ def test_dependency_constraints_are_exact_and_runtime_image_uses_isolated_venv():
+diff --git a/tests/test_ui.py b/tests/test_ui.py
+index aa680b1..814414b 100644
+--- a/tests/test_ui.py
++++ b/tests/test_ui.py
+@@ -503,7 +503,7 @@ class TestPhasesPage:
+         assert (
+             "--sidebar-width:var(--shell-sidebar-expanded);"
+             "--header-height:var(--shell-header-height)"
+-        ) in response.text
++        ) in re.sub(r"\s+", "", response.text)
+         assert "@media(max-width:1279px) and (min-width:768px)" in response.text
+         assert ":root{--sidebar-width:var(--shell-sidebar-compact)}" in response.text
+         assert "@media(max-width:767px)" in response.text
+@@ -516,7 +516,7 @@ class TestPhasesPage:
+         assert "color:var(--accent-foreground);border-color:var(--accent)" in response.text
+         assert "color:var(--accent-hover-foreground)" in response.text
+         assert "--accent-foreground:" in response.text
+-        assert "--shell-page-gutter:clamp(16px,2vw,32px)" in response.text
++        assert "--shell-page-gutter:clamp(16px,2vw,32px)" in re.sub(r"\s+", "", response.text)
+         assert 'data-page-layout="wide"' in response.text
+ 
+     def test_mobile_shell_keeps_theme_and_services_in_drawer(self):
+@@ -2047,7 +2047,7 @@ class TestTaskDetail:
+         response = client.get(f"/task/RUN-247?namespace_id={self._default_namespace_id()}")
+         assert response.status_code == 200
+         assert "Приём задачи" in response.text
+-        progress_match = re.search(r"(\d+)\s*/\s*(\d+)", response.text)
++        progress_match = re.search(r'<div class="summary-value">(\d+)\s*/\s*(\d+)', response.text)
+         assert progress_match is not None
+         current, total = map(int, progress_match.groups())
+         assert current == 0
+diff --git a/tests/test_ui_api.py b/tests/test_ui_api.py
+index 9a2dd83..d31ae40 100644
+--- a/tests/test_ui_api.py
++++ b/tests/test_ui_api.py
+@@ -423,16 +423,18 @@ class TestApiPhases:
+             raise RuntimeError("synthetic commit failure")
+ 
+         monkeypatch.setattr(SAUnitOfWork, "commit", failed_commit)
+-        with pytest.raises(RuntimeError, match="synthetic commit failure"):
+-            client.put(
+-                f"/api/phases/{phase_id}",
+-                json={
+-                    "description": "Must be rolled back",
+-                    "instructions": [{"id": None, "description": "Must be rolled back"}],
+-                    "checks": [{"id": None, "description": "Must be rolled back"}],
+-                    "evidence": [{"id": None, "description": "Must be rolled back"}],
+-                },
+-            )
++        response = client.put(
++            f"/api/phases/{phase_id}",
++            json={
++                "description": "Must be rolled back",
++                "instructions": [{"id": None, "description": "Must be rolled back"}],
++                "checks": [{"id": None, "description": "Must be rolled back"}],
++                "evidence": [{"id": None, "description": "Must be rolled back"}],
++            },
++        )
++        assert response.status_code == 500
++        assert "synthetic commit failure" not in response.text
++        assert response.headers.get("X-Request-Id")
+ 
+         monkeypatch.setattr(SAUnitOfWork, "commit", original_commit)
+         after = client.get(f"/api/phases/{phase_id}").json()["phase"]

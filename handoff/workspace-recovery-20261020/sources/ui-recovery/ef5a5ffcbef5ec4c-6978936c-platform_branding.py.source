@@ -1,0 +1,45 @@
+"""Same-origin bridge to the configured public Base branding document."""
+
+from __future__ import annotations
+
+import httpx
+from fastapi import Request
+from starlette.responses import Response
+
+from ...config import get_settings
+
+
+def branding_url() -> str | None:
+    settings = get_settings()
+    if settings.PLATFORM_BRANDING_URL is not None:
+        return settings.PLATFORM_BRANDING_URL or None
+    catalog = settings.PLATFORM_SERVICES_URL
+    suffix = "/api/v1/runtime/services"
+    return catalog.removesuffix(suffix) + "/api/v1/runtime/branding" if catalog.endswith(suffix) else None
+
+
+async def platform_branding(request: Request) -> Response:
+    url = branding_url()
+    if not url:
+        return Response(status_code=404)
+    headers = {}
+    validator = request.headers.get("if-none-match")
+    if validator:
+        headers["If-None-Match"] = validator
+    try:
+        async with httpx.AsyncClient(timeout=2.0, follow_redirects=False) as client:
+            async with client.stream("GET", url, headers=headers) as upstream:
+                if upstream.status_code not in {200, 304, 404}:
+                    return Response(status_code=502)
+                forwarded = {
+                    key: value for key, value in upstream.headers.items()
+                    if key.lower() in {"etag", "cache-control", "content-type"}
+                }
+                body = bytearray()
+                async for chunk in upstream.aiter_bytes():
+                    body.extend(chunk)
+                    if len(body) > 65536:
+                        return Response(status_code=502)
+                return Response(bytes(body), status_code=upstream.status_code, headers=forwarded)
+    except (httpx.HTTPError, ValueError):
+        return Response(status_code=503)

@@ -1,0 +1,61 @@
+diff --git a/docs/adr/2026-10-01-read-only-react-pilot.md b/docs/adr/2026-10-01-read-only-react-pilot.md
+index 037e266..7feb9e4 100644
+--- a/docs/adr/2026-10-01-read-only-react-pilot.md
++++ b/docs/adr/2026-10-01-read-only-react-pilot.md
+@@ -1,6 +1,7 @@
+ # ADR: Read-only React-пилот
+ 
+-Статус: read-only пилот реализован локально; Docker/SSO acceptance не завершена.
++Статус: read-only пилот реализован, чистая Docker-сборка и packaged assets проверены;
++полная workspace/browser/SSO acceptance не завершена.
+ Решение о полном переносе не принято. Дата: 2026-10-01.
+ 
+ ## Решение
+@@ -39,6 +40,9 @@ force-include. Для сборки Python package вне Docker по-прежн
+ `/app/ui-build.json` хранит source SHA, Base/product fingerprints и SHA-256 каждого
+ React asset; OCI labels содержат product/Base revisions. Launcher передаёт текущие
+ SHA. Значение `unknown` допустимо для локального dev build, но не для выпуска.
++Точные source/image версии и выполненные проверки:
++[build evidence](../ui-evidence/2026-10-01/workflow-image-build.json). Генерируемые
++SSR assets имеют `text eol=lf`: Git archive на Windows не меняет fingerprint bytes.
+ При включённом флаге отсутствие build или bootstrap marker останавливает запуск.
+ По умолчанию флаг выключен; /react и его assets недоступны. Флаг выключается без
+ изменения Jinja URL, API, CLI или схем БД.
+diff --git a/docs/ui-evidence/2026-10-01/workflow-image-build.json b/docs/ui-evidence/2026-10-01/workflow-image-build.json
+new file mode 100644
+index 0000000..0a9dbbd
+--- /dev/null
++++ b/docs/ui-evidence/2026-10-01/workflow-image-build.json
+@@ -0,0 +1,32 @@
++{
++  "schemaVersion": 1,
++  "recordedAt": "2026-10-01T10:52:25Z",
++  "status": "build-bytes-verified-runtime-acceptance-pending",
++  "productSha": "5ceaacb0de7991c432cafd0029a4c6383ab7cdb7",
++  "baseSha": "855350aa539de70a4adcf8ab12a41f47754adbeb",
++  "image": "workflow-ui-standard:5ceaacb",
++  "imageDigest": "sha256:458f9b0d5afa859e4dce46fec3ae37d413c80878fbc5efaf6ac53123a6035140",
++  "baseFingerprint": "1025b48f9f0411ae310c5d724102aee4e42c370a27bd050ec1cde49e13a0a04c",
++  "productFingerprint": "1b4baf6cc23433178536a9553b6f69702502b63f13e0187527e0d56a704c90c3",
++  "source": "Clean git archive exports; no ignored local React dist or node_modules",
++  "checks": {
++    "frozenDockerBuild": "passed",
++    "sourceAndImageFingerprints": "equal",
++    "ociSourceLabels": "matched",
++    "packagedAssetDigests": "passed: 3 React and 3 SSR files",
++    "disabledPilot": "passed: routes and assets return 404",
++    "enabledPilot": "passed: tasks, phases, phase detail and assets return 200; POST returns 405; safe bootstrap inserted"
++  },
++  "commands": [
++    "git archive --format=tar --output=<archive> <source-sha>",
++    "docker build --build-context sdlc_ui=<archived-base>/frontend --build-arg VCS_REF=5ceaacb0de7991c432cafd0029a4c6383ab7cdb7 --build-arg BASE_VCS_REF=855350aa539de70a4adcf8ab12a41f47754adbeb --tag workflow-ui-standard:5ceaacb .",
++    "docker run --rm --network none workflow-ui-standard:5ceaacb python scripts/verify_ui_image.py --require-revisions"
++  ],
++  "limitations": [
++    "Enabled/disabled route checks used packaged install_react_ui on a minimal FastAPI application through TestClient, without API mocks; this is not full application browser smoke.",
++    "Full workspace launcher, PostgreSQL health, live SSO, role/state matrix and screenshots on this image remain pending.",
++    "Historical gallery and 420 geometry observations retain their original source versions and are not release evidence for this image.",
++    "Full Python/PostgreSQL/coverage gate has not been rerun for this snapshot; focused build/SSR/React/doc tests and lint/typecheck passed.",
++    "No default branch integration or product mirror synchronization has been performed."
++  ]
++}

@@ -1,0 +1,1189 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 7391aa5..f251e20 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -7,6 +7,14 @@
+ ## [Unreleased]
+ 
+ ### Changed
++- Lifecycle инструкций в деталях фазы подтверждает создание, текст, навыки,
++  режим, порядок и удаление scoped GET со строгой проверкой родителя и строк.
++  Неизвестный результат сохраняет общий lock и Base draft guard; повторная
++  мутация недоступна. Create ID берётся только из проверенного ACK, DELETE
++  остаётся защищённым после отмены/повторного открытия Base confirmation.
++  Подтверждённые изменения обновляют существующие DOM-строки без reload,
++  сохраняют более поздний ввод, keyboard focus, URL context и deferred autosave.
++  API, схема БД, Base SSR assets и принятые runtime pins не меняются.
+ - Автосохранение деталей фазы использует снимок одной попытки и стабильные
+   локальные ключи checks/evidence вместо позднего чтения DOM и очереди функций.
+   Общий pending/unknown lock защищает controls и переходы через Base draft guard.
+@@ -15,8 +23,8 @@
+   403/404 отключают запись; API, схема БД и runtime pins не меняются.
+   Запись инструкций и порядка разделяет тот же pending lock; черновики текста
+   и навыков защищены Base navigation guard. Ошибка текста не сбрасывает ввод,
+-  reload-based действия не затирают другой draft. Unknown reconciliation
+-  инструкций/reorder остаётся отдельным открытым пунктом.
++  структурные действия не затирают другой draft. Unknown reconciliation
++  инструкций/reorder теперь выполняется общей lifecycle-проверкой выше.
+   Отложенный metadata autosave возобновляется после settlement инструкции,
+   без параллельного PUT и повторной записи неизменённой фазы.
+ - Каталог фаз использует Base SSR controls/states и общий navigation guard.
+diff --git a/frontend/e2e/phase-detail-save.spec.ts b/frontend/e2e/phase-detail-save.spec.ts
+index 67e72f8..cea24f1 100644
+--- a/frontend/e2e/phase-detail-save.spec.ts
++++ b/frontend/e2e/phase-detail-save.spec.ts
+@@ -300,8 +300,15 @@ for (const status of [409, 500]) {
+     await description.fill('Retained instruction draft')
+     await page.evaluate(() => (window as unknown as { saveInstructionDescription: (input: Element) => Promise<void> }).saveInstructionDescription(document.querySelector('.timeline-name-input')!))
+     await expect(description).toHaveValue('Retained instruction draft')
+-    await expect(description).toBeEnabled()
+-    await expect(name(page)).toBeEnabled()
++    if (status === 500) {
++      await expect(description).toBeDisabled()
++      await expect(name(page)).toBeDisabled()
++      await expect(saveState(page)).toHaveAttribute('data-page-state', 'partial-error')
++      await expect(page.locator('#phaseSaveReconcile')).toBeVisible()
++    } else {
++      await expect(description).toBeEnabled()
++      await expect(name(page)).toBeEnabled()
++    }
+     await page.locator('.wiki-header a').first().click()
+     await expect(page.locator('[data-base-draft-dialog]')).toBeVisible()
+     await page.keyboard.press('Escape')
+diff --git a/frontend/e2e/phase-instruction-lifecycle.spec.ts b/frontend/e2e/phase-instruction-lifecycle.spec.ts
+new file mode 100644
+index 0000000..14b788d
+--- /dev/null
++++ b/frontend/e2e/phase-instruction-lifecycle.spec.ts
+@@ -0,0 +1,336 @@
++import { expect, test } from '@playwright/test'
++
++if (process.env.WORKFLOW_UI_QA_MUTATIONS !== 'isolated-fixture') throw new Error('Phase instruction QA requires an isolated fixture')
++
++let workflowId: number
++let namespaceId: number
++let phaseId: number
++let instructionIds: number[]
++const pageUrl = () => `/phase/${phaseId}?namespace_id=${namespaceId}&foreign=keep`
++
++test.beforeEach(async ({ request }) => {
++  workflowId = 0
++  namespaceId = 0
++  instructionIds = []
++  const created = await request.post('/api/workflows', { data: { name: `Instruction lifecycle ${crypto.randomUUID()}` } })
++  expect(created.ok()).toBeTruthy()
++  workflowId = (await created.json()).workflow_id as number
++  const namespace = await request.post('/api/namespaces', { data: { name: `Instruction QA ${crypto.randomUUID()}`, cli_command: `instruction-${crypto.randomUUID()}`, workflow_id: workflowId } })
++  expect(namespace.ok()).toBeTruthy()
++  namespaceId = (await namespace.json()).namespace_id as number
++  const phases = await request.get(`/api/phases?workflow_id=${workflowId}`)
++  expect(phases.ok()).toBeTruthy()
++  phaseId = (await phases.json()).phases[0].id as number
++  for (const step of [1, 2]) {
++    const response = await request.post(`/api/instructions?namespace_id=${namespaceId}`, { data: { phase_id: phaseId, description: `Instruction ${step}`, step_num: step } })
++    expect(response.ok()).toBeTruthy()
++    instructionIds.push((await response.json()).instruction.id as number)
++  }
++})
++
++test.afterEach(async ({ request }) => {
++  if (namespaceId) expect((await request.delete(`/api/namespaces/${namespaceId}`)).ok()).toBeTruthy()
++  if (workflowId) expect((await request.delete(`/api/workflows/${workflowId}`)).ok()).toBeTruthy()
++})
++
++test('phase instruction lifecycle lost reorder never invents rollback or releases writes', async ({ page, request }) => {
++  await page.goto(pageUrl())
++  let writes = 0
++  let unavailable = true
++  await page.route(`**/api/phases/${phaseId}/instructions**`, async route => {
++    if (route.request().method() === 'PUT') {
++      writes++
++      const response = await route.fetch()
++      expect(response.ok()).toBeTruthy()
++      return route.fulfill({ status: 500, json: { ok: false, error: 'Lost acknowledgement after actual commit' } })
++    }
++    if (unavailable) return route.fulfill({ status: 503, json: { ok: false, error: 'Readback unavailable' } })
++    await route.continue()
++  })
++  await page.locator('.move-down-btn').first().click()
++  await expect.poll(() => writes).toBe(1)
++  await expect.poll(async () => (await (await request.get(`/api/phases/${phaseId}/instructions`)).json()).instructions.map((row: { id: number }) => row.id)).toEqual([...instructionIds].reverse())
++  await expect(page.locator('.timeline-name-input').first()).toHaveValue('Instruction 2')
++  await expect(page.locator('.wiki-header [data-field="name"]')).toBeDisabled()
++  await expect(page.locator('#phaseSaveReconcile')).toBeVisible()
++  await expect(page.locator('#phaseSaveReconcile')).toBeFocused()
++  unavailable = false
++  await page.locator('#phaseSaveReconcile').click()
++  await expect(page.locator('.wiki-header [data-field="name"]')).toBeEnabled()
++  await expect(page.locator('.timeline-name-input').first()).toHaveValue('Instruction 2')
++  await expect(page.locator('.move-up-btn').first()).toBeDisabled()
++  expect(writes).toBe(1)
++})
++
++test('phase instruction lifecycle missing create ID remains unknown after readback without replay', async ({ page, request }) => {
++  await page.goto(pageUrl())
++  let writes = 0
++  await page.route('**/api/instructions*', async route => {
++    if (route.request().method() !== 'POST') return route.continue()
++    writes++
++    const response = await route.fetch()
++    expect(response.ok()).toBeTruthy()
++    await route.fulfill({ response, json: { ok: true } })
++  })
++  await page.getByRole('button', { name: '+ Добавить шаг', exact: true }).click()
++  await expect.poll(async () => (await (await request.get(`/api/phases/${phaseId}/instructions`)).json()).instructions.length).toBe(3)
++  await expect(page.locator('.wiki-header [data-field="name"]')).toBeDisabled()
++  await expect(page.locator('#phaseSaveReconcile')).toBeVisible()
++  await page.locator('#phaseSaveReconcile').click()
++  await expect(page.locator('.wiki-header [data-field="name"]')).toBeDisabled()
++  await expect(page.locator('#phaseSaveReconcile')).toBeVisible()
++  await page.evaluate(() => (window as unknown as { addInstructionLast: () => Promise<void> }).addInstructionLast())
++  expect(writes).toBe(1)
++  expect(new URL(page.url()).searchParams.get('foreign')).toBe('keep')
++})
++
++for (const status of [409, 422]) {
++  test(`phase instruction lifecycle known reorder rejection restores order (${status})`, async ({ page, request }) => {
++    await page.goto(pageUrl())
++    let writes = 0
++    await page.route(`**/api/phases/${phaseId}/instructions/reorder*`, async route => {
++      writes++
++      await route.fulfill({ status, json: { ok: false } })
++    })
++    await page.locator('.move-down-btn').first().click()
++    await expect(page.locator('.timeline-name-input').first()).toHaveValue('Instruction 1')
++    await expect(page.locator('.wiki-header [data-field="name"]')).toBeEnabled()
++    await expect(page.locator('#phaseSaveStatus')).toHaveAttribute('data-page-state', 'error')
++    expect(writes).toBe(1)
++    expect((await (await request.get(`/api/phases/${phaseId}/instructions`)).json()).instructions.map((row: {id: number}) => row.id)).toEqual(instructionIds)
++  })
++}
++
++for (const status of [401, 403, 404]) {
++  test(`phase instruction lifecycle terminal instruction write disables actions (${status})`, async ({ page }) => {
++    await page.goto(pageUrl())
++    let writes = 0
++    await page.route(`**/api/instructions/${instructionIds[0]}*`, async route => {
++      writes++
++      await route.fulfill({ status, json: { ok: false } })
++    })
++    const input = page.locator('.timeline-name-input').first()
++    await input.fill('Retained terminal draft')
++    await page.evaluate(() => (window as unknown as { saveInstructionDescription: (input: Element) => Promise<void> }).saveInstructionDescription(document.querySelector('.timeline-name-input')!))
++    await expect(input).toHaveValue('Retained terminal draft')
++    await expect(input).toBeDisabled()
++    await expect(page.locator('#phaseSaveStatus')).toHaveAttribute('data-page-state', status === 404 ? 'not-found' : 'permission-denied')
++    await expect(page.locator('#phaseSaveReconcile')).toBeHidden()
++    expect(writes).toBe(1)
++  })
++}
++
++for (const invalid of ['id', 'workflow', 'mode', 'instruction', 'duplicate', 'steps']) {
++  test(`phase instruction lifecycle rejects foreign or malformed readback (${invalid})`, async ({ page }) => {
++    await page.goto(pageUrl())
++    let writes = 0
++    await page.route(`**/api/instructions/${instructionIds[0]}*`, async route => {
++      if (route.request().method() === 'PUT') writes++
++      await route.continue()
++    })
++    await page.route(`**/api/phases/${phaseId}/instructions?*`, async route => {
++      const response = await route.fetch()
++      const data = await response.json()
++      if (invalid === 'id') data.phase.id = -1
++      if (invalid === 'workflow') data.phase.workflow_id = -1
++      if (invalid === 'mode') data.phase.mode_id = -1
++      if (invalid === 'instruction') data.instructions[0].phase_id = -1
++      if (invalid === 'duplicate') data.instructions[1].id = data.instructions[0].id
++      if (invalid === 'steps') data.instructions[0].step_num = 2
++      await route.fulfill({ response, json: data })
++    })
++    await page.locator('.timeline-name-input').first().fill('Validated attempt')
++    await page.evaluate(() => (window as unknown as { saveInstructionDescription: (input: Element) => Promise<void> }).saveInstructionDescription(document.querySelector('.timeline-name-input')!))
++    await expect(page.locator('#phaseSaveStatus')).toHaveAttribute('data-page-state', 'partial-error')
++    await expect(page.locator('.timeline-name-input').first()).toBeDisabled()
++    await page.unroute(`**/api/phases/${phaseId}/instructions?*`)
++    await page.locator('#phaseSaveReconcile').click()
++    await expect(page.locator('.timeline-name-input').first()).toBeEnabled()
++    await expect(page.locator('.timeline-name-input').first()).toHaveAttribute('data-original-description', 'Validated attempt')
++    expect(writes).toBe(1)
++  })
++}
++
++test('phase instruction lifecycle unknown skill response keeps input and never replays PUT', async ({ page, request }) => {
++  await page.goto(pageUrl())
++  let writes = 0
++  await page.route(`**/api/instructions/${instructionIds[0]}*`, async route => {
++    writes++
++    await route.fulfill({ status: 200, json: { ok: true } })
++  })
++  const input = page.locator('.skill-candidate').first()
++  await input.fill('retained-skill')
++  await page.evaluate(() => (window as unknown as { addSkillToInstruction: (input: Element) => Promise<void> }).addSkillToInstruction(document.querySelector('.skill-candidate')!))
++  await expect(input).toHaveValue('retained-skill')
++  await expect(input).toBeDisabled()
++  await page.locator('#phaseSaveReconcile').click()
++  await expect(input).toHaveValue('retained-skill')
++  expect(writes).toBe(1)
++  expect((await (await request.get(`/api/phases/${phaseId}/instructions`)).json()).instructions[0].skills).toEqual([])
++})
++
++test('phase instruction lifecycle unknown type result is recovered by GET only', async ({ page, request }) => {
++  await page.goto(pageUrl())
++  let writes = 0
++  let unavailable = true
++  await page.route(`**/api/instructions/${instructionIds[0]}*`, async route => {
++    writes++
++    await route.fetch()
++    await route.fulfill({ status: 408, json: { ok: false } })
++  })
++  await page.route(`**/api/phases/${phaseId}/instructions?*`, async route => {
++    if (unavailable) return route.fulfill({ status: 503, json: { ok: false } })
++    await route.continue()
++  })
++  await page.locator('.timeline-card .execution-row button').first().click()
++  await expect(page.locator('#phaseSaveStatus')).toHaveAttribute('data-page-state', 'partial-error')
++  await expect(page.locator('.timeline-item').first()).toHaveAttribute('data-type', 'sync')
++  expect((await (await request.get(`/api/phases/${phaseId}/instructions`)).json()).instructions[0].execution_type).toBe('parallel')
++  unavailable = false
++  await page.locator('#phaseSaveReconcile').click()
++  await expect(page.locator('.timeline-item').first()).toHaveAttribute('data-type', 'parallel')
++  await expect(page.locator('.wiki-header [data-field="name"]')).toBeEnabled()
++  expect(writes).toBe(1)
++})
++
++test('phase instruction lifecycle known create ID waits for GET without page reload', async ({ page, request }) => {
++  await page.goto(pageUrl())
++  await page.evaluate(() => { (window as unknown as { phaseSentinel: string }).phaseSentinel = 'same-document' })
++  let writes = 0
++  let unavailable = true
++  await page.route('**/api/instructions*', async route => {
++    if (route.request().method() === 'POST') writes++
++    await route.continue()
++  })
++  await page.route(`**/api/phases/${phaseId}/instructions?*`, async route => {
++    if (unavailable) return route.fulfill({ status: 503, json: { ok: false } })
++    await route.continue()
++  })
++  await page.getByRole('button', { name: 'Добавить инструкцию после 1', exact: true }).click()
++  await expect(page.locator('#phaseSaveStatus')).toHaveAttribute('data-page-state', 'partial-error')
++  await expect(page.locator('.timeline-item')).toHaveCount(2)
++  unavailable = false
++  await page.locator('#phaseSaveReconcile').click()
++  await expect(page.locator('.timeline-item')).toHaveCount(3)
++  const rows = (await (await request.get(`/api/phases/${phaseId}/instructions`)).json()).instructions
++  await expect(page.locator('.timeline-item').nth(1)).toHaveAttribute('data-instruction-id', String(rows[1].id))
++  await expect(page.locator('.timeline-name-input').nth(1)).toBeFocused()
++  expect(await page.evaluate(() => (window as unknown as { phaseSentinel: string }).phaseSentinel)).toBe('same-document')
++  expect(writes).toBe(1)
++})
++
++test('phase instruction lifecycle lost DELETE stays locked after cancel and read-only reopen', async ({ page, request }) => {
++  await page.goto(pageUrl())
++  let writes = 0
++  await page.route(`**/api/instructions/${instructionIds[0]}*`, async route => {
++    if (route.request().method() !== 'DELETE') return route.continue()
++    writes++
++    await route.fetch()
++    await route.fulfill({ status: 500, json: { ok: false } })
++  })
++  const dialog = page.locator('[data-base-confirm-dialog]')
++  await page.locator('.phase-delete-btn').first().click()
++  await dialog.getByRole('button', { name: 'Удалить', exact: true }).click()
++  await expect(dialog.locator('#confirmReconcile')).toBeVisible()
++  await page.keyboard.press('Escape')
++  await expect(dialog).toBeHidden()
++  await expect(page.locator('.wiki-header [data-field="name"]')).toBeDisabled()
++  await expect(page.locator('.phase-delete-btn').first()).toBeEnabled()
++  await expect(page.locator('.phase-delete-btn').nth(1)).toBeDisabled()
++  await page.locator('.phase-delete-btn').first().click()
++  await expect(dialog.getByRole('button', { name: 'Удалить', exact: true })).toBeDisabled()
++  await dialog.locator('#confirmReconcile').click()
++  await expect(dialog).toBeHidden()
++  await expect(page.locator('.timeline-item')).toHaveCount(1)
++  await expect(page.locator('.wiki-header [data-field="name"]')).toBeEnabled()
++  await expect(page.locator('#phase-instructions')).toBeFocused()
++  expect(writes).toBe(1)
++  expect((await (await request.get(`/api/phases/${phaseId}/instructions`)).json()).instructions.map((row: {id: number}) => row.id)).toEqual([instructionIds[1]])
++})
++
++test('phase instruction lifecycle deferred metadata waits until unknown order is confirmed', async ({ page, request }) => {
++  await page.goto(pageUrl())
++  let phaseWrites = 0
++  let unavailable = true
++  let instructionWrites = 0
++  await page.route(`**/api/phases/${phaseId}/instructions**`, async route => {
++    if (route.request().method() === 'PUT') {
++      instructionWrites++
++      await route.fetch()
++      return route.fulfill({ status: 500, json: { ok: false } })
++    }
++    if (unavailable) return route.fulfill({ status: 503, json: { ok: false } })
++    await route.continue()
++  })
++  await page.route(`**/api/phases/${phaseId}?*`, async route => {
++    if (route.request().method() === 'PUT') phaseWrites++
++    await route.continue()
++  })
++  await page.evaluate(() => {
++    document.querySelector<HTMLInputElement>('.wiki-header [data-field="name"]')!.value = 'Deferred through unknown'
++    const controller = window as unknown as { scheduleSave: () => void, moveInstruction: (button: Element, direction: number) => Promise<void> }
++    controller.scheduleSave()
++    return controller.moveInstruction(document.querySelector('.move-down-btn')!, 1)
++  })
++  await page.waitForTimeout(750)
++  expect(phaseWrites).toBe(0)
++  await expect(page.locator('.wiki-header [data-field="name"]')).toHaveValue('Deferred through unknown')
++  unavailable = false
++  await page.locator('#phaseSaveReconcile').click()
++  await expect.poll(() => phaseWrites).toBe(1)
++  await expect(page.locator('.wiki-header [data-field="name"]')).toBeEnabled()
++  expect((await (await request.get(`/api/phases/${phaseId}`)).json()).phase.name).toBe('Deferred through unknown')
++  expect(instructionWrites).toBe(1)
++})
++
++for (const theme of ['dark', 'gray', 'light']) {
++  test(`phase instruction lifecycle native controls, keyboard and geometry (${theme})`, async ({ page, request }, testInfo) => {
++    await page.setViewportSize({ width: testInfo.project.name === 'mobile' ? 375 : 1920, height: 1080 })
++    await page.addInitScript(value => localStorage.setItem('workflow-theme', value), theme)
++    const errors: string[] = []
++    page.on('pageerror', error => errors.push(error.message))
++    page.on('response', response => { if (response.status() >= 400) errors.push(`${response.status()} ${new URL(response.url()).pathname}`) })
++    await page.goto(pageUrl())
++    await page.evaluate(() => { (window as unknown as { phaseSentinel: string }).phaseSentinel = 'same-document' })
++    const target = testInfo.project.name === 'mobile' ? 44 : 40
++    for (const control of [page.locator('.move-down-btn').first(), page.locator('.phase-add-btn').first(), page.locator('.phase-delete-btn').first(), page.locator('.skill-candidate').first()]) {
++      const bounds = (await control.boundingBox())!
++      expect(bounds.width).toBeGreaterThanOrEqual(target)
++      expect(bounds.height).toBeGreaterThanOrEqual(target)
++    }
++    const description = page.locator('.timeline-name-input').first()
++    const longDescription = 'Readable instruction with a long value '.repeat(12)
++    await description.fill(longDescription)
++    await description.press('Tab')
++    await expect(description).toHaveAttribute('data-original-description', longDescription.trim())
++    const input = page.locator('.skill-candidate').first()
++    await input.fill('long-safe-skill-' + 'value'.repeat(12))
++    await input.press('Tab')
++    await expect(input).toHaveValue('')
++    await expect(page.locator('.skill-remove-btn')).toHaveCount(1)
++    await page.locator('.timeline-card .execution-row button').first().click()
++    await expect(page.locator('.timeline-item').first()).toHaveAttribute('data-type', 'parallel')
++    await page.locator('.move-down-btn').first().click()
++    await expect(page.locator('.timeline-name-input').nth(1)).toHaveAttribute('data-original-description', longDescription.trim())
++    await page.locator('.skill-remove-btn').click()
++    await expect(page.locator('.skill-remove-btn')).toHaveCount(0)
++    await page.getByRole('button', { name: 'Добавить инструкцию после 1', exact: true }).click()
++    await expect(page.locator('.timeline-item')).toHaveCount(3)
++    await expect(page.locator('.timeline-name-input').nth(1)).toBeFocused()
++    await page.locator('.phase-delete-btn').nth(1).click()
++    const dialog = page.locator('[data-base-confirm-dialog]')
++    await expect(dialog.locator('[data-base-confirm-cancel]')).toBeFocused()
++    await page.keyboard.press('Escape')
++    await expect(page.locator('.phase-delete-btn').nth(1)).toBeFocused()
++    await page.locator('.phase-delete-btn').nth(1).click()
++    await dialog.getByRole('button', { name: 'Удалить', exact: true }).click()
++    await expect(page.locator('.timeline-item')).toHaveCount(2)
++    await expect(page.locator('#phase-instructions')).toBeFocused()
++    expect(await page.evaluate(() => (window as unknown as { phaseSentinel: string }).phaseSentinel)).toBe('same-document')
++    expect((await (await request.get(`/api/phases/${phaseId}/instructions`)).json()).instructions.map((row: {id: number}) => row.id)).toEqual([...instructionIds].reverse())
++    await expect(page.locator('#phaseSaveStatus')).toBeHidden()
++    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy()
++    expect(errors).toEqual([])
++    await page.screenshot({ path: testInfo.outputPath(`phase-instructions-${theme}.png`), fullPage: true })
++  })
++}
+diff --git a/project_workflow/interfaces/ui/templates/phase_detail.html b/project_workflow/interfaces/ui/templates/phase_detail.html
+index 3255bbb..447bd94 100644
+--- a/project_workflow/interfaces/ui/templates/phase_detail.html
++++ b/project_workflow/interfaces/ui/templates/phase_detail.html
+@@ -116,7 +116,7 @@
+     </div>
+ 
+     <div class="base-resource-state" id="phaseSaveStatus" data-page-state="error" role="alert" hidden><p></p></div>
+-    <div class="base-page-actions">{{ base.button('Проверить сохранение', id='phaseSaveReconcile') }}</div>
++    <div class="base-page-actions">{{ base.button('Проверить сохранение', id='phaseSaveReconcile') }}<a class="btn btn-secondary" id="phaseInstructionInspect" target="_blank" rel="noopener" hidden>Открыть для сверки</a></div>
+     <div class="wiki-page">
+ 
+   <!-- Header -->
+@@ -190,6 +190,12 @@
+       </div>
+     </div>
+     {% endmacro %}
++    <template id="phaseInstructionTemplate">
++      <div class="timeline-item">
++        {{ instruction_body({'id': 0, 'step_num': 0, 'execution_type': 'sync', 'description': '', 'skills': []}, 0) }}
++        <div class="timeline-arrow" hidden>↓</div>
++      </div>
++    </template>
+ 
+     <div class="timeline" id="instructionsTimeline">
+       {% set runs = phase.instructions|group_instructions %}
+@@ -453,7 +459,10 @@ function renderInstructionTimeline(items) {
+   if (!timeline) return;
+   const emptyNode = timeline.querySelector('.empty-state');
+   if (items.length === 0) {
+-    if (emptyNode) timeline.replaceChildren(emptyNode);
++    const empty = emptyNode || document.createElement('div');
++    empty.className = 'empty-state';
++    empty.textContent = 'Нет инструкций';
++    timeline.replaceChildren(empty);
+     return;
+   }
+   timeline.innerHTML = '';
+@@ -498,246 +507,7 @@ function updateInstructionControls() {
+   });
+ }
+ 
+-async function persistInstructionOrder() {
+-  const ids = getInstructionItems().map((item) => parseInt(item.dataset.instructionId, 10));
+-  try {
+-    const resp = await fetch(phaseApiUrl(`/api/phases/${phaseId}/instructions/reorder`), {
+-      method: 'PUT',
+-      headers: {'Content-Type': 'application/json'},
+-      body: JSON.stringify({instruction_ids: ids}),
+-    });
+-    if (!resp.ok) {
+-      showToast('Не удалось сохранить порядок инструкций', 'error');
+-      return false;
+-    }
+-    showToast('Порядок инструкций сохранён', 'success');
+-    return true;
+-  } catch (_error) {
+-    showToast('Не удалось сохранить порядок инструкций', 'error');
+-    return false;
+-  }
+-}
+-
+-async function moveInstruction(button, direction) {
+-  if (phaseAggregateLocked()) return;
+-  const item = button.closest('.timeline-item');
+-  if (!item) return;
+-  const items = getInstructionItems();
+-  const currentIndex = items.indexOf(item);
+-  const targetIndex = currentIndex + direction;
+-  if (currentIndex < 0 || targetIndex < 0 || targetIndex >= items.length) return;
+-  if (!beginPhaseInstructionChange(null, false)) return;
+-  try {
+-    const reordered = [...items];
+-    const [moved] = reordered.splice(currentIndex, 1);
+-    reordered.splice(targetIndex, 0, moved);
+-    renderInstructionTimeline(reordered);
+-    updateInstructionControls();
+-    if (!await persistInstructionOrder()) {
+-      renderInstructionTimeline(items);
+-      updateInstructionControls();
+-    }
+-  } finally { endPhaseInstructionChange(); }
+-}
+-
+-async function requestPhaseDetail(url, options) {
+-  try {
+-    const resp = await fetch(url, options);
+-    const data = await resp.json().catch(() => ({}));
+-    return {resp, data};
+-  } catch (_error) {
+-    showRequestError();
+-    return null;
+-  }
+-}
+-
+-async function addInstructionAfter(button) {
+-  if (phaseAggregateLocked()) return;
+-  const item = button.closest('.timeline-item');
+-  if (!item) return;
+-  const currentStep = parseInt(item.dataset.stepNum || '0', 10);
+-  const stepNum = currentStep > 0 ? currentStep + 1 : 1;
+-  if (!beginPhaseInstructionChange()) return;
+-  try {
+-    const result = await requestPhaseDetail(phaseApiUrl('/api/instructions'), {
+-      method: 'POST',
+-      headers: {'Content-Type': 'application/json'},
+-      body: JSON.stringify({phase_id: phaseId, description: 'Новая инструкция', step_num: stepNum}),
+-    });
+-    if (!result) return;
+-    const {resp, data} = result;
+-    if (!resp.ok || !data.ok) {
+-      showToast(data.error || 'Не удалось добавить инструкцию', 'error');
+-      return;
+-    }
+-    await reloadPhaseAfterInstruction();
+-  } finally {
+-    endPhaseInstructionChange();
+-  }
+-}
+-
+-async function addInstructionLast() {
+-  if (phaseAggregateLocked()) return;
+-  const items = getInstructionItems();
+-  const stepNum = items.length > 0 ? items.length + 1 : 1;
+-  if (!beginPhaseInstructionChange()) return;
+-  try {
+-    const result = await requestPhaseDetail(phaseApiUrl('/api/instructions'), {
+-      method: 'POST',
+-      headers: {'Content-Type': 'application/json'},
+-      body: JSON.stringify({phase_id: phaseId, description: 'Новая инструкция', step_num: stepNum}),
+-    });
+-    if (!result) return;
+-    const {resp, data} = result;
+-    if (!resp.ok || !data.ok) {
+-      showToast(data.error || 'Не удалось добавить инструкцию', 'error');
+-      return;
+-    }
+-    await reloadPhaseAfterInstruction();
+-  } finally {
+-    endPhaseInstructionChange();
+-  }
+-}
+-
+-async function deleteInstruction(button) {
+-  if (phaseAggregateLocked()) return;
+-  const item = button.closest('.timeline-item');
+-  if (!item) return;
+-  const id = Number(item.dataset.instructionId);
+-  if (!beginPhaseInstructionChange()) return;
+-  let deleted = false;
+-  try {
+-    deleted = await requestWorkflowDeletion({
+-      url:phaseApiUrl('/api/instructions/' + id),title:'Удалить инструкцию?',
+-      message:'Инструкция будет удалена без возможности восстановления.',returnFocus:button,
+-      exists:()=>workflowCollectionContains(phaseApiUrl('/api/phases/' + phaseId + '/instructions'),'instructions',id),
+-    });
+-    if (deleted) await reloadPhaseAfterInstruction();
+-  } finally {
+-    endPhaseInstructionChange();
+-    if (!deleted && button.isConnected && !button.disabled) button.focus();
+-  }
+-}
+-
+-async function toggleInstructionType(badge) {
+-  if (phaseAggregateLocked()) return;
+-  const card = badge.closest('.timeline-card');
+-  const id = card.dataset.instructionId;
+-  const isSync = (card.dataset.type || 'sync') === 'sync';
+-  const nextType = isSync ? 'parallel' : 'sync';
+-  if (!beginPhaseInstructionChange()) return;
+-  try {
+-    const result = await requestPhaseDetail(phaseApiUrl('/api/instructions/' + id), {
+-      method: 'PUT',
+-      headers: {'Content-Type': 'application/json'},
+-      body: JSON.stringify({execution_type: nextType}),
+-    });
+-    if (!result) return;
+-    const {resp} = result;
+-    if (!resp.ok) {
+-      showToast('Не удалось сменить режим', 'error');
+-      return;
+-    }
+-    await reloadPhaseAfterInstruction();
+-  } finally {
+-    endPhaseInstructionChange();
+-  }
+-}
+-
+-async function saveInstructionDescription(input) {
+-  if (phaseAggregateLocked()) return;
+-  const card = input.closest('.timeline-card');
+-  const id = card.dataset.instructionId;
+-  const previousDescription = input.dataset.originalDescription || '';
+-  if (input.value === previousDescription) return;
+-  const rawDescription = input.value;
+-  const description = rawDescription.trim();
+-  if (!description) {
+-    resizeInlineTextarea(input);
+-    showToast('Описание инструкции обязательно', 'error');
+-    return;
+-  }
+-  if (!beginPhaseInstructionChange(input, false)) return;
+-  try {
+-    const result = await requestPhaseDetail(phaseApiUrl('/api/instructions/' + id), {
+-      method: 'PUT',
+-      headers: {'Content-Type': 'application/json'},
+-      body: JSON.stringify({description: description}),
+-    });
+-    if (!result) return;
+-    const {resp, data} = result;
+-    if (!resp.ok || !data.ok) {
+-      showToast(data.error || 'Не удалось сохранить описание', 'error');
+-      return;
+-    }
+-    if (data.instruction?.id !== Number(id) || data.instruction.phase_id !== phaseId || data.instruction.description !== description) {
+-      showToast('Сохранение инструкции не подтверждено. Черновик сохранён.', 'error');
+-      return;
+-    }
+-    const savedDescription = data.instruction.description;
+-    if (input.value === rawDescription) input.value = savedDescription;
+-    input.dataset.originalDescription = savedDescription;
+-  } finally {
+-    endPhaseInstructionChange();
+-    resizeInlineTextarea(input);
+-  }
+-}
+-
+-async function addSkillToInstruction(input) {
+-  if (phaseAggregateLocked()) return;
+-  const card = input.closest('.timeline-card');
+-  const id = card.dataset.instructionId;
+-  const skill = String(input.value || '').trim();
+-  if (!skill) return;
+-  const existing = Array.from(card.querySelectorAll('.timeline-badges .badge'))
+-    .filter((b) => !b.classList.contains('badge-sync') && !b.classList.contains('badge-parallel'))
+-    .map((b) => b.textContent.replace('×', '').trim());
+-  const skills = normalizeSkillNames([...existing, skill]);
+-  if (!beginPhaseInstructionChange(input)) return;
+-  try {
+-    const result = await requestPhaseDetail(phaseApiUrl('/api/instructions/' + id), {
+-      method: 'PUT',
+-      headers: {'Content-Type': 'application/json'},
+-      body: JSON.stringify({skills: skills}),
+-    });
+-    if (!result) return;
+-    const {resp} = result;
+-    if (!resp.ok) {
+-      showToast('Не удалось добавить навык', 'error');
+-      return;
+-    }
+-    input.value = '';
+-    await reloadPhaseAfterInstruction();
+-  } finally {
+-    endPhaseInstructionChange();
+-  }
+-}
+-
+-async function removeSkillFromInstruction(button) {
+-  if (phaseAggregateLocked()) return;
+-  const card = button.closest('.timeline-card');
+-  const id = card.dataset.instructionId;
+-  const skillName = button.dataset.skill;
+-  const existing = Array.from(card.querySelectorAll('.timeline-badges .badge'))
+-    .filter((b) => !b.classList.contains('badge-sync') && !b.classList.contains('badge-parallel'))
+-    .map((b) => b.textContent.replace('×', '').trim());
+-  const skills = normalizeSkillNames(existing.filter((s) => s !== skillName));
+-  if (!beginPhaseInstructionChange()) return;
+-  try {
+-    const result = await requestPhaseDetail(phaseApiUrl('/api/instructions/' + id), {
+-      method: 'PUT',
+-      headers: {'Content-Type': 'application/json'},
+-      body: JSON.stringify({skills: skills}),
+-    });
+-    if (!result) return;
+-    const {resp} = result;
+-    if (!resp.ok) {
+-      showToast('Не удалось убрать навык', 'error');
+-      return;
+-    }
+-    await reloadPhaseAfterInstruction();
+-  } finally { endPhaseInstructionChange(); }
+-}
++{% include 'phase_instructions.js' %}
+ 
+ /* ---------- Checks & Evidence ---------- */
+ function syncTextItemList(list) {
+diff --git a/project_workflow/interfaces/ui/templates/phase_instructions.js b/project_workflow/interfaces/ui/templates/phase_instructions.js
+new file mode 100644
+index 0000000..bfb3523
+--- /dev/null
++++ b/project_workflow/interfaces/ui/templates/phase_instructions.js
+@@ -0,0 +1,294 @@
++function validPhaseInstruction(row) {
++  return row && Number.isInteger(row.id) && row.id > 0 && row.phase_id === phaseId
++    && Number.isInteger(row.step_num) && row.step_num > 0 && typeof row.description === 'string'
++    && ['sync', 'parallel'].includes(row.execution_type) && Array.isArray(row.skills)
++    && row.skills.every((skill) => typeof skill === 'string');
++}
++
++async function readPhaseInstructions() {
++  const response = await fetch(phaseApiUrl('/api/phases/' + phaseId + '/instructions'), {cache: 'no-store'});
++  if (phaseSaveTerminalResponse(response.status)) throw Object.assign(new Error('Нет доступа к инструкциям'), {status: response.status});
++  const data = await response.json();
++  if (!response.ok || data.ok !== true || data.phase?.id !== phaseId
++    || data.phase.workflow_id !== phaseWorkflowId || data.phase.mode_id !== phaseModeId
++    || !Array.isArray(data.instructions) || !data.instructions.every(validPhaseInstruction)
++    || new Set(data.instructions.map((row) => row.id)).size !== data.instructions.length) throw new Error('Неверный ответ списка инструкций');
++  const rows = [...data.instructions].sort((a, b) => a.step_num - b.step_num);
++  if (rows.some((row, index) => row.step_num !== index + 1)) throw new Error('Неверный порядок инструкций');
++  return rows;
++}
++
++function instructionAttempt(kind, payload, returnFocus, id = null) {
++  const items = getInstructionItems();
++  return {kind, payload: structuredClone(payload), returnFocus, id, receivedId: null,
++    items, ids: items.map((item) => Number(item.dataset.instructionId)), raw: returnFocus?.value};
++}
++
++function instructionPayloadMatches(row, payload) {
++  return validPhaseInstruction(row) && Object.entries(payload).every(([key, value]) => JSON.stringify(row[key]) === JSON.stringify(value));
++}
++
++function phaseInstructionMatches(attempt, rows) {
++  const priorIds = attempt.ids;
++  let expectedIds = priorIds;
++  if (attempt.kind === 'create') {
++    // Only an identified ACK may bind a newly created entity to this attempt.
++    if (!Number.isInteger(attempt.receivedId) || priorIds.includes(attempt.receivedId)) return false;
++    expectedIds = [...priorIds, attempt.receivedId];
++  } else if (attempt.kind === 'delete') expectedIds = priorIds.filter((id) => id !== attempt.id);
++  if (rows.length !== expectedIds.length || expectedIds.some((id) => !rows.some((row) => row.id === id))) return false;
++  if (attempt.kind === 'reorder') return rows.every((row, index) => row.id === attempt.payload.instruction_ids[index]);
++  if (attempt.kind === 'delete') return !rows.some((row) => row.id === attempt.id);
++  return instructionPayloadMatches(rows.find((row) => row.id === (attempt.receivedId || attempt.id)), attempt.payload);
++}
++
++function syncPhaseInstructionRow(item, row, attempt) {
++  const card = item.querySelector('.timeline-card');
++  for (const node of [item, card]) {
++    node.dataset.instructionId = String(row.id);
++    node.dataset.stepNum = String(row.step_num);
++    node.dataset.type = row.execution_type;
++  }
++  const description = card.querySelector('.timeline-name-input');
++  if (attempt.kind === 'create' && row.id === attempt.receivedId) {
++    description.value = row.description;
++    description.dataset.originalDescription = row.description;
++  } else if (attempt.id === row.id && Object.hasOwn(attempt.payload, 'description')) {
++    if (description.value === attempt.raw) description.value = row.description;
++    description.dataset.originalDescription = row.description;
++  }
++  const type = card.querySelector('.execution-row .badge');
++  const parallel = row.execution_type === 'parallel';
++  type.className = 'badge ' + (parallel ? 'badge-parallel' : 'badge-sync');
++  type.textContent = parallel ? '⚡ параллельно' : '⏱ последовательно';
++  type.setAttribute('aria-label', 'Режим выполнения: ' + (parallel ? 'параллельно' : 'последовательно'));
++  if ((attempt.id === row.id && Object.hasOwn(attempt.payload, 'skills')) || (attempt.kind === 'create' && row.id === attempt.receivedId)) {
++    const badges = card.querySelector('.timeline-badges');
++    const input = badges.querySelector('.skill-candidate');
++    badges.querySelectorAll('.badge').forEach((badge) => badge.remove());
++    for (const skill of row.skills) {
++      const badge = document.createElement('span');
++      badge.className = 'badge';
++      badge.style.background = 'var(--accent-soft)';
++      badge.style.color = 'var(--accent-readable)';
++      badge.append(document.createTextNode(skill));
++      const button = document.createElement('button');
++      button.type = 'button';
++      button.className = 'skill-remove-btn';
++      button.dataset.skill = skill;
++      button.textContent = '×';
++      button.addEventListener('click', () => removeSkillFromInstruction(button));
++      badge.append(button);
++      badges.insertBefore(badge, input);
++    }
++    if (attempt.returnFocus === input && input.value === attempt.raw) input.value = '';
++  }
++  const step = row.step_num;
++  description.setAttribute('aria-label', 'Описание инструкции ' + step);
++  item.querySelector('.move-up-btn').setAttribute('aria-label', 'Поднять инструкцию ' + step + ' выше');
++  item.querySelector('.move-down-btn').setAttribute('aria-label', 'Опустить инструкцию ' + step + ' ниже');
++  item.querySelector('.phase-add-btn').setAttribute('aria-label', 'Добавить инструкцию после ' + step);
++  item.querySelector('.phase-delete-btn').setAttribute('aria-label', 'Удалить инструкцию ' + step);
++  card.querySelector('.skill-candidate').setAttribute('aria-label', 'Добавить навык к инструкции ' + step);
++  card.querySelectorAll('.skill-remove-btn').forEach((button) => button.setAttribute('aria-label', 'Убрать навык ' + button.dataset.skill + ' из инструкции ' + step));
++}
++
++function finishPhaseInstruction(attempt, rows) {
++  const current = getInstructionItems();
++  if (attempt.items.length !== current.length || attempt.items.some((item, index) => !current.includes(item)
++    || Number(item.dataset.instructionId) !== attempt.ids[index])) return false;
++  const items = new Map(attempt.items.map((item) => [Number(item.dataset.instructionId), item]));
++  const next = rows.map((row) => {
++    const item = items.get(row.id) || document.getElementById('phaseInstructionTemplate').content.firstElementChild.cloneNode(true);
++    syncPhaseInstructionRow(item, row, attempt);
++    return item;
++  });
++  renderInstructionTimeline(next);
++  const count = String(rows.length);
++  document.querySelector('#phase-instructions .count').textContent = count;
++  document.querySelector('[data-phase-section-link="phase-instructions"] .phase-outline-count').textContent = count;
++  document.querySelector('#phaseSectionSelect option[value="phase-instructions"]').textContent = 'Инструкции (' + count + ')';
++  phaseInstructionUnknown = null;
++  phaseInstructionDeleteState = null;
++  showPhaseSaveState('empty', '');
++  if (attempt.kind === 'reorder') showToast('Порядок инструкций сохранён', 'success');
++  else showToast('Сохранено', 'success');
++  if (attempt.kind === 'create') attempt.returnFocus = next.find((item) => Number(item.dataset.instructionId) === attempt.receivedId).querySelector('.timeline-name-input');
++  if (attempt.kind === 'delete') attempt.returnFocus = document.getElementById('phase-instructions');
++  resizeAllInlineTextareas();
++  return true;
++}
++
++async function readPhaseInstructionAttempt(attempt) {
++  try {
++    const rows = await readPhaseInstructions();
++    if (phaseInstructionMatches(attempt, rows) && finishPhaseInstruction(attempt, rows)) return true;
++  } catch (_error) {}
++  if (!phaseSaveTerminal) showPhaseSaveState('partial-error', 'Результат записи инструкции не подтверждён. Повтор заблокирован; черновик сохранён. Проверьте состояние.');
++  return false;
++}
++
++function restorePhaseInstructionFocus(attempt) {
++  if (phaseSaveTerminal) document.getElementById('phase-instructions').focus();
++  else if (phaseInstructionUnknown) document.getElementById('phaseSaveReconcile').focus();
++  else if (phaseInstructionDeleteState) phaseInstructionDeleteState.button.focus();
++  else if (attempt.returnFocus?.isConnected && !attempt.returnFocus.disabled) attempt.returnFocus.focus();
++  else document.getElementById('phase-instructions').focus();
++}
++
++async function requestPhaseInstruction(attempt) {
++  const reorder = attempt.kind === 'reorder';
++  const url = reorder ? '/api/phases/' + phaseId + '/instructions/reorder'
++    : attempt.kind === 'create' ? '/api/instructions' : '/api/instructions/' + attempt.id;
++  try {
++    const response = await fetch(phaseApiUrl(url), {
++      method: attempt.kind === 'create' ? 'POST' : 'PUT',
++      headers: {'Content-Type': 'application/json'}, body: JSON.stringify(attempt.payload),
++    });
++    if (phaseSaveTerminalResponse(response.status)) return false;
++    if (response.status >= 400 && response.status < 500 && response.status !== 408) {
++      if (reorder) renderInstructionTimeline(attempt.items);
++      showPhaseSaveState('error', 'Не удалось сохранить инструкцию. Исправьте данные; черновик сохранён.');
++      return false;
++    }
++    const data = await response.json().catch(() => null);
++    if (attempt.kind === 'create' && response.ok && data?.ok === true
++      && instructionPayloadMatches(data.instruction, attempt.payload)) attempt.receivedId = data.instruction.id;
++  } catch (_error) {}
++  finally {
++    if (phaseSaveTerminal || document.getElementById('phaseSaveStatus').dataset.pageState === 'error') {
++      endPhaseInstructionChange();
++      restorePhaseInstructionFocus(attempt);
++    }
++  }
++  phaseInstructionUnknown = attempt;
++  try { return await readPhaseInstructionAttempt(attempt); }
++  finally {
++    endPhaseInstructionChange();
++    restorePhaseInstructionFocus(attempt);
++  }
++}
++
++async function reconcilePhaseInstruction() {
++  if (phaseSavePending || phaseInstructionPending || phaseSaveTerminal || !phaseInstructionUnknown) return;
++  const attempt = phaseInstructionUnknown;
++  phaseInstructionPending = true;
++  showPhaseSaveState('loading', 'Проверка сохранения инструкции…');
++  updatePhaseSaveControls();
++  try { await readPhaseInstructionAttempt(attempt); }
++  finally {
++    endPhaseInstructionChange();
++    restorePhaseInstructionFocus(attempt);
++  }
++}
++
++async function moveInstruction(button, direction) {
++  if (phaseAggregateLocked()) return;
++  const items = getInstructionItems();
++  const index = items.indexOf(button.closest('.timeline-item'));
++  const target = index + direction;
++  if (index < 0 || target < 0 || target >= items.length || ![-1, 1].includes(direction)) return;
++  if (!beginPhaseInstructionChange(null, false)) return;
++  const attempt = instructionAttempt('reorder', {}, button);
++  const reordered = [...items];
++  const [moved] = reordered.splice(index, 1);
++  reordered.splice(target, 0, moved);
++  attempt.payload = {instruction_ids: reordered.map((item) => Number(item.dataset.instructionId))};
++  renderInstructionTimeline(reordered);
++  updateInstructionControls();
++  return requestPhaseInstruction(attempt);
++}
++
++async function createPhaseInstruction(step, button) {
++  if (!beginPhaseInstructionChange()) return;
++  return requestPhaseInstruction(instructionAttempt('create', {
++    phase_id: phaseId, description: 'Новая инструкция', step_num: step, execution_type: 'sync', skills: [],
++  }, button));
++}
++
++async function addInstructionAfter(button) {
++  if (phaseAggregateLocked()) return;
++  const item = button.closest('.timeline-item');
++  if (item) return createPhaseInstruction(Number(item.dataset.stepNum) + 1, button);
++}
++
++async function addInstructionLast() {
++  if (phaseAggregateLocked()) return;
++  return createPhaseInstruction(getInstructionItems().length + 1, document.querySelector('#phase-instructions .wiki-add-btn'));
++}
++
++async function saveInstructionDescription(input) {
++  if (phaseAggregateLocked()) return;
++  const previousDescription = input.dataset.originalDescription || '';
++  if (input.value === previousDescription) return;
++  const rawDescription = input.value;
++  const description = rawDescription.trim();
++  if (!description) {
++    showPhaseSaveState('error', 'Описание инструкции обязательно');
++    refreshWorkflowDraftGuard();
++    return;
++  }
++  if (!beginPhaseInstructionChange(input, false)) return;
++  return requestPhaseInstruction(instructionAttempt('update', {description}, input, Number(input.closest('.timeline-card').dataset.instructionId)));
++}
++
++async function toggleInstructionType(badge) {
++  if (phaseAggregateLocked() || !beginPhaseInstructionChange()) return;
++  const card = badge.closest('.timeline-card');
++  return requestPhaseInstruction(instructionAttempt('update', {execution_type: card.dataset.type === 'parallel' ? 'sync' : 'parallel'}, badge, Number(card.dataset.instructionId)));
++}
++
++function phaseInstructionSkills(card) {
++  return Array.from(card.querySelectorAll('.skill-remove-btn')).map((button) => button.dataset.skill);
++}
++
++async function addSkillToInstruction(input) {
++  if (phaseAggregateLocked()) return;
++  const skill = input.value.trim();
++  if (!skill || !beginPhaseInstructionChange(input)) return;
++  const card = input.closest('.timeline-card');
++  return requestPhaseInstruction(instructionAttempt('update', {skills: normalizeSkillNames([...phaseInstructionSkills(card), skill])}, input, Number(card.dataset.instructionId)));
++}
++
++async function removeSkillFromInstruction(button) {
++  if (phaseAggregateLocked() || !beginPhaseInstructionChange()) return;
++  const card = button.closest('.timeline-card');
++  return requestPhaseInstruction(instructionAttempt('update', {skills: phaseInstructionSkills(card).filter((skill) => skill !== button.dataset.skill)}, button, Number(card.dataset.instructionId)));
++}
++
++async function deleteInstruction(button) {
++  const recovery = phaseInstructionDeleteState?.button === button && phaseInstructionDeleteState.state.kind === 'unknown';
++  if (phaseSavePending || phaseInstructionPending || phaseInstructionUnknown || phaseUnknownSave || phaseSaveTerminal
++    || (phaseInstructionDeleteState && !recovery)) return;
++  const item = button.closest('.timeline-item');
++  if (!item) return;
++  if (!recovery && !beginPhaseInstructionChange()) return;
++  phaseInstructionPending = true;
++  updatePhaseSaveControls();
++  const attempt = instructionAttempt('delete', {}, button, Number(item.dataset.instructionId));
++  const url = phaseApiUrl('/api/instructions/' + attempt.id);
++  try {
++    const deleted = await requestWorkflowDeletion({
++      url, title: 'Удалить инструкцию?', message: 'Инструкция будет удалена без возможности восстановления.',
++      returnFocus: button, fallbackFocus: document.getElementById('phase-instructions'),
++      exists: async () => (await readPhaseInstructions()).some((row) => row.id === attempt.id),
++    });
++    if (deleted) {
++      phaseInstructionDeleteState = null;
++      phaseInstructionUnknown = attempt;
++      await readPhaseInstructionAttempt(attempt);
++    } else {
++      const state = workflowDeletionState(url);
++      phaseInstructionDeleteState = state.kind === 'ready' ? null : {state, button};
++      if (state.kind !== 'ready') {
++        if (!phaseSaveTerminalResponse(state.status)) showPhaseSaveState('partial-error', 'Результат удаления неизвестен. Повторная запись заблокирована; проверьте удаление.');
++        button.setAttribute('aria-label', 'Проверить удаление инструкции ' + item.dataset.stepNum);
++        button.title = 'Проверить удаление инструкции';
++        button.textContent = '↻';
++      }
++    }
++  } finally {
++    endPhaseInstructionChange();
++    restorePhaseInstructionFocus(attempt);
++  }
++}
+diff --git a/project_workflow/interfaces/ui/templates/phase_save.js b/project_workflow/interfaces/ui/templates/phase_save.js
+index 1de71f7..c8a0ae2 100644
+--- a/project_workflow/interfaces/ui/templates/phase_save.js
++++ b/project_workflow/interfaces/ui/templates/phase_save.js
+@@ -1,5 +1,7 @@
+ let phaseSavePending = false;
+ let phaseInstructionPending = false;
++let phaseInstructionUnknown = null;
++let phaseInstructionDeleteState = null;
+ let phaseSaveDeferred = false;
+ let phaseUnknownSave = null;
+ let phaseSaveTerminal = null;
+@@ -9,7 +11,7 @@ let _saveTimer = null;
+ const phaseDisabledControls = new Map();
+ 
+ function phaseAggregateLocked() {
+-  return phaseSavePending || phaseInstructionPending || Boolean(phaseUnknownSave || phaseSaveTerminal);
++  return phaseSavePending || phaseInstructionPending || Boolean(phaseUnknownSave || phaseInstructionUnknown || phaseInstructionDeleteState || phaseSaveTerminal);
+ }
+ 
+ function phaseTextRows(kind) {
+@@ -43,12 +45,12 @@ function phaseInstructionsDirty(except = null) {
+ }
+ 
+ function phaseDraftDirty() {
+-  return phaseMetadataDirty() || phaseInstructionsDirty();
++  return phaseMetadataDirty() || phaseInstructionsDirty() || Boolean(phaseInstructionUnknown || phaseInstructionDeleteState);
+ }
+ 
+ function beginPhaseInstructionChange(draft = null, reloads = true) {
+   if (phaseAggregateLocked()) return false;
+-  // Reload-based instruction actions must not discard another editor's draft.
++  // Structural actions require the other editors to have settled first.
+   if (reloads && (phaseMetadataDirty() || phaseInstructionsDirty(draft))) {
+     showPhaseSaveState('error', 'Сначала сохраните остальные изменения. Черновик сохранён на странице.');
+     refreshWorkflowDraftGuard();
+@@ -65,17 +67,12 @@ function endPhaseInstructionChange() {
+   if (document.getElementById('phaseSaveStatus').dataset.pageState === 'loading') showPhaseSaveState('empty', '');
+   updatePhaseSaveControls();
+   updateInstructionControls();
+-  if (phaseSaveDeferred) {
++  if (phaseSaveDeferred && !phaseAggregateLocked()) {
+     phaseSaveDeferred = false;
+     if (phaseMetadataDirty()) scheduleSave();
+   }
+ }
+ 
+-function reloadPhaseAfterInstruction() {
+-  endPhaseInstructionChange();
+-  return navigateWorkflow(window.location.href);
+-}
+-
+ function showPhaseSaveState(kind, message) {
+   const state = document.getElementById('phaseSaveStatus');
+   state.hidden = !message;
+@@ -99,8 +96,14 @@ function updatePhaseSaveControls() {
+   if (!locked) phaseDisabledControls.clear();
+   document.querySelector('.wiki-page').setAttribute('aria-busy', String(phaseSavePending || phaseInstructionPending));
+   const reconcile = document.getElementById('phaseSaveReconcile');
+-  reconcile.hidden = !phaseUnknownSave || Boolean(phaseSaveTerminal);
+-  reconcile.disabled = phaseSavePending;
++  reconcile.hidden = !(phaseUnknownSave || phaseInstructionUnknown) || Boolean(phaseSaveTerminal);
++  reconcile.disabled = phaseSavePending || phaseInstructionPending;
++  const inspection = document.getElementById('phaseInstructionInspect');
++  inspection.hidden = phaseInstructionUnknown?.kind !== 'create' || Boolean(phaseSaveTerminal);
++  if (!inspection.hidden) inspection.href = window.location.href;
++  if (phaseInstructionDeleteState?.state.kind === 'unknown' && !phaseInstructionPending && !phaseSaveTerminal) {
++    phaseInstructionDeleteState.button.disabled = false;
++  }
+   refreshWorkflowDraftGuard();
+ }
+ 
+@@ -185,7 +188,7 @@ async function readPhaseSave(attempt) {
+ 
+ function scheduleSave() {
+   if (_saveTimer) clearTimeout(_saveTimer);
+-  if (phaseInstructionPending) { phaseSaveDeferred = true; return; }
++  if (phaseInstructionPending || phaseInstructionUnknown || phaseInstructionDeleteState) { phaseSaveDeferred = true; return; }
+   if (phaseAggregateLocked()) return;
+   _saveTimer = setTimeout(savePhase, 400);
+   refreshWorkflowDraftGuard();
+@@ -194,7 +197,7 @@ function scheduleSave() {
+ async function savePhase() {
+   if (_saveTimer) clearTimeout(_saveTimer);
+   _saveTimer = null;
+-  if (phaseInstructionPending) { phaseSaveDeferred = true; return false; }
++  if (phaseInstructionPending || phaseInstructionUnknown || phaseInstructionDeleteState) { phaseSaveDeferred = true; return false; }
+   if (phaseAggregateLocked()) return false;
+   let attempt;
+   try { attempt = capturePhaseSave(); }
+@@ -238,6 +241,7 @@ function restorePhaseSaveFocus(attempt) {
+ }
+ 
+ async function reconcilePhaseSave() {
++  if (phaseInstructionUnknown) return reconcilePhaseInstruction();
+   if (phaseSavePending || phaseSaveTerminal || !phaseUnknownSave) return;
+   const attempt = phaseUnknownSave;
+   phaseSavePending = true;
+diff --git a/tests/test_ui.py b/tests/test_ui.py
+index 0c9dbd7..37764bf 100644
+--- a/tests/test_ui.py
++++ b/tests/test_ui.py
+@@ -1558,7 +1558,9 @@ class TestPhaseDetail:
+         assert "phaseSavePending || phaseInstructionPending" in response.text
+         assert "function phaseInstructionsDirty(except = null)" in response.text
+         assert "function beginPhaseInstructionChange(draft = null, reloads = true)" in response.text
+-        assert "await reloadPhaseAfterInstruction();" in response.text
++        assert "phaseInstructionUnknown = attempt;" in response.text
++        assert "async function reconcilePhaseInstruction()" in response.text
++        assert "reloadPhaseAfterInstruction" not in response.text
+         assert "window.location.reload();" not in response.text
+ 
+     def test_new_check_and_evidence_wait_for_user_input_before_saving(self):
+@@ -1611,10 +1613,25 @@ class TestPhaseDetail:
+         assert "const rawDescription = input.value;" in response.text
+         assert "const description = rawDescription.trim();" in response.text
+         assert "input.value = previousDescription;" not in response.text
+-        assert "if (input.value === rawDescription) input.value = savedDescription;" in response.text
+-        assert "data.instruction.phase_id !== phaseId" in response.text
+-        assert "input.dataset.originalDescription = savedDescription;" in response.text
+-        assert "showToast('Описание инструкции обязательно', 'error');" in response.text
++        assert "if (description.value === attempt.raw) description.value = row.description;" in response.text
++        assert "row.phase_id === phaseId" in response.text
++        assert "description.dataset.originalDescription = row.description;" in response.text
++        assert "showPhaseSaveState('error', 'Описание инструкции обязательно');" in response.text
++
++    def test_phase_detail_instruction_lifecycle_uses_scoped_readback_without_reload_or_replay(self):
++        response = client.get(_phase_detail_path("1.INTAKE"))
++
++        assert response.status_code == 200
++        assert "data.phase.workflow_id !== phaseWorkflowId" in response.text
++        assert "data.phase.mode_id !== phaseModeId" in response.text
++        assert "row.step_num !== index + 1" in response.text
++        assert "instructionPayloadMatches(data.instruction, attempt.payload)" in response.text
++        assert "Number.isInteger(attempt.receivedId)" in response.text
++        assert "phaseInstructionDeleteState" in response.text
++        assert "phaseSaveDeferred && !phaseAggregateLocked()" in response.text
++        assert "inspection.href = window.location.href;" in response.text
++        assert 'id="phaseInstructionTemplate"' in response.text
++        assert "requestPhaseDetail" not in response.text
+ 
+     def test_instructions_page_preserves_description_and_reconciles_unknown_write(self):
+         phase_id = _phase_id("1.INTAKE")
+@@ -2883,6 +2900,8 @@ def test_ui_deletions_use_base_confirmation_not_a_local_modal():
+     base = (TEMPLATES_DIR / "base.html").read_text(encoding="utf-8")
+     assert "{% include 'phase_catalog.js' %}" in templates["phases.html"]
+     templates["phases.html"] += (TEMPLATES_DIR / "phase_catalog.js").read_text(encoding="utf-8")
++    assert "{% include 'phase_instructions.js' %}" in templates["phase_detail.html"]
++    templates["phase_detail.html"] += (TEMPLATES_DIR / "phase_instructions.js").read_text(encoding="utf-8")
+ 
+     assert "base.confirm_dialog(id='confirmDialog'" in base
+     assert "function requestConfirmation" in base
+@@ -3190,7 +3209,7 @@ class TestUiNetworkFailures:
+         assert "async function requestInstruction(attempt)" in instructions_page.text
+         assert "showInstructionError('Результат записи неизвестен." in instructions_page.text
+         assert detail_page.status_code == 200
+-        assert "async function requestPhaseDetail(url, options)" in detail_page.text
++        assert "async function requestPhaseInstruction(attempt)" in detail_page.text
+         assert "if (!await savePhase() && !phaseUnknownSave && !phaseSaveTerminal)" in detail_page.text
+         assert "list.insertBefore(li, nextSibling)" in detail_page.text
+         assert "await deleteItem(input);" in detail_page.text
+diff --git a/tests/test_ui_api.py b/tests/test_ui_api.py
+index 923528c..d425034 100644
+--- a/tests/test_ui_api.py
++++ b/tests/test_ui_api.py
+@@ -135,9 +135,12 @@ class TestIndex:
+         resp = client.get(f"/phase/{phase_id}?namespace_id={namespace['id']}")
+ 
+         assert resp.status_code == 200
+-        assert "fetch(phaseApiUrl(`/api/phases/${phaseId}/instructions/reorder`)" in resp.text
+-        assert "requestPhaseDetail(phaseApiUrl('/api/instructions')" in resp.text
+-        assert "requestPhaseDetail(phaseApiUrl('/api/instructions/' + id)" in resp.text
++        assert f"const selectedNamespaceId = {namespace['id']};" in resp.text
++        assert "url.searchParams.set('namespace_id', String(selectedNamespaceId));" in resp.text
++        assert "const url = reorder ? '/api/phases/' + phaseId + '/instructions/reorder'" in resp.text
++        assert "attempt.kind === 'create' ? '/api/instructions' : '/api/instructions/' + attempt.id" in resp.text
++        assert "fetch(phaseApiUrl(url)" in resp.text
++        assert "fetch(phaseApiUrl('/api/phases/' + phaseId + '/instructions')" in resp.text
+ 
+     def test_instructions_page_scopes_instruction_api_to_selected_namespace(self, client):
+         namespace = next(item for item in client.get("/api/namespaces").json()["namespaces"])
+diff --git a/tests/test_ui_instructions.py b/tests/test_ui_instructions.py
+index 772e885..958f059 100644
+--- a/tests/test_ui_instructions.py
++++ b/tests/test_ui_instructions.py
+@@ -22,7 +22,7 @@ def _seed_phase_id() -> int:
+ 
+ 
+ class TestInstructionsApi:
+-    def test_reorder_templates_move_rows_and_restore_dom_on_failure(self):
++    def test_reorder_templates_restore_only_known_rejections_and_reconcile_unknown_writes(self):
+         phase_id = _seed_phase_id()
+         dedicated = client.get(f"/instructions?phase_id={phase_id}").text
+         detail = client.get(f"/phase/{phase_id}").text
+@@ -34,8 +34,12 @@ class TestInstructionsApi:
+         assert "appendChild(r.closest('.instruction-block')" not in dedicated
+         assert "const isParallelGroup = group.length > 1;" in dedicated
+         assert "type === 'parallel' ? ' parallel-group'" not in dedicated
+-        assert "if (!await persistInstructionOrder())" in detail
+-        assert "renderInstructionTimeline(items)" in detail
++        assert "renderInstructionTimeline(reordered);" in detail
++        assert "response.status >= 400 && response.status < 500 && response.status !== 408" in detail
++        assert "if (reorder) renderInstructionTimeline(attempt.items);" in detail
++        assert "phaseInstructionUnknown = attempt;" in detail
++        assert "return await readPhaseInstructionAttempt(attempt);" in detail
++        assert "persistInstructionOrder" not in detail
+ 
+     def test_instructions_list_returns_phase_and_instructions(self):
+         phase_id = _seed_phase_id()

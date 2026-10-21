@@ -1,0 +1,41 @@
+"""Actual Developer identity resolution; no runtime/SDK/effect claim."""
+from fastapi.testclient import TestClient
+
+from project_workflow.infrastructure import bug_work_authority as authority
+from project_workflow.interfaces.ui.app import create_app
+from project_workflow.interfaces.ui.routes import bug_work_api
+from tests.test_bug_work import source as source
+
+
+def test_fixed_catalog_resolves_owner_profession_and_reads_packaged_compatibility(source, monkeypatch):
+    request, principal, _ = source
+    calls = []
+
+    def authenticate(_authorization, *, write):
+        calls.append(write)
+        return principal
+
+    monkeypatch.setattr(authority, "authorize_fleet", authenticate)
+    descriptor = {"synthetic_runtime_descriptor": "fixture-only-not-SDK-authority"}
+    monkeypatch.setattr(bug_work_api, "runtime_compatibility_descriptor", lambda: descriptor)
+    client = TestClient(create_app())
+    catalog = client.get("/internal/bug-work/v1/catalog")
+    assert catalog.status_code == 200
+    body = catalog.json()["result"]
+    assert body["profession_id"] == request.workflow_project_id
+    assert body["workflow_key"] == "hermes-sdlc:developer" and body["mode_key"] == "initial"
+    assert body["catalog_sha256"] == request.expected_catalog_sha256
+    assert client.get("/internal/bug-work/v1/compatibility").json()["result"] == descriptor
+    assert calls == [False, False]
+
+
+def test_fixed_catalog_and_compatibility_require_fresh_registered_fleet_identity(source, monkeypatch):
+    from project_workflow.infrastructure.namespace_auth import NamespaceAuthError
+
+    def deny(*_args, **_kwargs):
+        raise NamespaceAuthError(403)
+
+    monkeypatch.setattr(authority, "authorize_fleet", deny)
+    client = TestClient(create_app())
+    for path in ("catalog", "compatibility"):
+        assert client.get("/internal/bug-work/v1/" + path).status_code == 403

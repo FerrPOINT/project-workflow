@@ -1,0 +1,5 @@
+# Supplementary search guidance
+
+Source only, unqualified. ExecutionSnapshot optional `user_guidance:{parent_execution_id,text}` is closed, nonblank/NUL-free and <=4096 UTF-8 bytes; only manual executions permit it. The exact original value is immutable and part of snapshot SHA. None is omitted by serializer, preserving older hashes. Parent ownership/terminal custody is checked by Fleet and Tracker admission; this field does not authorize arbitrary parent access here.
+
+Workflow context retains the snapshot and phase evaluation explicitly treats guidance as quoted supplementary user data. Immutable targets, pinned versions, original verification basis, permissions and credential boundaries remain authoritative. Catalog/profession packages and HMAC transport are unchanged. Active guidance delivery is Fleet original-runtime control, not a new Workflow Task or phase authority.

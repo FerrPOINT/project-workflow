@@ -1,0 +1,831 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index f251e20..1044828 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -7,6 +7,14 @@
+ ## [Unreleased]
+ 
+ ### Changed
++- Read-only React-пилот использует Base Table внутри одного ListPage content
++  block: общие колонки, подписи, keyboard local scroll и Base link targets.
++  Удалена локальная сетка строк; namespace context и Jinja task links сохранены.
++- Jinja показывает подтверждённый успех и ошибки через inline Base states.
++  Удалены product toast host, CSS, обработчик и таймер. Ошибки остаются рядом
++  с формой, CLI feedback принадлежит конкретной команде; success не получает
++  focus и не снимает pending/unknown write protection. API, Base assets,
++  feature flag и принятые runtime pins не меняются.
+ - Lifecycle инструкций в деталях фазы подтверждает создание, текст, навыки,
+   режим, порядок и удаление scoped GET со строгой проверкой родителя и строк.
+   Неизвестный результат сохраняет общий lock и Base draft guard; повторная
+diff --git a/frontend/e2e/agent-drafts.spec.ts b/frontend/e2e/agent-drafts.spec.ts
+index d272d52..29b29e1 100644
+--- a/frontend/e2e/agent-drafts.spec.ts
++++ b/frontend/e2e/agent-drafts.spec.ts
+@@ -84,7 +84,8 @@ test('pending create protects fields, disclosure and direct duplicate handlers',
+     await expect(page.locator('#newName')).toBeEnabled()
+     await expect(page.locator('#newName')).toHaveValue('Unsaved agent draft')
+     await expect(form.locator('[data-page-state]')).toHaveText('Fixture validation rejected')
+-    await expect(page.locator('#toast')).not.toHaveText('Fixture validation rejected')
++    await expect(page.locator('#toast')).toHaveCount(0)
++    await expect(form.getByRole('alert')).toHaveCount(1)
+     expect(writes).toBe(1)
+   } finally { release() }
+ })
+diff --git a/frontend/e2e/base-list-feedback.spec.ts b/frontend/e2e/base-list-feedback.spec.ts
+new file mode 100644
+index 0000000..37b841b
+--- /dev/null
++++ b/frontend/e2e/base-list-feedback.spec.ts
+@@ -0,0 +1,156 @@
++import { expect, test } from '@playwright/test'
++
++if (process.env.WORKFLOW_UI_QA_MUTATIONS !== 'isolated-fixture') throw new Error('UI QA requires an isolated fixture')
++
++for (const theme of ['dark', 'gray', 'light']) {
++  for (const route of ['tasks', 'phases']) {
++    test(`Base pilot ${route} table has stable columns, density and local keyboard scroll (${theme})`, async ({ page }, testInfo) => {
++      await page.addInitScript(value => {
++        localStorage.setItem('theme', value)
++        localStorage.setItem('workflow-theme', value)
++      }, theme)
++      await page.route('**/api/namespaces', request => request.fulfill({ json: { namespaces: [{ id: 1, name: 'Fixture', workflow_id: 1 }] } }))
++      await page.route(`**/api/${route}*`, request => request.fulfill({ json: route === 'tasks' ? {
++        tasks: [
++          { namespace_id: 1, task_key: 'QA/1', title: 'Первая задача', current_phase_name: 'Ревью', status_label: 'В работе' },
++          { namespace_id: 1, task_key: 'QA/2', title: 'ДлинноеНазваниеБезПробелов'.repeat(15), current_phase_name: 'Проверка', status_label: 'Ожидает подтверждения' },
++        ],
++      } : {
++        phases: [
++          { id: 1, name: 'Первая фаза', agent_name: 'Агент', description: 'Краткое описание' },
++          { id: 2, name: 'ДлинноеНазваниеБезПробелов'.repeat(15), agent_name: null, description: 'Подробное описание '.repeat(25) },
++        ],
++      } }))
++      const widths = testInfo.project.name === 'desktop' ? [1023, 1024, 1279, 1280, 1440, 1920, 2560] : [375, 767, 768]
++      for (const width of widths) {
++        await page.setViewportSize({ width, height: 1080 })
++        await page.goto(`/react/${route}?namespace_id=1`)
++        await page.reload()
++        const table = page.getByRole('table', { name: route === 'tasks' ? 'Задачи' : 'Фазы', exact: true })
++        await expect(table.locator('tbody tr')).toHaveCount(2)
++        await expect(table.getByRole('columnheader')).toHaveCount(3)
++        await expect(page.locator('[data-page-layout]')).toHaveAttribute('data-page-layout', 'wide')
++        const geometry = await table.evaluate(element => {
++          const rows = [...element.querySelectorAll('tbody tr')]
++          const boxes = rows.map(row => [...row.children].map(cell => cell.getBoundingClientRect()))
++          const scroll = element.parentElement!
++          return {
++            columns: boxes.map(cells => cells.map(cell => ({ x: cell.x, width: cell.width }))),
++            rowGap: boxes[1][0].top - boxes[0][0].bottom,
++            overflow: document.documentElement.scrollWidth - window.innerWidth,
++            scrollable: scroll.scrollWidth > scroll.clientWidth,
++            scrollLeft: scroll.scrollLeft,
++          }
++        })
++        expect(geometry.overflow).toBeLessThanOrEqual(1)
++        expect(Math.abs(geometry.rowGap)).toBeLessThanOrEqual(1)
++        expect(geometry.columns[0]).toEqual(geometry.columns[1])
++        const link = table.getByRole('link').first()
++        expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(width < 768 ? 44 : 40)
++        await table.focus()
++        await expect(table).toBeFocused()
++        if (geometry.scrollable) {
++          await page.keyboard.press('ArrowRight')
++          await expect.poll(() => table.evaluate(element => element.parentElement!.scrollLeft)).toBeGreaterThan(0)
++        }
++        await link.focus()
++        await expect(link).toBeFocused()
++        const href = await link.getAttribute('href')
++        expect(href).toBe(route === 'tasks' ? '/task/QA%2F1?namespace_id=1' : '/react/phases/1?namespace_id=1')
++        if ([375, 1920].includes(width)) await page.screenshot({ path: testInfo.outputPath(`base-table-${route}-${theme}-${width}.png`), fullPage: true })
++      }
++    })
++  }
++
++  for (const outcome of ['success', 'failure']) {
++    test(`SSR CLI ${outcome} uses a local Base state without a toast or focus theft (${theme})`, async ({ page }, testInfo) => {
++      await page.addInitScript(({ theme, outcome }) => {
++        localStorage.setItem('workflow-theme', theme)
++        Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (value: string) => {
++          if (!value) throw new Error('Empty command')
++          if (outcome === 'failure') throw new Error('Fixture clipboard rejection')
++        } } })
++      }, { theme, outcome })
++      await page.goto('/settings?namespace_id=1')
++      const command = page.locator('.cli-command').first()
++      const button = command.getByRole('button', { name: /^Копировать команду/ })
++      await button.click()
++      const state = command.locator('[data-page-state]')
++      await expect(state).toHaveText(outcome === 'success' ? 'Команда скопирована' : 'Не удалось скопировать команду')
++      await expect(state).toHaveAttribute('role', outcome === 'success' ? 'status' : 'alert')
++      await expect(state).toHaveAttribute('data-page-state', outcome === 'success' ? 'ready' : 'error')
++      await expect(button).toBeEnabled()
++      await expect(button).toBeFocused()
++      await expect(page.locator('#toast')).toHaveCount(0)
++      expect(await page.evaluate(() => 'showToast' in window)).toBe(false)
++      expect(await state.evaluate(element => getComputedStyle(element).position)).toBe('static')
++      expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1)
++      await expect(page.locator('.cli-copy-state:visible')).toHaveCount(1)
++      await page.screenshot({ path: testInfo.outputPath(`base-cli-${outcome}-${theme}-${page.viewportSize()!.width}.png`), fullPage: true })
++    })
++  }
++  test(`SSR long validation stays inline and retains the agent draft (${theme})`, async ({ page }) => {
++    await page.addInitScript(value => localStorage.setItem('workflow-theme', value), theme)
++    const message = 'Длинное сообщение об ошибке проверки полей. '.repeat(40)
++    let writes = 0
++    await page.route('**/api/agents', route => {
++      expect(route.request().method()).toBe('POST')
++      writes++
++      return route.fulfill({ status: 422, json: { ok: false, error: message } })
++    })
++    await page.goto('/agents?namespace_id=1')
++    await page.locator('#agentCreatePanel > summary').click()
++    await page.locator('#newName').fill('Retained draft')
++    const form = page.locator('#agentCreatePanel form')
++    await form.locator('[type="submit"]').click()
++    await expect(form.getByRole('alert')).toHaveText(message.trim())
++    await expect(page.locator('#newName')).toHaveValue('Retained draft')
++    await expect(page.locator('#newName')).toBeEnabled()
++    await expect(page.locator('#toast')).toHaveCount(0)
++    expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1)
++    expect(writes).toBe(1)
++    await page.locator('#newName').fill('Edited retained draft')
++    await expect(form.locator('.agent-write-state')).not.toBeVisible()
++  })
++}
++
++test('SSR CLI fallback copy keeps the same local feedback and focus contract', async ({ page }) => {
++  await page.addInitScript(() => {
++    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined })
++    document.execCommand = (command: string) => command === 'copy'
++  })
++  await page.goto('/settings?namespace_id=1')
++  const command = page.locator('.cli-command').first()
++  const button = command.getByRole('button', { name: /^Копировать команду/ })
++  await button.click()
++  await expect(command.getByRole('status')).toHaveText('Команда скопирована')
++  await expect(button).toBeFocused()
++  await expect(page.locator('body > textarea')).toHaveCount(0)
++  await expect(page.locator('#toast')).toHaveCount(0)
++})
++
++test('SSR agent acknowledgement stays visible after disclosure closes and returns focus to its summary', async ({ page, request }) => {
++  const name = `Inline feedback ${crypto.randomUUID()}`
++  const created = await request.post('/api/agents', { data: { name, description: '', launch_profile: null } })
++  expect(created.ok()).toBeTruthy()
++  const id = (await created.json()).agent_id as number
++  try {
++    await page.goto('/agents?namespace_id=1')
++    const entry = page.locator(`.agent-entry[data-id="${id}"]`)
++    const summary = entry.locator('summary')
++    await summary.click()
++    await entry.locator('textarea').fill('Confirmed update')
++    await entry.getByRole('button', { name: 'Сохранить', exact: true }).click()
++    await expect(entry).not.toHaveAttribute('open', '')
++    await expect(summary).toBeFocused()
++    const state = page.locator('#agentFeedback [data-page-state]')
++    await expect(state).toHaveText('Агент сохранён')
++    await expect(state).toHaveAttribute('role', 'status')
++    await expect(state).toBeVisible()
++    expect(await state.evaluate(element => getComputedStyle(element).position)).toBe('static')
++    await summary.click()
++    await entry.locator('textarea').fill('Next unsaved draft')
++    await expect(page.locator('#agentFeedback')).not.toBeVisible()
++    await expect(entry.locator('textarea')).toHaveValue('Next unsaved draft')
++  } finally { expect((await request.delete(`/api/agents/${id}`)).ok()).toBeTruthy() }
++})
+diff --git a/frontend/e2e/instruction-drafts.spec.ts b/frontend/e2e/instruction-drafts.spec.ts
+index 97bcafa..a8d2954 100644
+--- a/frontend/e2e/instruction-drafts.spec.ts
++++ b/frontend/e2e/instruction-drafts.spec.ts
+@@ -101,7 +101,7 @@ for (const status of [401, 403, 404, 409, 422]) {
+       await expect(state(page)).toBeFocused()
+     }
+     await expect(reconcile(page)).not.toBeVisible()
+-    await expect(page.locator('#toast')).not.toHaveText(`Rejected ${status}`)
++    await expect(page.locator('#toast')).toHaveCount(0)
+   })
+ }
+ 
+@@ -166,7 +166,9 @@ for (const property of ['description', 'skills', 'execution_type']) {
+     await expect(reconcile(page)).toBeFocused()
+     await expect(field(page)).toBeDisabled()
+     await reconcile(page).click()
+-    await expect(page.locator('#instructionWriteError')).not.toBeVisible()
++    await expect(state(page)).toHaveAttribute('data-page-state', 'ready')
++    await expect(state(page)).toHaveText('Изменения сохранены')
++    await expect(state(page)).toHaveAttribute('role', 'status')
+     await expect(field(page)).toBeEnabled()
+     await expect(page.locator('#newInstructionText')).toHaveValue('Unrelated create draft')
+     const records = (await (await request.get(`/api/phases/${phaseId}/instructions`)).json()).instructions as { id: number; description: string; skills: string[]; execution_type: string }[]
+@@ -217,7 +219,8 @@ test('instruction editor lost reorder preserves planned order and verifies actua
+   await expect(state(page)).toHaveText(/Результат записи неизвестен/)
+   expect(await page.locator('#instructionsLayout .instruction-row').evaluateAll(rows => rows.map(row => Number((row as HTMLElement).dataset.instructionId)))).toEqual(order)
+   await reconcile(page).click()
+-  await expect(page.locator('#instructionWriteError')).not.toBeVisible()
++  await expect(state(page)).toHaveAttribute('data-page-state', 'ready')
++  await expect(state(page)).toHaveText('Изменения сохранены')
+   await expect(row(page, 1).locator('.move-up')).toBeDisabled()
+   await expect(field(page, 1)).toBeFocused()
+   const records = (await (await request.get(`/api/phases/${phaseId}/instructions`)).json()).instructions as { id: number }[]
+@@ -274,7 +277,8 @@ for (const fault of ['stale', 'malformed', 'transient', 'missing', '403', '404']
+       await page.unroute(`**/api/phases/${phaseId}/instructions*`)
+       await reconcile(page).click()
+       await expect(field(page)).toBeEnabled()
+-      await expect(page.locator('#instructionWriteError')).not.toBeVisible()
++      await expect(state(page)).toHaveAttribute('data-page-state', 'ready')
++      await expect(state(page)).toHaveText('Изменения сохранены')
+     }
+     expect(writes).toBe(1)
+   })
+diff --git a/frontend/e2e/phase-detail-save.spec.ts b/frontend/e2e/phase-detail-save.spec.ts
+index cea24f1..864c907 100644
+--- a/frontend/e2e/phase-detail-save.spec.ts
++++ b/frontend/e2e/phase-detail-save.spec.ts
+@@ -106,7 +106,9 @@ test('phase detail aggregate lost ACK recovers existing IDs without replay', asy
+   await name(page).fill('Confirmed by GET')
+   expect(await save(page)).toBe(true)
+   await expect(name(page)).toBeEnabled()
+-  await expect(saveState(page)).toBeHidden()
++  await expect(saveState(page)).toHaveAttribute('data-page-state', 'ready')
++  await expect(saveState(page)).toHaveAttribute('role', 'status')
++  await expect(saveState(page)).toHaveText('Сохранено')
+   expect(writes).toBe(1)
+   expect((await (await request.get(`/api/phases/${phaseId}`)).json()).phase.name).toBe('Confirmed by GET')
+ })
+@@ -196,7 +198,9 @@ for (const invalid of ['id', 'workflow_id', 'mode_id', 'checks']) {
+     await page.unroute(`**/api/phases/${phaseId}*`)
+     await page.locator('#phaseSaveReconcile').click()
+     await expect(name(page)).toBeEnabled()
+-    await expect(saveState(page)).toBeHidden()
++    await expect(saveState(page)).toHaveAttribute('data-page-state', 'ready')
++    await expect(saveState(page)).toHaveAttribute('role', 'status')
++    await expect(saveState(page)).toHaveText('Сохранено')
+   })
+ }
+ 
+@@ -464,7 +468,9 @@ test('phase detail aggregate resumes deferred autosave after instruction settlem
+   await action
+   await expect.poll(() => phaseWrites).toBe(1)
+   await expect(name(page)).toBeEnabled()
+-  await expect(saveState(page)).toBeHidden()
++  await expect(saveState(page)).toHaveAttribute('data-page-state', 'ready')
++  await expect(saveState(page)).toHaveAttribute('role', 'status')
++  await expect(saveState(page)).toHaveText('Сохранено')
+   expect((await (await request.get(`/api/phases/${phaseId}`)).json()).phase.name).toBe('Deferred metadata draft')
+ })
+ 
+diff --git a/frontend/e2e/phase-instruction-lifecycle.spec.ts b/frontend/e2e/phase-instruction-lifecycle.spec.ts
+index 14b788d..7f0c071 100644
+--- a/frontend/e2e/phase-instruction-lifecycle.spec.ts
++++ b/frontend/e2e/phase-instruction-lifecycle.spec.ts
+@@ -328,7 +328,9 @@ for (const theme of ['dark', 'gray', 'light']) {
+     await expect(page.locator('#phase-instructions')).toBeFocused()
+     expect(await page.evaluate(() => (window as unknown as { phaseSentinel: string }).phaseSentinel)).toBe('same-document')
+     expect((await (await request.get(`/api/phases/${phaseId}/instructions`)).json()).instructions.map((row: {id: number}) => row.id)).toEqual([...instructionIds].reverse())
+-    await expect(page.locator('#phaseSaveStatus')).toBeHidden()
++    await expect(page.locator('#phaseSaveStatus')).toHaveAttribute('data-page-state', 'ready')
++    await expect(page.locator('#phaseSaveStatus')).toHaveAttribute('role', 'status')
++    await expect(page.locator('#phaseSaveStatus')).toHaveText('Инструкция удалена')
+     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy()
+     expect(errors).toEqual([])
+     await page.screenshot({ path: testInfo.outputPath(`phase-instructions-${theme}.png`), fullPage: true })
+diff --git a/frontend/e2e/phase-namespace.spec.ts b/frontend/e2e/phase-namespace.spec.ts
+index edff99c..26aa22f 100644
+--- a/frontend/e2e/phase-namespace.spec.ts
++++ b/frontend/e2e/phase-namespace.spec.ts
+@@ -56,7 +56,9 @@ for (const theme of ['dark', 'gray', 'light']) {
+     }
+     await page.locator('.wiki-header [data-field="name"]').fill('Editable global phase')
+     expect(await save(page)).toBe(true)
+-    await expect(page.locator('#phaseSaveStatus')).toBeHidden()
++    await expect(page.locator('#phaseSaveStatus')).toHaveAttribute('data-page-state', 'ready')
++    await expect(page.locator('#phaseSaveStatus')).toHaveAttribute('role', 'status')
++    await expect(page.locator('#phaseSaveStatus')).toHaveText('Сохранено')
+     expect((await (await request.get(`/api/phases/${phaseId}`)).json()).phase.name).toBe('Editable global phase')
+     const before = (await (await request.get(`/api/phases/${phaseId}/instructions`)).json()).instructions.length as number
+     await page.getByRole('button', { name: '+ Добавить шаг', exact: true }).click()
+diff --git a/frontend/e2e/workflow-editor.spec.ts b/frontend/e2e/workflow-editor.spec.ts
+index eff429c..4e50429 100644
+--- a/frontend/e2e/workflow-editor.spec.ts
++++ b/frontend/e2e/workflow-editor.spec.ts
+@@ -254,7 +254,9 @@ test('workflow editor lost PUT acknowledgement reconciles only by GET without re
+   })
+   expect(writes).toBe(1)
+   await page.locator('#workflowReconcileButton').click()
+-  await expect(page.locator('#workflowWriteError')).not.toBeVisible()
++  await expect(state(page)).toHaveAttribute('data-page-state', 'ready')
++  await expect(state(page)).toHaveText('Воркфлоу сохранён')
++  await expect(state(page)).toHaveAttribute('role', 'status')
+   await expect(page.locator('#workflowDescription')).toBeEnabled()
+   await expect(page.locator('#workflowDescription')).toHaveValue('Persisted description')
+   await expect(page.locator('#workflowSubmitButton')).toBeFocused()
+diff --git a/frontend/src/App.test.tsx b/frontend/src/App.test.tsx
+index ffda3c5..02ac752 100644
+--- a/frontend/src/App.test.tsx
++++ b/frontend/src/App.test.tsx
+@@ -1,6 +1,6 @@
+ // @vitest-environment jsdom
+ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
++import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+ import { RouterProvider, createMemoryRouter, useLocation, useNavigate } from 'react-router'
+ import { PlatformProvider, ThemeProvider, updateQuery, useUrlSearchParams } from '@sdlc/ui/lib'
+@@ -58,6 +58,27 @@ afterEach(() => {
+ })
+ 
+ describe('read-only React pilot', () => {
++  it('renders task columns in one Base table and keeps Jinja links scoped', async () => {
++    mount('/tasks?namespace_id=7')
++    await screen.findByRole('link', { name: /Read-only task/ })
++    const table = screen.getByRole('table', { name: 'Задачи' })
++    expect(within(table).getAllByRole('columnheader').map(header => header.textContent)).toEqual(['Задача', 'Фаза', 'Статус'])
++    expect(within(table).getAllByRole('row')).toHaveLength(2)
++    expect(table.getAttribute('tabindex')).toBe('0')
++    expect(table.parentElement?.classList.contains('overflow-auto')).toBe(true)
++    expect(table.closest('.base-page-stack')?.children.length).toBe(2)
++    expect(within(table).getByRole('link').getAttribute('href')).toBe('/task/QA%2F42?namespace_id=7')
++  })
++  it('renders phase columns, readable fallbacks and scoped read-only links', async () => {
++    mount('/phases?namespace_id=7')
++    await screen.findByRole('link', { name: /^Review/ })
++    const table = screen.getByRole('table', { name: 'Фазы' })
++    expect(within(table).getAllByRole('columnheader').map(header => header.textContent)).toEqual(['Фаза', 'Агент', 'Описание'])
++    expect(within(table).getByRole('link').getAttribute('href')).toBe('/react/phases/1?namespace_id=7')
++    expect(within(table).getByText('Без агента')).toBeTruthy()
++    expect(within(table).getByText('Без описания')).toBeTruthy()
++    expect(screen.queryByRole('button', { name: 'Сохранить' })).toBeNull()
++  })
+   it('restores cookie namespace once and links task detail to Jinja', async () => {
+     mount('/tasks', 7)
+     const task = await screen.findByRole('link', { name: /Read-only task/ })
+diff --git a/frontend/src/App.tsx b/frontend/src/App.tsx
+index ed3227f..aab7bfd 100644
+--- a/frontend/src/App.tsx
++++ b/frontend/src/App.tsx
+@@ -2,7 +2,7 @@ import { ListChecks, Layers, Pencil } from 'lucide-react'
+ import { useEffect, useState } from 'react'
+ import { Link, Navigate, Route, Routes, useLocation, useParams } from 'react-router'
+ import { useQuery } from '@tanstack/react-query'
+-import { AppShell, Button, DetailPage, ListPage, ResourceStateView, Select, resourceErrorState } from '@sdlc/ui/ui'
++import { AppShell, Button, DetailPage, ListPage, ResourceStateView, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, resourceErrorState } from '@sdlc/ui/ui'
+ import { positiveIntegerQuery, updateQuery, useUrlSearchParams } from '@sdlc/ui/lib'
+ import { client, pilotPath, scopedPath, taskHref, type Namespace, type Phase, type Task } from './api'
+ 
+@@ -19,13 +19,27 @@ function Tasks() {
+   const namespace = useNamespace()
+   const query = useQuery({ queryKey: ['tasks', namespace], queryFn: ({ signal }) => client.get<{ tasks: Task[] }>(scopedPath('/api/tasks', namespace), signal) })
+   const state = query.isLoading ? { kind: 'loading' as const } : query.error ? resourceErrorState(query.error, () => void query.refetch()) : !query.data?.tasks.length ? { kind: 'empty' as const, message: 'Задач пока нет' } : undefined
+-  return <ListPage title="Задачи" state={state}>{query.data?.tasks.map(task => <a className="workflow-row" key={`${task.namespace_id}:${task.task_key}`} href={taskHref(task)}><span><strong>{task.task_key}</strong> · {task.title}</span><span>{task.current_phase_name}</span><span>{task.status_label}</span></a>)}</ListPage>
++  return <ListPage title="Задачи" state={state}><Table aria-label="Задачи" tabIndex={0} className="table-fixed min-w-[36rem] focus-visible:outline-2 focus-visible:outline-focus focus-visible:-outline-offset-2">
++    <colgroup><col className="w-1/2" /><col className="w-1/4" /><col className="w-1/4" /></colgroup>
++    <TableHeader><TableRow><TableHead scope="col">Задача</TableHead><TableHead scope="col">Фаза</TableHead><TableHead scope="col">Статус</TableHead></TableRow></TableHeader>
++    <TableBody>{query.data?.tasks.map(task => <TableRow key={`${task.namespace_id}:${task.task_key}`}>
++      <TableCell><Button asChild variant="ghost" className="h-auto w-full justify-start px-0 text-left whitespace-normal [overflow-wrap:anywhere]"><a href={taskHref(task)}><span><strong>{task.task_key}</strong> · {task.title}</span></a></Button></TableCell>
++      <TableCell className="break-words">{task.current_phase_name || 'Без фазы'}</TableCell><TableCell className="break-words">{task.status_label}</TableCell>
++    </TableRow>)}</TableBody>
++  </Table></ListPage>
+ }
+ function Phases() {
+   const namespace = useNamespace()
+   const query = useQuery({ queryKey: ['phases', namespace], queryFn: ({ signal }) => client.get<{ phases: Phase[] }>(scopedPath('/api/phases', namespace), signal) })
+   const state = query.isLoading ? { kind: 'loading' as const } : query.error ? resourceErrorState(query.error, () => void query.refetch()) : !query.data?.phases.length ? { kind: 'empty' as const, message: 'Фаз пока нет' } : undefined
+-  return <ListPage title="Фазы" state={state}>{query.data?.phases.map(phase => <Link className="workflow-row" key={phase.id} to={pilotPath(`/phases/${phase.id}`, namespace)}><strong>{phase.name}</strong><span>{phase.agent_name ?? 'Без агента'}</span><span>{phase.description}</span></Link>)}</ListPage>
++  return <ListPage title="Фазы" state={state}><Table aria-label="Фазы" tabIndex={0} className="table-fixed min-w-[36rem] focus-visible:outline-2 focus-visible:outline-focus focus-visible:-outline-offset-2">
++    <colgroup><col className="w-1/4" /><col className="w-1/4" /><col className="w-1/2" /></colgroup>
++    <TableHeader><TableRow><TableHead scope="col">Фаза</TableHead><TableHead scope="col">Агент</TableHead><TableHead scope="col">Описание</TableHead></TableRow></TableHeader>
++    <TableBody>{query.data?.phases.map(phase => <TableRow key={phase.id}>
++      <TableCell><Button asChild variant="ghost" className="h-auto w-full justify-start px-0 text-left whitespace-normal [overflow-wrap:anywhere]"><Link to={pilotPath(`/phases/${phase.id}`, namespace)}><strong>{phase.name}</strong></Link></Button></TableCell>
++      <TableCell className="break-words">{phase.agent_name ?? 'Без агента'}</TableCell><TableCell className="break-words whitespace-pre-wrap">{phase.description || 'Без описания'}</TableCell>
++    </TableRow>)}</TableBody>
++  </Table></ListPage>
+ }
+ function PhaseDetail({ namespaces }: { namespaces?: Namespace[] }) {
+   const { id } = useParams()
+diff --git a/frontend/src/style.css b/frontend/src/style.css
+index f44e822..4319ae8 100644
+--- a/frontend/src/style.css
++++ b/frontend/src/style.css
+@@ -3,5 +3,3 @@
+ @source '../node_modules/@sdlc/ui/src';
+ html, body, #root { min-height: 100%; margin: 0; }
+ body { font-family: Inter, system-ui, sans-serif; background: var(--color-background); color: var(--color-text-primary); letter-spacing: 0; }
+-.workflow-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--color-border); overflow-wrap: anywhere; }
+-@media (max-width: 767px) { .workflow-row { grid-template-columns: minmax(0, 1fr); gap: 6px; } }
+diff --git a/project_workflow/interfaces/ui/templates/agents.html b/project_workflow/interfaces/ui/templates/agents.html
+index e8e24ed..0c2aefa 100644
+--- a/project_workflow/interfaces/ui/templates/agents.html
++++ b/project_workflow/interfaces/ui/templates/agents.html
+@@ -48,6 +48,7 @@
+ <div class="agent-layout">
+   <section aria-labelledby="agentsTitle">
+     <h2 class="agent-section-title" id="agentsTitle">Агенты · <span id="agentCount">{{ agents|length }}</span></h2>
++    <div id="agentFeedback" hidden>{{ base.state('ready', '') }}</div>
+     <div class="agent-list-header" aria-hidden="true"><span>Имя</span><span>Ключ запуска</span><span>Описание</span></div>
+     <div class="agent-list" id="agentsList">
+       {% for a in agents %}
+@@ -110,6 +111,7 @@ function agentDraftSnapshot(form){
+ }
+ function agentFormDirty(form){ return agentUnknownWrites.has(form)||agentDraftSnapshot(form)!==agentDraftBaselines.get(form); }
+ function showAgentState(form,message,kind){
++  document.getElementById('agentFeedback').hidden=true;
+   var container=form.querySelector('.agent-write-state');
+   var state=container.querySelector('[data-page-state]');
+   container.hidden=!message;
+@@ -117,6 +119,11 @@ function showAgentState(form,message,kind){
+   state.setAttribute('role',kind==='permission-denied'||kind==='not-found'?'status':'alert');
+   state.querySelector('p').textContent=message;
+ }
++function showAgentFeedback(message){
++  var container=document.getElementById('agentFeedback');
++  container.hidden=false;
++  container.querySelector('p').textContent=message;
++}
+ function setAgentPending(form,pending){
+   if(pending)agentPendingForms.add(form);
+   else agentPendingForms.delete(form);
+@@ -181,7 +188,7 @@ function acknowledgeAgent(form,agent,attempt){
+     entry.querySelector('summary').focus();
+   }
+   agentDraftBaselines.set(form,agentDraftSnapshot(form));
+-  showToast(attempt.id==null?'Добавлено':'Сохранено','success');
++  showAgentFeedback(attempt.id==null?'Агент добавлен':'Агент сохранён');
+ }
+ function unknownAgentWrite(form,attempt){
+   agentUnknownWrites.set(form,attempt);
+@@ -273,7 +280,7 @@ async function deleteAgent(button){
+     document.getElementById('agentCount').textContent=count;
+     document.getElementById('agentsEmpty').hidden=count>0;
+     if(focusTarget)focusTarget.focus();
+-    showToast('Удалено','success');
++    showAgentFeedback('Агент удалён');
+   }
+ }
+ function addAgent(event){
+diff --git a/project_workflow/interfaces/ui/templates/base.html b/project_workflow/interfaces/ui/templates/base.html
+index 9c12226..efed549 100644
+--- a/project_workflow/interfaces/ui/templates/base.html
++++ b/project_workflow/interfaces/ui/templates/base.html
+@@ -128,12 +128,6 @@ input,textarea,select{background:var(--panel);border:1px solid var(--border);col
+ input:focus,textarea:focus,select:focus{border-color:var(--accent)}
+ textarea{resize:vertical;min-height:60px}
+ 
+-/* ── Toast ─────────────────────────────────────────────────────────── */
+-.toast{position:fixed;bottom:20px;right:20px;padding:10px 16px;border-radius:6px;font-size:13px;font-weight:500;box-shadow:0 4px 12px rgba(0,0,0,.4);transform:translateY(80px);transition:transform .3s,opacity .3s,visibility .3s;z-index:200;max-width:90vw;word-break:break-word;opacity:0;visibility:hidden;pointer-events:none}
+-.toast.show{transform:translateY(0);opacity:1;visibility:visible;pointer-events:auto}
+-.toast-success{background:var(--green-soft);color:var(--green);border:1px solid rgba(34,197,94,.25)}
+-.toast-error{background:var(--red-soft);color:var(--red);border:1px solid rgba(239,68,68,.25)}
+-@media(max-width:480px){.toast{bottom:10px;right:10px;left:10px;max-width:none}}
+ 
+ /* ── Status badges ─────────────────────────────────────────────────── */
+ .status{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500}
+@@ -387,7 +381,6 @@ textarea{resize:vertical;min-height:60px}
+   {{ base.draft_guard_dialog() }}
+ </main>
+ 
+-<div class="toast toast-success" id="toast" aria-hidden="true">Сохранено</div>
+ {% call base.confirm_dialog(id='confirmDialog', confirm_label='Удалить') %}
+   {{ base.button('Проверить результат', id='confirmReconcile') }}
+ {% endcall %}
+@@ -430,20 +423,6 @@ document.addEventListener('keydown',function(event){
+     serviceMenu.querySelector('summary').focus();
+   }
+ });
+-function showToast(msg, type){
+-  var t=document.getElementById('toast');
+-  if(t._hideTimer){clearTimeout(t._hideTimer);}
+-  t.textContent=msg;
+-  t.className='toast toast-'+type+' show';
+-  t.setAttribute('aria-hidden','false');
+-  t._hideTimer=setTimeout(function(){
+-    t.classList.remove('show');
+-    t.setAttribute('aria-hidden','true');
+-  },2000);
+-}
+-function showRequestError(){
+-  showToast('Не удалось связаться с сервером','error');
+-}
+ function refreshWorkflowConfirmation(){
+   if(!workflowConfirmationState)return;
+   document.getElementById('confirmReconcile').hidden = !workflowConfirmationState.reconcileVisible();
+diff --git a/project_workflow/interfaces/ui/templates/instructions.html b/project_workflow/interfaces/ui/templates/instructions.html
+index cccaeb1..c64d851 100644
+--- a/project_workflow/interfaces/ui/templates/instructions.html
++++ b/project_workflow/interfaces/ui/templates/instructions.html
+@@ -134,7 +134,7 @@ function updateInstructionControls() {
+ function focusInstructionRecovery() {
+   if (instructionTerminalState) document.querySelector('#instructionWriteError [data-page-state]').focus();
+   else if (instructionUnknownWrite) document.getElementById('instructionReconcileButton').focus();
+-  else if (!document.getElementById('instructionWriteError').hidden) document.querySelector('#instructionWriteError [data-page-state]').focus();
++  else if (!document.getElementById('instructionWriteError').hidden && document.querySelector('#instructionWriteError [data-page-state]').dataset.pageState !== 'ready') document.querySelector('#instructionWriteError [data-page-state]').focus();
+ }
+ function focusInstructionAcknowledgement(attempt) {
+   const trigger = attempt.returnFocus;
+@@ -197,10 +197,9 @@ function acknowledgeInstruction(item, attempt) {
+     applyInstructionRecord(getRows().find(row => Number(row.dataset.instructionId) === attempt.id), item, Object.keys(attempt.payload));
+   }
+   instructionUnknownWrite = null;
+-  showInstructionError('');
++  showInstructionError('Изменения сохранены', 'ready');
+   document.getElementById('instructionReadbackCandidates').hidden = true;
+   updateTimeline();
+-  showToast('Изменения сохранены', 'success');
+ }
+ async function requestInstruction(attempt) {
+   if (instructionWritesBlocked()) return false;
+@@ -419,8 +418,7 @@ async function deleteInstruction(button) {
+       instructionDeleteState = null;
+       row.remove();
+       updateTimeline();
+-      showInstructionError('');
+-      showToast('Инструкция удалена', 'success');
++      showInstructionError('Инструкция удалена', 'ready');
+       document.querySelector('main[tabindex="-1"]').focus();
+     } else {
+       const state = workflowDeletionState(url);
+diff --git a/project_workflow/interfaces/ui/templates/namespaces.html b/project_workflow/interfaces/ui/templates/namespaces.html
+index 2398e5f..84906a1 100644
+--- a/project_workflow/interfaces/ui/templates/namespaces.html
++++ b/project_workflow/interfaces/ui/templates/namespaces.html
+@@ -154,7 +154,7 @@ function showNamespaceWriteError(message, state){
+   root.hidden = !message;
+   var section = root.querySelector('[data-page-state]');
+   section.dataset.pageState = state || 'error';
+-  section.setAttribute('role', state === 'not-found' || state === 'permission-denied' ? 'status' : 'alert');
++  section.setAttribute('role', state === 'ready' || state === 'not-found' || state === 'permission-denied' ? 'status' : 'alert');
+   section.querySelector('p').textContent = message || '';
+ }
+ 
+@@ -462,14 +462,14 @@ function renderNamespaceSelector(){
+   });
+ }
+ function saveNamespace(){
+-  if(selectedNamespaceId == null){ showToast('Сначала выберите неймспейс','error'); return; }
++  if(selectedNamespaceId == null){ showNamespaceWriteError('Сначала выберите неймспейс'); return; }
+   return performNamespaceWrite('PUT', selectedNamespaceId, currentPayload());
+ }
+ async function deleteNamespace(){
+   if(namespaceMutationPending || namespaceUnknownWrite || namespaceTerminalState){ return; }
+-  if(selectedNamespaceId == null){ showToast('Сначала выберите неймспейс','error'); return; }
++  if(selectedNamespaceId == null){ showNamespaceWriteError('Сначала выберите неймспейс'); return; }
+   var namespace = namespaceById(selectedNamespaceId);
+-  if(namespace && Number(namespace.task_count) > 0){ showToast('Сначала удалите или перенесите задачи','error'); return; }
++  if(namespace && Number(namespace.task_count) > 0){ showNamespaceWriteError('Сначала удалите или перенесите задачи'); return; }
+   var title = namespace ? 'Удалить неймспейс «' + namespace.name + '»?' : 'Удалить неймспейс?';
+   var message = namespace ? '«' + namespace.name + '» будет удалён без возможности восстановления.' : 'Неймспейс будет удалён без возможности восстановления.';
+   var id = selectedNamespaceId;
+@@ -518,17 +518,17 @@ function acknowledgeNamespaceWrite(attempt, namespace){
+     renderNamespaceSelector();
+     syncNav();
+     rememberNamespaceSelection(attempt.id, 'replace');
+-    showToast('Неймспейс сохранён', 'success');
++    showNamespaceWriteError('Неймспейс сохранён', 'ready');
+     return null;
+   }
+   // Acknowledged create/delete changes the page's identity; reload its SSR composition.
+   namespaceDraftBaseline = JSON.stringify(namespaceDraftValues());
+   if(attempt.method === 'POST'){
+-    showToast('Неймспейс создан', 'success');
++    showNamespaceWriteError('Неймспейс создан', 'ready');
+     return {id:namespace.id,url:namespaceScopedPath('/namespaces', namespace.id)};
+   }
+   var next = namespaceStore.find(function(item){ return item.id !== attempt.id; });
+-  showToast('Неймспейс удалён', 'success');
++  showNamespaceWriteError('Неймспейс удалён', 'ready');
+   return {id:next ? next.id : null,url:namespaceScopedPath('/namespaces', next ? next.id : null)};
+ }
+ function finishNamespaceDeparture(destination){
+@@ -602,19 +602,19 @@ function submitNamespace(){
+   if(namespaceMutationPending || namespaceUnknownWrite || namespaceTerminalState){ return; }
+   var nameInput = document.getElementById('namespaceName');
+   if(!nameInput.value.trim()){
+-    showToast('Введите название неймспейса','error');
++    showNamespaceWriteError('Введите название неймспейса');
+     nameInput.focus();
+     return;
+   }
+   var commandInput = document.getElementById('namespaceCliCommand');
+   if(!/^[a-z][a-z0-9_-]{1,63}$/.test(commandInput.value.trim())){
+-    showToast('Проверьте формат CLI-команды','error');
++    showNamespaceWriteError('Проверьте формат CLI-команды');
+     commandInput.focus();
+     return;
+   }
+   var workflowInput = document.getElementById('namespaceWorkflowId');
+   if(!workflowInput.value){
+-    showToast('Выберите воркфлоу','error');
++    showNamespaceWriteError('Выберите воркфлоу');
+     workflowInput.focus();
+     return;
+   }
+diff --git a/project_workflow/interfaces/ui/templates/phase_instructions.js b/project_workflow/interfaces/ui/templates/phase_instructions.js
+index bfb3523..7b66c8c 100644
+--- a/project_workflow/interfaces/ui/templates/phase_instructions.js
++++ b/project_workflow/interfaces/ui/templates/phase_instructions.js
+@@ -110,9 +110,7 @@ function finishPhaseInstruction(attempt, rows) {
+   document.querySelector('#phaseSectionSelect option[value="phase-instructions"]').textContent = 'Инструкции (' + count + ')';
+   phaseInstructionUnknown = null;
+   phaseInstructionDeleteState = null;
+-  showPhaseSaveState('empty', '');
+-  if (attempt.kind === 'reorder') showToast('Порядок инструкций сохранён', 'success');
+-  else showToast('Сохранено', 'success');
++  showPhaseSaveState('ready', attempt.kind === 'reorder' ? 'Порядок инструкций сохранён' : attempt.kind === 'delete' ? 'Инструкция удалена' : 'Сохранено');
+   if (attempt.kind === 'create') attempt.returnFocus = next.find((item) => Number(item.dataset.instructionId) === attempt.receivedId).querySelector('.timeline-name-input');
+   if (attempt.kind === 'delete') attempt.returnFocus = document.getElementById('phase-instructions');
+   resizeAllInlineTextareas();
+diff --git a/project_workflow/interfaces/ui/templates/phase_save.js b/project_workflow/interfaces/ui/templates/phase_save.js
+index c8a0ae2..2946113 100644
+--- a/project_workflow/interfaces/ui/templates/phase_save.js
++++ b/project_workflow/interfaces/ui/templates/phase_save.js
+@@ -163,8 +163,7 @@ function finishPhaseSave(attempt) {
+   }
+   phaseSaveBaseline = JSON.stringify(baseline);
+   phaseUnknownSave = null;
+-  showPhaseSaveState('empty', '');
+-  showToast('Сохранено', 'success');
++  showPhaseSaveState('ready', 'Сохранено');
+   return true;
+ }
+ 
+diff --git a/project_workflow/interfaces/ui/templates/phases.html b/project_workflow/interfaces/ui/templates/phases.html
+index 987e0a6..eb6a6a7 100644
+--- a/project_workflow/interfaces/ui/templates/phases.html
++++ b/project_workflow/interfaces/ui/templates/phases.html
+@@ -215,7 +215,7 @@ function getPhaseTimelineItems(){return Array.from(document.querySelectorAll('#p
+ 
+ function selectMode(modeId){
+   const parsed=Number(modeId);
+-  if(!Number.isInteger(parsed)||parsed<=0){showToast('Не удалось определить режим воркфлоу','error');return;}
++  if(!Number.isInteger(parsed)||parsed<=0){showPhaseError('Не удалось определить режим воркфлоу');return;}
+   const url=new URL(window.location.href);
+   url.searchParams.set('mode_id',String(parsed));
+   const select=document.getElementById('modeSelect');
+diff --git a/project_workflow/interfaces/ui/templates/settings.html b/project_workflow/interfaces/ui/templates/settings.html
+index e57efb4..274c360 100644
+--- a/project_workflow/interfaces/ui/templates/settings.html
++++ b/project_workflow/interfaces/ui/templates/settings.html
+@@ -34,6 +34,7 @@
+       <code class="cli-usage" id="cliUsage{{ loop.index }}">{{ command.usage }}</code>
+       <button class="btn btn-secondary cli-copy" type="button" aria-label="Копировать команду {{ command.name }}" onclick="copyCliUsage(this, 'cliUsage{{ loop.index }}')">Копировать</button>
+     </div>
++    <div class="cli-copy-state" hidden>{{ base.state('ready', '') }}</div>
+     {% if command.summary %}
+     <div class="cli-summary">{{ command.summary }}</div>
+     {% endif %}
+@@ -60,6 +61,14 @@
+ {% endblock %}
+ 
+ {% block extra_script %}
++function showCliCopyState(button,message,kind){
++  var container=button.closest('.cli-command').querySelector('.cli-copy-state');
++  container.hidden=!message;
++  var state=container.querySelector('[data-page-state]');
++  state.dataset.pageState=kind||'ready';
++  state.setAttribute('role',kind==='error'?'alert':'status');
++  state.querySelector('p').textContent=message;
++}
+ function fallbackCopyCliUsage(text){
+   var field = document.createElement('textarea');
+   field.value = text;
+@@ -75,8 +84,8 @@ function fallbackCopyCliUsage(text){
+ async function copyCliUsage(button, usageId){
+   if(button.disabled){ return; }
+   var usage = document.getElementById(usageId);
+-  if(!usage){ showToast('Команда не найдена','error'); return; }
+-  clearTimeout(button._copyTimer);
++  if(!usage){ showCliCopyState(button,'Команда не найдена','error'); return; }
++  showCliCopyState(button,'');
+   button.disabled = true;
+   button.textContent = 'Копирование…';
+   try{
+@@ -86,18 +95,13 @@ async function copyCliUsage(button, usageId){
+     }else{
+       fallbackCopyCliUsage(text);
+     }
+-    button.textContent = 'Скопировано';
+-    showToast('Команда скопирована','success');
++    showCliCopyState(button,'Команда скопирована');
+   }catch(_error){
+-    button.textContent = 'Копировать';
+-    showToast('Не удалось скопировать команду','error');
++    showCliCopyState(button,'Не удалось скопировать команду','error');
+   }finally{
+     button.disabled = false;
++    button.textContent = 'Копировать';
+     button.focus();
+-    if(button.textContent === 'Скопировано'){
+-      clearTimeout(button._copyTimer);
+-      button._copyTimer = setTimeout(function(){ button.textContent = 'Копировать'; }, 1600);
+-    }
+   }
+ }
+ {% endblock %}
+diff --git a/project_workflow/interfaces/ui/templates/workflows.html b/project_workflow/interfaces/ui/templates/workflows.html
+index 3da7f48..9f0eb1f 100644
+--- a/project_workflow/interfaces/ui/templates/workflows.html
++++ b/project_workflow/interfaces/ui/templates/workflows.html
+@@ -113,7 +113,7 @@ function showWorkflowError(message, kind){
+   container.hidden = !message;
+   var state = container.querySelector('[data-page-state]');
+   state.dataset.pageState = kind || 'error';
+-  state.setAttribute('role', kind === 'permission-denied' || kind === 'not-found' ? 'status' : 'alert');
++  state.setAttribute('role', kind === 'ready' || kind === 'permission-denied' || kind === 'not-found' ? 'status' : 'alert');
+   state.querySelector('p').textContent = message;
+ }
+ function updateWorkflowPending(){
+@@ -373,7 +373,7 @@ function acknowledgeWorkflow(item, attempt){
+     renderWorkflowNav();
+     syncWorkflowNav();
+   } else workflowDraftBaseline = workflowDraftSnapshot();
+-  showToast(attempt.id == null ? 'Воркфлоу создан' : 'Воркфлоу сохранён', 'success');
++  showWorkflowError(attempt.id == null ? 'Воркфлоу создан' : 'Воркфлоу сохранён', 'ready');
+ }
+ async function performWorkflowWrite(method, id, payload){
+   if(workflowMutationPending || workflowCataloguePending || workflowCatalogueUnavailable || workflowUnknownWrite || workflowTerminalState || workflowDeleteState)return;
+@@ -453,7 +453,7 @@ async function deleteWorkflow(){
+   if(!workflowDeleteState && workflowDraftDirty()){
+     if(!await requestWorkflowTransition(function(){ fillWorkflowForm(workflowById(selectedWorkflowId)); }))return;
+   }
+-  if(selectedWorkflowId == null){ showToast('Воркфлоу не выбран','error'); return; }
++  if(selectedWorkflowId == null){ showWorkflowError('Воркфлоу не выбран'); return; }
+   var workflow = workflowById(selectedWorkflowId);
+   var title = workflow ? 'Удалить воркфлоу «' + workflow.name + '»?' : 'Удалить воркфлоу?';
+   var message = workflow
+@@ -479,8 +479,7 @@ async function deleteWorkflow(){
+       renderWorkflowNav();
+       syncWorkflowNav();
+       showWorkflowError('');
+-      showToast('Воркфлоу удалён','success');
+-      await reloadWorkflows(null);
++      if(await reloadWorkflows(null))showWorkflowError('Воркфлоу удалён','ready');
+     } else {
+       var deletion = workflowDeletionState('/api/workflows/' + workflowId);
+       workflowDeleteState = deletion.kind === 'ready' ? null : deletion;
+diff --git a/tests/test_ui.py b/tests/test_ui.py
+index 37764bf..67c69fe 100644
+--- a/tests/test_ui.py
++++ b/tests/test_ui.py
+@@ -390,14 +390,13 @@ class TestIndexPage:
+         assert "TASK — TASK" not in response.text
+         assert "UITEST — UI Test Project" not in response.text
+ 
+-    def test_global_toast_is_hidden_by_default_until_action(self):
++    def test_ssr_has_no_product_notification_host_or_timer(self):
+         response = client.get("/")
+         assert response.status_code == 200
+-        assert 'id="toast"' in response.text
+-        assert 'aria-hidden="true"' in response.text
+-        assert "visibility:hidden" in response.text
+-        assert "opacity:0" in response.text
+-        assert "pointer-events:none" in response.text
++        assert 'id="toast"' not in response.text
++        assert "function showToast" not in response.text
++        assert "._hideTimer" not in response.text
++        assert ".toast{" not in response.text
+ 
+ 
+ class TestPhasesPage:
+@@ -1678,11 +1677,12 @@ class TestPhaseDetail:
+         finally:
+             client.put(_phase_api_path("1.INTAKE"), json=restore_payload)
+ 
+-    def test_phase_detail_reorder_success_uses_success_toast(self):
++    def test_phase_detail_reorder_success_uses_inline_base_state(self):
+         response = client.get(_phase_detail_path("1.INTAKE"))
+ 
+-        assert "showToast('Порядок инструкций сохранён', 'success');" in response.text
+-        assert "showToast('Порядок инструкций сохранён');" not in response.text
++        assert "showPhaseSaveState('ready', attempt.kind === 'reorder' ? 'Порядок инструкций сохранён'" in response.text
++        assert "showToast" not in response.text
++        assert 'id="phaseSaveStatus"' in response.text
+ 
+     def test_phase_detail_can_add_and_delete_instruction(self):
+         phase_response = client.get(_phase_api_path("1.INTAKE"))
+@@ -3048,9 +3048,10 @@ class TestSettingsPage:
+         assert 'aria-label="Копировать команду step"' in response.text
+         assert "function fallbackCopyCliUsage(text)" in response.text
+         assert "async function copyCliUsage(button, usageId)" in response.text
+-        assert "clearTimeout(button._copyTimer);" in response.text
++        assert "button._copyTimer" not in response.text
+         assert "await navigator.clipboard.writeText(text);" in response.text
+-        assert "showToast('Команда скопирована','success');" in response.text
++        assert "showCliCopyState(button,'Команда скопирована');" in response.text
++        assert 'class="cli-copy-state" hidden><section class="base-resource-state"' in response.text
+ 
+     def test_settings_page_has_explicit_empty_cli_state(self):
+         with patch("project_workflow.interfaces.ui.routes.pages._load_cli_reference", return_value=[]):
+@@ -3166,12 +3167,11 @@ class TestUiNetworkFailures:
+             assert "Names are not unique: matching rows are evidence, not an acknowledgement." in response.text
+             assert "Повторная запись заблокирована." in response.text
+             return
+-        handler = ".catch(showRequestError)"
+-        assert response.text.count(handler) + response.text.count("requestWorkflowDeletion({") >= minimum_handlers
++        assert response.text.count("requestWorkflowDeletion({") >= minimum_handlers
+         assert "catch (_error) { unknown(); }" in response.text
+         assert "state.kind !== 'ready'" in response.text
+         assert "throw new Error('Delete not acknowledged')" in response.text
+-        assert "Не удалось связаться с сервером" in response.text
++        assert "Результат удаления неизвестен" in response.text
+ 
+     def test_task_deletion_is_absent_from_ui_and_routes(self):
+         response = client.get("/tasks")

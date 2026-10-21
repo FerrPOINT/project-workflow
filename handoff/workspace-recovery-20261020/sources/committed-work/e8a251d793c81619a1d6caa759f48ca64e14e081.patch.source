@@ -1,0 +1,447 @@
+diff --git a/.base-revision b/.base-revision
+new file mode 100644
+index 0000000..35b27eb
+--- /dev/null
++++ b/.base-revision
+@@ -0,0 +1 @@
++d22ca2205f5068eba976745ed5fad93c6daacfa1
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index cb53fb9..269aef8 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -13,6 +13,10 @@
+ - Standalone-режим: репозиторий собирается и запускается без соседнего `services-base` (убраны extra `cli-platform`, uv source, Docker additional_context и CI checkout). Token-режим CLI без `sdlc-cli-core` выдаёт понятную ошибку; запуск без `AUTH_ISSUER` работает без авторизации.
+ 
+ ### Fixed
++- Agent editors use Base SSR controls and draft protection for navigation and
++  disclosure/cancel. Pending create/update locks fields and actions and rejects
++  direct duplicate handlers; rejected HTTP responses cannot announce success.
++  Unknown create/update outcome reconciliation remains a separate follow-up.
+ - Jinja deletion confirmations use the shared Base SSR native dialog instead
+   of a local modal shell. Pending callbacks keep the dialog locked until API
+   acknowledgement; uncertain deletes block repeat writes across cancel/reopen
+diff --git a/docs/UI_UX_MAP.md b/docs/UI_UX_MAP.md
+index 849a9b9..7d02a12 100644
+--- a/docs/UI_UX_MAP.md
++++ b/docs/UI_UX_MAP.md
+@@ -83,3 +83,19 @@ cancel/reopen, и предоставляет только явную GET-све
+ Начальный preview namespace получает SVG без дополнительного ввода в форму.
+ Это не завершение backlog: workflows/agents create/update draft safety,
+ pending/unknown/ACK lifecycle и оставшиеся controls требуют отдельной миграции.
++
++## Agent Draft And Pending Candidate
++
++Редакторы `/agents` подключают Base SSR input/textarea/button targets и общий
++draft guard. Выход через navigation и закрытие disclosure/cancel защищают
++черновик; подтверждение сбрасывает только выбранную форму. Pending create/update
++блокирует поля/actions, закрытие disclosure и повторный прямой вызов handler.
++HTTP rejection сохраняет значения и не объявляет успех, даже если тело содержит
++`ok: true`. После ACK create сохраняется защита других открытых редакторов.
++Новый root `.base-revision` закрепляет d22 для установленного React package;
++SSR assets сохраняют собственную byte-for-byte drift проверку. Read-only pilot
++не добавляет notification store или host без producers.
++
++Это узкий кандидат, не закрытие полного agent/workflow lifecycle. Unknown outcome,
++read-only reconcile, authoritative ACK payload и terminal 401/403/404 create/update
++ещё OPEN. Release/images/SSO и полный quality gate фиксируются отдельным evidence.
+diff --git a/docs/plans/2026-10-05-agent-drafts.md b/docs/plans/2026-10-05-agent-drafts.md
+new file mode 100644
+index 0000000..c392260
+--- /dev/null
++++ b/docs/plans/2026-10-05-agent-drafts.md
+@@ -0,0 +1,26 @@
++# Agent Editor Draft And Pending Protection
++
++## Scope
++
++Подключить Base SSR controls/draft guard на существующей `/agents` без изменения
++доменных API, Python services, DB, CLI, auth и read-only React pilot.
++
++- Сохранять черновик при cancel/Escape navigation и закрытии disclosure.
++- Подтверждённый discard сбрасывает только текущий редактор и возвращает focus.
++- Pending create/update блокирует fields/actions/disclosure и direct duplicate
++  handlers; HTTP failure не становится success из-за `ok: true` в теле.
++- Base controls задают 40/44 targets; продукт сохраняет profile pattern/bounds.
++- После create ACK навигация учитывает другие несохранённые agent editors.
++
++## Checks
++
++Targeted Python/template checks, frontend checks, SSR drift и installed fingerprint;
++browser fixtures desktop/mobile, три темы, drafts/cancel/pending/HTTP rejection;
++полный Python/PostgreSQL/coverage94/Ruff/mypy/resources gate до source commit.
++Не считать fixture доказательством accepted images/SSO/README release.
++
++## Remaining Work
++
++Unknown create/update outcome reconciliation, authoritative ACK comparison,
++terminal states и workflows create/update lifecycle остаются в общем backlog.
++Эта правка не заявляет полный UI/UX audit или release acceptance завершёнными.
+diff --git a/frontend/e2e/agent-drafts.spec.ts b/frontend/e2e/agent-drafts.spec.ts
+new file mode 100644
+index 0000000..6686100
+--- /dev/null
++++ b/frontend/e2e/agent-drafts.spec.ts
+@@ -0,0 +1,123 @@
++import { expect, test, type Page } from '@playwright/test'
++
++if (process.env.WORKFLOW_UI_QA_MUTATIONS !== 'isolated-fixture') {
++  throw new Error('Agent editor QA requires an isolated fixture')
++}
++
++const draftDialog = (page: Page) => page.locator('[data-base-draft-dialog]')
++
++async function openCreate(page: Page) {
++  await page.goto('/agents?namespace_id=1')
++  await page.locator('#agentCreatePanel > summary').click()
++  await page.locator('#newName').fill('Unsaved agent draft')
++}
++
++for (const theme of ['dark', 'gray', 'light']) {
++  test(`Base guards agent draft, cancel and control targets (${theme})`, async ({ page }) => {
++    await page.addInitScript(value => localStorage.setItem('workflow-theme', value), theme)
++    await openCreate(page)
++    const initialUrl = page.url()
++    const input = page.locator('#newName')
++    const form = page.locator('#agentCreatePanel form')
++    const width = page.viewportSize()!.width
++    for (const control of [input, form.locator('button[type="submit"]'), form.getByRole('button', { name: 'Отмена', exact: true })]) {
++      expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(width < 768 ? 44 : 40)
++    }
++    await page.locator('#agentCreatePanel > summary').click()
++    await expect(page.locator('#confirmDialog')).toBeVisible()
++    await page.keyboard.press('Escape')
++    await expect(input).toHaveValue('Unsaved agent draft')
++    await expect(page.locator('#agentCreatePanel')).toHaveAttribute('open', '')
++    if (width < 768) await page.locator('#burgerBtn').click()
++    await page.locator('.sidebar-link:visible[href^="/tasks"]').first().click()
++    await expect(draftDialog(page)).toBeVisible()
++    await page.keyboard.press('Escape')
++    await expect(input).toHaveValue('Unsaved agent draft')
++    expect(page.url()).toBe(initialUrl)
++    if (width < 768) {
++      const drawer = page.locator('[data-base-drawer]')
++      await expect(drawer).toBeVisible()
++      expect(await drawer.evaluate(element => element.contains(document.activeElement))).toBeTruthy()
++      await page.keyboard.press('Escape')
++      await expect(drawer).not.toBeVisible()
++      await expect(page.locator('#burgerBtn')).toBeFocused()
++    }
++    await page.screenshot({ path: test.info().outputPath(`agent-draft-${theme}-${width}.png`), fullPage: true })
++    // Cancel the particular form, not another editor on the same page.
++    await form.getByRole('button', { name: 'Отмена', exact: true }).click()
++    await page.locator('[data-base-confirm-accept]').click()
++    await expect(page.locator('#agentCreatePanel')).not.toHaveAttribute('open', '')
++    await expect(page.locator('#agentCreatePanel > summary')).toBeFocused()
++    await expect(input).toHaveValue('')
++  })
++}
++
++test('pending create protects fields, disclosure and direct duplicate handlers', async ({ page }) => {
++  let writes = 0
++  let release!: () => void
++  const held = new Promise<void>(resolve => { release = resolve })
++  await page.route('**/api/agents', async route => {
++    expect(route.request().method()).toBe('POST')
++    writes++
++    await held
++    await route.fulfill({ status: 422, json: { ok: false, error: 'Fixture validation rejected' } })
++  })
++  await openCreate(page)
++  const form = page.locator('#agentCreatePanel form')
++  try {
++    await form.locator('[type="submit"]').click()
++    await expect(form).toHaveAttribute('aria-busy', 'true')
++    await expect(page.locator('#newName')).toBeDisabled()
++    await expect(form.getByRole('button', { name: 'Отмена', exact: true })).toBeDisabled()
++    await page.locator('#agentCreatePanel > summary').click()
++    await expect(page.locator('#agentCreatePanel')).toHaveAttribute('open', '')
++    await page.evaluate(() => {
++      const ui = window as unknown as { addAgent: (event: { preventDefault: () => void; target: HTMLFormElement }) => Promise<void> }
++      const target = document.querySelector<HTMLFormElement>('#agentCreatePanel form')!
++      const event = { target, preventDefault() {} }
++      void ui.addAgent(event)
++      void ui.addAgent(event)
++    })
++    expect(writes).toBe(1)
++    release()
++    await expect(form).toHaveAttribute('aria-busy', 'false')
++    await expect(page.locator('#newName')).toBeEnabled()
++    await expect(page.locator('#newName')).toHaveValue('Unsaved agent draft')
++    await expect(page.locator('#toast')).toHaveText('Fixture validation rejected')
++    expect(writes).toBe(1)
++  } finally { release() }
++})
++
++test('cancelled update preserves server values and draft; HTTP failure cannot announce success', async ({ page, request }) => {
++  const response = await request.post('/api/agents', { data: { name: `agent-draft-${crypto.randomUUID()}`, description: 'Disposable agent editor fixture' } })
++  expect(response.ok()).toBeTruthy()
++  const id = (await response.json()).agent_id as number
++  try {
++    await page.goto('/agents?namespace_id=1')
++    const entry = page.locator(`.agent-entry[data-id="${id}"]`)
++    await entry.locator('summary').click()
++    const input = entry.locator('[name="name"]')
++    const original = await input.inputValue()
++    await input.fill('Unsaved updated agent')
++    await entry.getByRole('button', { name: 'Отмена', exact: true }).click()
++    await page.keyboard.press('Escape')
++    await expect(input).toHaveValue('Unsaved updated agent')
++    let writes = 0
++    await page.route(`**/api/agents/${id}`, async route => {
++      expect(route.request().method()).toBe('PUT')
++      writes++
++      await route.fulfill({ status: 503, json: { ok: true } })
++    })
++    await entry.locator('[type="submit"]').click()
++    await expect(entry.locator('form')).toHaveAttribute('aria-busy', 'false')
++    await expect(input).toHaveValue('Unsaved updated agent')
++    await expect(entry.locator('.agent-name')).toHaveText(original)
++    await expect(page.locator('#toast')).toHaveClass(/toast-error/)
++    expect(writes).toBe(1)
++    await entry.getByRole('button', { name: 'Отмена', exact: true }).click()
++    await page.locator('[data-base-confirm-accept]').click()
++    await expect(input).toHaveValue(original)
++  } finally {
++    expect((await request.delete(`/api/agents/${id}`)).ok()).toBeTruthy()
++  }
++})
+diff --git a/project_workflow/interfaces/ui/templates/agents.html b/project_workflow/interfaces/ui/templates/agents.html
+index aa48396..1be828f 100644
+--- a/project_workflow/interfaces/ui/templates/agents.html
++++ b/project_workflow/interfaces/ui/templates/agents.html
+@@ -19,14 +19,10 @@
+ .agent-profile,.agent-description{font-size:12px;color:var(--text-secondary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ .agent-profile{font-family:'JetBrains Mono',monospace}
+ .agent-editor{background:var(--surface);border-top:1px solid var(--border);padding:14px 12px}
+-.agent-editor input,.agent-editor .btn{min-height:var(--shell-control-min)}
+ .agent-fields{display:grid;grid-template-columns:minmax(150px,1fr) minmax(150px,1fr) minmax(0,2fr);gap:12px}
+ .agent-field-label{display:block;font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px}
+-.agent-fields textarea{min-height:66px}
+ .agent-editor-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px;flex-wrap:wrap}
+-.agent-delete{margin-right:auto;color:var(--red);border-color:var(--border)}
+-.agent-delete:hover{color:var(--red);border-color:var(--red);background:var(--red-soft)}
+-html[data-theme='dark'] .agent-delete,html[data-theme='dark'] .agent-delete:hover{color:#f87171}
++.agent-delete{margin-right:auto}
+ .agent-create{border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+ .agent-create summary{padding:12px 8px;cursor:pointer;color:var(--accent-readable);font-size:13px;font-weight:600;list-style:none}
+ .agent-create summary::-webkit-details-marker{display:none}
+@@ -44,7 +40,7 @@ html[data-theme='dark'] .agent-delete,html[data-theme='dark'] .agent-delete:hove
+ @media(max-width:480px){
+   .agent-fields{grid-template-columns:minmax(0,1fr)}
+   .agent-fields .agent-description-field{grid-column:auto}
+-  .agent-editor input,.agent-editor .btn,.agent-create summary{min-height:44px}
++  .agent-create summary{min-height:44px}
+ }
+ {% endblock %}
+ 
+@@ -63,14 +59,14 @@ html[data-theme='dark'] .agent-delete,html[data-theme='dark'] .agent-delete:hove
+         </summary>
+         <form class="agent-editor" onsubmit="saveAgent(event,this)">
+           <div class="agent-fields">
+-            <label><span class="agent-field-label">Имя</span><input type="text" name="name" value="{{ a.name }}" required></label>
+-            <label><span class="agent-field-label">Ключ запуска</span><input type="text" name="launch_profile" value="{{ a.launch_profile or '' }}" pattern="[a-z0-9][a-z0-9_-]*" maxlength="251"></label>
+-            <label class="agent-description-field"><span class="agent-field-label">Описание</span><textarea name="description">{{ a.description or '' }}</textarea></label>
++            <label><span class="agent-field-label">Имя</span>{{ base.input_control('agentName' ~ a.id, 'name', value=a.name, required=true) }}</label>
++            <label><span class="agent-field-label">Ключ запуска</span><input class="base-control" type="text" name="launch_profile" value="{{ a.launch_profile or '' }}" pattern="[a-z0-9][a-z0-9_-]*" maxlength="251"></label>
++            <label class="agent-description-field"><span class="agent-field-label">Описание</span>{{ base.textarea_control('agentDescription' ~ a.id, 'description', value=a.description or '', rows=3) }}</label>
+           </div>
+           <div class="agent-editor-actions">
+-            <button class="btn btn-secondary agent-delete" type="button" onclick="deleteAgent(this)">Удалить</button>
+-            <button class="btn btn-secondary" type="button" onclick="cancelAgent(this)">Отмена</button>
+-            <button class="btn btn-primary" type="submit">Сохранить</button>
++            <button class="base-control base-button base-button-danger agent-delete" type="button" onclick="deleteAgent(this)">Удалить</button>
++            <button class="base-control base-button base-button-secondary" type="button" onclick="cancelAgent(this)">Отмена</button>
++            {{ base.button('Сохранить', type='submit', variant='primary') }}
+           </div>
+         </form>
+       </details>
+@@ -84,11 +80,14 @@ html[data-theme='dark'] .agent-delete,html[data-theme='dark'] .agent-delete:hove
+       <summary>+ Добавить агента</summary>
+       <form class="agent-editor" onsubmit="addAgent(event)">
+         <div class="agent-fields">
+-          <label><span class="agent-field-label">Имя</span><input type="text" id="newName" required></label>
+-          <label><span class="agent-field-label">Ключ запуска</span><input type="text" id="newLaunchProfile" pattern="[a-z0-9][a-z0-9_-]*" maxlength="251"></label>
+-          <label class="agent-description-field"><span class="agent-field-label">Описание</span><textarea id="newDescription"></textarea></label>
++          <label><span class="agent-field-label">Имя</span>{{ base.input_control('newName', 'name', required=true) }}</label>
++          <label><span class="agent-field-label">Ключ запуска</span><input class="base-control" type="text" id="newLaunchProfile" name="launch_profile" pattern="[a-z0-9][a-z0-9_-]*" maxlength="251"></label>
++          <label class="agent-description-field"><span class="agent-field-label">Описание</span>{{ base.textarea_control('newDescription', 'description', rows=3) }}</label>
++        </div>
++        <div class="agent-editor-actions">
++          <button class="base-control base-button base-button-secondary" type="button" onclick="cancelAgent(this)">Отмена</button>
++          {{ base.button('Добавить', type='submit', variant='primary') }}
+         </div>
+-        <div class="agent-editor-actions"><button class="btn btn-primary" type="submit">Добавить</button></div>
+       </form>
+     </details>
+   </section>
+@@ -96,30 +95,63 @@ html[data-theme='dark'] .agent-delete,html[data-theme='dark'] .agent-delete:hove
+ {% endblock %}
+ 
+ {% block extra_script %}
+-function cancelAgent(button){
+-  var entry=button.closest('.agent-entry');
+-  entry.querySelector('form').reset();
++var agentDraftBaselines=new WeakMap();
++var agentPendingForms=new Set();
++var agentDisabledControls=new WeakMap();
++function agentDraftSnapshot(form){
++  return JSON.stringify(Array.from(form.querySelectorAll('input,textarea')).map(function(field){ return field.value; }));
++}
++function agentFormDirty(form){ return agentDraftSnapshot(form)!==agentDraftBaselines.get(form); }
++function setAgentPending(form,pending){
++  if(pending){
++    agentPendingForms.add(form);
++    agentDisabledControls.set(form,Array.from(form.querySelectorAll('input,textarea,button')).map(function(control){
++      var state={control:control,disabled:control.disabled};
++      control.disabled=true;
++      return state;
++    }));
++  }else{
++    agentPendingForms.delete(form);
++    (agentDisabledControls.get(form)||[]).forEach(function(state){ state.control.disabled=state.disabled; });
++    agentDisabledControls.delete(form);
++  }
++  form.setAttribute('aria-busy',String(pending));
++  refreshWorkflowDraftGuard();
++}
++async function cancelAgent(button){
++  var entry=button.closest('.agent-entry,.agent-create');
++  var form=entry.querySelector('form');
++  if(agentPendingForms.size)return;
++  if(agentFormDirty(form)&&!await requestConfirmation({
++    title:'Отменить изменения агента?',message:'Несохранённые значения этой формы будут потеряны.',
++    confirmLabel:'Отменить изменения',returnFocus:button,fallbackFocus:entry.querySelector('summary'),
++    onConfirm:function(){},
++  }))return;
++  form.reset();
++  agentDraftBaselines.set(form,agentDraftSnapshot(form));
+   entry.open=false;
+   entry.querySelector('summary').focus();
++  refreshWorkflowDraftGuard();
+ }
+ async function saveAgent(event,form){
+   event.preventDefault();
++  if(agentPendingForms.has(form))return;
+   var entry=form.closest('.agent-entry');
+   var name=form.elements.namedItem('name').value.trim();
+   var launchProfile=form.elements.namedItem('launch_profile').value.trim();
+   var description=form.elements.namedItem('description').value.trim();
+   if(!name){showToast('Имя агента обязательно','error');return;}
+-  var button=form.querySelector('[type="submit"]');
+-  button.disabled=true;
++  setAgentPending(form,true);
+   try{
+     var response=await fetch('/api/agents/'+entry.dataset.id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,description:description,launch_profile:launchProfile||null})});
+     var data=await response.json();
+-    if(!data.ok){showToast(data.error||'Ошибка','error');return;}
++    if(!response.ok||!data.ok){showToast(data.error||'Ошибка','error');return;}
+     [['name',name],['launch_profile',launchProfile],['description',description]].forEach(function(item){
+       var field=form.elements.namedItem(item[0]);
+       field.value=item[1];
+       field.defaultValue=item[1];
+     });
++    agentDraftBaselines.set(form,agentDraftSnapshot(form));
+     entry.querySelector('.agent-name').textContent=name;
+     entry.querySelector('.agent-profile').textContent=launchProfile||'Без ключа';
+     entry.querySelector('.agent-description').textContent=description||'Без описания';
+@@ -127,10 +159,11 @@ async function saveAgent(event,form){
+     entry.open=false;
+     entry.querySelector('summary').focus();
+     showToast('Сохранено','success');
+-  }catch(error){showRequestError(error)}finally{button.disabled=false}
++  }catch(error){showRequestError(error)}finally{setAgentPending(form,false)}
+ }
+ async function deleteAgent(button){
+   var entry=button.closest('.agent-entry');
++  if(agentPendingForms.size)return;
+   var name=entry.querySelector('.agent-name').textContent.trim();
+   if(await requestWorkflowDeletion({
+     url:'/api/agents/'+entry.dataset.id,title:'Удалить агента «'+name+'»?',
+@@ -143,6 +176,7 @@ async function deleteAgent(button){
+       ||(previous&&previous.matches('.agent-entry')&&previous.querySelector('summary'))
+       ||document.querySelector('#agentCreatePanel summary');
+     entry.remove();
++    refreshWorkflowDraftGuard();
+     var count=document.querySelectorAll('.agent-entry').length;
+     document.getElementById('agentCount').textContent=count;
+     document.getElementById('agentsEmpty').hidden=count>0;
+@@ -152,16 +186,38 @@ async function deleteAgent(button){
+ }
+ async function addAgent(event){
+   event.preventDefault();
++  var form=event.target;
++  if(agentPendingForms.has(form))return;
+   var name=document.getElementById('newName').value.trim();
+   var description=document.getElementById('newDescription').value.trim();
+   var launchProfile=document.getElementById('newLaunchProfile').value.trim();
+   if(!name){showToast('Имя агента обязательно','error');return;}
+-  var button=event.target.querySelector('[type="submit"]');
+-  button.disabled=true;
++  var added=false;
++  setAgentPending(form,true);
+   try{
+     var response=await fetch('/api/agents',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,description:description,launch_profile:launchProfile||null})});
+     var data=await response.json();
+-    if(data.ok){showToast('Добавлено','success');location.reload()}else showToast(data.error||'Ошибка','error');
+-  }catch(error){showRequestError(error)}finally{button.disabled=false}
++    if(response.ok&&data.ok){
++      form.reset();
++      agentDraftBaselines.set(form,agentDraftSnapshot(form));
++      added=true;
++      showToast('Добавлено','success');
++    }else showToast(data.error||'Ошибка','error');
++  }catch(error){showRequestError(error)}finally{setAgentPending(form,false)}
++  if(added)return navigateWorkflow(window.location.href);
+ }
++document.querySelectorAll('.agent-editor').forEach(function(form){
++  agentDraftBaselines.set(form,agentDraftSnapshot(form));
++  form.addEventListener('input',refreshWorkflowDraftGuard);
++  var entry=form.closest('.agent-entry,.agent-create');
++  entry.querySelector('summary').addEventListener('click',function(event){
++    if(!entry.open)return;
++    if(agentPendingForms.size){event.preventDefault();return;}
++    if(agentFormDirty(form)){event.preventDefault();cancelAgent(event.currentTarget);}
++  });
++});
++registerWorkflowDraftGuard({
++  isDirty:function(){ return Array.from(document.querySelectorAll('.agent-editor')).some(agentFormDirty); },
++  isPending:function(){ return agentPendingForms.size>0; },
++});
+ {% endblock %}
+diff --git a/tests/test_ui.py b/tests/test_ui.py
+index 0fa6516..704f841 100644
+--- a/tests/test_ui.py
++++ b/tests/test_ui.py
+@@ -2803,13 +2803,16 @@ class TestAgentsPage:
+         for path, rule in (
+             ("/namespaces", 'href="/static/base-ui/base-ui.css"'),
+             ("/workflows", ".workflow-panel input,.workflow-panel .btn{min-height:var(--shell-control-min)}"),
+-            ("/agents", ".agent-editor input,.agent-editor .btn{min-height:var(--shell-control-min)}"),
++            ("/agents", 'href="/static/base-ui/base-ui.css"'),
+         ):
+             response = client.get(path)
+             assert response.status_code == 200
+             assert rule in response.text
+             if path == "/agents":
+-                assert "html[data-theme='dark'] .agent-delete" in response.text
++                assert 'class="base-control"' in response.text
++                assert 'class="base-control base-button base-button-danger agent-delete"' in response.text
++                assert ".agent-editor input,.agent-editor .btn" not in response.text
++                assert "html[data-theme='dark'] .agent-delete" not in response.text
+ 
+     def test_agents_page_shows_name_and_description_without_sort_field(self):
+         response = client.get("/agents")
+@@ -2848,7 +2851,12 @@ class TestAgentsPage:
+         assert 'function cancelAgent(button)' in response.text
+         assert response.text.count("entry.querySelector('summary').focus()") == 2
+         assert "title:'Удалить агента «'+name+'»?'" in response.text
+-        assert ".agent-editor input,.agent-editor .btn,.agent-create summary{min-height:44px}" in response.text
++        assert ".agent-create summary{min-height:44px}" in response.text
++        assert ".agent-editor input,.agent-editor .btn" not in response.text
++        assert 'class="base-control base-button base-button-secondary"' in response.text
++        assert "registerWorkflowDraftGuard({" in response.text
++        assert "if(agentPendingForms.has(form))return;" in response.text
++        assert "if(!response.ok||!data.ok)" in response.text
+ 
+     def test_agents_api_create_and_update_description(self):
+         create = client.post(

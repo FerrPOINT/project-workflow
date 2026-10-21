@@ -1,0 +1,261 @@
+"""Tracker104 source receipts remain metadata, never Developer execution authority."""
+
+import copy
+import json
+
+import pytest
+from pydantic import ValidationError
+from sqlalchemy import select
+
+from project_workflow.application import bug_work as app_work
+from project_workflow.application.bug_work import BugWorkService
+from project_workflow.domain.bug_work import BugWorkStep, BugWorkStop, checked_grant
+from project_workflow.domain.bug_work_origin import BugWorkOriginReadback
+from project_workflow.domain.exceptions import ConflictError
+from project_workflow.domain.runtime_assignment import canonical_json, payload_sha256
+from project_workflow.infrastructure import bug_work_authority as authority
+from project_workflow.infrastructure.db import models as m
+from project_workflow.infrastructure.db.uow import SAUnitOfWork
+from project_workflow.infrastructure.namespace_auth import NamespaceAuthError
+from tests.test_bug_target_source import identity
+from tests.test_bug_work import bind_command, owner_state, uid
+from tests.test_bug_work import source as source
+
+
+def with_origin(observed, *, qa=False, provenance=False):
+    assignment = observed["assignment"]
+    context = {
+        "contract_version": 1,
+        "project": {"tracker_instance_id": assignment["tracker_instance_id"], "project_id": assignment["project_id"]},
+        "mode": "qa" if qa else "source_only",
+        "targets": [
+            {
+                "repository_ref": "catalog:portal",
+                "commit_sha": "a" * 40,
+                "target_ref": "qa:portal" if qa else None,
+                "deployment_ref": "ci:original-a" if qa else None,
+            },
+            {
+                "repository_ref": "catalog:billing",
+                "commit_sha": "b" * 64,
+                "target_ref": "qa:billing" if qa else None,
+                "deployment_ref": "ci:original-b" if qa else None,
+            },
+        ],
+        "scope": ["src/счета/**", "tests/**"],
+        "excluded_paths": ["dist/**"],
+    }
+    if provenance:
+        for target in context["targets"]:
+            target["source"] = identity(
+                assignment["project_id"], assignment["tracker_instance_uuid"], target["commit_sha"]
+            )
+            if qa:
+                target["source"]["observed_head_sha"] = "e" * len(target["commit_sha"])
+    origin = {
+        "contract_version": 1,
+        "execution_id": uid(),
+        "finding_id": uid(),
+        "snapshot_sha256": "c" * 64,
+        "source_context_sha256": payload_sha256(context),
+    }
+    assignment["origin"] = origin
+    observed["assignment_sha256"] = payload_sha256(assignment)
+    return {
+        "contract_version": 1,
+        "assignment_id": assignment["assignment_id"],
+        "assignment_sha256": observed["assignment_sha256"],
+        "origin": copy.deepcopy(origin),
+        "source_context": context,
+    }
+
+
+def require(raw, observed):
+    assignment = checked_grant(observed).assignment
+    parsed = BugWorkOriginReadback.model_validate_json(canonical_json(raw))
+    parsed.require_assignment(
+        assignment_id=assignment.assignment_id,
+        assignment_sha256=observed["assignment_sha256"],
+        origin=assignment.origin,
+        project_id=assignment.project_id,
+        tracker_instance_id=assignment.tracker_instance_id,
+        tracker_instance_uuid=assignment.tracker_instance_uuid,
+    )
+    return parsed
+
+
+def test_old103_omits_optional_origin_and_preserves_original_assignment_hash():
+    observed = owner_state(uid())
+    original = copy.deepcopy(observed)
+    checked = checked_grant(observed)
+    assert checked.assignment.origin is None
+    assert "origin" not in checked.assignment.model_dump(mode="json")
+    assert observed == original and payload_sha256(observed["assignment"]) == observed["assignment_sha256"]
+    observed["assignment"]["origin_ref"] = None
+    observed["assignment_sha256"] = payload_sha256(observed["assignment"])
+    with pytest.raises(ValidationError):
+        checked_grant(observed)
+
+
+@pytest.mark.parametrize("qa", [False, True])
+def test_exact104_multirepo_source_and_qa_refs_preserve_owner_bytes_and_hash(qa):
+    observed = owner_state(uid())
+    raw = with_origin(observed, qa=qa)
+    parsed = require(raw, observed)
+    assert parsed.model_dump(mode="json") == raw
+    assert checked_grant(observed).assignment.origin.model_dump(mode="json") == raw["origin"]
+    assert parsed.source_context.targets[0].commit_sha == "a" * 40
+    assert parsed.source_context.mode == ("qa" if qa else "source_only")
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "project",
+        "instance",
+        "assignment",
+        "assignment_hash",
+        "context_hash",
+        "origin",
+        "missing_nullable",
+        "extra_field",
+        "paths",
+        "too_many",
+        "bool_version",
+    ],
+)
+def test_origin_cannot_change_identity_hash_or_bounded_owner_scope(bad):
+    observed = owner_state(uid())
+    raw = with_origin(observed)
+    if bad == "project":
+        raw["source_context"]["project"]["project_id"] = uid()
+    elif bad == "instance":
+        raw["source_context"]["project"]["tracker_instance_id"] = "foreign"
+    elif bad == "assignment":
+        raw["assignment_id"] = uid()
+    elif bad == "assignment_hash":
+        raw["assignment_sha256"] = "0" * 64
+    elif bad == "context_hash":
+        raw["source_context"]["targets"][0]["commit_sha"] = "d" * 40
+    elif bad == "origin":
+        raw["origin"]["finding_id"] = uid()
+    elif bad == "missing_nullable":
+        del raw["source_context"]["targets"][0]["target_ref"]
+    elif bad == "extra_field":
+        raw["source_context"]["checkout_url"] = "http://untrusted.invalid"
+    elif bad == "paths":
+        raw["source_context"]["scope"] = ["../secrets"]
+    elif bad == "too_many":
+        raw["source_context"]["targets"] *= 9
+    else:
+        raw["origin"]["contract_version"] = True
+    with pytest.raises((ValidationError, ValueError)):
+        require(raw, observed)
+
+
+def test_104_prepare_retains_exact_origin_but_bound_fixer_remains_disabled_after_revoke(source, monkeypatch):
+    request, principal, observed = source
+    raw = with_origin(observed, qa=True, provenance=True)
+    request = request.model_copy(update={"assignment_sha256": observed["assignment_sha256"]})
+    monkeypatch.setattr(authority, "read_origin", lambda *_: copy.deepcopy(raw))
+    with SAUnitOfWork() as uow:
+        service = BugWorkService(uow)
+        prepared = service.prepare(request, principal)
+        row = service._row(request.assignment_id, request.tracker_instance_uuid)
+        assert json.loads(row.payload)["bug_work"]["source_origin"] == raw
+    assert prepared["can_execute"] is False
+    assert prepared["blocked_reasons"] == [app_work.RUNTIME_UNAVAILABLE]
+    command = bind_command()
+    with SAUnitOfWork() as uow:
+        service = BugWorkService(uow)
+        bound = service.bind(request.assignment_id, request.tracker_instance_uuid, command, principal)
+        token = "Bearer " + authority.scope_token(
+            service.claims(service._row(request.assignment_id, request.tracker_instance_uuid))
+        )
+    assert bound["can_execute"] is False and bound["binding"] == command.model_dump(mode="json")
+    with pytest.raises(ConflictError, match=app_work.RUNTIME_UNAVAILABLE):
+        with SAUnitOfWork() as uow:
+            BugWorkService(uow).step(
+                request.assignment_id,
+                request.tracker_instance_uuid,
+                BugWorkStep(
+                    operation_key="step:104",
+                    expected_assignment_revision=1,
+                    expected_fence=1,
+                    expected_phase_code=bound["current_phase_code"],
+                    expected_status="active",
+                    report="No filesystem effects",
+                ),
+                token,
+            )
+
+    def revoked(*_):
+        raise NamespaceAuthError(503)
+
+    monkeypatch.setattr(authority, "read_grant", revoked)
+    monkeypatch.setattr(authority, "read_origin", revoked)
+    with SAUnitOfWork() as uow:
+        service = BugWorkService(uow)
+        assert service.read(request.assignment_id, request.tracker_instance_uuid, principal)["can_execute"] is False
+        assert service.history(request.assignment_id, request.tracker_instance_uuid, token)["records"] == []
+        stopped = service.stop(
+            request.assignment_id,
+            request.tracker_instance_uuid,
+            BugWorkStop(
+                operation_key="stop:104",
+                expected_assignment_revision=1,
+                expected_fence=1,
+            ),
+            principal,
+        )
+        assert stopped["runtime_terminal_confirmed"] is False and stopped["bug_resolved"] is False
+
+
+def test_104_unavailable_origin_never_creates_metadata_cursor(source, monkeypatch):
+    request, principal, observed = source
+    with_origin(observed)
+    request = request.model_copy(update={"assignment_sha256": observed["assignment_sha256"]})
+
+    def unavailable(*_):
+        raise NamespaceAuthError(503)
+
+    monkeypatch.setattr(authority, "read_origin", unavailable)
+    with pytest.raises(NamespaceAuthError):
+        with SAUnitOfWork() as uow:
+            BugWorkService(uow).prepare(request, principal)
+    with SAUnitOfWork() as uow:
+        assert (
+            uow.session.scalar(
+                select(m.TaskRuntimeAssignment.id).where(
+                    m.TaskRuntimeAssignment.bug_work_assignment_id == request.assignment_id,
+                )
+            )
+            is None
+        )
+
+
+def test_old104_origin_without_repo_identity_stays_readable_and_cannot_guess_checkout(source, monkeypatch):
+    request, principal, observed = source
+    raw = with_origin(observed)
+    request = request.model_copy(update={"assignment_sha256": observed["assignment_sha256"]})
+    monkeypatch.setattr(authority, "read_origin", lambda *_: copy.deepcopy(raw))
+    with SAUnitOfWork() as uow:
+        prepared = BugWorkService(uow).prepare(request, principal)
+    assert prepared["can_execute"] is False
+    assert prepared["blocked_reasons"] == [app_work.SOURCE_IDENTITY_UNAVAILABLE]
+
+
+@pytest.mark.parametrize("bad", ["registry", "project"])
+def test_typed_repo_origin_must_match_assignment_even_with_consistent_rehashed_owner_body(bad):
+    observed = owner_state(uid())
+    raw = with_origin(observed, qa=True, provenance=True)
+    raw["source_context"]["targets"][0]["source"]["project"][
+        "tracker_instance_id" if bad == "registry" else "project_id"
+    ] = uid()
+    updated = {**raw["origin"], "source_context_sha256": payload_sha256(raw["source_context"])}
+    observed["assignment"]["origin"] = updated
+    observed["assignment_sha256"] = payload_sha256(observed["assignment"])
+    raw["origin"] = copy.deepcopy(updated)
+    raw["assignment_sha256"] = observed["assignment_sha256"]
+    with pytest.raises((ValidationError, ValueError)):
+        require(raw, observed)

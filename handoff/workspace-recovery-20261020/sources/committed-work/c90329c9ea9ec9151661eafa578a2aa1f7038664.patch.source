@@ -1,0 +1,96 @@
+diff --git a/LIVE_TEST_PLAN.md b/LIVE_TEST_PLAN.md
+index c27b637..d656789 100644
+--- a/LIVE_TEST_PLAN.md
++++ b/LIVE_TEST_PLAN.md
+@@ -52,8 +52,8 @@ pwsh -File services-base/deploy/start-workspace.ps1
+ 
+ Версионируемый `services-base/deploy/project-workflow.local.override.yml`
+ подключает API к сети `sdlc-ux_platform` и задаёт
+-`AUTH_INTERNAL_BASE_URL=http://auth:7701`. Перед browser E2E проверить
+-`http://auth:7701/health` из контейнера API; публичный `AUTH_ISSUER` остаётся
++`AUTH_INTERNAL_BASE_URL=http://auth-backend:7701`. Перед browser E2E проверить
++`http://auth-backend:7701/health` из контейнера API; публичный `AUTH_ISSUER` остаётся
+ `http://localhost:7701`. Для отдельного Compose с Auth на хосте
+ `host.docker.internal:7701` допустим только после такого же preflight из
+ контейнера: если адрес недоступен, callback завершится `503` и этот режим
+@@ -62,7 +62,7 @@ pwsh -File services-base/deploy/start-workspace.ps1
+ Из корня workspace preflight для общего стенда:
+ 
+ ```powershell
+-docker compose --env-file .local/local.env --project-directory project-workflow -p project-workflow-local -f project-workflow/docker-compose.yml -f services-base/deploy/project-workflow.local.override.yml exec -T api python -c "import urllib.request; urllib.request.urlopen('http://auth:7701/health', timeout=3)"
++docker compose --env-file .local/local.env --project-directory project-workflow -p project-workflow-local -f project-workflow/docker-compose.yml -f services-base/deploy/project-workflow.local.override.yml exec -T backend python -c "import urllib.request; urllib.request.urlopen('http://auth-backend:7701/health', timeout=3)"
+ ```
+ 
+ E2E evidence обязано подтвердить: anonymous `/` редиректит на `/login`, login
+diff --git a/README.md b/README.md
+index de0276a..910bd43 100644
+--- a/README.md
++++ b/README.md
+@@ -142,7 +142,7 @@ Runtime-источник данных — **PostgreSQL**. SQLite использ
+ 
+ | Режим | Когда использовать | Настройки | Поведение |
+ |---|---|---|---|
+-| Standalone без авторизации | Локальная разработка, loopback/VPN, один репозиторий | Не задавать `AUTH_*` | `docker compose up --build -d --wait` запускает db, migrate и api; UI/API открыты без входа. |
++| Standalone без авторизации | Локальная разработка, loopback/VPN, один репозиторий | Не задавать `AUTH_*` | `docker compose up --build -d --wait` запускает db, migrate и backend; UI/API открыты без входа. |
+ | Central Auth SSO | Общий private-контур и несколько пользователей | `AUTH_ISSUER`, `AUTH_INTERNAL_BASE_URL`, `AUTH_PUBLIC_ORIGIN`, `AUTH_SESSION_SECRET` | UI и human API требуют Central Auth через Authorization Code + PKCE; при недоступности Auth запросы fail closed с `503`. |
+ | Personal-token CLI | CLI запускается вне БД сервиса | `SDLC_API_TOKEN`, `PROJECT_WORKFLOW_URL`, отдельно установленный `sdlc-cli-core` | Central Auth интроспектирует token и scopes `project-workflow:read/write`; token не хранится приложением. |
+ 
+@@ -172,7 +172,7 @@ review.
+ 
+ ```dotenv
+ AUTH_ISSUER=http://localhost:7701
+-AUTH_INTERNAL_BASE_URL=http://auth:7701
++AUTH_INTERNAL_BASE_URL=http://auth-backend:7701
+ AUTH_PUBLIC_ORIGIN=http://localhost:8812
+ AUTH_SESSION_SECRET=[CHANGE_ME_AT_LEAST_32_CHARACTERS]
+ AUTH_COOKIE_SECURE=false
+diff --git a/docker-compose.yml b/docker-compose.yml
+index c254a17..c10bd04 100644
+--- a/docker-compose.yml
++++ b/docker-compose.yml
+@@ -26,7 +26,7 @@ services:
+       db:
+         condition: service_healthy
+ 
+-  api:
++  backend:
+     build:
+       context: .
+     ports:
+diff --git a/docs/database-reset.md b/docs/database-reset.md
+index 1618d22..efdf84c 100644
+--- a/docs/database-reset.md
++++ b/docs/database-reset.md
+@@ -31,12 +31,12 @@ baseline migration `0001_initial`.
+ Для стандартного Compose-окружения:
+ 
+ ```bash
+-docker compose stop api
++docker compose stop backend
+ docker compose exec -T db psql \
+   -U project_workflow -d project_workflow -v ON_ERROR_STOP=1 \
+   -c 'DROP SCHEMA IF EXISTS project_workflow CASCADE;'
+ docker compose run --rm migrate
+-docker compose up -d --wait api
++docker compose up -d --wait backend
+ ```
+ 
+ Для внешнего PostgreSQL выполните эквивалентный `DROP SCHEMA` только после
+diff --git a/docs/plans/2026-10-04-compose-service-names.md b/docs/plans/2026-10-04-compose-service-names.md
+new file mode 100644
+index 0000000..ecd4728
+--- /dev/null
++++ b/docs/plans/2026-10-04-compose-service-names.md
+@@ -0,0 +1,12 @@
++# Унификация Compose-процессов
++
++Серверный сервис самостоятельного Compose — `backend`; имя продукта задаёт
++project. Полный workspace использует `<product>-backend` и `<product>-web`.
++API-маршруты, имена крейтов, БД, volumes и публичные порты сохраняются.
++Правила и безопасная процедура для действующих snapshots принадлежат Base:
++`services-base/deploy/LOCAL_GROUPS.md`. Принятые runtime images не пересобираются.
++
++Изменения: имя standalone сервиса, связанные команды и внутренние HTTP адреса;
++для Admin — upstream Nginx и DNS-алиас самостоятельного backend.
++Проверки: Compose config, зависимости и gate документации; полный runtime
++workspace проверяется через Base после адресного переименования.
