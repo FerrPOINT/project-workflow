@@ -8,6 +8,11 @@
 <div class="page-frame"><div class="{% if mode == 'reading' %}page-readable{% elif mode == 'detail-with-aside' %}page-detail{% else %}page-wide{% endif %}" data-page-layout="{{ mode }}">{{ caller() }}</div></div>
 {%- endmacro %}
 
+{% macro detail_page(title=none, context=none, actions=none, heading=none, aside=none, aside_label='Контекст') -%}
+{% set detail_content = caller() %}
+<section class="base-page-stack">{{ page_header(title=title, context=context, actions=actions, heading=heading) }}{% if aside %}<div class="page-split"><div class="base-detail-main">{{ detail_content }}</div><aside class="base-detail-aside" aria-label="{{ aside_label }}">{{ aside }}</aside></div>{% else %}<div class="base-detail-main">{{ detail_content }}</div>{% endif %}</section>
+{%- endmacro %}
+
 {% macro sidebar() -%}
 <aside class="sidebar base-shell-sidebar" id="sidebar">{{ caller() }}</aside>
 {%- endmacro %}
@@ -22,6 +27,21 @@
 
 {% macro navigation_drawer(title) -%}
 <dialog id="base-mobile-navigation" class="base-shell-drawer" data-base-drawer aria-labelledby="base-drawer-title"><div class="base-shell-drawer-title"><h2 id="base-drawer-title">{{ title }}</h2><button type="button" class="base-control base-icon-control base-drawer-close" data-base-drawer-close aria-label="Закрыть навигацию" title="Закрыть навигацию">&times;</button></div><div class="base-shell-navigation-scroll">{{ caller() }}</div></dialog>
+{%- endmacro %}
+
+{% macro app_shell(title, navigation, leading=none, services=none, context=none, actions=none, layout='wide') -%}
+{% set page_content = caller() %}
+<div class="base-ssr-app">
+<aside class="sidebar base-shell-sidebar" id="sidebar" data-base-desktop-navigation data-base-dialog-background><div data-base-navigation-content>{{ navigation }}</div></aside>
+{% call navigation_drawer(title) %}<div data-base-navigation-context-slot></div><div data-base-navigation-slot></div>{% endcall %}
+<header class="platform-header" data-base-dialog-background data-platform-header>
+  <div class="platform-header-leading" data-platform-header-slot="leading"><button type="button" class="base-control base-icon-control base-shell-drawer-trigger" data-base-drawer-trigger aria-label="Открыть навигацию" title="Открыть навигацию" aria-controls="base-mobile-navigation" aria-expanded="false">&#9776;</button>{{ leading or '' }}</div>
+  {% if services %}<div class="platform-header-services" data-platform-header-slot="services">{{ services }}</div>{% endif %}
+  {% if context %}<div class="platform-header-context" data-platform-header-slot="context" data-base-context-home><div data-base-responsive-context>{{ context }}</div></div>{% endif %}
+  {% if actions %}<div class="platform-header-actions" data-platform-header-slot="actions">{{ actions }}</div>{% endif %}
+</header>
+<main class="main" tabindex="-1" aria-label="{{ title }}" data-base-dialog-background>{% call frame(layout) %}<div class="base-page-stack">{{ page_content }}</div>{% endcall %}</main>
+</div>
 {%- endmacro %}
 
 {% macro field(id, label, hint=none, error=none, required=false) -%}
