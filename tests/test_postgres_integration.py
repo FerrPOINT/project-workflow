@@ -3740,3 +3740,150 @@ class TestPostgresContinuationCatalogVersioning:
             assert bound["execution_scope"] == scope and bound["mode_key"] == mode_key
             pinned = uow.workflows.get_mode(bound["mode_id"])
             assert pinned.catalog_version == 2 and set(pinned.execution_scopes) == {"delivery", "aggregate"}
+
+
+@pytest.mark.integration
+class TestPostgresPMBootstrap:
+    """Real namespace/task locks; synthetic Fleet HTTP permits, never live authority."""
+
+    @pytest.fixture
+    def bootstrap_pg(self, pg_url, monkeypatch, request):
+        from project_workflow.infrastructure.db.single_task_catalog import ensure_single_task_catalog
+        from tests.test_pm_bootstrap_http import fleet_server
+        from tests.test_pm_bootstrap_retry import prepare_pending
+
+        engine = get_engine(pg_url)
+        assert engine.dialect.name == "postgresql"
+        ensure_migrated(engine)
+        monkeypatch.setattr(config_module, "CATALOG_VARIANT", "single-task-v1")
+        monkeypatch.setenv("PROJECT_WORKFLOW_PM_SCOPE_SECRET", "s" * 40)
+        monkeypatch.setenv("PROJECT_WORKFLOW_PM_READBACK_TOKEN", "p" * 40)
+        config_module.get_settings.cache_clear()
+        with SAUnitOfWork() as uow:
+            assert uow.session.get_bind() is engine
+            ensure_single_task_catalog(uow)
+        with TestClient(create_app()) as client:
+            pending = prepare_pending(client, monkeypatch, getattr(request, "param", "bound"))
+            with fleet_server(pending, monkeypatch) as fleet:
+                yield pending, fleet
+
+    @pytest.mark.parametrize("bootstrap_pg", ["bound", "unbound"], indirect=True)
+    def test_registered_retry_preserves_predecessor_and_fences_late_bind(self, bootstrap_pg):
+        from project_workflow.infrastructure.db import models as m
+        from tests.test_pm_bootstrap_http import PREDECESSOR, RETRY
+        from tests.test_pm_bootstrap_retry import command
+        from tests.test_single_task_runtime import API, PM, PROFILE, WRITER
+
+        pending, fleet = bootstrap_pg
+        request = command(pending)
+        with SAUnitOfWork() as uow:
+            before = uow.tasks.get_assignment_by_operation_key(request.predecessor_operation_key).to_dict()
+        reader = pending["client"].get(PREDECESSOR, params={
+            "task": pending["assignment"]["task"], "assignment_operation_key": request.predecessor_operation_key,
+            "assignment_revision": 1,
+        }, headers=WRITER)
+        assert reader.status_code == 200 and reader.json()["result"] == pending["state"]
+        accepted = pending["client"].post(RETRY, json=request.model_dump(), headers=WRITER)
+        assert accepted.status_code == 200, accepted.text
+        result = accepted.json()["result"]
+        assert result["assignment_revision"] == result["attempt_number"] == 2
+        assert result["binding_state"] == "unbound" and result["status"] == "active"
+        assert "execution_token" not in accepted.json()
+        native = pending["proof"].native
+        fleet["runs"][native.session_run_id]["status"] = "running"
+        late = {**PROFILE, **native.model_dump(include={
+            "task", "execution_ref", "tracker_instance_ref", "tracker_project_ref", "task_ref", "root_ref",
+            "agent_ref", "assignment_operation_key", "assignment_ref", "assignment_revision",
+            "binding_ref", "hermes_run_ref", "session_run_id",
+        }), "operation_key": native.dispatch_operation_key, "expected_version": 0}
+        assert pending["client"].post(PM + "bind", json=late, headers=WRITER).status_code == 409
+        assert pending["client"].post(API + "bind", json=pending["binding"], headers=WRITER).status_code == 409
+        count = len(fleet["paths"])
+        fleet["proofs"].clear()
+        replay = pending["client"].post(RETRY, json=request.model_dump(), headers=WRITER)
+        assert replay.status_code == 200 and len(fleet["paths"]) == count
+        with SAUnitOfWork() as uow:
+            assert uow.tasks.get_assignment_by_operation_key(request.predecessor_operation_key).to_dict() == before
+            assert len(uow.tasks.list_assignments(pending["state"]["task_id"])) == 2
+            assert list(uow.session.scalars(select(m.PMExecution))) == []
+            assert list(uow.session.scalars(select(m.PMRun))) == []
+            assert uow.step_history.list(task_id=pending["state"]["task_id"]) == []
+
+    def test_concurrent_successors_have_one_locked_publication(self, bootstrap_pg):
+        from project_workflow.domain.runtime_assignment import payload_sha256
+        from tests.test_pm_bootstrap_http import RETRY
+        from tests.test_pm_bootstrap_retry import command
+        from tests.test_single_task_pm_terminal import CURRENT_RUN
+        from tests.test_single_task_runtime import WRITER
+
+        pending, fleet = bootstrap_pg
+        second = pending["proof"].model_copy(update={"bootstrap_attempt_ref": CURRENT_RUN})
+        fleet["proofs"][CURRENT_RUN] = second.model_dump(mode="json")
+        requests = [command(pending), command(
+            pending, operation_key="pm-bootstrap:competitor", bootstrap_attempt_ref=CURRENT_RUN,
+            proof_sha256=payload_sha256(second.model_dump()),
+        )]
+        fleet["barrier"] = Barrier(2)
+
+        def send(request):
+            return pending["client"].post(RETRY, json=request.model_dump(), headers=WRITER)
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(send, requests))
+        assert sorted(result.status_code for result in results) == [200, 409]
+        with SAUnitOfWork() as uow:
+            records = uow.tasks.list_assignments(pending["state"]["task_id"])
+            assert len(records) == 2
+            task = uow.tasks.get_by_id(pending["state"]["task_id"])
+            assert task.assignment_revision == 2 and task.status == "active"
+            winner = next(result.json()["result"] for result in results if result.status_code == 200)
+            assert task.assignment_operation_key == winner["assignment_operation_key"]
+
+    def test_enrollment_during_composite_http_read_prevents_successor(self, bootstrap_pg):
+        from project_workflow.infrastructure.db import models as m
+        from tests.test_pm_bootstrap_http import RETRY
+        from tests.test_pm_bootstrap_retry import command
+        from tests.test_single_task_runtime import PM, PROFILE, WRITER
+
+        pending, fleet = bootstrap_pg
+        fleet["release"].clear()
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(pending["client"].post, RETRY, json=command(pending).model_dump(), headers=WRITER)
+            try:
+                assert fleet["entered"].wait(timeout=5)
+                native = pending["proof"].native
+                fleet["runs"][native.session_run_id]["status"] = "running"
+                body = {**PROFILE, **native.model_dump(include={
+                    "task", "execution_ref", "tracker_instance_ref", "tracker_project_ref", "task_ref", "root_ref",
+                    "agent_ref", "assignment_operation_key", "assignment_ref", "assignment_revision",
+                    "binding_ref", "hermes_run_ref", "session_run_id",
+                }), "operation_key": native.dispatch_operation_key, "expected_version": 0}
+                enrolled = pending["client"].post(PM + "bind", json=body, headers=WRITER)
+                assert enrolled.status_code == 200, enrolled.text
+                fleet["runs"][native.session_run_id]["status"] = native.status
+            finally:
+                fleet["release"].set()
+            rejected = future.result(timeout=15)
+        assert rejected.status_code == 409, rejected.text
+        with SAUnitOfWork() as uow:
+            assert len(uow.tasks.list_assignments(pending["state"]["task_id"])) == 1
+            assert len(list(uow.session.scalars(select(m.PMExecution)))) == 1
+            assert len(list(uow.session.scalars(select(m.PMRun)))) == 1
+
+    def test_predecessor_lock_timeout_is_unknown_not_absent(self, bootstrap_pg):
+        from project_workflow.application.pm_bootstrap import PMBootstrapService
+        from tests.test_pm_bootstrap_http import PREDECESSOR
+        from tests.test_single_task_runtime import WRITER
+
+        pending, fleet = bootstrap_pg
+        query = {"task": pending["assignment"]["task"],
+                 "assignment_operation_key": pending["assignment"]["operation_key"], "assignment_revision": 1}
+        with SAUnitOfWork() as owner:
+            PMBootstrapService(owner)._locked(pending["project"], query["task"], query["assignment_operation_key"])
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                future = pool.submit(pending["client"].get, PREDECESSOR, params=query, headers=WRITER)
+                response = future.result(timeout=8)
+            assert response.status_code == 503 and "result" not in response.json()
+            assert response.headers["Cache-Control"] == "no-store"
+        assert pending["client"].get(PREDECESSOR, params=query, headers=WRITER).status_code == 200
+        assert fleet["paths"] == []

@@ -1,8 +1,9 @@
 # PM bootstrap: reader и внутренний successor
 
 Продолжение source-only boundary `fe8aa0fc6ab22b83e04e4e75e6163f69be554277`.
-Ни один новый route пока не зарегистрирован. Shared DTO/client, Fleet composite
-producer и Tracker lease-retry интегрирует Main с A/C; этот пакет их не имитирует.
+GET predecessor и POST retry зарегистрированы в существующем Workflow app.
+Fleet composite producer/route и Tracker lease-retry интегрирует Main с A/C;
+этот пакет не имитирует их actual runtime authority.
 
 ## Узкая граница
 
@@ -23,13 +24,14 @@ canonical key/revision; обычные runtime bind/step используют lo
 Новый PM bind всё ещё обязан получить actual `running` proof. Старый запоздавший
 bind отвергается как stale даже при предоставленном running observation.
 
-## Предлагаемый GET
+## Зарегистрированный GET
 
-Main registration на существующем FastAPI app:
+Registration в существующем FastAPI app:
 
 ```python
 from project_workflow.interfaces.ui.routes import pm_bootstrap_api
 app.get("/internal/runtime/pm-bootstrap/predecessor", response_model=None)(pm_bootstrap_api.predecessor)
+app.post("/internal/runtime/pm-bootstrap/retry", response_model=None)(pm_bootstrap_api.retry)
 ```
 
 Query: `task`, `assignment_operation_key`, `assignment_revision`. Только existing
@@ -57,16 +59,37 @@ PMExecution (для task И canonical execution), step rows и phase events. Н�
 lock/statement budgets 3s/10s ограничивают ожидание; ошибка даёт unknown/rollback.
 Snapshot не гарантирует будущее отсутствие enrollment после отпускания lock.
 
+Flat reader contract для A/C: `assignment_operation_key`/`assignment_revision` —
+CURRENT local sink, `canonical_assignment_operation_key`/`canonical_assignment_revision` —
+retained canonical root. `bind_request_sha256` — stored SHA256 или NULL,
+`binding` — original bind request или NULL; это НЕ envelope `{request,sha256}`.
+`initial_phase_id` — actual first mode phase ID или NULL при отсутствии phase,
+`current_phase_id` — actual task cursor. `initial_phase=false` не даёт retry permit.
+
 ## Внутренний producer
 
 ```python
 PMBootstrapService(uow).retry(project_id, task, request, read_current)
 ```
 
-`BootstrapRetry` — application-internal, не shared HTTP DTO. Поля:
+`POST /internal/runtime/pm-bootstrap/retry` принимает closed `BootstrapRetry`. Поля:
 `predecessor_operation_key`, `predecessor_sha256`, новый `operation_key`,
 `bootstrap_attempt_ref`, `proof_sha256`. Нет caller `no_step`, status override,
 skip-running или request-supplied URL/credential.
+Namespace/task разрешаются из stored predecessor через существующую PM assignment
+credential; caller не выбирает другой task/project. Ответ — standard assignment
+result, без execution token. Ошибки/успех no-store; readback failure даёт 503 без
+публикации successor. Exact replay не делает новый proof/native HTTP request.
+
+Зарегистрированный POST использует `pm_readback.bootstrap_proof`. Origin и token
+берутся из существующих `PROJECT_WORKFLOW_PM_READBACK_URL/TOKEN`. Fixed GET:
+`/internal/runtime/v1/pm/bootstrap-retries/{bootstrap_attempt_ref}/workflow-proof`.
+Ответ — RAW `BootstrapProof`, не `{ok,result}`. Это frozen permit из durable Fleet
+attempt ПОСЛЕ Tracker retry ACK плюс fresh current lease/owner validation на Fleet.
+Configured proxy environment отключён, redirects запрещены, transport budgets 3s/10s.
+Новых credentials/URLs/settings нет. Pre-renew witness route
+`/internal/runtime/v1/pm/runs/{old}/bootstrap-retry?barrier_id&next_session_run_id`
+остаётся отдельным C contract: его expired witness не принимается как post-renew permit.
 
 `read_current(request) -> BootstrapProof` — доверенный интеграционный callback,
 НЕ обработчик переданного клиентом proof JSON. Он должен читать существующий
@@ -103,8 +126,8 @@ transaction rollback и protected reader/no-proof-on-timeout. Actual TestClient
 confirmation/resume/rebind -> terminal receipt/readback проверяется для обоих
 Present/Absent predecessor. Receipt сохраняет local bind/result и canonical
 `binding.pm.identity` раздельно; `single_task_terminal` не требует подмены key.
-Это не PostgreSQL concurrency qualification и не live retry acceptance. Новые
-routes/DTO/producer wiring требуют интеграции Main до публикации coherent пакета.
+Это не PostgreSQL concurrency qualification и не live retry acceptance.
+Fleet/Tracker producer wiring требует интеграции Main до coherent live acceptance.
 
 Предыдущий run commit `2b8900b` (17 PASS) НЕ доказывал canonical-key compatibility:
 positive fixture ошибочно подменяла native/PM key на local child. Этот результат
@@ -121,3 +144,29 @@ positive fixture ошибочно подменяла native/PM key на local ch
 Scoped mypy трёх source files, Ruff четырёх Python files и `git diff --check` PASS.
 Единственный warning — existing Starlette/AnyIO deprecation. Никаких Docker,
 PostgreSQL, model/live calls, builds, installs или push не выполнялось.
+
+## Registered transport follow-up
+
+Source baseline: `e2abddf4d1833a6758032621110d978a955b1e51`; canonical/unbound fix:
+`12679d91c6731b5fd1f5fd4e3fd959d80ac36097`. Fresh remote master `c24c252` добавил
+только recovery handoff; production bytes baseline не менялись.
+
+После registrations/adapter: **47 host PASS / 125.05s** без skips — 33 bootstrap,
+12 HTTP transport и 2 retained native-readback/OpenAPI tests. Scoped mypy 4 source
+files, Ruff 7 Python files, diff-check PASS. Loopback HTTP — synthetic Fleet,
+не real runtime/model calls. Полный quality gate/coverage/PG/live не запускались.
+
+**5 PG cases authored, collected / UNRUN** в существующем PG fixture
+`tests/test_postgres_integration.py::TestPostgresPMBootstrap`:
+
+- `test_registered_retry_preserves_predecessor_and_fences_late_bind[bound]`;
+- `test_registered_retry_preserves_predecessor_and_fences_late_bind[unbound]`;
+- `test_concurrent_successors_have_one_locked_publication`;
+- `test_enrollment_during_composite_http_read_prevents_successor`;
+- `test_predecessor_lock_timeout_is_unknown_not_absent`.
+
+Будущий PG запуск — только в own isolated Compose/helper v2 с explicit test DB
+environment; не against installed runtime. Fixtures проверяют real PG locks/rows
+через registered endpoints и synthetic configured Fleet HTTP, без LLM/native effects.
+Fleet post-renew proof route обязан сам проверить durable retry ACK/current lease;
+его server-side реализация и Tracker producer не квалифицированы этими host tests.

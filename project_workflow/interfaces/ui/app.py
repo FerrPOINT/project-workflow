@@ -18,7 +18,16 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from ... import __version__
 from ...infrastructure.db.session import DatabaseUnavailable, get_engine, reset_engine
-from .routes import api, cli_api, namespace_ownership_api, pages, pm_api, resource_context, runtime_api
+from .routes import (
+    api,
+    cli_api,
+    namespace_ownership_api,
+    pages,
+    pm_api,
+    pm_bootstrap_api,
+    resource_context,
+    runtime_api,
+)
 from .sso import install_sso
 
 logger = logging.getLogger(__name__)
@@ -286,6 +295,8 @@ def create_app() -> FastAPI:
              response_model_exclude_unset=True)(pm_api.rebind)
     app.post("/internal/runtime/v1/pm/readback", response_model=PMResponse,
              response_model_exclude_unset=True)(pm_api.readback)
+    app.get("/internal/runtime/pm-bootstrap/predecessor", response_model=None)(pm_bootstrap_api.predecessor)
+    app.post("/internal/runtime/pm-bootstrap/retry", response_model=None)(pm_bootstrap_api.retry)
     from project_workflow.domain.namespace_ownership import NamespaceOwnershipResponse
 
     app.put("/api/pm/namespace-ownership/{namespace_id}", response_model=NamespaceOwnershipResponse,

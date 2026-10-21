@@ -1,4 +1,4 @@
-"""Pre-enrollment bootstrap recovery; internal types, not public wire DTOs."""
+"""Pre-enrollment bootstrap recovery; closed retry and trusted callback types."""
 
 from collections.abc import Callable
 from typing import Literal

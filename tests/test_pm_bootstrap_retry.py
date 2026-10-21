@@ -31,6 +31,10 @@ NEXT = "22222222-2222-4222-8222-222222222211"
 
 @pytest.fixture
 def pending(bridge, monkeypatch, request):
+    return prepare_pending(bridge, monkeypatch, getattr(request, "param", "bound"))
+
+
+def prepare_pending(bridge, monkeypatch, binding_state="bound"):
     monkeypatch.setenv("PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON", json.dumps({"project_manager": "w" * 40}))
     monkeypatch.setenv("PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON", json.dumps({"project_manager": "r" * 40}))
     config.get_settings.cache_clear()
@@ -51,7 +55,7 @@ def pending(bridge, monkeypatch, request):
             "attempt_number": 1, "expected_phase_code": assigned.json()["result"]["current_phase_code"],
             "expected_status": "active", "session_run_id": SESSION, "single_task_context_sha256": "0" * 64}
     headers = runtime.RUNNER
-    if getattr(request, "param", "bound") == "bound":
+    if binding_state == "bound":
         bound = bridge.post(API + "bind", json=binding, headers=WRITER)
         assert bound.status_code == 200, bound.text
         step["single_task_context_sha256"] = bound.json()["result"]["single_task_context_sha256"]
