@@ -126,7 +126,7 @@ transaction rollback и protected reader/no-proof-on-timeout. Actual TestClient
 confirmation/resume/rebind -> terminal receipt/readback проверяется для обоих
 Present/Absent predecessor. Receipt сохраняет local bind/result и canonical
 `binding.pm.identity` раздельно; `single_task_terminal` не требует подмены key.
-Это не PostgreSQL concurrency qualification и не live retry acceptance.
+Эти host tests отдельно не являются PostgreSQL concurrency qualification или live retry acceptance.
 Fleet/Tracker producer wiring требует интеграции Main до coherent live acceptance.
 
 Предыдущий run commit `2b8900b` (17 PASS) НЕ доказывал canonical-key compatibility:
@@ -143,7 +143,7 @@ positive fixture ошибочно подменяла native/PM key на local ch
 
 Scoped mypy трёх source files, Ruff четырёх Python files и `git diff --check` PASS.
 Единственный warning — existing Starlette/AnyIO deprecation. Никаких Docker,
-PostgreSQL, model/live calls, builds, installs или push не выполнялось.
+PostgreSQL, model/live calls, builds, installs или push на этом host-этапе не выполнялось.
 
 ## Registered transport follow-up
 
@@ -156,24 +156,59 @@ Source baseline: `e2abddf4d1833a6758032621110d978a955b1e51`; canonical/unbound f
 files, Ruff 7 Python files, diff-check PASS. Loopback HTTP — synthetic Fleet,
 не real runtime/model calls. Полный quality gate/coverage/PG/live не запускались.
 
-**5 PG cases authored, collected / UNRUN** в существующем PG fixture
-`tests/test_postgres_integration.py::TestPostgresPMBootstrap`:
-
-- `test_registered_retry_preserves_predecessor_and_fences_late_bind[bound]`;
-- `test_registered_retry_preserves_predecessor_and_fences_late_bind[unbound]`;
-- `test_concurrent_successors_have_one_locked_publication`;
-- `test_enrollment_during_composite_http_read_prevents_successor`;
-- `test_predecessor_lock_timeout_is_unknown_not_absent`.
-
-Будущий PG запуск — только в own isolated Compose/helper v2 с explicit test DB
-environment; не against installed runtime. Fixtures проверяют real PG locks/rows
-через registered endpoints и synthetic configured Fleet HTTP, без LLM/native effects.
+Первоначальные PG fixtures были authored/collected, но ещё UNRUN на transport-этапе.
+Их последующий actual isolated Compose/helper v2 результат приведён ниже отдельно.
+Fixtures проверяют real PG locks/rows через registered endpoints и synthetic
+configured Fleet HTTP, без installed runtime/LLM/native effects.
 Fleet post-renew proof route обязан сам проверить durable retry ACK/current lease;
 его server-side реализация и Tracker producer не квалифицированы этими host tests.
 
 PG acceptance follow-up (test-only): positive Present/Absent проходят весь normal
 canonicalRoot PM bind/step/readback/typed confirmation/terminal flow через configured
 loopback native HTTP. Concurrent successor теперь параметризован обоими binding
-states: итог **6 PG executions**, не пять. До review runner это authored/collected,
-не PG PASS. Shared host/PG terminal assertion helper + HTTP smoke: 4 host PASS / 37.50s.
+states: итог **6 PG executions**, не пять. Первоначальный authored/collected scope
+впоследствии исполнен отдельным actual PG gate ниже.
+Shared host/PG terminal assertion helper + HTTP smoke: 4 host PASS / 37.50s.
 Отдельный instruction/catalog audit production source `4e82326`: 66 host PASS / 23.12s.
+
+## Actual PostgreSQL acceptance
+
+Qualified immutable source: `a7b805d4efc3d486aef400947a8da38201a46a8f`,
+tree `ebb432a2e5289b7cecb33a485a8ab4b8841ce6d4`. Следующий docs-only commit
+не меняет эти source labels и не объявляется новым выполненным PG run.
+
+2026-10-21: **6 PASS / 0 failures / 0 errors / 0 skipped, 158.877s**, один запуск
+в isolated ComposeHelper v2. Exact collection и JUnit совпали:
+
+| Selector в `TestPostgresPMBootstrap` | Seconds | Result |
+|---|---:|---|
+| `test_registered_retry_preserves_predecessor_and_fences_late_bind[bound]` | 57.985 | PASS |
+| `test_registered_retry_preserves_predecessor_and_fences_late_bind[unbound]` | 59.636 | PASS |
+| `test_concurrent_successors_have_one_locked_publication[bound]` | 8.096 | PASS |
+| `test_concurrent_successors_have_one_locked_publication[unbound]` | 7.314 | PASS |
+| `test_enrollment_during_composite_http_read_prevents_successor` | 10.215 | PASS |
+| `test_predecessor_lock_timeout_is_unknown_not_absent` | 12.031 | PASS |
+
+Файл: `tests/test_postgres_integration.py`. Реальный disposable PostgreSQL,
+registered HTTP endpoints и configured loopback proof/native HTTP; installed
+Fleet/Tracker/model не вызывались. Оба positive paths проходят unchanged
+canonicalRoot PM bind/step/readback/terminal, без подмены на local child identity.
+
+Actual full OpenAPI export: **61 operation IDs / 61 unique**, обе bootstrap
+routes и closed five-field `BootstrapRetry`. Existing consumer exporter дал
+byte-identical committed Git/LF JSON; старые routes/schemas не изменены.
+
+| Artifact | SHA256 |
+|---|---|
+| Terminal result | `fc2318cfb88908e5c92b9d3e91815abcb6429dc20661a0f196717049e04804a1` |
+| JUnit | `e5d83f30f64a6bc2831d32db0376cdb4fd3b368513756cc0b6ac21cef49e507f` |
+| Actual full OpenAPI | `45fd92723d7bafde760079e947730461cbe48d07ff515c69ea4a341fe3f17da0` |
+| Actual/committed consumer OpenAPI | `843880b6347ea343dff69158522b7ec9e603c6adee6694734e5f72d9c235e93d` |
+| Executed runner | `edcd83adcf67f596d8c7db2283e2e1fd2adc9d062a05aef8a00e2f1449e45f34` |
+
+Fresh disk/RAM/route/IPAM admission passed; preparation/download/PG использовали
+явные отдельные `10.246.6/7/8.0/24`, egress удалён до PG/tests. Journal v2 cleaned,
+`cleanup_verified=true`, `input_cleanup_verified=true`; exact-project readback
+подтвердил отсутствие own containers/volumes/networks. Raw source/helpers/logs
+сохранены вне disposable inputs. Результат не включает full repository gate,
+coverage, release/image build, install или live technical-retry acceptance.
