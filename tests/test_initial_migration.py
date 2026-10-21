@@ -473,7 +473,7 @@ def test_sqlite_legacy_archive_guard_loss_at_head_is_not_readiness(tmp_path):
 
 @pytest.mark.parametrize("predecessor", [
     "0004_wide_work_item_revision", "0005_mode_execution_scopes", "0006_versioned_mode_catalog",
-    "0008_pm_execution",
+    "0008_pm_execution", "0014_launch_profile_only", "0015_single_task_assignments",
 ])
 def test_sqlite_supported_additive_upgrade_preserves_legacy_catalog_and_assignment_history(tmp_path, predecessor):
     engine = _sqlite_engine(tmp_path, f"{predecessor}.db")

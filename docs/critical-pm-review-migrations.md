@@ -2,7 +2,7 @@
 
 ## Implemented Source
 
-The single unreleased `0015_single_task_assignments` migration supports subsequent
+The `0015_single_task_assignments` migration supports subsequent
 PM executions for the same Tracker task/concrete agent. Existing namespace locks
 and the actual prior Workflow/native terminal checks remain required. Original
 PM executions, operation replay and history are not rewritten or resumed as new
@@ -37,6 +37,15 @@ with initialization_transaction(get_engine()) as connection:
 
 This is a migration-only example, not an installation command executed against
 the accepted stand. Profile/catalog adoption and pinned images remain separate.
+
+## Переход с 0015 на 0016
+
+`0015_single_task_assignments` — поддерживаемый предшественник новой миграции
+`0016_human_project_commit_guard`. Штатный `ensure_migrated` сохраняет данные
+и допускает этот переход; проверку совместимости схемы не обходят.
+Заполненные сценарии обновления с 0014 и 0015 проверяют неизменность задач,
+назначений и истории, а также повторный запуск. Проверка на копии production
+и совместимый откат учитываются отдельно от этих тестов.
 
 ## Qualification Boundary
 
