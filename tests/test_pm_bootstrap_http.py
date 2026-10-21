@@ -10,6 +10,7 @@ import pytest
 import requests
 
 from project_workflow import config
+from project_workflow.domain.pm_execution import RuntimeObservation
 from project_workflow.infrastructure import pm_readback
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from tests.test_pm_bootstrap_retry import NEXT, command
@@ -45,6 +46,8 @@ def fleet_server(fixture, monkeypatch):
                         value = state["proofs"].get(ref)
                 elif self.path.startswith("/internal/runtime/v1/pm/runs/"):
                     value = state["runs"].get(self.path.rsplit("/", 1)[-1])
+            if isinstance(value, RuntimeObservation):
+                value = value.model_dump(mode="json")
             body = json.dumps(value).encode()
             self.send_response(200 if value is not None else 503)
             self.send_header("Content-Type", "application/json")

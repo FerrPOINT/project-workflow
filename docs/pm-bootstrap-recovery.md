@@ -170,3 +170,10 @@ environment; не against installed runtime. Fixtures проверяют real PG
 через registered endpoints и synthetic configured Fleet HTTP, без LLM/native effects.
 Fleet post-renew proof route обязан сам проверить durable retry ACK/current lease;
 его server-side реализация и Tracker producer не квалифицированы этими host tests.
+
+PG acceptance follow-up (test-only): positive Present/Absent проходят весь normal
+canonicalRoot PM bind/step/readback/typed confirmation/terminal flow через configured
+loopback native HTTP. Concurrent successor теперь параметризован обоими binding
+states: итог **6 PG executions**, не пять. До review runner это authored/collected,
+не PG PASS. Shared host/PG terminal assertion helper + HTTP smoke: 4 host PASS / 37.50s.
+Отдельный instruction/catalog audit production source `4e82326`: 66 host PASS / 23.12s.

@@ -3768,11 +3768,11 @@ class TestPostgresPMBootstrap:
                 yield pending, fleet
 
     @pytest.mark.parametrize("bootstrap_pg", ["bound", "unbound"], indirect=True)
-    def test_registered_retry_preserves_predecessor_and_fences_late_bind(self, bootstrap_pg):
+    def test_registered_retry_preserves_predecessor_and_fences_late_bind(self, bootstrap_pg, supervisor_llm):
         from project_workflow.infrastructure.db import models as m
         from tests.test_pm_bootstrap_http import PREDECESSOR, RETRY
-        from tests.test_pm_bootstrap_retry import command
-        from tests.test_single_task_runtime import API, PM, PROFILE, WRITER
+        from tests.test_pm_bootstrap_retry import NEXT, command, finish_confirmed_retry
+        from tests.test_single_task_runtime import API, PM, PROFILE, RUNNER, WRITER
 
         pending, fleet = bootstrap_pg
         request = command(pending)
@@ -3809,6 +3809,44 @@ class TestPostgresPMBootstrap:
             assert list(uow.session.scalars(select(m.PMRun))) == []
             assert uow.step_history.list(task_id=pending["state"]["task_id"]) == []
 
+        # Normal explicit enrollment/steps after retry: native and PM identity
+        # keep canonicalRoot; only the generic bind/step sink uses the child.
+        binding = {**pending["binding"], "assignment_operation_key": request.operation_key,
+                   "assignment_revision": 2, "attempt_number": 2, "bind_operation_key": "bind:retry",
+                   "binding_ref": "binding:retry", "hermes_run_ref": "run:retry", "session_run_id": NEXT}
+        client = pending["client"]
+        bound = client.post(API + "bind", json=binding, headers=WRITER)
+        assert bound.status_code == 200, bound.text
+        identity = native.model_dump(include={
+            "task", "execution_ref", "tracker_instance_ref", "tracker_project_ref", "task_ref", "root_ref",
+            "agent_ref", "assignment_operation_key", "assignment_ref", "assignment_revision",
+        })
+        assert identity["assignment_operation_key"] == request.predecessor_operation_key
+        pm_command = {**PROFILE, **identity, "operation_key": "pm:retry-bind", "expected_version": 0,
+                      "binding_ref": "binding:retry", "hermes_run_ref": "run:retry", "session_run_id": NEXT}
+        current_native = native.model_copy(update={
+            "status": "running", "binding_ref": "binding:retry", "hermes_run_ref": "run:retry",
+            "session_run_id": NEXT, "dispatch_operation_key": "pm:retry-bind",
+        })
+        fleet["runs"][NEXT] = current_native
+        enrolled = client.post(PM + "bind", json=pm_command, headers=WRITER)
+        assert enrolled.status_code == 200, enrolled.text
+        read = client.post(PM + "readback", json={**PROFILE, **identity}, headers=WRITER)
+        assert read.status_code == 200 and read.json()["result"]["identity"] == identity
+        step = {**pending["step"], "assignment_revision": 2, "attempt_number": 2,
+                "step_operation_key": "step:retry-read", "binding_ref": "binding:retry",
+                "hermes_run_ref": "run:retry", "session_run_id": NEXT,
+                "single_task_context_sha256": enrolled.json()["result"]["single_task_context_sha256"]}
+        headers = {**RUNNER, "X-Workflow-Execution-Token": enrolled.json()["execution_token"]}
+        first = client.post(API + "step", json=step, headers=headers)
+        assert first.status_code == 200 and first.json()["result"]["phase_code"] == "PM-DRAFT-01"
+        finish_confirmed_retry(
+            pending, supervisor_llm, identity, current_native, pm_command, step, headers, fleet["runs"],
+        )
+        with SAUnitOfWork() as uow:
+            assert uow.tasks.get_assignment_by_operation_key(request.predecessor_operation_key).to_dict() == before
+
+    @pytest.mark.parametrize("bootstrap_pg", ["bound", "unbound"], indirect=True)
     def test_concurrent_successors_have_one_locked_publication(self, bootstrap_pg):
         from project_workflow.domain.runtime_assignment import payload_sha256
         from tests.test_pm_bootstrap_http import RETRY

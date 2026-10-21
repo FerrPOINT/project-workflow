@@ -193,9 +193,14 @@ def test_retry_preserves_canonical_identity_and_original_bytes_then_requires_run
 @pytest.mark.parametrize("pending", ["bound", "unbound"], indirect=True)
 def test_canonical_root_survives_local_retry_through_confirmed_terminal_readback(pending, monkeypatch, supervisor_llm):
     identity, native, command, step, headers = enroll_retry(pending, monkeypatch)
-    child_key = "pm-bootstrap:" + NEXT
     observations = {NEXT: native.model_copy(update={"status": "running"})}
     monkeypatch.setattr(pm_readback, "observe_run", lambda run: observations[run])
+    finish_confirmed_retry(pending, supervisor_llm, identity, native, command, step, headers, observations)
+
+
+def finish_confirmed_retry(pending, supervisor_llm, identity, native, command, step, headers, observations):
+    """Shared host/PG assertions; callers choose synthetic native transport, not authority shortcuts."""
+    child_key = "pm-bootstrap:" + NEXT
     client = pending["client"]
     supervisor_llm("PASS")
     for number in range(2):
