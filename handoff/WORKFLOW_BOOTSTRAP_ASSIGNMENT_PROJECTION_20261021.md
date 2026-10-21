@@ -17,11 +17,14 @@ not a mocked PMBootstrapService return.
 
 After correction: all12 tests/test_pm_bootstrap_http.py host cases PASS25.82s;
 full Ruff, mypy142 source files and diff checks PASS. This is the HTTP contract
-matching Fleet's closed Assignment shape; no Rust decoder or new PG execution
-is claimed. The earlier scoped49 proof belongs to the prior byte-equal scope;
+matching Fleet's closed Assignment shape; no Rust decoder execution is claimed.
+The earlier scoped49 proof belongs to the prior byte-equal scope;
 these12 tests qualify the additional projection change separately.
 
-Existing held PG packet must be rebound to this commit before any execution.
-Do not run/relabel the prior634/abd/f33 prepared candidates. Critical-history
-timeout60 is still OPEN and separate. PR140 is already merged; no push into its
-closed branch or unapproved duplicate PR was performed.
+Draft followup PR141 includes actual master657bcaf1 through normal merge7e7b78ce;
+its entire tree equals checked488. Main's one-case PG pilot passed, followed by
+the affected full18 bootstrap6/retained2/health10 gate in138.243s,0skip. Actual
+OpenAPI/PM consumer export parity and both cleanup checks passed. See the
+catalog-scope handoff for exact source/evidence hashes. This is not live proof.
+Critical-history timeout60 stays OPEN; no all3105 claim. Old prepared tuples
+and failures remain immutable; PR140's closed branch was not pushed.

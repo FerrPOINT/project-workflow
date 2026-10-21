@@ -2,7 +2,7 @@
 
 Baseline f33b6e0d73b1e974de2ba4d41d28f0ad8cbb8e1a, atop master f73f2b2.
 No migration, manifest, lock, API signature, Hermes or installed-state change.
-This followup is local source; Main owns PG admission and Build/Apply.
+Published as Draft PR141; Main owns PG admission and Build/Apply.
 
 ## Actual evidence and correction
 
@@ -57,7 +57,23 @@ Private probe files remain in existing workflow-bootstrap-current-pg-qa packet:
 host-f33-observe-count.json SHA778710431d5bbc0e03f897a5269b1f39809ba57ae0fc42bd1188a1343081ba36;
 host-scoped-observe-count.json SHAb7aa70bf48fc8fff538e49e2d6c21d68583ea584f54c6d494853886605732387.
 
-Next Main-controlled PG check: the existing failed retained-unbound exact case
-on this committed source with existing telemetry/timeout120, not a blind full18
-rerun. PostgreSQL advisory-lock execution and real wall-time remain UNRUN for
-this followup; host dialect compilation only verifies the lock expression.
+## Actual PostgreSQL followup
+
+Main executed immutable7e7b78ce3907d5d1a469bb7bce326717e66052d0,
+treeb664be20a5cf6259527c190a260d1341b05379cb (exact checked488 tree).
+Retained-unbound pilot PASS1/0skip: protocol17.337s/CPU11.470s,5683 SELECT;
+last step725 SELECT/1.623s and terminal read187 SELECT/0.596s. Baseline f33
+protocol66.309s/19990 SELECT remains separate, not relabelled as this proof.
+
+Subsequent affected full gate PASS18/0skip in138.243s: bootstrap6 +retained2
++health10, original assertions/timeout120 and real PostgreSQL. Actual OpenAPI
+export checks and PM consumer byte parity passed; v2 cleanup/input cleanup true.
+Evidence workflow-bootstrap-current-pg-qa-20261021/evidence-7e7b78ce-full18-a01;
+result SHA256 de8d6092014871740d9992aea2e27a1f16c43ef4fb4675753e75b25db9f55d9a.
+Runner SHA256 0a8df34dc5eba81686d0dccf5bf35a9489500e2158eaa2ba033445208879767d.
+
+This is scoped PG qualification, not live acceptance or a full host-suite pass.
+The separate host critical-review history case still times out at60s; cause is
+unresolved. No all3105/coverage success, install, model or Kubernetes proof is
+claimed. This evidence-only followup changes no production/test bytes; the
+Build clone and runner stay at the actual qualified7e source.
