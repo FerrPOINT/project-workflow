@@ -124,6 +124,7 @@ class _RequestLoggingMiddleware(BaseHTTPMiddleware):
 def _health() -> JSONResponse:
     """Readiness probe for connectivity, schema presence, and migration head."""
     from ...infrastructure.db import session as _session
+    from ...infrastructure.db.readiness import schema_is_ready_for_health
 
     health = {
         "ok": True,
@@ -139,7 +140,7 @@ def _health() -> JSONResponse:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         health["database"] = "ok"
-        if not _session.schema_is_ready(engine):
+        if not schema_is_ready_for_health(engine):
             raise RuntimeError("schema-not-ready")
         health["schema"] = "ok"
         health["catalog"] = "ok"
