@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from sqlalchemy import text
+from sqlalchemy import bindparam, func, select
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.orm import Session
 
@@ -84,12 +84,11 @@ class SAUnitOfWork(UnitOfWork):
         bind = self._session.get_bind()
         if bind.dialect.name != "postgresql":
             return
-        lock_function = "pg_advisory_xact_lock_shared" if shared else "pg_advisory_xact_lock"
+        lock_function = func.pg_advisory_xact_lock_shared if shared else func.pg_advisory_xact_lock
         self._session.execute(
-            text(
-                f"SELECT {lock_function}("
-                "hashtextextended(current_database() || ':' || :schema, 0))"
-            ),
+            select(lock_function(func.hashtextextended(
+                func.current_database().concat(":").concat(bindparam("schema")), 0,
+            ))),
             {"schema": config.get_settings().DB_SCHEMA},
         )
 

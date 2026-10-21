@@ -2,7 +2,14 @@
 
 import hashlib
 import json
+from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
+
+from sqlalchemy import event
+from sqlalchemy.engine import Connection
+from sqlalchemy.sql import Delete, Insert, Select, Update, visitors
+from sqlalchemy.sql.elements import TextClause
 
 from project_workflow import config
 from project_workflow.domain.namespace import legacy_code_from_cli_command
@@ -28,6 +35,57 @@ from project_workflow.infrastructure.db.managed_catalog import (
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
 REFERENCES = Path(__file__).resolve().parents[2] / "references"
+_RUNTIME_READ = "single_task_runtime_catalog_read"
+_CATALOG_TABLES = frozenset({
+    "workflows", "workflow_modes", "profession_workflows", "projects", "phases",
+    "phase_instructions", "phase_checks", "phase_evidence_requirements",
+})
+
+
+@dataclass
+class _RuntimeCatalogRead:
+    transaction: tuple[object, object] | None = None
+    installation: SingleTaskInstallation | None = None
+
+
+@contextmanager
+def runtime_catalog_read(uow: SAUnitOfWork):
+    """Reuse only catalog validation within one explicitly scoped runtime call."""
+    session = uow.session
+    if _RUNTIME_READ in session.info:
+        yield
+        return
+    scope = _RuntimeCatalogRead()
+    session.info[_RUNTIME_READ] = scope
+    connections: list[Connection] = []
+
+    def before_sql(_connection, _cursor, _sql, _parameters, context, _many):
+        statement = getattr(context.compiled, "statement", None)
+        if isinstance(statement, (Select, Insert, Update, Delete)):
+            for node in visitors.iterate(statement):
+                if (isinstance(node, TextClause)
+                    or isinstance(node, (Insert, Update, Delete)) and node.table.name in _CATALOG_TABLES):
+                    break
+            else:
+                return
+        # Includes direct Connection writes, opaque SQL and writable CTEs.
+        scope.installation = None
+
+    def watch(_session, _transaction, connection):
+        if connection not in connections:
+            event.listen(connection, "before_cursor_execute", before_sql)
+            connections.append(connection)
+
+    event.listen(session, "after_begin", watch)
+    try:
+        if session.in_transaction():
+            watch(session, None, session.connection())
+        yield
+    finally:
+        event.remove(session, "after_begin", watch)
+        for connection in connections:
+            event.remove(connection, "before_cursor_execute", before_sql)
+        del session.info[_RUNTIME_READ]
 
 
 def load_profile(manifest_sha256: str = MANIFEST_SHA256) -> tuple[dict, dict]:
@@ -66,6 +124,14 @@ def load_profile(manifest_sha256: str = MANIFEST_SHA256) -> tuple[dict, dict]:
 
 def observe_installation(uow: SAUnitOfWork) -> SingleTaskInstallation:
     """Validate all seven persisted professions before returning any binding."""
+    session = uow.session
+    scope = session.info.get(_RUNTIME_READ)
+    transaction = (session.get_transaction(), session.get_nested_transaction())
+    if scope is not None:
+        if any(row.__table__.name in _CATALOG_TABLES for row in session.new | session.dirty | session.deleted):
+            scope.installation = None
+        if scope.installation is not None and scope.transaction == transaction:
+            return scope.installation.model_copy(deep=True)
     uow.lock_catalog_state(shared=True)
     uow.refresh()
     # Match a complete sealed family, never stamp old rows with the current hash.
@@ -73,7 +139,11 @@ def observe_installation(uow: SAUnitOfWork) -> SingleTaskInstallation:
     failures: list[ValueError] = []
     for catalog, manifest in profiles:
         try:
-            return _observe_profile(uow, catalog, manifest)
+            result = _observe_profile(uow, catalog, manifest)
+            if scope is not None:
+                scope.transaction = (session.get_transaction(), session.get_nested_transaction())
+                scope.installation = result.model_copy(deep=True)
+            return result
         except ValueError as exc:
             failures.append(exc)
     raise failures[0]

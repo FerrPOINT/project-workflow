@@ -93,12 +93,37 @@ def test_registered_retry_reads_raw_postrenew_permit_and_replays_without_http(pe
         assert response.headers["Cache-Control"] == "no-store"
         assert response.json()["result"]["assignment_revision"] == 2
         assert response.json()["result"]["binding_state"] == "unbound"
+        # Closed Assignment result consumed by Fleet, not Task.to_dict/private SQL fields.
+        body = response.json()
+        assert set(body) == {"ok", "result"} and body["ok"] is True
+        result = body["result"]
+        strings = set((
+            "task_key workflow_key mode_key assignment_operation_key role_key execution_scope stage_key "
+            "business_task_ref root_task_ref assignment_ref binding_state status current_phase_code current_phase_name"
+        ).split())
+        integers = set("workflow_id mode_id cycle_number attempt_number assignment_revision current_phase_id".split())
+        nullable_strings = set((
+            "work_item_ref queue_item_ref task_workspace_ref tech_execution_workspace_ref tech_execution_attempt_ref "
+            "decomposition_revision_ref stage_revision binding_ref hermes_run_ref bind_operation_key concrete_agent_ref"
+        ).split())
+        nullable_integers = set("work_item_revision workspace_revision workspace_generation lease_generation".split())
+        assert set(result) == strings | integers | nullable_strings | nullable_integers | {"exact_input_refs"}
+        assert all(isinstance(result[key], str) for key in strings)
+        assert all(type(result[key]) is int for key in integers)
+        assert all(result[key] is None or isinstance(result[key], str) for key in nullable_strings)
+        assert all(result[key] is None or type(result[key]) is int for key in nullable_integers)
+        assert all(result[key] is None for key in ("binding_ref", "hermes_run_ref", "bind_operation_key"))
+        assert isinstance(result["exact_input_refs"], list)
+        for reference in result["exact_input_refs"]:
+            assert set(reference) == {"kind", "ref", "hash"}
+            assert all(isinstance(value, str) for value in reference.values())
         assert "execution_token" not in response.json()
         assert fleet["paths"] == [FLEET_PROOF + NEXT + "/workflow-proof",
                                   "/internal/runtime/v1/pm/runs/" + pending["proof"].native.session_run_id]
         fleet["proofs"].clear()
         replay = client.post(RETRY, json=request.model_dump(), headers=WRITER)
         assert replay.status_code == 200, replay.text
+        assert replay.json() == body
         assert len(fleet["paths"]) == 2
     with SAUnitOfWork() as uow:
         assert uow.tasks.get_assignment_by_operation_key(request.predecessor_operation_key).to_dict() == before
