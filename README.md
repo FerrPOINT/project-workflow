@@ -58,6 +58,8 @@ Business adapter проверяет runtime-контракт через ауте
 схемы и immutable source provenance. Отсутствующий или некорректный build
 manifest даёт `503`, при этом публичный `/health` по-прежнему проверяет только
 DB/schema и подходит для standalone-разработки.
+Стоимость повторных запросов и обнаружение изменений описаны в
+[проверке готовности](docs/health-readiness.md).
 
 Managed DEV bootstrap загружает versioned-каталог v2 из исторически именованного
 [`hermes_sdlc_catalog_v1.json`](project_workflow/references/hermes_sdlc_catalog_v1.json):
