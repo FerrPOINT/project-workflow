@@ -111,7 +111,7 @@ Supervisor Engine перед commit выполнить следующие про
 ## Термины PDLC и общие компоненты
 
 Перед изменением платформенных имён прочитайте [интеграцию с Base](docs/PDLC_BASE_INTEGRATION.md) и канонические TERMS/BRANDING.
-Для UI: CLI `pdlc-ui` из закреплённого UI-пакета Base, затем карточка и один пример. SSR-ресурсы получать штатным exporter Base; fingerprint проверять отдельно.
+Работа с SSR UI описана в разделе «Разработка UI со справочником Base» ниже.
 Не переносите продуктовые запросы, DTO и права в общий UI. SDK/UI/skills pins независимы; новое имя платформы не меняет SDLC IDs/scopes или закреплённые внешние runtime-источники.
 
 ## Общие поля выбора Base
@@ -128,10 +128,19 @@ bridge принадлежит только Base; SSR использует шта
 Правила выбора и подключения: Base docs/platform/CHOICE_CONTROLS.md.
 UI/SDK/skills pins независимы; установка и production — отдельные операции.
 
-## Единая дизайн-система Base
+## Разработка UI со справочником Base
 
-Перед созданием UI: pdlc-ui search → show → один example. Button, Input,
-Textarea, Checkbox, RadioGroup/Radio, Switch, меню, Card, Table, Disclosure,
+Перед изменением SSR UI читать [маршрут разработки со справочником Base](https://github.com/FerrPOINT/services-base/blob/ae2b41291eee5af752daff89f760fba5aff41783/base-modules/ui/reference/guides/agent.md),
+включая раздел для Workflow без Node frontend. Прочитать `.base-ui-revision`;
+подготовить отдельный checkout этого SHA без переключения соседней рабочей ветки.
+Запуск из него: `node base-modules/ui/tools/ui-reference/cli.mjs check`, затем
+`search "задача"`, адресный `show` и один `example`. Node 22 достаточен;
+npm install, frontend-пакет, работающие API/Storybook и доступ к стенду не нужны.
+Для SSR использовать macro из карточки, штатный exporter и fingerprints;
+React-пример не подменяет серверный контракт. Полный каталог не загружать;
+новые возможности Base не считать принятыми без отдельного изменения UI pin.
+
+Button, Input, Textarea, Checkbox, RadioGroup/Radio, Switch, меню, Card, Table, Disclosure,
 Dialog и Toaster/toast использовать из публичного @pdlc/ui. Общий дефект
 исправлять в Base; продукт сохраняет данные, права и сохранение. Прямой Sonner,
 копии примитивов и продуктовые определения общих tokens не добавлять.
