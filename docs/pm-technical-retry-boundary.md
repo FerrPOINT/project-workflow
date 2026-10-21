@@ -6,7 +6,7 @@ Workflow production, DTO, схема и generated catalog этим пакето�
 
 Уточнение Main после исходного review: canonical Tracker assignment/execution и
 owner_version сохраняются; создаётся linked Fleet bootstrap attempt. Реализация
-незарегистрированного reader/internal метода описана в [pm-bootstrap-recovery.md](pm-bootstrap-recovery.md).
+зарегистрированного reader/internal метода описана в [pm-bootstrap-recovery.md](pm-bootstrap-recovery.md).
 
 ## Конкретный пробел
 
@@ -116,3 +116,48 @@ PM first-step до enrollment запрещён, старые assignment bytes и
   manifest `652a38c0f7bdb48a569aa3fcd5c2e81e153db6e22b5201cfb6ce15c988dd57f3`.
 - Scope: source/test-only, без Hermes/live API/PG/Docker/build/install. Полный
   repository quality gate и positive technical-retry acceptance не выполнялись.
+
+## Повторный profession audit 2026-10-21
+
+Read-only audit исходников на docs-only HEAD `57785668ba3aab93eee5db073c531beabb699a9a`;
+production/tests/scripts/catalog byte-identical к `a7b805d4`. Это отдельный source
+scope, не installed/live qualification. Проверяется существующий generated
+installable catalog: **7 namespaces, 7 workflows, 8 modes, 24 phases**.
+
+- Все восемь modes начинают с реального scoped CLI `project-workflow --json step`
+  без report, с supplied original key/request/token; не narrative ACK и не local DB.
+- PM draft сохраняет brainstorming малыми итерациями, pre-document feedback
+  null/null, затем full saved requirements и exact owner confirmation перед final
+  report. Нет fake revision/checkpoint, self-confirmation или лишнего PM cycle.
+- Analyst/Architect сохраняют task=root и не создают children, decomposition
+  barriers или integration/integration_rework modes.
+- Developer initial/rework, Reviewer, Tester и DevOps сохраняют конкретные role
+  artifacts, provenance и собственные verdicts. Rework повторяет Review и Testing;
+  третье отклонение сохраняет реальный stage/Ready/Terminal без четвёртого cycle.
+- Все шесть technical roles сначала получают usable Workflow complete receipt,
+  затем публикуют Tracker result proposal и делают original-key operation readback,
+  после чего завершают native run. Собственный CompleteCAS/stage transition внутри
+  live agent не ожидается; это последующий Fleet/operator readback.
+- Critical business hold остаётся отдельной unfinished веткой: не normal result,
+  не fake completion и не автоматическое PM/scheduler действие агента.
+
+Новых доказанных instruction defects в этом bounded scope не обнаружено;
+production/instruction/catalog bytes не изменялись и новые modes не добавлялись.
+
+Actual host regressions на этом неизменном source:
+
+- `test_single_task_instructions.py`, `test_single_task_catalog.py`,
+  `test_single_task_source_context_instructions.py`,
+  `test_single_task_artifact_instructions.py`: **133 PASS / 49.00s**.
+- Existing `test_cli_platform.py`: original snapshot/key/scoped credential
+  forwarding (2), incomplete/mismatched flags reject before HTTP/DB (6), timeout
+  unknown without retry/DB fallback (1): **9 PASS / 8.44s**, mocked HTTP transport.
+- `python -m scripts.build_single_task_profile --check`: PASS; catalog
+  `86e6c983b7aa6a2c99da11d1d4b1f1b4563ff913262236903a19bc86bdec2d67`, manifest
+  `652a38c0f7bdb48a569aa3fcd5c2e81e153db6e22b5201cfb6ce15c988dd57f3`.
+
+Эти scopes не суммируются с overlapping прежними 66/155 host cases или с actual
+PG6. Установленные CLI/профессии и реальные модели здесь не вызывались. Отдельный
+actual bootstrap PG6/API61 receipt на a7 находится в
+[pm-bootstrap-recovery.md](pm-bootstrap-recovery.md); production release/install
+или seven-role business acceptance этим audit не заявлены.
