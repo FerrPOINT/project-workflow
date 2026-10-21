@@ -1,0 +1,114 @@
+"""Exact Tracker104 source provenance; it is not a Fleet execution permission."""
+
+from __future__ import annotations
+
+import json
+from typing import Annotated, Literal
+
+from pydantic import AfterValidator, Field, StringConstraints, field_validator, model_validator
+
+from project_workflow.domain.bug_search_catalog import FrozenCatalogModel
+from project_workflow.domain.bug_search_execution import ExecutionBinding, Sha256, SnapshotTarget, UUIDRef, wire_text
+from project_workflow.domain.runtime_assignment import payload_sha256
+
+OriginText = Annotated[str, StringConstraints(strict=True), wire_text(512)]
+
+
+class BugWorkOriginRef(FrozenCatalogModel):
+    contract_version: Literal[1]
+    execution_id: UUIDRef
+    finding_id: UUIDRef
+    snapshot_sha256: Sha256
+    source_context_sha256: Sha256
+
+    @field_validator("contract_version", mode="before")
+    @classmethod
+    def integer_version(cls, value: object) -> object:
+        return ExecutionBinding.strict_version(value)
+
+
+def original_tracker_locator(value: str) -> str:
+    """Opaque Tracker103/104 locator only; preserve original UTF-8/hash bytes."""
+    if not value.strip() or "\0" in value or len(value.encode("utf-8")) > 128:
+        raise ValueError("Требуется исходный непустой Tracker locator до128 UTF-8 bytes без NUL")
+    return value
+
+
+class BugWorkOriginProject(FrozenCatalogModel):
+    tracker_instance_id: Annotated[str, StringConstraints(strict=True), AfterValidator(original_tracker_locator)]
+    project_id: UUIDRef
+
+
+class BugWorkOriginTarget(SnapshotTarget):
+    repository_ref: OriginText
+    commit_sha: Annotated[str, StringConstraints(strict=True, pattern=r"^[0-9a-f]{40}([0-9a-f]{24})?$")]
+    target_ref: OriginText | None
+    deployment_ref: OriginText | None
+
+
+class BugWorkSourceContext(FrozenCatalogModel):
+    contract_version: Literal[1]
+    project: BugWorkOriginProject
+    mode: Literal["source_only", "qa"]
+    targets: tuple[BugWorkOriginTarget, ...] = Field(strict=False, min_length=1, max_length=16)
+    scope: tuple[OriginText, ...] = Field(strict=False, min_length=1, max_length=128)
+    excluded_paths: tuple[OriginText, ...] = Field(strict=False, max_length=128)
+
+    @field_validator("contract_version", mode="before")
+    @classmethod
+    def integer_version(cls, value: object) -> object:
+        return ExecutionBinding.strict_version(value)
+
+    @model_validator(mode="after")
+    def bounded_original(self) -> BugWorkSourceContext:
+        if len(json.dumps(self.model_dump(mode="json"), ensure_ascii=False, indent=2).encode("utf-8")) > 65_536:
+            raise ValueError("Исходный source context Bug превышает допустимый размер")
+        if any(
+            value.startswith("/") or "\\" in value or ":" in value or ".." in value.split("/")
+            for value in (*self.scope, *self.excluded_paths)
+        ):
+            raise ValueError("Требуются исходные относительные пути Bug")
+        if self.mode == "qa" and any(
+            target.target_ref is None or target.deployment_ref is None for target in self.targets
+        ):
+            raise ValueError("Исходный QA context требует точную поставленную версию")
+        for target in self.targets:
+            if target.source is not None:
+                target.source.require_target(self.project.project_id, self.mode, target.commit_sha)
+        return self
+
+
+class BugWorkOriginReadback(FrozenCatalogModel):
+    contract_version: Literal[1]
+    assignment_id: UUIDRef
+    assignment_sha256: Sha256
+    origin: BugWorkOriginRef
+    source_context: BugWorkSourceContext
+
+    @field_validator("contract_version", mode="before")
+    @classmethod
+    def integer_version(cls, value: object) -> object:
+        return ExecutionBinding.strict_version(value)
+
+    def require_assignment(
+        self,
+        *,
+        assignment_id: str,
+        assignment_sha256: str,
+        origin: BugWorkOriginRef | None,
+        project_id: str,
+        tracker_instance_id: str,
+        tracker_instance_uuid: str,
+    ) -> None:
+        if (
+            origin is None
+            or self.origin != origin
+            or self.assignment_id != assignment_id
+            or self.assignment_sha256 != assignment_sha256
+            or self.source_context.project.project_id != project_id
+            or self.source_context.project.tracker_instance_id != tracker_instance_id
+            or payload_sha256(self.source_context.model_dump(mode="json")) != origin.source_context_sha256
+            or any(target.source is not None and target.source.project.tracker_instance_id != tracker_instance_uuid
+                   for target in self.source_context.targets)
+        ):
+            raise ValueError("Source context не совпадает с исходным назначением Bug")

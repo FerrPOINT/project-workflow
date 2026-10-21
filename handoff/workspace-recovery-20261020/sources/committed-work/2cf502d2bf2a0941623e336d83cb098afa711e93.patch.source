@@ -1,0 +1,69 @@
+diff --git a/handoff/ROLE_ARCHITECT_20261018.md b/handoff/ROLE_ARCHITECT_20261018.md
+new file mode 100644
+index 0000000..892927f
+--- /dev/null
++++ b/handoff/ROLE_ARCHITECT_20261018.md
+@@ -0,0 +1,63 @@
++# Seven-Profession Instruction Countercheck
++
++## Verdict And Sources
++
++No demonstrated missing instruction, CLI grammar or typed-result mismatch in the actual installable single-task-v1 family. No production patch or Main catalog/hash/registration hook is needed. This commit records review evidence only; it does not change or qualify live execution.
++
++- Freshly fetched Workflow remote master: `89bb30d2e3f65adda5f94466c5e214f5378b4a46`.
++- Isolated branch: `fix/single-task-role-contract-20261018`.
++- Isolated checkout: `C:/git/azhukov/sdlc/.local/single-task-sdlc-20261013/workflow-role-contract-20261018`.
++- Installed-source revision supplied by Main: `6d9674db96aaecacc3ef127ed56441698df06521`, tree `12b89174308a313fb37ac7219c532363ba872070`, verified in the clean `workflow-runtime-catalog-8d8-20261017` checkout. No live runtime inspection was performed here.
++- Tracker candidate: `0608095be1383d521a97fc47b36f0fca2f40b143`, parent `beb029fd381f025fe9879d98e34bc87bfe686fc9`.
++- Freshly fetched Tracker main: `6a5910bf9f79f59ff9e293f680372e759f24a000`. Its CLI and inspected lifecycle/PM contracts have no changes against that parent. Tracker candidate was not edited.
++- Root and nearest repository AGENTS were read. Dirty shared checkouts were not edited. No push, merge, Cargo, Docker, live API/DB/config mutation, agent/model invocation or Hermes change.
++
++## Installed Versus New Source
++
++The following files are byte-identical between the clean installed-source checkout and freshly fetched Workflow master:
++
++| File | SHA256 |
++| --- | --- |
++| `project_workflow/infrastructure/single_task_catalog.py` | `461cb120649809f07cc391a525d61cc479428aed1db538c746b42811993036c8` |
++| `project_workflow/infrastructure/single_task_delivery_instructions.py` | `4e15aef1be5f1ef7bc6f01d69e613cd2da362f0ec89f993f0057bd93a4bab6ec` |
++| `scripts/build_single_task_profile.py` | `c3ebbda5d738de8fb529b7057de4b00974dd1b596f8529c9197a0401be4f1648` |
++| `project_workflow/references/single_task_catalog_v1.json` | `86e6c983b7aa6a2c99da11d1d4b1f1b4563ff913262236903a19bc86bdec2d67` |
++| `project_workflow/references/single_task_manifest_v1.json` | `652a38c0f7bdb48a569aa3fcd5c2e81e153db6e22b5201cfb6ce15c988dd57f3` |
++
++There is no instruction source/install gap for these inputs. The historical proposal preset contains obsolete capability statements; the installable builder replaces those instructions. It would be incorrect to fix the proposal-only terminal text as though it were the installed terminal instruction. No catalog was regenerated or installed for this review.
++
++## Contract Countercheck
++
++The actual family has seven professions, eight existing modes and 24 phases. Developer initial/rework are separate modes; Architect keeps its existing `decomposition` key but explicitly outputs architecture plus an ordered implementable plan inside the same task. Integration/integration_rework are absent. First operation is the scoped Workflow CLI step, with no report, before Tracker/source/tool work. Every role retains the single-task/no-children/no-integration-barrier and native-Hermes constraints.
++
++PM phase 02 already requires small iterative brainstorming, alternatives/tradeoffs, one useful question and free-form answers, with no preselection/default/implied consent. Pre-document feedback permits null/null requirements without fake questions or placeholder revisions. Phase 03 presents the FULL saved latest document/revision/hash, keeps the same execution unfinished while waiting, invalidates old consent on any revision change, and requires actual owner confirmation via `task-tracker sdlc confirmation read --task <task-uuid> --revision <confirmed-revision>` before the final Workflow report. PM cannot confirm as the owner or borrow scheduler credentials. No duplicate plan or extra PM cycle is needed.
++
++| Role | Existing typed evidence/result | Authorized next stage/status |
++| --- | --- | --- |
++| PM | Exact saved requirements and owner-confirmation receipt, then accepted final Workflow report/native completion | Backlog / Ready; Analysis / Ready only through guarded Tracker/Fleet pickup after actual PM completion |
++| Analyst | `role=analyst`, sealed `analysis` ArtifactReceipt | Architecture / Ready |
++| Architect | `role=architect`, sealed `design` ArtifactReceipt with analysis/requirements/source references and implementation plan | Development / Ready |
++| Developer, initial/rework | `role=developer`, exact `commit_sha`, sealed `changes` and `checks` receipts | Review / Ready, then fresh Testing |
++| Reviewer | `role=reviewer`, `verdict=approved|rework`, sealed `report` | Testing / Ready or bounded Rework / Ready |
++| Tester | `role=tester`, `verdict=passed|rework`, sealed `report` | Deployment / Ready or bounded Rework / Ready |
++| DevOps | `role=devops`, sealed `deployment` and `verification`, exact candidate/provenance/health/acceptance | Deployment / Completed |
++
++Non-PM final instructions use the actual strict `SubmitDeliveryProposal {fence, workflow_receipt, result, idempotency_key}` and existing CLI `task-tracker sdlc result propose --task ... --from-file ...`, followed by `result operation --task ... --key <original-key>`. ArtifactReceipt is exactly reference/sha256; DeliveryFence fields match Tracker. Reviewer/Tester Workflow report language passed/needs_rework is explicitly distinguished from the wire verdicts above. All of these commands and shapes exist in Tracker 060/main source.
++
++A live agent cannot observe its own post-terminal transition. The correct final split is already explicit: seal/read back actual own-assignment artifacts, obtain accepted Workflow receipt, propose/read back the original-key result, report the actual receipt and end the native run. A proposal is NOT acceptance or stage completion. Only Fleet/scheduler may Complete after authoritative terminal readback; Fleet/operator then checks the actual accepted result and stage/status with existing `task-tracker sdlc lifecycle --task ...` and result readback. PM completion likewise belongs to the scheduler, not PM. Instructing agents to mutate stage/status or invoke scheduler completion would violate the actual contract, not repair it. At rework cycle 3, rejected Review/Testing remains Ready with Terminal runtime and rework_limit_reached; no fourth cycle or forced Completed.
++
++Inspected Tracker authorities: `backend/cli/src/commands.rs`, `backend/cli/src/sdlc_pm_commands.rs`, `backend/domain/src/sdlc_lifecycle.rs`, `backend/app/src/sdlc_lifecycle.rs`, `backend/infra/src/sdlc_lifecycle.rs`, `backend/infra/src/sdlc_reservation.rs`. PM owner receipt readback is historical Backlog evidence, not current lifecycle completion. Scheduler Complete independently checks the retained agent proposal against terminal evidence. Critical holds leave Workflow unfinished and never substitute for a normal role result.
++
++## Verification
++
++Executed source checks: fresh remote fetches; clean installed-source status; exact installed/master byte and SHA256 comparison above; Tracker relevant-contract diff; actual CLI/DTO/transition source inspection.
++
++Focused existing tests (isolated offline dependencies, temporary SQLite fixture only; no live DB or model calls):
++
++```text
++uv run --offline --isolated --with-requirements constraints.txt --all-extras pytest -q tests/test_single_task_instructions.py tests/test_single_task_artifact_instructions.py tests/test_single_task_source_context_instructions.py --timeout=60
++```
++
++Result: **119 passed in 108.51 seconds**. These existing checks cover all eight modes, PM iterative brainstorming/exact confirmation, strict final result/readback ordering, source/provenance, sealed artifacts, no-child architecture and bounded rework.
++
++No full suite, PostgreSQL, browser, CLI server smoke, image build, catalog installer or installed/live business acceptance was run. No new test was added without a demonstrated defect. Main retains publication, runtime qualification and any actual authorized transition/readback.

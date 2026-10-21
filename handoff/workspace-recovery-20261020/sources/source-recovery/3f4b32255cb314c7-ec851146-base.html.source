@@ -1,0 +1,539 @@
+{% import 'macros.html' as base %}
+{% set active_namespace = theme_namespace if theme_namespace is defined else none %}
+{% set active_namespace_id = active_namespace.id if active_namespace else none %}
+{% set accent_text = active_namespace.theme_color | accent_foreground if active_namespace else none %}
+<!DOCTYPE html>
+<html lang="ru" data-theme="dark" data-base-branding-url="/api/platform/branding" data-base-service-name="Project Workflow" data-base-theme-storage="workflow-theme"{% if active_namespace %} style="--color-accent:{{ active_namespace.theme_color }};--color-accent-hover:{{ active_namespace.theme_color }};--color-accent-foreground:{{ accent_text }}"{% endif %}>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}Workflow Engine{% endblock %}</title>
+<script>try{var savedTheme=localStorage.getItem('workflow-theme');if(['dark','gray','light'].includes(savedTheme)){document.documentElement.dataset.theme=savedTheme}}catch(_error){}</script>
+<link rel="stylesheet" href="/static/base-ui/base-ui.css">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html{font-feature-settings:"cv01","ss03"}
+/* ── Единый скроллбар всего приложения в стиле темы ─────────────────── */
+html{scrollbar-width:thin;scrollbar-color:var(--surface-active) transparent}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--surface-active);border-radius:999px;border:2px solid transparent;background-clip:padding-box}
+::-webkit-scrollbar-thumb:hover{background:var(--text-dim)}
+::-webkit-scrollbar-corner{background:transparent}
+/* Скроллящиеся области приложения наследуют тот же стиль */
+*{scrollbar-width:thin;scrollbar-color:var(--surface-active) transparent}
+body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,-apple-system,sans-serif;line-height:1.5;font-size:14px;min-height:100vh;display:flex}
+a{color:var(--accent-readable);text-decoration:none}a:hover{text-decoration:underline}
+button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid var(--accent-hover);outline-offset:2px}
+
+/* ── Sidebar (desktop fixed) ────────────────────────────────────────── */
+.sidebar-logo{min-width:0;color:var(--text)}
+.brand-link{display:flex;align-items:center;gap:10px;color:inherit;text-decoration:none;min-width:40px;padding:4px}
+.brand-link:hover{color:inherit;text-decoration:none}
+.brand-mark{width:32px;height:32px;border-radius:8px;background:var(--accent-soft);border:1px solid var(--accent);color:var(--accent-readable);display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto}
+.brand-mark svg{width:18px;height:18px}
+.brand-text{display:flex;flex-direction:column;min-width:0;line-height:1.1}
+.brand-name{font-size:14px;font-weight:700;color:var(--text);max-width:148px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.brand-subname{font-size:11px;font-weight:600;color:var(--text-secondary);max-width:148px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sidebar-close{display:none;background:none;border:none;color:var(--text-muted);font-size:20px;cursor:pointer;padding:0;width:40px;height:40px;align-items:center;justify-content:center}
+.sidebar-nav:focus-visible{outline:2px solid var(--accent-hover);outline-offset:-2px}
+.sidebar-section{padding:8px 20px;font-size:10px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;margin-top:8px}
+.sidebar-cli-icon{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;flex:0 0 16px;font:700 12px/1 'JetBrains Mono',monospace}
+.sidebar-link .badge{margin-left:auto;font-size:11px;font-weight:600;padding:1px 6px;border-radius:4px;background:var(--accent-soft);color:var(--accent-readable)}
+.sidebar-footer{min-height:52px;padding:8px 20px;border-top:1px solid var(--border);font-size:12px;color:var(--text-dim);display:flex;align-items:center;gap:8px}
+.sidebar-logout{display:none;min-width:40px;margin-left:auto;align-items:center;justify-content:center;color:var(--text-secondary);font-weight:600}
+.sidebar-utilities{display:none}
+.sidebar-service-menu summary{cursor:pointer;list-style:none}
+.sidebar-service-menu summary::-webkit-details-marker{display:none}
+.sidebar-service-menu summary::after{content:'▾';margin-left:auto;color:var(--text-muted);font-size:11px}
+.sidebar-service-menu[open] summary::after{transform:rotate(180deg)}
+.sidebar-service-links{padding:2px 12px 8px 20px}
+.sidebar-service-link{display:flex;min-height:40px;align-items:center;gap:10px;padding:8px 12px 8px 20px;color:var(--text-secondary);font-size:12px;text-decoration:none}
+.sidebar-service-link:hover,.sidebar-service-link:focus-visible{background:var(--surface-hover);color:var(--text);text-decoration:none}
+.sidebar-service-link[aria-current="page"]{color:var(--text);font-weight:600}
+.sidebar-theme{padding:10px 20px 14px}
+.sidebar-theme label{display:block;margin-bottom:6px;color:var(--text-muted);font-size:11px;font-weight:600;text-transform:uppercase}
+.sidebar-theme .theme-select{width:100%;max-width:none}
+.dot{width:6px;height:6px;border-radius:50%}
+.dot.green{background:var(--green)}.dot.yellow{background:var(--orange)}.dot.red{background:var(--red)}
+
+/* ── Mobile sidebar (drawer overlay) ───────────────────────────────── */
+.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:90}
+
+/* ── Main ──────────────────────────────────────────────────────────── */
+.header-title-group{display:flex;align-items:center;flex:0 0 auto;gap:8px}
+.header-title{font-size:15px;font-weight:600}
+.header-actions{display:flex;min-width:0;gap:10px;align-items:center}
+.header .btn{display:inline-flex;align-items:center}
+.namespace-switcher{display:flex;align-items:center;gap:6px;min-width:0}
+.namespace-select{width:190px;max-width:26vw;font-weight:600;color:var(--text);background:var(--surface)}
+.service-menu{position:relative}
+.theme-select{height:40px;max-width:110px;padding:0 8px;border:1px solid var(--border-strong);border-radius:6px;background:var(--surface);color:var(--text);font:inherit;font-size:12px}
+.service-menu summary{height:40px;padding:0 10px;border:1px solid var(--border-strong);border-radius:6px;background:var(--surface);color:var(--text-secondary);display:flex;align-items:center;gap:8px;font-weight:600;cursor:pointer;list-style:none;white-space:nowrap}
+.service-menu summary::-webkit-details-marker{display:none}
+.service-menu summary:hover,.service-menu[open] summary{background:var(--surface-hover);color:var(--text);border-color:var(--accent)}
+.service-menu-chevron{font-size:11px;color:var(--text-muted);transition:transform .15s}
+.service-menu[open] .service-menu-chevron{transform:rotate(180deg)}
+.service-menu-popover{position:absolute;left:0;right:auto;top:calc(100% + 8px);z-index:250;width:260px;max-width:calc(100vw - 24px);max-height:calc(100dvh - var(--header-height) - 16px);overflow-y:auto;overscroll-behavior:contain;padding:6px;background:var(--surface);border:1px solid var(--border-strong);border-radius:8px;box-shadow:0 16px 40px rgba(0,0,0,.45)}
+.service-menu-item{min-height:40px;padding:8px 10px;border-radius:6px;display:flex;align-items:center;gap:10px;color:var(--text-secondary);text-decoration:none}
+.service-menu-item:hover,.service-menu-item:focus-visible{background:var(--surface-hover);color:var(--text);text-decoration:none}
+.service-menu-item[aria-current="page"]{background:var(--accent-soft);color:var(--text);font-weight:600}
+.service-health{width:8px;height:8px;border-radius:50%;flex:0 0 auto;background:var(--text-dim)}
+.service-health.healthy{background:var(--green)}
+.service-health.unreachable{background:var(--red)}
+.service-menu-current{margin-left:auto;font-size:11px;color:var(--text)}
+.service-menu-source{padding:8px 10px 3px;margin-top:4px;border-top:1px solid var(--border);color:var(--text-dim);font-size:11px}
+.namespace-icon-action{width:40px;height:40px;flex:0 0 40px;border-radius:6px;background:var(--surface);border:1px solid var(--border);color:var(--text-secondary);display:inline-flex;align-items:center;justify-content:center;text-decoration:none;font-size:16px;font-weight:700;line-height:1}
+.namespace-icon-action:hover{background:var(--surface-hover);color:var(--text);text-decoration:none;border-color:var(--accent)}
+.btn{padding:6px 14px;border-radius:6px;font-size:13px;font-weight:500;border:1px solid transparent;cursor:pointer;transition:background-color .12s,border-color .12s,color .12s;font-family:inherit;white-space:nowrap}
+.btn-primary{background:var(--accent);color:var(--accent-foreground);border-color:var(--accent)}
+.btn-primary:hover{background:var(--accent-hover);color:var(--accent-hover-foreground)}
+.btn-secondary{background:var(--surface);color:var(--text-secondary);border-color:var(--border)}
+.btn-secondary:hover{background:var(--surface-hover);color:var(--text)}
+.btn-danger{background:#b42332;color:#fff;border-color:#b42332}
+.btn-danger:hover{filter:brightness(1.08)}
+.modal-backdrop[hidden]{display:none}
+.modal-backdrop{position:fixed;inset:0;z-index:300;display:grid;place-items:center;padding:20px;background:rgba(5,6,10,.72);backdrop-filter:blur(5px)}
+.modal-card{width:min(100%,420px);background:var(--surface);border:1px solid var(--border-strong);border-radius:14px;padding:22px;box-shadow:0 24px 64px rgba(0,0,0,.48)}
+.modal-eyebrow{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--red)}
+html[data-theme='dark'] .modal-eyebrow{color:#ff6b6b}
+.modal-title{margin:8px 0 0;font-size:20px;line-height:1.25;color:var(--text)}
+.modal-copy{margin-top:10px;color:var(--text-muted);line-height:1.55}
+.modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;flex-wrap:wrap}
+.burger{display:none;background:none;border:none;color:var(--text-muted);font-size:22px;cursor:pointer;padding:0;width:44px;height:44px;align-items:center;justify-content:center;margin-right:4px}
+
+/* ── Cards ─────────────────────────────────────────────────────────── */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px}
+.card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px}
+.card-title{font-size:14px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.06em}
+.section-heading{font-size:22px;font-weight:650;color:var(--text);padding-bottom:10px;margin-bottom:18px;border-bottom:1px solid var(--border-strong);letter-spacing:0}
+.card-value{font-size:28px;font-weight:600;color:var(--text);letter-spacing:0}
+.card-delta{font-size:12px;color:var(--text-muted);margin-top:4px}
+
+/* ── KPI Grid ──────────────────────────────────────────────────────── */
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+@media(max-width:900px){.kpi-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:480px){.kpi-grid{grid-template-columns:1fr}}
+
+/* ── Progress bar ──────────────────────────────────────────────────── */
+.progress-bg{height:6px;background:var(--panel);border-radius:3px;overflow:hidden;margin-top:8px}
+.progress-fill{height:100%;background:var(--accent);border-radius:3px;transition:width .3s}
+
+/* ── Tables (desktop) ──────────────────────────────────────────────── */
+table{width:100%;border-collapse:collapse;font-size:13px;display:table}
+th{text-align:left;padding:8px 12px;font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid var(--border-strong);background:var(--panel)}
+td{padding:8px 12px;border-bottom:1px solid var(--border);color:var(--text-secondary);vertical-align:top}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(255,255,255,.02)}
+
+/* Mobile cards (replace table on small screens) */
+@media(max-width:640px){
+  .table-card-list{display:flex;flex-direction:column;gap:10px}
+  .table-card{display:none}  /* shown via template logic */
+}
+
+/* ── Form elements ─────────────────────────────────────────────────── */
+input,textarea,select{background:var(--panel);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-family:inherit;font-size:13px;outline:none;width:100%}
+input:focus,textarea:focus,select:focus{border-color:var(--accent)}
+textarea{resize:vertical;min-height:60px}
+
+/* ── Toast ─────────────────────────────────────────────────────────── */
+.toast{position:fixed;bottom:20px;right:20px;padding:10px 16px;border-radius:6px;font-size:13px;font-weight:500;box-shadow:0 4px 12px rgba(0,0,0,.4);transform:translateY(80px);transition:transform .3s,opacity .3s,visibility .3s;z-index:200;max-width:90vw;word-break:break-word;opacity:0;visibility:hidden;pointer-events:none}
+.toast.show{transform:translateY(0);opacity:1;visibility:visible;pointer-events:auto}
+.toast-success{background:var(--green-soft);color:var(--green);border:1px solid rgba(34,197,94,.25)}
+.toast-error{background:var(--red-soft);color:var(--red);border:1px solid rgba(239,68,68,.25)}
+@media(max-width:480px){.toast{bottom:10px;right:10px;left:10px;max-width:none}}
+
+/* ── Status badges ─────────────────────────────────────────────────── */
+.status{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500}
+.status-dot{width:6px;height:6px;border-radius:50%}
+.status-done .status-dot{background:var(--green)}
+.status-active .status-dot{background:var(--accent)}
+.status-wait .status-dot{background:var(--text-dim)}
+.status-block .status-dot{background:var(--red)}
+
+/* ── Phase detail ──────────────────────────────────────────────────── */
+.phase-detail-header{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px 24px;margin-bottom:16px}
+.phase-detail-header h2{margin:0;font-size:20px;font-weight:500;word-break:break-word}
+.phase-detail-header .meta{display:flex;gap:12px;margin-top:12px;flex-wrap:wrap;font-size:12px;color:var(--text-muted)}
+.phase-detail-header .meta b{color:var(--text-secondary);font-weight:500}
+
+/* ── Tabs ──────────────────────────────────────────────────────────── */
+.tabs{display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid var(--border);flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{padding:8px 14px;font-size:13px;font-weight:500;color:var(--text-muted);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;transition:background-color .12s,border-color .12s,color .12s}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--accent-readable);border-bottom-color:var(--accent)}
+
+/* ── Editable rows ─────────────────────────────────────────────────── */
+.row{display:grid;grid-template-columns:28px 1fr 120px 80px 32px;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);align-items:center}
+@media(max-width:768px){.row{grid-template-columns:28px 1fr 100px 32px}}
+@media(max-width:480px){.row{grid-template-columns:1fr 32px;gap:6px}.row .step-num{display:none}}
+.row:last-child{border-bottom:none}
+.step-num{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text-dim)}
+.row-actions{display:flex;gap:6px;justify-content:flex-end}
+.icon-btn{width:28px;height:28px;border-radius:4px;background:var(--surface);border:1px solid var(--border);color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background-color .12s,border-color .12s,color .12s;font-size:15px}
+.icon-btn:hover{background:var(--red-soft);color:var(--red);border-color:var(--red)}
+
+/* ── Buttons group ─────────────────────────────────────────────────── */
+.btn-group{display:flex;gap:10px;flex-wrap:wrap}
+
+/* ── Timeline (shared by phases list and phase detail instructions) ─── */
+.timeline{display:flex;flex-direction:column;align-items:center;min-width:0;margin:0;width:100%}
+.timeline-block{width:100%}
+.timeline-item{width:100%}
+.timeline-row{display:grid;grid-template-columns:84px minmax(0,1fr);gap:12px;align-items:stretch}
+.phase-order-controls{flex-shrink:0;width:84px;display:flex;flex-direction:column;align-items:center;gap:8px;padding-top:6px}
+.phase-move-btn{width:36px;height:32px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;transition:background-color .12s,border-color .12s,color .12s;font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.phase-move-btn:disabled{opacity:.35;cursor:not-allowed}
+.phase-move-btn:hover:not(:disabled){background:var(--surface-hover);border-color:var(--accent)}
+.phase-add-btn{width:36px;height:32px;border-radius:8px;border:1px dashed var(--accent);background:var(--accent-soft);color:var(--accent-readable);cursor:pointer;transition:background-color .12s,border-color .12s,color .12s;font-size:20px;font-weight:700;line-height:1;display:flex;align-items:center;justify-content:center}
+.phase-add-btn:hover{background:var(--accent);color:var(--accent-foreground);border-style:solid}
+.phase-delete-btn{width:36px;height:32px;border-radius:8px;border:1px solid var(--red);background:rgba(239,68,68,.12);color:var(--red);cursor:pointer;transition:background-color .12s,border-color .12s,color .12s;font-size:18px;font-weight:700;line-height:1;display:flex;align-items:center;justify-content:center}
+.phase-delete-btn:hover{background:var(--red);color:#fff}
+.phase-delete-btn:disabled{opacity:.35;cursor:not-allowed}
+.timeline-card{width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 18px;cursor:pointer;transition:background-color .12s,border-color .12s,color .12s;text-decoration:none;color:inherit;display:block;position:relative}
+.timeline-card:hover{background:var(--surface-hover);border-color:var(--border-strong);transform:translateY(-1px)}
+.timeline-parallel-group{width:100%;display:flex;flex-direction:column;gap:10px;border:1px solid var(--orange);border-radius:12px;padding:12px;background:rgba(245,158,11,.08);box-shadow:inset 0 0 0 1px rgba(245,158,11,.18)}
+.timeline-parallel-label{display:inline-flex;align-items:center;align-self:flex-start;gap:6px;padding:3px 10px;border-radius:999px;border:1px solid var(--orange);background:var(--orange-soft);color:var(--orange);font-size:11px;font-weight:700;letter-spacing:.04em}
+.timeline-arrow{text-align:center;padding:8px 0;color:var(--text-dim);font-size:18px}
+.timeline-name{font-size:14px;font-weight:500;color:var(--text);line-height:1.4}
+.timeline-badges{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;align-items:center}
+.execution-row{display:flex;gap:6px;margin-top:10px;align-items:center;min-height:32px;width:100%}
+.badge{font-size:11px;font-weight:500;padding:2px 8px;border-radius:4px;display:inline-flex;align-items:center;gap:3px}
+.badge-sync,.badge-parallel{cursor:pointer;border:1px solid transparent;padding:6px 14px;font-size:13px;font-weight:600;line-height:1;box-shadow:0 1px 2px rgba(0,0,0,.2)}
+.badge-sync:hover,.badge-parallel:hover{border-color:currentColor;transform:translateY(-1px)}
+.badge-agent{background:var(--accent-soft);color:var(--text)}
+.badge-delegate{background:var(--accent-soft);color:var(--accent-readable)}
+.badge-parallel{background:var(--orange-soft);color:var(--orange)}
+.badge-sync{background:var(--green-soft);color:var(--green)}
+.timeline-desc{font-size:12px;color:var(--text-muted);margin-top:4px}
+.empty-note{color:var(--text-dim);font-size:13px;line-height:1.6}
+@media (max-width: 720px){.timeline-row{grid-template-columns:1fr}.phase-order-controls{flex-direction:row;flex-wrap:wrap;justify-content:flex-start;padding-top:0;gap:6px}}
+
+/* ── Responsive breakpoints ──────────────────────────────────────── */
+@media(max-width:1279px) and (min-width:768px){
+  .sidebar-logo{width:40px}
+  .brand-link{justify-content:center}
+  .brand-text,.sidebar-section,.sidebar-link .badge,.sidebar-status-label{display:none}
+  .sidebar-label{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+  .sidebar-footer{justify-content:center;padding-inline:8px}
+  .header-actions{gap:6px}
+  .theme-select{max-width:90px}
+  .namespace-select{width:140px;max-width:20vw}
+}
+@media(max-width:767px){
+  .sidebar-logout{display:inline-flex}
+  .burger{display:flex}
+}
+@media(max-width:767px){
+  .header-title-group{min-width:0;flex:1 1 auto}
+  .header-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .burger{flex:0 0 44px}
+  .header-actions{width:auto;flex:0 1 auto;min-width:0;gap:6px;flex-wrap:nowrap;justify-content:flex-end}
+  .namespace-switcher{flex:0 1 auto;max-width:45vw;gap:4px}
+  .namespace-select{width:clamp(72px,29vw,108px);max-width:none}
+  .namespace-icon-action{width:44px;height:44px;flex:0 0 44px}
+}
+@media(max-width:640px){
+  .sidebar-utilities{display:block}
+  .header-actions > .theme-select,.header-title-group > .service-menu{display:none}
+}
+@media(max-width:480px){
+  .card{padding:14px}
+  .card-value{font-size:22px}
+  .header-title{font-size:14px}
+  .namespace-switcher .namespace-select{min-width:0;flex:1 1 72px}
+}
+
+/* ── Side nav lists (workflows / namespaces / phases) ────────────────
+   Скроллбар наследует глобальный тематический стиль (см. шапку стилей). */
+.side-nav-scroll{overscroll-behavior:contain;scroll-snap-type:y proximity}
+.side-nav-scroll > *{scroll-snap-align:start}
+
+/* ── Kanban ───────────────────────────────────────────────────────── */
+{% block extra_style %}{% endblock %}
+</style>
+</head>
+<body class="base-app-shell base-ssr-shell">
+
+{% macro workflow_navigation(drawer=false) %}
+  {% if drawer %}<div class="sidebar-header"><span data-base-platform-mark></span></div>{% endif %}
+  <nav class="sidebar-nav" aria-label="Основная навигация">
+    <a class="sidebar-link {% if page == 'namespace' %}active{% endif %}" href="/namespaces" aria-label="Неймспейсы" title="Неймспейсы" {% if page == 'namespace' %}aria-current="page"{% endif %}>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h18"/><path d="M5 7V5a2 2 0 0 1 2-2h3"/><path d="M19 7v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7"/><path d="M9 12h6"/><path d="M9 16h4"/></svg>
+      <span class="sidebar-label">Неймспейсы</span>
+    </a>
+    <div class="sidebar-section">ОБЗОР</div>
+    <a class="sidebar-link {% if page == 'dashboard' %}active{% endif %}" href="/" aria-label="Дашборд" title="Дашборд" {% if page == 'dashboard' %}aria-current="page"{% endif %}>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      <span class="sidebar-label">Дашборд</span>
+    </a>
+    <a class="sidebar-link {% if page == 'workflows' %}active{% endif %}" href="/workflows" aria-label="Воркфлоу" title="Воркфлоу" {% if page == 'workflows' %}aria-current="page"{% endif %}>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><path d="M7 10v4"/><path d="M17 10v4"/></svg>
+      <span class="sidebar-label">Воркфлоу</span>
+    </a>
+    <a class="sidebar-link {% if page == 'phases' %}active{% endif %}" href="/phases" aria-label="Фазы" title="Фазы" {% if page == 'phases' %}aria-current="page"{% endif %}>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+      <span class="sidebar-label">Фазы</span>
+    </a>
+    <a class="sidebar-link {% if page == 'tasks' %}active{% endif %}" href="/tasks" aria-label="Задачи" title="Задачи" {% if page == 'tasks' %}aria-current="page"{% endif %}>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+      <span class="sidebar-label">Задачи</span>
+    </a>
+    <div class="sidebar-section">УПРАВЛЕНИЕ</div>
+    <a class="sidebar-link {% if page == 'agents' %}active{% endif %}" href="/agents" aria-label="Агенты" title="Агенты" {% if page == 'agents' %}aria-current="page"{% endif %}>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4z"/><path d="M2 20c0-2.21 3.58-4 8-4s8 1.79 8 4"/></svg>
+      <span class="sidebar-label">Агенты</span>
+    </a>
+    <a class="sidebar-link {% if page == 'settings' %}active{% endif %}" href="/settings" aria-label="Команды CLI" title="Команды CLI" {% if page == 'settings' %}aria-current="page"{% endif %}>
+      <span class="sidebar-cli-icon" aria-hidden="true">&gt;_</span>
+      <span class="sidebar-label">Команды CLI</span>
+    </a>
+    {% if drawer %}<div class="sidebar-utilities">
+      <div class="sidebar-section">ПЛАТФОРМА</div>
+      <div class="sidebar-theme">
+        <label for="sidebarThemeSelector">Тема</label>
+        <select class="theme-select" id="sidebarThemeSelector" onchange="setPlatformTheme(this.value)">
+          <option value="dark">Тёмная</option>
+          <option value="gray">Серая</option>
+          <option value="light">Светлая</option>
+        </select>
+      </div>
+      {% if show_service_switcher|default(false) %}
+      <details class="sidebar-service-menu">
+        <summary class="sidebar-link"><span class="sidebar-label">Сервисы</span></summary>
+        <div class="sidebar-service-links">
+          {% for service in other_services %}
+          <a class="sidebar-service-link" href="{{ service.url }}">
+            <span class="service-health {{ service.health }}" role="img" aria-label="{% if service.health == 'healthy' %}Работает{% elif service.health == 'unreachable' %}Недоступен{% else %}Состояние неизвестно{% endif %}"></span>
+            <span>{{ service.label }}</span>
+          </a>
+          {% endfor %}
+          <a class="sidebar-service-link" href="/" aria-current="page">
+            <span class="service-health healthy" role="img" aria-label="Работает"></span>
+            <span>Project Workflow</span>
+          </a>
+          {% set catalog_source = services_source|default('fallback-unreachable') %}
+          <div class="service-menu-source" role="status">Источник: {{ 'каталог' if catalog_source == 'runtime' else 'резервный список' if catalog_source.startswith('fallback') else 'сохранённый каталог' }}</div>
+        </div>
+      </details>
+      {% endif %}
+    </div>{% endif %}
+    </nav>
+{% endmacro %}
+{% call base.navigation_drawer('Project Workflow') %}{{ workflow_navigation(true) }}{% endcall %}
+{% call base.sidebar() %}
+  <div class="sidebar-header">
+    <div class="sidebar-logo">
+      <a class="brand-link" href="/" aria-label="Workflow Engine">
+        <span class="brand-mark" data-base-platform-mark>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="{{ project_icon_path(active_namespace.theme_icon if active_namespace else default_project_icon) }}"></path>
+          </svg>
+        </span>
+        <span class="brand-text">
+          <span class="brand-name">{{ active_namespace.name if active_namespace else 'workflow' }}</span>
+          <span class="brand-subname">{{ active_namespace.cli_command if active_namespace and active_namespace.cli_command else 'engine' }}</span>
+        </span>
+      </a>
+    </div>
+  </div>
+{{ workflow_navigation() }}
+{% endcall %}
+
+<!-- Main -->
+<main class="main" tabindex="-1">
+  {% call base.header() %}
+    <div class="header-title-group">
+      <button class="burger base-shell-drawer-trigger" id="burgerBtn" type="button" aria-label="Открыть навигацию" aria-controls="base-mobile-navigation" aria-expanded="false" data-base-drawer-trigger>☰</button>
+      {% if show_service_switcher|default(false) %}
+      <details class="service-menu" id="serviceMenu">
+        <summary aria-label="Project Workflow: открыть список сервисов">Project Workflow <span class="service-menu-chevron" aria-hidden="true">▾</span></summary>
+        <div class="service-menu-popover">
+        <div role="menu" aria-label="Сервисы платформы">
+        {% for service in other_services %}
+          <a class="service-menu-item" href="{{ service.url }}" role="menuitem">
+            <span class="service-health {{ service.health }}" role="img" aria-label="{% if service.health == 'healthy' %}Работает{% elif service.health == 'unreachable' %}Недоступен{% else %}Состояние неизвестно{% endif %}"></span>
+            <span>{{ service.label }}</span>
+          </a>
+        {% endfor %}
+          <a class="service-menu-item" href="/" role="menuitem" aria-current="page">
+            <span class="service-health healthy" role="img" aria-label="Работает"></span>
+            <span>Project Workflow</span>
+            <span class="service-menu-current">Текущий</span>
+          </a>
+        </div>
+          {% set catalog_source = services_source|default('fallback-unreachable') %}
+          <div class="service-menu-source" role="status">Источник: {{ 'каталог' if catalog_source == 'runtime' else 'резервный список' if catalog_source.startswith('fallback') else 'сохранённый каталог' }}</div>
+        </div>
+      </details>
+      {% endif %}
+      <h1 class="header-title">{% block header_title %}{% endblock %}</h1>
+    </div>
+    <div class="header-actions">
+      <select class="theme-select" id="themeSelector" aria-label="Тема" onchange="setPlatformTheme(this.value)">
+        <option value="dark">Тёмная</option>
+        <option value="gray">Серая</option>
+        <option value="light">Светлая</option>
+      </select>
+      {% if namespaces is defined and namespaces %}
+      <div class="namespace-switcher">
+        <select class="namespace-select" id="namespaceSelector" aria-label="Выбор пространства" onchange="switchNamespace(this.value)">
+          {% for namespace in namespaces %}
+          <option value="{{ namespace.id }}" {% if active_namespace_id == namespace.id %}selected{% endif %}>{{ namespace.name }}</option>
+          {% endfor %}
+        </select>
+        <a class="namespace-icon-action" id="namespaceCreateLink" href="/namespaces/new{% if active_namespace_id %}?namespace_id={{ active_namespace_id }}{% endif %}" title="Создать пространство" aria-label="Создать пространство">+</a>
+        <a class="namespace-icon-action" id="namespaceEditLink" href="/namespaces{% if active_namespace_id %}?namespace_id={{ active_namespace_id }}{% endif %}" title="Редактировать пространство" aria-label="Редактировать пространство">✎</a>
+      </div>
+      {% endif %}
+      {% block header_actions %}{% endblock %}
+      {{ base.account() }}
+    </div>
+  {% endcall %}
+
+  {% set layout_mode %}{% block page_layout %}wide{% endblock %}{% endset %}
+  {% set layout_mode = layout_mode | trim %}
+  {% call base.frame(layout_mode) %}
+    {% block content %}{% endblock %}
+  {% endcall %}
+</main>
+
+<div class="toast toast-success" id="toast" aria-hidden="true">Сохранено</div>
+<div class="modal-backdrop" id="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="confirmDialogTitle" aria-hidden="true" hidden>
+  <section class="modal-card" role="document">
+    <div class="modal-eyebrow" id="confirmDialogEyebrow">Подтверждение</div>
+    <h2 class="modal-title" id="confirmDialogTitle">Подтвердите действие</h2>
+    <p class="modal-copy" id="confirmDialogCopy"></p>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-secondary" id="confirmDialogCancel">Отмена</button>
+      <button type="button" class="btn btn-danger" id="confirmDialogAccept">Удалить</button>
+    </div>
+  </section>
+</div>
+
+<script src="/static/base-ui/base-ui.js" defer></script>
+<script>
+function syncSidebarLayout(){
+  var dialogOpen=!document.getElementById('confirmDialog').hidden;
+  document.getElementById('sidebar').inert=dialogOpen;
+  document.querySelector('.main').inert=dialogOpen;
+}
+var serviceMenu=document.getElementById('serviceMenu');
+document.addEventListener('click',function(event){
+  if(serviceMenu&&serviceMenu.open&&!serviceMenu.contains(event.target)){serviceMenu.open=false;}
+});
+document.addEventListener('keydown',function(event){
+  if(event.key==='Escape'&&serviceMenu&&serviceMenu.open){
+    serviceMenu.open=false;
+    serviceMenu.querySelector('summary').focus();
+  }
+});
+function showToast(msg, type){
+  var t=document.getElementById('toast');
+  if(t._hideTimer){clearTimeout(t._hideTimer);}
+  t.textContent=msg;
+  t.className='toast toast-'+type+' show';
+  t.setAttribute('aria-hidden','false');
+  t._hideTimer=setTimeout(function(){
+    t.classList.remove('show');
+    t.setAttribute('aria-hidden','true');
+  },2000);
+}
+function showRequestError(){
+  showToast('Не удалось связаться с сервером','error');
+}
+function requestConfirmation(options){
+  var dialog = document.getElementById('confirmDialog');
+  var cancel = document.getElementById('confirmDialogCancel');
+  var accept = document.getElementById('confirmDialogAccept');
+  var trigger = document.activeElement;
+  var background = [document.querySelector('.sidebar'), document.querySelector('.main')];
+  var previousInert = background.map(function(element){ return element.inert; });
+  document.getElementById('confirmDialogEyebrow').textContent = options.eyebrow || 'Подтверждение';
+  document.getElementById('confirmDialogTitle').textContent = options.title || 'Подтвердите действие';
+  document.getElementById('confirmDialogCopy').textContent = options.message || '';
+  accept.textContent = options.confirmLabel || 'Удалить';
+  dialog.hidden = false;
+  dialog.setAttribute('aria-hidden', 'false');
+  background.forEach(function(element){ element.inert = true; });
+  accept.focus();
+  return new Promise(function(resolve){
+    function close(value){
+      dialog.hidden = true;
+      dialog.setAttribute('aria-hidden', 'true');
+      background.forEach(function(element,index){ element.inert = previousInert[index]; });
+      syncSidebarLayout();
+      cancel.removeEventListener('click', onCancel);
+      accept.removeEventListener('click', onAccept);
+      dialog.removeEventListener('click', onBackdrop);
+      document.removeEventListener('keydown', onKeyDown);
+      if(trigger && trigger.isConnected && typeof trigger.focus === 'function'){ trigger.focus(); }else{ document.querySelector('.main').focus(); }
+      resolve(value);
+    }
+    function onCancel(){ close(false); }
+    function onAccept(){ close(true); }
+    function onBackdrop(event){ if(event.target === dialog){ close(false); } }
+    function onKeyDown(event){
+      if(event.key === 'Escape'){ close(false); }
+      if(event.key === 'Tab'){
+        if(event.shiftKey && (document.activeElement === cancel || !dialog.contains(document.activeElement))){
+          event.preventDefault();
+          accept.focus();
+        }else if(!event.shiftKey && (document.activeElement === accept || !dialog.contains(document.activeElement))){
+          event.preventDefault();
+          cancel.focus();
+        }
+      }
+    }
+    cancel.addEventListener('click', onCancel);
+    accept.addEventListener('click', onAccept);
+    dialog.addEventListener('click', onBackdrop);
+    document.addEventListener('keydown', onKeyDown);
+  });
+}
+function switchNamespace(namespaceId){
+  if(!namespaceId){return;}
+  document.cookie='workflow_namespace_id='+encodeURIComponent(namespaceId)+'; path=/; SameSite=Lax';
+  var url=new URL(window.location.href);
+  if(url.pathname === '/phases'){
+    url.searchParams.delete('workflow_id');
+  }
+  if(url.pathname.startsWith('/phase/')){
+    url.pathname='/phases';
+    url.searchParams.delete('workflow_id');
+  }
+  if(url.pathname === '/instructions'){
+    url.pathname='/phases';
+    url.searchParams.delete('phase_id');
+    url.searchParams.delete('workflow_id');
+  }
+  if(url.pathname === '/namespaces/new'){
+    url.pathname='/namespaces';
+  }
+  url.searchParams.set('namespace_id', namespaceId);
+  window.location.href=url.toString();
+}
+function setPlatformTheme(theme){
+  if(!['dark','gray','light'].includes(theme)){return;}
+  document.documentElement.dataset.theme=theme;
+  document.querySelectorAll('.theme-select').forEach(function(select){select.value=theme;});
+  try{localStorage.setItem('workflow-theme',theme)}catch(_error){}
+  document.dispatchEvent(new CustomEvent('base:theme-change',{detail:theme}));
+}
+try{
+  var savedTheme=localStorage.getItem('workflow-theme');
+  if(['dark','gray','light'].includes(savedTheme)){
+    document.querySelectorAll('.theme-select').forEach(function(select){select.value=savedTheme;});
+  }
+}catch(_error){}
+function pluralizeRu(n, one, few, many){
+  if(n % 10 === 1 && n % 100 !== 11){ return n + ' ' + one; }
+  if(n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20)){ return n + ' ' + few; }
+  return n + ' ' + many;
+}
+{% block extra_script %}{% endblock %}
+</script>
+</body>
+</html>

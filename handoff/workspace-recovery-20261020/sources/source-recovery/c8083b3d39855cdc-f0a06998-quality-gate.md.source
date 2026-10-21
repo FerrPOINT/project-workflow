@@ -1,0 +1,181 @@
+# Quality Gate
+
+Этот файл фиксирует локальный quality gate для `project-workflow`. GitHub Actions
+в `.github/workflows/ci.yml` повторяет этот обязательный набор на каждом push и
+pull request в `master`: job `quality` запускает тесты и статический анализ с
+PostgreSQL 16, а `compose-smoke` собирает стек и проверяет `/health`. Перед
+commit разработчик всё равно запускает релевантные локальные проверки.
+
+## Базовый gate
+
+```bash
+uv run --isolated --with-requirements constraints.txt --all-extras pytest -q --timeout=60
+uv run --isolated --with-requirements constraints.txt --all-extras pytest -q -m integration tests/test_postgres_integration.py --timeout=120
+uv run --isolated --with-requirements constraints.txt --all-extras pytest --cov=project_workflow --cov-report=term --timeout=60
+uv run --isolated --with-requirements constraints.txt --all-extras ruff check .
+uv run --isolated --with-requirements constraints.txt --all-extras mypy project_workflow scripts
+git diff --check
+```
+
+Ожидаемый результат:
+
+- обычный pytest проходит без падений; PostgreSQL integration tests в нём
+  показываются как deselected;
+- отдельный PostgreSQL integration gate проходит на реальном PostgreSQL;
+- coverage остаётся не ниже текущего локального baseline `94%`;
+- `ruff`, `mypy` и `git diff --check` не находят ошибок.
+
+На Unix-like окружении тот же набор доступен через `make quality`; на Windows
+без `make` используйте `pwsh -File scripts/quality.ps1 quality`. Дополнительные
+цели `warnings` и `compose-ready` есть и в `Makefile`, и в PowerShell helper.
+
+## ResourceWarning Gate
+
+После изменений в тестовой инфраструктуре, SQLAlchemy layer, UI request
+lifecycle или CLI session lifecycle дополнительно запускать:
+
+```bash
+uv run --isolated --with-requirements constraints.txt --all-extras pytest -q --timeout=60 -W error::ResourceWarning -W error::pytest.PytestUnraisableExceptionWarning
+```
+
+Этот прогон должен проходить без SQLite connection warnings, включая
+`PytestUnraisableExceptionWarning`, и без зависаний на повторных миграционных
+кейсах. Если тест создаёт `SAUnitOfWork` вручную, он должен использовать context
+manager или закрываться через общий pytest lifecycle в `tests/conftest.py`. Если
+тест создаёт SQLite engine напрямую, engine должен быть disposed в teardown.
+
+## PostgreSQL Integration
+
+Integration tests требуют локальный PostgreSQL с правом создавать и удалять
+временные базы:
+
+```bash
+PGHOST=127.0.0.1
+PGPORT=5432
+PGUSER=project_workflow
+PGPASSWORD=project_workflow
+PGDATABASE=project_workflow
+```
+
+Набор `tests/test_postgres_integration.py` проверяет реальный путь CLI
+subprocess -> PostgreSQL -> тестовый OpenAI-compatible HTTP endpoint ->
+Supervisor -> PostgreSQL. Это deterministic runtime integration, а не полный
+business E2E с настоящим исполнителем.
+
+Полный executor-driven acceptance описан отдельно в
+[`LIVE_TEST_PLAN.md`](../LIVE_TEST_PLAN.md).
+
+## Compose Readiness
+
+Для проверки локального runtime:
+
+```bash
+docker compose up --build -d --wait
+curl --fail http://127.0.0.1:8812/health
+```
+
+Ожидается HTTP `200`, `database=ok`, `schema=ok`. Стандартный Compose публикует
+PostgreSQL и API только на loopback. Для стандартного compose-ready должны быть
+свободны `127.0.0.1:5432` и `127.0.0.1:8812`; если порт 5432 занят другим
+PostgreSQL, integration gate можно запускать с `PGPORT`, указывающим на
+отдельный тестовый PostgreSQL.
+
+## UI Smoke
+
+После любых изменений UI/templates/static JS:
+
+Подготовить отдельную нейтральную smoke-базу, чтобы скриншоты не зависели от
+дефолтного runtime-каталога и показывали две независимые записи для одной
+внешней задачи:
+
+`prepare_ui_smoke_data.py` намеренно принимает только отдельную SQLite smoke-базу
+в `.smoke/ui-smoke.db` или файл `ui-smoke.db`; обычную runtime-БД он отклоняет.
+
+```bash
+export DATABASE_URL=sqlite:///$PWD/.smoke/ui-smoke.db
+rm -f .smoke/ui-smoke.db
+python scripts/prepare_ui_smoke_data.py
+python -m project_workflow.interfaces.ui --host 127.0.0.1 --port 8812
+```
+
+В другом терминале:
+
+```bash
+npm --prefix .smoke install playwright
+SMOKE_BASE_URL=http://127.0.0.1:8812 node scripts/capture_ui_screenshots.mjs
+```
+
+PowerShell:
+
+```powershell
+$env:DATABASE_URL = "sqlite:///$PWD/.smoke/ui-smoke.db"
+Remove-Item -LiteralPath .smoke/ui-smoke.db -ErrorAction SilentlyContinue
+python scripts/prepare_ui_smoke_data.py
+python -m project_workflow.interfaces.ui --host 127.0.0.1 --port 8812
+```
+
+В другом PowerShell:
+
+```powershell
+npm --prefix .smoke install playwright
+$env:SMOKE_BASE_URL = "http://127.0.0.1:8812"
+node scripts/capture_ui_screenshots.mjs
+```
+
+- открыть `http://127.0.0.1:8812/`;
+- открыть `http://127.0.0.1:8812/namespaces`;
+- открыть `http://127.0.0.1:8812/namespaces/new`;
+- открыть `http://127.0.0.1:8812/tasks`;
+- открыть `http://127.0.0.1:8812/tasks?namespace_id=<qa-id>`;
+- открыть `http://127.0.0.1:8812/phases`;
+- открыть `http://127.0.0.1:8812/agents`;
+- открыть `http://127.0.0.1:8812/settings`;
+- открыть detail одной задачи в двух выбранных неймспейсах, если менялись selector,
+  task links, theme или данные выбранного неймспейса;
+- открыть `http://127.0.0.1:8812/workflows`, если менялись workflow controls,
+  фазы или CRUD workflow;
+- проверить, что верхний selector переключает выбранный неймспейс, меняет логотип,
+  цвет темы, список задач, dashboard stats и `/phases`;
+- проверить, что страницы загрузились без console/network ошибок;
+- сохранить full-page screenshot evidence через `scripts/capture_ui_screenshots.mjs`;
+- убедиться, что screenshot evidence сделан на полной нейтральной smoke-fixture
+  с задачами, фазами, агентами и двумя неймспейсами, а не на пустой дефолтной
+  базе;
+- проверить, что screenshot evidence не содержит старое дефолтное имя или
+  runtime-specific упоминания конкретного внешнего исполнителя, включая
+  старые `flow-*` ключи и прочие внутренние labels; CLI settings должен
+  показывать выбранную wrapper-команду.
+
+Для backend-only тестовых или документационных изменений browser smoke не
+обязателен.
+
+## CLI Wrappers
+
+После изменений в CRUD неймспейсов, bootstrap или CLI selector path дополнительно
+проверять генерацию пользовательских команд:
+
+```bash
+python scripts/install_namespace_clis.py --bin-dir <dir>
+```
+
+Скрипт читает неймспейсы из PostgreSQL, создаёт wrapper-команды из
+`cli_command`, выставляет `PROJECT_WORKFLOW_NAMESPACE_ID=<id>` и вызывает
+только `project-workflow step/history`. `project-workflow` не получает новых
+публичных команд: wrapper names являются пользовательской CLI-командой нужного неймспейса.
+
+## Диагностика SSO Callback
+
+При HTTP503 на `/sso/callback` сервер пишет warning `SSO callback failed` с
+фиксированным этапом (`exchange`, `tokens`, `jwks`, `claims` или
+`session-confirmation`) и классом исключения. Текст исключения и traceback
+намеренно не записываются: они могут содержать OIDC credentials. Не добавлять
+код входа, verifier, JWT, cookie или заголовок Authorization в диагностику.
+Ответ остаётся fail-closed; ошибка не создаёт локальную сессию. Unit gate для
+этой границы: `pytest -q tests/test_sso.py --timeout=60`.
+
+## References
+
+- [README](../README.md) — launch modes and command overview.
+- [Architecture](architecture.md) — runtime and auth boundaries.
+- [Live Acceptance](../LIVE_TEST_PLAN.md) — executor-driven E2E evidence.
+- [Database Reset](database-reset.md) — clean local Compose baseline.

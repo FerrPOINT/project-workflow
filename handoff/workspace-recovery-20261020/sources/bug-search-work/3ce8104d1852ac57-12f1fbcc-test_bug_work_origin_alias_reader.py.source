@@ -1,0 +1,99 @@
+"""Actual fixed HTTP reader preserves original Tracker103/104 opaque locators."""
+
+import copy
+
+import httpx
+import pytest
+from pydantic import ValidationError
+
+from project_workflow import config
+from project_workflow.domain.bug_work_origin import BugWorkOriginProject
+from project_workflow.domain.runtime_assignment import canonical_json, payload_sha256
+from project_workflow.infrastructure import bug_work_authority as authority
+from project_workflow.infrastructure.namespace_auth import NamespaceAuthError
+from tests.test_bug_work import source as source
+from tests.test_bug_work_origin_authority import READ_GRANT, READ_ORIGIN, configure
+
+
+def original_alias(source, monkeypatch, alias):
+    request, observed, origin, _ = configure(source, monkeypatch)
+    observed["assignment"]["tracker_instance_id"] = alias
+    origin["source_context"]["project"]["tracker_instance_id"] = alias
+    request = refresh_hashes(request, observed, origin).model_copy(update={"tracker_instance_id": alias})
+    # The OS cannot store NUL in environment; the request/domain must still reject it.
+    configured = alias if "\0" not in alias else "configured-safe-locator"
+    monkeypatch.setenv("PROJECT_WORKFLOW_BUG_SEARCH_TRACKER_INSTANCE_ID", configured)
+    config.get_settings.cache_clear()
+    return request, observed, origin
+
+
+def refresh_hashes(request, observed, origin):
+    observed["assignment"]["origin"]["source_context_sha256"] = payload_sha256(origin["source_context"])
+    origin["origin"] = copy.deepcopy(observed["assignment"]["origin"])
+    observed["assignment_sha256"] = payload_sha256(observed["assignment"])
+    origin["assignment_sha256"] = observed["assignment_sha256"]
+    return request.model_copy(update={"assignment_sha256": observed["assignment_sha256"]})
+
+
+@pytest.mark.parametrize("alias", ['tracker-integration-Ж🚀"\\\r\n', "Ж" * 64])
+def test_actual_owner_reader_preserves_unicode_crlf_and_exact_128_utf8_bytes(source, monkeypatch, alias):
+    request, observed, origin = original_alias(source, monkeypatch, alias)
+    before = canonical_json({"grant": observed, "origin": origin})
+    calls = []
+
+    def handle(outgoing):
+        calls.append(outgoing.url.path)
+        prefix = f"/api/v1/projects/{request.project_id}/sdlc/bug-intake/assignments/{request.assignment_id}"
+        assert outgoing.url.path in {prefix + "/grant", prefix + "/origin"}
+        assert outgoing.headers["authorization"] == "Bearer synthetic-workflow-own-reader"
+        return httpx.Response(200, json=observed if outgoing.url.path.endswith("/grant") else origin)
+
+    client = httpx.Client
+    monkeypatch.setattr(authority.httpx, "Client", lambda **kw: client(**kw, transport=httpx.MockTransport(handle)))
+    assert READ_GRANT(request) == observed
+    assert READ_ORIGIN(request, observed) == origin
+    assert len(calls) == 2
+    assert canonical_json({"grant": observed, "origin": origin}) == before
+    assert payload_sha256(origin["source_context"]) == observed["assignment"]["origin"]["source_context_sha256"]
+
+
+@pytest.mark.parametrize("alias", ["bad\0alias", "Ж" * 65, " \r\n "])
+def test_original_locator_rejects_nul_blank_or_utf8_overflow_before_http(source, monkeypatch, alias):
+    request, observed, _ = original_alias(source, monkeypatch, alias)
+    monkeypatch.setattr(authority.httpx, "Client", lambda **_: pytest.fail("Invalid locator must not probe owner"))
+    with pytest.raises(NamespaceAuthError):
+        READ_ORIGIN(request, observed)
+    with pytest.raises(ValidationError):
+        BugWorkOriginProject.model_validate({"tracker_instance_id": alias, "project_id": request.project_id})
+
+
+def test_original_locator_still_requires_exact_configured_value_and_canonical_uuid(source, monkeypatch):
+    request, observed, _ = original_alias(source, monkeypatch, "исходный\r\nTracker")
+    monkeypatch.setattr(authority.httpx, "Client", lambda **_: pytest.fail("Foreign locator must not probe owner"))
+    monkeypatch.setenv("PROJECT_WORKFLOW_BUG_SEARCH_TRACKER_INSTANCE_ID", "foreign")
+    config.get_settings.cache_clear()
+    with pytest.raises(NamespaceAuthError):
+        READ_ORIGIN(request, observed)
+    monkeypatch.setenv("PROJECT_WORKFLOW_BUG_SEARCH_TRACKER_INSTANCE_ID", request.tracker_instance_id)
+    monkeypatch.setenv("PROJECT_WORKFLOW_BUG_SEARCH_TRACKER_INSTANCE_UUID", "not-a-uuid")
+    config.get_settings.cache_clear()
+    with pytest.raises(NamespaceAuthError):
+        READ_ORIGIN(request, observed)
+
+
+def test_http_origin_alias_cannot_change_even_with_a_consistent_new_source_hash(source, monkeypatch):
+    request, observed, origin = original_alias(source, monkeypatch, "исходный\r\nTracker")
+    origin["source_context"]["project"]["tracker_instance_id"] = "foreign"
+    request = refresh_hashes(request, observed, origin)
+    calls = []
+
+    def handle(outgoing):
+        calls.append(outgoing.url.path)
+        assert outgoing.url.path.endswith("/origin")
+        return httpx.Response(200, json=origin)
+
+    client = httpx.Client
+    monkeypatch.setattr(authority.httpx, "Client", lambda **kw: client(**kw, transport=httpx.MockTransport(handle)))
+    with pytest.raises(NamespaceAuthError):
+        READ_ORIGIN(request, observed)
+    assert len(calls) == 1

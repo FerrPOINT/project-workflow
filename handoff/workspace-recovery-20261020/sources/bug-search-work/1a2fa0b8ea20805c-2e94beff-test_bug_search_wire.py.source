@@ -1,0 +1,173 @@
+"""Strict cross-owner authority and explicit defect-verification wire semantics."""
+
+import json
+from datetime import datetime, timedelta, timezone
+
+import pytest
+from pydantic import ValidationError
+
+from project_workflow.domain.bug_search_execution import (
+    BugSourceIdentity,
+    ExecutionResult,
+    ExecutionSnapshot,
+    FindingReport,
+    GrantReadback,
+)
+from project_workflow.domain.runtime_assignment import payload_sha256
+from tests.test_bug_search_execution import grant, uid
+from tests.test_bug_search_execution import source as source
+
+
+def report_value():
+    source = {"schema_version": 1, "producer": "bug_searcher", "rule_key": "portal:total",
+              "stable_defect_key": "invoice:rounding"}
+    return {"source_identity": payload_sha256(source), "source": source, "title": "Неверный итог",
+            "basis": "Expected contract", "expected": "10", "actual": "11", "reproducer": "Open invoice",
+            "checked_version": "a" * 40, "evidence_refs": ["evidence:invoice"]}
+
+
+def test_typed_source_hash_uses_stable_defect_identity_and_occurrence_ids():
+    value = report_value()
+    parsed = FindingReport.model_validate_json(json.dumps(value))
+    assert parsed.source_identity == payload_sha256(parsed.source.model_dump(mode="json"))
+    value["checked_version"] = "b" * 40
+    value["evidence_refs"] = ["evidence:second-run"]
+    assert FindingReport.model_validate_json(json.dumps(value)).source_identity == parsed.source_identity
+    occurrence = uid()
+    result = ExecutionResult.model_validate_json(json.dumps({"coverage": "complete", "findings": [
+        {"finding_id": occurrence, "report": value},
+    ]}))
+    assert result.findings[0].finding_id == occurrence
+    with pytest.raises(ValidationError):
+        ExecutionResult(coverage="complete", findings=result.findings + result.findings)
+
+
+@pytest.mark.parametrize("mutation", [
+    {"source_identity": "legacy:opaque"}, {"source": None}, {"source_identity": "0" * 64},
+    {"basis": "x" * 8193}, {"reproducer": "x" * 16385}, {"title": "я" * 251},
+    {"evidence_refs": ["evidence"] * 33}, {"actual": "contains\0nul"},
+])
+def test_registration_refuses_legacy_missing_mismatched_or_oversized_source(mutation):
+    with pytest.raises(ValidationError):
+        FindingReport.model_validate_json(json.dumps({**report_value(), **mutation}))
+
+
+@pytest.mark.parametrize("version", [True, 1.0, "1", 2])
+def test_source_schema_is_exact_integer(version):
+    with pytest.raises(ValidationError):
+        BugSourceIdentity(schema_version=version, producer="producer", rule_key="rule", stable_defect_key="defect")
+
+
+def test_reserved_prepare_only_allows_awaiting_admission_information(source):
+    binding = source[0].binding
+    grant(binding, admitted=False).require(binding, dispatch=False)
+    with pytest.raises(ValueError):
+        grant(binding, admitted=False).require(binding, dispatch=True)
+    with pytest.raises(ValueError):
+        grant(binding, admitted=False, blocked_reasons=("awaiting_admission", "owner_changed")).require(
+            binding, dispatch=False,
+        )
+    with pytest.raises(ValueError):
+        grant(binding, expires_at=datetime.now(timezone.utc) - timedelta(seconds=1)).require(binding, dispatch=False)
+    with pytest.raises(ValueError):
+        grant(binding, authorization_valid=False).require(binding, dispatch=False)
+    with pytest.raises(ValueError):
+        grant(binding, dispatch_allowed=False).require(binding, dispatch=True)
+    with pytest.raises(ValidationError):
+        GrantReadback(**{**grant(binding).model_dump(), "expires_at": datetime.now()})
+
+
+def verification_snapshot(source):
+    payload = source[0].snapshot.content()
+    basis = report_value()
+    bug = uid()
+    deployment = "forge:delivered:" + "d" * 64
+    payload.update(kind="verification", mode="qa", bug_id=bug,
+                   expected_fixed_deployment_ref=deployment, verification_basis=basis)
+    payload["targets"][0].update(target_ref="qa:portal", deployment_ref=deployment)
+    return payload
+
+
+def test_verification_has_original_typed_basis_and_explicit_verdict(source):
+    payload = verification_snapshot(source)
+    snapshot = ExecutionSnapshot.model_validate_json(json.dumps(payload))
+    verdict = {"bug_id": snapshot.bug_id, "basis_sha256": payload_sha256(payload["verification_basis"]),
+               "delivery_ref": snapshot.expected_fixed_deployment_ref, "verdict": "passed",
+               "actual": "Original reproducer now returns expected result", "evidence_refs": ["qa:evidence"]}
+    result = ExecutionResult.model_validate_json(json.dumps({
+        "coverage": "complete", "findings": [], "verification": verdict,
+    }))
+    assert result.verification.verdict == "passed"
+    with pytest.raises(ValidationError):
+        ExecutionResult.model_validate_json(json.dumps({
+            "coverage": "partial", "findings": [], "verification": verdict,
+        }))
+    payload.pop("verification_basis")
+    with pytest.raises(ValidationError):
+        ExecutionSnapshot.model_validate_json(json.dumps(payload))
+
+
+def test_search_snapshot_omits_optional_verification_basis_without_changing_hash(source):
+    snapshot = source[0].snapshot
+    assert "verification_basis" not in snapshot.content()
+    assert payload_sha256(snapshot.content()) == source[0].binding.snapshot_sha256
+    value = snapshot.content()
+    value["verification_basis"] = report_value()
+    with pytest.raises(ValidationError):
+        ExecutionSnapshot.model_validate_json(json.dumps(value))
+
+
+def test_verification_basis_requires_original_repository_but_allows_fixed_commit(source):
+    from tests.test_bug_target_source import identity
+
+    value = verification_snapshot(source)
+    # Legacy snapshots preserve their source-omitted wire contract.
+    ExecutionSnapshot.model_validate_json(json.dumps(value))
+    target = value["targets"][0]
+    target["commit_sha"] = "b" * 40
+    pin = identity(value["project"]["project_id"], source[0].binding.tracker_instance_uuid, "c" * 40)
+    target["source"] = pin
+    with pytest.raises(ValidationError):
+        ExecutionSnapshot.model_validate_json(json.dumps(value))
+    basis = value["verification_basis"]
+    basis["source"]["repository_id"] = uid()
+    basis["source_identity"] = payload_sha256(basis["source"])
+    with pytest.raises(ValidationError):
+        ExecutionSnapshot.model_validate_json(json.dumps(value))
+    basis["source"]["repository_id"] = pin["repository_id"]
+    basis["source_identity"] = payload_sha256(basis["source"])
+    parsed = ExecutionSnapshot.model_validate_json(json.dumps(value))
+    assert parsed.verification_basis.checked_version != parsed.targets[0].commit_sha
+    assert parsed.targets[0].source.observed_head_sha != parsed.targets[0].commit_sha
+    value["targets"].append(dict(target))
+    with pytest.raises(ValidationError):
+        ExecutionSnapshot.model_validate_json(json.dumps(value))
+    value["targets"].pop()
+    del target["source"]
+    with pytest.raises(ValidationError):
+        ExecutionSnapshot.model_validate_json(json.dumps(value))
+    target["source"] = pin
+    # A source-less extra target cannot authorize a basis from another repository.
+    value["targets"].append({key: item for key, item in target.items() if key != "source"})
+    pin["repository_id"] = uid()
+    with pytest.raises(ValidationError):
+        ExecutionSnapshot.model_validate_json(json.dumps(value))
+
+
+def test_repeat_guidance_is_optional_closed_utf8_bounded_and_hash_bound(source):
+    snapshot = source[0].snapshot
+    original = snapshot.content()
+    assert "user_guidance" not in original
+    assert payload_sha256(original) == source[0].binding.snapshot_sha256
+    value = {**original, "trigger": "manual", "user_guidance": {
+        "parent_execution_id": uid(), "text": "Проверь сохранение\n ещё раз",
+    }}
+    parsed = ExecutionSnapshot.model_validate_json(json.dumps(value))
+    assert parsed.content()["user_guidance"] == value["user_guidance"]
+    assert payload_sha256(parsed.content()) != payload_sha256(original)
+    for update in [{"text": "я" * 2049}, {"text": " "}, {"text": "a\0b"}, {"targets": []}]:
+        bad = {**value, "user_guidance": {**value["user_guidance"], **update}}
+        with pytest.raises(ValidationError):
+            ExecutionSnapshot.model_validate_json(json.dumps(bad))
+    with pytest.raises(ValidationError):
+        ExecutionSnapshot.model_validate_json(json.dumps({**value, "trigger": "periodic"}))

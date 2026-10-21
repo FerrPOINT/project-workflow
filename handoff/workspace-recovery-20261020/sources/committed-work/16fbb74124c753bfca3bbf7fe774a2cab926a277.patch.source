@@ -1,0 +1,339 @@
+diff --git a/.dockerignore b/.dockerignore
+index 63ac47e..02f81bc 100644
+--- a/.dockerignore
++++ b/.dockerignore
+@@ -13,9 +13,11 @@ htmlcov
+ tests
+ tools
+ docs
++!docs/ui-routes.json
+ screenshots
+ **/__pycache__
+ **/*.py[cod]
+ *.db
+ *.dump
+ .env
++project_workflow/interfaces/ui/static/react
+diff --git a/Dockerfile b/Dockerfile
+index 0e23875..c8b0dc4 100644
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -1,4 +1,27 @@
+ # syntax=docker/dockerfile:1
++FROM node:22.20.0-bookworm-slim@sha256:b21fe589dfbe5cc39365d0544b9be3f1f33f55f3c86c87a76ff65a02f8f5848e AS frontend
++
++RUN npm install --global pnpm@10.28.1
++WORKDIR /workspace/services-base/frontend
++COPY --from=sdlc_ui /package.json /pnpm-lock.yaml ./
++COPY --from=sdlc_ui /src ./src
++COPY --from=sdlc_ui /ssr ./ssr
++COPY --from=sdlc_ui /scripts ./scripts
++RUN pnpm install --frozen-lockfile
++
++WORKDIR /workspace/project-workflow
++COPY frontend/ ./frontend/
++COPY project_workflow/ ./project_workflow/
++COPY docs/ui-routes.json ./docs/ui-routes.json
++COPY Dockerfile pyproject.toml constraints.txt ./
++WORKDIR /workspace/project-workflow/frontend
++RUN pnpm install --frozen-lockfile && pnpm ssr:check && pnpm build
++
++ARG VCS_REF=unknown
++ARG BASE_VCS_REF=unknown
++RUN node ../../services-base/frontend/scripts/write-ui-build.mjs --repo .. \
++    --out /workspace/ui-build.json --product-sha "$VCS_REF" --base-sha "$BASE_VCS_REF"
++
+ FROM python:3.11-slim-bookworm@sha256:0bee7276f83efd4a1ee05bbbf4281d95ed28e079220a9457f25a93e3f1e3c31b AS builder
+ 
+ WORKDIR /app
+@@ -12,6 +35,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
+ COPY pyproject.toml constraints.txt README.md LICENSE alembic.ini ./
+ COPY scripts/ ./scripts/
+ COPY project_workflow/ ./project_workflow/
++COPY --from=frontend /workspace/project-workflow/project_workflow/interfaces/ui/static/react ./project_workflow/interfaces/ui/static/react
+ 
+ ENV PIP_CONSTRAINT=/app/constraints.txt
+ 
+@@ -24,7 +48,9 @@ RUN python -m venv /opt/venv \
+ FROM python:3.11-slim-bookworm@sha256:0bee7276f83efd4a1ee05bbbf4281d95ed28e079220a9457f25a93e3f1e3c31b AS runtime
+ 
+ ARG VCS_REF=unknown
++ARG BASE_VCS_REF=unknown
+ LABEL org.opencontainers.image.revision=$VCS_REF
++LABEL org.sdlc.ui.base.revision=$BASE_VCS_REF
+ 
+ WORKDIR /app
+ 
+@@ -37,6 +63,7 @@ COPY --from=builder /opt/venv /opt/venv
+ COPY --from=builder /app/alembic.ini /app/alembic.ini
+ COPY --from=builder /app/scripts /app/scripts
+ COPY --from=builder /app/project_workflow/infrastructure/db/migrations /app/project_workflow/infrastructure/db/migrations
++COPY --from=frontend /workspace/ui-build.json /app/ui-build.json
+ 
+ ENV PATH="/opt/venv/bin:$PATH"
+ ENV PYTHONUNBUFFERED=1
+diff --git a/docker-compose.yml b/docker-compose.yml
+index 6dd6649..47139c6 100644
+--- a/docker-compose.yml
++++ b/docker-compose.yml
+@@ -18,6 +18,11 @@ services:
+   migrate:
+     build:
+       context: .
++      additional_contexts:
++        sdlc_ui: ../services-base/frontend
++      args:
++        VCS_REF: ${WORKFLOW_VCS_REF:-unknown}
++        BASE_VCS_REF: ${BASE_VCS_REF:-unknown}
+     command: ["python", "scripts/init_db.py"]
+     environment:
+       DATABASE_URL: postgresql+psycopg://project_workflow:project_workflow@db:5432/project_workflow
+@@ -29,6 +34,11 @@ services:
+   api:
+     build:
+       context: .
++      additional_contexts:
++        sdlc_ui: ../services-base/frontend
++      args:
++        VCS_REF: ${WORKFLOW_VCS_REF:-unknown}
++        BASE_VCS_REF: ${BASE_VCS_REF:-unknown}
+     ports:
+       - "127.0.0.1:8812:8811"
+     environment:
+@@ -37,6 +47,7 @@ services:
+       UI_HOST: 0.0.0.0
+       UI_PORT: 8811
+       LOG_LEVEL: INFO
++      WORKFLOW_REACT_UI_ENABLED: ${WORKFLOW_REACT_UI_ENABLED:-false}
+       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-http://192.168.10.1:4000/v1}
+       OPENAI_MODEL: ${OPENAI_MODEL:-app-test}
+       OPENAI_TIMEOUT: ${OPENAI_TIMEOUT:-120}
+diff --git a/docs/adr/2026-10-01-read-only-react-pilot.md b/docs/adr/2026-10-01-read-only-react-pilot.md
+index 5299f68..037e266 100644
+--- a/docs/adr/2026-10-01-read-only-react-pilot.md
++++ b/docs/adr/2026-10-01-read-only-react-pilot.md
+@@ -28,7 +28,20 @@
+ 
+ ## Сборка и отключение
+ 
+-Выполнить `cd frontend && pnpm install --frozen-lockfile && pnpm ssr:check && pnpm build` до сборки Python package/image. Static resources включаются в wheel детерминированным force-include. При включённом флаге отсутствие build или bootstrap marker останавливает запуск. По умолчанию флаг выключен; /react и его assets недоступны. Флаг выключается без изменения Jinja URL, API, CLI или схем БД.
++Dockerfile собирает React из tracked sources в отдельном Node stage с pinned image
++и pnpm, frozen lockfiles Base и Workflow и обязательным `ssr:check`. Named context
++`sdlc_ui` указывает на выбранный `services-base/frontend`; оба штатных Compose
++build передают его. Локальный `static/react` исключён из Docker context: stale dist
++не может попасть в image. Результат копируется в Python wheel детерминированным
++force-include. Для сборки Python package вне Docker по-прежнему выполнить
++`cd frontend && pnpm install --frozen-lockfile && pnpm ssr:check && pnpm build`.
++
++`/app/ui-build.json` хранит source SHA, Base/product fingerprints и SHA-256 каждого
++React asset; OCI labels содержат product/Base revisions. Launcher передаёт текущие
++SHA. Значение `unknown` допустимо для локального dev build, но не для выпуска.
++При включённом флаге отсутствие build или bootstrap marker останавливает запуск.
++По умолчанию флаг выключен; /react и его assets недоступны. Флаг выключается без
++изменения Jinja URL, API, CLI или схем БД.
+ 
+ ## Сравнительная Acceptance Matrix
+ 
+diff --git a/docs/ui-routes.json b/docs/ui-routes.json
+index 711fa19..0ab0d68 100644
+--- a/docs/ui-routes.json
++++ b/docs/ui-routes.json
+@@ -6,6 +6,7 @@
+     "project_workflow/interfaces/ui/react_ui.py"
+   ],
+   "ssrAssets": "project_workflow/interfaces/ui/static/base-ui",
++  "reactAssets": "project_workflow/interfaces/ui/static/react",
+   "shellTemplate": "project_workflow/interfaces/ui/templates/base.html",
+   "acceptanceStatus": "pending",
+   "routes": [
+diff --git a/pyproject.toml b/pyproject.toml
+index d1a1065..36d2916 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -2,6 +2,9 @@
+ requires = ["hatchling==1.32.0"]
+ build-backend = "hatchling.build"
+ 
++[tool.hatch.build.targets.wheel]
++exclude = ["project_workflow/interfaces/ui/static/**"]
++
+ [tool.hatch.build.targets.wheel.force-include]
+ "project_workflow/interfaces/ui/static" = "project_workflow/interfaces/ui/static"
+ 
+diff --git a/scripts/verify_ui_image.py b/scripts/verify_ui_image.py
+new file mode 100644
+index 0000000..42ed7a2
+--- /dev/null
++++ b/scripts/verify_ui_image.py
+@@ -0,0 +1,66 @@
++"""Verify packaged UI bytes against immutable build provenance without network calls."""
++
++from __future__ import annotations
++
++import argparse
++import hashlib
++import json
++import re
++from pathlib import Path
++
++
++def verify_ui_assets(record_path: Path, static_path: Path, require_revisions: bool = False) -> dict:
++    record = json.loads(record_path.read_text(encoding="utf-8"))
++    if record.get("schemaVersion") != 1 or record.get("product") != "project-workflow":
++        raise ValueError("Invalid Workflow UI build record")
++    for name in ("baseFingerprint", "productFingerprint"):
++        if not re.fullmatch(r"[a-f0-9]{64}", str(record.get(name, ""))):
++            raise ValueError(f"Missing {name}")
++    if require_revisions:
++        for name in ("productSha", "baseSha"):
++            if not re.fullmatch(r"[a-f0-9]{40}", str(record.get(name, ""))):
++                raise ValueError(f"Missing attested {name}")
++
++    def verify(directory: Path, expected: dict) -> None:
++        actual = {file.relative_to(directory).as_posix() for file in directory.rglob("*") if file.is_file()}
++        if actual != set(expected):
++            raise ValueError(f"Unexpected or missing UI assets: {directory}")
++        for relative, digest in expected.items():
++            file = (directory / relative).resolve()
++            if not file.is_relative_to(directory.resolve()):
++                raise ValueError(f"Asset escapes static directory: {relative}")
++            if hashlib.sha256(file.read_bytes()).hexdigest() != digest:
++                raise ValueError(f"UI asset digest mismatch: {relative}")
++
++    assets = record.get("assets")
++    if (
++        not isinstance(assets, dict) or "index.html" not in assets
++        or not any(name.startswith("assets/") for name in assets)
++    ):
++        raise ValueError("Missing built React assets")
++    verify(static_path / "react", assets)
++    html = (static_path / "react" / "index.html").read_text(encoding="utf-8")
++    if html.count("<!--workflow-bootstrap-->") != 1:
++        raise ValueError("Missing safe bootstrap marker")
++    ssr = json.loads((static_path / "base-ui" / "fingerprint.json").read_text(encoding="utf-8"))
++    if ssr.get("package") != "@sdlc/ui" or set(ssr.get("files", {})) != {"base-ui.css", "base-ui.js", "macros.html"}:
++        raise ValueError("Invalid Base SSR asset fingerprint")
++    verify(static_path / "base-ui", {**ssr["files"], "fingerprint.json": hashlib.sha256(
++        (static_path / "base-ui" / "fingerprint.json").read_bytes(),
++    ).hexdigest()})
++    return {"productSha": record.get("productSha"), "baseSha": record.get("baseSha"),
++            "reactAssets": len(assets), "ssrAssets": len(ssr["files"])}
++
++
++def main() -> None:
++    from project_workflow.interfaces.ui.react_ui import FRONTEND_DIST
++
++    parser = argparse.ArgumentParser(description=__doc__)
++    parser.add_argument("--record", type=Path, default=Path("/app/ui-build.json"))
++    parser.add_argument("--require-revisions", action="store_true")
++    args = parser.parse_args()
++    print(json.dumps(verify_ui_assets(args.record, FRONTEND_DIST.parent, args.require_revisions)))
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/tests/test_runtime_cleanup.py b/tests/test_runtime_cleanup.py
+index 502b53e..b850b92 100644
+--- a/tests/test_runtime_cleanup.py
++++ b/tests/test_runtime_cleanup.py
+@@ -164,6 +164,25 @@ def test_repository_contains_declared_proprietary_license():
+     assert 'license-files = ["LICENSE"]' in pyproject
+ 
+ 
++def test_image_builds_read_only_pilot_from_frozen_sources_instead_of_local_dist():
++    dockerfile = DOCKERFILE_PATH.read_text(encoding="utf-8")
++    dockerignore = (REPO_ROOT / ".dockerignore").read_text(encoding="utf-8")
++    compose = COMPOSE_PATH.read_text(encoding="utf-8")
++    assert "FROM node:22.20.0-bookworm-slim@sha256:" in dockerfile
++    assert "pnpm@10.28.1" in dockerfile
++    assert "pnpm install --frozen-lockfile && pnpm ssr:check && pnpm build" in dockerfile
++    assert "COPY --from=sdlc_ui /src ./src" in dockerfile
++    assert "COPY --from=frontend /workspace/project-workflow/project_workflow/interfaces/ui/static/react" in dockerfile
++    assert "COPY --from=frontend /workspace/ui-build.json /app/ui-build.json" in dockerfile
++    assert "org.sdlc.ui.base.revision=$BASE_VCS_REF" in dockerfile
++    assert "project_workflow/interfaces/ui/static/react" in dockerignore.splitlines()
++    assert "!docs/ui-routes.json" in dockerignore.splitlines()
++    assert compose.count("sdlc_ui: ../services-base/frontend") == 2
++    assert "WORKFLOW_REACT_UI_ENABLED: ${WORKFLOW_REACT_UI_ENABLED:-false}" in compose
++    pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
++    assert 'exclude = ["project_workflow/interfaces/ui/static/**"]' in pyproject
++
++
+ @pytest.mark.parametrize("raises", [False, True])
+ def test_uow_context_always_closes_session(tmp_path, monkeypatch, raises):
+     uow = SAUnitOfWork(f"sqlite:///{tmp_path / f'uow-{raises}.db'}")
+diff --git a/tests/test_ui_image.py b/tests/test_ui_image.py
+new file mode 100644
+index 0000000..06b27b8
+--- /dev/null
++++ b/tests/test_ui_image.py
+@@ -0,0 +1,69 @@
++"""Image verification rejects stale, incomplete or unattested packaged frontend assets."""
++
++import hashlib
++import json
++
++import pytest
++
++from scripts.verify_ui_image import verify_ui_assets
++
++
++def fixture(tmp_path):
++    static = tmp_path / "static"
++    contents = {
++        "react/index.html": "<html><!--workflow-bootstrap--></html>",
++        "react/assets/app.js": "export const fixture=true;",
++        "base-ui/base-ui.css": ":root {--shell-header-height:60px;}",
++        "base-ui/base-ui.js": "export const fixture=true;",
++        "base-ui/macros.html": "{% macro header() %}<header></header>{% endmacro %}",
++    }
++    for file, text in contents.items():
++        target = static / file
++        target.parent.mkdir(parents=True, exist_ok=True)
++        target.write_text(text, encoding="utf-8")
++    def digest(name):
++        return hashlib.sha256((static / name).read_bytes()).hexdigest()
++    ssr = {"schemaVersion": 1, "package": "@sdlc/ui", "files": {
++        name: digest(f"base-ui/{name}") for name in ("base-ui.css", "base-ui.js", "macros.html")}}
++    (static / "base-ui/fingerprint.json").write_text(json.dumps(ssr), encoding="utf-8")
++    record = tmp_path / "ui-build.json"
++    record.write_text(json.dumps({"schemaVersion": 1, "product": "project-workflow",
++        "productSha": "a" * 40, "baseSha": "b" * 40, "baseFingerprint": "c" * 64, "productFingerprint": "d" * 64,
++        "assets": {name.removeprefix("react/"): digest(name) for name in contents if name.startswith("react/")}}),
++        encoding="utf-8")
++    return static, record
++
++
++def test_image_assets_and_revisions_are_verified(tmp_path):
++    static, record = fixture(tmp_path)
++    assert verify_ui_assets(record, static, True) == {
++        "productSha": "a" * 40, "baseSha": "b" * 40, "reactAssets": 2, "ssrAssets": 3}
++
++
++@pytest.mark.parametrize("file", ["react/assets/app.js", "base-ui/base-ui.css"])
++def test_modified_image_asset_is_rejected(tmp_path, file):
++    static, record = fixture(tmp_path)
++    (static / file).write_text("stale build", encoding="utf-8")
++    with pytest.raises(ValueError, match="digest mismatch"):
++        verify_ui_assets(record, static)
++
++
++@pytest.mark.parametrize("extra", [False, True])
++def test_missing_or_extra_image_asset_is_rejected(tmp_path, extra):
++    static, record = fixture(tmp_path)
++    if extra:
++        (static / "react/assets/stale.js").write_text("stale", encoding="utf-8")
++    else:
++        (static / "react/assets/app.js").unlink()
++    with pytest.raises(ValueError, match="Unexpected or missing UI assets"):
++        verify_ui_assets(record, static)
++
++
++def test_unknown_source_revision_cannot_pass_release_verification(tmp_path):
++    static, record = fixture(tmp_path)
++    value = json.loads(record.read_text(encoding="utf-8"))
++    value["baseSha"] = "unknown"
++    record.write_text(json.dumps(value), encoding="utf-8")
++    assert verify_ui_assets(record, static)["baseSha"] == "unknown"
++    with pytest.raises(ValueError, match="attested baseSha"):
++        verify_ui_assets(record, static, True)

@@ -1,0 +1,123 @@
+"""Private BugWork owner routes and HMAC-only worker CLI; no live runtime effects."""
+
+import json
+
+import httpx
+from click.testing import CliRunner
+from fastapi.testclient import TestClient
+
+from project_workflow.infrastructure import bug_work_authority as authority
+from project_workflow.infrastructure.db.uow import SAUnitOfWork
+from project_workflow.interfaces.cli.core import cli
+from project_workflow.interfaces.ui.app import create_app
+from tests.test_bug_work import bind_command, uid
+from tests.test_bug_work import source as source
+
+BASE = "/internal/bug-work/v1"
+
+
+def test_private_machine_prepare_bind_readback_stop_and_scoped_worker_hold(source, monkeypatch):
+    request, principal, _ = source
+    monkeypatch.setattr(authority, "authorize_fleet", lambda _authorization, **_: principal)
+    client = TestClient(create_app())
+    payload = request.model_dump(mode="json")
+    response = client.post(BASE + "/assignments", json=payload)
+    assert response.status_code == 200 and response.headers["cache-control"] == "no-store"
+    prepared = response.json()["result"]
+    assert prepared["bug_id"] == source[2]["assignment"]["bug_id"]
+    path = BASE + "/assignments/" + request.assignment_id
+    query = {"tracker_instance_uuid": request.tracker_instance_uuid}
+    assert client.get(path, params=query).json()["result"] == prepared
+    command = bind_command()
+    bound_response = client.post(path + "/bind", params=query, json=command.model_dump(mode="json"))
+    assert bound_response.status_code == 200, bound_response.text
+    token = bound_response.json()["execution_token"]
+    assert token.startswith("wf_bug_work_v1_")
+    headers = {"Authorization": "Bearer " + token}
+    assert client.get(path + "/history", params=query, headers=headers).json()["result"]["records"] == []
+    step = {
+        "operation_key": "step:1",
+        "expected_assignment_revision": 1,
+        "expected_fence": 1,
+        "expected_phase_code": prepared["current_phase_code"],
+        "expected_status": "active",
+        "report": None,
+    }
+    assert client.post(path + "/step", params=query, headers=headers, json=step).status_code == 409
+    denied = client.get(path + "/history", params=query, headers={"Authorization": "Bearer wf_bug_v1_" + "a" * 64})
+    assert denied.status_code in {401, 403}
+    stopped = client.post(
+        path + "/stop",
+        params=query,
+        json={"operation_key": "stop:1", "expected_assignment_revision": 1, "expected_fence": 1},
+    )
+    assert stopped.status_code == 200 and stopped.json()["result"]["runtime_terminal_confirmed"] is False
+    # The read endpoint is protective, but remains exact producer+instance scoped.
+    assert client.get(path, params={"tracker_instance_uuid": uid()}).status_code == 404
+    assert client.get(BASE + f"/catalog/{request.workflow_project_id}").status_code == 200
+
+
+def test_worker_cli_has_no_pat_or_database_fallback(source, monkeypatch, tmp_path):
+    from project_workflow.interfaces.cli import bug_work_execution as worker
+
+    request = source[0]
+    monkeypatch.delenv("SDLC_API_TOKEN", raising=False)
+    monkeypatch.setenv("PROJECT_WORKFLOW_NAMESPACE_ID", str(request.workflow_project_id))
+    monkeypatch.setenv("PROJECT_WORKFLOW_URL", "http://workflow.invalid")
+    request_path = tmp_path / "bug-work.json"
+    request_path.write_text(
+        json.dumps(
+            {
+                "assignment_id": request.assignment_id,
+                "tracker_instance_uuid": request.tracker_instance_uuid,
+                "profession_id": request.workflow_project_id,
+                "step": {
+                    "operation_key": "step:original",
+                    "expected_assignment_revision": 1,
+                    "expected_fence": 1,
+                    "expected_phase_code": "DV-INITIAL-01",
+                    "expected_status": "active",
+                    "report": None,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    token_path = tmp_path / "worker-token"
+    token_path.write_text("wf_bug_work_v1_" + "a" * 64, encoding="ascii")
+    calls = []
+
+    def handle(outgoing):
+        calls.append(outgoing)
+        assert outgoing.url.path == BASE + f"/assignments/{request.assignment_id}/step"
+        assert outgoing.url.params["tracker_instance_uuid"] == request.tracker_instance_uuid
+        assert outgoing.headers["authorization"] == "Bearer wf_bug_work_v1_" + "a" * 64
+        assert "SDLC_API_TOKEN" not in outgoing.headers
+        return httpx.Response(200, json={"ok": True, "result": {"can_execute": False}})
+
+    client = httpx.Client
+    monkeypatch.setattr(
+        worker.httpx, "Client", lambda **kwargs: client(**kwargs, transport=httpx.MockTransport(handle))
+    )
+    args = ["--json", "step", "--bug-work-request", str(request_path), "--execution-token-file", str(token_path)]
+    result = CliRunner().invoke(cli, args)
+    assert result.exit_code == 0, result.output
+    assert len(calls) == 1
+    monkeypatch.setenv("SDLC_API_TOKEN", "synthetic-pat-must-not-forward")
+    assert CliRunner().invoke(cli, args).exit_code != 0 and len(calls) == 1
+    monkeypatch.delenv("SDLC_API_TOKEN")
+    assert CliRunner().invoke(cli, [*args, "--task", "RUN-42"]).exit_code != 0 and len(calls) == 1
+    monkeypatch.setenv("PROJECT_WORKFLOW_NAMESPACE_ID", "999999")
+    assert CliRunner().invoke(cli, args).exit_code != 0 and len(calls) == 1
+
+
+def test_wrong_role_profession_is_not_silently_used(source):
+    import pytest
+
+    from project_workflow.application.bug_work import BugWorkService
+    from project_workflow.domain.exceptions import ConflictError
+
+    with SAUnitOfWork() as uow:
+        pm = uow.projects.get_by_cli_command("workflow-project_manager")
+        with pytest.raises(ConflictError):
+            BugWorkService(uow).catalog(pm.id)

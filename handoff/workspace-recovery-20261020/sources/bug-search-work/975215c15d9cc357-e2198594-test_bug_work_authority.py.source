@@ -1,0 +1,101 @@
+"""Fixed Tracker103 route, exact reader subject/scopes and bounded immutable wire."""
+
+import copy
+
+import httpx
+import pytest
+
+from project_workflow import config
+from project_workflow.infrastructure import bug_work_authority as authority
+from project_workflow.infrastructure.namespace_auth import NamespaceAuthError, NamespacePrincipal
+from tests.test_bug_work import source as source
+from tests.test_bug_work import uid
+
+READ_GRANT = authority.read_grant
+
+
+def settings(monkeypatch, request, subject, fleet_subject):
+    for key, value in {
+        "TRACKER_ROOT": "http://tracker.invalid",
+        "TRACKER_INSTANCE_ID": request.tracker_instance_id,
+        "TRACKER_INSTANCE_UUID": request.tracker_instance_uuid,
+        "TRACKER_READER_SUBJECT": subject,
+        "TRACKER_TOKEN": "synthetic-workflow-own-reader",
+        "FLEET_SUBJECT": fleet_subject,
+    }.items():
+        monkeypatch.setenv("PROJECT_WORKFLOW_BUG_SEARCH_" + key, value)
+    config.get_settings.cache_clear()
+
+
+def test_fixed_owner_reader_preserves_raw_assignment_and_binds_exact_scope(source, monkeypatch):
+    request, fleet, observed = source
+    reader = uid()
+    settings(monkeypatch, request, reader, fleet.subject)
+    monkeypatch.setattr(
+        authority,
+        "introspect",
+        lambda _: (NamespacePrincipal(issuer=fleet.issuer, subject=reader), ["task-tracker:read"]),
+    )
+    calls = []
+
+    def handle(outgoing):
+        calls.append(outgoing)
+        assert (
+            outgoing.url.path
+            == f"/api/v1/projects/{request.project_id}/sdlc/bug-intake/assignments/{request.assignment_id}/grant"
+        )
+        assert outgoing.headers["authorization"] == "Bearer synthetic-workflow-own-reader"
+        return httpx.Response(200, json=copy.deepcopy(observed))
+
+    client = httpx.Client
+    monkeypatch.setattr(
+        authority.httpx, "Client", lambda **kwargs: client(**kwargs, transport=httpx.MockTransport(handle))
+    )
+    assert READ_GRANT(request) == observed
+    assert len(calls) == 1
+    monkeypatch.setattr(
+        authority,
+        "introspect",
+        lambda _: (NamespacePrincipal(issuer=fleet.issuer, subject=uid()), ["task-tracker:read"]),
+    )
+    with pytest.raises(NamespaceAuthError):
+        READ_GRANT(request)
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize(
+    "bad", ["foreign_project", "foreign_machine", "wrong_hash", "unbounded", "redirect", "extra_scope", "grant_all"]
+)
+def test_reader_rejects_forged_scope_payload_and_unregistered_permissions(source, monkeypatch, bad):
+    request, fleet, observed = source
+    reader = uid()
+    settings(monkeypatch, request, reader, fleet.subject)
+    scopes = ["task-tracker:read"]
+    if bad == "extra_scope":
+        scopes.append("task-tracker:write")
+    elif bad == "grant_all":
+        scopes = ["*"]
+    monkeypatch.setattr(
+        authority, "introspect", lambda _: (NamespacePrincipal(issuer=fleet.issuer, subject=reader), scopes)
+    )
+    value = copy.deepcopy(observed)
+    if bad == "foreign_project":
+        value["assignment"]["project_id"] = uid()
+    elif bad == "foreign_machine":
+        value["assignment"]["machine_subject"] = uid()
+    elif bad == "wrong_hash":
+        value["assignment_sha256"] = "0" * 64
+
+    def handle(_):
+        if bad == "redirect":
+            return httpx.Response(302, headers={"Location": "http://foreign.invalid"})
+        if bad == "unbounded":
+            return httpx.Response(200, content=b"x" * 98_305)
+        return httpx.Response(200, json=value)
+
+    client = httpx.Client
+    monkeypatch.setattr(
+        authority.httpx, "Client", lambda **kwargs: client(**kwargs, transport=httpx.MockTransport(handle))
+    )
+    with pytest.raises(NamespaceAuthError):
+        READ_GRANT(request)

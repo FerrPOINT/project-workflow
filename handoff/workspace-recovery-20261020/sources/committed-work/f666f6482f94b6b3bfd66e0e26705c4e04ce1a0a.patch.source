@@ -1,0 +1,747 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 0a981f7..80a7d06 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -13,6 +13,12 @@
+ - Standalone-режим: репозиторий собирается и запускается без соседнего `services-base` (убраны extra `cli-platform`, uv source, Docker additional_context и CI checkout). Token-режим CLI без `sdlc-cli-core` выдаёт понятную ошибку; запуск без `AUTH_ISSUER` работает без авторизации.
+ 
+ ### Fixed
++- Jinja pages use the Base page header in the work area: one h1, one owner of
++  page actions across desktop/mobile, and shared error/403/404 states. Phase mode
++  controls use the Base responsive target token instead of a fixed 40 px height.
++- React default/all namespace scope survives reload and navigation despite an old
++  cookie. API calls omit empty numeric parameters; Jinja phase editor links resolve
++  an explicit matching namespace from the existing catalogue, without extra APIs.
+ - Read-only React-пилот использует Base URL helper и data router: namespace
+   changes сохраняют hash и принятые query patches, detail -> list выполняется
+   одним history transition, login next сохраняет полный адрес. Catalogue errors
+diff --git a/docs/UI_UX_MAP.md b/docs/UI_UX_MAP.md
+index a448855..d52f48a 100644
+--- a/docs/UI_UX_MAP.md
++++ b/docs/UI_UX_MAP.md
+@@ -13,7 +13,9 @@ Fixture IDs обозначают необходимые изолированны
+ `/task/{task_key}` использует `wide`, поскольку этот экран не имеет aside;
+ маркер `detail-with-aside` без фактической боковой колонки не допускается.
+ 
+-## Локальный SSR-Кандидат
++## Предыдущие Проверки SSR-Кандидата
++
++Исторические source checkpoints ниже не заменяют текущую выпускную приёмку.
+ 
+ Base snapshot `5a78740` (предыдущая проверка: `9df7dc3`): header расположен над всей рабочей областью;
+ sidebar начинается ниже него. В Jinja main больше не содержит header,
+@@ -45,3 +47,20 @@ Builder теперь использует Git-архивы обоих проду
+ покрывает также frontend build inputs. Обе цепочки provenance сохраняются:
+ runtime-build-manifest и ui-build. Совместимость со штатным launcher и
+ выпускную приёмку подтверждать только новым фактическим image evidence.
++
++## Текущая Композиция Страниц
++
++Base snapshot `94169d1` поставляет React primitives и SSR `page_header`/`state`.
++Jinja показывает единственный `h1` в рабочей области; верхний header содержит
++контекст, а действия страницы находятся в общем page header без мобильных дублей.
++Task title/context используют Base scale; error/403/404 используют Base states,
++а ссылка назад не маскируется под retry. Mode select использует target token Base.
++Fixture `/instructions` обязательно задаёт существующий `phase_id`.
++
++React URL `namespace_id=` означает явный default/all scope и не восстанавливает
++старую cookie после reload. Этот маркер сохраняется в pilot navigation, но не
++передаётся в numeric API/Jinja query. Ссылка Jinja редактора получает существующий
++namespace с matching workflow; при неразрешённом default context она скрыта.
++Нет новых endpoint, auth store или изменений основного Jinja/runtime bridge.
++Актуальные source gates и browser evidence фиксируются отдельно; immutable image,
++SSO/roles/states/drafts и release provenance остаются обязательной отдельной проверкой.
+diff --git a/docs/adr/2026-10-01-read-only-react-pilot.md b/docs/adr/2026-10-01-read-only-react-pilot.md
+index f262964..5ea52e3 100644
+--- a/docs/adr/2026-10-01-read-only-react-pilot.md
++++ b/docs/adr/2026-10-01-read-only-react-pilot.md
+@@ -35,6 +35,13 @@ Namespace patch сохраняет unrelated query/hash и сбрасывает
+ Переход detail -> list задаёт destination общему helper, не копирует router state
+ или собственную optimistic query в продукт. Новые auth/API/CRUD контуры не нужны.
+ 
++Явный default/all scope кодируется UI-параметром `namespace_id=`: отсутствие
++параметра разрешает первоначальный bootstrap, пустое значение запрещает повторное
++восстановление cookie после reload. Pilot links сохраняют этот маркер, API calls
++опускают пустой numeric parameter. Переход в Jinja редактор разрешает положительный
++namespace_id по существующему workflow_id из GET phase и GET namespaces; если
++сопоставление не найдено, ссылка не предлагается. Новый endpoint не добавляется.
++
+ ## Сборка и отключение
+ 
+ Dockerfile собирает React из tracked sources в отдельном Node stage с pinned image
+diff --git a/docs/ui-routes.json b/docs/ui-routes.json
+index 0ab0d68..47759e5 100644
+--- a/docs/ui-routes.json
++++ b/docs/ui-routes.json
+@@ -55,7 +55,7 @@
+       "roles": [
+         "authenticated"
+       ],
+-      "fixture": "isolated:/instructions",
++      "fixture": "isolated:/instructions?phase_id={phase_id}",
+       "states": [
+         "normal",
+         "loading",
+diff --git a/frontend/src/App.test.tsx b/frontend/src/App.test.tsx
+index 0c7eee3..ffda3c5 100644
+--- a/frontend/src/App.test.tsx
++++ b/frontend/src/App.test.tsx
+@@ -44,9 +44,9 @@ beforeEach(() => {
+   vi.stubGlobal('localStorage', new MemoryStorage())
+   get.mockReset()
+   get.mockImplementation(async (path: string) => {
+-    if (path === '/api/namespaces') return { namespaces: [{ id: 7, name: 'Fixture', code: 'fixture' }, { id: 8, name: 'Another', code: 'another' }] }
++    if (path === '/api/namespaces') return { namespaces: [{ id: 7, name: 'Fixture', code: 'fixture', workflow_id: 1 }, { id: 8, name: 'Another', code: 'another', workflow_id: 2 }] }
+     if (path.startsWith('/api/tasks')) return { tasks: [{ task_key: 'QA/42', namespace_id: 7, title: 'Read-only task', current_phase_name: 'Review', status_label: 'Active' }] }
+-    if (path.startsWith('/api/phases/')) return { phase: { id: 1, name: 'Review', description: 'Phase detail', instructions: [{ id: 2, description: 'Inspect evidence', execution_type: 'sync' }] } }
++    if (path.startsWith('/api/phases/')) return { phase: { id: 1, workflow_id: 1, name: 'Review', description: 'Phase detail', instructions: [{ id: 2, description: 'Inspect evidence', execution_type: 'sync' }] } }
+     return { phases: [{ id: 1, name: 'Review' }] }
+   })
+ })
+@@ -72,7 +72,7 @@ describe('read-only React pilot', () => {
+     const selector = screen.getByLabelText('Неймспейс') as HTMLSelectElement
+     expect(selector.value).toBe('7')
+     fireEvent.change(selector, { target: { value: '' } })
+-    await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/tasks'))
++    await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/tasks?namespace_id='))
+     fireEvent.click(screen.getByRole('button', { name: 'Fixture Back' }))
+     await waitFor(() => expect(selector.value).toBe('7'))
+     expect(screen.getByTestId('location').textContent).toBe('/tasks?namespace_id=7')
+@@ -107,10 +107,54 @@ describe('read-only React pilot', () => {
+     expect(screen.getByTestId('location').textContent).toBe('/tasks?source=qa&page=4&namespace_id=7#context')
+     const selector = screen.getByLabelText('Неймспейс') as HTMLSelectElement
+     fireEvent.change(selector, { target: { value: '' } })
+-    await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/tasks?source=qa#context'))
++    await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/tasks?source=qa&namespace_id=#context'))
+     expect(selector.value).toBe('')
+     expect(get.mock.calls.some(([path]) => path === '/api/tasks')).toBe(true)
+   })
++  it.each(['tasks', 'phases'])('keeps explicit default scope after reload of %s with an old cookie', async route => {
++    const view = mount(`/${route}?namespace_id=8`, 8)
++    await waitFor(() => expect((screen.getByLabelText('Неймспейс') as HTMLSelectElement).disabled).toBe(false))
++    fireEvent.change(screen.getByLabelText('Неймспейс'), { target: { value: '' } })
++    await waitFor(() => expect(screen.getByTestId('location').textContent).toBe(`/${route}?namespace_id=`))
++    const path = screen.getByTestId('location').textContent!
++    view.unmount()
++    mount(path, 8)
++    await waitFor(() => expect((screen.getByLabelText('Неймспейс') as HTMLSelectElement).disabled).toBe(false))
++    expect((screen.getByLabelText('Неймспейс') as HTMLSelectElement).value).toBe('')
++    expect(screen.getByTestId('location').textContent).toBe(path)
++    expect(get.mock.calls.some(([url]) => url === `/api/${route}`)).toBe(true)
++    expect(get.mock.calls.some(([url]) => url === `/api/${route}?namespace_id=`)).toBe(false)
++  })
++  it('keeps default scope across navigation and resolves the Jinja editor namespace from its workflow', async () => {
++    mount('/tasks?namespace_id=', 8)
++    await screen.findByRole('link', { name: /Read-only task/ })
++    fireEvent.click(screen.getByRole('link', { name: 'Фазы' }))
++    await screen.findByRole('link', { name: /^Review/ })
++    expect(screen.getByTestId('location').textContent).toBe('/phases?namespace_id=')
++    fireEvent.click(screen.getByRole('link', { name: /^Review/ }))
++    await screen.findByText('Inspect evidence')
++    expect(screen.getByTestId('location').textContent).toBe('/phases/1?namespace_id=')
++    expect(screen.getByRole('link', { name: 'Открыть редактор фазы' }).getAttribute('href')).toBe('/phase/1?namespace_id=7')
++    fireEvent.click(screen.getByRole('button', { name: 'Fixture Back' }))
++    await screen.findByRole('link', { name: /^Review/ })
++    expect(screen.getByTestId('location').textContent).toBe('/phases?namespace_id=')
++    fireEvent.click(screen.getByRole('button', { name: 'Fixture Forward' }))
++    await screen.findByText('Inspect evidence')
++    expect((screen.getByLabelText('Неймспейс') as HTMLSelectElement).value).toBe('')
++  })
++  it('preserves explicit default scope, query and hash on the pilot root redirect', async () => {
++    mount('/?namespace_id=&source=qa#context', 8)
++    await screen.findByRole('link', { name: /Read-only task/ })
++    expect(screen.getByTestId('location').textContent).toBe('/tasks?namespace_id=&source=qa#context')
++  })
++  it('does not offer a cookie-dependent editor when the default phase namespace is unresolved', async () => {
++    get.mockImplementation(async path => path === '/api/namespaces'
++      ? { namespaces: [] }
++      : { phase: { id: 1, workflow_id: 1, name: 'Review', description: 'Unassigned phase' } })
++    mount('/phases/1?namespace_id=', 8)
++    await screen.findByText('Unassigned phase')
++    expect(screen.queryByRole('link', { name: 'Открыть редактор фазы' })).toBeNull()
++  })
+   it('resets phase detail to the phase list in one history entry while preserving context', async () => {
+     mount('/phases/1?source=qa&namespace_id=7&page=3#instructions')
+     await screen.findByText('Inspect evidence')
+diff --git a/frontend/src/App.tsx b/frontend/src/App.tsx
+index 2135b6f..ed3227f 100644
+--- a/frontend/src/App.tsx
++++ b/frontend/src/App.tsx
+@@ -1,10 +1,10 @@
+-import { ListChecks, Layers } from 'lucide-react'
++import { ListChecks, Layers, Pencil } from 'lucide-react'
+ import { useEffect, useState } from 'react'
+ import { Link, Navigate, Route, Routes, useLocation, useParams } from 'react-router'
+ import { useQuery } from '@tanstack/react-query'
+-import { AppShell, DetailPage, ListPage, ResourceStateView, Select, resourceErrorState } from '@sdlc/ui/ui'
++import { AppShell, Button, DetailPage, ListPage, ResourceStateView, Select, resourceErrorState } from '@sdlc/ui/ui'
+ import { positiveIntegerQuery, updateQuery, useUrlSearchParams } from '@sdlc/ui/lib'
+-import { client, scopedPath, taskHref, type Namespace, type Phase, type Task } from './api'
++import { client, pilotPath, scopedPath, taskHref, type Namespace, type Phase, type Task } from './api'
+ 
+ const identifier = positiveIntegerQuery(0)
+ function validIdentifier(value: string) {
+@@ -13,7 +13,7 @@ function validIdentifier(value: string) {
+ function useNamespace() {
+   const [params] = useUrlSearchParams()
+   const id = params.get('namespace_id') ?? ''
+-  return validIdentifier(id) ? id : ''
++  return validIdentifier(id) ? String(identifier.parse(id)) : ''
+ }
+ function Tasks() {
+   const namespace = useNamespace()
+@@ -25,16 +25,17 @@ function Phases() {
+   const namespace = useNamespace()
+   const query = useQuery({ queryKey: ['phases', namespace], queryFn: ({ signal }) => client.get<{ phases: Phase[] }>(scopedPath('/api/phases', namespace), signal) })
+   const state = query.isLoading ? { kind: 'loading' as const } : query.error ? resourceErrorState(query.error, () => void query.refetch()) : !query.data?.phases.length ? { kind: 'empty' as const, message: 'Фаз пока нет' } : undefined
+-  return <ListPage title="Фазы" state={state}>{query.data?.phases.map(phase => <Link className="workflow-row" key={phase.id} to={scopedPath(`/phases/${phase.id}`, namespace)}><strong>{phase.name}</strong><span>{phase.agent_name ?? 'Без агента'}</span><span>{phase.description}</span></Link>)}</ListPage>
++  return <ListPage title="Фазы" state={state}>{query.data?.phases.map(phase => <Link className="workflow-row" key={phase.id} to={pilotPath(`/phases/${phase.id}`, namespace)}><strong>{phase.name}</strong><span>{phase.agent_name ?? 'Без агента'}</span><span>{phase.description}</span></Link>)}</ListPage>
+ }
+-function PhaseDetail() {
++function PhaseDetail({ namespaces }: { namespaces?: Namespace[] }) {
+   const { id } = useParams()
+   const namespace = useNamespace()
+   const validId = validIdentifier(id ?? '')
+   const query = useQuery({ queryKey: ['phase', id, namespace], enabled: validId, queryFn: ({ signal }) => client.get<{ phase: Phase }>(scopedPath(`/api/phases/${id}`, namespace), signal) })
+   const phase = query.data?.phase
++  const editorNamespace = namespace || (phase?.workflow_id ? String(namespaces?.find(item => item.workflow_id === phase.workflow_id)?.id ?? '') : '')
+   const state = !validId ? { kind: 'not-found' as const } : query.isLoading ? { kind: 'loading' as const } : query.error ? resourceErrorState(query.error, () => void query.refetch()) : undefined
+-  return <DetailPage title={phase?.name ?? 'Фаза'} state={state} aside={<a href={scopedPath(`/phase/${id}`, namespace)}>Открыть редактор фазы</a>}><p className="mb-5 whitespace-pre-wrap">{phase?.description}</p><h2 className="mb-3 text-lg font-semibold">Инструкции</h2>{phase?.instructions?.length ? phase.instructions.map(item => <article className="border-b border-border py-3" key={item.id}><p className="whitespace-pre-wrap">{item.description}</p></article>) : <p className="text-text-muted">Инструкций пока нет</p>}</DetailPage>
++  return <DetailPage title={phase?.name ?? 'Фаза'} state={state} aside={phase && editorNamespace ? <Button asChild variant="outline"><a href={scopedPath(`/phase/${id}`, editorNamespace)}><Pencil aria-hidden="true" />Открыть редактор фазы</a></Button> : undefined}><p className="mb-5 whitespace-pre-wrap">{phase?.description}</p><h2 className="mb-3 text-lg font-semibold">Инструкции</h2>{phase?.instructions?.length ? phase.instructions.map(item => <article className="border-b border-border py-3" key={item.id}><p className="whitespace-pre-wrap">{item.description}</p></article>) : <p className="text-text-muted">Инструкций пока нет</p>}</DetailPage>
+ }
+ export function App({ identity, initialNamespace }: { identity?: { name?: string; subject?: string }; initialNamespace?: number }) {
+   const location = useLocation()
+@@ -52,15 +53,19 @@ export function App({ identity, initialNamespace }: { identity?: { name?: string
+     }
+   }, [restoreNamespace, initialNamespace, hasNamespace, setParams])
+   const namespaces = useQuery({ queryKey: ['namespaces'], queryFn: ({ signal }) => client.get<{ namespaces: Namespace[] }>('/api/namespaces', signal) })
+-  const navigation = [{ to: scopedPath('/tasks', namespace), label: 'Задачи', icon: ListChecks }, { to: scopedPath('/phases', namespace), label: 'Фазы', icon: Layers }]
++  const navigation = [{ to: pilotPath('/tasks', namespace), label: 'Задачи', icon: ListChecks }, { to: pilotPath('/phases', namespace), label: 'Фазы', icon: Layers }]
+   function changeNamespace(value: string) {
+-    const patch = { namespace_id: value }
++    const patch = (current: URLSearchParams) => {
++      const next = updateQuery(current, { namespace_id: value }, true)
++      next.set('namespace_id', value)
++      return next
++    }
+     if (/^\/phases\//.test(location.pathname)) {
+-      setPhaseListParams(current => updateQuery(current, patch, true))
++      setPhaseListParams(patch)
+     } else {
+-      setParams(current => updateQuery(current, patch, true))
++      setParams(patch)
+     }
+   }
+   const context = <><label htmlFor="namespace" className="sr-only">Неймспейс</label><Select id="namespace" className="max-w-48" value={namespace} onChange={event => changeNamespace(event.target.value)} disabled={namespaces.isLoading || namespaces.isError}><option value="">{location.pathname.startsWith('/phases') ? 'Воркфлоу по умолчанию' : 'Все неймспейсы'}</option>{namespaces.data?.namespaces.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></>
+-  return <AppShell currentServiceKey="project-workflow" title="Workflow" navigation={navigation} layout={/^\/phases\//.test(location.pathname) ? 'detail-with-aside' : 'wide'} context={context} account={identity?.subject ? { label: identity.name ?? 'Project Workflow', secondary: identity.subject, onLogout: () => window.location.assign('/logout') } : undefined}>{namespaces.error && <ResourceStateView state={resourceErrorState(namespaces.error, () => void namespaces.refetch(), { hasData: true, message: 'Неймспейсы не загружены' })} />}{restoreNamespace ? <ResourceStateView state={{ kind: 'loading' }} /> : invalidNamespace ? <ResourceStateView state={{ kind: 'error', message: 'Некорректный namespace_id: ожидается положительное целое число.' }} /> : <Routes><Route path="/tasks" element={<Tasks />} /><Route path="/phases" element={<Phases />} /><Route path="/phases/:id" element={<PhaseDetail />} /><Route path="/" element={<Navigate to={scopedPath('/tasks', namespace)} replace />} /><Route path="*" element={<ResourceStateView state={{ kind: 'not-found' }} />} /></Routes>}</AppShell>
++  return <AppShell currentServiceKey="project-workflow" title="Workflow" navigation={navigation} layout={/^\/phases\//.test(location.pathname) ? 'detail-with-aside' : 'wide'} context={context} account={identity?.subject ? { label: identity.name ?? 'Project Workflow', secondary: identity.subject, onLogout: () => window.location.assign('/logout') } : undefined}>{namespaces.error && <ResourceStateView state={resourceErrorState(namespaces.error, () => void namespaces.refetch(), { hasData: true, message: 'Неймспейсы не загружены' })} />}{restoreNamespace ? <ListPage title="Workflow" state={{ kind: 'loading' }} children={null} /> : invalidNamespace ? <ListPage title="Workflow" state={{ kind: 'error', message: 'Некорректный namespace_id: ожидается положительное целое число.' }} children={null} /> : <Routes><Route path="/tasks" element={<Tasks />} /><Route path="/phases" element={<Phases />} /><Route path="/phases/:id" element={<PhaseDetail namespaces={namespaces.data?.namespaces} />} /><Route path="/" element={<Navigate to={{ pathname: '/tasks', search: location.search, hash: location.hash }} replace />} /><Route path="*" element={<ListPage title="Workflow" state={{ kind: 'not-found' }} children={null} />} /></Routes>}</AppShell>
+ }
+diff --git a/frontend/src/api.ts b/frontend/src/api.ts
+index 01cabba..1737cbf 100644
+--- a/frontend/src/api.ts
++++ b/frontend/src/api.ts
+@@ -1,8 +1,8 @@
+ import { createApiClient } from '@sdlc/ui/lib'
+ 
+-export interface Namespace { id: number; name: string; code: string; theme_color?: string }
++export interface Namespace { id: number; name: string; code: string; workflow_id?: number; theme_color?: string }
+ export interface Task { task_key: string; namespace_id: number; title: string; current_phase_name: string; status_label: string }
+-export interface Phase { id: number; name: string; description?: string; agent_name?: string; instructions?: { id: number; description: string; execution_type: string }[] }
++export interface Phase { id: number; name: string; workflow_id?: number; description?: string; agent_name?: string; instructions?: { id: number; description: string; execution_type: string }[] }
+ export const client = createApiClient({ onUnauthorized: () => {
+   window.location.assign(`/login?next=${encodeURIComponent(window.location.pathname + window.location.search + window.location.hash)}`)
+ } })
+@@ -10,6 +10,10 @@ export const client = createApiClient({ onUnauthorized: () => {
+ export function scopedPath(path: string, namespace: string) {
+   return `${path}${namespace ? `?${new URLSearchParams({ namespace_id: namespace })}` : ''}`
+ }
++// The UI keeps an explicit default scope; numeric API/Jinja parameters must not be empty.
++export function pilotPath(path: string, namespace: string) {
++  return `${path}?${new URLSearchParams({ namespace_id: namespace })}`
++}
+ export function taskHref(task: Pick<Task, 'task_key' | 'namespace_id'>) {
+   return `/task/${encodeURIComponent(task.task_key)}?${new URLSearchParams({ namespace_id: String(task.namespace_id) })}`
+ }
+diff --git a/project_workflow/interfaces/ui/templates/base.html b/project_workflow/interfaces/ui/templates/base.html
+index bdbd572..b1c64aa 100644
+--- a/project_workflow/interfaces/ui/templates/base.html
++++ b/project_workflow/interfaces/ui/templates/base.html
+@@ -359,7 +359,7 @@ textarea{resize:vertical;min-height:60px}
+         </div>
+       </details>
+       {% endif %}
+-      <h1 class="header-title">{% block header_title %}{% endblock %}</h1>
++      <p class="header-title">{% block header_title %}{% endblock %}</p>
+     </div>
+     <div class="header-actions">
+       <select class="theme-select" id="themeSelector" aria-label="Тема" onchange="setPlatformTheme(this.value)">
+@@ -378,7 +378,6 @@ textarea{resize:vertical;min-height:60px}
+         <a class="namespace-icon-action" id="namespaceEditLink" href="/namespaces{% if active_namespace_id %}?namespace_id={{ active_namespace_id }}{% endif %}" title="Редактировать пространство" aria-label="Редактировать пространство">✎</a>
+       </div>
+       {% endif %}
+-      {% block header_actions %}{% endblock %}
+       {{ base.account() }}
+     </div>
+   {% endcall %}
+@@ -388,7 +387,13 @@ textarea{resize:vertical;min-height:60px}
+   {% set layout_mode %}{% block page_layout %}wide{% endblock %}{% endset %}
+   {% set layout_mode = layout_mode | trim %}
+   {% call base.frame(layout_mode) %}
+-    {% block content %}{% endblock %}
++    {% set page_title %}{% block page_title %}{{ self.header_title() }}{% endblock %}{% endset %}
++    {% set page_context %}{% block page_context %}{% endblock %}{% endset %}
++    {% set page_actions %}{% block header_actions %}{% endblock %}{% endset %}
++    <section class="base-page-stack">
++      {{ base.page_header(page_title | trim, page_context | trim, page_actions | trim) }}
++      {% block content %}{% endblock %}
++    </section>
+   {% endcall %}
+ </main>
+ 
+diff --git a/project_workflow/interfaces/ui/templates/error.html b/project_workflow/interfaces/ui/templates/error.html
+index be14584..1c66c3b 100644
+--- a/project_workflow/interfaces/ui/templates/error.html
++++ b/project_workflow/interfaces/ui/templates/error.html
+@@ -2,19 +2,11 @@
+ 
+ {% block title %}{{ title }} — Workflow Engine{% endblock %}
+ {% block header_title %}{{ title }}{% endblock %}
+-
+-{% block extra_style %}
+-.error-state{max-width:680px;margin:8vh auto 0;text-align:center;padding:40px 28px}
+-.error-code{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text-dim);margin-bottom:10px}
+-.error-state h1{font-size:24px;margin-bottom:10px}
+-.error-state p{color:var(--text-muted);line-height:1.65;margin-bottom:22px}
++{% block header_actions %}
++  <a href="{{ back_url }}" class="btn btn-secondary">← {{ back_label }}</a>
+ {% endblock %}
++{% block page_context %}HTTP {{ status_code }}{% endblock %}
+ 
+ {% block content %}
+-<section class="card error-state">
+-  <div class="error-code">HTTP {{ status_code }}</div>
+-  <h1>{{ title }}</h1>
+-  <p>{{ message }}</p>
+-  <a class="btn btn-secondary" href="{{ back_url }}">← {{ back_label }}</a>
+-</section>
++{{ base.state('permission-denied' if status_code == 403 else 'not-found' if status_code == 404 else 'error', message) }}
+ {% endblock %}
+diff --git a/project_workflow/interfaces/ui/templates/instructions.html b/project_workflow/interfaces/ui/templates/instructions.html
+index de810c1..00290a1 100644
+--- a/project_workflow/interfaces/ui/templates/instructions.html
++++ b/project_workflow/interfaces/ui/templates/instructions.html
+@@ -3,12 +3,13 @@
+ 
+ {% block title %}Инструкции фазы {{ phase.name }} — Workflow Engine{% endblock %}
+ {% block header_title %}<span class="instructions-desktop-title">Инструкции фазы {{ phase.name }}</span><span class="instructions-mobile-title">Шаги</span>{% endblock %}
++{% block page_title %}Инструкции фазы {{ phase.name }}{% endblock %}
+ {% block header_actions %}
+   <a href="/phase/{{ phase.id }}{% if selected_namespace %}?namespace_id={{ selected_namespace.id }}{% endif %}" class="btn btn-secondary instructions-header-action">← К фазе</a>
+ {% endblock %}
+ 
+ {% block extra_style %}
+-.instructions-mobile-title,.instructions-mobile-actions,.instructions-context{display:none}
++.instructions-mobile-title{display:none}
+ .instructions-layout{display:flex;flex-direction:column;gap:8px;margin:0;width:100%}
+ .instruction-block{width:100%}
+ .instruction-row{display:grid;grid-template-columns:40px minmax(0,1fr) 40px;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);align-items:start}
+@@ -34,13 +35,11 @@
+ .order-btn:disabled{opacity:.35;cursor:not-allowed}
+ .row-actions .icon-btn{width:40px;height:40px}
+ .empty-instructions{color:var(--text-dim);font-size:13px;padding:20px 0}
+-@media(max-width:930px){.instructions-desktop-title,.header .instructions-header-action{display:none}.instructions-mobile-title{display:inline}.instructions-mobile-actions{display:flex;justify-content:flex-end;margin:0 8px}.instructions-mobile-actions .btn{display:inline-flex;align-items:center;min-height:var(--shell-control-min)}.instructions-context{display:block;margin:0 8px;font-size:18px;line-height:1.3;overflow-wrap:anywhere}}
++@media(max-width:930px){.instructions-desktop-title{display:none}.instructions-mobile-title{display:inline}}
+ @media(max-width:480px){.instruction-row{grid-template-columns:minmax(0,1fr) 40px;gap:6px}.instruction-row .step-num{display:none}.instruction-row .order-controls{grid-column:1;grid-row:1;flex-direction:row;justify-content:flex-start}.instruction-row .instruction-body{grid-column:1/-1;grid-row:2}.instruction-row .row-actions{grid-column:2;grid-row:1}}
+ {% endblock %}
+ 
+ {% block content %}
+-<div class="instructions-mobile-actions"><a href="/phase/{{ phase.id }}{% if selected_namespace %}?namespace_id={{ selected_namespace.id }}{% endif %}" class="btn btn-secondary">← К фазе</a></div>
+-<h2 class="instructions-context">{{ phase.name }}</h2>
+ 
+ <div class="instructions-layout" id="instructionsLayout">
+   {% for group in instruction_groups %}
+diff --git a/project_workflow/interfaces/ui/templates/namespaces.html b/project_workflow/interfaces/ui/templates/namespaces.html
+index 7c0e795..64b3f56 100644
+--- a/project_workflow/interfaces/ui/templates/namespaces.html
++++ b/project_workflow/interfaces/ui/templates/namespaces.html
+@@ -3,6 +3,7 @@
+ 
+ {% block title %}Неймспейсы — Workflow Engine{% endblock %}
+ {% block header_title %}Неймспейсы{% endblock %}
++{% block page_title %}{{ 'Создать пространство' if create_mode else 'Неймспейсы' }}{% endblock %}
+ {% block header_actions %}{% endblock %}
+ 
+ {% block extra_style %}
+diff --git a/project_workflow/interfaces/ui/templates/phase_detail.html b/project_workflow/interfaces/ui/templates/phase_detail.html
+index daef0ce..9bb3b9c 100644
+--- a/project_workflow/interfaces/ui/templates/phase_detail.html
++++ b/project_workflow/interfaces/ui/templates/phase_detail.html
+@@ -3,6 +3,7 @@
+ 
+ {% block title %}{{ phase.name }} — Workflow Engine{% endblock %}
+ {% block header_title %}<span class="phase-detail-desktop-title">Детали фазы</span><span class="phase-detail-mobile-title">Фаза</span>{% endblock %}
++{% block page_title %}Детали фазы{% endblock %}
+ 
+ {% block extra_style %}
+ /* ── Structured phase editor ───────────────────────────────────────── */
+diff --git a/project_workflow/interfaces/ui/templates/phases.html b/project_workflow/interfaces/ui/templates/phases.html
+index 90aea3f..0a23192 100644
+--- a/project_workflow/interfaces/ui/templates/phases.html
++++ b/project_workflow/interfaces/ui/templates/phases.html
+@@ -2,6 +2,7 @@
+ 
+ {% block title %}Фазы воркфлоу — Workflow Engine{% endblock %}
+ {% block header_title %}<span class="phases-desktop-title">Фазы воркфлоу</span><span class="phases-mobile-title">Фазы</span>{% endblock %}
++{% block page_title %}Фазы воркфлоу{% endblock %}
+ {% block header_actions %}<a href="/workflows{% if selected_namespace %}?namespace_id={{ selected_namespace.id }}{% endif %}" class="btn btn-secondary phases-header-action">← К воркфлоу</a>{% endblock %}
+ 
+ {% block extra_style %}
+@@ -20,12 +21,12 @@
+ .workflow-summary .card-title{font-size:20px;color:var(--text);text-transform:none;letter-spacing:0;margin-bottom:5px}
+ .mode-navigation{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0}
+ .mode-tabs{display:flex;align-items:center;gap:6px;min-width:0;overflow-x:auto;padding:2px;scrollbar-width:thin}
+-.mode-tab{display:inline-flex;align-items:center;min-height:40px;padding:8px 14px;border:1px solid var(--border-strong);border-radius:7px;background:var(--surface);color:var(--text-secondary);font-size:13px;font-weight:600;text-decoration:none;white-space:nowrap}
++.mode-tab{display:inline-flex;align-items:center;min-height:var(--shell-control-min);padding:8px 14px;border:1px solid var(--border-strong);border-radius:7px;background:var(--surface);color:var(--text-secondary);font-size:13px;font-weight:600;text-decoration:none;white-space:nowrap}
+ .mode-tab:hover{text-decoration:none;border-color:var(--accent);color:var(--text)}
+ .mode-tab[aria-current="page"]{border-color:var(--accent);background:var(--accent-soft);color:var(--accent-readable)}
+ .mode-tab:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+ .mode-picker{display:none;width:100%}
+-.mode-picker select{min-height:40px;width:100%}
++.mode-picker select{min-height:var(--shell-control-min);width:100%}
+ .phase-view-controls{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}
+ .phase-view-switch{display:inline-flex;align-items:center;padding:2px;border:1px solid var(--border-strong);border-radius:6px;background:var(--surface)}
+ .phase-view-switch button{min-height:var(--shell-control-min);padding:0 12px;border:0;border-radius:4px;background:transparent;color:var(--text-secondary);font:inherit;font-size:13px;cursor:pointer}
+@@ -66,7 +67,6 @@
+ .phase-add-btn{position:relative;z-index:1;width:40px;height:40px;border-radius:50%;border:1px dashed var(--accent);background:var(--panel);color:var(--accent);cursor:pointer;font-size:18px;line-height:1}
+ .phase-add-btn:hover{background:var(--accent);color:var(--accent-foreground);border-style:solid}
+ .phases-mobile-title{display:none}
+-.phases-mobile-actions{display:none}
+ .timeline.is-compact{border-top:1px solid var(--border)}
+ .timeline.is-compact .timeline-block{border-bottom:1px solid var(--border)}
+ .timeline.is-compact .timeline-card{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:56px;padding:8px 104px 8px 12px;border:0;border-radius:0}
+@@ -85,7 +85,7 @@
+ .timeline.is-compact .timeline-connector .phase-add-btn{position:absolute;right:58px;bottom:8px;border-style:solid;border-radius:6px}
+ @media(max-width:1050px){.phases-layout{grid-template-columns:1fr}.workflow-nav{position:static;max-height:none}}
+ @media(max-width:760px){.workflow-summary{flex-wrap:wrap}.mode-tabs{display:none}.mode-picker{display:block}.phase-view-controls{width:100%;justify-content:space-between}.phase-jump-select{flex:1 1 100%}.timeline-parallel-grid{grid-template-columns:1fr}.timeline-parallel-group{padding:10px}.timeline-card,.timeline-parallel-grid .timeline-card{min-height:0}.timeline.is-compact .timeline-card{display:block;min-height:56px}.timeline.is-compact .timeline-desc{display:none}.timeline.is-compact .execution-row{width:auto;max-width:none;margin-top:4px;justify-content:flex-start}}
+-@media(max-width:930px){.header .phases-header-action{display:none}.phases-mobile-actions{display:flex;justify-content:flex-end;margin-bottom:8px}.phases-mobile-actions .btn{display:inline-flex;align-items:center;min-height:var(--shell-control-min)}.phases-desktop-title{display:none}.phases-mobile-title{display:inline}}
++@media(max-width:930px){.phases-desktop-title{display:none}.phases-mobile-title{display:inline}}
+ {% endblock %}
+ 
+ {% macro phase_card(p) -%}
+@@ -116,7 +116,6 @@
+ {%- endmacro %}
+ 
+ {% block content %}
+-<div class="phases-mobile-actions"><a href="/workflows{% if selected_namespace %}?namespace_id={{ selected_namespace.id }}{% endif %}" class="btn btn-secondary">← К воркфлоу</a></div>
+ <div class="phases-layout{% if workflows | length <= 1 %} phases-layout-single{% endif %}">
+   {% if workflows | length > 1 %}
+   <section class="workflow-nav side-nav-scroll" id="workflowNav">
+diff --git a/project_workflow/interfaces/ui/templates/settings.html b/project_workflow/interfaces/ui/templates/settings.html
+index 1127c57..e57efb4 100644
+--- a/project_workflow/interfaces/ui/templates/settings.html
++++ b/project_workflow/interfaces/ui/templates/settings.html
+@@ -2,6 +2,7 @@
+ {% block page_layout %}reading{% endblock %}
+ {% block title %}Команды CLI{% endblock %}
+ {% block header_title %}<span class="cli-desktop-title">Команды CLI</span><span class="cli-mobile-title">CLI</span>{% endblock %}
++{% block page_title %}Команды CLI{% endblock %}
+ 
+ {% block extra_style %}
+ .cli-mobile-title{display:none}
+diff --git a/project_workflow/interfaces/ui/templates/task_detail.html b/project_workflow/interfaces/ui/templates/task_detail.html
+index a61d9e3..bec5dfc 100644
+--- a/project_workflow/interfaces/ui/templates/task_detail.html
++++ b/project_workflow/interfaces/ui/templates/task_detail.html
+@@ -3,15 +3,15 @@
+ 
+ {% block title %}{{ task.task_key }} — Workflow Engine{% endblock %}
+ {% block header_title %}<span class="task-detail-desktop-title">{{ task.task_key }}</span><span class="task-detail-mobile-title">Задача</span>{% endblock %}
++{% block page_title %}{{ task.task_key }}{% endblock %}
++{% block page_context %}{% if task.title and task.title != task.task_key %}{{ task.title }}{% endif %}{% endblock %}
+ {% block header_actions %}
+   <a href="/tasks{% if task.namespace_id %}?namespace_id={{ task.namespace_id }}{% endif %}" class="btn btn-secondary task-detail-header-action">← Задачи</a>
+ {% endblock %}
+ 
+ {% block extra_style %}
+-.task-detail-mobile-title,.task-detail-mobile-actions{display:none}
++.task-detail-mobile-title{display:none}
+ .detail-header{padding:4px 0 20px;border-bottom:1px solid var(--border-strong);margin-bottom:20px}
+-.detail-header h1{font-size:26px;font-weight:650;letter-spacing:0;word-break:break-word}
+-.detail-header .subtitle{margin-top:5px;color:var(--text-secondary);font-size:15px;line-height:1.5}
+ .detail-meta{display:flex;gap:8px 18px;margin-top:14px;flex-wrap:wrap;align-items:center;color:var(--text-muted);font-size:12px}
+ .detail-meta b{color:var(--text-secondary);font-weight:500}
+ .chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border-strong);background:var(--surface);border-radius:999px;padding:3px 9px;font-size:11px;font-weight:600;color:var(--text-secondary);white-space:nowrap}
+@@ -107,13 +107,11 @@
+ 
+ @media(max-width:800px){.summary-bar{grid-template-columns:1fr}.contract-grid{grid-template-columns:1fr}.parallel-grid,.contract-participants{grid-template-columns:1fr}}
+ @media(max-width:640px){
+-  .task-detail-desktop-title,.header .task-detail-header-action{display:none}
++  .task-detail-desktop-title{display:none}
+   .task-detail-mobile-title{display:inline}
+-  .task-detail-mobile-actions{display:flex;justify-content:flex-end;margin-bottom:12px}
+-  .task-detail-mobile-actions .btn{display:inline-flex;align-items:center;min-height:var(--shell-control-min)}
+ }
+ @media(max-width:480px){
+-  .detail-header h1{font-size:21px}.detail-meta{display:grid;gap:7px}.detail-jump-nav{position:sticky;top:57px;z-index:4;margin:0 -4px 16px;padding:8px 4px;background:var(--bg);overflow-x:auto;flex-wrap:nowrap}.detail-jump-nav a{white-space:nowrap}
++  .detail-meta{display:grid;gap:7px}.detail-jump-nav{position:sticky;top:57px;z-index:4;margin:0 -4px 16px;padding:8px 4px;background:var(--bg);overflow-x:auto;flex-wrap:nowrap}.detail-jump-nav a{white-space:nowrap}
+   #task-summary,#phase-history-title,#check-history-title,.detail-section{scroll-margin-top:123px}
+   .phase-history-step{grid-template-columns:30px minmax(0,1fr);column-gap:8px}
+   .phase-card{padding:11px}.phase-status{width:100%;margin-left:0}.activity-event{grid-template-columns:20px minmax(0,1fr);column-gap:7px}.activity-time{width:100%;margin-left:0}
+@@ -156,10 +154,7 @@
+ {%- endmacro %}
+ 
+ {% block content %}
+-<div class="task-detail-mobile-actions"><a href="/tasks{% if task.namespace_id %}?namespace_id={{ task.namespace_id }}{% endif %}" class="btn btn-secondary">← Задачи</a></div>
+ <section class="detail-header">
+-  <h1>{{ task.task_key }}</h1>
+-  {% if task.title and task.title != task.task_key %}<div class="subtitle">{{ task.title }}</div>{% endif %}
+   <div class="detail-meta">
+     <span><b>Воркфлоу:</b> {{ task.workflow_name or '—' }}</span>
+     <span><b>Неймспейс:</b> {{ task.namespace_cli_command or task.namespace_name }}</span>
+diff --git a/project_workflow/interfaces/ui/templates/tasks.html b/project_workflow/interfaces/ui/templates/tasks.html
+index 66a0006..54f8a96 100644
+--- a/project_workflow/interfaces/ui/templates/tasks.html
++++ b/project_workflow/interfaces/ui/templates/tasks.html
+@@ -2,6 +2,7 @@
+ 
+ {% block title %}Задачи воркфлоу — Workflow Engine{% endblock %}
+ {% block header_title %}<span class="tasks-desktop-title">Задачи воркфлоу</span><span class="tasks-mobile-title">Задачи</span>{% endblock %}
++{% block page_title %}Задачи воркфлоу{% endblock %}
+ {% block header_actions %}{% endblock %}
+ {% block extra_style %}
+ .tasks-mobile-title{display:none}
+diff --git a/project_workflow/interfaces/ui/templates/workflows.html b/project_workflow/interfaces/ui/templates/workflows.html
+index be22c49..ab75874 100644
+--- a/project_workflow/interfaces/ui/templates/workflows.html
++++ b/project_workflow/interfaces/ui/templates/workflows.html
+@@ -28,7 +28,6 @@
+ .workflow-delete:hover{color:var(--text);background:var(--red-soft)}
+ .workflow-delete-hint{font-size:12px;color:var(--text-muted);line-height:1.5}
+ .empty-note{color:var(--text-dim);font-size:13px;line-height:1.6}
+-.workflow-mobile-actions{display:none}
+ @media (max-width: 980px){
+   .workflow-crud,.workflow-crud.is-single{grid-template-columns:minmax(0,1fr)}
+   .workflow-nav{display:none}
+@@ -36,18 +35,9 @@
+   .workflow-picker select{min-height:var(--shell-control-min)}
+   .workflow-crud.is-single .workflow-picker{display:none}
+ }
+-@media(max-width:930px){
+-  .header .workflow-header-action{display:none}
+-  .workflow-mobile-actions{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+-  .workflow-mobile-actions .btn{display:inline-flex;align-items:center;min-height:var(--shell-control-min)}
+-}
+ {% endblock %}
+ 
+ {% block content %}
+-<div class="workflow-mobile-actions">
+-  <button type="button" class="btn btn-primary" id="mobileNewWorkflowButton" onclick="startCreateWorkflow()">+ Новый воркфлоу</button>
+-  <a href="/phases{% if selected_namespace %}?namespace_id={{ selected_namespace.id }}{% endif %}" class="btn btn-secondary">← К фазам</a>
+-</div>
+ <div class="workflow-crud {% if workflows|length <= 1 %}is-single{% endif %}" id="workflowCrud">
+   <div class="workflow-picker" id="workflowPicker">
+     <label class="label" for="workflowSelect">Воркфлоу</label>
+diff --git a/tests/test_ui.py b/tests/test_ui.py
+index 6baccca..14887a2 100644
+--- a/tests/test_ui.py
++++ b/tests/test_ui.py
+@@ -414,16 +414,15 @@ class TestPhasesPage:
+ 
+         assert response.status_code == 200
+         back_href = f'href="/workflows?namespace_id={namespace_id}"'
+-        assert response.text.count(back_href) == 2
++        assert response.text.count(back_href) == 1
+         assert 'class="btn btn-secondary phases-header-action"' in response.text
+-        assert 'class="phases-mobile-actions"' in response.text
++        assert 'class="phases-mobile-actions"' not in response.text
++        assert '<h1 class="base-page-title">Фазы воркфлоу</h1>' in response.text
+         assert (
+             '<span class="phases-desktop-title">Фазы воркфлоу</span>'
+             '<span class="phases-mobile-title">Фазы</span>'
+         ) in response.text
+-        assert ".header .phases-header-action{display:none}" in response.text
+-        assert ".phases-mobile-actions{display:flex" in response.text
+-        assert "@media(max-width:930px){.header .phases-header-action{display:none}" in response.text
++        assert ".header .phases-header-action{display:none}" not in response.text
+         assert ".phases-desktop-title{display:none}.phases-mobile-title{display:inline}" in response.text
+ 
+     def test_phases_has_phase_rows(self):
+@@ -558,7 +557,7 @@ class TestPhasesPage:
+ 
+         assert connected.status_code == 200
+         assert 'id="serviceMenu"' in connected.text
+-        assert connected.text.index('id="serviceMenu"') < connected.text.index('<h1 class="header-title">')
++        assert connected.text.index('id="serviceMenu"') < connected.text.index('<p class="header-title">')
+         assert "Project Workflow" in connected.text
+ 
+         with patch(
+@@ -2058,9 +2057,10 @@ class TestTaskDetail:
+         response = client.get(f"/task/RUN-247?namespace_id={namespace_id}")
+ 
+         assert response.status_code == 200
+-        assert response.text.count(f'href="/tasks?namespace_id={namespace_id}"') == 2
++        assert response.text.count(f'href="/tasks?namespace_id={namespace_id}"') == 1
+         assert '<span class="task-detail-mobile-title">Задача</span>' in response.text
+-        assert 'class="task-detail-mobile-actions"' in response.text
++        assert 'class="task-detail-mobile-actions"' not in response.text
++        assert '<h1 class="base-page-title">RUN-247</h1>' in response.text
+         assert "@media(max-width:350px){.detail-jump-nav{top:105px}" in response.text
+         assert (
+             "#task-summary,#phase-history-title,#check-history-title,.detail-section{scroll-margin-top:171px}"
+@@ -2258,7 +2258,7 @@ class TestProjectsPage:
+     def test_namespace_create_page_uses_plus_without_duplicate_add_label(self):
+         response = client.get("/namespaces/new")
+         assert response.status_code == 200
+-        assert '<h1 class="header-title">Неймспейсы</h1>' in response.text
++        assert '<h1 class="base-page-title">Создать пространство</h1>' in response.text
+         assert 'href="/namespaces/new' in response.text
+         assert 'title="Создать пространство" aria-label="Создать пространство">+</a>' in response.text
+         assert '<div class="card-title" id="namespaceFormMode">Создание</div>' in response.text
+@@ -2540,17 +2540,17 @@ class TestWorkflowsPage:
+         assert 'id="workflowThemeColor"' not in response.text
+         assert 'id="workflowThemePreview"' not in response.text
+ 
+-    def test_workflows_mobile_actions_leave_sticky_header(self):
++    def test_workflows_page_actions_have_one_owner_outside_sticky_header(self):
+         response = client.get("/workflows")
+ 
+         assert response.status_code == 200
+         assert 'id="newWorkflowButton"' in response.text
+-        assert 'id="mobileNewWorkflowButton"' in response.text
+-        assert response.text.count('onclick="startCreateWorkflow()"') == 2
+-        assert 'class="workflow-mobile-actions"' in response.text
+-        assert "@media(max-width:930px){" in response.text
+-        assert ".header .workflow-header-action{display:none}" in response.text
+-        assert response.text.count("← К фазам") == 2
++        assert 'id="mobileNewWorkflowButton"' not in response.text
++        assert response.text.count('onclick="startCreateWorkflow()"') == 1
++        assert 'class="workflow-mobile-actions"' not in response.text
++        assert '<h1 class="base-page-title">Воркфлоу</h1>' in response.text
++        assert ".header .workflow-header-action{display:none}" not in response.text
++        assert response.text.count("← К фазам") == 1
+ 
+     def test_workflows_page_offers_compact_picker_for_multiple_workflows(self):
+         created = client.post("/api/workflows", json={"name": "Secondary UI workflow"})
+@@ -2747,7 +2747,7 @@ def test_workflows_list_scrolls_with_page_and_labels_fields():
+     assert "max-height:calc(100vh - 100px);overflow-y:auto" not in response.text
+     assert 'class="workflow-nav side-nav-scroll" id="workflowNav"' in response.text
+     assert "html{scrollbar-width:thin;scrollbar-color:var(--surface-active) transparent}" in response.text
+-    assert '<h1 class="header-title">Воркфлоу</h1>' in response.text
++    assert '<h1 class="base-page-title">Воркфлоу</h1>' in response.text
+     assert '<label class="label" for="workflowName">Название</label>' in response.text
+     assert '<label class="label" for="workflowDescription">Описание</label>' in response.text
+ 
+@@ -3035,9 +3035,9 @@ class TestUiNetworkFailures:
+         response = client.get(f"/instructions?phase_id={phase_id}")
+ 
+         assert response.status_code == 200
+-        assert len(re.findall(rf'href="/phase/{phase_id}(?:\?namespace_id=\d+)?"', response.text)) == 2
+-        assert 'class="instructions-mobile-actions"' in response.text
+-        assert 'class="instructions-context"' in response.text
++        assert len(re.findall(rf'href="/phase/{phase_id}(?:\?namespace_id=\d+)?"', response.text)) == 1
++        assert 'class="instructions-mobile-actions"' not in response.text
++        assert 'class="instructions-context"' not in response.text
+         assert '<span class="instructions-mobile-title">Шаги</span>' in response.text
+         assert "Добавляй, удаляй и меняй порядок инструкций" not in response.text
+         assert 'class="instruction-text" rows="1"' in response.text
+diff --git a/tests/test_ui_page_header.py b/tests/test_ui_page_header.py
+new file mode 100644
+index 0000000..2b7b28a
+--- /dev/null
++++ b/tests/test_ui_page_header.py
+@@ -0,0 +1,95 @@
++from __future__ import annotations
++
++from html.parser import HTMLParser
++
++import pytest
++from fastapi.testclient import TestClient
++
++from project_workflow.interfaces.ui.app import create_app
++from project_workflow.interfaces.ui.templates import env
++
++
++class PageStructure(HTMLParser):
++    def __init__(self) -> None:
++        super().__init__()
++        self.stack: list[tuple[str, dict[str, str | None]]] = []
++        self.headings: list[list[tuple[str, dict[str, str | None]]]] = []
++        self.page_actions: list[list[tuple[str, dict[str, str | None]]]] = []
++
++    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
++        attributes = dict(attrs)
++        if tag == "h1":
++            self.headings.append([*self.stack, (tag, attributes)])
++        if "base-page-actions" in (attributes.get("class") or "").split():
++            self.page_actions.append([*self.stack, (tag, attributes)])
++        if tag not in {
++            "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source",
++            "track", "wbr",
++        }:
++            self.stack.append((tag, attributes))
++
++    def handle_endtag(self, tag: str) -> None:
++        for index in range(len(self.stack) - 1, -1, -1):
++            if self.stack[index][0] == tag:
++                del self.stack[index:]
++                break
++
++
++def assert_page_header(html: str) -> None:
++    structure = PageStructure()
++    structure.feed(html)
++    assert len(structure.headings) == 1
++    ancestry = structure.headings[0]
++    assert any(tag == "main" for tag, _ in ancestry)
++    assert any("base-page-header" in (attrs.get("class") or "").split() for _, attrs in ancestry)
++    assert not any(tag == "header" for tag, _ in ancestry)
++    for action in structure.page_actions:
++        assert any(tag == "main" for tag, _ in action)
++        assert not any(tag == "header" for tag, _ in action)
++
++
++@pytest.mark.ui
++@pytest.mark.parametrize("route", [
++    "/", "/tasks", "/phases", "/workflows", "/namespaces", "/namespaces/new", "/agents", "/settings",
++    "/phase/{id}", "/instructions?phase_id={id}", "/unknown-page",
++])
++def test_operational_pages_own_one_base_page_header(route: str) -> None:
++    with TestClient(create_app()) as client:
++        if "{id}" in route:
++            namespace = client.get("/api/namespaces").json()["namespaces"][0]
++            phases = client.get(f"/api/phases?namespace_id={namespace['id']}").json()["phases"]
++            route = route.format(id=phases[0]["id"])
++            route += ("&" if "?" in route else "?") + f"namespace_id={namespace['id']}"
++        response = client.get(route)
++    assert response.status_code == (404 if route == "/unknown-page" else 200)
++    assert_page_header(response.text)
++    assert "mobileNewWorkflowButton" not in response.text
++    assert 'class="task-detail-mobile-actions"' not in response.text
++
++
++def test_task_detail_uses_shared_page_title_and_context() -> None:
++    html = env.get_template("task_detail.html").render(
++        page="tasks",
++        task={"task_key": "QA-42", "title": "Task context", "namespace_id": 7, "status": "active"},
++        phase_history_blocks=[],
++        step_history=[],
++        progress_done=0,
++        progress_total=0,
++        cycles_done=0,
++        cycles_total=0,
++    )
++    assert_page_header(html)
++    assert '<h1 class="base-page-title">QA-42</h1>' in html
++    assert "Task context" in html
++    assert html.count('href="/tasks?namespace_id=7" class="btn') == 1
++
++
++@pytest.mark.parametrize(("status", "kind"), [(403, "permission-denied"), (404, "not-found"), (503, "error")])
++def test_error_template_uses_shared_state_without_retry_for_navigation(status: int, kind: str) -> None:
++    html = env.get_template("error.html").render(
++        title="Fixture error", message="Safe explanation", status_code=status,
++        back_url="/tasks", back_label="Задачи",
++    )
++    assert_page_header(html)
++    assert f'data-page-state="{kind}"' in html
++    assert html.count('href="/tasks" class="btn') == 1

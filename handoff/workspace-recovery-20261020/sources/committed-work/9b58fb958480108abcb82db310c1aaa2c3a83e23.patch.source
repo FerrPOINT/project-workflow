@@ -1,0 +1,35 @@
+diff --git a/project_workflow/interfaces/ui/templates/base.html b/project_workflow/interfaces/ui/templates/base.html
+index cec2a21..a9b92e1 100644
+--- a/project_workflow/interfaces/ui/templates/base.html
++++ b/project_workflow/interfaces/ui/templates/base.html
+@@ -9,7 +9,6 @@
+ <title>{% block title %}Workflow Engine{% endblock %}</title>
+ <script>try{var savedTheme=localStorage.getItem('workflow-theme');if(['dark','gray','light'].includes(savedTheme)){document.documentElement.dataset.theme=savedTheme}}catch(_error){}</script>
+ <style>
+-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+ :root{
+   --bg:#111217;--panel:#17181d;--surface:#202126;--surface-hover:#27282e;--surface-active:#2d2e35;
+   --text:#f7f8f8;--text-secondary:#d0d6e0;--text-muted:#969ba5;--text-dim:#a1a6af;
+diff --git a/tests/test_local_fonts.py b/tests/test_local_fonts.py
+new file mode 100644
+index 0000000..d021150
+--- /dev/null
++++ b/tests/test_local_fonts.py
+@@ -0,0 +1,17 @@
++"""The server-rendered UI works without third-party font requests."""
++
++import pytest
++from fastapi.testclient import TestClient
++
++from project_workflow.interfaces.ui import app
++
++pytestmark = [pytest.mark.ui]
++
++
++@pytest.mark.parametrize("route", ["/", "/phases"])
++def test_rendered_ui_does_not_load_third_party_fonts(route):
++    response = TestClient(app).get(route)
++    assert response.status_code == 200
++    assert "fonts.googleapis.com" not in response.text
++    assert "fonts.gstatic.com" not in response.text
++    assert "system-ui" in response.text

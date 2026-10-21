@@ -1,0 +1,2194 @@
+diff --git a/.base-revision b/.base-revision
+index e560de2..9fcf157 100644
+--- a/.base-revision
++++ b/.base-revision
+@@ -1 +1 @@
+-0ffb99e209bb62031488cbae1b61c9a2e40faec9
++7e27713077f68c84cb5d5a02f720a594abc643df
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index e4cd128..ebf8041 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -25,10 +25,21 @@
+ - Standalone-режим: репозиторий собирается и запускается без соседнего `services-base` (убраны extra `cli-platform`, uv source, Docker additional_context и CI checkout). Token-режим CLI без `sdlc-cli-core` выдаёт понятную ошибку; запуск без `AUTH_ISSUER` работает без авторизации.
+ 
+ ### Fixed
++
++- Base 7e27713 supplies shared label/control typography through generated SSR
++  assets and the pinned React package; no hand-copied tokens or runtime rollout.
+ - Agent create/update keeps drafts frozen after lost responses, 5xx and malformed
+   or mismatched ACKs. Explicit no-cache catalogue readback reconciles the result
+   without replay; confirmed 401/403/404 disables CRUD and retains the values.
+   Validation/conflict errors remain editable. No API or runtime changes.
++- Workflow editor and instruction pages use Base SSR controls, inline states
++  and draft protection. Pending locks controls and direct handlers; uncertain
++  writes require read-only reconciliation without mutation replay. Rejections
++  retain raw values, terminal access/not-found states block CRUD, and reordered
++  instructions return focus to an enabled field when the trigger is disabled.
++  Workflow create mode survives direct open/reload and namespace compatibility
++  is retained. The unused external font import is removed; Base owns typography.
++  Source/browser fixtures do not constitute accepted-image/SSO release evidence.
+ - Docker frontend stage includes the pinned `.base-revision` before recording
+   product fingerprints; container metadata now attests the same runtime inputs
+   as the clean checkout. Jinja/React routes and the active skills catalog are unchanged.
+diff --git a/docs/UI_UX_MAP.md b/docs/UI_UX_MAP.md
+index db26692..895ab42 100644
+--- a/docs/UI_UX_MAP.md
++++ b/docs/UI_UX_MAP.md
+@@ -50,6 +50,25 @@ runtime-build-manifest и ui-build. Совместимость со штатны
+ 
+ ## Текущая Композиция Страниц
+ 
++Редактор workflows сохраняет Base `wide`: каталог и форма составляют одну
++рабочую композицию без дополнительной карточки вокруг формы. Прямой URL
++`workflow_mode=create` восстанавливает создание после reload; неизвестный mode
++и конфликт с явным workflow ID дают 422 без редактора. Dirty selection/history,
++cancel и navigation защищает Base draft guard. Каталог при ошибке refresh не
++перезаписывает форму и не открывает CRUD по устаревшей записи.
++
++`/instructions` остаётся `reading`. Поля description/skills, тип, создание и
++порядок имеют общий product-owned operation lock. ACK проверяет HTTP и DTO,
++unknown требует явной сверки существующим GET без повторения записи. Потерянный
++POST без authoritative ID не объявляется успешным по совпавшему неуникальному
++описанию. Известные ошибки сохраняют raw draft; 401/403/404 блокируют CRUD.
++DELETE сохраняет блокировку после cancel/reopen до readback. Удаление своей
++строки не сбрасывает другие drafts; focus возвращается к доступному control.
++
++Эти изменения проверяются на изолированной копии fixture БД. Они не закрывают
++phase detail/catalog backlog или actual-image/SSO/README release acceptance.
++Подробности: [план редакторов](plans/2026-10-06-workflow-editor-instructions.md).
++
+ Base поставляет React primitives и SSR `page_header`/`state`; фактическая версия
+ определяется build fingerprint, а не историческим SHA из описания композиции.
+ Jinja показывает единственный `h1` в рабочей области; верхний header содержит
+diff --git a/docs/plans/2026-10-06-workflow-editor-instructions.md b/docs/plans/2026-10-06-workflow-editor-instructions.md
+new file mode 100644
+index 0000000..9dce219
+--- /dev/null
++++ b/docs/plans/2026-10-06-workflow-editor-instructions.md
+@@ -0,0 +1,48 @@
++# Workflow Editor И Инструкции
++
++## Границы
++
++Закрывает source findings WF-EDITOR-01/02/03 и WF-INSTRUCTION-01/02 из
++workspace backlog 2026-10-06. Jinja остаётся основным UI; API, schema, active
++catalog, auth и read-only React pilot не меняются. Phase detail и каталог фаз
++остаются отдельной очередью, а не считаются исправленными этим изменением.
++
++## Реализация
++
++- Основа объединённого кандидата: agent lifecycle `d8da8f8` и Base UI snapshot
++  `7e27713`. `.base-revision`, installed package/lock и детерминированный SSR
++  export должны подтверждать один источник; подписи 12 px, поля 14 px.
++- Base SSR fields/buttons/states и draft guard, без второго modal/token set.
++- Workflow editor без плавающей form card, с direct create URL/reload,
++  indexed history, безопасной сменой контекста и сохранённой шириной `wide`.
++- Product-owned pending/unknown/terminal lifecycle для связанных controls и
++  прямых handlers. ACK проверяет HTTP, положительный ID и значения DTO.
++- GET no-store reconciliation, без автоматического POST/PUT/DELETE replay.
++  Stale/malformed/transient ответы не разблокируют неподтверждённую запись.
++  Неуникальное имя/описание без authoritative create ID не доказывает ACK.
++- Ошибки сохраняют raw draft; 401/403/404 блокируют недоступный CRUD.
++- Instruction reorder не откатывает неизвестный server outcome. Подтверждённая
++  перестановка возвращает focus к textarea, если trigger стал disabled.
++- DELETE не снимает unknown lock после cancel/reopen; поддерживает только
++  original operation readback. Удаление не стирает drafts соседних строк.
++- Catalog refresh сохраняет форму; partial error не маскируется как empty.
++- Header, gutter и layout modes остаются Base. Controls 40/44 px; размеры текста
++  задаются Base. Неиспользуемый remote font import удалён, shell использует
++  существующий системный font stack без внешнего запроса.
++
++## Проверки
++
++Scoped browser v3: 84 passed (38 editor, 46 instructions), все три темы,
++desktop 1440/1920/2560, 375 и границы 767/768,1023/1024,1279/1280. Есть проверки
++geometry/overflow, длинных данных, pending duplicate calls, HTTP rejection,
++потерянных фактически сохранённых POST/PUT/DELETE/reorder, GET faults и focus.
++Stands используют disposable fixture copy, не accepted runtime.
++
++До интеграции обязательны свежие frontend/SSR/docs checks и полный объединённый
++Python/PostgreSQL/coverage/Ruff/mypy/warnings gate после интеграции agent lifecycle
++и выбранного Base snapshot. Full browser/native deletion regression выполняется
++на тех же неизменных исходниках. Scoped 84 tests не заменяют этот полный gate.
++
++После source integration остаются immutable image, SSO/roles/state matrix,
++README provenance и официальный product mirror sync. Accepted pins, snapshots,
++signing keys и volumes этим кандидатом не изменяются.
+diff --git a/frontend/e2e/instruction-drafts.spec.ts b/frontend/e2e/instruction-drafts.spec.ts
+new file mode 100644
+index 0000000..97bcafa
+--- /dev/null
++++ b/frontend/e2e/instruction-drafts.spec.ts
+@@ -0,0 +1,309 @@
++import { expect, test, type Page } from '@playwright/test'
++
++if (process.env.WORKFLOW_UI_QA_MUTATIONS !== 'isolated-fixture') throw new Error('Instruction QA requires an isolated fixture')
++
++let workflowId = 0
++let phaseId = 0
++let ids: number[] = []
++const row = (page: Page, index = 0) => page.locator(`#instructionsLayout [data-instruction-id="${ids[index]}"]`)
++const field = (page: Page, index = 0) => row(page, index).locator('.instruction-text')
++const state = (page: Page) => page.locator('#instructionWriteError [data-page-state]')
++const reconcile = (page: Page) => page.locator('#instructionReconcileButton')
++const open = (page: Page) => page.goto(`/instructions?phase_id=${phaseId}`)
++
++test.beforeEach(async ({ request }) => {
++  workflowId = 0; phaseId = 0; ids = []
++  const response = await request.post('/api/workflows', { data: { name: `Instruction fixture ${crypto.randomUUID()}`, description: 'Disposable browser QA' } })
++  expect(response.ok()).toBeTruthy()
++  workflowId = (await response.json()).workflow_id as number
++  const phases = await request.get(`/api/phases?workflow_id=${workflowId}`)
++  expect(phases.ok()).toBeTruthy()
++  phaseId = (await phases.json()).phases[0].id as number
++  for (const description of ['First instruction', 'Second instruction']) {
++    const created = await request.post('/api/instructions', { data: { phase_id: phaseId, description } })
++    expect(created.ok()).toBeTruthy()
++    ids.push((await created.json()).instruction.id as number)
++  }
++})
++
++test.afterEach(async ({ request }) => {
++  if (workflowId > 0) expect((await request.delete(`/api/workflows/${workflowId}`)).ok()).toBeTruthy()
++})
++
++for (const theme of ['dark', 'gray', 'light']) {
++  test(`instruction delete Escape restores the initiator after the operation unlocks (${theme})`, async ({ page, request }) => {
++    await page.addInitScript(value => localStorage.setItem('workflow-theme', value), theme)
++    await open(page)
++    const trigger = row(page).locator('button[onclick="deleteInstruction(this)"]')
++    await trigger.click()
++    await expect(page.locator('#confirmDialog')).toBeVisible()
++    await page.keyboard.press('Escape')
++    await expect(page.locator('#confirmDialog')).not.toBeVisible()
++    await expect(trigger).toBeEnabled()
++    await expect(trigger).toBeFocused()
++    const response = await request.get(`/api/phases/${phaseId}/instructions`)
++    expect(response.ok()).toBeTruthy()
++    expect((await response.json()).instructions.some((item: { id: number }) => item.id === ids[0])).toBeTruthy()
++  })
++
++  test(`instruction editor Base reading geometry, long text and keyboard (${theme})`, async ({ page, request }, testInfo) => {
++    await page.addInitScript(value => localStorage.setItem('workflow-theme', value), theme)
++    expect((await request.put(`/api/instructions/${ids[0]}`, { data: { description: 'Длинная инструкция '.repeat(35), skills: ['ОченьДлинноеНазваниеНавыка'.repeat(8)] } })).ok()).toBeTruthy()
++    const widths = testInfo.project.name === 'desktop' ? [1023, 1024, 1279, 1280, 1440, 1920, 2560] : [375, 767, 768]
++    for (const width of widths) {
++      await page.setViewportSize({ width, height: 1080 })
++      await open(page)
++      await page.reload()
++      await expect(page.locator('[data-page-layout]')).toHaveAttribute('data-page-layout', 'reading')
++      const geometry = await page.locator('[data-page-layout]').boundingBox()
++      const sidebar = width >= 1280 ? 264 : width >= 768 ? 72 : 0
++      const gutter = Math.min(32, Math.max(16, width * 0.02))
++      expect(geometry!.x).toBeCloseTo(sidebar + gutter, 1)
++      expect(geometry!.width).toBeCloseTo(Math.min(760, width - sidebar - gutter * 2), 1)
++      expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBe(0)
++      for (const control of [field(page), row(page).locator('.skills-input'), row(page).locator('.type-badge'), row(page).locator('.move-up'), row(page).locator('.row-actions button'), page.locator('#newInstructionText'), page.locator('#addInstructionButton')]) {
++        const bounds = (await control.boundingBox())!
++        expect(bounds.height).toBeGreaterThanOrEqual(width < 768 ? 44 : 40)
++        expect(bounds.x).toBeGreaterThanOrEqual(geometry!.x - 0.1)
++        expect(bounds.x + bounds.width).toBeLessThanOrEqual(geometry!.x + geometry!.width + 0.1)
++      }
++      for (const control of [field(page), row(page).locator('.skills-input'), row(page).locator('.type-badge'), page.locator('#newInstructionText')]) {
++        expect(await control.evaluate(node => getComputedStyle(node).fontSize)).toBe('14px')
++      }
++      if (width === 1920 || width === 375) await page.screenshot({ path: testInfo.outputPath(`instruction-editor-${theme}-${width}.png`), fullPage: true })
++    }
++    await page.locator('#newInstructionText').fill('Unsaved new instruction')
++    if (page.viewportSize()!.width < 768) await page.locator('#burgerBtn').click()
++    await page.locator('.sidebar-link:visible[href^="/tasks"]').first().click()
++    await expect(page.locator('[data-base-draft-dialog]')).toBeVisible()
++    await page.keyboard.press('Escape')
++    await expect(page.locator('#newInstructionText')).toHaveValue('Unsaved new instruction')
++  })
++}
++
++for (const status of [401, 403, 404, 409, 422]) {
++  test(`instruction editor HTTP ${status} preserves raw description and classifies rejection`, async ({ page }) => {
++    await open(page)
++    await page.route(`**/api/instructions/${ids[0]}*`, route => route.fulfill({ status, json: { ok: true, error: `Rejected ${status}` } }))
++    await field(page).fill('  Rejected raw draft  ')
++    await field(page).dispatchEvent('change')
++    await expect(state(page)).toHaveText(`Rejected ${status}`)
++    await expect(field(page)).toHaveValue('  Rejected raw draft  ')
++    if ([401, 403, 404].includes(status)) {
++      await expect(state(page)).toHaveAttribute('data-page-state', status === 404 ? 'not-found' : 'permission-denied')
++      await expect(state(page)).toHaveAttribute('role', 'status')
++      await expect(state(page)).toBeFocused()
++      await expect(field(page)).toBeDisabled()
++      await expect(page.locator('#addInstructionButton')).toBeDisabled()
++    } else {
++      await expect(field(page)).toBeEnabled()
++      await expect(state(page)).toHaveAttribute('role', 'alert')
++      await expect(state(page)).toBeFocused()
++    }
++    await expect(reconcile(page)).not.toBeVisible()
++    await expect(page.locator('#toast')).not.toHaveText(`Rejected ${status}`)
++  })
++}
++
++test('instruction editor whitespace validation retains draft and never writes', async ({ page }) => {
++  await open(page)
++  let writes = 0
++  page.on('request', request => { if (request.method() !== 'GET' && new URL(request.url()).pathname.startsWith('/api/')) writes++ })
++  await field(page).fill('   ')
++  await field(page).dispatchEvent('change')
++  await expect(field(page)).toHaveValue('   ')
++  await expect(field(page)).toBeFocused()
++  await expect(field(page)).toHaveAttribute('aria-invalid', 'true')
++  expect(writes).toBe(0)
++})
++
++test('instruction editor pending description locks all handlers and fields until known rejection', async ({ page }) => {
++  await open(page)
++  let writes = 0
++  let release!: () => void
++  const held = new Promise<void>(resolve => { release = resolve })
++  await page.route(`**/api/instructions/${ids[0]}*`, async route => {
++    writes++
++    await held
++    await route.fulfill({ status: 422, json: { ok: false, error: 'Fixture rejected' } })
++  })
++  try {
++    await field(page).fill('Pending description')
++    await field(page).dispatchEvent('change')
++    await expect(page.locator('#instructionsLayout')).toHaveAttribute('aria-busy', 'true')
++    await expect(field(page, 1)).toBeDisabled()
++    await expect(page.locator('#addInstructionButton')).toBeDisabled()
++    await page.evaluate(async id => {
++      const ui = window as unknown as { updateInstruction: (field: Element) => Promise<void>; toggleType: (field: Element) => Promise<void>; moveInstruction: (field: Element, direction: number) => Promise<void>; addInstruction: () => Promise<void> }
++      const row = document.querySelector(`[data-instruction-id="${id}"]`)!
++      await ui.updateInstruction(row.querySelector('.instruction-text')!)
++      await ui.toggleType(row.querySelector('.type-badge')!)
++      await ui.moveInstruction(row.querySelector('.move-up')!, -1)
++      await ui.addInstruction()
++    }, ids[0])
++    expect(writes).toBe(1)
++    release()
++    await expect(state(page)).toHaveText('Fixture rejected')
++    await expect(field(page)).toBeEnabled()
++    await expect(field(page)).toHaveValue('Pending description')
++  } finally { release() }
++})
++
++for (const property of ['description', 'skills', 'execution_type']) {
++  test(`instruction editor lost ${property} PUT reconciles by GET and preserves another draft`, async ({ page, request }) => {
++    await open(page)
++    await page.locator('#newInstructionText').fill('Unrelated create draft')
++    let writes = 0
++    await page.route(`**/api/instructions/${ids[0]}*`, async route => {
++      writes++
++      expect((await route.fetch()).ok()).toBeTruthy()
++      await route.abort('failed')
++    })
++    if (property === 'description') { await field(page).fill('Persisted description'); await field(page).dispatchEvent('change') }
++    else if (property === 'skills') { await row(page).locator('.skills-input').fill('workflow, review'); await row(page).locator('.skills-input').dispatchEvent('change') }
++    else await row(page).locator('.type-badge').click()
++    await expect(state(page)).toHaveText(/Результат записи неизвестен/)
++    await expect(reconcile(page)).toBeFocused()
++    await expect(field(page)).toBeDisabled()
++    await reconcile(page).click()
++    await expect(page.locator('#instructionWriteError')).not.toBeVisible()
++    await expect(field(page)).toBeEnabled()
++    await expect(page.locator('#newInstructionText')).toHaveValue('Unrelated create draft')
++    const records = (await (await request.get(`/api/phases/${phaseId}/instructions`)).json()).instructions as { id: number; description: string; skills: string[]; execution_type: string }[]
++    const record = records.find(item => item.id === ids[0])!
++    if (property === 'description') expect(record.description).toBe('Persisted description')
++    else if (property === 'skills') expect(record.skills).toEqual(['workflow', 'review'])
++    else expect(record.execution_type).toBe('parallel')
++    expect(writes).toBe(1)
++  })
++}
++
++test('instruction editor lost POST without ID never acknowledges a nonunique matching description', async ({ page }) => {
++  await open(page)
++  await page.locator('#newInstructionText').fill('Nonunique instruction create')
++  let writes = 0
++  await page.route('**/api/instructions?*', async route => {
++    writes++
++    expect((await route.fetch()).ok()).toBeTruthy()
++    await route.abort('failed')
++  })
++  await page.route('**/api/instructions', async route => {
++    writes++
++    expect((await route.fetch()).ok()).toBeTruthy()
++    await route.abort('failed')
++  })
++  await page.locator('#addInstructionButton').click()
++  await expect(state(page)).toHaveText(/Результат записи неизвестен/)
++  await reconcile(page).click()
++  await expect(state(page)).toHaveText(/не подтверждено/)
++  await expect(page.locator('#instructionReadbackCandidates a')).toHaveCount(1)
++  await expect(page.locator('#instructionReadbackCandidates a')).toHaveAttribute('target', '_blank')
++  await expect(page.locator('#newInstructionText')).toHaveValue('Nonunique instruction create')
++  await expect(page.locator('#addInstructionButton')).toBeDisabled()
++  expect(writes).toBe(1)
++})
++
++test('instruction editor lost reorder preserves planned order and verifies actual server order', async ({ page, request }) => {
++  await open(page)
++  let writes = 0
++  let order: number[] = []
++  await page.route(`**/api/phases/${phaseId}/instructions/reorder*`, async route => {
++    writes++
++    order = route.request().postDataJSON().instruction_ids as number[]
++    expect((await route.fetch()).ok()).toBeTruthy()
++    await route.abort('failed')
++  })
++  await row(page, 1).locator('.move-up').click()
++  await expect(state(page)).toHaveText(/Результат записи неизвестен/)
++  expect(await page.locator('#instructionsLayout .instruction-row').evaluateAll(rows => rows.map(row => Number((row as HTMLElement).dataset.instructionId)))).toEqual(order)
++  await reconcile(page).click()
++  await expect(page.locator('#instructionWriteError')).not.toBeVisible()
++  await expect(row(page, 1).locator('.move-up')).toBeDisabled()
++  await expect(field(page, 1)).toBeFocused()
++  const records = (await (await request.get(`/api/phases/${phaseId}/instructions`)).json()).instructions as { id: number }[]
++  expect(records.map(item => item.id)).toEqual(order)
++  expect(writes).toBe(1)
++})
++
++test('instruction editor acknowledged create appends without dropping unrelated draft or reloading', async ({ page }) => {
++  await open(page)
++  await field(page, 1).fill('Unrelated raw draft')
++  await page.locator('#newInstructionText').evaluate(node => { (node as HTMLInputElement).value = 'Acknowledged create' })
++  const url = page.url()
++  await page.evaluate(async () => { await (window as unknown as { addInstruction: () => Promise<void> }).addInstruction() })
++  expect(await page.locator('#instructionsLayout .instruction-text').evaluateAll(fields => fields.map(field => (field as HTMLTextAreaElement).value))).toContain('Acknowledged create')
++  await expect(field(page, 1)).toHaveValue('Unrelated raw draft')
++  expect(page.url()).toBe(url)
++  await expect(page.locator('#newInstructionText')).toHaveValue('')
++})
++
++for (const fault of ['stale', 'malformed', 'transient', 'missing', '403', '404']) {
++  test(`instruction editor unknown PUT readback ${fault} never unlocks unconfirmed writes`, async ({ page }) => {
++    await open(page)
++    let writes = 0
++    await page.route(`**/api/instructions/${ids[0]}*`, async route => {
++      writes++
++      expect((await route.fetch()).ok()).toBeTruthy()
++      await route.abort('failed')
++    })
++    await field(page).fill('Persisted but uncertain draft')
++    await field(page).dispatchEvent('change')
++    await expect(reconcile(page)).toBeVisible()
++    await page.route(`**/api/phases/${phaseId}/instructions*`, async route => {
++      if (['transient', '403', '404'].includes(fault)) {
++        await route.fulfill({ status: fault === 'transient' ? 503 : Number(fault), json: { ok: true, instructions: [] } })
++        return
++      }
++      const response = await route.fetch()
++      const data = await response.json() as { phase: { id: number }; instructions: { id: number; description: string; step_num: number }[] }
++      if (fault === 'stale') data.instructions.find(item => item.id === ids[0])!.description = 'Old stale description'
++      else if (fault === 'malformed') data.phase.id = phaseId + 100000
++      else data.instructions = data.instructions.filter(item => item.id !== ids[0]).map((item, index) => ({ ...item, step_num: index + 1 }))
++      await route.fulfill({ response, json: data })
++    })
++    await reconcile(page).click()
++    await expect(field(page)).toBeDisabled()
++    await expect(field(page)).toHaveValue('Persisted but uncertain draft')
++    await expect(page.locator('#addInstructionButton')).toBeDisabled()
++    if (['missing', '403', '404'].includes(fault)) {
++      await expect(state(page)).toHaveAttribute('data-page-state', fault === '403' ? 'permission-denied' : 'not-found')
++      await expect(state(page)).toBeFocused()
++      await expect(reconcile(page)).not.toBeVisible()
++    } else {
++      await expect(reconcile(page)).toBeEnabled()
++      await page.unroute(`**/api/phases/${phaseId}/instructions*`)
++      await reconcile(page).click()
++      await expect(field(page)).toBeEnabled()
++      await expect(page.locator('#instructionWriteError')).not.toBeVisible()
++    }
++    expect(writes).toBe(1)
++  })
++}
++
++test('instruction editor lost DELETE keeps other drafts and locks writes across cancel/reopen', async ({ page }) => {
++  await open(page)
++  await page.locator('#newInstructionText').fill('Unrelated deletion draft')
++  let writes = 0
++  await page.route(`**/api/instructions/${ids[0]}*`, async route => {
++    writes++
++    expect(route.request().method()).toBe('DELETE')
++    expect((await route.fetch()).ok()).toBeTruthy()
++    await route.abort('failed')
++  })
++  await row(page).locator('.row-actions button').click()
++  await page.locator('[data-base-confirm-accept]').click()
++  await expect(page.locator('#confirmReconcile')).toBeVisible()
++  await page.keyboard.press('Escape')
++  await expect(field(page, 1)).toBeDisabled()
++  await expect(page.locator('#newInstructionText')).toHaveValue('Unrelated deletion draft')
++  await expect(page.locator('#addInstructionButton')).toBeDisabled()
++  await row(page).locator('.row-actions button').click()
++  await expect(page.locator('[data-base-confirm-accept]')).toBeDisabled()
++  await page.locator('#confirmReconcile').click()
++  await expect(page.locator('#confirmDialog')).not.toBeVisible()
++  await expect(row(page)).toHaveCount(0)
++  await expect(field(page, 1)).toBeEnabled()
++  await expect(page.locator('#newInstructionText')).toHaveValue('Unrelated deletion draft')
++  await expect(page.locator('main')).toBeFocused()
++  expect(writes).toBe(1)
++})
+diff --git a/frontend/e2e/workflow-editor.spec.ts b/frontend/e2e/workflow-editor.spec.ts
+new file mode 100644
+index 0000000..17b0c6e
+--- /dev/null
++++ b/frontend/e2e/workflow-editor.spec.ts
+@@ -0,0 +1,347 @@
++import { expect, test, type Page } from '@playwright/test'
++
++if (process.env.WORKFLOW_UI_QA_MUTATIONS !== 'isolated-fixture') {
++  throw new Error('Workflow editor QA requires an isolated fixture')
++}
++
++let ids: number[] = []
++const dialog = (page: Page) => page.locator('[data-base-draft-dialog]')
++const state = (page: Page) => page.locator('#workflowWriteError [data-page-state]')
++
++test.beforeEach(async ({ request }) => {
++  ids = []
++  for (const name of ['First', 'Second']) {
++    const response = await request.post('/api/workflows', { data: { name: `${name} editor ${crypto.randomUUID()}`, description: `${name} original description` } })
++    expect(response.ok()).toBeTruthy()
++    ids.push((await response.json()).workflow_id as number)
++  }
++})
++
++test.afterEach(async ({ request }) => {
++  for (const id of ids) {
++    const response = await request.delete(`/api/workflows/${id}`)
++    if (response.status() === 404) {
++      const rows = (await (await request.get('/api/workflows')).json()).workflows as { id: number }[]
++      expect(rows.some(item => item.id === id)).toBeFalsy()
++    } else expect(response.ok()).toBeTruthy()
++  }
++})
++
++async function open(page: Page) {
++  await page.goto(`/workflows?workflow_id=${ids[0]}&namespace_id=1&foreign=keep#workflowForm`)
++}
++
++async function select(page: Page, id: number) {
++  if (page.viewportSize()!.width < 980) await page.locator('#workflowSelect').selectOption(String(id))
++  else await page.locator(`#workflowNav [data-workflow-id="${id}"]`).click()
++}
++
++for (const theme of ['dark', 'gray', 'light']) {
++  test(`workflow editor Base geometry, long data and direct create/reload (${theme})`, async ({ page, request }, testInfo) => {
++    const widths = testInfo.project.name === 'desktop' ? [1023, 1024, 1279, 1280, 1440, 1920, 2560] : [375, 767, 768]
++    const name = `Длинное название ${'воркфлоу'.repeat(18)} ${crypto.randomUUID()}`
++    expect((await request.put(`/api/workflows/${ids[0]}`, { data: { name, description: 'Длинное описание '.repeat(30) } })).ok()).toBeTruthy()
++    await page.addInitScript(value => localStorage.setItem('workflow-theme', value), theme)
++    const pageErrors: string[] = []
++    page.on('pageerror', error => pageErrors.push(error.message))
++    for (const width of widths) {
++      await page.setViewportSize({ width, height: 1080 })
++      for (const create of [false, true]) {
++        await page.goto(create ? '/workflows?workflow_mode=create&namespace_id=1&foreign=keep' : `/workflows?workflow_id=${ids[0]}&namespace_id=1&foreign=keep`)
++        await page.reload()
++        await expect(page.locator('#workflowName')).toHaveValue(create ? '' : name)
++        await expect(page.locator('[data-page-layout]')).toHaveAttribute('data-page-layout', 'wide')
++        const geometry = await page.evaluate(() => {
++          const header = document.querySelector<HTMLElement>('.base-ssr-header')!
++          const frame = document.querySelector<HTMLElement>('.page-frame')!
++          const stack = frame.querySelector<HTMLElement>('.base-page-stack')!
++          const sidebar = document.querySelector<HTMLElement>('.base-shell-sidebar')!
++          const form = document.querySelector<HTMLElement>('#workflowForm')!
++          return {
++            overflow: document.documentElement.scrollWidth - innerWidth,
++            headerHeight: header.getBoundingClientRect().height,
++            sidebarWidth: sidebar.getBoundingClientRect().width,
++            frame: { left: frame.getBoundingClientRect().left, right: frame.getBoundingClientRect().right },
++            stack: { left: stack.getBoundingClientRect().left, right: stack.getBoundingClientRect().right },
++            form: { left: form.getBoundingClientRect().left, right: form.getBoundingClientRect().right, top: form.getBoundingClientRect().top },
++            titleBottom: document.querySelector('.base-page-header')!.getBoundingClientRect().bottom,
++            fontSize: getComputedStyle(document.querySelector('#workflowName')!).fontSize,
++          }
++        })
++        const sidebarWidth = width >= 1280 ? 264 : width >= 768 ? 72 : 0
++        const gutter = Math.min(32, Math.max(16, width * 0.02))
++        expect(geometry.overflow, `${theme}/${width}/${create}`).toBe(0)
++        expect(geometry.headerHeight).toBe(60)
++        expect(geometry.sidebarWidth).toBe(sidebarWidth)
++        expect(geometry.frame.left).toBe(sidebarWidth)
++        expect(geometry.frame.right).toBe(width)
++        expect(geometry.stack.left).toBeCloseTo(sidebarWidth + gutter, 1)
++        expect(geometry.stack.right).toBeCloseTo(width - gutter, 1)
++        expect(geometry.form.left).toBeGreaterThanOrEqual(geometry.stack.left)
++        expect(geometry.form.right).toBeLessThanOrEqual(geometry.stack.right + 0.1)
++        expect(geometry.form.top).toBeGreaterThanOrEqual(geometry.titleBottom + 19)
++        expect(geometry.fontSize).toBe('14px')
++        for (const selector of ['#workflowName', '#workflowDescription', '#workflowSubmitButton', '#newWorkflowButton', '#workflowSelect']) {
++          const box = await page.locator(selector).boundingBox()
++          if (box) {
++            expect(box.height, `${selector}/${width}`).toBeGreaterThanOrEqual(width < 768 ? 44 : 40)
++            expect(box.x).toBeGreaterThanOrEqual(geometry.stack.left - 0.1)
++            expect(box.x + box.width).toBeLessThanOrEqual(geometry.stack.right + 0.1)
++          }
++        }
++        if (!create && (width === 1920 || width === 375)) {
++          await page.screenshot({ path: testInfo.outputPath(`workflow-editor-long-${theme}-${width}.png`), fullPage: true })
++        }
++      }
++    }
++    expect(pageErrors).toEqual([])
++  })
++
++  test(`workflow editor preserves dirty selection, create/cancel and Base targets (${theme})`, async ({ page }) => {
++    await page.addInitScript(value => localStorage.setItem('workflow-theme', value), theme)
++    await open(page)
++    const original = page.url()
++    const input = page.locator('#workflowName')
++    await input.fill('Unsaved workflow draft')
++    await select(page, ids[1])
++    await expect(dialog(page)).toBeVisible()
++    await page.keyboard.press('Escape')
++    await expect(input).toHaveValue('Unsaved workflow draft')
++    expect(page.url()).toBe(original)
++    await page.locator('#newWorkflowButton').click()
++    await expect(dialog(page)).toBeVisible()
++    await page.keyboard.press('Escape')
++    await expect(input).toHaveValue('Unsaved workflow draft')
++    await page.locator('#newWorkflowButton').click()
++    await page.locator('[data-base-draft-discard]').click()
++    await expect(input).toHaveValue('')
++    expect(new URL(page.url()).searchParams.get('workflow_mode')).toBe('create')
++    expect(new URL(page.url()).searchParams.get('foreign')).toBe('keep')
++    expect(new URL(page.url()).hash).toBe('#workflowForm')
++    await input.fill('Unsaved create draft')
++    await page.locator('#cancelCreateWorkflowButton').click()
++    await expect(dialog(page)).toBeVisible()
++    await page.keyboard.press('Escape')
++    await expect(input).toHaveValue('Unsaved create draft')
++    for (const control of [input, page.locator('#workflowDescription'), page.locator('#workflowSubmitButton')]) {
++      expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(page.viewportSize()!.width < 768 ? 44 : 40)
++    }
++    expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBe(0)
++    await page.screenshot({ path: test.info().outputPath(`workflow-editor-${theme}-${page.viewportSize()!.width}.png`), fullPage: true })
++  })
++}
++
++test('workflow editor indexed Back cancellation, discard and Forward preserve URL context', async ({ page }) => {
++  await open(page)
++  await select(page, ids[1])
++  await expect(page).toHaveURL(new RegExp(`workflow_id=${ids[1]}`))
++  const accepted = page.url()
++  await page.locator('#workflowName').fill('Second workflow draft')
++  await page.goBack()
++  await expect(dialog(page)).toBeVisible()
++  await page.keyboard.press('Escape')
++  await expect(page.locator('#workflowName')).toHaveValue('Second workflow draft')
++  expect(page.url()).toBe(accepted)
++  await page.goBack()
++  await expect(dialog(page)).toBeVisible()
++  await page.locator('[data-base-draft-discard]').click()
++  await expect(page).toHaveURL(new RegExp(`workflow_id=${ids[0]}`))
++  await expect(page.locator('#workflowDescription')).toHaveValue('First original description')
++  await page.goForward()
++  await expect(page).toHaveURL(new RegExp(`workflow_id=${ids[1]}`))
++  await expect(page.locator('#workflowDescription')).toHaveValue('Second original description')
++  expect(new URL(page.url()).searchParams.get('foreign')).toBe('keep')
++  expect(new URL(page.url()).hash).toBe('#workflowForm')
++})
++
++test('workflow editor pending write blocks fields, direct duplicate handlers and departure', async ({ page }) => {
++  let writes = 0
++  let release!: () => void
++  const held = new Promise<void>(resolve => { release = resolve })
++  await open(page)
++  await page.locator('#workflowName').fill('Pending workflow draft')
++  await page.route(`**/api/workflows/${ids[0]}`, async route => {
++    writes++
++    await held
++    await route.fulfill({ status: 422, json: { ok: false, error: 'Fixture rejected' } })
++  })
++  try {
++    await page.locator('#workflowSubmitButton').click()
++    await expect(page.locator('#workflowForm')).toHaveAttribute('aria-busy', 'true')
++    await expect(page.locator('#workflowName')).toBeDisabled()
++    await expect(page.locator('#newWorkflowButton')).toBeDisabled()
++    await page.evaluate(() => {
++      const ui = window as unknown as { submitWorkflow: () => Promise<void>; saveWorkflow: () => Promise<void>; createWorkflow: () => Promise<void> }
++      void ui.submitWorkflow()
++      void ui.saveWorkflow()
++      void ui.createWorkflow()
++    })
++    expect(writes).toBe(1)
++    if (page.viewportSize()!.width < 768) await page.locator('#burgerBtn').click()
++    await page.locator('.sidebar-link:visible[href^="/tasks"]').first().click()
++    await expect(dialog(page)).toBeVisible()
++    await expect(page.locator('[data-base-draft-discard]')).toBeDisabled()
++    await page.keyboard.press('Escape')
++    release()
++    await expect(page.locator('#workflowForm')).toHaveAttribute('aria-busy', 'false')
++    await expect(state(page)).toHaveText('Fixture rejected')
++    await expect(page.locator('#workflowName')).toBeEnabled()
++    await expect(page.locator('#workflowName')).toHaveValue('Pending workflow draft')
++    expect(writes).toBe(1)
++  } finally { release() }
++})
++
++for (const status of [403, 404, 409, 422]) {
++  test(`workflow editor HTTP ${status} preserves draft and distinguishes terminal rejection`, async ({ page }) => {
++    await open(page)
++    await page.locator('#workflowDescription').fill('Rejected description')
++    await page.route(`**/api/workflows/${ids[0]}`, route => route.fulfill({ status, json: { ok: true, error: `Rejection ${status}` } }))
++    await page.locator('#workflowSubmitButton').click()
++    await expect(state(page)).toHaveText(`Rejection ${status}`)
++    await expect(page.locator('#workflowDescription')).toHaveValue('Rejected description')
++    if (status === 403 || status === 404) {
++      await expect(state(page)).toHaveAttribute('data-page-state', status === 403 ? 'permission-denied' : 'not-found')
++      await expect(state(page)).toBeFocused()
++      await expect(page.locator('#workflowSubmitButton')).toBeDisabled()
++    } else await expect(page.locator('#workflowSubmitButton')).toBeEnabled()
++  })
++}
++
++test('workflow editor lost PUT acknowledgement reconciles only by GET without replay', async ({ page, request }) => {
++  let writes = 0
++  await open(page)
++  await page.locator('#workflowDescription').fill('Persisted description')
++  await page.route(`**/api/workflows/${ids[0]}`, async route => {
++    writes++
++    expect(route.request().method()).toBe('PUT')
++    expect((await route.fetch()).ok()).toBeTruthy()
++    await route.abort('failed')
++  })
++  await page.locator('#workflowSubmitButton').click()
++  await expect(state(page)).toHaveText(/Результат записи неизвестен/)
++  await expect(page.locator('#workflowDescription')).toBeDisabled()
++  await expect(page.locator('#workflowReconcileButton')).toBeFocused()
++  await page.evaluate(async () => {
++    await (window as unknown as { submitWorkflow: () => Promise<void> }).submitWorkflow()
++  })
++  expect(writes).toBe(1)
++  await page.locator('#workflowReconcileButton').click()
++  await expect(page.locator('#workflowWriteError')).not.toBeVisible()
++  await expect(page.locator('#workflowDescription')).toBeEnabled()
++  await expect(page.locator('#workflowDescription')).toHaveValue('Persisted description')
++  await expect(page.locator('#workflowSubmitButton')).toBeFocused()
++  const rows = (await (await request.get('/api/workflows')).json()).workflows as { id: number; description: string }[]
++  expect(rows.find(item => item.id === ids[0])!.description).toBe('Persisted description')
++  expect(writes).toBe(1)
++})
++
++test('workflow editor lost POST response never treats matching nonunique names as acknowledged create', async ({ page }) => {
++  let writes = 0
++  await open(page)
++  await page.locator('#newWorkflowButton').click()
++  await page.locator('#workflowName').fill('Nonunique workflow create')
++  await page.route('**/api/workflows', async route => {
++    if (route.request().method() === 'GET') { await route.continue(); return }
++    writes++
++    const response = await route.fetch()
++    expect(response.ok()).toBeTruthy()
++    ids.push((await response.json()).workflow_id as number)
++    await route.abort('failed')
++  })
++  await page.locator('#workflowSubmitButton').click()
++  await expect(state(page)).toHaveText(/Результат записи неизвестен/)
++  await page.locator('#workflowReconcileButton').click()
++  await expect(state(page)).toHaveText(/результат записи не подтверждён/)
++  await expect(page.locator('#workflowSubmitButton')).toBeDisabled()
++  await expect(page.locator('#workflowReadbackCandidates a')).toHaveCount(1)
++  await expect(page.locator('#workflowReadbackCandidates a')).toHaveAttribute('target', '_blank')
++  await expect(page.locator('#workflowName')).toHaveValue('Nonunique workflow create')
++  expect(writes).toBe(1)
++})
++
++test('workflow editor confirmed create opens phases without an incompatible namespace query', async ({ page }) => {
++  await open(page)
++  await page.locator('#newWorkflowButton').click()
++  await page.locator('#workflowName').fill(`Acknowledged workflow ${crypto.randomUUID()}`)
++  await page.locator('#workflowSubmitButton').click()
++  await expect(page).toHaveURL(/\/phases\?workflow_id=\d+$/)
++  ids.push(Number(new URL(page.url()).searchParams.get('workflow_id')))
++  expect(new URL(page.url()).searchParams.has('namespace_id')).toBeFalsy()
++  await expect(page.locator('[data-page-layout]')).toHaveAttribute('data-page-layout', 'wide')
++})
++
++test('workflow editor unknown DELETE keeps all writes locked after cancellation and permits only readback', async ({ page }) => {
++  await open(page)
++  const deletedId = ids[0]
++  let writes = 0
++  await page.route(`**/api/workflows/${deletedId}`, async route => {
++    writes++
++    expect(route.request().method()).toBe('DELETE')
++    expect((await route.fetch()).ok()).toBeTruthy()
++    await route.abort('failed')
++  })
++  await page.locator('#deleteWorkflowButton').click()
++  await page.locator('[data-base-confirm-accept]').click()
++  await expect(page.locator('[data-base-confirm-error]')).toHaveText(/Результат удаления неизвестен/)
++  await page.keyboard.press('Escape')
++  await expect(page.locator('#workflowName')).toBeDisabled()
++  await expect(page.locator('#workflowSubmitButton')).toBeDisabled()
++  await expect(page.locator('#deleteWorkflowButton')).toHaveText('Проверить удаление')
++  await page.evaluate(async () => {
++    const ui = window as unknown as { saveWorkflow: () => Promise<void>; createWorkflow: () => Promise<void> }
++    await ui.saveWorkflow()
++    await ui.createWorkflow()
++  })
++  expect(writes).toBe(1)
++  await page.locator('#deleteWorkflowButton').click()
++  await expect(page.locator('[data-base-confirm-accept]')).toBeDisabled()
++  await page.locator('#confirmReconcile').click()
++  await expect(page.locator('#confirmDialog')).not.toBeVisible()
++  await expect(page.locator(`#workflowNav [data-workflow-id="${deletedId}"]`)).toHaveCount(0)
++  await expect(page.locator('#workflowName')).toBeEnabled()
++  expect(writes).toBe(1)
++})
++
++test('workflow editor acknowledged DELETE and failed catalogue refresh never expose stale CRUD', async ({ page }) => {
++  await open(page)
++  const deletedId = ids[0]
++  await page.route('**/api/workflows', route => route.fulfill({ status: 503, json: { ok: false } }))
++  await page.locator('#deleteWorkflowButton').click()
++  await page.locator('[data-base-confirm-accept]').click()
++  await expect(page.locator('#confirmDialog')).not.toBeVisible()
++  await expect(state(page)).toHaveAttribute('data-page-state', 'partial-error')
++  await expect(page.locator('#workflowName')).toHaveValue('')
++  await expect(page.locator('#workflowSubmitButton')).toBeDisabled()
++  await expect(page.locator('#newWorkflowButton')).toBeDisabled()
++  await expect(page.locator(`#workflowNav [data-workflow-id="${deletedId}"]`)).toHaveCount(0)
++  await page.unroute('**/api/workflows')
++  await page.locator('#workflowRefreshButton').click()
++  await expect(page.locator('#workflowName')).toBeEnabled()
++  await expect(page.locator('#workflowWriteError')).not.toBeVisible()
++})
++
++for (const status of [403, 404]) {
++  test(`workflow editor unknown DELETE readback HTTP ${status} disables inaccessible recovery`, async ({ page }) => {
++    await open(page)
++    let writes = 0
++    await page.route(`**/api/workflows/${ids[0]}`, async route => {
++      writes++
++      await route.abort('failed')
++    })
++    await page.locator('#deleteWorkflowButton').click()
++    await page.locator('[data-base-confirm-accept]').click()
++    await expect(page.locator('#confirmReconcile')).toBeVisible()
++    await page.route('**/api/workflows', route => route.fulfill({ status, json: { ok: true, workflows: [] } }))
++    await page.locator('#confirmReconcile').click()
++    await expect(page.locator('#confirmReconcile')).not.toBeVisible()
++    await expect(page.locator('[data-base-confirm-accept]')).toBeDisabled()
++    await page.keyboard.press('Escape')
++    await expect(state(page)).toHaveAttribute('data-page-state', status === 404 ? 'not-found' : 'permission-denied')
++    await expect(state(page)).toBeFocused()
++    await expect(page.locator('#workflowName')).toBeDisabled()
++    await expect(page.locator('#workflowSubmitButton')).toBeDisabled()
++    await expect(page.locator('#deleteWorkflowButton')).toBeDisabled()
++    await expect(page.locator('#newWorkflowButton')).toBeDisabled()
++    expect(writes).toBe(1)
++  })
++}
+diff --git a/project_workflow/interfaces/ui/routes/pages.py b/project_workflow/interfaces/ui/routes/pages.py
+index ba749c8..22c7221 100644
+--- a/project_workflow/interfaces/ui/routes/pages.py
++++ b/project_workflow/interfaces/ui/routes/pages.py
+@@ -633,6 +633,16 @@ async def workflows_page(request: Request) -> HTMLResponse:
+         return error_response
+     raw_workflow_id = request.query_params.get("workflow_id")
+     workflow_id = _parse_positive_int(raw_workflow_id)
++    workflow_mode = request.query_params.get("workflow_mode")
++    if workflow_mode is not None and (workflow_mode != "create" or raw_workflow_id is not None):
++        return _query_id_error_page(
++            request,
++            context,
++            field_name="workflow_mode",
++            back_url="/workflows",
++            back_label="К воркфлоу",
++            page="workflows",
++        )
+     if raw_workflow_id is not None and workflow_id is None:
+         return _query_id_error_page(
+             request,
+@@ -656,6 +666,8 @@ async def workflows_page(request: Request) -> HTMLResponse:
+         return _workflow_error_page(request, context, workflow_id, page="workflows")
+     if selected_workflow is None and workflows:
+         selected_workflow = workflows[0]
++    if workflow_mode == "create":
++        selected_workflow = None
+     context.update(
+         {
+             "workflows": workflows,
+diff --git a/project_workflow/interfaces/ui/static/base-ui/base-ui.css b/project_workflow/interfaces/ui/static/base-ui/base-ui.css
+index d6e3330..91a9576 100644
+--- a/project_workflow/interfaces/ui/static/base-ui/base-ui.css
++++ b/project_workflow/interfaces/ui/static/base-ui/base-ui.css
+@@ -72,6 +72,7 @@ dialog.base-shell-drawer::backdrop { background: rgb(0 0 0 / 65%); }
+ .base-page-title { overflow-wrap: anywhere; font-size: var(--base-font-page-title); font-weight: 600; line-height: 1.25; letter-spacing: 0; }
+ .base-page-actions, .base-filter-row { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 8px; }
+ .base-form-field { display: flex; min-width: 0; flex-direction: column; gap: 6px; overflow-wrap: anywhere; }
++.base-label, .base-form-field label { font-size: var(--base-font-label); }
+ 
+ @media (min-width: 768px) and (max-width: 1279px) {
+   .base-shell-sidebar { width: var(--shell-sidebar-compact); }
+@@ -242,7 +243,7 @@ dialog.base-shell-drawer::backdrop { background: rgb(0 0 0 / 65%); }
+ .base-form-field label { font-weight: 500; }
+ .base-form-field p { margin: 0; color: var(--color-text-muted); font-size: var(--base-font-label); }
+ .base-form-field [role='alert'] { color: var(--color-danger); }
+-.base-form-field > .base-control { width: 100%; min-width: 0; padding: 8px 12px; border: 1px solid var(--color-border); border-radius: var(--base-radius); background: var(--color-surface); color: var(--color-text-primary); font: inherit; }
++.base-form-field > .base-control { width: 100%; min-width: 0; padding: 8px 12px; border: 1px solid var(--color-border); border-radius: var(--base-radius); background: var(--color-surface); color: var(--color-text-primary); font: inherit; font-size: var(--base-font-body); }
+ .base-ssr-shell textarea.base-control { min-height: 80px; }
+ .base-form-field > [aria-invalid='true'] { border-color: var(--color-danger); }
+ .base-ssr-shell .base-control:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+diff --git a/project_workflow/interfaces/ui/static/base-ui/fingerprint.json b/project_workflow/interfaces/ui/static/base-ui/fingerprint.json
+index 21c7dc2..efa0031 100644
+--- a/project_workflow/interfaces/ui/static/base-ui/fingerprint.json
++++ b/project_workflow/interfaces/ui/static/base-ui/fingerprint.json
+@@ -2,7 +2,7 @@
+   "schemaVersion": 1,
+   "package": "@sdlc/ui",
+   "files": {
+-    "base-ui.css": "bbc1da8dda5e081dd44c418f101c81eb349c21344edc00c89bbecdf04d93b868",
++    "base-ui.css": "9cf1475c0e0d65a64bcd7b81924ad2f3288e07314a8328a0e2ab707c36a08342",
+     "base-ui.js": "02a46637c9c340b1330263b48e986ee3fae2c326834f3bef481257eaab8eae06",
+     "macros.html": "fe53deccef37163bfb4fae61c1c29f1275d78f79bf0fb743d2f6fec7801445bc"
+   }
+diff --git a/project_workflow/interfaces/ui/templates/base.html b/project_workflow/interfaces/ui/templates/base.html
+index ca9f5d0..47835c4 100644
+--- a/project_workflow/interfaces/ui/templates/base.html
++++ b/project_workflow/interfaces/ui/templates/base.html
+@@ -11,7 +11,6 @@
+ <script>try{var savedTheme=localStorage.getItem('workflow-theme');if(['dark','gray','light'].includes(savedTheme)){document.documentElement.dataset.theme=savedTheme}}catch(_error){}</script>
+ <link rel="stylesheet" href="/static/base-ui/base-ui.css">
+ <style>
+-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+ *{box-sizing:border-box;margin:0;padding:0}
+ html{font-feature-settings:"cv01","ss03"}
+ /* ── Единый скроллбар всего приложения в стиле темы ─────────────────── */
+diff --git a/project_workflow/interfaces/ui/templates/confirm_deletion.js b/project_workflow/interfaces/ui/templates/confirm_deletion.js
+index 4bcb453..2ced999 100644
+--- a/project_workflow/interfaces/ui/templates/confirm_deletion.js
++++ b/project_workflow/interfaces/ui/templates/confirm_deletion.js
+@@ -1,12 +1,22 @@
+ (() => {
+   // Product-owned API lifecycle; Base owns the modal and its interactions.
+   const attempts = new Map();
++  window.workflowDeletionState = url => {
++    const state = attempts.get(url);
++    return state ? { kind: state.kind, error: state.error, status: state.status } : { kind: 'ready', error: '' };
++  };
+   window.workflowCollectionContains = async (url, collection, id) => {
+     const response = await fetch(url, { cache: 'no-store' });
++    if ([401, 403, 404].includes(response.status)) {
++      const error = new Error(response.status === 404 ? 'Объект больше недоступен.' : 'Нет доступа к проверке результата.');
++      error.status = response.status;
++      throw error;
++    }
+     const data = await response.json();
+     const rows = data[collection];
+     if (!response.ok || data.ok !== true || !Array.isArray(rows) ||
+-        !rows.every(row => row && Number.isInteger(row.id) && row.id > 0)) {
++        !rows.every(row => row && Number.isInteger(row.id) && row.id > 0) ||
++        new Set(rows.map(row => row.id)).size !== rows.length) {
+       throw new Error('Catalogue unavailable');
+     }
+     return rows.some(row => row.id === id);
+@@ -35,6 +45,7 @@
+           if (response.ok || response.status >= 500 || response.status === 408) unknown();
+           else {
+             state.kind = [401, 403, 404].includes(response.status) ? 'terminal' : 'ready';
++            state.status = response.status;
+             state.error = data && typeof data.error === 'string' ? data.error : 'Удаление отклонено. Проверьте доступ и состояние объекта.';
+             attempts.set(url, state);
+           }
+@@ -50,7 +61,14 @@
+         try {
+           absent = !(await exists());
+           state.error = absent ? '' : 'Удаление пока не подтверждено. Повторная запись заблокирована.';
+-        } catch (_error) { state.error = 'Не удалось проверить результат. Повторная запись заблокирована.'; }
++        } catch (error) {
++          if (error && [401, 403, 404].includes(error.status)) {
++            state.kind = 'terminal';
++            state.status = error.status;
++            state.error = error.message;
++            attempts.set(url, state);
++          } else state.error = 'Не удалось проверить результат. Повторная запись заблокирована.';
++        }
+         finally { pending = false; refreshWorkflowConfirmation(); }
+         if (absent) workflowConfirmation.close(true);
+       },
+diff --git a/project_workflow/interfaces/ui/templates/instructions.html b/project_workflow/interfaces/ui/templates/instructions.html
+index 196525c..d765a97 100644
+--- a/project_workflow/interfaces/ui/templates/instructions.html
++++ b/project_workflow/interfaces/ui/templates/instructions.html
+@@ -5,7 +5,7 @@
+ {% block header_title %}<span class="instructions-desktop-title">Инструкции фазы {{ phase.name }}</span><span class="instructions-mobile-title">Шаги</span>{% endblock %}
+ {% block page_title %}Инструкции фазы {{ phase.name }}{% endblock %}
+ {% block header_actions %}
+-  <a href="/phase/{{ phase.id }}{% if selected_namespace %}?namespace_id={{ selected_namespace.id }}{% endif %}" class="btn btn-secondary instructions-header-action">← К фазе</a>
++  <a href="/phase/{{ phase.id }}{% if selected_namespace %}?namespace_id={{ selected_namespace.id }}{% endif %}" class="base-control base-button base-button-secondary instructions-header-action">← К фазе</a>
+ {% endblock %}
+ 
+ {% block extra_style %}
+@@ -15,19 +15,17 @@
+ .instruction-row{display:grid;grid-template-columns:40px minmax(0,1fr) 40px;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);align-items:start}
+ .instruction-body{display:flex;flex-direction:column;gap:8px;min-width:0}
+ .execution-row{display:flex;align-items:center;gap:6px;min-height:28px}
+-.skills-cell{font-size:11px;color:var(--text-muted);display:flex;flex-wrap:wrap;gap:6px;align-items:center}
++.skills-cell{color:var(--text-muted);display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+ .step-num{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text-dim)}
+ .instruction-desc textarea{display:block;min-height:var(--shell-control-min);box-sizing:border-box;overflow:hidden;resize:none;overflow-wrap:anywhere;line-height:1.5}
+-.type-badge{display:inline-flex;align-items:center;min-height:var(--shell-control-min);padding:8px 10px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;user-select:none}
+-.type-badge.sync{background:rgba(34,197,94,.12);color:var(--green);border:1px solid rgba(34,197,94,.25)}
++.type-badge{display:inline-flex;align-items:center;min-height:var(--shell-control-min);padding:8px 10px;border-radius:6px;font-size:var(--base-font-body);font-weight:500;cursor:pointer;user-select:none}
++.type-badge.sync{background:var(--green-soft);color:var(--green);border:1px solid var(--green)}
+ .type-badge.parallel{background:var(--orange-soft);color:var(--orange);border:1px solid var(--orange)}
+-.skills-cell{font-size:11px;color:var(--text-muted)}
+-.skill-chip{display:inline-flex;align-items:center;gap:3px;padding:2px 6px;border-radius:4px;background:var(--accent-soft);color:var(--accent-readable);overflow-wrap:anywhere;margin:0 4px 4px 0}
+-.skills-input{width:100%;min-height:var(--shell-control-min);font-size:13px;padding:6px 8px;background:var(--panel);border:1px solid var(--border);border-radius:4px;color:var(--text-secondary)}
+-.parallel-group{border:1px solid var(--orange);border-radius:8px;padding:12px;background:rgba(245,158,11,.08);box-shadow:inset 0 0 0 1px rgba(245,158,11,.18)}
+-.parallel-label{display:inline-flex;align-items:center;align-self:flex-start;gap:6px;padding:3px 10px;border-radius:999px;border:1px solid var(--orange);background:var(--orange-soft);color:var(--orange);font-size:11px;font-weight:700;letter-spacing:.04em;margin-bottom:8px}
++.skill-chip{display:inline-flex;align-items:center;gap:3px;padding:2px 6px;border-radius:4px;background:var(--accent-soft);color:var(--accent-readable);font-size:var(--base-font-label);overflow-wrap:anywhere;margin:0 4px 4px 0}
++.parallel-group{border:1px solid var(--orange);border-radius:8px;padding:12px;background:var(--orange-soft)}
++.parallel-label{display:inline-flex;align-items:center;align-self:flex-start;gap:6px;padding:3px 10px;border-radius:6px;border:1px solid var(--orange);background:var(--orange-soft);color:var(--orange);font-size:11px;font-weight:700;letter-spacing:0;margin-bottom:8px}
+ .add-panel{margin:10px 0 0;padding-top:12px;border-top:1px solid var(--border)}
+-.add-row{display:flex;gap:10px;align-items:center}
++.add-row{display:flex;gap:10px;align-items:flex-end}
+ .add-row input,.add-row button{min-height:var(--shell-control-min)}
+ .order-controls{display:flex;flex-direction:column;align-items:center;gap:4px}
+ .order-btn{width:40px;height:40px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;font-size:16px;line-height:1}
+@@ -36,52 +34,61 @@
+ .row-actions .icon-btn{width:40px;height:40px}
+ .empty-instructions{color:var(--text-dim);font-size:13px;padding:20px 0}
+ @media(max-width:930px){.instructions-desktop-title{display:none}.instructions-mobile-title{display:inline}}
+-@media(max-width:480px){.instruction-row{grid-template-columns:minmax(0,1fr) 40px;gap:6px}.instruction-row .step-num{display:none}.instruction-row .order-controls{grid-column:1;grid-row:1;flex-direction:row;justify-content:flex-start}.instruction-row .instruction-body{grid-column:1/-1;grid-row:2}.instruction-row .row-actions{grid-column:2;grid-row:1}}
++@media(max-width:767px){.instruction-row{grid-template-columns:var(--shell-control-mobile-min) minmax(0,1fr) var(--shell-control-mobile-min)}}
++@media(max-width:480px){.instruction-row{grid-template-columns:minmax(0,1fr) var(--shell-control-mobile-min);gap:6px}.instruction-row .step-num{display:none}.instruction-row .order-controls{grid-column:1;grid-row:1;flex-direction:row;justify-content:flex-start}.instruction-row .instruction-body{grid-column:1/-1;grid-row:2}.instruction-row .row-actions{grid-column:2;grid-row:1}}
+ {% endblock %}
+ 
+ {% block content %}
+ 
+-<div class="instructions-layout" id="instructionsLayout">
+-  {% for group in instruction_groups %}
+-    {% set is_parallel_group = group | length > 1 %}
+-    <div class="instruction-block {% if is_parallel_group %}parallel-group{% endif %}" data-block-index="{{ loop.index0 }}">
+-      {% if is_parallel_group %}<div class="parallel-label">⚡ параллельно</div>{% endif %}
+-      {% for instruction in group %}
++{% macro instruction_row(instruction) %}
+       <div class="instruction-row" data-instruction-id="{{ instruction.id }}" data-step-num="{{ instruction.step_num }}">
+         <div class="order-controls">
+-          <button type="button" class="order-btn move-up" onclick="moveInstruction(this, -1)" aria-label="Поднять инструкцию {{ instruction.step_num }} выше">↑</button>
++          <button type="button" class="order-btn move-up base-control base-icon-control" onclick="moveInstruction(this, -1)" aria-label="Поднять инструкцию {{ instruction.step_num }} выше" title="Поднять инструкцию">↑</button>
+           <span class="step-num">{{ instruction.step_num }}</span>
+-          <button type="button" class="order-btn move-down" onclick="moveInstruction(this, 1)" aria-label="Опустить инструкцию {{ instruction.step_num }} ниже">↓</button>
++          <button type="button" class="order-btn move-down base-control base-icon-control" onclick="moveInstruction(this, 1)" aria-label="Опустить инструкцию {{ instruction.step_num }} ниже" title="Опустить инструкцию">↓</button>
+         </div>
+         <div class="instruction-body">
+-          <div class="instruction-desc">
+-            <textarea class="instruction-text" rows="1" data-original-description="{{ instruction.description }}" aria-label="Описание инструкции {{ instruction.step_num }}" onchange="updateInstruction(this)">{{ instruction.description }}</textarea>
++          <div class="instruction-desc base-form-field">
++            <textarea class="instruction-text base-control" rows="1" data-original-description="{{ instruction.description }}" aria-label="Описание инструкции {{ instruction.step_num }}" onchange="updateInstruction(this)">{{ instruction.description }}</textarea>
+           </div>
+           <div class="execution-row">
+-            <button type="button" class="type-badge {{ instruction.execution_type }}" data-execution-type="{{ instruction.execution_type }}" aria-pressed="{{ 'true' if instruction.execution_type == 'parallel' else 'false' }}" onclick="toggleType(this)">{{ 'параллельно' if instruction.execution_type == 'parallel' else 'последовательно' }}</button>
++            <button type="button" class="type-badge {{ instruction.execution_type }} base-control" data-execution-type="{{ instruction.execution_type }}" aria-pressed="{{ 'true' if instruction.execution_type == 'parallel' else 'false' }}" onclick="toggleType(this)">{{ 'параллельно' if instruction.execution_type == 'parallel' else 'последовательно' }}</button>
+           </div>
+-          <div class="skills-cell">
+-            {% for skill in instruction.skills %}
+-            <span class="skill-chip">{{ skill }}</span>
+-            {% endfor %}
+-            <input class="skills-input" type="text" value="{{ instruction.skills | join(', ') }}" placeholder="Навыки через запятую" aria-label="Навыки инструкции {{ instruction.step_num }}" onchange="updateSkills(this)">
++          <div class="skills-cell base-form-field">
++            <div class="instruction-skills-list">{% for skill in instruction.skills %}<span class="skill-chip">{{ skill }}</span>{% endfor %}</div>
++            <input class="skills-input base-control" type="text" value="{{ instruction.skills | join(', ') }}" data-original-skills="{{ instruction.skills | join(', ') }}" placeholder="Навыки через запятую" aria-label="Навыки инструкции {{ instruction.step_num }}" onchange="updateSkills(this)">
+           </div>
+         </div>
+         <div class="row-actions">
+-          <button type="button" class="icon-btn" onclick="deleteInstruction(this)" aria-label="Удалить инструкцию {{ instruction.step_num }}" title="Удалить инструкцию">×</button>
++          <button type="button" class="icon-btn base-control base-icon-control" onclick="deleteInstruction(this)" aria-label="Удалить инструкцию {{ instruction.step_num }}" title="Удалить инструкцию">×</button>
+         </div>
+       </div>
++{% endmacro %}
++
++<div id="instructionWriteError" hidden>{{ base.state('error', '') }}</div>
++<button type="button" class="base-control base-button base-button-secondary" id="instructionReconcileButton" hidden onclick="reconcileInstructionWrite()">Проверить сохранение</button>
++<div id="instructionReadbackCandidates" hidden></div>
++<template id="instructionRowTemplate">{{ instruction_row({'id':0,'step_num':1,'description':'','execution_type':'sync','skills':[]}) }}</template>
++<template id="emptyInstructionsTemplate">{{ base.state('empty', 'Инструкций пока нет.') }}</template>
++
++<div class="instructions-layout" id="instructionsLayout">
++  {% for group in instruction_groups %}
++    {% set is_parallel_group = group | length > 1 %}
++    <div class="instruction-block {% if is_parallel_group %}parallel-group{% endif %}" data-block-index="{{ loop.index0 }}">
++      {% if is_parallel_group %}<div class="parallel-label">⚡ параллельно</div>{% endif %}
++      {% for instruction in group %}
++      {{ instruction_row(instruction) }}
+       {% endfor %}
+     </div>
+   {% else %}
+-    <div class="empty-instructions">Инструкций пока нет.</div>
++    {{ base.state('empty', 'Инструкций пока нет.') }}
+   {% endfor %}
+ </div>
+ 
+ <div class="add-panel">
+   <div class="add-row">
+-    <input type="text" id="newInstructionText" placeholder="Новая инструкция…" aria-label="Новая инструкция" style="flex:1">
+-    <button type="button" class="btn btn-primary" onclick="addInstruction()">Добавить</button>
++    <div style="flex:1;min-width:0">{% call base.field('newInstructionText', 'Новая инструкция', required=true) %}{{ base.input_control('newInstructionText', 'description', required=true) }}{% endcall %}</div>
++    <button type="button" id="addInstructionButton" class="base-control base-button base-button-primary" onclick="addInstruction()">Добавить</button>
+   </div>
+ </div>
+ 
+@@ -89,7 +96,184 @@
+ 
+ {% block extra_script %}
+ const PHASE_ID = {{ phase.id }};
+-const selectedNamespaceId = {{ selected_namespace.id if selected_namespace else 'null' }};
++const selectedNamespaceId = {{ selected_namespace.id if selected_namespace and selected_namespace.workflow_id == phase.workflow_id else 'null' }};
++let instructionMutationPending = false;
++let instructionUnknownWrite = null;
++let instructionTerminalState = null;
++let instructionDeleteState = null;
++
++function instructionWritesBlocked() {
++  return instructionMutationPending || Boolean(instructionUnknownWrite || instructionTerminalState || instructionDeleteState);
++}
++function instructionDraftDirty() {
++  return Boolean(instructionUnknownWrite || instructionDeleteState) || Boolean(document.getElementById('newInstructionText').value) || getRows().some(row =>
++    row.querySelector('.instruction-text').value !== row.querySelector('.instruction-text').dataset.originalDescription ||
++    row.querySelector('.skills-input').value !== row.querySelector('.skills-input').dataset.originalSkills);
++}
++function showInstructionError(message, kind = 'error') {
++  const container = document.getElementById('instructionWriteError');
++  container.hidden = !message;
++  const state = container.querySelector('[data-page-state]');
++  state.dataset.pageState = kind;
++  state.setAttribute('role', kind === 'error' || kind === 'partial-error' ? 'alert' : 'status');
++  state.querySelector('p').textContent = message;
++  state.tabIndex = -1;
++}
++function updateInstructionControls() {
++  document.querySelectorAll('#instructionsLayout button,#instructionsLayout input,#instructionsLayout textarea,.add-panel input,.add-panel button').forEach(control => { control.disabled = instructionWritesBlocked(); });
++  if (instructionDeleteState && instructionDeleteState.state.kind === 'unknown' && !instructionMutationPending) {
++    instructionDeleteState.button.disabled = false;
++  }
++  const reconcile = document.getElementById('instructionReconcileButton');
++  reconcile.hidden = !instructionUnknownWrite || Boolean(instructionTerminalState);
++  reconcile.disabled = instructionMutationPending;
++  document.getElementById('instructionsLayout').setAttribute('aria-busy', String(instructionMutationPending));
++  updateMoveButtons();
++  refreshWorkflowDraftGuard();
++}
++function focusInstructionRecovery() {
++  if (instructionTerminalState) document.querySelector('#instructionWriteError [data-page-state]').focus();
++  else if (instructionUnknownWrite) document.getElementById('instructionReconcileButton').focus();
++  else if (!document.getElementById('instructionWriteError').hidden) document.querySelector('#instructionWriteError [data-page-state]').focus();
++}
++function focusInstructionAcknowledgement(attempt) {
++  const trigger = attempt.returnFocus;
++  if (trigger?.isConnected && !trigger.disabled) { trigger.focus(); return; }
++  const fallback = trigger?.closest('.instruction-row')?.querySelector('.instruction-text') || document.getElementById('newInstructionText');
++  fallback.focus();
++}
++function validInstruction(item) {
++  return item && Number.isInteger(item.id) && item.id > 0 && item.phase_id === PHASE_ID &&
++    Number.isInteger(item.step_num) && item.step_num > 0 && typeof item.description === 'string' &&
++    ['sync', 'parallel'].includes(item.execution_type) && Array.isArray(item.skills) && item.skills.every(skill => typeof skill === 'string');
++}
++function instructionMatchesAttempt(item, attempt) {
++  return validInstruction(item) && (attempt.kind === 'create' ? !attempt.knownIds.has(item.id) : item.id === attempt.id) &&
++    Object.entries(attempt.payload).every(([key, value]) => key === 'phase_id' || JSON.stringify(item[key]) === JSON.stringify(value));
++}
++function rejectInstructionWrite(response, data) {
++  instructionTerminalState = [401, 403].includes(response.status) ? 'permission-denied' : response.status === 404 ? 'not-found' : null;
++  showInstructionError(data && typeof data.error === 'string' ? data.error : 'Изменения не сохранены. Проверьте поля и доступ.', instructionTerminalState || 'error');
++}
++function applyInstructionRecord(row, item, fields) {
++  if (fields.includes('description')) {
++    const input = row.querySelector('.instruction-text');
++    input.value = item.description;
++    input.dataset.originalDescription = item.description;
++    resizeInstructionTextarea(input);
++  }
++  if (fields.includes('skills')) {
++    const input = row.querySelector('.skills-input');
++    input.value = item.skills.join(', ');
++    input.dataset.originalSkills = input.value;
++    const chips = row.querySelector('.instruction-skills-list');
++    chips.replaceChildren();
++    item.skills.forEach(skill => {
++      const chip = document.createElement('span');
++      chip.className = 'skill-chip';
++      chip.textContent = skill;
++      chips.appendChild(chip);
++    });
++  }
++  if (fields.includes('execution_type')) {
++    const badge = row.querySelector('.type-badge');
++    badge.dataset.executionType = item.execution_type;
++    badge.classList.toggle('sync', item.execution_type === 'sync');
++    badge.classList.toggle('parallel', item.execution_type === 'parallel');
++    badge.textContent = item.execution_type === 'parallel' ? 'параллельно' : 'последовательно';
++    badge.setAttribute('aria-pressed', String(item.execution_type === 'parallel'));
++  }
++}
++function acknowledgeInstruction(item, attempt) {
++  if (attempt.kind === 'create') {
++    const row = document.getElementById('instructionRowTemplate').content.firstElementChild.cloneNode(true);
++    row.dataset.instructionId = String(item.id);
++    row.dataset.stepNum = String(item.step_num);
++    applyInstructionRecord(row, item, ['description', 'skills', 'execution_type']);
++    document.querySelector('#instructionsLayout [data-page-state="empty"]')?.remove();
++    document.getElementById('instructionsLayout').appendChild(row);
++    document.getElementById('newInstructionText').value = '';
++  } else if (attempt.kind === 'update') {
++    applyInstructionRecord(getRows().find(row => Number(row.dataset.instructionId) === attempt.id), item, Object.keys(attempt.payload));
++  }
++  instructionUnknownWrite = null;
++  showInstructionError('');
++  document.getElementById('instructionReadbackCandidates').hidden = true;
++  updateTimeline();
++  showToast('Изменения сохранены', 'success');
++}
++async function requestInstruction(attempt) {
++  if (instructionWritesBlocked()) return false;
++  instructionMutationPending = true;
++  showInstructionError('');
++  updateInstructionControls();
++  let acknowledged = false;
++  try {
++    const response = await fetch(instructionApiUrl(attempt.url), {
++      method: attempt.kind === 'create' ? 'POST' : 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(attempt.payload),
++    });
++    const data = await response.json().catch(() => null);
++    if (response.ok && data && data.ok === true && attempt.kind === 'create' && data.instruction &&
++        Number.isInteger(data.instruction.id) && data.instruction.id > 0 && !attempt.knownIds.has(data.instruction.id)) attempt.receivedId = data.instruction.id;
++    if (!response.ok || !data || data.ok !== true) {
++      if (response.ok || response.status >= 500 || response.status === 408) instructionUnknownWrite = attempt;
++      else {
++        if (attempt.previousRows) { document.getElementById('instructionsLayout').replaceChildren(...attempt.previousRows); updateTimeline(); }
++        rejectInstructionWrite(response, data);
++      }
++    } else if (attempt.kind !== 'reorder' && !instructionMatchesAttempt(data.instruction, attempt)) instructionUnknownWrite = attempt;
++    else { acknowledgeInstruction(data.instruction, attempt); acknowledged = true; }
++  } catch (_error) { instructionUnknownWrite = attempt; }
++  finally {
++    if (instructionUnknownWrite) showInstructionError('Результат записи неизвестен. Введённые значения сохранены; повтор заблокирован до проверки.');
++    instructionMutationPending = false;
++    updateInstructionControls();
++    focusInstructionRecovery();
++  }
++  if (acknowledged) focusInstructionAcknowledgement(attempt);
++  return acknowledged;
++}
++async function reconcileInstructionWrite() {
++  if (instructionMutationPending || !instructionUnknownWrite || instructionTerminalState) return;
++  const attempt = instructionUnknownWrite;
++  instructionMutationPending = true;
++  updateInstructionControls();
++  let acknowledged = false;
++  try {
++    const response = await fetch(instructionApiUrl('/api/phases/' + PHASE_ID + '/instructions'), {cache: 'no-store'});
++    const data = await response.json().catch(() => null);
++    if ([401, 403, 404].includes(response.status)) { rejectInstructionWrite(response, data); return; }
++    if (!response.ok || !data || data.ok !== true || !data.phase || data.phase.id !== PHASE_ID ||
++        !Array.isArray(data.instructions) || !data.instructions.every(validInstruction) ||
++        new Set(data.instructions.map(item => item.id)).size !== data.instructions.length ||
++        new Set(data.instructions.map(item => item.step_num)).size !== data.instructions.length) throw new Error('Catalogue unavailable');
++    const rows = [...data.instructions].sort((left, right) => left.step_num - right.step_num);
++    if (rows.some((row, index) => row.step_num !== index + 1)) throw new Error('Order unavailable');
++    const id = attempt.kind === 'create' ? attempt.receivedId : attempt.id;
++    const saved = attempt.kind === 'reorder' ? JSON.stringify(rows.map(item => item.id)) === JSON.stringify(attempt.payload.instruction_ids) :
++      id != null && rows.find(item => item.id === id && instructionMatchesAttempt(item, attempt));
++    if (saved) { acknowledgeInstruction(attempt.kind === 'reorder' ? null : saved, attempt); acknowledged = true; }
++    else if (attempt.kind === 'update' && !rows.some(item => item.id === attempt.id)) {
++      instructionTerminalState = 'not-found';
++      showInstructionError('Инструкция больше недоступна. Введённые значения сохранены.', 'not-found');
++    } else {
++      showInstructionError('Сохранение пока не подтверждено. Повторная запись заблокирована.');
++      const candidates = document.getElementById('instructionReadbackCandidates');
++      candidates.replaceChildren();
++      if (attempt.kind === 'create' && attempt.receivedId == null) rows.filter(item => instructionMatchesAttempt(item, attempt)).forEach(item => {
++        const link = document.createElement('a');
++        link.className = 'base-control base-button base-button-secondary';
++        link.href = '/instructions?phase_id=' + PHASE_ID + (selectedNamespaceId === null ? '' : '&namespace_id=' + selectedNamespaceId);
++        link.target = '_blank'; link.rel = 'noopener';
++        link.textContent = 'Проверить найденную инструкцию (ID ' + item.id + ') в новой вкладке';
++        candidates.appendChild(link);
++      });
++      candidates.hidden = !candidates.childElementCount;
++    }
++  } catch (_error) { showInstructionError('Не удалось проверить сохранение. Введённые значения сохранены, повторная запись заблокирована.'); }
++  finally { instructionMutationPending = false; updateInstructionControls(); focusInstructionRecovery(); }
++  if (acknowledged) focusInstructionAcknowledgement(attempt);
++}
+ 
+ function resizeInstructionTextarea(field) {
+   field.style.height = 'auto';
+@@ -151,6 +335,7 @@ function updateTimeline() {
+     group.forEach(row => block.appendChild(row));
+     layout.appendChild(block);
+   });
++  if (!rows.length) layout.appendChild(document.getElementById('emptyInstructionsTemplate').content.cloneNode(true));
+   renumberRows();
+   updateMoveButtons();
+ }
+@@ -160,31 +345,18 @@ function updateMoveButtons() {
+   rows.forEach((row, idx) => {
+     const up = row.querySelector('.move-up');
+     const down = row.querySelector('.move-down');
+-    if (up) up.disabled = idx === 0;
+-    if (down) down.disabled = idx === rows.length - 1;
++    if (up) up.disabled = instructionWritesBlocked() || idx === 0;
++    if (down) down.disabled = instructionWritesBlocked() || idx === rows.length - 1;
+   });
+ }
+ 
+-async function persistOrder() {
++async function persistOrder(previousRows, returnFocus) {
+   const ids = getRows().map(r => parseInt(r.dataset.instructionId, 10));
+-  try {
+-    const resp = await fetch(instructionApiUrl('/api/phases/' + PHASE_ID + '/instructions/reorder'), {
+-      method: 'PUT',
+-      headers: {'Content-Type': 'application/json'},
+-      body: JSON.stringify({instruction_ids: ids}),
+-    });
+-    if (!resp.ok) {
+-      showToast('Не удалось сохранить порядок', 'error');
+-      return false;
+-    }
+-    return true;
+-  } catch (_error) {
+-    showToast('Не удалось сохранить порядок', 'error');
+-    return false;
+-  }
++  return requestInstruction({kind: 'reorder', url: '/api/phases/' + PHASE_ID + '/instructions/reorder', payload: {instruction_ids: ids}, previousRows, returnFocus});
+ }
+ 
+ async function moveInstruction(button, dir) {
++  if (instructionWritesBlocked()) return;
+   const row = button.closest('.instruction-row');
+   const rows = getRows();
+   const idx = rows.indexOf(row);
+@@ -196,138 +368,106 @@ async function moveInstruction(button, dir) {
+   const layout = document.getElementById('instructionsLayout');
+   layout.replaceChildren(...reordered);
+   updateTimeline();
+-  if (!await persistOrder()) {
+-    layout.replaceChildren(...rows);
+-    updateTimeline();
+-  }
+-}
+-
+-async function requestInstruction(url, options) {
+-  try {
+-    const resp = await fetch(url, options);
+-    const data = await resp.json().catch(() => ({}));
+-    return {resp, data};
+-  } catch (_error) {
+-    showRequestError();
+-    return null;
+-  }
++  await persistOrder(rows, button);
+ }
+ 
+ async function updateInstruction(textarea) {
++  if (instructionWritesBlocked()) return;
+   const row = textarea.closest('.instruction-row');
+   const id = parseInt(row.dataset.instructionId, 10);
+-  const previousDescription = textarea.dataset.originalDescription || '';
+   const description = textarea.value.trim();
+   if (!description) {
+-    textarea.value = previousDescription;
+-    resizeInstructionTextarea(textarea);
+-    showToast('Описание инструкции обязательно', 'error');
++    showInstructionError('Описание инструкции обязательно');
++    textarea.setAttribute('aria-invalid', 'true');
++    textarea.focus();
+     return;
+   }
+-  textarea.disabled = true;
+-  try {
+-    const result = await requestInstruction(instructionApiUrl('/api/instructions/' + id), {
+-      method: 'PUT',
+-      headers: {'Content-Type': 'application/json'},
+-      body: JSON.stringify({description: description}),
+-    });
+-    if (!result) {
+-      textarea.value = previousDescription;
+-      return;
+-    }
+-    const {resp, data} = result;
+-    if (!resp.ok || !data.ok) {
+-      textarea.value = previousDescription;
+-      showToast(data.error || 'Ошибка сохранения', 'error');
+-      return;
+-    }
+-    const savedDescription = data.instruction?.description || description;
+-    textarea.value = savedDescription;
+-    textarea.dataset.originalDescription = savedDescription;
+-  } finally {
+-    textarea.disabled = false;
+-    resizeInstructionTextarea(textarea);
+-  }
++  textarea.removeAttribute('aria-invalid');
++  if (description === textarea.dataset.originalDescription && textarea.value === description) return;
++  await requestInstruction({kind: 'update', id, url: '/api/instructions/' + id, payload: {description}, returnFocus: textarea});
+ }
+ 
+ async function toggleType(badge) {
++  if (instructionWritesBlocked()) return;
+   const row = badge.closest('.instruction-row');
+   const id = parseInt(row.dataset.instructionId, 10);
+   const nextType = (badge.dataset.executionType || 'sync') === 'sync' ? 'parallel' : 'sync';
+-  const result = await requestInstruction(instructionApiUrl('/api/instructions/' + id), {
+-    method: 'PUT',
+-    headers: {'Content-Type': 'application/json'},
+-    body: JSON.stringify({execution_type: nextType}),
+-  });
+-  if (!result) return;
+-  const {resp, data} = result;
+-  if (!resp.ok || !data.ok) {
+-    showToast(data.error || 'Ошибка сохранения', 'error');
+-    return;
+-  }
+-  badge.dataset.executionType = nextType;
+-  badge.textContent = nextType === 'parallel' ? 'параллельно' : 'последовательно';
+-  badge.className = 'type-badge ' + nextType;
+-  badge.setAttribute('aria-pressed', String(nextType === 'parallel'));
+-  updateTimeline();
++  await requestInstruction({kind: 'update', id, url: '/api/instructions/' + id, payload: {execution_type: nextType}, returnFocus: badge});
+ }
+ 
+ async function deleteInstruction(button) {
++  if (instructionMutationPending || instructionUnknownWrite || instructionTerminalState) return;
++  if (instructionDeleteState && (instructionDeleteState.button !== button || instructionDeleteState.state.kind !== 'unknown')) return;
+   const row = button.closest('.instruction-row');
+   const id = parseInt(row.dataset.instructionId, 10);
+-  if (!await requestWorkflowDeletion({
+-    url:instructionApiUrl('/api/instructions/' + id),title:'Удалить инструкцию?',
+-    message:'Инструкция будет удалена без возможности восстановления.',returnFocus:button,
+-    exists:()=>workflowCollectionContains(instructionApiUrl('/api/phases/' + PHASE_ID + '/instructions'),'instructions',id),
+-  })) return;
+-  row.remove();
+-  updateTimeline();
+-  document.querySelector('main[tabindex="-1"]').focus();
++  if (!instructionDeleteState && (row.querySelector('.instruction-text').value !== row.querySelector('.instruction-text').dataset.originalDescription ||
++      row.querySelector('.skills-input').value !== row.querySelector('.skills-input').dataset.originalSkills)) {
++    if (!await requestWorkflowTransition(() => {})) return;
++    if (instructionWritesBlocked()) return;
++  }
++  const url = instructionApiUrl('/api/instructions/' + id);
++  instructionMutationPending = true;
++  updateInstructionControls();
++  let confirmed = false;
++  try {
++    confirmed = await requestWorkflowDeletion({
++      url,title:'Удалить инструкцию?',
++      message:'Инструкция будет удалена без возможности восстановления.',returnFocus:button,
++      exists:()=>workflowCollectionContains(instructionApiUrl('/api/phases/' + PHASE_ID + '/instructions'),'instructions',id),
++    });
++    if (confirmed) {
++      instructionDeleteState = null;
++      row.remove();
++      updateTimeline();
++      showInstructionError('');
++      showToast('Инструкция удалена', 'success');
++      document.querySelector('main[tabindex="-1"]').focus();
++    } else {
++      const state = workflowDeletionState(url);
++      instructionDeleteState = state.kind === 'ready' ? null : {state, button};
++      if (instructionDeleteState) {
++        if (state.kind === 'terminal') instructionTerminalState = state.status === 404 ? 'not-found' : 'permission-denied';
++        showInstructionError(state.error, instructionTerminalState || 'error');
++        if (state.kind === 'unknown') { button.textContent = '↻'; button.setAttribute('aria-label', 'Проверить удаление инструкции'); button.title = 'Проверить удаление инструкции'; }
++      }
++    }
++  } finally {
++    instructionMutationPending = false;
++    updateInstructionControls();
++    focusInstructionRecovery();
++    if (!confirmed && !instructionDeleteState && button.isConnected && !button.disabled) button.focus();
++  }
+ }
+ 
+ async function addInstruction() {
++  if (instructionWritesBlocked()) return;
+   const input = document.getElementById('newInstructionText');
+   const description = input.value.trim();
+-  if (!description) return;
+-  const result = await requestInstruction(instructionApiUrl('/api/instructions'), {
+-    method: 'POST',
+-    headers: {'Content-Type': 'application/json'},
+-    body: JSON.stringify({phase_id: PHASE_ID, description: description}),
+-  });
+-  if (!result) return;
+-  const {resp, data} = result;
+-  if (!resp.ok || !data.ok) {
+-    showToast(data.error || 'Ошибка добавления', 'error');
+-    return;
+-  }
+-  window.location.reload();
++  if (!description) { showInstructionError('Введите описание инструкции'); input.focus(); return; }
++  await requestInstruction({kind: 'create', url: '/api/instructions', payload: {phase_id: PHASE_ID, description}, knownIds: new Set(getRows().map(row => Number(row.dataset.instructionId))), receivedId: null, returnFocus: input});
+ }
+ 
+ async function updateSkills(input) {
++  if (instructionWritesBlocked()) return;
+   const row = input.closest('.instruction-row');
+   const id = parseInt(row.dataset.instructionId, 10);
+   const selected = input.value.split(',').map(value => value.trim()).filter(Boolean);
+-  const result = await requestInstruction(instructionApiUrl('/api/instructions/' + id), {
+-    method: 'PUT',
+-    headers: {'Content-Type': 'application/json'},
+-    body: JSON.stringify({skills: selected}),
+-  });
+-  if (!result) return;
+-  const {resp, data} = result;
+-  if (!resp.ok || !data.ok) {
+-    showToast(data.error || 'Ошибка сохранения', 'error');
+-    return;
+-  }
+-  window.location.reload();
++  if (new Set(selected).size !== selected.length) { showInstructionError('Навыки не должны повторяться'); input.focus(); return; }
++  await requestInstruction({kind: 'update', id, url: '/api/instructions/' + id, payload: {skills: selected}, returnFocus: input});
+ }
+ 
+ document.addEventListener('DOMContentLoaded', () => {
+-  updateMoveButtons();
++  updateInstructionControls();
+   resizeInstructionTextareas();
+   if (document.fonts) document.fonts.ready.then(resizeInstructionTextareas);
+ });
+ document.addEventListener('input', (event) => {
+   if (event.target.matches('.instruction-text')) resizeInstructionTextarea(event.target);
++  if (event.target.closest('#instructionsLayout,.add-panel')) {
++    if (!instructionWritesBlocked()) { showInstructionError(''); event.target.removeAttribute('aria-invalid'); }
++    refreshWorkflowDraftGuard();
++  }
+ });
+ window.addEventListener('resize', resizeInstructionTextareas);
++registerWorkflowDraftGuard({isDirty: instructionDraftDirty, isPending: () => instructionMutationPending});
+ {% endblock %}
+diff --git a/project_workflow/interfaces/ui/templates/workflows.html b/project_workflow/interfaces/ui/templates/workflows.html
+index a3fc6ff..a6c38bd 100644
+--- a/project_workflow/interfaces/ui/templates/workflows.html
++++ b/project_workflow/interfaces/ui/templates/workflows.html
+@@ -3,8 +3,8 @@
+ {% block title %}Воркфлоу — Workflow Engine{% endblock %}
+ {% block header_title %}Воркфлоу{% endblock %}
+ {% block header_actions %}
+-  <button type="button" class="btn btn-primary workflow-header-action" id="newWorkflowButton" onclick="startCreateWorkflow()">+ Новый воркфлоу</button>
+-  <a href="/phases{% if selected_namespace %}?namespace_id={{ selected_namespace.id }}{% endif %}" class="btn btn-secondary workflow-header-action">← К фазам</a>
++  <button type="button" class="base-control base-button base-button-primary workflow-header-action" id="newWorkflowButton" onclick="startCreateWorkflow()">+ Новый воркфлоу</button>
++  <a href="/phases{% if selected_namespace %}?namespace_id={{ selected_namespace.id }}{% endif %}" class="base-control base-button base-button-secondary workflow-header-action">← К фазам</a>
+ {% endblock %}
+ 
+ {% block extra_style %}
+@@ -13,16 +13,17 @@
+ .workflow-crud.is-single .workflow-nav{display:none}
+ .workflow-nav{display:flex;flex-direction:column;gap:10px;align-self:start}
+ .workflow-nav:focus-visible{outline:2px solid var(--accent-hover);outline-offset:2px}
+-.workflow-nav-item{width:100%;text-align:left;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;cursor:pointer;color:var(--text)}
++.workflow-nav-item{width:100%;text-align:left;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;cursor:pointer;color:var(--text)}
+ .workflow-nav-item.active{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent-soft)}
+ .workflow-name{font-size:15px;font-weight:600;color:var(--text);overflow-wrap:anywhere}
+ .workflow-meta{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:var(--text-dim)}
+ .workflow-picker{display:none}
+ .workflow-panel{display:flex;flex-direction:column;gap:16px;min-width:0}
+-.workflow-panel input,.workflow-panel .btn{min-height:var(--shell-control-min)}
+ .form-stack{display:flex;flex-direction:column;gap:12px}
+-.label{font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em}
+-.workflow-description{min-height:96px}
++.workflow-editor-title{font-size:16px;font-weight:600;line-height:1.5}
++#workflowDescription{min-height:96px}
++#workflowReadbackCandidates{display:flex;flex-wrap:wrap;gap:12px;min-width:0}
++#workflowReadbackCandidates a{max-width:100%;white-space:normal;overflow-wrap:anywhere;text-align:left}
+ .panel-actions{display:flex;gap:10px;flex-wrap:wrap}
+ .workflow-delete{margin-left:auto;color:var(--text);border-color:var(--red)}
+ .workflow-delete:hover{color:var(--text);background:var(--red-soft)}
+@@ -40,13 +41,14 @@
+ {% block content %}
+ <div class="workflow-crud {% if workflows|length <= 1 %}is-single{% endif %}" id="workflowCrud">
+   <div class="workflow-picker" id="workflowPicker">
+-    <label class="label" for="workflowSelect">Воркфлоу</label>
+-    <select id="workflowSelect" onchange="selectWorkflow(Number(this.value))">
++    {% call base.field('workflowSelect', 'Воркфлоу') %}
++    {% call base.select_control('workflowSelect', 'workflow_id') %}
+       <option value="" disabled>Выберите воркфлоу</option>
+       {% for workflow in workflows %}
+       <option value="{{ workflow.id }}" {% if selected_workflow and selected_workflow.id == workflow.id %}selected{% endif %}>{{ workflow.name }}</option>
+       {% endfor %}
+-    </select>
++    {% endcall %}
++    {% endcall %}
+   </div>
+   <section class="workflow-nav side-nav-scroll" id="workflowNav">
+     {% for workflow in workflows %}
+@@ -63,20 +65,22 @@
+   </section>
+ 
+   <section class="workflow-panel">
+-    <form id="workflowForm" class="card form-stack" aria-labelledby="workflowFormMode" onsubmit="event.preventDefault(); submitWorkflow();">
+-      <div class="card-title" id="workflowFormMode">Редактирование воркфлоу</div>
+-      <div>
+-        <label class="label" for="workflowName">Название</label>
+-        <input type="text" id="workflowName" value="{{ selected_workflow.name if selected_workflow else '' }}" required>
+-      </div>
+-      <div>
+-        <label class="label" for="workflowDescription">Описание</label>
+-        <textarea id="workflowDescription" class="workflow-description">{{ selected_workflow.description if selected_workflow else '' }}</textarea>
+-      </div>
++    <form id="workflowForm" class="form-stack" aria-labelledby="workflowFormMode" onsubmit="event.preventDefault(); submitWorkflow();">
++      <h2 class="workflow-editor-title" id="workflowFormMode">{{ 'Редактирование воркфлоу' if selected_workflow else 'Новый воркфлоу' }}</h2>
++      {% call base.field('workflowName', 'Название', required=true) %}
++        {{ base.input_control('workflowName', 'name', value=selected_workflow.name if selected_workflow else '', required=true) }}
++      {% endcall %}
++      {% call base.field('workflowDescription', 'Описание') %}
++        {{ base.textarea_control('workflowDescription', 'description', value=selected_workflow.description if selected_workflow else '', rows=4) }}
++      {% endcall %}
++      <div id="workflowWriteError" hidden>{{ base.state('error', '') }}</div>
++      <button class="base-control base-button base-button-secondary" id="workflowReconcileButton" type="button" hidden onclick="reconcileWorkflowWrite()">Проверить сохранение</button>
++      <button class="base-control base-button base-button-secondary" id="workflowRefreshButton" type="button" hidden onclick="reloadWorkflows(null)">Обновить список</button>
++      <div id="workflowReadbackCandidates" hidden></div>
+       <div class="panel-actions">
+-        <button class="btn btn-primary" type="submit" id="workflowSubmitButton">Сохранить</button>
+-        <button class="btn btn-secondary" type="button" id="cancelCreateWorkflowButton" onclick="cancelCreateWorkflow()" style="display:none">Отмена</button>
+-        <button class="btn btn-secondary workflow-delete" type="button" id="deleteWorkflowButton" onclick="deleteWorkflow()">Удалить</button>
++        <button class="base-control base-button base-button-primary" type="submit" id="workflowSubmitButton">{{ 'Сохранить' if selected_workflow else 'Создать воркфлоу' }}</button>
++        <button class="base-control base-button base-button-secondary" type="button" id="cancelCreateWorkflowButton" onclick="cancelCreateWorkflow()"{% if selected_workflow or not workflows %} style="display:none"{% endif %}>Отмена</button>
++        <button class="base-control base-button base-button-danger workflow-delete" type="button" id="deleteWorkflowButton" onclick="deleteWorkflow()"{% if not selected_workflow %} style="display:none"{% endif %}>Удалить</button>
+       </div>
+       <p class="workflow-delete-hint" id="workflowDeleteHint" hidden>Воркфлоу по умолчанию нельзя удалить.</p>
+     </form>
+@@ -89,21 +93,66 @@
+ const workflowStore = {{ workflows | tojson }};
+ let selectedWorkflowId = {{ selected_workflow.id if selected_workflow else 'null' }};
+ const defaultWorkflowId = {{ default_workflow_id if default_workflow_id else 'null' }};
+-let previousWorkflowId = selectedWorkflowId;
++let previousWorkflowId = selectedWorkflowId == null ? defaultWorkflowId : selectedWorkflowId;
+ let workflowFormMode = selectedWorkflowId == null ? 'create' : 'edit';
++let workflowDraftBaseline;
++let workflowMutationPending = false;
++let workflowUnknownWrite = null;
++let workflowTerminalState = null;
++let workflowDeleteState = null;
++let workflowCataloguePending = false;
++let workflowCatalogueUnavailable = false;
++let workflowAcceptedLocation;
++let workflowHistoryAttempt = null;
++
++function workflowDraftSnapshot(){
++  return JSON.stringify(['workflowName','workflowDescription'].map(function(id){ return document.getElementById(id).value; }));
++}
++function workflowDraftDirty(){ return Boolean(workflowUnknownWrite || workflowDeleteState) || workflowDraftSnapshot() !== workflowDraftBaseline; }
++function showWorkflowError(message, kind){
++  var container = document.getElementById('workflowWriteError');
++  container.hidden = !message;
++  var state = container.querySelector('[data-page-state]');
++  state.dataset.pageState = kind || 'error';
++  state.setAttribute('role', kind === 'permission-denied' || kind === 'not-found' ? 'status' : 'alert');
++  state.querySelector('p').textContent = message;
++}
++function updateWorkflowPending(){
++  var pending = workflowMutationPending || workflowCataloguePending;
++  var frozen = pending || workflowCatalogueUnavailable || Boolean(workflowUnknownWrite || workflowTerminalState || workflowDeleteState);
++  document.querySelectorAll('#workflowForm input,#workflowForm textarea,#workflowForm button:not(#workflowReconcileButton):not(#workflowRefreshButton),#workflowNav button,#workflowSelect,#newWorkflowButton').forEach(function(control){
++    control.disabled = frozen || (control.id === 'deleteWorkflowButton' && Boolean(workflowById(selectedWorkflowId) && workflowById(selectedWorkflowId).is_default));
++  });
++  if(workflowDeleteState && !pending){
++    var deletion = document.getElementById('deleteWorkflowButton');
++    deletion.disabled = workflowDeleteState.kind !== 'unknown';
++    deletion.textContent = 'Проверить удаление';
++  }
++  var reconcile = document.getElementById('workflowReconcileButton');
++  reconcile.hidden = !workflowUnknownWrite || Boolean(workflowTerminalState);
++  reconcile.disabled = pending;
++  var refresh = document.getElementById('workflowRefreshButton');
++  refresh.hidden = !workflowCatalogueUnavailable || Boolean(workflowTerminalState);
++  refresh.disabled = pending;
++  document.getElementById('workflowForm').setAttribute('aria-busy', String(pending));
++  refreshWorkflowDraftGuard();
++}
+ 
+ function workflowById(id){ return workflowStore.find(function(workflow){ return workflow.id === id; }); }
+ function workflowSelectionUrl(workflowId){
+   var url = new URL(window.location.href);
+-  if(workflowId == null){ url.searchParams.delete('workflow_id'); }
+-  else { url.searchParams.set('workflow_id', String(workflowId)); }
++  if(workflowId == null){ url.searchParams.delete('workflow_id'); url.searchParams.set('workflow_mode', 'create'); }
++  else { url.searchParams.set('workflow_id', String(workflowId)); url.searchParams.delete('workflow_mode'); }
+   return url.pathname + url.search + url.hash;
+ }
+ function syncWorkflowUrl(workflowId, mode){
+   var nextUrl = workflowSelectionUrl(workflowId);
+   var currentUrl = window.location.pathname + window.location.search + window.location.hash;
+   if(nextUrl === currentUrl)return;
+-  window.history[mode === 'replace' ? 'replaceState' : 'pushState']({workflowId:workflowId},'',nextUrl);
++  var index = workflowAcceptedLocation ? workflowAcceptedLocation.index : 0;
++  if(mode !== 'replace')index++;
++  window.history[mode === 'replace' ? 'replaceState' : 'pushState'](Object.assign({}, window.history.state, {workflowEditorIndex:index}), '', nextUrl);
++  workflowAcceptedLocation = {href:window.location.href,index:index,state:window.history.state};
+ }
+ function workflowIdFromUrl(){
+   var raw = new URL(window.location.href).searchParams.get('workflow_id');
+@@ -137,6 +186,16 @@ function syncWorkflowNav(){
+ function fillWorkflowForm(workflow){
+   document.getElementById('workflowName').value = workflow ? workflow.name : '';
+   document.getElementById('workflowDescription').value = workflow ? (workflow.description || '') : '';
++  workflowDraftBaseline = workflowDraftSnapshot();
++  workflowUnknownWrite = null;
++  workflowTerminalState = null;
++  workflowDeleteState = null;
++  workflowCatalogueUnavailable = false;
++  showWorkflowError('');
++  document.getElementById('workflowReadbackCandidates').replaceChildren();
++  document.getElementById('workflowReadbackCandidates').hidden = true;
++  updateWorkflowPending();
++  refreshWorkflowDraftGuard();
+ }
+ function setWorkflowFormMode(mode){
+   workflowFormMode = mode;
+@@ -153,6 +212,10 @@ function setWorkflowFormMode(mode){
+   document.getElementById('cancelCreateWorkflowButton').style.display = createMode && workflowStore.length ? '' : 'none';
+ }
+ function startCreateWorkflow(){
++  if(workflowMutationPending || workflowCataloguePending || workflowCatalogueUnavailable || workflowUnknownWrite || workflowTerminalState || workflowDeleteState)return Promise.resolve(false);
++  return requestWorkflowTransition(applyCreateWorkflow);
++}
++function applyCreateWorkflow(){
+   if(selectedWorkflowId != null){
+     previousWorkflowId = selectedWorkflowId;
+   }
+@@ -160,6 +223,7 @@ function startCreateWorkflow(){
+   fillWorkflowForm(null);
+   setWorkflowFormMode('create');
+   syncWorkflowNav();
++  syncWorkflowUrl(null, 'push');
+   document.getElementById('workflowName').focus();
+ }
+ function cancelCreateWorkflow(){
+@@ -171,11 +235,16 @@ function cancelCreateWorkflow(){
+   if(!workflowById(fallbackId)){
+     fallbackId = workflowStore[0].id;
+   }
+-  selectWorkflow(fallbackId);
+-  document.getElementById('workflowName').focus();
++  return selectWorkflow(fallbackId).then(function(allowed){ if(allowed)document.getElementById('workflowName').focus(); });
+ }
+ function selectWorkflow(id, options){
+-  if(!workflowById(id))return;
++  if(workflowMutationPending || workflowCataloguePending || workflowCatalogueUnavailable || workflowUnknownWrite || workflowTerminalState || workflowDeleteState){ syncWorkflowNav(); return Promise.resolve(false); }
++  if(!workflowById(id))return Promise.resolve(false);
++  if(selectedWorkflowId === id && workflowFormMode === 'edit'){ syncWorkflowNav(); return Promise.resolve(false); }
++  syncWorkflowNav();
++  return requestWorkflowTransition(function(){ applyWorkflowSelection(id, options); });
++}
++function applyWorkflowSelection(id, options){
+   selectedWorkflowId = id;
+   previousWorkflowId = id;
+   fillWorkflowForm(workflowById(id));
+@@ -234,11 +303,16 @@ function renderWorkflowNav(){
+     nav.appendChild(button);
+   });
+ }
+-function reloadWorkflows(nextId){
+-  return fetch('/api/workflows')
+-    .then(function(r){return r.json()})
+-    .then(function(d){
+-      if(!d.ok){showToast(d.error || 'Ошибка загрузки воркфлоу','error');return;}
++async function reloadWorkflows(nextId){
++  if(workflowCataloguePending || workflowUnknownWrite || workflowDeleteState || workflowTerminalState)return false;
++  if(workflowDraftDirty()){ showWorkflowError('Обновление списка не выполнено: сохраните изменения или выберите воркфлоу.'); return Promise.resolve(false); }
++  workflowCataloguePending = true;
++  updateWorkflowPending();
++  try {
++      var response = await fetch('/api/workflows', {cache:'no-store'});
++      var d = await response.json().catch(function(){ return null; });
++      if([401,403,404].includes(response.status)){ rejectWorkflowWrite(response, d); updateWorkflowPending(); focusWorkflowRecovery(); return false; }
++      if(!response.ok || !validWorkflowCatalogue(d))throw new Error('Catalogue unavailable');
+       workflowStore.length = 0;
+       d.workflows.forEach(function(workflow){ workflowStore.push(workflow); });
+       if(workflowStore.length === 0){
+@@ -259,33 +333,127 @@ function reloadWorkflows(nextId){
+       setWorkflowFormMode('edit');
+       syncWorkflowNav();
+       syncWorkflowUrl(selectedWorkflowId, 'replace');
+-    })
+-    .catch(showRequestError);
++      return true;
++  } catch(_error){ workflowCatalogueUnavailable = true; showWorkflowError('Не удалось обновить список воркфлоу. Доступные данные сохранены; запись заблокирована до обновления.', 'partial-error'); return false; }
++  finally { workflowCataloguePending = false; updateWorkflowPending(); }
+ }
+ function saveWorkflow(){
+-  if(selectedWorkflowId == null){ showToast('Воркфлоу не выбран','error'); return; }
+-  var payload = currentWorkflowPayload();
+-  return fetch('/api/workflows/' + selectedWorkflowId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+-    .then(function(r){return r.json()})
+-    .then(function(d){ if(d.ok){ showToast('Воркфлоу сохранён','success'); return reloadWorkflows(selectedWorkflowId); } showToast(d.error || 'Ошибка','error'); })
+-    .catch(showRequestError);
++  if(selectedWorkflowId == null){ showWorkflowError('Воркфлоу не выбран'); return; }
++  return performWorkflowWrite('PUT', selectedWorkflowId, currentWorkflowPayload());
+ }
+ function createWorkflow(){
+-  var payload = currentWorkflowPayload();
+-  return fetch('/api/workflows',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+-    .then(function(r){return r.json()})
+-    .then(function(d){
+-      if(d.ok){
+-        showToast('Воркфлоу создан','success');
+-        reloadWorkflows(d.workflow_id);
+-        window.location.href = phaseUrlForWorkflow(d.workflow_id);
+-      } else {
+-        showToast(d.error || 'Ошибка','error');
++  return performWorkflowWrite('POST', null, currentWorkflowPayload());
++}
++function validWorkflowCatalogue(data){
++  return data && data.ok === true && Array.isArray(data.workflows)
++    && data.workflows.every(function(item){ return item && Number.isInteger(item.id) && item.id > 0 && typeof item.name === 'string' && typeof item.description === 'string'; })
++    && new Set(data.workflows.map(function(item){ return item.id; })).size === data.workflows.length;
++}
++function workflowMatchesAttempt(item, attempt){
++  return item && Number.isInteger(item.id) && item.id > 0 && item.name === attempt.payload.name && item.description === attempt.payload.description
++    && (attempt.id == null ? !attempt.knownIds.has(item.id) : item.id === attempt.id);
++}
++function rejectWorkflowWrite(response, data){
++  workflowTerminalState = [401,403].includes(response.status) ? 'permission-denied' : response.status === 404 ? 'not-found' : null;
++  showWorkflowError(data && typeof data.error === 'string' ? data.error : 'Изменения не сохранены. Проверьте поля и доступ.', workflowTerminalState);
++}
++function focusWorkflowRecovery(){
++  if(workflowTerminalState){
++    var state = document.querySelector('#workflowWriteError [data-page-state]');
++    state.tabIndex = -1;
++    state.focus();
++  } else if(workflowUnknownWrite)document.getElementById('workflowReconcileButton').focus();
++}
++function acknowledgeWorkflow(item, attempt){
++  workflowUnknownWrite = null;
++  showWorkflowError('');
++  document.getElementById('workflowReadbackCandidates').hidden = true;
++  if(attempt.id != null){
++    Object.assign(workflowById(attempt.id), item);
++    fillWorkflowForm(item);
++    renderWorkflowNav();
++    syncWorkflowNav();
++  } else workflowDraftBaseline = workflowDraftSnapshot();
++  showToast(attempt.id == null ? 'Воркфлоу создан' : 'Воркфлоу сохранён', 'success');
++}
++async function performWorkflowWrite(method, id, payload){
++  if(workflowMutationPending || workflowCataloguePending || workflowCatalogueUnavailable || workflowUnknownWrite || workflowTerminalState || workflowDeleteState)return;
++  if(!payload.name){ showWorkflowError('Введите название воркфлоу'); document.getElementById('workflowName').focus(); return; }
++  if(!document.getElementById('workflowForm').reportValidity())return;
++  var attempt = {id:id,payload:payload,knownIds:new Set(workflowStore.map(function(item){ return item.id; })),receivedId:null};
++  var acknowledged = false;
++  workflowMutationPending = true;
++  showWorkflowError('');
++  updateWorkflowPending();
++  document.getElementById('workflowSubmitButton').textContent = method === 'POST' ? 'Создание…' : 'Сохранение…';
++  try {
++    var response = await fetch('/api/workflows' + (id == null ? '' : '/' + id), {method:method,headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
++    var data = await response.json().catch(function(){ return null; });
++    if(response.ok && data && data.ok === true && id == null && Number.isInteger(data.workflow_id) && data.workflow_id > 0 && !attempt.knownIds.has(data.workflow_id))attempt.receivedId = data.workflow_id;
++    if(!response.ok || !data || data.ok !== true){
++      if(response.ok || response.status >= 500 || response.status === 408)workflowUnknownWrite = attempt;
++      else rejectWorkflowWrite(response, data);
++    } else if(!workflowMatchesAttempt(data.workflow, attempt) || (id == null && data.workflow_id !== data.workflow.id))workflowUnknownWrite = attempt;
++    else { acknowledgeWorkflow(data.workflow, attempt); acknowledged = true; }
++  } catch(_error){ workflowUnknownWrite = attempt; }
++  finally {
++    if(workflowUnknownWrite)showWorkflowError('Результат записи неизвестен. Повтор заблокирован до проверки сохранения.');
++    workflowMutationPending = false;
++    setWorkflowFormMode(workflowFormMode);
++    updateWorkflowPending();
++    focusWorkflowRecovery();
++  }
++  if(acknowledged && id == null)return navigateWorkflow(phaseUrlForWorkflow(data.workflow.id));
++  if(acknowledged)document.getElementById('workflowSubmitButton').focus();
++}
++async function reconcileWorkflowWrite(){
++  if(workflowMutationPending || !workflowUnknownWrite || workflowTerminalState)return;
++  var attempt = workflowUnknownWrite;
++  var saved;
++  workflowMutationPending = true;
++  updateWorkflowPending();
++  try {
++    var response = await fetch('/api/workflows', {cache:'no-store'});
++    var data = await response.json().catch(function(){ return null; });
++    if([401,403,404].includes(response.status)){ rejectWorkflowWrite(response, data); return; }
++    if(!response.ok || !validWorkflowCatalogue(data))throw new Error('Catalogue unavailable');
++    var id = attempt.id == null ? attempt.receivedId : attempt.id;
++    saved = id == null ? null : data.workflows.find(function(item){ return item.id === id && workflowMatchesAttempt(item, attempt); });
++    if(saved)acknowledgeWorkflow(saved, attempt);
++    else if(attempt.id != null && !data.workflows.some(function(item){ return item.id === attempt.id; })){
++      workflowTerminalState = 'not-found';
++      showWorkflowError('Воркфлоу больше недоступен. Введённые значения сохранены в форме.', 'not-found');
++    }
++    else {
++      showWorkflowError('Сохранение пока не подтверждено. Повторная запись заблокирована.');
++      var candidates = document.getElementById('workflowReadbackCandidates');
++      candidates.replaceChildren();
++      if(attempt.id == null && attempt.receivedId == null){
++        // Names are not unique: matching rows are evidence, not an acknowledgement.
++        data.workflows.filter(function(item){ return workflowMatchesAttempt(item, attempt); }).forEach(function(item){
++          var link = document.createElement('a');
++          link.className = 'base-control base-button base-button-secondary';
++          link.href = workflowSelectionUrl(item.id);
++          link.target = '_blank';
++          link.rel = 'noopener';
++          link.textContent = 'Проверить найденный воркфлоу «' + item.name + '» (ID ' + item.id + ') в новой вкладке';
++          candidates.appendChild(link);
++        });
++        if(candidates.childElementCount)showWorkflowError('Найдены совпадения, но ответ не содержит ID созданного воркфлоу. Проверьте их в новой вкладке; результат записи не подтверждён.');
+       }
+-    })
+-    .catch(showRequestError);
++      candidates.hidden = !candidates.childElementCount;
++    }
++  } catch(_error){ showWorkflowError('Не удалось проверить сохранение. Значения сохранены в форме, повторная запись заблокирована.'); }
++  finally { workflowMutationPending = false; updateWorkflowPending(); focusWorkflowRecovery(); }
++  if(saved && attempt.id == null)return navigateWorkflow(phaseUrlForWorkflow(saved.id));
++  if(saved)document.getElementById('workflowSubmitButton').focus();
+ }
+ async function deleteWorkflow(){
++  if(workflowMutationPending || workflowCataloguePending || workflowCatalogueUnavailable || workflowUnknownWrite || workflowTerminalState)return;
++  if(workflowDeleteState && workflowDeleteState.kind !== 'unknown')return;
++  if(!workflowDeleteState && workflowDraftDirty()){
++    if(!await requestWorkflowTransition(function(){ fillWorkflowForm(workflowById(selectedWorkflowId)); }))return;
++  }
+   if(selectedWorkflowId == null){ showToast('Воркфлоу не выбран','error'); return; }
+   var workflow = workflowById(selectedWorkflowId);
+   var title = workflow ? 'Удалить воркфлоу «' + workflow.name + '»?' : 'Удалить воркфлоу?';
+@@ -294,27 +462,51 @@ async function deleteWorkflow(){
+     : 'Воркфлоу будет удалён.';
+   var workflowId = selectedWorkflowId;
+   var button = document.getElementById('deleteWorkflowButton');
+-  if(await requestWorkflowDeletion({
+-    url:'/api/workflows/' + workflowId,title:title,message:message,returnFocus:button,
+-    exists:function(){ return workflowCollectionContains('/api/workflows','workflows',workflowId); },
+-  })){
+-    showToast('Воркфлоу удалён','success');
+-    return reloadWorkflows(null);
++  workflowMutationPending = true;
++  updateWorkflowPending();
++  try {
++    var confirmed = await requestWorkflowDeletion({
++      url:'/api/workflows/' + workflowId,title:title,message:message,returnFocus:button,
++      exists:function(){ return workflowCollectionContains('/api/workflows','workflows',workflowId); },
++    });
++    if(confirmed){
++      workflowDeleteState = null;
++      var deletedIndex = workflowStore.findIndex(function(item){ return item.id === workflowId; });
++      if(deletedIndex >= 0)workflowStore.splice(deletedIndex, 1);
++      selectedWorkflowId = null;
++      previousWorkflowId = null;
++      fillWorkflowForm(null);
++      setWorkflowFormMode('create');
++      renderWorkflowNav();
++      syncWorkflowNav();
++      showWorkflowError('');
++      showToast('Воркфлоу удалён','success');
++      await reloadWorkflows(null);
++    } else {
++      var deletion = workflowDeletionState('/api/workflows/' + workflowId);
++      workflowDeleteState = deletion.kind === 'ready' ? null : deletion;
++      if(workflowDeleteState)showWorkflowError(deletion.error, deletion.kind === 'terminal' ? deletion.status === 404 ? 'not-found' : 'permission-denied' : 'error');
++    }
++  } finally {
++    workflowMutationPending = false;
++    updateWorkflowPending();
++    if(!button.disabled && button.isConnected)button.focus();
++    else if(workflowDeleteState && workflowDeleteState.kind === 'terminal'){
++      var state = document.querySelector('#workflowWriteError [data-page-state]');
++      state.tabIndex = -1;
++      state.focus();
++    }
+   }
+ }
+ function submitWorkflow(){
++  if(workflowMutationPending || workflowCataloguePending || workflowCatalogueUnavailable || workflowUnknownWrite || workflowTerminalState || workflowDeleteState)return;
+   var nameInput = document.getElementById('workflowName');
+   if(!nameInput.value.trim()){
+-    showToast('Введите название воркфлоу','error');
++    showWorkflowError('Введите название воркфлоу');
+     nameInput.focus();
+     return;
+   }
+-  var button = document.getElementById('workflowSubmitButton');
+-  if(button.disabled)return;
+-  button.disabled = true;
+-  button.textContent = workflowFormMode === 'create' ? 'Создание…' : 'Сохранение…';
+-  var operation = workflowFormMode === 'create' ? createWorkflow() : saveWorkflow();
+-  Promise.resolve(operation).finally(function(){ button.disabled = false; setWorkflowFormMode(workflowFormMode); });
++  return workflowFormMode === 'create' ? createWorkflow() : saveWorkflow();
+ }
+ renderWorkflowNav();
+ if(selectedWorkflowId == null){
+@@ -324,9 +516,66 @@ if(selectedWorkflowId == null){
+   setWorkflowFormMode('edit');
+ }
+ syncWorkflowNav();
+-window.addEventListener('popstate', function(){
+-  var workflowId = workflowIdFromUrl();
+-  if(workflowId == null)return;
+-  selectWorkflow(workflowId, {updateUrl:false});
++workflowDraftBaseline = workflowDraftSnapshot();
++var initialIndex = window.history.state && window.history.state.workflowEditorIndex;
++if(!Number.isInteger(initialIndex))initialIndex = 0;
++window.history.replaceState(Object.assign({}, window.history.state, {workflowEditorIndex:initialIndex}), '', window.location.href);
++workflowAcceptedLocation = {href:window.location.href,index:initialIndex,state:window.history.state};
++syncWorkflowUrl(selectedWorkflowId, 'replace');
++registerWorkflowDraftGuard({isDirty:workflowDraftDirty,isPending:function(){ return workflowMutationPending || workflowCataloguePending; }});
++document.getElementById('workflowSelect').addEventListener('change', function(){ selectWorkflow(Number(this.value)); });
++document.getElementById('workflowForm').addEventListener('input', function(){ if(!workflowUnknownWrite && !workflowTerminalState)showWorkflowError(''); refreshWorkflowDraftGuard(); });
++function restoreWorkflowLocation(){
++  if(new URL(window.location.href).searchParams.get('workflow_mode') === 'create'){
++    selectedWorkflowId = null;
++    fillWorkflowForm(null);
++    setWorkflowFormMode('create');
++    syncWorkflowNav();
++    return;
++  }
++  var id = workflowIdFromUrl();
++  if(id != null)applyWorkflowSelection(id, {updateUrl:false});
++}
++function workflowLocationContext(href){
++  var url = new URL(href);
++  return url.pathname + ':' + (url.searchParams.get('workflow_id') || '') + ':' + (url.searchParams.get('workflow_mode') || '') + ':' + (url.searchParams.get('namespace_id') || '');
++}
++window.addEventListener('popstate', function(event){
++  var target = {href:window.location.href,index:event.state && event.state.workflowEditorIndex,state:event.state};
++  if(workflowHistoryAttempt){
++    var attempt = workflowHistoryAttempt;
++    if(attempt.stage === 'replay' && target.href === attempt.target.href){
++      workflowHistoryAttempt = null;
++      workflowAcceptedLocation = target;
++      restoreWorkflowLocation();
++      return;
++    }
++    if(target.href !== workflowAcceptedLocation.href){
++      if(Number.isInteger(target.index))window.history.go(workflowAcceptedLocation.index - target.index);
++      else window.history.replaceState(workflowAcceptedLocation.state, '', workflowAcceptedLocation.href);
++      return;
++    }
++    if(attempt.stage !== 'restore')return;
++    attempt.stage = 'confirm';
++    requestWorkflowTransition(function(){
++      attempt.stage = 'replay';
++      window.history.go(attempt.target.index - workflowAcceptedLocation.index);
++    }).then(function(allowed){ if(!allowed && workflowHistoryAttempt === attempt)workflowHistoryAttempt = null; });
++    return;
++  }
++  if(workflowLocationContext(target.href) === workflowLocationContext(workflowAcceptedLocation.href)){
++    var index = Number.isInteger(target.index) ? target.index : workflowAcceptedLocation.index;
++    window.history.replaceState(Object.assign({}, target.state, {workflowEditorIndex:index}), '', target.href);
++    workflowAcceptedLocation = {href:target.href,index:index,state:window.history.state};
++    return;
++  }
++  if(!workflowDraftDirty() && !workflowMutationPending && !workflowCataloguePending){ workflowAcceptedLocation = target; restoreWorkflowLocation(); return; }
++  if(!Number.isInteger(target.index)){
++    window.history.replaceState(workflowAcceptedLocation.state, '', workflowAcceptedLocation.href);
++    showWorkflowError('Переход не выполнен: сохраните изменения или выберите воркфлоу.');
++    return;
++  }
++  workflowHistoryAttempt = {stage:'restore',target:target};
++  window.history.go(workflowAcceptedLocation.index - target.index);
+ });
+ {% endblock %}
+diff --git a/tests/test_ui.py b/tests/test_ui.py
+index 4fc6a1f..974507e 100644
+--- a/tests/test_ui.py
++++ b/tests/test_ui.py
+@@ -1558,17 +1558,19 @@ class TestPhaseDetail:
+         assert "input.dataset.originalDescription = savedDescription;" in response.text
+         assert "showToast('Описание инструкции обязательно', 'error');" in response.text
+ 
+-    def test_instructions_page_instruction_description_reverts_after_rejected_save(self):
++    def test_instructions_page_preserves_description_and_reconciles_unknown_write(self):
+         phase_id = _phase_id("1.INTAKE")
+         response = client.get(f"/instructions?phase_id={phase_id}")
+ 
+         assert response.status_code == 200
+         assert 'data-original-description="' in response.text
+-        assert "const previousDescription = textarea.dataset.originalDescription || '';" in response.text
+         assert "const description = textarea.value.trim();" in response.text
+-        assert "textarea.value = previousDescription;" in response.text
+-        assert "textarea.dataset.originalDescription = savedDescription;" in response.text
+-        assert "showToast('Описание инструкции обязательно', 'error');" in response.text
++        assert "textarea.value = previousDescription;" not in response.text
++        assert "showInstructionError('Описание инструкции обязательно');" in response.text
++        assert "instructionUnknownWrite = attempt" in response.text
++        assert "async function reconcileInstructionWrite()" in response.text
++        assert "instructionTerminalState = 'not-found'" in response.text
++        assert "registerWorkflowDraftGuard({isDirty: instructionDraftDirty" in response.text
+ 
+     def test_phase_detail_can_toggle_instruction_execution_type(self):
+         phase_response = client.get(_phase_api_path("1.INTAKE"))
+@@ -2507,6 +2509,24 @@ class TestProjectsPage:
+ 
+ 
+ class TestWorkflowsPage:
++    def test_create_mode_is_server_rendered_without_edit_values(self):
++        response = client.get("/workflows?workflow_mode=create")
++
++        assert response.status_code == 200
++        assert 'id="workflowFormMode">Новый воркфлоу</h2>' in response.text
++        assert 'id="workflowName" name="name" type="text" value=""' in response.text
++        assert "let selectedWorkflowId = null;" in response.text
++        assert 'id="workflowSubmitButton">Создать воркфлоу</button>' in response.text
++        assert 'id="deleteWorkflowButton" onclick="deleteWorkflow()" style="display:none"' in response.text
++
++    @pytest.mark.parametrize("query", ["workflow_mode=edit", "workflow_mode=create&workflow_id=1"])
++    def test_create_mode_rejects_unknown_or_conflicting_query(self, query):
++        response = client.get(f"/workflows?{query}")
++
++        assert response.status_code == 422
++        assert "Некорректный workflow_mode" in response.text
++        assert 'id="workflowForm"' not in response.text
++
+     def test_workflows_page_returns_html(self):
+         response = client.get("/workflows")
+         assert response.status_code == 200
+@@ -2539,16 +2559,23 @@ class TestWorkflowsPage:
+         assert 'id="newWorkflowButton"' in response.text
+         assert 'id="workflowFormMode"' in response.text
+         assert 'id="workflowSelect"' in response.text
+-        assert 'class="workflow-description"' in response.text
++        assert 'id="workflowDescription" name="description"' in response.text
+         assert 'id="workflowName"' in response.text and "required" in response.text
+         assert 'id="workflowDeleteHint" hidden' in response.text
+         assert 'aria-controls="workflowForm" aria-pressed="true"' in response.text
+         assert "node.setAttribute('aria-pressed', String(active))" in response.text
+-        assert response.text.count("document.getElementById('workflowName').focus()") == 2
++        assert "function applyCreateWorkflow()" in response.text
++        assert "return requestWorkflowTransition(applyCreateWorkflow)" in response.text
+         assert "deleteButton.disabled = protectedDefault" in response.text
+         assert "title = workflow ? 'Удалить воркфлоу «' + workflow.name + '»?'" in response.text
+-        assert "Promise.resolve(operation).finally" in response.text
+-        assert "button.textContent = workflowFormMode === 'create' ? 'Создание…' : 'Сохранение…'" in response.text
++        assert (
++            "workflowCatalogueUnavailable || workflowUnknownWrite || "
++            "workflowTerminalState || workflowDeleteState)return;"
++            in response.text
++        )
++        assert "method === 'POST' ? 'Создание…' : 'Сохранение…'" in response.text
++        assert "workflowMutationPending = false" in response.text
++        assert "updateWorkflowPending()" in response.text
+         assert 'data-base-confirm-pending role="status" hidden' in response.text
+         assert "requestWorkflowDeletion({" in response.text
+         assert 'spellcheck="false"' not in response.text
+@@ -2602,7 +2629,11 @@ class TestWorkflowsPage:
+         assert "url.searchParams.delete('workflow_id');" in response.text
+         assert "window.history[mode === 'replace' ? 'replaceState' : 'pushState']" in response.text
+         assert "window.addEventListener('popstate'" in response.text
+-        assert "selectWorkflow(workflowId, {updateUrl:false});" in response.text
++        assert "workflowHistoryAttempt = {stage:'restore',target:target}" in response.text
++        assert "window.history.go(workflowAcceptedLocation.index - target.index)" in response.text
++        assert "restoreWorkflowLocation()" in response.text
++        assert "Object.assign({}, window.history.state, {workflowEditorIndex:index})" in response.text
++        assert "url.searchParams.set('workflow_mode', 'create')" in response.text
+         assert "syncWorkflowUrl(selectedWorkflowId, 'replace');" in response.text
+         assert "return workflowById(defaultWorkflowId) ? defaultWorkflowId" in response.text
+ 
+@@ -2681,7 +2712,8 @@ class TestWorkflowsPage:
+         assert "function phaseUrlForWorkflow(workflowId)" in response.text
+         assert "url.searchParams.set('workflow_id', String(workflowId));" in response.text
+         assert "url.searchParams.set('namespace_id', String(activeNamespaceId));" not in response.text
+-        assert "window.location.href = phaseUrlForWorkflow(d.workflow_id);" in response.text
++        assert "navigateWorkflow(phaseUrlForWorkflow(data.workflow.id))" in response.text
++        assert "window.location.href = phaseUrlForWorkflow" not in response.text
+         assert "window.location.href = '/phases?workflow_id=' + d.workflow_id;" not in response.text
+ 
+     def test_workflows_api_create_update_and_delete(self):
+@@ -2766,8 +2798,8 @@ def test_workflows_list_scrolls_with_page_and_labels_fields():
+     assert 'class="workflow-nav side-nav-scroll" id="workflowNav"' in response.text
+     assert "html{scrollbar-width:thin;scrollbar-color:var(--surface-active) transparent}" in response.text
+     assert '<h1 class="base-page-title">Воркфлоу</h1>' in response.text
+-    assert '<label class="label" for="workflowName">Название</label>' in response.text
+-    assert '<label class="label" for="workflowDescription">Описание</label>' in response.text
++    assert '<label for="workflowName">Название<span aria-hidden="true"> *</span></label>' in response.text
++    assert '<label for="workflowDescription">Описание</label>' in response.text
+ 
+ 
+ def test_ui_deletions_use_base_confirmation_not_a_local_modal():
+@@ -2802,7 +2834,7 @@ class TestAgentsPage:
+     def test_form_editors_have_touch_sized_controls(self):
+         for path, rule in (
+             ("/namespaces", 'href="/static/base-ui/base-ui.css"'),
+-            ("/workflows", ".workflow-panel input,.workflow-panel .btn{min-height:var(--shell-control-min)}"),
++            ("/workflows", 'id="workflowSelect" name="workflow_id"'),
+             ("/agents", 'href="/static/base-ui/base-ui.css"'),
+         ):
+             response = client.get(path)
+@@ -3034,6 +3066,19 @@ class TestUiNetworkFailures:
+             assert "catch(_error){showAgentState(form,'Не удалось проверить сохранение." in response.text
+             assert "requestWorkflowDeletion({" in response.text
+             return
++        if path == "/workflows":
++            assert "catch(_error){ workflowUnknownWrite = attempt; }" in response.text
++            assert (
++                "workflowCatalogueUnavailable || workflowUnknownWrite || "
++                "workflowTerminalState || workflowDeleteState)return;"
++                in response.text
++            )
++            assert "response.ok && data && data.ok === true" in response.text
++            assert "!workflowMatchesAttempt(data.workflow, attempt)" in response.text
++            assert "fetch('/api/workflows', {cache:'no-store'})" in response.text
++            assert "Names are not unique: matching rows are evidence, not an acknowledgement." in response.text
++            assert "Повторная запись заблокирована." in response.text
++            return
+         handler = ".catch(showRequestError)"
+         assert response.text.count(handler) + response.text.count("requestWorkflowDeletion({") >= minimum_handlers
+         assert "catch (_error) { unknown(); }" in response.text
+@@ -3071,8 +3116,8 @@ class TestUiNetworkFailures:
+         assert "requestWorkflowDeletion({" in instructions_page.text
+         assert "requestWorkflowDeletion({" in detail_page.text
+         assert instructions_page.status_code == 200
+-        assert "async function requestInstruction(url, options)" in instructions_page.text
+-        assert "showRequestError();" in instructions_page.text
++        assert "async function requestInstruction(attempt)" in instructions_page.text
++        assert "showInstructionError('Результат записи неизвестен." in instructions_page.text
+         assert detail_page.status_code == 200
+         assert "async function requestPhaseDetail(url, options)" in detail_page.text
+         assert "if (!await savePhase())" in detail_page.text
+@@ -3107,11 +3152,11 @@ class TestUiNetworkFailures:
+         assert 'class="instructions-context"' not in response.text
+         assert '<span class="instructions-mobile-title">Шаги</span>' in response.text
+         assert "Добавляй, удаляй и меняй порядок инструкций" not in response.text
+-        assert 'class="instruction-text" rows="1"' in response.text
++        assert 'class="instruction-text base-control" rows="1"' in response.text
+         assert 'aria-label="Описание инструкции 1"' in response.text
+-        assert 'class="type-badge sync"' in response.text
++        assert 'class="type-badge sync base-control"' in response.text
+         assert 'aria-pressed="false" onclick="toggleType(this)"' in response.text
+-        assert 'aria-label="Новая инструкция"' in response.text
++        assert '<label for="newInstructionText">Новая инструкция' in response.text
+         assert ".order-btn{width:40px;height:40px" in response.text
+         assert ".row-actions .icon-btn{width:40px;height:40px}" in response.text
+         assert "function resizeInstructionTextarea(field)" in response.text
+diff --git a/tests/test_ui_api.py b/tests/test_ui_api.py
+index 0055940..543e950 100644
+--- a/tests/test_ui_api.py
++++ b/tests/test_ui_api.py
+@@ -148,9 +148,9 @@ class TestIndex:
+         assert resp.status_code == 200
+         assert f"const selectedNamespaceId = {namespace['id']};" in resp.text
+         assert "function instructionApiUrl(path)" in resp.text
+-        assert "fetch(instructionApiUrl('/api/phases/' + PHASE_ID + '/instructions/reorder')" in resp.text
+-        assert "requestInstruction(instructionApiUrl('/api/instructions/' + id)" in resp.text
+-        assert "requestInstruction(instructionApiUrl('/api/instructions')" in resp.text
++        assert "url: '/api/phases/' + PHASE_ID + '/instructions/reorder'" in resp.text
++        assert "requestInstruction({kind: 'update', id, url: '/api/instructions/' + id" in resp.text
++        assert "requestInstruction({kind: 'create', url: '/api/instructions'" in resp.text
+ 
+     def test_settings_page(self, client):
+         resp = client.get("/settings")
+diff --git a/tests/test_ui_instructions.py b/tests/test_ui_instructions.py
+index d1b2998..772e885 100644
+--- a/tests/test_ui_instructions.py
++++ b/tests/test_ui_instructions.py
+@@ -28,7 +28,9 @@ class TestInstructionsApi:
+         detail = client.get(f"/phase/{phase_id}").text
+ 
+         assert "layout.replaceChildren(...reordered)" in dedicated
+-        assert "layout.replaceChildren(...rows)" in dedicated
++        assert "if (attempt.previousRows)" in dedicated
++        assert "document.getElementById('instructionsLayout').replaceChildren(...attempt.previousRows)" in dedicated
++        assert "catch (_error) { instructionUnknownWrite = attempt; }" in dedicated
+         assert "appendChild(r.closest('.instruction-block')" not in dedicated
+         assert "const isParallelGroup = group.length > 1;" in dedicated
+         assert "type === 'parallel' ? ' parallel-group'" not in dedicated

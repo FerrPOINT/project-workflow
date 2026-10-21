@@ -1,0 +1,1145 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 61eed8e..2a3eb22 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -7,6 +7,15 @@
+ ## [Unreleased]
+ 
+ ### Changed
++- Каталог фаз использует Base SSR controls/states и общий navigation guard.
++  Создание, порядок, режим и удаление имеют единую блокировку записи. Создание,
++  порядок и режим подтверждаются scoped GET-каталогом; неизвестный результат не повторяется,
++  а создание без возвращённого ID не определяется по имени или новым строкам.
++  Ошибки 403/404 отключают CRUD, 409/422 сохраняют каталог; API и runtime pins
++  не меняются. Локальные повторяемые карточки и mobile targets приведены к Base.
++- Неудачные чтения каталога сервисов кешируются на 10 секунд с сохранением
++  причины fallback и неизвестного health. Недоступный Admin не добавляет
++  сетевой timeout к каждому переходу; успешный каталог сохраняет TTL 60 секунд.
+ - Общий Base snapshot обновлён до 0ffb99e: verified profile/directory contracts
+   и UI dependency graph без замены shell. SSR assets сохраняются byte-for-byte;
+   active skills catalog и принятый runtime не переключаются.
+diff --git a/frontend/e2e/phase-catalog.spec.ts b/frontend/e2e/phase-catalog.spec.ts
+new file mode 100644
+index 0000000..b27d26c
+--- /dev/null
++++ b/frontend/e2e/phase-catalog.spec.ts
+@@ -0,0 +1,321 @@
++import { expect, test, type Page, type APIRequestContext } from '@playwright/test'
++
++if (process.env.WORKFLOW_UI_QA_MUTATIONS !== 'isolated-fixture') throw new Error('Phase catalog QA requires an isolated fixture')
++
++interface Phase { id: number; workflow_id: number; mode_id: number; phase_order: number; execution_type: string }
++let workflowId: number
++let namespaceId: number
++let modeId: number
++let initial: Phase[]
++const state = (page: Page) => page.locator('#phaseWriteError [data-page-state]')
++const recovery = (page: Page) => page.locator('#phaseReconcileButton')
++const items = (page: Page) => page.locator('#phasesTimeline .timeline-item')
++const draftDialog = (page: Page) => page.locator('[data-base-draft-dialog]')
++const catalogue = () => `/api/phases?workflow_id=${workflowId}&mode_id=${modeId}&namespace_id=${namespaceId}`
++const pageUrl = () => `/phases?workflow_id=${workflowId}&mode_id=${modeId}&namespace_id=${namespaceId}&foreign=keep`
++async function rows(request: APIRequestContext) {
++  const response = await request.get(catalogue())
++  expect(response.ok()).toBeTruthy()
++  return (await response.json()).phases as Phase[]
++}
++async function action(page: Page, index: number, selector: string) {
++  const item = items(page).nth(index)
++  await item.locator('summary').click()
++  await item.locator(selector).click()
++}
++
++test.beforeEach(async ({ request }) => {
++  workflowId = 0
++  namespaceId = 0
++  const response = await request.post('/api/workflows', { data: { name: `Phase catalog ${crypto.randomUUID()}` } })
++  expect(response.ok()).toBeTruthy()
++  workflowId = (await response.json()).workflow_id as number
++  const data = await (await request.get(`/api/phases?workflow_id=${workflowId}`)).json()
++  modeId = data.mode.id as number
++  const namespace = await request.post('/api/namespaces', { data: { name: `Phase QA ${crypto.randomUUID()}`, cli_command: `phase-${crypto.randomUUID()}`, workflow_id: workflowId } })
++  expect(namespace.ok()).toBeTruthy()
++  namespaceId = (await namespace.json()).namespace_id as number
++  const second = await request.post('/api/phases', { data: { workflow_id: workflowId, mode_id: modeId, phase_order: 2, name: 'Second catalog phase' } })
++  expect(second.ok()).toBeTruthy()
++  initial = await rows(request)
++  expect(initial).toHaveLength(2)
++})
++test.afterEach(async ({ request }) => {
++  if (namespaceId) expect((await request.delete(`/api/namespaces/${namespaceId}`)).ok()).toBeTruthy()
++  if (workflowId) expect((await request.delete(`/api/workflows/${workflowId}`)).ok()).toBeTruthy()
++})
++
++for (const theme of ['dark', 'gray', 'light']) {
++  test(`phase catalog Base geometry, targets, keyboard and native writes (${theme})`, async ({ page, request }, testInfo) => {
++    const widths = testInfo.project.name === 'desktop' ? [1023, 1024, 1279, 1280, 1440, 1920, 2560] : [375, 767, 768]
++    expect((await request.put(`/api/phases/${initial[0].id}`, { data: { name: 'Длинное название фазы '.repeat(18), description: 'Длинное описание '.repeat(40) } })).ok()).toBeTruthy()
++    await page.addInitScript(value => localStorage.setItem('workflow-theme', value), theme)
++    const errors: string[] = []
++    page.on('pageerror', error => errors.push(error.message))
++    for (const width of widths) {
++      await page.setViewportSize({ width, height: 1080 })
++      await page.goto(pageUrl())
++      await page.reload()
++      await expect(page.locator('[data-page-layout]')).toHaveAttribute('data-page-layout', 'wide')
++      const geometry = await page.evaluate(() => {
++        const frame = document.querySelector('.page-frame')!.getBoundingClientRect()
++        const header = document.querySelector('.base-ssr-header')!.getBoundingClientRect()
++        const panel = document.querySelector('.timeline-panel')!.getBoundingClientRect()
++        return { overflow: document.documentElement.scrollWidth - innerWidth, left: frame.left, right: frame.right, header: header.height, panelRight: panel.right }
++      })
++      expect(geometry.overflow).toBe(0)
++      expect(geometry.left).toBe(width >= 1280 ? 264 : width >= 768 ? 72 : 0)
++      expect(geometry.right).toBe(width)
++      expect(geometry.header).toBe(60)
++      expect(geometry.panelRight).toBeLessThanOrEqual(width - 16)
++      const item = items(page).first()
++      const summary = item.locator('summary')
++      await summary.focus()
++      await page.keyboard.press('Enter')
++      await expect(item.locator('.phase-actions-menu')).toBeVisible()
++      for (const control of [summary, item.locator('.execution-toggle'), page.locator('.phase-add-btn').first(), page.locator('[data-phase-view="compact"]')]) {
++        const bounds = (await control.boundingBox())!
++        expect(bounds.height).toBeGreaterThanOrEqual(width < 768 ? 44 : 40)
++        expect(bounds.width).toBeGreaterThanOrEqual(width < 768 ? 44 : 40)
++      }
++      await page.keyboard.press('Escape')
++      await expect(summary).toBeFocused()
++      await expect(item.locator('.phase-actions-menu')).toBeHidden()
++      if ([375, 1920].includes(width)) await page.screenshot({ path: testInfo.outputPath(`phase-catalog-${theme}-${width}.png`), fullPage: true })
++    }
++    await action(page, 0, '.execution-toggle')
++    await expect(items(page).first()).toHaveAttribute('data-execution-type', 'parallel')
++    expect((await rows(request))[0].execution_type).toBe('parallel')
++    await action(page, 0, '.move-down-btn')
++    await expect(items(page).first()).toHaveAttribute('data-phase-id', String(initial[1].id))
++    expect((await rows(request)).map(row => row.id)).toEqual([initial[1].id, initial[0].id])
++    await page.locator('.phase-add-btn').last().click()
++    await expect(items(page)).toHaveCount(3)
++    expect(await rows(request)).toHaveLength(3)
++    expect(new URL(page.url()).searchParams.get('namespace_id')).toBe(String(namespaceId))
++    expect(new URL(page.url()).searchParams.get('foreign')).toBe('keep')
++    expect(errors).toEqual([])
++  })
++}
++
++test('phase catalog same-tick locks all writes, preserves DOM until scoped readback', async ({ page }) => {
++  await page.goto(pageUrl())
++  let writes = 0
++  let release!: () => void
++  const pending = new Promise<void>(resolve => { release = resolve })
++  await page.route('**/api/phases/order*', async route => {
++    writes++
++    await pending
++    await route.fulfill({ status: 409, json: { ok: false, error: 'Catalog conflict' } })
++  })
++  await page.evaluate(() => {
++    const button = document.querySelector<HTMLElement>('.move-down-btn')!
++    button.click()
++    button.click()
++    document.querySelector<HTMLElement>('.phase-add-btn')!.click()
++    document.querySelector<HTMLElement>('.execution-toggle')!.click()
++    document.querySelector<HTMLElement>('.phase-delete-btn')!.click()
++  })
++  await expect.poll(() => writes).toBe(1)
++  await expect(page.locator('#phasesTimeline')).toHaveAttribute('aria-busy', 'true')
++  await expect(page.locator('.phase-add-btn').first()).toBeDisabled()
++  await page.locator('.phases-header-action').click()
++  await expect(draftDialog(page)).toBeVisible()
++  await expect(draftDialog(page).locator('[data-base-draft-discard]')).toBeDisabled()
++  await draftDialog(page).locator('[data-base-draft-cancel]').click()
++  release()
++  await expect(state(page)).toContainText('Catalog conflict')
++  await expect(state(page)).toBeFocused()
++  await expect(items(page).first()).toHaveAttribute('data-phase-id', String(initial[0].id))
++  await expect(page.locator('.phase-add-btn').first()).toBeEnabled()
++  await expect(items(page).first().locator('.move-up-btn')).toBeDisabled()
++  await expect(items(page).last().locator('.move-down-btn')).toBeDisabled()
++  expect(writes).toBe(1)
++})
++
++for (const kind of ['type', 'reorder'] as const) {
++  test(`phase catalog committed ${kind} with lost reply only reconciles, never repeats`, async ({ page, request }) => {
++    await page.goto(pageUrl())
++    let writes = 0
++    const pattern = kind === 'type' ? `**/api/phases/${initial[0].id}*` : '**/api/phases/order*'
++    await page.route(pattern, async route => {
++      writes++
++      const response = await route.fetch()
++      expect(response.ok()).toBeTruthy()
++      await route.abort('failed')
++    })
++    await action(page, 0, kind === 'type' ? '.execution-toggle' : '.move-down-btn')
++    await expect(recovery(page)).toBeVisible()
++    await expect(recovery(page)).toBeFocused()
++    await expect(page.locator('.phase-add-btn').first()).toBeDisabled()
++    await expect(items(page).first()).toHaveAttribute('data-phase-id', String(initial[0].id))
++    await page.locator('.phases-header-action').click()
++    await expect(draftDialog(page)).toBeVisible()
++    await draftDialog(page).locator('[data-base-draft-cancel]').click()
++    await recovery(page).click()
++    if (kind === 'type') {
++      await expect(items(page).first()).toHaveAttribute('data-execution-type', 'parallel')
++      expect((await rows(request))[0].execution_type).toBe('parallel')
++    } else {
++      await expect(items(page).first()).toHaveAttribute('data-phase-id', String(initial[1].id))
++      expect((await rows(request)).map(row => row.id)).toEqual([initial[1].id, initial[0].id])
++    }
++    expect(writes).toBe(1)
++  })
++}
++
++test('phase catalog lost create reply never claims a new object without its returned ID', async ({ page, request }) => {
++  await page.goto(pageUrl())
++  let writes = 0
++  await page.route('**/api/phases?*', async route => {
++    if (route.request().method() !== 'POST') { await route.continue(); return }
++    writes++
++    expect((await route.fetch()).ok()).toBeTruthy()
++    await route.abort('failed')
++  })
++  await page.locator('.phase-add-btn').first().click()
++  await expect(recovery(page)).toBeVisible()
++  await recovery(page).click()
++  await expect(state(page)).toContainText('ID созданной фазы не получен')
++  await expect(items(page)).toHaveCount(2)
++  await expect(page.locator('.phase-add-btn').first()).toBeDisabled()
++  await expect(page.locator('#phaseInspectCatalogue')).toBeVisible()
++  await expect(page.locator('#phaseInspectCatalogue')).toHaveAttribute('target', '_blank')
++  expect(await rows(request)).toHaveLength(3)
++  expect(writes).toBe(1)
++})
++
++test('phase catalog create ACK keeps returned ID while readback fails, then reconciles safely', async ({ page }) => {
++  await page.goto(pageUrl())
++  let writes = 0
++  let allowRead = false
++  let createdId: number | undefined
++  await page.route('**/api/phases?*', async route => {
++    if (route.request().method() === 'POST') {
++      writes++
++      const response = await route.fetch()
++      createdId = (await response.json()).phase_id as number
++      await route.fulfill({ response })
++    } else if (!allowRead) await route.fulfill({ status: 503, json: { ok: false } })
++    else await route.continue()
++  })
++  await page.locator('.phase-add-btn').first().click()
++  await expect(recovery(page)).toBeVisible()
++  await expect(state(page)).toContainText('Не удалось проверить')
++  await expect(page.locator('#phaseInspectCatalogue')).toBeHidden()
++  allowRead = true
++  await recovery(page).click()
++  await expect(items(page)).toHaveCount(3)
++  await expect(items(page).nth(1)).toHaveAttribute('data-phase-id', String(createdId))
++  expect(writes).toBe(1)
++})
++
++for (const status of [401, 403, 404, 409, 422]) {
++  test(`phase catalog distinguishes write rejection ${status}, no reload or false success`, async ({ page }) => {
++    await page.goto(pageUrl())
++    await page.route(`**/api/phases/${initial[0].id}*`, route => route.fulfill({ status, json: { ok: false, error: `Rejected ${status}` } }))
++    await action(page, 0, '.execution-toggle')
++    await expect(state(page)).toContainText(`Rejected ${status}`)
++    await expect(state(page)).toHaveAttribute('data-page-state', status === 404 ? 'not-found' : [401, 403].includes(status) ? 'permission-denied' : 'error')
++    await expect(recovery(page)).toBeHidden()
++    await expect(items(page)).toHaveCount(2)
++    await expect(items(page).first()).toHaveAttribute('data-execution-type', 'sync')
++    if ([401, 403, 404].includes(status)) await expect(page.locator('.phase-add-btn').first()).toBeDisabled()
++    else await expect(page.locator('.phase-add-btn').first()).toBeEnabled()
++  })
++}
++
++for (const invalid of ['wrong-scope', 'duplicate', 'gap', 'wrong-order', 'failed-envelope']) {
++  test(`phase catalog rejects ${invalid} readback, keeps uncertain write blocked`, async ({ page, request }) => {
++    await page.goto(pageUrl())
++    await page.route('**/api/phases/order*', async route => {
++      expect((await route.fetch()).ok()).toBeTruthy()
++      await route.abort('failed')
++    })
++    await action(page, 0, '.move-down-btn')
++    await expect(recovery(page)).toBeVisible()
++    const response = await request.get(catalogue())
++    const data = await response.json()
++    if (invalid === 'wrong-scope') data.workflow.id = workflowId + 100000
++    if (invalid === 'duplicate') data.phases[1].id = data.phases[0].id
++    if (invalid === 'gap') data.phases[1].phase_order = 999
++    if (invalid === 'wrong-order') data.phases = initial
++    if (invalid === 'failed-envelope') data.ok = false
++    await page.route('**/api/phases?*', route => route.fulfill({ json: data }))
++    await recovery(page).click()
++    await expect(state(page)).toBeVisible()
++    await expect(recovery(page)).toBeEnabled()
++    await expect(page.locator('.phase-add-btn').first()).toBeDisabled()
++    await expect(items(page).first()).toHaveAttribute('data-phase-id', String(initial[0].id))
++  })
++}
++
++test('phase catalog deletion shares the write lock, cancelled unknown delete is readback-only', async ({ page, request }) => {
++  await page.goto(pageUrl())
++  let deletes = 0
++  await page.route(`**/api/phases/${initial[0].id}*`, async route => {
++    deletes++
++    expect((await route.fetch()).ok()).toBeTruthy()
++    await route.abort('failed')
++  })
++  await action(page, 0, '.phase-delete-btn')
++  const confirm = page.locator('#confirmDialog')
++  await expect(confirm).toBeVisible()
++  await expect(page.locator('.phase-add-btn').first()).toBeDisabled()
++  await confirm.locator('[data-base-confirm-accept]').click()
++  await expect(confirm.locator('#confirmReconcile')).toBeVisible()
++  await page.keyboard.press('Escape')
++  await expect(page.locator('.phase-add-btn').first()).toBeDisabled()
++  const trigger = items(page).first().locator('.phase-delete-btn')
++  await expect(trigger).toBeFocused()
++  await trigger.click()
++  await expect(confirm.locator('[data-base-confirm-accept]')).toBeDisabled()
++  await confirm.locator('#confirmReconcile').click()
++  await expect(items(page)).toHaveCount(1)
++  expect(await rows(request)).toHaveLength(1)
++  expect(deletes).toBe(1)
++})
++
++for (const reply of ['timeout', 'server-error', 'invalid-json', 'failed-envelope']) {
++  test(`phase catalog ${reply} is uncertain, unchanged readback does not authorize a repeat`, async ({ page }) => {
++    await page.goto(pageUrl())
++    let writes = 0
++    await page.route(`**/api/phases/${initial[0].id}*`, async route => {
++      writes++
++      if (reply === 'invalid-json') await route.fulfill({ status: 200, contentType: 'application/json', body: '{' })
++      else await route.fulfill({ status: reply === 'timeout' ? 408 : reply === 'server-error' ? 503 : 200, json: { ok: false } })
++    })
++    await action(page, 0, '.execution-toggle')
++    await expect(recovery(page)).toBeVisible()
++    await recovery(page).click()
++    await expect(state(page)).toContainText('запрошенное изменение не подтверждено')
++    await expect(page.locator('.phase-add-btn').first()).toBeDisabled()
++    await page.evaluate(() => {
++      document.querySelector<HTMLElement>('.execution-toggle')!.click()
++      document.querySelector<HTMLElement>('.phase-add-btn')!.click()
++    })
++    expect(writes).toBe(1)
++    await expect(items(page).first()).toHaveAttribute('data-execution-type', 'sync')
++  })
++}
++
++for (const status of [401, 403, 404]) {
++  test(`phase catalog readback ${status} removes retry and CRUD without treating failure as empty`, async ({ page }) => {
++    await page.goto(pageUrl())
++    await page.route(`**/api/phases/${initial[0].id}*`, async route => {
++      expect((await route.fetch()).ok()).toBeTruthy()
++      await route.abort('failed')
++    })
++    await action(page, 0, '.execution-toggle')
++    await expect(recovery(page)).toBeVisible()
++    await page.route('**/api/phases?*', route => route.fulfill({ status, json: { ok: false, error: `Readback ${status}` } }))
++    await recovery(page).click()
++    await expect(state(page)).toContainText(`Readback ${status}`)
++    await expect(state(page)).toHaveAttribute('data-page-state', status === 404 ? 'not-found' : 'permission-denied')
++    await expect(state(page)).toBeFocused()
++    await expect(recovery(page)).toBeHidden()
++    await expect(page.locator('.phase-add-btn').first()).toBeDisabled()
++    await expect(page.locator('[data-testid="workflow-mode-empty"]')).toHaveCount(0)
++    await expect(items(page)).toHaveCount(2)
++  })
++}
+diff --git a/project_workflow/interfaces/ui/platform_services.py b/project_workflow/interfaces/ui/platform_services.py
+index 582710f..c54b65f 100644
+--- a/project_workflow/interfaces/ui/platform_services.py
++++ b/project_workflow/interfaces/ui/platform_services.py
+@@ -1,8 +1,8 @@
+ """Base runtime catalog for the native project-workflow service selector.
+ 
+ The UI is server-rendered, so it reads the public Admin Panel catalog on the
+-server with a short TTL cache. An unreachable Admin Panel never blocks a page:
+-the local fallback is rendered instead.
++server with a short TTL cache. Failed reads render the local fallback and are
++cached briefly, so an outage does not add a network timeout to every page.
+ """
+ 
+ from __future__ import annotations
+@@ -24,9 +24,11 @@ _FALLBACK_SERVICES: list[dict[str, Any]] = [
+ ]
+ _CURRENT_KEY = "project-workflow"
+ _CACHE_TTL_SECONDS = 60.0
++_FAILURE_CACHE_TTL_SECONDS = 10.0
+ _cached_at = 0.0
+ _cached_services: list[dict[str, Any]] = []
+ _cached_url: str | None = None
++_cached_source = "runtime"
+ _VALID_HEALTH = {"healthy", "unreachable", "unknown"}
+ _ORDER = {service["key"]: index for index, service in enumerate(_FALLBACK_SERVICES)}
+ 
+@@ -85,20 +87,31 @@ def _with_request_host(services: list[dict[str, Any]], request_url: str | None)
+     return adjusted
+ 
+ 
++def _cache_catalog(
++    catalog_url: str, services: list[dict[str, Any]], source: str, request_url: str | None,
++) -> ServiceCatalog:
++    global _cached_at, _cached_services, _cached_url, _cached_source
++    _cached_services = services
++    _cached_at = time.monotonic()
++    _cached_url = catalog_url
++    _cached_source = source
++    return ServiceCatalog(_with_request_host(services, request_url), source)
++
++
+ def load_service_catalog(catalog_url: str | None, *, request_url: str | None = None) -> ServiceCatalog:
+     """Return UI services, including current health, and the diagnostic source."""
+-    global _cached_at, _cached_services, _cached_url
+     if not catalog_url:
+         return ServiceCatalog(_with_request_host(_FALLBACK_SERVICES, request_url), "fallback-unreachable")
+     now = time.monotonic()
+-    if _cached_url == catalog_url and _cached_services and now - _cached_at < _CACHE_TTL_SECONDS:
+-        return ServiceCatalog(_with_request_host(_cached_services, request_url), "runtime")
++    ttl = _CACHE_TTL_SECONDS if _cached_source == "runtime" else _FAILURE_CACHE_TTL_SECONDS
++    if _cached_url == catalog_url and _cached_services and now - _cached_at < ttl:
++        return ServiceCatalog(_with_request_host(_cached_services, request_url), _cached_source)
+     try:
+         with urlopen(catalog_url, timeout=2.0) as response:  # nosec B310: configured internal URL
+             body = response.read()
+     except Exception:
+-        return ServiceCatalog(
+-            _with_request_host(_FALLBACK_SERVICES, request_url), "fallback-unreachable",
++        return _cache_catalog(
++            catalog_url, _FALLBACK_SERVICES, "fallback-unreachable", request_url,
+         )
+     try:
+         payload = json.loads(body.decode("utf-8"))
+@@ -123,19 +136,16 @@ def load_service_catalog(catalog_url: str | None, *, request_url: str | None = N
+                 raise ValueError("invalid UI URL")
+             services.append(normalized)
+     except Exception:
+-        return ServiceCatalog(
+-            _with_request_host(_FALLBACK_SERVICES, request_url), "fallback-invalid",
++        return _cache_catalog(
++            catalog_url, _FALLBACK_SERVICES, "fallback-invalid", request_url,
+         )
+     if not services:
+-        return ServiceCatalog(
+-            _with_request_host(_FALLBACK_SERVICES, request_url),
+-            "fallback-empty" if not raw_entries else "fallback-invalid",
++        return _cache_catalog(
++            catalog_url, _FALLBACK_SERVICES,
++            "fallback-empty" if not raw_entries else "fallback-invalid", request_url,
+         )
+     services.sort(key=lambda service: (_ORDER.get(service["key"], len(_ORDER)), service["key"]))
+-    _cached_services = services
+-    _cached_at = now
+-    _cached_url = catalog_url
+-    return ServiceCatalog(_with_request_host(services, request_url), "runtime")
++    return _cache_catalog(catalog_url, services, "runtime", request_url)
+ 
+ 
+ def load_other_services(catalog_url: str | None, *, request_url: str | None = None) -> list[dict[str, Any]]:
+diff --git a/project_workflow/interfaces/ui/templates/phase_catalog.js b/project_workflow/interfaces/ui/templates/phase_catalog.js
+new file mode 100644
+index 0000000..9e69a17
+--- /dev/null
++++ b/project_workflow/interfaces/ui/templates/phase_catalog.js
+@@ -0,0 +1,211 @@
++// Product owns phase mutations; Base owns controls, states, dialogs and navigation guards.
++const phaseNamespaceId={{ selected_namespace.id if selected_namespace else 'null' }};
++let phaseMutationPending=false;
++let phaseUnknownWrite=null;
++let phaseTerminalState=null;
++let phaseDeletionAttempt=null;
++
++function phaseApiUrl(path){
++  const url=new URL(path,window.location.origin);
++  if(phaseNamespaceId)url.searchParams.set('namespace_id',String(phaseNamespaceId));
++  return url.pathname+url.search;
++}
++function phaseScope(){
++  const timeline=document.getElementById('phasesTimeline');
++  return {workflow_id:Number(timeline.dataset.workflowId),mode_id:Number(timeline.dataset.modeId)};
++}
++function phaseWritesBlocked(){return phaseMutationPending||Boolean(phaseUnknownWrite||phaseTerminalState||phaseDeletionAttempt);}
++function showPhaseError(message,kind='error'){
++  const container=document.getElementById('phaseWriteError');
++  container.hidden=!message;
++  const state=container.querySelector('[data-page-state]');
++  state.dataset.pageState=kind;
++  state.setAttribute('role',['error','partial-error'].includes(kind)?'alert':'status');
++  state.querySelector('p').textContent=message;
++  state.tabIndex=-1;
++}
++function updatePhaseControls(){
++  const items=getPhaseTimelineItems();
++  items.forEach((item,index)=>{
++    item.querySelectorAll('button').forEach(button=>{
++      button.disabled=phaseWritesBlocked()||
++        (button.classList.contains('move-up-btn')&&index===0)||
++        (button.classList.contains('move-down-btn')&&index===items.length-1)||
++        (button.classList.contains('phase-delete-btn')&&items.length<=1);
++    });
++  });
++  document.querySelectorAll('.phase-add-btn').forEach(button=>{button.disabled=phaseWritesBlocked();});
++  if(phaseDeletionAttempt&&!phaseTerminalState){
++    // Keep the initiator focusable for Base's cancel/return-focus lifecycle.
++    phaseDeletionAttempt.button.disabled=false;
++  }
++  const recovery=document.getElementById('phaseRecoveryActions');
++  recovery.hidden=!phaseUnknownWrite||Boolean(phaseTerminalState);
++  document.getElementById('phaseReconcileButton').disabled=phaseMutationPending;
++  document.getElementById('phaseInspectCatalogue').hidden=phaseUnknownWrite?.kind!=='create'||Boolean(phaseUnknownWrite?.receivedId);
++  document.getElementById('phasesTimeline').setAttribute('aria-busy',String(phaseMutationPending));
++  refreshWorkflowDraftGuard();
++}
++function focusPhaseRecovery(){
++  if(phaseUnknownWrite&&!phaseTerminalState)document.getElementById('phaseReconcileButton').focus();
++  else if(!document.getElementById('phaseWriteError').hidden)document.querySelector('#phaseWriteError [data-page-state]').focus();
++}
++function rejectPhaseWrite(response,data){
++  phaseTerminalState=[401,403].includes(response.status)?'permission-denied':response.status===404?'not-found':null;
++  showPhaseError(data&&typeof data.error==='string'?data.error:'Изменения отклонены. Проверьте доступ и состояние фаз.',phaseTerminalState||'error');
++}
++async function readPhaseCatalogue(){
++  const scope=phaseScope();
++  const response=await fetch(phaseApiUrl('/api/phases?workflow_id='+scope.workflow_id+'&mode_id='+scope.mode_id),{cache:'no-store'});
++  const data=await response.json().catch(()=>null);
++  if([401,403,404].includes(response.status)){
++    const error=new Error('Каталог недоступен');
++    error.status=response.status;
++    rejectPhaseWrite(response,data);
++    throw error;
++  }
++  if(!response.ok||!data||data.ok!==true||data.workflow?.id!==scope.workflow_id||data.mode?.id!==scope.mode_id||
++    !Array.isArray(data.phases)||!data.phases.every(item=>item&&Number.isInteger(item.id)&&item.id>0&&
++      item.workflow_id===scope.workflow_id&&item.mode_id===scope.mode_id&&Number.isInteger(item.phase_order)&&
++      item.phase_order>0&&['sync','parallel'].includes(item.execution_type))||
++    new Set(data.phases.map(item=>item.id)).size!==data.phases.length)throw new Error('Некорректный каталог');
++  const rows=[...data.phases].sort((a,b)=>a.phase_order-b.phase_order);
++  if(rows.some((row,index)=>row.phase_order!==index+1))throw new Error('Некорректный порядок фаз');
++  return rows;
++}
++function phaseAttemptConfirmed(rows,attempt){
++  let expectedIds=attempt.ids;
++  if(attempt.kind==='create'){
++    if(!attempt.receivedId||attempt.ids.includes(attempt.receivedId))return false;
++    expectedIds=[...attempt.ids];
++    expectedIds.splice(attempt.payload.phase_order-1,0,attempt.receivedId);
++  }
++  if(JSON.stringify(rows.map(row=>row.id))!==JSON.stringify(expectedIds))return false;
++  if(attempt.kind==='type')return rows.some(row=>row.id===attempt.id&&row.execution_type===attempt.payload.execution_type);
++  if(attempt.kind==='create')return rows.some(row=>row.id===attempt.receivedId&&row.execution_type==='sync');
++  return true;
++}
++function finishPhaseWrite(){
++  phaseUnknownWrite=null;
++  phaseDeletionAttempt=null;
++  phaseMutationPending=false;
++  showPhaseError('');
++  updatePhaseControls();
++  window.location.reload();
++}
++async function verifyPhaseAttempt(attempt){
++  try{
++    const rows=await readPhaseCatalogue();
++    if(phaseAttemptConfirmed(rows,attempt)){finishPhaseWrite();return true;}
++    showPhaseError(attempt.kind==='create'&&!attempt.receivedId?
++      'ID созданной фазы не получен. Каталог доступен, но результат этой записи не подтверждён. Повтор заблокирован.':
++      'Каталог загружен, но запрошенное изменение не подтверждено. Повторная запись заблокирована.');
++  }catch(_error){
++    if(!phaseTerminalState)showPhaseError('Не удалось проверить результат записи. Повтор заблокирован до проверки.');
++  }
++  return false;
++}
++async function requestPhaseWrite(attempt){
++  if(phaseWritesBlocked())return;
++  phaseMutationPending=true;
++  showPhaseError('');
++  updatePhaseControls();
++  try{
++    const response=await fetch(phaseApiUrl(attempt.url),{
++      method:attempt.kind==='create'?'POST':'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(attempt.payload),
++    });
++    const data=await response.json().catch(()=>null);
++    if(!response.ok&&!([408].includes(response.status)||response.status>=500)){
++      rejectPhaseWrite(response,data);
++      return;
++    }
++    phaseUnknownWrite=attempt;
++    if(response.ok&&data?.ok===true){
++      if(attempt.kind==='create'&&Number.isInteger(data.phase_id)&&data.phase_id>0&&data.phase?.id===data.phase_id&&
++        data.phase.workflow_id===attempt.payload.workflow_id&&data.phase.mode_id===attempt.payload.mode_id&&
++        !attempt.ids.includes(data.phase_id))attempt.receivedId=data.phase_id;
++      if(attempt.kind!=='create'||attempt.receivedId){
++        if(await verifyPhaseAttempt(attempt))return;
++      }else showPhaseError('ID созданной фазы не подтверждён. Повтор заблокирован до проверки.');
++    }else showPhaseError('Результат записи неизвестен. Повтор заблокирован до проверки.');
++  }catch(_error){
++    phaseUnknownWrite=attempt;
++    showPhaseError('Результат записи неизвестен. Повтор заблокирован до проверки.');
++  }finally{
++    phaseMutationPending=false;
++    updatePhaseControls();
++    focusPhaseRecovery();
++  }
++}
++async function reconcilePhaseWrite(){
++  if(phaseMutationPending||!phaseUnknownWrite||phaseTerminalState)return;
++  phaseMutationPending=true;
++  updatePhaseControls();
++  try{await verifyPhaseAttempt(phaseUnknownWrite);}
++  finally{phaseMutationPending=false;updatePhaseControls();focusPhaseRecovery();}
++}
++function phaseIds(){return getPhaseTimelineItems().map(item=>Number(item.dataset.phaseId));}
++async function addPhaseAfter(button){
++  if(phaseWritesBlocked())return;
++  const workflowId=document.getElementById('phasesTimeline')?.dataset.workflowId;
++  const modeId=document.getElementById('phasesTimeline')?.dataset.modeId;
++  const currentOrder=Number(button.dataset.afterOrder||'0');
++  if(!workflowId||!modeId||!Number.isInteger(currentOrder)||currentOrder<0||currentOrder>phaseIds().length){
++    showPhaseError('Не удалось определить позицию фазы.');focusPhaseRecovery();return;
++  }
++  await requestPhaseWrite({kind:'create',url:'/api/phases',ids:phaseIds(),payload:{workflow_id:Number(workflowId),mode_id:Number(modeId),phase_order:currentOrder+1}});
++}
++async function togglePhaseType(button){
++  if(phaseWritesBlocked())return;
++  const item=button.closest('.timeline-item');
++  if(!item)return;
++  await requestPhaseWrite({kind:'type',url:'/api/phases/'+item.dataset.phaseId,id:Number(item.dataset.phaseId),ids:phaseIds(),
++    payload:{execution_type:item.dataset.executionType==='sync'?'parallel':'sync'}});
++}
++async function movePhase(button,direction){
++  if(phaseWritesBlocked()||![-1,1].includes(direction))return;
++  const item=button.closest('.timeline-item');
++  const ids=phaseIds();
++  const index=ids.indexOf(Number(item?.dataset.phaseId));
++  if(index<0||index+direction<0||index+direction>=ids.length)return;
++  const moved=ids.splice(index,1)[0];
++  ids.splice(index+direction,0,moved);
++  await requestPhaseWrite({kind:'reorder',url:'/api/phases/order',ids,payload:{orders:ids.map((id,i)=>({phase_id:id,phase_order:i+1}))}});
++}
++async function deletePhase(button){
++  if(phaseMutationPending||phaseUnknownWrite||phaseTerminalState||(phaseDeletionAttempt&&phaseDeletionAttempt.button!==button))return;
++  const item=button.closest('.timeline-item');
++  if(!item||phaseIds().length<=1)return;
++  const phaseName=item.querySelector('.timeline-name')?.textContent.trim()||'эту фазу';
++  const url=phaseApiUrl('/api/phases/'+item.dataset.phaseId);
++  phaseDeletionAttempt={button,url};
++  phaseMutationPending=true;
++  showPhaseError('');
++  updatePhaseControls();
++  let confirmed=false;
++  try{
++    confirmed=await requestWorkflowDeletion({url,title:'Удалить фазу «'+phaseName+'»?',
++      message:'Фаза «'+phaseName+'» и её настройки будут удалены.',returnFocus:button,
++      exists:async()=>{const rows=await readPhaseCatalogue();return rows.some(row=>row.id===Number(item.dataset.phaseId));},
++    });
++    if(confirmed){finishPhaseWrite();return;}
++    const state=workflowDeletionState(url);
++    if(state.kind==='ready')phaseDeletionAttempt=null;
++    else{
++      if(state.kind==='terminal')phaseTerminalState=state.status===404?'not-found':'permission-denied';
++      showPhaseError(state.error,phaseTerminalState||'error');
++    }
++  }finally{
++    phaseMutationPending=false;
++    updatePhaseControls();
++    if(phaseTerminalState)focusPhaseRecovery();
++    else if(!confirmed&&!button.disabled)button.focus();
++  }
++}
++registerWorkflowDraftGuard({
++  isDirty:()=>Boolean(phaseUnknownWrite||phaseDeletionAttempt),
++  isPending:()=>phaseMutationPending,
++});
++document.addEventListener('DOMContentLoaded',()=>{
++  document.getElementById('phaseReconcileButton').addEventListener('click',reconcilePhaseWrite);
++});
+diff --git a/project_workflow/interfaces/ui/templates/phases.html b/project_workflow/interfaces/ui/templates/phases.html
+index 0ade0a5..987e0a6 100644
+--- a/project_workflow/interfaces/ui/templates/phases.html
++++ b/project_workflow/interfaces/ui/templates/phases.html
+@@ -9,27 +9,27 @@
+ .phases-layout{display:grid;grid-template-columns:280px minmax(0,1fr);gap:20px;align-items:start}
+ .phases-layout-single{grid-template-columns:minmax(0,1fr)}
+ .workflow-nav{display:flex;flex-direction:column;gap:10px;max-height:calc(100vh - 100px);overflow:auto;position:sticky;top:76px}
+-.workflow-nav-item{display:block;width:100%;text-align:left;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;color:var(--text);text-decoration:none}
++.workflow-nav-item{display:block;width:100%;text-align:left;background:var(--surface);border:1px solid var(--border);border-radius:var(--base-radius);padding:14px;color:var(--text);text-decoration:none;overflow-wrap:anywhere}
+ .workflow-nav-item:hover{text-decoration:none;border-color:var(--border-strong);background:var(--surface-hover)}
+ .workflow-nav-item.active{border-color:var(--accent);box-shadow:inset 3px 0 0 var(--accent)}
+ .workflow-name{font-size:15px;font-weight:600;color:var(--text)}
+ .workflow-meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:var(--text-dim)}
+ .workflow-chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;background:rgba(148,163,184,.10);color:var(--text-muted)}
+-.timeline-panel{display:flex;flex-direction:column;gap:18px;min-width:0}
+-.workflow-summary{background:transparent;border-width:0 0 1px;border-radius:0;padding:0 0 16px;display:flex;align-items:center;justify-content:space-between;gap:16px}
++.timeline-panel{display:flex;flex-direction:column;gap:var(--shell-page-block-gap);min-width:0}
++.workflow-summary{border-bottom:1px solid var(--border);padding:0 0 16px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+ .workflow-summary-copy{min-width:0}
+ .workflow-summary .card-title{font-size:20px;color:var(--text);text-transform:none;letter-spacing:0;margin-bottom:5px}
+ .mode-navigation{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0}
+ .mode-tabs{display:flex;align-items:center;gap:6px;min-width:0;overflow-x:auto;padding:2px;scrollbar-width:thin}
+-.mode-tab{display:inline-flex;align-items:center;min-height:var(--shell-control-min);padding:8px 14px;border:1px solid var(--border-strong);border-radius:7px;background:var(--surface);color:var(--text-secondary);font-size:13px;font-weight:600;text-decoration:none;white-space:nowrap}
++.mode-tab{display:inline-flex;align-items:center;padding:8px 14px;border:1px solid var(--border-strong);border-radius:var(--base-radius);background:var(--surface);color:var(--text-secondary);font-size:var(--base-font-body);font-weight:600;text-decoration:none;white-space:nowrap}
+ .mode-tab:hover{text-decoration:none;border-color:var(--accent);color:var(--text)}
+ .mode-tab[aria-current="page"]{border-color:var(--accent);background:var(--accent-soft);color:var(--accent-readable)}
+ .mode-tab:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+ .mode-picker{display:none;width:100%}
+-.mode-picker select{min-height:var(--shell-control-min);width:100%}
++.mode-picker select{width:100%}
+ .phase-view-controls{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}
+ .phase-view-switch{display:inline-flex;align-items:center;padding:2px;border:1px solid var(--border-strong);border-radius:6px;background:var(--surface)}
+-.phase-view-switch button{min-height:var(--shell-control-min);padding:0 12px;border:0;border-radius:4px;background:transparent;color:var(--text-secondary);font:inherit;font-size:13px;cursor:pointer}
++.phase-view-switch button{padding:0 12px;border:0;border-radius:4px;background:transparent;color:var(--text-secondary);font:inherit;font-size:var(--base-font-body);cursor:pointer}
+ .phase-view-switch button[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent-readable);font-weight:600}
+ .phase-view-switch button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+ .phase-jump-select{flex:0 1 240px;min-width:180px;min-height:var(--shell-control-min);max-width:100%}
+@@ -37,23 +37,24 @@
+ .timeline{display:flex;flex-direction:column;align-items:stretch;max-width:none;gap:0}
+ .timeline-block,.timeline-item{width:100%}
+ .phase-card-shell{position:relative}
+-.timeline-card{min-height:112px;padding:16px 18px;border-radius:9px}
++.timeline-card{min-height:112px;padding:16px 18px;border-radius:var(--base-radius)}
+ .timeline-card .timeline-name{padding-right:48px}
+ .timeline-card:hover{transform:none}
+ .phase-card-actions{position:absolute;right:12px;top:12px;z-index:2}
+ .phase-card-actions[open]{z-index:20}
+-.phase-card-actions summary{display:flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:6px;border:1px solid var(--border-strong);background:var(--panel);color:var(--text-secondary);cursor:pointer;list-style:none;font-size:22px;line-height:1}
++.phase-card-actions summary{display:flex;align-items:center;justify-content:center;width:var(--shell-control-min);height:var(--shell-control-min);border-radius:var(--base-radius);border:1px solid var(--border-strong);background:var(--panel);color:var(--text-secondary);cursor:pointer;list-style:none;font-size:22px;line-height:1}
++.phase-card-actions summary:focus-visible,.phase-add-btn:focus-visible{outline:2px solid var(--color-focus);outline-offset:2px}
+ .phase-card-actions summary::-webkit-details-marker{display:none}
+ .phase-card-actions summary:hover,.phase-card-actions[open] summary{color:var(--text);border-color:var(--accent);background:var(--surface-hover)}
+-.phase-actions-menu{position:absolute;right:0;top:44px;width:200px;padding:4px;background:var(--panel);border:1px solid var(--border-strong);border-radius:8px;box-shadow:0 12px 32px rgba(0,0,0,.45)}
+-.phase-actions-menu button{display:block;width:100%;min-height:var(--shell-control-min);padding:8px 10px;text-align:left;border:0;border-radius:5px;background:transparent;color:var(--text-secondary);font:inherit;font-size:13px;cursor:pointer}
++.phase-actions-menu{position:absolute;right:0;top:calc(100% + 4px);width:200px;padding:4px;background:var(--panel);border:1px solid var(--border-strong);border-radius:8px;box-shadow:0 12px 32px rgba(0,0,0,.45)}
++.phase-actions-menu button{display:block;width:100%;padding:8px 10px;text-align:left;border:0;border-radius:5px;background:transparent;color:var(--text-secondary);font:inherit;font-size:var(--base-font-body);cursor:pointer}
+ .phase-actions-menu button:hover:not(:disabled){color:var(--text);background:var(--surface-hover)}
+ .phase-actions-menu button:disabled{opacity:.4;cursor:not-allowed}
+-.phase-actions-menu .phase-delete-btn{height:40px;margin-top:4px;border-top:1px solid var(--border-strong);color:var(--red)}
++.phase-actions-menu .phase-delete-btn{margin-top:4px;border-top:1px solid var(--border-strong);color:var(--red)}
+ .phase-actions-menu .phase-delete-btn:hover:not(:disabled){color:var(--red);background:var(--red-soft)}
+ .execution-row{margin-top:10px;min-height:0}
+-.phase-actions-menu .execution-toggle{display:block;width:100%!important;height:auto;min-height:var(--shell-control-min);padding:8px 10px!important;font-size:13px!important;border:0;box-shadow:none}
+-.timeline-parallel-group{display:block;border-color:rgba(245,158,11,.58);background:rgba(255,255,255,.012);box-shadow:none;padding:14px}
++.phase-actions-menu .execution-toggle{display:block;width:100%!important;height:auto;padding:8px 10px!important;font-size:var(--base-font-body)!important;border:0;box-shadow:none}
++.timeline-parallel-group{display:block;border:0;border-left:3px solid var(--orange);border-radius:0;background:transparent;box-shadow:none;padding:0 0 0 14px}
+ .timeline-parallel-header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+ .timeline-parallel-label{border-color:var(--border-strong);background:var(--panel);color:var(--text-muted)}
+ .timeline-parallel-count{font-size:12px;color:var(--text-dim)}
+@@ -64,7 +65,8 @@
+ .timeline-connector::before,.timeline-connector::after{content:'';position:absolute;left:50%;width:1px;transform:translateX(-50%);background:var(--border-strong)}
+ .timeline-connector::before{top:0;bottom:calc(50% + 21px)}
+ .timeline-connector::after{top:calc(50% + 21px);bottom:0}
+-.phase-add-btn{position:relative;z-index:1;width:40px;height:40px;border-radius:50%;border:1px dashed var(--accent);background:var(--panel);color:var(--accent);cursor:pointer;font-size:18px;line-height:1}
++.phase-add-btn{position:relative;z-index:1;width:var(--shell-control-min);height:var(--shell-control-min);border-radius:50%;border:1px dashed var(--accent-readable);background:var(--panel);color:var(--accent-readable);cursor:pointer;font-size:18px;line-height:1}
++.phase-add-btn:disabled{opacity:.4;cursor:not-allowed}
+ .phase-add-btn:hover{background:var(--accent);color:var(--accent-foreground);border-style:solid}
+ .phases-mobile-title{display:none}
+ .timeline.is-compact{border-top:1px solid var(--border)}
+@@ -86,6 +88,7 @@
+ @media(max-width:1050px){.phases-layout{grid-template-columns:1fr}.workflow-nav{position:static;max-height:none}}
+ @media(max-width:760px){.workflow-summary{flex-wrap:wrap}.mode-tabs{display:none}.mode-picker{display:block}.phase-view-controls{width:100%;justify-content:space-between}.phase-jump-select{flex:1 1 100%}.timeline-parallel-grid{grid-template-columns:1fr}.timeline-parallel-group{padding:10px}.timeline-card,.timeline-parallel-grid .timeline-card{min-height:0}.timeline.is-compact .timeline-card{display:block;min-height:56px}.timeline.is-compact .timeline-desc{display:none}.timeline.is-compact .execution-row{width:auto;max-width:none;margin-top:4px;justify-content:flex-start}}
+ @media(max-width:930px){.phases-desktop-title{display:none}.phases-mobile-title{display:inline}}
++@media(max-width:767px){.phase-card-actions summary,.phase-add-btn{width:var(--shell-control-mobile-min);height:var(--shell-control-mobile-min)}.timeline-connector{height:56px}.timeline.is-compact .timeline-connector .phase-add-btn{right:60px}}
+ {% endblock %}
+ 
+ {% macro phase_card(p) -%}
+@@ -103,12 +106,12 @@
+       </div>
+     </a>
+     <details class="phase-card-actions">
+-      <summary aria-label="Действия фазы {{ p.name }}" title="Действия фазы {{ p.name }}"><span aria-hidden="true">⋯</span></summary>
++      <summary class="base-control base-icon-control" aria-label="Действия фазы {{ p.name }}" title="Действия фазы {{ p.name }}"><span aria-hidden="true">⋯</span></summary>
+       <div class="phase-actions-menu">
+-        <button type="button" class="move-up-btn" onclick="movePhase(this,-1)" aria-label="Поднять фазу {{ p.name }} выше">Поднять выше</button>
+-        <button type="button" class="move-down-btn" onclick="movePhase(this,1)" aria-label="Опустить фазу {{ p.name }} ниже">Опустить ниже</button>
+-        <button type="button" class="execution-toggle" onclick="togglePhaseType(this)" aria-label="Изменить режим выполнения фазы {{ p.name }}">{{ 'Параллельно' if p.execution_type == 'parallel' else 'Последовательно' }}</button>
+-        <button type="button" class="phase-delete-btn" onclick="deletePhase(this)" aria-label="Удалить фазу {{ p.name }}"{% if phase_count <= 1 %} disabled{% endif %}>Удалить</button>
++        <button type="button" class="move-up-btn base-control" onclick="movePhase(this,-1)" aria-label="Поднять фазу {{ p.name }} выше">Поднять выше</button>
++        <button type="button" class="move-down-btn base-control" onclick="movePhase(this,1)" aria-label="Опустить фазу {{ p.name }} ниже">Опустить ниже</button>
++        <button type="button" class="execution-toggle base-control" onclick="togglePhaseType(this)" aria-label="Изменить режим выполнения фазы {{ p.name }}">{{ 'Параллельно' if p.execution_type == 'parallel' else 'Последовательно' }}</button>
++        <button type="button" class="phase-delete-btn base-control" onclick="deletePhase(this)" aria-label="Удалить фазу {{ p.name }}"{% if phase_count <= 1 %} disabled{% endif %}>Удалить</button>
+       </div>
+     </details>
+   </div>
+@@ -132,7 +135,7 @@
+   {% endif %}
+ 
+   <section class="timeline-panel">
+-    <div class="card workflow-summary">
++    <div class="workflow-summary">
+       <div class="workflow-summary-copy">
+         <div class="card-title">{{ selected_workflow.name if selected_workflow else 'Фазы' }}</div>
+         {% if selected_workflow and selected_workflow.description %}<div class="empty-note">{{ selected_workflow.description }}</div>
+@@ -142,11 +145,11 @@
+       {% if phase_count > 1 %}
+       <div class="phase-view-controls">
+         <div class="phase-view-switch" role="group" aria-label="Отображение фаз">
+-          <button type="button" data-phase-view="compact" aria-pressed="{{ 'true' if phase_count >= 8 else 'false' }}" onclick="setPhaseView('compact')">Список</button>
+-          <button type="button" data-phase-view="timeline" aria-pressed="{{ 'false' if phase_count >= 8 else 'true' }}" onclick="setPhaseView('timeline')">Схема</button>
++          <button type="button" class="base-control" data-phase-view="compact" aria-pressed="{{ 'true' if phase_count >= 8 else 'false' }}" onclick="setPhaseView('compact')">Список</button>
++          <button type="button" class="base-control" data-phase-view="timeline" aria-pressed="{{ 'false' if phase_count >= 8 else 'true' }}" onclick="setPhaseView('timeline')">Схема</button>
+         </div>
+         {% if phase_count >= 8 %}
+-        <select id="phaseJump" class="phase-jump-select" aria-label="Перейти к фазе" onchange="jumpToPhase(this)">
++        <select id="phaseJump" class="phase-jump-select base-control" aria-label="Перейти к фазе" onchange="jumpToPhase(this)">
+           <option value="">Перейти к фазе</option>
+           {% for phase in phases %}<option value="{{ phase.id }}">{{ phase.name }}</option>{% endfor %}
+         </select>
+@@ -160,7 +163,7 @@
+       <div class="mode-tabs" data-testid="workflow-mode-tabs">
+         {% for mode in modes %}
+         <a
+-          class="mode-tab"
++          class="mode-tab base-control"
+           {% if selected_mode_id == mode.id %}aria-current="page"{% endif %}
+           data-testid="workflow-mode-tab-{{ mode.key }}"
+           data-mode-id="{{ mode.id }}"
+@@ -168,9 +171,9 @@
+         >{{ mode.name }}</a>
+         {% endfor %}
+       </div>
+-      <div class="mode-picker">
+-        <label class="label" for="modeSelect">Режим</label>
+-        <select id="modeSelect" data-testid="workflow-mode-select" aria-label="Режим воркфлоу" onchange="selectMode(this.value)">
++      <div class="mode-picker base-form-field">
++        <label class="base-label" for="modeSelect">Режим</label>
++        <select id="modeSelect" class="base-control" data-testid="workflow-mode-select" aria-label="Режим воркфлоу" onchange="selectMode(this.value)">
+           {% for mode in modes %}
+           <option value="{{ mode.id }}" {% if selected_mode_id == mode.id %}selected{% endif %}>{{ mode.name }}</option>
+           {% endfor %}
+@@ -179,6 +182,11 @@
+     </nav>
+     {% endif %}
+ 
++    <div id="phaseWriteError" hidden>{{ base.state('error', '') }}</div>
++    <div class="base-page-actions" id="phaseRecoveryActions" hidden>
++      {{ base.button('Проверить результат', variant='secondary', id='phaseReconcileButton') }}
++      <a class="base-control base-button base-button-secondary" id="phaseInspectCatalogue" href="{{ request.url }}" target="_blank" rel="noopener" hidden>Открыть каталог отдельно</a>
++    </div>
+     <div class="timeline{% if phase_count >= 8 %} is-compact{% endif %}" id="phasesTimeline"{% if selected_workflow_id %} data-workflow-id="{{ selected_workflow_id }}"{% endif %}{% if selected_mode_id %} data-mode-id="{{ selected_mode_id }}"{% endif %} data-testid="workflow-mode-phases" aria-live="polite" aria-busy="false">
+       {% for block in phase_blocks %}
+         {% if block.kind == 'parallel' %}
+@@ -191,11 +199,11 @@
+         </section>
+         {% else %}<section class="timeline-block">{{ phase_card(block.phases[0]) }}</section>{% endif %}
+         <div class="timeline-connector">
+-          <button type="button" class="phase-add-btn" data-after-order="{{ block.phases[-1].phase_num }}" onclick="addPhaseAfter(this)" title="Добавить фазу после блока" aria-label="Добавить фазу после блока">+</button>
++          <button type="button" class="phase-add-btn base-control base-icon-control" data-after-order="{{ block.phases[-1].phase_num }}" onclick="addPhaseAfter(this)" title="Добавить фазу после блока" aria-label="Добавить фазу после блока">+</button>
+         </div>
+       {% else %}
+-        <div class="card empty-note" role="status" data-testid="workflow-mode-empty" style="width:100%">В этом режиме фаз пока нет.</div>
+-        {% if selected_workflow_id %}<div class="timeline-connector"><button type="button" class="phase-add-btn" data-after-order="0" onclick="addPhaseAfter(this)" aria-label="Добавить первую фазу">+</button></div>{% endif %}
++        <div data-testid="workflow-mode-empty">{{ base.state('empty', 'В этом режиме фаз пока нет.') }}</div>
++        {% if selected_workflow_id %}<div class="timeline-connector"><button type="button" class="phase-add-btn base-control base-icon-control" data-after-order="0" onclick="addPhaseAfter(this)" aria-label="Добавить первую фазу">+</button></div>{% endif %}
+       {% endfor %}
+     </div>
+   </section>
+@@ -210,7 +218,9 @@ function selectMode(modeId){
+   if(!Number.isInteger(parsed)||parsed<=0){showToast('Не удалось определить режим воркфлоу','error');return;}
+   const url=new URL(window.location.href);
+   url.searchParams.set('mode_id',String(parsed));
+-  window.location.assign(url.pathname+url.search);
++  const select=document.getElementById('modeSelect');
++  if(select)select.value=document.getElementById('phasesTimeline').dataset.modeId;
++  navigateWorkflow(url.pathname+url.search);
+ }
+ 
+ function setPhaseView(view,persist=true){
+@@ -234,81 +244,14 @@ function jumpToPhase(select){
+   item.querySelector('.timeline-card')?.focus({preventScroll:true});
+ }
+ 
+-async function addPhaseAfter(button){
+-  const workflowId=document.getElementById('phasesTimeline')?.dataset.workflowId;
+-  const modeId=document.getElementById('phasesTimeline')?.dataset.modeId;
+-  const currentOrder=parseInt(button.dataset.afterOrder||'0',10);
+-  if(!workflowId||!modeId||currentOrder<0){showToast('Не удалось определить позицию фазы','error');return;}
+-  button.disabled=true;
+-  try{
+-    const resp=await fetch('/api/phases',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({workflow_id:parseInt(workflowId,10),mode_id:parseInt(modeId,10),phase_order:currentOrder+1})});
+-    const data=await resp.json().catch(()=>({}));
+-    if(!resp.ok||!data.ok){showToast(data.error||'Не удалось добавить фазу','error');return;}
+-    window.location.reload();
+-  }catch(_error){showRequestError();
+-  }finally{button.disabled=false;}
+-}
+-
+-async function deletePhase(button){
+-  const item=button.closest('.timeline-item');
+-  const items=getPhaseTimelineItems();
+-  if(!item)return;
+-  if(items.length<=1){showToast('Нельзя удалить единственную фазу воркфлоу','error');return;}
+-  const phaseName=item.querySelector('.timeline-name')?.textContent.trim()||'эту фазу';
+-  const timeline=document.getElementById('phasesTimeline');
+-  const catalogue='/api/phases?workflow_id='+encodeURIComponent(timeline.dataset.workflowId)+'&mode_id='+encodeURIComponent(timeline.dataset.modeId);
+-  if(await requestWorkflowDeletion({
+-    url:'/api/phases/'+item.dataset.phaseId,title:'Удалить фазу «'+phaseName+'»?',
+-    message:'Фаза «'+phaseName+'» и её настройки будут удалены.',returnFocus:button,
+-    exists:()=>workflowCollectionContains(catalogue,'phases',Number(item.dataset.phaseId)),
+-  }))window.location.reload();
+-}
+-
+-async function togglePhaseType(button){
+-  const item=button.closest('.timeline-item');
+-  if(!item)return;
+-  const nextType=(item.dataset.executionType||'sync')==='sync'?'parallel':'sync';
+-  button.disabled=true;
+-  try{
+-    const resp=await fetch('/api/phases/'+item.dataset.phaseId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({execution_type:nextType})});
+-    const data=await resp.json().catch(()=>({}));
+-    if(!resp.ok||!data.ok){showToast(data.error||'Не удалось сменить режим','error');return;}
+-    window.location.reload();
+-  }catch(_error){showRequestError();
+-  }finally{button.disabled=false;}
+-}
+-
+-async function movePhase(button,direction){
+-  const item=button.closest('.timeline-item');
+-  const items=getPhaseTimelineItems();
+-  const currentIndex=items.indexOf(item);
+-  const targetIndex=currentIndex+direction;
+-  if(!item||currentIndex<0||targetIndex<0||targetIndex>=items.length)return;
+-  const reordered=[...items];
+-  const moved=reordered.splice(currentIndex,1)[0];
+-  reordered.splice(targetIndex,0,moved);
+-  button.disabled=true;
+-  try{
+-    const orders=reordered.map((phase,index)=>({phase_id:Number(phase.dataset.phaseId),phase_order:index+1}));
+-    const resp=await fetch('/api/phases/order',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({orders})});
+-    if(!resp.ok){showToast('Не удалось сохранить порядок фаз','error');return;}
+-    window.location.reload();
+-  }catch(_error){showRequestError();
+-  }finally{button.disabled=false;}
+-}
++{% include 'phase_catalog.js' %}
+ 
+ document.addEventListener('DOMContentLoaded',()=>{
+   try{
+     const savedView=localStorage.getItem('phase-view-mode');
+     if(savedView==='compact'||savedView==='timeline')setPhaseView(savedView,false);
+   }catch(_error){}
+-  const items=getPhaseTimelineItems();
+-  items.forEach((item,index)=>{
+-    const up=item.querySelector('.move-up-btn');
+-    const down=item.querySelector('.move-down-btn');
+-    if(up)up.disabled=index===0;
+-    if(down)down.disabled=index===items.length-1;
+-  });
++  updatePhaseControls();
+   const menus=Array.from(document.querySelectorAll('.phase-card-actions'));
+   const confirmationDialog=document.getElementById('confirmDialog');
+   menus.forEach(menu=>menu.addEventListener('toggle',()=>{
+diff --git a/tests/test_platform_services.py b/tests/test_platform_services.py
+index 0e5435a..8db7e29 100644
+--- a/tests/test_platform_services.py
++++ b/tests/test_platform_services.py
+@@ -165,11 +165,13 @@ def test_malformed_runtime_catalog_uses_invalid_fallback(monkeypatch):
+ 
+     monkeypatch.setattr(ps, "_cached_services", [], raising=False)
+     for body in (b"not-json", b'{"services": {}}', b'{"services": [{"key": 1}]}'):
++        monkeypatch.setattr(ps, "_cached_services", [])
+         monkeypatch.setattr(ps, "urlopen", lambda *_args, **_kwargs: Response(body))
+         catalog = load_service_catalog("http://admin/api")
+         assert catalog.source == "fallback-invalid"
+         assert len(catalog.services) == 6
+ 
++    monkeypatch.setattr(ps, "_cached_services", [])
+     monkeypatch.setattr(ps, "urlopen", lambda *_args, **_kwargs: Response(b'{"services": []}'))
+     assert load_service_catalog("http://admin/api").source == "fallback-empty"
+ 
+@@ -181,6 +183,7 @@ def isolated_catalog_cache(monkeypatch):
+     monkeypatch.setattr(ps, "_cached_services", [])
+     monkeypatch.setattr(ps, "_cached_at", 0.0)
+     monkeypatch.setattr(ps, "_cached_url", None)
++    monkeypatch.setattr(ps, "_cached_source", "runtime")
+ 
+ 
+ def test_catalog_fallback_contains_six_ordered_ui_with_unknown_current_health():
+@@ -234,6 +237,8 @@ def test_expired_runtime_failure_uses_unknown_fallback_and_recovers(monkeypatch,
+     assert len(fallback.services) == 6
+     assert {service["health"] for service in fallback.services} == {"unknown"}
+     monkeypatch.setattr(ps, "urlopen", lambda *_args, **_kwargs: _response(_runtime_services()))
++    assert load_service_catalog("http://admin/api") == fallback
++    now[0] += ps._FAILURE_CACHE_TTL_SECONDS
+     restored = load_service_catalog("http://admin/api")
+     assert restored == first
+ 
+@@ -260,6 +265,85 @@ def test_catalog_cache_is_scoped_to_url_and_respects_ttl(monkeypatch):
+     assert len(calls) == 3
+ 
+ 
++@pytest.mark.parametrize("failure,expected_source", [
++    (None, "fallback-unreachable"),
++    ([], "fallback-empty"),
++    ([{"key": "bad"}], "fallback-invalid"),
++])
++def test_failure_cache_has_bounded_ttl_and_preserves_diagnostic_source(monkeypatch, failure, expected_source):
++    from project_workflow.interfaces.ui import platform_services as ps
++
++    calls = []
++    now = [100.0]
++    monkeypatch.setattr(ps.time, "monotonic", lambda: now[0])
++
++    def failed(url, **kwargs):
++        calls.append(url)
++        assert kwargs["timeout"] == 2.0
++        now[0] += 4.0
++        if failure is None:
++            raise OSError("catalog unavailable")
++        return _response(failure)
++
++    monkeypatch.setattr(ps, "urlopen", failed)
++    first = load_service_catalog("http://admin/api")
++    assert first.source == expected_source
++    assert not first.admin_console_connected
++    assert {service["health"] for service in first.services} == {"unknown"}
++    now[0] += ps._FAILURE_CACHE_TTL_SECONDS - 0.01
++    assert load_service_catalog("http://admin/api") == first
++    assert len(calls) == 1
++    now[0] += 0.01
++    assert load_service_catalog("http://admin/api") == first
++    assert len(calls) == 2
++
++
++def test_failure_cache_is_url_scoped_and_does_not_cache_request_host(monkeypatch):
++    from project_workflow.interfaces.ui import platform_services as ps
++
++    calls = []
++
++    def failed(url, **_kwargs):
++        calls.append(url)
++        raise OSError("catalog unavailable")
++
++    monkeypatch.setattr(ps, "urlopen", failed)
++    first = load_service_catalog("http://admin-a/api", request_url="http://192.168.1.10/tasks")
++    second = load_service_catalog("http://admin-a/api", request_url="http://192.168.1.11/tasks")
++    assert len(calls) == 1
++    assert all("192.168.1.10" in service["url"] for service in first.services)
++    assert all("192.168.1.11" in service["url"] for service in second.services)
++    canonical = load_service_catalog("http://admin-a/api")
++    assert all("localhost" in service["url"] for service in canonical.services)
++    load_service_catalog(None)
++    assert load_service_catalog("http://admin-a/api") == canonical
++    assert len(calls) == 1
++    load_service_catalog("http://admin-b/api")
++    assert calls == ["http://admin-a/api", "http://admin-b/api"]
++
++
++def test_success_cache_ttl_starts_after_fetch_completes(monkeypatch):
++    from project_workflow.interfaces.ui import platform_services as ps
++
++    calls = []
++    now = [100.0]
++    monkeypatch.setattr(ps.time, "monotonic", lambda: now[0])
++
++    def response(url, **_kwargs):
++        calls.append(url)
++        now[0] += 4.0
++        return _response(_runtime_services())
++
++    monkeypatch.setattr(ps, "urlopen", response)
++    first = load_service_catalog("http://admin/api")
++    now[0] += ps._CACHE_TTL_SECONDS - 0.01
++    assert load_service_catalog("http://admin/api") == first
++    assert len(calls) == 1
++    now[0] += 0.01
++    assert load_service_catalog("http://admin/api") == first
++    assert len(calls) == 2
++
++
+ @pytest.mark.parametrize("invalid", [None, {"key": "wiki", "label": "Duplicate", "ui_url": "http://x"},
+                                      {"key": "broken", "label": "Broken", "ui_url": "javascript:alert(1)"}])
+ def test_mixed_invalid_catalog_does_not_silently_drop_bad_rows(monkeypatch, invalid):
+diff --git a/tests/test_ui.py b/tests/test_ui.py
+index f33e449..5b4ab1b 100644
+--- a/tests/test_ui.py
++++ b/tests/test_ui.py
+@@ -803,18 +803,18 @@ class TestPhasesPage:
+         assert "movePhase(this,-1)" in response.text
+         assert "movePhase(this,1)" in response.text
+         assert "addPhaseAfter(this)" in response.text
+-        assert "fetch('/api/phases/order'" in response.text
+-        assert "fetch('/api/phases'," in response.text
++        assert "kind:'reorder',url:'/api/phases/order'" in response.text
++        assert "kind:'create',url:'/api/phases'" in response.text
+ 
+     def test_phases_page_keeps_insertion_visible_and_groups_other_actions(self):
+         response = client.get("/phases")
+         assert response.status_code == 200
+-        assert 'class="phase-add-btn"' in response.text
++        assert 'class="phase-add-btn base-control base-icon-control"' in response.text
+         assert 'onclick="addPhaseAfter(this)"' in response.text
+         assert '<details class="phase-card-actions">' in response.text
+         assert 'class="phase-actions-menu"' in response.text
+-        assert 'summary aria-label="Действия фазы ' in response.text
+-        assert 'class="move-up-btn"' in response.text
++        assert 'summary class="base-control base-icon-control" aria-label="Действия фазы ' in response.text
++        assert 'class="move-up-btn base-control"' in response.text
+         assert "Параллельно" in response.text
+         assert "Последовательно" in response.text
+         assert "width:40px;height:40px" in response.text
+@@ -913,9 +913,25 @@ class TestPhasesPage:
+         # Each row exposes server order; block add buttons carry the exact insertion order.
+         assert "data-phase-order=" in response.text
+         assert "data-after-order=" in response.text
+-        assert "parseInt(button.dataset.afterOrder" in response.text
++        assert "Number(button.dataset.afterOrder" in response.text
+         assert "currentIndex + 2" not in response.text
+ 
++    def test_phase_catalog_uses_base_states_and_scoped_authoritative_readback(self):
++        response = client.get("/phases")
++        assert response.status_code == 200
++        assert 'id="phaseWriteError" hidden><section class="base-resource-state"' in response.text
++        assert 'id="phaseReconcileButton"' in response.text
++        assert 'id="phaseInspectCatalogue"' in response.text
++        assert "if(phaseWritesBlocked())return;" in response.text
++        assert "phaseMutationPending=true;" in response.text
++        assert "data.workflow?.id!==scope.workflow_id||data.mode?.id!==scope.mode_id" in response.text
++        assert "new Set(data.phases.map(item=>item.id)).size!==data.phases.length" in response.text
++        assert "row.phase_order!==index+1" in response.text
++        assert "if(!attempt.receivedId||attempt.ids.includes(attempt.receivedId))return false" in response.text
++        assert "registerWorkflowDraftGuard({" in response.text
++        assert "isDirty:()=>Boolean(phaseUnknownWrite||phaseDeletionAttempt)" in response.text
++        assert "window.location.assign(url.pathname+url.search)" not in response.text
++
+     def test_phases_page_add_phase_api_flow_creates_phase_in_default_workflow(self):
+         from project_workflow.infrastructure.db import schema as db_schema
+ 
+@@ -973,7 +989,8 @@ class TestPhasesPage:
+             assert page.status_code == 200
+             assert "phase-delete-btn" in page.text
+             assert "deletePhase(this)" in page.text
+-            assert "fetch('/api/phases/'" in page.text
++            assert "const url=phaseApiUrl('/api/phases/'+item.dataset.phaseId)" in page.text
++            assert "confirmed=await requestWorkflowDeletion({url" in page.text
+ 
+             phases = [p.to_dict() for p in uow.phases.list(workflow_id=workflow_id)]
+             assert len(phases) == 1
+@@ -1009,7 +1026,8 @@ class TestPhasesPage:
+ 
+         assert f'data-phase-id="{phase["id"]}"' in response.text
+         assert 'data-phase-id="4.START"' not in response.text
+-        assert "phase_id:Number(phase.dataset.phaseId)" in response.text
++        assert "Number(item.dataset.phaseId)" in response.text
++        assert "orders:ids.map((id,i)=>({phase_id:id,phase_order:i+1}))" in response.text
+ 
+     def test_phases_page_rebuilds_parallel_groups_from_execution_sequence(self):
+         response = client.get("/phases")
+@@ -2823,6 +2841,8 @@ def test_ui_deletions_use_base_confirmation_not_a_local_modal():
+         )
+     }
+     base = (TEMPLATES_DIR / "base.html").read_text(encoding="utf-8")
++    assert "{% include 'phase_catalog.js' %}" in templates["phases.html"]
++    templates["phases.html"] += (TEMPLATES_DIR / "phase_catalog.js").read_text(encoding="utf-8")
+ 
+     assert "base.confirm_dialog(id='confirmDialog'" in base
+     assert "function requestConfirmation" in base
+@@ -3119,7 +3139,10 @@ class TestUiNetworkFailures:
+         detail_page = client.get(f"/phase/{phase_id}")
+ 
+         assert phases_page.status_code == 200
+-        assert phases_page.text.count("catch(_error){showRequestError();") >= 3
++        assert "async function requestPhaseWrite(attempt)" in phases_page.text
++        assert "if(phaseWritesBlocked())return;" in phases_page.text
++        assert "catch(_error){\n    phaseUnknownWrite=attempt;" in phases_page.text
++        assert "Результат записи неизвестен. Повтор заблокирован до проверки." in phases_page.text
+         assert "requestWorkflowDeletion({" in phases_page.text
+         assert "requestWorkflowDeletion({" in instructions_page.text
+         assert "requestWorkflowDeletion({" in detail_page.text
