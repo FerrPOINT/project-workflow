@@ -14,26 +14,26 @@ Workflow получает общие SSR-контракты Base #298 и layout 
   Back/Forward/reload, клавиатура, popup и mobile drawer PASS.
 - На собственной записи выполнены create/edit/delete workflow, failed-save
   с сохранением черновика, очистка foreign mode и сохранение profession/project
-  scope. Дополнительно проверены границы picker980/981 px и единая кнопка
+  scope. Дополнительно проверены границы picker 980/981 px и единая кнопка
   редактирования; удаление собственной профессии сохранило соседние fixtures.
-- Получены17 скриншотов полного нейтрального каталога. Просмотрены
+- Получены 17 скриншотов полного нейтрального каталога. Просмотрены
   [форма профессии](../screenshots/branding-pin-convergence-20261021/profession-desktop.png)
   и [mobile settings](../screenshots/branding-pin-convergence-20261021/settings-mobile.png).
 
 Smoke runners обновлены на действующие контракты: общий platform mark,
-canonical UI profession_id (API namespace_id сохранён), rail72 px вместо
-старых60 px, видимые Base Select triggers и одна responsive edit action.
+canonical UI profession_id (API namespace_id сохранён), rail 72 px вместо
+старых 60 px, видимые Base Select triggers и одна responsive edit action.
 До исправления runners падали на старых selectors/ожиданиях; assertions
 приведены к проверенным Base/product contracts, production CSS не переопределён.
 
 ## Полный hosted gate и граница повторного использования
 
-Run39561495321 на b04cb644fbd45aa1089e16d6fff74c2968263e60 завершился PASS:
-3084 unit/UI tests,60 subtests,5 optional skips,112 PostgreSQL cases,
-coverage94.22%, Node navigation,ruff,mypy,docs и Compose smoke.
+Run 39561495321 на b04cb644fbd45aa1089e16d6fff74c2968263e60 завершился PASS:
+3084 unit/UI tests, 60 subtests, 5 optional skips, 112 PostgreSQL cases,
+coverage 94.22%, Node navigation,ruff,mypy,docs и Compose smoke.
 
 Этот полный результат относится к указанному input. Финальный input дополнен
-UI pin и QA/docs; его production Python/dependencies/SDK и22 канонических SSR
+UI pin и QA/docs; его production Python/dependencies/SDK и 22 канонических SSR
 assets совпадают с квалифицированным b04. Новый exporter исправляет только
 порядок font-ключей fingerprint; проверяется штатный --check и каждый raw SHA.
 Повторное выполнение полного backend/PG gate для QA runner не заявляется.
