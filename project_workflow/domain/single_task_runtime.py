@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from project_workflow.domain.base_admission import Sha256
 from project_workflow.domain.namespace_ownership import InstanceRef, UUIDRef, canonical_uuid
 from project_workflow.domain.runtime_assignment import FleetAgentRef
-from project_workflow.domain.single_task_profile import MANIFEST_SHA256, ROLE_MODES
+from project_workflow.domain.single_task_profile import ROLE_MODES, SUPPORTED_MANIFESTS
 
 
 def validate_assignment_identity(
@@ -42,7 +42,7 @@ class SingleTaskContext(BaseModel):
 
     @model_validator(mode="after")
     def exact_manifest(self) -> "SingleTaskContext":
-        if self.instruction_manifest_sha256 != MANIFEST_SHA256:
+        if self.instruction_manifest_sha256 not in SUPPORTED_MANIFESTS:
             raise ValueError("Single-task manifest mismatch")
         return self
 

@@ -240,12 +240,12 @@ def test_tester_and_devops_propagate_accepted_predecessor_reports_not_synthetic_
         assert terminal.index(source) < terminal.index("task-tracker attachment upload")
 
 
-def test_initial_pm_and_single_task_inventory_are_unchanged(generated):
+def test_conditional_pm_brief_and_single_task_inventory_are_pinned(generated):
     catalog, manifest = generated
     assert manifest["inventory"] == {"namespaces": 7, "workflows": 7, "modes": 8, "phases": 24}
     assert manifest["task_identity"] == {"task_equals_root": True, "children": False, "decomposition_barriers": False}
     assert manifest["roles"]["project_manager"]["role_instructions_sha256"] == (
-        "b363961b2a49d24a259d57f53e6febb06ff53a1605ffd9683a88eacd6ceabae1"
+        "f462bf462273f8789f280b5ae404df3101529993347f92443355e90ad4cd716e"
     )
     assert len(catalog["workflows"]) == 7
     assert sum(len(w["modes"]) for w in catalog["workflows"]) == 8

@@ -314,3 +314,90 @@ and strict workspace all-target Clippy PASS. Fleet d5 backend tree equals 0db;
 The exact d5 release startup delta and final image smoke remain main-owned build
 checks, not completed image/live evidence in this document. No tests/builds were
 repeated for this docs-only update; no model/provider input or native live run is inferred.
+
+## Conditional PM Clarification (21 October)
+
+The installable PM draft overlay now distinguishes two paths. Incomplete or
+contradictory input requires a focused clarification of the actual gap, not a
+questionnaire. A complete, consistent brief proceeds directly to real requirements
+without clarification questions or mandatory alternatives. Evaluator checks and
+evidence carry the same condition; no question/answer history is required when no
+clarification occurred.
+
+Both paths still present the full saved requirements and require the owner's
+explicit exact revision/hash confirmation before the final Workflow report and
+Backlog / Ready. First step, phase-report handling, confirmation instructions and
+final terminal ordering are unchanged. Other six professions/seven modes are
+byte-equivalent within the generated catalog. No protocol, runtime, Hermes or
+installation behavior changes are introduced.
+
+Current generated catalog: `91b34be1fb3057476954d4947d86bae117c3eafd6abfe8d0b46333d38678c6fb`.
+Current manifest: `19d3228270bc76959f91a06f3b946a39b4509b14a2c29b62acc8762dd5cc3fe2`.
+These supersede the earlier source hashes above, not historical qualification
+receipts. New regressions exercise the real generated `PhaseContractBuilder`
+instructions and evaluator criteria for both paths; this is source-contract
+evidence, not an observed model conversation or live installed acceptance.
+
+Bounded validation: 77 instruction/artifact tests, 14 catalog tests and two actual
+isolated SQLite PM producer/terminal fixture tests PASS (93 distinct cases).
+The two fixtures were regenerated through their existing producer tests, then
+passed again without update mode; their hashes were not hand-edited. Generator
+`--check`, scoped Ruff and diff-check PASS. No full gate, PG, build or live run was
+repeated. Existing installed catalog hashes/history are not rewritten; normal
+coordinated profile publication remains separate.
+
+## Retained Family Compatibility
+
+Current source retains the exact published catalog86e6/manifest652a files under
+`project_workflow/references/retained/652a38c0f7bdb48a569aa3fcd5c2e81e153db6e22b5201cfb6ce15c988dd57f3/`.
+Their bytes are original Git artifacts, not reconstructed or relabelled content;
+LF checkout rules preserve their seals on Windows. Context validation accepts
+only these two exact manifest hashes, not arbitrary prior versions.
+
+Installation readback reuses the complete existing validator to match one of the
+two sealed seven-profession families. Existing old installation rows, namespace
+IDs, mode/phase IDs, assignment context and bindings are not upgraded by startup.
+Fresh installation uses the conditional PM family. Partial, mixed or tampered
+catalogs still fail without repair, and a new manifest cannot authorize retry of
+an old assignment against its retained namespace. Canonical root key, task/run
+history and predecessor payload remain unchanged; only the already-guarded retry
+successor is inserted. No API shape, migration or caller-selected version flag
+was added.
+
+This supports latest code with an existing old family; it is not an in-place
+promotion or simultaneous old/new content in one namespace. Installing latest
+code does not itself change active Fleet agent config revisions or apply the new
+conditional instructions to FLEETQA3. The original family remains authoritative
+for that old assignment. No live FLEETQA3 eligibility or successful retry is
+inferred from synthetic tests.
+
+The branch was merged with master `c7854f1f40e4b7020f317cf45b6d330a472e29a5`,
+preserving both upstream branding and bootstrap route registrations. Focused host
+validation selected 101 cases: 100 PASS in the first batch; one old installation
+assertion expected the former unconditional dependency wording. Only that
+assertion was changed to require exact confirmation-readback dependencies plus
+conditional checkpoint evidence, then its exact case passed separately. Eight
+compatibility cases are included in the 100, not additional passes: old/new parse,
+closed artifacts/tamper, unchanged installed rows, mixed-family denial and actual
+old-family bound/unbound bind/retry ledgers. All native readbacks are synthetic.
+Scoped Ruff, mypy (four source files), generator parity and owned-source diff
+checks PASS. Raw recovery handoff artifacts inherited from master were preserved,
+including their existing whitespace; they were not rewritten for diff cleanup.
+
+The historical PG6 remains bound to a7, not this modified validator/loader/app
+closure. No fresh PostgreSQL, image build, install or full quality gate is claimed
+for the merged source by these host results.
+
+Two further focused old-family cases passed separately (53.75s): retained bound
+and unbound predecessors retry through actual SQLite PM bind/step, exact typed
+confirmation and final terminal-receipt readback, still using manifest652a and
+canonical root identity. These reuse the existing synthetic-native test helper,
+not an installed/native model. The compatibility module now contains ten cases;
+the two new terminal cases are not counted inside the earlier 101-case batch.
+
+Actual merged-source OpenAPI generation reports 62 operations/62 unique IDs,
+including the upstream branding endpoint and both bootstrap routes. The PM
+consumer export remains byte-identical at
+`843880b6347ea343dff69158522b7ec9e603c6adee6694734e5f72d9c235e93d`.
+The prior a7-only image preparation is superseded as an install candidate; its
+Build may finish but must not be Applied under this latest-source direction.

@@ -10,6 +10,9 @@ from project_workflow.infrastructure.single_task_delivery_instructions import (
     PM_CONFIRMATION_EVIDENCE,
     PM_CONFIRMATION_INSTRUCTIONS,
     PM_CRITICAL_REVIEW,
+    PM_DRAFT_CHECKS,
+    PM_DRAFT_EVIDENCE,
+    PM_DRAFT_INSTRUCTIONS,
     PM_PHASE_REPORT,
     PM_PUBLISH_INSTRUCTION,
     context_instruction,
@@ -41,6 +44,10 @@ def render() -> tuple[bytes, bytes]:
                 })
                 for phase in mode["phases"][:2]:
                     phase["instructions"][-1]["description"] = PM_PHASE_REPORT
+                draft = mode["phases"][1]
+                for instruction, text in zip(draft["instructions"][:3], PM_DRAFT_INSTRUCTIONS, strict=True):
+                    instruction["description"] = text
+                draft.update(checks=list(PM_DRAFT_CHECKS), evidence=list(PM_DRAFT_EVIDENCE))
                 mode["phases"][1]["instructions"][3]["description"] = PM_PUBLISH_INSTRUCTION
                 mode["phases"][1]["instructions"][4]["description"] = (
                     "Prepare the FULL saved requirements document and its exact revision/content_hash for "

@@ -84,7 +84,7 @@ class PMExecutionService:
         if task is None:
             raise NotFoundError("PM task not found in authorized namespace")
         assignment = self.session.execute(select(m.TaskRuntimeAssignment).where(
-            m.TaskRuntimeAssignment.operation_key == identity.assignment_operation_key,
+            m.TaskRuntimeAssignment.operation_key == task.assignment_operation_key,
             m.TaskRuntimeAssignment.task_id == task.id,
         ).execution_options(populate_existing=True)).scalar_one_or_none()
         if assignment is None:
@@ -104,8 +104,18 @@ class PMExecutionService:
         authority_revision = (
             review.tracker_assignment_revision if review is not None else assignment.assignment_revision
         )
+        authority_operation_key = assignment.operation_key
+        if payload.get("pm_bootstrap_context") is not None:
+            from project_workflow.application.pm_bootstrap import canonical_assignment
+
+            if review is not None or payload.get("single_task_context") is None:
+                raise ConflictError("Bootstrap mapping is only for initial single-task PM")
+            record = self.uow.tasks.get_assignment_by_operation_key(assignment.operation_key)
+            if record is None:
+                raise ConflictError("Bootstrap assignment is missing")
+            authority_operation_key, authority_revision = canonical_assignment(self.uow, record.to_dict())
         if (
-            task.assignment_operation_key != identity.assignment_operation_key
+            authority_operation_key != identity.assignment_operation_key
             or task.assignment_revision != assignment.assignment_revision
             or authority_revision != identity.assignment_revision
             or assignment.assignment_ref != identity.assignment_ref

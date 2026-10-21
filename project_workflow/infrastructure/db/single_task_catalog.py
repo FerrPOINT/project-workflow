@@ -11,7 +11,10 @@ from project_workflow.domain.single_task_profile import (
     CATALOG_SHA256,
     MANIFEST_SHA256,
     PROFILE,
+    RETAINED_CATALOG_SHA256,
+    RETAINED_MANIFEST_SHA256,
     ROLE_MODES,
+    SUPPORTED_MANIFESTS,
     SingleTaskInstallation,
     is_single_task_key,
 )
@@ -27,11 +30,16 @@ from project_workflow.infrastructure.db.uow import SAUnitOfWork
 REFERENCES = Path(__file__).resolve().parents[2] / "references"
 
 
-def load_profile() -> tuple[dict, dict]:
+def load_profile(manifest_sha256: str = MANIFEST_SHA256) -> tuple[dict, dict]:
+    if manifest_sha256 not in SUPPORTED_MANIFESTS:
+        raise ValueError("Unsupported single-task profile manifest")
+    retained = manifest_sha256 == RETAINED_MANIFEST_SHA256
+    root = REFERENCES / "retained" / RETAINED_MANIFEST_SHA256 if retained else REFERENCES
+    catalog_sha256 = RETAINED_CATALOG_SHA256 if retained else CATALOG_SHA256
     values = []
-    for filename, expected in (("single_task_catalog_v1.json", CATALOG_SHA256),
-                               ("single_task_manifest_v1.json", MANIFEST_SHA256)):
-        path = REFERENCES / filename
+    for filename, expected in (("single_task_catalog_v1.json", catalog_sha256),
+                               ("single_task_manifest_v1.json", manifest_sha256)):
+        path = root / filename
         if path.is_symlink():
             raise ValueError("Profile source must be a regular artifact")
         content = path.read_bytes()
@@ -43,7 +51,7 @@ def load_profile() -> tuple[dict, dict]:
         or manifest["schema"] != "single-task-sdlc/profile-manifest/v1"
         or catalog["instruction_profile"] != PROFILE or manifest["instruction_profile"] != PROFILE
         or catalog["catalog_version"] != 1 or manifest["profile_version"] != 1 or manifest["proposal"] is not False
-        or manifest["workflow_catalog"]["sha256"] != CATALOG_SHA256):
+        or manifest["workflow_catalog"]["sha256"] != catalog_sha256):
         raise ValueError("Single-task profile generation mismatch")
     if [w["role_key"] for w in catalog["workflows"]] != list(ROLE_MODES):
         raise ValueError("Single-task role inventory mismatch")
@@ -60,7 +68,20 @@ def observe_installation(uow: SAUnitOfWork) -> SingleTaskInstallation:
     """Validate all seven persisted professions before returning any binding."""
     uow.lock_catalog_state(shared=True)
     uow.refresh()
-    catalog, manifest = load_profile()
+    # Match a complete sealed family, never stamp old rows with the current hash.
+    profiles = [load_profile(digest) for digest in SUPPORTED_MANIFESTS]
+    failures: list[ValueError] = []
+    for catalog, manifest in profiles:
+        try:
+            return _observe_profile(uow, catalog, manifest)
+        except ValueError as exc:
+            failures.append(exc)
+    raise failures[0]
+
+
+def _observe_profile(uow: SAUnitOfWork, catalog: dict, manifest: dict) -> SingleTaskInstallation:
+    catalog_sha256 = manifest["workflow_catalog"]["sha256"]
+    manifest_sha256 = RETAINED_MANIFEST_SHA256 if catalog_sha256 == RETAINED_CATALOG_SHA256 else MANIFEST_SHA256
     installed_workflows = {workflow.key: workflow for workflow in uow.workflows.list()}
     if {key for key in installed_workflows if is_single_task_key(key)} != {w["key"] for w in catalog["workflows"]}:
         raise ValueError("Single-task installed workflow inventory mismatch")
@@ -103,16 +124,16 @@ def observe_installation(uow: SAUnitOfWork) -> SingleTaskInstallation:
             modes.append({"mode_id": str(mode.id), "key": mode.key, "execution_scopes": mode.execution_scopes,
                           "phase_ids": [str(p.id) for p in uow.phases.list(workflow.id, mode_id=mode.id)]})
         bindings.append({
-            "schema": "single-task-sdlc/workflow-binding/v1", "instruction_manifest_sha256": MANIFEST_SHA256,
-            "workflow_catalog_sha256": CATALOG_SHA256, "namespace_id": str(project.id),
+            "schema": "single-task-sdlc/workflow-binding/v1", "instruction_manifest_sha256": manifest_sha256,
+            "workflow_catalog_sha256": catalog_sha256, "namespace_id": str(project.id),
             "namespace_name": identity["name"], "namespace_cli_command": identity["cli_command"],
             "workflow_id": str(workflow.id), "workflow_key": workflow.key, "role_key": role,
             "profile": identity["launch_profile"], "modes": modes,
             "role_instructions_sha256": manifest["roles"][role]["role_instructions_sha256"],
         })
     return SingleTaskInstallation.model_validate({
-        "schema": "single-task-sdlc/installation/v1", "instruction_manifest_sha256": MANIFEST_SHA256,
-        "workflow_catalog_sha256": CATALOG_SHA256, "bindings": bindings,
+        "schema": "single-task-sdlc/installation/v1", "instruction_manifest_sha256": manifest_sha256,
+        "workflow_catalog_sha256": catalog_sha256, "bindings": bindings,
     })
 
 

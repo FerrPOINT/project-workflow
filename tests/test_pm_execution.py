@@ -351,7 +351,16 @@ def test_openapi_exposes_pm_wire_and_callback_schema(pm):
     assert runtime_bind["properties"]["concrete_agent_ref"]["anyOf"][0]["not"] == {
         "const": NIL_FLEET_AGENT_REF,
     }
-    assert json.loads(Path(OUTPUT).read_text(encoding="utf-8")) == pm_openapi()
+    published = pm_openapi()
+    for path, method in (("/internal/runtime/pm-bootstrap/predecessor", "get"),
+                         ("/internal/runtime/pm-bootstrap/retry", "post")):
+        assert published["paths"][path][method] == schema["paths"][path][method]
+    retry = published["components"]["schemas"]["BootstrapRetry"]
+    expected = {"predecessor_operation_key", "predecessor_sha256", "operation_key",
+                "bootstrap_attempt_ref", "proof_sha256"}
+    assert set(retry["properties"]) == set(retry["required"]) == expected
+    assert retry["additionalProperties"] is False
+    assert json.loads(Path(OUTPUT).read_text(encoding="utf-8")) == published
 
 
 @pytest.mark.parametrize("field,value", [
