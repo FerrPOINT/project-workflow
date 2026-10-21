@@ -131,3 +131,25 @@ def test_retained_assignment_bind_and_retry_keep_original_manifest_and_history(r
         assert child["payload"]["single_task_context"]["instruction_manifest_sha256"] == RETAINED_MANIFEST_SHA256
         identity = json.loads(uow.session.scalar(select(m.PMExecution.identity_json)))
         assert identity["assignment_operation_key"] == original_key
+
+
+@pytest.mark.parametrize("state", ["bound", "unbound"])
+def test_retained_retry_keeps_original_family_through_confirmation_and_terminal(
+    retained_bridge, monkeypatch, supervisor_llm, state,
+):
+    pending = bootstrap.prepare_pending(retained_bridge, monkeypatch, state)
+    identity, native, command, step, headers = bootstrap.enroll_retry(pending, monkeypatch)
+    observations = {bootstrap.NEXT: native.model_copy(update={"status": "running"})}
+    monkeypatch.setattr(bootstrap.pm_readback, "observe_run", lambda run: observations[run])
+    bootstrap.finish_confirmed_retry(
+        pending, supervisor_llm, identity, native, command, step, headers, observations,
+    )
+    with SAUnitOfWork() as uow:
+        observed = catalog.observe_installation(uow)
+        assert observed.instruction_manifest_sha256 == RETAINED_MANIFEST_SHA256
+        execution = uow.session.scalar(select(m.PMExecution))
+        assignment = uow.tasks.get_assignment_by_operation_key("pm-bootstrap:" + bootstrap.NEXT)
+        assert execution.assignment_id == assignment.id
+        assert assignment.to_dict()["payload"]["single_task_context"]["instruction_manifest_sha256"] == (
+            RETAINED_MANIFEST_SHA256
+        )

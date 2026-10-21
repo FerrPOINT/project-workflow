@@ -387,3 +387,17 @@ including their existing whitespace; they were not rewritten for diff cleanup.
 The historical PG6 remains bound to a7, not this modified validator/loader/app
 closure. No fresh PostgreSQL, image build, install or full quality gate is claimed
 for the merged source by these host results.
+
+Two further focused old-family cases passed separately (53.75s): retained bound
+and unbound predecessors retry through actual SQLite PM bind/step, exact typed
+confirmation and final terminal-receipt readback, still using manifest652a and
+canonical root identity. These reuse the existing synthetic-native test helper,
+not an installed/native model. The compatibility module now contains ten cases;
+the two new terminal cases are not counted inside the earlier 101-case batch.
+
+Actual merged-source OpenAPI generation reports 62 operations/62 unique IDs,
+including the upstream branding endpoint and both bootstrap routes. The PM
+consumer export remains byte-identical at
+`843880b6347ea343dff69158522b7ec9e603c6adee6694734e5f72d9c235e93d`.
+The prior a7-only image preparation is superseded as an install candidate; its
+Build may finish but must not be Applied under this latest-source direction.
