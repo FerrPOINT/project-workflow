@@ -48,34 +48,49 @@ class BootstrapMapping(BaseModel):
     predecessor_operation_key: Key
     predecessor_payload_sha256: Sha256
     predecessor_assignment_revision: Version
+    canonical_assignment_operation_key: Key
     canonical_assignment_revision: Version
     workflow_assignment_revision: Version
     bootstrap_attempt_ref: UUIDRef
     proof_sha256: Sha256
 
 
-def canonical_revision(uow: SAUnitOfWork, assignment: dict) -> int:
-    mapping = assignment["payload"].get("pm_bootstrap_context")
-    if mapping is None:
-        return assignment["assignment_revision"]
-    value = BootstrapMapping.model_validate(mapping)
-    previous = uow.tasks.get_assignment_by_operation_key(value.predecessor_operation_key)
-    if previous is None:
-        raise ConflictError("Bootstrap predecessor is missing")
-    old = previous.to_dict()
-    old_mapping = old["payload"].get("pm_bootstrap_context")
-    old_revision = (BootstrapMapping.model_validate(old_mapping).canonical_assignment_revision
-                    if old_mapping is not None else old["assignment_revision"])
-    if (old["task_id"] != assignment["task_id"] or old["assignment_ref"] != assignment["assignment_ref"]
-        or old["payload_sha256"] != value.predecessor_payload_sha256
-        or payload_sha256(old["payload"]) != old["payload_sha256"]
-        or old["assignment_revision"] != value.predecessor_assignment_revision
-        or assignment["assignment_revision"] != value.workflow_assignment_revision
-        or assignment["assignment_revision"] != old["assignment_revision"] + 1
-        or assignment["attempt_number"] != old["attempt_number"] + 1
-        or value.canonical_assignment_revision != old_revision):
-        raise ConflictError("Bootstrap canonical/local assignment mapping differs")
-    return value.canonical_assignment_revision
+def canonical_assignment(uow: SAUnitOfWork, assignment: dict) -> tuple[str, int]:
+    """Resolve authority only through the retained, hash-bound predecessor chain."""
+    mappings = []
+    seen = set()
+    while True:
+        if (assignment["operation_key"] in seen
+            or payload_sha256(assignment["payload"]) != assignment["payload_sha256"]):
+            raise ConflictError("Bootstrap assignment history differs")
+        seen.add(assignment["operation_key"])
+        mapping = assignment["payload"].get("pm_bootstrap_context")
+        if mapping is None:
+            break
+        value = BootstrapMapping.model_validate(mapping)
+        previous = uow.tasks.get_assignment_by_operation_key(value.predecessor_operation_key)
+        if previous is None:
+            raise ConflictError("Bootstrap predecessor is missing")
+        old = previous.to_dict()
+        if (old["task_id"] != assignment["task_id"] or old["project_id"] != assignment["project_id"]
+            or old["assignment_ref"] != assignment["assignment_ref"]
+            or old["payload_sha256"] != value.predecessor_payload_sha256
+            or old["assignment_revision"] != value.predecessor_assignment_revision
+            or assignment["assignment_revision"] != value.workflow_assignment_revision
+            or assignment["assignment_revision"] != old["assignment_revision"] + 1
+            or assignment["attempt_number"] != old["attempt_number"] + 1):
+            raise ConflictError("Bootstrap canonical/local assignment mapping differs")
+        TaskService._validate_retry_assignment(previous=old, payload=assignment["payload"],
+                                              mode_id=old["mode_id"], attempt_number=assignment["attempt_number"])
+        mappings.append(value)
+        assignment = old
+    authority = (assignment["operation_key"], assignment["assignment_revision"])
+    if mappings and (authority[0] != f"pm-draft:{assignment['assignment_ref']}" or any(
+        (value.canonical_assignment_operation_key, value.canonical_assignment_revision) != authority
+        for value in mappings
+    )):
+        raise ConflictError("Bootstrap canonical assignment differs from retained root")
+    return authority
 
 
 class PMBootstrapService:
@@ -142,15 +157,19 @@ class PMBootstrapService:
             (m.TaskPhaseEvent.event_type != "entered") | (m.TaskPhaseEvent.phase_id != row.current_phase_id)
             | m.TaskPhaseEvent.step_history_id.is_not(None),
         ).limit(1)))
+        canonical_key, canonical_revision = canonical_assignment(self.uow, record)
         return {
             "task": row.task_key, "task_id": row.id, "project_id": row.project_id,
             "assignment_operation_key": record["operation_key"],
             "assignment_revision": record["assignment_revision"], "attempt_number": record["attempt_number"],
             "assignment_ref": record["assignment_ref"], "payload_sha256": record["payload_sha256"],
-            "canonical_assignment_revision": canonical_revision(self.uow, record),
+            "canonical_assignment_operation_key": canonical_key,
+            "canonical_assignment_revision": canonical_revision,
             "context": context, "task_ref": record["business_task_ref"], "root_ref": record["root_task_ref"],
-            "binding": binding, "status": row.status, "cycle_number": row.cycle_number,
+            "binding": binding, "bind_request_sha256": record.get("bind_request_sha256"),
+            "status": row.status, "cycle_number": row.cycle_number,
             "current_phase_id": row.current_phase_id, "pm_enrolled": enrolled,
+            "initial_phase_id": first.id if first is not None else None,
             "step_state": "recorded" if steps or progressed else "absent",
             "initial_phase": first is not None and row.current_phase_id == first.id,
         }
@@ -199,11 +218,13 @@ class PMBootstrapService:
                    "attempt_number": previous["attempt_number"] + 1, "single_task_context": context,
                    "expected_revision": previous["assignment_revision"], "expected_status": "active",
                    "expected_mode_key": "draft", "expected_cycle_number": row.cycle_number}
+        canonical_key, canonical_revision = canonical_assignment(self.uow, previous)
         mapping = BootstrapMapping(
             predecessor_operation_key=previous["operation_key"],
             predecessor_payload_sha256=previous["payload_sha256"],
             predecessor_assignment_revision=previous["assignment_revision"],
-            canonical_assignment_revision=canonical_revision(self.uow, previous),
+            canonical_assignment_operation_key=canonical_key,
+            canonical_assignment_revision=canonical_revision,
             workflow_assignment_revision=previous["assignment_revision"] + 1,
             bootstrap_attempt_ref=request.bootstrap_attempt_ref, proof_sha256=request.proof_sha256,
         )
@@ -214,7 +235,8 @@ class PMBootstrapService:
         old_context = state["context"]
         if (payload_sha256(state) != request.predecessor_sha256 or state["pm_enrolled"]
             or state["step_state"] != "absent" or not state["initial_phase"] or state["status"] != "active"
-            or state["cycle_number"] != 0 or state["binding"] is None
+            or state["cycle_number"] != 0
+            or canonical_key != f"pm-draft:{previous['assignment_ref']}"
             or request.operation_key == previous["operation_key"]
             or proof.owner_version != proof.predecessor_owner_version
             or proof.assignment_ref != previous["assignment_ref"]
@@ -223,14 +245,15 @@ class PMBootstrapService:
                 "execution_ref", "concrete_agent_ref",
             ))
             or any(getattr(native, k) != v for k, v in {
-                "task": row.task_key, "assignment_operation_key": previous["operation_key"],
+                "task": row.task_key, "assignment_operation_key": canonical_key,
                 "assignment_ref": previous["assignment_ref"],
                 "assignment_revision": mapping.canonical_assignment_revision,
                 "execution_ref": old_context["execution_ref"],
                 "tracker_instance_ref": old_context["tracker_instance_ref"],
                 "tracker_project_ref": old_context["tracker_project_ref"], "task_ref": state["task_ref"],
                 "root_ref": state["root_ref"], "agent_ref": old_context["concrete_agent_ref"],
-                **{k: state["binding"][k] for k in ("binding_ref", "hermes_run_ref", "session_run_id")},
+                **({k: state["binding"][k] for k in ("binding_ref", "hermes_run_ref", "session_run_id")}
+                   if state["binding"] is not None else {}),
             }.items())):
             raise ConflictError("Bootstrap predecessor, authority or no-enrollment fence differs")
         service._validate_retry_assignment(previous=previous, payload=payload,

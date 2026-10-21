@@ -14,9 +14,12 @@ Task не маркируется done; checkpoint, critical review и Workflow r
 Результат successor — **unbound assignment**, не разрешение отправить PM run.
 
 `BootstrapMapping` в новом payload явно сохраняет predecessor key/payload hash,
-предыдущую и новую sink revision, canonical assignment revision, bootstrap attempt
-и hash принятого composite proof. PM enrollment использует canonical revision
-через проверяемое retained mapping; обычные runtime bind/step используют sink revision.
+предыдущую и новую sink revision, canonical assignment **operation key и revision**,
+bootstrap attempt и hash принятого composite proof. Под task lock PM enrollment
+разрешает CURRENT local assignment и проверяет всю hash-bound predecessor chain
+до original `pm-draft:<assignmentUUID>`. PM identity/native callback сохраняют этот
+canonical key/revision; обычные runtime bind/step используют local child key/revision.
+Произвольный old key или child key не становится PM authority.
 Новый PM bind всё ещё обязан получить actual `running` proof. Старый запоздавший
 bind отвергается как stale даже при предоставленном running observation.
 
@@ -33,13 +36,19 @@ Query: `task`, `assignment_operation_key`, `assignment_revision`. Только e
 PM **assignment** credential; runtime/catalog/foreign role не авторизованы. Ответ
 `{ok:true,result:{...}}` содержит task/project, canonical references/context,
 current local assignment revision/attempt/payload hash, immutable original bind
-request, status/cycle/phase, `pm_enrolled`, `step_state`, `initial_phase` и SHA256
+request, actual stored `bind_request_sha256`, `initial_phase_id`, status/cycle/phase,
+`pm_enrolled`, `step_state`, `initial_phase` и SHA256
 всего snapshot без самого SHA. Credentials, env и private request files отсутствуют.
 Все ответы no-store. Not found/stale/unknown различаются: 404/409/503. Timeout не
 превращается в empty/absent result.
 Реально unbound assignment имеет `binding=null`. Partial custody — отказ, не
-fallback в absent. Guarded retry в этом пакете обрабатывает только finalized
-predecessor; обычный ещё unbound bind остаётся существующим путём.
+fallback в absent. Guarded retry принимает finalized Present И authoritative
+unbound Absent: во втором случае все пять stored binding-полей должны быть NULL.
+Original native run/binding тогда берутся только из trusted Fleet composite,
+дополнительно сверенного с configured native readback, не из caller assertion.
+Никакие отсутствующие DB binding-поля не синтезируются. Если original generic bind
+успел до successor lock, snapshot изменится и retry откажет. После successor insert
+запоздавший original generic bind stale и не сможет заполнить predecessor.
 
 Reader берёт existing namespace lock, затем `SELECT Task FOR UPDATE`. Эти же locks
 в том же порядке берёт initial `PMExecutionService.bind`. Проверяются durable
@@ -87,12 +96,28 @@ operation replay сверяет сохранённый request и не вызы�
 
 Focused tests используют реальные isolated SQLite ledgers и обычные TestClient
 bind endpoints, synthetic native/Tracker readbacks. Покрываются terminal statuses,
-unchanged history/canonical identity, explicit revision mapping, live running
+unchanged history/canonical identity, explicit key/revision mapping, live running
 requirement, stale old bind, enrollment до lock, durable progress, conflict,
-transaction rollback и protected reader/no-proof-on-timeout.
+transaction rollback и protected reader/no-proof-on-timeout. Actual TestClient
+цепочка new local bind -> canonical PM bind/readback -> local steps -> typed
+confirmation/resume/rebind -> terminal receipt/readback проверяется для обоих
+Present/Absent predecessor. Receipt сохраняет local bind/result и canonical
+`binding.pm.identity` раздельно; `single_task_terminal` не требует подмены key.
 Это не PostgreSQL concurrency qualification и не live retry acceptance. Новые
 routes/DTO/producer wiring требуют интеграции Main до публикации coherent пакета.
 
-Финальный focused host run: `tests/test_pm_bootstrap_retry.py` **17 PASS / 51.44s**,
-без skips. Scoped mypy: 3 source files PASS; Ruff и diff-check PASS. Из warnings —
-существующий Starlette/AnyIO deprecation. Исходный boundary commit fe8 сохранён.
+Предыдущий run commit `2b8900b` (17 PASS) НЕ доказывал canonical-key compatibility:
+positive fixture ошибочно подменяла native/PM key на local child. Этот результат
+сохранён как исторический; новая regression использует unchanged canonical root.
+Финальный corrected host run: **41 PASS / 189.80s**, без skips:
+
+- `tests/test_pm_bootstrap_retry.py`: 33 cases;
+- `test_pm_execution.py::test_wait_resume_new_run_survives_sessions_and_replays`: 1;
+- `test_pm_review_revision_bridge.py::test_review_authority_sink_binding_and_restart_remain_independent`: 2;
+- `test_pm_review_revision_bridge.py::test_review_checkpoint_resume_and_terminal_use_authoritative_revision`: 1;
+- `test_single_task_runtime.py::test_profile_pm_readback_resolves_original_assignment_family`: 3;
+- `test_single_task_pm_terminal.py::test_pm_actual_seal_readback_replay_restart_and_exact_wire_fixture`: 1.
+
+Scoped mypy трёх source files, Ruff четырёх Python files и `git diff --check` PASS.
+Единственный warning — existing Starlette/AnyIO deprecation. Никаких Docker,
+PostgreSQL, model/live calls, builds, installs или push не выполнялось.

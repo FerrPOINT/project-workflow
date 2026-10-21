@@ -7,19 +7,22 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
 
+from project_workflow import config
 from project_workflow.application.pm_bootstrap import (
     BootstrapProof,
     BootstrapRetry,
     PMBootstrapService,
+    canonical_assignment,
 )
 from project_workflow.domain.exceptions import ConflictError
 from project_workflow.domain.pm_execution import RuntimeObservation
-from project_workflow.domain.runtime_assignment import payload_sha256
+from project_workflow.domain.runtime_assignment import canonical_json, payload_sha256
 from project_workflow.infrastructure import pm_readback
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.ui.routes import pm_bootstrap_api
 from tests import test_single_task_runtime as runtime
+from tests.test_single_task_pm_terminal import CHECKPOINT, CONFIRMATION, CURRENT_RUN, READBACK
 from tests.test_single_task_runtime import API, PM, PROFILE, SESSION, WRITER
 from tests.test_single_task_runtime import bridge as bridge
 
@@ -27,8 +30,32 @@ NEXT = "22222222-2222-4222-8222-222222222211"
 
 
 @pytest.fixture
-def pending(bridge, monkeypatch):
-    assignment, binding, step, headers = runtime.prepare(bridge, monkeypatch, "project_manager", "draft", "Draft")
+def pending(bridge, monkeypatch, request):
+    monkeypatch.setenv("PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON", json.dumps({"project_manager": "w" * 40}))
+    monkeypatch.setenv("PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON", json.dumps({"project_manager": "r" * 40}))
+    config.get_settings.cache_clear()
+    assignment = {**runtime.assignment_payload(), "task": "SDLC-7", "role_key": "project_manager",
+                  "workflow_key": "single-task-v1:project_manager", "mode_key": "draft", "stage_key": "Draft",
+                  "execution_scope": "business", "cycle_number": 0}
+    assignment["operation_key"] = f"pm-draft:{assignment['assignment_ref']}"
+    assigned = bridge.post(API + "assign", json=assignment, headers=WRITER)
+    assert assigned.status_code == 200, assigned.text
+    binding = {**PROFILE, "task": assignment["task"], "bind_operation_key": "bind:1",
+               "assignment_operation_key": assignment["operation_key"], "assignment_revision": 1,
+               "assignment_ref": assignment["assignment_ref"], "binding_ref": "binding:1", "hermes_run_ref": "run:1",
+               "mode_key": "draft", "cycle_number": 0, "attempt_number": 1, "expected_binding_state": "unbound",
+               "concrete_agent_ref": assignment["concrete_agent_ref"], "session_run_id": SESSION}
+    step = {**PROFILE, "task": assignment["task"], "step_operation_key": "step:read",
+            "assignment_revision": 1, "assignment_ref": assignment["assignment_ref"],
+            "binding_ref": "binding:1", "hermes_run_ref": "run:1", "mode_key": "draft", "cycle_number": 0,
+            "attempt_number": 1, "expected_phase_code": assigned.json()["result"]["current_phase_code"],
+            "expected_status": "active", "session_run_id": SESSION, "single_task_context_sha256": "0" * 64}
+    headers = runtime.RUNNER
+    if getattr(request, "param", "bound") == "bound":
+        bound = bridge.post(API + "bind", json=binding, headers=WRITER)
+        assert bound.status_code == 200, bound.text
+        step["single_task_context_sha256"] = bound.json()["result"]["single_task_context_sha256"]
+        headers = {**runtime.RUNNER, "X-Workflow-Execution-Token": bound.json()["execution_token"]}
     with SAUnitOfWork() as uow:
         project = uow.projects.get_by_cli_command("workflow-single-task-project-manager")
         uow.projects.create_pm_ownership({
@@ -38,6 +65,13 @@ def pending(bridge, monkeypatch):
             "provisioner_subject": assignment["concrete_agent_ref"],
         })
         state = PMBootstrapService(uow).predecessor(project.id, assignment["task"], assignment["operation_key"], 1)
+        record = uow.tasks.get_assignment_by_operation_key(assignment["operation_key"])
+        assert state["bind_request_sha256"] == record.bind_request_sha256
+        assert state["initial_phase_id"] == state["current_phase_id"]
+        if state["binding"] is not None:
+            assert state["bind_request_sha256"] == payload_sha256(state["binding"])
+        else:
+            assert state["bind_request_sha256"] is None
     native = RuntimeObservation.model_validate({
         "task": assignment["task"], "execution_ref": assignment["execution_ref"],
         "tracker_instance_ref": assignment["tracker_instance_ref"],
@@ -75,8 +109,7 @@ def retry(fixture, request=None, reader=None):
         )
 
 
-@pytest.mark.parametrize("status", ["completed", "failed", "cancelled", "stopped"])
-def test_retry_preserves_canonical_identity_and_original_bytes_then_requires_running_bind(pending, monkeypatch, status):
+def enroll_retry(pending, monkeypatch, status="failed"):
     old = pending["proof"].native
     proof = pending["proof"].model_copy(update={"native": old.model_copy(update={"status": status})})
     monkeypatch.setattr(pm_readback, "observe_run", lambda _run: proof.native)
@@ -106,15 +139,17 @@ def test_retry_preserves_canonical_identity_and_original_bytes_then_requires_run
     monkeypatch.setattr(pm_readback, "observe_run", lambda _: old.model_copy(update={"status": "running"}))
     late_bind = pending["client"].post(PM + "bind", json=old_command, headers=WRITER)
     assert late_bind.status_code == 409, late_bind.text
+    late_generic = pending["client"].post(API + "bind", json=pending["binding"], headers=WRITER)
+    assert late_generic.status_code == 409, late_generic.text
     binding = {**pending["binding"], "assignment_operation_key": request.operation_key,
                "assignment_revision": 2, "attempt_number": 2, "bind_operation_key": "bind:retry",
                "binding_ref": "binding:retry", "hermes_run_ref": "run:retry", "session_run_id": NEXT}
     bound = pending["client"].post(API + "bind", json=binding, headers=WRITER)
     assert bound.status_code == 200, bound.text
-    identity = {**old.model_dump(include={
+    identity = old.model_dump(include={
         "task", "execution_ref", "tracker_instance_ref", "tracker_project_ref", "task_ref", "root_ref",
         "agent_ref", "assignment_operation_key", "assignment_ref", "assignment_revision",
-    }), "assignment_operation_key": request.operation_key}
+    })
     pm_command = {**PROFILE, **identity, "operation_key": "pm:retry-bind", "expected_version": 0,
                   "binding_ref": "binding:retry", "hermes_run_ref": "run:retry", "session_run_id": NEXT}
     new_native = old.model_copy(update={**identity, "binding_ref": "binding:retry", "hermes_run_ref": "run:retry",
@@ -122,9 +157,16 @@ def test_retry_preserves_canonical_identity_and_original_bytes_then_requires_run
     monkeypatch.setattr(pm_readback, "observe_run", lambda _run: new_native)
     assert pending["client"].post(PM + "bind", json=pm_command, headers=WRITER).status_code == 409
     monkeypatch.setattr(pm_readback, "observe_run", lambda _run: new_native.model_copy(update={"status": "running"}))
+    for wrong_key in (request.operation_key, "pm-draft:" + NEXT):
+        wrong = {**pm_command, "assignment_operation_key": wrong_key}
+        assert pending["client"].post(PM + "bind", json=wrong, headers=WRITER).status_code == 409
     enrolled = pending["client"].post(PM + "bind", json=pm_command, headers=WRITER)
     assert enrolled.status_code == 200, enrolled.text
     assert enrolled.json()["result"]["identity"]["assignment_revision"] == 1
+    assert enrolled.json()["result"]["identity"]["assignment_operation_key"] == old.assignment_operation_key
+    read = pending["client"].post(PM + "readback", json={**PROFILE, **identity}, headers=WRITER)
+    assert read.status_code == 200, read.text
+    assert read.json()["result"] == {**enrolled.json()["result"], "operation": None}
     stale = pending["client"].post(API + "step", json=pending["step"], headers=pending["headers"])
     assert stale.status_code in {403, 409}
     next_step = {**pending["step"], "assignment_revision": 2, "attempt_number": 2,
@@ -135,6 +177,76 @@ def test_retry_preserves_canonical_identity_and_original_bytes_then_requires_run
     first = pending["client"].post(API + "step", json=next_step, headers=next_headers)
     assert first.status_code == 200, first.text
     assert first.json()["result"]["phase_code"] == "PM-DRAFT-01"
+    return identity, new_native, pm_command, next_step, next_headers
+
+
+@pytest.mark.parametrize("pending", ["bound", "unbound"], indirect=True)
+@pytest.mark.parametrize("status", ["completed", "failed", "cancelled", "stopped"])
+def test_retry_preserves_canonical_identity_and_original_bytes_then_requires_running_bind(pending, monkeypatch, status):
+    enroll_retry(pending, monkeypatch, status)
+
+
+@pytest.mark.parametrize("pending", ["bound", "unbound"], indirect=True)
+def test_canonical_root_survives_local_retry_through_confirmed_terminal_readback(pending, monkeypatch, supervisor_llm):
+    identity, native, command, step, headers = enroll_retry(pending, monkeypatch)
+    child_key = "pm-bootstrap:" + NEXT
+    observations = {NEXT: native.model_copy(update={"status": "running"})}
+    monkeypatch.setattr(pm_readback, "observe_run", lambda run: observations[run])
+    client = pending["client"]
+    supervisor_llm("PASS")
+    for number in range(2):
+        report = {**step, "step_operation_key": f"pm:retry-prepare:{number}", "report": "Verified preparation"}
+        response = client.post(API + "step", json=report, headers=headers)
+        assert response.status_code == 200, response.text
+        step["expected_phase_code"] = response.json()["result"]["current_phase_code"]
+    checkpoint = {**command, "operation_key": "pm:retry-checkpoint", "expected_version": 1, "expected_fence": 1,
+                  "checkpoint_ref": CHECKPOINT, "requirements_revision": 7, "requirements_sha256": "a" * 64}
+    response = client.post(PM + "checkpoint", json=checkpoint, headers=headers)
+    assert response.status_code == 200, response.text
+    observations[NEXT] = native.model_copy(update={"status": "stopped", "checkpoint_ref": CHECKPOINT})
+    confirmation = {"input": {"input_kind": "confirmation", "input_id": CONFIRMATION},
+                    "input_receipt": {"reference": "tracker:synthetic-confirmation", "sha256": "b" * 64}}
+    resumed = {**checkpoint, **confirmation, "operation_key": "pm:retry-resume", "expected_version": 2,
+               "new_session_run_id": CURRENT_RUN}
+    response = client.post(PM + "resume", json=resumed, headers=WRITER)
+    assert response.status_code == 200, response.text
+    observations[CURRENT_RUN] = native.model_copy(update={
+        "observation_ref": "observed:confirmed", "status": "running", "binding_ref": "binding:confirmed",
+        "hermes_run_ref": "run:confirmed", "session_run_id": CURRENT_RUN, "fence": 2,
+        "dispatch_operation_key": "pm:retry-resume", "checkpoint_ref": CHECKPOINT,
+    })
+    rebind = {**PROFILE, **identity, "operation_key": "pm:retry-rebind", "expected_version": 3, "expected_fence": 2,
+              "binding_ref": step["binding_ref"], "hermes_run_ref": step["hermes_run_ref"], "session_run_id": NEXT,
+              "checkpoint_ref": CHECKPOINT, "resume_operation_key": "pm:retry-resume",
+              "new_binding_ref": "binding:confirmed", "new_hermes_run_ref": "run:confirmed",
+              "new_session_run_id": CURRENT_RUN}
+    bound = client.post(PM + "rebind", json=rebind, headers=WRITER)
+    assert bound.status_code == 200, bound.text
+    final = {**step, "step_operation_key": "pm:retry-final", "report": "Actual confirmed final report",
+             "session_run_id": CURRENT_RUN, "binding_ref": "binding:confirmed", "hermes_run_ref": "run:confirmed",
+             "single_task_context_sha256": bound.json()["result"]["single_task_context_sha256"]}
+    current_headers = {**runtime.RUNNER, "X-Workflow-Execution-Token": bound.json()["execution_token"]}
+    finished = client.post(API + "step", json=final, headers=current_headers)
+    assert finished.status_code == 200, finished.text
+    receipt = finished.json()["result"]["single_task_terminal_receipt"]
+    assert receipt["binding"]["pm"]["identity"] == identity == observations[CURRENT_RUN].model_dump(
+        include=set(identity),
+    )
+    assert identity["assignment_operation_key"] == pending["assignment"]["operation_key"]
+    assert identity["assignment_revision"] == 1
+    assert receipt["binding"]["request"]["assignment_operation_key"] == child_key
+    assert receipt["binding"]["request"]["assignment_revision"] == receipt["result"]["assignment_revision"] == 2
+    assert receipt["result"]["assignment_operation_key"] == child_key
+    lookup = {**PROFILE, "task": final["task"], "current_run": True, "session_run_id": CURRENT_RUN,
+              "single_task_context_sha256": final["single_task_context_sha256"]}
+    read = client.post(READBACK, json=lookup, headers=current_headers)
+    assert read.status_code == 200, read.text
+    assert read.json()["receipt"] == receipt
+    with SAUnitOfWork() as uow:
+        task = uow.tasks.get_by_id(pending["state"]["task_id"])
+        assert task.status == "done" and task.assignment_operation_key == child_key
+        rows = uow.step_history.list(task_id=task.id)
+        assert len(rows) == 3 and all(entry.assignment_operation_key == child_key for entry in rows)
 
 
 @pytest.mark.parametrize("change", [
@@ -246,3 +358,93 @@ def test_reader_distinguishes_actual_unbound_assignment_from_unknown(pending):
         assert state["binding"] is None and state["pm_enrolled"] is False and state["step_state"] == "absent"
         with pytest.raises(ConflictError, match="revision differs"):
             PMBootstrapService(uow).predecessor(pending["project"], "RUN-8", "assignment:unbound", 2)
+
+
+@pytest.mark.parametrize("pending", ["unbound"], indirect=True)
+@pytest.mark.parametrize("field", [
+    "binding_ref", "hermes_run_ref", "bind_operation_key", "bind_request_sha256", "concrete_agent_ref",
+])
+def test_unbound_retry_never_falls_back_from_partial_custody(pending, field):
+    with SAUnitOfWork() as uow:
+        record = uow.tasks.get_assignment_by_operation_key(pending["assignment"]["operation_key"]).to_dict()
+        # The DB already rejects incomplete binding columns. Also fail closed on
+        # any partial reader projection, without disabling that physical guard.
+        record[field] = "a" * 64 if field == "bind_request_sha256" else NEXT
+        task = uow.session.get(m.Task, pending["state"]["task_id"])
+        with pytest.raises(ConflictError, match="Partial or changed"):
+            PMBootstrapService(uow)._snapshot(task, record)
+
+
+@pytest.mark.parametrize("pending", ["unbound"], indirect=True)
+def test_original_generic_bind_winning_before_successor_invalidates_absent_snapshot(pending):
+    def read(_request):
+        response = pending["client"].post(API + "bind", json=pending["binding"], headers=WRITER)
+        assert response.status_code == 200, response.text
+        return pending["proof"]
+
+    with pytest.raises(ConflictError, match="fence differs"):
+        retry(pending, reader=read)
+    with SAUnitOfWork() as uow:
+        assert len(uow.tasks.list_assignments(pending["state"]["task_id"])) == 1
+
+
+def test_second_bootstrap_resolves_retained_root_not_previous_local_key(pending, monkeypatch):
+    retry(pending)
+    first_key = command(pending).operation_key
+    with SAUnitOfWork() as uow:
+        state = PMBootstrapService(uow).predecessor(pending["project"], pending["assignment"]["task"], first_key, 2)
+    native = pending["proof"].native.model_copy(update={
+        "binding_ref": "binding:second-original", "hermes_run_ref": "run:second-original", "session_run_id": NEXT,
+        "dispatch_operation_key": "pm:second-original",
+    })
+    proof = pending["proof"].model_copy(update={
+        "predecessor_sha256": state["sha256"], "bootstrap_attempt_ref": CURRENT_RUN, "native": native,
+    })
+    request = command(pending, proof, predecessor_operation_key=first_key, predecessor_sha256=state["sha256"],
+                      operation_key="pm-bootstrap:second", bootstrap_attempt_ref=CURRENT_RUN)
+    monkeypatch.setattr(pm_readback, "observe_run", lambda _: native)
+    result = retry(pending, request, lambda _: proof)
+    assert result["assignment_revision"] == result["attempt_number"] == 3
+    binding = {**pending["binding"], "assignment_operation_key": request.operation_key, "assignment_revision": 3,
+               "attempt_number": 3, "bind_operation_key": "bind:second", "binding_ref": "binding:second",
+               "hermes_run_ref": "run:second", "session_run_id": CURRENT_RUN}
+    bound = pending["client"].post(API + "bind", json=binding, headers=WRITER)
+    assert bound.status_code == 200, bound.text
+    identity = native.model_dump(include={
+        "task", "execution_ref", "tracker_instance_ref", "tracker_project_ref", "task_ref", "root_ref",
+        "agent_ref", "assignment_operation_key", "assignment_ref", "assignment_revision",
+    })
+    pm_command = {**PROFILE, **identity, "expected_version": 0, "operation_key": "pm:second-bind",
+                  "binding_ref": "binding:second", "hermes_run_ref": "run:second", "session_run_id": CURRENT_RUN}
+    monkeypatch.setattr(pm_readback, "observe_run", lambda _: native.model_copy(update={
+        "status": "running", "binding_ref": "binding:second", "hermes_run_ref": "run:second",
+        "session_run_id": CURRENT_RUN, "dispatch_operation_key": "pm:second-bind",
+    }))
+    for key in (first_key, request.operation_key):
+        assert pending["client"].post(
+            PM + "bind", json={**pm_command, "assignment_operation_key": key}, headers=WRITER,
+        ).status_code == 409
+    enrolled = pending["client"].post(PM + "bind", json=pm_command, headers=WRITER)
+    assert enrolled.status_code == 200, enrolled.text
+    assert enrolled.json()["result"]["identity"] == identity
+
+
+@pytest.mark.parametrize("field,value", [
+    ("canonical_assignment_operation_key", "pm-bootstrap:" + NEXT),
+    ("canonical_assignment_revision", 2),
+    ("predecessor_payload_sha256", "0" * 64),
+])
+def test_mapping_cannot_rebind_canonical_authority_even_with_recomputed_child_hash(pending, field, value):
+    retry(pending)
+    with SAUnitOfWork() as uow:
+        row = uow.session.scalar(select(m.TaskRuntimeAssignment).where(
+            m.TaskRuntimeAssignment.operation_key == command(pending).operation_key,
+        ))
+        payload = json.loads(row.payload)
+        payload["pm_bootstrap_context"][field] = value
+        row.payload = canonical_json(payload)
+        row.payload_sha256 = payload_sha256(payload)
+        uow.session.flush()
+        record = uow.tasks.get_assignment_by_operation_key(row.operation_key).to_dict()
+        with pytest.raises(ConflictError):
+            canonical_assignment(uow, record)
