@@ -6,11 +6,9 @@ import logging
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-
 from pathlib import Path
 
 from fastapi import FastAPI, Request
-from starlette.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import ValidationError
@@ -18,6 +16,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.staticfiles import StaticFiles
 
 from ... import __version__
 from ...infrastructure.db.session import DatabaseUnavailable, get_engine, reset_engine
@@ -182,7 +181,11 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 def create_app() -> FastAPI:
     app = FastAPI(title="Интерфейс project-workflow", version=__version__, lifespan=_lifespan)
-    app.mount("/base-assets/fonts", StaticFiles(directory=Path(__file__).parent / "templates/base/fonts"), name="base-fonts")
+    app.mount(
+        "/base-assets/fonts",
+        StaticFiles(directory=Path(__file__).parent / "templates/base/fonts"),
+        name="base-fonts",
+    )
     app.add_middleware(_RequestLoggingMiddleware)
     app.add_middleware(_UoWMiddleware)
     install_sso(app)
