@@ -24,7 +24,7 @@ import pytest
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
 from fastapi.testclient import TestClient
-from sqlalchemy import inspect, select, text
+from sqlalchemy import event, inspect, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import close_all_sessions
 
@@ -36,6 +36,7 @@ from project_workflow.application.project import ProjectService
 from project_workflow.application.task import TaskService
 from project_workflow.application.workflow import WorkflowService
 from project_workflow.domain.exceptions import ConflictError
+from project_workflow.infrastructure.db import session as health_db_session
 from project_workflow.infrastructure.db.managed_catalog import (
     ensure_managed_catalog,
     validate_managed_catalog_state,
@@ -3740,3 +3741,75 @@ class TestPostgresContinuationCatalogVersioning:
             assert bound["execution_scope"] == scope and bound["mode_key"] == mode_key
             pinned = uow.workflows.get_mode(bound["mode_id"])
             assert pinned.catalog_version == 2 and set(pinned.execution_scopes) == {"delivery", "aggregate"}
+
+
+def _health_probe_client(pg_url):
+    engine = health_db_session.get_engine(pg_url)
+    health_db_session.ensure_migrated(engine)
+    return engine, TestClient(create_app())
+
+
+@pytest.mark.integration
+def test_postgres_warm_health_reuses_exact_validation_with_bounded_queries(pg_url):
+    engine, client = _health_probe_client(pg_url)
+    with patch.object(health_db_session, "schema_is_ready", wraps=health_db_session.schema_is_ready) as deep:
+        assert client.get("/health").status_code == 200
+        queries = []
+
+        def record(_conn, _cursor, statement, _parameters, _context, _many):
+            queries.append(statement)
+
+        event.listen(engine, "before_cursor_execute", record)
+        try:
+            for _ in range(3):
+                assert client.get("/health").status_code == 200
+        finally:
+            event.remove(engine, "before_cursor_execute", record)
+        assert deep.call_count == 1
+        assert len(queries) <= 18
+
+
+@pytest.mark.parametrize("change", [
+    "ALTER TABLE projects ADD COLUMN unexpected_health_column TEXT",
+    "ALTER TABLE projects ALTER COLUMN name TYPE text",
+    "ALTER TABLE projects ALTER COLUMN name SET DEFAULT 'unexpected-default'",
+    "CREATE INDEX health_extra_index ON projects(name)",
+    "CREATE TABLE unexpected_health_table(id integer)",
+    "CREATE FUNCTION legacy_metadata_readonly() RETURNS trigger LANGUAGE plpgsql "
+    "AS $$BEGIN RETURN NEW; END;$$",
+    "UPDATE alembic_version SET version_num='unknown_health_revision'",
+])
+@pytest.mark.integration
+def test_postgres_health_rejects_ddl_or_revision_drift_without_ttl(pg_url, change):
+    engine, client = _health_probe_client(pg_url)
+    assert client.get("/health").status_code == 200
+    with engine.begin() as connection:
+        connection.execute(text(change))
+    response = client.get("/health")
+    assert response.status_code == 503
+    assert response.json()["error_code"] == "schema-not-ready"
+
+
+@pytest.mark.integration
+def test_postgres_health_recovers_after_ddl_repair(pg_url):
+    engine, client = _health_probe_client(pg_url)
+    assert client.get("/health").status_code == 200
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE unexpected_health_table(id integer)"))
+    assert client.get("/health").status_code == 503
+    with engine.begin() as connection:
+        connection.execute(text("DROP TABLE unexpected_health_table"))
+    assert client.get("/health").status_code == 200
+
+
+@pytest.mark.integration
+def test_postgres_health_neighbor_namespace_and_same_revision_dml_do_not_repeat_validation(pg_url):
+    engine, client = _health_probe_client(pg_url)
+    with patch.object(health_db_session, "schema_is_ready", wraps=health_db_session.schema_is_ready) as deep:
+        assert client.get("/health").status_code == 200
+        with engine.begin() as connection:
+            connection.execute(text("UPDATE alembic_version SET version_num=version_num"))
+            connection.execute(text('CREATE SCHEMA "Health_Neighbor"'))
+            connection.execute(text('CREATE TABLE "Health_Neighbor".extra(id integer)'))
+        assert client.get("/health").status_code == 200
+        assert deep.call_count == 1
