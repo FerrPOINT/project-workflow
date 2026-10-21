@@ -32,6 +32,7 @@ from project_workflow.domain.runtime_assignment import (
 from project_workflow.domain.single_task_runtime import SingleTaskTerminalReadback
 from project_workflow.infrastructure.db.managed_catalog import validate_managed_catalog_state
 from project_workflow.infrastructure.db.models import PMExecution, PMRun
+from project_workflow.infrastructure.db.single_task_catalog import runtime_catalog_read
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.cli.core import _require_valid_key, _resolve_namespace_id
 from project_workflow.interfaces.ui.schemas import (
@@ -536,7 +537,7 @@ def _read_committed_runtime_step(
     role_key: str,
 ) -> dict[str, Any]:
     """Read a committed operation response in a fresh transaction."""
-    with SAUnitOfWork() as uow:
+    with SAUnitOfWork() as uow, runtime_catalog_read(uow):
         namespace_id = _namespace_id(uow, role_key, single_task=isinstance(payload, SingleTaskStepRequest))
         task_key = _require_valid_key(payload.task, uow, project_id=namespace_id)
         _assert_task_key_in_namespace(uow, namespace_id, task_key)
@@ -684,7 +685,7 @@ def runtime_assign(
             and payload.runtime_compatibility != runtime_compatibility_descriptor()
         ):
             return _error("Runtime compatibility mismatch", 409)
-        with SAUnitOfWork() as uow:
+        with SAUnitOfWork() as uow, runtime_catalog_read(uow):
             namespace_id = _namespace_id(uow, role, single_task=isinstance(payload, SingleTaskAssignmentRequest))
             task_key = _require_valid_key(payload.task, uow, project_id=namespace_id)
             _assert_task_key_in_namespace(uow, namespace_id, task_key)
@@ -763,7 +764,7 @@ def runtime_rebind(
         role = _authorized_assignment_role(authorization)
         if role is None:
             return _error("Недействительный assignment token", 401)
-        with SAUnitOfWork() as uow:
+        with SAUnitOfWork() as uow, runtime_catalog_read(uow):
             namespace_id = _namespace_id(uow, role)
             task_key = _require_valid_key(payload.task, uow, project_id=namespace_id)
             _assert_task_key_in_namespace(uow, namespace_id, task_key)
@@ -800,7 +801,7 @@ def runtime_bind(
             return _error(str(exc), 503)
         return _error("Недействительный runtime token", 401)
     try:
-        with SAUnitOfWork() as uow:
+        with SAUnitOfWork() as uow, runtime_catalog_read(uow):
             namespace_id = _namespace_id(
                 uow, role, single_task=isinstance(payload, SingleTaskBindRequest),
                 assignment_operation_key=payload.assignment_operation_key,
@@ -861,7 +862,7 @@ def runtime_step(
     request_digest = payload_sha256(payload.model_dump(mode="json"))
     try:
         response: dict[str, Any] | None = None
-        with SAUnitOfWork() as uow:
+        with SAUnitOfWork() as uow, runtime_catalog_read(uow):
             namespace_id = _namespace_id(uow, role, single_task=isinstance(payload, SingleTaskStepRequest))
             task_key = _require_valid_key(payload.task, uow, project_id=namespace_id)
             _assert_task_key_in_namespace(uow, namespace_id, task_key)
@@ -994,7 +995,7 @@ def runtime_history(
         return _error("History cursor requires fleet-summary-v1 and a positive signed 64-bit ID", 422)
     role = credential.role_key
     try:
-        with SAUnitOfWork() as uow:
+        with SAUnitOfWork() as uow, runtime_catalog_read(uow):
             if instruction_profile not in {None, "single-task-v1"}:
                 raise ConflictError("Unknown instruction profile")
             namespace_id = _namespace_id(uow, role, single_task=instruction_profile == "single-task-v1")
@@ -1065,7 +1066,7 @@ def runtime_terminal_readback(
             return reply({"ok": False, "error": "Invalid runtime credential"}, 401)
         if credential.kind != "runtime":
             return reply({"ok": False, "error": "Runtime role required"}, 403)
-        with SAUnitOfWork() as uow:
+        with SAUnitOfWork() as uow, runtime_catalog_read(uow):
             namespace_id = _namespace_id(uow, credential.role_key, single_task=True)
             task_key = _require_valid_key(payload.task, uow, project_id=namespace_id)
             _assert_task_key_in_namespace(uow, namespace_id, task_key)

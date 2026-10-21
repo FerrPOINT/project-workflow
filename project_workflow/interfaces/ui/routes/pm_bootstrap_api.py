@@ -7,6 +7,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from project_workflow.application.pm_bootstrap import BootstrapRetry, PMBootstrapService
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.infrastructure import pm_readback
+from project_workflow.infrastructure.db.single_task_catalog import runtime_catalog_read
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
 from . import runtime_api
@@ -27,7 +28,7 @@ def predecessor(
             return response({"ok": False, "error": "Invalid machine credential"}, 401)
         if credential.kind != "assignment" or credential.role_key != "project_manager":
             return response({"ok": False, "error": "PM assignment credential required"}, 403)
-        with SAUnitOfWork() as uow:
+        with SAUnitOfWork() as uow, runtime_catalog_read(uow):
             project_id = runtime_api._namespace_id(uow, "project_manager", single_task=True)
             key = runtime_api._require_valid_key(task, uow, project_id=project_id)
             result = PMBootstrapService(uow).predecessor(
@@ -53,7 +54,7 @@ def retry(payload: BootstrapRetry, authorization: str | None = Header(default=No
             return response({"ok": False, "error": "Invalid machine credential"}, 401)
         if credential.kind != "assignment" or credential.role_key != "project_manager":
             return response({"ok": False, "error": "PM assignment credential required"}, 403)
-        with SAUnitOfWork() as uow:
+        with SAUnitOfWork() as uow, runtime_catalog_read(uow):
             project_id = runtime_api._namespace_id(
                 uow, "project_manager", single_task=True, assignment_operation_key=payload.predecessor_operation_key,
             )
