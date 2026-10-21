@@ -63,7 +63,7 @@ def retry(payload: BootstrapRetry, authorization: str | None = Header(default=No
             if task is None or task.project_id != project_id:
                 raise NotFoundError("Bootstrap task missing")
             result = PMBootstrapService(uow).retry(project_id, task.task_key, payload, pm_readback.bootstrap_proof)
-        return response({"ok": True, "result": result}, 200)
+        return response({"ok": True, "result": runtime_api._assignment_response(result)["result"]}, 200)
     except NotFoundError:
         return response({"ok": False, "error": "Predecessor not found"}, 404)
     except (ConflictError, ValueError):
