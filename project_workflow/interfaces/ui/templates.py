@@ -69,10 +69,7 @@ def _project_icon_path(icon: str | None) -> str:
 
 
 def _project_icon_options() -> list[dict[str, str]]:
-    return [
-        {"key": key, "label": label, "path": _project_icon_path(key)}
-        for key, label in PROJECT_THEME_ICONS.items()
-    ]
+    return [{"key": key, "label": label, "path": _project_icon_path(key)} for key, label in PROJECT_THEME_ICONS.items()]
 
 
 def _group_instructions(instructions: list[dict[str, Any]] | None) -> list[list[dict[str, Any]]]:
@@ -115,14 +112,23 @@ def _accent_foreground(color: str | None) -> str:
 
 
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+
+
+def _platform_branding_url() -> str | None:
+    from .platform_branding import branding_url
+
+    if not branding_url():
+        return None
+    return get_settings().UI_BASE_PATH.rstrip("/") + "/api/platform/branding"
+
+
+templates.env.globals["platform_branding_url"] = _platform_branding_url
 templates.env.globals["ui_base_path"] = lambda: get_settings().UI_BASE_PATH
 templates.env.filters["group_instructions"] = _group_instructions
 templates.env.filters["pluralize"] = _pluralize
 templates.env.filters["accent_foreground"] = _accent_foreground
 templates.env.globals["project_icon_path"] = _project_icon_path
-templates.env.globals["project_icon_paths"] = {
-    key: _project_icon_path(key) for key in PROJECT_THEME_ICONS
-}
+templates.env.globals["project_icon_paths"] = {key: _project_icon_path(key) for key in PROJECT_THEME_ICONS}
 templates.env.globals["project_icon_options"] = _project_icon_options()
 templates.env.globals["default_project_icon"] = DEFAULT_PROJECT_ICON
 env = templates.env

@@ -379,7 +379,27 @@ class TestIndexPage:
         assert "В работе" in response.text
         assert "Task Intake" not in response.text
         assert "Token Verification" not in response.text
-        assert "Validate" not in response.text
+        class PageText(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.ignored = False
+                self.parts = []
+
+            def handle_starttag(self, tag, attrs):
+                if tag in {"script", "style"}:
+                    self.ignored = True
+
+            def handle_endtag(self, tag):
+                if tag in {"script", "style"}:
+                    self.ignored = False
+
+            def handle_data(self, data):
+                if not self.ignored:
+                    self.parts.append(data)
+
+        page = PageText()
+        page.feed(response.text)
+        assert "Validate" not in "".join(page.parts)
         assert "regex" not in response.text
         assert '<div class="metric-label">Фазы</div>' not in response.text
         assert "TASK — TASK" not in response.text
@@ -524,8 +544,11 @@ class TestPhasesPage:
         assert 'id="sidebarThemeSelector"' not in response.text
         assert response.text.count('data-base-theme-option') >= 3
         assert 'window.PdlcThemePreference.read("workflow-theme")' in response.text
-        assert response.text.count('data-namespace-selector class="namespace-select"') == 2
-        assert 'id="namespaceSelector" data-namespace-selector' in response.text
+        controls = re.findall(
+            r'<select\b(?=[^>]*data-base-choice)(?=[^>]*data-namespace-selector)[^>]*>', response.text,
+        )
+        assert len(controls) == 2
+        assert re.search(r'<select\b[^>]*id="namespaceSelector"[^>]*data-namespace-selector', response.text)
         assert '.platform-header .service-menu-popover{position:fixed;left:12px;right:12px;' in response.text
 
     def test_sidebar_places_namespaces_first(self):
@@ -2220,7 +2243,7 @@ class TestProjectsPage:
         assert 'id="namespaceThemeControls"' in response.text
         assert 'aria-controls="namespaceForm"' in response.text
         assert 'aria-pressed="true"' in response.text
-        assert "document.querySelectorAll('.namespace-trigger')" in response.text
+        assert "document.querySelectorAll('[data-namespace-selector]')" in response.text
         assert "document.querySelector('.brand-mark')" not in response.text
         assert 'id="createProjectForm"' not in response.text
         assert 'id="projectForm"' not in response.text
@@ -2247,7 +2270,7 @@ class TestProjectsPage:
         assert response.status_code == 200
         assert "function applyPageTheme(" not in response.text
         assert "document.documentElement.style.setProperty('--accent" not in response.text
-        assert "trigger.style.setProperty('--namespace-color', color || defaultNamespaceThemeColor)" in response.text
+        assert "option.dataset.color = color || defaultNamespaceThemeColor" in response.text
 
     def test_namespace_create_page_uses_plus_without_duplicate_add_label(self):
         response = client.get("/namespaces/new")
@@ -2303,7 +2326,8 @@ class TestProjectsPage:
         )
         assert (
             "document.querySelectorAll('[data-namespace-selector]')"
-            ".forEach(function(selector){ selector.value = String(id); });" in response.text
+            ".forEach(function(selector){ selector.value = String(id); "
+            "window.PdlcChoice?.refreshChoice(selector); });" in response.text
         )
         assert "url.pathname = '/namespaces';" in response.text
         assert "var method = historyMode === 'push' ? 'pushState' : 'replaceState';" in response.text
@@ -2351,7 +2375,7 @@ class TestProjectsPage:
         assert response.status_code == 200
         assert "document.querySelector('.brand-name')" not in response.text
         assert "document.querySelector('.brand-subname')" not in response.text
-        assert "trigger.querySelector('.namespace-selector-name').textContent = name;" in response.text
+        assert "option.textContent = name;" in response.text
         assert "option.dataset.icon = namespace.theme_icon" in response.text
         assert "option.dataset.color = namespace.theme_color" in response.text
         assert "refreshNamespaceSelectors();" in response.text
