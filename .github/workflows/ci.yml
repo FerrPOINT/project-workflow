@@ -62,6 +62,8 @@ jobs:
           version: "0.10.10"
           enable-cache: true
       - name: Unit and UI tests with the existing coverage floor
+        env:
+          COVERAGE_CORE: sysmon
         run: uv run --isolated --with-requirements constraints.txt --all-extras pytest -q --timeout=60 --cov=project_workflow --cov-report=term
       - name: Profession and platform navigation regression
         run: node scripts/test_profession_navigation.mjs
