@@ -13,6 +13,7 @@ from project_workflow import config
 from project_workflow.domain.pm_execution import RuntimeObservation
 from project_workflow.infrastructure import pm_readback
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
+from scripts.export_pm_openapi import OUTPUT
 from tests.test_pm_bootstrap_retry import NEXT, command
 from tests.test_pm_bootstrap_retry import pending as pending
 from tests.test_single_task_runtime import WRITER
@@ -122,7 +123,12 @@ def test_retry_body_is_exactly_five_fields_not_caller_proof_or_url(pending, monk
     schema = pending["client"].get("/openapi.json").json()
     body = schema["components"]["schemas"]["BootstrapRetry"]
     assert set(body["properties"]) == set(command(pending).model_dump())
+    assert set(body["required"]) == set(command(pending).model_dump())
     assert body["additionalProperties"] is False
+    published = json.loads(OUTPUT.read_text(encoding="utf-8"))
+    assert published["components"]["schemas"]["BootstrapRetry"] == body
+    for path in (PREDECESSOR, RETRY):
+        assert published["paths"][path] == schema["paths"][path]
     callback.assert_not_called()
 
 
