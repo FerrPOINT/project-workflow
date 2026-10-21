@@ -87,5 +87,5 @@
 {%- endmacro %}
 
 {% macro platform_mark(with_name=false) -%}
-<span class="base-platform-mark" data-base-platform-mark><img hidden alt="" aria-hidden="true"><span data-base-brand-initials aria-hidden="true">PD</span>{% if with_name %}<span data-base-brand-name>PDLC</span>{% endif %}</span>
+<span class="inline-flex items-center gap-2"><span class="base-platform-mark" data-base-platform-mark><img hidden alt="" aria-hidden="true"><span data-base-brand-initials aria-hidden="true">PD</span></span>{% if with_name %}<span data-base-brand-name>PDLC</span>{% endif %}</span>
 {%- endmacro %}

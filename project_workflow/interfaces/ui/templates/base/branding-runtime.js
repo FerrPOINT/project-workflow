@@ -1,6 +1,8 @@
+import { isHex as hex, contrast, foreground } from "./branding-colors.js";
+import { brandingFavicon, paintBrandingMark } from "./branding-marks.js";
 import { DEFAULT_PLATFORM_NAME } from "./platform-title.js";
 
-/** @typedef { {version: 1, font_preset: 'system'|'inter'|'noto-sans', type_scale: 'standard'|'large', density: 'compact'|'standard'|'comfortable', radius: 'square'|'standard'|'rounded'} } BrandingDesign */
+/** @typedef { {version: 1, font_preset: 'system'|'inter'|'noto-sans', type_scale: 'standard'|'large', density: 'compact'|'standard'|'comfortable', radius: 'square'|'standard'|'rounded', colors?: Record<string,{primary:string,accent:string}>, radii?: Record<'control'|'menu'|'dialog'|'card'|'mark',number>, marks?: Record<string,any>, favicon?: any, documentation_url?: string, initial_theme?: 'dark'|'gray'|'light'} } BrandingDesign */
 /** @typedef { {product_name: string, product_short_name: string, logo_url: string|null, favicon_url: string|null, support_url: string|null, primary_color: string, accent_color: string, surface_color: string|null, design?: BrandingDesign|null} } Branding */
 /** @typedef { {revision: number, updated_at: string, branding: Branding} } BrandingDocument */
 
@@ -77,8 +79,6 @@ const themes = {
     "destructive-foreground": "#ffffff",
   },
 };
-const hex = (value) =>
-  typeof value === "string" && /^#[a-f\d]{6}$/i.test(value);
 const channels = (color) =>
   [1, 3, 5].map((i) => parseInt(color.slice(i, i + 2), 16));
 const mix = (a, b, amount) =>
@@ -90,23 +90,6 @@ const mix = (a, b, amount) =>
         .padStart(2, "0"),
     )
     .join("");
-function luminance(color) {
-  const c = channels(color).map((v) => {
-    const n = v / 255;
-    return n <= 0.04045 ? n / 12.92 : ((n + 0.055) / 1.055) ** 2.4;
-  });
-  return c[0] * 0.2126 + c[1] * 0.7152 + c[2] * 0.0722;
-}
-function contrast(a, b) {
-  const x = luminance(a),
-    y = luminance(b);
-  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
-}
-function foreground(color) {
-  return contrast(color, "#000000") >= contrast(color, "#ffffff")
-    ? "#000000"
-    : "#ffffff";
-}
 /** The smallest deterministic sRGB adjustment meeting the role's contrast floor. */
 function readable(seed, backgrounds, ratio) {
   if (backgrounds.every((bg) => contrast(seed, bg) >= ratio)) return seed;
@@ -117,6 +100,144 @@ function readable(seed, backgrounds, ratio) {
   }
   return target;
 }
+
+/** The same URL boundary is used by wire readers and the interactive editor. */
+export function validBrandUrl(value) {
+  if (!value) return true;
+  if (
+    typeof value !== "string" ||
+    value.length > 2048 ||
+    value.includes("\\") ||
+    /\p{Cc}/u.test(value)
+  )
+    return false;
+  try {
+    const url = new URL(value);
+    return (
+      !url.username &&
+      !url.password &&
+      (url.protocol === "https:" ||
+        (url.protocol === "http:" &&
+          (["localhost", "[::1]"].includes(url.hostname) ||
+            /^127(?:\.\d{1,3}){3}$/.test(url.hostname))))
+    );
+  } catch {
+    return false;
+  }
+}
+const record = (value) =>
+  !!value && typeof value === "object" && !Array.isArray(value);
+const iconIds = [
+  "layers",
+  "box",
+  "compass",
+  "globe",
+  "hexagon",
+  "network",
+  "rocket",
+  "shield",
+  "terminal",
+  "workflow",
+  "cpu",
+  "activity",
+  "leaf",
+  "sparkles",
+  "circle-dot",
+  "flask",
+];
+function validAsset(value, branding) {
+  return (
+    value === null ||
+    (record(value) &&
+      typeof value.id === "string" &&
+      (/^[a-f0-9]{64}$/.test(value.id) ||
+        (value.id === "legacy-logo" && value.url === branding.logo_url) ||
+        (value.id === "legacy-favicon" &&
+          value.url === branding.favicon_url)) &&
+      typeof value.url === "string" &&
+      !!value.url &&
+      validBrandUrl(value.url) &&
+      typeof value.name === "string" &&
+      value.name.length <= 255)
+  );
+}
+function validMark(mark, branding) {
+  if (
+    !record(mark) ||
+    !["letters", "icon", "image"].includes(mark.kind) ||
+    ![1, 2, 4].includes(mark.count) ||
+    typeof mark.letters !== "string" ||
+    mark.letters.length > 128 ||
+    !iconIds.includes(mark.icon) ||
+    !hex(mark.foreground) ||
+    !hex(mark.background) ||
+    !["square", "rounded", "circle"].includes(mark.shape) ||
+    !["contain", "cover"].includes(mark.fit) ||
+    !validAsset(mark.image, branding)
+  )
+    return false;
+  if (mark.kind === "image") return !!mark.image;
+  if (contrast(mark.foreground, mark.background) < 4.5) return false;
+  if (mark.kind !== "letters") return true;
+  const letters = Array.from(
+    new Intl.Segmenter("ru", { granularity: "grapheme" }).segment(mark.letters),
+    (part) => part.segment,
+  );
+  return (
+    letters.length === mark.count &&
+    letters.every(
+      (letter) =>
+        !/[\s\p{Cc}]/u.test(letter) && !/^[\p{M}\p{C}]+$/u.test(letter),
+    )
+  );
+}
+function validExpandedDesign(design, branding) {
+  if (
+    !record(design.marks) ||
+    !validMark(design.marks.common, branding) ||
+    ![design.marks.light, design.marks.dark].every(
+      (mark) => mark === null || validMark(mark, branding),
+    ) ||
+    !record(design.favicon) ||
+    !["auto", "logo", "image"].includes(design.favicon.mode) ||
+    !validAsset(design.favicon.image, branding) ||
+    (design.favicon.mode === "image" && !design.favicon.image) ||
+    !record(design.colors) ||
+    !record(design.radii) ||
+    !["dark", "gray", "light"].includes(design.initial_theme) ||
+    typeof design.documentation_url !== "string" ||
+    !validBrandUrl(design.documentation_url)
+  )
+    return false;
+  for (const mode of ["dark", "gray", "light"]) {
+    const colors = design.colors[mode];
+    if (!record(colors) || !hex(colors.primary) || !hex(colors.accent))
+      return false;
+    if (
+      [themes[mode].background, themes[mode].surface].some(
+        (background) =>
+          contrast(colors.primary, background) < 3 ||
+          contrast(colors.accent, background) < 4.5,
+      )
+    )
+      return false;
+  }
+  for (const [key, max] of Object.entries({
+    control: 12,
+    menu: 16,
+    dialog: 24,
+    card: 24,
+    mark: 16,
+  }))
+    if (
+      !Number.isInteger(design.radii[key]) ||
+      design.radii[key] < 0 ||
+      design.radii[key] > max
+    )
+      return false;
+  return true;
+}
+
 /** Reject unsupported design versions instead of silently dropping their settings. */
 export function normalizeBranding(payload) {
   if (!payload || typeof payload !== "object") return null;
@@ -131,10 +252,28 @@ export function normalizeBranding(payload) {
   )
     return null;
   if (value.surface_color != null && !hex(value.surface_color)) return null;
+  if (
+    new TextEncoder().encode(value.product_name).length > 80 ||
+    new TextEncoder().encode(value.product_short_name).length > 24
+  )
+    return null;
+  for (const key of ["logo_url", "favicon_url", "support_url"])
+    if (
+      value[key] != null &&
+      (typeof value[key] !== "string" || !validBrandUrl(value[key]))
+    )
+      return null;
   if (value.design != null) {
     if (typeof value.design !== "object") return null;
-    for (const [key, allowed] of Object.entries(brandingPresets))
-      if (!allowed.some((item) => item === value.design[key])) return null;
+    const expanded = Object.hasOwn(value.design, "marks");
+    for (const [key, allowed] of Object.entries(brandingPresets)) {
+      const choice =
+        key !== "version" && value.design[key] === undefined
+          ? defaultDesign[key]
+          : value.design[key];
+      if (!allowed.some((item) => item === choice)) return null;
+    }
+    if (expanded && !validExpandedDesign(value.design, value)) return null;
   }
   return /** @type {Branding} */ ({
     product_name: value.product_name,
@@ -147,7 +286,7 @@ export function normalizeBranding(payload) {
     primary_color: value.primary_color,
     accent_color: value.accent_color,
     surface_color: value.surface_color ?? null,
-    design: { ...(value.design ?? defaultDesign) },
+    design: { ...defaultDesign, ...(value.design ?? {}) },
   });
 }
 
@@ -157,6 +296,9 @@ export function resolveBrandingTokens(branding, theme = "dark") {
   if (!value) throw new Error("Unsupported or invalid branding document");
   const mode = Object.hasOwn(themes, theme) ? theme : "dark";
   const colors = { ...themes[mode] };
+  const selected = value.design?.colors?.[mode];
+  const primary = selected?.primary ?? value.primary_color;
+  const accent = selected?.accent ?? value.accent_color;
   if (value.surface_color)
     for (const key of ["background", "surface", "surface-raised"])
       colors[key] = mix(colors[key], value.surface_color, 0.08);
@@ -176,19 +318,21 @@ export function resolveBrandingTokens(branding, theme = "dark") {
   ])
     colors[key] = readable(colors[key], backgrounds, 4.5);
   colors["border-strong"] = readable(colors["border-strong"], backgrounds, 3);
-  const action = readable(value.primary_color, backgrounds, 4.5);
-  const highlight = readable(value.accent_color, backgrounds, 4.5);
+  const action = readable(primary, backgrounds, 4.5);
+  const highlight = readable(accent, backgrounds, 4.5);
   const design = value.design ?? defaultDesign;
   const large = design.type_scale === "large";
-  const radius = { square: 0, standard: 6, rounded: 12 }[design.radius];
+  const radius =
+    design.radii?.control ??
+    { square: 0, standard: 6, rounded: 12 }[design.radius];
   const density = design.density;
   const tokens = Object.fromEntries(
     Object.entries(colors).map(([key, color]) => ["--color-" + key, color]),
   );
   Object.assign(tokens, {
-    "--platform-primary": value.primary_color,
-    "--platform-primary-foreground": foreground(value.primary_color),
-    "--platform-accent": value.accent_color,
+    "--platform-primary": primary,
+    "--platform-primary-foreground": foreground(primary),
+    "--platform-accent": accent,
     "--platform-surface": value.surface_color ?? colors.surface,
     "--color-accent": action,
     "--color-accent-foreground": foreground(action),
@@ -201,10 +345,10 @@ export function resolveBrandingTokens(branding, theme = "dark") {
       mix(action, mode === "light" ? "#000000" : "#ffffff", 0.12),
     ),
     "--color-highlight": highlight,
-    "--color-selection": mix(colors.surface, value.accent_color, 0.14),
+    "--color-selection": mix(colors.surface, accent, 0.14),
     "--color-selection-foreground": readable(
       colors["text-primary"],
-      [mix(colors.surface, value.accent_color, 0.14)],
+      [mix(colors.surface, accent, 0.14)],
       4.5,
     ),
     "--color-focus": readable(action, backgrounds, 3),
@@ -254,6 +398,19 @@ export function resolveBrandingTokens(branding, theme = "dark") {
     }[density],
     "--shell-control-min": density === "comfortable" || large ? "44px" : "40px",
     "--shell-control-mobile-min": "44px",
+  });
+  Object.assign(tokens, {
+    "--base-radius-card":
+      (design.radii?.card ?? (radius ? radius + 2 : 0)) + "px",
+    "--base-radius-dialog":
+      (design.radii?.dialog ?? (radius ? radius + 2 : 0)) + "px",
+    "--base-radius-menu": (design.radii?.menu ?? radius) + "px",
+    ...Object.fromEntries(
+      Object.entries(design.radii ?? {}).map(([key, value]) => [
+        "--brand-radius-" + key,
+        value + "px",
+      ]),
+    ),
   });
   return tokens;
 }
@@ -330,6 +487,7 @@ export function createBrandingRuntime(options) {
       root.style.setProperty(name, value);
     }
   }
+  let generatedIcon = null;
   const originalIcons =
     root === root.ownerDocument.documentElement
       ? new Map(
@@ -352,6 +510,8 @@ export function createBrandingRuntime(options) {
       return null;
     }
   };
+  const originalMarks = new Map();
+  let identitySequence = 0;
   function identity() {
     if (!active) return;
     for (const title of root.querySelectorAll("[data-base-brand-title]"))
@@ -366,6 +526,29 @@ export function createBrandingRuntime(options) {
         .slice(0, 2)
         .toUpperCase();
     for (const mark of root.querySelectorAll("[data-base-platform-mark]")) {
+      if (branding.design?.marks) {
+        if (!originalMarks.has(mark))
+          originalMarks.set(mark, {
+            nodes: Array.from(mark.childNodes),
+            style: mark.getAttribute("style"),
+            role: mark.getAttribute("role"),
+            label: mark.getAttribute("aria-label"),
+          });
+        paintBrandingMark(mark, branding, root.dataset.theme);
+        continue;
+      }
+      if (originalMarks.has(mark)) {
+        const original = originalMarks.get(mark);
+        mark.replaceChildren(...original.nodes);
+        for (const [name, value] of [
+          ["style", original.style],
+          ["role", original.role],
+          ["aria-label", original.label],
+        ])
+          if (value === null) mark.removeAttribute(name);
+          else mark.setAttribute(name, value);
+        originalMarks.delete(mark);
+      }
       const image = mark.querySelector("img");
       const initials = mark.querySelector("[data-base-brand-initials]");
       const url = safeImage(branding.logo_url);
@@ -376,8 +559,25 @@ export function createBrandingRuntime(options) {
       }
       if (initials instanceof win.HTMLElement) initials.hidden = !!url;
     }
-    for (const [link, original] of originalIcons)
-      link.setAttribute("href", safeImage(branding.favicon_url) ?? original);
+    const identityRequest = ++identitySequence;
+    if (branding.design?.marks && root === root.ownerDocument.documentElement) {
+      if (!originalIcons.size) {
+        generatedIcon = root.ownerDocument.createElement("link");
+        generatedIcon.rel = "icon";
+        root.ownerDocument.head.appendChild(generatedIcon);
+        originalIcons.set(generatedIcon, "");
+      }
+      void brandingFavicon(branding, root.dataset.theme)
+        .then((url) => {
+          if (active && identityRequest === identitySequence && url)
+            for (const [link] of originalIcons) link.setAttribute("href", url);
+        })
+        .catch(() => {
+          /* Retain the confirmed icon when canvas is unavailable. */
+        });
+    } else
+      for (const [link, original] of originalIcons)
+        link.setAttribute("href", safeImage(branding.favicon_url) ?? original);
   }
   root.ownerDocument.addEventListener("DOMContentLoaded", identity);
   function publish() {
@@ -386,7 +586,10 @@ export function createBrandingRuntime(options) {
     onChange({ branding, revision, source });
   }
   publish();
-  const observer = new win.MutationObserver(paint);
+  const observer = new win.MutationObserver(() => {
+    paint();
+    identity();
+  });
   observer.observe(root, { attributes: true, attributeFilter: ["data-theme"] });
   async function refresh() {
     if (!active || !configUrl) return;
@@ -436,14 +639,46 @@ export function createBrandingRuntime(options) {
   void refresh();
   return {
     refresh,
+    applyPublished(payload, validator) {
+      if (!active || !configUrl) return false;
+      const doc = documentValue(payload);
+      if (!doc || (revision !== null && doc.revision < revision)) return false;
+      sequence++;
+      branding = doc.branding;
+      revision = doc.revision;
+      etag = validator ?? null;
+      source = "runtime";
+      if (key && storage)
+        try {
+          storage.setItem(
+            key,
+            JSON.stringify({ etag: etag ?? "", document: doc }),
+          );
+        } catch {
+          /* Storage is optional. */
+        }
+      publish();
+      return true;
+    },
     dispose() {
       active = false;
       sequence++;
       controller.abort();
       observer.disconnect();
+      for (const [mark, original] of originalMarks) {
+        mark.replaceChildren(...original.nodes);
+        for (const [name, value] of [
+          ["style", original.style],
+          ["role", original.role],
+          ["aria-label", original.label],
+        ])
+          if (value === null) mark.removeAttribute(name);
+          else mark.setAttribute(name, value);
+      }
       root.ownerDocument.removeEventListener("DOMContentLoaded", identity);
       for (const [link, original] of originalIcons)
         link.setAttribute("href", original);
+      generatedIcon?.remove();
       if (timer !== null) win.clearInterval(timer);
       root.ownerDocument.removeEventListener("visibilitychange", visible);
       win.removeEventListener("focus", visible);

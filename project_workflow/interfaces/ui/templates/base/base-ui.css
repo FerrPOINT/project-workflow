@@ -87,6 +87,9 @@
   --base-panel-padding: 20px;
   --shell-control-min: 40px;
   --shell-control-mobile-min: 44px;
+  --base-radius-card: 8px;
+  --base-radius-dialog: 8px;
+  --base-radius-menu: 6px;
 }
 :root, [data-theme="dark"] {
   color-scheme: dark;
@@ -139,6 +142,9 @@
   --base-panel-padding: 20px;
   --shell-control-min: 40px;
   --shell-control-mobile-min: 44px;
+  --base-radius-card: 8px;
+  --base-radius-dialog: 8px;
+  --base-radius-menu: 6px;
 }
 [data-theme="gray"] {
   color-scheme: dark;
@@ -191,6 +197,9 @@
   --base-panel-padding: 20px;
   --shell-control-min: 40px;
   --shell-control-mobile-min: 44px;
+  --base-radius-card: 8px;
+  --base-radius-dialog: 8px;
+  --base-radius-menu: 6px;
 }
 [data-theme="light"] {
   color-scheme: light;
@@ -243,6 +252,9 @@
   --base-panel-padding: 20px;
   --shell-control-min: 40px;
   --shell-control-mobile-min: 44px;
+  --base-radius-card: 8px;
+  --base-radius-dialog: 8px;
+  --base-radius-menu: 6px;
 }
 
 :root {
@@ -993,7 +1005,7 @@ body > .base-loading-state {
   height: 40px;
   padding: 0 12px;
   border: 1px solid var(--color-border-strong);
-  border-radius: var(--base-radius, 6px);
+  border-radius: var(--base-radius-menu, var(--base-radius, 6px));
   background: var(--color-surface);
   color: var(--color-text-primary);
   font: inherit;
@@ -1560,6 +1572,16 @@ body {
     width: var(--shell-control-mobile-min);
     height: var(--shell-control-mobile-min);
   }
+}
+
+.base-card {
+  border-radius: var(--base-radius-card, var(--base-radius));
+}
+.base-dialog {
+  border-radius: var(--base-radius-dialog, var(--radius-lg));
+}
+.base-menu {
+  border-radius: var(--base-radius-menu, var(--radius-md));
 }
 
 /* Adapter for server-rendered markup. Values come only from canonical tokens. */

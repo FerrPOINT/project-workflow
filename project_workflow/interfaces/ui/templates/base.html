@@ -10,7 +10,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <script>document.documentElement.dataset.platformOrigin={{ platform_origin|default('')|tojson }};{% include 'base/platform-navigation.js' %}</script>
 <script>{% include 'profession-navigation.js' %}</script>
-<title>{% block title %}Workflow Engine{% endblock %}</title>
+<title data-base-brand-title="Workflow Engine">{% block title %}Workflow Engine{% endblock %}</title>
 <script>{% include "base/theme-preference.js" %}
 document.documentElement.dataset.theme=window.PdlcThemePreference.read("workflow-theme");</script>
 <style>

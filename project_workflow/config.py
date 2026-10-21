@@ -39,8 +39,8 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     OPENAI_REASONING_EFFORT: str = "none"
 
+    PLATFORM_BRANDING_URL: str | None = None
     PLATFORM_SERVICES_URL: str = "http://localhost:7771/api/v1/runtime/services"
-    PLATFORM_BRANDING_URL: str = ""
     UI_PLATFORM_ORIGIN: str = ""
 
     AUTH_ISSUER: str = ""
@@ -91,9 +91,16 @@ def get_settings() -> Settings:
 CATALOG_VARIANT = os.environ.get("PROJECT_WORKFLOW_CATALOG_VARIANT", "legacy")
 if CATALOG_VARIANT not in {"legacy", "base", "single-task-v1"}:
     raise ValueError("Unknown managed catalog variant")
-MANAGED_CATALOG_PATH = _pkg_dir / "references" / (
-    "single_task_catalog_v1.json" if CATALOG_VARIANT == "single-task-v1"
-    else "base_sdlc_catalog_v2.json" if CATALOG_VARIANT == "base" else "hermes_sdlc_catalog_v1.json"
+MANAGED_CATALOG_PATH = (
+    _pkg_dir
+    / "references"
+    / (
+        "single_task_catalog_v1.json"
+        if CATALOG_VARIANT == "single-task-v1"
+        else "base_sdlc_catalog_v2.json"
+        if CATALOG_VARIANT == "base"
+        else "hermes_sdlc_catalog_v1.json"
+    )
 )
 LEGACY_UNMANAGED_SEED_PATH = _pkg_dir / "references" / "legacy_unmanaged_seed.json"
 MANAGED_NAMESPACE_WORKFLOW_NAME = "Дефолтный"
