@@ -2,13 +2,27 @@
   "schemaVersion": 1,
   "package": "@pdlc/ui",
   "files": {
-    "base-ui.css": "dad996d7e95187fc32150144382b5de073f67c00d483e3fccac69033a8a9f6b3",
-    "base-ui.js": "2925c6bdafc2bb5a78f652c62342dfe1ff4d94c94ff7ea43eab35f83052ace63",
-    "theme-preference.js": "cd9fee1556e6546bca6b4199ae672091e1ec147d3d383d0cf85c79b2a7f1154c",
-    "macros.html": "b732f209851715b110f70fb3e59f5cd0693afd6dc408a671d3f94d8b8364f2ce",
+    "base-ui.css": "6515576fa06fbf6d971d6cc3a4796050660111775a358fcbab41325d40e8a685",
+    "base-ui.js": "88328a381e0b4c12f070380331812a5afe4636e19b4032a84aca6f6997bdd97a",
+    "theme-preference.js": "266197ad8ff8895aebab44be7494d38a8ab275f3fc883a888726f3f286f9cc52",
+    "macros.html": "9452576d382ae66657a3702962af629459dc1d352958d67458f8246a114494d3",
+    "branding-colors.js": "6865a4bda39f15b2953f132d29344ae86ce6866b806851ef7e6a658b7ca7b8d3",
+    "branding-icons.js": "4f89a6e968986759e6637958679092c3abba896c7bb1c4e6b9009633e31f7600",
+    "branding-marks.js": "89203c9108a8cba74f8da00ea2bee1502137b41c40070ced09c9dd5dea86b9aa",
+    "branding-runtime.js": "cebb8bd4e6f5c9a7f5a14f687d24d8109c5d37684ee9392909429dc7103d9023",
+    "platform-title.js": "6a2d28f5d911b2b0c7b9fddae41cc5a0ea76642998b28b928ee3fe00ef6e9d75",
+    "branding-bootstrap.js": "58b417c90e170ae2d29c7400c8ad612e9fbed83f4db459dca7147525e1fa8c6e",
+    "choice-runtime.js": "f4c855a114299f44048d1af0525261b30964f2dd7fe5dfe0b03669cd204cab89",
     "draft-state.js": "0e0ec1eabdaaf1b43772c62189b9ece38824b4c186122cfbf3c1f85c123c3107",
     "platform-bridge.js": "273e09ddd02c45c3b91540d64cfa5e0b36512e1a39bf7bb3e620b99feefd2ad2",
     "platform-ssr.js": "59e0d8f1a6959f0cf670145ca820c4c3103a65d48aee97cebe1c79a923ca0da9",
-    "platform-navigation.js": "dda0b4476d1985b69af81a5aeeb2a1583eea3345f777435ac8c37eaa336d6298"
+    "platform-navigation.js": "dda0b4476d1985b69af81a5aeeb2a1583eea3345f777435ac8c37eaa336d6298",
+    "fonts/inter-LICENSE.txt": "3b0a5fca3d17942cde889069889dedbbbd075e9b599968c82a95f4d944e9b345",
+    "fonts/inter-cyrillic-wght-normal.woff2": "71d5ee93cc1e9f1d520a3a8b66456de18c7879d8df09d57fcd2eaff75fef0075",
+    "fonts/inter-latin-wght-normal.woff2": "3100e775e8616cd2611beecfa23a4263d7037586789b43f035236a2e6fbd4c62",
+    "fonts/noto-sans-LICENSE.txt": "54ec7b5a35310ad66f9f3091426f7028484cbf9ae1ab5da30122ee412a3009e1",
+    "fonts/noto-sans-cyrillic-wght-normal.woff2": "6ab64433de6077ca5ad31b05420450ce986a616a4ea47b6ad16f3217055dafc3",
+    "fonts/noto-sans-latin-wght-normal.woff2": "51ca196f49a33e79e7870ff88ebd2829a3f627a51e7d690986618f0e7ad2b52d",
+    "fonts/sources.json": "4a82ab55d946b0a1097d2f28316ea1944d54ca33e51fe4199c16ca6c360dd5b4"
   }
 }

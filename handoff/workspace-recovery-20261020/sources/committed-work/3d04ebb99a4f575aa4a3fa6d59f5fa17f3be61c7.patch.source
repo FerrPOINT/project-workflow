@@ -1,0 +1,148 @@
+diff --git a/.env.example b/.env.example
+index e7fa63d..6c44108 100644
+--- a/.env.example
++++ b/.env.example
+@@ -18,7 +18,9 @@ OPENAI_API_KEY=
+ OPENAI_REASONING_EFFORT=none
+ 
+ # Optional service catalog for cross-service links in the header.
+-PLATFORM_SERVICES_URL=http://localhost:7771/api/v1/runtime/services
++# Leave unset for Compose to use host.docker.internal by default.
++# For a process running directly on the host, optionally override:
++# PLATFORM_SERVICES_URL=http://localhost:7771/api/v1/runtime/services
+ 
+ # Optional Central Auth browser SSO. Keep AUTH_ISSUER public/browser-reachable
+ # and AUTH_INTERNAL_BASE_URL reachable from this process/container.
+diff --git a/project_workflow/interfaces/ui/platform_services.py b/project_workflow/interfaces/ui/platform_services.py
+index 2a21131..def54d2 100644
+--- a/project_workflow/interfaces/ui/platform_services.py
++++ b/project_workflow/interfaces/ui/platform_services.py
+@@ -58,11 +58,11 @@ def _normalize(entry: dict[str, Any]) -> dict[str, Any] | None:
+ 
+ 
+ def _with_request_host(services: list[dict[str, Any]], request_url: str | None) -> list[dict[str, Any]]:
+-    """Make localhost fallback targets usable from a remote UI session."""
++    """Rewrite loopback targets for remote browsers, preserving local SSO origins."""
+     if not request_url:
+         return services
+     request_host = urlsplit(request_url).hostname
+-    if not request_host:
++    if not request_host or request_host in {"localhost", "127.0.0.1", "::1"}:
+         return services
+ 
+     adjusted: list[dict[str, Any]] = []
+diff --git a/project_workflow/interfaces/ui/templates/base.html b/project_workflow/interfaces/ui/templates/base.html
+index 9220657..cec2a21 100644
+--- a/project_workflow/interfaces/ui/templates/base.html
++++ b/project_workflow/interfaces/ui/templates/base.html
+@@ -113,7 +113,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
+ .service-menu summary:hover,.service-menu[open] summary{background:var(--surface-hover);color:var(--text);border-color:var(--accent)}
+ .service-menu-chevron{font-size:11px;color:var(--text-muted);transition:transform .15s}
+ .service-menu[open] .service-menu-chevron{transform:rotate(180deg)}
+-.service-menu-popover{position:absolute;right:0;top:calc(100% + 8px);z-index:250;width:260px;max-width:calc(100vw - 24px);padding:6px;background:var(--surface);border:1px solid var(--border-strong);border-radius:8px;box-shadow:0 16px 40px rgba(0,0,0,.45)}
++.service-menu-popover{position:absolute;left:0;right:auto;top:calc(100% + 8px);z-index:250;width:260px;max-width:calc(100vw - 24px);max-height:calc(100dvh - var(--header-height) - 16px);overflow-y:auto;overscroll-behavior:contain;padding:6px;background:var(--surface);border:1px solid var(--border-strong);border-radius:8px;box-shadow:0 16px 40px rgba(0,0,0,.45)}
+ .service-menu-item{min-height:40px;padding:8px 10px;border-radius:6px;display:flex;align-items:center;gap:10px;color:var(--text-secondary);text-decoration:none}
+ .service-menu-item:hover,.service-menu-item:focus-visible{background:var(--surface-hover);color:var(--text);text-decoration:none}
+ .service-menu-item[aria-current="page"]{background:var(--accent-soft);color:var(--text);font-weight:600}
+@@ -302,7 +302,6 @@ textarea{resize:vertical;min-height:60px}
+   .card-value{font-size:22px}
+   .header-title{font-size:14px}
+   .namespace-switcher .namespace-select{min-width:0;flex:1 1 72px}
+-  .service-menu-popover{left:0;right:auto}
+ }
+ 
+ /* ── Side nav lists (workflows / namespaces / phases) ────────────────
+diff --git a/tests/test_docs_quality.py b/tests/test_docs_quality.py
+index 0f54a82..47ff208 100644
+--- a/tests/test_docs_quality.py
++++ b/tests/test_docs_quality.py
+@@ -99,7 +99,9 @@ def test_compose_and_env_example_forward_runtime_settings() -> None:
+     env_example = (ROOT / ".env.example").read_text(encoding="utf-8")
+ 
+     assert "OPENAI_MODEL: ${OPENAI_MODEL:-app-test}" in compose
+-    assert "PLATFORM_SERVICES_URL: ${PLATFORM_SERVICES_URL:-http://localhost:7771/api/v1/runtime/services}" in compose
++    assert (
++        "PLATFORM_SERVICES_URL: ${PLATFORM_SERVICES_URL:-http://host.docker.internal:7771/api/v1/runtime/services}"
++    ) in compose
+     assert "PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON: ${PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON:-}" in compose
+     assert "AUTH_ISSUER: ${AUTH_ISSUER:-}" in compose
+     assert "AUTH_INTERNAL_BASE_URL: ${AUTH_INTERNAL_BASE_URL:-}" in compose
+@@ -107,6 +109,7 @@ def test_compose_and_env_example_forward_runtime_settings() -> None:
+     assert "AUTH_SESSION_SECRET: ${AUTH_SESSION_SECRET:-}" in compose
+     assert "AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}" in compose
+     assert "PLATFORM_SERVICES_URL=http://localhost:7771/api/v1/runtime/services" in env_example
++    assert "\nPLATFORM_SERVICES_URL=" not in env_example
+     assert "PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON=" in env_example
+     assert "AUTH_ISSUER=" in env_example
+     assert "AUTH_INTERNAL_BASE_URL=" in env_example
+diff --git a/tests/test_platform_services.py b/tests/test_platform_services.py
+index 25aeeb4..5a78ba6 100644
+--- a/tests/test_platform_services.py
++++ b/tests/test_platform_services.py
+@@ -3,6 +3,8 @@ import io
+ import json
+ from pathlib import Path
+ 
++import pytest
++
+ from project_workflow.interfaces.ui.platform_services import (
+     ServiceCatalog,
+     _normalize,
+@@ -56,6 +58,19 @@ def test_fallback_preserves_localhost_without_request_url():
+     assert all("localhost" in str(service["url"]) for service in services)
+ 
+ 
++@pytest.mark.parametrize("request_url", [
++    "http://localhost:8812/",
++    "http://127.0.0.1:8812/",
++    "http://[::1]:8812/",
++])
++def test_local_browsing_preserves_canonical_service_origins(request_url):
++    services = load_other_services(None, request_url=request_url)
++
++    assert {service["url"] for service in services} == {
++        service["url"] for service in load_other_services(None)
++    }
++
++
+ def test_service_switcher_is_accessible_and_localizes_health():
+     template = (Path(__file__).parents[1] / "project_workflow/interfaces/ui/templates/base.html").read_text(
+         encoding="utf-8"
+@@ -66,7 +81,7 @@ def test_service_switcher_is_accessible_and_localizes_health():
+     assert "Project Workflow" in template
+     assert "Состояние неизвестно" in template
+     assert "event.key==='Escape'" in template
+-    assert ".service-menu-popover{left:0;right:auto}" in template
++    assert ".service-menu-popover{position:absolute;left:0;right:auto;" in template
+ 
+ 
+ def test_shell_controls_have_mobile_touch_targets_and_sidebar_focus_management():
+@@ -116,9 +131,12 @@ def test_runtime_catalog_order_and_source(monkeypatch):
+     ]}
+     monkeypatch.setattr(ps, "_cached_services", [], raising=False)
+     monkeypatch.setattr(ps, "urlopen", lambda *_args, **_kwargs: Response(json.dumps(payload).encode()))
+-    catalog = load_service_catalog("http://admin/api")
++    catalog = load_service_catalog("http://admin/api", request_url="http://127.0.0.1:8812/tasks")
+     assert catalog.source == "runtime"
+     assert [service["key"] for service in catalog.services] == ["admin-panel", "wiki"]
++    assert [service["url"] for service in catalog.services] == [
++        "http://localhost:7772", "http://localhost:7732",
++    ]
+ 
+ 
+ def test_malformed_runtime_catalog_uses_invalid_fallback(monkeypatch):
+diff --git a/tests/test_runtime_cleanup.py b/tests/test_runtime_cleanup.py
+index 0ba2799..502b53e 100644
+--- a/tests/test_runtime_cleanup.py
++++ b/tests/test_runtime_cleanup.py
+@@ -91,7 +91,9 @@ def test_compose_forwards_configurable_evaluator_and_runtime_configuration_to_ap
+     assert "OPENAI_MAX_TOKENS: ${OPENAI_MAX_TOKENS:-4000}" in compose
+     assert "OPENAI_API_KEY: ${OPENAI_API_KEY:-}" in compose
+     assert "OPENAI_REASONING_EFFORT: ${OPENAI_REASONING_EFFORT:-none}" in compose
+-    assert "PLATFORM_SERVICES_URL: ${PLATFORM_SERVICES_URL:-http://localhost:7771/api/v1/runtime/services}" in compose
++    assert (
++        "PLATFORM_SERVICES_URL: ${PLATFORM_SERVICES_URL:-http://host.docker.internal:7771/api/v1/runtime/services}"
++    ) in compose
+     assert "PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON: ${PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON:-}" in compose
+ 
+ 

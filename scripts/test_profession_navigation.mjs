@@ -60,18 +60,24 @@ test('invalid legacy profession is not silently converted into all projects', ()
 test('loading stored profession fields resets the leave guard after the form is populated', () => {
   const template = readFileSync(new URL('../project_workflow/interfaces/ui/templates/namespaces.html', import.meta.url), 'utf8');
   const fill = template.match(/function fillNamespaceForm\(namespace\)\{([\s\S]*?)\n\}/)[1];
-  const fields = new Map(['namespaceIconSelect', 'namespaceName', 'namespaceCliCommand', 'namespaceDescription', 'namespaceLaunchProfile', 'namespaceThemeColor', 'namespaceForm'].map(id => [id, {}]));
+  const fields = new Map(['namespaceThemeIcon', 'namespaceName', 'namespaceCliCommand', 'namespaceDescription', 'namespaceLaunchProfile', 'namespaceThemeColor', 'namespaceForm'].map(id => [id, {}]));
   const saved = [];
-  const context = { document: { getElementById: id => fields.get(id), querySelectorAll: () => [] }, window: { SdlcPlatformNavigation: { saved: form => saved.push({ form, name: fields.get('namespaceName').value, color: fields.get('namespaceThemeColor').value }) } }, updateNamespaceThemePreview() {}, defaultNamespaceThemeIcon: 'folder', defaultNamespaceThemeColor: '#000' };
+  const context = { document: { getElementById: id => fields.get(id), querySelectorAll: () => [] }, window: { SdlcPlatformNavigation: { saved: form => saved.push({ form, name: fields.get('namespaceName').value, icon: fields.get('namespaceThemeIcon').value, color: fields.get('namespaceThemeColor').value }) } }, updateNamespaceThemePreview() {}, defaultNamespaceThemeIcon: 'folder', defaultNamespaceThemeColor: '#000' };
   vm.runInNewContext(bootstrap, context);
   assert.equal(context.window.PdlcPlatformNavigation, context.window.SdlcPlatformNavigation);
-  vm.runInNewContext('function fillNamespaceForm(namespace){' + fill + '} fillNamespaceForm({name:"Analyst",theme_color:"#123456"});', context);
+  vm.runInNewContext('function fillNamespaceForm(namespace){' + fill + '} fillNamespaceForm({name:"Analyst",theme_icon:"rocket",theme_color:"#123456"});', context);
   assert.equal(saved.length, 1);
   assert.equal(saved[0].form, fields.get('namespaceForm'));
   assert.equal(saved[0].name, 'Analyst');
   assert.equal(saved[0].color, '#123456');
+  assert.equal(saved[0].icon, 'rocket');
   fields.get('namespaceName').value = 'Unsaved edit';
   assert.equal(saved[0].name, 'Analyst');
+  vm.runInNewContext('fillNamespaceForm(null);', context);
+  assert.equal(saved.length, 2);
+  assert.equal(saved[1].name, '');
+  assert.equal(saved[1].icon, 'folder');
+  assert.equal(saved[1].color, '#000');
 });
 
 for (const name of ['PdlcPlatformNavigation', 'SdlcPlatformNavigation']) test(`SSR bootstrap preserves the existing ${name} controller`, () => {

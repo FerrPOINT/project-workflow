@@ -107,7 +107,7 @@ def test_missing_or_unknown_effects_never_broaden_authority_or_invent_proposal_k
     assert "attachment operation" not in terminal and "attachment delete" not in terminal
 
 
-def test_pm_text_and_confirmation_order_are_unchanged_except_registration_wording(generated):
+def test_pm_authority_and_exact_confirmation_precede_backlog_ready_handoff(generated):
     # A private scope regression checksum, not a public catalog/manifest/profile pin.
     terminal = instructions.terminal_instruction("project_manager")
     current = (
@@ -117,12 +117,10 @@ def test_pm_text_and_confirmation_order_are_unchanged_except_registration_wordin
     assert terminal.count(current) == 1
     pm_text = [
         instructions.context_instruction("project_manager"), terminal.replace(current, historical),
-        instructions.FIRST_STEP, instructions.PM_PHASE_REPORT, instructions.PM_PUBLISH_INSTRUCTION,
-        instructions.PM_CONFIRMATION_INSTRUCTIONS, instructions.PM_CONFIRMATION_CHECKS,
-        instructions.PM_CONFIRMATION_EVIDENCE,
+        instructions.FIRST_STEP, instructions.PM_PHASE_REPORT, instructions.PM_CONFIRMATION_INSTRUCTIONS,
     ]
     assert hashlib.sha256(json.dumps(pm_text, ensure_ascii=True).encode()).hexdigest() == (
-        "d8604de3f2e303701f76fcb50fc0b5c095d67a54ea516245c1d5471c7b435644"
+        "78c5242a1451c621ec820ba0e9152ef66670de8a9a082a36c781913ecc1755c9"
     )
     catalog, _ = generated
     phases = mode_for(catalog, "project_manager", "draft")["phases"]
@@ -133,9 +131,10 @@ def test_pm_text_and_confirmation_order_are_unchanged_except_registration_wordin
         "requirements review all remain inside draft", "requirements_revision=null", "requirements_sha256=null",
         "same execution/assignment/cycle", "PM Workflow NOT completed", "FULL server-saved requirements document",
         "input_kind answer|feedback|confirmation", "Any document change invalidates earlier consent",
-        "PM does not dispatch Analyst", "Backlog / Ready", "Analysis / Ready",
+        "PM does not dispatch Analyst", "Backlog / Ready only", "do not request an Analysis intent",
     ):
         assert required in text
+    assert "then Analysis / Ready" not in text and "Analyst reserve remains blocked" not in text
     assert text.count(instructions.PM_CRITICAL_REVIEW) == 1
     ordinary = text.replace(instructions.PM_CRITICAL_REVIEW, "")
     assert "task-tracker attachment" not in ordinary and "proposal.idempotency_key" not in text

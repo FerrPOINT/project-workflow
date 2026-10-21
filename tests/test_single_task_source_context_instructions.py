@@ -137,10 +137,10 @@ def test_devops_uses_accepted_descriptor_not_preloaded_or_new_build_substitute(g
 
 
 @pytest.mark.parametrize("role,mode", [("project_manager", "draft"), *MODES])
-def test_original_first_step_and_final_workflow_tracker_handoff_are_byte_identical(generated, role, mode):
-    # UTF-8 text digests of the shipped abe4 catalog, not execution or native proof.
+def test_first_step_and_role_specific_final_handoffs_are_pinned(generated, role, mode):
+    # First step and six technical handoffs stay frozen; PM stops at owner-confirmed Backlog Ready.
     terminal_hashes = {
-        "project_manager": "4b4e9c4cd49d85364321f5e7dbd14af77d828d89ff2351248178450516f63cc7",
+        "project_manager": "fd12a1cc127074935f9e8cfdd392528df240569af14e96af06324035d3681f60",
         "analyst": "7d7467473ec382e374cadb5ee233c2460030414c1730efcee10b421817c35862",
         "architect": "1fca5c6eff98972d51251417186afc743ae53fcedf53de064916c35469cc95ef",
         "developer": "8494c25be76b6a2181077e4ade19aacd9cc8bfd06a07a077efc7d4543681e5d2",
@@ -240,12 +240,12 @@ def test_tester_and_devops_propagate_accepted_predecessor_reports_not_synthetic_
         assert terminal.index(source) < terminal.index("task-tracker attachment upload")
 
 
-def test_initial_pm_and_single_task_inventory_are_unchanged(generated):
+def test_conditional_pm_brief_and_single_task_inventory_are_pinned(generated):
     catalog, manifest = generated
     assert manifest["inventory"] == {"namespaces": 7, "workflows": 7, "modes": 8, "phases": 24}
     assert manifest["task_identity"] == {"task_equals_root": True, "children": False, "decomposition_barriers": False}
     assert manifest["roles"]["project_manager"]["role_instructions_sha256"] == (
-        "b363961b2a49d24a259d57f53e6febb06ff53a1605ffd9683a88eacd6ceabae1"
+        "aa1ab76d3752bf91510aeaddbcbf9b0713f656f677d75de0db9c226eae657152"
     )
     assert len(catalog["workflows"]) == 7
     assert sum(len(w["modes"]) for w in catalog["workflows"]) == 8

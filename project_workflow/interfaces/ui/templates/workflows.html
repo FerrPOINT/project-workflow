@@ -55,7 +55,7 @@
 .phase-view-switch button{min-height:40px;padding:0 12px;border:0;border-radius:4px;background:transparent;color:var(--text-secondary);font:inherit;font-size:13px;cursor:pointer}
 .phase-view-switch button[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent-readable);font-weight:600}
 .phase-view-switch button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.phase-jump-select{flex:0 1 240px;min-width:180px;min-height:40px;max-width:100%}
+.phase-jump-select{flex:0 1 240px;min-width:180px;max-width:100%}
 .empty-note{color:var(--text-dim);font-size:13px;line-height:1.6}
 .timeline{display:flex;flex-direction:column;align-items:stretch;max-width:none;gap:0}
 .timeline-block,.timeline-item{width:100%}
@@ -141,7 +141,7 @@
 <div class="workflow-crud {% if workflows|length == 0 %}is-empty{% endif %}" id="workflowCrud">
   <div class="workflow-picker" id="workflowPicker">
     <label class="label" for="workflowSelect">Воркфлоу</label>
-    <select id="workflowSelect" onchange="selectWorkflow(Number(this.value))">
+    <select data-base-choice id="workflowSelect" onchange="selectWorkflow(Number(this.value))">
       <option value="" disabled>Выберите воркфлоу</option>
       {% for workflow in workflows %}
       <option value="{{ workflow.id }}" {% if selected_workflow and selected_workflow.id == workflow.id %}selected{% endif %}>{{ workflow.name }}</option>
@@ -193,10 +193,10 @@
           <button type="button" data-phase-view="timeline" aria-pressed="{{ 'false' if phase_count >= 8 else 'true' }}" onclick="setPhaseView('timeline')">Схема</button>
         </div>
         {% if phase_count >= 8 %}
-        <select id="phaseJump" class="phase-jump-select" aria-label="Перейти к фазе" onchange="jumpToPhase(this)">
+        <div class="phase-jump-select"><select data-base-choice id="phaseJump" aria-label="Перейти к фазе" onchange="jumpToPhase(this)">
           <option value="">Перейти к фазе</option>
           {% for phase in phases %}<option value="{{ phase.id }}">{{ phase.name }}</option>{% endfor %}
-        </select>
+        </select></div>
         {% endif %}
       </div>
       {% endif %}
@@ -216,7 +216,7 @@
       </div>
       <div class="mode-picker">
         <label class="label" for="modeSelect">Режим</label>
-        <select id="modeSelect" data-testid="workflow-mode-select" aria-label="Режим воркфлоу" onchange="selectMode(this.value)">
+        <select data-base-choice id="modeSelect" data-testid="workflow-mode-select" aria-label="Режим воркфлоу" onchange="selectMode(this.value)">
           {% for mode in modes %}
           <option value="{{ mode.id }}" {% if selected_mode_id == mode.id %}selected{% endif %}>{{ mode.name }}</option>
           {% endfor %}
@@ -306,6 +306,7 @@ function syncWorkflowNav(){
   var picker = document.getElementById('workflowSelect');
   picker.options[0].textContent = workflowFormMode === 'create' ? 'Новый воркфлоу' : 'Выберите воркфлоу';
   picker.value = selectedWorkflowId == null ? '' : String(selectedWorkflowId);
+  window.PdlcChoice?.refreshChoice(picker);
 }
 function fillWorkflowForm(workflow){
   document.getElementById('workflowName').value = workflow ? workflow.name : '';
@@ -534,8 +535,8 @@ function setWorkflowWritePending(pending){
   workflowWritePending = pending;
   var form = document.getElementById('workflowForm');
   form.setAttribute('aria-busy', String(pending));
-  form.querySelectorAll('input,textarea,button').forEach(function(control){ control.disabled = pending; });
-  document.querySelectorAll('#workflowSelect, #workflowNav button, #newWorkflowButton').forEach(function(control){ control.disabled = pending; });
+  form.querySelectorAll('input,textarea,select,button').forEach(function(control){ control.disabled = pending; if (control.matches('select[data-base-choice]')) window.PdlcChoice?.refreshChoice(control); });
+  document.querySelectorAll('#workflowSelect, #workflowNav button, #newWorkflowButton').forEach(function(control){ control.disabled = pending; if (control.matches('select[data-base-choice]')) window.PdlcChoice?.refreshChoice(control); });
   setWorkflowFormMode(workflowFormMode);
 }
 function submitWorkflow(){

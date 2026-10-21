@@ -1,0 +1,79 @@
+"""Narrow HMAC-only project worker transport; never constructs a local DB client."""
+
+import json
+import os
+import re
+import time
+from pathlib import Path
+from typing import Any
+
+import httpx
+from pydantic import Field
+
+from project_workflow.domain.bug_search_catalog import DatabaseId, FrozenCatalogModel
+from project_workflow.domain.bug_search_execution import OperationKey, StepExecution
+from project_workflow.domain.namespace_ownership import UUIDRef
+from project_workflow.infrastructure.namespace_auth import _root, unique_object
+
+
+class ProjectExecutionRequest(FrozenCatalogModel):
+    execution_id: UUIDRef
+    profession_id: DatabaseId
+    step: StepExecution | None = Field(default=None)
+    after_operation_key: OperationKey | None = None
+
+
+def inputs(request_file: Path, token_file: Path | None) -> tuple[ProjectExecutionRequest, str]:
+    if token_file is None or os.environ.get("SDLC_API_TOKEN", "").strip():
+        raise ValueError("Project execution requires only its scoped token file; mixed PAT mode is forbidden")
+    try:
+        with request_file.open("rb") as source:
+            raw = source.read(524_289)
+        with token_file.open("rb") as source:
+            token_raw = source.read(129)
+        if len(raw) > 524_288 or len(token_raw) > 128:
+            raise ValueError
+        content = json.loads(raw, object_pairs_hook=unique_object)
+        request = ProjectExecutionRequest.model_validate_json(json.dumps(content, ensure_ascii=False))
+        token = token_raw.decode("ascii").strip()
+        if not re.fullmatch(r"wf_bug_v1_[0-9a-f]{64}", token):
+            raise ValueError
+        namespace = os.environ.get("PROJECT_WORKFLOW_NAMESPACE_ID", "")
+        if namespace != str(request.profession_id):
+            raise ValueError
+    except (OSError, ValueError, UnicodeError, RecursionError):
+        raise ValueError("Invalid project execution request, profession wrapper or token file") from None
+    return request, token
+
+
+def execute(request: ProjectExecutionRequest, token: str, *, history: bool) -> dict[str, Any]:
+    try:
+        root = _root(os.environ.get("PROJECT_WORKFLOW_URL", ""))
+        if history and request.step is not None:
+            raise ValueError("History request cannot contain a step mutation")
+        if not history and request.step is None:
+            raise ValueError("Project step request requires the complete version/fence command")
+        if not history and request.after_operation_key is not None:
+            raise ValueError("History cursor cannot be mixed with a step mutation")
+        path = f"/internal/bug-search/v1/executions/{request.execution_id}/" + ("history" if history else "step")
+        body = request.step.model_dump(mode="json") if request.step is not None else None
+        with httpx.Client(timeout=150, follow_redirects=False, trust_env=False) as client:
+            started = time.monotonic()
+            with client.stream("GET" if history else "POST", root + path, json=body,
+                               params={"after_operation_key": request.after_operation_key}
+                               if history and request.after_operation_key is not None else None, headers={
+                "Authorization": "Bearer " + token, "Accept-Encoding": "identity", "Cache-Control": "no-store",
+            }) as response:
+                if response.status_code != 200 or response.headers.get("Content-Encoding", "identity") != "identity":
+                    raise ValueError("Owner did not confirm project execution")
+                raw = bytearray()
+                for chunk in response.iter_bytes(chunk_size=4096):
+                    raw.extend(chunk)
+                    if len(raw) > 8_388_608 or time.monotonic() - started > 150:
+                        raise ValueError("Project execution response exceeded bounds")
+        value = json.loads(raw, object_pairs_hook=unique_object)
+        if not isinstance(value, dict) or value.get("ok") is not True or not isinstance(value.get("result"), dict):
+            raise ValueError("Invalid project execution response")
+        return value
+    except (ValueError, httpx.HTTPError):
+        raise ValueError("Project execution was not confirmed; no automatic retry or local DB fallback") from None

@@ -1,0 +1,324 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index fe1aa70..7391aa5 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -47,6 +47,12 @@
+ 
+ ### Fixed
+ 
++- Глобальные фазы и каталог до привязки workflow к namespace сохраняют контекст
++  header и переходов, но не подставляют чужой namespace в API-запросы. Возврат
++  в каталог с явным namespace больше не даёт ложный 404. Для workflow другого
++  namespace сохраняются HTML 404 и API 409; публичный API и runtime pins неизменны.
++  Проверка инструкции после неизвестного ACK открывает текущий адрес с namespace,
++  query и hash, не повторяя запись и не теряя черновик.
+ - Namespace create/edit uses unframed Base form fields, spacing and actions;
+   accessible form naming, validation, theme preview and draft safety are preserved.
+ - Jinja sidebar keeps the Workflow product identity while namespace context stays
+diff --git a/frontend/e2e/phase-namespace.spec.ts b/frontend/e2e/phase-namespace.spec.ts
+new file mode 100644
+index 0000000..edff99c
+--- /dev/null
++++ b/frontend/e2e/phase-namespace.spec.ts
+@@ -0,0 +1,177 @@
++import { expect, test, type Page } from '@playwright/test'
++
++if (process.env.WORKFLOW_UI_QA_MUTATIONS !== 'isolated-fixture') throw new Error('Phase namespace QA requires an isolated fixture')
++
++let workflows: number[]
++let namespaces: number[]
++let workflowId: number
++let phaseId: number
++let namespaceId: number
++const detail = () => `/phase/${phaseId}?namespace_id=${namespaceId}&foreign=keep`
++const catalogue = () => `/phases?workflow_id=${workflowId}&namespace_id=${namespaceId}`
++const save = (page: Page) => page.evaluate(() => (window as unknown as { savePhase: () => Promise<boolean> }).savePhase())
++
++test.beforeEach(async ({ request }) => {
++  workflows = []
++  namespaces = []
++  for (const kind of ['Context', 'Unassigned']) {
++    const response = await request.post('/api/workflows', { data: { name: `${kind} namespace QA ${crypto.randomUUID()}` } })
++    expect(response.ok()).toBeTruthy()
++    workflows.push((await response.json()).workflow_id as number)
++  }
++  workflowId = workflows[1]
++  const namespace = await request.post('/api/namespaces', { data: { name: `Context QA ${crypto.randomUUID()}`, cli_command: `context-${crypto.randomUUID()}`, workflow_id: workflows[0] } })
++  expect(namespace.ok()).toBeTruthy()
++  namespaceId = (await namespace.json()).namespace_id as number
++  namespaces.push(namespaceId)
++  const phases = await request.get(`/api/phases?workflow_id=${workflowId}`)
++  expect(phases.ok()).toBeTruthy()
++  phaseId = (await phases.json()).phases[0].id as number
++})
++
++test.afterEach(async ({ request }) => {
++  for (const id of namespaces.reverse()) expect((await request.delete(`/api/namespaces/${id}`)).ok()).toBeTruthy()
++  for (const id of workflows.reverse()) expect((await request.delete(`/api/workflows/${id}`)).ok()).toBeTruthy()
++})
++
++for (const theme of ['dark', 'gray', 'light']) {
++  test(`phase namespace global writes and navigation keep independent context (${theme})`, async ({ page, request }, testInfo) => {
++    await page.addInitScript(value => localStorage.setItem('workflow-theme', value), theme)
++    const errors: string[] = []
++    const scope: Array<string | null> = []
++    page.on('pageerror', error => errors.push(error.message))
++    page.on('request', request => {
++      const url = new URL(request.url())
++      if (/^\/api\/(phases|instructions)(\/|$)/.test(url.pathname)) scope.push(url.searchParams.get('namespace_id'))
++    })
++    const widths = testInfo.project.name === 'desktop' ? [1023, 1024, 1279, 1280, 1440, 1920, 2560] : [375, 767, 768]
++    for (const width of widths) {
++      await page.setViewportSize({ width, height: 1080 })
++      expect((await page.goto(detail()))!.status()).toBe(200)
++      await page.reload()
++      await expect(page.locator('#namespaceSelector')).toHaveValue(String(namespaceId))
++      await expect(page.locator('[data-page-layout]')).toHaveAttribute('data-page-layout', 'detail-with-aside')
++      expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBe(0)
++      if ([375, 1920].includes(width)) await page.screenshot({ path: testInfo.outputPath(`global-phase-${theme}-${width}.png`), fullPage: true })
++    }
++    await page.locator('.wiki-header [data-field="name"]').fill('Editable global phase')
++    expect(await save(page)).toBe(true)
++    await expect(page.locator('#phaseSaveStatus')).toBeHidden()
++    expect((await (await request.get(`/api/phases/${phaseId}`)).json()).phase.name).toBe('Editable global phase')
++    const before = (await (await request.get(`/api/phases/${phaseId}/instructions`)).json()).instructions.length as number
++    await page.getByRole('button', { name: '+ Добавить шаг', exact: true }).click()
++    await expect(page.locator('.timeline-item')).toHaveCount(before + 1)
++    await expect(page.locator('#namespaceSelector')).toHaveValue(String(namespaceId))
++    expect(new URL(page.url()).searchParams.get('foreign')).toBe('keep')
++    await page.goto(`/instructions?phase_id=${phaseId}&namespace_id=${namespaceId}&foreign=keep`)
++    await page.locator('#newInstructionText').fill('Global editor instruction')
++    await page.locator('#addInstructionButton').click()
++    await expect(page.locator('.instruction-text').last()).toHaveValue('Global editor instruction')
++    await page.getByRole('link', { name: '← К фазе', exact: true }).click()
++    await expect(page.locator('.wiki-header [data-field="name"]')).toHaveValue('Editable global phase')
++    await page.getByRole('link', { name: '← Назад к фазам', exact: true }).click()
++    await expect(page.locator('#phasesTimeline')).toBeVisible()
++    await expect(page.locator('#namespaceSelector')).toHaveValue(String(namespaceId))
++    if (testInfo.project.name === 'desktop') await page.setViewportSize({ width: 1920, height: 1080 })
++    else await page.setViewportSize({ width: 375, height: 1080 })
++    await page.screenshot({ path: testInfo.outputPath(`global-catalogue-${theme}-${page.viewportSize()!.width}.png`), fullPage: true })
++    const initial = await page.locator('#phasesTimeline .timeline-item').count()
++    await page.locator('.phase-add-btn').last().click()
++    await expect(page.locator('#phasesTimeline .timeline-item')).toHaveCount(initial + 1)
++    expect((await (await request.get(`/api/phases?workflow_id=${workflowId}`)).json()).phases).toHaveLength(initial + 1)
++    expect(new URL(page.url()).searchParams.get('namespace_id')).toBe(String(namespaceId))
++    expect(scope.length).toBeGreaterThan(0)
++    expect(scope.every(value => value === null)).toBe(true)
++    expect(errors).toEqual([])
++  })
++}
++
++test('phase namespace cookie-only global catalog stays editable through reload and Back', async ({ page }) => {
++  await page.goto(`/phases?namespace_id=${namespaceId}`)
++  const url = `/phases?workflow_id=${workflowId}&foreign=keep`
++  expect((await page.goto(url))!.status()).toBe(200)
++  await page.reload()
++  await expect(page.locator('#namespaceSelector')).toHaveValue(String(namespaceId))
++  const count = await page.locator('#phasesTimeline .timeline-item').count()
++  await page.locator('.phase-add-btn').last().click()
++  await expect(page.locator('#phasesTimeline .timeline-item')).toHaveCount(count + 1)
++  await page.locator('#phasesTimeline .timeline-card').first().click()
++  await expect(page.locator('.wiki-page')).toBeVisible()
++  await page.goBack()
++  await expect(page.locator('#phasesTimeline')).toBeVisible()
++  expect(new URL(page.url()).searchParams.get('foreign')).toBe('keep')
++  await expect(page.locator('#namespaceSelector')).toHaveValue(String(namespaceId))
++})
++
++test('phase namespace assigned foreign workflows keep HTML and API scope restrictions', async ({ page, request }) => {
++  const namespace = await request.post('/api/namespaces', { data: { name: `Foreign QA ${crypto.randomUUID()}`, cli_command: `foreign-${crypto.randomUUID()}`, workflow_id: workflowId } })
++  expect(namespace.ok()).toBeTruthy()
++  namespaces.push((await namespace.json()).namespace_id as number)
++  for (const route of [catalogue(), detail(), `/instructions?phase_id=${phaseId}&namespace_id=${namespaceId}`]) {
++    expect((await page.goto(route))!.status()).toBe(404)
++    await expect(page.locator('[data-page-state="not-found"]')).toBeVisible()
++    await expect(page.locator('#phasesTimeline,.wiki-page,#instructionsLayout')).toHaveCount(0)
++  }
++  const url = `/api/phases/${phaseId}?namespace_id=${namespaceId}`
++  expect((await request.get(url)).status()).toBe(409)
++  expect((await request.put(url, { data: { name: 'Forbidden foreign update' } })).status()).toBe(409)
++  expect((await request.post(`/api/instructions?namespace_id=${namespaceId}`, { data: { phase_id: phaseId, description: 'Forbidden foreign child' } })).status()).toBe(409)
++  expect((await (await request.get(`/api/phases/${phaseId}`)).json()).phase.name).not.toBe('Forbidden foreign update')
++})
++
++test('phase namespace matching assignment still scopes native GET and PUT', async ({ page, request }) => {
++  const namespace = await request.post('/api/namespaces', { data: { name: `Owner QA ${crypto.randomUUID()}`, cli_command: `owner-${crypto.randomUUID()}`, workflow_id: workflowId } })
++  expect(namespace.ok()).toBeTruthy()
++  const ownerId = (await namespace.json()).namespace_id as number
++  namespaces.push(ownerId)
++  const scopes: Array<string | null> = []
++  page.on('request', request => {
++    const url = new URL(request.url())
++    if (url.pathname === `/api/phases/${phaseId}`) scopes.push(url.searchParams.get('namespace_id'))
++  })
++  await page.goto(`/phase/${phaseId}?namespace_id=${ownerId}`)
++  await page.locator('.wiki-header [data-field="name"]').fill('Scoped owner phase')
++  expect(await save(page)).toBe(true)
++  expect(scopes).toEqual([String(ownerId), String(ownerId)])
++  await expect(page.locator('#namespaceSelector')).toHaveValue(String(ownerId))
++})
++
++test('phase namespace unknown instruction inspection preserves navigation context', async ({ page }) => {
++  await page.goto(`/instructions?phase_id=${phaseId}&namespace_id=${namespaceId}&foreign=keep#instructionsLayout`)
++  const contextUrl = page.url()
++  let writes = 0
++  await page.route('**/api/instructions*', async route => {
++    if (route.request().method() !== 'POST') return route.continue()
++    writes += 1
++    const response = await route.fetch()
++    expect(response.ok()).toBeTruthy()
++    await route.fulfill({ response, json: { ok: true } })
++  })
++  await page.locator('#newInstructionText').fill('Unknown global instruction')
++  await page.locator('#addInstructionButton').click()
++  await expect(page.locator('#instructionReconcileButton')).toBeVisible()
++  await page.locator('#instructionReconcileButton').click()
++  const candidate = page.locator('#instructionReadbackCandidates a')
++  await expect(candidate).toHaveCount(1)
++  expect(new URL((await candidate.getAttribute('href'))!, page.url()).href).toBe(contextUrl)
++  await expect(candidate).toHaveAttribute('target', '_blank')
++  await expect(page.locator('#addInstructionButton')).toBeDisabled()
++  await expect(page.locator('#newInstructionText')).toHaveValue('Unknown global instruction')
++  expect(writes).toBe(1)
++})
++
++test('phase namespace contextual UI workflow creation remains editable before binding', async ({ page }) => {
++  await page.goto(`/workflows?workflow_mode=create&namespace_id=${namespaceId}&foreign=keep`)
++  await page.locator('#workflowName').fill(`UI context workflow ${crypto.randomUUID()}`)
++  await page.locator('#workflowSubmitButton').click()
++  await expect(page).toHaveURL(/\/phases\?workflow_id=\d+/)
++  const id = Number(new URL(page.url()).searchParams.get('workflow_id'))
++  workflows.push(id)
++  await expect(page.locator('#namespaceSelector')).toHaveValue(String(namespaceId))
++  const initial = await page.locator('#phasesTimeline .timeline-item').count()
++  await page.locator('.phase-add-btn').last().click()
++  await expect(page.locator('#phasesTimeline .timeline-item')).toHaveCount(initial + 1)
++  await page.locator('#phasesTimeline .timeline-card').first().click()
++  await page.locator('.wiki-header [data-field="name"]').fill('New workflow editable phase')
++  expect(await save(page)).toBe(true)
++})
+diff --git a/project_workflow/interfaces/ui/routes/pages.py b/project_workflow/interfaces/ui/routes/pages.py
+index 22c7221..7fc3305 100644
+--- a/project_workflow/interfaces/ui/routes/pages.py
++++ b/project_workflow/interfaces/ui/routes/pages.py
+@@ -456,7 +456,8 @@ async def phases_page(request: Request) -> HTMLResponse:
+         return _workflow_error_page(request, context, int(workflow_id), page="phases")
+     selected_workflow_has_namespace = bool((selected_workflow or {}).get("namespace_count"))
+     if (
+-        (has_explicit_namespace or (has_cookie_namespace and selected_workflow_has_namespace))
++        (has_explicit_namespace or has_cookie_namespace)
++        and selected_workflow_has_namespace
+         and isinstance(selected_namespace_workflow_id, int)
+         and workflow_id is not None
+         and workflow_id != selected_namespace_workflow_id
+diff --git a/project_workflow/interfaces/ui/templates/instructions.html b/project_workflow/interfaces/ui/templates/instructions.html
+index d765a97..cccaeb1 100644
+--- a/project_workflow/interfaces/ui/templates/instructions.html
++++ b/project_workflow/interfaces/ui/templates/instructions.html
+@@ -263,7 +263,7 @@ async function reconcileInstructionWrite() {
+       if (attempt.kind === 'create' && attempt.receivedId == null) rows.filter(item => instructionMatchesAttempt(item, attempt)).forEach(item => {
+         const link = document.createElement('a');
+         link.className = 'base-control base-button base-button-secondary';
+-        link.href = '/instructions?phase_id=' + PHASE_ID + (selectedNamespaceId === null ? '' : '&namespace_id=' + selectedNamespaceId);
++        link.href = window.location.href;
+         link.target = '_blank'; link.rel = 'noopener';
+         link.textContent = 'Проверить найденную инструкцию (ID ' + item.id + ') в новой вкладке';
+         candidates.appendChild(link);
+diff --git a/project_workflow/interfaces/ui/templates/phase_catalog.js b/project_workflow/interfaces/ui/templates/phase_catalog.js
+index 9e69a17..ff78394 100644
+--- a/project_workflow/interfaces/ui/templates/phase_catalog.js
++++ b/project_workflow/interfaces/ui/templates/phase_catalog.js
+@@ -1,5 +1,5 @@
+ // Product owns phase mutations; Base owns controls, states, dialogs and navigation guards.
+-const phaseNamespaceId={{ selected_namespace.id if selected_namespace else 'null' }};
++const phaseNamespaceId={{ selected_namespace.id if selected_namespace and selected_namespace.workflow_id == selected_workflow_id else 'null' }};
+ let phaseMutationPending=false;
+ let phaseUnknownWrite=null;
+ let phaseTerminalState=null;
+diff --git a/project_workflow/interfaces/ui/templates/phase_detail.html b/project_workflow/interfaces/ui/templates/phase_detail.html
+index 8138117..3255bbb 100644
+--- a/project_workflow/interfaces/ui/templates/phase_detail.html
++++ b/project_workflow/interfaces/ui/templates/phase_detail.html
+@@ -280,7 +280,7 @@
+ const phaseId = {{ phase.id }};
+ const phaseWorkflowId = {{ phase.workflow_id | tojson }};
+ const phaseModeId = {{ phase.mode_id | tojson }};
+-const selectedNamespaceId = {{ selected_namespace.id if selected_namespace else 'null' }};
++const selectedNamespaceId = {{ selected_namespace.id if selected_namespace and selected_namespace.workflow_id == phase.workflow_id else 'null' }};
+ const phaseSectionIds = ['phase-overview', 'phase-instructions', 'phase-checks', 'phase-evidence'];
+ let phaseSectionNavigationLock = null;
+ 
+diff --git a/tests/test_ui.py b/tests/test_ui.py
+index 913ea38..0c9dbd7 100644
+--- a/tests/test_ui.py
++++ b/tests/test_ui.py
+@@ -640,6 +640,15 @@ class TestPhasesPage:
+         )
+         assert workflow.status_code == 200
+         workflow_id = workflow.json()["workflow_id"]
++        namespace = client.post(
++            "/api/namespaces",
++            json={
++                "name": "Foreign phase list namespace",
++                "workflow_id": workflow_id,
++                "cli_command": "workflow-phase-list-foreign",
++            },
++        )
++        assert namespace.status_code == 200
+         phase = client.post(
+             "/api/phases",
+             json={
+@@ -702,7 +711,8 @@ class TestPhasesPage:
+         assert "Cookie foreign phase item" not in response.text
+         assert 'href="/phase/' not in response.text
+ 
+-    def test_phases_page_allows_unassigned_workflow_with_cookie_selected_namespace(self):
++    @pytest.mark.parametrize("explicit_namespace", [False, True])
++    def test_phases_page_allows_unassigned_workflow_with_selected_namespace(self, explicit_namespace):
+         uow = ui_app_state.get_db()
+         namespace_id = _as_dict(uow.projects.get_by_code(config.DEFAULT_PROJECT_CODE))["id"]
+         workflow = client.post(
+@@ -727,7 +737,10 @@ class TestPhasesPage:
+         previous_cookie = client.cookies.get("workflow_namespace_id")
+         client.cookies.set("workflow_namespace_id", str(namespace_id))
+         try:
+-            response = client.get(f"/phases?workflow_id={workflow_id}")
++            route = f"/phases?workflow_id={workflow_id}"
++            if explicit_namespace:
++                route += f"&namespace_id={namespace_id}"
++            response = client.get(route)
+         finally:
+             client.cookies.delete("workflow_namespace_id")
+             if previous_cookie is not None:
+@@ -735,6 +748,8 @@ class TestPhasesPage:
+ 
+         assert response.status_code == 200
+         assert "Cookie unassigned phase item" in response.text
++        assert "const phaseNamespaceId=null;" in response.text
++        assert f'namespace_id={namespace_id}' in response.text
+ 
+     def test_phases_page_filters_by_selected_workflow(self):
+         uow = ui_app_state.get_db()
+@@ -1333,12 +1348,21 @@ class TestPhaseDetail:
+ 
+             phases_page = isolated_client.get(f"/phases?workflow_id={workflow_id}")
+             response = isolated_client.get(f"/phase/{phase_id}?namespace_id={namespace_id}")
++            explicit_catalog = isolated_client.get(f"/phases?workflow_id={workflow_id}&namespace_id={namespace_id}")
++            instructions = isolated_client.get(f"/instructions?phase_id={phase_id}&namespace_id={namespace_id}")
+ 
+         assert phases_page.status_code == 200
+         assert f'href="/phase/{phase_id}?namespace_id={namespace_id}"' in phases_page.text
+         assert response.status_code == 200
+         assert "Новая фаза" in response.text
+         assert "Фаза недоступна в выбранном воркфлоу" not in response.text
++        assert "const selectedNamespaceId = null;" in response.text
++        assert explicit_catalog.status_code == 200
++        assert "const phaseNamespaceId=null;" in explicit_catalog.text
++        assert instructions.status_code == 200
++        assert "const selectedNamespaceId = null;" in instructions.text
++        assert f'href="/phase/{phase_id}?namespace_id={namespace_id}"' in instructions.text
++        assert "link.href = window.location.href;" in instructions.text
+ 
+     def test_phase_detail_hides_next_recommendation_inline_input(self):
+         response = client.get(_phase_detail_path("4.START"))

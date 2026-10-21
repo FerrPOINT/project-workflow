@@ -1,0 +1,75 @@
+diff --git a/docs/UI_UX_MAP.md b/docs/UI_UX_MAP.md
+index d54289e..6a100a2 100644
+--- a/docs/UI_UX_MAP.md
++++ b/docs/UI_UX_MAP.md
+@@ -15,11 +15,13 @@ Fixture IDs обозначают необходимые изолированны
+ 
+ ## Локальный SSR-Кандидат
+ 
+-Base snapshot `9df7dc3`: header расположен над всей рабочей областью;
++Base snapshot `5a78740` (предыдущая проверка: `9df7dc3`): header расположен над всей рабочей областью;
+ sidebar начинается ниже него. В Jinja main больше не содержит header,
+ а подтверждения делают header inert вместе с main и sidebar.
+ SSR export/fingerprint проверен через `pnpm ssr:check`; установленный React
+ пакет проверен `pnpm ui:check` после frozen offline install.
++На объединённом Base повторно прошли installed fingerprint, SSR drift,
++frontend build, lint и 8 tests React-пилота.
+ 
+ На этом исходнике прошли 1517 Python tests с coverage 94,31%, отдельные
+ 38 PostgreSQL integration tests, Ruff, mypy (83 файла) и frontend tests/build.
+@@ -30,3 +32,8 @@ SSR export/fingerprint проверен через `pnpm ssr:check`; устан
+ Текущая `ui-acceptance.json` остаётся pending и содержит предыдущие source
+ fingerprints. Выпускной gate намеренно отклоняет её: новые immutable images,
+ SSO, все роли/состояния и полная browser matrix ещё требуют приёмки.
++Сохранённый default `origin/master=7a720b1` содержит отдельный immutable
++builder и новые runtime-контракты; текущая UI-ветка ещё не объединена с ним.
++Новый launcher Base требует этого builder, поэтому текущий checkout нельзя
++считать совместимым выпускным image. При объединении сохранить обе цепочки
++provenance и включить воспроизводимую React/Base сборку в immutable context.
+diff --git a/docs/quality-gate.md b/docs/quality-gate.md
+index 1ac47a9..457306d 100644
+--- a/docs/quality-gate.md
++++ b/docs/quality-gate.md
+@@ -1,10 +1,13 @@
+ # Quality Gate
+ 
+-Этот файл фиксирует локальный quality gate для `project-workflow`. GitHub Actions
+-в `.github/workflows/ci.yml` повторяет этот обязательный набор на каждом push и
+-pull request в `master`: job `quality` запускает тесты и статический анализ с
+-PostgreSQL 16, а `compose-smoke` собирает стек и проверяет `/health`. Перед
+-commit разработчик всё равно запускает релевантные локальные проверки.
++Этот файл фиксирует локальный quality gate для `project-workflow`.
++Для программы стандартизации UI/UX от 2026-10-01 приёмка и интеграция выполняются
++локально, без зависимости от GitHub Actions, по решению владельца и
++[Base UI/UX Standard](../../services-base/docs/platform/UI_UX_STANDARD.md).
++Наличие `.github/workflows/ci.yml` не заменяет локальные проверки и не является
++дополнительным условием приёмки этой программы. Перед commit запускаются
++релевантные проверки; перед выпуском обязателен полный набор ниже, runtime
++health, согласованные product/Base fingerprints и no-mock browser/SSO evidence.
+ 
+ ## Базовый gate
+ 
+diff --git a/tests/test_docs_quality.py b/tests/test_docs_quality.py
+index f0d2365..52afcde 100644
+--- a/tests/test_docs_quality.py
++++ b/tests/test_docs_quality.py
+@@ -85,6 +85,19 @@ def test_hosted_ci_covers_quality_and_compose_readiness() -> None:
+     # compose readiness checks run locally via make quality / make compose.
+ 
+ 
++def test_ui_standardization_acceptance_is_local_and_keeps_the_full_gate() -> None:
++    quality_gate = (ROOT / "docs" / "quality-gate.md").read_text(encoding="utf-8")
++
++    assert "без зависимости от GitHub Actions" in quality_gate
++    assert "Base UI/UX Standard" in quality_gate
++    assert "no-mock browser/SSO evidence" in quality_gate
++    assert "pytest -q --timeout=60" in quality_gate
++    assert "pytest -q -m integration tests/test_postgres_integration.py --timeout=120" in quality_gate
++    assert "pytest --cov=project_workflow --cov-report=term --timeout=60" in quality_gate
++    assert "ruff check ." in quality_gate
++    assert "mypy project_workflow scripts" in quality_gate
++
++
+ def test_readme_cli_examples_use_configured_wrapper_commands() -> None:
+     readme = (ROOT / "README.md").read_text(encoding="utf-8")
+ 

@@ -1,0 +1,379 @@
+"""Project execution authority; no task or managed task-role assignment exists here."""
+
+import json
+from datetime import datetime, timezone
+from typing import Annotated, Any, Literal
+
+from pydantic import (
+    AfterValidator,
+    Field,
+    SerializerFunctionWrapHandler,
+    StringConstraints,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
+
+from project_workflow.domain.bug_search_catalog import (
+    BugSearchCatalog,
+    BugSearchProfessionPins,
+    FrozenCatalogModel,
+    Purpose,
+    Sha256,
+)
+from project_workflow.domain.bug_target_source import BugTargetSourceIdentity
+from project_workflow.domain.namespace_ownership import InstanceRef, UUIDRef
+from project_workflow.domain.runtime_assignment import payload_sha256
+
+Version = Annotated[int, Field(strict=True, gt=0, le=(1 << 53) - 1)]
+
+
+def bounded_text(value: str) -> str:
+    if not value.strip() or "\0" in value:
+        raise ValueError("Nonblank text without NUL required")
+    return value
+
+
+Subject = Annotated[
+    str, StringConstraints(strict=True, min_length=1, max_length=256), AfterValidator(bounded_text),
+]
+Reference = Annotated[
+    str, StringConstraints(strict=True, min_length=1, max_length=512), AfterValidator(bounded_text),
+]
+OperationKey = Annotated[
+    str, StringConstraints(strict=True, pattern=r"^[^\s\x00-\x1f\x7f-\x9f]{1,128}$"),
+]
+
+
+class ProjectRef(FrozenCatalogModel):
+    tracker_instance_id: InstanceRef
+    project_id: UUIDRef
+
+
+class ExecutionBinding(FrozenCatalogModel):
+    """Exact Tracker wire tuple, received from its fixed credentialed readback."""
+
+    contract_version: Literal[1]
+    tracker_instance_id: InstanceRef
+    tracker_instance_uuid: UUIDRef
+    project_id: UUIDRef
+    owner_subject: Subject
+    execution_id: UUIDRef
+    agent_id: UUIDRef
+    purpose: Purpose
+    snapshot_sha256: Sha256
+    policy_revision: Version
+    fence: Version
+    machine_subject: Subject
+    grant_ref: UUIDRef
+    bug_id: UUIDRef | None
+    expected_delivery_ref: Reference | None
+
+    @field_validator("contract_version", mode="before")
+    @classmethod
+    def strict_version(cls, value: object) -> object:
+        if type(value) is not int:
+            raise ValueError("Integer contract version required")
+        return value
+
+    @model_validator(mode="after")
+    def purpose_authority(self) -> "ExecutionBinding":
+        if self.owner_subject == self.machine_subject:
+            raise ValueError("Separate policy owner and registered machine required")
+        if self.purpose == "search" and (self.bug_id is not None or self.expected_delivery_ref is not None):
+            raise ValueError("Search authority has no invented Bug or delivery")
+        if self.purpose == "verification" and (self.bug_id is None or self.expected_delivery_ref is None):
+            raise ValueError("Verification requires exact Bug and delivered target")
+        return self
+
+
+class GrantReadback(FrozenCatalogModel):
+    contract_version: Literal[1]
+    binding: ExecutionBinding
+    expires_at: datetime
+    revoked: bool
+    admission_state: Literal["reserved", "admitted", "rejected"]
+    authorization_valid: bool
+    dispatch_allowed: bool
+    blocked_reasons: tuple[Reference, ...] = Field(strict=False, max_length=32)
+
+    @field_validator("contract_version", mode="before")
+    @classmethod
+    def strict_version(cls, value: object) -> object:
+        return ExecutionBinding.strict_version(value)
+
+    @field_validator("expires_at")
+    @classmethod
+    def timezone_required(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("Timezone-aware grant expiry required")
+        return value
+
+    def require(self, binding: ExecutionBinding, *, dispatch: bool, now: datetime | None = None) -> None:
+        """Expiry is authority loss, never execution termination or slot-release proof."""
+        current = now if now is not None else datetime.now(timezone.utc)
+        informational = not dispatch and self.admission_state == "reserved" and self.blocked_reasons == (
+            "awaiting_admission",
+        )
+        if (self.binding != binding or self.revoked or self.expires_at <= current
+                or not self.authorization_valid or (self.blocked_reasons and not informational)
+                or self.admission_state not in ({"admitted"} if dispatch else {"reserved", "admitted"})
+                or (dispatch and not self.dispatch_allowed)):
+            raise ValueError("Fresh exact Tracker execution authority unavailable")
+
+
+class SnapshotTarget(FrozenCatalogModel):
+    repository_ref: Reference
+    commit_sha: Annotated[str, StringConstraints(strict=True, pattern=r"^[0-9a-f]{40}([0-9a-f]{24})?$")]
+    target_ref: Reference | None
+    deployment_ref: Reference | None
+    source: BugTargetSourceIdentity | None = None
+
+    @model_serializer(mode="wrap")
+    def original_wire(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        value: dict[str, Any] = handler(self)
+        if self.source is None:
+            value.pop("source", None)
+        else:
+            value["source"] = self.source.model_dump(mode="json", by_alias=True)
+        return value
+
+
+class UserGuidance(FrozenCatalogModel):
+    """Supplementary quoted user text, subordinate to immutable scope and basis."""
+
+    parent_execution_id: UUIDRef
+    text: Annotated[str, StringConstraints(strict=True, min_length=1)]
+
+    @field_validator("text")
+    @classmethod
+    def bounded_guidance(cls, value: str) -> str:
+        bounded_text(value)
+        if len(value.encode("utf-8")) > 4096:
+            raise ValueError("Guidance exceeds 4096 UTF-8 bytes")
+        return value
+
+
+class ExecutionSnapshot(FrozenCatalogModel):
+    """Exact immutable Fleet value, including nulls; catalog hash binds mode IDs."""
+
+    project: ProjectRef
+    owner_subject: Subject
+    agent_id: UUIDRef
+    profession: BugSearchProfessionPins
+    agent_config_revision: Reference
+    instruction_revision: Reference
+    policy_revision: Version
+    kind: Purpose
+    trigger: Literal["manual", "periodic"]
+    mode: Literal["source_only", "qa"]
+    targets: tuple[SnapshotTarget, ...] = Field(strict=False, min_length=1, max_length=16)
+    scope: tuple[Reference, ...] = Field(strict=False, min_length=1, max_length=128)
+    excluded_paths: tuple[Reference, ...] = Field(strict=False, max_length=128)
+    bug_id: UUIDRef | None
+    expected_fixed_deployment_ref: Reference | None
+    verification_basis: "FindingReport | None" = None
+    user_guidance: UserGuidance | None = None
+
+    @model_serializer(mode="wrap")
+    def original_guidance_wire(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        value: dict[str, Any] = handler(self)
+        if self.user_guidance is None:
+            value.pop("user_guidance", None)
+        return value
+
+    def content(self) -> dict[str, object]:
+        value = self.model_dump(mode="json")
+        if self.verification_basis is None:
+            value.pop("verification_basis")
+        return value
+
+    @model_validator(mode="after")
+    def snapshot_authority(self) -> "ExecutionSnapshot":
+        if self.user_guidance is not None and self.trigger != "manual":
+            raise ValueError("Repeat guidance is manual only")
+        if len(json.dumps(self.content(), ensure_ascii=False, indent=2).encode("utf-8")) > 65_536:
+            raise ValueError("Immutable snapshot too large")
+        if any(value.startswith("/") or "\\" in value or ":" in value or ".." in value.split("/")
+               for value in (*self.scope, *self.excluded_paths)):
+            raise ValueError("Relative bounded execution paths required")
+        if self.kind == "search":
+            if (self.bug_id is not None or self.expected_fixed_deployment_ref is not None
+                    or self.verification_basis is not None):
+                raise ValueError("Search snapshot cannot carry verification authority")
+        elif (self.trigger != "manual" or self.mode != "qa" or self.bug_id is None
+              or self.expected_fixed_deployment_ref is None or self.verification_basis is None
+              or len(self.targets) != 1
+              or any(target.deployment_ref != self.expected_fixed_deployment_ref for target in self.targets)):
+            raise ValueError("Exact manually requested delivered-target verification required")
+        if self.mode == "qa" and any(
+            target.target_ref is None or target.deployment_ref is None for target in self.targets
+        ):
+            raise ValueError("QA snapshot needs configured delivered target refs")
+        for target in self.targets:
+            if target.source is not None:
+                target.source.require_target(self.project.project_id, self.mode, target.commit_sha)
+        if (self.kind == "verification" and self.verification_basis is not None
+                and (self.verification_basis.source.repository_id is not None
+                     or any(target.source is not None for target in self.targets))
+                and not any(target.source is not None
+                            and target.source.repository_id == self.verification_basis.source.repository_id
+                            for target in self.targets)):
+            raise ValueError("Verification scenario belongs to another repository")
+        return self
+
+    def require_binding(self, binding: ExecutionBinding, catalog: BugSearchCatalog) -> None:
+        expected = (
+            self.project.tracker_instance_id, self.project.project_id, self.owner_subject,
+            self.agent_id, self.kind, payload_sha256(self.content()), self.policy_revision,
+            self.bug_id, self.expected_fixed_deployment_ref,
+        )
+        actual = (
+            binding.tracker_instance_id, binding.project_id, binding.owner_subject,
+            binding.agent_id, binding.purpose, binding.snapshot_sha256, binding.policy_revision,
+            binding.bug_id, binding.expected_delivery_ref,
+        )
+        if expected != actual or self.profession != catalog.profession:
+            raise ValueError("Execution snapshot, Tracker authority and frozen catalog differ")
+        if any(target.source is not None and target.source.project.tracker_instance_id != binding.tracker_instance_uuid
+               for target in self.targets):
+            raise ValueError("Source identity принадлежит другому Tracker")
+
+
+class PrepareExecution(FrozenCatalogModel):
+    operation_key: OperationKey
+    binding: ExecutionBinding
+    snapshot: ExecutionSnapshot
+
+
+def wire_text(limit: int, *, controls: bool = False) -> AfterValidator:
+    def validate(value: str) -> str:
+        bounded_text(value)
+        if len(value.encode("utf-8")) > limit or (not controls and any(
+            ord(character) < 32 or 127 <= ord(character) <= 159 for character in value
+        )):
+            raise ValueError("Bounded UTF-8 text required")
+        return value
+    return AfterValidator(validate)
+
+
+class BugSourceIdentity(FrozenCatalogModel):
+    """Producer identity is compared by exact value; text does not grant rule authority."""
+
+    schema_version: Literal[1]
+    producer: Annotated[str, StringConstraints(strict=True), wire_text(128)]
+    rule_key: Annotated[str, StringConstraints(strict=True), wire_text(256)]
+    stable_defect_key: Annotated[str, StringConstraints(strict=True), wire_text(512)]
+    repository_id: UUIDRef | None = None
+
+    @model_serializer(mode="wrap")
+    def original_source_wire(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        value: dict[str, Any] = handler(self)
+        if self.repository_id is None:
+            value.pop("repository_id", None)
+        return value
+
+    @field_validator("schema_version", mode="before")
+    @classmethod
+    def strict_version(cls, value: object) -> object:
+        return ExecutionBinding.strict_version(value)
+
+
+class FindingReport(FrozenCatalogModel):
+    """New registrations always carry a typed source and its canonical hash."""
+
+    source_identity: Sha256
+    source: BugSourceIdentity
+    title: Annotated[str, StringConstraints(strict=True), wire_text(500)]
+    basis: Annotated[str, StringConstraints(strict=True), wire_text(8192, controls=True)]
+    expected: Annotated[str, StringConstraints(strict=True), wire_text(8192, controls=True)]
+    actual: Annotated[str, StringConstraints(strict=True), wire_text(8192, controls=True)]
+    reproducer: Annotated[str, StringConstraints(strict=True), wire_text(16384, controls=True)]
+    checked_version: Annotated[str, StringConstraints(strict=True), wire_text(512)]
+    evidence_refs: tuple[Annotated[str, StringConstraints(strict=True), wire_text(512)], ...] = Field(
+        strict=False, max_length=32,
+    )
+
+    @model_validator(mode="after")
+    def registration_identity(self) -> "FindingReport":
+        if self.source_identity != payload_sha256(self.source.model_dump(mode="json")):
+            raise ValueError("Typed source canonical hash mismatch")
+        if len(json.dumps(self.model_dump(mode="json"), ensure_ascii=False, indent=2).encode("utf-8")) > 65_536:
+            raise ValueError("Finding report too large")
+        return self
+
+
+class FindingOccurrence(FrozenCatalogModel):
+    finding_id: UUIDRef
+    report: FindingReport
+
+
+class VerificationResult(FrozenCatalogModel):
+    bug_id: UUIDRef
+    basis_sha256: Sha256
+    delivery_ref: Reference
+    verdict: Literal["passed", "failed", "inconclusive"]
+    actual: Annotated[str, StringConstraints(strict=True), wire_text(8192, controls=True)]
+    evidence_refs: tuple[Annotated[str, StringConstraints(strict=True), wire_text(512)], ...] = Field(
+        strict=False, max_length=32,
+    )
+
+
+class ExecutionResult(FrozenCatalogModel):
+    coverage: Literal["complete", "partial", "inconclusive"]
+    findings: tuple[FindingOccurrence, ...] = Field(strict=False, max_length=100)
+    verification: VerificationResult | None = None
+
+    def require_snapshot(self, snapshot: ExecutionSnapshot) -> None:
+        versions = {target.commit_sha for target in snapshot.targets} | {
+            target.deployment_ref for target in snapshot.targets if target.deployment_ref is not None
+        }
+        for finding in self.findings:
+            report = finding.report
+            if report.checked_version not in versions:
+                raise ValueError("Finding checked version is outside the pinned execution targets")
+            if any(target.source is not None for target in snapshot.targets) and not any(
+                target.source is not None
+                and report.source.repository_id == target.source.repository_id
+                and report.checked_version == target.commit_sha
+                for target in snapshot.targets
+            ):
+                raise ValueError("Finding requires the exact original repository UUID and checked commit")
+
+    def content(self) -> dict[str, object]:
+        value = self.model_dump(mode="json")
+        if self.verification is None:
+            value.pop("verification")
+        return value
+
+    @model_validator(mode="after")
+    def bounded_result(self) -> "ExecutionResult":
+        if len({item.finding_id for item in self.findings}) != len(self.findings):
+            raise ValueError("Duplicate finding occurrence identity")
+        if len({item.report.source_identity for item in self.findings}) != len(self.findings):
+            raise ValueError("Duplicate finding defect identity")
+        if (self.verification is not None and self.verification.verdict in {"passed", "failed"}
+                and self.coverage != "complete"):
+            raise ValueError("Conclusive verification requires complete coverage")
+        if len(json.dumps(self.content(), ensure_ascii=False, indent=2).encode("utf-8")) > 65_536:
+            raise ValueError("Execution result too large")
+        return self
+
+
+class ExecutionCommand(FrozenCatalogModel):
+    operation_key: OperationKey
+    expected_version: Version
+    expected_fence: Version
+
+
+class BindExecution(ExecutionCommand):
+    session_id: UUIDRef
+    session_run_id: UUIDRef
+    hermes_run_ref: Reference
+
+
+class StepExecution(ExecutionCommand):
+    report: Annotated[str, StringConstraints(strict=True), wire_text(65_536, controls=True)] | None
+    result: ExecutionResult | None
+
+

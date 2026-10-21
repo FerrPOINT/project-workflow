@@ -85,8 +85,12 @@ def upgrade() -> None:
     for table in _TABLES:
         op.execute(f"CREATE TRIGGER workflow_human_write BEFORE INSERT OR UPDATE OR DELETE ON {table} "
                    "FOR EACH ROW EXECUTE FUNCTION workflow_human_row_guard()")
+        # Native catalog work must not queue no-op deferred events: PostgreSQL
+        # rejects subsequent DDL while such events remain pending in the transaction.
         op.execute(f"CREATE CONSTRAINT TRIGGER workflow_human_commit AFTER INSERT OR UPDATE OR DELETE ON {table} "
-                   "DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION workflow_human_row_guard()")
+                   "DEFERRABLE INITIALLY DEFERRED FOR EACH ROW "
+                   "WHEN (nullif(current_setting('pdlc.workflow_human', true), '') IS NOT NULL) "
+                   "EXECUTE FUNCTION workflow_human_row_guard()")
 
 
 def downgrade() -> None:

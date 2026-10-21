@@ -1,0 +1,192 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 1cbd95f..fb4a208 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -8,6 +8,11 @@
+ 
+ ### Changed
+ 
++- Create/edit поля агентов используют общий Base SSR field macro: canonical
++  labels и явные связи label/control вместо локального 11px uppercase CSS.
++  Required/pattern/maxlength и значения сохранены; lifecycle записи, drafts,
++  pending/unknown guards и focus не изменяются.
++
+ - Base snapshot обновлён до a434ee2; SSR assets экспортированы штатным
+   sync с fingerprint. Длинные непрерывные ошибки не растягивают страницу;
+   значения формы и защита повторной отправки сохранены. API и runtime прежние.
+diff --git a/frontend/e2e/base-agent-fields.spec.ts b/frontend/e2e/base-agent-fields.spec.ts
+new file mode 100644
+index 0000000..73706b1
+--- /dev/null
++++ b/frontend/e2e/base-agent-fields.spec.ts
+@@ -0,0 +1,71 @@
++import { expect, test } from '@playwright/test'
++
++if (process.env.WORKFLOW_UI_QA_MUTATIONS !== 'isolated-fixture') throw new Error('UI QA requires an isolated fixture')
++
++for (const theme of ['dark', 'gray', 'light']) {
++  test(`Base agent fields use shared labels and native constraints (${theme})`, async ({ page }, testInfo) => {
++    await page.addInitScript(value => localStorage.setItem('workflow-theme', value), theme)
++    const errors: string[] = []
++    page.on('pageerror', error => errors.push(error.message))
++    page.on('console', message => { if (message.type() === 'error') errors.push(message.text()) })
++    page.on('request', request => {
++      if (!['GET', 'HEAD'].includes(request.method())) errors.push(`Unexpected write: ${request.method()}`)
++    })
++    page.on('response', response => { if (response.status() >= 400) errors.push(`${response.status()} ${response.url()}`) })
++    await page.goto('/agents?namespace_id=1')
++    await page.reload()
++    await page.locator('.agent-entry').first().locator('summary').click()
++    await page.locator('#agentCreatePanel > summary').click()
++    const forms = page.locator('.agent-editor:visible')
++    await expect(forms).toHaveCount(2)
++    const widths = testInfo.project.name === 'desktop' ? [1023, 1024, 1279, 1280, 1440, 1920, 2560] : [375, 767, 768]
++    for (const width of widths) {
++      await page.setViewportSize({ width, height: 1080 })
++      await expect(forms.locator('.base-form-field > label:visible')).toHaveCount(6)
++      await expect(page.locator('.agent-field-label')).toHaveCount(0)
++      for (const form of await forms.all()) {
++        const name = form.getByRole('textbox', { name: 'Имя', exact: true })
++        const profile = form.getByRole('textbox', { name: 'Ключ запуска', exact: true })
++        const description = form.getByRole('textbox', { name: 'Описание', exact: true })
++        await expect(name).toHaveAttribute('required', '')
++        await expect(profile).toHaveAttribute('maxlength', '251')
++        await expect(profile).toHaveAttribute('pattern', '[a-z0-9][a-z0-9_\\-]*')
++        await expect(profile).toHaveAttribute('title', /251/)
++        for (const control of [name, profile, description]) {
++          const id = await control.getAttribute('id')
++          expect(id).toBeTruthy()
++          const label = form.locator(`.base-form-field > label[for="${id}"]`)
++          const metrics = await label.evaluate(element => {
++            const control = (element as HTMLLabelElement).control!
++            const labelBox = element.getBoundingClientRect()
++            const controlBox = control.getBoundingClientRect()
++            const style = getComputedStyle(element)
++            return { fontSize: style.fontSize, textTransform: style.textTransform, associated: control.id === element.getAttribute('for'),
++              labelBottom: labelBox.bottom, controlTop: controlBox.top, controlHeight: controlBox.height }
++          })
++          expect(metrics.fontSize).toBe('12px')
++          expect(metrics.textTransform).toBe('none')
++          expect(metrics.associated).toBe(true)
++          expect(metrics.labelBottom).toBeLessThanOrEqual(metrics.controlTop)
++          expect(metrics.controlHeight).toBeGreaterThanOrEqual(width < 768 ? 44 : 40)
++          await label.click()
++          await expect(control).toBeFocused()
++        }
++        await profile.fill('Invalid Profile')
++        expect(await profile.evaluate(element => (element as HTMLInputElement).checkValidity())).toBe(false)
++        await profile.fill('valid-profile_1')
++        expect(await profile.evaluate(element => (element as HTMLInputElement).checkValidity())).toBe(true)
++      }
++      expect(await forms.locator('input, textarea').evaluateAll(elements => {
++        const ids = elements.map(element => element.id)
++        return ids.every(Boolean) && new Set(ids).size === ids.length
++      })).toBe(true)
++      expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1)
++      if ([375, 1920].includes(width)) {
++        await page.evaluate(() => window.scrollTo(0, 0))
++        await page.screenshot({ path: testInfo.outputPath(`base-agent-fields-${theme}-${width}.png`), fullPage: true })
++      }
++    }
++    expect(errors).toEqual([])
++  })
++}
+diff --git a/project_workflow/interfaces/ui/templates/agents.html b/project_workflow/interfaces/ui/templates/agents.html
+index 0c2aefa..5fc3e2f 100644
+--- a/project_workflow/interfaces/ui/templates/agents.html
++++ b/project_workflow/interfaces/ui/templates/agents.html
+@@ -20,7 +20,6 @@
+ .agent-profile{font-family:'JetBrains Mono',monospace}
+ .agent-editor{background:var(--surface);border-top:1px solid var(--border);padding:14px 12px}
+ .agent-fields{display:grid;grid-template-columns:minmax(150px,1fr) minmax(150px,1fr) minmax(0,2fr);gap:12px}
+-.agent-field-label{display:block;font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0;margin-bottom:5px}
+ .agent-editor-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px;flex-wrap:wrap}
+ .agent-delete{margin-right:auto}
+ .agent-create{border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+@@ -60,9 +59,9 @@
+         </summary>
+         <form class="agent-editor" onsubmit="saveAgent(event,this)">
+           <div class="agent-fields">
+-            <label><span class="agent-field-label">Имя</span>{{ base.input_control('agentName' ~ a.id, 'name', value=a.name, required=true) }}</label>
+-            <label><span class="agent-field-label">Ключ запуска</span><input class="base-control" type="text" name="launch_profile" value="{{ a.launch_profile or '' }}" pattern="[a-z0-9][a-z0-9_\-]*" maxlength="251" title="Строчные латинские буквы, цифры, дефис и подчёркивание. Начните с буквы или цифры; до 251 символа."></label>
+-            <label class="agent-description-field"><span class="agent-field-label">Описание</span>{{ base.textarea_control('agentDescription' ~ a.id, 'description', value=a.description or '', rows=3) }}</label>
++            {% call base.field('agentName' ~ a.id, 'Имя', required=true) %}{{ base.input_control('agentName' ~ a.id, 'name', value=a.name, required=true) }}{% endcall %}
++            {% call base.field('agentLaunchProfile' ~ a.id, 'Ключ запуска') %}<input class="base-control" type="text" id="agentLaunchProfile{{ a.id }}" name="launch_profile" value="{{ a.launch_profile or '' }}" pattern="[a-z0-9][a-z0-9_\-]*" maxlength="251" title="Строчные латинские буквы, цифры, дефис и подчёркивание. Начните с буквы или цифры; до 251 символа.">{% endcall %}
++            <div class="agent-description-field">{% call base.field('agentDescription' ~ a.id, 'Описание') %}{{ base.textarea_control('agentDescription' ~ a.id, 'description', value=a.description or '', rows=3) }}{% endcall %}</div>
+           </div>
+           <div class="agent-write-state" hidden>{{ base.state('error', '') }}</div>
+           <button class="base-control base-button base-button-secondary" type="button" data-agent-reconcile hidden onclick="reconcileAgent(this.closest('form'))">Проверить сохранение</button>
+@@ -83,9 +82,9 @@
+       <summary>+ Добавить агента</summary>
+       <form class="agent-editor" onsubmit="addAgent(event)">
+         <div class="agent-fields">
+-          <label><span class="agent-field-label">Имя</span>{{ base.input_control('newName', 'name', required=true) }}</label>
+-          <label><span class="agent-field-label">Ключ запуска</span><input class="base-control" type="text" id="newLaunchProfile" name="launch_profile" pattern="[a-z0-9][a-z0-9_\-]*" maxlength="251" title="Строчные латинские буквы, цифры, дефис и подчёркивание. Начните с буквы или цифры; до 251 символа."></label>
+-          <label class="agent-description-field"><span class="agent-field-label">Описание</span>{{ base.textarea_control('newDescription', 'description', rows=3) }}</label>
++          {% call base.field('newName', 'Имя', required=true) %}{{ base.input_control('newName', 'name', required=true) }}{% endcall %}
++          {% call base.field('newLaunchProfile', 'Ключ запуска') %}<input class="base-control" type="text" id="newLaunchProfile" name="launch_profile" pattern="[a-z0-9][a-z0-9_\-]*" maxlength="251" title="Строчные латинские буквы, цифры, дефис и подчёркивание. Начните с буквы или цифры; до 251 символа.">{% endcall %}
++          <div class="agent-description-field">{% call base.field('newDescription', 'Описание') %}{{ base.textarea_control('newDescription', 'description', rows=3) }}{% endcall %}</div>
+         </div>
+         <div class="agent-write-state" hidden>{{ base.state('error', '') }}</div>
+         <button class="base-control base-button base-button-secondary" type="button" data-agent-reconcile hidden onclick="reconcileAgent(this.closest('form'))">Проверить сохранение</button>
+diff --git a/tests/test_ui_agent_fields.py b/tests/test_ui_agent_fields.py
+new file mode 100644
+index 0000000..bfc2a34
+--- /dev/null
++++ b/tests/test_ui_agent_fields.py
+@@ -0,0 +1,55 @@
++from html.parser import HTMLParser
++
++import pytest
++
++from project_workflow.interfaces.ui.templates import env
++
++
++class AgentFields(HTMLParser):
++    def __init__(self) -> None:
++        super().__init__()
++        self.fields = 0
++        self.labels: set[str | None] = set()
++        self.controls: dict[str, dict[str, str | None]] = {}
++
++    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
++        attributes = dict(attrs)
++        if "base-form-field" in (attributes.get("class") or "").split():
++            self.fields += 1
++        if tag == "label":
++            self.labels.add(attributes.get("for"))
++        if tag in {"input", "textarea"} and attributes.get("name") in {"name", "launch_profile", "description"}:
++            identifier = attributes.get("id")
++            assert identifier and identifier not in self.controls
++            self.controls[identifier] = attributes
++
++
++@pytest.mark.parametrize("count", [0, 1, 2])
++def test_agent_fields_share_base_labels_and_preserve_native_constraints(count: int) -> None:
++    agents = [
++        {
++            "id": index + 41, "name": f"Agent <{index}>",
++            "launch_profile": f"safe_profile_{index}", "description": "Safe text",
++        }
++        for index in range(count)
++    ]
++    html = env.get_template("agents.html").render(page="agents", agents=agents)
++    fields = AgentFields()
++    fields.feed(html)
++    fields.close()
++    assert fields.fields == (count + 1) * 3
++    assert set(fields.controls) <= fields.labels
++    assert "agent-field-label" not in html
++    for suffix in ["new", *(str(agent["id"]) for agent in agents)]:
++        name = fields.controls["newName" if suffix == "new" else f"agentName{suffix}"]
++        profile = fields.controls["newLaunchProfile" if suffix == "new" else f"agentLaunchProfile{suffix}"]
++        description = fields.controls["newDescription" if suffix == "new" else f"agentDescription{suffix}"]
++        assert "required" in name
++        assert profile["pattern"] == r"[a-z0-9][a-z0-9_\-]*"
++        assert profile["maxlength"] == "251"
++        assert "251" in (profile["title"] or "")
++        assert "required" not in profile
++        assert description["rows"] == "3"
++    for agent in agents:
++        assert fields.controls[f"agentName{agent['id']}"]["value"] == agent["name"]
++        assert fields.controls[f"agentLaunchProfile{agent['id']}"]["value"] == agent["launch_profile"]

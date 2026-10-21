@@ -1,0 +1,166 @@
+# Changelog
+
+Все значимые изменения проекта документируются здесь.
+Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
+версионирование — [SemVer](https://semver.org/lang/ru/).
+
+## [Unreleased]
+
+### Changed
+
+- Base snapshot обновлён до 44e48f3; SSR JS и fingerprint экспортированы
+  штатным sync. Drawer удерживает focus при закрытом и открытом disclosure,
+  исключает hidden/disabled/inert controls и сохраняет Escape/focus return.
+  API, autosave, данные и принятый runtime не меняются.
+
+- Подписи темы в drawer и раздела редактора фазы используют Base SSR field
+  и canonical control вместо локальных 11/14px labels. Сохранены theme
+  persistence, возврат фокуса, section URL navigation и точки переходов.
+  API, autosave и принятый runtime не изменяются.
+
+- Create/edit поля агентов используют общий Base SSR field macro: canonical
+  labels и явные связи label/control вместо локального 11px uppercase CSS.
+  Required/pattern/maxlength и значения сохранены; lifecycle записи, drafts,
+  pending/unknown guards и focus не изменяются.
+
+- Base snapshot обновлён до a434ee2; SSR assets экспортированы штатным
+  sync с fingerprint. Длинные непрерывные ошибки не растягивают страницу;
+  значения формы и защита повторной отправки сохранены. API и runtime прежние.
+
+- Read-only React-пилот использует Base Table внутри одного ListPage content
+  block: общие колонки, подписи, keyboard local scroll и Base link targets.
+  Удалена локальная сетка строк; namespace context и Jinja task links сохранены.
+- Jinja показывает подтверждённый успех и ошибки через inline Base states.
+  Удалены product toast host, CSS, обработчик и таймер. Ошибки остаются рядом
+  с формой, CLI feedback принадлежит конкретной команде; success не получает
+  focus и не снимает pending/unknown write protection. API, Base assets,
+  feature flag и принятые runtime pins не меняются.
+- Lifecycle инструкций в деталях фазы подтверждает создание, текст, навыки,
+  режим, порядок и удаление scoped GET со строгой проверкой родителя и строк.
+  Неизвестный результат сохраняет общий lock и Base draft guard; повторная
+  мутация недоступна. Create ID берётся только из проверенного ACK, DELETE
+  остаётся защищённым после отмены/повторного открытия Base confirmation.
+  Подтверждённые изменения обновляют существующие DOM-строки без reload,
+  сохраняют более поздний ввод, keyboard focus, URL context и deferred autosave.
+  API, схема БД, Base SSR assets и принятые runtime pins не меняются.
+- Автосохранение деталей фазы использует снимок одной попытки и стабильные
+  локальные ключи checks/evidence вместо позднего чтения DOM и очереди функций.
+  Общий pending/unknown lock защищает controls и переходы через Base draft guard.
+  Подтверждение требует scoped GET; ID новых строк берутся только из проверенного
+  ACK, потерянный ACK не заменяется поиском по имени. Ошибка сохраняет черновик,
+  403/404 отключают запись; API, схема БД и runtime pins не меняются.
+  Запись инструкций и порядка разделяет тот же pending lock; черновики текста
+  и навыков защищены Base navigation guard. Ошибка текста не сбрасывает ввод,
+  структурные действия не затирают другой draft. Unknown reconciliation
+  инструкций/reorder теперь выполняется общей lifecycle-проверкой выше.
+  Отложенный metadata autosave возобновляется после settlement инструкции,
+  без параллельного PUT и повторной записи неизменённой фазы.
+- Каталог фаз использует Base SSR controls/states и общий navigation guard.
+  Создание, порядок, режим и удаление имеют единую блокировку записи. Создание,
+  порядок и режим подтверждаются scoped GET-каталогом; неизвестный результат не повторяется,
+  а создание без возвращённого ID не определяется по имени или новым строкам.
+  Ошибки 403/404 отключают CRUD, 409/422 сохраняют каталог; API и runtime pins
+  не меняются. Локальные повторяемые карточки и mobile targets приведены к Base.
+- Неудачные чтения каталога сервисов кешируются на 10 секунд с сохранением
+  причины fallback и неизвестного health. Недоступный Admin не добавляет
+  сетевой timeout к каждому переходу; успешный каталог сохраняет TTL 60 секунд.
+- Общий Base snapshot обновлён до 0ffb99e: verified profile/directory contracts
+  и UI dependency graph без замены shell. SSR assets сохраняются byte-for-byte;
+  active skills catalog и принятый runtime не переключаются.
+- Локальный default с отдельным Base SDLC candidate и immutable Git verifier
+  интегрирован с Base UI/UX-веткой. Candidate остаётся configuration-only:
+  active catalog, bootstrap, migrations, основной Jinja UI, API и opt-in
+  read-only React pilot не переключаются. Закреплённый skills SHA независим
+  от UI SDK `.base-revision`; качество интеграции проверяется локально.
+- AGENTS, quality gate и README различают общий SDLC workspace, disposable QA
+  и standalone deployment вне workspace. Общий launcher/Compose ownership
+  принадлежат Base; legacy compose-ready не рекомендуется до миграции.
+  Документация не меняет empty-issuer auth default, UI/API или runtime pins.
+- Standalone Compose forwards optional `AUTH_*` settings without changing the empty-issuer default; Central Auth SSO has a documented deployment matrix, container-reachability requirement and browser acceptance path.
+- Documentation audit is clean: README has an H1; runtime/auth, quality, reset and historical plans have cross-links and explicit security/runtime boundaries.
+- Added regression coverage that proves an empty `AUTH_ISSUER` leaves UI/API open in standalone mode.
+- Standalone-режим: репозиторий собирается и запускается без соседнего `services-base` (убраны extra `cli-platform`, uv source, Docker additional_context и CI checkout). Token-режим CLI без `sdlc-cli-core` выдаёт понятную ошибку; запуск без `AUTH_ISSUER` работает без авторизации.
+
+### Fixed
+
+- Глобальные фазы и каталог до привязки workflow к namespace сохраняют контекст
+  header и переходов, но не подставляют чужой namespace в API-запросы. Возврат
+  в каталог с явным namespace больше не даёт ложный 404. Для workflow другого
+  namespace сохраняются HTML 404 и API 409; публичный API и runtime pins неизменны.
+  Проверка инструкции после неизвестного ACK открывает текущий адрес с namespace,
+  query и hash, не повторяя запись и не теряя черновик.
+- Namespace create/edit uses unframed Base form fields, spacing and actions;
+  accessible form naming, validation, theme preview and draft safety are preserved.
+- Jinja sidebar keeps the Workflow product identity while namespace context stays
+  in the header; editing or switching a namespace no longer replaces the brand.
+- Workflow delete inherits Base destructive foreground and hover styling;
+  effective text contrast is checked in all themes at every shell breakpoint.
+- Base 7e27713 supplies shared label/control typography through generated SSR
+  assets and the pinned React package; no hand-copied tokens or runtime rollout.
+- Agent create/update keeps drafts frozen after lost responses, 5xx and malformed
+  or mismatched ACKs. Explicit no-cache catalogue readback reconciles the result
+  without replay; confirmed 401/403/404 disables CRUD and retains the values.
+  Validation/conflict errors remain editable. No API or runtime changes.
+- Workflow editor and instruction pages use Base SSR controls, inline states
+  and draft protection. Pending locks controls and direct handlers; uncertain
+  writes require read-only reconciliation without mutation replay. Rejections
+  retain raw values, terminal access/not-found states block CRUD, and reordered
+  instructions return focus to an enabled field when the trigger is disabled.
+  Workflow create mode survives direct open/reload and namespace compatibility
+  is retained. The unused external font import is removed; Base owns typography.
+  Source/browser fixtures do not constitute accepted-image/SSO release evidence.
+- Docker frontend stage includes the pinned `.base-revision` before recording
+  product fingerprints; container metadata now attests the same runtime inputs
+  as the clean checkout. Jinja/React routes and the active skills catalog are unchanged.
+- Agent editors use Base SSR controls and draft protection for navigation and
+  disclosure/cancel. Pending create/update locks fields and actions and rejects
+  direct duplicate handlers; rejected HTTP responses cannot announce success.
+  Unknown create/update outcome reconciliation is covered by the subsequent fix above.
+- Jinja deletion confirmations use the shared Base SSR native dialog instead
+  of a local modal shell. Pending callbacks keep the dialog locked until API
+  acknowledgement; uncertain deletes block repeat writes across cancel/reopen
+  and require an explicit read-only catalogue check. Namespace deletion defers
+  navigation until confirmed success, and the initial namespace icon renders.
+- Namespace forms use the Base SSR draft guard for links, context selectors,
+  create cancellation and indexed Back/Forward. Pending writes block duplicates;
+  rejected writes retain fields, while unknown outcomes require read-only
+  reconciliation instead of another mutation. Acknowledged create/delete reload
+  the correct SSR composition; cancelled deletion restores trigger focus.
+- Namespace previews update canonical accent tokens, retaining the Base readable
+  foreground across themes instead of overriding its legacy aliases.
+- Jinja pages use the Base page header in the work area: one h1, one owner of
+  page actions across desktop/mobile, and shared error/403/404 states. Phase mode
+  controls use the Base responsive target token instead of a fixed 40 px height.
+- React default/all namespace scope survives reload and navigation despite an old
+  cookie. API calls omit empty numeric parameters; Jinja phase editor links resolve
+  an explicit matching namespace from the existing catalogue, without extra APIs.
+- Read-only React-пилот использует Base URL helper и data router: namespace
+  changes сохраняют hash и принятые query patches, detail -> list выполняется
+  одним history transition, login next сохраняет полный адрес. Catalogue errors
+  различают 403/404 и повторяемые сбои, не скрывая успешно загруженные задачи.
+- SSR-переключатель берёт текущий Workflow и его health из runtime-каталога,
+  без hardcoded healthy. Полный fallback из шести UI остаётся unknown при
+  сетевой ошибке, пустом или невалидном ответе; TTL cache разделён по URL.
+- Immutable image builder передаёт PAX-first tar через deterministic gzip;
+  Docker распознаёт stdin как context, а не Dockerfile. Source/bundle digests
+  и manifest contract не меняются.
+- SQLite migration test закрывает UoW и гарантированно освобождает собственный
+  engine; строгий ResourceWarning gate не зависит от момента garbage collection.
+- Меню сервисов не перекрывается sidebar и помещается на низком экране;
+  локальные переходы сохраняют канонический `localhost` для общей SSO-сессии.
+- Standalone Compose получает runtime-каталог через `host.docker.internal`,
+  а пример `.env` больше не подменяет этот адрес контейнерным `localhost`.
+- Workflow shell синхронизирован с документированным контрактом: header 60 px,
+  desktop sidebar 264 px, tablet rail 72 px и mobile drawer только ниже 768 px.
+- Workflow shell доступен с touch и клавиатуры (#49); улучшены phase controls и accessibility (#48).
+### Added
+- Central SSO и token-mode CLI transport (`feat/central-sso-cli`, #43): browser-сессии central auth и personal tokens как транспорт CLI.
+- Hosted CI (quality + compose-readiness) на каждый push/PR.
+
+### Changed
+- UI `/phases`: длинные цепочки открываются компактным списком с переключением на схему; единственный воркфлоу больше не дублируется в навигации.
+- UI `/phases`: быстрый переход к фазе в длинном списке с фокусом на выбранной фазе; иконки пространства в header сохраняют цель 40 px.
+- UI: улучшен контраст dark brand subtitle (#44).
+
+### Removed
+- Мобильные галереи и auth-скриншоты из README — desktop-only evidence standard.

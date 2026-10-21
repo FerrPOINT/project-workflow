@@ -2,7 +2,14 @@
 
 import hashlib
 import json
+from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
+
+from sqlalchemy import event
+from sqlalchemy.engine import Connection
+from sqlalchemy.sql import Delete, Insert, Select, Update, visitors
+from sqlalchemy.sql.elements import TextClause
 
 from project_workflow import config
 from project_workflow.domain.namespace import legacy_code_from_cli_command
@@ -11,7 +18,9 @@ from project_workflow.domain.single_task_profile import (
     CATALOG_SHA256,
     MANIFEST_SHA256,
     PROFILE,
+    RETAINED_PROFILE_CATALOGS,
     ROLE_MODES,
+    SUPPORTED_MANIFESTS,
     SingleTaskInstallation,
     is_single_task_key,
 )
@@ -25,13 +34,69 @@ from project_workflow.infrastructure.db.managed_catalog import (
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
 REFERENCES = Path(__file__).resolve().parents[2] / "references"
+_RUNTIME_READ = "single_task_runtime_catalog_read"
+_CATALOG_TABLES = frozenset({
+    "workflows", "workflow_modes", "profession_workflows", "projects", "phases",
+    "phase_instructions", "phase_checks", "phase_evidence_requirements",
+})
 
 
-def load_profile() -> tuple[dict, dict]:
+@dataclass
+class _RuntimeCatalogRead:
+    transaction: tuple[object, object] | None = None
+    installation: SingleTaskInstallation | None = None
+
+
+@contextmanager
+def runtime_catalog_read(uow: SAUnitOfWork):
+    """Reuse only catalog validation within one explicitly scoped runtime call."""
+    session = uow.session
+    if _RUNTIME_READ in session.info:
+        yield
+        return
+    scope = _RuntimeCatalogRead()
+    session.info[_RUNTIME_READ] = scope
+    connections: list[Connection] = []
+
+    def before_sql(_connection, _cursor, _sql, _parameters, context, _many):
+        statement = getattr(context.compiled, "statement", None)
+        if isinstance(statement, (Select, Insert, Update, Delete)):
+            for node in visitors.iterate(statement):
+                if (isinstance(node, TextClause)
+                    or isinstance(node, (Insert, Update, Delete)) and node.table.name in _CATALOG_TABLES):
+                    break
+            else:
+                return
+        # Includes direct Connection writes, opaque SQL and writable CTEs.
+        scope.installation = None
+
+    def watch(_session, _transaction, connection):
+        if connection not in connections:
+            event.listen(connection, "before_cursor_execute", before_sql)
+            connections.append(connection)
+
+    event.listen(session, "after_begin", watch)
+    try:
+        if session.in_transaction():
+            watch(session, None, session.connection())
+        yield
+    finally:
+        event.remove(session, "after_begin", watch)
+        for connection in connections:
+            event.remove(connection, "before_cursor_execute", before_sql)
+        del session.info[_RUNTIME_READ]
+
+
+def load_profile(manifest_sha256: str = MANIFEST_SHA256) -> tuple[dict, dict]:
+    if manifest_sha256 not in SUPPORTED_MANIFESTS:
+        raise ValueError("Unsupported single-task profile manifest")
+    retained = manifest_sha256 in RETAINED_PROFILE_CATALOGS
+    root = REFERENCES / "retained" / manifest_sha256 if retained else REFERENCES
+    catalog_sha256 = RETAINED_PROFILE_CATALOGS[manifest_sha256] if retained else CATALOG_SHA256
     values = []
-    for filename, expected in (("single_task_catalog_v1.json", CATALOG_SHA256),
-                               ("single_task_manifest_v1.json", MANIFEST_SHA256)):
-        path = REFERENCES / filename
+    for filename, expected in (("single_task_catalog_v1.json", catalog_sha256),
+                               ("single_task_manifest_v1.json", manifest_sha256)):
+        path = root / filename
         if path.is_symlink():
             raise ValueError("Profile source must be a regular artifact")
         content = path.read_bytes()
@@ -43,7 +108,7 @@ def load_profile() -> tuple[dict, dict]:
         or manifest["schema"] != "single-task-sdlc/profile-manifest/v1"
         or catalog["instruction_profile"] != PROFILE or manifest["instruction_profile"] != PROFILE
         or catalog["catalog_version"] != 1 or manifest["profile_version"] != 1 or manifest["proposal"] is not False
-        or manifest["workflow_catalog"]["sha256"] != CATALOG_SHA256):
+        or manifest["workflow_catalog"]["sha256"] != catalog_sha256):
         raise ValueError("Single-task profile generation mismatch")
     if [w["role_key"] for w in catalog["workflows"]] != list(ROLE_MODES):
         raise ValueError("Single-task role inventory mismatch")
@@ -58,9 +123,37 @@ def load_profile() -> tuple[dict, dict]:
 
 def observe_installation(uow: SAUnitOfWork) -> SingleTaskInstallation:
     """Validate all seven persisted professions before returning any binding."""
+    session = uow.session
+    scope = session.info.get(_RUNTIME_READ)
+    transaction = (session.get_transaction(), session.get_nested_transaction())
+    if scope is not None:
+        if any(row.__table__.name in _CATALOG_TABLES for row in session.new | session.dirty | session.deleted):
+            scope.installation = None
+        if scope.installation is not None and scope.transaction == transaction:
+            return scope.installation.model_copy(deep=True)
     uow.lock_catalog_state(shared=True)
     uow.refresh()
-    catalog, manifest = load_profile()
+    # Match a complete sealed family, never stamp old rows with the current hash.
+    profiles = [load_profile(digest) for digest in SUPPORTED_MANIFESTS]
+    failures: list[ValueError] = []
+    for catalog, manifest in profiles:
+        try:
+            result = _observe_profile(uow, catalog, manifest)
+            if scope is not None:
+                scope.transaction = (session.get_transaction(), session.get_nested_transaction())
+                scope.installation = result.model_copy(deep=True)
+            return result
+        except ValueError as exc:
+            failures.append(exc)
+    raise failures[0]
+
+
+def _observe_profile(uow: SAUnitOfWork, catalog: dict, manifest: dict) -> SingleTaskInstallation:
+    catalog_sha256 = manifest["workflow_catalog"]["sha256"]
+    manifest_sha256 = {
+        CATALOG_SHA256: MANIFEST_SHA256,
+        **{digest: key for key, digest in RETAINED_PROFILE_CATALOGS.items()},
+    }[catalog_sha256]
     installed_workflows = {workflow.key: workflow for workflow in uow.workflows.list()}
     if {key for key in installed_workflows if is_single_task_key(key)} != {w["key"] for w in catalog["workflows"]}:
         raise ValueError("Single-task installed workflow inventory mismatch")
@@ -103,16 +196,16 @@ def observe_installation(uow: SAUnitOfWork) -> SingleTaskInstallation:
             modes.append({"mode_id": str(mode.id), "key": mode.key, "execution_scopes": mode.execution_scopes,
                           "phase_ids": [str(p.id) for p in uow.phases.list(workflow.id, mode_id=mode.id)]})
         bindings.append({
-            "schema": "single-task-sdlc/workflow-binding/v1", "instruction_manifest_sha256": MANIFEST_SHA256,
-            "workflow_catalog_sha256": CATALOG_SHA256, "namespace_id": str(project.id),
+            "schema": "single-task-sdlc/workflow-binding/v1", "instruction_manifest_sha256": manifest_sha256,
+            "workflow_catalog_sha256": catalog_sha256, "namespace_id": str(project.id),
             "namespace_name": identity["name"], "namespace_cli_command": identity["cli_command"],
             "workflow_id": str(workflow.id), "workflow_key": workflow.key, "role_key": role,
             "profile": identity["launch_profile"], "modes": modes,
             "role_instructions_sha256": manifest["roles"][role]["role_instructions_sha256"],
         })
     return SingleTaskInstallation.model_validate({
-        "schema": "single-task-sdlc/installation/v1", "instruction_manifest_sha256": MANIFEST_SHA256,
-        "workflow_catalog_sha256": CATALOG_SHA256, "bindings": bindings,
+        "schema": "single-task-sdlc/installation/v1", "instruction_manifest_sha256": manifest_sha256,
+        "workflow_catalog_sha256": catalog_sha256, "bindings": bindings,
     })
 
 

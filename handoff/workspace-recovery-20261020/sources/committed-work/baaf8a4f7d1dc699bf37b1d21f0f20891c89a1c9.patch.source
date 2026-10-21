@@ -1,0 +1,17 @@
+diff --git a/project_workflow/interfaces/ui/AGENTS.md b/project_workflow/interfaces/ui/AGENTS.md
+index 0adfc50..2f99e28 100644
+--- a/project_workflow/interfaces/ui/AGENTS.md
++++ b/project_workflow/interfaces/ui/AGENTS.md
+@@ -5,8 +5,10 @@
+   принадлежат продукту; страницы входа Auth не требуют доступности Admin.
+ - Описать маршруты, роли, состояния и layout modes в route contract. Приватный
+   operational route сохраняет SSO; fixtures используют synthetic данные.
+-- Перед коммитом выполнить route/acceptance gates и матрицу viewport, тем,
+-  direct/reload, keyboard/focus, geometry, console/network.
++- До source-коммита выполнить route contract и соответствующие unit/build gates.
++  Затем собрать candidate image из committed source SHA и сохранить browser
++  evidence отдельным коммитом. До review readiness обязательны acceptance gates
++  и матрица viewport/тем, direct/reload, keyboard/focus, geometry, console/network.
+ - Browser evidence относится к committed source SHA и реальному candidate image.
+   После evidence допускаются документационные коммиты, если runtime fingerprints
+   не изменились. Secrets и реальные пользовательские данные исключить.

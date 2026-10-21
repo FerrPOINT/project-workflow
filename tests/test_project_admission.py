@@ -243,3 +243,96 @@ def test_display_window_policy_off_is_explicit_and_missing_proof_fails_closed(mo
     monkeypatch.setenv("PROJECT_WORKFLOW_SPACES__ENABLED", "true")
     with pytest.raises(SpaceAccessDenied):
         display_window()
+
+
+@pytest.mark.parametrize("role,writable,allowed", [
+    ("member", True, False), ("operator", False, False), ("operator", True, True),
+])
+def test_task_commit_requires_native_role_and_current_writable_owner(pm, role, writable, allowed):
+    client, _, binding, _, _ = pm
+    result = client.post("/internal/runtime/v1/pm/bind", headers={"Authorization": "Bearer " + "a" * 40},
+                         json=binding)
+    assert result.status_code == 200, result.text
+    with get_session() as session:
+        task = session.scalar(select(m.Task).where(m.Task.task_key == "PM-1"))
+        task_id, before = task.id, task.description
+    proof = scope((PROJECT_REF,), writable=(PROJECT_REF,) if writable else (), role=role)
+    token = human_scope.set(proof)
+    try:
+        with get_session() as session:
+            task = session.get(m.Task, task_id)
+            assert task is not None
+            task.description = "permitted ordinary edit"
+            if allowed:
+                session.commit()
+            else:
+                with pytest.raises(SpaceAccessDenied):
+                    session.commit()
+                session.rollback()
+    finally:
+        human_scope.reset(token)
+    with get_session() as session:
+        assert session.get(m.Task, task_id).description == ("permitted ordinary edit" if allowed else before)
+
+
+def test_operator_cannot_forge_native_execution_evidence(pm):
+    client, _, binding, _, _ = pm
+    result = client.post("/internal/runtime/v1/pm/bind", headers={"Authorization": "Bearer " + "a" * 40},
+                         json=binding)
+    assert result.status_code == 200, result.text
+    token = human_scope.set(scope((PROJECT_REF,), role="operator"))
+    try:
+        with get_session() as session:
+            execution = session.scalar(select(m.PMExecution))
+            assert execution is not None
+            before = execution.version
+            execution.version += 1
+            with pytest.raises(SpaceAccessDenied, match="Native execution protocol required"):
+                session.commit()
+            session.rollback()
+    finally:
+        human_scope.reset(token)
+    with get_session() as session:
+        assert session.scalar(select(m.PMExecution)).version == before
+
+
+@pytest.mark.parametrize("writable_owner", [True, False])
+def test_context_insert_requires_its_own_writable_space(writable_owner):
+    from project_workflow.domain.resource_context import CreateExecutionContext
+    from tests.test_resource_context import context
+
+    registry, owner, other = uuid4(), uuid4(), uuid4()
+    current = scope((PROJECT_REF,), role="operator")
+    value = current.proof.model_dump(mode="json")
+    value.update(
+        readable_spaces=[{"registry_instance_id": str(registry), "space_id": str(owner)}],
+        writable_spaces=[{"registry_instance_id": str(registry), "space_id": str(owner)}],
+    )
+    current = HumanProjectScope(ProjectAccessV2.model_validate(value), current.deadline, current.product_role)
+    resource = context(owner if writable_owner else other).model_dump(mode="json")
+    resource["namespace"]["registry_instance_id"] = str(registry)
+    resource["task"]["tracker_instance_id"] = str(current.proof.canonical_tracker_instance_id)
+    with get_session() as session:
+        mode = session.scalar(select(m.WorkflowMode).limit(1))
+        request = CreateExecutionContext(context=resource, workflow_id=mode.workflow_id,
+                                         catalog_version=mode.catalog_version, mode_key=mode.key)
+        row = m.ResourceExecutionContext(
+            id=str(uuid4()), operation_id=str(request.context.operation_id),
+            request=request.model_dump(mode="json"),
+            verified_projection={"tracker_project_id": PROJECT_REF},
+            workflow_id=mode.workflow_id, mode_id=mode.id, created_by_subject="confirmed-operator",
+        )
+    token = human_scope.set(current)
+    try:
+        with get_session() as session:
+            session.add(row)
+            if writable_owner:
+                session.commit()
+            else:
+                with pytest.raises(SpaceAccessDenied, match="Context owner space denied"):
+                    session.commit()
+                session.rollback()
+    finally:
+        human_scope.reset(token)
+    with get_session() as session:
+        assert (session.get(m.ResourceExecutionContext, row.id) is not None) is writable_owner

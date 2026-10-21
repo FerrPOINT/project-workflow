@@ -4,7 +4,10 @@ import json
 
 import pytest
 
+from project_workflow.infrastructure.db.managed_catalog import ManagedMode
+from project_workflow.infrastructure.db.schema import _phase_item_to_supervisor
 from project_workflow.infrastructure.db.single_task_catalog import load_profile
+from project_workflow.supervisor.contracts import PhaseContractBuilder
 from scripts.build_single_task_profile import render
 
 MODES = [
@@ -122,6 +125,45 @@ def test_pm_brainstorming_and_pre_document_feedback_do_not_require_a_fake_revisi
         assert "until an accepted complete=true" not in instruction_text(phase)
 
 
+def test_pm_incomplete_brief_contract_requires_only_actual_gap_clarification(catalog):
+    mode = ManagedMode.model_validate(mode_for(catalog, "project_manager", "draft"))
+    phases = [_phase_item_to_supervisor(phase) for phase in mode.phases]
+    builder = PhaseContractBuilder(phases)
+    contract = builder.build(phases[1])
+    text = " ".join(contract.instructions)
+    for required in (
+        "Clarify ONLY when the initial input is incomplete or contradictory",
+        "identify the concrete gap", "one useful question at a time", "free-form answers",
+        "Resolve blocking gaps or contradictions", "existing requirements revision",
+    ):
+        assert required in text
+    criteria = " ".join(text for _, text in builder.build_evaluation_items(phases[1]))
+    assert "Actual blocking gaps/contradictions were resolved without invented answers" in criteria
+    assert "For incomplete/contradictory input only: actual clarification and resolution references" in criteria
+    assert "Unresolved blockers remain explicit" in criteria
+
+
+def test_pm_complete_brief_contract_goes_to_requirements_without_questions_but_requires_confirmation(catalog):
+    mode = ManagedMode.model_validate(mode_for(catalog, "project_manager", "draft"))
+    phases = [_phase_item_to_supervisor(phase) for phase in mode.phases]
+    builder = PhaseContractBuilder(phases)
+    text = " ".join(builder.build(phases[1]).instructions)
+    assert "If the initial input is complete and consistent, ask no clarification questions" in text
+    assert "proceed directly to the real requirements document" in text
+    assert "Do not invent a question, missing detail or alternative solely to complete a phase" in text
+    criteria = " ".join(builder.build_checklist(phases[1]))
+    assert "no question/answer evidence is required" in criteria
+    assert "no question/answer references required" in criteria
+    assert "no clarification questions or mandatory alternatives" in criteria
+    final = builder.build(phases[-1])
+    assert "Clarification questions are not a prerequisite for confirmation" in " ".join(final.required_checks)
+    assert "only when they occurred" in " ".join(final.required_evidence)
+    terminal = final.instructions[-1]
+    assert terminal.index("ONLY AFTER") < terminal.index("confirmation receipt readback succeeds")
+    assert terminal.index("confirmation receipt readback succeeds") < terminal.index("--report <report-text>")
+    assert "Backlog / Ready" in terminal and "PM does not dispatch Analyst" in terminal
+
+
 def test_pm_confirmation_uses_current_typed_input_and_direct_cli_before_final_report(catalog):
     final = mode_for(catalog, "project_manager", "draft")["phases"][-1]
     text = instruction_text(final)
@@ -130,7 +172,7 @@ def test_pm_confirmation_uses_current_typed_input_and_direct_cli_before_final_re
                      "Answer.id", "PmFeedbackReceipt.message_id", "Confirmation.id", "old run terminal",
                      "Any document change invalidates earlier consent", "same execution/assignment/cycle",
                      "direct GET requirements/{revision}/confirmation", "owner_subject", "Backlog",
-                     "Backlog / Ready", "Analysis / Ready", "PM does not dispatch Analyst"):
+                     "Backlog / Ready only", "PM does not dispatch Analyst"):
         assert required in text
     assert "answer_event_ref" not in text
     assert "worker is preparing" not in text and "existing answer-only" not in text
@@ -140,6 +182,24 @@ def test_pm_confirmation_uses_current_typed_input_and_direct_cli_before_final_re
         "--report <report-text>")
     assert "ONLY AFTER" in terminal and "confirmation receipt readback succeeds" in terminal
     assert "--report" not in " ".join(i["description"] for i in final["instructions"][:-1])
+
+
+def test_pm_final_contract_stops_at_backlog_without_analysis_or_pickup_prerequisites(catalog):
+    mode = ManagedMode.model_validate(mode_for(catalog, "project_manager", "draft"))
+    phases = [_phase_item_to_supervisor(phase) for phase in mode.phases]
+    builder = PhaseContractBuilder(phases)
+    final = builder.build(phases[-1])
+    terminal = final.instructions[-1]
+    assert "ONLY AFTER the preceding exact owner confirmation receipt readback succeeds" in terminal
+    assert "stage AND status are Backlog / Ready only" in terminal
+    assert "do not request an Analysis intent, wait for Analyst pickup" in terminal
+    assert "sdlc confirmation read --task <task-uuid> --revision <confirmed-revision>" in terminal
+    assert terminal.index("confirmation receipt readback succeeds") < terminal.index("--report <report-text>")
+    criteria = " ".join(final.required_checks + final.required_evidence)
+    assert "No Analysis intent or Analyst pickup is required" in criteria
+    for text in (terminal, criteria):
+        for obsolete in ("then Analysis / Ready", "server-created Analysis intent", "Tracker/Fleet pickup"):
+            assert obsolete not in text
 
 
 def test_architecture_rework_and_devops_keep_the_single_task_boundaries(catalog):

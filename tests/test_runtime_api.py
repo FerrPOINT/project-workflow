@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from project_workflow import config
@@ -1302,12 +1303,9 @@ def test_runtime_step_integrity_error_replays_from_fresh_uow(monkeypatch):
     payload = RuntimeStepRequest.model_validate(
         {**_unknown_step_payload("DEV-25"), "report": "Готово"}
     )
-    first_uow = MagicMock()
-    first_uow.__enter__.return_value = first_uow
-    first_uow.__exit__.return_value = False
-    replay_uow = MagicMock()
-    replay_uow.__enter__.return_value = replay_uow
-    replay_uow.__exit__.return_value = False
+    # Keep real Session events and transaction cleanup active around the forced race.
+    first_uow = SAUnitOfWork()
+    replay_uow = SAUnitOfWork()
     replay_response = {
         "ok": True,
         "exit_code": 0,
@@ -1315,12 +1313,25 @@ def test_runtime_step_integrity_error_replays_from_fresh_uow(monkeypatch):
         "result": {"replayed": True},
     }
 
+    def read_saved(uow, **_kwargs):
+        if uow is replay_uow:
+            rolled_back.assert_called_once_with()
+            closed.assert_called_once_with()
+            assert not first_uow.session.in_transaction()
+        else:
+            assert uow is first_uow
+        # Both reads begin actual transactions through the production Session listeners.
+        assert uow.session.scalar(select(1)) == 1
+        return replay_response if uow is replay_uow else None
+
     with (
+        patch.object(first_uow, "rollback", wraps=first_uow.rollback) as rolled_back,
+        patch.object(first_uow, "close", wraps=first_uow.close) as closed,
         patch.object(runtime_api, "SAUnitOfWork", side_effect=[first_uow, replay_uow]) as factory,
         patch.object(runtime_api, "_namespace_id", return_value=1),
         patch.object(runtime_api, "_require_valid_key", return_value="DEV-25"),
         patch.object(runtime_api, "_assert_task_key_in_namespace"),
-        patch.object(runtime_api, "_runtime_step_replay", side_effect=[None, replay_response]),
+        patch.object(runtime_api, "_runtime_step_replay", side_effect=read_saved),
         patch.object(TaskService, "validate_runtime_step", return_value=MagicMock()),
         patch.object(
             runtime_api,
@@ -1336,6 +1347,9 @@ def test_runtime_step_integrity_error_replays_from_fresh_uow(monkeypatch):
     assert response == replay_response
     assert factory.call_count == 2
     assert first_uow is not replay_uow
+    assert first_uow.session is not replay_uow.session
+    assert not first_uow.session.in_transaction()
+    assert not replay_uow.session.in_transaction()
 
 
 def test_completed_step_cannot_replay_into_retry_or_new_cycle(monkeypatch, supervisor_llm):

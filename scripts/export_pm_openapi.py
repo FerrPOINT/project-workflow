@@ -18,6 +18,7 @@ def pm_openapi() -> dict[str, Any]:
             "/internal/runtime/assign", "/internal/runtime/bind", "/internal/runtime/rebind",
             "/internal/runtime/step", "/internal/runtime/history",
             "/internal/runtime/terminal-receipt/readback",
+            "/internal/runtime/pm-bootstrap/predecessor", "/internal/runtime/pm-bootstrap/retry",
         }
     )}
     components: dict[str, Any] = {}

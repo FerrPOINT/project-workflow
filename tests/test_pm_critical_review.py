@@ -15,7 +15,7 @@ from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.ui.app import create_app
 from tests import test_single_task_runtime as runtime_fixture
 from tests.test_single_task_pm_terminal import CURRENT_RUN, READBACK, complete
-from tests.test_single_task_runtime import API, PM, PROFILE, RUNNER, WRITER
+from tests.test_single_task_runtime import API, PM, PROFILE, RUNNER, SESSION, WRITER, enroll_pm
 from tests.test_single_task_runtime import bridge as bridge
 
 REVIEW_RUN = "22222222-2222-4222-8222-222222222201"
@@ -56,6 +56,70 @@ def review_bind(client, assignment):
         "session_run_id": REVIEW_RUN, "fence": 1, "dispatch_operation_key": command["operation_key"],
     })
     return binding, command, observation
+
+
+def test_unenrolled_pm_cannot_replace_finalized_binding_or_accept_first_step(bridge, monkeypatch):
+    assignment, binding, step, headers = runtime_fixture.prepare(
+        bridge, monkeypatch, "project_manager", "draft", "Draft",
+    )
+    with SAUnitOfWork() as uow:
+        original = uow.tasks.get_assignment_by_operation_key(assignment["operation_key"]).to_dict()
+    replay = bridge.post(API + "bind", json=binding, headers=WRITER)
+    assert replay.status_code == 200, replay.text
+    changed = {**binding, "bind_operation_key": "technical:replacement",
+               "binding_ref": "binding:replacement", "hermes_run_ref": "run:replacement",
+               "session_run_id": REVIEW_RUN}
+    assert bridge.post(API + "bind", json=changed, headers=WRITER).status_code == 409
+    assert bridge.post(API + "bind", json={**changed, "no_step": True}, headers=WRITER).status_code == 422
+    first = bridge.post(API + "step", json=step, headers=headers)
+    assert first.status_code == 409, first.text
+    assert "Single-task PM requires existing PM execution enrollment" in first.text
+    with SAUnitOfWork() as uow:
+        assert uow.tasks.get_assignment_by_operation_key(assignment["operation_key"]).to_dict() == original
+        task = uow.tasks.get_by_key(assignment["task"], project_id=original["project_id"])
+        assert task.status == "active" and task.current_phase_code == "PM-DRAFT-01"
+        assert uow.step_history.list(task_id=task.id) == []
+        assert list(uow.session.scalars(select(m.PMExecution))) == []
+        assert list(uow.session.scalars(select(m.PMRun))) == []
+        assert list(uow.session.scalars(select(m.PMOperation))) == []
+
+
+@pytest.mark.parametrize("native_status", ["completed", "failed", "cancelled", "stopped"])
+@pytest.mark.parametrize("read_first", [False, True])
+def test_native_terminal_without_report_is_not_workflow_completion_or_review_admission(
+    bridge, monkeypatch, native_status, read_first,
+):
+    identity, observations, headers, step = enroll_pm(bridge, monkeypatch)
+
+    def retained():
+        with SAUnitOfWork() as uow:
+            return {model.__tablename__: [m.model_to_dict(row) for row in uow.session.scalars(
+                select(model).order_by(*model.__table__.primary_key.columns),
+            )] for model in (m.Task, m.TaskRuntimeAssignment, m.TaskStepHistoryEntry, m.TaskPhaseEvent,
+                             m.PMExecution, m.PMRun, m.PMOperation)}
+
+    before = retained()
+    assert before["task_step_history"] == []
+    if read_first:
+        first = bridge.post(API + "step", json=step, headers=headers)
+        assert first.status_code == 200, first.text
+        assert first.json()["result"]["phase_code"] == "PM-DRAFT-01"
+        # A read-only first step is not a durable report/progress observation.
+        assert retained() == before
+    observations[SESSION]["status"] = native_status
+    lookup = {**PROFILE, **identity}
+    prior = bridge.post(PM + "readback", json=lookup, headers=headers)
+    assert prior.status_code == 200, prior.text
+    assert prior.json()["result"]["checkpoint"] is None
+    rejected = bridge.post(API + "assign", json=review_assignment(), headers=WRITER)
+    assert rejected.status_code == 409, rejected.text
+    assert "Previous PM Workflow execution is not complete" in rejected.text
+    receipt = bridge.post(READBACK, json={
+        **PROFILE, "task": step["task"], "session_run_id": SESSION, "current_run": True,
+        "single_task_context_sha256": step["single_task_context_sha256"],
+    }, headers=headers)
+    assert receipt.status_code == 404, receipt.text
+    assert retained() == before
 
 
 @pytest.mark.parametrize("native_status", ["completed", "failed", "cancelled", "stopped"])
@@ -214,7 +278,7 @@ def test_pm_review_migration_preserves_populated_execution_and_history(tmp_path)
         assert "uq_pm_task_agent" in {u["name"] for u in inspect(engine).get_unique_constraints("pm_executions")}
         ensure_migrated(engine)
         ensure_migrated(engine)
-        assert database_revisions(engine) == {"0015_single_task_assignments"}
+        assert database_revisions(engine) == {"0016_human_project_commit_guard"}
         assert "uq_pm_task_agent" not in {u["name"] for u in inspect(engine).get_unique_constraints("pm_executions")}
         assert "ix_pm_task_agent" in {i["name"] for i in inspect(engine).get_indexes("pm_executions")}
         with engine.connect() as connection:
@@ -225,7 +289,11 @@ def test_pm_review_migration_preserves_populated_execution_and_history(tmp_path)
             assert connection.execute(text("SELECT single_task_binding_json FROM task_runtime_assignments")).all() == [
                 (None,),
             ]
-        with pytest.raises(RuntimeError, match="preserved"):
+        with pytest.raises(RuntimeError, match="compatible guarded rollback cohort"):
             run_alembic_command("downgrade", engine, "0014_launch_profile_only")
+        assert database_revisions(engine) == {"0016_human_project_commit_guard"}
+        with engine.connect() as connection:
+            for name, table in tables.items():
+                assert connection.execute(select(table)).mappings().all() == frozen[name], name
     finally:
         engine.dispose()

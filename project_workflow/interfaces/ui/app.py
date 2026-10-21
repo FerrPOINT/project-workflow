@@ -6,6 +6,7 @@ import logging
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -15,10 +16,21 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.staticfiles import StaticFiles
 
 from ... import __version__
 from ...infrastructure.db.session import DatabaseUnavailable, get_engine, reset_engine
-from .routes import api, cli_api, namespace_ownership_api, pages, pm_api, resource_context, runtime_api
+from .platform_branding import platform_branding
+from .routes import (
+    api,
+    cli_api,
+    namespace_ownership_api,
+    pages,
+    pm_api,
+    pm_bootstrap_api,
+    resource_context,
+    runtime_api,
+)
 from .sso import install_sso
 
 logger = logging.getLogger(__name__)
@@ -123,6 +135,7 @@ class _RequestLoggingMiddleware(BaseHTTPMiddleware):
 def _health() -> JSONResponse:
     """Readiness probe for connectivity, schema presence, and migration head."""
     from ...infrastructure.db import session as _session
+    from ...infrastructure.db.readiness import schema_is_ready_for_health
 
     health = {
         "ok": True,
@@ -138,7 +151,7 @@ def _health() -> JSONResponse:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         health["database"] = "ok"
-        if not _session.schema_is_ready(engine):
+        if not schema_is_ready_for_health(engine):
             raise RuntimeError("schema-not-ready")
         health["schema"] = "ok"
         health["catalog"] = "ok"
@@ -178,6 +191,11 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 def create_app() -> FastAPI:
     app = FastAPI(title="Интерфейс project-workflow", version=__version__, lifespan=_lifespan)
+    app.mount(
+        "/base-assets/fonts",
+        StaticFiles(directory=Path(__file__).parent / "templates/base/fonts"),
+        name="base-fonts",
+    )
     app.add_middleware(_RequestLoggingMiddleware)
     app.add_middleware(_UoWMiddleware)
     install_sso(app)
@@ -237,6 +255,7 @@ def create_app() -> FastAPI:
         return _database_not_ready_response(request)
 
     app.get("/health")(_health)
+    app.get("/api/platform/branding", response_model=None)(platform_branding)
 
     # Private bridge for isolated agent containers; separate from browser UI.
     app.get("/internal/runtime/capabilities", response_model=None)(
@@ -292,6 +311,8 @@ def create_app() -> FastAPI:
              response_model_exclude_unset=True)(pm_api.rebind)
     app.post("/internal/runtime/v1/pm/readback", response_model=PMResponse,
              response_model_exclude_unset=True)(pm_api.readback)
+    app.get("/internal/runtime/pm-bootstrap/predecessor", response_model=None)(pm_bootstrap_api.predecessor)
+    app.post("/internal/runtime/pm-bootstrap/retry", response_model=None)(pm_bootstrap_api.retry)
     from project_workflow.domain.namespace_ownership import NamespaceOwnershipResponse
 
     app.put("/api/pm/namespace-ownership/{namespace_id}", response_model=NamespaceOwnershipResponse,

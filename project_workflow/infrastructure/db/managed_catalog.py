@@ -763,10 +763,20 @@ def _assert_existing_workflow(
         raise ValueError(
             f"Managed workflow {expected.key!r} already exists with a different mode registry"
         )
-    for actual_mode, expected_mode in zip(modes, expected.modes, strict=True):
+    phases_by_mode = {}
+    for actual_mode in modes:
         if actual_mode.id is None:
             raise ValueError(f"Managed workflow {expected.key!r} has a mode without id")
-        phases = list(uow.phases.list(workflow_id, mode_id=actual_mode.id))
+        phases_by_mode[actual_mode.id] = list(uow.phases.list(workflow_id, mode_id=actual_mode.id))
+    phase_ids = [phase.id for phases in phases_by_mode.values() for phase in phases if phase.id is not None]
+    # Read ordered content once per workflow, on the caller's existing transaction.
+    instructions = uow.phase_instructions.list_for_phases(phase_ids)
+    editable = allow_editor_changes and isinstance(expected, ManagedWorkflow)
+    checks = {} if editable else uow.phase_checks.list_for_phases(phase_ids)
+    evidence = {} if editable else uow.phase_evidence_requirements.list_for_phases(phase_ids)
+    for actual_mode, expected_mode in zip(modes, expected.modes, strict=True):
+        assert actual_mode.id is not None
+        phases = phases_by_mode[actual_mode.id]
         if allow_editor_changes and isinstance(expected, ManagedWorkflow):
             if not phases or any(phase.id is None for phase in phases):
                 raise ValueError(f"Managed mode {actual_mode.key!r} requires phases owned by its role")
@@ -783,7 +793,7 @@ def _assert_existing_workflow(
                 assert phase.id is not None
                 if any(
                     not set(item.get("skills") or []).issubset(expected.skill_allowlist)
-                    for item in uow.phase_instructions.list(phase.id)
+                    for item in instructions.get(phase.id, [])
                 ):
                     raise ValueError(f"Managed phase {phase.code!r} requests an unavailable role skill")
             continue
@@ -824,7 +834,7 @@ def _assert_existing_workflow(
                     item["execution_type"],
                     item.get("skills") or [],
                 )
-                for item in uow.phase_instructions.list(phase.id)
+                for item in instructions.get(phase.id, [])
             ]
             expected_instructions = [
                 (index, item.description, "sync", item.skills)
@@ -835,8 +845,8 @@ def _assert_existing_workflow(
                     raise ValueError("Unsupported saved instruction execution mode")
                 actual_instructions = [(step, text, "sync", skills)
                                        for step, text, _, skills in actual_instructions]
-            actual_checks = [item["description"] for item in uow.phases.get_checks(phase.id)]
-            actual_evidence = [item["description"] for item in uow.phases.get_evidence(phase.id)]
+            actual_checks = [item["description"] for item in checks.get(phase.id, [])]
+            actual_evidence = [item["description"] for item in evidence.get(phase.id, [])]
             expected_checks = [
                 str(item) if isinstance(item, str) else item.description
                 for item in expected_phase.checks

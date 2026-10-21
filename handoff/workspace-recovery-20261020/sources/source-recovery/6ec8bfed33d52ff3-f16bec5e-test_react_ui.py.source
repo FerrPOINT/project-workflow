@@ -1,0 +1,102 @@
+"""Read-only pilot flag, bootstrap escaping and existing cookie-SSO boundary."""
+
+from pathlib import Path
+from types import SimpleNamespace
+
+import httpx
+import pytest
+from fastapi import FastAPI, Request
+from fastapi.testclient import TestClient
+
+from project_workflow.config import Settings
+from project_workflow.interfaces.ui import react_ui, sso
+
+
+def pilot_app(monkeypatch, tmp_path: Path, enabled: bool = True) -> tuple[FastAPI, Settings]:
+    assets = tmp_path / "assets"
+    assets.mkdir()
+    (assets / "pilot.js").write_text("console.log('fixture')", encoding="utf-8")
+    (tmp_path / "index.html").write_text(
+        '<html><!--workflow-bootstrap--><script src="/react/assets/pilot.js"></script></html>', encoding="utf-8",
+    )
+    settings = Settings(DATABASE_URL="sqlite://", WORKFLOW_REACT_UI_ENABLED=enabled)
+    monkeypatch.setenv("WORKFLOW_REACT_UI_ENABLED", str(enabled).lower())
+    monkeypatch.setattr(react_ui, "get_settings", lambda: settings)
+    monkeypatch.setattr(react_ui, "FRONTEND_DIST", tmp_path)
+    app = FastAPI()
+    react_ui.install_react_ui(app)
+    return app, settings
+
+
+def test_pilot_is_off_by_default(monkeypatch, tmp_path):
+    assert not Settings(DATABASE_URL="sqlite://").WORKFLOW_REACT_UI_ENABLED
+    app, _ = pilot_app(monkeypatch, tmp_path, enabled=False)
+    client = TestClient(app)
+    for path in ("/react/", "/react/tasks", "/react/phases", "/react/phases/1", "/react/assets/pilot.js"):
+        assert client.get(path).status_code == 404
+
+
+def test_enabled_pilot_routes_reload_and_unknown_urls(monkeypatch, tmp_path):
+    app, _ = pilot_app(monkeypatch, tmp_path)
+    client = TestClient(app, follow_redirects=False)
+    assert client.get("/react/?namespace_id=7").headers["location"] == "/react/tasks?namespace_id=7"
+    assert client.get("/react").headers["location"] == "/react/tasks"
+    for path in ("/react/tasks", "/react/phases", "/react/phases/1"):
+        response = client.get(path)
+        assert response.status_code == 200
+        assert response.headers["cache-control"] == "no-store"
+        assert 'id="workflow-bootstrap"' in response.text
+        assert client.post(path).status_code == 405
+    assert client.get("/react/assets/pilot.js").status_code == 200
+    assert client.get("/react/unknown").status_code == 404
+    assert client.get("/react/phases/not-an-id").status_code == 404
+
+
+def test_bootstrap_does_not_expose_credentials_or_allow_script_breakout():
+    request = Request({
+        "type": "http",
+        "headers": [],
+        "state": {"central_subject": '</script><img src=x onerror=alert(1)>', "token": "private-token"},
+    })
+    payload = react_ui.bootstrap_json(request)
+    assert "<" not in payload
+    assert "private-token" not in payload
+    assert "\\u003c/script" in payload
+
+
+def test_enabled_pilot_requires_verified_build(monkeypatch, tmp_path):
+    monkeypatch.setenv("WORKFLOW_REACT_UI_ENABLED", "true")
+    monkeypatch.setattr(react_ui, "get_settings", lambda: SimpleNamespace(WORKFLOW_REACT_UI_ENABLED=True))
+    monkeypatch.setattr(react_ui, "FRONTEND_DIST", tmp_path)
+    with pytest.raises(RuntimeError, match="requires a built frontend"):
+        react_ui.install_react_ui(FastAPI())
+    (tmp_path / "index.html").write_text("<html>old build</html>", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="bootstrap marker"):
+        react_ui.install_react_ui(FastAPI())
+
+
+def test_pilot_and_assets_reuse_sso_cookie_without_browser_token(monkeypatch, tmp_path):
+    app, settings = pilot_app(monkeypatch, tmp_path)
+    settings.AUTH_ISSUER = "http://localhost:7701"
+    settings.AUTH_INTERNAL_BASE_URL = "http://auth:7701"
+    settings.AUTH_PUBLIC_ORIGIN = "http://localhost:8812"
+    settings.AUTH_SESSION_SECRET = "test-only-pilot-secret-with-at-least-thirty-two-bytes"
+    monkeypatch.setenv("AUTH_ISSUER", settings.AUTH_ISSUER)
+    monkeypatch.setattr(sso, "get_settings", lambda: settings)
+    sso.install_sso(app)
+    original_client = httpx.AsyncClient
+    monkeypatch.setattr(sso.httpx, "AsyncClient", lambda **kwargs: original_client(
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, json={"id": "fixture-user"})),
+        **kwargs,
+    ))
+    with TestClient(app, base_url="http://localhost:8812", follow_redirects=False) as client:
+        denied = client.get("/react/tasks?namespace_id=7")
+        assert denied.status_code == 303
+        assert denied.headers["location"] == "/login?next=%2Freact%2Ftasks%3Fnamespace_id%3D7"
+        assert client.get("/react/assets/pilot.js").status_code == 303
+        client.cookies.set("workflow_sso", sso._encode_cookie(settings, {"token": "private-token"}))
+        response = client.get("/react/tasks?namespace_id=7")
+        assert response.status_code == 200
+        assert "fixture-user" in response.text
+        assert "private-token" not in response.text
+        assert client.get("/react/assets/pilot.js").status_code == 200

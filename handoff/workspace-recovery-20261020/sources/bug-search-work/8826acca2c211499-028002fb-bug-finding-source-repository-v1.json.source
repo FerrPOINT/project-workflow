@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "producer": "BUG_SEARCHER",
+  "rule_key": "project-access",
+  "stable_defect_key": "portal/read",
+  "repository_id": "44444444-4444-4444-8444-444444444444"
+}

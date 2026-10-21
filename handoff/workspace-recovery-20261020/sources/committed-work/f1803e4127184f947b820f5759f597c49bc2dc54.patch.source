@@ -1,0 +1,900 @@
+diff --git a/.base-revision b/.base-revision
+index cf10c32..50b73f9 100644
+--- a/.base-revision
++++ b/.base-revision
+@@ -1 +1 @@
+-c1ff66bebbb11c2f0c0f27032d733cc69b17888d
++b6fa2c6745f270d0abf086db9224d0e60bf0fad5
+diff --git a/docs/plans/2026-10-05-ui-acceptance-contract.md b/docs/plans/2026-10-05-ui-acceptance-contract.md
+index 473eddf..b0d5c8e 100644
+--- a/docs/plans/2026-10-05-ui-acceptance-contract.md
++++ b/docs/plans/2026-10-05-ui-acceptance-contract.md
+@@ -25,3 +25,15 @@ acceptanceStatus остаётся pending до полного browser gate на
+ профилях. Standalone infrastructure-failure fallback и полный state evidence
+ проверяются отдельно, unit tests не заменяют их. Рабочие images, данные,
+ snapshots, secrets, Hermes desired state и наблюдение не изменяются.
++
++SSR JSON-запросы теперь используют существующий Base HTTP SDK через штатный
++export. HTTP status, business code, body и request ID доступны в typed error;
++сообщение об ошибке показывает безопасный server message и correlation id.
++Пустой/не-JSON success отделён от HTTP failure; retry/optimistic rollback и
++finally controls сохраняются. OIDC, API bodies и namespace resource URLs
++не меняются. Отказы БД, SSO и callback используют тот же Base error shell
++без повторного доступа к БД, identity provider или service catalog.
++Регрессии сохраняют fail-closed statuses и не отражают cookies/code/DSN.
++Обновлённый source прошёл 1958 tests (94,09% coverage), 56 PostgreSQL
++integration tests, Ruff/mypy и route/SSR fingerprint gates. Actual-image
++browser acceptance ещё требуется; source tests её не заменяют.
+diff --git a/project_workflow/interfaces/ui/app.py b/project_workflow/interfaces/ui/app.py
+index 00fb538..b59f9a6 100644
+--- a/project_workflow/interfaces/ui/app.py
++++ b/project_workflow/interfaces/ui/app.py
+@@ -25,6 +25,7 @@ from ...infrastructure.db.session import DatabaseUnavailable, get_engine, reset_
+ from ...infrastructure.db.uow import SAUnitOfWork
+ from .routes import api, cli_api, pages, runtime_api
+ from .sso import install_sso
++from .templates import unavailable_page
+ 
+ logger = logging.getLogger(__name__)
+ _readiness_worker = BoundedSemaphore(1)
+@@ -67,17 +68,10 @@ def _database_not_ready_response(request: Request) -> JSONResponse | HTMLRespons
+             },
+             status_code=503,
+         )
+-    return HTMLResponse(
+-        (
+-            '<!doctype html><html lang="ru"><head><meta charset="utf-8">'
+-            f"<title>{_DATABASE_NOT_READY_ERROR}</title>"
+-            "<style>body{margin:0;font-family:Arial,sans-serif;background:#101114;color:#f5f7fb}"
+-            "main{max-width:640px;margin:12vh auto;padding:32px}"
+-            "p{color:#aeb4c0;line-height:1.6}</style></head><body><main>"
+-            f"<h1>{_DATABASE_NOT_READY_ERROR}</h1>"
+-            "<p>Проверьте подключение и примените миграции, затем обновите страницу.</p>"
+-            "</main></body></html>"
+-        ),
++    return unavailable_page(
++        request,
++        title=_DATABASE_NOT_READY_ERROR,
++        message="Данные временно недоступны. Повторите попытку позже.",
+         status_code=503,
+     )
+ 
+diff --git a/project_workflow/interfaces/ui/sso.py b/project_workflow/interfaces/ui/sso.py
+index ffd6559..5da2587 100644
+--- a/project_workflow/interfaces/ui/sso.py
++++ b/project_workflow/interfaces/ui/sso.py
+@@ -15,10 +15,11 @@ import httpx
+ import jwt
+ from cryptography.fernet import Fernet, InvalidToken
+ from fastapi import FastAPI, Request
+-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
++from fastapi.responses import JSONResponse, RedirectResponse, Response
+ from starlette.middleware.base import BaseHTTPMiddleware
+ 
+ from project_workflow.config import Settings, get_settings
++from project_workflow.interfaces.ui.templates import unavailable_page
+ 
+ _CLIENT_ID = "project-workflow"
+ _SESSION_COOKIE = "workflow_sso"
+@@ -56,19 +57,15 @@ def _auth_error(request: Request, status: int, message: str) -> Response:
+     if request.url.path.startswith("/api/"):
+         return JSONResponse({"ok": False, "error": message}, status_code=status)
+     if request.url.path == "/sso/callback":
+-        return HTMLResponse(
+-            '<!doctype html><html lang="ru"><meta charset="utf-8"><title>Ошибка входа</title>'
+-            '<main style="max-width:32rem;margin:10vh auto;font:16px system-ui">'
+-            '<h1>Не удалось войти</h1><p>Повторите вход через Central Auth.</p>'
+-            '<a href="/login">Повторить</a></main></html>', status_code=status,
++        return unavailable_page(
++            request, title="Не удалось войти", message="Повторите вход через Central Auth.",
++            status_code=status, back_url="/login",
+         )
+     if status == 401:
+         destination = _safe_next(request.url.path + (f"?{request.url.query}" if request.url.query else ""))
+         return RedirectResponse(f"/login?{urlencode({'next': destination})}", status_code=303)
+-    return HTMLResponse(
+-        '<!doctype html><html lang="ru"><meta charset="utf-8"><title>Вход недоступен</title>'
+-        '<main style="max-width:32rem;margin:10vh auto;font:16px system-ui"><h1>Central Auth недоступен</h1>'
+-        '<p>Попробуйте позже. Локальный вход не используется.</p></main></html>',
++    return unavailable_page(
++        request, title="Вход недоступен", message=message,
+         status_code=status,
+     )
+ 
+diff --git a/project_workflow/interfaces/ui/templates.py b/project_workflow/interfaces/ui/templates.py
+index 34e0917..e530b6a 100644
+--- a/project_workflow/interfaces/ui/templates.py
++++ b/project_workflow/interfaces/ui/templates.py
+@@ -5,6 +5,8 @@ from __future__ import annotations
+ from pathlib import Path
+ from typing import Any
+ 
++from fastapi import Request
++from fastapi.responses import HTMLResponse
+ from fastapi.templating import Jinja2Templates
+ from jinja2 import FileSystemLoader
+ 
+@@ -96,3 +98,33 @@ templates.env.globals["project_icon_paths"] = {
+ templates.env.globals["project_icon_options"] = _project_icon_options()
+ templates.env.globals["default_project_icon"] = DEFAULT_PROJECT_ICON
+ env = templates.env
++
++
++def unavailable_page(
++    request: Request,
++    *,
++    title: str,
++    message: str,
++    status_code: int,
++    back_url: str = "/",
++    back_label: str = "Повторить",
++) -> HTMLResponse:
++    """Render the shared error shell without database or service-catalog access."""
++    return templates.TemplateResponse(
++        request=request,
++        name="error.html",
++        status_code=status_code,
++        context={
++            "page": "",
++            "title": title,
++            "message": message,
++            "status_code": status_code,
++            "back_url": back_url,
++            "back_label": back_label,
++            "namespaces": [],
++            "selected_namespace": None,
++            "theme_namespace": None,
++            "other_services": [],
++            "services_source": "unavailable",
++        },
++    )
+diff --git a/project_workflow/interfaces/ui/templates/agents.html b/project_workflow/interfaces/ui/templates/agents.html
+index 4787aee..a0c75fd 100644
+--- a/project_workflow/interfaces/ui/templates/agents.html
++++ b/project_workflow/interfaces/ui/templates/agents.html
+@@ -112,8 +112,7 @@ async function saveAgent(event,form){
+   var button=form.querySelector('[type="submit"]');
+   button.disabled=true;
+   try{
+-    var response=await fetch('/api/agents/'+entry.dataset.id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,description:description,launch_profile:launchProfile||null})});
+-    var data=await response.json();
++    var data=await workflowApi.request('/api/agents/'+entry.dataset.id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,description:description,launch_profile:launchProfile||null})});
+     if(!data.ok){showToast(data.error||'Ошибка','error');return;}
+     [['name',name],['launch_profile',launchProfile],['description',description]].forEach(function(item){
+       var field=form.elements.namedItem(item[0]);
+@@ -135,8 +134,7 @@ async function deleteAgent(button){
+   if(!await requestConfirmation({eyebrow:'Удаление агента',title:'Удалить агента «'+name+'»?',message:'Агент «'+name+'» будет удалён из списка.',confirmLabel:'Удалить'}))return;
+   button.disabled=true;
+   try{
+-    var response=await fetch('/api/agents/'+entry.dataset.id,{method:'DELETE'});
+-    var data=await response.json();
++    var data=await workflowApi.request('/api/agents/'+entry.dataset.id,{method:'DELETE'});
+     if(!data.ok){showToast(data.error||'Ошибка','error');return;}
+     var next=entry.nextElementSibling;
+     var previous=entry.previousElementSibling;
+@@ -160,8 +158,7 @@ async function addAgent(event){
+   var button=event.target.querySelector('[type="submit"]');
+   button.disabled=true;
+   try{
+-    var response=await fetch('/api/agents',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,description:description,launch_profile:launchProfile||null})});
+-    var data=await response.json();
++    var data=await workflowApi.request('/api/agents',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,description:description,launch_profile:launchProfile||null})});
+     if(data.ok){showToast('Добавлено','success');location.reload()}else showToast(data.error||'Ошибка','error');
+   }catch(error){showRequestError(error)}finally{button.disabled=false}
+ }
+diff --git a/project_workflow/interfaces/ui/templates/base-assets/base-ui.js b/project_workflow/interfaces/ui/templates/base-assets/base-ui.js
+index e0d0b10..395f2d5 100644
+--- a/project_workflow/interfaces/ui/templates/base-assets/base-ui.js
++++ b/project_workflow/interfaces/ui/templates/base-assets/base-ui.js
+@@ -1,3 +1,120 @@
++(() => {
++const exports = {};
++"use strict";
++Object.defineProperty(exports, "__esModule", { value: true });
++exports.InvalidResponseError = exports.ApiError = void 0;
++exports.apiErrorFromResponse = apiErrorFromResponse;
++exports.createApiClient = createApiClient;
++class ApiError extends Error {
++    status;
++    code;
++    body;
++    requestId;
++    constructor(status, message, body, requestId) {
++        super(message);
++        this.status = status;
++        this.name = 'ApiError';
++        this.body = body;
++        this.requestId = requestId;
++        const errorBody = body && typeof body === 'object' ? body : undefined;
++        const envelope = errorBody?.error;
++        this.code =
++            envelope && typeof envelope === 'object' && typeof envelope.code === 'string'
++                ? envelope.code
++                : typeof errorBody?.error_code === 'string' ? errorBody.error_code : undefined;
++    }
++}
++exports.ApiError = ApiError;
++class InvalidResponseError extends ApiError {
++    constructor(status, requestId) {
++        super(status, 'invalid JSON response', undefined, requestId);
++        this.name = 'InvalidResponseError';
++    }
++}
++exports.InvalidResponseError = InvalidResponseError;
++function apiErrorFromResponse(res, data) {
++    const body = data && typeof data === 'object' ? data : undefined;
++    const envelope = body?.error;
++    const message = typeof envelope === 'string' ? envelope
++        : envelope && typeof envelope.message === 'string' ? envelope.message
++            : typeof body?.message === 'string' ? body.message : `request failed: ${res.status}`;
++    const bodyId = envelope && typeof envelope === 'object'
++        ? typeof envelope.request_id === 'string' ? envelope.request_id
++            : typeof envelope.requestId === 'string' ? envelope.requestId : undefined
++        : undefined;
++    return new ApiError(res.status, message, data, res.headers.get('x-request-id') ?? bodyId);
++}
++function createApiClient(options = {}) {
++    const baseUrl = (options.baseUrl ?? '').replace(/\/+$/, '');
++    async function transport(path, init = {}, retried = false) {
++        if (options.refresh && typeof ReadableStream !== 'undefined' && init.body instanceof ReadableStream) {
++            throw new TypeError('Streaming request bodies cannot be replayed after authentication refresh');
++        }
++        const headers = new Headers(init.headers);
++        const token = options.getAccessToken?.();
++        if (token && !headers.has('Authorization'))
++            headers.set('Authorization', `Bearer ${token}`);
++        const res = await fetch(`${baseUrl}${path}`, {
++            credentials: 'include',
++            ...init,
++            headers,
++        });
++        if (res.status === 401 && !retried && options.refresh) {
++            const refreshed = await options.refresh();
++            if (refreshed)
++                return transport(path, init, true);
++        }
++        if (res.status === 401)
++            options.onUnauthorized?.();
++        return res;
++    }
++    async function raw(path, init = {}) {
++        return transport(path, {
++            method: init.method ?? 'GET',
++            signal: init.signal,
++            headers: init.body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
++            body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
++        }, init._retried);
++    }
++    async function json(res) {
++        if (res.status === 204)
++            return undefined;
++        const text = await res.text();
++        const data = text ? safeJson(text) : undefined;
++        if (!res.ok) {
++            throw apiErrorFromResponse(res, data);
++        }
++        if (!text || data === undefined) {
++            throw new InvalidResponseError(res.status, res.headers.get('x-request-id') ?? undefined);
++        }
++        return data;
++    }
++    function safeJson(text) {
++        try {
++            return JSON.parse(text);
++        }
++        catch {
++            return undefined;
++        }
++    }
++    return {
++        request: async (path, init) => {
++            const response = await transport(path, init);
++            if (init?.method?.toUpperCase() === 'HEAD' && response.ok)
++                return undefined;
++            return json(response);
++        },
++        get: async (path, signal) => json(await raw(path, { signal })),
++        post: async (path, body, signal) => json(await raw(path, { method: 'POST', body, signal })),
++        put: async (path, body, signal) => json(await raw(path, { method: 'PUT', body, signal })),
++        patch: async (path, body, signal) => json(await raw(path, { method: 'PATCH', body, signal })),
++        delete: async (path, signal) => json(await raw(path, { method: 'DELETE', signal })),
++        raw,
++    };
++}
++
++window.sdlcApi = exports;
++})();
+ (() => {
+   for (const account of document.querySelectorAll('.base-ssr-account')) {
+     const toggle = account.querySelector('summary');
+diff --git a/project_workflow/interfaces/ui/templates/base-assets/fingerprint.json b/project_workflow/interfaces/ui/templates/base-assets/fingerprint.json
+index c71aebf..79fefc2 100644
+--- a/project_workflow/interfaces/ui/templates/base-assets/fingerprint.json
++++ b/project_workflow/interfaces/ui/templates/base-assets/fingerprint.json
+@@ -3,7 +3,7 @@
+   "package": "@sdlc/ui",
+   "files": {
+     "base-ui.css": "6542d2657dd1373056c070e90e5cf46669316959f44ea6f937342d760f6295d6",
+-    "base-ui.js": "b653e40f48efadf50c0190ef3c461ad4db93c49f02577057696fe5a1fe8546eb",
++    "base-ui.js": "1b1f3a527508108566c660c8d6af351ef5ad113096973a1c67bc9231609bd889",
+     "macros.html": "02a5ce224504415b3f336cd65441373c414158dfa5e8a14bfe778b1a8b88c3a1"
+   }
+ }
+diff --git a/project_workflow/interfaces/ui/templates/base.html b/project_workflow/interfaces/ui/templates/base.html
+index ce0c22f..f334349 100644
+--- a/project_workflow/interfaces/ui/templates/base.html
++++ b/project_workflow/interfaces/ui/templates/base.html
+@@ -436,7 +436,9 @@ textarea{resize:vertical;min-height:60px}
+   </section>
+ </div>
+ 
++<script>{% include 'base-assets/base-ui.js' %}</script>
+ <script>
++var workflowApi = window.sdlcApi.createApiClient();
+ function syncSidebarLayout(){
+   var sidebar=document.getElementById('sidebar');
+   var main=document.querySelector('.main');
+@@ -518,8 +520,16 @@ function showToast(msg, type){
+     t.setAttribute('aria-hidden','true');
+   },2000);
+ }
+-function showRequestError(){
+-  showToast('Не удалось связаться с сервером','error');
++function showRequestError(error){
++  var message='Не удалось связаться с сервером';
++  if(error instanceof window.sdlcApi.ApiError){
++    message=error instanceof window.sdlcApi.InvalidResponseError
++      ? 'Сервер вернул некорректный ответ'
++      : error.message.startsWith('request failed:')
++        ? 'Не удалось выполнить запрос (HTTP '+error.status+')' : error.message;
++    if(error.requestId){message+=' · Код обращения: '+error.requestId;}
++  }
++  showToast(message,'error');
+ }
+ function requestConfirmation(options){
+   var dialog = document.getElementById('confirmDialog');
+diff --git a/project_workflow/interfaces/ui/templates/instructions.html b/project_workflow/interfaces/ui/templates/instructions.html
+index daaf1ba..7de848c 100644
+--- a/project_workflow/interfaces/ui/templates/instructions.html
++++ b/project_workflow/interfaces/ui/templates/instructions.html
+@@ -169,18 +169,18 @@ function updateMoveButtons() {
+ async function persistOrder() {
+   const ids = getRows().map(r => parseInt(r.dataset.instructionId, 10));
+   try {
+-    const resp = await fetch(instructionApiUrl('/api/phases/' + PHASE_ID + '/instructions/reorder'), {
++    const data = await workflowApi.request(instructionApiUrl('/api/phases/' + PHASE_ID + '/instructions/reorder'), {
+       method: 'PUT',
+       headers: {'Content-Type': 'application/json'},
+       body: JSON.stringify({instruction_ids: ids}),
+     });
+-    if (!resp.ok) {
++    if (!data.ok) {
+       showToast('Не удалось сохранить порядок', 'error');
+       return false;
+     }
+     return true;
+-  } catch (_error) {
+-    showToast('Не удалось сохранить порядок', 'error');
++  } catch (error) {
++    showRequestError(error);
+     return false;
+   }
+ }
+@@ -205,11 +205,10 @@ async function moveInstruction(button, dir) {
+ 
+ async function requestInstruction(url, options) {
+   try {
+-    const resp = await fetch(url, options);
+-    const data = await resp.json().catch(() => ({}));
+-    return {resp, data};
+-  } catch (_error) {
+-    showRequestError();
++    const data = await workflowApi.request(url, options);
++    return {data};
++  } catch (error) {
++    showRequestError(error);
+     return null;
+   }
+ }
+@@ -236,8 +235,8 @@ async function updateInstruction(textarea) {
+       textarea.value = previousDescription;
+       return;
+     }
+-    const {resp, data} = result;
+-    if (!resp.ok || !data.ok) {
++    const {data} = result;
++    if (!data.ok) {
+       textarea.value = previousDescription;
+       showToast(data.error || 'Ошибка сохранения', 'error');
+       return;
+@@ -261,8 +260,8 @@ async function toggleType(badge) {
+     body: JSON.stringify({execution_type: nextType}),
+   });
+   if (!result) return;
+-  const {resp, data} = result;
+-  if (!resp.ok || !data.ok) {
++  const {data} = result;
++  if (!data.ok) {
+     showToast(data.error || 'Ошибка сохранения', 'error');
+     return;
+   }
+@@ -279,8 +278,8 @@ async function deleteInstruction(button) {
+   if (!await requestConfirmation({eyebrow:'Удаление инструкции',title:'Удалить инструкцию?',message:'Инструкция будет удалена без возможности восстановления.',confirmLabel:'Удалить'})) return;
+   const result = await requestInstruction(instructionApiUrl('/api/instructions/' + id), {method: 'DELETE'});
+   if (!result) return;
+-  const {resp, data} = result;
+-  if (!resp.ok || !data.ok) {
++  const {data} = result;
++  if (!data.ok) {
+     showToast(data.error || 'Ошибка удаления', 'error');
+     return;
+   }
+@@ -298,8 +297,8 @@ async function addInstruction() {
+     body: JSON.stringify({phase_id: PHASE_ID, description: description}),
+   });
+   if (!result) return;
+-  const {resp, data} = result;
+-  if (!resp.ok || !data.ok) {
++  const {data} = result;
++  if (!data.ok) {
+     showToast(data.error || 'Ошибка добавления', 'error');
+     return;
+   }
+@@ -316,8 +315,8 @@ async function updateSkills(input) {
+     body: JSON.stringify({skills: selected}),
+   });
+   if (!result) return;
+-  const {resp, data} = result;
+-  if (!resp.ok || !data.ok) {
++  const {data} = result;
++  if (!data.ok) {
+     showToast(data.error || 'Ошибка сохранения', 'error');
+     return;
+   }
+diff --git a/project_workflow/interfaces/ui/templates/namespaces.html b/project_workflow/interfaces/ui/templates/namespaces.html
+index fb59828..10d9998 100644
+--- a/project_workflow/interfaces/ui/templates/namespaces.html
++++ b/project_workflow/interfaces/ui/templates/namespaces.html
+@@ -316,8 +316,7 @@ function restoreNamespaceLocation(){
+   if(namespaceId != null){ selectNamespace(namespaceId, 'none'); }
+ }
+ function reloadNamespaces(nextId){
+-  return fetch('/api/namespaces')
+-    .then(function(r){return r.json()})
++  return workflowApi.request('/api/namespaces')
+     .then(function(d){
+       if(!d.ok){showToast(d.error || 'Ошибка загрузки','error');return;}
+       namespaceStore.length = 0;
+@@ -432,8 +431,7 @@ function saveNamespace(){
+   if(selectedNamespaceId == null){ showToast('Сначала выберите неймспейс','error'); return; }
+   var namespaceId = selectedNamespaceId;
+   var payload = currentPayload();
+-  return fetch('/api/namespaces/' + namespaceId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+-    .then(function(r){return r.json()})
++  return workflowApi.request('/api/namespaces/' + namespaceId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+     .then(function(d){ if(d.ok){ showToast('Неймспейс сохранён','success'); return reloadNamespaces(namespaceId); } showToast(d.error || 'Ошибка','error'); })
+     .catch(showRequestError);
+ }
+@@ -448,16 +446,14 @@ async function deleteNamespace(){
+   var button = document.getElementById('deleteNamespaceButton');
+   button.disabled = true;
+   button.textContent = 'Удаление…';
+-  return fetch('/api/namespaces/' + namespaceId,{method:'DELETE'})
+-    .then(function(r){return r.json()})
++  return workflowApi.request('/api/namespaces/' + namespaceId,{method:'DELETE'})
+     .then(function(d){ if(d.ok){ showToast('Неймспейс удалён','success'); return reloadNamespaces(null); } showToast(d.error || 'Ошибка','error'); })
+     .catch(showRequestError)
+     .finally(function(){ setNamespaceFormMode(namespaceFormMode); });
+ }
+ function createNamespace(){
+   var payload = currentPayload();
+-  return fetch('/api/namespaces',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+-    .then(function(r){return r.json()})
++  return workflowApi.request('/api/namespaces',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+     .then(function(d){
+       if(d.ok){
+         showToast('Неймспейс создан','success');
+diff --git a/project_workflow/interfaces/ui/templates/phase_detail.html b/project_workflow/interfaces/ui/templates/phase_detail.html
+index 0cb94a1..7836ad9 100644
+--- a/project_workflow/interfaces/ui/templates/phase_detail.html
++++ b/project_workflow/interfaces/ui/templates/phase_detail.html
+@@ -494,19 +494,19 @@ function updateInstructionControls() {
+ async function persistInstructionOrder() {
+   const ids = getInstructionItems().map((item) => parseInt(item.dataset.instructionId, 10));
+   try {
+-    const resp = await fetch(phaseApiUrl(`/api/phases/${phaseId}/instructions/reorder`), {
++    const data = await workflowApi.request(phaseApiUrl(`/api/phases/${phaseId}/instructions/reorder`), {
+       method: 'PUT',
+       headers: {'Content-Type': 'application/json'},
+       body: JSON.stringify({instruction_ids: ids}),
+     });
+-    if (!resp.ok) {
++    if (!data.ok) {
+       showToast('Не удалось сохранить порядок инструкций', 'error');
+       return false;
+     }
+     showToast('Порядок инструкций сохранён', 'success');
+     return true;
+-  } catch (_error) {
+-    showToast('Не удалось сохранить порядок инструкций', 'error');
++  } catch (error) {
++    showRequestError(error);
+     return false;
+   }
+ }
+@@ -531,11 +531,10 @@ async function moveInstruction(button, direction) {
+ 
+ async function requestPhaseDetail(url, options) {
+   try {
+-    const resp = await fetch(url, options);
+-    const data = await resp.json().catch(() => ({}));
+-    return {resp, data};
+-  } catch (_error) {
+-    showRequestError();
++    const data = await workflowApi.request(url, options);
++    return {data};
++  } catch (error) {
++    showRequestError(error);
+     return null;
+   }
+ }
+@@ -553,8 +552,8 @@ async function addInstructionAfter(button) {
+       body: JSON.stringify({phase_id: phaseId, description: 'Новая инструкция', step_num: stepNum}),
+     });
+     if (!result) return;
+-    const {resp, data} = result;
+-    if (!resp.ok || !data.ok) {
++    const {data} = result;
++    if (!data.ok) {
+       showToast(data.error || 'Не удалось добавить инструкцию', 'error');
+       return;
+     }
+@@ -577,8 +576,8 @@ async function addInstructionLast() {
+       body: JSON.stringify({phase_id: phaseId, description: 'Новая инструкция', step_num: stepNum}),
+     });
+     if (!result) return;
+-    const {resp, data} = result;
+-    if (!resp.ok || !data.ok) {
++    const {data} = result;
++    if (!data.ok) {
+       showToast(data.error || 'Не удалось добавить инструкцию', 'error');
+       return;
+     }
+@@ -597,8 +596,8 @@ async function deleteInstruction(button) {
+     const id = item.dataset.instructionId;
+     const result = await requestPhaseDetail(phaseApiUrl('/api/instructions/' + id), {method: 'DELETE'});
+     if (!result) return;
+-    const {resp, data} = result;
+-    if (!resp.ok || !data.ok) {
++    const {data} = result;
++    if (!data.ok) {
+       showToast(data.error || 'Не удалось удалить инструкцию', 'error');
+       return;
+     }
+@@ -621,8 +620,8 @@ async function toggleInstructionType(badge) {
+       body: JSON.stringify({execution_type: nextType}),
+     });
+     if (!result) return;
+-    const {resp} = result;
+-    if (!resp.ok) {
++    const {data} = result;
++    if (!data.ok) {
+       showToast('Не удалось сменить режим', 'error');
+       return;
+     }
+@@ -654,8 +653,8 @@ async function saveInstructionDescription(input) {
+       input.value = previousDescription;
+       return;
+     }
+-    const {resp, data} = result;
+-    if (!resp.ok || !data.ok) {
++    const {data} = result;
++    if (!data.ok) {
+       input.value = previousDescription;
+       showToast(data.error || 'Не удалось сохранить описание', 'error');
+       return;
+@@ -686,8 +685,8 @@ async function addSkillToInstruction(input) {
+       body: JSON.stringify({skills: skills}),
+     });
+     if (!result) return;
+-    const {resp} = result;
+-    if (!resp.ok) {
++    const {data} = result;
++    if (!data.ok) {
+       showToast('Не удалось добавить навык', 'error');
+       return;
+     }
+@@ -711,8 +710,8 @@ async function removeSkillFromInstruction(button) {
+     body: JSON.stringify({skills: skills}),
+   });
+   if (!result) return;
+-  const {resp} = result;
+-  if (!resp.ok) {
++  const {data} = result;
++  if (!data.ok) {
+     showToast('Не удалось убрать навык', 'error');
+     return;
+   }
+@@ -844,13 +843,12 @@ async function persistPhase() {
+   });
+ 
+   try {
+-    const resp = await fetch(phaseApiUrl('/api/phases/' + phaseId), {
++    const result = await workflowApi.request(phaseApiUrl('/api/phases/' + phaseId), {
+       method: 'PUT',
+       headers: {'Content-Type': 'application/json'},
+       body: JSON.stringify(data),
+     });
+-    if (!resp.ok) { showToast('Ошибка сохранения', 'error'); return false; }
+-    const result = await resp.json();
++    if (!result.ok) { showToast(result.error || 'Ошибка сохранения', 'error'); return false; }
+     showToast('Сохранено', 'success');
+     if (result.ids) {
+       const checks = document.querySelectorAll('#checks-list li:not(.empty-state)');
+@@ -863,8 +861,8 @@ async function persistPhase() {
+       });
+     }
+     return true;
+-  } catch (_error) {
+-    showToast('Ошибка сохранения', 'error');
++  } catch (error) {
++    showRequestError(error);
+     return false;
+   }
+ }
+diff --git a/project_workflow/interfaces/ui/templates/phases.html b/project_workflow/interfaces/ui/templates/phases.html
+index 7529296..7df1488 100644
+--- a/project_workflow/interfaces/ui/templates/phases.html
++++ b/project_workflow/interfaces/ui/templates/phases.html
+@@ -242,11 +242,10 @@ async function addPhaseAfter(button){
+   if(!workflowId||!modeId||currentOrder<0){showToast('Не удалось определить позицию фазы','error');return;}
+   button.disabled=true;
+   try{
+-    const resp=await fetch('/api/phases',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({workflow_id:parseInt(workflowId,10),mode_id:parseInt(modeId,10),phase_order:currentOrder+1})});
+-    const data=await resp.json().catch(()=>({}));
+-    if(!resp.ok||!data.ok){showToast(data.error||'Не удалось добавить фазу','error');return;}
++    const data=await workflowApi.request('/api/phases',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({workflow_id:parseInt(workflowId,10),mode_id:parseInt(modeId,10),phase_order:currentOrder+1})});
++    if(!data.ok){showToast(data.error||'Не удалось добавить фазу','error');return;}
+     window.location.reload();
+-  }catch(_error){showRequestError();
++  }catch(error){showRequestError(error);
+   }finally{button.disabled=false;}
+ }
+ 
+@@ -259,11 +258,10 @@ async function deletePhase(button){
+   if(!await requestConfirmation({eyebrow:'Удаление фазы',title:'Удалить фазу «'+phaseName+'»?',message:'Фаза «'+phaseName+'» и её настройки будут удалены.',confirmLabel:'Удалить'}))return;
+   button.disabled=true;
+   try{
+-    const resp=await fetch('/api/phases/'+item.dataset.phaseId,{method:'DELETE'});
+-    const data=await resp.json().catch(()=>({}));
+-    if(!resp.ok||!data.ok){showToast(data.error||'Не удалось удалить фазу','error');return;}
++    const data=await workflowApi.request('/api/phases/'+item.dataset.phaseId,{method:'DELETE'});
++    if(!data.ok){showToast(data.error||'Не удалось удалить фазу','error');return;}
+     window.location.reload();
+-  }catch(_error){showRequestError();
++  }catch(error){showRequestError(error);
+   }finally{button.disabled=false;}
+ }
+ 
+@@ -273,11 +271,10 @@ async function togglePhaseType(button){
+   const nextType=(item.dataset.executionType||'sync')==='sync'?'parallel':'sync';
+   button.disabled=true;
+   try{
+-    const resp=await fetch('/api/phases/'+item.dataset.phaseId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({execution_type:nextType})});
+-    const data=await resp.json().catch(()=>({}));
+-    if(!resp.ok||!data.ok){showToast(data.error||'Не удалось сменить режим','error');return;}
++    const data=await workflowApi.request('/api/phases/'+item.dataset.phaseId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({execution_type:nextType})});
++    if(!data.ok){showToast(data.error||'Не удалось сменить режим','error');return;}
+     window.location.reload();
+-  }catch(_error){showRequestError();
++  }catch(error){showRequestError(error);
+   }finally{button.disabled=false;}
+ }
+ 
+@@ -293,10 +290,10 @@ async function movePhase(button,direction){
+   button.disabled=true;
+   try{
+     const orders=reordered.map((phase,index)=>({phase_id:Number(phase.dataset.phaseId),phase_order:index+1}));
+-    const resp=await fetch('/api/phases/order',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({orders})});
+-    if(!resp.ok){showToast('Не удалось сохранить порядок фаз','error');return;}
++    const data=await workflowApi.request('/api/phases/order',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({orders})});
++    if(!data.ok){showToast('Не удалось сохранить порядок фаз','error');return;}
+     window.location.reload();
+-  }catch(_error){showRequestError();
++  }catch(error){showRequestError(error);
+   }finally{button.disabled=false;}
+ }
+ 
+diff --git a/project_workflow/interfaces/ui/templates/workflows.html b/project_workflow/interfaces/ui/templates/workflows.html
+index 24332b2..827f026 100644
+--- a/project_workflow/interfaces/ui/templates/workflows.html
++++ b/project_workflow/interfaces/ui/templates/workflows.html
+@@ -245,8 +245,7 @@ function renderWorkflowNav(){
+   });
+ }
+ function reloadWorkflows(nextId){
+-  return fetch('/api/workflows')
+-    .then(function(r){return r.json()})
++  return workflowApi.request('/api/workflows')
+     .then(function(d){
+       if(!d.ok){showToast(d.error || 'Ошибка загрузки воркфлоу','error');return;}
+       workflowStore.length = 0;
+@@ -275,15 +274,13 @@ function reloadWorkflows(nextId){
+ function saveWorkflow(){
+   if(selectedWorkflowId == null){ showToast('Воркфлоу не выбран','error'); return; }
+   var payload = currentWorkflowPayload();
+-  return fetch('/api/workflows/' + selectedWorkflowId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+-    .then(function(r){return r.json()})
++  return workflowApi.request('/api/workflows/' + selectedWorkflowId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+     .then(function(d){ if(d.ok){ showToast('Воркфлоу сохранён','success'); return reloadWorkflows(selectedWorkflowId); } showToast(d.error || 'Ошибка','error'); })
+     .catch(showRequestError);
+ }
+ function createWorkflow(){
+   var payload = currentWorkflowPayload();
+-  return fetch('/api/workflows',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+-    .then(function(r){return r.json()})
++  return workflowApi.request('/api/workflows',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+     .then(function(d){
+       if(d.ok){
+         showToast('Воркфлоу создан','success');
+@@ -307,8 +304,7 @@ async function deleteWorkflow(){
+   var button = document.getElementById('deleteWorkflowButton');
+   button.disabled = true;
+   button.textContent = 'Удаление…';
+-  return fetch('/api/workflows/' + workflowId,{method:'DELETE'})
+-    .then(function(r){return r.json()})
++  return workflowApi.request('/api/workflows/' + workflowId,{method:'DELETE'})
+     .then(function(d){
+       if(d.ok){
+         showToast('Воркфлоу удалён','success');
+diff --git a/tests/test_sso.py b/tests/test_sso.py
+index e19f98f..e1e5eae 100644
+--- a/tests/test_sso.py
++++ b/tests/test_sso.py
+@@ -46,6 +46,9 @@ def test_broken_login_state_never_reflects_code_in_redirect(monkeypatch):
+         assert response.status_code == 401
+         assert "private-code" not in response.text
+         assert "location" not in response.headers
++        assert 'class="base-ssr-shell"' in response.text
++        assert 'data-page-state="error"' in response.text
++        assert 'href="/login"' in response.text
+ 
+ 
+ def test_central_outage_rejects_existing_session(monkeypatch):
+@@ -63,6 +66,12 @@ def test_central_outage_rejects_existing_session(monkeypatch):
+         response = client.get("/api/tasks")
+         assert response.status_code == 503
+         assert "временно недоступен" in response.json()["error"]
++        page = client.get("/")
++        assert page.status_code == 503
++        assert 'class="base-ssr-shell"' in page.text
++        assert 'data-page-state="error" role="alert"' in page.text
++        assert "Central Auth временно недоступен" in page.text
++        assert "sso-jwt" not in page.text
+ 
+ 
+ def test_login_logout_and_canonical_origin(monkeypatch):
+diff --git a/tests/test_ui.py b/tests/test_ui.py
+index 814414b..5858970 100644
+--- a/tests/test_ui.py
++++ b/tests/test_ui.py
+@@ -762,8 +762,8 @@ class TestPhasesPage:
+         assert "movePhase(this,-1)" in response.text
+         assert "movePhase(this,1)" in response.text
+         assert "addPhaseAfter(this)" in response.text
+-        assert "fetch('/api/phases/order'" in response.text
+-        assert "fetch('/api/phases'," in response.text
++        assert "workflowApi.request('/api/phases/order'" in response.text
++        assert "workflowApi.request('/api/phases'," in response.text
+ 
+     def test_phases_page_keeps_insertion_visible_and_groups_other_actions(self):
+         response = client.get("/phases")
+@@ -932,7 +932,7 @@ class TestPhasesPage:
+             assert page.status_code == 200
+             assert "phase-delete-btn" in page.text
+             assert "deletePhase(this)" in page.text
+-            assert "fetch('/api/phases/'" in page.text
++            assert "workflowApi.request('/api/phases/'" in page.text
+ 
+             phases = [p.to_dict() for p in uow.phases.list(workflow_id=workflow_id)]
+             assert len(phases) == 1
+@@ -1305,8 +1305,8 @@ class TestPhaseDetail:
+         phase = _phase_row("4.START")
+ 
+         assert f"const phaseId = {phase['id']};" in response.text
+-        assert "fetch(phaseApiUrl('/api/phases/' + phaseId)" in response.text
+-        assert "fetch('/api/phases/4.START'" not in response.text
++        assert "workflowApi.request(phaseApiUrl('/api/phases/' + phaseId)" in response.text
++        assert "workflowApi.request('/api/phases/4.START'" not in response.text
+ 
+     def test_phase_detail_has_responsive_structured_outline(self):
+         response = client.get(_phase_detail_path("4.START"))
+@@ -2952,10 +2952,13 @@ class TestUiNetworkFailures:
+         detail_page = client.get(f"/phase/{phase_id}")
+ 
+         assert phases_page.status_code == 200
+-        assert phases_page.text.count("catch(_error){showRequestError();") >= 4
++        assert phases_page.text.count("catch(error){showRequestError(error);") >= 4
++        assert "window.sdlcApi.createApiClient()" in phases_page.text
++        assert "workflowApi.request('/api/phases'" in phases_page.text
+         assert instructions_page.status_code == 200
+         assert "async function requestInstruction(url, options)" in instructions_page.text
+-        assert "showRequestError();" in instructions_page.text
++        assert "showRequestError(error);" in instructions_page.text
++        assert "error.requestId" in instructions_page.text
+         assert detail_page.status_code == 200
+         assert "async function requestPhaseDetail(url, options)" in detail_page.text
+         assert "if (!await savePhase())" in detail_page.text
+diff --git a/tests/test_ui_api.py b/tests/test_ui_api.py
+index d31ae40..30c3776 100644
+--- a/tests/test_ui_api.py
++++ b/tests/test_ui_api.py
+@@ -125,7 +125,7 @@ class TestIndex:
+         assert f"const selectedNamespaceId = {namespace['id']};" in resp.text
+         assert "function phaseApiUrl(path)" in resp.text
+         assert "url.searchParams.set('namespace_id', String(selectedNamespaceId));" in resp.text
+-        assert "fetch(phaseApiUrl('/api/phases/' + phaseId)" in resp.text
++        assert "workflowApi.request(phaseApiUrl('/api/phases/' + phaseId)" in resp.text
+ 
+     def test_phase_detail_page_scopes_instruction_api_to_selected_namespace(self, client):
+         namespace = next(item for item in client.get("/api/namespaces").json()["namespaces"])
+@@ -134,7 +134,7 @@ class TestIndex:
+         resp = client.get(f"/phase/{phase_id}?namespace_id={namespace['id']}")
+ 
+         assert resp.status_code == 200
+-        assert "fetch(phaseApiUrl(`/api/phases/${phaseId}/instructions/reorder`)" in resp.text
++        assert "workflowApi.request(phaseApiUrl(`/api/phases/${phaseId}/instructions/reorder`)" in resp.text
+         assert "requestPhaseDetail(phaseApiUrl('/api/instructions')" in resp.text
+         assert "requestPhaseDetail(phaseApiUrl('/api/instructions/' + id)" in resp.text
+ 
+@@ -147,7 +147,7 @@ class TestIndex:
+         assert resp.status_code == 200
+         assert f"const selectedNamespaceId = {namespace['id']};" in resp.text
+         assert "function instructionApiUrl(path)" in resp.text
+-        assert "fetch(instructionApiUrl('/api/phases/' + PHASE_ID + '/instructions/reorder')" in resp.text
++        assert "workflowApi.request(instructionApiUrl('/api/phases/' + PHASE_ID + '/instructions/reorder')" in resp.text
+         assert "requestInstruction(instructionApiUrl('/api/instructions/' + id)" in resp.text
+         assert "requestInstruction(instructionApiUrl('/api/instructions')" in resp.text
+ 
+diff --git a/tests/test_ui_app.py b/tests/test_ui_app.py
+index e8101af..18d66cc 100644
+--- a/tests/test_ui_app.py
++++ b/tests/test_ui_app.py
+@@ -123,6 +123,9 @@ def test_unmigrated_database_requests_return_sanitized_readiness_errors(tmp_path
+     }
+     assert page_response.status_code == 503
+     assert "База данных не готова" in page_response.text
++    assert 'class="base-ssr-shell"' in page_response.text
++    assert 'data-page-state="error" role="alert"' in page_response.text
++    assert 'class="namespace-editor' not in page_response.text
+     for leaked in ("SELECT", "sqlite", "OperationalError", "Traceback", "empty.db"):
+         assert leaked not in api_response.text
+         assert leaked not in page_response.text
+@@ -133,9 +136,16 @@ def test_uow_creation_database_errors_return_sanitized_readiness_errors():
+     client = TestClient(app, raise_server_exceptions=False)
+     error = OperationalError("SELECT secret", {}, RuntimeError("dsn-secret"))
+ 
+-    with patch("project_workflow.application.state._AppState.create_uow", side_effect=error):
++    with (
++        patch("project_workflow.application.state._AppState.create_uow", side_effect=error) as create_uow,
++        patch("project_workflow.interfaces.ui.routes.pages._load_namespaces") as namespaces,
++        patch("project_workflow.interfaces.ui.routes.pages.load_service_catalog") as catalog,
++    ):
+         api_response = client.get("/api/namespaces")
+         page_response = client.get("/namespaces")
++    assert create_uow.call_count == 2
++    namespaces.assert_not_called()
++    catalog.assert_not_called()
+ 
+     assert api_response.status_code == 503
+     assert api_response.json() == {
+@@ -145,6 +155,9 @@ def test_uow_creation_database_errors_return_sanitized_readiness_errors():
+     }
+     assert page_response.status_code == 503
+     assert "База данных не готова" in page_response.text
++    assert 'class="base-ssr-shell"' in page_response.text
++    assert 'data-page-state="error" role="alert"' in page_response.text
++    assert page_response.headers["X-Request-Id"]
+     for leaked in ("SELECT", "OperationalError", "Traceback", "dsn-secret"):
+         assert leaked not in api_response.text
+         assert leaked not in page_response.text

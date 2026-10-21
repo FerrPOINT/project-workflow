@@ -16,7 +16,6 @@
 .phase-outline-count{font-size:11px;font-weight:500;color:var(--text-dim)}
 .phase-editor-main{min-width:0;max-width:980px}
 .phase-section-picker{display:none;margin-bottom:16px}
-.phase-section-select{width:100%;min-height:40px}
 .phase-editor-section{scroll-margin-top:84px}
 .wiki-page{max-width:none;margin:0;padding:0}
 .phase-detail-mobile-title{display:none}
@@ -114,7 +113,7 @@
   <div class="phase-editor-main">
     <div class="phase-section-picker">
       <label class="sr-only" for="phaseSectionSelect">Раздел редактора</label>
-      <select class="phase-section-select" id="phaseSectionSelect">
+      <select data-base-choice id="phaseSectionSelect">
         <option value="phase-overview">Основное</option>
         <option value="phase-instructions">Инструкции ({{ phase.instructions|length }})</option>
         <option value="phase-checks">Проверки ({{ phase.checks|length }})</option>
@@ -145,7 +144,7 @@
       </button>
       <label id="parallelPartnerRow" {% if phase.execution_type != 'parallel' %}hidden{% endif %}>
         Связать с:
-        <select id="parallelPartnerSelect" class="inline-input" onchange="scheduleSave()">
+        <select data-base-choice id="parallelPartnerSelect" onchange="scheduleSave()">
           <option value="">— изолированная фаза —</option>
           {% for candidate in parallel_candidates %}
           <option value="{{ candidate.id }}" {% if phase.parallel_with_phase_id == candidate.id %}selected{% endif %}>{{ candidate.name }} · {{ candidate.code }}</option>
@@ -314,7 +313,7 @@ function setActivePhaseSection(sectionId) {
     else link.removeAttribute('aria-current');
   });
   const select = document.getElementById('phaseSectionSelect');
-  if (select && select.value !== sectionId) select.value = sectionId;
+  if (select && select.value !== sectionId) { select.value = sectionId; window.PdlcChoice?.refreshChoice(select); }
 }
 
 function syncPhaseSectionUrl(sectionId, historyMode) {
@@ -441,7 +440,7 @@ function setPhaseMode(el, mode) {
   if (partnerRow) partnerRow.hidden = mode !== 'parallel';
   if (mode !== 'parallel') {
     const partnerSelect = document.getElementById('parallelPartnerSelect');
-    if (partnerSelect) partnerSelect.value = '';
+    if (partnerSelect) { partnerSelect.value = ''; window.PdlcChoice?.refreshChoice(partnerSelect); }
   }
 }
 

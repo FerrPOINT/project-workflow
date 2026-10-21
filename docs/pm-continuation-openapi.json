@@ -93,6 +93,50 @@
         "title": "BaseAdmission",
         "type": "object"
       },
+      "BootstrapRetry": {
+        "additionalProperties": false,
+        "properties": {
+          "bootstrap_attempt_ref": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Bootstrap Attempt Ref",
+            "type": "string"
+          },
+          "operation_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Operation Key",
+            "type": "string"
+          },
+          "predecessor_operation_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Predecessor Operation Key",
+            "type": "string"
+          },
+          "predecessor_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Predecessor Sha256",
+            "type": "string"
+          },
+          "proof_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Proof Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "predecessor_operation_key",
+          "predecessor_sha256",
+          "operation_key",
+          "bootstrap_attempt_ref",
+          "proof_sha256"
+        ],
+        "title": "BootstrapRetry",
+        "type": "object"
+      },
       "ExactInputRef": {
         "additionalProperties": false,
         "description": "One immutable external input snapshot selected by Business.",
@@ -5104,6 +5148,136 @@
           }
         },
         "summary": "Runtime History"
+      }
+    },
+    "/internal/runtime/pm-bootstrap/predecessor": {
+      "get": {
+        "operationId": "predecessor_internal_runtime_pm_bootstrap_predecessor_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "task",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "title": "Task",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "assignment_operation_key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "title": "Assignment Operation Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "assignment_revision",
+            "required": true,
+            "schema": {
+              "exclusiveMinimum": 0,
+              "title": "Assignment Revision",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Predecessor"
+      }
+    },
+    "/internal/runtime/pm-bootstrap/retry": {
+      "post": {
+        "operationId": "retry_internal_runtime_pm_bootstrap_retry_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BootstrapRetry"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retry"
       }
     },
     "/internal/runtime/rebind": {

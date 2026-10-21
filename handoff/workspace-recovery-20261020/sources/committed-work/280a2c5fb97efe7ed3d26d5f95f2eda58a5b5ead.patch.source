@@ -1,0 +1,1064 @@
+diff --cc .base-revision
+index 783f253,0000000..efc48e2
+mode 100644,000000..100644
+--- a/.base-revision
++++ b/.base-revision
+@@@ -1,1 -1,0 +1,1 @@@
+- a434ee2226ee0532367e86ea0196441444239139
+++6e6d653c128df8091f6016f7966bef694faf4e82
+diff --cc CHANGELOG.md
+index fb4a208,58bbafd..c5a2dfd
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@@ -7,65 -7,6 +7,80 @@@
+  ## [Unreleased]
+  
+  ### Changed
+ +
+++- Синхронный HTML render страниц и ошибок выполняется в worker pool FastAPI:
+++  ожидание необязательного каталога сервисов не блокирует обработку других
+++  запросов. Общий TTL cache защищён от конкурирующих чтений; request host
+++  остаётся индивидуальным. Readiness, API, URL и mutation guards сохранены.
+++
+++- Base snapshot обновлён до 6e6d653; SSR assets и fingerprint экспортированы
+++  штатным sync. Drawer удерживает focus при открытом и закрытом disclosure,
+++  исключает hidden/disabled/inert controls и сохраняет Escape/focus return.
+++  Локально доступное исправление fallback HTTP address сохранено; API,
+++  autosave, данные и принятый runtime не меняются.
+++
+++- Подписи темы в drawer и раздела редактора фазы используют Base SSR field
+++  и canonical control вместо локальных labels. Сохранены theme persistence,
+++  возврат фокуса, section URL navigation и точки переходов.
+++
+ +- Create/edit поля агентов используют общий Base SSR field macro: canonical
+ +  labels и явные связи label/control вместо локального 11px uppercase CSS.
+ +  Required/pattern/maxlength и значения сохранены; lifecycle записи, drafts,
+ +  pending/unknown guards и focus не изменяются.
+ +
+ +- Base snapshot обновлён до a434ee2; SSR assets экспортированы штатным
+ +  sync с fingerprint. Длинные непрерывные ошибки не растягивают страницу;
+ +  значения формы и защита повторной отправки сохранены. API и runtime прежние.
+ +
+ +- Read-only React-пилот использует Base Table внутри одного ListPage content
+ +  block: общие колонки, подписи, keyboard local scroll и Base link targets.
+ +  Удалена локальная сетка строк; namespace context и Jinja task links сохранены.
+ +- Jinja показывает подтверждённый успех и ошибки через inline Base states.
+ +  Удалены product toast host, CSS, обработчик и таймер. Ошибки остаются рядом
+ +  с формой, CLI feedback принадлежит конкретной команде; success не получает
+ +  focus и не снимает pending/unknown write protection. API, Base assets,
+ +  feature flag и принятые runtime pins не меняются.
+ +- Lifecycle инструкций в деталях фазы подтверждает создание, текст, навыки,
+ +  режим, порядок и удаление scoped GET со строгой проверкой родителя и строк.
+ +  Неизвестный результат сохраняет общий lock и Base draft guard; повторная
+ +  мутация недоступна. Create ID берётся только из проверенного ACK, DELETE
+ +  остаётся защищённым после отмены/повторного открытия Base confirmation.
+ +  Подтверждённые изменения обновляют существующие DOM-строки без reload,
+ +  сохраняют более поздний ввод, keyboard focus, URL context и deferred autosave.
+ +  API, схема БД, Base SSR assets и принятые runtime pins не меняются.
+ +- Автосохранение деталей фазы использует снимок одной попытки и стабильные
+ +  локальные ключи checks/evidence вместо позднего чтения DOM и очереди функций.
+ +  Общий pending/unknown lock защищает controls и переходы через Base draft guard.
+ +  Подтверждение требует scoped GET; ID новых строк берутся только из проверенного
+ +  ACK, потерянный ACK не заменяется поиском по имени. Ошибка сохраняет черновик,
+ +  403/404 отключают запись; API, схема БД и runtime pins не меняются.
+ +  Запись инструкций и порядка разделяет тот же pending lock; черновики текста
+ +  и навыков защищены Base navigation guard. Ошибка текста не сбрасывает ввод,
+ +  структурные действия не затирают другой draft. Unknown reconciliation
+ +  инструкций/reorder теперь выполняется общей lifecycle-проверкой выше.
+ +  Отложенный metadata autosave возобновляется после settlement инструкции,
+ +  без параллельного PUT и повторной записи неизменённой фазы.
+ +- Каталог фаз использует Base SSR controls/states и общий navigation guard.
+ +  Создание, порядок, режим и удаление имеют единую блокировку записи. Создание,
+ +  порядок и режим подтверждаются scoped GET-каталогом; неизвестный результат не повторяется,
+ +  а создание без возвращённого ID не определяется по имени или новым строкам.
+ +  Ошибки 403/404 отключают CRUD, 409/422 сохраняют каталог; API и runtime pins
+ +  не меняются. Локальные повторяемые карточки и mobile targets приведены к Base.
+ +- Неудачные чтения каталога сервисов кешируются на 10 секунд с сохранением
+ +  причины fallback и неизвестного health. Недоступный Admin не добавляет
+ +  сетевой timeout к каждому переходу; успешный каталог сохраняет TTL 60 секунд.
+ +- Общий Base snapshot обновлён до 0ffb99e: verified profile/directory contracts
+ +  и UI dependency graph без замены shell. SSR assets сохраняются byte-for-byte;
+ +  active skills catalog и принятый runtime не переключаются.
+ +- Локальный default с отдельным Base SDLC candidate и immutable Git verifier
+ +  интегрирован с Base UI/UX-веткой. Candidate остаётся configuration-only:
+ +  active catalog, bootstrap, migrations, основной Jinja UI, API и opt-in
+ +  read-only React pilot не переключаются. Закреплённый skills SHA независим
+ +  от UI SDK `.base-revision`; качество интеграции проверяется локально.
+ +- AGENTS, quality gate и README различают общий SDLC workspace, disposable QA
+ +  и standalone deployment вне workspace. Общий launcher/Compose ownership
+ +  принадлежат Base; legacy compose-ready не рекомендуется до миграции.
+ +  Документация не меняет empty-issuer auth default, UI/API или runtime pins.
+  - Standalone Compose forwards optional `AUTH_*` settings without changing the empty-issuer default; Central Auth SSO has a documented deployment matrix, container-reachability requirement and browser acceptance path.
+  - Documentation audit is clean: README has an H1; runtime/auth, quality, reset and historical plans have cross-links and explicit security/runtime boundaries.
+  - Added regression coverage that proves an empty `AUTH_ISSUER` leaves UI/API open in standalone mode.
+diff --cc frontend/e2e/base-shell-section-fields.spec.ts
+index 0000000,0000000..9241fda
+new file mode 100644
+--- /dev/null
++++ b/frontend/e2e/base-shell-section-fields.spec.ts
+@@@ -1,0 -1,0 +1,105 @@@
+++import { expect, test, type Locator } from '@playwright/test'
+++
+++if (process.env.WORKFLOW_UI_QA_MUTATIONS !== 'isolated-fixture') throw new Error('UI QA requires an isolated fixture')
+++
+++async function sharedField(control: Locator, width: number) {
+++  const field = control.locator('..')
+++  await expect(field).toHaveClass(/base-form-field/)
+++  await expect(control).toHaveClass(/base-control/)
+++  const label = field.locator('label')
+++  const metrics = await label.evaluate(element => {
+++    const control = (element as HTMLLabelElement).control!
+++    const style = getComputedStyle(element)
+++    return { fontSize: style.fontSize, textTransform: style.textTransform,
+++      associated: control.id === element.getAttribute('for'),
+++      labelBottom: element.getBoundingClientRect().bottom, controlTop: control.getBoundingClientRect().top,
+++      height: control.getBoundingClientRect().height }
+++  })
+++  expect(metrics.fontSize).toBe('12px')
+++  expect(metrics.textTransform).toBe('none')
+++  expect(metrics.associated).toBe(true)
+++  expect(metrics.labelBottom).toBeLessThanOrEqual(metrics.controlTop)
+++  expect(metrics.height).toBeGreaterThanOrEqual(width < 768 ? 44 : 40)
+++  await label.click()
+++  await expect(control).toBeFocused()
+++}
+++
+++for (const theme of ['dark', 'gray', 'light']) {
+++  test(`Base shell and section fields preserve theme, drawer and URL navigation (${theme})`, async ({ page }, testInfo) => {
+++    await page.addInitScript(value => {
+++      if (!localStorage.getItem('workflow-theme')) localStorage.setItem('workflow-theme', value)
+++    }, theme)
+++    const errors: string[] = []
+++    page.on('pageerror', error => errors.push(error.message))
+++    page.on('console', message => { if (message.type() === 'error') errors.push(message.text()) })
+++    page.on('request', request => {
+++      if (!['GET', 'HEAD'].includes(request.method())) errors.push(`Unexpected write: ${request.method()} ${request.url()}`)
+++    })
+++    page.on('response', response => { if (response.status() >= 400) errors.push(`${response.status()} ${response.url()}`) })
+++    await page.goto('/phases?namespace_id=1')
+++    const phase = await page.locator('a[href^="/phase/"]').first().getAttribute('href')
+++    expect(phase).toBeTruthy()
+++    const phaseUrl = new URL(phase!, page.url())
+++    phaseUrl.searchParams.set('namespace_id', '1')
+++    phaseUrl.searchParams.set('foreign', 'keep')
+++    const widths = testInfo.project.name === 'desktop' ? [1023, 1024, 1279, 1280, 1440, 1920, 2560] : [375, 640, 641, 767, 768]
+++    for (const width of widths) {
+++      await page.setViewportSize({ width, height: 1080 })
+++      await page.goto('/settings?namespace_id=1')
+++      await page.reload()
+++      const themeControl = page.locator(width <= 640 ? '#sidebarThemeSelector' : '#themeSelector')
+++      const drawer = page.locator('#base-mobile-navigation')
+++      if (width <= 640) {
+++        await page.locator('#burgerBtn').click()
+++        await sharedField(themeControl, width)
+++        await expect(page.locator('#themeSelector')).toBeHidden()
+++        for (let index = 0; index < 3; index++) {
+++          await page.keyboard.press('Tab')
+++          expect(await drawer.evaluate(element => element.contains(document.activeElement))).toBe(true)
+++        }
+++      } else {
+++        await expect(themeControl).toBeVisible()
+++        await expect(page.locator('#sidebarThemeSelector')).toBeHidden()
+++      }
+++      const nextTheme = theme === 'light' ? 'dark' : 'light'
+++      await themeControl.selectOption(nextTheme)
+++      await expect(page.locator('html')).toHaveAttribute('data-theme', nextTheme)
+++      if ([375, 1920].includes(width)) await page.screenshot({ path: testInfo.outputPath(`base-theme-field-${theme}-${width}.png`), fullPage: true })
+++      if (width <= 640) {
+++        await page.keyboard.press('Escape')
+++        await expect(drawer).toBeHidden()
+++        await expect(page.locator('#burgerBtn')).toBeFocused()
+++      }
+++      await page.reload()
+++      await expect(page.locator('html')).toHaveAttribute('data-theme', nextTheme)
+++      if (width <= 640) await page.locator('#burgerBtn').click()
+++      await themeControl.selectOption(theme)
+++      if (width <= 640) await page.keyboard.press('Escape')
+++      await page.goto(phaseUrl.toString())
+++      await page.reload()
+++      const section = page.locator('#phaseSectionSelect')
+++      if (width < 1024) {
+++        await sharedField(section, width)
+++        await expect(section.locator('option')).toHaveText(['Основное', /Инструкции \(\d+\)/, /Проверки \(\d+\)/, /Подтверждения \(\d+\)/])
+++        for (const id of ['phase-instructions', 'phase-checks', 'phase-evidence', 'phase-overview']) {
+++          await section.selectOption(id)
+++          await expect(page).toHaveURL(new RegExp(`#${id}$`))
+++          expect(new URL(page.url()).searchParams.get('namespace_id')).toBe('1')
+++          expect(new URL(page.url()).searchParams.get('foreign')).toBe('keep')
+++          await expect(page.locator(`[data-phase-section-link="${id}"]`)).toHaveAttribute('aria-current', 'location')
+++        }
+++        await section.selectOption('phase-checks')
+++        await page.reload()
+++        await expect(section).toHaveValue('phase-checks')
+++        await section.selectOption('phase-overview')
+++      } else await expect(section).toBeHidden()
+++      expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1)
+++      await expect(page.locator('.base-ssr-header')).toHaveCSS('height', '60px')
+++      if ([375, 1023, 1920].includes(width)) {
+++        await page.evaluate(() => window.scrollTo(0, 0))
+++        await page.screenshot({ path: testInfo.outputPath(`base-section-field-${theme}-${width}.png`), fullPage: true })
+++      }
+++    }
+++    expect(errors).toEqual([])
+++  })
+++}
+diff --cc project_workflow/interfaces/ui/app.py
+index 4adf78f,6cbb8c2..ac5b1e1
+--- a/project_workflow/interfaces/ui/app.py
++++ b/project_workflow/interfaces/ui/app.py
+@@@ -14,6 -13,6 +14,7 @@@ from fastapi.staticfiles import StaticF
+  from pydantic import ValidationError
+  from sqlalchemy import text
+  from sqlalchemy.exc import SQLAlchemyError
+++from starlette.concurrency import run_in_threadpool
+  from starlette.exceptions import HTTPException as StarletteHTTPException
+  from starlette.middleware.base import BaseHTTPMiddleware
+  
+@@@ -201,7 -195,7 +202,7 @@@ def create_app() -> FastAPI
+      @app.exception_handler(RequestValidationError)
+      async def _validation_error(request: Request, exc: RequestValidationError) -> JSONResponse | HTMLResponse:
+          if not request.url.path.startswith("/api/"):
+--            html_response = pages.validation_error_page(request, exc.errors())
+++            html_response = await run_in_threadpool(pages.validation_error_page, request, exc.errors())
+              if html_response is not None:
+                  return html_response
+          return JSONResponse(
+@@@ -218,14 -212,14 +219,16 @@@
+          path_parts = request.url.path.strip("/").split("/")
+          if not request.url.path.startswith("/api/"):
+              if exc.status_code == 404:
+--                return pages.http_error_page(
+++                return await run_in_threadpool(
+++                    pages.http_error_page,
+                      request,
+                      title="Страница не найдена",
+                      message="Такой страницы нет в интерфейсе.",
+                      status_code=404,
+                  )
+              if exc.status_code == 405:
+--                return pages.http_error_page(
+++                return await run_in_threadpool(
+++                    pages.http_error_page,
+                      request,
+                      title="Метод не поддерживается",
+                      message="Этот URL есть, но выбранный HTTP-метод для него не поддерживается.",
+diff --cc project_workflow/interfaces/ui/platform_services.py
+index c54b65f,4187576..13bc7b4
+--- a/project_workflow/interfaces/ui/platform_services.py
++++ b/project_workflow/interfaces/ui/platform_services.py
+@@@ -10,6 -10,6 +10,7 @@@ from __future__ import annotation
+  import json
+  import time
+  from dataclasses import dataclass
+++from threading import Lock
+  from typing import Any
+  from urllib.parse import urlsplit, urlunsplit
+  from urllib.request import urlopen
+@@@ -28,7 -27,6 +29,8 @@@ _FAILURE_CACHE_TTL_SECONDS = 10.
+  _cached_at = 0.0
+  _cached_services: list[dict[str, Any]] = []
+  _cached_url: str | None = None
+ +_cached_source = "runtime"
+++_cache_lock = Lock()
+  _VALID_HEALTH = {"healthy", "unreachable", "unknown"}
+  _ORDER = {service["key"]: index for index, service in enumerate(_FALLBACK_SERVICES)}
+  
+@@@ -87,25 -79,14 +89,31 @@@ def _with_request_host(services: list[d
+      return adjusted
+  
+  
+ +def _cache_catalog(
+ +    catalog_url: str, services: list[dict[str, Any]], source: str, request_url: str | None,
+ +) -> ServiceCatalog:
+ +    global _cached_at, _cached_services, _cached_url, _cached_source
+ +    _cached_services = services
+ +    _cached_at = time.monotonic()
+ +    _cached_url = catalog_url
+ +    _cached_source = source
+ +    return ServiceCatalog(_with_request_host(services, request_url), source)
+ +
+ +
+  def load_service_catalog(catalog_url: str | None, *, request_url: str | None = None) -> ServiceCatalog:
+      """Return UI services, including current health, and the diagnostic source."""
+ -    global _cached_at, _cached_services, _cached_url
+      if not catalog_url:
+          return ServiceCatalog(_with_request_host(_FALLBACK_SERVICES, request_url), "fallback-unreachable")
+++    # HTML routes run in worker threads; publish one coherent cache snapshot.
+++    with _cache_lock:
+++        return _load_cached_catalog(catalog_url, request_url=request_url)
+++
+++
+++def _load_cached_catalog(catalog_url: str, *, request_url: str | None) -> ServiceCatalog:
+      now = time.monotonic()
+ -    if _cached_url == catalog_url and _cached_services and now - _cached_at < _CACHE_TTL_SECONDS:
+ -        return ServiceCatalog(_with_request_host(_cached_services, request_url), "runtime")
+ +    ttl = _CACHE_TTL_SECONDS if _cached_source == "runtime" else _FAILURE_CACHE_TTL_SECONDS
+ +    if _cached_url == catalog_url and _cached_services and now - _cached_at < ttl:
+ +        return ServiceCatalog(_with_request_host(_cached_services, request_url), _cached_source)
+      try:
+          with urlopen(catalog_url, timeout=2.0) as response:  # nosec B310: configured internal URL
+              body = response.read()
+diff --cc project_workflow/interfaces/ui/routes/pages.py
+index 7fc3305,5278285..bf7dca6
+--- a/project_workflow/interfaces/ui/routes/pages.py
++++ b/project_workflow/interfaces/ui/routes/pages.py
+@@@ -1,4 -1,4 +1,4 @@@
+--"""HTML page routes for the workflow UI."""
+++"""Synchronous HTML routes: FastAPI offloads database/catalog I/O to its worker pool."""
+  
+  from __future__ import annotations
+  
+@@@ -386,7 -385,7 +386,7 @@@ def validation_error_page(request: Requ
+      return None
+  
+  
+--async def index(request: Request) -> HTMLResponse:
+++def index(request: Request) -> HTMLResponse:
+      """Минимальный dashboard без заглушек."""
+      context = _namespace_context(request, page="dashboard")
+      if error_response := _namespace_error_page(request, context, page="dashboard"):
+@@@ -410,7 -409,7 +410,7 @@@
+      )
+  
+  
+--async def phases_page(request: Request) -> HTMLResponse:
+++def phases_page(request: Request) -> HTMLResponse:
+      context = _namespace_context(request, page="phases")
+      if error_response := _namespace_error_page(request, context, page="phases"):
+          return error_response
+@@@ -502,7 -500,7 +502,7 @@@
+      )
+  
+  
+--async def phase_detail(request: Request, phase_id: PositivePathId) -> HTMLResponse:
+++def phase_detail(request: Request, phase_id: PositivePathId) -> HTMLResponse:
+      context = _namespace_context(request, page="phases")
+      if error_response := _namespace_error_page(request, context, page="phases"):
+          return error_response
+@@@ -568,7 -566,7 +568,7 @@@
+      )
+  
+  
+--async def tasks_page(request: Request) -> HTMLResponse:
+++def tasks_page(request: Request) -> HTMLResponse:
+      """Список задач workflow."""
+      context = _namespace_context(request, page="tasks")
+      if error_response := _namespace_error_page(request, context, page="tasks"):
+@@@ -592,7 -590,7 +592,7 @@@
+      )
+  
+  
+--async def namespace_page(request: Request) -> HTMLResponse:
+++def namespace_page(request: Request) -> HTMLResponse:
+      """CRUD page for namespaces and style."""
+      context = _namespace_context(request, page="namespace")
+      if error_response := _namespace_error_page(request, context, page="namespace"):
+@@@ -613,7 -611,7 +613,7 @@@
+      )
+  
+  
+--async def namespace_new_page(request: Request) -> HTMLResponse:
+++def namespace_new_page(request: Request) -> HTMLResponse:
+      """Create page for a new namespace."""
+      context = _namespace_context(request, page="namespace")
+      if error_response := _namespace_error_page(request, context, page="namespace"):
+@@@ -628,7 -626,7 +628,7 @@@
+      return _template_response(request=request, name="namespaces.html", context=context)
+  
+  
+--async def workflows_page(request: Request) -> HTMLResponse:
+++def workflows_page(request: Request) -> HTMLResponse:
+      context = _namespace_context(request, page="workflows")
+      if error_response := _namespace_error_page(request, context, page="workflows"):
+          return error_response
+@@@ -683,7 -669,7 +683,7 @@@
+      )
+  
+  
+--async def task_detail_page(
+++def task_detail_page(
+      request: Request,
+      task_key: str,
+  ) -> HTMLResponse:
+@@@ -745,7 -731,7 +745,7 @@@
+      )
+  
+  
+--async def settings_page(request: Request) -> HTMLResponse:
+++def settings_page(request: Request) -> HTMLResponse:
+      """Read-only справка по реальным CLI-командам workflow."""
+      context = _namespace_context(request, page="settings")
+      if error_response := _namespace_error_page(request, context, page="settings"):
+@@@ -760,7 -746,7 +760,7 @@@
+      )
+  
+  
+--async def agents_page(request: Request) -> HTMLResponse:
+++def agents_page(request: Request) -> HTMLResponse:
+      """Список агентов."""
+      context = _namespace_context(request, page="agents")
+      if error_response := _namespace_error_page(request, context, page="agents"):
+@@@ -777,7 -763,7 +777,7 @@@
+      )
+  
+  
+--async def instructions_page(request: Request) -> HTMLResponse:
+++def instructions_page(request: Request) -> HTMLResponse:
+      """Dedicated instructions editor page for a phase."""
+      context = _namespace_context(request, page="phases")
+      if error_response := _namespace_error_page(request, context, page="phases"):
+diff --cc project_workflow/interfaces/ui/static/base-ui/base-ui.js
+index 24ad61b,0000000..4380d4e
+mode 100644,000000..100644
+--- a/project_workflow/interfaces/ui/static/base-ui/base-ui.js
++++ b/project_workflow/interfaces/ui/static/base-ui/base-ui.js
+@@@ -1,302 -1,0 +1,303 @@@
+ +(() => {
+ +  let owner = null;
+ +
+ +  window.BaseDraftGuard = {
+ +    attach({ dialog, isDirty, isPending = () => false, fallbackFocus = () => document.querySelector('main[tabindex="-1"]') }) {
+ +      if (owner) throw new Error('Base draft guard already attached');
+ +      if (!(dialog instanceof HTMLDialogElement) || typeof isDirty !== 'function' || typeof isPending !== 'function') {
+ +        throw new TypeError('Base draft guard requires a dialog and dirty/pending callbacks');
+ +      }
+ +      const cancel = dialog.querySelector('[data-base-draft-cancel]');
+ +      const discard = dialog.querySelector('[data-base-draft-discard]');
+ +      const pendingMessage = dialog.querySelector('[data-base-draft-pending]');
+ +      if (!cancel || !discard || !pendingMessage) throw new Error('Use the Base draft_guard_dialog macro');
+ +      const listeners = new AbortController();
+ +      let destroyed = false;
+ +      let attempt = null;
+ +      let permittedUnload = false;
+ +      let replayAnchor = null;
+ +      let replayEvent = null;
+ +
+ +      function restoreFocus(target) {
+ +        const usable = (node) => node instanceof HTMLElement && node.isConnected && !node.disabled && node.getClientRects().length;
+ +        if (!usable(target)) target = fallbackFocus();
+ +        if (usable(target)) target.focus();
+ +      }
+ +      function finish(allowed) {
+ +        if (!attempt) return;
+ +        const current = attempt;
+ +        attempt = null;
+ +        if (dialog.open) dialog.close();
+ +        restoreFocus(current.trigger);
+ +        current.resolve(allowed);
+ +      }
+ +      function refresh() {
+ +        if (destroyed) return;
+ +        const pending = isPending();
+ +        discard.disabled = pending;
+ +        pendingMessage.hidden = !pending;
+ +        if (pending && document.activeElement === discard) cancel.focus();
+ +        if (attempt && !pending && !isDirty()) finish(false);
+ +      }
+ +      async function requestLeave(transition) {
+ +        if (destroyed || attempt) return false;
+ +        if (typeof transition !== 'function') throw new TypeError('Base draft transition must be a callback');
+ +        if (!isDirty() && !isPending()) { transition(); return true; }
+ +        const allowed = await new Promise((resolve) => {
+ +          attempt = { resolve, trigger: document.activeElement };
+ +          refresh();
+ +          try { dialog.showModal(); cancel.focus(); }
+ +          catch (error) { finish(false); throw error; }
+ +        });
+ +        if (!allowed || destroyed || isPending()) return false;
+ +        transition();
+ +        return true;
+ +      }
+ +      function documentDeparture(target, transition) {
+ +        const current = new URL(location.href);
+ +        permittedUnload = target.origin !== current.origin || target.pathname !== current.pathname || target.search !== current.search || (!target.hash && !current.hash);
+ +        try { transition(); }
+ +        catch (error) { permittedUnload = false; throw error; }
+ +      }
+ +      function navigate(url, beforeNavigate = () => {}) {
+ +        const target = new URL(url, location.href);
+ +        if (!['http:', 'https:'].includes(target.protocol) || typeof beforeNavigate !== 'function') {
+ +          throw new TypeError('Base draft navigation requires an HTTP(S) URL and optional callback');
+ +        }
+ +        return requestLeave(() => {
+ +          beforeNavigate();
+ +          documentDeparture(target, () => location.assign(target.href));
+ +        });
+ +      }
+ +      const on = (target, type, callback, options = {}) => target.addEventListener(type, callback, { ...options, signal: listeners.signal });
+ +      on(cancel, 'click', () => finish(false));
+ +      on(discard, 'click', () => {
+ +        // Recheck synchronously: a save may start before the product refreshes controls.
+ +        if (isPending()) { refresh(); return; }
+ +        finish(true);
+ +      });
+ +      on(dialog, 'cancel', (event) => { event.preventDefault(); finish(false); });
+ +      on(dialog, 'close', () => { if (!dialog.open) finish(false); });
+ +      on(dialog, 'click', (event) => { if (event.target === dialog) finish(false); });
+ +      on(dialog, 'keydown', (event) => {
+ +        if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); finish(false); return; }
+ +        if (event.key !== 'Tab') return;
+ +        const controls = discard.disabled ? [cancel] : [cancel, discard];
+ +        if (event.shiftKey && document.activeElement === controls[0]) { event.preventDefault(); controls.at(-1).focus(); }
+ +        else if (!event.shiftKey && document.activeElement === controls.at(-1)) { event.preventDefault(); controls[0].focus(); }
+ +      });
+ +      on(window, 'beforeunload', (event) => {
+ +        if (permittedUnload) { permittedUnload = false; return; }
+ +        if (!isDirty() && !isPending()) return;
+ +        event.preventDefault();
+ +        event.returnValue = '';
+ +      });
+ +      on(document, 'click', (event) => {
+ +        if (replayAnchor && event.target === replayAnchor) { replayEvent = event; return; }
+ +        if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+ +        const anchor = event.target instanceof Element ? event.target.closest('a[href]') : null;
+ +        const browsingTarget = anchor?.target || document.querySelector('base[target]')?.target || '_self';
+ +        if (!anchor || anchor.hasAttribute('download') || browsingTarget !== '_self') return;
+ +        const target = new URL(anchor.href, location.href);
+ +        if (!['http:', 'https:'].includes(target.protocol) || (!isDirty() && !isPending())) return;
+ +        event.preventDefault();
+ +        event.stopImmediatePropagation();
+ +        void requestLeave(() => {
+ +          // Only the accepted document navigation bypasses its native unload prompt.
+ +          try { documentDeparture(target, () => {
+ +            if (anchor.isConnected && anchor.href === target.href) {
+ +              // Preserve SSR context handlers; the intercepted click never reached them.
+ +              replayAnchor = anchor;
+ +              replayEvent = null;
+ +              anchor.click();
+ +              if (replayEvent?.defaultPrevented) permittedUnload = false;
+ +            } else location.assign(target.href);
+ +          }); }
+ +          finally { replayAnchor = null; replayEvent = null; }
+ +        });
+ +      }, { capture: true });
+ +      const guard = {
+ +        requestLeave, navigate, refresh,
+ +        destroy() {
+ +          if (destroyed) return;
+ +          destroyed = true;
+ +          listeners.abort();
+ +          finish(false);
+ +          owner = null;
+ +        },
+ +      };
+ +      owner = guard;
+ +      return guard;
+ +    },
+ +  };
+ +})();
+ +
+ +(() => {
+ +  const owners = new WeakMap();
+ +  const configurations = new WeakMap();
+ +  window.BaseConfirmDialog = {
+ +    attach({ dialog, fallbackFocus = () => document.querySelector('main[tabindex="-1"]') }) {
+ +      if (!(dialog instanceof HTMLDialogElement)) throw new TypeError('Base confirmation requires a native dialog');
+ +      if (owners.has(dialog)) throw new Error('Base confirmation already attached');
+ +      const find = (name) => dialog.querySelector(`[data-base-confirm-${name}]`);
+ +      const title = find('title');
+ +      const description = find('description');
+ +      const cancel = find('cancel');
+ +      const confirm = find('accept');
+ +      const error = find('error');
+ +      const pending = find('pending');
+ +      const content = find('content');
+ +      if (![title, description, cancel, confirm, error, pending, content].every(Boolean)) throw new Error('Use the Base confirm_dialog macro');
+ +      const defaults = configurations.get(dialog) ?? { title: title.textContent, message: description.textContent, cancelLabel: cancel.textContent, confirmLabel: confirm.textContent, error: error.textContent };
+ +      configurations.set(dialog, defaults);
+ +      const listeners = new AbortController();
+ +      let attempt = null;
+ +      let destroyed = false;
+ +      const busy = () => Boolean(attempt && (attempt.submitting || attempt.options.isPending()));
+ +      const usable = (node) => node instanceof HTMLElement && node.isConnected && !node.disabled && !node.closest('[inert]') && node.getClientRects().length;
+ +      const controls = () => [...dialog.querySelectorAll('button,a[href],input,select,textarea,[tabindex]')]
+ +        .filter((node) => usable(node) && node.tabIndex >= 0 && !node.matches(':disabled'));
+ +      const focusTarget = (target) => typeof target === 'function' ? target() : target;
+ +      function restoreFocus(current) {
+ +        const preferred = focusTarget(current.options.returnFocus) || current.trigger;
+ +        if (usable(preferred)) preferred.focus();
+ +        if (document.activeElement !== preferred) {
+ +          const fallback = focusTarget(current.options.fallbackFocus ?? fallbackFocus);
+ +          if (usable(fallback)) fallback.focus();
+ +        }
+ +      }
+ +      function finish(confirmed) {
+ +        if (!attempt) return;
+ +        const current = attempt;
+ +        attempt = null;
+ +        if (dialog.open) dialog.close();
+ +        restoreFocus(current);
+ +        current.resolve(confirmed);
+ +      }
+ +      function refresh() {
+ +        if (!attempt || destroyed) return;
+ +        const locked = busy();
+ +        confirm.disabled = locked || attempt.options.confirmDisabled();
+ +        cancel.disabled = locked;
+ +        content.disabled = locked;
+ +        pending.hidden = !locked;
+ +        dialog.setAttribute('aria-busy', String(locked));
+ +        const message = attempt.options.error() || (attempt.failed ? defaults.error : '');
+ +        error.textContent = message;
+ +        error.hidden = !message;
+ +        if (locked && dialog.contains(document.activeElement) && document.activeElement.matches(':disabled')) dialog.focus();
+ +      }
+ +      function close(confirmed = false) {
+ +        if (!attempt || busy()) { refresh(); return false; }
+ +        finish(confirmed);
+ +        return true;
+ +      }
+ +      function request(options = {}) {
+ +        if (destroyed || attempt) return Promise.resolve(false);
+ +        const callbacks = { onConfirm: () => {}, isPending: () => false, confirmDisabled: () => false, error: () => '', ...options };
+ +        for (const name of ['onConfirm', 'isPending', 'confirmDisabled', 'error']) {
+ +          if (typeof callbacks[name] !== 'function') throw new TypeError(`Base confirmation ${name} must be a callback`);
+ +        }
+ +        title.textContent = options.title ?? defaults.title;
+ +        description.textContent = options.message ?? defaults.message;
+ +        cancel.textContent = options.cancelLabel ?? defaults.cancelLabel;
+ +        confirm.textContent = options.confirmLabel ?? defaults.confirmLabel;
+ +        return new Promise((resolve, reject) => {
+ +          attempt = { options: callbacks, resolve, trigger: document.activeElement, submitting: false, failed: false };
+ +          try {
+ +            refresh();
+ +            dialog.showModal();
+ +            if (!cancel.disabled) cancel.focus(); else dialog.focus();
+ +          } catch (failure) {
+ +            const current = attempt;
+ +            attempt = null;
+ +            if (dialog.open) dialog.close();
+ +            restoreFocus(current);
+ +            reject(failure);
+ +          }
+ +        });
+ +      }
+ +      async function accept() {
+ +        if (!attempt || busy() || attempt.options.confirmDisabled()) { refresh(); return; }
+ +        const current = attempt;
+ +        current.submitting = true;
+ +        refresh();
+ +        try {
+ +          await current.options.onConfirm();
+ +          if (attempt !== current || destroyed) return;
+ +          current.submitting = false;
+ +          current.failed = false;
+ +          if (current.options.closeOnConfirm !== false && !current.options.isPending()) finish(true);
+ +          else refresh();
+ +        } catch (_failure) {
+ +          // Products own classification/reconciliation; never replay an uncertain write.
+ +          if (attempt !== current || destroyed) return;
+ +          current.submitting = false;
+ +          current.failed = true;
+ +          refresh();
+ +        }
+ +      }
+ +      const on = (type, callback) => dialog.addEventListener(type, callback, { signal: listeners.signal });
+ +      confirm.addEventListener('click', () => { void accept(); }, { signal: listeners.signal });
+ +      cancel.addEventListener('click', () => close(), { signal: listeners.signal });
+ +      on('cancel', (event) => { event.preventDefault(); close(); });
+ +      on('close', () => {
+ +        if (!attempt || dialog.open) return;
+ +        if (busy()) { dialog.showModal(); dialog.focus(); }
+ +        else finish(false);
+ +      });
+ +      on('click', (event) => {
+ +        if (event.target !== dialog) return;
+ +        const rect = dialog.getBoundingClientRect();
+ +        if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) close();
+ +      });
+ +      on('keydown', (event) => {
+ +        if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); return; }
+ +        if (event.key !== 'Tab') return;
+ +        const items = controls();
+ +        if (!items.length) { event.preventDefault(); dialog.focus(); return; }
+ +        if (event.shiftKey && (document.activeElement === items[0] || !items.includes(document.activeElement))) { event.preventDefault(); items.at(-1).focus(); }
+ +        else if (!event.shiftKey && (document.activeElement === items.at(-1) || !items.includes(document.activeElement))) { event.preventDefault(); items[0].focus(); }
+ +      });
+ +      const controller = {
+ +        request, refresh, close,
+ +        destroy() {
+ +          if (destroyed) return;
+ +          destroyed = true;
+ +          listeners.abort();
+ +          finish(false);
+ +          owners.delete(dialog);
+ +        },
+ +      };
+ +      owners.set(dialog, controller);
+ +      return controller;
+ +    },
+ +  };
+ +})();
+ +
+ +(() => {
+ +  for (const account of document.querySelectorAll('.base-ssr-account')) {
+ +    const toggle = account.querySelector('summary');
+ +    function closeAccount(restoreFocus) { account.open = false; if (restoreFocus) toggle?.focus(); }
+ +    account.addEventListener('keydown', (event) => { if (event.key === 'Escape' && account.open) { event.preventDefault(); closeAccount(true); } });
+ +    document.addEventListener('click', (event) => { if (event.target instanceof Node && !account.contains(event.target)) closeAccount(false); });
+ +    account.addEventListener('focusout', (event) => { if (event.relatedTarget instanceof Node && !account.contains(event.relatedTarget)) closeAccount(false); });
+ +  }
+ +  const trigger = document.querySelector('[data-base-drawer-trigger]');
+ +  const drawer = document.querySelector('[data-base-drawer]');
+ +  if (!trigger || !drawer) return;
+-   const focusable = () => [...drawer.querySelectorAll('a[href],button,input,select,textarea,[tabindex="0"]')].filter((item) => !item.disabled && item.getClientRects().length);
+++  const focusable = () => [...drawer.querySelectorAll('a[href],button,input,select,textarea,summary,[tabindex]')]
+++    .filter((item) => item.tabIndex >= 0 && !item.matches(':disabled') && !item.closest('[inert]') && item.checkVisibility({ visibilityProperty: true }));
+ +  function close() { drawer.close(); trigger.setAttribute('aria-expanded', 'false'); const target = trigger.getClientRects().length ? trigger : document.querySelector('main[tabindex="-1"]'); target?.focus(); }
+ +  trigger.addEventListener('click', () => { drawer.showModal(); trigger.setAttribute('aria-expanded', 'true'); focusable()[0]?.focus(); });
+ +  drawer.addEventListener('cancel', (event) => { event.preventDefault(); close(); });
+ +  drawer.addEventListener('click', (event) => { if (event.target instanceof Element && event.target.closest('[data-base-drawer-close],a[href]')) close(); });
+ +  drawer.addEventListener('keydown', (event) => {
+ +    if (event.key !== 'Tab') return;
+ +    const items = focusable();
+ +    if (!items.length) { event.preventDefault(); return; }
+ +    if (event.shiftKey && document.activeElement === items[0]) { event.preventDefault(); items.at(-1).focus(); }
+ +    else if (!event.shiftKey && document.activeElement === items.at(-1)) { event.preventDefault(); items[0].focus(); }
+ +  });
+ +  window.matchMedia('(min-width: 768px)').addEventListener('change', (event) => { if (event.matches && drawer.open) close(); });
+ +})();
+diff --cc project_workflow/interfaces/ui/static/base-ui/fingerprint.json
+index 91b43c4,0000000..6bf539b
+mode 100644,000000..100644
+--- a/project_workflow/interfaces/ui/static/base-ui/fingerprint.json
++++ b/project_workflow/interfaces/ui/static/base-ui/fingerprint.json
+@@@ -1,9 -1,0 +1,9 @@@
+ +{
+ +  "schemaVersion": 1,
+ +  "package": "@sdlc/ui",
+ +  "files": {
+ +    "base-ui.css": "b48cf2f2baa919c4ab86769e72e4112095c600bd2836c50717443df0e36307a0",
+-     "base-ui.js": "02a46637c9c340b1330263b48e986ee3fae2c326834f3bef481257eaab8eae06",
+++    "base-ui.js": "4a84d485ea64a5d01a707e95e4a4419d065c28a06c97257d3f453d7978d1280a",
+ +    "macros.html": "fe53deccef37163bfb4fae61c1c29f1275d78f79bf0fb743d2f6fec7801445bc"
+ +  }
+ +}
+diff --cc project_workflow/interfaces/ui/templates/base.html
+index efed549,ccb0562..d84a709
+--- a/project_workflow/interfaces/ui/templates/base.html
++++ b/project_workflow/interfaces/ui/templates/base.html
+@@@ -51,7 -89,7 +51,6 @@@ button:focus-visible,a:focus-visible,in
+  .sidebar-service-link:hover,.sidebar-service-link:focus-visible{background:var(--surface-hover);color:var(--text);text-decoration:none}
+  .sidebar-service-link[aria-current="page"]{color:var(--text);font-weight:600}
+  .sidebar-theme{padding:10px 20px 14px}
+--.sidebar-theme label{display:block;margin-bottom:6px;color:var(--text-muted);font-size:11px;font-weight:600;text-transform:uppercase}
+  .sidebar-theme .theme-select{width:100%;max-width:none}
+  .dot{width:6px;height:6px;border-radius:50%}
+  .dot.green{background:var(--green)}.dot.yellow{background:var(--orange)}.dot.red{background:var(--red)}
+@@@ -274,17 -367,16 +273,18 @@@ textarea{resize:vertical;min-height:60p
+        <span class="sidebar-cli-icon" aria-hidden="true">&gt;_</span>
+        <span class="sidebar-label">Команды CLI</span>
+      </a>
+ -    <div class="sidebar-utilities">
+ +    {% if drawer %}<div class="sidebar-utilities">
+        <div class="sidebar-section">ПЛАТФОРМА</div>
+        <div class="sidebar-theme">
+--        <label for="sidebarThemeSelector">Тема</label>
+--        <select class="theme-select" id="sidebarThemeSelector" onchange="setPlatformTheme(this.value)">
+++        {% call base.field('sidebarThemeSelector', 'Тема') %}
+++        <select class="base-control theme-select" id="sidebarThemeSelector" onchange="setPlatformTheme(this.value)">
+            <option value="dark">Тёмная</option>
+            <option value="gray">Серая</option>
+            <option value="light">Светлая</option>
+          </select>
+++        {% endcall %}
+        </div>
+ +      {% if show_service_switcher|default(false) %}
+        <details class="sidebar-service-menu">
+          <summary class="sidebar-link"><span class="sidebar-label">Сервисы</span></summary>
+          <div class="sidebar-service-links">
+diff --cc project_workflow/interfaces/ui/templates/phase_detail.html
+index 447bd94,0cb94a1..e979d00
+--- a/project_workflow/interfaces/ui/templates/phase_detail.html
++++ b/project_workflow/interfaces/ui/templates/phase_detail.html
+@@@ -15,10 -14,9 +15,9 @@@
+  .phase-outline-link:hover{color:var(--text);background:var(--surface-hover);text-decoration:none}
+  .phase-outline-link[aria-current="location"]{border-left-color:var(--accent);color:var(--text);background:var(--accent-soft);font-weight:600}
+  .phase-outline-count{font-size:11px;font-weight:500;color:var(--text-dim)}
+ -.phase-editor-main{min-width:0;max-width:980px}
+ +.phase-editor-main{min-width:0}
+ +@media(max-width:767px){.phase-outline-link{min-height:var(--shell-control-mobile-min)}}
+  .phase-section-picker{display:none;margin-bottom:16px}
+- .phase-section-select{width:100%}
+ -.phase-section-select{width:100%;min-height:40px}
+  .phase-editor-section{scroll-margin-top:84px}
+  .wiki-page{max-width:none;margin:0;padding:0}
+  .phase-detail-mobile-title{display:none}
+@@@ -106,17 -113,15 +105,18 @@@
+  
+    <div class="phase-editor-main">
+      <div class="phase-section-picker">
+--      <label class="sr-only" for="phaseSectionSelect">Раздел редактора</label>
+--      <select class="phase-section-select" id="phaseSectionSelect">
+++      {% call base.field('phaseSectionSelect', 'Раздел редактора') %}
+++      <select class="base-control" id="phaseSectionSelect">
+          <option value="phase-overview">Основное</option>
+          <option value="phase-instructions">Инструкции ({{ phase.instructions|length }})</option>
+          <option value="phase-checks">Проверки ({{ phase.checks|length }})</option>
+          <option value="phase-evidence">Подтверждения ({{ phase.evidence|length }})</option>
+        </select>
+++      {% endcall %}
+      </div>
+  
+ +    <div class="base-resource-state" id="phaseSaveStatus" data-page-state="error" role="alert" hidden><p></p></div>
+ +    <div class="base-page-actions">{{ base.button('Проверить сохранение', id='phaseSaveReconcile') }}<a class="btn btn-secondary" id="phaseInstructionInspect" target="_blank" rel="noopener" hidden>Открыть для сверки</a></div>
+      <div class="wiki-page">
+  
+    <!-- Header -->
+diff --cc tests/test_platform_services.py
+index 8db7e29,3f82cfc..35df5ce
+--- a/tests/test_platform_services.py
++++ b/tests/test_platform_services.py
+@@@ -1,7 -1,7 +1,9 @@@
+  """Platform service catalog switcher (catalog v1.1)."""
+  import io
+  import json
+++from concurrent.futures import ThreadPoolExecutor
+  from pathlib import Path
+++from threading import Barrier, Event
+  
+  import pytest
+  
+@@@ -209,6 -191,6 +211,40 @@@ def _runtime_services()
+      ]
+  
+  
+++def test_concurrent_catalog_reads_share_fetch_without_sharing_request_host(monkeypatch):
+++    from project_workflow.interfaces.ui import platform_services as ps
+++
+++    started = Event()
+++    release = Event()
+++    ready = Barrier(8)
+++    calls = []
+++
+++    def response(url, **_kwargs):
+++        calls.append(url)
+++        started.set()
+++        assert release.wait(timeout=5)
+++        return _response(_runtime_services())
+++
+++    def read(index):
+++        ready.wait(timeout=5)
+++        return load_service_catalog("http://admin/api", request_url=f"http://browser-{index}:7752/tasks")
+++
+++    monkeypatch.setattr(ps, "urlopen", response)
+++    with ThreadPoolExecutor(max_workers=8) as executor:
+++        futures = [executor.submit(read, index) for index in range(8)]
+++        try:
+++            assert started.wait(timeout=5)
+++        finally:
+++            release.set()
+++        results = [future.result(timeout=5) for future in futures]
+++    assert calls == ["http://admin/api"]
+++    for index, catalog in enumerate(results):
+++        assert catalog.source == "runtime"
+++        assert [service["url"] for service in catalog.services] == [
+++            f"http://browser-{index}:7732", f"http://browser-{index}:7752",
+++        ]
+++
+++
+  @pytest.mark.parametrize("failure,expected_source", [
+      (None, "fallback-unreachable"),
+      ([], "fallback-empty"),
+diff --cc tests/test_ui_agent_fields.py
+index bfc2a34,0000000..3b4f96c
+mode 100644,000000..100644
+--- a/tests/test_ui_agent_fields.py
++++ b/tests/test_ui_agent_fields.py
+@@@ -1,55 -1,0 +1,64 @@@
+ +from html.parser import HTMLParser
+ +
+ +import pytest
+ +
+ +from project_workflow.interfaces.ui.templates import env
+ +
+ +
+ +class AgentFields(HTMLParser):
+ +    def __init__(self) -> None:
+ +        super().__init__()
+ +        self.fields = 0
+ +        self.labels: set[str | None] = set()
+ +        self.controls: dict[str, dict[str, str | None]] = {}
+++        self.agent_form = False
+ +
+ +    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+ +        attributes = dict(attrs)
+++        if tag == "form":
+++            self.agent_form = "agent-editor" in (attributes.get("class") or "").split()
+++        if not self.agent_form:
+++            return
+ +        if "base-form-field" in (attributes.get("class") or "").split():
+ +            self.fields += 1
+ +        if tag == "label":
+ +            self.labels.add(attributes.get("for"))
+ +        if tag in {"input", "textarea"} and attributes.get("name") in {"name", "launch_profile", "description"}:
+ +            identifier = attributes.get("id")
+ +            assert identifier and identifier not in self.controls
+ +            self.controls[identifier] = attributes
+ +
+++    def handle_endtag(self, tag: str) -> None:
+++        if tag == "form":
+++            self.agent_form = False
+++
+ +
+ +@pytest.mark.parametrize("count", [0, 1, 2])
+ +def test_agent_fields_share_base_labels_and_preserve_native_constraints(count: int) -> None:
+ +    agents = [
+ +        {
+ +            "id": index + 41, "name": f"Agent <{index}>",
+ +            "launch_profile": f"safe_profile_{index}", "description": "Safe text",
+ +        }
+ +        for index in range(count)
+ +    ]
+ +    html = env.get_template("agents.html").render(page="agents", agents=agents)
+ +    fields = AgentFields()
+ +    fields.feed(html)
+ +    fields.close()
+ +    assert fields.fields == (count + 1) * 3
+ +    assert set(fields.controls) <= fields.labels
+ +    assert "agent-field-label" not in html
+ +    for suffix in ["new", *(str(agent["id"]) for agent in agents)]:
+ +        name = fields.controls["newName" if suffix == "new" else f"agentName{suffix}"]
+ +        profile = fields.controls["newLaunchProfile" if suffix == "new" else f"agentLaunchProfile{suffix}"]
+ +        description = fields.controls["newDescription" if suffix == "new" else f"agentDescription{suffix}"]
+ +        assert "required" in name
+ +        assert profile["pattern"] == r"[a-z0-9][a-z0-9_\-]*"
+ +        assert profile["maxlength"] == "251"
+ +        assert "251" in (profile["title"] or "")
+ +        assert "required" not in profile
+ +        assert description["rows"] == "3"
+ +    for agent in agents:
+ +        assert fields.controls[f"agentName{agent['id']}"]["value"] == agent["name"]
+ +        assert fields.controls[f"agentLaunchProfile{agent['id']}"]["value"] == agent["launch_profile"]
+diff --cc tests/test_ui_catalog_latency.py
+index 0000000,0000000..9241942
+new file mode 100644
+--- /dev/null
++++ b/tests/test_ui_catalog_latency.py
+@@@ -1,0 -1,0 +1,55 @@@
+++"""Slow optional catalog reads must not block unrelated ASGI requests."""
+++
+++from concurrent.futures import ThreadPoolExecutor, TimeoutError
+++from threading import Event
+++
+++import pytest
+++from fastapi.testclient import TestClient
+++
+++from project_workflow.interfaces.ui import app
+++from project_workflow.interfaces.ui.platform_services import ServiceCatalog
+++from project_workflow.interfaces.ui.routes import pages
+++
+++pytestmark = [pytest.mark.ui]
+++
+++
+++@pytest.mark.parametrize(("method", "path", "status"), [
+++    ("GET", "/agents", 200),
+++    ("GET", "/phase/0", 422),
+++    ("GET", "/missing-page", 404),
+++    ("POST", "/settings", 405),
+++])
+++def test_health_remains_available_while_html_waits_for_catalog(monkeypatch, method, path, status):
+++    entered = Event()
+++    release = Event()
+++
+++    def slow_catalog(*_args, **_kwargs):
+++        entered.set()
+++        assert release.wait(timeout=10), "Catalog test was not released"
+++        return ServiceCatalog([], "fallback-unreachable")
+++
+++    monkeypatch.setattr(pages, "load_service_catalog", slow_catalog)
+++    with TestClient(app) as client, ThreadPoolExecutor(max_workers=2) as executor:
+++        expected_health = client.get("/health")
+++        assert expected_health.status_code in (200, 503)
+++        html = executor.submit(client.request, method, path)
+++        health = None
+++        responsive = False
+++        try:
+++            assert entered.wait(timeout=5), "HTML did not reach the optional catalog"
+++            health = executor.submit(client.get, "/health")
+++            try:
+++                response = health.result(timeout=2)
+++                responsive = response.status_code == expected_health.status_code and not release.is_set()
+++            except TimeoutError:
+++                pass
+++        finally:
+++            release.set()
+++            assert html.result(timeout=10).status_code == status
+++            if health is not None:
+++                actual_body = health.result(timeout=10).json()
+++                expected_body = expected_health.json()
+++                actual_body.pop("db_latency_ms")
+++                expected_body.pop("db_latency_ms")
+++                assert actual_body == expected_body
+++        assert responsive, "Optional catalog I/O blocked /health on the ASGI event loop"
+diff --cc tests/test_ui_shell_section_fields.py
+index 0000000,0000000..0e743ef
+new file mode 100644
+--- /dev/null
++++ b/tests/test_ui_shell_section_fields.py
+@@@ -1,0 -1,0 +1,65 @@@
+++from html.parser import HTMLParser
+++
+++from project_workflow.interfaces.ui.templates import env
+++
+++
+++class SelectFields(HTMLParser):
+++    def __init__(self) -> None:
+++        super().__init__()
+++        self.divs: list[str] = []
+++        self.labels: set[str | None] = set()
+++        self.controls: dict[str, dict[str, str | None]] = {}
+++        self.options: dict[str, list[str | None]] = {}
+++        self.current: str | None = None
+++
+++    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+++        attributes = dict(attrs)
+++        if tag == "div":
+++            self.divs.append(attributes.get("class") or "")
+++        if tag == "label" and "base-form-field" in self.divs:
+++            self.labels.add(attributes.get("for"))
+++        if tag == "select":
+++            identifier = attributes.get("id")
+++            self.current = identifier if identifier in {"sidebarThemeSelector", "phaseSectionSelect"} else None
+++            if self.current:
+++                assert "base-form-field" in self.divs
+++                assert self.current not in self.controls
+++                self.controls[self.current] = attributes
+++                self.options[self.current] = []
+++        if tag == "option" and self.current:
+++            self.options[self.current].append(attributes.get("value"))
+++
+++    def handle_endtag(self, tag: str) -> None:
+++        if tag == "div":
+++            self.divs.pop()
+++        if tag == "select":
+++            self.current = None
+++
+++
+++def fields(html: str) -> SelectFields:
+++    parser = SelectFields()
+++    parser.feed(html)
+++    parser.close()
+++    assert set(parser.controls) <= parser.labels
+++    for control in parser.controls.values():
+++        assert "base-control" in (control["class"] or "").split()
+++    return parser
+++
+++
+++def test_drawer_theme_uses_base_field_and_preserves_theme_callback() -> None:
+++    parser = fields(env.get_template("base.html").render())
+++    assert parser.controls["sidebarThemeSelector"]["onchange"] == "setPlatformTheme(this.value)"
+++    assert "theme-select" in (parser.controls["sidebarThemeSelector"]["class"] or "").split()
+++    assert parser.options["sidebarThemeSelector"] == ["dark", "gray", "light"]
+++
+++
+++def test_phase_section_uses_base_field_and_preserves_section_values() -> None:
+++    phase = {
+++        "id": 7, "workflow_id": 1, "mode_id": None, "name": "Safe phase",
+++        "instructions": [], "checks": [], "evidence": [],
+++    }
+++    parser = fields(env.get_template("phase_detail.html").render(page="phases", phase=phase))
+++    assert parser.options["phaseSectionSelect"] == [
+++        "phase-overview", "phase-instructions", "phase-checks", "phase-evidence",
+++    ]
+++    assert "onchange" not in parser.controls["phaseSectionSelect"]

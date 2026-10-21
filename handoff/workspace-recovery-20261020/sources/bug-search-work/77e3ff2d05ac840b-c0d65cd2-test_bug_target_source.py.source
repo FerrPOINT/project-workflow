@@ -1,0 +1,173 @@
+"""Optional original CI pins preserve old wire hashes and never resolve caller URLs."""
+
+import copy
+import json
+from pathlib import Path
+from uuid import uuid4
+
+import pytest
+from pydantic import ValidationError
+
+from project_workflow.domain.bug_search_execution import ExecutionSnapshot, SnapshotTarget
+from project_workflow.domain.bug_target_source import BugTargetSourceIdentity
+from project_workflow.domain.bug_work_origin import BugWorkOriginTarget
+from project_workflow.domain.runtime_assignment import payload_sha256
+from tests.test_bug_search_execution import source as source
+
+
+def identity(project_id, registry, commit):
+    return {
+        "contract_version": 1,
+        "schema": "forge/source-snapshot/v1",
+        "producer_version": "fixture:ci:1",
+        "project": {"tracker_instance_id": registry, "project_id": project_id},
+        "configuration_id": str(uuid4()),
+        "repository_id": str(uuid4()),
+        "branch_ref": "refs/heads/release/portal",
+        "observed_head_sha": commit,
+        "clone_url_sha256": "d" * 64,
+    }
+
+
+def vector():
+    return json.loads((Path(__file__).parent / "fixtures/bug_search_v1.json").read_text(encoding="utf-8"))["vectors"][1]
+
+
+def runtime_value(source):
+    """Current validated catalog/profile, independent of immutable historical hash vectors."""
+    request, _, _ = source
+    raw = request.snapshot.content()
+    raw["project"]["tracker_instance_id"] = request.binding.tracker_instance_uuid
+    return raw
+
+
+@pytest.mark.parametrize("model", [SnapshotTarget, BugWorkOriginTarget])
+def test_shared_tracker_fleet_target_fixture_has_exact_canonical_hash(model):
+    raw = json.loads((Path(__file__).parent / "fixtures/bug-target-source-v1.json").read_text(encoding="utf-8"))
+    target = model.model_validate_json(json.dumps(raw))
+    assert target.model_dump(mode="json") == raw
+    assert payload_sha256(target.model_dump(mode="json")) == (
+        "da98baaa72f26675f6bdd74a05c08d5b2a1de70fe06bc0ac8548a78a2e13af01"
+    )
+    assert target.source.observed_head_sha != target.commit_sha
+    target.source.require_target(raw["source"]["project"]["project_id"], "qa", target.commit_sha)
+    with pytest.raises(ValueError):
+        target.source.require_target(raw["source"]["project"]["project_id"], "source_only", target.commit_sha)
+    legacy = {key: value for key, value in raw.items() if key != "source"}
+    legacy.update(target_ref=None, deployment_ref=None)
+    assert model.model_validate_json(json.dumps(legacy)).model_dump(mode="json") == legacy
+    for required_nullable in ("target_ref", "deployment_ref"):
+        incomplete = {key: value for key, value in legacy.items() if key != required_nullable}
+        with pytest.raises(ValidationError):
+            model.model_validate_json(json.dumps(incomplete))
+
+
+def test_source_omission_preserves_original_shared_snapshot_hash_and_mandatory_nulls(source):
+    original = vector()
+    # The public hash vector intentionally retains its historical profile spelling.
+    # Its byte/hash compatibility is independent of the stricter current profile admission.
+    assert payload_sha256(original["value"]) == original["sha256"]
+    historical_target = original["value"]["targets"][0]
+    assert (
+        SnapshotTarget.model_validate_json(json.dumps(historical_target)).model_dump(mode="json") == historical_target
+    )
+    value = runtime_value(source)
+    snapshot = ExecutionSnapshot.model_validate_json(json.dumps(value, ensure_ascii=False))
+    assert snapshot.targets[0].source is None
+    assert snapshot.content() == value
+    target = snapshot.targets[0].model_dump(mode="json")
+    assert "source" not in target and "target_ref" in target and "deployment_ref" in target
+    assert target["target_ref"] is None and target["deployment_ref"] is None
+
+
+@pytest.mark.parametrize("qa", [False, True])
+def test_original_typed_ci_identity_roundtrips_without_timestamps_or_current_head_replacement(qa, source):
+    value = runtime_value(source)
+    target = value["targets"][0]
+    source = identity(value["project"]["project_id"], value["project"]["tracker_instance_id"], target["commit_sha"])
+    target["source"] = source
+    if qa:
+        value["mode"] = "qa"
+        target.update(target_ref="configured-qa", deployment_ref="forge:delivered:original-a")
+        source["observed_head_sha"] = "b" * 40
+    snapshot = ExecutionSnapshot.model_validate_json(json.dumps(value))
+    assert snapshot.content() == value
+    assert snapshot.targets[0].model_dump(mode="json")["source"] == source
+    assert "schema_name" not in snapshot.targets[0].model_dump(mode="json")["source"]
+    assert snapshot.targets[0].commit_sha == "a" * 40
+    if qa:
+        assert snapshot.targets[0].source.observed_head_sha == "b" * 40
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "project",
+        "head",
+        "branch",
+        "schema",
+        "nil_config",
+        "bool_version",
+        "url",
+        "url_hash",
+        "producer_bytes",
+        "camel_project",
+    ],
+)
+def test_typed_ci_identity_rejects_unbound_or_noncanonical_source(bad, source):
+    value = runtime_value(source)
+    target = value["targets"][0]
+    source = identity(value["project"]["project_id"], value["project"]["tracker_instance_id"], target["commit_sha"])
+    target["source"] = source
+    if bad == "project":
+        source["project"]["project_id"] = str(uuid4())
+    elif bad == "head":
+        source["observed_head_sha"] = "b" * 40
+    elif bad == "branch":
+        source["branch_ref"] = "refs/heads/main^{commit}"
+    elif bad == "schema":
+        source["schema"] = "untrusted/source/v1"
+    elif bad == "nil_config":
+        source["configuration_id"] = "00000000-0000-0000-0000-000000000000"
+    elif bad == "bool_version":
+        source["contract_version"] = True
+    elif bad == "url":
+        source["clone_url"] = "https://caller.invalid/git/private/repo.git"
+    elif bad == "url_hash":
+        source["clone_url_sha256"] = "URL"
+    elif bad == "producer_bytes":
+        source["producer_version"] = "я" * 65
+    else:
+        source["project"] = {
+            "trackerInstanceId": source["project"]["tracker_instance_id"],
+            "projectId": source["project"]["project_id"],
+        }
+    with pytest.raises((ValidationError, ValueError)):
+        ExecutionSnapshot.model_validate_json(json.dumps(value))
+
+
+def test_ci_identity_schema_alias_itself_requires_exact_wire_fields():
+    value = vector()["value"]
+    raw = identity(value["project"]["project_id"], value["project"]["tracker_instance_id"], "a" * 40)
+    parsed = BugTargetSourceIdentity.model_validate_json(json.dumps(raw))
+    assert parsed.model_dump(mode="json", by_alias=True) == raw
+    copied = copy.deepcopy(raw)
+    copied["schema_name"] = copied.pop("schema")
+    with pytest.raises(ValidationError):
+        BugTargetSourceIdentity.model_validate_json(json.dumps(copied))
+
+
+def test_ci_registry_is_bound_to_actual_tracker_uuid_without_parsing_opaque_alias(source):
+    request, _, catalog = source
+    value = request.snapshot.content()
+    value["targets"][0]["source"] = identity(
+        request.binding.project_id,
+        request.binding.tracker_instance_uuid,
+        value["targets"][0]["commit_sha"],
+    )
+    snapshot = ExecutionSnapshot.model_validate_json(json.dumps(value))
+    binding = request.binding.model_copy(update={"snapshot_sha256": payload_sha256(snapshot.content())})
+    snapshot.require_binding(binding, catalog)
+    assert snapshot.project.tracker_instance_id == "tracker-local"
+    with pytest.raises(ValueError, match="другому Tracker"):
+        snapshot.require_binding(binding.model_copy(update={"tracker_instance_uuid": str(uuid4())}), catalog)

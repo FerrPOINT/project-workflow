@@ -360,11 +360,43 @@ PM_PHASE_REPORT = (
     "readback. Stop at the returned next phase: owner confirmation belongs to phase 3 in this SAME execution. "
     "Do not complete the PM Workflow or create another assignment/cycle to wait for consent."
 )
+PM_DRAFT_INSTRUCTIONS = [
+    "Be a full brainstorming partner, not a mandatory questionnaire. Clarify ONLY when the initial input "
+    "is incomplete or contradictory for the requirements: identify the concrete gap, ask one useful question "
+    "at a time, and accept free-form answers in small iterations. Offer alternatives with tradeoffs only "
+    "when an unresolved choice needs the owner; do not reopen choices already explicit in the brief. "
+    "No long mandatory questionnaire, preselection, default selected answer or implied consent.",
+    "If the initial input is complete and consistent, ask no clarification questions: proceed directly "
+    "to the real requirements document using the supplied scope, constraints and acceptance criteria. "
+    "Do not invent a question, missing detail or alternative solely to complete a phase. Brainstorming, "
+    "clarification and requirements review all remain inside draft mode and Draft stage. Read the immutable "
+    "initial request and distinguish facts, preferences and actual open choices.",
+    "Converge on one clear in-scope requirements document without selecting a solution on the owner's "
+    "behalf. Preserve explicit choices from a complete brief. Resolve blocking gaps or contradictions "
+    "with the owner before claiming the requirements are ready; keep unresolved issues explicit. "
+    "A complete brief is not owner confirmation: present the saved requirements for exact confirmation in phase 3.",
+]
+PM_DRAFT_CHECKS = [
+    "Draft has a server-saved exact revision/hash, clear scope and measurable acceptance criteria.",
+    "Clarifications were requested only for incomplete or contradictory input; a complete, consistent "
+    "brief proceeds directly to requirements with no clarification questions or mandatory alternatives.",
+    "Actual blocking gaps/contradictions were resolved without invented answers or preselection; "
+    "if none exist, no question/answer evidence is required. Owner confirmation remains a separate exact action.",
+    "Unresolved blockers remain explicit; no additional Tracker tasks were created.",
+]
+PM_DRAFT_EVIDENCE = [
+    "Saved Draft revision/hash, source brief, scope/acceptance criteria and owner review presentation.",
+    "For incomplete/contradictory input only: actual clarification and resolution references. "
+    "For a complete, consistent brief: requirements derived from that brief, "
+    "with no question/answer references required.",
+]
 PM_PUBLISH_INSTRUCTION = (
-    "Brainstorm in small free-form iterations before a document exists; never create a placeholder revision "
+    "When clarification is needed, brainstorm in small free-form iterations before a document exists; "
+    "never create a placeholder revision "
     "or question solely for checkpointing. When the agreed draft is ready, publish the real requirements "
     "using task-tracker sdlc revision publish --task <task-uuid> --from-file <revision.json>. Formal "
-    "clarification requires an existing requirements revision: only then publish a focused question using "
+    "clarification is conditional on an actual unresolved gap and requires an existing requirements revision: "
+    "only then publish a focused question using "
     "task-tracker sdlc question publish --task <task-uuid> --from-file <question.json>. Use actual strict "
     "MachineFence, revision/version and idempotency fields from the supplied context; never invent IDs. "
     "Read questions/requirements back and match the actual server revision/content_hash. Reconcile "
@@ -404,15 +436,18 @@ PM_CONFIRMATION_INSTRUCTIONS = [
 PM_CONFIRMATION_CHECKS = [
     "The FULL latest server-saved requirements document and exact revision/content_hash were presented to the owner.",
     "Actual owner confirmation has a real authorized readback receipt matching task, latest revision/hash and owner.",
-    "Feedback was resolved within the same execution; no stale consent, fake answer IDs or extra PM cycles were used.",
-    "Authorized typed checkpoint/resume and direct PM confirmation readback dependencies are satisfied; "
-    "no blockers remain.",
-    "PM finalizes only; allowed next stage/status are Backlog / Ready then Analysis / Ready, not PM dispatch.",
+    "Any feedback that occurred was resolved within the same execution; no stale consent, fake answer IDs "
+    "or extra PM cycles were used. Clarification questions are not a prerequisite for confirmation.",
+    "Direct PM confirmation readback dependencies and any authorized typed checkpoint/resume actually used "
+    "are satisfied; no blockers remain.",
+    "PM finalizes only after exact owner confirmation; the allowed result is Backlog / Ready. "
+    "No Analysis intent or Analyst pickup is required for this PM handoff.",
 ]
 PM_CONFIRMATION_EVIDENCE = [
     "FULL saved requirements document, exact revision/content_hash and owner presentation reference.",
     "Actual owner confirmation receipt ID/reference and readback matching task/revision/hash/owner_subject.",
-    "Same-execution typed checkpoint/input references and feedback-to-revision history without fabricated answers.",
+    "Same-execution typed checkpoint/input references and feedback-to-revision history only when they occurred; "
+    "no fabricated answers or mandatory clarification history for a complete brief.",
 ]
 
 
@@ -428,9 +463,9 @@ def terminal_instruction(role: str) -> str:
             "confirmation receipt refs, revision/content_hash, owner_subject and check/evidence coverage; "
             "never invent authority fields. Reconcile uncertain effects using the exact original key/body "
             "before retry. Verify accepted Workflow complete=true, then finalize the PM run. The allowed next "
-            "stage AND status are Backlog / Ready, then Analysis / Ready through Tracker/Fleet pickup. "
-            "Tracker may create an Analysis / Ready intent at consent, but Analyst reserve remains blocked "
-            "until PM actual completion is observed. PM does not dispatch Analyst or create another PM cycle. "
+            "stage AND status are Backlog / Ready only. Stop at Backlog / Ready; do not request an Analysis "
+            "intent, wait for Analyst pickup or treat either as a PM completion prerequisite. "
+            "PM does not dispatch Analyst or create another PM cycle. "
             "Installed instructions alone do not authorize live routing; use only the actually authorized API/policy. "
             "Generic patch/issue transition/board move are forbidden substitutes."
         )

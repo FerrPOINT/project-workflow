@@ -13,20 +13,36 @@ class ThemeInputs(HTMLParser):
     def __init__(self):
         super().__init__()
         self.radios = []
+        self.icon_options = []
+        self.in_icon_selector = False
         self.root_attrs = {}
         self.brand_attrs = {}
         self.selector_attrs = []
+        self.selector_options = []
+        self.in_selector = False
 
     def handle_starttag(self, tag, attrs):
         fields = dict(attrs)
         if tag == "html":
             self.root_attrs = fields
-        if fields.get("class") == "brand-mark":
+        if "base-platform-mark" in fields.get("class", "").split():
             self.brand_attrs = fields
-        if fields.get("class") == "namespace-trigger":
-            self.selector_attrs.append(fields)
+        if tag == "select":
+            self.in_icon_selector = fields.get("name") == "namespaceThemeIcon"
+            self.in_selector = "data-namespace-selector" in fields
+            if self.in_selector:
+                self.selector_attrs.append(fields)
+        if tag == "option" and self.in_icon_selector:
+            self.icon_options.append(fields)
+        if tag == "option" and self.in_selector:
+            self.selector_options.append(fields)
         if tag == "input" and fields.get("name") == "namespaceThemeIcon":
             self.radios.append(fields)
+
+    def handle_endtag(self, tag):
+        if tag == "select":
+            self.in_selector = False
+            self.in_icon_selector = False
 
 
 @pytest.mark.parametrize("icon", [None, "folder", "code", "rocket", "palette", "users"])
@@ -45,21 +61,22 @@ def test_theme_controls_show_all_icons_and_select_current_value(icon):
     parsed = ThemeInputs()
     parsed.feed(html)
     assert "style" not in parsed.root_attrs
+    assert parsed.brand_attrs
     assert "style" not in parsed.brand_attrs
     if edited:
         assert len(parsed.selector_attrs) == 2
-        assert all(trigger["style"] == f"--namespace-color:{color}" for trigger in parsed.selector_attrs)
-    assert {radio["value"] for radio in parsed.radios} == set(PROJECT_THEME_ICONS)
-    assert [radio["value"] for radio in parsed.radios if "checked" in radio] == [icon or "folder"]
-    assert all(radio["type"] == "radio" and radio["aria-label"] for radio in parsed.radios)
-    assert 'role="radiogroup" aria-label="Иконка"' in html
-    assert '<details class="theme-icon-select" id="namespaceIconSelect">' in html
-    assert '<summary aria-label="Выбрать иконку">' in html
+        assert all("data-base-choice" in control for control in parsed.selector_attrs)
+        assert all(option["data-color"] == color for option in parsed.selector_options if "selected" in option)
+    assert {option["value"] for option in parsed.icon_options} == set(PROJECT_THEME_ICONS)
+    assert [option["value"] for option in parsed.icon_options if "selected" in option] == [icon or "folder"]
+    assert 'for="namespaceThemeIcon">Иконка</label>' in html
+    assert 'data-base-choice class="base-control" id="namespaceThemeIcon"' in html
+    assert 'renderOption: renderNamespaceIconChoice' in html
+    assert 'namespaceIconSelect' not in html
     assert 'id="namespaceThemeControls"' in html
     assert 'id="namespaceThemePreview"' not in html
-    assert 'id="namespaceThemeIcon"' not in html
     assert "<path d=" in html
-    assert "style.setProperty('--namespace-color', color)" in html
+    assert "option.dataset.color = color || defaultNamespaceThemeColor" in html
 
 
 def test_header_logo_is_constant_and_each_profession_option_has_its_own_identity():
@@ -76,17 +93,18 @@ def test_header_logo_is_constant_and_each_profession_option_has_its_own_identity
         parsed = ThemeInputs()
         parsed.feed(html)
         assert "style" not in parsed.brand_attrs
-        assert all(
-            trigger["style"] == f"--namespace-color:{current['theme_color']}"
-            for trigger in parsed.selector_attrs
-        )
-        assert html.count('role="listbox" aria-label="Профессии"') == 2
+        selected = [option for option in parsed.selector_options if "selected" in option]
+        assert len(selected) == 2
+        assert all(option["data-color"] == current["theme_color"] for option in selected)
+        assert all(option["value"] == str(current["id"]) for option in selected)
+        assert "initChoice(control" in html
         for profession in professions:
             assert html.count(f'data-icon="{profession["theme_icon"]}" data-color="{profession["theme_color"]}"') == 2
-            assert html.count(f'data-value="{profession["id"]}"') == 2
+            assert sum(option['value'] == str(profession['id']) for option in parsed.selector_options) == 2
         logos.append(html.split('<a class="brand-link"', 1)[1].split('</a>', 1)[0])
     assert logos[0] == logos[1]
-    assert 'd="M7 11v4a2 2 0 0 0 2 2h4"' in logos[0]
+    assert 'data-base-platform-mark' in logos[0]
+    assert 'data-base-brand-initials' in logos[0]
 
 
 @pytest.mark.parametrize("icon", PROJECT_THEME_ICONS)

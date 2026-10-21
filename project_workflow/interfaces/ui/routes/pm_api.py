@@ -28,6 +28,7 @@ from project_workflow.domain.pm_execution import (
     SingleTaskPMResume,
     SingleTaskPMReviewBind,
 )
+from project_workflow.infrastructure.db.single_task_catalog import runtime_catalog_read
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.infrastructure.pm_readback import ReadbackUnavailable, readback_configured
 
@@ -87,7 +88,7 @@ def _execute(
                 payload.expected_fence, payload.session_run_id, scope_token,
             ):
                 return error("forbidden", "Execution/run scoped credential required", 403)
-        with SAUnitOfWork() as uow:
+        with SAUnitOfWork() as uow, runtime_catalog_read(uow):
             assignment = uow.tasks.get_assignment_by_operation_key(identity.assignment_operation_key)
             context = assignment.payload.get("single_task_context") if assignment else None
             if (context is not None) != isinstance(payload, SingleTaskPMProfile):

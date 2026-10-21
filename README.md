@@ -58,6 +58,8 @@ Business adapter проверяет runtime-контракт через ауте
 схемы и immutable source provenance. Отсутствующий или некорректный build
 manifest даёт `503`, при этом публичный `/health` по-прежнему проверяет только
 DB/schema и подходит для standalone-разработки.
+Стоимость повторных запросов и обнаружение изменений описаны в
+[проверке готовности](docs/health-readiness.md).
 
 Managed DEV bootstrap загружает versioned-каталог v2 из исторически именованного
 [`hermes_sdlc_catalog_v1.json`](project_workflow/references/hermes_sdlc_catalog_v1.json):
@@ -501,6 +503,8 @@ project-workflow/
 
 ## 📚 Документы
 
+[Общий UI и управляемый брендинг Base](docs/shared-design-system.md).
+
 - [docs/architecture.md](docs/architecture.md) — CLI/UI/Supervisor boundaries, state/audit model и runtime scope.
 - [PM continuation contract](docs/pm-continuation-contract.md) and [verification](docs/pm-continuation-verification.md) describe the opt-in persistent PM checkpoint/resume API and its remaining Fleet integration gaps.
 - [Critical PM migration boundary](docs/critical-pm-review-migrations.md) and [PostgreSQL preservation qualification](docs/critical-pm-preservation-postgres-20261015.md): nine passing synthetic legacy-upgrade cases; accepted database upgrade and live subsequent-PM execution remain separate.
@@ -522,6 +526,14 @@ Proprietary source-available. Not open source. Viewing/evaluation only.
 Commercial, production, resale, redistribution, SaaS/hosting use require written license from FerrPOINT. См. [LICENSE](LICENSE), [NOTICE](NOTICE) и [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 Нормативные термины и зависимости: [PDLC и интеграция с Base](docs/PDLC_BASE_INTEGRATION.md).
+
+`GET /api/platform/branding` — ограниченный same-origin адаптер опубликованного
+брендинга. Он использует обычные SSO/UoW middleware Workflow и читает только
+настроенный public источник, передавая upstream один `If-None-Match`. Credentials
+браузера и `Set-Cookie` источника не проксируются. `PLATFORM_BRANDING_URL` задаёт
+адрес; пустое значение отключает bridge, отсутствие выводит адрес из канонического
+`PLATFORM_SERVICES_URL`. Принимается JSON до 64 KiB; redirects/HTML/ошибки источника
+не передаются как успешная конфигурация. Подключение SSR renderer выполняется отдельно.
 
 ## Единое пространство PDLC
 

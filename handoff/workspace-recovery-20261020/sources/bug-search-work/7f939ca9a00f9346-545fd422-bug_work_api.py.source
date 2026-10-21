@@ -1,0 +1,167 @@
+"""Separate registered Fleet adapter and HMAC BugWork worker surfaces."""
+
+from collections.abc import Callable
+from typing import Any
+
+from fastapi import Header, Path, Query
+from fastapi.responses import JSONResponse
+from pydantic import ValidationError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+
+from project_workflow.application.bug_work import BugWorkService
+from project_workflow.build_provenance import runtime_compatibility_descriptor
+from project_workflow.domain.bug_work import BugWorkBind, BugWorkPrepare, BugWorkStep, BugWorkStop
+from project_workflow.domain.exceptions import ConflictError, NotFoundError
+from project_workflow.domain.namespace_ownership import canonical_uuid
+from project_workflow.infrastructure import bug_work_authority as authority
+from project_workflow.infrastructure.db.uow import SAUnitOfWork
+from project_workflow.infrastructure.namespace_auth import NamespaceAuthError
+
+
+def _response(callback: Callable[[], dict[str, Any]]) -> JSONResponse:
+    try:
+        return JSONResponse({"ok": True, **callback()}, headers={"Cache-Control": "no-store"})
+    except NamespaceAuthError as error:
+        status, code = error.status, "authorization-unavailable" if error.status == 503 else "access-denied"
+    except NotFoundError:
+        status, code = 404, "assignment-not-found"
+    except (ConflictError, IntegrityError):
+        status, code = 409, "assignment-conflict"
+    except (ValidationError, ValueError, KeyError, TypeError):
+        status, code = 422, "assignment-invalid"
+    except (SQLAlchemyError, RuntimeError):
+        status, code = 503, "assignment-unavailable"
+    return JSONResponse(
+        {"ok": False, "error_code": code, "error": "Запрос назначения Bug отклонён"},
+        status_code=status,
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+def catalog(profession_id: int = Path(gt=0), authorization: str | None = Header(default=None)) -> JSONResponse:
+    def execute() -> dict[str, Any]:
+        authority.authorize_fleet(authorization, write=False)
+        with SAUnitOfWork() as uow:
+            return {"result": BugWorkService(uow).catalog(profession_id)}
+
+    return _response(execute)
+
+
+def installed_catalog(authorization: str | None = Header(default=None)) -> JSONResponse:
+    """Resolve the existing Developer profession; a Fleet workflow ID is not its ID."""
+    def execute() -> dict[str, Any]:
+        authority.authorize_fleet(authorization, write=False)
+        with SAUnitOfWork() as uow:
+            uow.lock_catalog_state(shared=True)
+            profession = uow.projects.get_by_cli_command("workflow-developer")
+            if profession is None or profession.id is None:
+                raise NotFoundError("Профессия Developer не найдена")
+            return {"result": BugWorkService(uow).catalog(profession.id)}
+
+    return _response(execute)
+
+
+def compatibility(authorization: str | None = Header(default=None)) -> JSONResponse:
+    """Read only this installed owner's packaged runtime descriptor, without legacy role tokens."""
+    def execute() -> dict[str, Any]:
+        authority.authorize_fleet(authorization, write=False)
+        return {"result": runtime_compatibility_descriptor()}
+
+    return _response(execute)
+
+
+def prepare(payload: BugWorkPrepare, authorization: str | None = Header(default=None)) -> JSONResponse:
+    def execute() -> dict[str, Any]:
+        principal = authority.authorize_fleet(authorization, write=True)
+        with SAUnitOfWork() as uow:
+            return {"result": BugWorkService(uow).prepare(payload, principal)}
+
+    return _response(execute)
+
+
+def readback(
+    assignment_id: str,
+    tracker_instance_uuid: str = Query(min_length=36, max_length=36),
+    authorization: str | None = Header(default=None),
+) -> JSONResponse:
+    def execute() -> dict[str, Any]:
+        principal = authority.authorize_fleet(authorization, write=False)
+        with SAUnitOfWork() as uow:
+            return {
+                "result": BugWorkService(uow).read(
+                    canonical_uuid(assignment_id), canonical_uuid(tracker_instance_uuid), principal
+                )
+            }
+
+    return _response(execute)
+
+
+def bind(
+    assignment_id: str,
+    payload: BugWorkBind,
+    tracker_instance_uuid: str = Query(min_length=36, max_length=36),
+    authorization: str | None = Header(default=None),
+) -> JSONResponse:
+    def execute() -> dict[str, Any]:
+        principal = authority.authorize_fleet(authorization, write=True)
+        with SAUnitOfWork() as uow:
+            service = BugWorkService(uow)
+            result = service.bind(
+                canonical_uuid(assignment_id), canonical_uuid(tracker_instance_uuid), payload, principal
+            )
+            row = service._row(assignment_id, tracker_instance_uuid)
+            token = authority.scope_token(service.claims(row)) if result["state"] == "bound" else None
+            return {"result": result, "execution_token": token}
+
+    return _response(execute)
+
+
+def stop(
+    assignment_id: str,
+    payload: BugWorkStop,
+    tracker_instance_uuid: str = Query(min_length=36, max_length=36),
+    authorization: str | None = Header(default=None),
+) -> JSONResponse:
+    def execute() -> dict[str, Any]:
+        principal = authority.authorize_fleet(authorization, write=True)
+        with SAUnitOfWork() as uow:
+            return {
+                "result": BugWorkService(uow).stop(
+                    canonical_uuid(assignment_id), canonical_uuid(tracker_instance_uuid), payload, principal
+                )
+            }
+
+    return _response(execute)
+
+
+def step(
+    assignment_id: str,
+    payload: BugWorkStep,
+    tracker_instance_uuid: str = Query(min_length=36, max_length=36),
+    authorization: str | None = Header(default=None),
+) -> JSONResponse:
+    def execute() -> dict[str, Any]:
+        with SAUnitOfWork() as uow:
+            return {
+                "result": BugWorkService(uow).step(
+                    canonical_uuid(assignment_id), canonical_uuid(tracker_instance_uuid), payload, authorization
+                )
+            }
+
+    return _response(execute)
+
+
+def history(
+    assignment_id: str,
+    tracker_instance_uuid: str = Query(min_length=36, max_length=36),
+    authorization: str | None = Header(default=None),
+) -> JSONResponse:
+    def execute() -> dict[str, Any]:
+        with SAUnitOfWork() as uow:
+            return {
+                "result": BugWorkService(uow).history(
+                    canonical_uuid(assignment_id), canonical_uuid(tracker_instance_uuid), authorization
+                )
+            }
+
+    return _response(execute)

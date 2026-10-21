@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "package": "@sdlc/ui",
+  "files": {
+    "base-ui.css": "b48cf2f2baa919c4ab86769e72e4112095c600bd2836c50717443df0e36307a0",
+    "base-ui.js": "4a84d485ea64a5d01a707e95e4a4419d065c28a06c97257d3f453d7978d1280a",
+    "macros.html": "fe53deccef37163bfb4fae61c1c29f1275d78f79bf0fb743d2f6fec7801445bc"
+  }
+}

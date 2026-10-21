@@ -24,7 +24,7 @@ import pytest
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
 from fastapi.testclient import TestClient
-from sqlalchemy import inspect, select, text
+from sqlalchemy import event, inspect, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import close_all_sessions
 
@@ -36,6 +36,7 @@ from project_workflow.application.project import ProjectService
 from project_workflow.application.task import TaskService
 from project_workflow.application.workflow import WorkflowService
 from project_workflow.domain.exceptions import ConflictError
+from project_workflow.infrastructure.db import session as health_db_session
 from project_workflow.infrastructure.db.managed_catalog import (
     ensure_managed_catalog,
     validate_managed_catalog_state,
@@ -467,7 +468,7 @@ def test_pm_ownership_catalog_lock_order_and_incomplete_schema(pg_url, winner):
     assert not schema_is_ready(engine)
     with pytest.raises(DatabaseRecreateRequired):
         ensure_migrated(engine)
-    assert database_revisions(engine) == {"0015_single_task_assignments"}
+    assert database_revisions(engine) == {"0016_human_project_commit_guard"}
 
 
 @pytest.mark.integration
@@ -1194,7 +1195,7 @@ class TestPostgresInitialMigration:
             version = conn.execute(
                 text("SELECT version_num FROM project_workflow.alembic_version")
             ).scalar_one()
-        assert version == migration_head() == "0015_single_task_assignments"
+        assert version == migration_head() == "0016_human_project_commit_guard"
         assert schema_is_ready(engine) is True
 
     def test_managed_bootstrap_serializes_with_public_catalog_creation(self, pg_url):
@@ -1310,6 +1311,7 @@ class TestPostgresInitialMigration:
         ("0004_wide_work_item_revision", "Downgrade from wide Business revisions"),
         ("0008_pm_execution", "PM execution downgrade refused"),
         ("0009_pm_draft_assignment", "PM Draft assignment downgrade refused"),
+        ("0016_human_project_commit_guard", "Human policy requires a compatible guarded rollback cohort"),
     ])
     def test_downgrade_refuses_lossy_mode_collapse(self, pg_url, revision, message):
         engine = get_engine(pg_url)
@@ -1317,7 +1319,7 @@ class TestPostgresInitialMigration:
         with pytest.raises(RuntimeError, match=message):
             run_alembic_command("downgrade", engine, "base")
         assert database_revisions(engine) == {revision}
-        assert schema_is_ready(engine) is (revision == "0015_single_task_assignments")
+        assert schema_is_ready(engine) is (revision == "0016_human_project_commit_guard")
 
     def test_populated_0001_upgrade_preserves_rows_and_backfills_per_workflow(self, pg_url):
         engine = get_engine(pg_url)
@@ -3740,3 +3742,260 @@ class TestPostgresContinuationCatalogVersioning:
             assert bound["execution_scope"] == scope and bound["mode_key"] == mode_key
             pinned = uow.workflows.get_mode(bound["mode_id"])
             assert pinned.catalog_version == 2 and set(pinned.execution_scopes) == {"delivery", "aggregate"}
+
+
+@pytest.mark.integration
+class TestPostgresPMBootstrap:
+    """Real namespace/task locks; synthetic Fleet HTTP permits, never live authority."""
+
+    @pytest.fixture
+    def bootstrap_pg(self, pg_url, monkeypatch, request):
+        from project_workflow.infrastructure.db.single_task_catalog import ensure_single_task_catalog
+        from tests.test_pm_bootstrap_http import fleet_server
+        from tests.test_pm_bootstrap_retry import prepare_pending
+
+        engine = get_engine(pg_url)
+        assert engine.dialect.name == "postgresql"
+        ensure_migrated(engine)
+        monkeypatch.setattr(config_module, "CATALOG_VARIANT", "single-task-v1")
+        monkeypatch.setenv("PROJECT_WORKFLOW_PM_SCOPE_SECRET", "s" * 40)
+        monkeypatch.setenv("PROJECT_WORKFLOW_PM_READBACK_TOKEN", "p" * 40)
+        config_module.get_settings.cache_clear()
+        with SAUnitOfWork() as uow:
+            assert uow.session.get_bind() is engine
+            ensure_single_task_catalog(uow)
+        with TestClient(create_app()) as client:
+            pending = prepare_pending(client, monkeypatch, getattr(request, "param", "bound"))
+            with fleet_server(pending, monkeypatch) as fleet:
+                yield pending, fleet
+
+    @pytest.mark.parametrize("bootstrap_pg", ["bound", "unbound"], indirect=True)
+    def test_registered_retry_preserves_predecessor_and_fences_late_bind(self, bootstrap_pg, supervisor_llm):
+        from project_workflow.infrastructure.db import models as m
+        from tests.test_pm_bootstrap_http import PREDECESSOR, RETRY
+        from tests.test_pm_bootstrap_retry import NEXT, command, finish_confirmed_retry
+        from tests.test_single_task_runtime import API, PM, PROFILE, RUNNER, WRITER
+
+        pending, fleet = bootstrap_pg
+        request = command(pending)
+        with SAUnitOfWork() as uow:
+            before = uow.tasks.get_assignment_by_operation_key(request.predecessor_operation_key).to_dict()
+        reader = pending["client"].get(PREDECESSOR, params={
+            "task": pending["assignment"]["task"], "assignment_operation_key": request.predecessor_operation_key,
+            "assignment_revision": 1,
+        }, headers=WRITER)
+        assert reader.status_code == 200 and reader.json()["result"] == pending["state"]
+        accepted = pending["client"].post(RETRY, json=request.model_dump(), headers=WRITER)
+        assert accepted.status_code == 200, accepted.text
+        result = accepted.json()["result"]
+        assert result["assignment_revision"] == result["attempt_number"] == 2
+        assert result["binding_state"] == "unbound" and result["status"] == "active"
+        assert "execution_token" not in accepted.json()
+        native = pending["proof"].native
+        fleet["runs"][native.session_run_id]["status"] = "running"
+        late = {**PROFILE, **native.model_dump(include={
+            "task", "execution_ref", "tracker_instance_ref", "tracker_project_ref", "task_ref", "root_ref",
+            "agent_ref", "assignment_operation_key", "assignment_ref", "assignment_revision",
+            "binding_ref", "hermes_run_ref", "session_run_id",
+        }), "operation_key": native.dispatch_operation_key, "expected_version": 0}
+        assert pending["client"].post(PM + "bind", json=late, headers=WRITER).status_code == 409
+        assert pending["client"].post(API + "bind", json=pending["binding"], headers=WRITER).status_code == 409
+        count = len(fleet["paths"])
+        fleet["proofs"].clear()
+        replay = pending["client"].post(RETRY, json=request.model_dump(), headers=WRITER)
+        assert replay.status_code == 200 and len(fleet["paths"]) == count
+        with SAUnitOfWork() as uow:
+            assert uow.tasks.get_assignment_by_operation_key(request.predecessor_operation_key).to_dict() == before
+            assert len(uow.tasks.list_assignments(pending["state"]["task_id"])) == 2
+            assert list(uow.session.scalars(select(m.PMExecution))) == []
+            assert list(uow.session.scalars(select(m.PMRun))) == []
+            assert uow.step_history.list(task_id=pending["state"]["task_id"]) == []
+
+        # Normal explicit enrollment/steps after retry: native and PM identity
+        # keep canonicalRoot; only the generic bind/step sink uses the child.
+        binding = {**pending["binding"], "assignment_operation_key": request.operation_key,
+                   "assignment_revision": 2, "attempt_number": 2, "bind_operation_key": "bind:retry",
+                   "binding_ref": "binding:retry", "hermes_run_ref": "run:retry", "session_run_id": NEXT}
+        client = pending["client"]
+        bound = client.post(API + "bind", json=binding, headers=WRITER)
+        assert bound.status_code == 200, bound.text
+        identity = native.model_dump(include={
+            "task", "execution_ref", "tracker_instance_ref", "tracker_project_ref", "task_ref", "root_ref",
+            "agent_ref", "assignment_operation_key", "assignment_ref", "assignment_revision",
+        })
+        assert identity["assignment_operation_key"] == request.predecessor_operation_key
+        pm_command = {**PROFILE, **identity, "operation_key": "pm:retry-bind", "expected_version": 0,
+                      "binding_ref": "binding:retry", "hermes_run_ref": "run:retry", "session_run_id": NEXT}
+        current_native = native.model_copy(update={
+            "status": "running", "binding_ref": "binding:retry", "hermes_run_ref": "run:retry",
+            "session_run_id": NEXT, "dispatch_operation_key": "pm:retry-bind",
+        })
+        fleet["runs"][NEXT] = current_native
+        enrolled = client.post(PM + "bind", json=pm_command, headers=WRITER)
+        assert enrolled.status_code == 200, enrolled.text
+        read = client.post(PM + "readback", json={**PROFILE, **identity}, headers=WRITER)
+        assert read.status_code == 200 and read.json()["result"]["identity"] == identity
+        step = {**pending["step"], "assignment_revision": 2, "attempt_number": 2,
+                "step_operation_key": "step:retry-read", "binding_ref": "binding:retry",
+                "hermes_run_ref": "run:retry", "session_run_id": NEXT,
+                "single_task_context_sha256": enrolled.json()["result"]["single_task_context_sha256"]}
+        headers = {**RUNNER, "X-Workflow-Execution-Token": enrolled.json()["execution_token"]}
+        first = client.post(API + "step", json=step, headers=headers)
+        assert first.status_code == 200 and first.json()["result"]["phase_code"] == "PM-DRAFT-01"
+        finish_confirmed_retry(
+            pending, supervisor_llm, identity, current_native, pm_command, step, headers, fleet["runs"],
+        )
+        with SAUnitOfWork() as uow:
+            assert uow.tasks.get_assignment_by_operation_key(request.predecessor_operation_key).to_dict() == before
+
+    @pytest.mark.parametrize("bootstrap_pg", ["bound", "unbound"], indirect=True)
+    def test_concurrent_successors_have_one_locked_publication(self, bootstrap_pg):
+        from project_workflow.domain.runtime_assignment import payload_sha256
+        from tests.test_pm_bootstrap_http import RETRY
+        from tests.test_pm_bootstrap_retry import command
+        from tests.test_single_task_pm_terminal import CURRENT_RUN
+        from tests.test_single_task_runtime import WRITER
+
+        pending, fleet = bootstrap_pg
+        second = pending["proof"].model_copy(update={"bootstrap_attempt_ref": CURRENT_RUN})
+        fleet["proofs"][CURRENT_RUN] = second.model_dump(mode="json")
+        requests = [command(pending), command(
+            pending, operation_key="pm-bootstrap:competitor", bootstrap_attempt_ref=CURRENT_RUN,
+            proof_sha256=payload_sha256(second.model_dump()),
+        )]
+        fleet["barrier"] = Barrier(2)
+
+        def send(request):
+            return pending["client"].post(RETRY, json=request.model_dump(), headers=WRITER)
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(send, requests))
+        assert sorted(result.status_code for result in results) == [200, 409]
+        with SAUnitOfWork() as uow:
+            records = uow.tasks.list_assignments(pending["state"]["task_id"])
+            assert len(records) == 2
+            task = uow.tasks.get_by_id(pending["state"]["task_id"])
+            assert task.assignment_revision == 2 and task.status == "active"
+            winner = next(result.json()["result"] for result in results if result.status_code == 200)
+            assert task.assignment_operation_key == winner["assignment_operation_key"]
+
+    def test_enrollment_during_composite_http_read_prevents_successor(self, bootstrap_pg):
+        from project_workflow.infrastructure.db import models as m
+        from tests.test_pm_bootstrap_http import RETRY
+        from tests.test_pm_bootstrap_retry import command
+        from tests.test_single_task_runtime import PM, PROFILE, WRITER
+
+        pending, fleet = bootstrap_pg
+        fleet["release"].clear()
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(pending["client"].post, RETRY, json=command(pending).model_dump(), headers=WRITER)
+            try:
+                assert fleet["entered"].wait(timeout=5)
+                native = pending["proof"].native
+                fleet["runs"][native.session_run_id]["status"] = "running"
+                body = {**PROFILE, **native.model_dump(include={
+                    "task", "execution_ref", "tracker_instance_ref", "tracker_project_ref", "task_ref", "root_ref",
+                    "agent_ref", "assignment_operation_key", "assignment_ref", "assignment_revision",
+                    "binding_ref", "hermes_run_ref", "session_run_id",
+                }), "operation_key": native.dispatch_operation_key, "expected_version": 0}
+                enrolled = pending["client"].post(PM + "bind", json=body, headers=WRITER)
+                assert enrolled.status_code == 200, enrolled.text
+                fleet["runs"][native.session_run_id]["status"] = native.status
+            finally:
+                fleet["release"].set()
+            rejected = future.result(timeout=15)
+        assert rejected.status_code == 409, rejected.text
+        with SAUnitOfWork() as uow:
+            assert len(uow.tasks.list_assignments(pending["state"]["task_id"])) == 1
+            assert len(list(uow.session.scalars(select(m.PMExecution)))) == 1
+            assert len(list(uow.session.scalars(select(m.PMRun)))) == 1
+
+    def test_predecessor_lock_timeout_is_unknown_not_absent(self, bootstrap_pg):
+        from project_workflow.application.pm_bootstrap import PMBootstrapService
+        from tests.test_pm_bootstrap_http import PREDECESSOR
+        from tests.test_single_task_runtime import WRITER
+
+        pending, fleet = bootstrap_pg
+        query = {"task": pending["assignment"]["task"],
+                 "assignment_operation_key": pending["assignment"]["operation_key"], "assignment_revision": 1}
+        with SAUnitOfWork() as owner:
+            PMBootstrapService(owner)._locked(pending["project"], query["task"], query["assignment_operation_key"])
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                future = pool.submit(pending["client"].get, PREDECESSOR, params=query, headers=WRITER)
+                response = future.result(timeout=8)
+            assert response.status_code == 503 and "result" not in response.json()
+            assert response.headers["Cache-Control"] == "no-store"
+        assert pending["client"].get(PREDECESSOR, params=query, headers=WRITER).status_code == 200
+        assert fleet["paths"] == []
+
+
+def _health_probe_client(pg_url):
+    engine = health_db_session.get_engine(pg_url)
+    health_db_session.ensure_migrated(engine)
+    return engine, TestClient(create_app())
+
+
+@pytest.mark.integration
+def test_postgres_warm_health_reuses_exact_validation_with_bounded_queries(pg_url):
+    engine, client = _health_probe_client(pg_url)
+    with patch.object(health_db_session, "schema_is_ready", wraps=health_db_session.schema_is_ready) as deep:
+        assert client.get("/health").status_code == 200
+        queries = []
+
+        def record(_conn, _cursor, statement, _parameters, _context, _many):
+            queries.append(statement)
+
+        event.listen(engine, "before_cursor_execute", record)
+        try:
+            for _ in range(3):
+                assert client.get("/health").status_code == 200
+        finally:
+            event.remove(engine, "before_cursor_execute", record)
+        assert deep.call_count == 1
+        assert len(queries) <= 18
+
+
+@pytest.mark.parametrize("change", [
+    "ALTER TABLE projects ADD COLUMN unexpected_health_column TEXT",
+    "ALTER TABLE projects ALTER COLUMN name TYPE text",
+    "ALTER TABLE projects ALTER COLUMN name SET DEFAULT 'unexpected-default'",
+    "CREATE INDEX health_extra_index ON projects(name)",
+    "CREATE TABLE unexpected_health_table(id integer)",
+    "CREATE FUNCTION legacy_metadata_readonly() RETURNS trigger LANGUAGE plpgsql "
+    "AS $$BEGIN RETURN NEW; END;$$",
+    "UPDATE alembic_version SET version_num='unknown_health_revision'",
+])
+@pytest.mark.integration
+def test_postgres_health_rejects_ddl_or_revision_drift_without_ttl(pg_url, change):
+    engine, client = _health_probe_client(pg_url)
+    assert client.get("/health").status_code == 200
+    with engine.begin() as connection:
+        connection.execute(text(change))
+    response = client.get("/health")
+    assert response.status_code == 503
+    assert response.json()["error_code"] == "schema-not-ready"
+
+
+@pytest.mark.integration
+def test_postgres_health_recovers_after_ddl_repair(pg_url):
+    engine, client = _health_probe_client(pg_url)
+    assert client.get("/health").status_code == 200
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE unexpected_health_table(id integer)"))
+    assert client.get("/health").status_code == 503
+    with engine.begin() as connection:
+        connection.execute(text("DROP TABLE unexpected_health_table"))
+    assert client.get("/health").status_code == 200
+
+
+@pytest.mark.integration
+def test_postgres_health_neighbor_namespace_and_same_revision_dml_do_not_repeat_validation(pg_url):
+    engine, client = _health_probe_client(pg_url)
+    with patch.object(health_db_session, "schema_is_ready", wraps=health_db_session.schema_is_ready) as deep:
+        assert client.get("/health").status_code == 200
+        with engine.begin() as connection:
+            connection.execute(text("UPDATE alembic_version SET version_num=version_num"))
+            connection.execute(text('CREATE SCHEMA "Health_Neighbor"'))
+            connection.execute(text('CREATE TABLE "Health_Neighbor".extra(id integer)'))
+        assert client.get("/health").status_code == 200
+        assert deep.call_count == 1

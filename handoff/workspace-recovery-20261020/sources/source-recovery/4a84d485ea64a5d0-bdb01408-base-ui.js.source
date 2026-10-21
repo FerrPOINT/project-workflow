@@ -1,0 +1,303 @@
+(() => {
+  let owner = null;
+
+  window.BaseDraftGuard = {
+    attach({ dialog, isDirty, isPending = () => false, fallbackFocus = () => document.querySelector('main[tabindex="-1"]') }) {
+      if (owner) throw new Error('Base draft guard already attached');
+      if (!(dialog instanceof HTMLDialogElement) || typeof isDirty !== 'function' || typeof isPending !== 'function') {
+        throw new TypeError('Base draft guard requires a dialog and dirty/pending callbacks');
+      }
+      const cancel = dialog.querySelector('[data-base-draft-cancel]');
+      const discard = dialog.querySelector('[data-base-draft-discard]');
+      const pendingMessage = dialog.querySelector('[data-base-draft-pending]');
+      if (!cancel || !discard || !pendingMessage) throw new Error('Use the Base draft_guard_dialog macro');
+      const listeners = new AbortController();
+      let destroyed = false;
+      let attempt = null;
+      let permittedUnload = false;
+      let replayAnchor = null;
+      let replayEvent = null;
+
+      function restoreFocus(target) {
+        const usable = (node) => node instanceof HTMLElement && node.isConnected && !node.disabled && node.getClientRects().length;
+        if (!usable(target)) target = fallbackFocus();
+        if (usable(target)) target.focus();
+      }
+      function finish(allowed) {
+        if (!attempt) return;
+        const current = attempt;
+        attempt = null;
+        if (dialog.open) dialog.close();
+        restoreFocus(current.trigger);
+        current.resolve(allowed);
+      }
+      function refresh() {
+        if (destroyed) return;
+        const pending = isPending();
+        discard.disabled = pending;
+        pendingMessage.hidden = !pending;
+        if (pending && document.activeElement === discard) cancel.focus();
+        if (attempt && !pending && !isDirty()) finish(false);
+      }
+      async function requestLeave(transition) {
+        if (destroyed || attempt) return false;
+        if (typeof transition !== 'function') throw new TypeError('Base draft transition must be a callback');
+        if (!isDirty() && !isPending()) { transition(); return true; }
+        const allowed = await new Promise((resolve) => {
+          attempt = { resolve, trigger: document.activeElement };
+          refresh();
+          try { dialog.showModal(); cancel.focus(); }
+          catch (error) { finish(false); throw error; }
+        });
+        if (!allowed || destroyed || isPending()) return false;
+        transition();
+        return true;
+      }
+      function documentDeparture(target, transition) {
+        const current = new URL(location.href);
+        permittedUnload = target.origin !== current.origin || target.pathname !== current.pathname || target.search !== current.search || (!target.hash && !current.hash);
+        try { transition(); }
+        catch (error) { permittedUnload = false; throw error; }
+      }
+      function navigate(url, beforeNavigate = () => {}) {
+        const target = new URL(url, location.href);
+        if (!['http:', 'https:'].includes(target.protocol) || typeof beforeNavigate !== 'function') {
+          throw new TypeError('Base draft navigation requires an HTTP(S) URL and optional callback');
+        }
+        return requestLeave(() => {
+          beforeNavigate();
+          documentDeparture(target, () => location.assign(target.href));
+        });
+      }
+      const on = (target, type, callback, options = {}) => target.addEventListener(type, callback, { ...options, signal: listeners.signal });
+      on(cancel, 'click', () => finish(false));
+      on(discard, 'click', () => {
+        // Recheck synchronously: a save may start before the product refreshes controls.
+        if (isPending()) { refresh(); return; }
+        finish(true);
+      });
+      on(dialog, 'cancel', (event) => { event.preventDefault(); finish(false); });
+      on(dialog, 'close', () => { if (!dialog.open) finish(false); });
+      on(dialog, 'click', (event) => { if (event.target === dialog) finish(false); });
+      on(dialog, 'keydown', (event) => {
+        if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); finish(false); return; }
+        if (event.key !== 'Tab') return;
+        const controls = discard.disabled ? [cancel] : [cancel, discard];
+        if (event.shiftKey && document.activeElement === controls[0]) { event.preventDefault(); controls.at(-1).focus(); }
+        else if (!event.shiftKey && document.activeElement === controls.at(-1)) { event.preventDefault(); controls[0].focus(); }
+      });
+      on(window, 'beforeunload', (event) => {
+        if (permittedUnload) { permittedUnload = false; return; }
+        if (!isDirty() && !isPending()) return;
+        event.preventDefault();
+        event.returnValue = '';
+      });
+      on(document, 'click', (event) => {
+        if (replayAnchor && event.target === replayAnchor) { replayEvent = event; return; }
+        if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+        const anchor = event.target instanceof Element ? event.target.closest('a[href]') : null;
+        const browsingTarget = anchor?.target || document.querySelector('base[target]')?.target || '_self';
+        if (!anchor || anchor.hasAttribute('download') || browsingTarget !== '_self') return;
+        const target = new URL(anchor.href, location.href);
+        if (!['http:', 'https:'].includes(target.protocol) || (!isDirty() && !isPending())) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        void requestLeave(() => {
+          // Only the accepted document navigation bypasses its native unload prompt.
+          try { documentDeparture(target, () => {
+            if (anchor.isConnected && anchor.href === target.href) {
+              // Preserve SSR context handlers; the intercepted click never reached them.
+              replayAnchor = anchor;
+              replayEvent = null;
+              anchor.click();
+              if (replayEvent?.defaultPrevented) permittedUnload = false;
+            } else location.assign(target.href);
+          }); }
+          finally { replayAnchor = null; replayEvent = null; }
+        });
+      }, { capture: true });
+      const guard = {
+        requestLeave, navigate, refresh,
+        destroy() {
+          if (destroyed) return;
+          destroyed = true;
+          listeners.abort();
+          finish(false);
+          owner = null;
+        },
+      };
+      owner = guard;
+      return guard;
+    },
+  };
+})();
+
+(() => {
+  const owners = new WeakMap();
+  const configurations = new WeakMap();
+  window.BaseConfirmDialog = {
+    attach({ dialog, fallbackFocus = () => document.querySelector('main[tabindex="-1"]') }) {
+      if (!(dialog instanceof HTMLDialogElement)) throw new TypeError('Base confirmation requires a native dialog');
+      if (owners.has(dialog)) throw new Error('Base confirmation already attached');
+      const find = (name) => dialog.querySelector(`[data-base-confirm-${name}]`);
+      const title = find('title');
+      const description = find('description');
+      const cancel = find('cancel');
+      const confirm = find('accept');
+      const error = find('error');
+      const pending = find('pending');
+      const content = find('content');
+      if (![title, description, cancel, confirm, error, pending, content].every(Boolean)) throw new Error('Use the Base confirm_dialog macro');
+      const defaults = configurations.get(dialog) ?? { title: title.textContent, message: description.textContent, cancelLabel: cancel.textContent, confirmLabel: confirm.textContent, error: error.textContent };
+      configurations.set(dialog, defaults);
+      const listeners = new AbortController();
+      let attempt = null;
+      let destroyed = false;
+      const busy = () => Boolean(attempt && (attempt.submitting || attempt.options.isPending()));
+      const usable = (node) => node instanceof HTMLElement && node.isConnected && !node.disabled && !node.closest('[inert]') && node.getClientRects().length;
+      const controls = () => [...dialog.querySelectorAll('button,a[href],input,select,textarea,[tabindex]')]
+        .filter((node) => usable(node) && node.tabIndex >= 0 && !node.matches(':disabled'));
+      const focusTarget = (target) => typeof target === 'function' ? target() : target;
+      function restoreFocus(current) {
+        const preferred = focusTarget(current.options.returnFocus) || current.trigger;
+        if (usable(preferred)) preferred.focus();
+        if (document.activeElement !== preferred) {
+          const fallback = focusTarget(current.options.fallbackFocus ?? fallbackFocus);
+          if (usable(fallback)) fallback.focus();
+        }
+      }
+      function finish(confirmed) {
+        if (!attempt) return;
+        const current = attempt;
+        attempt = null;
+        if (dialog.open) dialog.close();
+        restoreFocus(current);
+        current.resolve(confirmed);
+      }
+      function refresh() {
+        if (!attempt || destroyed) return;
+        const locked = busy();
+        confirm.disabled = locked || attempt.options.confirmDisabled();
+        cancel.disabled = locked;
+        content.disabled = locked;
+        pending.hidden = !locked;
+        dialog.setAttribute('aria-busy', String(locked));
+        const message = attempt.options.error() || (attempt.failed ? defaults.error : '');
+        error.textContent = message;
+        error.hidden = !message;
+        if (locked && dialog.contains(document.activeElement) && document.activeElement.matches(':disabled')) dialog.focus();
+      }
+      function close(confirmed = false) {
+        if (!attempt || busy()) { refresh(); return false; }
+        finish(confirmed);
+        return true;
+      }
+      function request(options = {}) {
+        if (destroyed || attempt) return Promise.resolve(false);
+        const callbacks = { onConfirm: () => {}, isPending: () => false, confirmDisabled: () => false, error: () => '', ...options };
+        for (const name of ['onConfirm', 'isPending', 'confirmDisabled', 'error']) {
+          if (typeof callbacks[name] !== 'function') throw new TypeError(`Base confirmation ${name} must be a callback`);
+        }
+        title.textContent = options.title ?? defaults.title;
+        description.textContent = options.message ?? defaults.message;
+        cancel.textContent = options.cancelLabel ?? defaults.cancelLabel;
+        confirm.textContent = options.confirmLabel ?? defaults.confirmLabel;
+        return new Promise((resolve, reject) => {
+          attempt = { options: callbacks, resolve, trigger: document.activeElement, submitting: false, failed: false };
+          try {
+            refresh();
+            dialog.showModal();
+            if (!cancel.disabled) cancel.focus(); else dialog.focus();
+          } catch (failure) {
+            const current = attempt;
+            attempt = null;
+            if (dialog.open) dialog.close();
+            restoreFocus(current);
+            reject(failure);
+          }
+        });
+      }
+      async function accept() {
+        if (!attempt || busy() || attempt.options.confirmDisabled()) { refresh(); return; }
+        const current = attempt;
+        current.submitting = true;
+        refresh();
+        try {
+          await current.options.onConfirm();
+          if (attempt !== current || destroyed) return;
+          current.submitting = false;
+          current.failed = false;
+          if (current.options.closeOnConfirm !== false && !current.options.isPending()) finish(true);
+          else refresh();
+        } catch (_failure) {
+          // Products own classification/reconciliation; never replay an uncertain write.
+          if (attempt !== current || destroyed) return;
+          current.submitting = false;
+          current.failed = true;
+          refresh();
+        }
+      }
+      const on = (type, callback) => dialog.addEventListener(type, callback, { signal: listeners.signal });
+      confirm.addEventListener('click', () => { void accept(); }, { signal: listeners.signal });
+      cancel.addEventListener('click', () => close(), { signal: listeners.signal });
+      on('cancel', (event) => { event.preventDefault(); close(); });
+      on('close', () => {
+        if (!attempt || dialog.open) return;
+        if (busy()) { dialog.showModal(); dialog.focus(); }
+        else finish(false);
+      });
+      on('click', (event) => {
+        if (event.target !== dialog) return;
+        const rect = dialog.getBoundingClientRect();
+        if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) close();
+      });
+      on('keydown', (event) => {
+        if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); return; }
+        if (event.key !== 'Tab') return;
+        const items = controls();
+        if (!items.length) { event.preventDefault(); dialog.focus(); return; }
+        if (event.shiftKey && (document.activeElement === items[0] || !items.includes(document.activeElement))) { event.preventDefault(); items.at(-1).focus(); }
+        else if (!event.shiftKey && (document.activeElement === items.at(-1) || !items.includes(document.activeElement))) { event.preventDefault(); items[0].focus(); }
+      });
+      const controller = {
+        request, refresh, close,
+        destroy() {
+          if (destroyed) return;
+          destroyed = true;
+          listeners.abort();
+          finish(false);
+          owners.delete(dialog);
+        },
+      };
+      owners.set(dialog, controller);
+      return controller;
+    },
+  };
+})();
+
+(() => {
+  for (const account of document.querySelectorAll('.base-ssr-account')) {
+    const toggle = account.querySelector('summary');
+    function closeAccount(restoreFocus) { account.open = false; if (restoreFocus) toggle?.focus(); }
+    account.addEventListener('keydown', (event) => { if (event.key === 'Escape' && account.open) { event.preventDefault(); closeAccount(true); } });
+    document.addEventListener('click', (event) => { if (event.target instanceof Node && !account.contains(event.target)) closeAccount(false); });
+    account.addEventListener('focusout', (event) => { if (event.relatedTarget instanceof Node && !account.contains(event.relatedTarget)) closeAccount(false); });
+  }
+  const trigger = document.querySelector('[data-base-drawer-trigger]');
+  const drawer = document.querySelector('[data-base-drawer]');
+  if (!trigger || !drawer) return;
+  const focusable = () => [...drawer.querySelectorAll('a[href],button,input,select,textarea,summary,[tabindex]')]
+    .filter((item) => item.tabIndex >= 0 && !item.matches(':disabled') && !item.closest('[inert]') && item.checkVisibility({ visibilityProperty: true }));
+  function close() { drawer.close(); trigger.setAttribute('aria-expanded', 'false'); const target = trigger.getClientRects().length ? trigger : document.querySelector('main[tabindex="-1"]'); target?.focus(); }
+  trigger.addEventListener('click', () => { drawer.showModal(); trigger.setAttribute('aria-expanded', 'true'); focusable()[0]?.focus(); });
+  drawer.addEventListener('cancel', (event) => { event.preventDefault(); close(); });
+  drawer.addEventListener('click', (event) => { if (event.target instanceof Element && event.target.closest('[data-base-drawer-close],a[href]')) close(); });
+  drawer.addEventListener('keydown', (event) => {
+    if (event.key !== 'Tab') return;
+    const items = focusable();
+    if (!items.length) { event.preventDefault(); return; }
+    if (event.shiftKey && document.activeElement === items[0]) { event.preventDefault(); items.at(-1).focus(); }
+    else if (!event.shiftKey && document.activeElement === items.at(-1)) { event.preventDefault(); items[0].focus(); }
+  });
+  window.matchMedia('(min-width: 768px)').addEventListener('change', (event) => { if (event.matches && drawer.open) close(); });
+})();
