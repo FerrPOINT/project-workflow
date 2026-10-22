@@ -468,7 +468,7 @@ def test_pm_ownership_catalog_lock_order_and_incomplete_schema(pg_url, winner):
     assert not schema_is_ready(engine)
     with pytest.raises(DatabaseRecreateRequired):
         ensure_migrated(engine)
-    assert database_revisions(engine) == {"0016_human_project_commit_guard"}
+    assert database_revisions(engine) == {"0017_human_application_clock"}
 
 
 @pytest.mark.integration
