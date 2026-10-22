@@ -159,6 +159,19 @@ class TestOpenAICompatibleClient:
             assert payload["messages"][0]["role"] == "system"
             assert payload["messages"][1]["role"] == "user"
 
+    def test_openai_wire_dialect_keeps_default_sampling_fields(self):
+        client = OpenAICompatibleClient(api_key="test-key", wire_dialect="openai")
+        with patch("project_workflow.infrastructure.llm.requests.post") as mock_post:
+            mock_post.return_value = MagicMock(
+                json=lambda: {"choices": [{"message": {"content": "{}"}}]},
+                raise_for_status=lambda: None,
+            )
+            client.chat("sys", "usr")
+
+        payload = mock_post.call_args.kwargs["json"]
+        assert payload["temperature"] == 0.1
+        assert payload["reasoning_effort"] == "none"
+
     def test_aihub_wire_dialect_uses_hub_chat_contract(self):
         client = OpenAICompatibleClient(
             model="published-supervisor-slug",
@@ -185,6 +198,27 @@ class TestOpenAICompatibleClient:
         assert payload["max_completion_tokens"] == 4000
         assert "max_tokens" not in payload
         assert "response_format" not in payload
+        assert "temperature" not in payload
+        assert "reasoning_effort" not in payload
+
+    def test_aihub_wire_dialect_keeps_explicit_sampling_overrides(self):
+        client = OpenAICompatibleClient(
+            model="published-supervisor-slug",
+            base_url="http://ai-hub.internal/v1",
+            api_key="aih1_test-client-key",
+            reasoning_effort="low",
+            wire_dialect="aihub",
+        )
+        with patch("project_workflow.infrastructure.llm.requests.post") as mock_post:
+            mock_post.return_value = MagicMock(
+                json=lambda: {"choices": [{"message": {"content": "{}"}}]},
+                raise_for_status=lambda: None,
+            )
+            client.chat("sys", "usr", temperature=0.4)
+
+        payload = mock_post.call_args.kwargs["json"]
+        assert payload["temperature"] == 0.4
+        assert payload["reasoning_effort"] == "low"
 
     def test_chat_omits_reasoning_effort_when_disabled(self):
         client = OpenAICompatibleClient(reasoning_effort="", api_key="test-key")

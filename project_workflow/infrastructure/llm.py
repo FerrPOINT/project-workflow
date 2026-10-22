@@ -82,17 +82,23 @@ class OpenAICompatibleClient:
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ],
-            "temperature": temperature,
             # Reasoning-capable OpenAI-compatible models may spend part of this
             # budget before emitting the small JSON verdict.
         }
         if self.wire_dialect == "aihub":
             payload["max_completion_tokens"] = self.max_tokens
+            # Hub profiles own generation settings by default. Only send these
+            # fields when the caller deliberately requests a non-default value.
+            if temperature != 0.1:
+                payload["temperature"] = temperature
+            if self.reasoning_effort and self.reasoning_effort.lower() != "none":
+                payload["reasoning_effort"] = self.reasoning_effort
         else:
+            payload["temperature"] = temperature
             payload["max_tokens"] = self.max_tokens
             payload["response_format"] = {"type": "json_object"}
-        if self.reasoning_effort:
-            payload["reasoning_effort"] = self.reasoning_effort
+            if self.reasoning_effort:
+                payload["reasoning_effort"] = self.reasoning_effort
 
         resp = requests.post(
             f"{self.base_url}/chat/completions",
