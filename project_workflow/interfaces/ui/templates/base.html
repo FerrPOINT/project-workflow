@@ -3,7 +3,7 @@
 {% set active_namespace = theme_namespace if theme_namespace is defined else none %}
 {% set active_namespace_id = active_namespace.id if active_namespace else none %}
 {% set sidebar_scope_suffix = '?project_scope=all' if request is defined and request.query_params.get('project_scope') == 'all' else '' %}
-{% set access_window = project_access_window() %}
+{% set access_window = project_access_window(request if request is defined else none) %}
 <!DOCTYPE html>
 <html lang="ru" data-pdlc-access-pending data-theme="dark" data-theme-storage-key="workflow-theme">
 <head>

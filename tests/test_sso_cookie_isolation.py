@@ -153,6 +153,9 @@ def test_namespace_cookie_and_template_writes_use_the_same_scope(monkeypatch):
                        "path": "/namespaces", "query_string": b"", "headers": [(b"cookie", (
                            f"workflow_namespace_id=1; {other_name}=1; {own_name}=2"
                        ).encode())]})
+    from tests.test_human_role_views import current_access_request
+
+    request.state.central_access = current_access_request(role="admin").state.central_access
     context = pages._namespace_context(request, page="namespaces")
     context.update(edited_namespace=context["selected_namespace"], create_mode=False, workflows=[])
     assert context["selected_namespace"]["id"] == 2

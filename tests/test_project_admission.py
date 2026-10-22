@@ -83,6 +83,17 @@ def test_membership_does_not_grant_native_mutation_and_expiry_is_not_reset():
         human_scope.reset(token)
 
 
+def test_global_user_work_still_requires_exact_writable_project_admission():
+    worker = scope((PROJECT_REF,), role="user")
+    worker.require_project("tracker:one", PROJECT_REF, write=True)
+    for denied in [scope((PROJECT_REF,), writable=(), role="user"),
+                   scope((), role="user"), scope((PROJECT_REF,), role="user", seconds=-1)]:
+        with pytest.raises(SpaceAccessDenied):
+            denied.require_project("tracker:one", PROJECT_REF, write=True)
+    with pytest.raises(SpaceAccessDenied):
+        worker.require_project("other-instance", PROJECT_REF, write=True)
+
+
 @pytest.mark.parametrize("change", [
     {"schema_version": True}, {"schema_version": 1}, {"schema_version": 2.0}, {"schema_version": "2"},
     {"policy_revision": True},
@@ -97,7 +108,8 @@ def test_invalid_project_proof_cannot_become_scope(change):
         ProjectAccessV2.model_validate(value)
 
 
-def test_http_sso_uses_current_project_proof_without_promotion_or_cache_fallback(monkeypatch, pm):
+@pytest.mark.parametrize("application_policy", [False, True])
+def test_http_sso_uses_current_project_proof_without_promotion_or_cache_fallback(monkeypatch, pm, application_policy):
     import httpx
     import jwt
     from fastapi.testclient import TestClient
@@ -110,16 +122,28 @@ def test_http_sso_uses_current_project_proof_without_promotion_or_cache_fallback
     result = native.post("/internal/runtime/v1/pm/bind",
                          headers={"Authorization": "Bearer " + "a" * 40}, json=binding)
     assert result.status_code == 200
-    _, settings = _app(monkeypatch)
+    _, settings = _app(monkeypatch, AUTH_APPLICATION_ACCESS_REQUIRED=application_policy)
     monkeypatch.setenv("PROJECT_WORKFLOW_SPACES__ENABLED", "true")
     monkeypatch.setenv("PROJECT_WORKFLOW_SPACES__TRACKER_URL", "http://tracker.test")
     monkeypatch.setenv("PROJECT_WORKFLOW_SPACES__TRACKER_INSTANCE_ID", "tracker:one")
-    current = {"projects": [PROJECT_REF], "role": "member", "unavailable": False, "foreign": False}
+    current = {"projects": [PROJECT_REF], "role": "member", "unavailable": False,
+               "foreign": False, "apps": ["project-workflow"]}
     original_client = httpx.AsyncClient
 
     def upstream(request):
         if request.url.path == "/auth/me":
-            return httpx.Response(200, json={"id": "ordinary-user", "status": "active", "role": current["role"]})
+            identity = {"id": "ordinary-user", "status": "active", "role": current["role"]}
+            if application_policy:
+                from datetime import datetime, timedelta, timezone
+
+                now = datetime.now(timezone.utc)
+                identity["role"] = "admin"  # A profile hint cannot bypass the authoritative user proof.
+                identity["application_access"] = {
+                    "schema_version": 1, "issuer": settings.AUTH_ISSUER, "subject": "ordinary-user",
+                    "role": "user", "applications": current["apps"], "revision": 3, "enforced": True,
+                    "observed_at": now.isoformat(), "expires_at": (now + timedelta(seconds=15)).isoformat(),
+                }
+            return httpx.Response(200, json=identity)
         assert request.url.path == "/api/v2/sdlc/project-access"
         if current["unavailable"]:
             return httpx.Response(503)
@@ -141,7 +165,8 @@ def test_http_sso_uses_current_project_proof_without_promotion_or_cache_fallback
         assert opened.headers["cache-control"] == "private, no-store"
         window = client.get("/api/v1/space-admission", headers=headers)
         assert window.status_code == 200, window.text
-        assert window.json()["enforced"] is True and 0 < window.json()["remaining_millis"] <= 30_000
+        ceiling = 15_000 if application_policy else 30_000
+        assert window.json()["enforced"] is True and 0 < window.json()["remaining_millis"] <= ceiling
         assert window.headers["cache-control"] == "private, no-store"
         # Ordinary member cannot acquire write through another login or broad session scopes.
         for _ in range(2):
@@ -157,6 +182,13 @@ def test_http_sso_uses_current_project_proof_without_promotion_or_cache_fallback
         current["foreign"] = False
         current["unavailable"] = True
         assert client.get("/api/tasks", headers=headers).status_code == 503
+        if application_policy:
+            current["unavailable"] = False
+            current["apps"] = []
+            denied = client.get("/api/tasks", headers=headers)
+            assert denied.status_code == 403 and "location" not in denied.headers
+            current["apps"] = ["project-workflow"]
+            assert client.get("/api/tasks", headers=headers).status_code == 200
 
 
 def test_retained_context_does_not_open_a_different_space_of_the_same_project(monkeypatch):

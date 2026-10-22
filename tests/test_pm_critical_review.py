@@ -278,7 +278,7 @@ def test_pm_review_migration_preserves_populated_execution_and_history(tmp_path)
         assert "uq_pm_task_agent" in {u["name"] for u in inspect(engine).get_unique_constraints("pm_executions")}
         ensure_migrated(engine)
         ensure_migrated(engine)
-        assert database_revisions(engine) == {"0016_human_project_commit_guard"}
+        assert database_revisions(engine) == {"0017_human_application_clock"}
         assert "uq_pm_task_agent" not in {u["name"] for u in inspect(engine).get_unique_constraints("pm_executions")}
         assert "ix_pm_task_agent" in {i["name"] for i in inspect(engine).get_indexes("pm_executions")}
         with engine.connect() as connection:
@@ -291,7 +291,7 @@ def test_pm_review_migration_preserves_populated_execution_and_history(tmp_path)
             ]
         with pytest.raises(RuntimeError, match="compatible guarded rollback cohort"):
             run_alembic_command("downgrade", engine, "0014_launch_profile_only")
-        assert database_revisions(engine) == {"0016_human_project_commit_guard"}
+        assert database_revisions(engine) == {"0017_human_application_clock"}
         with engine.connect() as connection:
             for name, table in tables.items():
                 assert connection.execute(select(table)).mappings().all() == frozen[name], name

@@ -177,6 +177,22 @@ def test_base_profile_metadata_preserves_namespace_authorization(owned_namespace
     assert client.get(url, headers=PAT).status_code == 403
 
 
+def test_explicit_machine_role_preserves_registered_subject_and_scope_checks(owned_namespace):
+    client, namespace_id, _, identity = owned_namespace
+    identity["role"] = "service_account"
+    url = f"/api/pm/namespace-ownership/{namespace_id}"
+    assert client.put(url, headers=PAT, json=PAYLOAD).status_code == 201
+    identity["sub"] = OTHER_SUBJECT
+    assert client.get(url, headers=PAT).status_code == 403
+
+
+@pytest.mark.parametrize("role", ["user", "admin", "member", "operator", None, 7])
+def test_human_or_invalid_role_cannot_become_registered_machine(owned_namespace, role):
+    client, namespace_id, _, identity = owned_namespace
+    identity["role"] = role
+    assert client.put(f"/api/pm/namespace-ownership/{namespace_id}", headers=PAT, json=PAYLOAD).status_code == 403
+
+
 def test_unknown_introspection_claims_do_not_authorize_namespace_access(owned_namespace):
     client, namespace_id, _, identity = owned_namespace
     identity.update(display_name="QA machine", is_admin=True)

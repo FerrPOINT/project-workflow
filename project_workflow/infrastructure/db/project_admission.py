@@ -11,6 +11,7 @@ from sqlalchemy.orm import ORMExecuteState, Session, with_loader_criteria
 
 from project_workflow.domain.project_admission import SpaceAccessDenied, human_scope
 from project_workflow.infrastructure.db import models as m
+from project_workflow.infrastructure.request_clock import current_clock, require_current
 
 
 def _task_ids(scope, *, write: bool = False):
@@ -33,6 +34,7 @@ def _require_session_scope(session: Session, scope: Any) -> None:
 
 @event.listens_for(Session, "do_orm_execute")
 def _filter_human_resources(state: ORMExecuteState) -> None:
+    require_current()
     scope = human_scope.get()
     if scope is None:
         return
@@ -75,6 +77,7 @@ def _filter_human_resources(state: ORMExecuteState) -> None:
 
 @event.listens_for(Session, "before_flush")
 def _guard_human_writes(session: Session, flush_context: Any, instances: Any) -> None:
+    require_current()
     scope = human_scope.get()
     if scope is None:
         return
@@ -107,16 +110,29 @@ def _guard_human_writes(session: Session, flush_context: Any, instances: Any) ->
 @event.listens_for(Session, "before_commit")
 def _guard_human_commit(session: Session) -> None:
     scope = human_scope.get()
-    if scope is not None:
+    if scope is not None or current_clock.get() is not None:
         # before_commit precedes SQLAlchemy's implicit flush: check after real row waits too.
         session.flush()
-        scope.require_current()
+        require_current()
+        if scope is not None:
+            scope.require_current()
 
 
 @event.listens_for(Session, "after_begin")
 def _install_human_transaction_scope(session: Session, transaction: Any, connection: Any) -> None:
     if connection.dialect.name != "postgresql":
         return
+    clock = current_clock.get()
+    if clock is None:
+        connection.execute(text("SELECT set_config('pdlc.workflow_request_until', '', true)"))
+    else:
+        clock.require_current()
+        connection.execute(text(
+            "SELECT set_config('pdlc.workflow_request_until', "
+            "least(CAST(:until AS double precision), "
+            "extract(epoch FROM clock_timestamp())::double precision + :remaining)::text, true)"
+        ), {"until": clock.expires_at, "remaining": clock.remaining()})
+        clock.require_current()
     scope = human_scope.get()
     session.info["workflow_human_scope"] = scope
     if scope is None:

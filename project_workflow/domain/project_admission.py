@@ -94,8 +94,10 @@ class HumanProjectScope:
 
     def require_operator(self) -> None:
         self.require_current()
-        if self.product_role not in {"admin", "platform_admin", "operator", "platform_operator"}:
-            raise SpaceAccessDenied("Confirmed Workflow operator role required")
+        # The new global user role permits work, while writable project/space admission
+        # remains mandatory. Legacy member stays read-only until explicit migration.
+        if self.product_role not in {"user", "admin", "platform_admin", "operator", "platform_operator"}:
+            raise SpaceAccessDenied("Confirmed Workflow work permission required")
 
     def require_project(self, instance: str, project: str | UUID, *, write: bool = False) -> None:
         self.require_current()

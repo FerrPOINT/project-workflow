@@ -9,18 +9,25 @@ import json
 import os
 import secrets
 import time
+from dataclasses import replace
+from datetime import datetime, timezone
 from urllib.parse import urlencode, urlparse
 
 import httpx
 import jwt
 from cryptography.fernet import Fernet, InvalidToken
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response
+from sqlalchemy.exc import DBAPIError
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
 from project_workflow.config import Settings, get_settings
-from project_workflow.infrastructure.platform_namespace import is_personal_token as platform_personal_token
+from project_workflow.infrastructure.platform_auth import HumanAccess, human_access
+from project_workflow.infrastructure.platform_namespace import (
+    is_personal_token as platform_personal_token,
+)
+from project_workflow.infrastructure.request_clock import RequestClock, current_clock
 from project_workflow.interfaces.ui.cookies import cookie_name
 from project_workflow.interfaces.ui.templates import templates
 
@@ -45,6 +52,7 @@ def _sso_entry(request: Request, *, message: str, next_path: str = "/", login_re
                status_code: int = 401) -> Response:
     return templates.TemplateResponse(request=request, name="sso_entry.html", status_code=status_code, context={
         "message": message, "login_required": login_required,
+        "access_denied": status_code == 403,
         "login_url": get_settings().UI_BASE_PATH + "/login?" + urlencode({"next": _safe_next(next_path)}),
         "platform_origin": get_settings().UI_PLATFORM_ORIGIN,
     })
@@ -107,8 +115,10 @@ class _SsoMiddleware(BaseHTTPMiddleware):
         original_started = time.monotonic()
         is_personal_token = platform_personal_token(bearer)
         path = "/auth/tokens/introspect" if is_personal_token else "/auth/me"
+        started = time.monotonic()
+        wall_started = datetime.now(timezone.utc)
         try:
-            async with httpx.AsyncClient(timeout=5) as client:
+            async with httpx.AsyncClient(timeout=5, follow_redirects=False) as client:
                 response = await client.get(settings.AUTH_INTERNAL_BASE_URL.rstrip("/") + path,
                                             params={"include_lifetime": "true"} if is_personal_token else None,
                                             headers={"Authorization": f"Bearer {token}"})
@@ -119,6 +129,8 @@ class _SsoMiddleware(BaseHTTPMiddleware):
         if response.status_code != 200:
             return _auth_error(request, 503, "Central Auth временно недоступен")
         try:
+            if len(response.content) > 16384:
+                raise ValueError("oversized identity")
             identity = response.json()
             subject = identity["sub" if is_personal_token else "id"]
             if not isinstance(subject, str) or not subject:
@@ -132,21 +144,48 @@ class _SsoMiddleware(BaseHTTPMiddleware):
                 action = "read" if request.method in {"GET", "HEAD", "OPTIONS"} else "write"
                 if f"project-workflow:{action}" not in identity["scopes"]:
                     return _auth_error(request, 403, "Недостаточно прав токена")
+            access = human_access(identity, issuer=settings.AUTH_ISSUER, subject=subject,
+                                  started=started, wall_started=wall_started,
+                                  require_proof=settings.AUTH_APPLICATION_ACCESS_REQUIRED)
+            if not access.permits([_CLIENT_ID]):
+                return _auth_error(request, 403, "Нет доступа к приложению Workflow")
+            request.state.central_access = access
             request.state.central_subject = subject
+        except PermissionError:
+            return _auth_error(request, 403, "Нет действующего допуска к приложению Workflow")
         except (KeyError, TypeError, ValueError):
             return _auth_error(request, 503, "Central Auth вернул некорректный ответ")
+        async def authorized_dispatch():
+            clock_token = None
+            try:
+                clock_token = current_clock.set(RequestClock.from_access(access))
+                result = await call_next(request)
+            except SpaceAccessDenied:
+                return _auth_error(request, 403, "Действующий допуск к операции не подтверждён")
+            except DBAPIError as error:
+                if getattr(error.orig, "sqlstate", None) != "42501":
+                    raise
+                return _auth_error(request, 403, "Действующий допуск к операции не подтверждён")
+            finally:
+                if clock_token is not None:
+                    current_clock.reset(clock_token)
+            if not access.is_current():
+                return _auth_error(request, 503, "Подтверждение доступа истекло. Повторите запрос")
+            result.headers["Cache-Control"] = "private, no-store"
+            return result
+
         from project_workflow.domain.project_admission import SpaceAccessDenied, human_scope
         from project_workflow.interfaces.ui.project_admission import confirm, policy_active
         if not policy_active():
-            return await call_next(request)
+            return await authorized_dispatch()
         if not is_personal_token and identity.get("status") != "active":
             return _auth_error(request, 403, "Учётная запись не активна")
-        role = identity.get("subject_role" if is_personal_token else "role")
+        role = access.role if access.proof is not None else identity.get(
+            "subject_role" if is_personal_token else "role")
         if not isinstance(role, str):
             return _auth_error(request, 503, "Не подтверждена роль пользователя")
         try:
             if is_personal_token:
-                from datetime import datetime
                 observed = datetime.fromisoformat(identity["observed_at"].replace("Z", "+00:00")).timestamp()
                 token_expiry = datetime.fromisoformat(identity["expires_at"].replace("Z", "+00:00")).timestamp()
                 if observed > time.time() + 1 or time.time() - observed > 60:
@@ -160,11 +199,13 @@ class _SsoMiddleware(BaseHTTPMiddleware):
             scope = await confirm(request, token=token, issuer=settings.AUTH_ISSUER.rstrip("/"),
                                   subject=subject, role=role, original_started=original_started,
                                   token_expiry=token_expiry)
+            scope = replace(scope, deadline=min(scope.deadline, access.monotonic_deadline()))
+            request.state.project_scope = scope
             if request.method not in {"GET", "HEAD", "OPTIONS"}:
                 scope.require_operator()
             context_token = human_scope.set(scope)
             try:
-                result = await call_next(request)
+                result = await authorized_dispatch()
                 scope.require_current()
                 result.headers["Cache-Control"] = "private, no-store"
                 return result
@@ -174,6 +215,31 @@ class _SsoMiddleware(BaseHTTPMiddleware):
             return _auth_error(request, 403, "Доступ к проекту или операции закрыт")
         except (KeyError, TypeError, ValueError, httpx.HTTPError):
             return _auth_error(request, 503, "Актуальный допуск к проектам недоступен")
+
+
+def can_administer(request: Request) -> bool:
+    """Use the same current authority for server dependencies and rendered controls."""
+    if not get_settings().AUTH_ISSUER:
+        return True  # Explicit legacy standalone mode.
+    access = getattr(request.state, "central_access", None)
+    return isinstance(access, HumanAccess) and access.permits([_CLIENT_ID], administration=True)
+
+
+def visible_services(request: Request, services: list[dict]) -> list[dict]:
+    """Filter a per-request view; never cache personal access in the public catalog."""
+    if not get_settings().AUTH_ISSUER:
+        return list(services)
+    access = getattr(request.state, "central_access", None)
+    if not isinstance(access, HumanAccess):
+        return []
+    return [service for service in services
+            if isinstance(service.get("key"), str) and access.permits([service["key"]])]
+
+
+def require_administrator(request: Request) -> None:
+    """Declared dependency; local history and application scopes never grant administration."""
+    if not can_administer(request):
+        raise HTTPException(status_code=403, detail="Требуются права администратора PDLC")
 
 
 def install_sso(app: FastAPI) -> None:
