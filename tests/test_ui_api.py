@@ -3,9 +3,7 @@
 Uses TestClient to hit GET/POST/PUT endpoints.
 """
 
-import os
 import re
-import tempfile
 import uuid
 
 import pytest
@@ -22,11 +20,10 @@ UNKNOWN_WORKFLOW_ID = 999998
 
 
 @pytest.fixture
-def client():
-    tmp_dir = tempfile.mkdtemp()
-    db_path = os.path.join(tmp_dir, "test.db")
+def client(tmp_path, monkeypatch):
+    db_path = tmp_path / "test.db"
     db_url = f"sqlite:///{db_path}"
-    os.environ["DATABASE_URL"] = db_url
+    monkeypatch.setenv("DATABASE_URL", db_url)
     from project_workflow import config
 
     config.get_settings.cache_clear()
