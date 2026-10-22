@@ -42,7 +42,7 @@ class ApplicationAccess:
 
     def permits(self, required: Iterable[str], *, administration: bool = False) -> bool:
         return (self.is_current() and (not administration or self.role == "admin")
-                and all(key in self.applications for key in required))
+                and (self.role == "admin" or all(key in self.applications for key in required)))
 
 
 def confirm_access(value: object, *, issuer: str, subject: str,

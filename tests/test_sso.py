@@ -350,6 +350,8 @@ def test_current_role_and_apps_apply_to_the_same_open_session(monkeypatch):
     from fastapi import Depends
     app, settings = _app(monkeypatch, AUTH_APPLICATION_ACCESS_REQUIRED=True)
     app.post("/api/configuration", dependencies=[Depends(sso.require_administrator)])(lambda: {"ok": True})
+    from project_workflow.interfaces.ui.project_admission import space_admission
+    app.get("/api/v1/space-admission")(space_admission)
     state = {"role": "user", "apps": ["project-workflow"], "proof": True, "enforced": True}
     original_client = httpx.AsyncClient
 
@@ -368,6 +370,10 @@ def test_current_role_and_apps_apply_to_the_same_open_session(monkeypatch):
     with TestClient(app, follow_redirects=False) as client:
         headers = {"authorization": "Bearer one-verified-session"}
         assert client.get("/api/tasks", headers=headers).status_code == 200
+        display = client.get("/api/v1/space-admission", headers=headers)
+        assert display.status_code == 200 and display.json()["enforced"] is True
+        assert 0 < display.json()["remaining_millis"] <= 60_000
+        assert display.headers["cache-control"] == "private, no-store"
         assert client.post("/api/configuration", headers=headers).status_code == 403
         state["role"] = "admin"
         assert client.post("/api/configuration", headers=headers).status_code == 200
@@ -389,6 +395,15 @@ def test_current_role_and_apps_apply_to_the_same_open_session(monkeypatch):
         state["enforced"] = True
         state["apps"] = ["wrong/path"]
         assert client.get("/api/tasks", headers=headers).status_code == 503
+        state["apps"] = ["project-workflow"]
+        from project_workflow.domain.project_admission import SpaceAccessDenied
+
+        def expired_before_dispatch(_access):
+            raise SpaceAccessDenied("Original application admission expired")
+
+        monkeypatch.setattr(sso.RequestClock, "from_access", expired_before_dispatch)
+        assert client.get("/api/tasks", headers=headers).status_code == 403
+        assert sso.current_clock.get() is None
 
 
 def test_real_configuration_routes_declare_administrator_dependency():

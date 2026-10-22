@@ -18,6 +18,7 @@ import jwt
 from cryptography.fernet import Fernet, InvalidToken
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response
+from sqlalchemy.exc import DBAPIError
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
@@ -26,6 +27,7 @@ from project_workflow.infrastructure.platform_auth import HumanAccess, human_acc
 from project_workflow.infrastructure.platform_namespace import (
     is_personal_token as platform_personal_token,
 )
+from project_workflow.infrastructure.request_clock import RequestClock, current_clock
 from project_workflow.interfaces.ui.cookies import cookie_name
 from project_workflow.interfaces.ui.templates import templates
 
@@ -154,7 +156,19 @@ class _SsoMiddleware(BaseHTTPMiddleware):
         except (KeyError, TypeError, ValueError):
             return _auth_error(request, 503, "Central Auth вернул некорректный ответ")
         async def authorized_dispatch():
-            result = await call_next(request)
+            clock_token = None
+            try:
+                clock_token = current_clock.set(RequestClock.from_access(access))
+                result = await call_next(request)
+            except SpaceAccessDenied:
+                return _auth_error(request, 403, "Действующий допуск к операции не подтверждён")
+            except DBAPIError as error:
+                if getattr(error.orig, "sqlstate", None) != "42501":
+                    raise
+                return _auth_error(request, 403, "Действующий допуск к операции не подтверждён")
+            finally:
+                if clock_token is not None:
+                    current_clock.reset(clock_token)
             if not access.is_current():
                 return _auth_error(request, 503, "Подтверждение доступа истекло. Повторите запрос")
             result.headers["Cache-Control"] = "private, no-store"
@@ -209,6 +223,17 @@ def can_administer(request: Request) -> bool:
         return True  # Explicit legacy standalone mode.
     access = getattr(request.state, "central_access", None)
     return isinstance(access, HumanAccess) and access.permits([_CLIENT_ID], administration=True)
+
+
+def visible_services(request: Request, services: list[dict]) -> list[dict]:
+    """Filter a per-request view; never cache personal access in the public catalog."""
+    if not get_settings().AUTH_ISSUER:
+        return list(services)
+    access = getattr(request.state, "central_access", None)
+    if not isinstance(access, HumanAccess):
+        return []
+    return [service for service in services
+            if isinstance(service.get("key"), str) and access.permits([service["key"]])]
 
 
 def require_administrator(request: Request) -> None:
