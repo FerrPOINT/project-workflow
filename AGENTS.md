@@ -91,13 +91,17 @@ Supervisor Engine перед commit выполнить следующие про
 
 ## Осознанно исключённые возможности
 
-Это внутренняя лёгкая агентская утилита, а не клиентский production-сервис.
-Следующие возможности оценены и исключены из текущего scope:
+Исторический standalone-профиль — внутренняя агентская утилита. В составе
+многопользовательского PDLC условия изменились: публичные проектные данные
+требуют central identity, общего admission и прежних write/admin ролей по
+[плану единого пространства](docs/plans/unified-spaces-20261019.md).
+Ни private network, ни отсутствие ProjectRef не открывают данные.
+Приведённые ниже ограничения не отменяют эти правила доступа:
 
 | Возможность | Решение | Причина |
 |---|---|---|
 | CI/CD pipeline (GitHub) | **Использовать** | Quality, coverage, PostgreSQL integration и Compose smoke воспроизводят обязательный локальный gate. |
-| Security middleware (CORS, CSP, HTTPS redirect, rate limits) | **Не добавлять** | UI доступен только на loopback либо в защищённом private/VPN-контуре. |
+| CORS, CSP, HTTPS redirect, rate limits | **По границам deployment** | Не добавлять общий framework ради задачи; public ingress и аутентификация/admission обязательны для PDLC. |
 | Локальные credentials в `docker-compose.yml` | **Допустимо только локально** | Compose публикуется только на loopback; внешний runtime обязан передавать собственный `DATABASE_URL`. |
 | Observability / metrics / structured JSON logs | **Не добавлять** | Request logging и `/health` достаточны для внутренней утилиты. |
 | Дополнительный слой sanitization | **Не добавлять** | API использует строгие Pydantic-схемы, SQLAlchemy ORM и параметризованный SQL. |
@@ -153,3 +157,11 @@ Dialog и Toaster/toast использовать из публичного @pdlc
 Брендинг применяется общим runtime; draft preview изолируется BrandingScope.
 Канонический контракт — Base docs/platform/DESIGN_SYSTEM.md и docs/BRANDING.md.
 UI/SDK/skills pins независимы; source-изменения не означают установку.
+
+## Единое пространство PDLC
+
+[Согласованный план](docs/plans/unified-spaces-20261019.md) вводит M:N и общий read admission. До полного
+совместимого cohort это цель, не установленное поведение. Строгие V1/V2 и
+applied migrations сохранять; ProjectRef/SpaceRef/V3 отдельны. Полный gate на
+интегрированной вехе, в ходе реализации scoped checks. Runtime не активировать
+по готовности одного продукта; не выбирать первый Project/Space неявно.

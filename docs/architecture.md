@@ -211,3 +211,8 @@ and does not change execution fences, authorization or HTTP responses.
 - [Quality Gate](quality-gate.md) — repeatable verification commands.
 - [Database Reset](database-reset.md) — destructive local database recovery.
 - Central Auth contract in the sibling `services-base` repository (`AUTH.md`) — issuer, OIDC and token ownership.
+
+## Человеческие роли и приложения
+
+[Контракт и текущие gates](human-application-access.md) описывают feature-исходники.
+До установки полного совместимого cohort политика не активируется.

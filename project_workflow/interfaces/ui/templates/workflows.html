@@ -5,8 +5,10 @@
 {% block title %}Воркфлоу — Workflow Engine{% endblock %}
 {% block header_title %}Воркфлоу{% endblock %}
 {% block header_actions %}
+{% if can_administer %}
   <button type="button" class="btn btn-secondary workflow-header-action" id="editWorkflowButton" data-workflow-edit aria-controls="workflowForm" aria-expanded="false"{% if not selected_workflow %} disabled{% endif %} onclick="startEditWorkflow()">Редактировать воркфлоу</button>
   <button type="button" class="btn btn-primary workflow-header-action" id="newWorkflowButton" onclick="startCreateWorkflow()">+ Новый воркфлоу</button>
+{% endif %}
 {% endblock %}
 
 {% block extra_style %}
@@ -123,6 +125,7 @@
         <span class="badge {{ 'badge-parallel' if p.execution_type == 'parallel' else 'badge-sync' }}">{{ 'параллельно' if p.execution_type == 'parallel' else 'последовательно' }}</span>
       </div>
     </a>
+{% if can_administer %}
     <details class="phase-card-actions">
       <summary aria-label="Действия фазы {{ p.name }}" title="Действия фазы {{ p.name }}"><span aria-hidden="true">⋯</span></summary>
       <div class="phase-actions-menu">
@@ -132,6 +135,7 @@
         <button type="button" class="phase-delete-btn" onclick="deletePhase(this)" aria-label="Удалить фазу {{ p.name }}"{% if phase_count <= 1 %} disabled{% endif %}>Удалить</button>
       </div>
     </details>
+{% endif %}
   </div>
 </div>
 {%- endmacro %}
@@ -167,6 +171,7 @@
       <h2 id="workflowSummaryName">{{ selected_workflow.name if selected_workflow else '' }}</h2>
       <p id="workflowSummaryDescription" class="empty-note"{% if not selected_workflow or not selected_workflow.description %} hidden{% endif %}>{{ selected_workflow.description if selected_workflow else '' }}</p>
     </div>
+{% if can_administer %}
     <form id="workflowForm" data-platform-draft class="card form-stack" aria-labelledby="workflowFormMode"{% if selected_workflow %} hidden{% endif %} onsubmit="event.preventDefault(); submitWorkflow();">
       <div class="card-title" id="workflowFormMode">Редактирование воркфлоу</div>
       <div>
@@ -184,6 +189,7 @@
       </div>
       <p class="workflow-delete-hint" id="workflowDeleteHint" hidden>Воркфлоу по умолчанию нельзя удалить.</p>
     </form>
+{% endif %}
 <section id="workflowPhases" aria-label="Фазы процесса"{% if not selected_workflow %} hidden{% endif %}>
 <div class="workflow-phase-heading"><h2>Фазы процесса</h2>
       {% if phase_count > 1 %}
@@ -237,12 +243,14 @@
           {% if not loop.last %}<p class="timeline-group-transition">Следующий этап — после завершения всех фаз группы.</p>{% endif %}
         </section>
         {% else %}<section class="timeline-block">{{ phase_card(block.phases[0]) }}</section>{% endif %}
+{% if can_administer %}
         <div class="timeline-connector">
           <button type="button" class="phase-add-btn" data-after-order="{{ block.phases[-1].phase_num }}" onclick="addPhaseAfter(this)" title="Добавить фазу после блока" aria-label="Добавить фазу после блока">+</button>
         </div>
+{% endif %}
       {% else %}
         <div class="card empty-note" role="status" data-testid="workflow-mode-empty" style="width:100%">В этом режиме фаз пока нет.</div>
-        {% if selected_workflow_id %}<div class="timeline-connector"><button type="button" class="phase-add-btn" data-after-order="0" onclick="addPhaseAfter(this)" aria-label="Добавить первую фазу">+</button></div>{% endif %}
+        {% if can_administer and selected_workflow_id %}<div class="timeline-connector"><button type="button" class="phase-add-btn" data-after-order="0" onclick="addPhaseAfter(this)" aria-label="Добавить первую фазу">+</button></div>{% endif %}
       {% endfor %}
     </div>
 
@@ -253,6 +261,7 @@
 {% endblock %}
 
 {% block extra_script %}
+{% if can_administer %}
 const professionId = {{ selected_namespace.id if selected_namespace else "null" }};
 const workflowStore = {{ workflows | tojson }};
 let selectedWorkflowId = {{ selected_workflow.id if selected_workflow else 'null' }};
@@ -693,4 +702,50 @@ document.addEventListener('DOMContentLoaded',()=>{
   });
 });
 
+{% else %}
+function selectWorkflow(id){
+  if(!Number.isInteger(id)||id<=0)return;
+  const url=new URL(window.location.href);
+  url.searchParams.set('workflow_id',String(id));
+  url.searchParams.delete('mode_id');
+  window.PdlcPlatformNavigation.navigate(url.pathname+url.search);
+}
+function selectMode(modeId){
+  const parsed=Number(modeId);
+  if(!Number.isInteger(parsed)||parsed<=0){showToast('Не удалось определить режим воркфлоу','error');return;}
+  const url=new URL(window.location.href);
+  url.pathname='{{ ui_base_path() }}/workflows';
+  url.searchParams.set('mode_id',String(parsed));
+  window.PdlcPlatformNavigation.navigate(url.pathname+url.search);
+}
+
+function setPhaseView(view,persist=true){
+  const timeline=document.getElementById('phasesTimeline');
+  if(!timeline||!['compact','timeline'].includes(view))return;
+  timeline.classList.toggle('is-compact',view==='compact');
+  document.querySelectorAll('[data-phase-view]').forEach(button=>{
+    button.setAttribute('aria-pressed',String(button.dataset.phaseView===view));
+  });
+  document.querySelectorAll('.phase-card-actions[open]').forEach(menu=>{menu.open=false;});
+  if(persist){try{localStorage.setItem('phase-view-mode',view);}catch(_error){}}
+}
+
+function jumpToPhase(select){
+  const phaseId=select.value;
+  select.value='';
+  const item=document.getElementById('phase-'+phaseId);
+  if(!item)return;
+  const headerHeight=document.querySelector('.header')?.getBoundingClientRect().height||0;
+  window.scrollTo({top:window.scrollY+item.getBoundingClientRect().top-headerHeight-12,behavior:'auto'});
+  item.querySelector('.timeline-card')?.focus({preventScroll:true});
+}
+
+document.addEventListener('DOMContentLoaded',()=>{
+  try{
+    const saved=localStorage.getItem('phase-view-mode');
+    if(saved==='compact'||saved==='timeline')setPhaseView(saved,false);
+  }catch(_error){}
+});
+
+{% endif %}
 {% endblock %}

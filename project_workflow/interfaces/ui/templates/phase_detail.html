@@ -126,8 +126,11 @@
   <!-- Header -->
   <div class="wiki-header phase-editor-section" id="phase-overview" data-phase-section tabindex="-1">
     <div style="margin-bottom:10px"><a href="{{ ui_base_path() }}/phases?workflow_id={{ phase.workflow_id }}{% if phase.mode_id %}&mode_id={{ phase.mode_id }}{% endif %}{% if selected_namespace %}&profession_id={{ selected_namespace.id }}{% endif %}" class="btn btn-secondary">← Назад к фазам</a></div>
+{% if can_administer %}
     <input type="text" class="inline-input" value="{{ phase.name }}" data-field="name" aria-label="Название фазы" onblur="scheduleSave()" style="font-size:26px;font-weight:600;margin:0 0 10px;width:100%">
-    <textarea class="inline-input wiki-subtitle" rows="1" data-field="description" aria-label="Описание фазы" onblur="scheduleSave()">{{ phase.description or '' }}</textarea>
+    <textarea class="inline-input wiki-subtitle" rows="1" data-field="description" aria-label="Описание фазы" onblur="scheduleSave()">{{ phase.description or '' }}</textarea>{% else %}
+    <h1>{{ phase.name }}</h1><p class="wiki-subtitle">{{ phase.description or '' }}</p>
+{% endif %}
 
     <div class="wiki-meta">
       {% if rollback_target_phase %}
@@ -135,6 +138,7 @@
       {% endif %}
     </div>
     <div class="execution-row" style="margin-top:12px">
+{% if can_administer %}
       <button type="button" class="execution-toggle" data-mode="{{ phase.execution_type or 'sync' }}" aria-pressed="{{ 'true' if phase.execution_type == 'parallel' else 'false' }}" onclick="togglePhaseMode(this)">
         {% if phase.execution_type == 'parallel' %}
         <b class="mode-parallel">⚡ параллельно</b>
@@ -150,15 +154,19 @@
           <option value="{{ candidate.id }}" {% if phase.parallel_with_phase_id == candidate.id %}selected{% endif %}>{{ candidate.name }} · {{ candidate.code }}</option>
           {% endfor %}
         </select>
-      </label>
+      </label>{% else %}
+      <span class="badge {{ 'badge-parallel' if phase.execution_type == 'parallel' else 'badge-sync' }}">{{ 'параллельно' if phase.execution_type == 'parallel' else 'последовательно' }}</span>
+{% endif %}
     </div>
   </div>
 
   <!-- Instructions — managed like phases list with inline edit, reorder, add, delete -->
+{% if can_administer %}
   <div class="base-page-actions">
     <button type="button" class="btn btn-secondary" id="phaseSaveEditor" onclick="saveEditorChanges()">Сохранить правки</button>
     <button type="button" class="btn btn-secondary" id="phaseSaveReadback" hidden onclick="reconcilePhaseSave()">Проверить сохранение</button>
   </div>
+{% endif %}
   <div class="wiki-section phase-editor-section" id="phase-instructions" data-phase-section tabindex="-1">
     <div class="wiki-section-title">
       📋 Инструкции
@@ -167,27 +175,34 @@
 
     {% macro instruction_body(i, instruction_count) %}
     <div class="timeline-row" >
+{% if can_administer %}
       <div class="phase-order-controls">
         <button type="button" class="phase-move-btn move-up-btn" onclick="moveInstruction(this, -1)" aria-label="Поднять инструкцию {{ i.step_num }} выше">↑</button>
         <button type="button" class="phase-add-btn" onclick="addInstructionAfter(this)" aria-label="Добавить инструкцию после {{ i.step_num }}">+</button>
         <button type="button" class="phase-move-btn move-down-btn" onclick="moveInstruction(this, 1)" aria-label="Опустить инструкцию {{ i.step_num }} ниже">↓</button>
         <button type="button" class="phase-delete-btn" onclick="deleteInstruction(this)" aria-label="Удалить инструкцию {{ i.step_num }}">×</button>
       </div>
+{% endif %}
       <div class="timeline-card" data-instruction-id="{{ i.id }}" data-step-num="{{ i.step_num }}" data-type="{{ i.execution_type }}">
+{% if can_administer %}
         <textarea class="timeline-name-input" rows="1" data-field="description" data-original-description="{{ i.description }}" aria-label="Описание инструкции {{ i.step_num }}" onblur="saveInstructionDescription(this)">{{ i.description }}</textarea>
         <div class="execution-row">
           <button type="button" class="badge {{ 'badge-parallel' if i.execution_type == 'parallel' else 'badge-sync' }}" onclick="toggleInstructionType(this)" aria-label="Режим выполнения: {{ 'параллельно' if i.execution_type == 'parallel' else 'последовательно' }}">
             {% if i.execution_type == 'parallel' %}⚡ параллельно{% else %}⏱ последовательно{% endif %}
           </button>
         </div>
+{% else %}
+        <p>{{ i.description }}</p>
+        <span class="badge {{ 'badge-parallel' if i.execution_type == 'parallel' else 'badge-sync' }}">{{ 'параллельно' if i.execution_type == 'parallel' else 'последовательно' }}</span>
+{% endif %}
         <div class="timeline-badges">
           {% for s in i.skills or [] %}
           <span class="badge" style="background:var(--accent-soft);color:var(--accent-readable)">
             {{ s }}
-            <button type="button" class="skill-remove-btn" data-skill="{{ s }}" onclick="removeSkillFromInstruction(this)" aria-label="Убрать навык {{ s }} из инструкции {{ i.step_num }}">×</button>
+            {% if can_administer %}<button type="button" class="skill-remove-btn" data-skill="{{ s }}" onclick="removeSkillFromInstruction(this)" aria-label="Убрать навык {{ s }} из инструкции {{ i.step_num }}">×</button>{% endif %}
           </span>
           {% endfor %}
-          <input class="skill-candidate" type="text" placeholder="Добавить навык" aria-label="Добавить навык к инструкции {{ i.step_num }}" onchange="addSkillToInstruction(this)">
+          {% if can_administer %}<input class="skill-candidate" type="text" placeholder="Добавить навык" aria-label="Добавить навык к инструкции {{ i.step_num }}" onchange="addSkillToInstruction(this)">{% endif %}
         </div>
       </div>
     </div>
@@ -220,7 +235,7 @@
         <div class="empty-state">Нет инструкций</div>
       {% endfor %}
     </div>
-    <button class="wiki-add-btn" onclick="addInstructionLast()">+ Добавить шаг</button>
+    {% if can_administer %}<button class="wiki-add-btn" onclick="addInstructionLast()">+ Добавить шаг</button>{% endif %}
   </div>
 
   <!-- Checks -->
@@ -233,14 +248,14 @@
       {% for c in phase.checks %}
       <li data-id="{{ c.id }}">
         <span class="status-icon wait">○</span>
-        <textarea class="inline-input check-text" rows="1" data-field="description" aria-label="Описание проверки {{ loop.index }}" onblur="scheduleSave()">{{ c.description }}</textarea>
-        <button type="button" class="item-delete" aria-label="Удалить проверку {{ loop.index }}" onclick="deleteItem(this)">×</button>
+        {% if can_administer %}<textarea class="inline-input check-text" rows="1" data-field="description" aria-label="Описание проверки {{ loop.index }}" onblur="scheduleSave()">{{ c.description }}</textarea>{% else %}<span class="check-text">{{ c.description }}</span>{% endif %}
+        {% if can_administer %}<button type="button" class="item-delete" aria-label="Удалить проверку {{ loop.index }}" onclick="deleteItem(this)">×</button>{% endif %}
       </li>
       {% else %}
       <li class="empty-state">Нет проверок</li>
       {% endfor %}
     </ul>
-    <button class="wiki-add-btn" onclick="addCheck()">+ Добавить проверку</button>
+    {% if can_administer %}<button class="wiki-add-btn" onclick="addCheck()">+ Добавить проверку</button>{% endif %}
   </div>
 
   <!-- Evidence -->
@@ -253,14 +268,14 @@
       {% for e in phase.evidence %}
       <li data-id="{{ e.id }}">
         <span class="file-icon">📄</span>
-        <textarea class="inline-input file-name" rows="1" data-field="description" aria-label="Описание подтверждения {{ loop.index }}" onblur="scheduleSave()">{{ e.description }}</textarea>
-        <button type="button" class="item-delete" aria-label="Удалить подтверждение {{ loop.index }}" onclick="deleteItem(this)">×</button>
+        {% if can_administer %}<textarea class="inline-input file-name" rows="1" data-field="description" aria-label="Описание подтверждения {{ loop.index }}" onblur="scheduleSave()">{{ e.description }}</textarea>{% else %}<span class="file-name">{{ e.description }}</span>{% endif %}
+        {% if can_administer %}<button type="button" class="item-delete" aria-label="Удалить подтверждение {{ loop.index }}" onclick="deleteItem(this)">×</button>{% endif %}
       </li>
       {% else %}
       <li class="empty-state">Нет подтверждений</li>
       {% endfor %}
     </ul>
-    <button class="wiki-add-btn" onclick="addEvidence()">+ Добавить подтверждение</button>
+    {% if can_administer %}<button class="wiki-add-btn" onclick="addEvidence()">+ Добавить подтверждение</button>{% endif %}
   </div>
 
     </div>
@@ -269,6 +284,7 @@
 {% endblock %}
 
 {% block extra_script %}
+{% if can_administer %}
 const phaseId = {{ phase.id }};
 let phaseDraft = null;
 let phaseSignature = '';
@@ -1009,4 +1025,12 @@ document.addEventListener('input', (event) => {
 });
 window.discardWorkflowDraft = () => { savingStopped = true; if (_saveTimer) clearTimeout(_saveTimer); _saveTimer = null; };
 window.addEventListener('resize', resizeAllInlineTextareas);
+{% else %}
+document.addEventListener('DOMContentLoaded',()=>{
+  const select=document.getElementById('phaseSectionSelect');
+  select?.addEventListener('change',()=>{
+    document.getElementById(select.value)?.scrollIntoView({block:'start'});
+  });
+});
+{% endif %}
 {% endblock %}

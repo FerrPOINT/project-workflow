@@ -55,7 +55,7 @@ def test_theme_controls_show_all_icons_and_select_current_value(icon):
     html = templates.get_template("namespaces.html").render(
         namespaces=[edited] if edited else [], selected_namespace=edited,
         edited_namespace=edited, theme_namespace=edited,
-        create_mode=edited is None, page="namespaces", ui_port=8812,
+        create_mode=edited is None, page="namespaces", ui_port=8812, can_administer=True,
         namespace_cookie_name="workflow_namespace_id", namespace_cookie_secure=False,
     )
     parsed = ThemeInputs()
