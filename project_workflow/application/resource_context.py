@@ -106,6 +106,10 @@ async def create_context(identity: UUID, actor: str, request: CreateExecutionCon
 def _persist_context(
     identity: UUID, actor: str, request: CreateExecutionContext, result: ExecutionContextReadback,
 ) -> ExecutionContextReadback:
+    from project_workflow.domain.project_admission import human_scope
+    scope = human_scope.get()
+    if scope is not None:
+        scope.require_project(str(request.context.task.tracker_instance_id), result.tracker_project_id, write=True)
     try:
         with get_session() as session, session.begin():
             profile = session.get(Workflow, request.workflow_id, with_for_update=True)

@@ -104,11 +104,13 @@ class _SsoMiddleware(BaseHTTPMiddleware):
             if request.headers.get("origin") != settings.AUTH_PUBLIC_ORIGIN.rstrip("/"):
                 return _auth_error(request, 403, "Неверный источник запроса")
 
+        original_started = time.monotonic()
         is_personal_token = platform_personal_token(bearer)
         path = "/auth/tokens/introspect" if is_personal_token else "/auth/me"
         try:
             async with httpx.AsyncClient(timeout=5) as client:
                 response = await client.get(settings.AUTH_INTERNAL_BASE_URL.rstrip("/") + path,
+                                            params={"include_lifetime": "true"} if is_personal_token else None,
                                             headers={"Authorization": f"Bearer {token}"})
         except httpx.RequestError:
             return _auth_error(request, 503, "Central Auth временно недоступен")
@@ -123,7 +125,8 @@ class _SsoMiddleware(BaseHTTPMiddleware):
                 raise ValueError("invalid identity")
             machines = os.environ.get("PROJECT_WORKFLOW_NAMESPACE__MACHINE_SUBJECTS", "").split(",")
             machine_subjects = [item.strip() for item in machines if item.strip()]
-            if identity.get("role") == "service_account" or subject in machine_subjects:
+            if (identity.get("role") == "service_account" or identity.get("subject_role") == "service_account"
+                    or subject in machine_subjects):
                 return _auth_error(request, 403, "Машинный credential не разрешён на human routes")
             if is_personal_token:
                 action = "read" if request.method in {"GET", "HEAD", "OPTIONS"} else "write"
@@ -132,10 +135,50 @@ class _SsoMiddleware(BaseHTTPMiddleware):
             request.state.central_subject = subject
         except (KeyError, TypeError, ValueError):
             return _auth_error(request, 503, "Central Auth вернул некорректный ответ")
-        return await call_next(request)
+        from project_workflow.domain.project_admission import SpaceAccessDenied, human_scope
+        from project_workflow.interfaces.ui.project_admission import confirm, policy_active
+        if not policy_active():
+            return await call_next(request)
+        if not is_personal_token and identity.get("status") != "active":
+            return _auth_error(request, 403, "Учётная запись не активна")
+        role = identity.get("subject_role" if is_personal_token else "role")
+        if not isinstance(role, str):
+            return _auth_error(request, 503, "Не подтверждена роль пользователя")
+        try:
+            if is_personal_token:
+                from datetime import datetime
+                observed = datetime.fromisoformat(identity["observed_at"].replace("Z", "+00:00")).timestamp()
+                token_expiry = datetime.fromisoformat(identity["expires_at"].replace("Z", "+00:00")).timestamp()
+                if observed > time.time() + 1 or time.time() - observed > 60:
+                    raise ValueError("Invalid token clock")
+            else:
+                # Auth has confirmed this exact bearer; exp is used only to shorten its permit.
+                claims = jwt.decode(token, options={"verify_signature": False})
+                token_expiry = claims["exp"]
+                if type(token_expiry) is not int:
+                    raise ValueError("Invalid token expiry")
+            scope = await confirm(request, token=token, issuer=settings.AUTH_ISSUER.rstrip("/"),
+                                  subject=subject, role=role, original_started=original_started,
+                                  token_expiry=token_expiry)
+            if request.method not in {"GET", "HEAD", "OPTIONS"}:
+                scope.require_operator()
+            context_token = human_scope.set(scope)
+            try:
+                result = await call_next(request)
+                scope.require_current()
+                result.headers["Cache-Control"] = "private, no-store"
+                return result
+            finally:
+                human_scope.reset(context_token)
+        except SpaceAccessDenied:
+            return _auth_error(request, 403, "Доступ к проекту или операции закрыт")
+        except (KeyError, TypeError, ValueError, httpx.HTTPError):
+            return _auth_error(request, 503, "Актуальный допуск к проектам недоступен")
 
 
 def install_sso(app: FastAPI) -> None:
+    if os.environ.get("PROJECT_WORKFLOW_SPACES__ENABLED") == "true" and not os.environ.get("AUTH_ISSUER"):
+        raise RuntimeError("Shared project policy requires central authentication")
     if not os.environ.get("AUTH_ISSUER"):
         return
     settings = get_settings()

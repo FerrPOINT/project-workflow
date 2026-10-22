@@ -1016,7 +1016,12 @@ class TestApiNamespaces:
         assert f'value="{namespace_id}" data-icon="shield" data-color="#22C55E" selected' in response.text
         assert 'initChoice(control' in response.text
         assert 'class="base-platform-mark" data-base-platform-mark' in response.text
-        assert '<html lang="ru" data-theme="dark" data-theme-storage-key="workflow-theme">' in response.text
+        html_tag = re.search(r"<html\b[^>]*>", response.text)
+        assert html_tag is not None
+        assert 'lang="ru"' in html_tag[0]
+        assert 'data-theme="dark"' in html_tag[0]
+        assert 'data-theme-storage-key="workflow-theme"' in html_tag[0]
+        assert "data-pdlc-access-pending" in html_tag[0]
         assert "Green Namespace" in response.text
         assert "RUN-1" not in response.text
 
