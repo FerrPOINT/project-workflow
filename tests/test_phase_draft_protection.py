@@ -20,10 +20,9 @@ def editor_script():
     tracker = (TEMPLATES / "base/draft-state.js").read_text(encoding="utf-8").replace("export function", "function")
     prefix = template[template.index("const phaseId ="):template.index("const selectedNamespaceId =")]
     prefix = prefix.replace("{{ phase.id }}", "7")
-    listener = template[
-        template.index("document.addEventListener('input'"):
-        template.index("window.addEventListener('resize', resizeAllInlineTextareas)")
-    ]
+    # Autosize now belongs to Base; keep this boundary tied to the input listener.
+    listener_start = template.index("document.addEventListener('input'")
+    listener = template[listener_start:template.index("\n});", listener_start) + len("\n});")]
     save = template[template.index("let _saveTimer"):template.index("document.addEventListener('DOMContentLoaded'")]
     return "\n".join([
         tracker,

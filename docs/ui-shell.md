@@ -22,6 +22,20 @@ events synchronize open documents and focus/visibility refreshes restore it.
 
 ## Page Geometry
 
+В текущем source-кандидате общий заголовок использует base-page-title, заголовки
+разделов dashboard и истории — section_header. Heading IDs и связи aria-labelledby
+сохраняются. Ссылки dashboard используют text_link с прежними namespace-aware URL;
+пустые секции — state. Ссылка со знаком платформы использует button(href=...)
+с native anchor, доступным именем и icon hit target; локальный brand-link CSS удалён.
+
+Shared page-frame/page-wide/page-detail/page-readable/page-split declarations
+are consumed from the Base stylesheet. The product does not repeat them in
+base.html. Retired brand-text/header-actions/theme-select/namespace-icon-action,
+phase-detail-header and tabs/tab skins have no active source references and are
+removed. Timeline/phase execution rules remain product-owned. This cleanup keeps
+the template markup, navigation and scripts unchanged; generated assets and
+installed runtime acceptance remain separate gates.
+
 - Dashboard, tasks, workflows, phases and instructions use `wide`.
   Tables, lists and timelines use `minmax(0, 1fr)`; technical horizontal
   scrolling remains local to its data container.
@@ -76,3 +90,18 @@ the active namespace contrast contract.
 - [Architecture](architecture.md) — UI ownership and selected namespace context.
 - [Quality Gate](quality-gate.md) — browser smoke commands.
 - [Base UI Shell Standard](https://github.com/FerrPOINT/services-base/blob/main/docs/platform/UI_SHELL_STANDARD.md) — fleet contract.
+
+## Показатели dashboard
+
+Dashboard использует общий `metric` из штатного SSR export Base. Существующие
+подсчёты и подписи не переносятся в UI-библиотеку. Вердикты преобразует Workflow:
+blocked → danger, rollback → warning, delegate → info, остальные → default.
+Идентификатор/имя вердикта не определяет общее поведение Base; новые вердикты
+сохраняют своё значение и читаемую подпись без подстановки другого статуса.
+Нулевое значение остаётся нулём. Внешняя dashboard-grid остаётся продуктовой,
+а локальные metric-card/label/value/verdict skins удалены.
+
+Оформление state и кнопки/ссылки повтора совпадает с React через канонические
+tokens Base. Проверять полный SSR export вместе с legacy adapter, а не отдельный
+фрагмент stylesheet. Потеря доступа и ошибка не показывают прежние закрытые
+показатели; read_state и разрешённый retry_url выбирает владелец данных.

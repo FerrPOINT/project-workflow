@@ -1,4 +1,4 @@
-/** @typedef { { renderOption?: (option: HTMLOptionElement, mode: 'value' | 'option') => Node } } ChoiceConfig */
+/** @typedef { { appearance?: 'default' | 'icons', renderOption?: (option: HTMLOptionElement, mode: 'value' | 'option') => Node } } ChoiceConfig */
 /** @typedef { { refresh: () => void, destroy: () => void } } ChoiceController */
 /** @type {WeakMap<HTMLSelectElement, ChoiceController>} */
 const controls = new WeakMap()
@@ -18,6 +18,8 @@ export function initChoice(control, config = {}) {
   const original = { hidden: control.hidden, tabIndex: control.getAttribute('tabindex'), ariaHidden: control.getAttribute('aria-hidden'), testId: control.getAttribute('data-testid') }
   const wrapper = doc.createElement('span')
   wrapper.className = 'base-choice-field'
+  const iconGrid = config.appearance === 'icons'
+  if (iconGrid) wrapper.dataset.appearance = 'icons'
   const trigger = doc.createElement('button')
   trigger.type = 'button'
   trigger.className = 'base-control base-choice-trigger'
@@ -30,6 +32,7 @@ export function initChoice(control, config = {}) {
   trigger.append(summary, chevron)
   const panel = doc.createElement('div')
   panel.className = 'base-choice-panel base-choice-ssr-panel'
+  if (iconGrid) panel.dataset.appearance = 'icons'
   panel.id = trigger.id + '-options'
   panel.setAttribute('role', 'listbox')
   panel.setAttribute('aria-labelledby', trigger.id)
@@ -59,7 +62,7 @@ export function initChoice(control, config = {}) {
     const above = rect.top > height - rect.bottom && height - rect.bottom < 200
     panel.style.position = 'fixed'
     panel.style.minWidth = Math.min(rect.width, width - 16) + 'px'
-    panel.style.width = Math.min(Math.max(rect.width, 180), width - 16) + 'px'
+    panel.style.width = Math.min(iconGrid ? 228 : Math.max(rect.width, 180), width - 16) + 'px'
     panel.style.left = Math.max(8, Math.min(rect.left, width - panel.offsetWidth - 8)) + 'px'
     panel.style.maxHeight = Math.max(44, Math.min(320, (above ? rect.top : height - rect.bottom) - 12)) + 'px'
     panel.style.top = (above ? Math.max(8, rect.top - panel.offsetHeight - 4) : rect.bottom + 4) + 'px'
@@ -127,6 +130,7 @@ export function initChoice(control, config = {}) {
       const item = doc.createElement('button')
       item.type = 'button'; item.className = 'base-choice-option'; item.tabIndex = -1
       item.dataset.value = option.value; item.disabled = option.disabled || option.parentElement?.tagName === 'OPTGROUP' && /** @type {HTMLOptGroupElement} */ (option.parentElement).disabled
+      if (iconGrid) { item.setAttribute('aria-label', option.label); item.title = option.label }
       item.setAttribute('role', 'option'); item.setAttribute('aria-selected', String(option.selected))
       const mark = doc.createElement('span'); mark.className = 'base-choice-indicator'; mark.textContent = option.selected ? '✓' : ''; mark.setAttribute('aria-hidden', 'true')
       item.append(mark, config.renderOption ? config.renderOption(option, 'option') : doc.createTextNode(option.label))
@@ -149,18 +153,28 @@ export function initChoice(control, config = {}) {
       if (next instanceof win.HTMLElement) next.focus()
       return
     }
-    if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+    if (['ArrowDown', 'ArrowUp', 'Home', 'End', ...(iconGrid ? ['ArrowLeft', 'ArrowRight'] : [])].includes(event.key)) {
       event.preventDefault()
       if (!open) {
         show(event.key === 'ArrowUp' || event.key === 'End')
         if (event.key === 'Home' || event.key === 'End') focusItem(event.key === 'Home' ? 0 : items.length - 1)
         return
       }
-      focusItem(event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : items.indexOf(/** @type {HTMLButtonElement} */ (doc.activeElement)) + (event.key === 'ArrowDown' ? 1 : -1))
+      // Match the four visual columns; ordinary lists keep their one-row step.
+      const step = iconGrid && ['ArrowDown', 'ArrowUp'].includes(event.key) ? 4 : 1
+      const forward = event.key === 'ArrowDown' || event.key === 'ArrowRight'
+      if (iconGrid && event.key.startsWith('Arrow')) {
+        const cells = [...panel.querySelectorAll('button')]
+        let next = cells.indexOf(/** @type {HTMLButtonElement} */ (doc.activeElement)) + (forward ? step : -step)
+        while (next >= 0 && next < cells.length && cells[next].disabled) next += forward ? step : -step
+        if (next >= 0 && next < cells.length) focusItem(items.indexOf(cells[next]))
+        return
+      }
+      focusItem(event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : items.indexOf(/** @type {HTMLButtonElement} */ (doc.activeElement)) + (forward ? step : -step))
     } else if (event.key.length === 1 && !event.ctrlKey && !event.altKey && !event.metaKey && event.key !== ' ') {
       event.preventDefault(); if (!open) show()
       const now = Date.now(); buffer = now - typedAt > 700 ? event.key : buffer + event.key; typedAt = now
-      const index = items.findIndex(item => item.textContent?.replace(/^✓/, '').trim().toLocaleLowerCase().startsWith(buffer.toLocaleLowerCase()))
+      const index = items.findIndex(item => (item.getAttribute('aria-label') ?? item.textContent?.replace(/^✓/, '').trim())?.toLocaleLowerCase().startsWith(buffer.toLocaleLowerCase()))
       if (index >= 0) focusItem(index)
     } else if ((event.key === 'Enter' || event.key === ' ') && event.target === trigger) { event.preventDefault(); open ? close() : show() }
   })

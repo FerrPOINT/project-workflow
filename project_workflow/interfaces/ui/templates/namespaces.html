@@ -7,36 +7,33 @@
 {% block extra_style %}
 .namespace-crud{display:grid;grid-template-columns:320px minmax(0,1fr);gap:16px;align-items:start}
 .namespace-nav{display:flex;flex-direction:column;gap:10px;max-height:calc(100vh - 100px);overflow:auto;position:sticky;top:76px;padding-right:2px}
-.namespace-nav-item{width:100%;text-align:left;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;cursor:pointer;color:var(--text);display:flex;gap:12px;align-items:flex-start}
-.namespace-nav-item.active{border-color:var(--namespace-color,var(--accent));box-shadow:0 0 0 1px var(--namespace-color,var(--accent))}
+.namespace-nav-item{width:100%;display:flex;gap:12px;align-items:flex-start}
 .namespace-picker{display:none}
 .namespace-crud.is-empty{grid-template-columns:minmax(0,760px)}
 .namespace-crud.is-empty .namespace-nav,.namespace-crud.is-empty .namespace-picker{display:none}
 .namespace-mark{width:34px;height:34px;border-radius:8px;background:color-mix(in srgb,var(--namespace-color,var(--accent)) 16%, transparent);border:1px solid var(--namespace-color,var(--accent));color:var(--namespace-color,var(--accent));display:flex;align-items:center;justify-content:center;flex:0 0 auto}
 .namespace-mark svg{width:19px;height:19px}
 .namespace-card-body{min-width:0}
-.namespace-name{font-size:15px;font-weight:600;color:var(--text)}
-.namespace-meta{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:var(--text-dim)}
+.namespace-name{display:block}
+.namespace-meta{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}
 .namespace-panel{display:flex;flex-direction:column;gap:16px;max-width:760px;min-width:0}
 .form-stack{display:flex;flex-direction:column;gap:12px}
-.profession-execution-settings{border:0;border-top:1px solid var(--border);margin-top:8px;padding:14px 0 0;display:grid;gap:12px}
-.label{display:block;font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0}
-.field-help,.namespace-delete-hint{font-size:12px;color:var(--text-muted);line-height:1.5;margin-top:6px}
-.namespace-description{min-height:96px;resize:vertical}
-.theme-controls{display:flex;align-items:center;gap:12px;min-width:0}
-.namespace-icon-choice{display:inline-flex;align-items:center;gap:8px}
-.namespace-icon-choice svg{width:20px;height:20px;flex:none}
-.theme-color-input{width:44px;height:40px;padding:2px;cursor:pointer;flex:0 0 auto}
+.namespace-delete-hint{font-size:var(--base-font-label);color:var(--text-muted);line-height:var(--base-line-body);margin-top:6px}
+.namespace-identity-row{display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px;min-width:0}
+.namespace-identity-row > .base-form-field{flex:1 1 220px;min-width:0}
+.namespace-identity-row > .theme-controls{flex:0 0 auto}
+.theme-controls{display:flex;align-items:flex-start;gap:12px;min-width:0}
+.theme-controls > .base-form-field:first-child{flex:0 1 auto}
+.theme-controls > .base-form-field:last-child{flex:0 0 auto}
 .panel-actions{display:flex;gap:10px;flex-wrap:wrap}
 .namespace-delete{margin-left:auto}
-.empty-note{color:var(--text-dim);font-size:13px;line-height:1.6}
-@media (max-width: 980px){.namespace-crud{grid-template-columns:minmax(0,1fr)}.namespace-nav{display:none}.namespace-picker{display:block}.namespace-picker select{min-height:40px}}
+@media (max-width: 980px){.namespace-crud{grid-template-columns:minmax(0,1fr)}.namespace-nav{display:none}.namespace-picker{display:block}}
 {% endblock %}
 
 {% block content %}
 <div class="namespace-crud{% if namespaces|length == 0 %} is-empty{% endif %}" id="namespaceCrud">
   <div class="namespace-picker" id="namespacePicker">
-    <label class="label" for="namespaceSelect">Профессия</label>
+    <label class="base-label" for="namespaceSelect">Профессия</label>
     <select data-base-choice id="namespaceSelect" onchange="selectNamespace(Number(this.value))">
       <option value="" disabled {% if create_mode %}selected{% endif %}>{{ 'Новая профессия' if create_mode else 'Выберите профессию' }}</option>
       {% for namespace in namespaces %}
@@ -46,61 +43,50 @@
   </div>
   <section class="namespace-nav side-nav-scroll" id="namespaceNav">
     {% for namespace in namespaces %}
-    <button type="button" class="namespace-nav-item {% if selected_namespace and selected_namespace.id == namespace.id %}active{% endif %}" data-namespace-id="{{ namespace.id }}" aria-controls="namespaceForm" aria-pressed="{{ 'true' if selected_namespace and selected_namespace.id == namespace.id and not create_mode else 'false' }}" onclick="selectNamespace({{ namespace.id }})" style="--namespace-color:{{ namespace.theme_color }}">
+    <button type="button" class="namespace-nav-item base-card base-card-content" data-interactive="true" data-namespace-id="{{ namespace.id }}" aria-controls="namespaceForm" aria-pressed="{{ 'true' if selected_namespace and selected_namespace.id == namespace.id and not create_mode else 'false' }}" onclick="selectNamespace({{ namespace.id }})" style="--namespace-color:{{ namespace.theme_color }}">
       <span class="namespace-mark" aria-hidden="true">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="{{ project_icon_path(namespace.theme_icon) }}"></path>
         </svg>
       </span>
       <span class="namespace-card-body">
-        <div class="namespace-name">{{ namespace.name }}</div>
-        <div class="namespace-meta">
-          <span>{{ namespace.task_count | pluralize('задача,задачи,задач') }}</span>
-        </div>
+        <span class="namespace-name base-card-title">{{ namespace.name }}</span>
+        <span class="namespace-meta">
+          {{ base_ui.badge(namespace.task_count | pluralize('задача,задачи,задач'), 'muted', 'inline') }}
+        </span>
       </span>
     </button>
-    {% else %}
-    <div class="card empty-note">Пока ничего не создано.</div>
     {% endfor %}
   </section>
 
   <section class="namespace-panel">
 {% if can_administer %}
-    <form id="namespaceForm" data-platform-draft class="card form-stack" aria-labelledby="namespaceFormMode" onsubmit="event.preventDefault(); submitNamespace();">
-      <div class="card-title" id="namespaceFormMode">{{ 'Создание' if create_mode else 'Редактирование' }}</div>
-      <div>
-        <label class="label" for="namespaceName">Название</label>
-        <input type="text" id="namespaceName" name="namespaceName" value="{{ edited_namespace.name if edited_namespace else '' }}" required>
-      </div>
-      <div>
-        <label class="label" for="namespaceCliCommand">CLI-команда</label>
-        <input type="text" id="namespaceCliCommand" name="namespaceCliCommand" value="{{ edited_namespace.cli_command if edited_namespace else '' }}" placeholder="workflow-qa" required minlength="2" maxlength="64" pattern="[a-z][a-z0-9_\-]{1,63}" aria-describedby="namespaceCliHelp">
-        <p class="field-help" id="namespaceCliHelp">От 2 до 64 символов: строчные латинские буквы, цифры, дефис и подчёркивание; первый символ — буква.</p>
-      </div>
-      <div>
-        <label class="label" for="namespaceDescription">Описание</label>
-        <textarea id="namespaceDescription" name="namespaceDescription" class="namespace-description">{{ edited_namespace.description if edited_namespace else '' }}</textarea>
-      </div>
-      <div>
-        <div class="label" id="namespaceThemeLabel">Иконка и цвет</div>
-        <div class="theme-controls" id="namespaceThemeControls" role="group" aria-labelledby="namespaceThemeLabel" style="--namespace-color:{{ edited_namespace.theme_color if edited_namespace else '#5E6AD2' }}">
-          <label class="sr-only" for="namespaceThemeIcon">Иконка</label>
+    <form id="namespaceForm" data-platform-draft class="base-card base-card-content form-stack" aria-labelledby="namespaceFormMode" onsubmit="event.preventDefault(); submitNamespace();">
+      <div class="base-card-title" id="namespaceFormMode">{{ 'Создание' if create_mode else 'Редактирование' }}</div>
+      <div class="namespace-identity-row">
+      {% call base_ui.field('namespaceName', 'Название', required=true) %}
+        {{ base_ui.input_control('namespaceName', 'namespaceName', value=edited_namespace.name if edited_namespace else '', required=true) }}
+      {% endcall %}
+      <div class="theme-controls" id="namespaceThemeControls" role="group" aria-label="Оформление профессии" style="--namespace-color:{{ edited_namespace.theme_color if edited_namespace else '#5E6AD2' }}">
+        {% call base_ui.field('namespaceThemeIcon', 'Иконка') %}
           {% call base_ui.select_control('namespaceThemeIcon', 'namespaceThemeIcon', required=true) %}
           {% for option in project_icon_options %}
           <option value="{{ option.key }}"{% if (edited_namespace.theme_icon if edited_namespace else default_project_icon) == option.key %} selected{% endif %}>{{ option.label }}</option>
           {% endfor %}
           {% endcall %}
-          <input type="color" id="namespaceThemeColor" name="namespaceThemeColor" class="theme-color-input" aria-label="Цвет" title="Цвет" value="{{ edited_namespace.theme_color if edited_namespace else '#5E6AD2' }}" oninput="updateNamespaceThemePreview()">
-        </div>
+        {% endcall %}
+        {% call base_ui.field('namespaceThemeColor', 'Цвет') %}
+          <input type="color" id="namespaceThemeColor" name="namespaceThemeColor" class="base-control base-input" aria-label="Цвет" title="Цвет" value="{{ edited_namespace.theme_color if edited_namespace else '#5E6AD2' }}" oninput="updateNamespaceThemePreview()">
+        {% endcall %}
       </div>
-      <fieldset class="profession-execution-settings">
-        <legend class="label">Настройки выполнения</legend>
-        <div>
-          <label class="label" for="namespaceLaunchProfile">Ключ запуска</label>
-          <input type="text" id="namespaceLaunchProfile" name="namespaceLaunchProfile" value="{{ edited_namespace.launch_profile or '' if edited_namespace else '' }}" pattern="[a-z0-9][a-z0-9_\-]*" maxlength="251" placeholder="profile-key">
-          <p class="field-help">Профиль внешнего исполнителя для этой профессии.</p>
-        </div>
-      </fieldset>
+      </div>
+      {% call base_ui.field('namespaceCliCommand', 'CLI-команда', required=true) %}
+        {{ base_ui.input_control('namespaceCliCommand', 'namespaceCliCommand', value=edited_namespace.cli_command if edited_namespace else '', placeholder='workflow-qa', required=true, minlength=2, maxlength=64, pattern='[a-z][a-z0-9_\\-]{1,63}', described_by='namespaceCliHelp') }}
+        <p id="namespaceCliHelp">2–64 символа: a–z, 0–9, - и _. Начните с буквы.</p>
+      {% endcall %}
+      {% call base_ui.field('namespaceDescription', 'Описание') %}
+        {{ base_ui.textarea_control('namespaceDescription', 'namespaceDescription', value=edited_namespace.description if edited_namespace else '', rows=2) }}
+      {% endcall %}
       <div class="panel-actions">
         <button class="btn btn-primary" type="submit" id="namespaceSubmitButton">{{ 'Создать' if create_mode else 'Сохранить' }}</button>
         <button class="btn btn-secondary" type="button" id="cancelCreateButton" onclick="cancelCreateNamespace()" style="display:none">Отмена</button>
@@ -109,12 +95,12 @@
       <p class="namespace-delete-hint" id="namespaceDeleteHint" hidden>Профессию с задачами нельзя удалить.</p>
     </form>
 {% elif edited_namespace %}
-    <article class="card form-stack" id="professionSummary">
-      <h2>{{ edited_namespace.name }}</h2>
+    <article class="base-card base-card-content form-stack" id="professionSummary">
+      <h2 class="base-section-title">{{ edited_namespace.name }}</h2>
       <p>{{ edited_namespace.description or '' }}</p>
       <p>CLI-команда: <code>{{ edited_namespace.cli_command }}</code></p>
     </article>
-{% else %}<p class="empty-note">Выберите профессию для просмотра.</p>{% endif %}
+{% else %}{{ base_ui.state('empty', 'Выберите профессию для просмотра.' if namespaces else 'Пока ничего не создано.') }}{% endif %}
 
   </section>
 </div>
@@ -145,7 +131,7 @@ function updateNamespaceHeaderLinks(id){
 }
 function namespaceIconSvg(icon){
   var path = namespaceIconPaths[icon || defaultNamespaceThemeIcon] || namespaceIconPaths[defaultNamespaceThemeIcon];
-  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="' + path + '"></path></svg>';
+  return '<svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="' + path + '"></path></svg>';
 }
 function applyNamespaceIdentity(name, icon, color){
   document.querySelectorAll('[data-namespace-selector]').forEach(function(selector){
@@ -167,10 +153,15 @@ function updateNamespaceThemePreview(){
 }
 function renderNamespaceIconChoice(option){
   var visual = document.createElement('span');
-  visual.className = 'namespace-icon-choice';
-  visual.style.color = document.getElementById('namespaceThemeColor').value || defaultNamespaceThemeColor;
   visual.innerHTML = namespaceIconSvg(option.value);
-  visual.appendChild(document.createTextNode(option.label));
+  var svg = visual.querySelector('svg');
+  svg.setAttribute('width', '20');
+  svg.setAttribute('height', '20');
+  svg.style.color = document.getElementById('namespaceThemeColor').value || defaultNamespaceThemeColor;
+  var name = document.createElement('span');
+  name.className = 'base-visually-hidden';
+  name.textContent = option.label;
+  visual.appendChild(name);
   return visual;
 }
 function currentPayload(){
@@ -178,7 +169,6 @@ function currentPayload(){
     name: document.getElementById('namespaceName').value.trim(),
     cli_command: document.getElementById('namespaceCliCommand').value.trim(),
     description: document.getElementById('namespaceDescription').value.trim(),
-    launch_profile: document.getElementById('namespaceLaunchProfile').value.trim() || null,
     theme_icon: document.getElementById('namespaceThemeIcon').value || defaultNamespaceThemeIcon,
     theme_color: document.getElementById('namespaceThemeColor').value || defaultNamespaceThemeColor,
   };
@@ -187,7 +177,6 @@ function currentPayload(){
 function syncNav(){
   document.querySelectorAll('#namespaceNav [data-namespace-id]').forEach(function(node){
     var active = Number(node.dataset.namespaceId) === selectedNamespaceId;
-    node.classList.toggle('active', active);
     node.setAttribute('aria-pressed', String(active));
   });
   var picker = document.getElementById('namespaceSelect');
@@ -223,7 +212,6 @@ function fillNamespaceForm(namespace){
   document.getElementById('namespaceName').value = namespace ? namespace.name : '';
   document.getElementById('namespaceCliCommand').value = namespace ? (namespace.cli_command || '') : '';
   document.getElementById('namespaceDescription').value = namespace ? (namespace.description || '') : '';
-  document.getElementById('namespaceLaunchProfile').value = namespace ? (namespace.launch_profile || '') : '';
   var icon = namespace ? (namespace.theme_icon || defaultNamespaceThemeIcon) : defaultNamespaceThemeIcon;
   document.getElementById('namespaceThemeIcon').value = icon;
   document.getElementById('namespaceThemeColor').value = namespace ? (namespace.theme_color || defaultNamespaceThemeColor) : defaultNamespaceThemeColor;
@@ -339,16 +327,11 @@ function renderNamespaceNav(){
   document.getElementById('namespaceCrud').classList.toggle('is-empty', namespaceStore.length === 0);
   var nav = document.getElementById('namespaceNav');
   nav.replaceChildren();
-  if(namespaceStore.length === 0){
-    var empty = document.createElement('div');
-    empty.className = 'card empty-note';
-    empty.textContent = 'Пока ничего не создано.';
-    nav.appendChild(empty);
-  }
   namespaceStore.forEach(function(namespace){
     var button = document.createElement('button');
     button.type = 'button';
-    button.className = 'namespace-nav-item';
+    button.className = 'namespace-nav-item base-card base-card-content';
+    button.dataset.interactive = 'true';
     button.dataset.namespaceId = String(namespace.id);
     button.setAttribute('aria-controls', 'namespaceForm');
     button.setAttribute('aria-pressed', 'false');
@@ -363,14 +346,17 @@ function renderNamespaceNav(){
     var body = document.createElement('span');
     body.className = 'namespace-card-body';
 
-    var name = document.createElement('div');
-    name.className = 'namespace-name';
+    var name = document.createElement('span');
+    name.className = 'namespace-name base-card-title';
     name.textContent = namespace.name;
 
-    var meta = document.createElement('div');
+    var meta = document.createElement('span');
     meta.className = 'namespace-meta';
 
     var tasks = document.createElement('span');
+    tasks.className = 'base-badge';
+    tasks.dataset.tone = 'muted';
+    tasks.dataset.appearance = 'inline';
     tasks.textContent = pluralizeRu(namespace.task_count, 'задача', 'задачи', 'задач');
 
     meta.appendChild(tasks);

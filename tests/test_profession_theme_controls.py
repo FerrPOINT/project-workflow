@@ -17,6 +17,8 @@ class ThemeInputs(HTMLParser):
         self.in_icon_selector = False
         self.root_attrs = {}
         self.brand_attrs = {}
+        self.brand_link_attrs = {}
+        self.brand_initials_attrs = {}
         self.selector_attrs = []
         self.selector_options = []
         self.in_selector = False
@@ -27,6 +29,10 @@ class ThemeInputs(HTMLParser):
             self.root_attrs = fields
         if "base-platform-mark" in fields.get("class", "").split():
             self.brand_attrs = fields
+        if tag == "a" and fields.get("aria-label") == "Project Workflow":
+            self.brand_link_attrs = fields
+        if "data-base-brand-initials" in fields:
+            self.brand_initials_attrs = fields
         if tag == "select":
             self.in_icon_selector = fields.get("name") == "namespaceThemeIcon"
             self.in_selector = "data-namespace-selector" in fields
@@ -64,7 +70,8 @@ def test_theme_controls_show_all_icons_and_select_current_value(icon):
     assert parsed.brand_attrs
     assert "style" not in parsed.brand_attrs
     if edited:
-        assert len(parsed.selector_attrs) == 2
+        # Base moves this one control between the desktop context and mobile drawer.
+        assert len(parsed.selector_attrs) == 1
         assert all("data-base-choice" in control for control in parsed.selector_attrs)
         assert all(option["data-color"] == color for option in parsed.selector_options if "selected" in option)
     assert {option["value"] for option in parsed.icon_options} == set(PROJECT_THEME_ICONS)
@@ -72,6 +79,9 @@ def test_theme_controls_show_all_icons_and_select_current_value(icon):
     assert 'for="namespaceThemeIcon">Иконка</label>' in html
     assert 'data-base-choice class="base-control" id="namespaceThemeIcon"' in html
     assert 'renderOption: renderNamespaceIconChoice' in html
+    assert "appearance: 'icons', renderOption: renderNamespaceIconChoice" in html
+    assert "name.className = 'base-visually-hidden'" in html
+    assert "visual.appendChild(document.createTextNode(option.label))" not in html
     assert 'namespaceIconSelect' not in html
     assert 'id="namespaceThemeControls"' in html
     assert 'id="namespaceThemePreview"' not in html
@@ -94,17 +104,20 @@ def test_header_logo_is_constant_and_each_profession_option_has_its_own_identity
         parsed.feed(html)
         assert "style" not in parsed.brand_attrs
         selected = [option for option in parsed.selector_options if "selected" in option]
-        assert len(selected) == 2
+        assert len(selected) == 1
         assert all(option["data-color"] == current["theme_color"] for option in selected)
         assert all(option["value"] == str(current["id"]) for option in selected)
         assert "initChoice(control" in html
         for profession in professions:
-            assert html.count(f'data-icon="{profession["theme_icon"]}" data-color="{profession["theme_color"]}"') == 2
-            assert sum(option['value'] == str(profession['id']) for option in parsed.selector_options) == 2
-        logos.append(html.split('<a class="brand-link"', 1)[1].split('</a>', 1)[0])
+            assert html.count(f'data-icon="{profession["theme_icon"]}" data-color="{profession["theme_color"]}"') == 1
+            assert sum(option['value'] == str(profession['id']) for option in parsed.selector_options) == 1
+        assert parsed.brand_link_attrs["href"] == "/"
+        assert parsed.brand_link_attrs["data-size"] == "icon"
+        assert "base-button" in parsed.brand_link_attrs["class"].split()
+        logos.append((parsed.brand_link_attrs, parsed.brand_attrs, parsed.brand_initials_attrs))
     assert logos[0] == logos[1]
-    assert 'data-base-platform-mark' in logos[0]
-    assert 'data-base-brand-initials' in logos[0]
+    assert 'data-base-platform-mark' in logos[0][1]
+    assert 'data-base-brand-initials' in logos[0][2]
 
 
 @pytest.mark.parametrize("icon", PROJECT_THEME_ICONS)

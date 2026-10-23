@@ -83,10 +83,12 @@ Supervisor Engine перед commit выполнить следующие про
   свой source; отдельный [Base candidate](docs/base-sdlc-candidate.md) закрепляет
   commit пакета `services-base/agent-skills`. Candidate не установлен: не менять
   default path, bootstrap, migrations и pinned history при подготовке документов.
-- Профессия хранит только `launch_profile` как настройку выполнения. Её
-  идентификатор — существующий `code`; роль задачи задаётся назначением и режимом.
-  Фазы не назначают отдельных агентов. Профилем запуска
-  владеет внешний исполнитель; несколько профессий могут использовать один профиль.
+- Профессия не задаёт общий профиль запуска и не показывает его в своей форме.
+  При необходимости профиль относится к конкретному workflow в рамках профессии.
+  `projects.launch_profile` пока сохраняется как legacy-контракт API/admission;
+  не очищать его при обычном редактировании и не считать перенос исполнения
+  реализованным без согласованной миграции. Идентификатор профессии — `code`;
+  роль задачи задаётся назначением и режимом. Фазы не назначают отдельных агентов.
 - Воспроизводимый CLI acceptance описан в `LIVE_TEST_PLAN.md`.
 
 ## Осознанно исключённые возможности
@@ -115,15 +117,17 @@ Supervisor Engine перед commit выполнить следующие про
 ## Термины PDLC и общие компоненты
 
 Перед изменением платформенных имён прочитайте [интеграцию с Base](docs/PDLC_BASE_INTEGRATION.md) и канонические TERMS/BRANDING.
-Для UI: CLI `pdlc-ui` из закреплённого UI-пакета Base, затем карточка и один пример. SSR-ресурсы получать штатным exporter Base; fingerprint проверять отдельно.
+Работа с SSR UI описана в разделе «Разработка UI со справочником Base» ниже.
 Не переносите продуктовые запросы, DTO и права в общий UI. SDK/UI/skills pins независимы; новое имя платформы не меняет SDLC IDs/scopes или закреплённые внешние runtime-источники.
 
 ## Общие поля выбора Base
 
 Сначала искать общий UI в Base: search → show → example. Общие исправления
 вносить в Base; продукт передаёт данные, права, преобразования и сохранение.
-Для одного известного значения использовать Select, для нескольких — MultiSelect,
-для каталога с поиском/пагинацией — SearchableSelect из публичного @pdlc/ui.
+Для закрытого списка с одним значением — Select; для нескольких — MultiSelect.
+Одно значение из всех видимых вариантов — RadioGroup, взаимноисключающие режимы — appearance="segmented".
+Вкладки с панелями используют Tabs. Каталог с поиском/пагинацией — SearchableSelect.
+Использовать публичный @pdlc/ui и сверять наличие API по точному UI pin.
 Контракт Select/MultiSelect: options, value/defaultValue, onValueChange;
 HTML children/option/onChange/multiple/size больше не являются их API.
 Видимые raw select и локальные копии оформления не добавлять. Технический form
@@ -132,16 +136,41 @@ bridge принадлежит только Base; SSR использует шта
 Правила выбора и подключения: Base docs/platform/CHOICE_CONTROLS.md.
 UI/SDK/skills pins независимы; установка и production — отдельные операции.
 
-## Единая дизайн-система Base
+## Разработка UI со справочником Base
 
-Перед созданием UI: pdlc-ui search → show → один example. Button, Input,
-Textarea, Checkbox, RadioGroup/Radio, Switch, меню, Card, Table, Disclosure,
+Открытая страница справочника может быть новее зависимости продукта: сверять
+контракт по принятому UI pin. Если поиск пуст, уточнить запрос/фильтры и
+проверить рецепты; отсутствие API проверить отдельно в актуальном Base.
+Общий контракт добавлять в Base вместе с metadata и примером, затем явно
+обновлять UI pin потребителя. Локальная копия не заменяет эту интеграцию.
+
+Перед изменением SSR UI читать [маршрут разработки со справочником Base](https://github.com/FerrPOINT/services-base/blob/ae2b41291eee5af752daff89f760fba5aff41783/base-modules/ui/reference/guides/agent.md),
+включая раздел для Workflow без Node frontend. Прочитать `.base-ui-revision`;
+подготовить отдельный checkout этого SHA без переключения соседней рабочей ветки.
+Запуск из него: `node base-modules/ui/tools/ui-reference/cli.mjs check`, затем
+`search "задача"`, адресный `show` и один `example`. Node 22 достаточен;
+npm install, frontend-пакет, работающие API/Storybook и доступ к стенду не нужны.
+Для SSR использовать macro из карточки, штатный exporter и fingerprints;
+React-пример не подменяет серверный контракт. Полный каталог не загружать;
+новые возможности Base не считать принятыми без отдельного изменения UI pin.
+
+Button, Input, Textarea, Checkbox, RadioGroup/Radio, Switch, меню, Card, Table, Disclosure,
 Dialog и Toaster/toast использовать из публичного @pdlc/ui. Общий дефект
 исправлять в Base; продукт сохраняет данные, права и сохранение. Прямой Sonner,
 копии примитивов и продуктовые определения общих tokens не добавлять.
 Брендинг применяется общим runtime; draft preview изолируется BrandingScope.
 Канонический контракт — Base docs/platform/DESIGN_SYSTEM.md и docs/BRANDING.md.
 UI/SDK/skills pins независимы; source-изменения не означают установку.
+
+SSR-каркас и page-frame/page-wide/page-readable/page-split принадлежат CSS Base.
+Не дублировать их геометрию в base.html и не возвращать retired local styles
+старой шапки/вкладок/переключателей. Таймлайн, статус исполнения и предметная
+компоновка сохраняют собственный контракт. Проверять реальные macros/assets,
+а не наличие прежнего CSS-текста в шаблоне продукта.
+Заголовок страницы использует base-page-title, раздел — section_header с прежним
+heading_id. Native home link использует button(href=..., variant=ghost, size=icon),
+ссылки действий — text_link, подтверждённая пустота — state. URL и namespace
+остаются у Workflow; не добавлять локальный skin или обработчик навигации.
 
 ## Единое пространство PDLC
 
@@ -150,3 +179,11 @@ UI/SDK/skills pins независимы; source-изменения не озна
 applied migrations сохранять; ProjectRef/SpaceRef/V3 отдельны. Полный gate на
 интегрированной вехе, в ходе реализации scoped checks. Runtime не активировать
 по готовности одного продукта; не выбирать первый Project/Space неявно.
+
+## Общие показатели
+
+Dashboard metrics используют штатный Base macro metric со стабильными id.
+Не возвращать локальные metric-* paint rules: геометрия, шрифт и состояния
+принадлежат Base. Подсчёт, verdict → tone и внешняя dashboard-grid остаются
+Workflow. Новый SSR API требует соответствующего UI pin и штатного export;
+SDK/skills pins не изменять вслед за UI. Source-проверка не означает установку.

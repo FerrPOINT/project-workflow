@@ -1,19 +1,12 @@
 {% extends "base.html" %}
 
 {% block title %}Задачи воркфлоу — Workflow Engine{% endblock %}
-{% block header_title %}<span class="tasks-desktop-title">Задачи воркфлоу</span><span class="tasks-mobile-title">Задачи</span>{% endblock %}
+{% block header_title %}Задачи воркфлоу{% endblock %}
 {% block header_actions %}{% endblock %}
 {% block extra_style %}
-.tasks-mobile-title{display:none}
 .tasks-layout{container:tasks / inline-size;min-width:0}
-.tasks-table-wrap{overflow-x:auto}
-.tasks-table{width:100%;min-width:0;table-layout:fixed;border-collapse:separate;border-spacing:0}
-.tasks-table thead th{background:var(--panel)}
-.tasks-table thead th:first-child{border-top-left-radius:9px}
-.tasks-table thead th:last-child{border-top-right-radius:9px}
-.tasks-table th,.tasks-table td{padding-inline:12px;white-space:normal;vertical-align:middle;overflow-wrap:anywhere}
-.tasks-table th{padding-block:11px}
-.tasks-table td{padding-block:10px}
+.tasks-table{min-width:0;table-layout:fixed}
+.tasks-table th,.tasks-table td{white-space:normal;overflow-wrap:anywhere}
 .tasks-table th:nth-child(1),.tasks-table td:nth-child(1){width:7%}
 .tasks-table th:nth-child(2),.tasks-table td:nth-child(2){width:13%}
 .tasks-table th:nth-child(3),.tasks-table td:nth-child(3){width:12%}
@@ -23,44 +16,15 @@
 .tasks-table th:nth-child(7),.tasks-table td:nth-child(7){width:10%}
 .tasks-table th:nth-child(8),.tasks-table td:nth-child(8){width:11%}
 .tasks-table th:nth-child(9),.tasks-table td:nth-child(9){width:8%}
-.tasks-table .task-key{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent-readable)}
-.task-key-date{display:none;margin-top:3px;color:var(--text-muted);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.tasks-table .task-title{color:var(--text);font-weight:500}
-.task-title-context{display:none;margin-top:3px;color:var(--text-muted);font-size:11px;line-height:1.4}
-.namespace-pill{display:inline-flex;align-items:center;gap:6px;max-width:100%;padding:3px 8px;border-radius:6px;background:var(--accent-soft);color:var(--text);font-size:12px;font-weight:600}
-.namespace-pill svg{width:14px;height:14px;flex:0 0 auto}
-.namespace-pill span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.status-badge{display:inline-flex;align-items:center;gap:6px;max-width:100%;padding:3px 10px;border-radius:6px;font-size:12px;font-weight:500;white-space:normal;overflow-wrap:anywhere}
-.status-done{background:var(--green-soft);color:var(--text)}
-.status-active{background:var(--accent-soft);color:var(--text)}
-.status-blocked{background:var(--red-soft);color:var(--text)}
-.progress-inline{display:flex;align-items:center;gap:6px;width:100%;min-width:0;font-size:12px;color:var(--text-muted);font-weight:600;white-space:nowrap}
-.progress-inline .bar{flex:1 1 48px;min-width:36px;height:6px;background:var(--panel);border:1px solid var(--border-strong);border-radius:999px;overflow:hidden;display:inline-block;vertical-align:middle}
-.progress-inline .bar-fill{display:block;height:100%;background:var(--accent);border-radius:inherit;min-width:2px;transition:width .3s}
-.progress-inline .bar-fill.done{background:var(--green)}
-.progress-inline .bar-fill.zero{background:transparent;min-width:0}
-.task-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-top:8px}
-.task-card .row{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;gap:8px;flex-wrap:wrap}
-.task-card .row:last-child{margin-bottom:0}
-.task-card .task-key{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent-readable)}
-.task-card .label{font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em}
-.task-card .value{font-size:13px;color:var(--text-secondary);font-weight:500}
-.task-card-title{margin:7px 0 9px;font-size:14px;color:var(--text);font-weight:600;line-height:1.35}
-.task-card-context{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 12px;border-top:1px solid var(--border);padding-top:8px}
-.task-card-context-item{min-width:0;font-size:12px;line-height:1.35;color:var(--text-secondary);overflow-wrap:anywhere}
-.task-card-context-item strong{color:var(--text-muted);font-weight:600}
-.task-card-context-item.context-wide{grid-column:1 / -1}
-.task-card-context-item.context-wide .context-value{color:var(--text);font-weight:500}
-.verdict-badge{display:inline-flex;align-items:center;gap:4px;max-width:100%;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;line-height:1.2;white-space:normal;overflow-wrap:anywhere}
+.task-key{font-family:var(--base-font-mono);font-size:var(--base-font-label)}
+.task-key-date{display:none;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.task-title-context{display:none;margin-top:3px}
+.progress-inline{display:flex;align-items:center;gap:6px;width:100%;min-width:0;white-space:nowrap}
+.task-progress{flex:1 1 48px;min-width:36px}
+.task-card-context{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 12px;margin:0}
+.task-card-head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
 .verdict-cell{display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-width:0}
-.verdict-phase{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--text-dim)}
-.verdict-pass{background:var(--green-soft);color:var(--text)}
-.verdict-partial{background:var(--yellow-soft);color:var(--text)}
-.verdict-blocked{background:var(--red-soft);color:var(--text)}
-.verdict-rollback{background:var(--orange-soft);color:var(--text)}
-.verdict-delegate{background:var(--accent-soft);color:var(--text)}
-.task-card-meta{display:grid!important;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));align-items:start}
-.task-empty{text-align:center;color:var(--text-dim);border-style:dashed}
+.verdict-phase{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .table-card-list{display:none}
 @container tasks (min-width:980px) and (max-width:1180px){
   .tasks-table th:nth-child(2),.tasks-table td:nth-child(2),.tasks-table th:nth-child(3),.tasks-table td:nth-child(3),.tasks-table th:nth-child(9),.tasks-table td:nth-child(9){display:none}
@@ -77,13 +41,12 @@
   .tasks-table-wrap{display:none}
   .table-card-list{display:flex;flex-direction:column;gap:12px}
 }
-@media(max-width:760px){.tasks-desktop-title{display:none}.tasks-mobile-title{display:inline}}
 {% endblock %}
 
 {% block content %}
+{% set verdict_tones = {'pass': 'success', 'partial': 'warning', 'blocked': 'danger', 'rollback': 'warning', 'delegate': 'info'} %}
 <div class="tasks-layout">
-<div class="card tasks-table-wrap">
-  <table class="tasks-table">
+{% call base_ui.table(label='Задачи воркфлоу', class_name='tasks-table', container_class='base-card tasks-table-wrap') %}
     <thead>
       <tr>
         <th>Ключ</th>
@@ -101,40 +64,41 @@
       {% for t in tasks %}
       <tr data-task-key="{{ t.task_key }}" data-status="{{ t.status }}" data-verdict="{{ t.latest_verdict or '' }}">
         <td>
-          <a href="{{ ui_base_path() }}/task/{{ t.task_key }}{% if t.namespace_id %}?profession_id={{ t.namespace_id }}{% endif %}" class="task-key">{{ t.task_key }}</a>
+          {% set task_key_label %}<span class="task-key">{{ t.task_key }}</span>{% endset %}
+          {{ base_ui.text_link(task_key_label, ui_base_path() ~ '/task/' ~ t.task_key ~ ('?profession_id=' ~ t.namespace_id if t.namespace_id else '')) }}
           <span class="task-key-date" title="Создана: {{ t.created_at[:10] if t.created_at else '—' }}">{{ t.created_at[:10] if t.created_at else '—' }}</span>
         </td>
         <td>
-          <span class="namespace-pill" style="--accent:{{ t.namespace_theme_color }};--accent-soft:{{ t.namespace_theme_color }}26">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{ project_icon_path(t.namespace_theme_icon) }}"></path></svg>
+          {% call base_ui.badge() %}
+            <svg viewBox="0 0 24 24" fill="none" stroke="{{ t.namespace_theme_color }}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="{{ project_icon_path(t.namespace_theme_icon) }}"></path></svg>
             <span>{{ t.namespace_cli_command or t.namespace_name }}</span>
-          </span>
+          {% endcall %}
         </td>
         <td>{{ t.workflow_name or '—' }}</td>
         <td>
-          <span class="task-title">{{ t.title if t.title and t.title != t.task_key else '—' }}</span>
+          <strong class="task-title">{{ t.title if t.title and t.title != t.task_key else '—' }}</strong>
           <span class="task-title-context">{{ t.namespace_cli_command or t.namespace_name }} · {{ t.workflow_name or '—' }}</span>
         </td>
         <td>{{ t.current_phase_name or '—' }}</td>
         <td>
-          <span class="progress-inline">
-            <div class="bar"><div class="bar-fill {% if t.completed >= t.total_phases %}done{% endif %} {% if t.completed == 0 %}zero{% endif %}" style="width:{{ (t.completed / t.total_phases * 100) if t.total_phases else 0 }}%"></div></div>
-            {{ t.completed }}/{{ t.total_phases }}
-          </span>
+          <div class="progress-inline">
+            {{ base_ui.progress(t.completed, max=t.total_phases, variant='success' if t.total_phases > 0 and t.completed >= t.total_phases else 'default', label='Прогресс задачи ' ~ t.task_key, value_text=(t.completed ~ ' из ' ~ t.total_phases) if t.total_phases else 'Фазы не заданы', class_name='task-progress') }}
+            <span>{{ t.completed }}/{{ t.total_phases }}</span>
+          </div>
         </td>
         <td>
           {% if t.status == 'done' %}
-          <span class="status-badge status-done">Завершена</span>
+          {{ base_ui.badge('Завершена', tone='success') }}
           {% elif t.status == 'blocked' %}
-          <span class="status-badge status-blocked">Заблокирована</span>
+          {{ base_ui.badge('Заблокирована', tone='danger') }}
           {% else %}
-          <span class="status-badge status-active">В работе</span>
+          {{ base_ui.badge('В работе', tone='info') }}
           {% endif %}
         </td>
         <td>
           {% if t.latest_verdict %}
           <span class="verdict-cell">
-            <span class="verdict-badge verdict-{{ t.latest_verdict }}">{{ t.latest_verdict_label }}</span>
+            {{ base_ui.badge(t.latest_verdict_label, tone=verdict_tones.get(t.latest_verdict, 'neutral')) }}
             {% if t.latest_verdict_phase %}<span class="verdict-phase" title="{{ t.latest_verdict_phase }}">{{ t.latest_verdict_phase }}</span>{% endif %}
           </span>
           {% else %}—{% endif %}
@@ -143,43 +107,35 @@
       </tr>
       {% else %}
       <tr>
-        <td colspan="9" style="text-align:center;color:var(--text-dim);padding:32px">Нет задач</td>
+        <td colspan="9">{{ base_ui.state('empty', 'Нет задач') }}</td>
       </tr>
       {% endfor %}
     </tbody>
-  </table>
-</div>
+{% endcall %}
 
 <div class="table-card-list">
   {% for t in tasks %}
-  <div class="task-card" data-task-key="{{ t.task_key }}" data-status="{{ t.status }}" data-verdict="{{ t.latest_verdict or '' }}">
-    <div class="row">
-      <a href="{{ ui_base_path() }}/task/{{ t.task_key }}{% if t.namespace_id %}?profession_id={{ t.namespace_id }}{% endif %}" class="task-key">{{ t.task_key }}</a>
-      {% if t.status == 'done' %}
-      <span class="status-badge status-done">Завершена</span>
-      {% elif t.status == 'blocked' %}
-      <span class="status-badge status-blocked">Заблокирована</span>
-      {% else %}
-      <span class="status-badge status-active">В работе</span>
-      {% endif %}
-      {% if t.latest_verdict %}
-      <span class="verdict-badge verdict-{{ t.latest_verdict }}">{{ t.latest_verdict_label }}</span>
-      {% endif %}
+  <article data-task-key="{{ t.task_key }}" data-status="{{ t.status }}" data-verdict="{{ t.latest_verdict or '' }}">
+  {% call base_ui.card(href=ui_base_path() ~ '/task/' ~ t.task_key ~ ('?profession_id=' ~ t.namespace_id if t.namespace_id else ''), label=t.task_key) %}
+  {% call base_ui.card_content(class_name='base-page-stack') %}
+    <div class="task-card-head">
+      <span class="task-key">{{ t.task_key }}</span>
+      {% if t.status == 'done' %}{{ base_ui.badge('Завершена', tone='success') }}
+      {% elif t.status == 'blocked' %}{{ base_ui.badge('Заблокирована', tone='danger') }}
+      {% else %}{{ base_ui.badge('В работе', tone='info') }}{% endif %}
+      {% if t.latest_verdict %}{{ base_ui.badge(t.latest_verdict_label, tone=verdict_tones.get(t.latest_verdict, 'neutral')) }}{% endif %}
     </div>
-    {% if t.title and t.title != t.task_key %}
-    <div class="task-card-title">{{ t.title }}</div>
-    {% endif %}
-    <div class="task-card-context">
-      <div class="task-card-context-item"><strong>Профессия:</strong> {{ t.namespace_cli_command or t.namespace_name }}</div>
-      <div class="task-card-context-item"><strong>Флоу:</strong> {{ t.workflow_name or '—' }}</div>
-      <div class="task-card-context-item"><strong>Фаза:</strong> {{ t.current_phase_name or '—' }}</div>
-      <div class="task-card-context-item"><strong>Прогресс:</strong> {{ t.completed }}/{{ t.total_phases }}</div>
-      <div class="task-card-context-item"><strong>Создана:</strong> {{ t.created_at[:10] if t.created_at else '—' }}</div>
-    </div>
-  </div>
-  {% else %}
-  <div class="task-card task-empty">Нет задач</div>
-  {% endfor %}
+    {% if t.title and t.title != t.task_key %}{{ base_ui.card_title(t.title) }}{% endif %}
+    <dl class="task-card-context">
+      {{ base_ui.description_item('Профессия', t.namespace_cli_command or t.namespace_name) }}
+      {{ base_ui.description_item('Флоу', t.workflow_name or '—') }}
+      {{ base_ui.description_item('Фаза', t.current_phase_name or '—') }}
+      {{ base_ui.description_item('Прогресс', t.completed ~ '/' ~ t.total_phases) }}
+      {{ base_ui.description_item('Создана', t.created_at[:10] if t.created_at else '—') }}
+    </dl>
+  {% endcall %}{% endcall %}
+  </article>
+  {% else %}{{ base_ui.state('empty', 'Нет задач') }}{% endfor %}
 </div>
 </div>
 {% endblock %}

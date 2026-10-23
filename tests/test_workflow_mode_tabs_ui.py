@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from project_workflow import config
 from project_workflow.interfaces.ui import _app_state, app
+from tests.test_ui_shell_template import Elements
 
 pytestmark = [pytest.mark.ui]
 
@@ -32,7 +33,11 @@ def test_unified_editor_renders_only_the_selected_workflow_mode(mode_key):
     assert response.status_code == 200
     assert response.text.count('id="workflowNav"') == 1
     assert response.text.index('id="workflowForm"') < response.text.index('id="phasesTimeline"')
-    assert 'id="workflowName" name="workflowName" value="Developer"' in response.text
+    name = next(attrs for tag, attrs in Elements(response.text).elements
+                if tag == "input" and attrs.get("id") == "workflowName")
+    assert name["name"] == "workflowName"
+    assert name["value"] == "Developer"
+    assert {"base-control", "base-input"} <= set(name["class"].split())
     assert f'data-mode-id="{mode_id}"' in response.text
     assert f'{mode_key.title()} phase' in response.text
     other_mode = "rework" if mode_key == "initial" else "initial"
@@ -223,10 +228,9 @@ def test_phase_detail_returns_to_its_mode_and_keeps_mode_local_graph():
     response = client.get(f"/phase/{catalog['rework_phase_id']}")
 
     assert response.status_code == 200
-    assert (
-        f'href="/phases?workflow_id={catalog["workflow_id"]}'
-        f'&mode_id={catalog["rework_mode_id"]}'
-    ) in response.text
+    links = [attrs.get('href') for tag, attrs in Elements(response.text).elements if tag == 'a']
+    assert (f'/phases?workflow_id={catalog["workflow_id"]}'
+            f'&mode_id={catalog["rework_mode_id"]}') in links
     assert "Rework phase" in response.text
     assert "Initial phase" not in response.text
 

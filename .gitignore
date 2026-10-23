@@ -46,6 +46,8 @@ htmlcov/
 Thumbs.db
 
 # Project specific
+# Read-only Base worktrees prepared by the UI dictionary guide.
+/.local/base-ui-reference-*/
 .artifacts/
 .smoke/
 *.log

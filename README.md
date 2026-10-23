@@ -535,6 +535,15 @@ Commercial, production, resale, redistribution, SaaS/hosting use require written
 `PLATFORM_SERVICES_URL`. Принимается JSON до 64 KiB; redirects/HTML/ошибки источника
 не передаются как успешная конфигурация. Подключение SSR renderer выполняется отдельно.
 
+## Разработка UI со справочником Base
+
+[Порядок для разработчика и ИИ](https://github.com/FerrPOINT/services-base/blob/ae2b41291eee5af752daff89f760fba5aff41783/base-modules/ui/reference/guides/agent.md): версия UI → check → поиск/карточка
+→ один пример → интеграция → проверка поведения.
+Для SSR используйте CLI из отдельного Base checkout точного `.base-ui-revision`
+без npm install; React-пример не заменяет macro и штатный SSR export.
+Полный каталог и запуск Storybook/API для offline-поиска не нужны. Общие
+компоненты и брендинг исправляются в Base, данные и правила остаются у продукта.
+
 ## Единое пространство PDLC
 
 [Согласованная M:N-модель и план](docs/plans/unified-spaces-20261019.md): реализация в работе. Source, tests,

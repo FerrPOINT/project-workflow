@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from project_workflow.interfaces.ui.templates import env
+from tests.test_ui_shell_template import Elements
 
 
 def test_task_detail_renders_group_markers_and_chronological_supervisor_dialog() -> None:
@@ -96,11 +97,11 @@ def test_task_detail_renders_group_markers_and_chronological_supervisor_dialog()
 
     assert html.count('class="phase-node serial done"') == 2
     assert html.count('class="phase-node parallel done"') == 1
-    assert html.count('class="phase-sequence"') == 4
-    assert '>1</span><span class="phase-name">Start' in html
-    assert '>2</span><span class="phase-name">Research' in html
-    assert '>3</span><span class="phase-name">Analysis' in html
-    assert '>27</span><span class="phase-name">Auto-Improve' in html
+    assert html.count('class="base-badge phase-sequence"') == 4
+    assert '>1</span><strong class="phase-name">Start' in html
+    assert '>2</span><strong class="phase-name">Research' in html
+    assert '>3</span><strong class="phase-name">Analysis' in html
+    assert '>27</span><strong class="phase-name">Auto-Improve' in html
     assert "phase-parallel-inner-arrow" not in html
     assert html.index("first-report") < html.index("second-report")
     assert "Циклы проверки" in html
@@ -108,6 +109,20 @@ def test_task_detail_renders_group_markers_and_chronological_supervisor_dialog()
     assert "Результат проверки" in html
     assert "Следующий этап" in html
     assert "Supervisor" not in html
+
+    elements = Elements(html).elements
+    disclosures = [attrs for tag, attrs in elements if tag == "details" and
+                   "base-disclosure" in attrs.get("class", "").split()]
+    assert len(disclosures) == 2
+    assert ["open" in attrs for attrs in disclosures] == [False, True]
+    assert all(attrs["data-appearance"] == "row" for attrs in disclosures)
+    summaries = [attrs for tag, attrs in elements if tag == "summary" and
+                 "base-resource-list-row" in attrs.get("class", "").split()]
+    assert len(summaries) == 2
+    links = [attrs["href"] for tag, attrs in elements if tag == "a" and
+             "base-section-navigation-item" in attrs.get("class", "").split()]
+    assert links == ["#task-summary", "#phase-history-title", "#check-history-title"]
+    assert 'class="activity-event-summary"' not in html
     assert "workflow-code-intelligence" in html
     assert "Dataflow проверен" in html
     assert "Лог исследования" in html

@@ -21,6 +21,7 @@ from project_workflow.interfaces.cli.core import cli
 from project_workflow.interfaces.ui import _app_state as ui_app_state
 from project_workflow.interfaces.ui import _load_cli_reference, app
 from tests._db_helpers import phase_by_code
+from tests.test_ui_shell_template import Elements
 
 client = TestClient(app)
 UNKNOWN_NAMESPACE_ID = 999999
@@ -112,6 +113,46 @@ def _normalize_skills(raw: object) -> list[str]:
     if isinstance(raw, str):
         return json.loads(raw)
     raise TypeError(f"Unsupported skills payload: {raw!r}")
+
+
+def _dashboard_metrics(html: str) -> list[dict]:
+    class Metrics(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.items = []
+            self.current = None
+            self.depth = 0
+            self.field = None
+
+        def handle_starttag(self, tag, attrs):
+            attributes = dict(attrs)
+            if tag == "div" and "base-metric" in attributes.get("class", "").split():
+                self.current = {"attrs": attributes, "label": "", "value": ""}
+                self.depth = 1
+            elif self.current is not None:
+                if tag == "div":
+                    self.depth += 1
+                if tag in {"dt", "dd"}:
+                    self.field = "label" if tag == "dt" else "value"
+
+        def handle_endtag(self, tag):
+            if self.current is None:
+                return
+            if tag in {"dt", "dd"}:
+                self.field = None
+            if tag == "div":
+                self.depth -= 1
+                if self.depth == 0:
+                    self.items.append(self.current)
+                    self.current = None
+
+        def handle_data(self, data):
+            if self.current is not None and self.field:
+                self.current[self.field] += data
+
+    parsed = Metrics()
+    parsed.feed(html)
+    return parsed.items
 
 
 def _phase_restore_payload(phase: dict) -> dict:
@@ -279,17 +320,45 @@ class TestIndexPage:
     def test_index_labels_namespace_blocks_as_namespaces_not_cli(self):
         response = client.get("/")
         assert response.status_code == 200
-        assert '<div class="metric-label">Профессии</div>' in response.text
+        labels = [item["label"] for item in _dashboard_metrics(response.text)]
+        assert "Профессии" in labels
         assert 'id="dashboardNamespacesTitle">Профессии · ' in response.text
-        assert '<div class="metric-label">CLI</div>' not in response.text
+        assert "CLI" not in labels
         assert 'id="dashboardNamespacesTitle">CLI' not in response.text
+
+    def test_index_metrics_preserve_values_labels_and_owner_verdict_mapping(self):
+        verdicts = {"blocked": 0, "rollback": 2, "delegate": 3, "pass": 4, "new-kind": 5, "new kind": 6}
+        labels = {key: f"Результат {key}" for key in verdicts}
+        labels["new-kind"] = '<script>Quoted "verdict"</script>'
+        dashboard = {
+            "stats": {"namespaces": 0, "tasks": 234, "active": 7, "done": 0,
+                      "verdicts": verdicts, "verdict_labels": labels},
+            "open_tasks": [], "namespaces": [],
+        }
+        with patch("project_workflow.interfaces.ui.routes.pages._load_dashboard", return_value=dashboard):
+            response = client.get("/")
+        assert response.status_code == 200
+        metrics = _dashboard_metrics(response.text)
+        assert [(item["label"], item["value"]) for item in metrics[:4]] == [
+            ("Профессии", "0"), ("Задачи", "234"), ("Активные", "7"), ("Завершённые", "0"),
+        ]
+        assert [(item["label"], item["value"]) for item in metrics[4:]] == [
+            ("Вердикт: " + labels[key], str(count)) for key, count in verdicts.items()
+        ]
+        assert [item["attrs"]["data-tone"] for item in metrics[4:]] == [
+            "danger", "warning", "info", "default", "default", "default",
+        ]
+        assert all(item["attrs"].get("role") == "group" for item in metrics)
+        assert len({item["attrs"]["id"] for item in metrics}) == len(metrics)
+        assert all(item["attrs"]["id"].split() == [item["attrs"]["id"]] for item in metrics)
+        assert '<script>Quoted "verdict"</script>' not in response.text
 
     def test_dashboard_mobile_hides_duplicate_header_shortcuts(self):
         response = client.get("/")
         assert response.status_code == 200
         assert 'class="btn btn-secondary dashboard-action"' not in response.text
         assert 'data-platform-header-slot="services"' in response.text
-        assert 'class="dashboard-section-link" href="/namespaces">Все профессии</a>' in response.text
+        assert 'class="base-text-link" href="/namespaces">Все профессии</a>' in response.text
 
     def test_dashboard_previews_recent_items_and_links_to_full_lists(self):
         dashboard = {
@@ -328,10 +397,11 @@ class TestIndexPage:
         assert 'dashboard-row base-resource-list-row' in response.text
         assert "Показано 8 из 12" in response.text
         assert "Показано 6 из 8" in response.text
-        assert 'class="dashboard-section-link" href="/tasks' in response.text
-        assert 'class="dashboard-section-link" href="/namespaces"' in response.text
+        assert 'class="base-text-link" href="/tasks' in response.text
+        assert 'class="base-text-link" href="/namespaces"' in response.text
         assert '<section class="card" data-dashboard-' not in response.text
-        assert ".code{font-family:'JetBrains Mono',monospace;color:var(--accent-readable)}" in response.text
+        assert ".code{font-family:var(--base-font-mono);color:var(--accent-readable)}" in response.text
+        assert "font-family:'JetBrains Mono',monospace;color:var(--accent-readable)" not in response.text
 
     def test_dashboard_keeps_empty_sections_navigable(self):
         dashboard = {
@@ -401,18 +471,19 @@ class TestIndexPage:
         page.feed(response.text)
         assert "Validate" not in "".join(page.parts)
         assert "regex" not in response.text
-        assert '<div class="metric-label">Фазы</div>' not in response.text
+        assert "Фазы" not in [item["label"] for item in _dashboard_metrics(response.text)]
         assert "TASK — TASK" not in response.text
         assert "UITEST — UI Test Project" not in response.text
 
     def test_global_toast_is_hidden_by_default_until_action(self):
         response = client.get("/")
         assert response.status_code == 200
-        assert 'id="toast"' in response.text
-        assert 'aria-hidden="true"' in response.text
-        assert "visibility:hidden" in response.text
-        assert "opacity:0" in response.text
-        assert "pointer-events:none" in response.text
+        # Base mounts empty live regions; the template is inert until notify().
+        assert 'id="base-toaster" aria-label="Уведомления" data-base-toaster' in response.text
+        assert '<div role="status" aria-atomic="true" data-base-toast-status></div>' in response.text
+        assert '<div role="alert" aria-atomic="true" data-base-toast-alert></div>' in response.text
+        assert '<template data-base-toast-template>' in response.text
+        assert '_hideTimer' not in response.text
 
 
 class TestPhasesPage:
@@ -461,6 +532,30 @@ class TestPhasesPage:
         assert "url.pathname='/phases';" in response.text
         assert "if(url.pathname === '/instructions'){" in response.text
         assert "url.searchParams.delete('phase_id');" in response.text
+
+    @pytest.mark.parametrize("explicit_profession", [False, True])
+    def test_phases_without_profession_catalog_keep_global_workflow_and_reject_explicit_scope(
+        self, explicit_profession,
+    ):
+        workflow = client.post("/api/workflows", json={"name": "Workflow before profession setup"})
+        assert workflow.status_code == 200
+        workflow_id = workflow.json()["workflow_id"]
+        phase = client.post("/api/phases", json={
+            "workflow_id": workflow_id, "phase_order": 1, "name": "Unassigned workflow phase",
+        })
+        assert phase.status_code == 200
+        query = f"workflow_id={workflow_id}"
+        if explicit_profession:
+            query += f"&profession_id={UNKNOWN_NAMESPACE_ID}"
+        with patch("project_workflow.interfaces.ui.routes.pages._load_namespaces", return_value=[]):
+            response = client.get("/phases?" + query)
+        if explicit_profession:
+            assert response.status_code == 404
+            assert "Unassigned workflow phase" not in response.text
+        else:
+            assert response.status_code == 200
+            assert "Unassigned workflow phase" in response.text
+            assert 'href="/phase/' in response.text
 
     def test_phases_reject_unknown_query_namespace(self):
         response = client.get(f"/phases?namespace_id={UNKNOWN_NAMESPACE_ID}")
@@ -512,21 +607,25 @@ class TestPhasesPage:
     def test_shared_shell_uses_desktop_rail_and_mobile_drawer_contract(self):
         response = client.get("/workflows")
         assert response.status_code == 200
-        assert (
-            "--sidebar-width:var(--shell-sidebar-expanded);"
-            "--header-height:var(--shell-header-height)"
-        ) in response.text
-        assert "@media(max-width:1279px) and (min-width:768px)" in response.text
-        assert ":root{--sidebar-width:var(--shell-sidebar-compact)}" in response.text
-        assert "@media(max-width:767px)" in response.text
-        assert "window.matchMedia('(max-width: 767px)')" in response.text
+        assert 'data-base-desktop-navigation' in response.text
+        assert 'data-base-navigation-slot' in response.text
+        assert 'data-base-drawer-trigger' in response.text
+        assert 'id="base-mobile-navigation"' in response.text
+        assert 'drawer.showModal()' in response.text
+        assert 'syncSidebarLayout' not in response.text
         assert 'class="base-ssr-account"' in response.text
         assert response.text.count('href="/logout"') == 1
         assert 'data-platform-header-slot="services"' in response.text
-        assert "sidebar.setAttribute('role','dialog')" in response.text
-        assert "sidebar.setAttribute('aria-modal','true')" in response.text
-        assert "color:var(--accent-foreground);border-color:var(--accent)" in response.text
-        assert "color:var(--accent-hover-foreground)" in response.text
+        assert re.search(r'<dialog\b[^>]*data-base-drawer', response.text)
+        assert re.search(
+            r'\.base-ssr-shell \.btn-primary\s*\{[^}]*background:\s*var\(--color-accent\);'
+            r'[^}]*color:\s*var\(--color-accent-foreground\);[^}]*border-color:\s*var\(--color-accent\)',
+            response.text, re.S,
+        )
+        assert re.search(
+            r'\.base-ssr-shell \.btn-primary:hover\s*\{[^}]*background:\s*var\(--color-accent-hover\);'
+            r'[^}]*color:\s*var\(--color-accent-hover-foreground\)', response.text, re.S,
+        )
         assert "--accent-foreground:" in response.text
         assert "--shell-page-gutter:clamp(16px,2vw,32px)" in re.sub(r"\s+", "", response.text)
         assert 'data-page-layout="wide"' in response.text
@@ -537,8 +636,9 @@ class TestPhasesPage:
         response = client.get("/namespaces")
 
         assert response.status_code == 200
-        assert 'class="sidebar-utilities"' in response.text
-        assert 'id="mobileNamespaceSelector"' in response.text
+        assert 'data-base-responsive-context' in response.text
+        assert 'data-base-navigation-context-slot' in response.text
+        assert 'id="mobileNamespaceSelector"' not in response.text
         assert response.text.count('id="serviceMenu"') == 1
         assert 'id="themeSelector"' not in response.text
         assert 'id="sidebarThemeSelector"' not in response.text
@@ -547,9 +647,14 @@ class TestPhasesPage:
         controls = re.findall(
             r'<select\b(?=[^>]*data-base-choice)(?=[^>]*data-namespace-selector)[^>]*>', response.text,
         )
-        assert len(controls) == 2
+        assert len(controls) == 1
         assert re.search(r'<select\b[^>]*id="namespaceSelector"[^>]*data-namespace-selector', response.text)
-        assert '.platform-header .service-menu-popover{position:fixed;left:12px;right:12px;' in response.text
+        assert 'class="base-ssr-service-switcher" id="serviceMenu" data-base-menu' in response.text
+        assert re.search(
+            r'@media\s*\(max-width:\s*767px\)\s*\{\s*\.base-ssr-service-panel\s*\{'
+            r'[^}]*position:\s*fixed;[^}]*inset-inline:\s*var\(--shell-page-gutter\)',
+            response.text, re.S,
+        )
 
     def test_sidebar_places_namespaces_first(self):
         response = client.get("/phases")
@@ -587,7 +692,10 @@ class TestPhasesPage:
         assert response.status_code == 200
         assert 'class="workflow-crud "' in response.text
         assert 'id="workflowNav"' in response.text
-        assert 'class="workflow-nav-item active"' in response.text
+        selected = next(attrs for tag, attrs in Elements(response.text).elements
+                        if tag == "button" and attrs.get("data-workflow-id") == str(workflow_id))
+        assert {"base-card", "base-card-content", "workflow-nav-item", "active"} <= set(selected["class"].split())
+        assert selected["aria-pressed"] == "true"
         assert 'id="workflowForm"' in response.text
 
     def test_phases_page_hides_other_workflows_when_namespace_is_selected(self):
@@ -788,21 +896,24 @@ class TestPhasesPage:
     def test_phases_page_keeps_insertion_visible_and_groups_other_actions(self):
         response = client.get("/phases")
         assert response.status_code == 200
-        assert 'class="phase-add-btn"' in response.text
+        assert 'base-icon-control phase-add-btn"' in response.text
         assert 'onclick="addPhaseAfter(this)"' in response.text
-        assert '<details class="phase-card-actions">' in response.text
-        assert 'class="phase-actions-menu"' in response.text
-        assert 'summary aria-label="Действия фазы ' in response.text
-        assert 'class="move-up-btn"' in response.text
+        assert '<details class="base-action-menu phase-card-actions" data-base-menu' in response.text
+        assert 'data-base-menu-group="phase-actions"' in response.text
+        assert 'aria-label="Действия фазы ' in response.text
+        assert 'class="base-control base-menu-item move-up-btn"' in response.text
         assert "Параллельно" in response.text
         assert "Последовательно" in response.text
-        assert "width:40px;height:40px" in response.text
-        assert "min-height:40px" in response.text
-        assert "event.key!=='Escape'" in response.text
+        assert 'data-size="icon"' in response.text
+        insertions = [attrs for tag, attrs in Elements(response.text).elements
+                      if tag == "button" and attrs.get("onclick") == "addPhaseAfter(this)"]
+        assert insertions
+        assert all({"base-control", "base-button", "base-icon-control"} <= set(item["class"].split())
+                   and item["data-size"] == "icon" and item["aria-label"] for item in insertions)
         assert "const phaseName=item.querySelector('.timeline-name')?.textContent.trim()||'эту фазу'" in response.text
         assert "title:'Удалить фазу «'+phaseName+'»?'" in response.text
-        assert "if(confirmationDialog.contains(event.target))return" in response.text
-        assert "if(event.key!=='Escape'||!confirmationDialog.hidden)return" in response.text
+        assert "if(!await window.PdlcBaseUI.requestConfirmation({eyebrow:'Удаление фазы'" in response.text
+        assert "const confirmationDialog=" not in response.text
 
     def test_long_phase_list_has_named_jump_to_phase_control(self):
         response = client.get("/phases")
@@ -815,16 +926,19 @@ class TestPhasesPage:
         assert f'id="phase-{phase["id"]}"' in response.text
         assert "function jumpToPhase(select)" in response.text
         assert "focus({preventScroll:true})" in response.text
-        assert ".namespace-icon-action{width:40px;height:40px;flex:0 0 40px" in response.text
+        assert 'data-base-choice id="phaseJump"' in response.text
 
     def test_long_phase_list_defaults_to_compact_with_switchable_timeline(self):
         response = client.get("/phases")
 
         assert response.status_code == 200
         assert 'class="timeline is-compact" id="phasesTimeline"' in response.text
-        assert 'data-phase-view="compact" aria-pressed="true"' in response.text
-        assert 'data-phase-view="timeline" aria-pressed="false"' in response.text
-        assert 'role="group" aria-label="Отображение фаз"' in response.text
+        radios = [attrs for tag, attrs in Elements(response.text).elements
+                  if tag == "input" and attrs.get("name") == "phase-view"]
+        assert [radio["value"] for radio in radios] == ["compact", "timeline"]
+        assert [radio["value"] for radio in radios if "checked" in radio] == ["compact"]
+        assert all(radio["type"] == "radio" and radio["class"] == "base-check-input" for radio in radios)
+        assert 'role="radiogroup" aria-label="Отображение фаз"' in response.text
         assert "function setPhaseView(view,persist=true)" in response.text
         assert "localStorage.getItem('phase-view-mode')" in response.text
 
@@ -841,7 +955,7 @@ class TestPhasesPage:
         response = client.get("/phases")
         assert response.status_code == 200
         groups = re.findall(
-            r'<section class="timeline-block timeline-parallel-group"[^>]*>(.*?)</section>',
+            r'<section class="timeline-block timeline-parallel-group base-card base-card-content"[^>]*>(.*?)</section>',
             response.text,
             re.DOTALL,
         )
@@ -864,7 +978,8 @@ class TestPhasesPage:
         response = client.get("/phases")
 
         assert response.status_code == 200
-        assert ".timeline-card{min-height:112px;padding:16px 18px" in response.text
+        assert ".phase-card-shell{position:relative;display:grid;min-height:112px}" in response.text
+        assert "base-card-content" in response.text
         assert ".timeline-card .timeline-name{padding-right:48px}" in response.text
         assert ".timeline-card{min-height:112px;padding:16px 148px" not in response.text
         assert ".timeline-card{padding-top:52px}" not in response.text
@@ -873,7 +988,7 @@ class TestPhasesPage:
         response = client.get("/phases")
 
         assert response.status_code == 200
-        assert 'class="badge badge-parallel"' in response.text
+        assert 'class="base-badge" data-tone="info" data-appearance="badge">параллельно</span>' in response.text
         assert 'class="badge badge-agent"' not in response.text
 
     def test_phases_page_add_phase_button_uses_timeline_workflow_id(self):
@@ -1092,7 +1207,7 @@ class TestPhasesPage:
         phase_html = response.text.split(_phase_href("10.REVIEW"), 1)[1].split("</a>", 1)[0]
 
         assert "Проверка кода" in phase_html
-        assert "badge-parallel" in phase_html
+        assert 'class="base-badge" data-tone="info"' in phase_html
         assert ">параллельно<" in phase_html
 
     def test_phases_api_exposes_real_execution_type_without_fake_instruction_parallel_flag(self):
@@ -1191,7 +1306,7 @@ class TestPhaseDetail:
         assert 'aria-label="Название фазы"' in response.text
         assert 'aria-label="Описание фазы"' in response.text
         assert 'id="agentSelect"' not in response.text
-        assert '<button type="button" class="execution-toggle"' in response.text
+        assert '<button type="button" class="base-control base-button execution-toggle"' in response.text
         assert 'aria-pressed="false"' in response.text
         assert 'aria-label="Описание инструкции ' in response.text
         assert 'aria-label="Добавить навык к инструкции ' in response.text
@@ -1202,25 +1317,33 @@ class TestPhaseDetail:
         response = client.get(_phase_detail_path("1.INTAKE"))
 
         assert response.status_code == 200
-        assert '<textarea class="inline-input wiki-subtitle"' in response.text
-        assert '<textarea class="timeline-name-input"' in response.text
-        assert '<textarea class="inline-input check-text"' in response.text
-        assert '<textarea class="inline-input file-name"' in response.text
-        assert '<span class="phase-detail-desktop-title">Детали фазы</span>' in response.text
-        assert '<span class="phase-detail-mobile-title">Фаза</span>' in response.text
-        assert "function resizeInlineTextarea(field)" in response.text
-        assert "document.querySelectorAll('.wiki-page textarea').forEach(resizeInlineTextarea);" in response.text
-        assert "if (event.target.matches('.wiki-page textarea')) resizeInlineTextarea(event.target);" in response.text
-        assert "document.fonts.ready.then(resizeAllInlineTextareas);" in response.text
-        assert "window.addEventListener('resize', resizeAllInlineTextareas);" in response.text
-        assert "color:var(--accent-readable)" in response.text
-        assert "flex:0 0 40px" in response.text
+        assert (
+            '<textarea data-base-autosize class="inline-input wiki-subtitle base-control base-textarea"'
+            in response.text
+        )
+        assert '<textarea data-base-autosize class="timeline-name-input base-control base-textarea"' in response.text
+        row_fields = [attrs for tag, attrs in Elements(response.text).elements if tag == "textarea"
+                      and "phase-text-content" in attrs.get("class", "").split()]
+        assert any(field["aria-label"].startswith("Описание проверки ") for field in row_fields)
+        assert any(field["aria-label"].startswith("Описание подтверждения ") for field in row_fields)
+        assert all({"base-control", "base-textarea"} <= set(field["class"].split())
+                   and "data-base-autosize" in field and field["rows"] == "1" for field in row_fields)
+        assert '<h1 class="base-page-title">Детали фазы</h1>' in response.text
+        assert "phase-detail-desktop-title" not in response.text
+        assert "phase-detail-mobile-title" not in response.text
+        assert "function resizeInlineTextarea" not in response.text
+        assert "resizeAllInlineTextareas" not in response.text
+        assert "export function initTextareaAutosize(field)" in response.text
+        assert "window.PdlcTextarea.refreshTextareaAutosize(input);" in response.text
+        assert 'data-variant="outline" aria-label="Параллельное выполнение фазы"' in response.text
+        assert 'data-size="icon" data-skill=' in response.text
 
     def test_phase_detail_keeps_sequential_cards_when_phase_instructions_are_sync(self):
         response = client.get(_phase_detail_path("4.START"))
         assert response.status_code == 200
-        assert 'class="timeline-block timeline-parallel-group"' not in response.text
-        assert 'class="timeline-parallel-label"' not in response.text
+        assert 'class="timeline-block timeline-parallel-group base-card base-card-content"' not in response.text
+        assert not any("timeline-parallel-label" in attrs.get("class", "").split()
+                       for _, attrs in Elements(response.text).elements)
 
     def test_phase_detail_renders_parallel_group_for_parallel_instructions(self):
         response = client.get(_phase_detail_path("4.START"))
@@ -1247,10 +1370,10 @@ class TestPhaseDetail:
         response = client.get(f"/phase/{phase['id']}?namespace_id={namespace_id}")
 
         assert response.status_code == 200
-        assert (
-            f'href="/phases?workflow_id={workflow_id}'
-            f'&mode_id={phase["mode_id"]}&profession_id={namespace_id}"'
-        ) in response.text
+        expected = f'/phases?workflow_id={workflow_id}&mode_id={phase["mode_id"]}&profession_id={namespace_id}'
+        back = next(attrs for tag, attrs in Elements(response.text).elements
+                    if tag == "a" and attrs.get("href") == expected)
+        assert "base-button" in back["class"].split()
 
     def test_phase_detail_rejects_unknown_query_namespace(self):
         phase = _phase_row("5.PREFLIGHT")
@@ -1335,10 +1458,10 @@ class TestPhaseDetail:
         assert response.status_code == 200
         assert 'class="phase-editor-layout"' in response.text
         assert 'aria-labelledby="phase-outline-title"' in response.text
-        assert 'data-phase-section-link="phase-overview" aria-current="location"' in response.text
-        assert 'data-phase-section-link="phase-instructions"' in response.text
-        assert 'data-phase-section-link="phase-checks"' in response.text
-        assert 'data-phase-section-link="phase-evidence"' in response.text
+        assert 'href="#phase-overview" aria-current="location"' in response.text
+        assert 'href="#phase-instructions"' in response.text
+        assert 'href="#phase-checks"' in response.text
+        assert 'href="#phase-evidence"' in response.text
         assert 'id="phaseSectionSelect"' in response.text
         assert 'id="phase-overview" data-phase-section tabindex="-1"' in response.text
         assert 'id="phase-instructions" data-phase-section tabindex="-1"' in response.text
@@ -1413,15 +1536,12 @@ class TestPhaseDetail:
 
             response = client.get(_phase_detail_path("1.INTAKE"))
             assert response.status_code == 200
+            assert f'data-instruction-skill="{skills[0]}"' in response.text
+            assert f'data-instruction-skill="{skills[1]}"' in response.text
             assert (
-                f'<span class="badge" style="background:var(--accent-soft);color:var(--accent-readable)">'
-                f"\n            {skills[0]}" in response.text
+                'class="skill-candidate base-control base-input" type="text" placeholder="Добавить навык"'
+                in response.text
             )
-            assert (
-                f'<span class="badge" style="background:var(--accent-soft);color:var(--accent-readable)">'
-                f"\n            {skills[1]}" in response.text
-            )
-            assert 'class="skill-candidate" type="text" placeholder="Добавить навык"' in response.text
         finally:
             client.put(_phase_api_path("1.INTAKE"), json=restore_payload)
 
@@ -1479,12 +1599,21 @@ class TestPhaseDetail:
         )[0]
         assert "savePhase();" not in add_check
         assert "savePhase();" not in add_evidence
-        assert 'onblur="saveNewTextItem(this)"' in add_check
-        assert 'onblur="saveNewTextItem(this)"' in add_evidence
-        assert "syncTextItemList(list);" in add_check
-        assert "syncTextItemList(list);" in add_evidence
-        assert "li.querySelector('textarea')?.focus();" in add_check
-        assert "li.querySelector('textarea')?.focus();" in add_evidence
+        assert "appendTextItem('checks-list')" in add_check
+        assert "appendTextItem('evidence-list')" in add_evidence
+        append = response.text.split("function appendTextItem(", 1)[1].split("function addCheck()", 1)[0]
+        assert "savePhase(" not in append
+        assert "syncTextItemList(list);" in append
+        assert "li.querySelector('textarea')?.focus();" in append
+        for kind in ["checks", "evidence"]:
+            fragment = re.search(
+                r'<template id="' + kind + r'-list-item-template">([\s\S]*?)</template>', response.text,
+            )
+            assert fragment is not None
+            field = next(attrs for tag, attrs in Elements(fragment.group(1)).elements if tag == "textarea")
+            assert field["onblur"] == "saveNewTextItem(this)"
+            assert "data-base-autosize" in field
+            assert "base-textarea" in field["class"].split()
 
     def test_phases_page_hides_code_and_number_visual_noise(self):
         response = client.get("/phases")
@@ -1780,11 +1909,13 @@ class TestTimelineHTML:
         assert response.status_code == 200
         assert 'href="/phase/' in response.text
 
-    def test_phase_controls_keep_interface_accent_with_readable_text(self):
+    def test_phase_controls_use_shared_semantic_colors_and_icon_geometry(self):
         response = client.get("/phases")
         assert response.status_code == 200
-        assert ".badge-agent{background:var(--accent-soft);color:var(--accent-readable)}" in response.text
-        assert "background:var(--accent-soft);color:var(--accent-readable);cursor:pointer" in response.text
+        assert '.base-badge[data-tone="info"]' in response.text
+        assert "--base-badge-color: var(--color-highlight)" in response.text
+        assert ".badge-agent{" not in response.text
+        assert 'data-variant="outline" data-size="icon"' in response.text
         assert "--accent:" in response.text
         assert "rgba(88,166,255,.12)" not in response.text
 
@@ -1797,19 +1928,23 @@ class TestTasksPage:
         assert response.status_code == 200
         assert "Задачи" in response.text
 
-    def test_tasks_mobile_header_uses_compact_title(self):
+    def test_tasks_header_uses_one_shared_responsive_title(self):
         response = client.get("/tasks")
 
         assert response.status_code == 200
-        assert '<span class="tasks-desktop-title">Задачи воркфлоу</span>' in response.text
-        assert '<span class="tasks-mobile-title">Задачи</span>' in response.text
-        assert "@media(max-width:760px){.tasks-desktop-title{display:none}" in response.text
+        assert '<h1 class="base-page-title">Задачи воркфлоу</h1>' in response.text
+        assert "tasks-desktop-title" not in response.text
+        assert "tasks-mobile-title" not in response.text
 
     def test_tasks_has_task_rows(self):
         response = client.get("/tasks")
         assert response.status_code == 200
-        # With empty DB after seed, page shows "Нет задач"
-        assert "Нет задач" in response.text or 'class="row"' in response.text or "TASK" in response.text
+        elements = Elements(response.text).elements
+        rows = [attrs["data-task-key"] for tag, attrs in elements if tag == "tr" and "data-task-key" in attrs]
+        cards = [attrs["data-task-key"] for tag, attrs in elements if tag == "article" and "data-task-key" in attrs]
+        assert cards == rows
+        if not rows:
+            assert sum(attrs.get("data-page-state") == "empty" for _, attrs in elements) == 2
 
     def test_tasks_api_returns_json(self):
         response = client.get("/api/tasks")
@@ -1890,10 +2025,8 @@ class TestTasksPage:
 
         assert response.status_code == 200
         assert ".tasks-layout{container:tasks / inline-size;min-width:0}" in response.text
-        assert (
-            ".tasks-table{width:100%;min-width:0;table-layout:fixed;"
-            "border-collapse:separate;border-spacing:0}"
-        ) in response.text
+        assert ".tasks-table{min-width:0;table-layout:fixed}" in response.text
+        assert 'class="base-table tasks-table"' in response.text
         assert ".tasks-table th:nth-child(9),.tasks-table td:nth-child(9){width:8%}" in response.text
         assert "white-space:normal;overflow-wrap:anywhere" in response.text
         assert (
@@ -1901,24 +2034,19 @@ class TestTasksPage:
             in response.text
         )
         assert "flex:1 1 48px;min-width:36px" in response.text
-        assert (
-            ".task-card-meta{display:grid!important;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));"
-            "align-items:start}"
-            in response.text
-        )
+        assert 'class="base-description-item" data-layout="stacked"' in response.text
         assert 'class="task-card-context"' in (TEMPLATES_DIR / "tasks.html").read_text(encoding="utf-8")
-        assert 'class="task-card-context-item"' in (TEMPLATES_DIR / "tasks.html").read_text(encoding="utf-8")
+        assert "base_ui.description_item(" in (TEMPLATES_DIR / "tasks.html").read_text(encoding="utf-8")
         assert "<details class=\"task-card-more\">" not in (TEMPLATES_DIR / "tasks.html").read_text(encoding="utf-8")
         assert "@container tasks (min-width:980px) and (max-width:1180px)" in response.text
         assert "@container tasks (max-width:980px)" in response.text
         assert 'class="task-key-date" title="Создана:' in response.text
         assert 'class="task-title-context"' in response.text
         assert (
-            ".tasks-table .task-key{font-family:'JetBrains Mono',monospace;"
-            "font-size:12px;color:var(--accent-readable)}"
+            ".task-key{font-family:var(--base-font-mono);font-size:var(--base-font-label)}"
         ) in response.text
-        assert ".status-blocked{background:var(--red-soft);color:var(--text)}" in response.text
-        assert ".verdict-delegate{background:var(--accent-soft);color:var(--text)}" in response.text
+        assert ".status-blocked{" not in response.text
+        assert ".verdict-delegate{" not in response.text
         assert (
             ".verdict-phase{display:block;max-width:100%;overflow:hidden;"
             "text-overflow:ellipsis;white-space:nowrap"
@@ -1945,6 +2073,10 @@ class TestTaskDetail:
         response = client.get(f"/task/RUN-247?namespace_id={self._default_namespace_id()}")
         assert response.status_code == 200
         assert "История фаз" in response.text
+        for heading_id in ["phase-history-title", "check-history-title"]:
+            assert f'class="base-section-title" data-level="2" id="{heading_id}"' in response.text
+            assert f'aria-labelledby="{heading_id}"' in response.text
+            assert f'href="#{heading_id}"' in response.text
 
     def test_task_detail_phase_numbers_have_accessible_text_without_prohibited_labels(self):
         class PhaseNumbers(HTMLParser):
@@ -2033,73 +2165,62 @@ class TestTaskDetail:
         assert f'href="/tasks?profession_id={namespace_id}"' in response.text
         assert "История фаз" not in response.text
 
-    def test_task_detail_current_state_uses_namespace_accent_styles(self):
-        response = client.get(f"/task/RUN-247?namespace_id={self._default_namespace_id()}")
+    @pytest.mark.parametrize("verdict,tone", [
+        ("pass", "success"), ("partial", "warning"), ("blocked", "danger"),
+        ("rollback", "warning"), ("delegate", "info"), ("future_verdict", "neutral"),
+    ])
+    def test_task_detail_reads_owner_verdicts_into_shared_tones(self, verdict, tone):
+        task = {"task_key": "RUN-247", "status": "active",
+                "latest_verdict": verdict, "latest_verdict_label": "Owner <verdict>"}
+        with patch("project_workflow.interfaces.ui.routes.pages._get_task_detail", return_value=task):
+            response = client.get(f"/task/RUN-247?namespace_id={self._default_namespace_id()}")
         assert response.status_code == 200
-        assert (
-            ".chip.active,.verdict-delegate{color:var(--accent-readable);background:var(--accent-soft)}"
-            in response.text
-        )
+        assert f'data-tone="{tone}" data-appearance="badge">Owner &lt;verdict&gt;</span>' in response.text
+        assert ".verdict-chip{" not in response.text
+        assert ".chip.blocked{" not in response.text
+
+    @pytest.mark.parametrize("status,label,tone", [
+        ("done", "Завершена", "success"),
+        ("blocked", "Заблокирована", "danger"),
+        ("active", "В работе", "info"),
+    ])
+    def test_task_detail_status_uses_shared_badge_without_rewriting_owner_data(self, status, label, tone):
+        task = {"task_key": "RUN-247", "status": status}
+        with patch("project_workflow.interfaces.ui.routes.pages._get_task_detail", return_value=task):
+            response = client.get(f"/task/RUN-247?namespace_id={self._default_namespace_id()}")
+        assert response.status_code == 200
+        assert f'data-tone="{tone}" data-appearance="badge">{label}</span>' in response.text
+        assert task["status"] == status
         assert ".phase-node.done{background:var(--green)}.phase-node.current{background:var(--accent)" in response.text
-        assert ".phase-card.current{border-color:var(--accent);border-top:3px solid var(--accent)}" in response.text
-        assert ".phase-card.current .phase-status{color:var(--accent-readable)}" in response.text
-        assert "rgba(59,130,246" not in response.text
-
-    def test_task_detail_blocked_verdict_uses_readable_text_and_semantic_border(self):
-        response = client.get(f"/task/RUN-247?namespace_id={self._default_namespace_id()}")
-
-        assert response.status_code == 200
-        assert ".verdict-blocked{color:var(--text);background:var(--red-soft)}" in response.text
-        assert ".verdict-chip.verdict-blocked{border-color:var(--red)}" in response.text
-        assert ".chip.blocked,.verdict-blocked{color:var(--red)" not in response.text
-
-    def test_task_detail_partial_verdict_uses_readable_text_and_semantic_border(self):
-        response = client.get(f"/task/RUN-247?namespace_id={self._default_namespace_id()}")
-
-        assert response.status_code == 200
-        assert ".verdict-partial{color:var(--text);background:var(--yellow-soft)}" in response.text
-        assert ".verdict-chip.verdict-partial{border-color:var(--yellow)}" in response.text
-        assert ".verdict-partial{color:var(--yellow)" not in response.text
-
-    def test_task_detail_blocked_status_uses_readable_text_and_semantic_border(self):
-        response = client.get(f"/task/RUN-247?namespace_id={self._default_namespace_id()}")
-
-        assert response.status_code == 200
-        assert ".chip.blocked{color:var(--text);background:var(--red-soft);border-color:var(--red)}" in response.text
-        assert ".chip.blocked{color:var(--red)" not in response.text
-
-    def test_task_detail_blockers_use_readable_text_and_keep_red_marker(self):
-        response = client.get(f"/task/RUN-247?namespace_id={self._default_namespace_id()}")
-
-        assert response.status_code == 200
-        assert ".result-list.blockers li{color:var(--text-secondary)}" in response.text
-        assert ".check-card.blocked{border-top-color:var(--red)}" in response.text
-        assert ".result-list.blockers li{color:var(--red)}" not in response.text
 
     def test_task_detail_mobile_navigation_keeps_links_accessible(self):
         namespace_id = self._default_namespace_id()
         response = client.get(f"/task/RUN-247?namespace_id={namespace_id}")
 
         assert response.status_code == 200
-        assert response.text.count(f'href="/tasks?profession_id={namespace_id}"') == 2
-        assert '<h1>RUN-247</h1>' in response.text
-        assert 'class="task-detail-mobile-actions"' in response.text
-        assert "@media(max-width:350px){.detail-jump-nav{top:105px}" in response.text
+        assert response.text.count(f'href="/tasks?profession_id={namespace_id}"') == 1
+        assert '<h1 class="base-page-title">RUN-247</h1>' in response.text
+        assert "task-detail-desktop-title" not in response.text
+        assert "task-detail-mobile-title" not in response.text
+        assert 'class="task-detail-mobile-actions"' not in response.text
+        assert ".detail-jump-nav{position:sticky;top:var(--shell-header-height)" in response.text
         assert (
             "#task-summary,#phase-history-title,#check-history-title,.detail-section{scroll-margin-top:171px}"
             in response.text
         )
-        assert ".detail-jump-nav a{display:inline-flex;align-items:center;min-height:40px" in response.text
+        jump_links = [attrs for tag, attrs in Elements(response.text).elements
+                      if tag == "a" and "base-section-navigation-item" in attrs.get("class", "").split()]
+        assert [attrs["href"] for attrs in jump_links] == [
+            "#task-summary", "#phase-history-title", "#check-history-title",
+        ]
 
     def test_task_detail_check_history_uses_native_disclosure_summary(self):
         template = (TEMPLATES_DIR / "task_detail.html").read_text(encoding="utf-8")
 
-        assert re.search(
-            r'<details class="activity-details"[^>]*>\s*<summary class="activity-event-summary">', template
-        )
+        assert "base_ui.disclosure(activity_summary, open=loop.last, appearance='row'" in template
         assert 'class="activity-event" data-check-run=' in template
         assert '<span class="activity-header">' in template
-        assert ".activity-event-summary{display:flex;align-items:flex-start;gap:8px;min-height:40px" in template
+        assert ".activity-event-summary{" not in template
 
     def test_task_detail_shows_current_phase_and_progress(self):
         uow = ui_app_state.get_db()
@@ -2112,11 +2233,11 @@ class TestTaskDetail:
         response = client.get(f"/task/RUN-247?namespace_id={self._default_namespace_id()}")
         assert response.status_code == 200
         assert "Приём задачи" in response.text
-        progress_match = re.search(r'<div class="summary-value">(\d+)\s*/\s*(\d+)', response.text)
-        assert progress_match is not None
-        current, total = map(int, progress_match.groups())
-        assert current == 0
-        assert total == 19
+        progress = next(attrs for _, attrs in Elements(response.text).elements
+                        if attrs.get("role") == "progressbar" and attrs.get("aria-label") == "Фазы воркфлоу")
+        assert progress["aria-valuenow"] == "0"
+        assert progress["aria-valuemax"] == "19"
+        assert progress["aria-valuetext"] == "0 / 19"
 
     def test_task_detail_renders_phase_history_from_db(self):
         uow = ui_app_state.get_db()
@@ -2253,9 +2374,16 @@ class TestProjectsPage:
     def test_namespace_editor_exposes_validation_and_safe_action_states(self):
         response = client.get("/namespaces")
         assert response.status_code == 200
-        assert re.search(r'id="namespaceName" name="namespaceName" value="[^"]*" required', response.text)
-        assert 'required minlength="2" maxlength="64" pattern="[a-z][a-z0-9_\\-]{1,63}"' in response.text
-        assert 'aria-describedby="namespaceCliHelp"' in response.text
+        fields = {attrs.get("id"): attrs for tag, attrs in Elements(response.text).elements if tag == "input"}
+        name = fields["namespaceName"]
+        assert name["name"] == "namespaceName" and name["value"]
+        assert "required" in name
+        assert "base-input" in name["class"].split()
+        command = fields["namespaceCliCommand"]
+        assert "required" in command
+        assert command["minlength"] == "2" and command["maxlength"] == "64"
+        assert command["pattern"] == r"[a-z][a-z0-9_\-]{1,63}"
+        assert command["aria-describedby"] == "namespaceCliHelp"
         assert 'id="namespaceWorkflowId"' not in response.text
         assert 'id="namespaceDeleteHint" hidden' in response.text
         assert "var protectedByTasks = !createMode && Boolean(namespace && Number(namespace.task_count) > 0);" in (
@@ -2275,10 +2403,10 @@ class TestProjectsPage:
     def test_namespace_create_page_uses_plus_without_duplicate_add_label(self):
         response = client.get("/namespaces/new")
         assert response.status_code == 200
-        assert '<h1 class="header-title">Профессии</h1>' in response.text
+        assert '<h1 class="base-page-title">Профессии</h1>' in response.text
         assert 'href="/namespaces/new' not in response.text
         assert 'id="namespaceCreateLink"' not in response.text
-        assert '<div class="card-title" id="namespaceFormMode">Создание</div>' in response.text
+        assert '<div class="base-card-title" id="namespaceFormMode">Создание</div>' in response.text
         assert 'id="deleteNamespaceButton" onclick="deleteNamespace()" style="display:none"' in response.text
         assert "Добавить" not in response.text
 
@@ -2549,7 +2677,11 @@ class TestWorkflowsPage:
         assert 'id="newWorkflowButton"' in response.text
         assert 'id="workflowFormMode"' in response.text
         assert 'id="workflowSelect"' in response.text
-        assert 'class="workflow-description"' in response.text
+        description = next(attrs for tag, attrs in Elements(response.text).elements
+                           if tag == "textarea" and attrs.get("id") == "workflowDescription")
+        assert {"base-control", "base-textarea", "workflow-description"} <= set(description["class"].split())
+        assert description["name"] == "workflowDescription"
+        assert description["rows"] == "2"
         assert 'id="workflowName"' in response.text and "required" in response.text
         assert 'id="workflowDeleteHint" hidden' in response.text
         assert 'aria-controls="workflowForm" aria-pressed="true"' in response.text
@@ -2776,10 +2908,15 @@ def test_workflows_list_scrolls_with_page_and_labels_fields():
     assert ".workflow-nav{display:flex;flex-direction:column;gap:10px;align-self:start}" in response.text
     assert "max-height:calc(100vh - 100px);overflow-y:auto" not in response.text
     assert 'class="workflow-nav side-nav-scroll" id="workflowNav"' in response.text
-    assert "html{scrollbar-width:thin;scrollbar-color:var(--surface-active) transparent}" in response.text
-    assert '<h1 class="header-title">Воркфлоу</h1>' in response.text
-    assert '<label class="label" for="workflowName">Название</label>' in response.text
-    assert '<label class="label" for="workflowDescription">Описание</label>' in response.text
+    assert "color-scheme: dark" in response.text
+    assert "color-scheme: light" in response.text
+    assert "html{scrollbar-width:" not in response.text
+    assert '<h1 class="base-page-title">Воркфлоу</h1>' in response.text
+    assert (
+        '<label class="base-label" for="workflowName">Название<span aria-hidden="true"> *</span></label>'
+        in response.text
+    )
+    assert '<label class="base-label" for="workflowDescription">Описание</label>' in response.text
 
 
 def test_ui_deletions_use_product_modal_not_browser_confirm():
@@ -2803,9 +2940,15 @@ def test_ui_deletions_use_product_modal_not_browser_confirm():
     assert "background.forEach(function(element){ element.inert = true; })" in shared_dialog
     assert "background.forEach(function(element,index){ element.inert = previousInert[index]; })" in shared_dialog
     assert "if(event.key === 'Tab')" in shared_dialog
-    assert "var dialogOpen=!document.getElementById('confirmDialog').hidden" in base
-    assert "sidebar.inert=dialogOpen||(mobile&&!sidebar.classList.contains('open'))" in base
-    assert ".btn-danger{background:#b42332;color:#fff" in base
+    assert 'data-base-dialog-background' in shared_macros
+    assert "document.querySelectorAll('[data-base-dialog-background]')" in shared_dialog
+    assert "document.querySelector('[data-base-drawer][open]')" in shared_dialog
+    assert "window.PdlcBaseUI?.closeNavigation?.()" in shared_dialog
+    assert "sidebar.inert=" not in base
+    shared_styles = (TEMPLATES_DIR / "base/base-ui.css").read_text(encoding="utf-8")
+    assert '.base-button[data-variant="destructive"]' in shared_styles
+    assert "background: var(--color-danger)" in shared_styles
+    assert ".btn-danger{background:" not in base
     assert "window.PdlcBaseUI.requestConfirmation(unsavedChangesConfirmation)" in base
     assert all("confirm(" not in template for template in templates.values())
 
@@ -2818,7 +2961,8 @@ class TestSettingsPage:
         assert response.status_code == 200
         assert response.headers["content-type"] == "text/html; charset=utf-8"
         assert "Команды CLI" in response.text
-        assert '<span class="cli-mobile-title">CLI</span>' in response.text
+        assert response.text.count('<h1 class="base-page-title">Команды CLI</h1>') == 1
+        assert 'cli-mobile-title' not in response.text
         assert 'class="sidebar-cli-icon" aria-hidden="true">&gt;_</span>' in response.text
         assert re.search(r"workflow-[a-z0-9_-]+ step", response.text)
         assert re.search(r"workflow-[a-z0-9_-]+ history", response.text)
@@ -2833,21 +2977,26 @@ class TestSettingsPage:
         assert ">--skip<" not in response.text
         assert "по умолчанию: все" in response.text
         assert "default:" not in response.text
-        assert "<h2>step</h2>" in response.text
+        assert re.search(r'<h2\b[^>]*class="base-section-title"[^>]*>step</h2>', response.text)
         assert 'id="cliUsage1"' in response.text
         assert 'aria-label="Копировать команду step"' in response.text
-        assert "function fallbackCopyCliUsage(text)" in response.text
-        assert "async function copyCliUsage(button, usageId)" in response.text
-        assert "clearTimeout(button._copyTimer);" in response.text
-        assert "await navigator.clipboard.writeText(text);" in response.text
-        assert "showToast('Команда скопирована','success');" in response.text
+        assert 'data-base-copy-target="cliUsage1"' in response.text
+        assert "function fallbackCopyCliUsage(text)" not in response.text
+        assert "async function copyCliUsage(button, usageId)" not in response.text
+        assert "document.execCommand(" not in response.text
+        assert 'data-base-copy-error role="alert"' in response.text
+        assert "window.PdlcClipboard = {initCopyButton, refreshCopyButton, destroyCopyButton}" in response.text
+
 
     def test_settings_page_has_explicit_empty_cli_state(self):
         with patch("project_workflow.interfaces.ui.routes.pages._load_cli_reference", return_value=[]):
             response = client.get("/settings")
 
         assert response.status_code == 200
-        assert 'class="card cli-empty" role="status"' in response.text
+        notices = [attrs for _, attrs in Elements(response.text).elements
+                   if 'base-notice' in attrs.get('class', '').split()]
+        assert any(attrs.get('role') == 'status' and attrs.get('data-appearance') == 'inline'
+                   for attrs in notices)
         assert "Доступные CLI-команды не найдены." in response.text
 
     def test_settings_page_rejects_unknown_query_namespace(self):
@@ -2995,21 +3144,24 @@ class TestUiNetworkFailures:
         response = client.get(f"/instructions?phase_id={phase_id}")
 
         assert response.status_code == 200
-        assert len(re.findall(rf'href="/phase/{phase_id}(?:\?profession_id=\d+)?"', response.text)) == 2
-        assert 'class="instructions-mobile-actions"' in response.text
-        assert 'class="instructions-context"' in response.text
-        assert '<span class="instructions-mobile-title">Шаги</span>' in response.text
+        assert len(re.findall(rf'href="/phase/{phase_id}(?:\?profession_id=\d+)?"', response.text)) == 1
+        assert 'class="base-page-header"' in response.text
+        assert 'class="base-page-title">Инструкции фазы ' in response.text
+        assert 'data-appearance="counter"' in response.text
+        assert "instructions-mobile" not in response.text
+        assert "instructions-context" not in response.text
         assert "Добавляй, удаляй и меняй порядок инструкций" not in response.text
-        assert 'class="instruction-text" rows="1"' in response.text
+        assert 'class="instruction-text base-control base-textarea" rows="1"' in response.text
         assert 'aria-label="Описание инструкции 1"' in response.text
-        assert 'class="type-badge sync"' in response.text
+        assert 'class="base-control base-button type-badge" data-variant="outline"' in response.text
         assert 'aria-pressed="false" onclick="toggleType(this)"' in response.text
         assert 'aria-label="Новая инструкция"' in response.text
-        assert ".order-btn{width:40px;height:40px" in response.text
-        assert ".row-actions .icon-btn{width:40px;height:40px}" in response.text
-        assert "function resizeInstructionTextarea(field)" in response.text
-        assert "document.fonts.ready.then(resizeInstructionTextareas);" in response.text
-        assert "window.addEventListener('resize', resizeInstructionTextareas);" in response.text
+        assert 'base-icon-control order-btn move-up"' in response.text
+        assert 'data-variant="destructive-outline" data-size="icon"' in response.text
+        assert "function resizeInstructionTextarea" not in response.text
+        assert "resizeInstructionTextareas" not in response.text
+        assert "export function initTextareaAutosize(field)" in response.text
+        assert "window.PdlcTextarea.refreshTextareaAutosize(textarea);" in response.text
 
     def test_instructions_page_rejects_phase_outside_selected_namespace_workflow(self):
         workflow = client.post(

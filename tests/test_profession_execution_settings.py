@@ -34,10 +34,22 @@ def test_settings_round_trip_and_agent_registration_removed(client):
                          ("put", "/api/agents/1"), ("delete", "/api/agents/1")):
         assert getattr(client, method)(path).status_code == 404
     html = client.get(f'/namespaces?namespace_id={profession["id"]}').text
-    assert 'id="namespaceLaunchProfile"' in html
+    assert 'id="namespaceLaunchProfile"' not in html
     assert "namespaceRoleKey" not in html
     assert "namespaceExecutionDescription" not in html
     assert 'href="/agents"' not in html
+
+
+def test_profession_form_update_preserves_legacy_execution_binding(client):
+    profession = create_profession(client, "legacy-ui", launch_profile="existing-runtime-profile")
+    response = client.put(f'/api/namespaces/{profession["id"]}', json={
+        "name": "Renamed profession", "cli_command": "workflow-legacy-ui",
+        "description": "Updated", "theme_icon": "code", "theme_color": "#123456",
+    })
+    assert response.status_code == 200, response.text
+    updated = response.json()["namespace"]
+    assert updated["name"] == "Renamed profession"
+    assert updated["launch_profile"] == "existing-runtime-profile"
 
 
 @pytest.mark.parametrize("invalid", ["", "Bad Profile", "profile/key", "a" * 252, 123])

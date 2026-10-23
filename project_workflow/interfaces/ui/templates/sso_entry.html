@@ -1,8 +1,10 @@
+{% import 'base/macros.html' as base_ui %}
 <!doctype html><html lang="ru" data-theme="dark"{% if login_required %} data-platform-login-required{% endif %}>
-<head><meta charset="utf-8"><title>{{ "Нет доступа" if access_denied else "Вход в платформу" }}</title>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{{ "Нет доступа" if access_denied else "Вход в платформу" }}</title>
 <script>{% include 'base/theme-preference.js' %};document.documentElement.dataset.theme=window.PdlcThemePreference.read('workflow-theme');</script>
-<style>{% include 'base/base-ui.css' %}body{margin:0;background:var(--color-background,#111217);color:var(--color-text-primary,#f7f8f8);font:16px system-ui}main{max-width:640px;margin:10vh auto;padding:24px}</style></head>
-<body><main><h1>{{ "Нет доступа" if access_denied else "Вход в платформу" }}</h1><p{% if not login_required %} role="alert"{% endif %}>{{ message }}</p>{% if not access_denied %}<a href="{{ login_url }}">Войти через SSO</a>{% endif %}</main>
+<style>{% include 'base/base-ui.css' %}</style></head>
+<body class="base-auth-page">
+{{ base_ui.platform_login('Нет доступа' if access_denied else 'Вход в платформу', message=message, message_kind='info' if login_required else 'error', login_url=none if access_denied else login_url) }}
 <script type="module">
 {% include 'base/platform-bridge.js' %}
 // An authentication result has no product route or application leave guards.
