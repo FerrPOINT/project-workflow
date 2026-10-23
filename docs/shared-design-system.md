@@ -18,7 +18,7 @@ PLATFORM_BRANDING_URL — явный public browser endpoint опубликов�
 каталог SVG и renderOption; собственных popup, Escape и возврата focus нет.
 Программная смена value завершается refreshChoice без input/change и записи.
 
-Принятый UI pin: `4856b4ffc40bc1b47066e5e8410ba4a7217b2201` в `.base-ui-revision`.
+Точный принятый UI pin задаёт `.base-ui-revision`; сверяйте ресурсы с этим SHA.
 Текущий перенос SSR проверяется на собственном Base source-кандидате; экспорт
 его ресурсов ещё не является принятием нового UI pin или обновлением runtime.
 SDK и skills pins независимы; установка этим source-кандидатом не выполняется.
