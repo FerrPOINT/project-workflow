@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from project_workflow.interfaces.ui.app import create_app
+from tests.test_ui_shell_template import Elements
 
 pytestmark = pytest.mark.ui
 
@@ -32,7 +33,13 @@ def test_catalog_navigation_ignores_another_namespace_cookie(monkeypatch, assign
         response = client.get(path)
         assert response.status_code == 200, response.text
         assert f'namespace_id={selected["id"]}' not in response.text
-        assert response.text.count('value="" disabled selected>Каталог воркфлоу</option>') == 2
+        # The adaptive Base shell owns one picker, rather than desktop/mobile copies.
+        elements = Elements(response.text).elements
+        selectors = [attrs for tag, attrs in elements if tag == "select" and "data-namespace-selector" in attrs]
+        assert len(selectors) == 1
+        assert selectors[0]["aria-label"] == "Выбор профессии"
+        assert "data-base-choice" in selectors[0]
+        assert response.text.count('value="" disabled selected>Каталог воркфлоу</option>') == 1
         assert client.cookies.get("workflow_namespace_id") == str(selected["id"])
 
         scoped = client.get(path + ("&" if "?" in path else "?") + f'namespace_id={selected["id"]}')
