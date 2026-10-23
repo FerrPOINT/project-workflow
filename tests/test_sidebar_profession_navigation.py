@@ -1,4 +1,5 @@
 """Preserve accepted sidebar behavior with profession-owned workflow collections."""
+import re
 from html.parser import HTMLParser
 
 import pytest
@@ -23,9 +24,15 @@ class Links(HTMLParser):
             self.links.append(dict(attrs))
 
 
+def sidebar_content(html):
+    matches = re.findall(r'<aside\b[^>]*\bid="sidebar"[^>]*>(.*?)</aside>', html, re.DOTALL)
+    assert len(matches) == 1
+    return matches[0]
+
+
 def test_sidebar_keeps_cli_and_has_no_removed_registry(client):
     response = client.get("/settings")
-    sidebar = response.text.split('<aside class="sidebar"', 1)[1].split("</aside>", 1)[0]
+    sidebar = sidebar_content(response.text)
     links = Links()
     links.feed(sidebar)
     assert not any(link.get("href") in {"/phases", "/agents"} for link in links.links)
@@ -72,7 +79,7 @@ def test_phase_modes_and_sidebar_preserve_explicit_all_scope(client, scope):
     assert all(link["href"].startswith("/workflows?") for link in modes)
     assert all(("project_scope=all" in link["href"]) == (scope == "all") for link in modes)
     sidebar = Links()
-    sidebar.feed(response.text.split('<aside class="sidebar"', 1)[1].split("</aside>", 1)[0])
+    sidebar.feed(sidebar_content(response.text))
     assert all(("project_scope=all" in link.get("href", "")) == (scope == "all")
                for link in sidebar.links)
 
@@ -110,7 +117,7 @@ def test_invalid_profession_selection_does_not_choose_another_profession(client,
 
 @pytest.mark.parametrize("path,fields", [
     ("/namespaces", [
-        "namespaceName", "namespaceCliCommand", "namespaceDescription", "namespaceLaunchProfile", "namespaceThemeColor",
+        "namespaceName", "namespaceCliCommand", "namespaceDescription", "namespaceThemeColor",
     ]),
     ("/workflows", ["workflowName", "workflowDescription"]),
 ])

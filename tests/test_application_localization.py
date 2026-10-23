@@ -59,7 +59,8 @@ def test_primary_ui_labels_do_not_expose_internal_english_enums() -> None:
     assert "параллельно" in sources
     assert "последовательно" in sources
     assert "Подтверждения" in sources
-    assert "Ключ запуска" in sources
+    assert "Ключ запуска" not in sources
+    assert "namespaceLaunchProfile" not in sources
 
 
 def test_working_pages_do_not_render_internal_launch_profile_values() -> None:

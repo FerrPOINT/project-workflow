@@ -16,187 +16,26 @@
 document.documentElement.dataset.theme=window.PdlcThemePreference.read("workflow-theme");</script>
 <style>
 html[data-pdlc-access-pending] body{visibility:hidden}
-:root{--sidebar-width:var(--shell-sidebar-expanded);--header-height:var(--shell-header-height);}
-*{box-sizing:border-box;margin:0;padding:0}
-html{font-feature-settings:"cv01","ss03"}
-/* ── Единый скроллбар всего приложения в стиле темы ─────────────────── */
-html{scrollbar-width:thin;scrollbar-color:var(--surface-active) transparent}
-::-webkit-scrollbar{width:10px;height:10px}
-::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:var(--surface-active);border-radius:999px;border:2px solid transparent;background-clip:padding-box}
-::-webkit-scrollbar-thumb:hover{background:var(--text-dim)}
-::-webkit-scrollbar-corner{background:transparent}
-/* Скроллящиеся области приложения наследуют тот же стиль */
-*{scrollbar-width:thin;scrollbar-color:var(--surface-active) transparent}
-body{background:var(--bg);color:var(--text);font-family:var(--base-font-sans);line-height:var(--base-line-body);font-size:var(--base-font-body);min-height:100vh;overflow-x:hidden}
-a{color:var(--accent-readable);text-decoration:none}a:hover{text-decoration:underline}
-button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid var(--accent-hover);outline-offset:2px}
 
 /* ── Sidebar (desktop fixed) ────────────────────────────────────────── */
-.sidebar{
-  width:var(--sidebar-width);background:var(--panel);border-right:1px solid var(--border);
-  display:flex;flex-direction:column;position:fixed;top:var(--header-height);height:calc(100dvh - var(--header-height));z-index:20;
-  transition:transform .25s ease;
-}
-.sidebar-header{height:var(--header-height);padding:0 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex:0 0 auto}
-.sidebar-logo{min-width:0;color:var(--text)}
-.brand-link{display:flex;align-items:center;gap:10px;color:inherit;text-decoration:none;min-width:40px;min-height:40px;padding:4px}
-.brand-link:hover{color:inherit;text-decoration:none}
-.brand-text{display:flex;flex-direction:column;min-width:0;line-height:1.1}
-.brand-name{font-size:14px;font-weight:700;color:var(--text);max-width:148px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.brand-subname{font-size:11px;font-weight:600;color:var(--text-secondary);max-width:148px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.sidebar-close{display:none;background:none;border:none;color:var(--text-muted);font-size:20px;cursor:pointer;padding:0;width:40px;height:40px;align-items:center;justify-content:center}
-.sidebar-nav{flex:1;padding:12px;overflow-y:auto;overscroll-behavior:contain}
-.sidebar-nav:focus-visible{outline:2px solid var(--accent-hover);outline-offset:-2px}
-.sidebar-section{padding:8px 12px;font-size:12px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;margin-top:8px}
-.sidebar-link{display:flex;min-height:var(--shell-control-min);align-items:center;gap:12px;padding:8px 12px;color:var(--text-muted);font-size:var(--base-font-body);font-weight:500;transition:background .12s,color .12s;text-decoration:none;border-radius:var(--base-radius)}
-.sidebar-link svg{width:20px;height:20px;flex:0 0 20px}
-.sidebar-cli-icon{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;flex:0 0 20px;font:700 14px/1 'JetBrains Mono',monospace}
-.sidebar-link:hover{color:var(--text);background:var(--surface)}
-.sidebar-link.active{color:var(--text);background:var(--surface-active)}
-.sidebar-link .badge{margin-left:auto;font-size:11px;font-weight:600;padding:1px 6px;border-radius:4px;background:var(--accent-soft);color:var(--accent-readable)}
-.sidebar-footer{min-height:52px;padding:8px 20px;border-top:1px solid var(--border);font-size:12px;color:var(--text-dim);display:flex;align-items:center;gap:8px}
-.sidebar-logout{display:none;min-width:40px;min-height:40px;margin-left:auto;align-items:center;justify-content:center;color:var(--text-secondary);font-weight:600}
-.sidebar-utilities{display:none}
-.sidebar-service-menu summary{cursor:pointer;list-style:none}
-.sidebar-service-menu summary::-webkit-details-marker{display:none}
-.sidebar-service-menu summary::after{content:'▾';margin-left:auto;color:var(--text-muted);font-size:11px}
-.sidebar-service-menu[open] summary::after{transform:rotate(180deg)}
-.sidebar-service-links{padding:2px 12px 8px 20px}
-.sidebar-service-link{display:flex;align-items:center;gap:10px;min-height:40px;padding:8px 12px 8px 20px;color:var(--text-secondary);font-size:12px;text-decoration:none}
-.sidebar-service-link:hover,.sidebar-service-link:focus-visible{background:var(--surface-hover);color:var(--text);text-decoration:none}
-.sidebar-service-link[aria-current="page"]{color:var(--text);font-weight:600}
-.sidebar-theme{padding:10px 20px 14px}
-.sidebar-theme label{display:block;margin-bottom:6px;color:var(--text-muted);font-size:11px;font-weight:600;text-transform:uppercase}
-.sidebar-theme .theme-select{width:100%;max-width:none}
-.dot{width:6px;height:6px;border-radius:50%}
-.dot.green{background:var(--green)}.dot.yellow{background:var(--orange)}.dot.red{background:var(--red)}
 
-/* ── Mobile sidebar (drawer overlay) ───────────────────────────────── */
-.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:90}
+.sidebar-cli-icon{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;flex:0 0 20px;font:700 14px/1 'JetBrains Mono',monospace}
 
 /* ── Main ──────────────────────────────────────────────────────────── */
-.main{flex:1;margin-left:var(--sidebar-width);min-width:0;min-height:100vh;width:calc(100% - var(--sidebar-width))}
-.header{height:var(--header-height);background:var(--panel);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 var(--shell-page-gutter);position:sticky;top:0;z-index:50}
-.header-title-group{display:flex;align-items:center;flex:0 0 auto}
-.header-title{font-size:15px;font-weight:600}
-.header-actions{display:flex;min-width:0;gap:10px;align-items:center}
-.header .btn{display:inline-flex;min-height:40px;align-items:center}
+
 .namespace-switcher{position:relative;min-width:0}
 
 .namespace-selector-mark{display:inline-flex;align-items:center;justify-content:center;flex:0 0 28px;width:28px;height:28px;border-radius:6px;background:color-mix(in srgb,var(--namespace-color,var(--accent)) 14%,transparent);color:var(--namespace-color,var(--accent));border:1px solid color-mix(in srgb,var(--namespace-color,var(--accent)) 45%,transparent)}
 .namespace-selector-mark[hidden]{display:none}
 .namespace-selector-mark svg{width:17px;height:17px}
 .namespace-selector-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
-.namespace-picker-label{margin-bottom:8px;color:var(--text-muted);font-size:11px;font-weight:600;text-transform:uppercase}
-.service-menu{position:relative}
-.theme-select{height:40px;max-width:110px;padding:0 8px;border:1px solid var(--border-strong);border-radius:6px;background:var(--surface);color:var(--text);font:inherit;font-size:12px}
-.service-menu summary{height:40px;padding:0 10px;border:1px solid var(--border-strong);border-radius:6px;background:var(--surface);color:var(--text-secondary);display:flex;align-items:center;gap:8px;font-weight:600;cursor:pointer;list-style:none;white-space:nowrap}
-.service-menu summary::-webkit-details-marker{display:none}
-.service-menu summary:hover,.service-menu[open] summary{background:var(--surface-hover);color:var(--text);border-color:var(--accent)}
-.service-menu-chevron{font-size:11px;color:var(--text-muted);transition:transform .15s}
-.service-menu[open] .service-menu-chevron{transform:rotate(180deg)}
-.service-menu-popover{position:absolute;left:0;right:auto;top:calc(100% + 8px);z-index:250;width:260px;max-width:calc(100vw - 24px);max-height:calc(100dvh - var(--header-height) - 16px);overflow-y:auto;overscroll-behavior:contain;padding:6px;background:var(--surface);border:1px solid var(--border-strong);border-radius:8px;box-shadow:0 16px 40px rgba(0,0,0,.45)}
-.service-menu-item{min-height:40px;padding:8px 10px;border-radius:6px;display:flex;align-items:center;gap:10px;color:var(--text-secondary);text-decoration:none}
-.service-menu-item:not([aria-disabled="true"]):hover,.service-menu-item:focus-visible{background:var(--surface-hover);color:var(--text);text-decoration:none}
-.service-menu-item[aria-disabled="true"]{color:var(--text-muted);cursor:default}
-.service-menu-item[aria-current="page"]{background:var(--accent-soft);color:var(--text);font-weight:600}
-.service-health{width:8px;height:8px;border-radius:50%;flex:0 0 auto;background:var(--text-dim)}
-.service-health.healthy{background:var(--green)}
-.service-health.unreachable{background:var(--red)}
-.service-menu-current{margin-left:auto;font-size:11px;color:var(--accent-readable)}
-.service-menu-source{padding:8px 10px 3px;margin-top:4px;border-top:1px solid var(--border);color:var(--text-dim);font-size:11px}
-.namespace-icon-action{width:40px;height:40px;flex:0 0 40px;border-radius:6px;background:var(--surface);border:1px solid var(--border);color:var(--text-secondary);display:inline-flex;align-items:center;justify-content:center;text-decoration:none;font-size:16px;font-weight:700;line-height:1}
-.namespace-icon-action:hover{background:var(--surface-hover);color:var(--text);text-decoration:none;border-color:var(--accent)}
-.btn{padding:6px 14px;border-radius:6px;font-size:13px;font-weight:500;border:1px solid transparent;cursor:pointer;transition:all .12s;font-family:inherit;white-space:nowrap}
-.btn-primary{background:var(--accent);color:var(--accent-foreground);border-color:var(--accent)}
-.btn-primary:hover{background:var(--accent-hover);color:var(--accent-hover-foreground)}
-.btn-secondary{background:var(--surface);color:var(--text-secondary);border-color:var(--border)}
-.btn-secondary:hover{background:var(--surface-hover);color:var(--text)}
-.btn-danger{background:#b42332;color:#fff;border-color:#b42332}
-.btn-danger:hover{filter:brightness(1.08)}
-.burger{display:none;background:none;border:none;color:var(--text-muted);font-size:22px;cursor:pointer;padding:0;width:44px;height:44px;align-items:center;justify-content:center;margin-right:4px}
-.container,.page-frame{min-width:0;width:100%;padding:var(--shell-page-gutter)}
-.page-wide,.page-detail{min-width:0;width:100%}
-.page-readable{min-width:0;width:min(100%,var(--shell-readable-width))}
-.page-split{display:grid;min-width:0;width:100%;grid-template-columns:minmax(0,1fr) var(--shell-aside-width);gap:var(--shell-page-block-gap)}
-@media(max-width:1023px){.page-split{grid-template-columns:minmax(0,1fr)}}
+.namespace-picker-label{margin-bottom:8px;color:var(--text-muted);font-size:var(--base-font-label);font-weight:600;text-transform:uppercase}
 
-/* ── Cards ─────────────────────────────────────────────────────────── */
-.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px}
-.card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px}
-.card-title{font-size:14px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.06em}
-.section-heading{font-size:22px;font-weight:650;color:var(--text);padding-bottom:10px;margin-bottom:18px;border-bottom:1px solid var(--border-strong);letter-spacing:0}
-.card-value{font-size:28px;font-weight:600;color:var(--text);letter-spacing:0}
-.card-delta{font-size:12px;color:var(--text-muted);margin-top:4px}
 
-/* ── KPI Grid ──────────────────────────────────────────────────────── */
-.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
-@media(max-width:900px){.kpi-grid{grid-template-columns:repeat(2,1fr)}}
-@media(max-width:480px){.kpi-grid{grid-template-columns:1fr}}
-
-/* ── Progress bar ──────────────────────────────────────────────────── */
-.progress-bg{height:6px;background:var(--panel);border-radius:3px;overflow:hidden;margin-top:8px}
-.progress-fill{height:100%;background:var(--accent);border-radius:3px;transition:width .3s}
-
-/* ── Tables (desktop) ──────────────────────────────────────────────── */
-table{width:100%;border-collapse:collapse;font-size:13px;display:table}
-th{text-align:left;padding:8px 12px;font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid var(--border-strong);background:var(--panel)}
-td{padding:8px 12px;border-bottom:1px solid var(--border);color:var(--text-secondary);vertical-align:top}
-tr:last-child td{border-bottom:none}
-tr:hover td{background:rgba(255,255,255,.02)}
-
-/* Mobile cards (replace table on small screens) */
-@media(max-width:640px){
-  .table-card-list{display:flex;flex-direction:column;gap:10px}
-  .table-card{display:none}  /* shown via template logic */
-}
-
-/* ── Form elements ─────────────────────────────────────────────────── */
-input,textarea{background:var(--panel);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-family:inherit;font-size:13px;outline:none;width:100%}
-input:focus,textarea:focus{border-color:var(--accent)}
-textarea{resize:vertical;min-height:60px}
-
-/* ── Toast ─────────────────────────────────────────────────────────── */
-.toast{position:fixed;bottom:20px;right:20px;padding:10px 16px;border-radius:6px;font-size:13px;font-weight:500;box-shadow:0 4px 12px rgba(0,0,0,.4);transform:translateY(80px);transition:transform .3s,opacity .3s,visibility .3s;z-index:200;max-width:90vw;word-break:break-word;opacity:0;visibility:hidden;pointer-events:none}
-.toast.show{transform:translateY(0);opacity:1;visibility:visible;pointer-events:auto}
-.toast-success{background:var(--green-soft);color:var(--green);border:1px solid rgba(34,197,94,.25)}
-.toast-error{background:var(--red-soft);color:var(--red);border:1px solid rgba(239,68,68,.25)}
-@media(max-width:480px){.toast{bottom:10px;right:10px;left:10px;max-width:none}}
-
-/* ── Status badges ─────────────────────────────────────────────────── */
-.status{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500}
-.status-dot{width:6px;height:6px;border-radius:50%}
-.status-done .status-dot{background:var(--green)}
-.status-active .status-dot{background:var(--accent)}
-.status-wait .status-dot{background:var(--text-dim)}
-.status-block .status-dot{background:var(--red)}
-
-/* ── Phase detail ──────────────────────────────────────────────────── */
-.phase-detail-header{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px 24px;margin-bottom:16px}
-.phase-detail-header h2{margin:0;font-size:20px;font-weight:500;word-break:break-word}
-.phase-detail-header .meta{display:flex;gap:12px;margin-top:12px;flex-wrap:wrap;font-size:12px;color:var(--text-muted)}
-.phase-detail-header .meta b{color:var(--text-secondary);font-weight:500}
-
-/* ── Tabs ──────────────────────────────────────────────────────────── */
-.tabs{display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid var(--border);flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
-.tabs::-webkit-scrollbar{display:none}
-.tab{padding:8px 14px;font-size:13px;font-weight:500;color:var(--text-muted);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;transition:all .12s}
-.tab:hover{color:var(--text)}
-.tab.active{color:var(--accent-readable);border-bottom-color:var(--accent)}
 
 /* ── Editable rows ─────────────────────────────────────────────────── */
-.row{display:grid;grid-template-columns:28px 1fr 120px 80px 32px;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);align-items:center}
-@media(max-width:768px){.row{grid-template-columns:28px 1fr 100px 32px}}
-@media(max-width:480px){.row{grid-template-columns:1fr 32px;gap:6px}.row .step-num{display:none}}
-.row:last-child{border-bottom:none}
-.step-num{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text-dim)}
 .row-actions{display:flex;gap:6px;justify-content:flex-end}
-.icon-btn{width:28px;height:28px;border-radius:4px;background:var(--surface);border:1px solid var(--border);color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .12s;font-size:15px}
-.icon-btn:hover{background:var(--red-soft);color:var(--red);border-color:var(--red)}
 
-/* ── Buttons group ─────────────────────────────────────────────────── */
-.btn-group{display:flex;gap:10px;flex-wrap:wrap}
 
 /* ── Timeline (shared by phases list and phase detail instructions) ─── */
 .timeline{display:flex;flex-direction:column;align-items:center;max-width:860px;margin:0 auto;width:100%}
@@ -204,98 +43,35 @@ textarea{resize:vertical;min-height:60px}
 .timeline-item{width:100%}
 .timeline-row{display:grid;grid-template-columns:84px minmax(0,1fr);gap:12px;align-items:stretch}
 .phase-order-controls{flex-shrink:0;width:84px;display:flex;flex-direction:column;align-items:center;gap:8px;padding-top:6px}
-.phase-move-btn{width:36px;height:32px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;transition:all .12s;font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center}
-.phase-move-btn:disabled{opacity:.35;cursor:not-allowed}
-.phase-move-btn:hover:not(:disabled){background:var(--surface-hover);border-color:var(--accent)}
-.phase-add-btn{width:36px;height:32px;border-radius:8px;border:1px dashed var(--accent);background:var(--accent-soft);color:var(--accent-readable);cursor:pointer;transition:all .12s;font-size:20px;font-weight:700;line-height:1;display:flex;align-items:center;justify-content:center}
-.phase-add-btn:hover{background:var(--accent);color:var(--accent-foreground);border-style:solid}
-.phase-delete-btn{width:36px;height:32px;border-radius:8px;border:1px solid var(--red);background:rgba(239,68,68,.12);color:var(--red);cursor:pointer;transition:all .12s;font-size:18px;font-weight:700;line-height:1;display:flex;align-items:center;justify-content:center}
-.phase-delete-btn:hover{background:var(--red);color:#fff}
-.phase-delete-btn:disabled{opacity:.35;cursor:not-allowed}
-.timeline-card{width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 18px;cursor:pointer;transition:all .12s;text-decoration:none;color:inherit;display:block;position:relative}
-.timeline-card:hover{background:var(--surface-hover);border-color:var(--border-strong);transform:translateY(-1px)}
-.timeline-parallel-group{width:100%;display:flex;flex-direction:column;gap:10px;border:1px solid var(--orange);border-radius:12px;padding:12px;background:rgba(245,158,11,.08);box-shadow:inset 0 0 0 1px rgba(245,158,11,.18)}
-.timeline-parallel-label{display:inline-flex;align-items:center;align-self:flex-start;gap:6px;padding:3px 10px;border-radius:999px;border:1px solid var(--orange);background:var(--orange-soft);color:var(--orange);font-size:11px;font-weight:700;letter-spacing:.04em}
+.timeline-card{width:100%;display:block;position:relative}
+.timeline-parallel-group{width:100%;display:flex;flex-direction:column;gap:10px}
+.timeline-parallel-label{align-self:flex-start}
 .timeline-arrow{text-align:center;padding:8px 0;color:var(--text-dim);font-size:18px}
-.timeline-name{font-size:14px;font-weight:500;color:var(--text);line-height:1.4}
+.timeline-name{font-size:var(--base-font-body);font-weight:500;color:var(--text);line-height:var(--base-line-body)}
 .timeline-badges{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;align-items:center}
 .execution-row{display:flex;gap:6px;margin-top:10px;align-items:center;min-height:32px;width:100%}
-.badge{font-size:11px;font-weight:500;padding:2px 8px;border-radius:4px;display:inline-flex;align-items:center;gap:3px}
-.badge-sync,.badge-parallel{cursor:pointer;border:1px solid transparent;padding:6px 14px;font-size:13px;font-weight:600;min-height:32px;line-height:1;box-shadow:0 1px 2px rgba(0,0,0,.2)}
-.badge-sync:hover,.badge-parallel:hover{border-color:currentColor;transform:translateY(-1px)}
-.badge-agent{background:var(--accent-soft);color:var(--accent-readable)}
-.badge-delegate{background:var(--accent-soft);color:var(--accent-readable)}
-.badge-parallel{background:var(--orange-soft);color:var(--orange)}
-.badge-sync{background:var(--green-soft);color:var(--green)}
-.timeline-desc{font-size:12px;color:var(--text-muted);margin-top:4px}
-.empty-note{color:var(--text-dim);font-size:13px;line-height:1.6}
+.timeline-desc{font-size:var(--base-font-label);color:var(--text-muted);margin-top:4px}
 @media (max-width: 720px){.timeline-row{grid-template-columns:1fr}.phase-order-controls{flex-direction:row;flex-wrap:wrap;justify-content:flex-start;padding-top:0;gap:6px}}
 
 /* ── Responsive breakpoints ──────────────────────────────────────── */
-@media(max-width:1279px) and (min-width:768px){
-  :root{--sidebar-width:var(--shell-sidebar-compact)}
-  .sidebar-header{padding:0 16px;justify-content:center}
-  .sidebar-logo{width:40px}
-  .brand-link{justify-content:center}
-  .brand-text,.sidebar-section,.sidebar-link .badge,.sidebar-status-label{display:none}
-  .sidebar-nav{padding:8px}
-  .sidebar-link{justify-content:center;padding:8px;border-left:0;border-radius:6px}
-  .sidebar-link.active{border-left-color:transparent;box-shadow:inset 3px 0 0 var(--accent)}
-  .sidebar-label{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
-  .sidebar-footer{justify-content:center;padding-inline:8px}
-  .header{padding-inline:16px}
-  .header-actions{gap:6px}
-  .theme-select{max-width:90px}
 
-}
-@media(max-width:767px){
-  .sidebar{width:min(320px,calc(100vw - 32px));transform:translateX(-100%)}
-  .sidebar.open{transform:translateX(0)}
-  .sidebar-overlay.show{display:block}
-  .sidebar-close{display:flex}
-  .sidebar-logout{display:inline-flex}
-  .main{margin-left:0;width:100%}
-  .burger{display:flex}
-  .header{padding-inline:16px}
-  .header .header-logout{display:none}
-}
-@media(max-width:767px){
-  .header{flex-wrap:nowrap;align-items:center;height:var(--header-height)}
-  .header-actions{width:auto;flex:1;min-width:0;gap:6px;flex-wrap:wrap;justify-content:flex-end}
-
-}
-@media(max-width:640px){
-  .sidebar-utilities{display:block}
-  .header-actions > .theme-select,.header-actions > .service-menu{display:none}
-}
 @media(max-width:480px){
-  .card{padding:14px}
-  .card-value{font-size:22px}
-  .header-title{font-size:14px}
-  .header-actions{min-width:200px}
 
   .namespace-switcher{min-width:200px}
 
 }
-@media(max-width:350px){.header-actions{width:100%;flex:none}}
 
 /* ── Side nav lists (workflows / namespaces / phases) ────────────────
-   Скроллбар наследует глобальный тематический стиль (см. шапку стилей). */
+   Native scrollbar colors follow the common Base color-scheme. */
 .side-nav-scroll{overscroll-behavior:contain;scroll-snap-type:y proximity}
 .side-nav-scroll > *{scroll-snap-align:start}
 
 /* ── Kanban ───────────────────────────────────────────────────────── */
-
-.mobile-drawer-title{display:none}
-.main{min-height:calc(100dvh - var(--header-height))}
 .page-actions:empty,.page-header:has(.page-actions:empty):has(h1:empty){display:none}
-.platform-header .service-menu summary{border:0;background:transparent;font-size:14px;padding-inline:8px}
-.platform-header .service-menu summary>span:first-of-type{max-width:160px;overflow:hidden;text-overflow:ellipsis}
 
 .platform-header-context .namespace-switcher{min-width:0;width:min(280px,100%)}
 .platform-header-context{justify-content:flex-end}
-.service-menu-trigger-icon{display:none}
-@media(max-width:767px){.sidebar{z-index:100;top:0;height:100dvh}.mobile-drawer-title{display:flex}.platform-header .platform-header-context{display:none}.sidebar-utilities{display:block;padding:12px 20px}.sidebar-utilities label{display:block;margin-bottom:8px}.platform-header-leading{flex-shrink:0}.platform-header .service-menu summary{min-width:44px;min-height:44px;justify-content:center}.platform-header .service-menu-chevron{display:none}.platform-header .service-menu-trigger-icon{display:block}.platform-header .service-menu-popover{position:fixed;left:12px;right:12px;top:calc(var(--header-height) + 8px);width:auto;max-width:none}.page-header h1{font-size:22px}}
+@media(max-width:767px){.platform-header .platform-header-context{display:none}.platform-header-leading{flex-shrink:0}}
 
 {% block extra_style %}{% endblock %}
 </style>
@@ -305,21 +81,11 @@ textarea{resize:vertical;min-height:60px}
 window.WorkflowBranding=window.PdlcBranding.createBrandingRuntime({root:document.documentElement,configUrl:{{ platform_branding_url()|tojson }}});
 window.addEventListener('pagehide',function(event){if(!event.persisted)window.WorkflowBranding.dispose();});
 </script>
-<style>
-.base-ssr-shell .main{min-height:calc(100dvh - var(--header-height))}
-.base-ssr-shell .mobile-drawer-title{display:none}
-@media(max-width:767px){.base-ssr-shell .mobile-drawer-title{display:flex}}
-@media(max-width:767px){.sidebar-utilities .namespace-switcher{width:100%;min-width:0}}
-</style>
+
 </head>
 <body class="base-ssr-shell">
 
-<!-- Sidebar overlay (mobile) -->
-<div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
-
-<!-- Sidebar -->
-<aside class="sidebar" data-base-dialog-background id="sidebar">
-  <div class="sidebar-header mobile-drawer-title"><strong>Project Workflow</strong><button class="sidebar-close" onclick="closeSidebar()" aria-label="Закрыть навигацию">&times;</button></div>
+{% set sidebar_navigation %}
   <nav class="sidebar-nav" aria-label="Основная навигация">
     <a class="sidebar-link {% if page == 'namespace' %}active{% endif %}" href="{{ ui_base_path() }}/namespaces{{ sidebar_scope_suffix }}" aria-label="Профессии" title="Профессии" {% if page == 'namespace' %}aria-current="page"{% endif %}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h18"/><path d="M5 7V5a2 2 0 0 1 2-2h3"/><path d="M19 7v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7"/><path d="M9 12h6"/><path d="M9 16h4"/></svg>
@@ -343,149 +109,41 @@ window.addEventListener('pagehide',function(event){if(!event.persisted)window.Wo
       <span class="sidebar-cli-icon" aria-hidden="true">&gt;_</span>
       <span class="sidebar-label">Команды CLI</span>
     </a>
-    <div class="sidebar-utilities">
-      {% if namespaces is defined and namespaces %}
-      <p class="namespace-picker-label">Профессия</p>
-      {{ profession_selector('mobileNamespaceSelector', namespaces, active_namespace) }}
-      {% endif %}
-    </div>
-    </nav>
-</aside>
-
-<!-- Main -->
-<header class="platform-header" data-base-dialog-background data-platform-header>
-  <div class="platform-header-leading" data-platform-header-slot="leading">
-    <button class="burger" id="burgerBtn" onclick="openSidebar()" aria-label="Открыть навигацию" aria-controls="sidebar" aria-expanded="false">☰</button>
-    {# Base service-switcher: project-workflow uses the Lucide Workflow mark. #}
-    <a class="brand-link" href="{{ ui_base_path() }}/" aria-label="Project Workflow" title="Project Workflow">{{ base_ui.platform_mark() }}</a>
-  </div>
-  <div class="platform-header-services" data-platform-header-slot="services">
-      <details class="service-menu" id="serviceMenu">
-        {% set current_service = other_services | selectattr('key', 'equalto', 'project-workflow') | first %}
-        <summary aria-label="{{ current_service.label if current_service else 'Project Workflow' }} — открыть список сервисов платформы"><svg class="service-menu-trigger-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span class="service-menu-trigger-label service-switcher-label" title="{{ current_service.label if current_service else 'Project Workflow' }}">{{ current_service.label if current_service else 'Project Workflow' }}</span><span class="service-menu-chevron" aria-hidden="true">▾</span></summary>
-        <div class="service-menu-popover">
-          <div role="menu" aria-label="Сервисы платформы">
-        {% for service in other_services %}
-          <a class="service-menu-item" data-platform-service="{{ service.key }}" {% if service.key == 'project-workflow' %}href="{{ ui_base_path() }}/"{% elif services_source|default('') == 'runtime' %}href="{{ service.url }}"{% else %}aria-disabled="true" tabindex="-1" title="Адрес сервиса недоступен: дождитесь восстановления каталога своего стенда"{% endif %} role="menuitem" {% if service.key == 'project-workflow' %}aria-current="page"{% endif %}>
-            <span class="service-health {{ service.health }}" role="img" aria-label="{% if service.health == 'healthy' %}Работает{% elif service.health == 'unreachable' %}Недоступен{% else %}Состояние неизвестно{% endif %}"></span>
-            <span>{{ service.label }}</span>
-            {% if service.key == 'project-workflow' %}<span class="service-menu-current">Текущий</span>{% endif %}
-          </a>
-        {% endfor %}
-          </div>
-          {% set catalog_source = services_source|default('fallback-unreachable') %}
-          <div class="service-menu-source" role="status">Источник: {{ 'каталог' if catalog_source == 'runtime' else 'резервный список' if catalog_source.startswith('fallback') else 'сохранённый каталог' }}</div>
-        </div>
-      </details>
-  </div>
-  <div class="platform-header-context" data-platform-header-slot="context">
-      {% if namespaces is defined and namespaces %}
-      {{ profession_selector('namespaceSelector', namespaces, active_namespace) }}
-      {% endif %}
-  </div>
-  <div class="platform-header-actions" data-platform-header-slot="actions">{{ base_ui.account() }}</div>
-</header>
-<main class="main" data-base-dialog-background>
-
-  {% set layout_mode %}{% block page_layout %}wide{% endblock %}{% endset %}
-  {% set layout_mode = layout_mode | trim %}
-  <div class="container page-frame">
-    <div class="{% if layout_mode == 'reading' %}page-readable{% elif layout_mode == 'detail-with-aside' %}page-detail{% else %}page-wide{% endif %}" data-page-layout="{{ layout_mode }}">
-      {% set page_heading_markup %}{% block page_heading %}<h1 class="header-title">{% block header_title %}{% endblock %}</h1>{% endblock %}{% endset %}
+  </nav>
+{% endset %}
+{% set shell_leading %}
+    {{ base_ui.button(base_ui.platform_mark(), href=ui_base_path() ~ '/', variant='ghost', size='icon', aria_label='Project Workflow', title='Project Workflow') }}
+{% endset %}
+{% set shell_services %}
+{% set current_service = other_services | selectattr('key', 'equalto', 'project-workflow') | first %}
+{% call base_ui.service_switcher(current_service.label if current_service else 'Project Workflow', id='serviceMenu', source=services_source|default('fallback-unreachable')) %}
+  {% for service in other_services %}
+    {% set service_href = ui_base_path() ~ '/' if service.key == 'project-workflow' else service.url if services_source|default('') == 'runtime' else none %}
+    {{ base_ui.service_switcher_item(service.key, service.label, href=service_href, current=service.key == 'project-workflow', health=service.health) }}
+  {% endfor %}
+{% endcall %}
+{% endset %}
+{% set shell_context %}
+{% if namespaces is defined and namespaces %}
+{{ profession_selector('namespaceSelector', namespaces, active_namespace) }}
+{% endif %}
+{% endset %}
+{% set layout_mode %}{% block page_layout %}wide{% endblock %}{% endset %}
+{% call base_ui.app_shell('Project Workflow', sidebar_navigation, leading=shell_leading,
+    services=shell_services, context=shell_context|trim, actions=base_ui.account(), layout=layout_mode|trim) %}
+      {% set page_heading_markup %}{% block page_heading %}<h1 class="base-page-title">{% block header_title %}{% endblock %}</h1>{% endblock %}{% endset %}
       {% set page_actions_markup %}{% block header_actions %}{% endblock %}{% endset %}
       {{ base_ui.page_header(heading=page_heading_markup, actions=page_actions_markup) }}
       {% block content %}{% endblock %}
-    </div>
-  </div>
-</main>
+{% endcall %}
 
-<div class="toast toast-success" id="toast" aria-hidden="true">Сохранено</div>
+{{ base_ui.toaster() }}
 {{ base_ui.confirmation_dialog() }}
 
 <script>
-function syncSidebarLayout(){
-  var sidebar=document.getElementById('sidebar');
-  var main=document.querySelector('.main');
-  var mobile=window.matchMedia('(max-width: 767px)').matches;
-  var dialogOpen=!document.getElementById('confirmDialog').hidden;
-  if(mobile){
-    sidebar.setAttribute('role','dialog');
-    sidebar.setAttribute('aria-modal','true');
-    sidebar.setAttribute('aria-label','Навигация Project Workflow');
-    sidebar.setAttribute('aria-hidden',sidebar.classList.contains('open')?'false':'true');
-  }else{
-    sidebar.removeAttribute('role');
-    sidebar.removeAttribute('aria-modal');
-    sidebar.removeAttribute('aria-label');
-    sidebar.removeAttribute('aria-hidden');
-  }
-  if(!mobile&&sidebar.classList.contains('open')){
-    sidebar.classList.remove('open');
-    document.getElementById('sidebarOverlay').classList.remove('show');
-    document.getElementById('burgerBtn').setAttribute('aria-expanded','false');
-    document.getElementById('burgerBtn').setAttribute('aria-label','Открыть навигацию');
-    document.body.style.overflow='';
-  }
-  sidebar.inert=dialogOpen||(mobile&&!sidebar.classList.contains('open'));
-  main.inert=dialogOpen||(mobile&&sidebar.classList.contains('open'));
-  document.querySelector('[data-platform-header]').inert=main.inert;
-}
-function openSidebar(){
-  document.getElementById('sidebar').classList.add('open');
-  document.getElementById('sidebarOverlay').classList.add('show');
-  document.getElementById('burgerBtn').setAttribute('aria-expanded','true');
-  document.getElementById('burgerBtn').setAttribute('aria-label','Закрыть навигацию');
-  document.body.style.overflow='hidden';
-  syncSidebarLayout();
-  document.querySelector('.sidebar-close').focus();
-}
-function closeSidebar(){
-
-  document.getElementById('sidebar').classList.remove('open');
-  document.getElementById('sidebarOverlay').classList.remove('show');
-  document.getElementById('burgerBtn').setAttribute('aria-expanded','false');
-  document.getElementById('burgerBtn').setAttribute('aria-label','Открыть навигацию');
-  document.body.style.overflow='';
-  syncSidebarLayout();
-  document.getElementById('burgerBtn').focus();
-}
-syncSidebarLayout();
-document.addEventListener('base-dialog-closed', syncSidebarLayout);
-window.addEventListener('resize',syncSidebarLayout);
-var serviceMenu=document.getElementById('serviceMenu');
-document.addEventListener('click',function(event){
-  if(serviceMenu&&serviceMenu.open&&!serviceMenu.contains(event.target)){serviceMenu.open=false;}
-});
-document.addEventListener('keydown',function(event){
-  var sidebar=document.getElementById('sidebar');
-  if(event.key==='Tab'&&sidebar.classList.contains('open')){
-    var focusables=Array.from(sidebar.querySelectorAll('button,a,select,summary,[tabindex]')).filter(function(el){
-      return !el.disabled&&el.tabIndex>=0&&el.getClientRects().length;
-    });
-    if(focusables.length){
-      var first=focusables[0],last=focusables[focusables.length-1];
-      if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}
-      else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
-    }
-  }
-  if(event.key==='Escape'&&sidebar.classList.contains('open')){
-    closeSidebar();
-  }
-  if(event.key==='Escape'&&serviceMenu&&serviceMenu.open){
-    serviceMenu.open=false;
-    serviceMenu.querySelector('summary').focus();
-  }
-});
+// Product messages and request outcomes stay here; Base owns presentation/lifetime.
 function showToast(msg, type){
-  var t=document.getElementById('toast');
-  if(t._hideTimer){clearTimeout(t._hideTimer);}
-  t.textContent=msg;
-  t.className='toast toast-'+type+' show';
-  t.setAttribute('aria-hidden','false');
-  t._hideTimer=setTimeout(function(){
-    t.classList.remove('show');
-    t.setAttribute('aria-hidden','true');
-  },2000);
+  return window.PdlcBaseUI.notify(msg, {type: type || 'normal'});
 }
 function showRequestError(){
   showToast('Не удалось связаться с сервером','error');
@@ -551,10 +209,20 @@ function pluralizeRu(n, one, few, many){
 </script>
 <script>{% include "base/base-ui.js" %}</script>
 <script type="module">
+{% include "base/textarea-runtime.js" %}
+window.PdlcTextarea = {initTextareaAutosize, refreshTextareaAutosize, destroyTextareaAutosize};
+document.querySelectorAll('textarea[data-base-autosize]').forEach(initTextareaAutosize);
+</script>
+<script type="module">
+{% include "base/clipboard-runtime.js" %}
+window.PdlcClipboard = {initCopyButton, refreshCopyButton, destroyCopyButton};
+document.querySelectorAll('button[data-base-copy-target]').forEach(function(button){ initCopyButton(button); });
+</script>
+<script type="module">
 {% include "base/choice-runtime.js" %}
 window.PdlcChoice = {initChoice, refreshChoice, destroyChoice};
 document.querySelectorAll('select[data-base-choice]').forEach(function(control){
-  try { initChoice(control, control.hasAttribute('data-namespace-selector') ? {renderOption: renderNamespaceChoice} : control.id === 'namespaceThemeIcon' ? {renderOption: renderNamespaceIconChoice} : {}); }
+  try { initChoice(control, control.hasAttribute('data-namespace-selector') ? {renderOption: renderNamespaceChoice} : control.id === 'namespaceThemeIcon' ? {appearance: 'icons', renderOption: renderNamespaceIconChoice} : {}); }
   catch(error) { console.error('Base choice initialization failed', error); }
 });
 refreshNamespaceSelectors();

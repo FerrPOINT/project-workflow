@@ -83,10 +83,12 @@ Supervisor Engine перед commit выполнить следующие про
   свой source; отдельный [Base candidate](docs/base-sdlc-candidate.md) закрепляет
   commit пакета `services-base/agent-skills`. Candidate не установлен: не менять
   default path, bootstrap, migrations и pinned history при подготовке документов.
-- Профессия хранит только `launch_profile` как настройку выполнения. Её
-  идентификатор — существующий `code`; роль задачи задаётся назначением и режимом.
-  Фазы не назначают отдельных агентов. Профилем запуска
-  владеет внешний исполнитель; несколько профессий могут использовать один профиль.
+- Профессия не задаёт общий профиль запуска и не показывает его в своей форме.
+  При необходимости профиль относится к конкретному workflow в рамках профессии.
+  `projects.launch_profile` пока сохраняется как legacy-контракт API/admission;
+  не очищать его при обычном редактировании и не считать перенос исполнения
+  реализованным без согласованной миграции. Идентификатор профессии — `code`;
+  роль задачи задаётся назначением и режимом. Фазы не назначают отдельных агентов.
 - Воспроизводимый CLI acceptance описан в `LIVE_TEST_PLAN.md`.
 
 ## Осознанно исключённые возможности
@@ -122,8 +124,10 @@ Supervisor Engine перед commit выполнить следующие про
 
 Сначала искать общий UI в Base: search → show → example. Общие исправления
 вносить в Base; продукт передаёт данные, права, преобразования и сохранение.
-Для одного известного значения использовать Select, для нескольких — MultiSelect,
-для каталога с поиском/пагинацией — SearchableSelect из публичного @pdlc/ui.
+Для закрытого списка с одним значением — Select; для нескольких — MultiSelect.
+Одно значение из всех видимых вариантов — RadioGroup, взаимноисключающие режимы — appearance="segmented".
+Вкладки с панелями используют Tabs. Каталог с поиском/пагинацией — SearchableSelect.
+Использовать публичный @pdlc/ui и сверять наличие API по точному UI pin.
 Контракт Select/MultiSelect: options, value/defaultValue, onValueChange;
 HTML children/option/onChange/multiple/size больше не являются их API.
 Видимые raw select и локальные копии оформления не добавлять. Технический form
@@ -158,6 +162,16 @@ Dialog и Toaster/toast использовать из публичного @pdlc
 Канонический контракт — Base docs/platform/DESIGN_SYSTEM.md и docs/BRANDING.md.
 UI/SDK/skills pins независимы; source-изменения не означают установку.
 
+SSR-каркас и page-frame/page-wide/page-readable/page-split принадлежат CSS Base.
+Не дублировать их геометрию в base.html и не возвращать retired local styles
+старой шапки/вкладок/переключателей. Таймлайн, статус исполнения и предметная
+компоновка сохраняют собственный контракт. Проверять реальные macros/assets,
+а не наличие прежнего CSS-текста в шаблоне продукта.
+Заголовок страницы использует base-page-title, раздел — section_header с прежним
+heading_id. Native home link использует button(href=..., variant=ghost, size=icon),
+ссылки действий — text_link, подтверждённая пустота — state. URL и namespace
+остаются у Workflow; не добавлять локальный skin или обработчик навигации.
+
 ## Единое пространство PDLC
 
 [Согласованный план](docs/plans/unified-spaces-20261019.md) вводит M:N и общий read admission. До полного
@@ -165,3 +179,11 @@ UI/SDK/skills pins независимы; source-изменения не озна
 applied migrations сохранять; ProjectRef/SpaceRef/V3 отдельны. Полный gate на
 интегрированной вехе, в ходе реализации scoped checks. Runtime не активировать
 по готовности одного продукта; не выбирать первый Project/Space неявно.
+
+## Общие показатели
+
+Dashboard metrics используют штатный Base macro metric со стабильными id.
+Не возвращать локальные metric-* paint rules: геометрия, шрифт и состояния
+принадлежат Base. Подсчёт, verdict → tone и внешняя dashboard-grid остаются
+Workflow. Новый SSR API требует соответствующего UI pin и штатного export;
+SDK/skills pins не изменять вслед за UI. Source-проверка не означает установку.

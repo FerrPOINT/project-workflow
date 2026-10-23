@@ -1,6 +1,7 @@
 """Platform service catalog switcher (catalog v1.1)."""
 import io
 import json
+import re
 from html.parser import HTMLParser
 from pathlib import Path
 
@@ -71,35 +72,55 @@ def test_local_browsing_preserves_canonical_service_origins(request_url):
 
 
 def test_service_switcher_is_accessible_and_localizes_health():
+    from project_workflow.interfaces.ui.templates import templates
+
     template = (Path(__file__).parents[1] / "project_workflow/interfaces/ui/templates/base.html").read_text(
         encoding="utf-8"
     )
-
-    assert '<div role="menu" aria-label="Сервисы платформы">' in template
-    assert '{% endfor %}\n          </div>\n          {% set catalog_source' in template
-    assert 'aria-current="page"' in template
-    assert "Project Workflow" in template
-    assert "Состояние неизвестно" in template
-    assert "event.key==='Escape'" in template
-    assert ".service-menu-popover{position:absolute;left:0;right:auto;" in template
+    html = templates.get_template("base.html").render(
+        page="tasks", other_services=load_service_catalog(None).services, services_source="fallback-unreachable",
+    )
+    parsed = _ServiceLinks()
+    parsed.feed(html)
+    assert "base_ui.service_switcher(" in template
+    assert any(tag == "nav" and attrs.get("aria-label") == "Сервисы платформы"
+               for tag, attrs in parsed.elements)
+    assert sum(attrs.get("aria-current") == "page" for attrs in parsed.links.values()) == 1
+    assert any(tag == "span" and attrs.get("role") == "img"
+               and attrs.get("aria-label") == "Состояние неизвестно"
+               for tag, attrs in parsed.elements)
+    assert any(tag == "details" and "data-base-menu" in attrs for tag, attrs in parsed.elements)
+    assert "service-menu-popover" not in template  # Position/focus/Escape belong to Base.
 
 
 def test_shell_controls_have_mobile_touch_targets_and_sidebar_focus_management():
-    template = (Path(__file__).parents[1] / "project_workflow/interfaces/ui/templates/base.html").read_text(
-        encoding="utf-8"
-    )
+    from project_workflow.interfaces.ui.templates import templates
 
-    assert ".service-menu summary{height:40px" in template
-    assert ".namespace-icon-action{width:40px;height:40px" in template
-    assert ".sidebar-link{display:flex;min-height:var(--shell-control-min)" in template
-    assert '<body class="base-ssr-shell">' in template
-    assert ".sidebar-logout{display:none;min-width:40px;min-height:40px" in template
-    assert 'aria-label="Открыть навигацию" aria-controls="sidebar" aria-expanded="false"' in template
-    assert 'aria-label="Закрыть навигацию"' in template
-    assert "sidebar.inert=dialogOpen||(mobile&&!sidebar.classList.contains('open'))" in template
-    assert "main.inert=dialogOpen||(mobile&&sidebar.classList.contains('open'))" in template
-    assert "setAttribute('aria-label','Закрыть навигацию')" in template
-    assert "if(event.key==='Tab'&&sidebar.classList.contains('open'))" in template
+    html = templates.get_template("base.html").render(page="tasks", namespaces=[], other_services=[])
+    parsed = _ServiceLinks()
+    parsed.feed(html)
+    trigger = next(attrs for tag, attrs in parsed.elements if tag == "button" and "data-base-drawer-trigger" in attrs)
+    drawer = next(attrs for tag, attrs in parsed.elements if tag == "dialog" and "data-base-drawer" in attrs)
+    assert trigger["type"] == "button"
+    assert {"base-control", "base-icon-control"} <= set(trigger["class"].split())
+    assert trigger["aria-controls"] == drawer["id"]
+    assert trigger["aria-expanded"] == "false"
+    assert trigger["aria-label"] == "Открыть навигацию"
+    assert any(tag == "button" and attrs.get("aria-label") == "Закрыть навигацию" for tag, attrs in parsed.elements)
+    assert any(tag == "main" and attrs.get("tabindex") == "-1" for tag, attrs in parsed.elements)
+    assert any(tag == "body" and attrs.get("class") == "base-ssr-shell" for tag, attrs in parsed.elements)
+
+    assets = Path(__file__).parents[1] / "project_workflow/interfaces/ui/templates/base"
+    css = (assets / "base-ui.css").read_text(encoding="utf-8")
+    assert re.search(r"--shell-control-min:\s*40px;", css)
+    assert re.search(r"--shell-control-mobile-min:\s*44px;", css)
+    runtime = (assets / "base-ui.js").read_text(encoding="utf-8")
+    # Jinja includes omit the terminal newline, while preserving the runtime bytes.
+    assert runtime.rstrip("\n") in html
+    assert "drawer.showModal()" in runtime
+    assert "focusable()[0]?.focus()" in runtime
+    assert "trigger.focus()" in runtime
+    assert "event.key !== 'Tab'" in runtime
 
 
 def test_fallback_on_unreachable_catalog(monkeypatch):
@@ -270,21 +291,26 @@ def test_rendered_switcher_uses_current_runtime_health_without_duplicate(monkeyp
     )
     menu = html.split('id="serviceMenu"', 1)[1].split("</details>", 1)[0]
     assert menu.count('aria-current="page"') == 1
-    assert 'service-health unreachable' in menu
-    assert 'service-health healthy' in menu
-    assert 'service-health unknown' not in menu
+    assert 'data-health="unreachable"' in menu
+    assert 'data-health="healthy"' in menu
+    assert 'data-health="unknown"' not in menu
     assert 'Project Workflow' not in menu  # runtime label is PW, not a fabricated replacement
     assert 'Central Auth' not in menu
-    assert 'href="/" role="menuitem" aria-current="page"' in menu
+    parsed = _ServiceLinks()
+    parsed.feed(menu)
+    assert parsed.links["project-workflow"]["href"] == "/"
+    assert parsed.links["project-workflow"]["aria-current"] == "page"
 
 
 class _ServiceLinks(HTMLParser):
     def __init__(self):
         super().__init__()
         self.links = {}
+        self.elements = []
 
     def handle_starttag(self, tag, attrs):
         attributes = dict(attrs)
+        self.elements.append((tag, attributes))
         key = attributes.get("data-platform-service")
         if tag == "a" and key:
             self.links[key] = attributes

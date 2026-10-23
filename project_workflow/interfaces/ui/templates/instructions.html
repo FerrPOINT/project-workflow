@@ -2,86 +2,69 @@
 {% block page_layout %}reading{% endblock %}
 
 {% block title %}Инструкции фазы {{ phase.name }} — Workflow Engine{% endblock %}
-{% block header_title %}<span class="instructions-desktop-title">Инструкции фазы {{ phase.name }}</span><span class="instructions-mobile-title">Шаги</span>{% endblock %}
+{% block header_title %}Инструкции фазы {{ phase.name }}{% endblock %}
 {% block header_actions %}
-  <a href="{{ ui_base_path() }}/phase/{{ phase.id }}{% if selected_namespace %}?profession_id={{ selected_namespace.id }}{% endif %}" class="btn btn-secondary instructions-header-action">← К фазе</a>
+  {% set return_url %}{{ ui_base_path() }}/phase/{{ phase.id }}{% if selected_namespace %}?profession_id={{ selected_namespace.id }}{% endif %}{% endset %}
+  {{ base_ui.button('← К фазе', href=return_url) }}
 {% endblock %}
 
 {% block extra_style %}
-.instructions-mobile-title,.instructions-mobile-actions,.instructions-context{display:none}
 .instructions-layout{display:flex;flex-direction:column;gap:8px;max-width:900px;margin:0 auto;width:100%}
 .instruction-block{width:100%}
-.instruction-row{display:grid;grid-template-columns:40px minmax(0,1fr) 40px;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);align-items:start}
+.instruction-row{display:grid;grid-template-columns:var(--shell-control-min) minmax(0,1fr) var(--shell-control-min);gap:10px;padding:10px 0;border-bottom:1px solid var(--border);align-items:start}
 .instruction-body{display:flex;flex-direction:column;gap:8px;min-width:0}
 .execution-row{display:flex;align-items:center;gap:6px;min-height:28px}
-.skills-cell{font-size:11px;color:var(--text-muted);display:flex;flex-wrap:wrap;gap:6px;align-items:center}
-.step-num{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text-dim)}
-.instruction-desc textarea{display:block;min-height:40px;box-sizing:border-box;overflow:hidden;resize:none;overflow-wrap:anywhere;line-height:1.5}
-.type-badge{display:inline-flex;align-items:center;min-height:40px;padding:8px 10px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;user-select:none}
-.type-badge.sync{background:rgba(34,197,94,.12);color:var(--green);border:1px solid rgba(34,197,94,.25)}
-.type-badge.parallel{background:var(--orange-soft);color:var(--orange);border:1px solid var(--orange)}
-.skills-cell{font-size:11px;color:var(--text-muted)}
-.skill-chip{display:inline-flex;align-items:center;gap:3px;padding:2px 6px;border-radius:4px;background:var(--accent-soft);color:var(--accent-readable);overflow-wrap:anywhere;margin:0 4px 4px 0}
-.skills-input{width:100%;min-height:40px;font-size:13px;padding:6px 8px;background:var(--panel);border:1px solid var(--border);border-radius:4px;color:var(--text-secondary)}
-.parallel-group{border:1px solid var(--orange);border-radius:8px;padding:12px;background:rgba(245,158,11,.08);box-shadow:inset 0 0 0 1px rgba(245,158,11,.18)}
-.parallel-label{display:inline-flex;align-items:center;align-self:flex-start;gap:6px;padding:3px 10px;border-radius:999px;border:1px solid var(--orange);background:var(--orange-soft);color:var(--orange);font-size:11px;font-weight:700;letter-spacing:.04em;margin-bottom:8px}
+.skills-cell{font-size:var(--base-font-label);color:var(--text-muted);display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.instruction-desc textarea{display:block;min-height:40px;box-sizing:border-box;overflow-wrap:anywhere}
+.skills-cell{font-size:var(--base-font-label);color:var(--text-muted)}
+.parallel-label{margin-bottom:8px}
 .add-panel{max-width:900px;margin:10px auto 0;padding-top:12px;border-top:1px solid var(--border)}
 .add-row{display:flex;gap:10px;align-items:center}
-.add-row input,.add-row button{min-height:40px}
 .order-controls{display:flex;flex-direction:column;align-items:center;gap:4px}
-.order-btn{width:40px;height:40px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;font-size:16px;line-height:1}
-.order-btn:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
-.order-btn:disabled{opacity:.35;cursor:not-allowed}
-.row-actions .icon-btn{width:40px;height:40px}
-.empty-instructions{color:var(--text-dim);font-size:13px;padding:20px 0}
-@media(max-width:930px){.instructions-desktop-title,.header .instructions-header-action{display:none}.instructions-mobile-title{display:inline}.instructions-mobile-actions{display:flex;justify-content:flex-end;max-width:900px;margin:0 auto 8px}.instructions-mobile-actions .btn{display:inline-flex;align-items:center;min-height:40px}.instructions-context{display:block;max-width:900px;margin:0 auto 8px;font-size:18px;line-height:1.3;overflow-wrap:anywhere}}
-@media(max-width:480px){.instruction-row{grid-template-columns:minmax(0,1fr) 40px;gap:6px}.instruction-row .step-num{display:none}.instruction-row .order-controls{grid-column:1;grid-row:1;flex-direction:row;justify-content:flex-start}.instruction-row .instruction-body{grid-column:1/-1;grid-row:2}.instruction-row .row-actions{grid-column:2;grid-row:1}}
+@media(max-width:480px){.instruction-row{grid-template-columns:minmax(0,1fr) var(--shell-control-mobile-min);gap:6px}.instruction-row .step-num{display:none}.instruction-row .order-controls{grid-column:1;grid-row:1;flex-direction:row;justify-content:flex-start}.instruction-row .instruction-body{grid-column:1/-1;grid-row:2}.instruction-row .row-actions{grid-column:2;grid-row:1}}
 {% endblock %}
 
 {% block content %}
-<div class="instructions-mobile-actions"><a href="{{ ui_base_path() }}/phase/{{ phase.id }}{% if selected_namespace %}?profession_id={{ selected_namespace.id }}{% endif %}" class="btn btn-secondary">← К фазе</a></div>
-<h2 class="instructions-context">{{ phase.name }}</h2>
-
 <div class="instructions-layout" id="instructionsLayout">
   {% for group in instruction_groups %}
     {% set is_parallel_group = group | length > 1 %}
-    <div class="instruction-block {% if is_parallel_group %}parallel-group{% endif %}" data-block-index="{{ loop.index0 }}">
-      {% if is_parallel_group %}<div class="parallel-label">⚡ параллельно</div>{% endif %}
+    <div class="instruction-block {% if is_parallel_group %}parallel-group base-card base-card-content{% endif %}" data-block-index="{{ loop.index0 }}">
+      {% if is_parallel_group %}{{ base_ui.badge('⚡ параллельно', 'info', class_name='parallel-label') }}{% endif %}
       {% for instruction in group %}
       <div class="instruction-row" data-instruction-id="{{ instruction.id }}" data-step-num="{{ instruction.step_num }}">
         <div class="order-controls">
-          <button type="button" class="order-btn move-up" onclick="moveInstruction(this, -1)" aria-label="Поднять инструкцию {{ instruction.step_num }} выше">↑</button>
-          <span class="step-num">{{ instruction.step_num }}</span>
-          <button type="button" class="order-btn move-down" onclick="moveInstruction(this, 1)" aria-label="Опустить инструкцию {{ instruction.step_num }} ниже">↓</button>
+          <button type="button" class="base-control base-button base-icon-control order-btn move-up" data-variant="secondary" data-size="icon" onclick="moveInstruction(this, -1)" aria-label="Поднять инструкцию {{ instruction.step_num }} выше">↑</button>
+          {{ base_ui.badge(instruction.step_num, appearance='counter', class_name='step-num') }}
+          <button type="button" class="base-control base-button base-icon-control order-btn move-down" data-variant="secondary" data-size="icon" onclick="moveInstruction(this, 1)" aria-label="Опустить инструкцию {{ instruction.step_num }} ниже">↓</button>
         </div>
         <div class="instruction-body">
           <div class="instruction-desc">
-            <textarea class="instruction-text" rows="1" data-original-description="{{ instruction.description }}" aria-label="Описание инструкции {{ instruction.step_num }}" onchange="updateInstruction(this)">{{ instruction.description }}</textarea>
+            <textarea data-base-autosize class="instruction-text base-control base-textarea" rows="1" data-original-description="{{ instruction.description }}" aria-label="Описание инструкции {{ instruction.step_num }}" onchange="updateInstruction(this)" data-appearance="inline">{{ instruction.description }}</textarea>
           </div>
           <div class="execution-row">
-            <button type="button" class="type-badge {{ instruction.execution_type }}" data-execution-type="{{ instruction.execution_type }}" aria-pressed="{{ 'true' if instruction.execution_type == 'parallel' else 'false' }}" onclick="toggleType(this)">{{ 'параллельно' if instruction.execution_type == 'parallel' else 'последовательно' }}</button>
+            <button type="button" class="base-control base-button type-badge" data-variant="outline" aria-label="Параллельное выполнение инструкции {{ instruction.step_num }}" data-execution-type="{{ instruction.execution_type }}" aria-pressed="{{ 'true' if instruction.execution_type == 'parallel' else 'false' }}" onclick="toggleType(this)">{{ 'параллельно' if instruction.execution_type == 'parallel' else 'последовательно' }}</button>
           </div>
           <div class="skills-cell">
             {% for skill in instruction.skills %}
-            <span class="skill-chip">{{ skill }}</span>
+            {{ base_ui.badge(skill, 'info') }}
             {% endfor %}
-            <input class="skills-input" type="text" value="{{ instruction.skills | join(', ') }}" placeholder="Навыки через запятую" aria-label="Навыки инструкции {{ instruction.step_num }}" onchange="updateSkills(this)">
+            <input class="skills-input base-control base-input" type="text" value="{{ instruction.skills | join(', ') }}" placeholder="Навыки через запятую" aria-label="Навыки инструкции {{ instruction.step_num }}" onchange="updateSkills(this)">
           </div>
         </div>
         <div class="row-actions">
-          <button type="button" class="icon-btn" onclick="deleteInstruction(this)" aria-label="Удалить инструкцию {{ instruction.step_num }}" title="Удалить инструкцию">×</button>
+          <button type="button" class="base-control base-button base-icon-control icon-btn" data-variant="destructive-outline" data-size="icon" onclick="deleteInstruction(this)" aria-label="Удалить инструкцию {{ instruction.step_num }}" title="Удалить инструкцию">×</button>
         </div>
       </div>
       {% endfor %}
     </div>
   {% else %}
-    <div class="empty-instructions">Инструкций пока нет.</div>
+    {{ base_ui.state('empty', 'Инструкций пока нет.') }}
   {% endfor %}
 </div>
 
 <div class="add-panel">
   <div class="add-row">
-    <input type="text" id="newInstructionText" placeholder="Новая инструкция…" aria-label="Новая инструкция" style="flex:1">
+    <input type="text" id="newInstructionText" placeholder="Новая инструкция…" aria-label="Новая инструкция" style="flex:1" class="base-control base-input">
     <button type="button" class="btn btn-primary" onclick="addInstruction()">Добавить</button>
   </div>
 </div>
@@ -91,15 +74,6 @@
 {% block extra_script %}
 const PHASE_ID = {{ phase.id }};
 const selectedNamespaceId = {{ selected_namespace.id if selected_namespace else 'null' }};
-
-function resizeInstructionTextarea(field) {
-  field.style.height = 'auto';
-  field.style.height = `${field.scrollHeight + field.offsetHeight - field.clientHeight}px`;
-}
-
-function resizeInstructionTextareas() {
-  document.querySelectorAll('.instruction-text').forEach(resizeInstructionTextarea);
-}
 
 function instructionApiUrl(path) {
   const url = new URL(path, window.location.origin);
@@ -122,6 +96,7 @@ function renumberRows() {
     row.querySelector('.move-down')?.setAttribute('aria-label', `Опустить инструкцию ${idx + 1} ниже`);
     row.querySelector('.instruction-text')?.setAttribute('aria-label', `Описание инструкции ${idx + 1}`);
     row.querySelector('.skills-input')?.setAttribute('aria-label', `Навыки инструкции ${idx + 1}`);
+    row.querySelector('.type-badge')?.setAttribute('aria-label', `Параллельное выполнение инструкции ${idx + 1}`);
     row.querySelector('.row-actions .icon-btn')?.setAttribute('aria-label', `Удалить инструкцию ${idx + 1}`);
   });
 }
@@ -142,10 +117,12 @@ function updateTimeline() {
   groups.forEach(group => {
     const isParallelGroup = group.length > 1;
     const block = document.createElement('div');
-    block.className = 'instruction-block' + (isParallelGroup ? ' parallel-group' : '');
+    block.className = 'instruction-block' + (isParallelGroup ? ' parallel-group base-card base-card-content' : '');
     if (isParallelGroup) {
-      const label = document.createElement('div');
-      label.className = 'parallel-label';
+      const label = document.createElement('span');
+      label.className = 'base-badge parallel-label';
+      label.dataset.tone = 'info';
+      label.dataset.appearance = 'badge';
       label.textContent = '⚡ параллельно';
       block.appendChild(label);
     }
@@ -154,6 +131,7 @@ function updateTimeline() {
   });
   renumberRows();
   updateMoveButtons();
+  layout.querySelectorAll('textarea[data-base-autosize]').forEach(field => window.PdlcTextarea?.initTextareaAutosize(field));
 }
 
 function updateMoveButtons() {
@@ -219,7 +197,7 @@ async function updateInstruction(textarea) {
   const id = parseInt(row.dataset.instructionId, 10);
   const description = textarea.value.trim();
   if (!description) {
-    resizeInstructionTextarea(textarea);
+    window.PdlcTextarea.refreshTextareaAutosize(textarea);
     showToast('Описание инструкции обязательно', 'error');
     return;
   }
@@ -243,7 +221,7 @@ async function updateInstruction(textarea) {
     textarea.dataset.originalDescription = savedDescription;
   } finally {
     textarea.disabled = false;
-    resizeInstructionTextarea(textarea);
+    window.PdlcTextarea.refreshTextareaAutosize(textarea);
   }
 }
 
@@ -264,7 +242,6 @@ async function toggleType(badge) {
   }
   badge.dataset.executionType = nextType;
   badge.textContent = nextType === 'parallel' ? 'параллельно' : 'последовательно';
-  badge.className = 'type-badge ' + nextType;
   badge.setAttribute('aria-pressed', String(nextType === 'parallel'));
   updateTimeline();
 }
@@ -280,6 +257,7 @@ async function deleteInstruction(button) {
     showToast(data.error || 'Ошибка удаления', 'error');
     return;
   }
+  row.querySelectorAll('textarea[data-base-autosize]').forEach(window.PdlcTextarea.destroyTextareaAutosize);
   row.remove();
   updateTimeline();
 }
@@ -322,11 +300,5 @@ async function updateSkills(input) {
 
 document.addEventListener('DOMContentLoaded', () => {
   updateMoveButtons();
-  resizeInstructionTextareas();
-  if (document.fonts) document.fonts.ready.then(resizeInstructionTextareas);
 });
-document.addEventListener('input', (event) => {
-  if (event.target.matches('.instruction-text')) resizeInstructionTextarea(event.target);
-});
-window.addEventListener('resize', resizeInstructionTextareas);
 {% endblock %}

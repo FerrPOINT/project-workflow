@@ -1,4 +1,79 @@
 (() => {
+  // Native pages use one replaceable message per host. React keeps Sonner's
+  // event store; this adapter needs neither React nor a second product timer.
+  const notifications = new WeakMap();
+  /** @param {string} message @param {import('../src/runtime-globals').ServerNotificationOptions} options */
+  function notify(message, options = {}) {
+    const host = document.getElementById(options.hostId || 'base-toaster');
+    const template = /** @type {HTMLTemplateElement} */ (host?.querySelector('[data-base-toast-template]'));
+    if (!host?.hasAttribute('data-base-toaster') || !template) throw new Error('Base notification host is missing');
+    const type = options.type ?? 'normal';
+    if (!['normal', 'success', 'error', 'warning'].includes(type)) throw new TypeError('Unknown Base notification type');
+    const duration = options.duration ?? (type === 'error' || type === 'warning' ? Infinity : 4000);
+    if (!(duration === Infinity || Number.isFinite(duration) && duration >= 0 && duration <= 2147483647)) throw new TypeError('Invalid Base notification duration');
+    const wasFocused = host.contains(document.activeElement);
+    const previous = notifications.get(host);
+    const trigger = wasFocused ? previous?.trigger : document.activeElement;
+    previous?.dismiss(false);
+    const panel = /** @type {HTMLElement} */ (template.content.firstElementChild.cloneNode(true));
+    const close = /** @type {HTMLButtonElement} */ (panel.querySelector('[data-base-toast-close]'));
+    panel.dataset.type = type;
+    panel.querySelector('[data-base-toast-message]').textContent = String(message);
+    host.querySelector(type === 'error' || type === 'warning' ? '[data-base-toast-alert]' : '[data-base-toast-status]').append(panel);
+    let timer;
+    let started = 0;
+    let remaining = duration;
+    let hovered = false;
+    let active = true;
+    function pause() {
+      if (timer !== undefined) {
+        clearTimeout(timer);
+        timer = undefined;
+        remaining = Math.max(0, remaining - (Date.now() - started));
+      }
+    }
+    function resume() {
+      if (!active || hovered || document.hidden || panel.contains(document.activeElement) || remaining === Infinity || timer !== undefined) return;
+      started = Date.now();
+      timer = setTimeout(() => dismiss(), remaining);
+    }
+    function onEnter() { hovered = true; pause(); }
+    function onLeave() { hovered = false; resume(); }
+    function onFocusOut(event) { if (!panel.contains(event.relatedTarget)) queueMicrotask(resume); }
+    function onVisibility() { if (document.hidden) pause(); else resume(); }
+    function onClose() { dismiss(); }
+    function onPageHide() { dismiss(false); }
+    function dismiss(restoreFocus = true) {
+      if (!active) return;
+      active = false;
+      pause();
+      const focused = panel.contains(document.activeElement);
+      panel.remove();
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pagehide', onPageHide);
+      // An obsolete dismiss handle must never remove a newer notification.
+      if (notifications.get(host)?.dismiss === dismiss) notifications.delete(host);
+      if (focused && restoreFocus) {
+        if (trigger?.isConnected && typeof trigger.focus === 'function') trigger.focus();
+        if (document.activeElement === document.body) /** @type {HTMLElement} */ (document.querySelector('main[tabindex="-1"]'))?.focus();
+      }
+    }
+    panel.addEventListener('pointerenter', onEnter);
+    panel.addEventListener('pointerleave', onLeave);
+    panel.addEventListener('focusin', pause);
+    panel.addEventListener('focusout', onFocusOut);
+    close.addEventListener('click', onClose);
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pagehide', onPageHide);
+    notifications.set(host, { dismiss, trigger });
+    if (wasFocused) close.focus();
+    resume();
+    return () => dismiss();
+  }
+  window.PdlcBaseUI = window.SdlcBaseUI = { ...(window.PdlcBaseUI || window.SdlcBaseUI), notify };
+})();
+
+(() => {
   const preference = window.PdlcThemePreference || window.SdlcThemePreference;
   if (preference) {
     const legacyKey = document.documentElement.dataset.themeStorageKey || 'theme';
@@ -11,16 +86,49 @@
     apply();
     preference.subscribe(apply);
   }
-  for (const account of /** @type {NodeListOf<HTMLDetailsElement>} */ (document.querySelectorAll('.base-ssr-account'))) {
+  const menus = /** @type {NodeListOf<HTMLDetailsElement>} */ (document.querySelectorAll('.base-ssr-account,[data-base-menu]'));
+  for (const account of menus) {
     const toggle = account.querySelector('summary');
+    const panel = /** @type {HTMLElement} */ (account.querySelector(':scope > [data-base-menu-content]'));
     let pointerInAccount = false;
     function closeAccount(restoreFocus) { account.open = false; if (restoreFocus) toggle?.focus(); }
+    function positionPanel() {
+      if (!account.open || !panel || !toggle) return;
+      // Native disclosure positioning shares viewport bounds with the React
+      // popup, without importing React/Popper into server-rendered pages.
+      const padding = 8;
+      const anchor = toggle.getBoundingClientRect();
+      const below = Math.max(0, window.innerHeight - anchor.bottom - padding - 4);
+      const above = Math.max(0, anchor.top - padding - 4);
+      const flip = below < panel.scrollHeight && above > below;
+      panel.style.top = flip ? 'auto' : 'calc(100% + 4px)';
+      panel.style.bottom = flip ? 'calc(100% + 4px)' : 'auto';
+      panel.style.maxHeight = Math.min(flip ? above : below, window.innerHeight * .8) + 'px';
+      panel.style.translate = '0px';
+      const bounds = panel.getBoundingClientRect();
+      const width = document.documentElement.clientWidth;
+      const shift = bounds.left < padding ? padding - bounds.left : Math.min(0, width - padding - bounds.right);
+      panel.style.translate = shift + 'px';
+    }
+    account.addEventListener('toggle', () => {
+      const group = account.dataset.baseMenuGroup;
+      if (account.open && group) for (const other of menus) {
+        if (other !== account && other.dataset.baseMenuGroup === group) other.open = false;
+      }
+      positionPanel();
+    });
+    if (panel) {
+      window.addEventListener('resize', positionPanel);
+      document.addEventListener('scroll', positionPanel, true);
+      // Published font/density changes can resize an already-open popup.
+      if (typeof ResizeObserver !== 'undefined') new ResizeObserver(positionPanel).observe(panel);
+    }
     // WebKit focuses an ancestor main before clicking a non-focusable link.
     // Keep the pressed menu item mounted until its click can be delivered.
     document.addEventListener('pointerdown', (event) => { pointerInAccount = event.target instanceof Node && account.contains(event.target); });
     document.addEventListener('pointerup', () => { pointerInAccount = false; });
     document.addEventListener('pointercancel', () => { pointerInAccount = false; });
-    account.addEventListener('keydown', (event) => { if (event.key === 'Escape' && account.open) { event.preventDefault(); closeAccount(true); } });
+    account.addEventListener('keydown', (event) => { if (event.key === 'Escape' && account.open) { event.preventDefault(); event.stopPropagation(); closeAccount(true); } });
     document.addEventListener('click', (event) => { if (event.target instanceof Node && !account.contains(event.target)) closeAccount(false); });
     account.addEventListener('focusout', (event) => { if (!pointerInAccount && event.relatedTarget instanceof Node && !account.contains(event.relatedTarget)) closeAccount(false); });
   }
@@ -87,6 +195,10 @@ function requestConfirmation(options){
   var cancel = document.getElementById('confirmDialogCancel');
   var accept = document.getElementById('confirmDialogAccept');
   var trigger = /** @type {HTMLElement} */ (document.activeElement);
+  // A modal dismisses its source disclosure; restore to the visible summary,
+  // not an action that is hidden inside the now-closed menu.
+  var sourceMenu = trigger?.closest('details[data-base-menu][open]');
+  if(sourceMenu){ trigger = sourceMenu.querySelector('summary'); sourceMenu.removeAttribute('open'); }
   var background = Array.from(/** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('[data-base-dialog-background]')));
   var previousInert = background.map(function(element){ return element.inert; });
   document.getElementById('confirmDialogEyebrow').textContent = options.eyebrow || 'Подтверждение';

@@ -239,8 +239,8 @@ def test_ui_smoke_pages_render_neutral_screenshot_fixture(tmp_path, monkeypatch)
     assert "Default Namespace" not in rendered
     assert "orchestrator" not in rendered
     assert "codex-operator" not in rendered
-    assert "Настройки выполнения" in rendered
-    assert 'id="namespaceLaunchProfile"' in rendered
+    assert "Настройки выполнения" not in rendered
+    assert 'id="namespaceLaunchProfile"' not in rendered
     assert DEFAULT_DEMO_WORKFLOW_NAME in rendered
     assert QA_WORKFLOW_NAME in rendered
     assert "workflow-dev" in rendered
