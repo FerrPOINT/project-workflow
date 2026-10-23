@@ -79,23 +79,25 @@ def test_instruction_save_failure_retains_entered_text(result, page, fn, next_fn
     end = template.index(f"async function {next_fn}(", start)
     source = template[start:end]
     script = "\n".join([
-        "const messages=[];const window={PdlcPlatformNavigation:{}};",
+        "const messages=[];let resizes=0;const window={PdlcPlatformNavigation:{},",
+        "PdlcTextarea:{refreshTextareaAutosize(element){"
+        "if(element!==input)throw new Error('Wrong textarea');resizes++;}}};",
         "const input={value:'Edited instruction',disabled:false,",
         "dataset:{originalDescription:'Original instruction'},closest:()=>({dataset:{instructionId:'23'}})};",
-        "const resizeInlineTextarea=()=>{}; const showToast=(text)=>messages.push(text); const phaseApiUrl=(url)=>url;",
+        "const showToast=(text)=>messages.push(text); const phaseApiUrl=(url)=>url;",
         "const requestPhaseDetail=async()=>(" + json.dumps(result) + ");",
         "const requestInstruction=requestPhaseDetail;const instructionApiUrl=phaseApiUrl;",
-        "const resizeInstructionTextarea=resizeInlineTextarea;",
         source,
         f"await {fn}(input);",
-        "console.log(JSON.stringify({value:input.value,saved:input.dataset.originalDescription,disabled:input.disabled}));",
+        "console.log(JSON.stringify({value:input.value,saved:input.dataset.originalDescription,disabled:input.disabled,resizes}));",
     ])
     completed = subprocess.run(
         ["node", "--input-type=module", "-"], input=script, text=True, encoding="utf-8",
-        capture_output=True, check=True, timeout=10,
+        capture_output=True, timeout=10,
     )
+    assert completed.returncode == 0, completed.stderr
     assert json.loads(completed.stdout) == {
-        "value": "Edited instruction", "saved": "Original instruction", "disabled": False,
+        "value": "Edited instruction", "saved": "Original instruction", "disabled": False, "resizes": 1,
     }
 
 
