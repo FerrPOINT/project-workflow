@@ -187,3 +187,22 @@ Controls работают только с собственными temporary plu
 локальная autouse fixture исключает ненужную подготовку DB/UI, assertions не меняются.
 Перенос tier не является новым PASS этих manual tests; прежний result сохраняется
 для прежнего source, release проверяет актуальный candidate отдельно.
+
+## Окружение host producer
+
+`producer-environment.json` явно включает Base profile `locked-ui-v1` для сборки
+immutable image: Python3.11.15, `uv run --locked --extra ui`, один project environment
+без requirements overlay. Нужен совместимый Base helper; старые exact tooling pins
+самостоятельно не обновляются. Quality по-прежнему использует свой frozen profile
+со всеми необходимыми test extras; producer не устанавливает их ради image.
+
+Перед UV Base сверяет profile/pyproject/lock/constraints с выбранным Git revision
+и проверяет общие версии constraints/lock. `--locked` сохраняет отказ на устаревшем
+lockfile, как описано в [документации UV](https://docs.astral.sh/uv/concepts/projects/sync/).
+Неизвестный profile, dirty inputs и mismatch запрещают подготовку вместо fallback.
+Checkout без opt-in сохраняет прежний legacy requirements path. Approved prepared
+context по-прежнему запускает stdlib producer без UV или новой установки.
+
+Source contracts проверены отдельно от native image/environment qualification.
+Для нового profile ещё требуется одна cold/warm UI preparation на согласованной
+вехе; отсутствие overlay не выдаётся за уже измеренное ускорение приложения.

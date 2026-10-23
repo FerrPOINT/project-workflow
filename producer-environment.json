@@ -1,0 +1,4 @@
+{
+  "schema": "workflow-producer-environment/v1",
+  "profile": "locked-ui-v1"
+}

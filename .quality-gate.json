@@ -23,6 +23,7 @@
       "tests/lanes.json",
       "pyproject.toml",
       "constraints.txt",
+      "producer-environment.json",
       "uv.lock",
       "dependency-wheels.json",
       "Dockerfile",
