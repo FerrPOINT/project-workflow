@@ -138,4 +138,3 @@ def test_sso_entry_uses_shared_screen_without_changing_result_or_owner_login_url
     assert ("data-platform-login-required" in html) is required
     assert "Owner &lt;message&gt;" in html
     assert "font:16px system-ui" not in html
-
