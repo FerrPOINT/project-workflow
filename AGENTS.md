@@ -187,3 +187,14 @@ Dashboard metrics используют штатный Base macro metric со с�
 принадлежат Base. Подсчёт, verdict → tone и внешняя dashboard-grid остаются
 Workflow. Новый SSR API требует соответствующего UI pin и штатного export;
 SDK/skills pins не изменять вслед за UI. Source-проверка не означает установку.
+
+## Подписи и карточки вариантов выбора
+
+После проверки API в принятом UI pin используйте label или children Checkbox/Radio
+для обычной подписи, appearance="card" — для варианта с рамкой и описанием.
+Не копируйте label с border/rounded/padding и не оборачивайте такой выбор в
+Card asChild. Base владеет hit target, focus, checked/disabled и нативной формой;
+продукт — данными, правами и обработчиком. Внешняя grid/flex-компоновка допустима.
+SSR использует checkbox_control/radio_control с appearance='card'; отдельный
+click-handler или повторное input/change для оформления не нужен.
+Контракт и пример: Base docs/platform/CHOICE_CONTROLS.md, pdlc-ui example Checkbox --case cards.
