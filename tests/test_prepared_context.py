@@ -23,6 +23,81 @@ from scripts.prepared_context import PreparedContextRef, read_prepared_context
 
 pytestmark = pytest.mark.unit
 MAX_BYTES = 2 * 1024 * 1024
+
+
+def test_named_plan_keeps_original_transport_and_provenance_without_producer(captured):
+    expected = read(captured.reference, captured).receipt
+    with (patch.object(builder, 'immutable_git_snapshot', side_effect=AssertionError('No archive')),
+          patch.object(builder.gzip, 'compress', side_effect=AssertionError('No compression')),
+          patch.object(prepared_context, 'read_prepared_context', side_effect=AssertionError('No allocation'))):
+        value = builder.plan_prepared_build(captured.root, captured.revision, captured.skills,
+            'legacy', captured.reference, MAX_BYTES, 'own-image', 'sdlc-build-' + 'a' * 32)
+    assert value['receipt'] == expected
+    assert value['receipt_sha256'] == captured.reference.receipt_sha256
+    command = value['arguments']
+    assert command[:4] == ['docker', 'buildx', 'build', '--load']
+    assert command[-3:] == ['--tag', 'own-image', '-']
+    assert 'BUILDKIT_BUILD_NAME=sdlc-build-' + 'a' * 32 in command
+    assert 'SOURCE_ARCHIVE_SHA256=' + expected['provenance']['source_archive_sha256'] in command
+
+
+def test_named_plan_rejects_a_compiler_input_disguised_as_history_metadata(captured):
+    original = builder._bounded_blob
+    def blob(root, spec):
+        return b'FROM scratch\nARG BUILDKIT_BUILD_NAME\n' if spec.endswith(':Dockerfile') else original(root, spec)
+    with patch.object(builder, '_bounded_blob', side_effect=blob), pytest.raises(
+            builder.BuildProvenanceError, match='history-only'):
+        builder.plan_prepared_build(captured.root, captured.revision, captured.skills,
+            'legacy', captured.reference, MAX_BYTES, 'own-image', 'sdlc-build-' + 'b' * 32)
+
+
+def test_named_plan_cli_is_stdlib_only(captured):
+    command = [sys.executable, '-S', '-B', '-m', 'scripts.build_runtime_image', 'plan-build',
+        '--root', str(captured.root), '--revision', captured.revision, '--skills-root', str(captured.skills),
+        '--prepared-context', str(captured.reference.directory), '--prepared-context-receipt-sha256',
+        captured.reference.receipt_sha256, '--context-max-bytes', str(MAX_BYTES),
+        '--image', 'own-image', '--build-name', 'sdlc-build-' + 'c' * 32]
+    result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, timeout=15, check=False)
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)['schema'] == 'workflow-prepared-build-plan/v1'
+
+
+def test_inspection_streams_transport_without_allocating_or_repreparing_it(captured):
+    expected = read(captured.reference, captured).receipt
+    original = prepared_context._read
+    with (patch.object(prepared_context, '_read', wraps=original) as reads,
+          patch.object(prepared_context, 'read_prepared_context', side_effect=AssertionError('No retained payload')),
+          patch.object(builder, 'immutable_git_snapshot', side_effect=AssertionError('No source export'))):
+        actual = prepared_context.inspect_prepared_context(captured.reference, expected_request=captured.request,
+            max_transport_bytes=MAX_BYTES)
+    assert actual == expected
+    payload_reads = [call for call in reads.call_args_list if call.args[0].name == 'context.tar.gz']
+    assert len(payload_reads) == 1 and payload_reads[0].kwargs['retain'] is False
+
+
+def test_inspection_cli_is_stdlib_only_and_returns_original_external_reference(captured):
+    command = [sys.executable, '-S', '-B', '-m', 'scripts.build_runtime_image', 'inspect-context',
+        '--root', str(captured.root), '--revision', captured.revision, '--skills-root', str(captured.skills),
+        '--prepared-context', str(captured.reference.directory), '--prepared-context-receipt-sha256',
+        captured.reference.receipt_sha256, '--context-max-bytes', str(MAX_BYTES)]
+    result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, timeout=15, check=False)
+    assert result.returncode == 0, result.stderr
+    value = json.loads(result.stdout)
+    assert value['schema'] == 'workflow-prepared-context-inspection/v1'
+    assert value['receipt_sha256'] == captured.reference.receipt_sha256
+    assert value['receipt'] == read(captured.reference, captured).receipt
+    assert Path(value['directory']) == captured.reference.directory
+
+
+def test_inspection_refuses_wrong_external_pin_and_corrupt_payload(packet, captured):
+    wrong = PreparedContextRef(packet.directory, '0' * 64)
+    with pytest.raises(builder.BuildProvenanceError):
+        prepared_context.inspect_prepared_context(wrong, expected_request=captured.request,
+            max_transport_bytes=MAX_BYTES)
+    (packet.directory / 'context.tar.gz').write_bytes(b'corrupt')
+    with pytest.raises(builder.BuildProvenanceError):
+        prepared_context.inspect_prepared_context(packet, expected_request=captured.request,
+            max_transport_bytes=MAX_BYTES)
 ROOT = Path(__file__).resolve().parents[1]
 SKILLS_MANIFEST = "manifests/hermes-workflow-role-skills.v1.json"
 

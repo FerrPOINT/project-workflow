@@ -191,6 +191,18 @@ def read_prepared_context(reference: PreparedContextRef, *, expected_request: di
     return PreparedTransport(data, receipt)
 
 
+def inspect_prepared_context(reference: PreparedContextRef, *, expected_request: dict[str, str],
+                             max_transport_bytes: int) -> dict[str, Any]:
+    """Verify the same approved transport streaming, without retaining its bytes.
+
+    This is read-only metadata for a parent owner, not an image receipt or a
+    grant to trust a later unverified read. The actual stdin consumer must bind
+    its input separately and retain daemon ownership through terminal proof.
+    """
+    _, receipt = _verify(reference, expected_request, max_transport_bytes, retain=False)
+    return receipt
+
+
 def _rename_new(source: Path, destination: Path) -> None:
     if os.name == "nt":
         source.rename(destination)  # Windows rename refuses an existing name.

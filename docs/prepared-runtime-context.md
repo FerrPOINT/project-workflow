@@ -7,8 +7,9 @@ prepared context позволяет пропустить повторные Git 
 
 ## Подготовка один раз
 
-Запускать issuer в уже подготовленном frozen producer environment Python3.11.15
-с UI/constraints dependencies. Он сам не устанавливает зависимости и не строит
+Запускать issuer в уже подготовленном frozen producer environment Python3.11.15.
+Текущий `locked-core-v1` использует project lock без UI extra и requirements overlay.
+Он сам не устанавливает зависимости и не строит
 image. Родитель output должен существовать; destination создаётся новым.
 
 ```sh
@@ -64,6 +65,31 @@ Reader сравнивает общую file identity между path/handle APIs
 иметь разную точность на Windows. Полные stamps, включая `ctime`, сравниваются
 до/после чтения отдельно для открытого handle и пути. Различие API не вызывает
 повторную подготовку, а изменение файла во время чтения остаётся ошибкой.
+
+## Подключение к владельцу BuildKit в Base
+
+`inspect-context` принимает те же revision/skills/prepared параметры и возвращает
+проверенный receipt. Payload читается потоком, без его сохранения в памяти.
+Это проверка transport, а не доказательство собранного image.
+
+`plan-build` дополнительно принимает `--image` и `--build-name sdlc-build-<32hex>`.
+Он возвращает `workflow-prepared-build-plan/v1` с точным Docker argv, исходным
+receipt и его внешним pin. Archive/exporter/gzip/UV/Docker не запускаются.
+Имя допустимо только как [история BuildKit](https://docs.docker.com/reference/dockerfile/#buildkit-built-in-build-args):
+объявление `ARG BUILDKIT_BUILD_NAME` в recipe запрещено, чтобы identity операции
+не стала compiler input. Build args и provenance labels принадлежат общей функции
+с обычным product producer.
+
+Новый Base caller передаёт уже сжатые immutable bytes напрямую в Docker stdin.
+Распаковки на Windows нет: Unix executable modes и исходный gzip сохраняются.
+Он удерживает общий slot и durable owner до terminal daemon record с тем же
+именем и frontend argument. Unknown/ambiguous metadata сохраняет ownership для
+read-only recovery; завершение CLI не доказывает завершение daemon.
+Последующий ready lookup проверяет original sealed proof без повторного plan,
+install/export/compile и без требования хранить disposable payload.
+
+Native qualification и принятие exact quality packet выполняются отдельно.
+Добавление API в source не переключает tooling/SDK/UI/skills/operator pins.
 
 ## Граница доказательства
 

@@ -8,6 +8,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import subprocess
 import sys
 import tarfile
@@ -339,6 +340,48 @@ def prepare_context(root: Path, revision: str, *, skills_root: Path, output: Pat
     return prepared.publish(destination, receipt, transport, max_transport_bytes=max_transport_bytes)
 
 
+def image_arguments(image, docker, provenance, catalog_variant, scheduling, *, build_name=None):
+    if build_name is not None and not re.fullmatch(r"sdlc-build-[a-f0-9]{32}", build_name):
+        raise BuildProvenanceError("Invalid named build identity")
+    return [docker,
+        *(["buildx", "build", "--load", *scheduling] if scheduling or build_name else ["build"]),
+        *(["--build-arg", "BUILDKIT_BUILD_NAME=" + build_name] if build_name else []),
+        "--build-arg", f"CATALOG_VARIANT={catalog_variant}",
+        "--build-arg", f"SOURCE_REVISION={provenance.source_revision}",
+        "--build-arg", f"SOURCE_ARCHIVE_SHA256={provenance.source_archive_sha256}",
+        "--build-arg", f"RUNTIME_BUNDLE_SHA256={provenance.runtime_bundle_sha256}",
+        "--label", f"org.opencontainers.image.revision={provenance.source_revision}",
+        "--label", f"io.relevanter.source.archive-sha256={provenance.source_archive_sha256}",
+        "--label", f"io.relevanter.runtime.bundle-sha256={provenance.runtime_bundle_sha256}",
+        "--tag", image, "-"]
+
+
+def plan_prepared_build(root, revision, skills_root, catalog_variant, reference,
+                        max_transport_bytes, image, build_name, resource_limits=None):
+    """Validate a frozen input and describe its existing producer, without Docker."""
+    from scripts.prepared_context import inspect_prepared_context
+
+    scheduling = resource_options(resource_limits)
+    request = context_request(root, revision, skills_root, catalog_variant)
+    receipt = inspect_prepared_context(reference, expected_request=request,
+                                       max_transport_bytes=max_transport_bytes)
+    if scheduling and receipt["resource_frontend"] != RESOURCE_FRONTEND:
+        raise BuildProvenanceError("Prepared context requires the qualified pinned Dockerfile frontend")
+    # A declared ARG could turn this history-only identity into a compiler input.
+    recipe = _bounded_blob(root, request['source_revision'] + ':Dockerfile').decode('utf-8')
+    logical = recipe.replace('\\\r\n', '').replace('\\\n', '')
+    if (re.search(r'(?im)^\s*#\s*escape\s*=\s*`', recipe)
+            or re.search(r'(?im)^\s*ARG\s+BUILDKIT_BUILD_NAME(?:[=\s]|$)', logical)):
+        raise BuildProvenanceError("Named builds require an undeclared history-only build name")
+    command = image_arguments(image, 'docker', validate_build_provenance(receipt['provenance']),
+                              catalog_variant, scheduling, build_name=build_name)
+    if context_request(root, revision, skills_root, catalog_variant) != request:
+        raise BuildProvenanceError("Prepared context request changed during planning")
+    return {'schema': 'workflow-prepared-build-plan/v1', 'arguments': command,
+            'directory': str(reference.directory), 'receipt_sha256': reference.receipt_sha256,
+            'receipt': receipt}
+
+
 def build_image(root: Path, image: str, docker: str, revision: str = "HEAD",
                 *, skills_root: Path, catalog_variant: str = "legacy",
                 resource_limits: list[str] | None = None, prepared_context=None,
@@ -375,27 +418,7 @@ def build_image(root: Path, image: str, docker: str, revision: str = "HEAD",
         # A PAX-first plain tar can be mistaken for a Dockerfile on stdin.
         transport = gzip.compress(context, mtime=0)
     subprocess.run(
-        [
-            docker,
-            *(["buildx", "build", "--load", *scheduling] if scheduling else ["build"]),
-            "--build-arg",
-            f"CATALOG_VARIANT={catalog_variant}",
-            "--build-arg",
-            f"SOURCE_REVISION={provenance.source_revision}",
-            "--build-arg",
-            f"SOURCE_ARCHIVE_SHA256={provenance.source_archive_sha256}",
-            "--build-arg",
-            f"RUNTIME_BUNDLE_SHA256={provenance.runtime_bundle_sha256}",
-            "--label",
-            f"org.opencontainers.image.revision={provenance.source_revision}",
-            "--label",
-            f"io.relevanter.source.archive-sha256={provenance.source_archive_sha256}",
-            "--label",
-            f"io.relevanter.runtime.bundle-sha256={provenance.runtime_bundle_sha256}",
-            "--tag",
-            image,
-            "-",
-        ],
+        image_arguments(image, docker, provenance, catalog_variant, scheduling),
         check=True,
         input=transport,
     )
@@ -429,6 +452,20 @@ def main(argv: list[str] | None = None) -> int:
     prepare.add_argument("--output", type=Path, required=True)
     prepare.add_argument("--context-max-bytes", type=int, required=True)
 
+    inspect = subparsers.add_parser("inspect-context")
+    inspect.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
+    inspect.add_argument("--revision", required=True)
+    inspect.add_argument("--skills-root", type=Path, required=True)
+    inspect.add_argument("--catalog-variant", choices=("legacy", "base"), default="legacy")
+    inspect.add_argument("--prepared-context", type=Path, required=True)
+    inspect.add_argument("--prepared-context-receipt-sha256", required=True)
+    inspect.add_argument("--context-max-bytes", type=int, required=True)
+
+    plan = subparsers.add_parser("plan-build", parents=[inspect], add_help=False)
+    plan.add_argument("--image", required=True)
+    plan.add_argument("--build-name", required=True)
+    plan.add_argument("--build-resource", action="append")
+
     for name in ("derive-compatibility", "verify-compatibility"):
         subparsers.add_parser(name).add_argument("--root", type=Path, required=True)
 
@@ -461,6 +498,25 @@ def main(argv: list[str] | None = None) -> int:
                                         catalog_variant=args.catalog_variant, output=args.output,
                                         max_transport_bytes=args.context_max_bytes)
             print(json.dumps({"directory": str(reference.directory), "receipt_sha256": reference.receipt_sha256}))
+        elif args.command == "plan-build":
+            from scripts.prepared_context import PreparedContextRef, plain
+
+            reference = PreparedContextRef(plain(args.prepared_context), args.prepared_context_receipt_sha256)
+            print(json.dumps(plan_prepared_build(args.root, args.revision, args.skills_root,
+                args.catalog_variant, reference, args.context_max_bytes, args.image, args.build_name,
+                args.build_resource)))
+        elif args.command == "inspect-context":
+            from scripts.prepared_context import PreparedContextRef, inspect_prepared_context, plain
+
+            request = context_request(args.root, args.revision, args.skills_root, args.catalog_variant)
+            reference = PreparedContextRef(plain(args.prepared_context), args.prepared_context_receipt_sha256)
+            receipt = inspect_prepared_context(reference, expected_request=request,
+                                               max_transport_bytes=args.context_max_bytes)
+            if context_request(args.root, args.revision, args.skills_root, args.catalog_variant) != request:
+                raise BuildProvenanceError("Prepared context request changed during inspection")
+            print(json.dumps({"schema": "workflow-prepared-context-inspection/v1",
+                              "directory": str(reference.directory), "receipt_sha256": reference.receipt_sha256,
+                              "receipt": receipt}))
         elif args.command == "derive-compatibility":
             (args.root / COMPATIBILITY_PATH).write_bytes(_json_bytes(derive_compatibility(args.root)))
         elif args.command == "verify-compatibility":
