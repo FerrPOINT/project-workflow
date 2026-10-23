@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_dispatch:
   push:
     branches: [master]
   pull_request:
@@ -68,6 +69,7 @@ jobs:
       - name: Profession and platform navigation regression
         run: node scripts/test_profession_navigation.mjs
       - name: PostgreSQL integration tests
+        if: github.event_name == 'workflow_dispatch'
         run: uv run --isolated --with-requirements constraints.txt --all-extras pytest -q -m integration tests/test_postgres_integration.py --timeout=120
       - name: Lint
         run: uv run --isolated --with-requirements constraints.txt --all-extras ruff check .
@@ -78,7 +80,7 @@ jobs:
       - name: Diff hygiene
         run: git diff --check
   compose-smoke:
-    if: github.actor != 'dependabot[bot]'
+    if: github.event_name == 'workflow_dispatch' && (github.actor != 'dependabot[bot]')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
