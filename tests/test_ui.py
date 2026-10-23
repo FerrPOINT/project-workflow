@@ -400,7 +400,8 @@ class TestIndexPage:
         assert 'class="base-text-link" href="/tasks' in response.text
         assert 'class="base-text-link" href="/namespaces"' in response.text
         assert '<section class="card" data-dashboard-' not in response.text
-        assert ".code{font-family:'JetBrains Mono',monospace;color:var(--accent-readable)}" in response.text
+        assert ".code{font-family:var(--base-font-mono);color:var(--accent-readable)}" in response.text
+        assert "font-family:'JetBrains Mono',monospace;color:var(--accent-readable)" not in response.text
 
     def test_dashboard_keeps_empty_sections_navigable(self):
         dashboard = {
@@ -531,6 +532,30 @@ class TestPhasesPage:
         assert "url.pathname='/phases';" in response.text
         assert "if(url.pathname === '/instructions'){" in response.text
         assert "url.searchParams.delete('phase_id');" in response.text
+
+    @pytest.mark.parametrize("explicit_profession", [False, True])
+    def test_phases_without_profession_catalog_keep_global_workflow_and_reject_explicit_scope(
+        self, explicit_profession,
+    ):
+        workflow = client.post("/api/workflows", json={"name": "Workflow before profession setup"})
+        assert workflow.status_code == 200
+        workflow_id = workflow.json()["workflow_id"]
+        phase = client.post("/api/phases", json={
+            "workflow_id": workflow_id, "phase_order": 1, "name": "Unassigned workflow phase",
+        })
+        assert phase.status_code == 200
+        query = f"workflow_id={workflow_id}"
+        if explicit_profession:
+            query += f"&profession_id={UNKNOWN_NAMESPACE_ID}"
+        with patch("project_workflow.interfaces.ui.routes.pages._load_namespaces", return_value=[]):
+            response = client.get("/phases?" + query)
+        if explicit_profession:
+            assert response.status_code == 404
+            assert "Unassigned workflow phase" not in response.text
+        else:
+            assert response.status_code == 200
+            assert "Unassigned workflow phase" in response.text
+            assert 'href="/phase/' in response.text
 
     def test_phases_reject_unknown_query_namespace(self):
         response = client.get(f"/phases?namespace_id={UNKNOWN_NAMESPACE_ID}")
@@ -1884,10 +1909,12 @@ class TestTimelineHTML:
         assert response.status_code == 200
         assert 'href="/phase/' in response.text
 
-    def test_phase_controls_keep_interface_accent_with_readable_text(self):
+    def test_phase_controls_use_shared_semantic_colors_and_icon_geometry(self):
         response = client.get("/phases")
         assert response.status_code == 200
-        assert ".badge-agent{background:var(--accent-soft);color:var(--accent-readable)}" in response.text
+        assert '.base-badge[data-tone="info"]' in response.text
+        assert "--base-badge-color: var(--color-highlight)" in response.text
+        assert ".badge-agent{" not in response.text
         assert 'data-variant="outline" data-size="icon"' in response.text
         assert "--accent:" in response.text
         assert "rgba(88,166,255,.12)" not in response.text
@@ -2881,8 +2908,10 @@ def test_workflows_list_scrolls_with_page_and_labels_fields():
     assert ".workflow-nav{display:flex;flex-direction:column;gap:10px;align-self:start}" in response.text
     assert "max-height:calc(100vh - 100px);overflow-y:auto" not in response.text
     assert 'class="workflow-nav side-nav-scroll" id="workflowNav"' in response.text
-    assert "html{scrollbar-width:thin;scrollbar-color:var(--surface-active) transparent}" in response.text
-    assert '<h1 class="header-title">Воркфлоу</h1>' in response.text
+    assert "color-scheme: dark" in response.text
+    assert "color-scheme: light" in response.text
+    assert "html{scrollbar-width:" not in response.text
+    assert '<h1 class="base-page-title">Воркфлоу</h1>' in response.text
     assert (
         '<label class="base-label" for="workflowName">Название<span aria-hidden="true"> *</span></label>'
         in response.text
@@ -2911,9 +2940,15 @@ def test_ui_deletions_use_product_modal_not_browser_confirm():
     assert "background.forEach(function(element){ element.inert = true; })" in shared_dialog
     assert "background.forEach(function(element,index){ element.inert = previousInert[index]; })" in shared_dialog
     assert "if(event.key === 'Tab')" in shared_dialog
-    assert "var dialogOpen=!document.getElementById('confirmDialog').hidden" in base
-    assert "sidebar.inert=dialogOpen||(mobile&&!sidebar.classList.contains('open'))" in base
-    assert ".btn-danger{background:#b42332;color:#fff" in base
+    assert 'data-base-dialog-background' in shared_macros
+    assert "document.querySelectorAll('[data-base-dialog-background]')" in shared_dialog
+    assert "document.querySelector('[data-base-drawer][open]')" in shared_dialog
+    assert "window.PdlcBaseUI?.closeNavigation?.()" in shared_dialog
+    assert "sidebar.inert=" not in base
+    shared_styles = (TEMPLATES_DIR / "base/base-ui.css").read_text(encoding="utf-8")
+    assert '.base-button[data-variant="destructive"]' in shared_styles
+    assert "background: var(--color-danger)" in shared_styles
+    assert ".btn-danger{background:" not in base
     assert "window.PdlcBaseUI.requestConfirmation(unsavedChangesConfirmation)" in base
     assert all("confirm(" not in template for template in templates.values())
 
@@ -2926,7 +2961,8 @@ class TestSettingsPage:
         assert response.status_code == 200
         assert response.headers["content-type"] == "text/html; charset=utf-8"
         assert "Команды CLI" in response.text
-        assert '<span class="cli-mobile-title">CLI</span>' in response.text
+        assert response.text.count('<h1 class="base-page-title">Команды CLI</h1>') == 1
+        assert 'cli-mobile-title' not in response.text
         assert 'class="sidebar-cli-icon" aria-hidden="true">&gt;_</span>' in response.text
         assert re.search(r"workflow-[a-z0-9_-]+ step", response.text)
         assert re.search(r"workflow-[a-z0-9_-]+ history", response.text)
@@ -2941,7 +2977,7 @@ class TestSettingsPage:
         assert ">--skip<" not in response.text
         assert "по умолчанию: все" in response.text
         assert "default:" not in response.text
-        assert "<h2>step</h2>" in response.text
+        assert re.search(r'<h2\b[^>]*class="base-section-title"[^>]*>step</h2>', response.text)
         assert 'id="cliUsage1"' in response.text
         assert 'aria-label="Копировать команду step"' in response.text
         assert 'data-base-copy-target="cliUsage1"' in response.text
@@ -2957,7 +2993,10 @@ class TestSettingsPage:
             response = client.get("/settings")
 
         assert response.status_code == 200
-        assert 'class="base-card base-card-content cli-empty" role="status"' in response.text
+        notices = [attrs for _, attrs in Elements(response.text).elements
+                   if 'base-notice' in attrs.get('class', '').split()]
+        assert any(attrs.get('role') == 'status' and attrs.get('data-appearance') == 'inline'
+                   for attrs in notices)
         assert "Доступные CLI-команды не найдены." in response.text
 
     def test_settings_page_rejects_unknown_query_namespace(self):

@@ -228,10 +228,9 @@ def test_phase_detail_returns_to_its_mode_and_keeps_mode_local_graph():
     response = client.get(f"/phase/{catalog['rework_phase_id']}")
 
     assert response.status_code == 200
-    assert (
-        f'href="/phases?workflow_id={catalog["workflow_id"]}'
-        f'&mode_id={catalog["rework_mode_id"]}'
-    ) in response.text
+    links = [attrs.get('href') for tag, attrs in Elements(response.text).elements if tag == 'a']
+    assert (f'/phases?workflow_id={catalog["workflow_id"]}'
+            f'&mode_id={catalog["rework_mode_id"]}') in links
     assert "Rework phase" in response.text
     assert "Initial phase" not in response.text
 

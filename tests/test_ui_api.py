@@ -14,6 +14,7 @@ pytestmark = [pytest.mark.ui]
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from tests._db_helpers import phase_by_code, prepare_sqlite_uow
 from tests._phase_helpers import create_empty_workflow
+from tests.test_ui_shell_template import Elements
 
 UNKNOWN_NAMESPACE_ID = 999999
 UNKNOWN_WORKFLOW_ID = 999998
@@ -1637,9 +1638,12 @@ def test_error_back_link_stays_under_public_prefix(client, monkeypatch, prefix):
         assert response.status_code == 404
         headings = re.findall(r"<h1\b[^>]*>(.*?)</h1>", response.text, re.DOTALL)
         assert headings == ["Фаза не найдена"]
-        assert 'class="base-page-header"' not in response.text
-        link = re.search(r'<a class="btn btn-secondary" href="([^"]+)">', response.text)
-        assert link is not None
-        assert link.group(1) == prefix + "/phases"
+        elements = Elements(response.text).elements
+        assert sum('base-page-header' in attrs.get('class', '').split() for _, attrs in elements) == 1
+        links = [attrs for tag, attrs in elements if tag == 'a'
+                 and 'base-button' in attrs.get('class', '').split()]
+        back_links = [attrs for attrs in links if attrs.get('href') == prefix + '/phases']
+        assert len(back_links) == 1
+        assert back_links[0].get('data-variant') == 'secondary'
     finally:
         get_settings.cache_clear()
