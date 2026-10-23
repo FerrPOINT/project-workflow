@@ -80,6 +80,10 @@ receipt и его внешним pin. Archive/exporter/gzip/UV/Docker не за�
 не стала compiler input. Build args и provenance labels принадлежат общей функции
 с обычным product producer.
 
+Metadata/attestations нового build могут менять top-level image index при тех же
+runtime layers/config. Сохранять original image identity между этапами; не
+отключать provenance и не заменять image ID совпадением payload digest.
+
 Новый Base caller передаёт уже сжатые immutable bytes напрямую в Docker stdin.
 Распаковки на Windows нет: Unix executable modes и исходный gzip сохраняются.
 Он удерживает общий slot и durable owner до terminal daemon record с тем же
