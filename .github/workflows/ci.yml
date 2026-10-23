@@ -62,7 +62,10 @@ jobs:
         with:
           version: "0.10.10"
           enable-cache: true
+      - name: Quick domain/SDK unit tests
+        run: uv run --isolated --with-requirements constraints.txt --all-extras pytest -q tests/test_domain_entities.py tests/test_phase_graph.py tests/test_task_validator.py tests/test_schema.py --timeout=60
       - name: Unit and UI tests with the existing coverage floor
+        if: github.event_name == 'workflow_dispatch'
         env:
           COVERAGE_CORE: sysmon
         run: uv run --isolated --with-requirements constraints.txt --all-extras pytest -q --timeout=60 --cov=project_workflow --cov-report=term

@@ -554,3 +554,8 @@ Commercial, production, resale, redistribution, SaaS/hosting use require written
 автоматический CI подтверждает быстрый набор; он не подтверждает пропущенную
 integration/live/E2E приёмку. Перед относящейся к данным или безопасности
 поставкой необходимый адресный manual gate остаётся обязательным.
+
+Полный workspace-набор тоже ручной: автоматический backend выполняет короткие
+SDK/domain unit tests; прежний полный набор сохранён с manual predicate.
+Полные Unit/UI и coverage с прежним порогом94% остаются в ручном шаге;
+автоматика проверяет domain entities, phase graph, task validator и schema.
