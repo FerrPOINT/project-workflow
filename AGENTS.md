@@ -198,3 +198,15 @@ Card asChild. Base владеет hit target, focus, checked/disabled и нат�
 SSR использует checkbox_control/radio_control с appearance='card'; отдельный
 click-handler или повторное input/change для оформления не нужен.
 Контракт и пример: Base docs/platform/CHOICE_CONTROLS.md, pdlc-ui example Checkbox --case cards.
+
+Знак профессии использует IconMark / SSR icon_mark Base. Передавайте свой SVG
+и нормализованный theme_color; размеры, фон, рамка и радиусы не копировать.
+При динамическом рендеринге использовать тот же публичный CSS-контракт Base.
+Каталог значков, ID, сохранение и выбор workflow остаются у продукта.
+
+
+Видимый выбор файла использует `Input type="file"` Base: кнопка выбора,
+focus и disabled следуют теме и branding. Native файловый диалог остаётся у ОС;
+чтение, проверка содержимого/размера и отправка — у продукта. Скрытый технический
+file input за Button допустим; видимый raw input не добавлять. Для обновления
+оформления сверять UI pin; CLI/Telegram без web UI не получают новых зависимостей.
