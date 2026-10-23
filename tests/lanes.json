@@ -1,6 +1,7 @@
 {
   "schema": "workflow-test-lanes/v1",
   "unit": [
+    "test_build_producer_imports.py",
     "test_build_resource_options.py",
     "test_dependency_inputs.py",
     "test_dependency_locks.py",

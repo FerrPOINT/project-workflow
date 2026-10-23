@@ -190,8 +190,8 @@ Controls работают только с собственными temporary plu
 
 ## Окружение host producer
 
-`producer-environment.json` явно включает Base profile `locked-ui-v1` для сборки
-immutable image: Python3.11.15, `uv run --locked --extra ui`, один project environment
+`producer-environment.json` явно включает Base profile `locked-core-v1` для сборки
+immutable image: Python3.11.15, `uv run --locked` без UI extra, один project environment
 без requirements overlay. Нужен совместимый Base helper; старые exact tooling pins
 самостоятельно не обновляются. Quality по-прежнему использует свой frozen profile
 со всеми необходимыми test extras; producer не устанавливает их ради image.
@@ -203,6 +203,13 @@ lockfile, как описано в [документации UV](https://docs.as
 Checkout без opt-in сохраняет прежний legacy requirements path. Approved prepared
 context по-прежнему запускает stdlib producer без UV или новой установки.
 
+Image producer использует core/catalog imports; FastAPI, Uvicorn, Jinja2, HTTPX
+и JWT/crypto относятся к приложению. Их runtime/UI dependencies сохраняются.
+`test_build_producer_imports.py` проверяет оба каталога с запрещёнными UI imports
+без DB/runtime fixture. Старый `locked-ui-v1` остаётся совместимым Base profile.
+Prepared environment с совместимыми дополнительными пакетами переиспользуется;
+их наличие не означает import/RAM overhead и не требует профилактической очистки.
+
 Source contracts проверены отдельно от native image/environment qualification.
-Для нового profile ещё требуется одна cold/warm UI preparation на согласованной
+Для нового profile ещё требуется одна cold/warm core preparation на согласованной
 вехе; отсутствие overlay не выдаётся за уже измеренное ускорение приложения.
