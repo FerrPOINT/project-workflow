@@ -25,6 +25,29 @@ pytestmark = pytest.mark.unit
 MAX_BYTES = 2 * 1024 * 1024
 
 
+def test_default_request_is_metadata_only_and_binds_archive_toolchain(captured):
+    with (patch.object(builder, 'immutable_git_snapshot', side_effect=AssertionError('No archive')),
+          patch.object(builder, 'prepare_context', side_effect=AssertionError('No preparation')),
+          patch.object(builder.gzip, 'compress', side_effect=AssertionError('No compression'))):
+        value = builder.default_context_request(captured.root, captured.revision, captured.skills, 'legacy')
+        assert value == builder.default_context_request(captured.root, captured.revision, captured.skills, 'legacy')
+    assert value['schema'] == 'workflow-default-context-request/v1'
+    assert value['request']['source_revision'] == captured.revision
+    assert value['archive']['policy'] == 'base-object-store-archive/v1'
+    assert len(value['archive']['git']['sha256']) == 64
+    assert value['archive_helper_sha256'] == read(captured.reference, captured).receipt['attestation'][
+        'archive_helper_sha256']
+
+
+def test_default_request_cli_is_stdlib_only(captured):
+    command = [sys.executable, '-S', '-B', '-m', 'scripts.build_runtime_image', 'request-context',
+        '--root', str(captured.root), '--revision', captured.revision, '--skills-root', str(captured.skills)]
+    result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, timeout=15, check=False)
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == builder.default_context_request(
+        captured.root, captured.revision, captured.skills, 'legacy')
+
+
 def test_named_plan_keeps_original_transport_and_provenance_without_producer(captured):
     expected = read(captured.reference, captured).receipt
     with (patch.object(builder, 'immutable_git_snapshot', side_effect=AssertionError('No archive')),

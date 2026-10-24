@@ -313,6 +313,21 @@ def context_request(root: Path, revision: str, skills_root: Path,
                              "skills_manifest_sha256": sha(manifest)})
 
 
+def default_context_request(root: Path, revision: str, skills_root: Path, catalog_variant: str):
+    """Metadata only: no archive, imports of product dependencies, or preparation."""
+    from project_workflow import build_provenance
+    from scripts import prepared_context as prepared
+
+    component, stamp = _archive_component()
+    return {"schema": "workflow-default-context-request/v1",
+            "request": context_request(root, revision, skills_root, catalog_variant),
+            "archive": component.identity(), "archive_helper_sha256": stamp[0],
+            "archive_descriptor_sha256": stamp[1],
+            "builder_sha256": prepared.sha(Path(__file__).read_bytes()),
+            "provenance_sha256": prepared.sha(Path(build_provenance.__file__).read_bytes()),
+            "helper_sha256": prepared.sha(Path(prepared.__file__).read_bytes())}
+
+
 def prepare_context(root: Path, revision: str, *, skills_root: Path, output: Path,
                     max_transport_bytes: int, catalog_variant: str = "legacy"):
     """Issue an explicit frozen transport once, without building an image."""
@@ -501,6 +516,12 @@ def main(argv: list[str] | None = None) -> int:
     prepare.add_argument("--output", type=Path, required=True)
     prepare.add_argument("--context-max-bytes", type=int, required=True)
 
+    request_parser = subparsers.add_parser("request-context")
+    request_parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
+    request_parser.add_argument("--revision", required=True)
+    request_parser.add_argument("--skills-root", type=Path, required=True)
+    request_parser.add_argument("--catalog-variant", choices=("legacy", "base"), default="legacy")
+
     inspect = subparsers.add_parser("inspect-context")
     inspect.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
     inspect.add_argument("--revision", required=True)
@@ -547,6 +568,9 @@ def main(argv: list[str] | None = None) -> int:
                                         catalog_variant=args.catalog_variant, output=args.output,
                                         max_transport_bytes=args.context_max_bytes)
             print(json.dumps({"directory": str(reference.directory), "receipt_sha256": reference.receipt_sha256}))
+        elif args.command == "request-context":
+            print(json.dumps(default_context_request(args.root, args.revision, args.skills_root,
+                                                     args.catalog_variant)))
         elif args.command == "plan-build":
             from scripts.prepared_context import PreparedContextRef, plain
 

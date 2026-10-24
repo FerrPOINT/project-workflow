@@ -1,0 +1,4 @@
+{
+  "schema": "workflow-default-image-producer/v1",
+  "policy": "owned-context-stdin/v1"
+}

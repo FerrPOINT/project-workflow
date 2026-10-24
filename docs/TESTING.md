@@ -228,3 +228,9 @@ tests/test_controlled_source_archive.py tests/test_prepared_context.py`.
 Новые receipts связывают archive policy/helper hash; прежние approved receipts
 остаются читаемыми. Это source prerequisite: `environment_equivalence` остаётся
 `UNQUALIFIED`, default owner/reuse и native qualification проверяются отдельно.
+
+`scripts/default-image-producer.json` включает совместимый Base owned producer:
+`request-context` читает только metadata через stdlib; `prepare-context` вызывается
+один раз после artifact miss/admission. Изменение descriptor/helper относится
+к backend при выборе проверок. Older tooling не получает automatic equivalence;
+новый caller и native default route квалифицируются отдельной вехой.
