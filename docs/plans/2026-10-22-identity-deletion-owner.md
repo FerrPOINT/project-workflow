@@ -143,10 +143,35 @@ SQLite regression сохраняет те же исторические стро
 с coverage не ниже 94%, строгий ResourceWarning gate и реальные PostgreSQL/EXPLAIN.
 Отдельно обязательны запуск настоящего сервера и HTTP readiness в собственном
 Compose-проекте, проверка private check/freeze/release с настоящим Auth coordinator,
-потерянного ACK, restart и гонок отмены/завершения. Эти code/security gates пока
-не квалифицированы целиком: успешные native и PostgreSQL компоненты не заменяют
-оставшиеся serving-HTTP и coordinator/recovery проверки. До их закрытия PR
-остаётся Draft и не объявляется готовым к merge.
+потерянного ACK, restart и гонок отмены/завершения. Статус на 2026-10-24: приняты изолированные source-компоненты и составное
+доказательство этих gates. Исходники готовы к слиянию; активация не разрешена:
+
+- Строгий native-компонент: 3446 PASS, 5 optional private-Base SKIP,
+  coverage 94,07262905162065%, Ruff/mypy и оба warning-as-error фильтра PASS.
+  Whole/outer receipts `bfcaba01…`/`0560da8d…` остаются `complete=false` из-за
+  concurrent/unknown изменения permanent-state guard. Успешный изолированный
+  source-компонент принят на неизменных inputs отдельно; эти результаты сохранены.
+- Настоящие PostgreSQL owner19 и repository115 — разные прогоны, не общий count.
+  Owner receipt `20ee7c40…` включает durable replay/release, cancel-before-freeze,
+  writer/freeze wait, RR40001, COMMIT rollback и populated upgrade/EXPLAIN;
+  repository receipt `3a8f9e76…` сохраняет полный обязательный repository gate.
+- Genuine Auth PAT и настоящий Workflow HTTP: receipt `0a526283…` прошёл 9 checks,
+  включая полную перехваченную freeze ACK, фактическую потерю ответа клиенту
+  (curl52), точный replay до/после restart, release200 и late-freeze409.
+  Cleanup/source/process/inputs и outer four-project guard PASS.
+- Auth actual PG20 в принятом scoped invocation `a72c21e6…`/gate `54859bfe…`
+  проверяет final-ACK/cancel с настоящим DB lock waiter, противоположный порядок
+  cancel-before-last-freeze, восстановление только после всех release ACKs,
+  worker crash/ACK recovery и один final effect. Это реальные Auth транзакции
+  с controlled TCP peers восьми owners, а не приёмка восьми продуктов.
+  Deletion/command code и SQL Auth C9 совпадают с этими проверенными inputs.
+
+Отдельного одновременного Workflow freeze/release на двух DB connections
+не запускали: owner19 проверяет общий exclusive transaction lock и оба durable
+порядка; concurrent cancel/complete проверен на стороне Auth. Это принятое
+составное source-доказательство, не новый full-cohort прогон. В Workflow HTTP
+fixture Auth inventory отсутствует и `global_cancel_finish_qualified=false`;
+это ограничение fixture не отменяет отдельные actual Auth race results.
 
 Полная совместная приёмка восьми owners, deployment qualification Docker/Compose
 и Kubernetes, включение функции и rollout относятся к отдельному этапу активации.
