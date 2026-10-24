@@ -216,3 +216,10 @@ and does not change execution fences, authorization or HTTP responses.
 
 [Контракт и текущие gates](human-application-access.md) описывают feature-исходники.
 До установки полного совместимого cohort политика не активируется.
+
+## Кандидат владельца жизненного цикла identity
+
+[Inventory, протокол, миграция и gates](plans/2026-10-22-identity-deletion-owner.md)
+описывают закрытый транспорт координатора Auth и транзакционные fences для ссылок
+на автора execution context и инициатора namespace. История продукта сохраняется;
+локальная директория пользователей и browser credential не добавляются.
