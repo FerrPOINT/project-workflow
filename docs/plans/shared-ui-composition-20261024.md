@@ -1,5 +1,24 @@
 # Общие композиции Workflow: иконки и SSR-брендинг
 
+## Текущая волна: фирменные подсказки — 25 октября 2026
+
+UI pin `56cf8a2f63b2b853103c164bbf1f7758a90e8db0`, версия 0.3.2; reference
+`3d88aadb70081f614a1ef51481c32724c53bcd7c6135045d96bc7be2a1dfd1d4`.
+
+Нового SSR-контрола автодополнения нет и вымышленный аналог не заявляется. Общая CSS и
+fingerprint получены штатным экспортом Base; маршруты, macros и JS adapters не менялись.
+
+Новый контрол и его popup принадлежат Base. IAB проверяет общую реализацию,
+а не authenticated страницы продукта; прежние результаты сохраняют свой scope.
+Scoped source/static прошёл: шесть strict TypeScript/CLI/choice consumers,
+Base types, examples, reference/coverage, настоящий offline UI-архив, SSR/Auth.
+Данные Radix подтверждают один layer stack у шести потребителей. Отдельно
+прошли 26 Base, 104 product cases и 8 Forge preview cases. Полный frontend
+gate и hosted CI этой волны ещё открыты; прежний полный PASS не подменяет их.
+SDK/skills pins, установленный runtime и пользовательские данные не менялись.
+Девять owner AGENTS уточняют выбор AutocompleteInput/Select/SearchableSelect.
+Общий остаток ведётся в Base `docs/plans/shared-ui-consolidation-20261021.md`.
+
 Статус: source-изменения и адресная локальная проверка; публикация и установка
 не выполнены. UI producer — `9eaa68c8bf25114ceee6fb31ffe6b7280185fab2`,
 reference — `3636f1705d5820b8f9f4f05e8ec0891ac20b2ce0eecf951a239b3acc5741b5d7`.

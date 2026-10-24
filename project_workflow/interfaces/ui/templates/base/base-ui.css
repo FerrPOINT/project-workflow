@@ -1634,6 +1634,16 @@ body > .base-loading-state:not([data-scope="local"]) {
 .base-choice-multiple {
   overflow-y: auto;
 }
+.base-autocomplete-panel {
+  width: var(--radix-popper-anchor-width);
+  min-width: 0;
+  max-height: min(320px, var(--radix-popper-available-height, calc(100dvh - 16px)));
+  overflow-y: auto;
+}
+.base-autocomplete-value {
+  color: var(--color-text-secondary);
+  font-size: var(--base-font-label);
+}
 .base-choice-option {
   position: relative;
   display: flex;
@@ -1767,6 +1777,12 @@ body > .base-loading-state:not([data-scope="local"]) {
   min-width: 0;
   align-items: center;
   gap: 8px;
+}
+
+.base-choice-option > span.base-autocomplete-label {
+  display: grid;
+  min-width: 0;
+  gap: 0;
 }
 
 /* React and SSR use these same element contracts. Layers allow content-level
