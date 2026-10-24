@@ -21,6 +21,7 @@ from project_workflow.domain.pm_execution import (
     RuntimeObservation,
     SingleTaskPMCheckpoint,
     SingleTaskPMResume,
+    SingleTaskPMResumeRetry,
     SingleTaskPMReviewBind,
 )
 from project_workflow.domain.runtime_assignment import (
@@ -481,6 +482,11 @@ class PMExecutionService:
         execution.state = "active"
         execution.version += 1
         return self._record(command, "rebind", execution)
+
+    def resume_retry(self, command: SingleTaskPMResumeRetry, project_id: int) -> dict[str, Any]:
+        from project_workflow.application.pm_resume_retry import retry
+
+        return retry(self, command, project_id)
 
     def readback(self, identity: PMIdentity, project_id: int, operation_key: str | None) -> dict[str, Any]:
         execution, _ = self.execution(identity, project_id)

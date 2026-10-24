@@ -26,6 +26,7 @@ from project_workflow.domain.pm_execution import (
     SingleTaskPMReadback,
     SingleTaskPMRebind,
     SingleTaskPMResume,
+    SingleTaskPMResumeRetry,
     SingleTaskPMReviewBind,
 )
 from project_workflow.infrastructure.db.single_task_catalog import runtime_catalog_read
@@ -77,7 +78,7 @@ def _execute(
             return error("forbidden", "PM machine role required", 403)
         if kind == "checkpoint" and credential.kind != "runtime":
             return error("forbidden", "Checkpoint requires scoped runtime identity", 403)
-        if kind in {"bind", "resume", "rebind"} and credential.kind != "assignment":
+        if kind in {"bind", "resume", "rebind", "resume_retry"} and credential.kind != "assignment":
             return error("forbidden", "Adapter assignment credential required", 403)
         if kind != "readback" and not configured():
             return error("capability-unavailable", "PM runtime readback/scope configuration unavailable", 503)
@@ -113,6 +114,8 @@ def _execute(
                 result = service.bind(payload, project_id)
             elif isinstance(payload, PMRebind):
                 result = service.rebind(payload, project_id)
+            elif isinstance(payload, SingleTaskPMResumeRetry):
+                result = service.resume_retry(payload, project_id)
             elif isinstance(payload, (PMResume, SingleTaskPMResume)):
                 result = service.resume(payload, project_id)
             elif isinstance(payload, (PMCheckpoint, SingleTaskPMCheckpoint)):
@@ -120,7 +123,7 @@ def _execute(
             else:
                 raise ValueError("Unsupported PM command")
         response: dict[str, Any] = {"ok": True, "result": result}
-        if credential.kind == "assignment" and result["state"] == "active" and configured():
+        if credential.kind == "assignment" and result.get("state") == "active" and configured():
             response["execution_token"] = service.scoped_token(
                 result, config.get_settings().PROJECT_WORKFLOW_PM_SCOPE_SECRET,
             )
@@ -187,6 +190,12 @@ def resume(
     payload: SingleTaskPMResume | PMResume, authorization: str | None = Header(default=None),
 ) -> dict[str, Any] | JSONResponse:
     return _execute(payload, "resume", authorization)
+
+
+def resume_retry(
+    payload: SingleTaskPMResumeRetry, authorization: str | None = Header(default=None),
+) -> dict[str, Any] | JSONResponse:
+    return _execute(payload, "resume_retry", authorization)
 
 
 def rebind(

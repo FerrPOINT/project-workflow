@@ -223,6 +223,8 @@ def runtime_capabilities(
             "dispatch_owner": "fleet",
             "execution_token_header": "X-Workflow-Execution-Token",
         }
+        if single_task and credential.kind == "assignment":
+            response["pm_continuation"]["commands"].append("resume-retry")
     return response
 
 

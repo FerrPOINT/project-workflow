@@ -310,7 +310,7 @@ def create_app() -> FastAPI:
     app.post("/internal/runtime/terminal-receipt/readback", response_model=SingleTaskTerminalResponse)(
         runtime_api.runtime_terminal_readback
     )
-    from project_workflow.domain.pm_execution import PMResponse
+    from project_workflow.domain.pm_execution import PMResponse, PMResumeRetryResponse
 
     app.post("/internal/runtime/v1/pm/assign", response_model=None)(pm_api.assign)
     app.post("/internal/runtime/v1/pm/bind", response_model=PMResponse,
@@ -319,6 +319,8 @@ def create_app() -> FastAPI:
              response_model_exclude_unset=True)(pm_api.checkpoint)
     app.post("/internal/runtime/v1/pm/resume", response_model=PMResponse,
              response_model_exclude_unset=True)(pm_api.resume)
+    app.post("/internal/runtime/v1/pm/resume-retry", response_model=PMResumeRetryResponse,
+             response_model_exclude_unset=True)(pm_api.resume_retry)
     app.post("/internal/runtime/v1/pm/rebind", response_model=PMResponse,
              response_model_exclude_unset=True)(pm_api.rebind)
     app.post("/internal/runtime/v1/pm/readback", response_model=PMResponse,

@@ -107,7 +107,8 @@ class PMOperation(Base):
     result_json: Mapped[str] = mapped_column(Text)
     __table_args__ = (
         Index("ix_pm_operations_execution_kind", "execution_ref", "kind"),
-        CheckConstraint("kind IN ('bind', 'checkpoint', 'resume', 'rebind')", name="ck_pm_operation_kind"),
+        CheckConstraint("kind IN ('bind', 'checkpoint', 'resume', 'rebind', 'resume_retry')",
+                        name="ck_pm_operation_kind"),
         CheckConstraint("length(request_sha256) = 64", name="ck_pm_operation_hash"),
     )
 
