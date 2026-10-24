@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import types
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
@@ -27,14 +28,57 @@ from project_workflow.build_provenance import (
     verify_build_manifest,
 )
 
+_ARCHIVE_COMPONENT = None
+
+
+def _archive_component():
+    """Load the exact vendored Base source bytes, never a checkout pyc."""
+    global _ARCHIVE_COMPONENT
+    root = Path(__file__).resolve().parents[1]
+    path = root / 'scripts/vendor/base_controlled_git_archive.py'
+    descriptor = root / 'scripts/vendor/base-controlled-git-archive.json'
+    if (path.is_symlink() or descriptor.is_symlink() or not path.is_file() or not descriptor.is_file()
+            or path.stat().st_nlink != 1 or descriptor.stat().st_nlink != 1
+            or path.stat().st_size > 128 * 1024 or descriptor.stat().st_size > 8192):
+        raise BuildProvenanceError('Controlled archive component must be bounded regular source')
+    raw, marker = path.read_bytes(), descriptor.read_bytes()
+    record = json.loads(marker)
+    checksum = hashlib.sha256(raw).hexdigest()
+    if (not isinstance(record, dict)
+            or set(record) != {'schema', 'source_repository', 'source_revision', 'source_path',
+                               'path', 'sha256', 'policy'}
+            or record['schema'] != 'base-vendored-source/v1'
+            or record['source_repository'] != 'https://github.com/FerrPOINT/services-base.git'
+            or not re.fullmatch('[a-f0-9]{40}', record['source_revision'])
+            or record['source_path'] != 'scripts/controlled_git_archive.py'
+            or record['path'] != 'scripts/vendor/base_controlled_git_archive.py'
+            or record['policy'] != 'base-object-store-archive/v1' or record['sha256'] != checksum):
+        raise BuildProvenanceError('Controlled archive component differs from its exact Base descriptor')
+    stamp = checksum, hashlib.sha256(marker).hexdigest()
+    if _ARCHIVE_COMPONENT is not None:
+        if _ARCHIVE_COMPONENT[1] != stamp:
+            raise BuildProvenanceError('Controlled archive component changed during operation')
+        return _ARCHIVE_COMPONENT[0], stamp
+    module = types.ModuleType('workflow_controlled_git_archive')
+    module.__file__ = str(path)
+    exec(compile(raw, str(path), 'exec'), module.__dict__)
+    if module.POLICY != record['policy']:
+        raise BuildProvenanceError('Controlled archive policy differs from its descriptor')
+    _ARCHIVE_COMPONENT = module, stamp
+    return module, stamp
+
 
 def _run_git(root: Path, *args: str, text: bool = True) -> str | bytes:
+    component, _ = _archive_component()
     result = subprocess.run(
-        ["git", *args],
+        ["git", *component.OPTIONS, *args],
         cwd=root,
         check=True,
         capture_output=True,
         text=text,
+        encoding='utf-8' if text else None,
+        env=component.environment(),
+        timeout=60,
     )
     return result.stdout
 
@@ -50,10 +94,11 @@ def immutable_git_snapshot(root: Path, revision: str) -> GitSourceSnapshot:
     exact_revision = str(
         _run_git(root, "rev-parse", "--verify", f"{revision}^{{commit}}")
     ).strip().lower()
-    archive = _run_git(
-        root, "-c", "core.autocrlf=false", "-c", "core.eol=lf",
-        "archive", "--format=tar", exact_revision, text=False,
-    )
+    component, _ = _archive_component()
+    try:
+        archive = component.canonical_archive(root, exact_revision)
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        raise BuildProvenanceError('Controlled source archive failed') from error
     if not isinstance(archive, bytes):  # defensive typing guard
         raise BuildProvenanceError("Git archive не вернул бинарные данные")
     provenance = validate_build_provenance(
@@ -285,6 +330,7 @@ def prepare_context(root: Path, revision: str, *, skills_root: Path, output: Pat
     builder_digest = prepared.sha(Path(__file__).read_bytes())
     provenance_digest = prepared.sha(Path(build_provenance.__file__).read_bytes())
     helper_digest = prepared.sha(Path(prepared.__file__).read_bytes())
+    archive_component, archive_stamp = _archive_component()
     snapshot = immutable_git_snapshot(root, request["source_revision"])
     context = (compatible_build_context(snapshot, skills_root, catalog_variant)
                if catalog_variant != "legacy" else compatible_build_context(snapshot, skills_root))
@@ -330,12 +376,15 @@ def prepare_context(root: Path, revision: str, *, skills_root: Path, output: Pat
                                "helper_sha256": helper_digest,
                                "python": sys.version, "zlib_runtime": zlib.ZLIB_RUNTIME_VERSION,
                                "environment_equivalence": "UNQUALIFIED",
+                               "archive_policy": archive_component.POLICY,
+                               "archive_helper_sha256": archive_stamp[0],
                                "skills_validation": "validated-base-package" if catalog_variant == "base"
                                else "legacy-manifest"}}
     if (context_request(root, request["source_revision"], skills_root, catalog_variant) != request
             or prepared.sha(Path(__file__).read_bytes()) != builder_digest
             or prepared.sha(Path(build_provenance.__file__).read_bytes()) != provenance_digest
-            or prepared.sha(Path(prepared.__file__).read_bytes()) != helper_digest):
+            or prepared.sha(Path(prepared.__file__).read_bytes()) != helper_digest
+            or _archive_component()[1] != archive_stamp):
         raise BuildProvenanceError("Prepared context inputs changed during preparation")
     return prepared.publish(destination, receipt, transport, max_transport_bytes=max_transport_bytes)
 

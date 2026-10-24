@@ -2,3 +2,5 @@
 
 # Canonical bytes for the exact Base selector.
 scripts/vendor/base_quality_selection.py text eol=lf
+scripts/vendor/base_controlled_git_archive.py text eol=lf
+scripts/vendor/base-controlled-git-archive.json text eol=lf

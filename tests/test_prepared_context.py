@@ -228,6 +228,25 @@ def read(reference, captured, **options):
                                  max_transport_bytes=options.get("max_transport_bytes", MAX_BYTES))
 
 
+def test_controlled_export_attestation_is_bound_and_legacy_shape_stays_readable(packet, captured):
+    receipt = read(captured.reference, captured).receipt
+    assert receipt['attestation']['archive_policy'] == 'base-object-store-archive/v1'
+    assert len(receipt['attestation']['archive_helper_sha256']) == 64
+    legacy = json.loads(json.dumps(receipt))
+    legacy['attestation'].pop('archive_policy')
+    legacy['attestation'].pop('archive_helper_sha256')
+    marker = packet.directory / 'receipt.json'
+    raw = (json.dumps(legacy, sort_keys=True) + '\n').encode()
+    marker.write_bytes(raw)
+    reference = PreparedContextRef(packet.directory, hashlib.sha256(raw).hexdigest())
+    assert read(reference, captured).receipt == legacy
+    legacy['attestation']['archive_policy'] = 'unknown-archive/v1'
+    raw = (json.dumps(legacy, sort_keys=True) + '\n').encode()
+    marker.write_bytes(raw)
+    with pytest.raises(builder.BuildProvenanceError, match='attestation'):
+        read(PreparedContextRef(packet.directory, hashlib.sha256(raw).hexdigest()), captured)
+
+
 def test_real_cold_chain_preserves_legacy_transport_bytes(captured):
     snapshot = builder.immutable_git_snapshot(captured.root, captured.revision)
     legacy = gzip.compress(builder.compatible_build_context(snapshot, captured.skills), mtime=0)
@@ -322,11 +341,14 @@ def test_frozen_selection_preserves_modes_binary_and_export_attributes(tmp_path)
     git(value.root, "config", "tar.umask", "0077")
     git(value.root, "tag", "fixture-approved")
     current = builder.immutable_git_snapshot(value.root, revision)
-    assert current.provenance.source_archive_sha256 != frozen.receipt["provenance"]["source_archive_sha256"]
+    # The exact-object profile no longer accepts mutable attributes/refs as
+    # archive inputs. Committed input changes are tested separately below.
+    assert current.provenance.source_archive_sha256 == frozen.receipt["provenance"]["source_archive_sha256"]
+    assert current.provenance.runtime_bundle_sha256 == frozen.receipt["provenance"]["runtime_bundle_sha256"]
     with tarfile.open(fileobj=io.BytesIO(current.archive)) as archive:
-        assert "raw.txt" not in archive.getnames()
-        assert archive.getmember("scripts/executable.sh").mode == 0o700
-        assert b"fixture-approved" in archive.extractfile("revision.txt").read()
+        assert archive.extractfile("raw.txt").read() == contents["raw.txt"]
+        assert archive.getmember("scripts/executable.sh").mode == 0o755
+        assert b"fixture-approved" not in archive.extractfile("revision.txt").read()
     assert read_prepared_context(reference, expected_request=request,
                                   max_transport_bytes=MAX_BYTES).transport == frozen.transport
 

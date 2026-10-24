@@ -43,7 +43,8 @@ target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "W"]
-per-file-ignores = { "tests/**/*.py" = ["E402"] }
+# Exact vendored bytes retain Base's import ordering; semantic checks still apply.
+per-file-ignores = { "tests/**/*.py" = ["E402"], "scripts/vendor/base_controlled_git_archive.py" = ["I001"] }
 
 [tool.mypy]
 explicit_package_bases = true

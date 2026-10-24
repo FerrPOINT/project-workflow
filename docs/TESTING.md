@@ -213,3 +213,18 @@ Prepared environment с совместимыми дополнительными 
 Source contracts проверены отдельно от native image/environment qualification.
 Для нового profile ещё требуется одна cold/warm core preparation на согласованной
 вехе; отсутствие overlay не выдаётся за уже измеренное ускорение приложения.
+
+## Управляемый экспорт исходников
+
+`scripts/vendor/base-controlled-git-archive.json` отдельно закрепляет Base helper
+по commit и SHA256. Builder исполняет проверенные source bytes, исключая старый
+checkout `.pyc`. Экспорт точного commit сохраняет pinned attributes, binary/EOL
+и executable modes, исключая mutable refs, info/attributes и ambient Git env.
+Новый profile явно задаёт modes 0644/0755; SDK/skills/quality pins не меняются.
+
+`tests/test_controlled_source_archive.py` — reviewed unit lane с tiny Git fixtures,
+без Docker/БД. Scoped запуск: `python scripts/quality.py test --
+tests/test_controlled_source_archive.py tests/test_prepared_context.py`.
+Новые receipts связывают archive policy/helper hash; прежние approved receipts
+остаются читаемыми. Это source prerequisite: `environment_equivalence` остаётся
+`UNQUALIFIED`, default owner/reuse и native qualification проверяются отдельно.

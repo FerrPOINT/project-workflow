@@ -1,0 +1,9 @@
+{
+  "schema": "base-vendored-source/v1",
+  "source_repository": "https://github.com/FerrPOINT/services-base.git",
+  "source_revision": "9fe573b36d89f3a265d1826133f4f4c585997169",
+  "source_path": "scripts/controlled_git_archive.py",
+  "path": "scripts/vendor/base_controlled_git_archive.py",
+  "sha256": "4cbd77909e0181a945ab5e0676bd5e16d37d91ee0c61573278287c4ae4047952",
+  "policy": "base-object-store-archive/v1"
+}

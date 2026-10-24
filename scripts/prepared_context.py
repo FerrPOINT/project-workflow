@@ -161,11 +161,17 @@ def _verify(reference: PreparedContextRef, expected_request: dict[str, str],
             or any(not digest(transport[name]) for name in ("sha256", "assembled_tar_sha256"))):
         raise BuildProvenanceError("Prepared context transport identity differs")
     attestation = receipt["attestation"]
-    if (not isinstance(attestation, dict) or set(attestation) != {
+    legacy_attestation = {
             "builder_sha256", "provenance_sha256", "helper_sha256", "python", "zlib_runtime",
             "environment_equivalence", "skills_validation"}
+    archive_attestation = {'archive_policy', 'archive_helper_sha256'}
+    if (not isinstance(attestation, dict) or set(attestation) not in (
+            legacy_attestation, legacy_attestation | archive_attestation)
             or any(not isinstance(v, str) or not v or len(v) > 4096 for v in attestation.values())
             or any(not digest(attestation[name]) for name in ("builder_sha256", "provenance_sha256", "helper_sha256"))
+            or (archive_attestation <= set(attestation) and (
+                attestation['archive_policy'] != 'base-object-store-archive/v1'
+                or not digest(attestation['archive_helper_sha256'])))
             or attestation["environment_equivalence"] != "UNQUALIFIED"
             or attestation["skills_validation"] != (
                 "validated-base-package" if expected_request["catalog_variant"] == "base" else "legacy-manifest")
