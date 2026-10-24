@@ -1048,6 +1048,10 @@ dialog.base-shell-drawer::backdrop {
   line-height: 1.25;
   letter-spacing: 0;
 }
+.base-page-title:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 4px;
+}
 .base-page-heading {
   display: flex;
   min-width: 0;
