@@ -64,3 +64,12 @@ check совпадает с имеющимися assets; повторный expo
 Workflow templates/handlers и независимые SDK/skills pins не меняются. Прежний
 font/SSR протокол сохраняет свои inputs; новая authenticated-проверка точного
 bootstrap и интегрированный gate остаются открытыми. Установка не выполняется.
+
+
+## Списки и пагинация — 24 октября 2026
+
+UI pin обновлён согласованно. Изменение относится к React PageNavigation; канонические SSR/Auth fingerprints совпадают, повторный export и Python/backend compile не выполнялись.
+
+UI producer `ff303ac5a273dc6b265292465b8b9db9a9476f9f`, fingerprint `206bf4889e50889e8c7bfab9aec36ef52df2e1e76dfcaa94a3ac756a7b80e2bf`.
+Проверки относятся к исходникам собственных checkout; установка, hosted CI и общий
+интеграционный gate сохраняют отдельный статус. SDK/skills pins не изменены.
