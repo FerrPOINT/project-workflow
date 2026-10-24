@@ -42,3 +42,15 @@ inspection подтвердил custom fonts, а не только наличи�
 через канонический ownership helper; отсутствие принадлежащих ей ресурсов и
 неизменность source inputs подтверждены. Полная route-матрица, настоящий zoom
 200%, интегрированный gate, hosted CI и установленная платформа остаются открытыми.
+
+## Сведение с upstream
+
+Итоговый UI pin — d6c0914ae7bab37fc91b5f10602ad05543551ec0, fingerprint
+`5f4ff5f4ada180236c2d6e014b52e78ad60586824980c7b45316eb20b44a69a8`.
+Base включил свежий main 17973ae4 и сохранил его минимальное исправление
+classic alias вместо второй реализации преобразования импортов. Штатный export
+обновил bootstrap и fingerprint Workflow; check прошёл. Свежие 21 Base regression
+cases проверяют фактическое исполнение runtime, defaults, неверные цвета и font
+tokens. Предыдущая font-IAB приёмка относится к точным assets producer 9eaa68c8;
+она не объявляется fresh browser-проверкой изменившегося bootstrap. Новый полный
+gate и source publication остаются открытыми; SDK/skills pins неизменны.

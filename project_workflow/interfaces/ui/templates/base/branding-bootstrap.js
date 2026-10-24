@@ -19,6 +19,7 @@ function contrast(a,b) {
 }
 function foreground(color) { return contrast(color,"#000000") >= contrast(color,"#ffffff") ? "#000000" : "#ffffff"; }
 
+const hex = isHex;
 // Generated from pinned Lucide (ISC license) by generate-design-tokens.mjs.
 const brandingIcons = {
   "layers": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"64\" height=\"64\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-layers lucide-layers-3\" aria-hidden=\"true\"><path d=\"M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z\"></path><path d=\"M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12\"></path><path d=\"M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17\"></path></svg>",
@@ -38,8 +39,6 @@ const brandingIcons = {
   "circle-dot": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"64\" height=\"64\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-circle-dot\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"1\"></circle><circle cx=\"12\" cy=\"12\" r=\"10\"></circle></svg>",
   "flask": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"64\" height=\"64\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-flask-conical\" aria-hidden=\"true\"><path d=\"M14 2v6a2 2 0 0 0 .245.96l5.51 10.08A2 2 0 0 1 18 22H6a2 2 0 0 1-1.755-2.96l5.51-10.08A2 2 0 0 0 10 8V2\"></path><path d=\"M6.453 15h11.094\"></path><path d=\"M8.5 2h7\"></path></svg>"
 };
-
-
 
 function effectiveMark(document, theme) {
   return (
@@ -230,11 +229,6 @@ function paintBrandingMark(element, branding, theme) {
     element.replaceChildren(svg);
   } else letters();
 }
-
-const hex = isHex;
-
-
-
 
 
 /** @typedef { {version: 1, font_preset: 'system'|'inter'|'noto-sans', type_scale: 'standard'|'large', density: 'compact'|'standard'|'comfortable', radius: 'square'|'standard'|'rounded', colors?: Record<string,{primary:string,accent:string}>, radii?: Record<'control'|'menu'|'dialog'|'card'|'mark',number>, marks?: Record<string,any>, favicon?: any, documentation_url?: string, initial_theme?: 'dark'|'gray'|'light'} } BrandingDesign */
