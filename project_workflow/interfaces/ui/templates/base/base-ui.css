@@ -366,6 +366,25 @@
   min-height: var(--shell-control-min);
 }
 /* Resource rows share geometry with SSR, but flex/grid remains product-owned. */
+@layer components {
+  .base-resource-title,
+  .base-resource-description {
+    min-width: 0;
+    margin: 0;
+    overflow-wrap: anywhere;
+    line-height: var(--base-line-body);
+  }
+  .base-resource-title {
+    color: var(--color-text-primary);
+    font-size: var(--base-font-body);
+    font-weight: 600;
+  }
+  .base-resource-description {
+    color: var(--color-text-secondary);
+    font-size: var(--base-font-label);
+    line-height: calc(var(--base-line-body) - 4px);
+  }
+}
 .base-resource-list {
   --resource-row-padding-inline: var(--base-control-padding-inline);
   --resource-row-padding-block: var(--base-control-padding-block);

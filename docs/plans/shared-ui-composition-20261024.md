@@ -112,3 +112,13 @@ native Tab/ArrowRight таблицы и URL-навигация Forge. Проду
 процессы и IAB-вкладка закрыты, source inputs сохранены, API-запросов нет.
 Общий интеграционный gate, HTTP parity, настоящий zoom 200%, публикация,
 hosted CI и установленная приёмка остаются открытыми. Runtime не изменён.
+
+## Общая типографика строк ресурсов — 25 октября 2026
+
+Получены штатные resource_list_title/resource_list_description macros, CSS и fingerprint. Python, маршруты, данные и обработчики не менялись. SSR freshness прошёл; новая native/PostgreSQL/authenticated-квалификация остаётся в общем gate.
+
+UI producer `1848c08d68f8a60f7dc179751984e8c821647373`, reference `250d3c802e3a22b4095efb70defe6b0baff379fd6b1c1f7bbcf9c10d2e30b983`. SDK/skills pins этой UI-волной не менялись; принятые upstream SDK-переходы сохранены. Семь UI pins согласованы. Frozen offline refresh шести React-потребителей сохранил locks и React singleton. Workflow получил штатный SSR export, Auth export не изменился.
+
+IAB: 168 уникальных сочетаний Base и шести реальных source-композиций, трёх тем, двух type_scale и ширин 320/375/1920/2560 без overflow; семь снимков просмотрены. Изменённый Fleet проверен повторно вместо прежних 24 результатов. Данные синтетические, записи отключены; backend/установленная приёмка не заявляется. Собственные временные процессы и вкладка закрыты.
+
+Доказательства: private evidence/remaining-ui-20261025/. Общий integrated gate, HTTP parity, zoom 200%, source publication, hosted CI и установленная приёмка остаются открытыми. Продолжается классификация других локальных компонентов и SSR/dev-preview.
