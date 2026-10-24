@@ -11,8 +11,6 @@
 .namespace-picker{display:none}
 .namespace-crud.is-empty{grid-template-columns:minmax(0,760px)}
 .namespace-crud.is-empty .namespace-nav,.namespace-crud.is-empty .namespace-picker{display:none}
-.namespace-mark{width:34px;height:34px;border-radius:8px;background:color-mix(in srgb,var(--namespace-color,var(--accent)) 16%, transparent);border:1px solid var(--namespace-color,var(--accent));color:var(--namespace-color,var(--accent));display:flex;align-items:center;justify-content:center;flex:0 0 auto}
-.namespace-mark svg{width:19px;height:19px}
 .namespace-card-body{min-width:0}
 .namespace-name{display:block}
 .namespace-meta{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}
@@ -43,12 +41,12 @@
   </div>
   <section class="namespace-nav side-nav-scroll" id="namespaceNav">
     {% for namespace in namespaces %}
-    <button type="button" class="namespace-nav-item base-card base-card-content" data-interactive="true" data-namespace-id="{{ namespace.id }}" aria-controls="namespaceForm" aria-pressed="{{ 'true' if selected_namespace and selected_namespace.id == namespace.id and not create_mode else 'false' }}" onclick="selectNamespace({{ namespace.id }})" style="--namespace-color:{{ namespace.theme_color }}">
-      <span class="namespace-mark" aria-hidden="true">
+    <button type="button" class="namespace-nav-item base-card base-card-content" data-interactive="true" data-namespace-id="{{ namespace.id }}" aria-controls="namespaceForm" aria-pressed="{{ 'true' if selected_namespace and selected_namespace.id == namespace.id and not create_mode else 'false' }}" onclick="selectNamespace({{ namespace.id }})">
+      {% call base_ui.icon_mark(color=namespace.theme_color) %}
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="{{ project_icon_path(namespace.theme_icon) }}"></path>
         </svg>
-      </span>
+      {% endcall %}
       <span class="namespace-card-body">
         <span class="namespace-name base-card-title">{{ namespace.name }}</span>
         <span class="namespace-meta">
@@ -335,11 +333,12 @@ function renderNamespaceNav(){
     button.dataset.namespaceId = String(namespace.id);
     button.setAttribute('aria-controls', 'namespaceForm');
     button.setAttribute('aria-pressed', 'false');
-    button.style.setProperty('--namespace-color', namespace.theme_color || defaultNamespaceThemeColor);
     button.onclick = function(){ selectNamespace(namespace.id); };
 
     var mark = document.createElement('span');
-    mark.className = 'namespace-mark';
+    mark.className = 'base-icon-mark';
+    mark.dataset.size = 'md';
+    mark.style.setProperty('--base-icon-mark-color', namespace.theme_color || defaultNamespaceThemeColor);
     mark.setAttribute('aria-hidden', 'true');
     mark.innerHTML = namespaceIconSvg(namespace.theme_icon);
 

@@ -447,6 +447,9 @@
   outline-offset: -2px;
 }
 @media (max-width: 767px) {
+  .base-input[type="file"] {
+    --base-file-control-min: var(--shell-control-mobile-min);
+  }
   .base-resource-list-row[data-interactive="true"] {
     min-height: max(
       var(--resource-row-min-height, var(--base-row-height)),
@@ -1236,6 +1239,7 @@ dialog.base-shell-drawer::backdrop {
 
 .base-loading-state {
   display: flex;
+  min-width: 0;
   align-items: center;
   justify-content: center;
   padding: var(--base-panel-padding);
@@ -1243,6 +1247,7 @@ dialog.base-shell-drawer::backdrop {
   font-size: var(--base-font-body);
   line-height: var(--base-line-body);
   color: var(--color-text-muted);
+  overflow-wrap: anywhere;
 }
 .base-empty-state,
 .base-error-state {
@@ -1263,6 +1268,15 @@ dialog.base-shell-drawer::backdrop {
 }
 .base-error-state {
   padding: var(--base-control-padding-inline);
+}
+.base-loading-state[data-scope="local"],
+.base-error-state[data-scope="local"] {
+  padding: 0;
+  justify-content: flex-start;
+  text-align: start;
+}
+.base-error-state[data-scope="local"] {
+  align-items: flex-start;
 }
 .base-error-state > .base-button {
   gap: calc(var(--base-control-padding-block) / 2);
@@ -1320,8 +1334,8 @@ dialog.base-shell-drawer::backdrop {
   flex-shrink: 0;
 }
 /* Initial product checks keep meaningful status text in the viewport. */
-#root > .base-loading-state,
-body > .base-loading-state {
+#root > .base-loading-state:not([data-scope="local"]),
+body > .base-loading-state:not([data-scope="local"]) {
   min-height: 100dvh;
   box-sizing: border-box;
 }
@@ -1352,6 +1366,39 @@ body > .base-loading-state {
   .platform-header-context [data-namespace-picker] select {
     min-height: var(--shell-control-mobile-min);
   }
+}
+
+/* Resource glyphs keep the readable foreground; caller colors tint their surface. */
+.base-icon-mark {
+  --base-icon-mark-color: var(--color-accent);
+  --base-icon-mark-size: calc(var(--base-font-body) + 20px);
+  --base-icon-mark-glyph-size: calc(var(--base-font-body) + 5px);
+  box-sizing: border-box;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--base-icon-mark-size);
+  height: var(--base-icon-mark-size);
+  border: 1px solid
+    color-mix(in srgb, var(--base-icon-mark-color) 45%, var(--color-border));
+  border-radius: var(--radius-lg);
+  background: color-mix(
+    in srgb,
+    var(--base-icon-mark-color) 12%,
+    var(--color-surface)
+  );
+  color: var(--color-text-primary);
+}
+.base-icon-mark[data-size="sm"] {
+  --base-icon-mark-size: calc(var(--base-font-body) + 14px);
+  --base-icon-mark-glyph-size: calc(var(--base-font-body) + 3px);
+  border-radius: var(--radius-md);
+}
+.base-icon-mark > svg {
+  width: var(--base-icon-mark-glyph-size);
+  height: var(--base-icon-mark-glyph-size);
+  flex: none;
 }
 
 /* A project's display key owns its recognizable avatar on every product surface. */
@@ -1666,7 +1713,8 @@ body > .base-loading-state {
   right: 0;
   font-size: 10px;
 }
-.base-choice-ssr-panel[data-appearance="icons"] .base-choice-option[aria-selected="true"] {
+.base-choice-ssr-panel[data-appearance="icons"]
+  .base-choice-option[aria-selected="true"] {
   background: var(--color-surface-raised);
   box-shadow: inset 0 0 0 1px var(--color-primary);
 }
@@ -1719,6 +1767,26 @@ body > .base-loading-state {
   .base-input {
     border-color: var(--color-border-strong);
     box-shadow: 0 1px 2px rgb(0 0 0 / 5%);
+  }
+  .base-input[type="file"] {
+    --base-file-control-min: var(--shell-control-min);
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .base-input[type="file"]::file-selector-button {
+    min-height: calc(var(--base-file-control-min) - 2px);
+    margin-inline-end: var(--base-control-padding-inline);
+    padding: var(--base-control-padding-block)
+      var(--base-control-padding-inline);
+    border: 0;
+    border-inline-end: 1px solid var(--color-border-strong);
+    font: inherit;
+    cursor: pointer;
+  }
+  .base-input[type="file"]:disabled::file-selector-button {
+    cursor: not-allowed;
   }
   .base-textarea {
     min-height: 80px;
@@ -2107,6 +2175,9 @@ body > .base-loading-state {
 
 /* Common component metrics, inherited by every presentation scope and its portals. */
 body {
+  margin: 0;
+  background-color: var(--color-background);
+  color: var(--color-text-primary);
   font-family: var(--base-font-sans);
   font-size: var(--base-font-body);
   line-height: var(--base-line-body);
@@ -2123,6 +2194,10 @@ body {
 }
 .base-control:not(textarea) {
   min-height: var(--shell-control-min);
+}
+.base-control.base-input[type="file"] {
+  /* The native file button owns padding; do not add it twice to the field. */
+  padding: 0;
 }
 .base-button {
   min-width: var(--shell-control-min);
@@ -2277,6 +2352,45 @@ body {
 .base-check-field:has(input:disabled) {
   cursor: default;
   opacity: 0.5;
+}
+/* Rich option cards use the native input for checked, validity and fieldset state. */
+.base-check-field[data-appearance="card"] {
+  box-sizing: border-box;
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  gap: var(--base-control-padding-inline);
+  padding: var(--base-control-padding-block) var(--base-control-padding-inline);
+  border: 1px solid var(--color-border);
+  border-radius: var(--base-radius-card, var(--base-radius));
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+}
+.base-check-field[data-appearance="card"] > .base-check-label {
+  flex: 1;
+  min-width: 0;
+}
+.base-check-field[data-appearance="card"] > [aria-hidden] {
+  margin-block-start: max(0px, calc((var(--base-line-body) - 18px) / 2));
+}
+.base-check-field[data-appearance="card"]:not(:has(input:disabled)):hover {
+  background: var(--color-surface-raised);
+}
+.base-check-field[data-appearance="card"]:has(input:checked),
+.base-check-field[data-appearance="card"]:has(input:indeterminate) {
+  border-color: var(--color-focus);
+  box-shadow: inset 0 0 0 1px var(--color-focus);
+}
+.base-check-field[data-appearance="card"]:has(input:focus-visible) {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+.base-check-field[data-appearance="card"] > input:focus-visible + span {
+  outline: none;
+}
+.base-check-field[data-appearance="card"]:has(input[aria-invalid="true"]) {
+  border-color: var(--color-danger);
+  box-shadow: inset 0 0 0 1px var(--color-danger);
 }
 .base-check-input {
   position: absolute;
@@ -2653,7 +2767,8 @@ body {
   background: var(--color-accent-hover);
   color: var(--color-accent-hover-foreground);
 }
-.base-button[data-variant="secondary"] {
+.base-button[data-variant="secondary"],
+.base-input[type="file"]::file-selector-button {
   background: var(--color-surface-raised);
   color: var(--color-text-primary);
   border-color: var(--color-border-strong);

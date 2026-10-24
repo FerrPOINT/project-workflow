@@ -25,9 +25,6 @@ html[data-pdlc-access-pending] body{visibility:hidden}
 
 .namespace-switcher{position:relative;min-width:0}
 
-.namespace-selector-mark{display:inline-flex;align-items:center;justify-content:center;flex:0 0 28px;width:28px;height:28px;border-radius:6px;background:color-mix(in srgb,var(--namespace-color,var(--accent)) 14%,transparent);color:var(--namespace-color,var(--accent));border:1px solid color-mix(in srgb,var(--namespace-color,var(--accent)) 45%,transparent)}
-.namespace-selector-mark[hidden]{display:none}
-.namespace-selector-mark svg{width:17px;height:17px}
 .namespace-selector-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
 .namespace-picker-label{margin-bottom:8px;color:var(--text-muted);font-size:var(--base-font-label);font-weight:600;text-transform:uppercase}
 
@@ -76,7 +73,8 @@ html[data-pdlc-access-pending] body{visibility:hidden}
 {% block extra_style %}{% endblock %}
 </style>
 {% set base_styles %}{% include "base/base-ui.css" %}{% endset %}
-<style>{{ base_styles|replace('url("./fonts/', 'url("' ~ ui_base_path() ~ '/base-assets/fonts/')|safe }}</style>
+{# The local prefix is validated; Markup.replace must not HTML-escape the CSS URL fragment. #}
+<style>{{ base_styles|replace('url("./fonts/', ('url("' ~ ui_base_path() ~ '/base-assets/fonts/')|safe)|safe }}</style>
 <script>{% include "base/branding-bootstrap.js" %}
 window.WorkflowBranding=window.PdlcBranding.createBrandingRuntime({root:document.documentElement,configUrl:{{ platform_branding_url()|tojson }}});
 window.addEventListener('pagehide',function(event){if(!event.persisted)window.WorkflowBranding.dispose();});
@@ -152,8 +150,9 @@ function renderNamespaceChoice(option, mode){
   var paths = {{ project_icon_paths | tojson }};
   var label = document.createElement('span');
   var icon = document.createElement('span');
-  icon.className = 'namespace-selector-mark';
-  icon.style.setProperty('--namespace-color', option.dataset.color);
+  icon.className = 'base-icon-mark';
+  icon.dataset.size = 'sm';
+  if (option.dataset.color) icon.style.setProperty('--base-icon-mark-color', option.dataset.color);
   icon.setAttribute('aria-hidden', 'true');
   var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('fill', 'none');
