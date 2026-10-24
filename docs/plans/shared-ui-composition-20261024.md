@@ -54,3 +54,13 @@ cases проверяют фактическое исполнение runtime, de
 tokens. Предыдущая font-IAB приёмка относится к точным assets producer 9eaa68c8;
 она не объявляется fresh browser-проверкой изменившегося bootstrap. Новый полный
 gate и source publication остаются открытыми; SDK/skills pins неизменны.
+
+## Поставка справочника и source guard
+
+UI pin — eb3ceceeb1b1c5029ccaaa9b863d6646b35b1a46; reference
+`5a702cb74a6eff5ec0e298ebdee609e70703e4fb01eda9e101cf7be84f019d36`.
+Этот срез добавляет пример Notice и source guard React-потребителей. Штатный SSR
+check совпадает с имеющимися assets; повторный export и компиляция не требуются.
+Workflow templates/handlers и независимые SDK/skills pins не меняются. Прежний
+font/SSR протокол сохраняет свои inputs; новая authenticated-проверка точного
+bootstrap и интегрированный gate остаются открытыми. Установка не выполняется.
