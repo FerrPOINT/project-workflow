@@ -127,14 +127,33 @@ SQLite regression сохраняет те же исторические стро
 0016 в upgrade allowlist и попытку теста удалить immutable namespace history.
 Исправления сохраняют ограничения unversioned/foreign schema; неизвестная история
 и запрет новой записи проверяются раздельно на свежих базах. Исторические результаты
-не выдаются за проверку текущей интеграции. Набор owner PG теперь содержит 16 случаев. Три COMMIT barrier проверки для
+не выдаются за проверку текущей интеграции. Исторический расширенный owner PG
+набор содержал 16 случаев; текущий отдельный owner PG набор содержит 19 случаев.
+Он не заменяет полный repository PostgreSQL gate
+`tests/test_postgres_integration.py`: его 115 случаев имеют отдельное evidence.
+Три COMMIT barrier проверки для
 `check`/`freeze`/`release` сначала подтверждают вход в настоящий deferred trigger,
 удерживают транзакцию до истечения исходного proof, затем проверяют `42501`,
 полный rollback journal/binding/epoch и успешную свежую команду. Пороговые таймауты
 приложения и ранее выпущенные часы доступа не расширяются.
 
-До merge остаются pinned Python/constraints lint/mypy, полный pytest и coverage
-не ниже 94%, реальные PostgreSQL/EXPLAIN, настоящий Auth coordinator, потерянный ACK,
-restart, гонки отмены/завершения и Docker/Kubernetes qualification. Контейнерные
-проверки запускаются только в собственном временном ComposeHelper v2 проекте
-с сохранением evidence и удалением собственных ресурсов. Runtime здесь не менялся.
+### Gates исходников и активации
+
+До merge исходников обязательны pinned Python/constraints lint/mypy, полный pytest
+с coverage не ниже 94%, строгий ResourceWarning gate и реальные PostgreSQL/EXPLAIN.
+Отдельно обязательны запуск настоящего сервера и HTTP readiness в собственном
+Compose-проекте, проверка private check/freeze/release с настоящим Auth coordinator,
+потерянного ACK, restart и гонок отмены/завершения. Эти code/security gates пока
+не квалифицированы целиком: успешные native и PostgreSQL компоненты не заменяют
+оставшиеся serving-HTTP и coordinator/recovery проверки. До их закрытия PR
+остаётся Draft и не объявляется готовым к merge.
+
+Полная совместная приёмка восьми owners, deployment qualification Docker/Compose
+и Kubernetes, включение функции и rollout относятся к отдельному этапу активации.
+Эти gates остаются **OPEN**; их отделение от merge исходников не означает PASS
+или завершение общей цели. Слияние кода с выключенной по умолчанию функцией
+не разрешает её включение или установку в действующий runtime.
+
+Все контейнерные проверки используют только собственный временный
+ComposeHelper v2 проект с сохранением evidence и удалением собственных ресурсов.
+Этот PR не устанавливает runtime.
