@@ -40,11 +40,12 @@ def bridge(monkeypatch):
 
 
 def prepare(client, monkeypatch, role="developer", mode="initial", stage="Development", tech_pair=None, cycle=0,
-            native_run_ref="run:1"):
+            native_run_ref="run:1", task_key="RUN-7"):
     monkeypatch.setenv("PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON", json.dumps({role: "w" * 40}))
     monkeypatch.setenv("PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON", json.dumps({role: "r" * 40}))
     config.get_settings.cache_clear()
-    assignment = {**assignment_payload(), "role_key": role, "workflow_key": "single-task-v1:" + role,
+    assignment = {**assignment_payload(), "task": task_key,
+                  "role_key": role, "workflow_key": "single-task-v1:" + role,
                   "mode_key": mode, "stage_key": stage,
                   "execution_scope": ROLE_MODES[role][mode][0], "cycle_number": cycle}
     if tech_pair is not None:
@@ -205,9 +206,9 @@ def test_profile_executes_three_phases_replays_and_reads_history(
             assert entry.evaluation_snapshot["single_task_context_sha256"] == step["single_task_context_sha256"]
 
 
-def enroll_pm(client, monkeypatch, native_run_ref="run:1", observation_ref="observed:1"):
+def enroll_pm(client, monkeypatch, native_run_ref="run:1", observation_ref="observed:1", task_key="RUN-7"):
     assignment, binding, step, _ = prepare(
-        client, monkeypatch, "project_manager", "draft", "Draft", native_run_ref=native_run_ref,
+        client, monkeypatch, "project_manager", "draft", "Draft", native_run_ref=native_run_ref, task_key=task_key,
     )
     with SAUnitOfWork() as uow:
         project = uow.projects.get_by_cli_command("workflow-single-task-project-manager")

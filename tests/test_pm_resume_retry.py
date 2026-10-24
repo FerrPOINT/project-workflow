@@ -39,7 +39,7 @@ def stored():
 @pytest.fixture
 def pending(bridge, monkeypatch):
     identity, observations, headers, step = enroll_pm(
-        bridge, monkeypatch, native_run_ref="run_source", observation_ref=SOURCE_OBSERVATION,
+        bridge, monkeypatch, native_run_ref="run_source", observation_ref=SOURCE_OBSERVATION, task_key="SDLC-7",
     )
     first = bridge.post(API + "step", json=step, headers=headers)
     assert first.status_code == 200, first.text
@@ -79,6 +79,8 @@ def test_retry_keeps_source_fence_and_checkpoint_with_exact_replay_and_readback(
     PMResumeRetryResponse.model_validate(wire)
     assert set(wire) == {"ok", "result"} and "execution_token" not in wire
     result = wire["result"]
+    assert command["task"] == original_resume["result"]["identity"]["task"] == "SDLC-7"
+    assert result["pending"]["identity"]["task"] == "SDLC-7"
     assert result["request_sha256"] == payload_sha256(command)
     assert result["input"] == command["input"] and result["input_receipt"] == command["input_receipt"]
     assert result["source"] == {"session_run_id": SESSION, "binding_ref": command["binding_ref"],
