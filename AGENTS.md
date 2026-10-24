@@ -39,11 +39,14 @@ Supervisor Engine перед commit выполнить следующие про
 
 2. **PostgreSQL integration**
    ```bash
-   pytest -q -m integration tests/test_postgres_integration.py --timeout=120
+   pytest -q -m integration --timeout=120
    ```
    Ожидается 0 падений и 0 ошибок. Набор включает реальный путь CLI subprocess →
    PostgreSQL → тестовый OpenAI-compatible HTTP endpoint. Два multi-process E2E
    теста имеют собственный timeout 240 секунд.
+   Маркер охватывает также admission/COMMIT regressions. Для application-clock
+   case нужна отдельная пустая QA-база `request_clock_fixture` через
+   `WORKFLOW_APPLICATION_CLOCK_TEST_URL`; без неё skip не подтверждает этот gate.
 
 3. **Coverage**
    ```bash

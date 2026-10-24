@@ -37,7 +37,7 @@ python ../services-base/scripts/export_python_namespace.py --out project_workflo
 
 ```bash
 uv run --isolated --with-requirements constraints.txt --all-extras pytest -q --timeout=60
-uv run --isolated --with-requirements constraints.txt --all-extras pytest -q -m integration tests/test_postgres_integration.py --timeout=120
+uv run --isolated --with-requirements constraints.txt --all-extras pytest -q -m integration --timeout=120
 uv run --isolated --with-requirements constraints.txt --all-extras pytest --cov=project_workflow --cov-report=term --timeout=60
 uv run --isolated --with-requirements constraints.txt --all-extras ruff check .
 uv run --isolated --with-requirements constraints.txt --all-extras mypy project_workflow scripts
@@ -104,6 +104,35 @@ image/runtime и hosted CI этим результатом не подтверж
 предыдущий `15182d57`; штатная проверка fingerprints прошла. Новая browser-only
 функция скачивания Blob не меняет Python/runtime и не требует повтора non-PG.
 
+### Дополнение: полный PostgreSQL-срез того же кандидата
+
+Реальный PostgreSQL 16.15 из существующего образа
+`sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea`
+подтвердил 114 cases основного модуля за 380.95 s. Пять дополнительных
+admission/clock cases прошли сразу; один выявил дефект observer в тесте row wait.
+Тест читал `pg_stat_activity` в одной транзакции и сохранял первый снимок,
+так что настоящий waiter мог остаться невидимым. Только observer переведён в
+AUTOCOMMIT согласно [модели статистики PostgreSQL 16](https://www.postgresql.org/docs/16/monitoring-stats.html#MONITORING-STATS-VIEWS).
+Срок proof 0.6 s, ожидание истечения, требование реальной блокировки, SQLSTATE
+42501 и проверка сохранности исходных данных не изменены.
+
+Адресный повтор row-wait и соседнего deferred-COMMIT дал 2 PASS. Совокупный
+результат — 120 уникальных integration cases, без skips; повтор соседа не
+прибавляется к числу уникальных tests. Application Python не менялся, поэтому
+исходные 114 не запускались повторно. Отказ первого observer сохранён отдельно.
+
+Существующие Make, PowerShell и CI manual entrypoints теперь выбирают marker
+`integration`, включая три модуля. Проверен actual PowerShell launcher на границе
+native uv process: выбор всех integration и передача exit 0/9. Изменённый
+документационный regression case прошёл; Ruff прошёл. Hosted CI не запускался.
+
+Каждый прогон использовал собственный временный PostgreSQL на loopback,
+512 MiB memory/memory+swap, 1 CPU и pids128; native launcher ограничен двумя
+CPU affinity bits. OOM не было, контейнеры удалены. Это лимиты и isolated source
+proof, а не потребление установленного приложения. Общие БД, runtime, credentials,
+dev и production не использовались. Authenticated browser-проверка UI кандидата
+остаётся открытой; успешная интеграция не заменяет визуальную приёмку.
+
 ## ResourceWarning Gate
 
 После изменений в тестовой инфраструктуре, SQLAlchemy layer, UI request
@@ -132,7 +161,19 @@ PGPASSWORD=project_workflow
 PGDATABASE=project_workflow
 ```
 
-Набор `tests/test_postgres_integration.py` проверяет реальный путь CLI
+Ручные `test-integration` и CI workflow_dispatch выбирают все tests с маркером
+`integration`, без ограничения одним файлом. Срез кандидата содержит 114 cases
+основного PostgreSQL-модуля, пять project-admission cases и один application-clock
+case. Последние шесть не должны выпадать из gate при выборе старого файла.
+
+Application-clock case требует явный `WORKFLOW_APPLICATION_CLOCK_TEST_URL` к
+отдельной пустой QA-базе с точным именем `request_clock_fixture`; обычная
+runtime-БД отклоняется. В CI эту базу создаёт manual step внутри свежего
+PostgreSQL service. Для локального запуска её готовит владелец изолированного
+QA-окружения; не создавать её автоматически в общей установленной БД.
+Без URL тест явно пропускается, и такой skip не подтверждает COMMIT-clock gate.
+
+Основной модуль `tests/test_postgres_integration.py` проверяет реальный путь CLI
 subprocess -> PostgreSQL -> тестовый OpenAI-compatible HTTP endpoint ->
 Supervisor -> PostgreSQL. Это deterministic runtime integration, а не полный
 business E2E с настоящим исполнителем.
