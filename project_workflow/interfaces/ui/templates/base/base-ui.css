@@ -2256,6 +2256,10 @@ body {
   font-size: var(--base-font-page-title);
   line-height: 1.25;
 }
+.base-table:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
+}
 .base-table th,
 .base-table td {
   font-size: var(--base-font-body);
