@@ -112,3 +112,12 @@ UI pin `1eb905ffe1d7d983af9464c98e67ee90ead20e18` обновляет подго�
 Карточки и демонстрации поддерживаются [приложением Base](https://github.com/FerrPOINT/services-base/tree/main/components-dictionary). Общие каркас, навигация, темы и мобильное меню принадлежат Base; запросы, DTO, права и предметные состояния остаются у продукта. Приёмка source-кандидата не означает установку или production-приёмку.
 
 Workflow остаётся SSR-потребителем. Экспорт и fingerprints канонических macros/JS/CSS проверяются штатным exporter; React AppShell в серверные шаблоны не переносится.
+
+## Кандидат SDK жизненного цикла identity
+
+`.base-revision` закрепляет `2bb386503eeb009e2238160e88970eae0fab2824`:
+[протокол Base v1](https://github.com/FerrPOINT/services-base/blob/2bb386503eeb009e2238160e88970eae0fab2824/docs/contracts/IDENTITY_DELETION_V1.md).
+Namespace exporter без дополнительных зависимостей, UI и skills pins остаются
+независимыми. Workflow реализует строгие Python DTO и собственные durable guards
+для ссылок на identity; [inventory и квалификация](plans/2026-10-22-identity-deletion-owner.md)
+не означают merge, установку или сквозную приёмку Auth.

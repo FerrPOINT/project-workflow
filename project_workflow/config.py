@@ -50,6 +50,8 @@ class Settings(BaseSettings):
     AUTH_SESSION_SECRET: str = ""
     AUTH_COOKIE_SECURE: bool = False
     PROJECT_WORKFLOW_NAMESPACE_PROVISIONER_SUBJECT: str = ""
+    PROJECT_WORKFLOW_IDENTITY_DELETION_COORDINATOR_SUBJECTS: str = ""
+    PROJECT_WORKFLOW_IDENTITY_LEGACY_ISSUER: str = ""
 
     # Private role-token map for isolated agent containers, not the browser UI.
     # Shape: {"analyst":"<token>", ...}. Empty keeps the bridge fail-closed.

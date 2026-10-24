@@ -448,6 +448,8 @@ def ensure_migrated(engine: Engine | Connection | None = None) -> None:
         "0013_profession_execution",
         "0014_launch_profile_only",
         "0015_single_task_assignments",
+        "0016_human_project_commit_guard",
+        "0017_human_application_clock",
     }
     incompatible_revision = bool(revisions) and not revisions.issubset(compatible_upgrade_revisions)
     _validate_legacy_archives(target)
