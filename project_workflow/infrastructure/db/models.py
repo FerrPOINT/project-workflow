@@ -779,3 +779,44 @@ class TaskPhaseEvent(Base):
 # Runtime helper used by repository layer to extract a plain dict from a model.
 def model_to_dict(model: Base) -> dict[str, Any]:
     return {c.name: getattr(model, c.name) for c in model.__table__.columns}
+
+
+class IdentityLegacyIssuer(Base):
+    __tablename__ = "identity_legacy_issuer"
+    singleton: Mapped[int] = mapped_column(primary_key=True)
+    issuer: Mapped[str] = mapped_column(Text, nullable=False)
+    __table_args__ = (CheckConstraint("singleton = 1", name="ck_identity_issuer_singleton"),)
+
+
+class IdentityOwnerCommandAuthorization(Base):
+    __tablename__ = "identity_owner_command_authorizations"
+    authorization_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    valid_until: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class IdentityFenceEpoch(Base):
+    __tablename__ = "identity_fence_epoch"
+    singleton: Mapped[int] = mapped_column(primary_key=True)
+    revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    __table_args__ = (CheckConstraint("singleton = 1 AND revision > 0", name="ck_identity_epoch_singleton"),)
+
+
+class IdentityDeletionOperation(Base):
+    __tablename__ = "identity_deletion_operations"
+    operation_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    issuer: Mapped[str] = mapped_column(Text, nullable=False)
+    subject: Mapped[str] = mapped_column(String(64), nullable=False)
+    inventory_revision: Mapped[str] = mapped_column(String(36), nullable=False)
+    request: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    state: Mapped[str] = mapped_column(String(16), nullable=False)
+    fence: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    reference_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    __table_args__ = (
+        CheckConstraint("state IN ('frozen','released')", name="ck_identity_operation_state"),
+        CheckConstraint("revision > 0 AND reference_count >= 0", name="ck_identity_operation_counts"),
+        CheckConstraint("(state='frozen') = (fence IS NOT NULL)", name="ck_identity_operation_fence"),
+        Index("ix_identity_operation_target", "issuer", "subject"),
+        Index("identity_one_active_freeze", "issuer", "subject", unique=True,
+              postgresql_where=text("state='frozen'"), sqlite_where=text("state='frozen'")),
+    )

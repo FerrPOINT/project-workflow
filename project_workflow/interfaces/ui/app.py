@@ -97,7 +97,9 @@ class _UoWMiddleware(BaseHTTPMiddleware):
         if request.url.path in {
             "/health", "/internal/runtime/capabilities",
             "/internal/runtime/base/source-catalog", "/internal/runtime/base/source-capabilities",
-        } or request.url.path.startswith("/internal/runtime/base/namespace-bindings/"):
+        } or request.url.path.startswith((
+            "/internal/runtime/base/namespace-bindings/", "/api/internal/v1/user-deletions/",
+        )):
             return await call_next(request)
         try:
             uow = _app_state.create_uow()
@@ -199,6 +201,13 @@ def create_app() -> FastAPI:
     app.add_middleware(_RequestLoggingMiddleware)
     app.add_middleware(_UoWMiddleware)
     install_sso(app)
+
+    @app.middleware("http")
+    async def identity_owner_no_store(request: Request, call_next):
+        response = await call_next(request)
+        if request.url.path.startswith("/api/internal/v1/user-deletions/"):
+            response.headers["Cache-Control"] = "no-store"
+        return response
     from project_workflow.domain.project_admission import SpaceAccessDenied
 
     @app.exception_handler(SpaceAccessDenied)
@@ -326,6 +335,8 @@ def create_app() -> FastAPI:
 
     # Configuration writes declare their administration dependency at registration.
     admin_access = [Depends(require_administrator)]
+    from .routes.identity_deletion_api import handle as identity_deletion_handle
+    app.post("/api/internal/v1/user-deletions/{operation_id}/{action}")(identity_deletion_handle)
 
     # Pages
     app.get("/", response_class=HTMLResponse)(pages.index)
