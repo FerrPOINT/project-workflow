@@ -177,6 +177,28 @@ class SingleTaskPMResume(SingleTaskPMCheckpoint):
         return self
 
 
+class SingleTaskPMResumeRetry(PMCommand, SingleTaskPMProfile):
+    contract_version: Literal[1]
+    checkpoint_ref: Ref
+    prior_resume_operation_key: Key
+    input: PMTypedInput
+    input_receipt: PMInputReceipt
+    failed_session_run_id: UUIDRef
+    failed_hermes_run_ref: Ref
+    failed_binding_ref: Ref
+    new_session_run_id: UUIDRef
+    new_binding_ref: Ref
+
+    @model_validator(mode="after")
+    def distinct_attempts(self) -> "SingleTaskPMResumeRetry":
+        if (len({self.session_run_id, self.failed_session_run_id, self.new_session_run_id}) != 3
+            or len({self.binding_ref, self.failed_binding_ref, self.new_binding_ref}) != 3
+            or self.new_binding_ref != f"fleet:pm:{self.new_session_run_id}"
+            or self.operation_key == self.prior_resume_operation_key):
+            raise ValueError("Resume retry requires distinct retained source, failed and new attempts")
+        return self
+
+
 class SingleTaskPMRebind(PMRebind, SingleTaskPMProfile):
     new_session_run_id: UUIDRef
 
@@ -258,11 +280,51 @@ class PMOperationResult(BaseModel):
     result: PMExecutionSnapshot
 
 
+class PMResumeRetrySource(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    session_run_id: FleetRunId
+    binding_ref: Ref
+    hermes_run_ref: Ref
+    fence: Version
+    checkpoint_ref: Ref
+
+
+class PMResumeRetryResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    contract_version: Literal[1]
+    operation_key: Key
+    request_sha256: Sha256
+    prior_resume_operation_key: Key
+    input: PMTypedInput
+    input_receipt: PMInputReceipt
+    source: PMResumeRetrySource
+    failed_terminal: RuntimeObservation
+    pending: PMExecutionSnapshot
+
+
+class PMResumeRetryOperationResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    operation_key: Key
+    kind: Literal["resume_retry"]
+    request_sha256: Sha256
+    result: PMResumeRetryResult
+
+
 class PMResult(PMExecutionSnapshot):
-    operation: PMOperationResult | None = None
+    operation: PMOperationResult | PMResumeRetryOperationResult | None = None
 
 
 class PMResponse(BaseModel):
     ok: Literal[True]
     result: PMResult
     execution_token: str | None = None
+
+
+class PMResumeRetryResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ok: Literal[True]
+    result: PMResumeRetryResult
