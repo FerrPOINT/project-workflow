@@ -1293,6 +1293,12 @@ dialog.base-shell-drawer::backdrop {
   font-size: var(--base-font-label);
   line-height: calc(var(--base-line-body) - 4px);
 }
+.base-empty-heading {
+  margin: 0;
+  font-size: inherit;
+  line-height: inherit;
+  font-weight: 500;
+}
 .base-error-message {
   color: var(--color-danger);
 }
