@@ -77,6 +77,33 @@ JavaScript передаётся в Node через stdin с явным `encoding
 а не пропущенной частью успешного non-PG результата. Исторический отказab3
 не удаляется; текущий non-PG PASS не заменяет PostgreSQL/image/live-приёмку.
 
+### Квалификация общего UI — 24 октября 2026
+
+Следующий полный non-PG прогон для переноса общего UI прошёл без отказов тестов:
+3315 passed, 5 skipped, 120 PostgreSQL deselected, 97 subtests passed. Он включал
+ResourceWarning и PytestUnraisableExceptionWarning как ошибки. Отдельный
+Pydantic UnsupportedFieldAttributeWarning сохранён в отчёте; это не ResourceWarning.
+
+Первичный raw line coverage составил 93.99660912453761%. При precision=0
+pytest-cov завершился с кодом 0, хотя текстовый отчёт сообщил недостаточное
+покрытие. Такой результат не считается прохождением порога. Теперь precision=4,
+а fail_under=94 не изменён: результат ниже порога больше не округляется в PASS.
+
+Добавлены четыре проверки реальной границы human display window: остаток меньше
+1 ms отклоняется, достаточное малое окно сохраняется, при включённой и выключенной
+application policy. Ещё три проверки используют действующий coverage predicate
+и подтверждают отказ непосредственно ниже 94%. На неизменных 136 application
+Python-файлах к копии полного coverage dataset добавлен только этот набор из
+семи PASS. Итог — 12199 из 12976 statements, raw coverage 94.01202219482121%.
+Первичный dataset сохранён отдельно; полный набор повторно не выполнялся.
+
+Это 3322 уникальных non-PG cases и отдельный coverage proof; пять skips не
+засчитываются как выполненные проверки. PostgreSQL 120, authenticated UI,
+image/runtime и hosted CI этим результатом не подтверждены. UI producer
+`2e13224836dda29ae863db407866ee2e6ae8bb42` экспортирует те же SSR bytes, что
+предыдущий `15182d57`; штатная проверка fingerprints прошла. Новая browser-only
+функция скачивания Blob не меняет Python/runtime и не требует повтора non-PG.
+
 ## ResourceWarning Gate
 
 После изменений в тестовой инфраструктуре, SQLAlchemy layer, UI request

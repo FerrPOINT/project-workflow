@@ -277,6 +277,36 @@ def test_display_window_policy_off_is_explicit_and_missing_proof_fails_closed(mo
         display_window()
 
 
+@pytest.mark.parametrize("project_policy", [False, True])
+@pytest.mark.parametrize("remaining_seconds", [0.0005, 0.01])
+def test_display_window_does_not_expose_a_zero_millisecond_human_window(
+    monkeypatch, project_policy, remaining_seconds,
+):
+    from fastapi import Request
+
+    from project_workflow.infrastructure.platform_auth import HumanAccess
+    from project_workflow.interfaces.ui.project_admission import display_window
+
+    monkeypatch.setattr(time, "monotonic", lambda: 1000.0)
+    monkeypatch.setattr(time, "time", lambda: 2000.0)
+    monkeypatch.setenv("PROJECT_WORKFLOW_SPACES__ENABLED", "true" if project_policy else "false")
+    request = Request({"type": "http", "method": "GET", "path": "/"})
+    request.state.central_subject = "ordinary-user"
+    request.state.central_access = HumanAccess("user", None, 1000.0 + remaining_seconds)
+    original = human_scope.set(scope((PROJECT_REF,)))
+    try:
+        if remaining_seconds < 0.001:
+            with pytest.raises(SpaceAccessDenied, match="Original .* admission expired"):
+                display_window(request)
+        else:
+            window = display_window(request)
+            assert window["enforced"] is True
+            assert 1 <= window["remaining_millis"] <= 10
+            assert len(window["scope_revision"]) == 64
+    finally:
+        human_scope.reset(original)
+
+
 @pytest.mark.parametrize("role,writable,allowed", [
     ("member", True, False), ("operator", False, False), ("operator", True, True),
 ])
