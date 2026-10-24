@@ -23,6 +23,8 @@ FAILED = "11111111-1111-4111-8111-111111111901"
 TARGET = "11111111-1111-4111-8111-111111111902"
 LATER = "11111111-1111-4111-8111-111111111903"
 CHECKPOINT = "11111111-1111-4111-8111-111111111904"
+SOURCE_OBSERVATION = "11111111-1111-4111-8111-111111111905"
+FAILED_OBSERVATION = "11111111-1111-4111-8111-111111111906"
 
 
 def stored():
@@ -36,7 +38,9 @@ def stored():
 
 @pytest.fixture
 def pending(bridge, monkeypatch):
-    identity, observations, headers, step = enroll_pm(bridge, monkeypatch)
+    identity, observations, headers, step = enroll_pm(
+        bridge, monkeypatch, native_run_ref="run_source", observation_ref=SOURCE_OBSERVATION,
+    )
     first = bridge.post(API + "step", json=step, headers=headers)
     assert first.status_code == 200, first.text
     checkpoint = {**PROFILE, **identity, "operation_key": "checkpoint:source", "expected_version": 1,
@@ -52,17 +56,17 @@ def pending(bridge, monkeypatch):
               "new_session_run_id": FAILED}
     response = bridge.post(PM + "resume", json=resume, headers=WRITER)
     assert response.status_code == 200, response.text
-    observations[FAILED] = {**identity, "observation_ref": "observed:failed", "status": "completed",
+    observations[FAILED] = {**identity, "observation_ref": FAILED_OBSERVATION, "status": "completed",
                             "session_run_id": FAILED, "binding_ref": "binding:failed",
-                            "hermes_run_ref": "run:failed", "fence": 2,
+                            "hermes_run_ref": "run_failed", "fence": 2,
                             "dispatch_operation_key": resume["operation_key"], "checkpoint_ref": None}
     command = {**PROFILE, **identity, **saved_input, "contract_version": 1,
                "operation_key": "resume-retry:1", "expected_version": 3, "expected_fence": 2,
                "session_run_id": SESSION, "binding_ref": step["binding_ref"],
                "hermes_run_ref": step["hermes_run_ref"], "checkpoint_ref": CHECKPOINT,
                "prior_resume_operation_key": resume["operation_key"], "failed_session_run_id": FAILED,
-               "failed_hermes_run_ref": "run:failed", "failed_binding_ref": "binding:failed",
-               "new_session_run_id": TARGET, "new_binding_ref": "binding:target"}
+               "failed_hermes_run_ref": "run_failed", "failed_binding_ref": "binding:failed",
+               "new_session_run_id": TARGET, "new_binding_ref": "fleet:pm:" + TARGET}
     return bridge, command, observations, step, response.json()
 
 
@@ -178,7 +182,8 @@ def test_retry_rejects_unknown_fields_and_duplicate_run_ids(pending):
     client, command, _, _, _ = pending
     before = stored()
     for change in [{"prompt": "not allowed"}, {"contract_version": 2},
-                   {"new_session_run_id": FAILED}, {"new_binding_ref": command["binding_ref"]}]:
+                   {"new_session_run_id": FAILED}, {"new_binding_ref": command["binding_ref"]},
+                   {"new_binding_ref": "binding:target"}]:
         assert client.post(PM + "resume-retry", json={**command, **change}, headers=WRITER).status_code == 422
     assert stored() == before
 
@@ -188,7 +193,8 @@ def test_retry_does_not_replace_a_rebound_or_already_retried_target(pending):
     accepted = client.post(PM + "resume-retry", json=command, headers=WRITER)
     assert accepted.status_code == 200, accepted.text
     before = stored()
-    assert client.post(PM + "resume-retry", json={**command, "new_session_run_id": LATER},
+    assert client.post(PM + "resume-retry", json={**command, "new_session_run_id": LATER,
+                                               "new_binding_ref": "fleet:pm:" + LATER},
                        headers=WRITER).status_code == 409
     assert client.post(PM + "resume-retry", json={**command, "operation_key": "other-key"},
                        headers=WRITER).status_code == 409
@@ -225,7 +231,7 @@ def test_second_terminal_retry_still_uses_original_source_fence_one(pending):
     next_command = {**command, "operation_key": "resume-retry:2", "expected_version": 4, "expected_fence": 3,
                     "prior_resume_operation_key": command["operation_key"], "failed_session_run_id": TARGET,
                     "failed_hermes_run_ref": "run:target", "failed_binding_ref": command["new_binding_ref"],
-                    "new_session_run_id": LATER, "new_binding_ref": "binding:later"}
+                    "new_session_run_id": LATER, "new_binding_ref": "fleet:pm:" + LATER}
     result = client.post(PM + "resume-retry", json=next_command, headers=WRITER)
     assert result.status_code == 200, result.text
     assert result.json()["result"]["source"]["fence"] == 1
@@ -265,7 +271,7 @@ def test_bootstrap_canonical_identity_survives_terminal_resume_retry(bridge, mon
                "checkpoint_ref": CHECKPOINT, "prior_resume_operation_key": "resume:bootstrap",
                "failed_session_run_id": FAILED, "failed_binding_ref": "binding:failed",
                "failed_hermes_run_ref": "run:failed", "new_session_run_id": TARGET,
-               "new_binding_ref": "binding:target"}
+               "new_binding_ref": "fleet:pm:" + TARGET}
     before = stored()
     response = bridge.post(PM + "resume-retry", headers=WRITER, json=command)
     assert response.status_code == 200, response.text

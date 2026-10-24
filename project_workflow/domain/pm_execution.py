@@ -193,6 +193,7 @@ class SingleTaskPMResumeRetry(PMCommand, SingleTaskPMProfile):
     def distinct_attempts(self) -> "SingleTaskPMResumeRetry":
         if (len({self.session_run_id, self.failed_session_run_id, self.new_session_run_id}) != 3
             or len({self.binding_ref, self.failed_binding_ref, self.new_binding_ref}) != 3
+            or self.new_binding_ref != f"fleet:pm:{self.new_session_run_id}"
             or self.operation_key == self.prior_resume_operation_key):
             raise ValueError("Resume retry requires distinct retained source, failed and new attempts")
         return self
