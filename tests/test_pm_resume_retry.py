@@ -180,6 +180,26 @@ def test_retry_requires_assignment_credential(pending, headers, status):
     assert stored() == before
 
 
+def test_retry_readback_requires_current_runtime_scope_and_never_returns_token(pending):
+    from project_workflow.application.pm_execution import PMExecutionService
+
+    client, command, _, _, original = pending
+    stale_token = PMExecutionService.scoped_token(original["result"], "s" * 40)
+    accepted = client.post(PM + "resume-retry", json=command, headers=WRITER)
+    assert accepted.status_code == 200, accepted.text
+    current = accepted.json()["result"]["pending"]
+    body = {**PROFILE, **current["identity"], "operation_key": command["operation_key"]}
+    before = stored()
+    for headers in (RUNNER, {**RUNNER, "X-Workflow-Execution-Token": stale_token}):
+        assert client.post(PM + "readback", json=body, headers=headers).status_code == 403
+    headers = {**RUNNER, "X-Workflow-Execution-Token": PMExecutionService.scoped_token(current, "s" * 40)}
+    readback = client.post(PM + "readback", json=body, headers=headers)
+    assert readback.status_code == 200, readback.text
+    assert readback.json()["result"]["operation"]["result"] == accepted.json()["result"]
+    assert "execution_token" not in accepted.json() and "execution_token" not in readback.json()
+    assert stored() == before
+
+
 def test_retry_rejects_unknown_fields_and_duplicate_run_ids(pending):
     client, command, _, _, _ = pending
     before = stored()
@@ -214,6 +234,9 @@ def test_retry_does_not_replace_a_rebound_or_already_retried_target(pending):
     bound = client.post(PM + "rebind", json=rebind, headers=WRITER)
     assert bound.status_code == 200, bound.text
     assert bound.json()["result"]["state"] == "active" and bound.json()["result"]["fence"] == 3
+    after_rebind = stored()
+    assert client.post(PM + "resume-retry", json=command, headers=WRITER).json() == accepted.json()
+    assert stored() == after_rebind
     assert client.post(PM + "resume-retry", json={**command, "operation_key": "after-rebind"},
                        headers=WRITER).status_code == 409
 
@@ -327,3 +350,31 @@ def test_migration_only_extends_kind_and_refuses_to_drop_retained_retry(tmp_path
             migration.downgrade()
         assert connection.exec_driver_sql("SELECT count(*) FROM pm_operations").scalar() == 2
     engine.dispose()
+
+
+def test_migration_keeps_populated_pm_history_and_refuses_populated_retry_downgrade(pending, monkeypatch):
+    migration = importlib.import_module(
+        "project_workflow.infrastructure.db.migrations.versions.0019_pm_terminal_resume_retry"
+    )
+    client, command, _, _, _ = pending
+    original = stored()
+    assert {row["kind"] for row in original["pm_operations"]} == {"bind", "checkpoint", "resume"}
+    with SAUnitOfWork() as uow:
+        monkeypatch.setattr(migration, "op", Operations(MigrationContext.configure(uow.session.connection())))
+        migration.downgrade()
+    assert stored() == original
+    with SAUnitOfWork() as uow:
+        monkeypatch.setattr(migration, "op", Operations(MigrationContext.configure(uow.session.connection())))
+        migration.upgrade()
+    assert stored() == original
+    accepted = client.post(PM + "resume-retry", json=command, headers=WRITER)
+    assert accepted.status_code == 200, accepted.text
+    after = stored()
+    with SAUnitOfWork() as uow:
+        monkeypatch.setattr(migration, "op", Operations(MigrationContext.configure(uow.session.connection())))
+        with pytest.raises(RuntimeError, match="prevent downgrade"):
+            migration.downgrade()
+    assert stored() == after
+    for name, rows in original.items():
+        if name != "pm_executions":
+            assert all(row in after[name] for row in rows)
