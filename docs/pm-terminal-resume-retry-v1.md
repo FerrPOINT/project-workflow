@@ -136,7 +136,8 @@ Additive migration `0019_pm_terminal_resume_retry` follows
 `resume_retry`. It adds no table, queue, scheduler or receipt rewrite. Existing
 operation rows remain intact. Downgrade explicitly refuses while any
 `resume_retry` receipt exists; it never deletes retained history to restore the
-old CHECK. PostgreSQL transactional DDL and concurrency remain integration gates.
+old CHECK. The seven selected PostgreSQL migration/replay/concurrency cases now
+pass on the exact source documented in [PG evidence](pm-terminal-resume-retry-postgres-20261025.md).
 
 Source evidence on producer `ba990991e7053dd068991854e35a390d4d8f995b`:
 
@@ -151,7 +152,7 @@ Source evidence on producer `ba990991e7053dd068991854e35a390d4d8f995b`:
   pending snapshot, response and operation-key readback without normalization.
   Native refs and observations remain synthetic; no live PM work is implied.
 
-Still open: real PostgreSQL migration/locking, full repository gates, deployed
+Still open: actual installed-history copy verification, full repository gates, deployed
 cross-service auth/callback/capability compatibility, and real CLI delivery.
 The final business boundary remains genuine owner confirmation followed by
 Backlog/Ready for FLEETQA-3 without Analysis/Analyst. This technical retry is not

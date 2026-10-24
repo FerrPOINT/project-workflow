@@ -38,6 +38,10 @@
 
 
 ### Changed
+- The normal migration entrypoint accepts0018 as the predecessor of0019.
+  Seven actual PostgreSQL retry/migration/concurrency tests pass, including
+  retained receipts, rollback refusal and observed row-lock waits. These
+  source checks do not claim an installed or live PM business result.
 - Documented the opt-in PM terminal resume retry V1 command, distinct receipt,
   scoped readback and additive migration 0019. Source/SQLite and reported Fleet
   golden verification are separated from open PostgreSQL/deployment/live gates;
