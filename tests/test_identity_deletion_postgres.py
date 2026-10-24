@@ -404,3 +404,75 @@ def test_original_owner_authority_expiring_inside_commit_rolls_back_every_effect
             ).scalar_one() == 0
     finally:
         event.remove(engine, "handle_error", record_error)
+
+
+@pytest.mark.parametrize("variant", ["uppercase", "compact", "braces"])
+def test_subject_alias_request_counts_canonical_rows_and_installs_the_same_fence(owner, variant):
+    engine, _, _, project = owner
+    subject = "abcdefab-cdef-4abc-8def-" + uuid4().hex[:12]
+    canonical = command(subject)
+    payload = canonical.model_dump(mode="json")
+    forms = {"uppercase": subject.upper(), "compact": subject.replace("-", ""), "braces": "{" + subject + "}"}
+    alias = DeletionRequest.model_validate(payload | {
+        "identity": payload["identity"] | {"subject": forms[variant]},
+    })
+    with engine.begin() as connection:
+        context(connection, owner, subject)
+        connection.execute(text(
+            "INSERT INTO pm_namespace_ownership(ownership_ref,namespace_id,tracker_instance_ref,"
+            "tracker_project_ref,authority_issuer,provisioner_subject) "
+            "VALUES(:id,:project,'fixture',:tracker,:issuer,:subject)"
+        ), {"id": str(uuid4()), "project": project, "tracker": str(uuid4()), "issuer": ISSUER, "subject": subject})
+
+    # This count is the regression: old valid-but-noncanonical DTOs returned zero
+    # against both real canonical reference rows, then installed a nonmatching fence.
+    checked = execute("check", alias, authority())
+    assert checked.reference_count == 2
+    assert checked.request == canonical
+    frozen = execute("freeze", alias, authority())
+    assert frozen.reference_count == 2 and frozen.request == canonical
+    assert execute("freeze", canonical, authority()) == frozen
+
+    def saved_operation():
+        with engine.connect() as connection:
+            return dict(connection.execute(text(
+                "SELECT request,issuer,subject,inventory_revision,state,fence,revision,reference_count "
+                "FROM identity_deletion_operations WHERE operation_id=:operation"
+            ), {"operation": str(canonical.operation_id)}).mappings().one())
+
+    saved = saved_operation()
+    assert saved["request"] == payload
+    assert saved["issuer"] == ISSUER and saved["subject"] == subject
+    assert saved["inventory_revision"] == str(canonical.inventory_revision)
+    assert saved["state"] == "frozen" and saved["fence"] == str(frozen.fence)
+    assert saved["revision"] == frozen.revision and saved["reference_count"] == 2
+    with pytest.raises(OwnerError) as changed:
+        execute("freeze", alias.model_copy(update={"inventory_revision": uuid4()}), authority())
+    assert changed.value.status == 409 and changed.value.code == "identity_deletion_operation_conflict"
+    assert saved_operation() == saved
+
+    with engine.begin() as connection:
+        with pytest.raises(DBAPIError) as rejected:
+            context(connection, owner, subject)
+        assert rejected.value.orig.sqlstate == "23514"
+        assert rejected.value.orig.diag.message_primary == "identity_reference_frozen"
+    assert saved_operation() == saved
+    with engine.connect() as connection:
+        assert connection.execute(text(
+            "SELECT created_by_subject FROM resource_execution_contexts WHERE created_by_subject=:subject"
+        ), {"subject": subject}).scalars().all() == [subject]
+        assert connection.execute(text(
+            "SELECT authority_issuer,provisioner_subject FROM pm_namespace_ownership "
+            "WHERE authority_issuer=:issuer AND provisioner_subject=:subject"
+        ), {"issuer": ISSUER, "subject": subject}).all() == [(ISSUER, subject)]
+
+    assert execute("release", alias, authority()) == execute("release", canonical, authority())
+    with engine.begin() as connection:
+        context(connection, owner, subject)
+    with pytest.raises(OwnerError) as late:
+        execute("freeze", alias, authority())
+    assert late.value.status == 409 and late.value.code == "identity_deletion_operation_conflict"
+    released = saved_operation()
+    assert released["request"] == payload and released["subject"] == subject
+    assert released["state"] == "released" and released["fence"] is None
+    assert released["revision"] == saved["revision"] and released["reference_count"] == 2

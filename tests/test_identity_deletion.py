@@ -3,7 +3,7 @@
 import asyncio
 import time
 from datetime import datetime, timedelta, timezone
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 import pytest
@@ -300,3 +300,30 @@ def test_transaction_receipt_uses_original_remaining_after_database_anchor_respo
     assert writes[0][1]["id"] == writes[1][1]["id"]
     assert proof.deadline == 110.0
     assert proof.remaining() == 2.0
+
+
+@pytest.mark.parametrize("variant", ["uppercase", "compact", "braces"])
+def test_subject_uuid_wire_forms_share_canonical_request_and_operation_identity(variant):
+    subject = UUID("abcdefab-cdef-4abc-8def-123456789abc")
+    payload = command()
+    payload["identity"] = {"issuer": ISSUER + "/exact-issuer/", "subject": str(subject)}
+    canonical = DeletionRequest.model_validate(payload)
+    forms = {"uppercase": str(subject).upper(), "compact": subject.hex, "braces": "{" + str(subject) + "}"}
+    alias = DeletionRequest.model_validate(payload | {
+        "identity": payload["identity"] | {"subject": forms[variant]},
+    })
+    assert alias.identity.subject == str(subject)
+    assert alias.identity.issuer == payload["identity"]["issuer"]
+    assert alias.operation_id == canonical.operation_id
+    assert alias.inventory_revision == canonical.inventory_revision
+    assert alias == canonical
+    assert alias.model_dump(mode="json") == canonical.model_dump(mode="json")
+    assert alias.model_dump_json() == canonical.model_dump_json()
+
+
+@pytest.mark.parametrize("subject", [str(UUID(int=0)), UUID(int=0).hex, "{" + str(UUID(int=0)) + "}"])
+def test_nil_subject_wire_forms_remain_invalid(subject):
+    payload = command()
+    payload["identity"]["subject"] = subject
+    with pytest.raises(ValidationError):
+        DeletionRequest.model_validate(payload)

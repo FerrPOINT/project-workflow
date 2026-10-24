@@ -289,7 +289,9 @@ def test_pm_review_migration_preserves_populated_execution_and_history(tmp_path)
             assert connection.execute(text("SELECT single_task_binding_json FROM task_runtime_assignments")).all() == [
                 (None,),
             ]
-        with pytest.raises(RuntimeError, match="Identity lifecycle requires guarded cohort rollback; preserve fences and history"):
+        with pytest.raises(
+            RuntimeError, match="Identity lifecycle requires guarded cohort rollback; preserve fences and history"
+        ):
             run_alembic_command("downgrade", engine, "0014_launch_profile_only")
         assert database_revisions(engine) == {"0018_identity_deletion_owner"}
         with engine.connect() as connection:

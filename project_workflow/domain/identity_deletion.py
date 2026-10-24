@@ -15,9 +15,10 @@ class CentralIdentity(BaseModel):
     @field_validator("subject")
     @classmethod
     def valid_subject(cls, value: str) -> str:
-        if not UUID(value).int:
+        parsed = UUID(value)
+        if not parsed.int:
             raise ValueError("Non-nil identity required")
-        return value
+        return str(parsed)
 
 
 class DeletionRequest(BaseModel):
