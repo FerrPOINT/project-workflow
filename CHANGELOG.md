@@ -38,6 +38,10 @@
 
 
 ### Changed
+- Documented the opt-in PM terminal resume retry V1 command, distinct receipt,
+  scoped readback and additive migration 0019. Source/SQLite and reported Fleet
+  golden verification are separated from open PostgreSQL/deployment/live gates;
+  retained operation history is never deleted to permit downgrade.
 - PM Draft assignments accept the actual Tracker reservation and input snapshot
   without inventing future queue/workspace refs. Additive migration 0009 preserves
   existing assignment history; bind keeps the original agent and generic steps,

@@ -12,6 +12,12 @@ PM paths and the ordinary assignment/bind/continuation paths. Regenerate it with
 `python -m scripts.export_pm_openapi`; a contract test checks it against the
 application’s generated schema.
 
+The opt-in single-task [terminal resume retry V1](pm-terminal-resume-retry-v1.md)
+adds `/resume-retry` for a terminal pending target that never rebound. It retains
+the source checkpoint/input and uses a distinct receipt; ordinary resume/rebind
+and legacy request bodies remain unchanged. Source/SQLite verification and
+reported consumer golden checks do not imply PostgreSQL or live acceptance.
+
 ## Initial Draft assignment
 
 `POST /internal/runtime/v1/pm/assign` accepts the trusted Fleet adapter's actual
