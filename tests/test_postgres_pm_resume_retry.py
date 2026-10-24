@@ -146,7 +146,7 @@ def test_concurrent_retry_serializes_one_receipt_and_target(pending, postgres, m
             # Prove that the competing real PG transaction is blocked while
             # the winner retains its task row lock across the native callback.
             deadline = time.monotonic() + 5
-            with postgres.connect() as connection:
+            with postgres.connect().execution_options(isolation_level="AUTOCOMMIT") as connection:
                 while True:
                     blocked = connection.execute(
                         text(
