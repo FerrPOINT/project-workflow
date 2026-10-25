@@ -38,12 +38,18 @@
 
 
 ### Changed
+- Actual retained0015-copy migration-only qualification passes on `6c98e83`:
+  two existing `ensure_migrated()` calls preserve old data/catalog/PM history,
+  add only four identity tables and reach0019; outer cleanup is verified.
+  Full retry host module39 plus11 adjacent cases pass with scoped Ruff/mypy.
+  `init_db()` seeding failures remain retained; image/install, full gates,
+  authenticated PM HTTP and live owner-confirmed Backlog/Ready remain open.
 - PM terminal resume retry preserves the single trusted observation's null or
   exact inherited source checkpoint marker without treating it as own progress.
   The populated0018 upgrade plus six affected PostgreSQL cases pass on `6c98e83`
   (7/7, cleanup verified); foreign markers and genuine rebound targets remain
-  rejected. Actual0015-copy, full gates, Fleet transactional recovery and live PM
-  acceptance remain open; the earlier PG7 keeps its historical scope.
+  rejected. Full gates, Fleet transactional recovery and live PM acceptance
+  remain open; the earlier PG7 keeps its historical scope.
 - The normal migration entrypoint accepts0018 as the predecessor of0019.
   Seven actual PostgreSQL retry/migration/concurrency tests pass, including
   retained receipts, rollback refusal and observed row-lock waits. These

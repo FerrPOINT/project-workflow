@@ -2,8 +2,10 @@
 
 Status: source implemented with isolated SQLite/TestClient fixtures, the prior
 seven-case PostgreSQL gate and a separate seven-case inherited-checkpoint gate
-on `6c98e83`. Actual installed-history copy, full repository gates, Fleet
-transactional integration, deployment and live CLI handoff remain open.
+on `6c98e83`. The actual0015-copy migration-only preservation check and full
+39-case retry host module plus11 adjacent cases pass on that code. Full
+repository gates, Fleet transactional integration, image/install,
+authenticated PM HTTP and live CLI handoff remain open.
 This contract does not authorize installation,
 native dispatch, another business input or owner confirmation.
 
@@ -171,8 +173,13 @@ passed with the populated0018 upgrade case on `6c98e83` (7/7, cleanup verified),
 recorded separately in [PG evidence](pm-terminal-resume-retry-postgres-20261025.md).
 The older seven-case PASS remains historical and does not replace this proof.
 
-Still open: actual installed0015-history copy verification, full repository gates,
-Fleet transactional/consumer recovery, deployed
+Actual installed0015-history copy verification passes narrowly through two
+existing `ensure_migrated()` calls, unchanged retained rows/catalog/PM hashes,
+and the direct health handler; outer cleanup is verified. `init_db()` seeding is
+not covered or permitted by that result. Receipt hashes and the full50-case
+host result are recorded in [PG evidence](pm-terminal-resume-retry-postgres-20261025.md).
+
+Still open: full repository gates, image/install, Fleet transactional/consumer recovery, deployed
 cross-service auth/callback/capability compatibility, and real CLI delivery.
 The final business boundary remains genuine owner confirmation followed by
 Backlog/Ready for FLEETQA-3 without Analysis/Analyst. This technical retry is not
