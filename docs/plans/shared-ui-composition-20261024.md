@@ -1,5 +1,19 @@
 # Общие композиции Workflow: иконки и SSR-брендинг
 
+## SSR: классификация оставшейся разметки — 25 октября 2026
+
+49 native controls в 13 собственных top-level templates классифицированы по
+реальным Base CSS/runtime: 16 button DOM adapters, 11 legacy .btn adapters,
+семь backing select, четыре menu items, две card selection buttons, пять input
+и четыре textarea. .btn находится в Base legacy.css и использует общие tokens;
+это не 11 продуктовых копий CSS. Product bootstrap вызывает штатные initChoice
+и initTextareaAutosize; варианты/права/IDs и callbacks остаются у Workflow.
+Макрос не заменяет callback/data contract, которого в его API нет.
+Классификация подтверждает владельца presentation-кода этих controls, а не
+полноту динамического DOM, CSS overrides или live-поведения. Текущие source
+templates/assets не менялись. Ограниченный inventory сохранён в evidence задачи;
+общий аудит композиций/SSR и интеграционный gate продолжаются.
+
 ## Текущий кандидат: текстовые ссылки Base — 25 октября 2026
 
 UI producer `a27339a2efe253124770ff103a209e7212e2c11b`, reference `464b512a10dd44ec66aeeb09e791123e5a07e245346922898225f19db442fd35`, версия 0.3.2.
