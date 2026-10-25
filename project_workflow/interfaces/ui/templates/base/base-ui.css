@@ -2273,6 +2273,11 @@ body {
   line-height: var(--base-line-body);
   border-radius: var(--radius-md);
 }
+/* Code typography is an existing field contract; keep common size and touch floors. */
+.base-input.font-mono,
+.base-textarea.font-mono {
+  font-family: var(--base-font-mono);
+}
 .base-page-navigation[data-separated="true"] {
   border-top: 1px solid var(--color-border);
   padding-block-start: var(--base-control-padding-block);
