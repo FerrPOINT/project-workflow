@@ -2253,6 +2253,10 @@ body {
   border-top: 1px solid var(--color-border);
   padding-block-start: var(--base-control-padding-block);
 }
+.base-section-header[data-separated="true"] {
+  border-block-end: 1px solid var(--color-border);
+  padding-block-end: var(--base-control-padding-block);
+}
 .base-control:not(textarea):not(.base-icon-control) {
   height: auto;
   padding-block: var(--base-control-padding-block);
@@ -2316,6 +2320,11 @@ body {
 .base-table:focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: -2px;
+}
+.base-table tr[data-selected="true"] {
+  background: var(--color-selection);
+  color: var(--color-selection-foreground);
+  box-shadow: inset 3px 0 0 var(--color-selection-foreground);
 }
 .base-table th,
 .base-table td {

@@ -5,9 +5,9 @@
 {%- endif %}
 {%- endmacro %}
 
-{% macro section_header(title, heading_id=none, level=2, context=none, actions=none, class_name='') -%}
+{% macro section_header(title, heading_id=none, level=2, context=none, actions=none, class_name='', separated=false) -%}
 {% set heading_level = level|int if level in [2, 3, 4, 5, 6] else 2 -%}
-<div class="base-section-header{% if class_name %} {{ class_name }}{% endif %}"><div class="base-section-heading"><h{{ heading_level }} class="base-section-title" data-level="{{ heading_level }}"{% if heading_id %} id="{{ heading_id }}"{% endif %}>{{ title }}</h{{ heading_level }}>{% if context is defined and context is not none and context is not sameas false and context != '' %}<div class="base-section-context">{{ context }}</div>{% endif %}</div>{% if actions is defined and actions is not none and actions is not sameas false and actions != '' %}<div class="base-page-actions">{{ actions }}</div>{% endif %}</div>
+<div class="base-section-header{% if class_name %} {{ class_name }}{% endif %}"{% if separated %} data-separated="true"{% endif %}><div class="base-section-heading"><h{{ heading_level }} class="base-section-title" data-level="{{ heading_level }}"{% if heading_id %} id="{{ heading_id }}"{% endif %}>{{ title }}</h{{ heading_level }}>{% if context is defined and context is not none and context is not sameas false and context != '' %}<div class="base-section-context">{{ context }}</div>{% endif %}</div>{% if actions is defined and actions is not none and actions is not sameas false and actions != '' %}<div class="base-page-actions">{{ actions }}</div>{% endif %}</div>
 {%- endmacro %}
 
 {% macro code_block(value, id=none, label='Код', labelled_by=none, described_by=none, wrap=true, class_name='') -%}

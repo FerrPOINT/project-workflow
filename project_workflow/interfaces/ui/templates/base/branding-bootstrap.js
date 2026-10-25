@@ -531,11 +531,13 @@ function resolveBrandingTokens(branding, theme = "dark") {
   if (value.surface_color)
     for (const key of ["background", "surface", "surface-raised"])
       colors[key] = mix(colors[key], value.surface_color, 0.08);
-  // A brand changes surfaces slightly; essential text/status roles retain their contrast.
+  const selectionSurface = mix(colors.surface, accent, 0.14);
+  // Semantic descendants also render on selected rows and resource choices.
   const backgrounds = [
     colors.background,
     colors.surface,
     colors["surface-raised"],
+    selectionSurface,
   ];
   for (const key of [
     "text-primary",
@@ -574,10 +576,10 @@ function resolveBrandingTokens(branding, theme = "dark") {
       mix(action, mode === "light" ? "#000000" : "#ffffff", 0.12),
     ),
     "--color-highlight": highlight,
-    "--color-selection": mix(colors.surface, accent, 0.14),
+    "--color-selection": selectionSurface,
     "--color-selection-foreground": readable(
       colors["text-primary"],
-      [mix(colors.surface, accent, 0.14)],
+      [selectionSurface],
       4.5,
     ),
     "--color-focus": readable(action, backgrounds, 3),
