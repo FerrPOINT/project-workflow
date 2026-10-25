@@ -2249,6 +2249,10 @@ body {
   line-height: var(--base-line-body);
   border-radius: var(--radius-md);
 }
+.base-page-navigation[data-separated="true"] {
+  border-top: 1px solid var(--color-border);
+  padding-block-start: var(--base-control-padding-block);
+}
 .base-control:not(textarea):not(.base-icon-control) {
   height: auto;
   padding-block: var(--base-control-padding-block);
