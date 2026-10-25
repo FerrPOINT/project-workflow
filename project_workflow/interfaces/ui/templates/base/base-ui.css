@@ -2472,6 +2472,13 @@ body {
   cursor: default;
   opacity: 0.5;
 }
+/* Label context never changes the checked indicator or native validity. */
+.base-check-field[data-label-tone="secondary"] > .base-check-label {
+  color: var(--color-text-secondary);
+}
+.base-check-field[data-label-tone="danger"] > .base-check-label {
+  color: var(--color-danger);
+}
 /* Rich option cards use the native input for checked, validity and fieldset state. */
 .base-check-field[data-appearance="card"] {
   box-sizing: border-box;
