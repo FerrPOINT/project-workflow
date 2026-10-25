@@ -8,6 +8,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import subprocess
 import sys
 import tarfile
@@ -199,8 +200,26 @@ def compatible_build_context(snapshot: GitSourceSnapshot, skills_root: Path,
     return _add_context_files(context, {COMPATIBILITY_PATH: descriptor})
 
 
+def build_resource_args() -> list[str]:
+    memory = os.environ.get("PROJECT_WORKFLOW_BUILD_MEMORY_MIB")
+    cpus = os.environ.get("PROJECT_WORKFLOW_BUILD_CPUS")
+    if memory is None and cpus is None:
+        return []
+    if (memory is None or cpus is None
+            or re.fullmatch(r"[1-9][0-9]{0,4}", memory) is None
+            or re.fullmatch(r"[1-8]", cpus) is None
+            or not 256 <= int(memory) <= 32768):
+        raise BuildProvenanceError(
+            "Set both PROJECT_WORKFLOW_BUILD_MEMORY_MIB (256..32768) and "
+            "PROJECT_WORKFLOW_BUILD_CPUS (1..8) as canonical positive integers"
+        )
+    return ["--resource", f"memory={memory}m", "--resource", f"memory-swap={memory}m",
+            "--resource", "cpu-period=100000", "--resource", f"cpu-quota={100000 * int(cpus)}"]
+
+
 def build_image(root: Path, image: str, docker: str, revision: str = "HEAD",
                 *, skills_root: Path, catalog_variant: str = "legacy") -> None:
+    resources = build_resource_args()
     snapshot = immutable_git_snapshot(root, revision)
     provenance = snapshot.provenance
     context = (compatible_build_context(snapshot, skills_root, catalog_variant)
@@ -227,6 +246,7 @@ def build_image(root: Path, image: str, docker: str, revision: str = "HEAD",
             f"io.relevanter.runtime.bundle-sha256={provenance.runtime_bundle_sha256}",
             "--tag",
             image,
+            *resources,
             "-",
         ],
         check=True,

@@ -618,6 +618,75 @@ def test_compatible_image_delivers_descriptor_to_docker(compatible_sources):
     assert "COPY --from=builder /app/runtime-compatibility.json /app/runtime-compatibility.json" in dockerfile
 
 
+@pytest.mark.parametrize("limits", [None, ("256", "1"), ("2048", "2"), ("32768", "8")])
+def test_build_resource_limits_preserve_context_and_provenance(git_source, monkeypatch, limits):
+    builder = _builder_module()
+    monkeypatch.delenv("PROJECT_WORKFLOW_BUILD_MEMORY_MIB", raising=False)
+    monkeypatch.delenv("PROJECT_WORKFLOW_BUILD_CPUS", raising=False)
+    snapshot = builder.immutable_git_snapshot(git_source, "HEAD")
+    context = docker_context_with_manifest(snapshot.archive, snapshot.provenance)
+    docker_run = MagicMock()
+    with (
+        patch.object(builder, "immutable_git_snapshot", return_value=snapshot),
+        patch.object(builder, "compatible_build_context", return_value=context),
+        patch.object(builder.subprocess, "run", docker_run),
+    ):
+        builder.build_image(git_source, "workflow:test", "fixture-docker", skills_root=git_source)
+        legacy = docker_run.call_args
+        provenance = snapshot.provenance
+        assert legacy.args[0] == [
+            "fixture-docker", "build",
+            "--build-arg", "CATALOG_VARIANT=legacy",
+            "--build-arg", f"SOURCE_REVISION={provenance.source_revision}",
+            "--build-arg", f"SOURCE_ARCHIVE_SHA256={provenance.source_archive_sha256}",
+            "--build-arg", f"RUNTIME_BUNDLE_SHA256={provenance.runtime_bundle_sha256}",
+            "--label", f"org.opencontainers.image.revision={provenance.source_revision}",
+            "--label", f"io.relevanter.source.archive-sha256={provenance.source_archive_sha256}",
+            "--label", f"io.relevanter.runtime.bundle-sha256={provenance.runtime_bundle_sha256}",
+            "--tag", "workflow:test", "-",
+        ]
+        docker_run.reset_mock()
+        if limits is not None:
+            memory, cpus = limits
+            monkeypatch.setenv("PROJECT_WORKFLOW_BUILD_MEMORY_MIB", memory)
+            monkeypatch.setenv("PROJECT_WORKFLOW_BUILD_CPUS", cpus)
+        builder.build_image(git_source, "workflow:test", "fixture-docker", skills_root=git_source)
+
+    docker_run.assert_called_once()
+    actual = docker_run.call_args
+    flags = [] if limits is None else [
+        "--resource", f"memory={limits[0]}m", "--resource", f"memory-swap={limits[0]}m",
+        "--resource", "cpu-period=100000", "--resource", f"cpu-quota={100000 * int(limits[1])}",
+    ]
+    assert actual.args[0] == [*legacy.args[0][:-1], *flags, "-"]
+    assert actual.kwargs == legacy.kwargs == {"check": True, "input": gzip.compress(context, mtime=0)}
+    assert runtime_bundle_sha256_from_archive(gzip.decompress(actual.kwargs["input"])) == (
+        provenance.runtime_bundle_sha256
+    )
+
+
+@pytest.mark.parametrize("memory,cpus", [
+    (None, "1"), ("2048", None), ("", "1"), ("2048", ""),
+    ("255", "1"), ("32769", "1"), ("2048", "0"), ("2048", "9"),
+    ("02048", "1"), ("2048", "01"), ("+2048", "1"), ("2048", "+1"),
+    (" 2048", "1"), ("2048", "1 "), ("2048\n", "1"), ("2048", "1\n"),
+    ("2g", "1"), ("2048", "1.0"), ("-256", "1"), ("2048", "-1"),
+    ("２５６", "1"), ("2048", "１"), ("9" * 5000, "1"),
+])
+def test_build_resource_limits_refuse_invalid_before_process(tmp_path, monkeypatch, memory, cpus):
+    builder = _builder_module()
+    for name, value in (("PROJECT_WORKFLOW_BUILD_MEMORY_MIB", memory),
+                        ("PROJECT_WORKFLOW_BUILD_CPUS", cpus)):
+        if value is None:
+            monkeypatch.delenv(name, raising=False)
+        else:
+            monkeypatch.setenv(name, value)
+    with patch.object(builder.subprocess, "run") as process:
+        with pytest.raises(BuildProvenanceError, match="Set both PROJECT_WORKFLOW_BUILD"):
+            builder.build_image(tmp_path, "workflow:test", "fixture-docker", skills_root=tmp_path)
+    process.assert_not_called()
+
+
 def test_missing_pinned_skills_ref_fails_before_docker(compatible_sources):
     source, skills, _, _ = compatible_sources
     builder = _builder_module()

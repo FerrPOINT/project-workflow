@@ -111,6 +111,16 @@ python scripts/build_runtime_image.py build \
   --image project-workflow:<exact-sha>
 ```
 
+Optional build-container limits are inherited by the producer from normal Base
+Build: set both `PROJECT_WORKFLOW_BUILD_MEMORY_MIB` (256..32768) and
+`PROJECT_WORKFLOW_BUILD_CPUS` (1..8) as canonical positive decimal integers.
+For example, `2048` and `1` add Docker `--resource` memory/memory-swap `2048m`
+and CPU period/quota `100000`/`100000`. Missing pairs or invalid values fail
+before launching processes; absent both preserves the legacy build command.
+The Docker CLI must support `--resource`. These are build-container limits,
+not an aggregate cap across parallel stages or runtime limits. Independent
+host CPU/RAM admission and the 30 GiB free-disk check remain required.
+
 Скрипт один раз читает `git archive <exact-sha>`, из этих же bytes вычисляет
 SHA-256 source archive и канонический SHA-256 runtime bundle, добавляет manifest
 в копию archive и передаёт полученный immutable tar как Docker build context.
