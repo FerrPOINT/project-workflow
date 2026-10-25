@@ -1,8 +1,9 @@
 # PM Terminal Resume Retry V1
 
-Status: source implemented with isolated SQLite/TestClient fixtures and a prior
-seven-case PostgreSQL gate. The inherited-checkpoint follow-up below requires
-its own affected PostgreSQL checks; deployment and live CLI handoff remain open.
+Status: source implemented with isolated SQLite/TestClient fixtures, the prior
+seven-case PostgreSQL gate and a separate seven-case inherited-checkpoint gate
+on `6c98e83`. Actual installed-history copy, full repository gates, Fleet
+transactional integration, deployment and live CLI handoff remain open.
 This contract does not authorize installation,
 native dispatch, another business input or owner confirmation.
 
@@ -166,10 +167,12 @@ Source evidence on producer `ba990991e7053dd068991854e35a390d4d8f995b`:
 The inherited-checkpoint follow-up adds focused SQLite/PG wrappers for null and
 exact inherited markers, single-observation/raw replay preservation, foreign
 markers and a target rebound through the real API. Its affected PG selectors
-are recorded separately from the earlier seven-case qualification; that older
-PASS does not qualify this semantic change.
+passed with the populated0018 upgrade case on `6c98e83` (7/7, cleanup verified),
+recorded separately in [PG evidence](pm-terminal-resume-retry-postgres-20261025.md).
+The older seven-case PASS remains historical and does not replace this proof.
 
-Still open: actual installed-history copy verification, full repository gates, deployed
+Still open: actual installed0015-history copy verification, full repository gates,
+Fleet transactional/consumer recovery, deployed
 cross-service auth/callback/capability compatibility, and real CLI delivery.
 The final business boundary remains genuine owner confirmation followed by
 Backlog/Ready for FLEETQA-3 without Analysis/Analyst. This technical retry is not

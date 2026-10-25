@@ -38,6 +38,12 @@
 
 
 ### Changed
+- PM terminal resume retry preserves the single trusted observation's null or
+  exact inherited source checkpoint marker without treating it as own progress.
+  The populated0018 upgrade plus six affected PostgreSQL cases pass on `6c98e83`
+  (7/7, cleanup verified); foreign markers and genuine rebound targets remain
+  rejected. Actual0015-copy, full gates, Fleet transactional recovery and live PM
+  acceptance remain open; the earlier PG7 keeps its historical scope.
 - The normal migration entrypoint accepts0018 as the predecessor of0019.
   Seven actual PostgreSQL retry/migration/concurrency tests pass, including
   retained receipts, rollback refusal and observed row-lock waits. These
