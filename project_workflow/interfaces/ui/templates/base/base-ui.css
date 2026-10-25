@@ -3128,6 +3128,10 @@ label.base-card[data-interactive="true"]:has(input:disabled) {
   padding: 0;
   gap: 0;
 }
+.base-dialog-content:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
+}
 .base-dialog-content[data-layout="sectioned"]
   > :is(.base-dialog-header, .base-dialog-body, .base-dialog-footer) {
   padding: var(--base-panel-padding);
