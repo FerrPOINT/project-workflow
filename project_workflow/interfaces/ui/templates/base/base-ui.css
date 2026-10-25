@@ -1641,12 +1641,17 @@ body > .base-loading-state:not([data-scope="local"]) {
 }
 
 /* Common React and enhanced SSR choice fields. Only the form bridge is native. */
+/* Form composition owns width; shared touch floors stay unlayered. */
+@layer components {
+  .base-choice-trigger {
+    width: 100%;
+  }
+}
 .base-choice-trigger {
   display: inline-flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  width: 100%;
   min-width: 0;
   height: 40px;
   padding: var(--base-control-padding-block) var(--base-control-padding-inline);
