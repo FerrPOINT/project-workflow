@@ -1,5 +1,25 @@
 # Общие композиции Workflow: иконки и SSR-брендинг
 
+## Текущий кандидат: подтверждение действия Base — 25 октября 2026
+
+UI producer `900b8dc531c33bfafe939623b6aa18c225f9a29d`, reference
+`b5ce47fe31e4a6ee67838e825c1acc0c743b2de0ad6e3956b01f2f3916c3a468`, версия 0.3.2.
+Штатный SSR export --check PASS; SSR assets и продуктовые шаблоны этой поставкой не менялись. Прежние 41 template cases переиспользуются по неизменным SSR inputs, не считаются новым прогоном.
+
+SSR/Auth freshness проверена отдельно; React API не имитируется новым SSR macro. Совместный scoped gate: 124 product cases, 49 Base confirmation,
+60 guard и 87 reference cases PASS. Настоящий UI-архив содержит новый компонент
+и offline CLI; шесть cached frozen refresh сохранили locks и React singleton.
+Семь UI pins согласованы; SDK/skills pins сохранены. Source guard из этого
+кандидата также включает прежнее исправление conditional const className.
+
+IAB общего компонента: 36 контекстов и восемь сценариев; отдельные точные
+Tracker fragments — 13 контекстов, label click, клавиатура и disabled. Оба QA
+закрыты, source hashes стабильны, HTTP-записей нет. Это source-проверка, не
+приёмка authenticated/установленного продукта. Исходные ошибки test setup и
+private verification helper сохранены отдельно, не считаются PASS; успешные
+install не повторялись. Полный milestone и общий семантический аудит продолжаются.
+Push, hosted CI, merge, runtime и production не выполнялись.
+
 ## SSR: классификация оставшейся разметки — 25 октября 2026
 
 49 native controls в 13 собственных top-level templates классифицированы по
@@ -14,7 +34,7 @@
 templates/assets не менялись. Ограниченный inventory сохранён в evidence задачи;
 общий аудит композиций/SSR и интеграционный gate продолжаются.
 
-## Текущий кандидат: текстовые ссылки Base — 25 октября 2026
+## Предыдущий кандидат: текстовые ссылки Base — 25 октября 2026
 
 UI producer `a27339a2efe253124770ff103a209e7212e2c11b`, reference `464b512a10dd44ec66aeeb09e791123e5a07e245346922898225f19db442fd35`, версия 0.3.2.
 Предметные шаблоны, JS и штатные SSR assets не менялись; свежие export --check и 41 template regression PASS. Изменён только UI pin.
