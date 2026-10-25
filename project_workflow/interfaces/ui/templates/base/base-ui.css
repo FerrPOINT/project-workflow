@@ -2117,6 +2117,21 @@ body > .base-loading-state:not([data-scope="local"]) {
   .base-menu-item[data-tone="danger"] {
     color: var(--color-danger);
   }
+  .base-menu-label {
+    min-width: 0;
+    padding: var(--base-control-padding-block)
+      var(--base-control-padding-inline);
+    color: var(--color-text-primary);
+    font-size: var(--base-font-body);
+    line-height: var(--base-line-body);
+    font-weight: 500;
+    overflow-wrap: anywhere;
+  }
+  .base-menu-separator {
+    height: 1px;
+    margin: 4px -4px;
+    background: var(--color-border);
+  }
   .base-menu-radio-item {
     padding-inline-start: calc(var(--base-control-padding-inline) + 16px);
   }
