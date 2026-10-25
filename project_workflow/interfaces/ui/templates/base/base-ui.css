@@ -913,6 +913,9 @@ dialog.base-shell-drawer::backdrop {
   min-height: var(--shell-control-min);
   align-items: center;
 }
+.base-page-header {
+  overflow-wrap: anywhere;
+}
 .base-section-heading {
   min-width: 0;
 }
