@@ -15,6 +15,7 @@ from project_workflow.domain.pm_execution import (
     SingleTaskPMResumeRetry,
 )
 from project_workflow.domain.runtime_assignment import canonical_json, payload_sha256
+from project_workflow.infrastructure import pm_readback
 from project_workflow.infrastructure.db import models as m
 
 if TYPE_CHECKING:
@@ -64,12 +65,16 @@ def retry(service: PMExecutionService, command: SingleTaskPMResumeRetry, project
         or source_proof.checkpoint_ref != command.checkpoint_ref
         or source_proof.status not in {"completed", "failed", "cancelled", "stopped"}):
         raise ConflictError("Resume retry source checkpoint, input or profile changed")
-    # The failed target never rebound, so it never accepted a checkpoint. Its
-    # terminal proof is distinct from the retained source's checkpoint proof.
-    terminal = service._proof(
-        identity, command.failed_hermes_run_ref, command.failed_binding_ref, execution.fence,
-        command.prior_resume_operation_key, None, command.failed_session_run_id,
-    )
+    # A never-rebound target may report its inherited source checkpoint. This
+    # marker is not own progress; keep the single trusted observation unchanged.
+    terminal = pm_readback.observe_run(command.failed_session_run_id)
+    if (service.identity(terminal) != identity
+        or terminal.hermes_run_ref != command.failed_hermes_run_ref
+        or terminal.binding_ref != command.failed_binding_ref or terminal.fence != execution.fence
+        or terminal.dispatch_operation_key != command.prior_resume_operation_key
+        or terminal.session_run_id != command.failed_session_run_id
+        or terminal.checkpoint_ref not in (None, command.checkpoint_ref)):
+        raise ConflictError("Trusted runtime readback does not match the scoped pending retry run")
     if terminal.status not in {"completed", "failed", "cancelled", "stopped"}:
         raise ConflictError("Pending resume target is not terminal")
     service.session.add(m.PMRun(

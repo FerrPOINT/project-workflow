@@ -1,8 +1,9 @@
 # PM Terminal Resume Retry V1
 
-Status: source implemented and verified with isolated SQLite/TestClient fixtures
-and synthetic authenticated native readback. PostgreSQL integration, deployment
-and live CLI handoff remain open. This contract does not authorize installation,
+Status: source implemented with isolated SQLite/TestClient fixtures and a prior
+seven-case PostgreSQL gate. The inherited-checkpoint follow-up below requires
+its own affected PostgreSQL checks; deployment and live CLI handoff remain open.
+This contract does not authorize installation,
 native dispatch, another business input or owner confirmation.
 
 This is an extension of the [PM continuation contract](pm-continuation-contract.md).
@@ -14,7 +15,7 @@ application with `python -m scripts.export_pm_openapi`; its parity test passes.
 The original source run accepted a checkpoint and became terminal. Ordinary
 `/resume` reserved a target, but that target became terminal before `/rebind`.
 Workflow therefore remains `resume_pending`, bound to the original source and
-checkpoint. The failed target has no Workflow `PMRun` or accepted checkpoint.
+checkpoint. The failed target has no Workflow `PMRun` or its own accepted checkpoint.
 
 For example, source fence1, failed pending fence2 and the new pending fence3 are
 different facts. A terminal target is not successful input delivery. There is no
@@ -66,7 +67,15 @@ native run, fence and checkpoint. The independently authenticated failed-target
 callback must match its identity, target UUID, native run, binding, current
 pending fence and prior resume dispatch key. Its status must be one of
 `completed`, `failed`, `cancelled`, `stopped`, and its `checkpoint_ref` must be
-null. The producer does not copy the source checkpoint onto the failed run.
+either null or exactly the command's retained source `checkpoint_ref`. Fleet may
+report that inherited reservation marker when the target has no own checkpoint.
+The producer reads this observation once and preserves its marker unchanged in
+the receipt and failed-run history; it never copies, clears or normalizes it.
+A foreign marker is refused. Absence of a failed-target Workflow `PMRun` remains
+mandatory, so a genuinely rebound target cannot use this lane. Fleet separately
+requires absence of **any** checkpoint/workflow-step journal for that failed
+target before retry admission; the inherited marker is not proof of own progress.
+The shared `_proof` validator and ordinary resume/rebind checks are unchanged.
 
 On success, the producer appends the genuine failed terminal observation as
 `PMRun` history and stores a `PMOperation(kind=resume_retry)` receipt. It increases
@@ -136,8 +145,10 @@ Additive migration `0019_pm_terminal_resume_retry` follows
 `resume_retry`. It adds no table, queue, scheduler or receipt rewrite. Existing
 operation rows remain intact. Downgrade explicitly refuses while any
 `resume_retry` receipt exists; it never deletes retained history to restore the
-old CHECK. The seven selected PostgreSQL migration/replay/concurrency cases now
-pass on the exact source documented in [PG evidence](pm-terminal-resume-retry-postgres-20261025.md).
+old CHECK. The seven selected PostgreSQL migration/replay/concurrency cases
+passed on earlier source `e4963a7`, as documented in
+[PG evidence](pm-terminal-resume-retry-postgres-20261025.md). That historical gate
+does not qualify the inherited-checkpoint follow-up.
 
 Source evidence on producer `ba990991e7053dd068991854e35a390d4d8f995b`:
 
@@ -151,6 +162,12 @@ Source evidence on producer `ba990991e7053dd068991854e35a390d4d8f995b`:
   The golden used actual typed producer enrollment for `SDLC-7`, request, original
   pending snapshot, response and operation-key readback without normalization.
   Native refs and observations remain synthetic; no live PM work is implied.
+
+The inherited-checkpoint follow-up adds focused SQLite/PG wrappers for null and
+exact inherited markers, single-observation/raw replay preservation, foreign
+markers and a target rebound through the real API. Its affected PG selectors
+are recorded separately from the earlier seven-case qualification; that older
+PASS does not qualify this semantic change.
 
 Still open: actual installed-history copy verification, full repository gates, deployed
 cross-service auth/callback/capability compatibility, and real CLI delivery.

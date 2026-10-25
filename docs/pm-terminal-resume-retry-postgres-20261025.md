@@ -33,6 +33,24 @@ JUnit SHA256:
 
 ## Still Open
 
+An inherited-checkpoint producer follow-up accepts a failed observation with
+either null or the exact retained source marker, without rewriting the received
+proof. The seven-case result above predates that change and remains historical.
+Affected cases in `tests/test_postgres_pm_resume_retry.py` are the existing replay
+and canonical-bootstrap tests plus:
+
+- `test_retry_preserves_failed_terminal_checkpoint_marker_on_postgres[absent]`
+- `test_retry_preserves_failed_terminal_checkpoint_marker_on_postgres[inherited-source]`
+- `test_retry_rejects_foreign_checkpoint_marker_on_postgres`
+- `test_retry_rejects_genuine_rebound_pm_run_on_postgres`
+
+These six affected PG cases are **UNRUN** for the follow-up. They reuse the
+existing disposable-PG fixtures and synthetic native callbacks; no live runtime
+or source checkpoint is modified to obtain evidence.
+Focused SQLite/TestClient validation of the follow-up: **15 passed**, including
+single-observation/raw replay, both allowed markers, scoped-field mismatches,
+genuine rebind refusal, unknown callbacks and canonical bootstrap identity.
+
 This does not qualify an actual installed0015 database copy, all repository
 gates, deployment, Fleet consumer recovery or live CLI/model work. FLEETQA-3
 still requires useful PM dialogue, requirements and genuine owner confirmation

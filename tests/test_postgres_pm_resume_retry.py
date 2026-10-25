@@ -108,6 +108,21 @@ def test_bootstrap_canonical_identity_survives_retry_on_postgres(bridge, monkeyp
     retry_cases.test_bootstrap_canonical_identity_survives_terminal_resume_retry(bridge, monkeypatch)
 
 
+@pytest.mark.parametrize("checkpoint_ref", [None, retry_cases.CHECKPOINT], ids=["absent", "inherited-source"])
+def test_retry_preserves_failed_terminal_checkpoint_marker_on_postgres(pending, monkeypatch, checkpoint_ref):
+    retry_cases.test_retry_preserves_failed_terminal_checkpoint_marker(pending, monkeypatch, checkpoint_ref)
+
+
+def test_retry_rejects_foreign_checkpoint_marker_on_postgres(pending):
+    retry_cases.test_retry_rejects_nonterminal_or_foreign_trusted_readback(
+        pending, "checkpoint_ref", "foreign-checkpoint"
+    )
+
+
+def test_retry_rejects_genuine_rebound_pm_run_on_postgres(pending, monkeypatch):
+    retry_cases.test_retry_rejects_target_with_genuine_rebound_pm_run(pending, monkeypatch)
+
+
 @pytest.mark.parametrize("same_key", [True, False], ids=["same-key", "different-target"])
 def test_concurrent_retry_serializes_one_receipt_and_target(pending, postgres, monkeypatch, same_key):
     client, command, _, _, _ = pending

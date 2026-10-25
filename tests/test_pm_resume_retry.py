@@ -142,8 +142,9 @@ def test_retry_rejects_changed_custody_without_writes(pending, field, value):
 
 
 @pytest.mark.parametrize("field,value", [
-    ("status", "running"), ("fence", 1), ("checkpoint_ref", CHECKPOINT),
+    ("status", "running"), ("fence", 1), ("checkpoint_ref", "foreign-checkpoint"),
     ("dispatch_operation_key", "foreign"), ("execution_ref", "foreign"),
+    ("session_run_id", LATER), ("hermes_run_ref", "foreign"), ("binding_ref", "foreign"),
 ])
 def test_retry_rejects_nonterminal_or_foreign_trusted_readback(pending, field, value):
     client, command, observations, _, _ = pending
@@ -151,6 +152,66 @@ def test_retry_rejects_nonterminal_or_foreign_trusted_readback(pending, field, v
     before = stored()
     response = client.post(PM + "resume-retry", json=command, headers=WRITER)
     assert response.status_code == 409, response.text
+    assert stored() == before
+
+
+@pytest.mark.parametrize("checkpoint_ref", [None, CHECKPOINT], ids=["absent", "inherited-source"])
+def test_retry_preserves_failed_terminal_checkpoint_marker(pending, monkeypatch, checkpoint_ref):
+    client, command, observations, _, _ = pending
+    observations[FAILED]["checkpoint_ref"] = checkpoint_ref
+    raw = dict(observations[FAILED])
+    before = stored()
+    with SAUnitOfWork() as uow:
+        assert uow.session.get(m.PMRun, FAILED) is None
+    observe = pm_readback.observe_run
+    probes = []
+
+    def single_observation(run):
+        probes.append(run)
+        return observe(run)
+
+    monkeypatch.setattr(pm_readback, "observe_run", single_observation)
+    accepted = client.post(PM + "resume-retry", headers=WRITER, json=command)
+    assert accepted.status_code == 200, accepted.text
+    wire = accepted.json()
+    assert probes == [FAILED]
+    assert wire["result"]["failed_terminal"] == raw
+    assert wire["result"]["source"]["checkpoint_ref"] == command["checkpoint_ref"]
+    after = stored()
+    failed = next(row for row in after["pm_runs"] if row["session_run_id"] == FAILED)
+    assert json.loads(failed["observation_json"]) == json.loads(failed["terminal_json"]) == raw
+    for name in ("tasks", "task_runtime_assignments", "task_step_history"):
+        assert after[name] == before[name]
+    assert all(row in after["pm_operations"] for row in before["pm_operations"])
+    observations[FAILED]["checkpoint_ref"] = "foreign-after-acceptance"
+    monkeypatch.setattr(pm_readback, "observe_run", lambda *_: pytest.fail("Retained replay must not refetch"))
+    assert client.post(PM + "resume-retry", headers=WRITER, json=command).json() == wire
+    readback = client.post(PM + "readback", headers=WRITER, json={
+        **PROFILE, **wire["result"]["pending"]["identity"], "operation_key": command["operation_key"],
+    })
+    assert readback.status_code == 200, readback.text
+    assert readback.json()["result"]["operation"]["result"] == wire["result"]
+    assert stored() == after
+
+
+def test_retry_rejects_target_with_genuine_rebound_pm_run(pending, monkeypatch):
+    client, command, observations, _, _ = pending
+    observations[FAILED].update(status="running", checkpoint_ref=CHECKPOINT)
+    rebind = {**PROFILE, **command_identity(command), "operation_key": "rebind:failed-target",
+              "expected_version": 3, "expected_fence": 2, "session_run_id": SESSION,
+              "binding_ref": command["binding_ref"], "hermes_run_ref": command["hermes_run_ref"],
+              "checkpoint_ref": CHECKPOINT, "resume_operation_key": command["prior_resume_operation_key"],
+              "new_session_run_id": FAILED, "new_binding_ref": command["failed_binding_ref"],
+              "new_hermes_run_ref": command["failed_hermes_run_ref"]}
+    rebound = client.post(PM + "rebind", headers=WRITER, json=rebind)
+    assert rebound.status_code == 200, rebound.text
+    assert rebound.json()["result"]["state"] == "active"
+    with SAUnitOfWork() as uow:
+        assert uow.session.get(m.PMRun, FAILED) is not None
+    observations[FAILED].update(status="completed")
+    before = stored()
+    monkeypatch.setattr(pm_readback, "observe_run", lambda *_: pytest.fail("Rebound target must not be retried"))
+    assert client.post(PM + "resume-retry", headers=WRITER, json=command).status_code == 409
     assert stored() == before
 
 
