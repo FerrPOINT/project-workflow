@@ -1,6 +1,28 @@
 # Общие композиции Workflow: иконки и SSR-брендинг
 
-## Текущий кандидат: подтверждение действия Base — 25 октября 2026
+## Текущая волна: SSR-названия ресурсов — 25 октября 2026
+
+Dashboard и карточки фаз используют восемь call sites канонических
+resource_list_title/resource_list_description Base. Удалены 13 локальных
+font-size/weight/color/line-height/overflow-wrap деклараций; внешняя раскладка,
+DOM-hooks, scoped URL, данные и handlers сохранены полной source-сверкой.
+Составная подпись задачи остаётся экранированной через Jinja capture, без safe
+на пользовательских значениях. Типографика теперь соответствует React-контракту.
+
+42 template cases PASS, включая исходный RED, одинаковые названия с разными IDs,
+экранирование и 1/2/8 фаз. Штатный SSR fingerprint актуален. IAB: шесть baseline
+и 72 positive contexts, три темы, две шкалы, четыре ширины, compact/readonly/empty,
+порядок focus. QA использует точные rendered fragments, не runtime приложения;
+закрыт без HTTP-записей и с неизменными inputs. Неправильный reset первого private
+показа исправлен в fixture; продуктовый box sizing не менялся.
+
+Base UI producer 900b8dc531c33bfafe939623b6aa18c225f9a29d и reference b5ce47fe31e4
+сохранены. Общие UI/SSR assets и все независимые pins byte-identical; новый
+пакет, install, compile, backend или Storybook build не нужны. Предыдущие gates
+переиспользованы по inputs, не названы свежими. Source-коммиты локальные;
+hosted CI, push, merge и установленный runtime не затрагивались.
+
+## Предыдущая волна: подтверждение действия Base — 25 октября 2026
 
 UI producer `900b8dc531c33bfafe939623b6aa18c225f9a29d`, reference
 `b5ce47fe31e4a6ee67838e825c1acc0c743b2de0ad6e3956b01f2f3916c3a468`, версия 0.3.2.

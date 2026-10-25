@@ -80,9 +80,9 @@
     {% set phase_href = ui_base_path() ~ '/phase/' ~ p.id ~ ('?profession_id=' ~ selected_namespace.id if selected_namespace else '') ~ phase_scope_suffix %}
     {% call render_panel(href=phase_href, class_name='timeline-card' ~ ('' if compact else ' base-card-content')) %}
       <div class="phase-card-copy">
-        <div class="timeline-name">{{ p.name }}</div>
+        <div class="timeline-name">{{ base_ui.resource_list_title(p.name) }}</div>
         {% set description = p.description | default('') %}
-        {% if description %}<div class="timeline-desc">{{ description[:120] }}{% if description|length > 120 %}...{% endif %}</div>{% endif %}
+        {% if description %}<div class="timeline-desc">{{ base_ui.resource_list_description(description[:120] ~ ('...' if description|length > 120 else '')) }}</div>{% endif %}
       </div>
       <div class="execution-row">
         {{ base_ui.badge('параллельно' if p.execution_type == 'parallel' else 'последовательно', 'info' if p.execution_type == 'parallel' else 'neutral') }}

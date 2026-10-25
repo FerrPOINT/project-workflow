@@ -124,6 +124,33 @@ class SharedShellTemplateTests(TestCase):
         self.assertEqual(sum(attrs.get("data-page-state") == "empty" for _, attrs in elements), 1)
         self.assertIn("Незавершённых задач нет.", html)
 
+    def test_dashboard_resource_text_uses_base_with_escaped_labels_and_distinct_links(self):
+        namespaces = [dict(id=value, name="Same <name>", task_count=value) for value in [7, 9]]
+        tasks = [
+            dict(task_key="WK-7", title="Title <script>text</script>", namespace_id=7,
+                 namespace_name="Same <name>", workflow_name="Flow <7>", status_label="В работе"),
+            dict(task_key="WK-9", title="", namespace_id=9,
+                 namespace_name="Same <name>", workflow_name=None, status_label="Ожидает"),
+        ]
+        html = self.render_shell(
+            namespaces, template="dashboard.html", open_tasks=tasks,
+            stats=dict(namespaces=2, tasks=2, active=1, done=0, verdicts={}),
+        )
+        elements = Elements(html).elements
+        self.assertEqual(sum("base-resource-title" in attrs.get("class", "").split()
+                             for _, attrs in elements), 4)
+        self.assertEqual(sum("base-resource-description" in attrs.get("class", "").split()
+                             for _, attrs in elements), 7)
+        links = [attrs["href"] for tag, attrs in elements
+                 if tag == "a" and ("data-task-key" in attrs or "data-namespace-id" in attrs)]
+        self.assertEqual(links, ["/workflow/task/WK-7?profession_id=7",
+                                "/workflow/task/WK-9?profession_id=9",
+                                "/workflow/namespaces?profession_id=7",
+                                "/workflow/namespaces?profession_id=9"])
+        self.assertIn("Title &lt;script&gt;text&lt;/script&gt;", html)
+        self.assertIn("Flow &lt;7&gt;", html)
+        self.assertNotIn("<script>text</script>", html)
+
     def test_instructions_use_one_shared_header_and_exact_namespace_return_url(self):
         for name in ["Phase <name>", "Очень длинное название фазы " * 8]:
             for namespace in [None, dict(id=73, code="QA", name="QA")]:
@@ -791,6 +818,10 @@ class SharedShellTemplateTests(TestCase):
                 self.assertTrue({"base-card", "base-card-content"} <= set(picker["class"].split()))
                 self.assertEqual(picker["data-interactive"], "true")
                 self.assertEqual(picker["aria-pressed"], "true")
+                self.assertEqual(sum("base-resource-title" in attrs.get("class", "").split()
+                                     for _, attrs in elements), count)
+                self.assertEqual(sum("base-resource-description" in attrs.get("class", "").split()
+                                     for _, attrs in elements), count)
                 menus = [
                     attrs
                     for tag, attrs in elements

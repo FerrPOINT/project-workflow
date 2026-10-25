@@ -224,3 +224,9 @@ file input за Button допустим; видимый raw input не доба�
 и обработчики; не копировать типографику подписи и фон/рамку/радиусы/padding
 Input/Textarea. Внешняя компоновка, высота Textarea и моноширинный код допустимы.
 SSR использует field/label_control штатного экспорта принятого UI pin.
+
+Названия и описания строк ресурсов используют resource_list_title и
+resource_list_description Base. Внешние контейнеры, flex/grid, отступы и классы
+для product handlers сохраняются; локальные font-size/weight/color не копировать.
+Составную подпись передавать через Jinja capture при включённом autoescape,
+без safe для пользовательских строк. Значения и построение URL остаются Workflow.
