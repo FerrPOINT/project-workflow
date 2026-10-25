@@ -1647,6 +1647,7 @@ body > .base-loading-state:not([data-scope="local"]) {
 .base-choice-option {
   position: relative;
   display: flex;
+  justify-content: flex-start;
   align-items: center;
   min-height: var(--shell-control-min);
   padding: var(--base-control-padding-block) var(--base-control-padding-inline)
@@ -2261,6 +2262,8 @@ body {
 }
 .base-button {
   min-width: var(--shell-control-min);
+}
+.base-button:not(.base-choice-option) {
   padding-inline: var(--base-control-padding-inline);
 }
 .base-button:hover {
