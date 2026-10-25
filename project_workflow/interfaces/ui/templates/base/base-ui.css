@@ -523,6 +523,59 @@
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;
 }
+.base-breadcrumbs,
+.base-breadcrumb-list,
+.base-breadcrumb-item {
+  min-width: 0;
+  max-width: 100%;
+}
+.base-breadcrumb-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--base-control-padding-block);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.base-breadcrumb-item {
+  display: flex;
+  align-items: center;
+  gap: var(--base-control-padding-block);
+}
+.base-breadcrumb-separator {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+}
+.base-breadcrumb-item:first-child > .base-breadcrumb-separator {
+  display: none;
+}
+.base-button.base-breadcrumb-control {
+  max-width: 100%;
+  justify-content: flex-start;
+  text-align: start;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.base-button.base-breadcrumb-control[data-variant="ghost"][aria-current]:not(
+    [aria-current="false"]
+  ) {
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+.base-breadcrumb-control > svg {
+  flex-shrink: 0;
+  width: 1rem;
+  height: 1rem;
+}
+.base-button.base-breadcrumb-control[data-variant="ghost"]:not(:is(a, button)),
+.base-button.base-breadcrumb-control[data-variant="ghost"]:not(
+    :is(a, button)
+  ):hover {
+  cursor: default;
+  background: transparent;
+  color: var(--color-text-secondary);
+}
 .base-search-input,
 .base-input-with-action {
   display: block;

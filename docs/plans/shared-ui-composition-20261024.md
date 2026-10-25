@@ -1,6 +1,21 @@
 # Общие композиции Workflow: иконки и SSR-брендинг
 
-## Текущий UI кандидат: ResourceStateView — 25 октября 2026
+## Текущий UI кандидат: Breadcrumbs — 25 октября 2026
+
+UI producer `403e5002b37621a1c7c67767dece8fa712eb16c0`, версия 0.3.2, reference
+`189e9c5854e0c7ff88421c44648c627cf369bd26da3662bc854f7d9bdb8550e4`. Семь UI pins согласованы;
+SDK/skills pins сохранены. React API, запросы, DTO и ACL не менялись.
+Шесть frozen offline refresh подтвердили целостность UI, неизменность locks
+и React singleton. Types шести consumers переиспользованы: после их PASS
+в UI изменились только tokens.css и generated manifest, JS/TS API прежний.
+Это локальная source adoption; hosted CI, публикация и установленный runtime
+не проверялись и не менялись.
+
+CSS и fingerprint обновлены только штатным SSR export; freshness PASS.
+Новый breadcrumb macro не объявляется: текущий Workflow не содержит такого
+визуального потребителя. Templates, маршруты, namespace и события неизменны.
+
+## Предыдущая волна: ResourceStateView — 25 октября 2026
 
 UI producer `93303ba042832195c636302fef147901631a054d`, версия 0.3.2, reference
 `c1c01d526009aa3a7240fe63c53b8053392f81090a47b472a569f6fd4e3397b5`.
