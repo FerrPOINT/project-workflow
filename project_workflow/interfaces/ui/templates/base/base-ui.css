@@ -1342,6 +1342,23 @@ dialog.base-shell-drawer::backdrop {
   font-weight: 600;
   line-height: calc(var(--base-line-body) + 4px);
 }
+.base-terminal-icon {
+  display: block;
+  width: calc(var(--base-font-body) * 2);
+  height: calc(var(--base-font-body) * 2);
+  margin-bottom: var(--base-control-padding-inline);
+  color: var(--color-danger);
+}
+.base-terminal-state[data-page-state="not-found"] .base-terminal-icon {
+  color: var(--color-text-muted);
+}
+.base-terminal-icon > svg {
+  width: 100%;
+  height: 100%;
+}
+.base-terminal-action {
+  margin-top: var(--base-control-padding-inline);
+}
 .base-state-description {
   margin: var(--base-control-padding-block) 0 0;
   color: var(--color-text-secondary);
