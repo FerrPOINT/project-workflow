@@ -124,6 +124,10 @@
 <h{{ heading }} class="base-card-title"{% if id %} id="{{ id }}"{% endif %}>{{ title }}</h{{ heading }}>
 {%- endmacro %}
 
+{% macro card_description(text, tone='default', id=none) -%}
+<p class="base-card-description" data-tone="{{ tone if tone in ['default', 'muted'] else 'default' }}"{% if id %} id="{{ id }}"{% endif %}>{{ text }}</p>
+{%- endmacro %}
+
 {% macro card_content(class_name='', density='default') -%}
 <div class="base-card-content{% if class_name %} {{ class_name }}{% endif %}" data-density="{{ density if density in ['default', 'compact'] else 'default' }}">{{ caller() }}</div>
 {%- endmacro %}

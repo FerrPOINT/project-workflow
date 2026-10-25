@@ -2371,6 +2371,21 @@ body {
 .base-card-footer {
   padding-top: 0;
 }
+.base-card-description {
+  min-width: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--base-font-body);
+  line-height: var(--base-line-body);
+  overflow-wrap: anywhere;
+}
+@layer components {
+  .base-card-description {
+    margin: 0;
+  }
+}
+.base-card-description[data-tone="muted"] {
+  color: var(--color-text-muted);
+}
 /* React and SSR metrics share one skin; products own values and the outer grid. */
 .base-metric {
   min-width: 0;
