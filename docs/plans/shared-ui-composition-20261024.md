@@ -1,6 +1,15 @@
 # Общие композиции Workflow: иконки и SSR-брендинг
 
-## Текущая волна: SSR-названия ресурсов — 25 октября 2026
+## Текущий UI кандидат: ResourceStateView — 25 октября 2026
+
+UI producer `93303ba042832195c636302fef147901631a054d`, версия 0.3.2, reference
+`c1c01d526009aa3a7240fe63c53b8053392f81090a47b472a569f6fd4e3397b5`.
+Совместимое children у ResourceStateView централизует показ подтверждённого
+содержимого; переход ready ↔ partial-error сохраняет ввод. Продуктовые API,
+DTO, права и предметные композиции остаются у владельцев. SDK/skills pins
+не меняются. Это source adoption, установка и runtime не изменялись.
+
+## Предыдущая волна: SSR-названия ресурсов — 25 октября 2026
 
 Dashboard и карточки фаз используют восемь call sites канонических
 resource_list_title/resource_list_description Base. Удалены 13 локальных
