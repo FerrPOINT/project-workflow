@@ -1,6 +1,35 @@
 # Общие композиции Workflow: иконки и SSR-брендинг
 
-## Текущий кандидат: кодовые поля Base — 25 октября 2026
+## Текущий кандидат: текстовые ссылки Base — 25 октября 2026
+
+UI producer `a27339a2efe253124770ff103a209e7212e2c11b`, reference `464b512a10dd44ec66aeeb09e791123e5a07e245346922898225f19db442fd35`, версия 0.3.2.
+Предметные шаблоны, JS и штатные SSR assets не менялись; свежие export --check и 41 template regression PASS. Изменён только UI pin.
+
+В волне 44 inline-ссылки переведены на существующий TextLink в 28 файлах;
+ещё один standalone переход Admin использует Button asChild. Данные, права,
+URL/namespace, target/rel и обработчики остаются у продуктов. Slot принимает
+строковый className ребёнка; callback-className NavLink не поддерживается этой
+композицией. Активная навигация использует SidebarItem с явным active.
+Существующий source guard проверяет native/Router links и доказанные прозрачные
+фасады, не угадывает shadowed bindings или неиспользуемый className.
+
+Проверки изменённых frontend и Base: 236 runtime cases плюс 13 Admin detail,
+types/lint, reference и guard regressions. Неизменные проверки переиспользованы
+по inputs; они не объявлены новым прогоном. Финальный настоящий UI-архив/offline
+CLI PASS; шесть cached frozen refresh и фактических CLI check подтвердили новый
+fingerprint, неизменные prepared lockfiles и React singleton. AI file-URI изменён
+явно. SDK/skills pins сохранены; dev guard читается из точного source Base,
+он намеренно не является runtime-файлом npm-архива.
+IAB shared scene: 36 контекстов, три темы/шрифта, две шкалы текста и четыре
+ширины; ссылки, focus, Enter, history и overflow. Отдельный Admin fragment —
+54 контекста. Оба QA закрыты, inputs стабильны, HTTP-записей нет. Это source
+проверка, а не приёмка установленного или authenticated продукта.
+Полный milestone gate, hosted CI, публикация и установка остаются отдельно.
+Общий аудит продолжается; каноническая матрица — shared-ui-consolidation-20261021
+в Base. 93 оставшихся native React candidates классифицированы как семантическое
+содержимое/слоты Base, два скрытых file bridges и token swatch; это не 93 копии.
+
+## Предыдущий кандидат: кодовые поля Base — 25 октября 2026
 
 UI producer `7432f931cddcba29f0c6bc91ca2cf6663baa771f`, reference `9154aea77e9265a2abca532e909b5c3836678814123aeee51d3fc36703b7b4f5`, версия 0.3.2.
 Штатный SSR CSS и fingerprint обновлены; macros, JS, маршруты и dirty tracking не менялись. Freshness и 41 template regression PASS.
