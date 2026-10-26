@@ -807,7 +807,11 @@
 .base-sidebar-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: calc(var(--base-control-padding-block) / 2);
+}
+.base-sidebar-list[data-separated="true"] {
+  border-top: 1px solid var(--color-border);
+  padding-top: calc(var(--base-control-padding-block) * 1.5);
 }
 .base-sidebar-list[hidden] {
   display: none;
@@ -848,7 +852,7 @@
   flex-direction: column;
 }
 .base-sidebar-list[data-nested="true"] {
-  padding-inline-start: 12px;
+  padding-inline-start: calc(var(--base-control-padding-block) * 1.5);
 }
 .base-sidebar-item,
 .base-shell-link {
