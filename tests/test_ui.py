@@ -2191,7 +2191,9 @@ class TestTaskDetail:
         assert response.status_code == 200
         assert f'data-tone="{tone}" data-appearance="badge">{label}</span>' in response.text
         assert task["status"] == status
-        assert ".phase-node.done{background:var(--green)}.phase-node.current{background:var(--accent)" in response.text
+        roots = [attrs for _, attrs in Elements(response.text).elements
+                 if "base-timeline" in attrs.get("class", "").split()]
+        assert [attrs["data-appearance"] for attrs in roots] == ["steps", "activity"]
 
     def test_task_detail_mobile_navigation_keeps_links_accessible(self):
         namespace_id = self._default_namespace_id()
@@ -2218,7 +2220,7 @@ class TestTaskDetail:
         template = (TEMPLATES_DIR / "task_detail.html").read_text(encoding="utf-8")
 
         assert "base_ui.disclosure(activity_summary, open=loop.last, appearance='row'" in template
-        assert 'class="activity-event" data-check-run=' in template
+        assert 'class="base-timeline-item activity-event" data-check-run=' in template
         assert '<span class="activity-header">' in template
         assert ".activity-event-summary{" not in template
 

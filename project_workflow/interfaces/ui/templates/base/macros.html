@@ -302,3 +302,22 @@
 {% macro service_switcher_item(key, label, href=none, current=false, health='unknown') -%}
 <a class="base-ssr-service-item" data-platform-service="{{ key }}"{% if href %} href="{{ href }}"{% else %} aria-disabled="true" tabindex="-1" title="Адрес сервиса недоступен: дождитесь восстановления каталога своего стенда"{% endif %}{% if current %} aria-current="page"{% endif %}><span class="base-ssr-service-health" data-health="{{ health if health in ['healthy', 'unreachable'] else 'unknown' }}" role="img" aria-label="{{ 'Работает' if health == 'healthy' else 'Недоступен' if health == 'unreachable' else 'Состояние неизвестно' }}"></span><span>{{ label }}</span>{% if current %}<span class="base-ssr-service-current">Текущий</span>{% endif %}</a>
 {%- endmacro %}
+
+
+{% macro timeline(appearance='activity', tag='ol', label=none, class_name='') -%}
+{% set element = tag if tag in ['ol', 'ul', 'div'] else 'ol' -%}
+<{{ element }} class="base-timeline{% if class_name %} {{ class_name }}{% endif %}" data-appearance="{{ appearance if appearance in ['activity', 'steps'] else 'activity' }}"{% if label %} aria-label="{{ label }}"{% endif %}>{{ caller() }}</{{ element }}>
+{%- endmacro %}
+
+{% macro timeline_item(tag='li', class_name='') -%}
+{% set element = tag if tag in ['li', 'div', 'article'] else 'li' -%}
+<{{ element }} class="base-timeline-item{% if class_name %} {{ class_name }}{% endif %}">{{ caller() }}</{{ element }}>
+{%- endmacro %}
+
+{% macro timeline_marker(tone='neutral', size='small', current=false, class_name='') -%}
+<div class="base-timeline-marker{% if class_name %} {{ class_name }}{% endif %}" aria-hidden="true" data-tone="{{ tone if tone in ['neutral', 'success', 'warning', 'danger', 'info'] else 'neutral' }}" data-size="{{ size if size in ['small', 'large'] else 'small' }}"{% if current %} data-current="true"{% endif %}><span></span></div>
+{%- endmacro %}
+
+{% macro timeline_content(class_name='') -%}
+<div class="base-timeline-content{% if class_name %} {{ class_name }}{% endif %}">{{ caller() }}</div>
+{%- endmacro %}

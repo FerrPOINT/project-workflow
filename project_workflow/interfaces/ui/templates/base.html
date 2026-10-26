@@ -19,14 +19,12 @@ html[data-pdlc-access-pending] body{visibility:hidden}
 
 /* ── Sidebar (desktop fixed) ────────────────────────────────────────── */
 
-.sidebar-cli-icon{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;flex:0 0 20px;font:700 14px/1 'JetBrains Mono',monospace}
 
 /* ── Main ──────────────────────────────────────────────────────────── */
 
 .namespace-switcher{position:relative;min-width:0}
 
 .namespace-selector-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
-.namespace-picker-label{margin-bottom:8px;color:var(--text-muted);font-size:var(--base-font-label);font-weight:600;text-transform:uppercase}
 
 
 
@@ -65,7 +63,6 @@ html[data-pdlc-access-pending] body{visibility:hidden}
 .page-actions:empty,.page-header:has(.page-actions:empty):has(h1:empty){display:none}
 
 .platform-header-context .namespace-switcher{min-width:0;width:min(280px,100%)}
-.platform-header-context{justify-content:flex-end}
 @media(max-width:767px){.platform-header .platform-header-context{display:none}.platform-header-leading{flex-shrink:0}}
 
 {% block extra_style %}{% endblock %}
@@ -102,7 +99,7 @@ window.addEventListener('pagehide',function(event){if(!event.persisted)window.Wo
     </a>
     <div class="sidebar-section">УПРАВЛЕНИЕ</div>
     <a class="sidebar-link {% if page == 'settings' %}active{% endif %}" href="{{ ui_base_path() }}/settings{{ sidebar_scope_suffix }}" aria-label="Команды CLI" title="Команды CLI" {% if page == 'settings' %}aria-current="page"{% endif %}>
-      <span class="sidebar-cli-icon" aria-hidden="true">&gt;_</span>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><path d="m4 7 6 5-6 5M12 19h8"/></svg>
       <span class="sidebar-label">Команды CLI</span>
     </a>
   </nav>

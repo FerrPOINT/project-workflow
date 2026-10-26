@@ -3657,6 +3657,100 @@ label.base-card[data-interactive="true"]:has(input:disabled) {
   }
 }
 
+
+@layer components {
+  .base-timeline {
+    --base-timeline-rail-width: 1.875rem;
+    --base-timeline-gap: calc(var(--base-control-padding-inline) * 0.75);
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .base-timeline[data-appearance="steps"] {
+    --base-timeline-rail-width: 2.5rem;
+    --base-timeline-gap: calc(var(--base-control-padding-inline) * 0.875);
+  }
+  .base-timeline-item {
+    display: grid;
+    grid-template-columns: var(--base-timeline-rail-width) minmax(0, 1fr);
+    column-gap: var(--base-timeline-gap);
+    min-width: 0;
+    align-items: stretch;
+  }
+  .base-timeline-marker {
+    grid-column: 1;
+    grid-row: 1;
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding-block-start: 0.3125rem;
+  }
+  .base-timeline-marker::after {
+    content: "";
+    position: absolute;
+    inset-inline-start: 50%;
+    inset-block-start: 1rem;
+    inset-block-end: 0;
+    width: 1px;
+    background: var(--color-border-strong);
+  }
+  .base-timeline-marker > span {
+    position: relative;
+    z-index: 1;
+    box-sizing: border-box;
+    flex: none;
+    width: 0.6875rem;
+    height: 0.6875rem;
+    border-radius: 50%;
+    background: var(--color-text-muted);
+    box-shadow: 0 0 0 4px var(--color-background);
+  }
+  .base-timeline-marker[data-size="large"] > span { width: 1.5rem; height: 1.5rem; }
+  .base-timeline-marker[data-tone="success"] > span { background: var(--color-success); }
+  .base-timeline-marker[data-tone="warning"] > span { background: var(--color-warning); }
+  .base-timeline-marker[data-tone="danger"] > span { background: var(--color-danger); }
+  .base-timeline-marker[data-tone="info"] > span { background: var(--color-accent); }
+  .base-timeline-marker[data-current="true"] > span {
+    background: var(--color-accent);
+    box-shadow: 0 0 0 4px var(--color-selection);
+    outline: 1px solid var(--color-focus);
+  }
+  .base-timeline-content {
+    grid-column: 2;
+    min-width: 0;
+    padding-block-end: var(--base-control-padding-inline);
+    overflow-wrap: anywhere;
+  }
+  .base-timeline[data-appearance="steps"] > .base-timeline-item > .base-timeline-marker {
+    align-items: center;
+    padding-block-start: 0;
+  }
+  .base-timeline[data-appearance="steps"] > .base-timeline-item > .base-timeline-marker::before,
+  .base-timeline[data-appearance="steps"] > .base-timeline-item > .base-timeline-marker::after {
+    content: "";
+    position: absolute;
+    inset-inline-start: 50%;
+    width: 2px;
+    background: var(--color-border-strong);
+  }
+  .base-timeline[data-appearance="steps"] > .base-timeline-item > .base-timeline-marker::before { inset-block-start: 0; inset-block-end: 50%; }
+  .base-timeline[data-appearance="steps"] > .base-timeline-item > .base-timeline-marker::after { inset-block-start: 50%; inset-block-end: 0; }
+  .base-timeline-item:first-child > .base-timeline-marker::before,
+  .base-timeline-item:last-child > .base-timeline-marker::after { display: none; }
+  @media (max-width: 480px) {
+    .base-timeline { --base-timeline-rail-width: 1.25rem; --base-timeline-gap: calc(var(--base-control-padding-block) * 0.875); }
+    .base-timeline[data-appearance="steps"] { --base-timeline-rail-width: 1.875rem; --base-timeline-gap: var(--base-control-padding-block); }
+  }
+  @media (forced-colors: active) {
+    .base-timeline-marker > span { border: 1px solid CanvasText; }
+    .base-timeline-marker[data-current="true"] > span { outline: 2px solid Highlight; }
+  }
+}
+
 /* The SSR reset precedes shared component styles without overriding their layer. */
 @layer base {
   .base-ssr-shell, .base-ssr-shell * { box-sizing: border-box; margin: 0; padding: 0; }

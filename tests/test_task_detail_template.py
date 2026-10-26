@@ -95,8 +95,10 @@ def test_task_detail_renders_group_markers_and_chronological_supervisor_dialog()
         step_history=runs,
     )
 
-    assert html.count('class="phase-node serial done"') == 2
-    assert html.count('class="phase-node parallel done"') == 1
+    phase_markers = [attrs for _, attrs in Elements(html).elements
+                     if "base-timeline-marker" in attrs.get("class", "").split()][:3]
+    assert [attrs["data-size"] for attrs in phase_markers] == ["small", "large", "small"]
+    assert all(attrs["data-tone"] == "success" for attrs in phase_markers)
     assert html.count('class="base-badge phase-sequence"') == 4
     assert '>1</span><strong class="phase-name">Start' in html
     assert '>2</span><strong class="phase-name">Research' in html

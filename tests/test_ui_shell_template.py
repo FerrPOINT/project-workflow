@@ -86,7 +86,7 @@ class SharedShellTemplateTests(TestCase):
         self.assertIsNone(re.search(r"\.\b(?:" + retired + r")\b(?![-\w])", css))
         self.assertIsNone(re.search(r"\.(?:page-frame|page-wide|page-detail|page-readable|page-split)\b", css))
         self.assertIn(".timeline-row{", css)
-        self.assertIn(".row-actions{", css)
+        self.assertNotIn(".row-actions{", css)
         html = self.render_shell([])
         elements = Elements(html).elements
         self.assertEqual(sum("page-frame" in attrs.get("class", "").split() for _, attrs in elements), 1)
@@ -323,7 +323,7 @@ class SharedShellTemplateTests(TestCase):
         self.assertEqual([(tag, attrs["id"]) for tag, attrs in headings],
                          [("h2", "records"), ("h3", "details"), ("h2", "bounded")])
         self.assertIn('class="base-section-context">0</div>', html)
-        self.assertIn('class="base-page-actions">0</div>', html)
+        self.assertIn('class="base-action-group base-page-actions" data-align="start">0</div>', html)
         self.assertIn("&lt;img&gt;Records&lt;/img&gt;", html)
         self.assertFalse(any(tag in ["img", "script"] for tag, _ in Elements(html).elements))
 

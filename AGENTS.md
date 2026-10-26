@@ -230,3 +230,11 @@ resource_list_description Base. Внешние контейнеры, flex/grid, 
 для product handlers сохраняются; локальные font-size/weight/color не копировать.
 Составную подпись передавать через Jinja capture при включённом autoescape,
 без safe для пользовательских строк. Значения и построение URL остаются Workflow.
+
+## Общая история событий
+
+История событий и этапов использует Timeline/TimelineItem/TimelineMarker/TimelineContent
+из Base, SSR — штатные timeline macros/classes. Порядок, статус → tone, данные,
+параллельные группы и действия остаются у продукта. Маркеры декоративные;
+состояние должно быть видно текстом. Не копировать rail/node CSS и не заменять
+историю percentage Progress. Сначала проверить наличие контракта в принятом UI pin.
