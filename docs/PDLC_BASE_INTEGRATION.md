@@ -2,7 +2,7 @@
 
 ## Текущий source-кандидат UI
 
-Точный UI SHA: `675565b5923455c771c22589979a23520cc5d041` ([pin](../.base-ui-revision)).
+Точный UI SHA: `efa4babe176b42530a3e17fc25f10e8678f82d33` ([pin](../.base-ui-revision)).
 Компоненты и reference берутся из этой версии Base; открытый справочник другой
 версии не подтверждает доступность контракта в продукте. SDK/skills pins
 независимы. Это исходники собственного checkout; установка и authenticated
@@ -242,3 +242,13 @@ UI pin не менялся; штатный SSR fingerprint совпадает, �
 переиспользован. Install, compile, reference generation и app/backend builds
 не повторялись. Это source-компоненты и синтетические callbacks без API/Auth;
 не установленное приложение и не приёмка серверных операций.
+
+
+## Общая подпись навигации — 2026-10-27
+
+Принят совместимый UI 0.3.4, producer `efa4babe176b42530a3e17fc25f10e8678f82d33`.
+Новый SidebarItemLabel доступен через публичный API; локальная композиция
+данного продукта не требовала замены подписи. Сохранены прежние контракты.
+Проверены настоящий архив, offline CLI и frozen adoption: шесть React consumers
+с одним React, седьмой SSR consumer — через штатный export/check. SDK/skills
+pins неизменны; это source-кандидат, без установки и hosted CI.
