@@ -1,6 +1,6 @@
-{% macro action_group(align='end', separated=false, stack_on_mobile=false, class_name='', id=none) -%}
+{% macro action_group(align='end', separated=false, stack_on_mobile=false, class_name='', id=none, orientation='horizontal') -%}
 {% set placement = align if align in ['start', 'end', 'between'] else 'end' -%}
-<div class="base-action-group{% if class_name %} {{ class_name }}{% endif %}" data-align="{{ placement }}"{% if separated %} data-separated="true"{% endif %}{% if stack_on_mobile %} data-mobile-stack="true"{% endif %}{% if id %} id="{{ id }}"{% endif %}>{{ caller() }}</div>
+<div class="base-action-group{% if class_name %} {{ class_name }}{% endif %}" data-align="{{ placement }}"{% if orientation == 'vertical' %} data-orientation="vertical"{% endif %}{% if separated %} data-separated="true"{% endif %}{% if stack_on_mobile %} data-mobile-stack="true"{% endif %}{% if id %} id="{{ id }}"{% endif %}>{{ caller() }}</div>
 {%- endmacro %}
 
 {% macro page_header(title=none, context=none, actions=none, heading=none, leading=none) -%}

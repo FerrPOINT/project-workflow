@@ -418,6 +418,11 @@
   .base-action-group[data-align="start"] {
     justify-content: flex-start;
   }
+  .base-action-group[data-orientation="vertical"] {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+  }
   .base-action-group[data-align="end"] {
     justify-content: flex-end;
   }
