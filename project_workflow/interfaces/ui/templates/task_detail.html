@@ -19,7 +19,6 @@
 #task-summary,#phase-history-title,#check-history-title{scroll-margin-top:76px}
 .phase-top,.assignment-head,.activity-header{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
 .phase-name{overflow-wrap:anywhere}
-.phase-sequence-label{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .phase-status{margin-left:auto}
 .parallel-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .activity-time{margin-left:auto}
@@ -118,7 +117,7 @@
             {% for ph in block.phases %}
             <article>
               {% call base_ui.card(highlighted=ph.status == 'current') %}{% call base_ui.card_content(class_name='base-page-stack') %}
-              <div class="phase-top">{% call base_ui.badge(appearance='counter', class_name='phase-sequence') %}<span class="phase-sequence-label">Фаза </span>{{ ph.sequence_number }}{% endcall %}<strong class="phase-name">{{ ph.phase_name }}</strong><span class="phase-status">{{ base_ui.badge('Завершена' if ph.status == 'done' else ('Текущая' if ph.status == 'current' else 'Ожидает'), tone='success' if ph.status == 'done' else ('info' if ph.status == 'current' else 'muted')) }}</span></div>
+              <div class="phase-top">{% call base_ui.badge(appearance='counter', class_name='phase-sequence') %}<span class="phase-sequence-label base-visually-hidden">Фаза </span>{{ ph.sequence_number }}{% endcall %}<strong class="phase-name">{{ ph.phase_name }}</strong><span class="phase-status">{{ base_ui.badge('Завершена' if ph.status == 'done' else ('Текущая' if ph.status == 'current' else 'Ожидает'), tone='success' if ph.status == 'done' else ('info' if ph.status == 'current' else 'muted')) }}</span></div>
               {% if ph.phase_description %}{% call base_ui.prose() %}<p>{{ ph.phase_description }}</p>{% endcall %}{% endif %}
             {% endcall %}{% endcall %}
             </article>
@@ -129,7 +128,7 @@
           {% set ph = block.phases[0] %}
           <article>
               {% call base_ui.card(highlighted=ph.status == 'current') %}{% call base_ui.card_content(class_name='base-page-stack') %}
-            <div class="phase-top">{% call base_ui.badge(appearance='counter', class_name='phase-sequence') %}<span class="phase-sequence-label">Фаза </span>{{ ph.sequence_number }}{% endcall %}<strong class="phase-name">{{ ph.phase_name }}</strong><span class="phase-status">{{ base_ui.badge('Завершена' if ph.status == 'done' else ('Текущая' if ph.status == 'current' else 'Ожидает'), tone='success' if ph.status == 'done' else ('info' if ph.status == 'current' else 'muted')) }}</span></div>
+            <div class="phase-top">{% call base_ui.badge(appearance='counter', class_name='phase-sequence') %}<span class="phase-sequence-label base-visually-hidden">Фаза </span>{{ ph.sequence_number }}{% endcall %}<strong class="phase-name">{{ ph.phase_name }}</strong><span class="phase-status">{{ base_ui.badge('Завершена' if ph.status == 'done' else ('Текущая' if ph.status == 'current' else 'Ожидает'), tone='success' if ph.status == 'done' else ('info' if ph.status == 'current' else 'muted')) }}</span></div>
             {% if ph.phase_description %}{% call base_ui.prose() %}<p>{{ ph.phase_description }}</p>{% endcall %}{% endif %}
           {% endcall %}{% endcall %}
             </article>

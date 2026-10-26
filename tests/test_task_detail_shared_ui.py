@@ -147,7 +147,7 @@ def test_phase_surfaces_use_base_and_keep_phase_sequence_and_status(status, labe
     assert (markers[0].get("data-current") == "true") is highlighted
     assert markers[0]["aria-hidden"] == "true"
     assert f'data-tone="{tone}" data-appearance="badge">{label}</span>' in html
-    assert 'data-appearance="counter"><span class="phase-sequence-label">Фаза </span>73' in html
+    assert 'data-appearance="counter"><span class="phase-sequence-label base-visually-hidden">Фаза </span>73' in html
     assert "Owner &lt;phase&gt;" in html
     assert "Owner &lt;description&gt;" in html
     highlighted_cards = [attrs for _, attrs in Elements(html).elements

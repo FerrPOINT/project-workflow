@@ -23,7 +23,6 @@
 .theme-controls{display:flex;align-items:flex-start;gap:12px;min-width:0}
 .theme-controls > .base-form-field:first-child{flex:0 1 auto}
 .theme-controls > .base-form-field:last-child{flex:0 0 auto}
-.panel-actions{display:flex;gap:10px;flex-wrap:wrap}
 .namespace-delete{margin-left:auto}
 @media (max-width: 980px){.namespace-crud{grid-template-columns:minmax(0,1fr)}.namespace-nav{display:none}.namespace-picker{display:block}}
 {% endblock %}
@@ -85,11 +84,11 @@
       {% call base_ui.field('namespaceDescription', 'Описание') %}
         {{ base_ui.textarea_control('namespaceDescription', 'namespaceDescription', value=edited_namespace.description if edited_namespace else '', rows=2) }}
       {% endcall %}
-      <div class="panel-actions">
+      {% call base_ui.action_group(align='start', class_name='panel-actions') %}
         <button class="btn btn-primary" type="submit" id="namespaceSubmitButton">{{ 'Создать' if create_mode else 'Сохранить' }}</button>
         <button class="btn btn-secondary" type="button" id="cancelCreateButton" onclick="cancelCreateNamespace()" style="display:none">Отмена</button>
         <button class="btn btn-secondary namespace-delete" type="button" id="deleteNamespaceButton" onclick="deleteNamespace()"{% if create_mode %} style="display:none"{% endif %}>Удалить</button>
-      </div>
+      {% endcall %}
       {{ base_ui.resource_list_description('Профессию с задачами нельзя удалить.', id='namespaceDeleteHint', tag='p', class_name='namespace-delete-hint', hidden=true) }}
     </form>
 {% elif edited_namespace %}

@@ -2127,7 +2127,7 @@ class TestTaskDetail:
         assert parser.numbers
         assert all(re.fullmatch(r"Фаза \d+", number) for number in parser.numbers)
         template = (TEMPLATES_DIR / "task_detail.html").read_text(encoding="utf-8")
-        assert template.count('<span class="phase-sequence-label">Фаза </span>') == 2
+        assert template.count('<span class="phase-sequence-label base-visually-hidden">Фаза </span>') == 2
 
     def test_task_detail_rejects_unknown_query_namespace_without_fallback(self):
         response = client.get(f"/task/RUN-247?namespace_id={UNKNOWN_NAMESPACE_ID}")

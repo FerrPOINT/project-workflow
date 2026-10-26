@@ -93,3 +93,33 @@ def test_parallel_guidance_keeps_barrier_text_and_quiet_common_presentation():
     assert "Phase &lt;1&gt;" in html and "Owner &lt;description&gt;" in html
     assert "function setPhaseView(view,persist=true)" in html
     assert "localStorage.setItem('phase-view-mode',view)" in html
+
+
+@pytest.mark.parametrize("create", [False, True])
+@pytest.mark.parametrize("admin", [False, True])
+def test_namespace_actions_keep_owner_permissions_and_native_form_contract(create, admin):
+    namespace = dict(id=73, name="Owner <profession>", cli_command="owner-command",
+                     description="Owner description", theme_icon="folder", theme_color="#123456", task_count=0)
+    html = shell_helpers.SharedShellTemplateTests().render_shell(
+        [namespace], template="namespaces.html", can_administer=admin, create_mode=create,
+        selected_namespace=namespace, edited_namespace=None if create else namespace,
+        project_icon_options=[dict(key="folder", label="Owner icon")], default_project_icon="folder",
+    )
+    elements = shell_helpers.Elements(html).elements
+    groups = [attrs for _, attrs in elements if "panel-actions" in attrs.get("class", "").split()]
+    assert len(groups) == int(admin)
+    if not admin:
+        assert not any(attrs.get("id") == "namespaceForm" for _, attrs in elements)
+        return
+    assert "base-action-group" in groups[0]["class"].split()
+    assert groups[0]["data-align"] == "start"
+    buttons = {attrs.get("id"): attrs for tag, attrs in elements if tag == "button"}
+    assert buttons["namespaceSubmitButton"]["type"] == "submit"
+    assert buttons["cancelCreateButton"]["type"] == "button"
+    assert buttons["cancelCreateButton"]["onclick"] == "cancelCreateNamespace()"
+    assert buttons["deleteNamespaceButton"]["onclick"] == "deleteNamespace()"
+    assert (buttons["deleteNamespaceButton"].get("style") == "display:none") is create
+    form = next(attrs for tag, attrs in elements if tag == "form" and attrs.get("id") == "namespaceForm")
+    assert "data-platform-draft" in form
+    assert form["onsubmit"] == "event.preventDefault(); submitNamespace();"
+    assert "owner-command" in html
