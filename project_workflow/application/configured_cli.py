@@ -256,6 +256,9 @@ def finish_history(uow: SAUnitOfWork, fence: ConfiguredCliFence, history_id: int
             "task": task.task_key, "tracker_task_id": fence.enrollment["request"]["tracker_task_id"],
             "namespace_id": task.project_id, "concrete_agent_ref": result["concrete_agent_ref"],
             "assignment_ref": result["assignment_ref"], "operation_key": fence.request.operation_key,
+            "assignment_version": fence.enrollment["request"]["assignment_version"],
+            "tracker_execution_id": fence.enrollment["request"]["tracker_execution_id"],
+            "machine_subject": fence.enrollment["request"]["machine_subject"],
             "request_sha256": fence.request_sha256, "result_version": fence.version + 1,
             "requirements_revision": observed["revision"], "requirements_sha256": observed["content_hash"],
             "owner_subject": observed["owner_subject"], "confirmation_id": observed["id"],
@@ -320,6 +323,9 @@ def terminal_readback(uow: SAUnitOfWork, command: ConfiguredTerminalReadback) ->
             or receipt["history_id"] != row.id or receipt["tracker_task_id"] != enrollment["tracker_task_id"]
             or receipt["concrete_agent_ref"] != enrollment["concrete_agent_ref"]
             or receipt["assignment_ref"] != enrollment["assignment_ref"]
+            or receipt["assignment_version"] != enrollment["assignment_version"]
+            or receipt["tracker_execution_id"] != enrollment["tracker_execution_id"]
+            or receipt["machine_subject"] != enrollment["machine_subject"]
             or receipt["owner_subject"] != enrollment["owner_subject"]
             or receipt["request_sha256"] != metadata.get("request_sha256")
             or receipt["result_version"] != metadata.get("result_version")

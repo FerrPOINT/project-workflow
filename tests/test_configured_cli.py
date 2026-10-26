@@ -137,6 +137,7 @@ def test_owner_confirmation_is_required_before_final_report(configured, supervis
 
 
 def test_terminal_receipt_and_trusted_readback_survive_replay(configured, supervisor_llm, monkeypatch):
+    configured[1]["assignment_version"] = 9
     enrolled = enroll(configured)
     supervisor_llm("PASS")
     confirmation = {"id": str(uuid4()), "task_id": TRACKER_TASK, "revision": 2,
@@ -154,6 +155,8 @@ def test_terminal_receipt_and_trusted_readback_survive_replay(configured, superv
     assert result["complete"] is True and result["version"] == 4
     assert receipt["requirements_revision"] == 2 and receipt["requirements_sha256"] == "a" * 64
     assert receipt["concrete_agent_ref"] == AGENT and "hermes_run_ref" not in receipt
+    for field in ("assignment_version", "tracker_execution_id", "machine_subject"):
+        assert receipt[field] == configured[1][field]
     assert step(configured, **command).json() == response.json()
     client, assignment = configured
     params = {"task": assignment["task"], "namespace_id": assignment["namespace_id"],
@@ -288,6 +291,10 @@ def test_terminal_endpoint_reads_saved_receipt_not_live_authority(configured, su
         assert response.headers["cache-control"] == "no-store"
         assert response.json() == {"ok": True, "complete": True,
                                    "receipt": saved["terminal_receipt"], "workflow_receipt": saved["workflow_receipt"]}
+        for field in ("assignment_version", "tracker_execution_id", "machine_subject"):
+            assert response.json()["receipt"][field] == configured[1][field]
+            assert client.post("/internal/runtime/terminal-receipt/readback", headers=WRITER,
+                               json={**selector, field: configured[1][field]}).status_code == 422
     assert client.post("/internal/runtime/terminal-receipt/readback",
                        headers=MACHINE, json=selector).status_code == 403
     with SAUnitOfWork() as uow:
@@ -315,6 +322,26 @@ def test_terminal_endpoint_refuses_wrong_tuple_and_corrupt_saved_hash(configured
         uow.commit()
     assert client.post("/internal/runtime/terminal-receipt/readback", headers=WRITER,
                        json=selector).status_code == 409
+
+
+def test_terminal_enrollment_identity_cannot_be_replaced_even_with_rehashed_receipt(
+    configured, supervisor_llm, monkeypatch,
+):
+    from project_workflow.domain.runtime_assignment import payload_sha256
+
+    selector, saved = complete(configured, supervisor_llm, monkeypatch)
+    client, assignment = configured
+    for field, forged in (("assignment_version", assignment["assignment_version"] + 1),
+                          ("tracker_execution_id", str(uuid4())), ("machine_subject", str(uuid4()))):
+        changed = json.loads(json.dumps(saved))
+        changed["terminal_receipt"][field] = forged
+        changed["workflow_receipt"]["sha256"] = payload_sha256(changed["terminal_receipt"])
+        with SAUnitOfWork() as uow:
+            row = uow.session.scalars(select(m.TaskStepHistoryEntry).order_by(m.TaskStepHistoryEntry.id.desc())).first()
+            row.supervisor_response = json.dumps(changed)
+            uow.commit()
+        assert client.post("/internal/runtime/terminal-receipt/readback", headers=WRITER,
+                           json=selector).status_code == 409
 
 
 def test_final_report_requires_exact_requirements_evidence(configured, supervisor_llm, monkeypatch):

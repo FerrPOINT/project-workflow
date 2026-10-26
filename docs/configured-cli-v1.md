@@ -121,7 +121,14 @@ Terminal result contains terminal_receipt and workflow_receipt reference/SHA256.
 Receipt fields: interaction_protocol, execution_ref, task, tracker_task_id,
 namespace_id, concrete_agent_ref, assignment_ref, operation_key, request_sha256,
 result_version, requirements_revision, requirements_sha256, owner_subject,
-confirmation_id, history_id, status. No native proof is claimed. Workflow does
+confirmation_id, history_id, status, assignment_version, tracker_execution_id,
+machine_subject. The last three fields come ONLY from the saved enrollment
+request, not step/readback caller claims. assignment_version is a strict positive
+integer; both identity fields are canonical non-nil UUIDs. They are included in
+the canonical receipt hash and checked against enrollment on readback, including
+when a corrupt receipt has a recomputed hash. The readback request body below
+is unchanged and does not accept these fields as caller-supplied authority.
+No native proof is claimed. Workflow does
 not move Tracker or dispatch Analyst. Tracker owns the Backlog/Ready transition.
 
 Tracker verifies the actual retained result server-to-server at the EXISTING
@@ -183,11 +190,15 @@ request interleaving while the provider releases the transaction. They do NOT
 qualify PostgreSQL locking, populated-copy preservation, packaged CLI,
 integrated Fleet/Tracker, real credentials, deployment or live new-chat behavior.
 
-Scoped host check: 72 PASS across test_configured_cli.py,
+Initial scoped host check (f275bdf): 72 PASS across test_configured_cli.py,
 test_configured_cli_transport.py, test_configured_cli_tracker.py and
 test_pm_assignment_guard.py. Ruff over the repository and mypy over all
 163 product/script source files pass. Python used: 3.13.13, with the already
 prepared host dependencies; no Compose or live requests were executed.
+The authoritative enrollment-metadata receipt follow-up passed all 24 cases
+in test_configured_cli.py, scoped Ruff on its three changed Python files and
+scoped mypy on its two changed source modules. Full Ruff/mypy were not repeated
+for this bounded receipt-only follow-up.
 
 The wider 341-case host selection was not green: 337 passed, one skipped and
 three failed. Its extra legacy replay read was fixed and the whole affected

@@ -101,6 +101,9 @@ class ConfiguredTerminalReadback(BaseModel):
 
 class ConfiguredTerminalReceipt(ConfiguredTerminalReadback):
     tracker_task_id: UUIDRef
+    assignment_version: int = Field(gt=0, strict=True)
+    tracker_execution_id: UUIDRef
+    machine_subject: UUIDRef
     request_sha256: Sha256
     owner_subject: UUIDRef
     confirmation_id: UUIDRef
