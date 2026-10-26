@@ -141,7 +141,7 @@ def test_terminal_receipt_and_trusted_readback_survive_replay(configured, superv
     enrolled = enroll(configured)
     supervisor_llm("PASS")
     confirmation = {"id": str(uuid4()), "task_id": TRACKER_TASK, "revision": 2,
-                    "content_hash": "a" * 64, "owner_subject": OWNER, "stage": "Backlog"}
+                    "content_hash": "a" * 64, "owner_subject": OWNER, "stage": "Draft"}
     monkeypatch.setattr(configured_cli, "confirmation", lambda _payload: confirmation)
     command = {}
     for version in (1, 2, 3):
@@ -246,7 +246,7 @@ def test_changed_confirmation_after_provider_cannot_commit_terminal(configured, 
     for version in (1, 2):
         assert step(configured, report="Actual report", operation_key=f"p-{version}",
                     expected_version=version).status_code == 200
-    receipt = {"id": str(uuid4()), "revision": 1, "content_hash": "a" * 64, "owner_subject": OWNER}
+    receipt = {"id": str(uuid4()), "revision": 1, "content_hash": "a" * 64, "owner_subject": OWNER, "stage": "Draft"}
     count = 0
     def confirmation(_payload):
         nonlocal count
@@ -262,7 +262,7 @@ def complete(configured, supervisor_llm, monkeypatch):
     enrolled = enroll(configured)
     supervisor_llm("PASS")
     confirmed = {"id": str(uuid4()), "task_id": TRACKER_TASK, "revision": 7,
-                 "content_hash": "a" * 64, "owner_subject": OWNER, "stage": "Backlog"}
+                 "content_hash": "a" * 64, "owner_subject": OWNER, "stage": "Draft"}
     monkeypatch.setattr(configured_cli, "confirmation", lambda _: dict(confirmed))
     for version in (1, 2, 3):
         response = step(configured, report=f"Actual report {version}", operation_key=f"phase-{version}",
@@ -299,6 +299,8 @@ def test_terminal_endpoint_reads_saved_receipt_not_live_authority(configured, su
                        headers=MACHINE, json=selector).status_code == 403
     with SAUnitOfWork() as uow:
         assert uow.session.scalar(select(func.count()).select_from(m.TaskStepHistoryEntry)) == 3
+        row = uow.session.scalars(select(m.TaskStepHistoryEntry).order_by(m.TaskStepHistoryEntry.id.desc())).first()
+        assert json.loads(row.evaluation_snapshot)["configured_cli"]["confirmation"]["stage"] == "Draft"
 
 
 def test_terminal_endpoint_refuses_wrong_tuple_and_corrupt_saved_hash(configured, supervisor_llm, monkeypatch):
@@ -352,7 +354,7 @@ def test_final_report_requires_exact_requirements_evidence(configured, superviso
                     expected_version=version).status_code == 200
     monkeypatch.setattr(configured_cli, "confirmation", lambda _: {
         "id": str(uuid4()), "task_id": TRACKER_TASK, "revision": 7, "content_hash": "a" * 64,
-        "owner_subject": OWNER, "stage": "Backlog"})
+        "owner_subject": OWNER, "stage": "Draft"})
     for evidence in ({}, {"requirements_revision": 6, "requirements_sha256": "a" * 64},
                      {"requirements_revision": 7, "requirements_sha256": "b" * 64}):
         assert step(configured, report="Actual final report", operation_key="final", expected_version=3,
@@ -367,16 +369,23 @@ def test_instruction_projection_retains_business_rules_without_rewriting_catalog
     from project_workflow.infrastructure import single_task_delivery_instructions as delivery
     from project_workflow.supervisor.models import Phase, PhaseCheck, PhaseEvidence, PhaseInstruction
 
-    source = [Phase(code="PM-DRAFT-03", checks=[PhaseCheck("Actual business check")],
+    source = [Phase(code="PM-DRAFT-03", checks=[PhaseCheck("Actual business check"),
+        PhaseCheck(delivery.PM_CONFIRMATION_CHECKS[4])],
         evidence=[PhaseEvidence("Actual owner evidence")], instructions=[PhaseInstruction(text) for text in (
             delivery.PM_CRITICAL_REVIEW, delivery.PM_PHASE_REPORT,
             *delivery.PM_CONFIRMATION_INSTRUCTIONS, delivery.terminal_instruction("project_manager"))])]
     before = deepcopy(source)
     projected = configured_instructions.phases(source)
     text = "\n".join(item.step for item in projected[0].instructions)
-    assert source == before and projected[0].checks == source[0].checks and projected[0].evidence == source[0].evidence
+    assert source == before and projected[0].checks[0] == source[0].checks[0]
+    assert projected[0].evidence == source[0].evidence
     assert "authorized critical-review input" in text and "sealed source evidence" in text
     assert "Any document change invalidates earlier consent" in text
     assert "--requirements-revision" in text and "--requirements-sha256" in text
     assert "--runtime-request" not in text and "--execution-token-file" not in text
     assert "Use the existing typed checkpoint/feedback/answer/confirmation path" not in text
+    assert "stage=Draft" in text and "stage=Backlog" not in text
+    assert "Owner confirmation leaves the task in Draft" in text
+    assert "atomic Draft -> Backlog / Ready" in text
+    assert "not an external verifier checklist" in text
+    assert "Workflow completes first" in projected[0].checks[1].description

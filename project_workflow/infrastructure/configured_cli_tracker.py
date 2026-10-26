@@ -65,7 +65,7 @@ def confirmation(request: dict[str, Any]) -> dict[str, Any]:
     accepted = read(request, f"requirements/{number}/confirmation")
     if (accepted.get("task_id") != request["tracker_task_id"] or type(accepted.get("revision")) is not int
             or accepted.get("revision") != number or accepted.get("content_hash") != digest
-            or accepted.get("owner_subject") != request["owner_subject"] or accepted.get("stage") != "Backlog"):
+            or accepted.get("owner_subject") != request["owner_subject"] or accepted.get("stage") != "Draft"):
         raise ConflictError("Tracker confirmation does not match latest requirements and owner")
     try:
         namespace_auth.canonical_uuid(accepted.get("id", ""))

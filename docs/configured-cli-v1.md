@@ -106,6 +106,15 @@ The final PM report requires the latest requirements revision/hash and its real
 saved owner confirmation. Workflow rechecks the same confirmation and current
 assignment before commit after evaluator IO. Prose, silence, a clarification
 answer or an older confirmed revision never substitutes for owner consent.
+Configured owner confirmation is saved while Tracker remains in Draft; its
+actual confirmation receipt must report stage=Draft, NOT Backlog. The sequence
+is owner consent in Draft -> terminal Workflow commit -> Tracker PM completion
+with server-to-server terminal readback -> atomic Draft to Backlog/Ready.
+Workflow complete=true/status=done describe only Workflow, not a prior Tracker
+transition. Tracker owns the final atomic document/questions/owner/receipt
+checks and transition. No external verifier checklist for business-document
+points is required in this path; CLI/runtime readiness is a separate check.
+Legacy confirmation/terminal contracts retain their existing stage rules.
 The final write MUST explicitly include requirements_revision and
 requirements_sha256. These must match the real latest confirmed document both
 before evaluation and before commit. Other phases reject those evidence fields.
@@ -199,6 +208,12 @@ The authoritative enrollment-metadata receipt follow-up passed all 24 cases
 in test_configured_cli.py, scoped Ruff on its three changed Python files and
 scoped mypy on its two changed source modules. Full Ruff/mypy were not repeated
 for this bounded receipt-only follow-up.
+The Draft-confirmation ordering correction passed 43 focused cases across
+test_configured_cli.py and test_configured_cli_tracker.py, scoped Ruff on five
+changed Python files and scoped mypy on three changed source modules. It adds
+an explicit Backlog-confirmation refusal for this protocol; legacy catalog and
+confirmation paths are not rewritten. These remain host checks, not live
+Tracker completion/transition acceptance.
 
 The wider 341-case host selection was not green: 337 passed, one skipped and
 three failed. Its extra legacy replay read was fixed and the whole affected

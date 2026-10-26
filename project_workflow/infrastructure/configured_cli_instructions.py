@@ -50,8 +50,12 @@ FINAL = (
     "--revision <confirmed-revision>. Match latest revision/hash, owner and task. " + REPORT + " "
     "For this final report add --requirements-revision <confirmed-revision> "
     "--requirements-sha256 <confirmed-content-hash>; these exact values are frozen in the committed receipt. "
-    "Workflow independently verifies confirmation through Tracker and returns its authoritative terminal receipt. "
-    "A pasted receipt alone is not authority: Tracker must read it back server-to-server. Stop at Backlog / Ready; "
+    "Owner confirmation leaves the task in Draft. Workflow verifies that exact Draft confirmation and returns its "
+    "authoritative terminal receipt without moving Tracker. Only then use the supported Tracker PM completion, "
+    "which reads this receipt server-to-server and performs atomic Draft -> Backlog / Ready. "
+    "Do not require Backlog before Workflow completion. A pasted receipt alone is not authority. "
+    "Business completion requires a valid saved document, resolved questions and actual owner consent, not an "
+    "external verifier checklist. Configured CLI readiness is a separate runtime check. Stop at Backlog / Ready; "
     "do not create Analysis intent, dispatch Analyst or confirm requirements as the owner."
 )
 
@@ -64,6 +68,9 @@ def phases(source: list[Phase]) -> list[Phase]:
         delivery.PM_CRITICAL_REVIEW: CRITICAL_REVIEW,
         delivery.PM_CONFIRMATION_INSTRUCTIONS[1]: WAIT,
         delivery.PM_CONFIRMATION_INSTRUCTIONS[2]: FEEDBACK,
+        delivery.PM_CONFIRMATION_INSTRUCTIONS[3]: delivery.PM_CONFIRMATION_INSTRUCTIONS[3].replace(
+            "stage=Backlog", "stage=Draft"
+        ).replace("the own-task PM grant", "the configured per-agent service identity"),
         delivery.terminal_instruction("project_manager"): FINAL,
     }
     projected = deepcopy(source)
@@ -71,4 +78,12 @@ def phases(source: list[Phase]) -> list[Phase]:
         for item in phase.instructions:
             for old, new in replacements.items():
                 item.step = item.step.replace(old, new)
+        for check in phase.checks:
+            if check.description == delivery.PM_CONFIRMATION_CHECKS[4]:
+                check.description = (
+                    "Exact owner confirmation is saved while Tracker remains in Draft. Workflow completes first; "
+                    "only subsequent Tracker PM completion may atomically move Draft to Backlog / Ready using "
+                    "the authoritative terminal receipt. No external business verifier checklist or Analyst "
+                    "is required."
+                )
     return projected

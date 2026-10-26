@@ -335,7 +335,8 @@ def terminal_readback(uow: SAUnitOfWork, command: ConfiguredTerminalReadback) ->
             or result.workflow_receipt.sha256 != payload_sha256(receipt)):
         raise ConflictError("Retained terminal receipt tuple/hash differs")
     frozen = metadata.get("confirmation")
-    if (not isinstance(frozen, dict) or frozen.get("id") != receipt["confirmation_id"]
+    if (not isinstance(frozen, dict) or frozen.get("stage") != "Draft"
+            or frozen.get("id") != receipt["confirmation_id"]
             or frozen.get("revision") != receipt["requirements_revision"]
             or frozen.get("content_hash") != receipt["requirements_sha256"]
             or frozen.get("owner_subject") != receipt["owner_subject"]):

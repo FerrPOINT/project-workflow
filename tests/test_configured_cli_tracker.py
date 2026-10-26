@@ -26,7 +26,7 @@ def authority(monkeypatch):
                "workflow_task_key": request["task"],
                "assignment": assignment}
     confirmed = {"id": str(uuid4()), "task_id": request["tracker_task_id"], "revision": 4,
-                 "content_hash": "a" * 64, "owner_subject": request["owner_subject"], "stage": "Backlog"}
+                 "content_hash": "a" * 64, "owner_subject": request["owner_subject"], "stage": "Draft"}
     bodies = {"context": context, "requirements": {"revision": 4, "content_hash": "a" * 64},
               "requirements/4/confirmation": confirmed}
     monkeypatch.setenv("PROJECT_WORKFLOW_CONFIGURED_TRACKER_URL", "https://tracker.test")
@@ -88,9 +88,9 @@ def test_task_and_owner_cannot_be_borrowed(authority, field):
 
 
 @pytest.mark.parametrize("field,value", [("task_id", str(uuid4())), ("owner_subject", str(uuid4())),
-    ("revision", 3), ("revision", True), ("content_hash", "b" * 64), ("stage", "Analysis"),
+    ("revision", 3), ("revision", True), ("content_hash", "b" * 64), ("stage", "Analysis"), ("stage", "Backlog"),
     ("id", None), ("id", "00000000-0000-0000-0000-000000000000")])
-def test_confirmation_must_match_latest_document_exact_owner_and_backlog(authority, field, value):
+def test_confirmation_must_match_latest_document_exact_owner_and_draft(authority, field, value):
     request, bodies, _ = authority
     bodies["requirements/4/confirmation"][field] = value
     with pytest.raises(ConflictError):
