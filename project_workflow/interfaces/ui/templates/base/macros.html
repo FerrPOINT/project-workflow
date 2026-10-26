@@ -85,15 +85,15 @@
 <{{ tag }} class="base-resource-list-row{% if class_name %} {{ class_name }}{% endif %}"{% if id %} id="{{ id }}"{% endif %}{% if href %} href="{{ href }}" data-interactive="true"{% endif %}{% if label %} aria-label="{{ label }}"{% endif %}>{{ caller() }}</{{ tag }}>
 {%- endmacro %}
 
-{% macro resource_list_title(label, heading_level=none, id=none) -%}
+{% macro resource_list_title(label, heading_level=none, id=none, technical=false) -%}
 {% set level = heading_level|string -%}
 {% set tag = 'h' ~ level if level in ['2', '3', '4', '5', '6'] else 'span' -%}
-<{{ tag }} class="base-resource-title"{% if id %} id="{{ id }}"{% endif %}>{{ label }}</{{ tag }}>
+<{{ tag }} class="base-resource-title"{% if technical %} data-technical="true"{% endif %}{% if id %} id="{{ id }}"{% endif %}>{{ label }}</{{ tag }}>
 {%- endmacro %}
 
-{% macro resource_list_description(label=none, id=none, tag='span', class_name='', hidden=false) -%}
+{% macro resource_list_description(label=none, id=none, tag='span', class_name='', hidden=false, technical=false) -%}
 {% set element = tag if tag in ['span', 'p', 'div'] else 'span' -%}
-<{{ element }} class="base-resource-description{% if class_name %} {{ class_name }}{% endif %}"{% if id %} id="{{ id }}"{% endif %}{% if hidden %} hidden{% endif %}>{% if caller is defined %}{{ caller() }}{% elif label is not none %}{{ label }}{% endif %}</{{ element }}>
+<{{ element }} class="base-resource-description{% if class_name %} {{ class_name }}{% endif %}"{% if technical %} data-technical="true"{% endif %}{% if id %} id="{{ id }}"{% endif %}{% if hidden %} hidden{% endif %}>{% if caller is defined %}{{ caller() }}{% elif label is not none %}{{ label }}{% endif %}</{{ element }}>
 {%- endmacro %}
 
 {% macro action_menu(label, id=none, class_name='', group=none) -%}
@@ -139,7 +139,7 @@
 {%- endmacro %}
 
 {% macro metric(label, value=none, description=none, icon=none, appearance='card', tone='default', read_state='ready', message=none, retry_url=none, id=none) -%}
-{% set presentation = appearance if appearance in ['card', 'inline'] else 'card' -%}
+{% set presentation = appearance if appearance in ['card', 'inline', 'compact'] else 'card' -%}
 {% set semantic_tone = tone if tone in ['default', 'info', 'success', 'warning', 'danger'] else 'default' -%}
 {% set view_state = read_state if read_state in ['ready', 'loading', 'empty', 'not-found', 'permission-denied', 'error', 'partial-error'] else 'error' -%}
 {% set shows_data = view_state in ['ready', 'partial-error'] -%}

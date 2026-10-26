@@ -369,6 +369,7 @@
 @layer components {
   .base-resource-title,
   .base-resource-description {
+    font-family: var(--base-font-sans);
     min-width: 0;
     margin: 0;
     overflow-wrap: anywhere;
@@ -383,6 +384,10 @@
     color: var(--color-text-secondary);
     font-size: var(--base-font-label);
     line-height: calc(var(--base-line-body) - 4px);
+  }
+  .base-resource-title[data-technical="true"],
+  .base-resource-description[data-technical="true"] {
+    font-family: var(--base-font-mono);
   }
   .base-chat-composer {
     min-width: 0;
@@ -2613,6 +2618,15 @@ body {
 .base-metric[data-appearance="inline"] .base-metric-value {
   order: -1;
   margin-block-start: 0;
+}
+.base-metric[data-appearance="compact"] .base-metric-label {
+  font-size: var(--base-font-label);
+  line-height: calc(var(--base-line-body) - 4px);
+}
+.base-metric[data-appearance="compact"] .base-metric-value {
+  font-size: var(--base-font-body);
+  line-height: var(--base-line-body);
+  margin-block-start: calc(var(--base-control-padding-block) / 4);
 }
 .base-check-field {
   position: relative;

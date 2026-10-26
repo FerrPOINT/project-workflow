@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "package": "@pdlc/ui",
   "files": {
-    "base-ui.css": "e318faa13e062197e54a46c45688e395c9f18da9e5d33141d7d9568a6cc037ea",
+    "base-ui.css": "04343bc4b4b9321ea1e064ed39dff4cb434d019ec6b52610b4134732d4692956",
     "base-ui.js": "085d35a51ee5813dbaa8ee09a64a033ac9f65300ecc8a3264c02e8e1857f2e2a",
     "theme-preference.js": "266197ad8ff8895aebab44be7494d38a8ab275f3fc883a888726f3f286f9cc52",
-    "macros.html": "e8b5c239529e24d67d8611f90281626c2952f22d97dd05a431fdb343f4b669ff",
+    "macros.html": "2cdbe5a4ed816e239c5179e1b8e4e0f9e2e0fa24f3a606133896205694c0e00c",
     "branding-colors.js": "6865a4bda39f15b2953f132d29344ae86ce6866b806851ef7e6a658b7ca7b8d3",
     "branding-icons.js": "4f89a6e968986759e6637958679092c3abba896c7bb1c4e6b9009633e31f7600",
     "branding-marks.js": "89203c9108a8cba74f8da00ea2bee1502137b41c40070ced09c9dd5dea86b9aa",
