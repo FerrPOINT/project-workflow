@@ -194,8 +194,22 @@ and the direct health handler; outer cleanup is verified. `init_db()` seeding is
 not covered or permitted by that result. Receipt hashes and the full50-case
 host result are recorded in [PG evidence](pm-terminal-resume-retry-postgres-20261025.md).
 
-Still open: full repository gates, image/install, Fleet transactional/consumer recovery, deployed
-cross-service auth/callback/capability compatibility, and real CLI delivery.
+Current deadline follow-up source d356 passes42 execution tests and scoped Ruff.
+Normal Build55ffb27aa58d452fae0404e17bc264e8 produces imaged450c853 on that
+source; receipt SHA6cf6da5323e100523ffc1d04e9b5622807d75f40679edccfa66a5abfb2b043c5.
+On a fresh actual0019 copy, that image preserves the complete table census and
+whole DDL through two migration-only calls, normal startup and restart. Own
+Compose cleanup passes; sequence positions are not checked. Copy result SHA
+998b2e4a09c1cd424fadcd5729731144800a6bd3415441961910658528fe6037.
+Normal Workflow-only Apply1a102a1c2e3944e88f7f2d787cb554b8 completes, CID0e51daef
+is healthy, and live table/history census before/after is identical. Journal SHA
+edb959e8af15d1400394eeb7f3813e1f10bbd93d2ffcbba745f39c1db9171da7.
+This does not qualify the paired Fleet fix or a useful PM response. The paired
+Fleet source6e4 has passed its three deadline regressions and strict Clippy;
+its normal Build8aedad is running after this Apply, not yet installed.
+
+Still open: full repository gates, Fleet transactional/consumer recovery, deployed
+combined callback/capability compatibility, and real CLI delivery.
 The final business boundary remains genuine owner confirmation followed by
 Backlog/Ready for FLEETQA-3 without Analysis/Analyst. This technical retry is not
 that confirmation, an instruction completion receipt or SDLC business success.
