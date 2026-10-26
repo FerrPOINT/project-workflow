@@ -1,0 +1,90 @@
+name: release-checks (manual)
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    if: github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: project-workflow
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: project_workflow
+          POSTGRES_PASSWORD: project_workflow
+          POSTGRES_DB: project_workflow
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U project_workflow -d project_workflow"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: "5432"
+      PGUSER: project_workflow
+      PGPASSWORD: project_workflow
+      PGDATABASE: project_workflow
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: project-workflow
+      - name: Read independent Base SDK contract revision
+        id: base-sdk
+        run: echo "sha=$(cat .base-revision)" >> "$GITHUB_OUTPUT"
+      - name: Check out pinned Base SDK source
+        uses: actions/checkout@v4
+        with:
+          repository: FerrPOINT/services-base
+          path: services-base
+          ref: ${{ steps.base-sdk.outputs.sha }}
+          ssh-key: ${{ secrets.SERVICES_BASE_DEPLOY_KEY }}
+          persist-credentials: false
+      - name: Verify generated dependency-free namespace contract
+        run: |
+          python ../services-base/scripts/verify_base_revision.py --base ../services-base --revision .base-revision
+          python ../services-base/scripts/export_python_namespace.py --out project_workflow/infrastructure/platform_namespace.py --check
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.10.10"
+          enable-cache: true
+      - name: Canonical local quality gate (unit coverage, PostgreSQL, lint, types)
+        run: make release
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.20.0'
+      - name: Profession and platform navigation regression
+        run: node scripts/test_profession_navigation.mjs
+  compose-smoke:
+    if: github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: project-workflow
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: project-workflow
+      - name: Compose config
+        run: docker compose config -q
+      - name: Build and start
+        run: docker compose up --build -d --wait
+      - name: Readiness
+        run: curl --fail --retry 10 --retry-connrefused http://127.0.0.1:8812/health
+      - name: Compose logs
+        if: failure()
+        run: docker compose logs --no-color
+      - name: Compose cleanup
+        if: always()
+        run: docker compose down -v --remove-orphans

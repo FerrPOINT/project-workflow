@@ -62,3 +62,6 @@ data/workflow.db
 data/workflow.db-*
 tmp/
 .env
+
+# Local prepared quality environments and reports are disposable, not source.
+.local/
