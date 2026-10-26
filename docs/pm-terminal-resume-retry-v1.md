@@ -141,6 +141,21 @@ reserved new target/key/fence/checkpoint, changes Workflow to active and supplie
 its normal execution scope. The existing no-report first instruction and CLI
 handoff still have to succeed while that native run is alive.
 
+## Operation Timeouts
+
+The trusted `observe_run` callback uses a 3-second connect timeout and 45-second
+read-inactivity timeout. This accommodates the observed 13.8-second Fleet native
+context check inside the paired Fleet 60-second outer proof-route HTTP budget,
+leaving room for admission and response handling. It does not change the native
+startup 120-second wait, identity/fence/checkpoint validation, or dispatch authority.
+Connect/read timeout, non-200, redirect or invalid proof still fail closed; no
+resume/rebind authority is inferred. Reconcile the original operation key rather
+than creating another native run. The separate `bootstrap_proof` callback retains
+its existing 3/10-second timeouts; this change does not qualify that unrelated path.
+The paired Fleet proof routes must provide that 60-second outer budget; a legacy
+10-second outer request would still expire first. Source/mock tests do not qualify
+the combined live handoff or either deployment mode.
+
 ## Migration And Verification Limits
 
 Additive migration `0019_pm_terminal_resume_retry` follows

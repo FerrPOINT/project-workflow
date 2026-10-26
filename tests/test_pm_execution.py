@@ -2,7 +2,7 @@
 
 import json
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -29,6 +29,7 @@ NEW_RUN = "22222222-2222-4222-8222-222222222222"
 AGENT_REF = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 PROJECT_REF = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
 OTHER_AGENT_REF = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+HTTP_OBSERVE = pm_readback.observe_run
 
 
 @pytest.fixture
@@ -274,13 +275,60 @@ def test_runtime_readback_network_contract(monkeypatch):
                 pm_readback.observe_run(OLD_RUN)
             assert client.trust_env is False
             assert get.call_args.kwargs["allow_redirects"] is False
-            assert get.call_args.kwargs["timeout"] == (3, 10)
+            assert get.call_args.kwargs["timeout"] == (3, 45)
             assert get.call_args.args[0] == "http://runtime.test/readback/" + OLD_RUN
             assert "params" not in get.call_args.kwargs
             get.return_value.status_code = 200
             get.return_value.json.return_value = {"status": "stopped"}
             with pytest.raises(pm_readback.ReadbackUnavailable):
                 pm_readback.observe_run(OLD_RUN)
+
+
+def test_runtime_readback_accepts_slow_callback_with_bounded_timeout(pm):
+    observations = pm[3]
+    elapsed = 0.0
+
+    def slow_get(_url, *, headers, timeout, allow_redirects):
+        nonlocal elapsed
+        # Virtual socket wait: reproduce the measured context without sleeping or HTTP.
+        delay = 13.8
+        elapsed += min(delay, timeout[1])
+        if delay > timeout[1]:
+            raise pm_readback.requests.ReadTimeout("synthetic-secret")
+        assert headers == {"Authorization": "Bearer " + "p" * 40}
+        assert allow_redirects is False
+        return Mock(status_code=200, json=Mock(return_value=observations[OLD_RUN]))
+
+    with patch.object(pm_readback.requests, "Session") as factory:
+        transport = factory.return_value.__enter__.return_value
+        transport.get.side_effect = slow_get
+        observed = HTTP_OBSERVE(OLD_RUN)
+        assert observed == RuntimeObservation.model_validate(observations[OLD_RUN])
+        assert elapsed == 13.8
+        assert transport.trust_env is False
+        assert transport.get.call_count == 1
+        assert transport.get.call_args.kwargs["timeout"] == (3, 45)
+
+
+@pytest.mark.parametrize("failure", [pm_readback.requests.ConnectTimeout, pm_readback.requests.ReadTimeout])
+def test_runtime_readback_timeout_never_publishes_resume(pm, monkeypatch, failure):
+    client, _, _, resume, _, _ = waiting_pm(pm)
+    monkeypatch.setattr(pm_readback, "observe_run", HTTP_OBSERVE)
+    with patch.object(pm_readback.requests, "Session") as factory:
+        transport = factory.return_value.__enter__.return_value
+        transport.get.side_effect = failure("synthetic-secret")
+        response = client.post(BASE + "/resume", headers=ADAPTER, json=resume)
+        assert response.status_code == 503
+        assert "synthetic-secret" not in response.text
+        assert transport.trust_env is False
+        assert transport.get.call_count == 1
+        assert transport.get.call_args.kwargs["timeout"] == (3, 45)
+        assert transport.get.call_args.kwargs["allow_redirects"] is False
+    read = client.post(BASE + "/readback", headers=ADAPTER, json={**pm[1], "operation_key": resume["operation_key"]})
+    assert read.status_code == 200
+    assert read.json()["result"]["state"] == "waiting"
+    assert read.json()["result"]["operation"] is None
+    assert read.json()["result"]["terminal_readback"] is None
 
 
 def test_initial_bind_rejects_session_run_id_reserved_by_pending_resume(pm):

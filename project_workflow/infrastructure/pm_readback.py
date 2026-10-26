@@ -36,7 +36,7 @@ def observe_run(session_run_id: str) -> RuntimeObservation:
             response = client.get(
                 settings.PROJECT_WORKFLOW_PM_READBACK_URL.rstrip("/") + "/" + quote(session_run_id, safe=""),
                 headers={"Authorization": f"Bearer {settings.PROJECT_WORKFLOW_PM_READBACK_TOKEN}"},
-                timeout=(3, 10), allow_redirects=False,
+                timeout=(3, 45), allow_redirects=False,
             )
         if response.status_code != 200:
             raise ReadbackUnavailable("Runtime acceptance is unknown; read back the same run before retry")
