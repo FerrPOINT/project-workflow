@@ -70,6 +70,13 @@ def test_table_and_linked_card_share_owner_status_and_safe_task_identity(status,
     assert html.count("Owner &lt;verdict&gt;") == 2
     assert html.count('data-task-key="OWN-73"') == 2
     assert html.count('data-status="' + status + '"') == 2
+    keys = [attrs for tag, attrs in elements if tag == "span" and
+            "task-key" in attrs.get("class", "").split()]
+    assert len(keys) == 2
+    assert all("base-resource-description" in attrs["class"].split() and
+               attrs.get("data-technical") == "true" and attrs.get("data-tone") == "inherit"
+               for attrs in keys)
+    assert html.count('data-tone="inherit">OWN-73</span>') == 2
     assert 'stroke="#123456"' in html
     definitions = Definitions(html).values
     assert definitions == [

@@ -16,7 +16,6 @@
 .tasks-table th:nth-child(7),.tasks-table td:nth-child(7){width:10%}
 .tasks-table th:nth-child(8),.tasks-table td:nth-child(8){width:11%}
 .tasks-table th:nth-child(9),.tasks-table td:nth-child(9){width:8%}
-.task-key{font-family:var(--base-font-mono);font-size:var(--base-font-label)}
 .task-key-date{display:none;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .task-title-context{display:none;margin-top:3px}
 .progress-inline{display:flex;align-items:center;gap:6px;width:100%;min-width:0;white-space:nowrap}
@@ -64,7 +63,7 @@
       {% for t in tasks %}
       <tr data-task-key="{{ t.task_key }}" data-status="{{ t.status }}" data-verdict="{{ t.latest_verdict or '' }}">
         <td>
-          {% set task_key_label %}<span class="task-key">{{ t.task_key }}</span>{% endset %}
+          {% set task_key_label %}{{ base_ui.resource_list_description(t.task_key, class_name='task-key', technical=true, tone='inherit') }}{% endset %}
           {{ base_ui.text_link(task_key_label, ui_base_path() ~ '/task/' ~ t.task_key ~ ('?profession_id=' ~ t.namespace_id if t.namespace_id else '')) }}
           <span class="task-key-date" title="Создана: {{ t.created_at[:10] if t.created_at else '—' }}">{{ t.created_at[:10] if t.created_at else '—' }}</span>
         </td>
@@ -119,7 +118,7 @@
   {% call base_ui.card(href=ui_base_path() ~ '/task/' ~ t.task_key ~ ('?profession_id=' ~ t.namespace_id if t.namespace_id else ''), label=t.task_key) %}
   {% call base_ui.card_content(class_name='base-page-stack') %}
     <div class="task-card-head">
-      <span class="task-key">{{ t.task_key }}</span>
+      {{ base_ui.resource_list_description(t.task_key, class_name='task-key', technical=true, tone='inherit') }}
       {% if t.status == 'done' %}{{ base_ui.badge('Завершена', tone='success') }}
       {% elif t.status == 'blocked' %}{{ base_ui.badge('Заблокирована', tone='danger') }}
       {% else %}{{ base_ui.badge('В работе', tone='info') }}{% endif %}

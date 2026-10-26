@@ -400,7 +400,9 @@ class TestIndexPage:
         assert 'class="base-text-link" href="/tasks' in response.text
         assert 'class="base-text-link" href="/namespaces"' in response.text
         assert '<section class="card" data-dashboard-' not in response.text
-        assert ".code{font-family:var(--base-font-mono);color:var(--accent-readable)}" in response.text
+        technical_keys = [attrs for _, attrs in Elements(response.text).elements
+                          if attrs.get("data-technical") == "true" and attrs.get("data-tone") == "accent"]
+        assert len(technical_keys) == 8
         assert "font-family:'JetBrains Mono',monospace;color:var(--accent-readable)" not in response.text
 
     def test_dashboard_keeps_empty_sections_navigable(self):
@@ -2042,9 +2044,15 @@ class TestTasksPage:
         assert "@container tasks (max-width:980px)" in response.text
         assert 'class="task-key-date" title="Создана:' in response.text
         assert 'class="task-title-context"' in response.text
-        assert (
-            ".task-key{font-family:var(--base-font-mono);font-size:var(--base-font-label)}"
-        ) in response.text
+        elements = Elements(response.text).elements
+        task_rows = [attrs for tag, attrs in elements if tag == "tr" and "data-task-key" in attrs]
+        task_keys = [attrs for tag, attrs in elements if tag == "span" and
+                     "task-key" in attrs.get("class", "").split()]
+        assert len(task_keys) == len(task_rows) * 2
+        assert all("base-resource-description" in attrs["class"].split() and
+                   attrs.get("data-technical") == "true" and attrs.get("data-tone") == "inherit"
+                   for attrs in task_keys)
+        assert ".task-key{font-family:" not in response.text
         assert ".status-blocked{" not in response.text
         assert ".verdict-delegate{" not in response.text
         assert (

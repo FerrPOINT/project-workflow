@@ -13,7 +13,6 @@
 .dashboard-row:hover{color:inherit;text-decoration:none}
 .list-title{margin-bottom:3px}
 .list-meta{display:flex;gap:4px 10px;flex-wrap:wrap}
-.code{font-family:var(--base-font-mono);color:var(--accent-readable)}
 .dashboard-section-footer{margin-top:8px}
 @media(max-width:780px){.dashboard-panels{grid-template-columns:minmax(0,1fr);gap:20px}}
 @media(max-width:930px){.header .dashboard-action{display:none}}
@@ -43,7 +42,7 @@
     <div class="base-resource-list" data-variant="plain" data-density="normal">
       {% for task in open_tasks[:8] %}
       <a href="{{ ui_base_path() }}/task/{{ task.task_key }}{% if task.namespace_id %}?profession_id={{ task.namespace_id }}{% endif %}" class="dashboard-row base-resource-list-row" data-interactive="true" data-task-key="{{ task.task_key }}">
-        {% set task_title %}<span class="code">{{ task.task_key }}</span>{% if task.title %} — {{ task.title }}{% endif %}{% endset %}
+        {% set task_title %}{{ base_ui.resource_list_title(task.task_key, technical=true, tone='accent') }}{% if task.title %} — {{ task.title }}{% endif %}{% endset %}
         <div class="list-title">{{ base_ui.resource_list_title(task_title) }}</div>
         <div class="list-meta">
           {{ base_ui.resource_list_description(task.namespace_name) }}

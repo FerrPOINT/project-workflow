@@ -2,12 +2,14 @@
 
 ## Текущий source-кандидат UI
 
-Точный UI SHA: `c2e4e6f4cf6d6ec48dfeb97cf7f20fd7dcc7b6f5` ([pin](../.base-ui-revision)).
+Точный UI SHA: `a2480502b44b07d542357b49403cadcd05d48b5f` ([pin](../.base-ui-revision)).
 Компоненты и reference берутся из этой версии Base; открытый справочник другой
 версии не подтверждает доступность контракта в продукте. SDK/skills pins
 независимы. Это исходники собственного checkout; установка и authenticated
 приёмка runtime этим значением не подтверждаются. Датированные разделы ниже
 описывают прежние квалификации и не заменяют проверку итогового кандидата.
+
+Ключи задач используют resource_list_title/description technical/tone. Общая choice label и mobile header geometry принадлежат Base; backing control, данные профессий, маршруты и события сохраняются Workflow.
 
 ## Исходный baseline до объединения UI
 

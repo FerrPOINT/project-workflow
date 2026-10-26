@@ -24,7 +24,6 @@ html[data-pdlc-access-pending] body{visibility:hidden}
 
 .namespace-switcher{position:relative;min-width:0}
 
-.namespace-selector-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
 
 
 
@@ -63,7 +62,6 @@ html[data-pdlc-access-pending] body{visibility:hidden}
 .page-actions:empty,.page-header:has(.page-actions:empty):has(h1:empty){display:none}
 
 .platform-header-context .namespace-switcher{min-width:0;width:min(280px,100%)}
-@media(max-width:767px){.platform-header .platform-header-context{display:none}.platform-header-leading{flex-shrink:0}}
 
 {% block extra_style %}{% endblock %}
 </style>
@@ -141,7 +139,7 @@ function showToast(msg, type){
 function showRequestError(){
   showToast('Не удалось связаться с сервером','error');
 }
-function renderNamespaceChoice(option, mode){
+function renderNamespaceChoice(option){
   var paths = {{ project_icon_paths | tojson }};
   var label = document.createElement('span');
   var icon = document.createElement('span');
@@ -155,7 +153,7 @@ function renderNamespaceChoice(option, mode){
   var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
   path.setAttribute('d', paths[option.dataset.icon] || paths.folder);
   svg.append(path); icon.append(svg);
-  var name = document.createElement('span'); name.className = 'namespace-selector-name'; name.textContent = option.label; if(mode === 'option') name.style.whiteSpace = 'normal';
+  var name = document.createElement('span'); name.className = 'base-choice-label'; name.textContent = option.label;
   label.append(icon, name); return label;
 }
 let confirmedProfessionId = {{ (active_namespace_id|string if active_namespace_id is not none else '')|tojson }};

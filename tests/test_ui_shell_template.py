@@ -137,8 +137,12 @@ class SharedShellTemplateTests(TestCase):
             stats=dict(namespaces=2, tasks=2, active=1, done=0, verdicts={}),
         )
         elements = Elements(html).elements
-        self.assertEqual(sum("base-resource-title" in attrs.get("class", "").split()
-                             for _, attrs in elements), 4)
+        titles = [attrs for _, attrs in elements
+                  if "base-resource-title" in attrs.get("class", "").split()]
+        self.assertEqual(sum(attrs.get("data-technical") != "true" for attrs in titles), 4)
+        keys = [attrs for attrs in titles if attrs.get("data-technical") == "true"]
+        self.assertEqual(len(keys), 2)
+        self.assertEqual([attrs.get("data-tone") for attrs in keys], ["accent", "accent"])
         self.assertEqual(sum("base-resource-description" in attrs.get("class", "").split()
                              for _, attrs in elements), 7)
         links = [attrs["href"] for tag, attrs in elements

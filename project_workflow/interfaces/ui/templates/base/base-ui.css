@@ -389,6 +389,14 @@
   .base-resource-description[data-technical="true"] {
     font-family: var(--base-font-mono);
   }
+  .base-resource-title[data-tone="inherit"],
+  .base-resource-description[data-tone="inherit"] {
+    color: inherit;
+  }
+  .base-resource-title[data-tone="accent"],
+  .base-resource-description[data-tone="accent"] {
+    color: var(--color-highlight);
+  }
   .base-chat-composer {
     min-width: 0;
     flex-shrink: 0;
@@ -1788,6 +1796,17 @@ body > .base-loading-state:not([data-scope="local"]) {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.base-choice-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: start;
+}
+.base-choice-option .base-choice-label {
+  white-space: normal;
+}
 .base-choice-panel {
   z-index: 70;
   min-width: var(
@@ -2519,6 +2538,13 @@ body {
   padding-inline: var(--base-control-padding-inline);
   height: var(--base-row-height);
   padding-block: var(--base-control-padding-block);
+}
+.base-table td[data-technical="true"] {
+  font-family: var(--base-font-mono);
+}
+.base-table td[data-text-size="sm"] {
+  font-size: var(--base-font-label);
+  line-height: calc(var(--base-line-body) - 4px);
 }
 .base-card-header,
 .base-card-content,
@@ -3749,6 +3775,13 @@ label.base-card[data-interactive="true"]:has(input:disabled) {
     .base-timeline-marker > span { border: 1px solid CanvasText; }
     .base-timeline-marker[data-current="true"] > span { outline: 2px solid Highlight; }
   }
+}
+
+
+/* SSR context moves into the shared navigation drawer at the same breakpoint. */
+@media (max-width: 767px) {
+  .base-ssr-app .platform-header-context { display: none; }
+  .base-ssr-app .platform-header-leading { flex-shrink: 0; }
 }
 
 /* The SSR reset precedes shared component styles without overriding their layer. */
