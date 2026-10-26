@@ -2,7 +2,7 @@
 
 ## Текущий source-кандидат UI
 
-Точный UI SHA: `c2ca61094a904706fceeda8eb8f3b3cfd2e7cdfc` ([pin](../.base-ui-revision)).
+Точный UI SHA: `675565b5923455c771c22589979a23520cc5d041` ([pin](../.base-ui-revision)).
 Компоненты и reference берутся из этой версии Base; открытый справочник другой
 версии не подтверждает доступность контракта в продукте. SDK/skills pins
 независимы. Это исходники собственного checkout; установка и authenticated
