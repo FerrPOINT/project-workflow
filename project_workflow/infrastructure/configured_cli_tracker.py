@@ -51,6 +51,7 @@ def assignment(request: dict[str, Any]) -> None:
             or not isinstance(actual, dict) or type(actual.get("version")) is not int
             or context.get("task_id") != request["tracker_task_id"]
             or context.get("root_task_id") != request["tracker_task_id"]
+            or context.get("workflow_task_key") != request["task"]
             or context.get("owner_subject") != request["owner_subject"] or context.get("assignment") != expected):
         raise ConflictError("Current Tracker owner/assignment/agent differs from enrollment")
 

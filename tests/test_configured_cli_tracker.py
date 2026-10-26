@@ -13,7 +13,8 @@ from project_workflow.infrastructure import configured_cli_tracker as tracker
 
 @pytest.fixture
 def authority(monkeypatch):
-    request = {"tracker_task_id": str(uuid4()), "owner_subject": str(uuid4()), "assignment_ref": str(uuid4()),
+    request = {"task": "SDLC-901", "tracker_task_id": str(uuid4()), "owner_subject": str(uuid4()),
+               "assignment_ref": str(uuid4()),
                "tracker_execution_id": str(uuid4()), "concrete_agent_ref": str(uuid4()),
                "machine_subject": str(uuid4()), "assignment_version": 2}
     assignment = {"assignment_id": request["assignment_ref"],
@@ -22,6 +23,7 @@ def authority(monkeypatch):
                   "machine_subject": request["machine_subject"], "version": 2}
     context = {"contract_version": 1, "task_id": request["tracker_task_id"],
                "root_task_id": request["tracker_task_id"], "owner_subject": request["owner_subject"],
+               "workflow_task_key": request["task"],
                "assignment": assignment}
     confirmed = {"id": str(uuid4()), "task_id": request["tracker_task_id"], "revision": 4,
                  "content_hash": "a" * 64, "owner_subject": request["owner_subject"], "stage": "Backlog"}
@@ -60,6 +62,13 @@ def test_current_assignment_and_actual_latest_confirmation(authority):
     tracker.assignment(request)
     assert tracker.confirmation(request) == bodies["requirements/4/confirmation"]
     assert len(calls) == 3
+    for key in ("SDLC-902", None):
+        bodies["context"]["workflow_task_key"] = key
+        with pytest.raises(ConflictError):
+            tracker.assignment(request)
+    del bodies["context"]["workflow_task_key"]
+    with pytest.raises(ConflictError):
+        tracker.assignment(request)
 
 
 @pytest.mark.parametrize("field", ["assignment_id", "execution_id", "agent_id", "machine_subject", "version"])

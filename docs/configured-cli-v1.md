@@ -25,6 +25,8 @@ reads or project-workflow:write for reports. The subject must match enrollment.
 Current Tracker context independently checks the task/root, owner and exact
 assignment/execution/version/concrete agent/machine subject. No Fleet/native
 callback or rebind is required.
+Its workflow_task_key must also exactly equal the enrolled SDLC-N key; missing
+or different keys refuse both enrollment and current agent access.
 
 ## Enrollment
 
