@@ -42,7 +42,7 @@
   --color-surface: #18181b;
   --color-surface-raised: #27272a;
   --color-border: #27272a;
-  --color-border-strong: #717176;
+  --color-border-strong: #737378;
   --color-text-primary: #fafafa;
   --color-text-secondary: #d4d4d8;
   --color-text-muted: #a1a1aa;
@@ -54,15 +54,15 @@
   --platform-primary-foreground: #ffffff;
   --platform-accent: #14b8a6;
   --platform-surface: #18181b;
-  --color-accent: #5c8af0;
+  --color-accent: #628ff1;
   --color-accent-foreground: #000000;
-  --color-accent-hover: #7098f2;
+  --color-accent-hover: #759cf3;
   --color-accent-hover-foreground: #000000;
   --color-highlight: #14b8a6;
   --color-selection: #172e2e;
   --color-selection-foreground: #fafafa;
-  --color-focus: #5c8af0;
-  --color-primary: #5c8af0;
+  --color-focus: #628ff1;
+  --color-primary: #628ff1;
   --color-primary-foreground: #000000;
   --color-secondary: #27272a;
   --color-secondary-foreground: #fafafa;
@@ -97,7 +97,7 @@
   --color-surface: #18181b;
   --color-surface-raised: #27272a;
   --color-border: #27272a;
-  --color-border-strong: #717176;
+  --color-border-strong: #737378;
   --color-text-primary: #fafafa;
   --color-text-secondary: #d4d4d8;
   --color-text-muted: #a1a1aa;
@@ -109,15 +109,15 @@
   --platform-primary-foreground: #ffffff;
   --platform-accent: #14b8a6;
   --platform-surface: #18181b;
-  --color-accent: #5c8af0;
+  --color-accent: #628ff1;
   --color-accent-foreground: #000000;
-  --color-accent-hover: #7098f2;
+  --color-accent-hover: #759cf3;
   --color-accent-hover-foreground: #000000;
   --color-highlight: #14b8a6;
   --color-selection: #172e2e;
   --color-selection-foreground: #fafafa;
-  --color-focus: #5c8af0;
-  --color-primary: #5c8af0;
+  --color-focus: #628ff1;
+  --color-primary: #628ff1;
   --color-primary-foreground: #000000;
   --color-secondary: #27272a;
   --color-secondary-foreground: #fafafa;
@@ -207,7 +207,7 @@
   --color-surface: #ffffff;
   --color-surface-raised: #f4f4f5;
   --color-border: #e4e4e7;
-  --color-border-strong: #8c8c8f;
+  --color-border-strong: #8a8a8c;
   --color-text-primary: #18181b;
   --color-text-secondary: #3f3f46;
   --color-text-muted: #52525b;
@@ -223,7 +223,7 @@
   --color-accent-foreground: #ffffff;
   --color-accent-hover: #2157cf;
   --color-accent-hover-foreground: #ffffff;
-  --color-highlight: #0e7d71;
+  --color-highlight: #0d7b6f;
   --color-selection: #def5f3;
   --color-selection-foreground: #18181b;
   --color-focus: #2563eb;
@@ -383,6 +383,45 @@
     color: var(--color-text-secondary);
     font-size: var(--base-font-label);
     line-height: calc(var(--base-line-body) - 4px);
+  }
+  .base-chat-message {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--base-control-padding-block) var(--base-control-padding-inline);
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .base-chat-message[data-avatar="true"] {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .base-chat-message-avatar {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    align-self: start;
+  }
+  .base-chat-message-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--base-control-padding-block);
+    min-width: 0;
+  }
+  .base-chat-message-content {
+    min-width: 0;
+    display: grid;
+    gap: var(--base-control-padding-block);
+  }
+  .base-chat-message[data-avatar="true"] > .base-chat-message-header,
+  .base-chat-message[data-avatar="true"] > .base-chat-message-content {
+    grid-column: 2;
+  }
+  @media (max-width: 639px) {
+    .base-chat-message-avatar {
+      grid-row: 1;
+    }
+    .base-chat-message[data-avatar="true"] > .base-chat-message-content {
+      grid-column: 1 / -1;
+    }
   }
 }
 .base-resource-list {
