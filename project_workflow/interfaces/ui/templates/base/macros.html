@@ -159,8 +159,8 @@
 </section>
 {%- endmacro %}
 
-{% macro notice(message, tone='neutral', appearance='panel', role=none, id=none, title=none) -%}
-<div class="base-notice" data-tone="{{ tone }}" data-appearance="{{ appearance }}"{% if role %} role="{{ role }}"{% endif %}{% if id %} id="{{ id }}"{% endif %}><span class="base-notice-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">{% if tone == 'warning' %}<path d="M10.3 3.9 1.8 18.1a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/>{% else %}<circle cx="12" cy="12" r="10"/>{% endif %}{% if tone == 'success' %}<path d="m9 12 2 2 4-4"/>{% elif tone in ['warning','danger'] %}<path d="M12 8v4m0 4h.01"/>{% else %}<path d="M12 12v4m0-8h.01"/>{% endif %}</svg></span><div class="base-notice-body">{% if title %}<div class="base-notice-title">{{ title }}</div>{% endif %}<div>{{ message }}</div></div></div>
+{% macro notice(message, tone='neutral', appearance='panel', role=none, id=none, title=none, separated=false) -%}
+<div class="base-notice" data-tone="{{ tone }}" data-appearance="{{ appearance }}"{% if separated and appearance == 'inline' %} data-separated="true"{% endif %}{% if role %} role="{{ role }}"{% endif %}{% if id %} id="{{ id }}"{% endif %}><span class="base-notice-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">{% if tone == 'warning' %}<path d="M10.3 3.9 1.8 18.1a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/>{% else %}<circle cx="12" cy="12" r="10"/>{% endif %}{% if tone == 'success' %}<path d="m9 12 2 2 4-4"/>{% elif tone in ['warning','danger'] %}<path d="M12 8v4m0 4h.01"/>{% else %}<path d="M12 12v4m0-8h.01"/>{% endif %}</svg></span><div class="base-notice-body">{% if title %}<div class="base-notice-title">{{ title }}</div>{% endif %}<div>{{ message }}</div></div></div>
 {%- endmacro %}
 
 {% macro label_control(id, text, required=false) -%}
