@@ -2,7 +2,7 @@
 
 ## Текущий source-кандидат UI
 
-Точный UI SHA: `efa4babe176b42530a3e17fc25f10e8678f82d33` ([pin](../.base-ui-revision)).
+Точный UI SHA: `8bdd8ecd54eb6a6f553bfbadcfaf07c99f4a801d` ([pin](../.base-ui-revision)).
 Компоненты и reference берутся из этой версии Base; открытый справочник другой
 версии не подтверждает доступность контракта в продукте. SDK/skills pins
 независимы. Это исходники собственного checkout; установка и authenticated
@@ -252,3 +252,15 @@ UI pin не менялся; штатный SSR fingerprint совпадает, �
 Проверены настоящий архив, offline CLI и frozen adoption: шесть React consumers
 с одним React, седьмой SSR consumer — через штатный export/check. SDK/skills
 pins неизменны; это source-кандидат, без установки и hosted CI.
+
+
+## Нативные атрибуты SSR Button — 2026-10-27
+
+Текущий UI 0.3.5: `8bdd8ecd54eb6a6f553bfbadcfaf07c99f4a801d`. Сохраняются React API и независимые SDK/skills pins.
+27 кнопок четырёх шаблонов используют Base button с caller/attributes.
+Сохранены owner handlers/data/IDs, native submit и ARIA; из JS не создаётся
+новый dispatcher. Динамическая параллельная метка клонирует Base badge template.
+Пройдены 216 DOM-проекций, 81 scoped tests и 37 subtests; JS вне клонирования
+badge совпадает полностью. UI contract gate и Ruff пройдены.
+Архив UI и offline frozen adoption проверены; общий интеграционный gate,
+hosted CI, публикация и установка здесь не выполнялись.

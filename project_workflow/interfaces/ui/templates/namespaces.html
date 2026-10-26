@@ -83,9 +83,9 @@
         {{ base_ui.textarea_control('namespaceDescription', 'namespaceDescription', value=edited_namespace.description if edited_namespace else '', rows=2) }}
       {% endcall %}
       {% call base_ui.action_group(align='start', class_name='panel-actions') %}
-        <button class="btn btn-primary" type="submit" id="namespaceSubmitButton">{{ 'Создать' if create_mode else 'Сохранить' }}</button>
-        <button class="btn btn-secondary" type="button" id="cancelCreateButton" onclick="cancelCreateNamespace()" style="display:none">Отмена</button>
-        <button class="btn btn-secondary namespace-delete" type="button" id="deleteNamespaceButton" onclick="deleteNamespace()"{% if create_mode %} style="display:none"{% endif %}>Удалить</button>
+        {% call base_ui.button(variant="primary", id="namespaceSubmitButton", type="submit") %}{{ 'Создать' if create_mode else 'Сохранить' }}{% endcall %}
+        {% call base_ui.button(id="cancelCreateButton", type="button", attributes={"onclick": "cancelCreateNamespace()", "style": "display:none"}) %}Отмена{% endcall %}
+        {% call base_ui.button(class_name="namespace-delete", id="deleteNamespaceButton", type="button", attributes={"onclick": "deleteNamespace()", "style": ('display:none' if create_mode else none)}) %}Удалить{% endcall %}
       {% endcall %}
       {{ base_ui.resource_list_description('Профессию с задачами нельзя удалить.', id='namespaceDeleteHint', tag='p', class_name='namespace-delete-hint', hidden=true) }}
     </form>

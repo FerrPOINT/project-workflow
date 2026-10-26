@@ -24,6 +24,7 @@
 {% endblock %}
 
 {% block content %}
+<template id="instruction-parallel-label-template">{{ base_ui.badge('⚡ параллельно', 'info', class_name='parallel-label') }}</template>
 <div class="instructions-layout" id="instructionsLayout">
   {% for group in instruction_groups %}
     {% set is_parallel_group = group | length > 1 %}
@@ -32,16 +33,16 @@
       {% for instruction in group %}
       <div class="instruction-row" data-instruction-id="{{ instruction.id }}" data-step-num="{{ instruction.step_num }}">
         <div class="order-controls">
-          <button type="button" class="base-control base-button base-icon-control order-btn move-up" data-variant="secondary" data-size="icon" onclick="moveInstruction(this, -1)" aria-label="Поднять инструкцию {{ instruction.step_num }} выше">↑</button>
+          {% call base_ui.button(size="icon", class_name="order-btn move-up", type="button", aria_label="Поднять инструкцию " ~ (instruction.step_num) ~ " выше", attributes={"onclick": "moveInstruction(this, -1)"}) %}↑{% endcall %}
           {{ base_ui.badge(instruction.step_num, appearance='counter', class_name='step-num') }}
-          <button type="button" class="base-control base-button base-icon-control order-btn move-down" data-variant="secondary" data-size="icon" onclick="moveInstruction(this, 1)" aria-label="Опустить инструкцию {{ instruction.step_num }} ниже">↓</button>
+          {% call base_ui.button(size="icon", class_name="order-btn move-down", type="button", aria_label="Опустить инструкцию " ~ (instruction.step_num) ~ " ниже", attributes={"onclick": "moveInstruction(this, 1)"}) %}↓{% endcall %}
         </div>
         <div class="instruction-body">
           <div class="instruction-desc">
             <textarea data-base-autosize class="instruction-text base-control base-textarea" rows="1" data-original-description="{{ instruction.description }}" aria-label="Описание инструкции {{ instruction.step_num }}" onchange="updateInstruction(this)" data-appearance="inline">{{ instruction.description }}</textarea>
           </div>
           <div class="execution-row">
-            <button type="button" class="base-control base-button type-badge" data-variant="outline" aria-label="Параллельное выполнение инструкции {{ instruction.step_num }}" data-execution-type="{{ instruction.execution_type }}" aria-pressed="{{ 'true' if instruction.execution_type == 'parallel' else 'false' }}" onclick="toggleType(this)">{{ 'параллельно' if instruction.execution_type == 'parallel' else 'последовательно' }}</button>
+            {% call base_ui.button(variant="outline", class_name="type-badge", type="button", aria_label="Параллельное выполнение инструкции " ~ (instruction.step_num), aria_pressed=((('true' if instruction.execution_type == 'parallel' else 'false')) == 'true'), attributes={"data-execution-type": (instruction.execution_type), "onclick": "toggleType(this)"}) %}{{ 'параллельно' if instruction.execution_type == 'parallel' else 'последовательно' }}{% endcall %}
           </div>
           <div class="skills-cell">
             {% for skill in instruction.skills %}
@@ -51,7 +52,7 @@
           </div>
         </div>
         {% call base_ui.action_group(class_name='row-actions') %}
-          <button type="button" class="base-control base-button base-icon-control icon-btn" data-variant="destructive-outline" data-size="icon" onclick="deleteInstruction(this)" aria-label="Удалить инструкцию {{ instruction.step_num }}" title="Удалить инструкцию">×</button>
+          {% call base_ui.button(variant="destructive-outline", size="icon", class_name="icon-btn", type="button", aria_label="Удалить инструкцию " ~ (instruction.step_num), title="Удалить инструкцию", attributes={"onclick": "deleteInstruction(this)"}) %}×{% endcall %}
         {% endcall %}
       </div>
       {% endfor %}
@@ -64,7 +65,7 @@
 <div class="add-panel">
   <div class="add-row">
     <input type="text" id="newInstructionText" placeholder="Новая инструкция…" aria-label="Новая инструкция" style="flex:1" class="base-control base-input">
-    <button type="button" class="btn btn-primary" onclick="addInstruction()">Добавить</button>
+    {% call base_ui.button(variant="primary", type="button", attributes={"onclick": "addInstruction()"}) %}Добавить{% endcall %}
   </div>
 </div>
 
@@ -118,11 +119,7 @@ function updateTimeline() {
     const block = document.createElement('div');
     block.className = 'instruction-block' + (isParallelGroup ? ' parallel-group base-card base-card-content' : '');
     if (isParallelGroup) {
-      const label = document.createElement('span');
-      label.className = 'base-badge parallel-label';
-      label.dataset.tone = 'info';
-      label.dataset.appearance = 'badge';
-      label.textContent = '⚡ параллельно';
+      const label = document.getElementById('instruction-parallel-label-template').content.firstElementChild.cloneNode(true);
       block.appendChild(label);
     }
     group.forEach(row => block.appendChild(row));

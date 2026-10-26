@@ -244,3 +244,11 @@ resource_list_description Base. Внешние контейнеры, flex/grid, 
 параллельные группы и действия остаются у продукта. Маркеры декоративные;
 состояние должно быть видно текстом. Не копировать rail/node CSS и не заменять
 историю percentage Progress. Сначала проверить наличие контракта в принятом UI pin.
+
+
+Обычные SSR actions рендерятся штатным button Base с label либо caller.
+После проверки UI pin attributes передаёт owner handlers/data/hidden/form;
+Base сохраняет приоритет type/id/variant/size и disabled/pending/ARIA.
+Не копировать base-control/base-button или btn в product markup. Нативные
+card/menu contracts отличаются от обычной action button и проверяются отдельно.
+Новые параметры требуют штатного SSR export; runtime этим не обновляется.

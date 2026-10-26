@@ -204,11 +204,19 @@
 <div class="base-table-scroll{% if container_class %} {{ container_class }}{% endif %}"><table class="base-table{% if class_name %} {{ class_name }}{% endif %}"{% if id %} id="{{ id }}"{% endif %}{% if label %} aria-label="{{ label }}"{% endif %}>{{ caller() }}</table></div>
 {%- endmacro %}
 
-{% macro button(label, id=none, type='button', variant='secondary', disabled=false, pending=false, size='default', aria_label=none, class_name='', title=none, aria_pressed=none, aria_controls=none, href=none) -%}
+{% macro button(label=none, id=none, type='button', variant='secondary', disabled=false, pending=false, size='default', aria_label=none, class_name='', title=none, aria_pressed=none, aria_controls=none, href=none, attributes=none) -%}
 {% set public_variant = {'primary': 'default', 'danger': 'destructive'}.get(variant, variant) -%}
 {% set is_link = href is not none -%}
 {% set tag = 'a' if is_link else 'button' -%}
-<{{ tag }} class="base-control base-button base-button-{{ variant }}{% if size == 'icon' %} base-icon-control{% endif %}{% if class_name %} {{ class_name }}{% endif %}" data-variant="{{ public_variant }}" data-size="{{ size }}"{% if is_link %}{% if disabled or pending %} role="link" aria-disabled="true" tabindex="-1"{% else %} href="{{ href }}"{% endif %}{% else %} type="{{ type }}"{% if disabled or pending %} disabled{% endif %}{% endif %}{% if id %} id="{{ id }}"{% endif %}{% if pending %} aria-busy="true"{% endif %}{% if aria_label %} aria-label="{{ aria_label }}"{% endif %}{% if title %} title="{{ title }}"{% endif %}{% if not is_link and aria_pressed is not none %} aria-pressed="{{ 'true' if aria_pressed else 'false' }}"{% endif %}{% if aria_controls %} aria-controls="{{ aria_controls }}"{% endif %}>{{ label }}</{{ tag }}>
+{# Native attributes belong to the caller; explicit primitive state remains authoritative. #}
+{% set provided = namespace(values={}) -%}
+{% for name, value in (attributes or {}).items() if value is not none and value is not sameas false -%}
+{% set provided.values = dict(provided.values, **{name|lower: '' if value is sameas true else value}) -%}
+{% endfor -%}
+{% set native = provided.values -%}
+{% set native = dict(native, **{'class': none, 'type': none, 'href': none, 'disabled': none, 'id': none, 'data-variant': none, 'data-size': none, 'aria-busy': none, 'aria-disabled': none, 'aria-label': none, 'title': none, 'aria-pressed': none, 'aria-controls': none}) -%}
+{% if is_link and (disabled or pending) %}{% set native = dict(native, role=none, tabindex=none, **{'aria-disabled': none}) %}{% endif -%}
+<{{ tag }} class="base-control base-button base-button-{{ variant }}{% if size == 'icon' %} base-icon-control{% endif %}{% if class_name %} {{ class_name }}{% endif %}" data-variant="{{ public_variant }}" data-size="{{ size }}"{% if is_link %}{% if disabled or pending %} role="link" aria-disabled="true" tabindex="-1"{% else %} href="{{ href }}"{% endif %}{% else %} type="{{ type }}"{% if disabled or pending %} disabled{% endif %}{% endif %}{% if id %} id="{{ id }}"{% endif %}{% if pending %} aria-busy="true"{% endif %}{% if aria_label %} aria-label="{{ aria_label }}"{% endif %}{% if title %} title="{{ title }}"{% endif %}{% if not is_link and aria_pressed is not none %} aria-pressed="{{ 'true' if aria_pressed else 'false' }}"{% endif %}{% if aria_controls %} aria-controls="{{ aria_controls }}"{% endif %}{{ native | xmlattr }}>{% if caller is defined %}{{ caller() }}{% elif label is not none %}{{ label }}{% endif %}</{{ tag }}>
 {%- endmacro %}
 
 {% macro loader(size='md') -%}

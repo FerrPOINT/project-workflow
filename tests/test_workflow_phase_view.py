@@ -25,6 +25,26 @@ def render_editor(admin, count=8):
 
 
 @pytest.mark.parametrize("admin", [False, True])
+def test_editor_header_actions_keep_native_semantics_and_product_handlers(admin):
+    elements = shell.Elements(render_editor(admin, count=1)).elements
+    buttons = {attrs.get("id"): attrs for tag, attrs in elements if tag == "button"}
+    if not admin:
+        assert "editWorkflowButton" not in buttons
+        assert "newWorkflowButton" not in buttons
+        assert "workflowSubmitButton" not in buttons
+        return
+    assert buttons["editWorkflowButton"]["type"] == "button"
+    assert buttons["editWorkflowButton"]["onclick"] == "startEditWorkflow()"
+    assert buttons["editWorkflowButton"]["aria-controls"] == "workflowForm"
+    assert buttons["editWorkflowButton"]["aria-expanded"] == "false"
+    assert "disabled" not in buttons["editWorkflowButton"]
+    assert buttons["newWorkflowButton"]["onclick"] == "startCreateWorkflow()"
+    assert buttons["workflowSubmitButton"]["type"] == "submit"
+    assert buttons["cancelCreateWorkflowButton"]["style"] == "display:none"
+    assert buttons["cancelCreateWorkflowButton"]["onclick"] == "cancelWorkflowForm()"
+
+
+@pytest.mark.parametrize("admin", [False, True])
 @pytest.mark.parametrize("view", ["compact", "timeline"])
 def test_phase_view_changes_base_skin_for_each_role_without_writing_during_restore(admin, view):
     html = render_editor(admin)
