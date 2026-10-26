@@ -65,6 +65,9 @@ class Settings(BaseSettings):
     # Deployment-registered Base reader subject UUID -> canonical role or "catalog".
     # A PAT scope/email or legacy shared token alone never registers a machine.
     PROJECT_WORKFLOW_BASE_READER_SUBJECTS_JSON: str = ""
+    # Read-only Tracker authority for configured PM completion, never supplied by the agent.
+    PROJECT_WORKFLOW_CONFIGURED_TRACKER_URL: str = ""
+    PROJECT_WORKFLOW_CONFIGURED_TRACKER_READ_TOKEN: str = ""
 
     @field_validator("DATABASE_URL", mode="before")
     @classmethod

@@ -305,9 +305,11 @@ def create_app() -> FastAPI:
     app.post("/internal/runtime/base/terminal-receipt/readback", response_model=None)(base_api.terminal_readback)
     app.get("/internal/runtime/base/source-catalog", response_model=None)(base_api.source_catalog)
     app.get("/internal/runtime/base/source-capabilities", response_model=None)(base_api.source_capabilities)
+    from project_workflow.domain.configured_cli import ConfiguredTerminalResponse
     from project_workflow.domain.single_task_runtime import SingleTaskTerminalResponse
 
-    app.post("/internal/runtime/terminal-receipt/readback", response_model=SingleTaskTerminalResponse)(
+    app.post("/internal/runtime/terminal-receipt/readback",
+             response_model=ConfiguredTerminalResponse | SingleTaskTerminalResponse)(
         runtime_api.runtime_terminal_readback
     )
     from project_workflow.domain.pm_execution import PMResponse, PMResumeRetryResponse

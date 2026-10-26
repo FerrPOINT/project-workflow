@@ -143,6 +143,12 @@ def _runtime_step_inputs(
               default=None, help="Замороженный JSON существующего RuntimeStepRequest, включая полный fence")
 @click.option("--execution-token-file", type=click.Path(exists=True, dir_okay=False, path_type=Path),
               default=None, help="Приватный файл scoped token из actual PM bind/resume receipt")
+@click.option("--expected-version", type=click.IntRange(min=1), default=None,
+              help="Точная версия configured-cli-v1 для отчёта; --report - читает stdin")
+@click.option("--requirements-revision", type=click.IntRange(min=1), default=None,
+              help="Точная подтверждённая редакция требований для финального PM отчёта")
+@click.option("--requirements-sha256", default=None,
+              help="Точный content_hash подтверждённой редакции требований")
 @click.pass_context
 def step_cmd(
     ctx: click.Context,
@@ -151,6 +157,9 @@ def step_cmd(
     operation_key: str | None,
     runtime_request: Path | None,
     execution_token_file: Path | None,
+    expected_version: int | None,
+    requirements_revision: int | None,
+    requirements_sha256: str | None,
 ) -> None:
     """Движение по workflow: показать текущую фазу или отчитаться и перейти.
 
@@ -159,6 +168,30 @@ def step_cmd(
       project-workflow step --task RUN-42 --report "..."  -> оценить отчёт исполнителя CLI и перейти
     """
     jmode = ctx.obj.get("json_mode", False)
+    from . import configured
+
+    try:
+        configured_mode = configured.enabled()
+        if configured_mode:
+            if runtime_request is not None or execution_token_file is not None:
+                raise ValueError("Configured CLI forbids per-run files and legacy runtime flags")
+            response = configured.step(task, report, operation_key, expected_version,
+                requirements_revision=requirements_revision, requirements_sha256=requirements_sha256)
+            result = response["result"]
+            if jmode:
+                out_json(result, exit_code=response["exit_code"])
+                return
+            console.print(str(result.get("instructions", result)))
+            raise click.exceptions.Exit(response["exit_code"])
+        if any(value is not None for value in (expected_version, requirements_revision, requirements_sha256)):
+            raise ValueError("Configured version/evidence flags require configured-cli-v1")
+    except ValueError:
+        result = configured.failure("configuration-or-input-invalid")["result"]
+        if jmode:
+            out_json(result, exit_code=1)
+            return
+        console.print(result["error"])
+        raise click.exceptions.Exit(1) from None
     if report is not None and not report.strip():
         result = blocked_result(task, "Отчёт не может быть пустым")
         if jmode:
@@ -271,11 +304,15 @@ def step_cmd(
 @cli.command()
 @click.option("--task", required=True, help="Ключ задачи")
 @click.option("--n", type=click.IntRange(min=1), default=None, help="Количество записей (по умолчанию: все)")
+@click.option("--operation-key", default=None, help="Configured CLI: read back this exact saved operation")
+@click.option("--execution-ref", default=None, help="Configured CLI: exact retained execution identity")
 @click.pass_context
 def history_cmd(
     ctx: click.Context,
     task: str,
     n: int | None,
+    operation_key: str | None,
+    execution_ref: str | None,
 ) -> None:
     """История отчётов, переходов и статусов по задаче.
 
@@ -284,6 +321,25 @@ def history_cmd(
       project-workflow history --task RUN-42 --n 50     -> последние 50 записей
     """
     jmode = ctx.obj.get("json_mode", False)
+    from . import configured
+
+    try:
+        if configured.enabled():
+            response = configured.history(task, n, operation_key, execution_ref)
+            if jmode:
+                out_json(response["result"], exit_code=response["exit_code"])
+                return
+            console.print(str(response["result"]))
+            raise click.exceptions.Exit(response["exit_code"])
+        if operation_key is not None or execution_ref is not None:
+            raise ValueError("Operation readback flags require configured-cli-v1")
+    except ValueError:
+        result = configured.failure("configuration-or-input-invalid")["result"]
+        if jmode:
+            out_json(result, exit_code=1)
+            return
+        console.print(result["error"])
+        raise click.exceptions.Exit(1) from None
     if platform_env("API_TOKEN"):
         try:
             params = {"task": task, "n": n}

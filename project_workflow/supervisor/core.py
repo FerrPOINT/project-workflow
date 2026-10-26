@@ -13,6 +13,8 @@ from __future__ import annotations
 import threading
 from typing import Any
 
+from project_workflow.domain.configured_cli import ConfiguredCliFence
+
 from ..application.project import ProjectService
 from ..application.task import TaskService
 from ..application.workflow import WorkflowService
@@ -62,7 +64,7 @@ class SupervisorEngine:
         uow: SAUnitOfWork | None = None,
         create_if_missing: bool = True,
         project_id: int | None = None,
-        runtime_fence: RuntimeStepFence | None = None,
+        runtime_fence: RuntimeStepFence | ConfiguredCliFence | None = None,
     ):
         self.task_key = task_key
         self.create_if_missing = create_if_missing
@@ -122,6 +124,10 @@ class SupervisorEngine:
                 self._uow, workflow_id=self.workflow_id, mode_id=self.execution_mode_id,
                 profession_settings=self.project,
             )
+            if isinstance(self.runtime_fence, ConfiguredCliFence):
+                from ..infrastructure.configured_cli_instructions import phases
+
+                self._all_phases = phases(self._all_phases)
         return self._all_phases
 
     @all_phases.setter
@@ -555,6 +561,9 @@ class SupervisorEngine:
             from ..application.base_admission import assert_base_supervisor
 
             assert_base_supervisor(self._uow, self.task, self.runtime_fence)
+        if isinstance(self.runtime_fence, ConfiguredCliFence):
+            self.runtime_fence.assert_task(self.task)
+            return
         if isinstance(self._uow, SAUnitOfWork) and self.task is not None:
             from project_workflow.application.pm_execution import PMExecutionService
 

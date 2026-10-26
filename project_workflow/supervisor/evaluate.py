@@ -9,6 +9,7 @@ from typing import Any
 import requests
 from sqlalchemy.exc import IntegrityError
 
+from ..domain.configured_cli import ConfiguredCliFence
 from ..domain.exceptions import ConcurrentTransitionError
 from ..domain.runtime_assignment import RuntimeStepFence
 from ..infrastructure.llm import (
@@ -422,6 +423,9 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         transition_routes=transition_routes,
     )
     fingerprint = _report_fingerprint(task_id, report, initial_contract_fingerprint)
+    configured = engine.runtime_fence if isinstance(engine.runtime_fence, ConfiguredCliFence) else None
+    if configured is not None:
+        fingerprint = configured.operation_fingerprint
     replayed = _replay(engine, task_id, phase_id, fingerprint)
     if replayed is not None:
         engine.db.commit()
@@ -648,6 +652,10 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         "supervisor_response": result,
     }
     runtime_fence = getattr(engine, "runtime_fence", None)
+    if isinstance(runtime_fence, ConfiguredCliFence):
+        from ..application.configured_cli import prepare_history
+
+        prepare_history(runtime_fence, run_data)
     if isinstance(runtime_fence, RuntimeStepFence):
         if runtime_fence.single_task_context_sha256 is not None:
             from ..application.single_task_runtime import current_binding
@@ -714,6 +722,10 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
                 )
                 result["complete"] = True
                 engine.db.step_history.update_supervisor_response(step_history_id, result)
+        if isinstance(runtime_fence, ConfiguredCliFence):
+            from ..application.configured_cli import finish_history
+
+            finish_history(engine.db, runtime_fence, step_history_id, result)
         engine.db.commit()
     except IntegrityError:
         engine.db.rollback()

@@ -6,6 +6,16 @@
 
 ## [Unreleased]
 
+### Added
+
+- Opt-in configured-cli-v1 for new PM tasks: existing trusted assignment and
+  direct step/history endpoints with a dedicated per-agent Auth PAT, current
+  Tracker assignment validation, version/key replay and actual owner-confirmed
+  terminal receipts. No temporary CLI files, native/Fleet callback or human-route
+  machine admission. Legacy records and applied schemas/catalogs are unchanged.
+  Host qualification is scoped; PostgreSQL, packaged/integrated and live gates
+  remain open. See docs/configured-cli-v1.md for wire and deployment dependencies.
+
 - Обновлён штатный SSR export Base: страницы ошибок больше не показывают лишний заголовок None. HTTP-регрессия проверяет единственный правильный h1 и возврат к списку как в корне, так и под UI_BASE_PATH.
 
 - Навигация и редактор учитывают UI_BASE_PATH: смена профессии со страницы фазы сбрасывает прежние workflow/mode и сохраняет проектный контекст; порядок инструкций сохраняется без повторного префикса, а возврат со страницы ошибки остаётся внутри приложения.

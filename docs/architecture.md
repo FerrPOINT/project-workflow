@@ -1,5 +1,12 @@
 # Архитектура project-workflow
 
+Новые PM-задачи могут явно выбрать [configured-cli-v1](configured-cli-v1.md):
+постоянный agent PAT, существующие runtime assign/step/history и business-version
+CAS без native bind/rebind и временных CLI-файлов. Машины не получают human API.
+Текущий Tracker assignment и реальное owner confirmation проверяются сервером;
+legacy PMExecution/receipts не переписываются. Source implementation не означает
+установку или live acceptance.
+
 Отдельный [Base SDLC candidate](base-sdlc-candidate.md) не изменяет описанный ниже
 runtime. В целевом Base Task lifecycle принадлежит Tracker, чаты/config/runs —
 Fleet, технические workspace/receipts — Forge. Business-привязки действующего

@@ -20,6 +20,7 @@ from project_workflow.build_provenance import (
     load_build_provenance,
     runtime_compatibility_descriptor,
 )
+from project_workflow.domain.configured_cli import ConfiguredAssignment, ConfiguredStep, ConfiguredTerminalReadback
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.domain.runtime_assignment import (
     MANAGED_ROLE_MODE_SCOPES,
@@ -660,10 +661,15 @@ def _assignment_response(task: dict[str, Any]) -> dict[str, Any]:
 
 
 def runtime_assign(
-    payload: SingleTaskPMReviewAssignmentRequest | SingleTaskAssignmentRequest | RuntimeAssignmentRequest,
+    payload: (ConfiguredAssignment | SingleTaskPMReviewAssignmentRequest
+              | SingleTaskAssignmentRequest | RuntimeAssignmentRequest),
     authorization: str | None = Header(default=None),
 ) -> dict[str, Any] | JSONResponse:
     """Accept one authorized Business assignment and persist its technical cursor."""
+    if isinstance(payload, ConfiguredAssignment):
+        from . import configured_cli_api
+
+        return configured_cli_api.assign(payload, authorization)
     try:
         role = _authorized_assignment_role(authorization, single_task=isinstance(payload, SingleTaskAssignmentRequest))
     except RuntimeError as exc:
@@ -845,11 +851,15 @@ def runtime_bind(
 
 
 def runtime_step(
-    payload: SingleTaskStepRequest | RuntimeStepRequest,
+    payload: ConfiguredStep | SingleTaskStepRequest | RuntimeStepRequest,
     authorization: str | None = Header(default=None),
     x_workflow_execution_token: str | None = Header(default=None),
 ) -> dict[str, Any] | JSONResponse:
     """Execute one role-scoped step in the trusted workflow service."""
+    if isinstance(payload, ConfiguredStep):
+        from . import configured_cli_api
+
+        return configured_cli_api.step(payload, authorization)
     try:
         credential = _authorized_service_credential(
             authorization, single_task=isinstance(payload, SingleTaskStepRequest),
@@ -983,8 +993,17 @@ def runtime_history(
     instruction_manifest_sha256: str | None = Query(default=None),
     projection: Literal["fleet-summary-v1"] | None = Query(default=None),
     before_history_id: str | None = Query(default=None, pattern=r"^[1-9][0-9]*$", max_length=19),
+    interaction_protocol: Literal["configured-cli-v1"] | None = None,
+    namespace_id: int | None = None,
+    execution_ref: str | None = None,
+    operation_key: str | None = None,
 ) -> dict[str, Any] | JSONResponse:
     """Return history only from the namespace bound to the supplied role token."""
+    if interaction_protocol == "configured-cli-v1":
+        from . import configured_cli_api
+
+        return configured_cli_api.history(task, namespace_id, authorization, n=n,
+                                           execution_ref=execution_ref, operation_key=operation_key)
     try:
         credential = _authorized_service_credential(authorization, single_task=instruction_profile == "single-task-v1")
     except RuntimeError as exc:
@@ -1047,11 +1066,15 @@ def runtime_history(
 
 
 def runtime_terminal_readback(
-    payload: SingleTaskTerminalReadback,
+    payload: ConfiguredTerminalReadback | SingleTaskTerminalReadback,
     authorization: str | None = Header(default=None),
     x_workflow_execution_token: str | None = Header(default=None),
 ) -> JSONResponse:
     """Authenticated lookup of an actual completion; never synthesize evidence."""
+    if isinstance(payload, ConfiguredTerminalReadback):
+        from . import configured_cli_api
+
+        return configured_cli_api.terminal_readback(payload, authorization)
     from project_workflow.application.single_task_runtime import authorize
     from project_workflow.application.single_task_terminal import (
         read_terminal_receipt,

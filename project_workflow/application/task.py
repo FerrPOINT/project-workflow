@@ -453,6 +453,9 @@ class TaskService:
         replay = self._uow.tasks.get_assignment_by_operation_key(operation_key)
         if replay is not None:
             return self._reconcile_assignment(replay.to_dict(), payload)
+        enrolled = self._uow.tasks.get_assignment_by_operation_key(locked.assignment_operation_key or "")
+        if enrolled is not None and enrolled.payload.get("interaction_protocol") == "configured-cli-v1":
+            raise ConflictError("Configured task cannot be reassigned through the legacy runtime protocol")
         # No terminal/quiescent replacement-history CAS exists for enrolled PM.
         if (
             self._uow.tasks.task_has_pm_execution(int(locked.id or 0))

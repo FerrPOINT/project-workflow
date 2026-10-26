@@ -6,6 +6,7 @@ from typing import Any
 from project_workflow import config
 from project_workflow.domain.base_admission import BaseAdmission
 from project_workflow.domain.base_catalog import BASE_CATALOG_ARTIFACTS, BASE_CATALOG_SKILLS, FROZEN_BASE_CATALOG_V3
+from project_workflow.domain.configured_cli import ConfiguredCliFence
 from project_workflow.domain.exceptions import ConflictError
 from project_workflow.domain.project_theme import MANAGED_PROFESSION_PRESENTATION
 from project_workflow.domain.repositories import UnitOfWork
@@ -123,9 +124,14 @@ def assert_base_step(
 
 
 def assert_base_supervisor(
-    uow: UnitOfWork, task: dict[str, Any], fence: RuntimeStepFence | None,
+    uow: UnitOfWork, task: dict[str, Any], fence: RuntimeStepFence | ConfiguredCliFence | None,
 ) -> None:
     """Keep legacy CLI/human step from bypassing admitted candidate execution."""
+    from project_workflow.application.configured_cli import assert_fence
+    if isinstance(fence, ConfiguredCliFence):
+        assert_fence(uow, task, fence)
+        return
+    assert_fence(uow, task, None)
     from project_workflow.domain.single_task_profile import is_single_task_key
 
     workflow = uow.workflows.get_by_id(task["workflow_id"]) if task.get("workflow_id") else None
