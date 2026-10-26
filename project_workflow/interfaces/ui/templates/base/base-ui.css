@@ -3237,6 +3237,50 @@ label.base-card[data-interactive="true"]:has(input:disabled) {
   outline: 2px solid var(--color-focus);
   outline-offset: -2px;
 }
+.base-form-dialog {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.base-form-dialog > .base-dialog-header {
+  flex-shrink: 0;
+  text-align: start;
+  padding-inline-end: calc(
+    var(--base-dialog-close-size) + var(--base-control-padding-inline)
+  );
+}
+.base-form-dialog-form {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+  gap: var(--base-panel-padding);
+}
+.base-form-dialog-fields {
+  /* Native disabled semantics remain; the fieldset's anonymous box must not
+     become a second sizing container between the form and its scroll region. */
+  display: contents;
+}
+.base-form-dialog-fields > .base-dialog-body {
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  /* Keep outlines inside the scrollport without moving the content alignment. */
+  margin: calc(-1 * var(--base-control-padding-block));
+  padding: var(--base-control-padding-block);
+  scroll-padding: var(--base-control-padding-block);
+}
+.base-form-dialog-fields > .base-dialog-body > * + * {
+  margin-block-start: var(--base-panel-padding);
+}
+.base-form-dialog-fields > .base-dialog-footer {
+  position: relative;
+  flex-shrink: 0;
+}
 .base-dialog-content[data-layout="sectioned"]
   > :is(.base-dialog-header, .base-dialog-body, .base-dialog-footer) {
   padding: var(--base-panel-padding);
