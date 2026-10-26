@@ -632,7 +632,12 @@ class TestPhasesPage:
         assert "--shell-page-gutter:clamp(16px,2vw,32px)" in re.sub(r"\s+", "", response.text)
         assert 'data-page-layout="wide"' in response.text
         assert '<body class="base-ssr-shell">' in response.text
-        assert '.platform-header-context{justify-content:flex-end}' in response.text
+        assert re.search(r'\.platform-header-context\s*\{[^}]*justify-content:\s*flex-end', response.text)
+        contexts = [attrs for _, attrs in Elements(response.text).elements
+                    if attrs.get("data-platform-header-slot") == "context"]
+        assert len(contexts) == 1
+        assert "platform-header-context" in contexts[0]["class"].split()
+        assert "data-base-context-home" in contexts[0]
 
     def test_shell_has_one_service_switcher_and_account_theme_with_mobile_namespace(self):
         response = client.get("/namespaces")
@@ -2715,7 +2720,15 @@ class TestWorkflowsPage:
         assert 'id="mobileNewWorkflowButton"' not in response.text
         assert response.text.count('onclick="startCreateWorkflow()"') == 1
         assert 'class="workflow-mobile-actions"' not in response.text
-        assert 'class="base-page-actions"' in response.text
+        elements = Elements(response.text).elements
+        header = next(i for i, (_, attrs) in enumerate(elements)
+                      if "base-page-header" in attrs.get("class", "").split())
+        content = next(i for i, (_, attrs) in enumerate(elements) if attrs.get("id") == "workflowCrud")
+        page_actions = [attrs for _, attrs in elements[header:content]
+                        if "base-page-actions" in attrs.get("class", "").split()]
+        assert len(page_actions) == 1
+        assert "base-action-group" in page_actions[0]["class"].split()
+        assert page_actions[0]["data-align"] == "start"
         assert ".header .workflow-header-action{display:none}" not in response.text
         assert 'data-workflow-phases' not in response.text
         assert 'id="workflowPhases"' in response.text

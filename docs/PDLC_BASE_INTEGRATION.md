@@ -158,3 +158,27 @@ resource_list_description необязательными tag=span/p/div, class_n
 у Workflow. Общий CSS/macros/fingerprints получают штатным exporter;
 ручная копия и продуктовые шрифты/цвета для этих подписей не нужны.
 UI/SDK/skills pins независимы; source adoption не означает установку.
+
+## Навигация режимов и контекст фаз — 2026-10-26
+
+На действующем UI pin `c2ca61094a904706fceeda8eb8f3b3cfd2e7cdfc` Workflow
+использует SSR action_group для формы и переключателей вида фаз,
+section_navigation для реальных ссылок режимов и Notice separated для
+пояснения барьера параллельной группы. Native anchors сохраняют href,
+data-mode-id/testid и aria-current; это переходы страниц, а не Tabs.
+IDs, права, scope, submit/cancel/delete, phase jump и весь extra_script
+не меняются. Данные графа, сортировка и резерв места под меню остаются
+предметной композицией Workflow. Отдельного динамического renderer пояснения
+нет: setPhaseView переключает оформление существующей разметки.
+
+Пройдены 114 distinct scoped cases: новые контракты/шаблон, режимы и sidebar,
+а также выбранные workflows/phases routes. Два устаревших shell-assertions
+воспроизведены на исходном шаблоне и исправлены под действующий контракт Base.
+Ruff и штатный SSR fingerprint прошли. Изменения только в шаблоне и тестах;
+UI-пакет, SDK/skills pins и artifacts других приложений не пересобирались.
+
+[Компонентная проверка IAB](assets/screens/shared-context-20261026/README.md)
+покрывает native iframe ширины 320/375/1920/2560 и три темы. Проверены
+клавиатурный Select режима, route parameters, RadioGroup и focus phase jump.
+Это точные SSR-фрагменты с синтетическими данными; установленное приложение,
+авторизация, запись и реальный browser zoom 200% этим не проверены.
