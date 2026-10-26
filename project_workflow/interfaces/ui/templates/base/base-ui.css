@@ -3413,9 +3413,13 @@ label.base-card[data-interactive="true"]:has(input:disabled) {
 }
 
 /* Product-rendered content shares typography without owning a parser or sanitizer. */
+@layer components {
+  .base-prose {
+    min-width: 0;
+    max-width: 100%;
+  }
+}
 .base-prose {
-  min-width: 0;
-  max-width: 100%;
   overflow-wrap: anywhere;
   color: var(--color-text-secondary);
   font-family: var(--base-font-sans);
@@ -3448,6 +3452,7 @@ label.base-card[data-interactive="true"]:has(input:disabled) {
 .base-prose :where(ol) {
   list-style: decimal;
 }
+.base-prose[data-preserve-line-breaks="true"]:where(p),
 .base-prose[data-preserve-line-breaks="true"] :where(p, li) {
   white-space: pre-line;
 }
