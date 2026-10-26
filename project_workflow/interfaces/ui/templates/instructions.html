@@ -51,9 +51,9 @@
             <input class="skills-input base-control base-input" type="text" value="{{ instruction.skills | join(', ') }}" placeholder="Навыки через запятую" aria-label="Навыки инструкции {{ instruction.step_num }}" onchange="updateSkills(this)">
           </div>
         </div>
-        <div class="row-actions">
+        {% call base_ui.action_group(class_name='row-actions') %}
           <button type="button" class="base-control base-button base-icon-control icon-btn" data-variant="destructive-outline" data-size="icon" onclick="deleteInstruction(this)" aria-label="Удалить инструкцию {{ instruction.step_num }}" title="Удалить инструкцию">×</button>
-        </div>
+        {% endcall %}
       </div>
       {% endfor %}
     </div>

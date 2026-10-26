@@ -121,3 +121,19 @@ Namespace exporter без дополнительных зависимостей,
 независимыми. Workflow реализует строгие Python DTO и собственные durable guards
 для ссылок на identity; [inventory и квалификация](plans/2026-10-22-identity-deletion-owner.md)
 не означают merge, установку или сквозную приёмку Auth.
+
+## Общие строки действий — 2026-10-26
+
+UI producer: `c0d2245e40303efffc04c7d8c24eb3746afd1439`. В Base добавлен ActionGroup и SSR action_group;
+PageHeader, SectionHeader, PageNavigation и ChatComposerActions используют общий
+каркас. Данные, права, курсоры, submit/pending, неизвестный результат записи и
+readback сохраняются у продукта. Для пояснений используется ResourceListDescription.
+Внешние margin/width/grid placement и sticky-контейнер принадлежат экрану;
+общие gap, разделитель и мобильная компоновка — Base. Нативные формы,
+тип кнопок, hidden, IDs и callbacks сохраняются. SDK и skills pins не изменены.
+
+Проверены шесть offline frozen installs, singleton React, CLI/reference,
+frontend types, guards и штатный SSR fingerprint. Изменённые React-сценарии
+имеют scoped regression checks; общий UI проверен в IAB на трёх темах и
+ширинах320/375/1920/2560. Это source adoption; установленный runtime, SSO
+и продуктовые данные не изменялись. Полный release/hosted/runtime gate отдельно.

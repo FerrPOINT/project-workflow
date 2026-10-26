@@ -112,10 +112,10 @@
 
   <!-- Instructions — managed like phases list with inline edit, reorder, add, delete -->
 {% if can_administer %}
-  <div class="base-page-actions">
+  {% call base_ui.action_group(align='start', class_name='base-page-actions') %}
     <button type="button" class="btn btn-secondary" id="phaseSaveEditor" onclick="saveEditorChanges()">Сохранить правки</button>
     <button type="button" class="btn btn-secondary" id="phaseSaveReadback" hidden onclick="reconcilePhaseSave()">Проверить сохранение</button>
-  </div>
+  {% endcall %}
 {% endif %}
   <div class="wiki-section phase-editor-section base-page-stack" id="phase-instructions" data-phase-section tabindex="-1">
     {{ base_ui.section_header('Инструкции', heading_id='instructions-title', actions=base_ui.badge(phase.instructions|length, class_name='count')) }}

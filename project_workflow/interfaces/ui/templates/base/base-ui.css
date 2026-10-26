@@ -392,28 +392,50 @@
     border-top: 1px solid var(--color-border);
     padding-top: calc(var(--base-control-padding-block) * 1.5);
   }
-  .base-chat-composer-actions,
-  .base-chat-composer-buttons {
+  .base-action-group {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: var(--base-control-padding-block);
     min-width: 0;
-  }
-  .base-chat-composer-actions {
+    max-width: 100%;
+    flex-shrink: 0;
     overflow-wrap: anywhere;
   }
-  .base-chat-composer-hint {
-    display: flex;
-    align-items: center;
-    gap: var(--base-control-padding-block);
-    min-width: 0;
+  .base-action-group[data-align="start"] {
+    justify-content: flex-start;
   }
-  .base-chat-composer-hint > svg {
-    flex-shrink: 0;
+  .base-action-group[data-align="end"] {
+    justify-content: flex-end;
+  }
+  .base-action-group[data-align="between"] {
+    justify-content: space-between;
+  }
+  .base-action-group[data-separated="true"] {
+    border-block-start: 1px solid var(--color-border);
+    padding-block-start: var(--base-control-padding-block);
+  }
+  .base-action-group[hidden] {
+    display: none;
+  }
+  @media (max-width: 767px) {
+    .base-action-group[data-mobile-stack="true"] {
+      flex-direction: column;
+      align-items: stretch;
+    }
+    .base-action-group[data-mobile-stack="true"]
+      > :is(button, a, .base-action-group) {
+      width: 100%;
+    }
   }
   .base-chat-composer-actions[data-hint] > .base-chat-composer-buttons {
     margin-inline-start: auto;
+  }
+  .base-chat-composer-hint {
+    flex-wrap: nowrap;
+  }
+  .base-chat-composer-hint > svg {
+    flex-shrink: 0;
   }
   .base-chat-message {
     display: grid;
@@ -1211,7 +1233,6 @@ dialog.base-shell-drawer::backdrop {
   align-items: center;
   gap: 8px;
 }
-.base-page-actions,
 .base-filter-row {
   display: flex;
   min-width: 0;
@@ -2412,10 +2433,6 @@ body {
 .base-input.font-mono,
 .base-textarea.font-mono {
   font-family: var(--base-font-mono);
-}
-.base-page-navigation[data-separated="true"] {
-  border-top: 1px solid var(--color-border);
-  padding-block-start: var(--base-control-padding-block);
 }
 .base-section-header[data-separated="true"] {
   border-block-end: 1px solid var(--color-border);

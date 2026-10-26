@@ -1,13 +1,18 @@
+{% macro action_group(align='end', separated=false, stack_on_mobile=false, class_name='', id=none) -%}
+{% set placement = align if align in ['start', 'end', 'between'] else 'end' -%}
+<div class="base-action-group{% if class_name %} {{ class_name }}{% endif %}" data-align="{{ placement }}"{% if separated %} data-separated="true"{% endif %}{% if stack_on_mobile %} data-mobile-stack="true"{% endif %}{% if id %} id="{{ id }}"{% endif %}>{{ caller() }}</div>
+{%- endmacro %}
+
 {% macro page_header(title=none, context=none, actions=none, heading=none, leading=none) -%}
 {% set has_leading = leading is defined and leading is not none and leading is not sameas false and leading != '' -%}
 {% if heading or title is not none or context or actions -%}
-<div class="base-page-header"><div>{% if has_leading %}<div class="base-page-heading">{{ leading }}{% endif %}{% if heading %}{{ heading }}{% elif title is not none %}<h1 class="base-page-title">{{ title }}</h1>{% endif %}{% if has_leading %}</div>{% endif %}{% if context %}<p>{{ context }}</p>{% endif %}</div>{% if actions %}<div class="base-page-actions">{{ actions }}</div>{% endif %}</div>
+<div class="base-page-header"><div>{% if has_leading %}<div class="base-page-heading">{{ leading }}{% endif %}{% if heading %}{{ heading }}{% elif title is not none %}<h1 class="base-page-title">{{ title }}</h1>{% endif %}{% if has_leading %}</div>{% endif %}{% if context %}<p>{{ context }}</p>{% endif %}</div>{% if actions %}<div class="base-action-group base-page-actions" data-align="start">{{ actions }}</div>{% endif %}</div>
 {%- endif %}
 {%- endmacro %}
 
 {% macro section_header(title, heading_id=none, level=2, context=none, actions=none, class_name='', separated=false) -%}
 {% set heading_level = level|int if level in [2, 3, 4, 5, 6] else 2 -%}
-<div class="base-section-header{% if class_name %} {{ class_name }}{% endif %}"{% if separated %} data-separated="true"{% endif %}><div class="base-section-heading"><h{{ heading_level }} class="base-section-title" data-level="{{ heading_level }}"{% if heading_id %} id="{{ heading_id }}"{% endif %}>{{ title }}</h{{ heading_level }}>{% if context is defined and context is not none and context is not sameas false and context != '' %}<div class="base-section-context">{{ context }}</div>{% endif %}</div>{% if actions is defined and actions is not none and actions is not sameas false and actions != '' %}<div class="base-page-actions">{{ actions }}</div>{% endif %}</div>
+<div class="base-section-header{% if class_name %} {{ class_name }}{% endif %}"{% if separated %} data-separated="true"{% endif %}><div class="base-section-heading"><h{{ heading_level }} class="base-section-title" data-level="{{ heading_level }}"{% if heading_id %} id="{{ heading_id }}"{% endif %}>{{ title }}</h{{ heading_level }}>{% if context is defined and context is not none and context is not sameas false and context != '' %}<div class="base-section-context">{{ context }}</div>{% endif %}</div>{% if actions is defined and actions is not none and actions is not sameas false and actions != '' %}<div class="base-action-group base-page-actions" data-align="start">{{ actions }}</div>{% endif %}</div>
 {%- endmacro %}
 
 {% macro code_block(value, id=none, label='Код', labelled_by=none, described_by=none, wrap=true, class_name='') -%}
