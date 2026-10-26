@@ -1,5 +1,6 @@
 {% import "base/macros.html" as base_ui %}
 {% from "profession_selector.html" import profession_selector %}
+{% from "namespace_mark.html" import namespace_mark %}
 {% set active_namespace = theme_namespace if theme_namespace is defined else none %}
 {% set active_namespace_id = active_namespace.id if active_namespace else none %}
 {% set sidebar_scope_suffix = '?project_scope=all' if request is defined and request.query_params.get('project_scope') == 'all' else '' %}
@@ -76,6 +77,8 @@ window.addEventListener('pagehide',function(event){if(!event.persisted)window.Wo
 </head>
 <body class="base-ssr-shell">
 
+<template id="namespace-choice-mark-template">{{ namespace_mark(size='sm') }}</template>
+
 {% set sidebar_navigation %}
   <nav class="sidebar-nav" aria-label="Основная навигация">
     <a class="sidebar-link {% if page == 'namespace' %}active{% endif %}" href="{{ ui_base_path() }}/namespaces{{ sidebar_scope_suffix }}" aria-label="Профессии" title="Профессии" {% if page == 'namespace' %}aria-current="page"{% endif %}>
@@ -142,17 +145,9 @@ function showRequestError(){
 function renderNamespaceChoice(option){
   var paths = {{ project_icon_paths | tojson }};
   var label = document.createElement('span');
-  var icon = document.createElement('span');
-  icon.className = 'base-icon-mark';
-  icon.dataset.size = 'sm';
+  var icon = document.getElementById('namespace-choice-mark-template').content.firstElementChild.cloneNode(true);
   if (option.dataset.color) icon.style.setProperty('--base-icon-mark-color', option.dataset.color);
-  icon.setAttribute('aria-hidden', 'true');
-  var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('fill', 'none');
-  svg.setAttribute('stroke', 'currentColor'); svg.setAttribute('stroke-width', '2');
-  var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  path.setAttribute('d', paths[option.dataset.icon] || paths.folder);
-  svg.append(path); icon.append(svg);
+  icon.querySelector('path').setAttribute('d', paths[option.dataset.icon] || paths.folder);
   var name = document.createElement('span'); name.className = 'base-choice-label'; name.textContent = option.label;
   label.append(icon, name); return label;
 }

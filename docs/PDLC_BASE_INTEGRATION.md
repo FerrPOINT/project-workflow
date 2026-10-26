@@ -216,3 +216,29 @@ Tracker связана с её данными и не получает общи�
 преобразования в SSR macro нет.
 Backend build, hosted CI, общий интеграционный gate и установка здесь
 не выполнялись; source adoption не меняет установленный runtime.
+
+## Динамические знаки и метки профессий — 2026-10-27
+
+Статические и динамические знаки используют один `namespace_mark` — продуктовую
+композицию SVG-словаря с `icon_mark` Base. Header choice и палитра клонируют
+малый знак; карточки — обычный. Счётчик карточки клонирует результат `badge`.
+Геометрия, ARIA и оформление общего примитива больше не повторяются в JS;
+namespace IDs, SVG paths, имена, значения цвета и pluralize остаются у Workflow.
+
+В палитре убраны локальные 20 px и окрашивание самого SVG: общий IconMark
+тонирует подложку и сохраняет читаемый foreground темы даже для белого цвета.
+Название остаётся доступным, экземпляры знаков и шаблоны не меняют друг друга.
+Продуктовые handlers, URLs, выбор workflow и операции сохранены вне renderer
+границ; проекция всех десяти rendered script blocks это проверяет.
+
+Пройдены четыре DOM-теста с фрагментами из настоящих Jinja/Base macros,
+59 namespace-route tests, шесть role-view tests и scoped Ruff.
+Codex IAB проверяет 36 иконок, light/dark/gray × 320/375/1920/2560,
+End/Escape, focus, перенос длинного имени, одинаковые названия с разными ID,
+один синтетический callback и отсутствие видимых native select/overflow.
+[Снимки и область проверки](assets/screens/template-marks-20261027/README.md).
+
+UI pin не менялся; штатный SSR fingerprint совпадает, прежний архив Base
+переиспользован. Install, compile, reference generation и app/backend builds
+не повторялись. Это source-компоненты и синтетические callbacks без API/Auth;
+не установленное приложение и не приёмка серверных операций.

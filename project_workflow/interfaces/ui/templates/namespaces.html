@@ -28,6 +28,8 @@
 {% endblock %}
 
 {% block content %}
+<template id="namespace-card-mark-template">{{ namespace_mark() }}</template>
+<template id="namespace-task-count-template">{{ base_ui.badge('', 'muted', 'inline') }}</template>
 <div class="namespace-crud{% if namespaces|length == 0 %} is-empty{% endif %}" id="namespaceCrud">
   <div class="namespace-picker" id="namespacePicker">
     <label class="base-label" for="namespaceSelect">Профессия</label>
@@ -41,11 +43,7 @@
   <section class="namespace-nav side-nav-scroll" id="namespaceNav">
     {% for namespace in namespaces %}
     <button type="button" class="namespace-nav-item base-card base-card-content" data-interactive="true" data-namespace-id="{{ namespace.id }}" aria-controls="namespaceForm" aria-pressed="{{ 'true' if selected_namespace and selected_namespace.id == namespace.id and not create_mode else 'false' }}" onclick="selectNamespace({{ namespace.id }})">
-      {% call base_ui.icon_mark(color=namespace.theme_color) %}
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="{{ project_icon_path(namespace.theme_icon) }}"></path>
-        </svg>
-      {% endcall %}
+      {{ namespace_mark(namespace.theme_icon, namespace.theme_color) }}
       <span class="namespace-card-body">
         <span class="namespace-name base-card-title">{{ namespace.name }}</span>
         <span class="namespace-meta">
@@ -126,10 +124,6 @@ function updateNamespaceHeaderLinks(id){
   if(createLink){ createLink.href = namespaceScopedPath('{{ ui_base_path() }}/namespaces/new', id); }
   if(editLink){ editLink.href = namespaceScopedPath('{{ ui_base_path() }}/namespaces', id); }
 }
-function namespaceIconSvg(icon){
-  var path = namespaceIconPaths[icon || defaultNamespaceThemeIcon] || namespaceIconPaths[defaultNamespaceThemeIcon];
-  return '<svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="' + path + '"></path></svg>';
-}
 function applyNamespaceIdentity(name, icon, color){
   document.querySelectorAll('[data-namespace-selector]').forEach(function(selector){
     var option = selector.selectedOptions[0];
@@ -150,11 +144,10 @@ function updateNamespaceThemePreview(){
 }
 function renderNamespaceIconChoice(option){
   var visual = document.createElement('span');
-  visual.innerHTML = namespaceIconSvg(option.value);
-  var svg = visual.querySelector('svg');
-  svg.setAttribute('width', '20');
-  svg.setAttribute('height', '20');
-  svg.style.color = document.getElementById('namespaceThemeColor').value || defaultNamespaceThemeColor;
+  var mark = document.getElementById('namespace-choice-mark-template').content.firstElementChild.cloneNode(true);
+  mark.querySelector('path').setAttribute('d', namespaceIconPaths[option.value] || namespaceIconPaths[defaultNamespaceThemeIcon]);
+  mark.style.setProperty('--base-icon-mark-color', document.getElementById('namespaceThemeColor').value || defaultNamespaceThemeColor);
+  visual.appendChild(mark);
   var name = document.createElement('span');
   name.className = 'base-visually-hidden';
   name.textContent = option.label;
@@ -334,12 +327,9 @@ function renderNamespaceNav(){
     button.setAttribute('aria-pressed', 'false');
     button.onclick = function(){ selectNamespace(namespace.id); };
 
-    var mark = document.createElement('span');
-    mark.className = 'base-icon-mark';
-    mark.dataset.size = 'md';
+    var mark = document.getElementById('namespace-card-mark-template').content.firstElementChild.cloneNode(true);
     mark.style.setProperty('--base-icon-mark-color', namespace.theme_color || defaultNamespaceThemeColor);
-    mark.setAttribute('aria-hidden', 'true');
-    mark.innerHTML = namespaceIconSvg(namespace.theme_icon);
+    mark.querySelector('path').setAttribute('d', namespaceIconPaths[namespace.theme_icon || defaultNamespaceThemeIcon] || namespaceIconPaths[defaultNamespaceThemeIcon]);
 
     var body = document.createElement('span');
     body.className = 'namespace-card-body';
@@ -351,10 +341,7 @@ function renderNamespaceNav(){
     var meta = document.createElement('span');
     meta.className = 'namespace-meta';
 
-    var tasks = document.createElement('span');
-    tasks.className = 'base-badge';
-    tasks.dataset.tone = 'muted';
-    tasks.dataset.appearance = 'inline';
+    var tasks = document.getElementById('namespace-task-count-template').content.firstElementChild.cloneNode(true);
     tasks.textContent = pluralizeRu(namespace.task_count, 'задача', 'задачи', 'задач');
 
     meta.appendChild(tasks);
