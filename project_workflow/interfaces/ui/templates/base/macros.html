@@ -91,8 +91,9 @@
 <{{ tag }} class="base-resource-title"{% if id %} id="{{ id }}"{% endif %}>{{ label }}</{{ tag }}>
 {%- endmacro %}
 
-{% macro resource_list_description(label, id=none) -%}
-<span class="base-resource-description"{% if id %} id="{{ id }}"{% endif %}>{{ label }}</span>
+{% macro resource_list_description(label=none, id=none, tag='span', class_name='', hidden=false) -%}
+{% set element = tag if tag in ['span', 'p', 'div'] else 'span' -%}
+<{{ element }} class="base-resource-description{% if class_name %} {{ class_name }}{% endif %}"{% if id %} id="{{ id }}"{% endif %}{% if hidden %} hidden{% endif %}>{% if caller is defined %}{{ caller() }}{% elif label is not none %}{{ label }}{% endif %}</{{ element }}>
 {%- endmacro %}
 
 {% macro action_menu(label, id=none, class_name='', group=none) -%}

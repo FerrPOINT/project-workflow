@@ -45,8 +45,7 @@
 .phase-card-actions[open]{z-index:20}
 .execution-row{margin-top:10px;min-height:0}
 .timeline-parallel-header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
-.timeline-parallel-count{font-size:var(--base-font-label);color:var(--text-dim)}
-.timeline-group-transition{margin:12px 0 0;padding-top:10px;border-top:1px solid var(--border);color:var(--text-secondary);font-size:var(--base-font-label);line-height:var(--base-line-body)}
+.timeline-group-transition{margin:12px 0 0;padding-top:10px;border-top:1px solid var(--border)}
 .timeline-parallel-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:10px}
 .timeline-connector{height:52px;display:flex;align-items:center;justify-content:center;position:relative}
 .timeline-connector::before,.timeline-connector::after{content:'';position:absolute;left:50%;width:1px;transform:translateX(-50%);background:var(--border-strong)}
@@ -203,10 +202,10 @@
         <section class="timeline-block timeline-parallel-group base-card base-card-content" aria-label="Параллельная группа: {{ block.phases | map(attribute='name') | join(', ') }}">
           <div class="timeline-parallel-header">
             {{ base_ui.badge('Параллельная группа', 'info', class_name='timeline-parallel-label') }}
-            <div class="timeline-parallel-count">{{ block.phases | length }} одновременно</div>
+            {{ base_ui.resource_list_description((block.phases|length) ~ ' одновременно', tag='div', class_name='timeline-parallel-count') }}
           </div>
           <div class="timeline-parallel-grid">{% for p in block.phases %}{{ phase_card(p) }}{% endfor %}</div>
-          {% if not loop.last %}<p class="timeline-group-transition">Следующий этап — после завершения всех фаз группы.</p>{% endif %}
+          {% if not loop.last %}{{ base_ui.resource_list_description('Следующий этап — после завершения всех фаз группы.', tag='p', class_name='timeline-group-transition') }}{% endif %}
         </section>
         {% else %}<section class="timeline-block">{{ phase_card(block.phases[0]) }}</section>{% endif %}
 {% if can_administer %}

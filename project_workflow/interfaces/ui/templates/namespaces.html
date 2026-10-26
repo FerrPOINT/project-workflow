@@ -16,7 +16,7 @@
 .namespace-meta{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}
 .namespace-panel{display:flex;flex-direction:column;gap:16px;max-width:760px;min-width:0}
 .form-stack{display:flex;flex-direction:column;gap:12px}
-.namespace-delete-hint{font-size:var(--base-font-label);color:var(--text-muted);line-height:var(--base-line-body);margin-top:6px}
+.namespace-delete-hint{margin-top:6px}
 .namespace-identity-row{display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px;min-width:0}
 .namespace-identity-row > .base-form-field{flex:1 1 220px;min-width:0}
 .namespace-identity-row > .theme-controls{flex:0 0 auto}
@@ -90,7 +90,7 @@
         <button class="btn btn-secondary" type="button" id="cancelCreateButton" onclick="cancelCreateNamespace()" style="display:none">Отмена</button>
         <button class="btn btn-secondary namespace-delete" type="button" id="deleteNamespaceButton" onclick="deleteNamespace()"{% if create_mode %} style="display:none"{% endif %}>Удалить</button>
       </div>
-      <p class="namespace-delete-hint" id="namespaceDeleteHint" hidden>Профессию с задачами нельзя удалить.</p>
+      {{ base_ui.resource_list_description('Профессию с задачами нельзя удалить.', id='namespaceDeleteHint', tag='p', class_name='namespace-delete-hint', hidden=true) }}
     </form>
 {% elif edited_namespace %}
     <article class="base-card base-card-content form-stack" id="professionSummary">

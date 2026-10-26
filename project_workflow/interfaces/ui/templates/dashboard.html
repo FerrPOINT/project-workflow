@@ -14,7 +14,7 @@
 .list-title{margin-bottom:3px}
 .list-meta{display:flex;gap:4px 10px;flex-wrap:wrap}
 .code{font-family:var(--base-font-mono);color:var(--accent-readable)}
-.dashboard-section-footer{margin-top:8px;font-size:var(--base-font-label);color:var(--text-muted)}
+.dashboard-section-footer{margin-top:8px}
 @media(max-width:780px){.dashboard-panels{grid-template-columns:minmax(0,1fr);gap:20px}}
 @media(max-width:930px){.header .dashboard-action{display:none}}
 @media(max-width:640px){.dashboard-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
@@ -53,7 +53,7 @@
       </a>
       {% endfor %}
     </div>
-    {% if open_tasks|length > 8 %}<div class="dashboard-section-footer">Показано 8 из {{ open_tasks|length }}</div>{% endif %}
+    {% if open_tasks|length > 8 %}{{ base_ui.resource_list_description('Показано 8 из ' ~ (open_tasks|length), tag='div', class_name='dashboard-section-footer') }}{% endif %}
     {% else %}
     {{ base_ui.state('empty', 'Незавершённых задач нет.') }}
     {% endif %}
@@ -72,7 +72,7 @@
       </a>
       {% endfor %}
     </div>
-    {% if namespaces|length > 6 %}<div class="dashboard-section-footer">Показано 6 из {{ namespaces|length }}</div>{% endif %}
+    {% if namespaces|length > 6 %}{{ base_ui.resource_list_description('Показано 6 из ' ~ (namespaces|length), tag='div', class_name='dashboard-section-footer') }}{% endif %}
     {% else %}
     {{ base_ui.state('empty', 'Профессий пока нет.') }}
     {% endif %}
