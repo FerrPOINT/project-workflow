@@ -136,6 +136,51 @@ def test_owner_confirmation_is_required_before_final_report(configured, supervis
     assert step(configured).json()["result"]["version"] == 3
 
 
+def test_actual_final_phase_read_and_post_evaluation_keep_configured_instructions(configured, supervisor_llm):
+    enroll(configured)
+    supervisor_llm("PASS")
+    response = None
+    for version in (1, 2):
+        response = step(configured, report="Actual preparation", operation_key=f"prepare-{version}",
+                        expected_version=version)
+        assert response.status_code == 200, response.text
+    read = step(configured)
+    assert read.status_code == 200, read.text
+    result = read.json()["result"]
+    assert result["phase_code"] == "PM-DRAFT-03"
+    rendered = json.dumps({"instructions": result["instructions"], "contract": result["phase_contract"]})
+    next_contract = json.dumps(response.json()["result"]["next_phase_contract"])
+    for text in (rendered, next_contract):
+        for command in (
+            "project-workflow --json step --task <workflow-task-key>",
+            "--requirements-revision <confirmed-revision>", "--requirements-sha256 <confirmed-content-hash>",
+            "task-tracker sdlc pm completion submit --task <task-uuid> --from-file -",
+            "task-tracker sdlc pm completion operation --task <task-uuid> --key <same-completion-key>",
+            "task-tracker sdlc pm completion read --task <task-uuid>",
+            "task-tracker sdlc context --task <task-uuid>",
+        ):
+            assert command in text
+        for field in ("fence={assignment_id,execution_id,agent_id,assignment_version}",
+                      "requirement_revision=terminal_receipt.requirements_revision",
+                      "content_hash=terminal_receipt.requirements_sha256", "namespace_id=terminal_receipt.namespace_id",
+                      "workflow_execution_ref=terminal_receipt.execution_ref",
+                      "workflow_operation_key=terminal_receipt.operation_key",
+                      "workflow_result_version=terminal_receipt.result_version", "idempotency_key="):
+            assert field in text
+        assert "terminal_receipt.tracker_execution_id (NOT Workflow execution_ref)" in text
+        assert text.index("--requirements-revision") < text.index("pm completion submit") < text.index("stage=Backlog")
+        assert "stage=Draft" in text and "Do not require Backlog before Workflow completion" in text
+        assert "--runtime-request" not in text and "--execution-token-file" not in text
+        assert "then Analysis / Ready" not in text
+    client, assignment = configured
+    history = client.get("/internal/runtime/history", headers=MACHINE, params={
+        "interaction_protocol": "configured-cli-v1", "task": assignment["task"],
+        "namespace_id": assignment["namespace_id"], "operation_key": "prepare-2"})
+    assert history.status_code == 200
+    assert history.json()["result"]["records"][0]["result"]["next_phase_contract"] == (
+        response.json()["result"]["next_phase_contract"])
+
+
 def test_terminal_receipt_and_trusted_readback_survive_replay(configured, supervisor_llm, monkeypatch):
     configured[1]["assignment_version"] = 9
     enrolled = enroll(configured)
@@ -384,7 +429,8 @@ def test_instruction_projection_retains_business_rules_without_rewriting_catalog
     assert "--requirements-revision" in text and "--requirements-sha256" in text
     assert "--runtime-request" not in text and "--execution-token-file" not in text
     assert "Use the existing typed checkpoint/feedback/answer/confirmation path" not in text
-    assert "stage=Draft" in text and "stage=Backlog" not in text
+    assert "stage=Draft" in text and "stage=Backlog" in text
+    assert text.index("pm completion submit") < text.index("stage=Backlog")
     assert "Owner confirmation leaves the task in Draft" in text
     assert "atomic Draft -> Backlog / Ready" in text
     assert "not an external verifier checklist" in text

@@ -140,6 +140,50 @@ is unchanged and does not accept these fields as caller-supplied authority.
 No native proof is claimed. Workflow does
 not move Tracker or dispatch Analyst. Tracker owns the Backlog/Ready transition.
 
+After the actual terminal Workflow response, PM uses these existing commands:
+
+```sh
+task-tracker sdlc pm completion submit --task <Tracker-task-UUID> --from-file -
+task-tracker sdlc pm completion operation --task <Tracker-task-UUID> --key <original-completion-key>
+task-tracker sdlc pm completion read --task <Tracker-task-UUID>
+task-tracker sdlc context --task <Tracker-task-UUID>
+```
+
+Submit consumes JSON on stdin, not an auth/context file. Its closed payload is
+the existing Tracker CompleteConfiguredPm DTO (no native/lease fields):
+
+| Field | Actual source |
+| --- | --- |
+| interaction_protocol | configured-cli-v1 |
+| fence | Fresh Tracker context.assignment: assignment_id, execution_id, agent_id, assignment_version |
+| requirement_revision | terminal_receipt.requirements_revision (singular request field) |
+| content_hash | terminal_receipt.requirements_sha256 |
+| namespace_id | terminal_receipt.namespace_id |
+| workflow_execution_ref | terminal_receipt.execution_ref |
+| workflow_operation_key | terminal_receipt.operation_key |
+| workflow_result_version | terminal_receipt.result_version |
+| idempotency_key | One stable completion key, retained after uncertain acceptance |
+
+The fresh fence must match terminal_receipt.assignment_ref,
+tracker_execution_id, concrete_agent_ref and assignment_version respectively.
+Tracker execution_id is NOT the Workflow execution_ref. After uncertain submit,
+read the original operation before any further effect. Operation.result,
+completion read.current and fresh context must agree on task/root, exact
+revision/hash and the accepted Backlog/Ready state. A terminal Workflow result
+alone is not proof that Tracker completed its transition.
+
+Both fresh step and next_phase_contract after evaluator IO use this runtime-only
+instruction projection. A regression reproduces the former legacy-contract leak
+after reload and verifies its correction, including persisted history readback.
+Applied catalog bytes are not rewritten.
+This correction passed 69 host checks across test_configured_cli.py,
+test_configured_cli_tracker.py, test_pm_assignment_guard.py and
+test_supervisor_contracts.py, plus scoped Ruff (three changed Python files)
+and mypy (two source modules). The new actual-response regression failed on
+c8f626a at post-evaluation next_phase_contract and passes with the configured
+reload correction. No Tracker/Fleet calls, deployment or new live transition
+were performed for this check.
+
 Tracker verifies the actual retained result server-to-server at the EXISTING
 terminal-receipt endpoint. Authorization is the existing trusted PM assignment
 service Bearer, not an agent PAT or browser credential. Closed request:

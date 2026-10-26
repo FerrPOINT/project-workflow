@@ -544,14 +544,18 @@ class SupervisorEngine:
         )
         self.workflow_id = self._require_task_workflow_id(self.task) if self.task else None
         self.workflow = self._workflow_service.get_workflow(self.workflow_id) if self.workflow_id else None
-        self._all_phases = (
-            schema.load_phases_from_db(
-                self._uow, workflow_id=self.workflow_id, mode_id=self.execution_mode_id,
-                profession_settings=self.project,
+        if isinstance(self.runtime_fence, ConfiguredCliFence):
+            # Load through all_phases so the runtime-only projection survives provider IO.
+            self._all_phases = None
+        else:
+            self._all_phases = (
+                schema.load_phases_from_db(
+                    self._uow, workflow_id=self.workflow_id, mode_id=self.execution_mode_id,
+                    profession_settings=self.project,
+                )
+                if self.workflow_id
+                else []
             )
-            if self.workflow_id
-            else []
-        )
         self._phase_map = None
         self.current_phase_code = self._resolve_current_phase_code()
 
