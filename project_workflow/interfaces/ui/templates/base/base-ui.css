@@ -3527,6 +3527,11 @@ label.base-card[data-interactive="true"]:has(input:disabled) {
   background: transparent;
   padding: 0;
 }
+.base-prose
+  :where(pre:not(.base-code-block), table:not(.base-table))[tabindex]:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
 .base-prose :where(blockquote) {
   border-inline-start: 3px solid var(--color-border-strong);
   padding-inline-start: 0.75em;

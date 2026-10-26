@@ -207,3 +207,12 @@ IAB проверяет source-компонент Forge с синтетическ
 Данные, права, pending и подтверждения остаются у продукта; сетка корзины
 Tracker связана с её данными и не получает общий breakpoint из Base.
 Публикация, полный интеграционный gate и установка учитываются отдельно.
+
+## Подготовленный HTML и клавиатура — 2026-10-27
+
+Принят совместимый UI producer `a95d9fe7b31cca23e1f6432bae43246120859efb`; SDK/skills pins сохранены.
+Общий Prose keyboardScroll документирован в [Base](https://github.com/FerrPOINT/services-base/blob/a95d9fe7b31cca23e1f6432bae43246120859efb/docs/platform/DESIGN_SYSTEM.md).
+Штатный SSR export и fingerprint актуальны; нового клиентского HTML
+преобразования в SSR macro нет.
+Backend build, hosted CI, общий интеграционный gate и установка здесь
+не выполнялись; source adoption не меняет установленный runtime.
