@@ -384,6 +384,37 @@
     font-size: var(--base-font-label);
     line-height: calc(var(--base-line-body) - 4px);
   }
+  .base-chat-composer {
+    min-width: 0;
+    flex-shrink: 0;
+    display: grid;
+    gap: var(--base-control-padding-block);
+    border-top: 1px solid var(--color-border);
+    padding-top: calc(var(--base-control-padding-block) * 1.5);
+  }
+  .base-chat-composer-actions,
+  .base-chat-composer-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--base-control-padding-block);
+    min-width: 0;
+  }
+  .base-chat-composer-actions {
+    overflow-wrap: anywhere;
+  }
+  .base-chat-composer-hint {
+    display: flex;
+    align-items: center;
+    gap: var(--base-control-padding-block);
+    min-width: 0;
+  }
+  .base-chat-composer-hint > svg {
+    flex-shrink: 0;
+  }
+  .base-chat-composer-actions[data-hint] > .base-chat-composer-buttons {
+    margin-inline-start: auto;
+  }
   .base-chat-message {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
