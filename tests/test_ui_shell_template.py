@@ -567,6 +567,14 @@ class SharedShellTemplateTests(TestCase):
                     self.assertEqual(item["onclick"], f"selectNamespace({item['data-namespace-id']})")
                 self.assertIn("Same &lt;name&gt;", html)
                 self.assertNotIn(".namespace-nav-item.active", html)
+                create_links = [attrs for tag, attrs in Elements(html).elements
+                                if tag == "a" and attrs.get("id") == "namespaceCreateLink"]
+                self.assertEqual(len(create_links), 0 if create_mode else 1)
+                if create_links:
+                    self.assertEqual(create_links[0]["href"], "/workflow/namespaces/new?profession_id=9")
+                    self.assertEqual(create_links[0]["aria-label"], "Создать профессию")
+                    self.assertIn("base-button", create_links[0]["class"].split())
+                    self.assertNotIn("type", create_links[0])
 
     def test_workflow_form_preserves_required_name_and_explicit_description_height(self):
         html = self.render_shell(
