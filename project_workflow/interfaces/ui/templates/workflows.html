@@ -31,7 +31,7 @@
   .workflow-crud.is-empty .workflow-picker{display:none}
 }
 #workflowPhases[hidden]{display:none}
-.mode-navigation{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0;margin-bottom:16px}
+.mode-navigation{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0}
 .mode-tabs{display:flex;align-items:center;gap:6px;min-width:0;overflow-x:auto;padding:2px;scrollbar-width:thin}
 .mode-picker{display:none;width:100%}
 .mode-picker select{width:100%}
@@ -156,7 +156,7 @@
       {% call base_ui.prose(compact=true) %}<p id="workflowDeleteHint" hidden>Воркфлоу по умолчанию нельзя удалить.</p>{% endcall %}
     </form>
 {% endif %}
-<section id="workflowPhases" aria-label="Фазы процесса"{% if not selected_workflow %} hidden{% endif %}>
+<section id="workflowPhases" class="base-page-stack" aria-label="Фазы процесса"{% if not selected_workflow %} hidden{% endif %}>
 {% set phase_view_actions %}
       {% if phase_count > 1 %}
       <div class="phase-view-controls">
