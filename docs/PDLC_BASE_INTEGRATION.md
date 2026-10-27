@@ -2,7 +2,7 @@
 
 ## Текущий source-кандидат UI
 
-Точный UI SHA: `623deb7da5813fa9d1185ded7688c35bb15cd43e` ([pin](../.base-ui-revision)).
+Точный UI SHA: `cf88f7094044a403e6bb7105cfa88b12c4208c96` ([pin](../.base-ui-revision)).
 Компоненты и reference берутся из этой версии Base; открытый справочник другой
 версии не подтверждает доступность контракта в продукте. SDK/skills pins
 независимы. Это исходники собственного checkout; установка и authenticated
@@ -289,3 +289,29 @@ mouse/Enter, Escape/focus. У двух console MutationObserver сообщени
 React/JS/CSS/types и зависимости совпадают с 0.3.5, без повторной сборки этих
 артефактов. SDK/skills pins не менялись. Полный интеграционный gate, hosted CI,
 установка и приёмка приложения остаются отдельными этапами.
+
+
+## SSR выбор и составные части — 2026-10-27
+
+Принят UI 0.3.8, producer `cf88f7094044a403e6bb7105cfa88b12c4208c96`.
+Семь raw select заменены select_control; четыре Label, два CardTitle,
+ResourceList/Row, Timeline/Item/Content, mode navigation и Prose создаёт Base.
+Это 25 исходных мест; их данные, options/selected, scope и callbacks сохранены.
+
+29 полных DOM/value/FormData-проекций и product scripts совпадают вне явно
+обновлённого канонического Base choice-runtime. Пройдены 102 scoped tests и
+37 subtests на финальном экспорте. В IAB найден и исправлен общий native reset:
+reset восстанавливал backing value, но trigger обновлялся раньше default action.
+Общий runtime теперь ждёт следующий task и проверяет cancellation/destroy.
+До/после, отмена и cleanup имеют отдельные регрессионные доказательства.
+
+IAB source fragments: 12 theme/width modes, клавиатура/mouse, одна пара
+input/change, callback, refresh/reset и destroy/reinit без дублей.
+Это не runtime-приёмка продукта. Одно MutationObserver console сообщение
+без URL сохранено как неатрибутированное. Страничный error handler пуст.
+
+Архив, frozen offline adoption семи consumers, SSR fingerprints и CLI
+проверены. React/CSS/types не менялись; изменён standalone SSR JS runtime,
+проверены checked JS, declarations, lint, 3 reset/native-composition cases
+и 7 runtime cases. SDK/skills pins сохранены. Hosted CI, полный gate,
+push/PR/merge и установка остаются отдельными действиями.

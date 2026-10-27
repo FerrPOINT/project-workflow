@@ -32,13 +32,13 @@
 <template id="namespace-card-template">{{ namespace_card() }}</template>
 <div class="namespace-crud{% if namespaces|length == 0 %} is-empty{% endif %}" id="namespaceCrud">
   <div class="namespace-picker" id="namespacePicker">
-    <label class="base-label" for="namespaceSelect">Профессия</label>
-    <select data-base-choice id="namespaceSelect" onchange="selectNamespace(Number(this.value))">
+    {{ base_ui.label_control("namespaceSelect", "Профессия") }}
+    {% call base_ui.select_control(id="namespaceSelect", attributes={"onchange": "selectNamespace(Number(this.value))"}) %}
       <option value="" disabled {% if create_mode %}selected{% endif %}>{{ 'Новая профессия' if create_mode else 'Выберите профессию' }}</option>
       {% for namespace in namespaces %}
       <option value="{{ namespace.id }}" {% if not create_mode and selected_namespace and selected_namespace.id == namespace.id %}selected{% endif %}>{{ namespace.name }}</option>
       {% endfor %}
-    </select>
+    {% endcall %}
   </div>
   <section class="namespace-nav side-nav-scroll" id="namespaceNav">
     {% for namespace in namespaces %}
@@ -49,7 +49,7 @@
   <section class="namespace-panel">
 {% if can_administer %}
     {% call base_ui.card(tag="form", padded=true, class_name="form-stack", id="namespaceForm", attributes={"data-platform-draft": true, "aria-labelledby": "namespaceFormMode", "onsubmit": "event.preventDefault(); submitNamespace();"}) %}
-      <div class="base-card-title" id="namespaceFormMode">{{ 'Создание' if create_mode else 'Редактирование' }}</div>
+      {{ base_ui.card_title(('Создание' if create_mode else 'Редактирование'), tag='div', id="namespaceFormMode") }}
       <div class="namespace-identity-row">
       {% call base_ui.field('namespaceName', 'Название', required=true) %}
         {{ base_ui.input_control('namespaceName', 'namespaceName', value=edited_namespace.name if edited_namespace else '', required=true) }}

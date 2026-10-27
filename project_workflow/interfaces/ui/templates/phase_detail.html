@@ -57,13 +57,13 @@
 
   <div class="phase-editor-main">
     <div class="phase-section-picker">
-      <label class="base-visually-hidden" for="phaseSectionSelect">Раздел редактора</label>
-      <select data-base-choice id="phaseSectionSelect">
+      {{ base_ui.label_control("phaseSectionSelect", "Раздел редактора", visually_hidden=true) }}
+      {% call base_ui.select_control(id="phaseSectionSelect") %}
         <option value="phase-overview">Основное</option>
         <option value="phase-instructions">Инструкции ({{ phase.instructions|length }})</option>
         <option value="phase-checks">Проверки ({{ phase.checks|length }})</option>
         <option value="phase-evidence">Подтверждения ({{ phase.evidence|length }})</option>
-      </select>
+      {% endcall %}
     </div>
 
     <div class="wiki-page base-page-stack">
@@ -97,12 +97,12 @@
       {% endcall %}
       <div id="parallelPartnerRow" {% if phase.execution_type != 'parallel' %}hidden{% endif %}>
         {% call base_ui.field('parallelPartnerSelect', 'Связать с:') %}
-        <select data-base-choice id="parallelPartnerSelect" onchange="scheduleSave()">
+        {% call base_ui.select_control(id="parallelPartnerSelect", attributes={"onchange": "scheduleSave()"}) %}
           <option value="">— изолированная фаза —</option>
           {% for candidate in parallel_candidates %}
           <option value="{{ candidate.id }}" {% if phase.parallel_with_phase_id == candidate.id %}selected{% endif %}>{{ candidate.name }} · {{ candidate.code }}</option>
           {% endfor %}
-        </select>
+        {% endcall %}
         {% endcall %}
       </div>{% else %}
       {{ base_ui.badge('параллельно' if phase.execution_type == 'parallel' else 'последовательно', 'info' if phase.execution_type == 'parallel' else 'neutral') }}
@@ -194,13 +194,13 @@
   {% for kind, label, empty_message in [('checks', 'Проверки', 'Нет проверок'), ('evidence', 'Подтверждения', 'Нет подтверждений')] %}
   <div class="wiki-section phase-editor-section base-page-stack" id="phase-{{ kind }}" data-phase-section tabindex="-1">
     {{ base_ui.section_header(label, heading_id=kind ~ '-title', actions=base_ui.badge(phase[kind]|length, class_name='count')) }}
-    <ul class="base-resource-list" data-variant="plain" data-density="normal" id="{{ kind }}-list">
+    {% call base_ui.resource_list(tag='ul', id=kind ~ '-list') %}
       {% for item in phase[kind] %}
         {{ phase_text_item(item, kind, loop.index) }}
       {% else %}
         <li class="empty-state">{{ base_ui.state('empty', empty_message) }}</li>
       {% endfor %}
-    </ul>
+    {% endcall %}
 {% if can_administer %}
     <template id="{{ kind }}-list-item-template">{{ phase_text_item({'id':none, 'description':''}, kind, fresh=true) }}</template>
     <template id="{{ kind }}-list-empty-template">{{ base_ui.state('empty', empty_message) }}</template>

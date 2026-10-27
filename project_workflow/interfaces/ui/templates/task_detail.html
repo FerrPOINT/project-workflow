@@ -105,11 +105,11 @@
 
 <section class="detail-section" aria-labelledby="phase-history-title">
   {{ base_ui.section_header('История фаз', heading_id='phase-history-title') }}
-  <div class="base-timeline phase-history" data-appearance="steps">
+  {% call base_ui.timeline(tag='div', appearance='steps', class_name='phase-history') %}
     {% for block in phase_history_blocks %}
-    <div class="base-timeline-item phase-history-step {% if loop.first %}first{% endif %} {% if loop.last %}last{% endif %}" data-phase-group="{{ block.kind }}">
+    {% call base_ui.timeline_item(tag='div', class_name='phase-history-step ' ~ ('first' if loop.first else '') ~ ' ' ~ ('last' if loop.last else ''), attributes={'data-phase-group':block.kind}) %}
       {{ base_ui.timeline_marker(tone='success' if block.status == 'done' else 'info' if block.status == 'current' else 'neutral', size='large' if block.kind == 'parallel' else 'small', current=block.status == 'current') }}
-      <div class="base-timeline-content phase-step-content">
+      {% call base_ui.timeline_content(class_name='phase-step-content') %}
         {% if block.kind == 'parallel' %}
         {% call base_ui.card(surface='raised') %}{% call base_ui.card_content(class_name='base-page-stack') %}
           {{ base_ui.badge('Параллельная группа · ' ~ (block.phases | length) ~ ' фазы', tone='warning') }}
@@ -133,17 +133,17 @@
           {% endcall %}{% endcall %}
             </article>
         {% endif %}
-      </div>
-    </div>
+      {% endcall %}
+    {% endcall %}
     {% else %}{{ base_ui.state('empty', 'История фаз пока пуста.') }}{% endfor %}
-  </div>
+  {% endcall %}
 </section>
 
 <section class="detail-section" aria-labelledby="check-history-title">
   {{ base_ui.section_header('История проверок', heading_id='check-history-title') }}
-  <div class="base-timeline check-activity" data-appearance="activity">
+  {% call base_ui.timeline(tag='div', appearance='activity', class_name='check-activity') %}
     {% for run in step_history %}
-    <div class="base-timeline-item activity-event" data-check-run="{{ loop.index }}">
+    {% call base_ui.timeline_item(tag='div', class_name='activity-event', attributes={'data-check-run':loop.index}) %}
       {{ base_ui.timeline_marker(tone=verdict_tones.get(run.verdict, 'neutral')) }}
       {% set activity_summary %}
           <span class="activity-header">
@@ -185,8 +185,8 @@
         {% endif %}
       </div>
       {% endcall %}
-    </div>
+    {% endcall %}
     {% else %}{{ base_ui.state('empty', 'Проверок пока нет.') }}{% endfor %}
-  </div>
+  {% endcall %}
 </section>
 {% endblock %}

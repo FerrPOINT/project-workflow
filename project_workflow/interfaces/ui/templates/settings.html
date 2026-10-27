@@ -24,7 +24,7 @@
       </div>
 
     {% if command.options %}
-    <div class="base-prose">
+    {% call base_ui.prose() %}
     {% call base_ui.table(label='Параметры команды ' ~ command.name) %}
       <thead><tr><th scope="col">Параметр</th><th scope="col">Описание</th></tr></thead>
       <tbody>
@@ -40,7 +40,7 @@
       {% endfor %}
       </tbody>
     {% endcall %}
-    </div>
+    {% endcall %}
     {% endif %}
     {% endcall %}
   {% endcall %}

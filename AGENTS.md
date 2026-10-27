@@ -254,3 +254,11 @@ Base сохраняет приоритет type/id/variant/size и disabled/pend
 Input/Textarea — штатные macros с attributes и optional id/name, без фиктивных
 FormData keys. Один product template используется для initial/hydrated карточек.
 Новые параметры требуют штатного SSR export; runtime этим не обновляется.
+
+
+Все backing select создаёт select_control Base, включая profession_selector;
+не возвращать raw select с data-base-choice. Названия/IDs/options, icon data и
+input/change handlers сохраняются Workflow. Dynamic options требуют refreshChoice.
+Для resource_list/row, timeline/item/content и section_navigation_item применять
+штатные macros с owner attributes. Нативный ul/li/div и прежние IDs сохранять;
+card_title(tag='div') и label_control сохраняют подписи формы без product skin.

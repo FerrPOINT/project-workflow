@@ -85,13 +85,14 @@
 </div>
 {%- endmacro %}
 
-{% macro resource_list(id=none, label=none, variant='plain', density='normal', class_name='') -%}
-<div class="base-resource-list{% if class_name %} {{ class_name }}{% endif %}" data-variant="{{ variant }}" data-density="{{ density }}"{% if id %} id="{{ id }}"{% endif %}{% if label %} aria-label="{{ label }}"{% endif %}>{{ caller() }}</div>
+{% macro resource_list(id=none, label=none, variant='plain', density='normal', class_name='', tag='div', attributes=none) -%}
+{% set element = tag if tag in ['div', 'ul', 'ol'] else 'div' -%}
+<{{ element }} class="base-resource-list{% if class_name %} {{ class_name }}{% endif %}" data-variant="{{ variant }}" data-density="{{ density }}"{% if id %} id="{{ id }}"{% endif %}{% if label %} aria-label="{{ label }}"{% endif %}{{ _native_attributes(attributes, ['class','id','aria-label','data-variant','data-density']) }}>{{ caller() }}</{{ element }}>
 {%- endmacro %}
 
-{% macro resource_list_row(href=none, id=none, label=none, class_name='') -%}
+{% macro resource_list_row(href=none, id=none, label=none, class_name='', attributes=none) -%}
 {% set tag = 'a' if href else 'div' -%}
-<{{ tag }} class="base-resource-list-row{% if class_name %} {{ class_name }}{% endif %}"{% if id %} id="{{ id }}"{% endif %}{% if href %} href="{{ href }}" data-interactive="true"{% endif %}{% if label %} aria-label="{{ label }}"{% endif %}>{{ caller() }}</{{ tag }}>
+<{{ tag }} class="base-resource-list-row{% if class_name %} {{ class_name }}{% endif %}"{% if id %} id="{{ id }}"{% endif %}{% if href %} href="{{ href }}" data-interactive="true"{% endif %}{% if label %} aria-label="{{ label }}"{% endif %}{{ _native_attributes(attributes, ['class','id','href','data-interactive','aria-label']) }}>{{ caller() }}</{{ tag }}>
 {%- endmacro %}
 
 {% macro resource_list_title(label, heading_level=none, id=none, technical=false, tone='default') -%}
@@ -141,7 +142,7 @@
 
 {% macro card_title(title, level=3, id=none, tag=none, class_name='', attributes=none) -%}
 {% set heading = level if level in [1, 2, 3, 4, 5, 6] else 3 -%}
-{% set element = 'span' if tag == 'span' else 'h' ~ heading -%}
+{% set element = tag if tag in ['span', 'div'] else 'h' ~ heading -%}
 <{{ element }} class="base-card-title{% if class_name %} {{ class_name }}{% endif %}"{% if id %} id="{{ id }}"{% endif %}{{ _native_attributes(attributes, ['class','id']) }}>{{ title }}</{{ element }}>
 {%- endmacro %}
 
@@ -178,8 +179,8 @@
 <div class="base-notice" data-tone="{{ tone }}" data-appearance="{{ appearance }}"{% if separated and appearance == 'inline' %} data-separated="true"{% endif %}{% if role %} role="{{ role }}"{% endif %}{% if id %} id="{{ id }}"{% endif %}><span class="base-notice-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">{% if tone == 'warning' %}<path d="M10.3 3.9 1.8 18.1a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/>{% else %}<circle cx="12" cy="12" r="10"/>{% endif %}{% if tone == 'success' %}<path d="m9 12 2 2 4-4"/>{% elif tone in ['warning','danger'] %}<path d="M12 8v4m0 4h.01"/>{% else %}<path d="M12 12v4m0-8h.01"/>{% endif %}</svg></span><div class="base-notice-body">{% if title %}<div class="base-notice-title">{{ title }}</div>{% endif %}<div>{{ message }}</div></div></div>
 {%- endmacro %}
 
-{% macro label_control(id, text, required=false) -%}
-<label class="base-label" for="{{ id }}">{{ text }}{% if required %}<span aria-hidden="true"> *</span>{% endif %}</label>
+{% macro label_control(id, text, required=false, visually_hidden=false) -%}
+<label class="{{ 'base-visually-hidden' if visually_hidden else 'base-label' }}" for="{{ id }}">{{ text }}{% if required %}<span aria-hidden="true"> *</span>{% endif %}</label>
 {%- endmacro %}
 
 {% macro field(id, label, hint=none, error=none, required=false) -%}
@@ -203,8 +204,9 @@
 <span class="base-search-input"><svg class="base-search-input-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>{{ input_control(id, name, value=value, type='search', required=required, hint=hint, error=error, disabled=disabled, autocomplete=autocomplete, placeholder=placeholder, maxlength=maxlength, described_by=described_by, aria_label=aria_label, class_name=class_name) }}</span>
 {%- endmacro %}
 
-{% macro select_control(id, name, required=false, hint=none, error=none, disabled=false, multiple=false) -%}
-<select{% if multiple %} multiple{% endif %} data-base-choice class="base-control" id="{{ id }}" name="{{ name }}"{% if required %} required{% endif %}{% if disabled %} disabled{% endif %}{% if error %} aria-invalid="true"{% endif %}{% if hint or error %} aria-describedby="{% if hint %}{{ id }}-hint{% endif %}{% if hint and error %} {% endif %}{% if error %}{{ id }}-error{% endif %}"{% endif %}>{{ caller() }}</select>
+{% macro select_control(id=none, name=none, required=false, hint=none, error=none, disabled=false, multiple=false, aria_label=none, described_by=none, form=none, class_name='', attributes=none) -%}
+{% set descriptions = [(id ~ '-hint') if id is not none and hint else none, (id ~ '-error') if id is not none and error else none, described_by] | select | join(' ') -%}
+<select{% if multiple %} multiple{% endif %} data-base-choice class="base-control{% if class_name %} {{ class_name }}{% endif %}"{% if id is not none %} id="{{ id }}"{% endif %}{% if name is not none %} name="{{ name }}"{% endif %}{% if form %} form="{{ form }}"{% endif %}{% if required %} required{% endif %}{% if disabled %} disabled{% endif %}{% if aria_label %} aria-label="{{ aria_label }}"{% endif %}{% if error %} aria-invalid="true"{% endif %}{% if descriptions %} aria-describedby="{{ descriptions }}"{% endif %}{{ _native_attributes(attributes, ['class','id','name','form','required','disabled','multiple','data-base-choice','aria-label','aria-invalid','aria-describedby']) }}>{{ caller() }}</select>
 {%- endmacro %}
 
 {% macro textarea_control(id=none, name=none, value='', required=false, hint=none, error=none, disabled=false, rows=4, class_name='', appearance='default', aria_label=none, autosize=false, attributes=none) -%}
@@ -253,8 +255,8 @@
 <nav class="base-section-navigation{% if class_name %} {{ class_name }}{% endif %}" data-orientation="{{ orientation }}"{% if labelled_by %} aria-labelledby="{{ labelled_by }}"{% else %} aria-label="{{ label }}"{% endif %}>{{ caller() }}</nav>
 {%- endmacro %}
 
-{% macro section_navigation_item(href, label=none, active=false, current='page', class_name='') -%}
-<a class="base-section-navigation-item base-control{% if class_name %} {{ class_name }}{% endif %}" href="{{ href }}"{% if active %} aria-current="{{ current }}"{% endif %}>{% if caller is defined %}{{ caller() }}{% elif label is not none %}{{ label }}{% endif %}</a>
+{% macro section_navigation_item(href, label=none, active=false, current='page', class_name='', attributes=none) -%}
+<a class="base-section-navigation-item base-control{% if class_name %} {{ class_name }}{% endif %}" href="{{ href }}"{% if active %} aria-current="{{ current }}"{% endif %}{{ _native_attributes(attributes, ['class','href','aria-current']) }}>{% if caller is defined %}{{ caller() }}{% elif label is not none %}{{ label }}{% endif %}</a>
 {%- endmacro %}
 
 {% macro nav(items, current_path) -%}
@@ -325,9 +327,9 @@
 <{{ element }} class="base-timeline{% if class_name %} {{ class_name }}{% endif %}" data-appearance="{{ appearance if appearance in ['activity', 'steps'] else 'activity' }}"{% if label %} aria-label="{{ label }}"{% endif %}>{{ caller() }}</{{ element }}>
 {%- endmacro %}
 
-{% macro timeline_item(tag='li', class_name='') -%}
+{% macro timeline_item(tag='li', class_name='', attributes=none) -%}
 {% set element = tag if tag in ['li', 'div', 'article'] else 'li' -%}
-<{{ element }} class="base-timeline-item{% if class_name %} {{ class_name }}{% endif %}">{{ caller() }}</{{ element }}>
+<{{ element }} class="base-timeline-item{% if class_name %} {{ class_name }}{% endif %}"{{ _native_attributes(attributes, ['class']) }}>{{ caller() }}</{{ element }}>
 {%- endmacro %}
 
 {% macro timeline_marker(tone='neutral', size='small', current=false, class_name='') -%}

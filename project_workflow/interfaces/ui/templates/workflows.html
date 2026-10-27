@@ -113,13 +113,13 @@
 
 <div class="workflow-crud {% if workflows|length == 0 %}is-empty{% endif %}" id="workflowCrud">
   <div class="workflow-picker" id="workflowPicker">
-    <label class="base-label" for="workflowSelect">Воркфлоу</label>
-    <select data-base-choice id="workflowSelect" onchange="selectWorkflow(Number(this.value))">
+    {{ base_ui.label_control("workflowSelect", "Воркфлоу") }}
+    {% call base_ui.select_control(id="workflowSelect", attributes={"onchange": "selectWorkflow(Number(this.value))"}) %}
       <option value="" disabled>Выберите воркфлоу</option>
       {% for workflow in workflows %}
       <option value="{{ workflow.id }}" {% if selected_workflow and selected_workflow.id == workflow.id %}selected{% endif %}>{{ workflow.name }}</option>
       {% endfor %}
-    </select>
+    {% endcall %}
   </div>
   <section class="workflow-nav side-nav-scroll" id="workflowNav">
     {% for workflow in workflows %}
@@ -140,7 +140,7 @@
     </div>
 {% if can_administer %}
     {% call base_ui.card(tag="form", padded=true, class_name="form-stack", id="workflowForm", attributes={"data-platform-draft": true, "aria-labelledby": "workflowFormMode", "hidden": (true if selected_workflow else false), "onsubmit": "event.preventDefault(); submitWorkflow();"}) %}
-      <div class="base-card-title" id="workflowFormMode">Редактирование воркфлоу</div>
+      {{ base_ui.card_title("Редактирование воркфлоу", tag='div', id="workflowFormMode") }}
       {% call base_ui.field('workflowName', 'Название', required=true) %}
         {{ base_ui.input_control('workflowName', 'workflowName', value=selected_workflow.name if selected_workflow else '', required=true) }}
       {% endcall %}
@@ -163,10 +163,10 @@
             [{'value':'compact', 'label':'Список'}, {'value':'timeline', 'label':'Схема'}],
             value='compact' if phase_count >= 8 else 'timeline', appearance='segmented') }}
         {% if phase_count >= 8 %}
-        <div class="phase-jump-select"><select data-base-choice id="phaseJump" aria-label="Перейти к фазе" onchange="jumpToPhase(this)">
+        <div class="phase-jump-select">{% call base_ui.select_control(id="phaseJump", aria_label="Перейти к фазе", attributes={"onchange": "jumpToPhase(this)"}) %}
           <option value="">Перейти к фазе</option>
           {% for phase in phases %}<option value="{{ phase.id }}">{{ phase.name }}</option>{% endfor %}
-        </select></div>
+        {% endcall %}</div>
         {% endif %}
       {% endcall %}
       {% endif %}
@@ -177,23 +177,17 @@
       <div class="mode-tabs" data-testid="workflow-mode-tabs">
         {% call base_ui.section_navigation(label='Режимы воркфлоу') %}
         {% for mode in modes %}
-        <a
-          class="base-section-navigation-item base-control mode-tab"
-          {% if selected_mode_id == mode.id %}aria-current="page"{% endif %}
-          data-testid="workflow-mode-tab-{{ mode.key }}"
-          data-mode-id="{{ mode.id }}"
-          href="{{ ui_base_path() }}/workflows?workflow_id={{ selected_workflow_id }}&mode_id={{ mode.id }}{% if selected_namespace %}&profession_id={{ selected_namespace.id }}{% endif %}{{ mode_scope_suffix }}"
-        >{{ mode.name }}</a>
+        {% set mode_href %}{{ ui_base_path() }}/workflows?workflow_id={{ selected_workflow_id }}&mode_id={{ mode.id }}{% if selected_namespace %}&profession_id={{ selected_namespace.id }}{% endif %}{{ mode_scope_suffix }}{% endset %}{{ base_ui.section_navigation_item(mode_href, label=mode.name, active=selected_mode_id == mode.id, class_name='mode-tab', attributes={'data-testid':'workflow-mode-tab-' ~ mode.key, 'data-mode-id':mode.id}) }}
         {% endfor %}
         {% endcall %}
       </div>
       <div class="mode-picker">
-        <label class="base-label" for="modeSelect">Режим</label>
-        <select data-base-choice id="modeSelect" data-testid="workflow-mode-select" aria-label="Режим воркфлоу" onchange="selectMode(this.value)">
+        {{ base_ui.label_control("modeSelect", "Режим") }}
+        {% call base_ui.select_control(id="modeSelect", aria_label="Режим воркфлоу", attributes={"data-testid": "workflow-mode-select", "onchange": "selectMode(this.value)"}) %}
           {% for mode in modes %}
           <option value="{{ mode.id }}" {% if selected_mode_id == mode.id %}selected{% endif %}>{{ mode.name }}</option>
           {% endfor %}
-        </select>
+        {% endcall %}
       </div>
     </div>
     {% endif %}
