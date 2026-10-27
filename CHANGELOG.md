@@ -8,12 +8,22 @@
 
 ### Added
 
+- Configured PM final judging is precommit-only: valid full saved requirements,
+  resolved feedback/questions and exact actual owner consent in Draft. The
+  worker retains its full terminal-receipt/Tracker completion commands, but the
+  judge cannot require those future effects before its verdict. Known retained
+  terminal/check/evidence variants are projected without changing the legacy
+  catalog or custom security constraints. No forced PASS or new authority.
+  All35 configured tests and independent review pass on210db1; normal
+  Workflow-only installation preserves all nine history tables. Live PM final
+  continuation remains separate from these source/install checks.
+
 - Configured PM preparation instructions distinguish the independently generated
   Workflow execution_ref from Tracker assignment.execution_id, and Workflow
   cursor versions from Tracker assignment versions. Match task/assignment/agent
   identities by authority; do not rebind or invent IDs to make unrelated IDs
   equal. Eight focused source tests pass, including evaluator prompt coverage.
-  This instruction correction is source-only until installed. In the existing
+  The instruction corrections are installed with210db1. In the existing
   live PM chat, an explicit explanation allowed the agent to submit a corrected
   report and advance PM-DRAFT-01 to PM-DRAFT-02; that assisted check is not full
   autonomous PM or Backlog acceptance.
@@ -62,7 +72,7 @@
   stdout fields and Tracker task/input references. CLI JSON is flattened; do not
   invent HTTP ok/result wrappers or a future report verdict as evidence. Existing
   verifier/check lists remain unchanged. Fifty-one focused tests and Ruff pass;
-  the instruction update is not installed or live-accepted yet.
+  the current instruction update is installed; full live acceptance is separate.
 - Actual retained0015-copy migration-only qualification passes on `6c98e83`:
   two existing `ensure_migrated()` calls preserve old data/catalog/PM history,
   add only four identity tables and reach0019; outer cleanup is verified.

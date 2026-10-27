@@ -125,6 +125,24 @@ transition. Tracker owns the final atomic document/questions/owner/receipt
 checks and transition. No external verifier checklist for business-document
 points is required in this path; CLI/runtime readiness is a separate check.
 Legacy confirmation/terminal contracts retain their existing stage rules.
+
+### Final Assessment Boundary
+
+The worker receives the full final instruction, including the subsequent Tracker
+completion/readback commands. The judge must assess only precommit work: the full
+saved document, resolved blocking questions/feedback and actual exact owner
+confirmation while Tracker remains in Draft. It must not require the terminal
+receipt produced by its own future accepting commit, or the later Tracker
+Backlog/Ready transition. Those are subsequent effects, not evidence already
+available to this report. Missing/stale/fabricated document or consent still
+cannot pass; server authority is rechecked before commit.
+
+This projection applies only to the known configured PM final instruction and
+preserves additional custom security constraints. The stored legacy catalog and
+its native execution contract are not overwritten. Known PARTIAL results require
+actual missing work or a corrected report using the returned version; uncertain
+acceptance still requires original-key readback, not a new operation.
+
 The final write MUST explicitly include requirements_revision and
 requirements_sha256. These must match the real latest confirmed document both
 before evaluation and before commit. Other phases reject those evidence fields.
@@ -277,6 +295,13 @@ test_single_task_pm_terminal.py, which expect SDLC-7 while their unchanged
 prepare helper supplies RUN-7. Both failures reproduce on unmodified PR148
 head60c4dd6. Old fixtures were not regenerated or waived. Full repository,
 coverage, PostgreSQL and deployed-cohort gates remain open.
+
+2026-10-27 correction210db1: all35 test_configured_cli.py cases pass, including
+actual judge-prompt boundaries, retained final variants, custom security,
+missing/stale consent and terminal replay. Normal Workflow-only build3b2c2094
+installs image182e4667 with all nine history tables unchanged. Actual retained
+PM CLI reads the new final checks. The live continuation is still required to
+qualify terminal receipt plus Tracker Backlog/Ready; host tests do not replace it.
 
 ```sh
 python -B -m pytest -q tests/test_configured_cli.py tests/test_configured_cli_transport.py tests/test_configured_cli_tracker.py tests/test_pm_assignment_guard.py --timeout=60
