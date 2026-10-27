@@ -11,13 +11,13 @@
 {% block extra_style %}
 .instructions-layout{display:flex;flex-direction:column;gap:8px;max-width:900px;margin:0 auto;width:100%}
 .instruction-block{width:100%}
-.instruction-row{display:grid;grid-template-columns:var(--shell-control-min) minmax(0,1fr) var(--shell-control-min);gap:10px;padding:10px 0;border-bottom:1px solid var(--border);align-items:start}
+.instruction-row{display:grid;grid-template-columns:var(--shell-control-min) minmax(0,1fr) var(--shell-control-min);gap:10px;align-items:start}
 .instruction-body{display:flex;flex-direction:column;gap:8px;min-width:0}
 .execution-row{display:flex;align-items:center;gap:6px;min-height:28px}
 .skills-cell{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .instruction-desc textarea{display:block;min-height:40px;box-sizing:border-box;overflow-wrap:anywhere}
 .parallel-label{margin-bottom:8px}
-.add-panel{max-width:900px;margin:10px auto 0;padding-top:12px;border-top:1px solid var(--border)}
+.add-panel{max-width:900px;margin:10px auto 0}
 .add-row{display:flex;gap:10px;align-items:center}
 .order-controls{display:flex;flex-direction:column;align-items:center;gap:4px}
 @media(max-width:480px){.instruction-row{grid-template-columns:minmax(0,1fr) var(--shell-control-mobile-min);gap:6px}.instruction-row .step-num{display:none}.instruction-row .order-controls{grid-column:1;grid-row:1;flex-direction:row;justify-content:flex-start}.instruction-row .instruction-body{grid-column:1/-1;grid-row:2}.instruction-row .row-actions{grid-column:2;grid-row:1}}
@@ -32,7 +32,7 @@
     {% set group_body %}
       {% if is_parallel_group %}{{ base_ui.badge('⚡ параллельно', 'info', class_name='parallel-label') }}{% endif %}
       {% for instruction in group %}
-      <div class="instruction-row" data-instruction-id="{{ instruction.id }}" data-step-num="{{ instruction.step_num }}">
+      {% call base_ui.content_section(tag='div', dividers='end', inset='both', density='compact', class_name='instruction-row', attributes={'data-instruction-id':instruction.id, 'data-step-num':instruction.step_num}) %}
         <div class="order-controls">
           {% call base_ui.button(size="icon", class_name="order-btn move-up", type="button", aria_label="Поднять инструкцию " ~ (instruction.step_num) ~ " выше", attributes={"onclick": "moveInstruction(this, -1)"}) %}↑{% endcall %}
           {{ base_ui.badge(instruction.step_num, appearance='counter', class_name='step-num') }}
@@ -55,7 +55,7 @@
         {% call base_ui.action_group(class_name='row-actions') %}
           {% call base_ui.button(variant="destructive-outline", size="icon", class_name="icon-btn", type="button", aria_label="Удалить инструкцию " ~ (instruction.step_num), title="Удалить инструкцию", attributes={"onclick": "deleteInstruction(this)"}) %}×{% endcall %}
         {% endcall %}
-      </div>
+      {% endcall %}
       {% endfor %}
     {% endset %}
     {% if is_parallel_group %}
@@ -68,12 +68,12 @@
   {% endfor %}
 </div>
 
-<div class="add-panel">
+{% call base_ui.content_section(tag='div', density='compact', class_name='add-panel') %}
   <div class="add-row">
     {{ base_ui.input_control(id="newInstructionText", type="text", placeholder="Новая инструкция…", aria_label="Новая инструкция", attributes={"style": "flex:1"}) }}
     {% call base_ui.button(variant="primary", type="button", attributes={"onclick": "addInstruction()"}) %}Добавить{% endcall %}
   </div>
-</div>
+{% endcall %}
 
 {% endblock %}
 
