@@ -97,6 +97,62 @@ def test_instruction_and_history_do_not_require_execution_files_or_native_proof(
     assert history.status_code == 200 and history.json()["result"]["records"] == []
 
 
+def test_first_phase_names_actual_response_evidence_without_changing_checks(configured):
+    enroll(configured)
+    response = step(configured).json()
+    result = response["result"]
+    instructions = result["instructions"]
+    assert "Actual first Workflow step response" in instructions
+    assert "ok=true" in instructions and "exit_code=0" in instructions
+    for field in ("interaction_protocol", "task", "namespace_id", "concrete_agent_ref", "assignment_ref",
+                  "execution_ref", "business_task_ref", "phase_code", "version", "status"):
+        assert field in result
+        assert "result." + field in instructions
+    assert "not a future PASS verdict" in instructions
+    assert "Never invent response values" in instructions
+    assert "Tracker task/root UUID, stage/status and actual input references" in instructions
+    contract = result["phase_contract"]
+    assert contract["required_checks"] == [
+        "The returned Workflow step is admitted in the assigned namespace.",
+        "The one Tracker task, current stage/status and input references match.",
+    ]
+    assert contract["required_evidence"] == ["Actual first Workflow step response and task/input references."]
+
+
+@pytest.mark.parametrize("include_response", [False, True])
+def test_first_phase_response_evidence_reaches_verifier_without_forcing_pass(
+    configured, supervisor_llm, monkeypatch, include_response,
+):
+    from project_workflow.infrastructure.llm import OpenAICompatibleClient
+
+    enroll(configured)
+    observed = step(configured).json()
+    report = "Tracker context/input observed; preparation only."
+    if include_response:
+        fields = ("interaction_protocol", "task", "namespace_id", "concrete_agent_ref", "assignment_ref",
+                  "execution_ref", "business_task_ref", "phase_code", "version", "status")
+        evidence = {"ok": observed["ok"], "exit_code": observed["exit_code"],
+                    "result": {name: observed["result"][name] for name in fields}}
+        report += "\nActual first Workflow step response: " + json.dumps(evidence, sort_keys=True)
+    required = "Actual first Workflow step response and task/input references."
+    supervisor_llm("PARTIAL", missing=[required])
+    original_chat = OpenAICompatibleClient.chat
+    prompts = []
+
+    def chat(*args, **kwargs):
+        prompts.append(kwargs["user"])
+        return original_chat(*args, **kwargs)
+
+    monkeypatch.setattr(OpenAICompatibleClient, "chat", chat)
+    response = step(configured, report=report, operation_key="first-report", expected_version=1)
+    assert response.status_code == 200, response.text
+    result = response.json()["result"]
+    assert prompts and any(report in prompt and required in prompt for prompt in prompts)
+    assert result["verdict"] == "PARTIAL" and required in result["missing"]
+    assert result["phase_code"] == "PM-DRAFT-01" and result["version"] == 2
+    assert result["complete"] is False and "terminal_receipt" not in result
+
+
 def test_exact_report_replay_and_changed_payload_conflict(configured, supervisor_llm):
     enroll(configured)
     supervisor_llm("PASS")

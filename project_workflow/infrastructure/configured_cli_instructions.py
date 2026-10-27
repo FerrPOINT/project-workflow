@@ -11,7 +11,17 @@ FIRST = (
     "server-issued workflow_task_key (SDLC-N); never guess the key or create another task. "
     "Read this task's current Workflow instructions using project-workflow --json step --task <workflow-task-key>. "
     "Use the permanently configured namespace and agent credential. Missing configuration or denied access is a "
-    "blocker; never use a human token or local database fallback. No native binding or temporary files are required."
+    "blocker; never use a human token or local database fallback. No native binding or temporary files are required. "
+    "Before reporting this phase, include an 'Actual first Workflow step response' block in the report evidence: "
+    "copy the successful no-report response's ok=true, exit_code=0 and actual scalar fields "
+    "result.interaction_protocol, result.task, result.namespace_id, result.concrete_agent_ref, "
+    "result.assignment_ref, result.execution_ref, result.business_task_ref, result.phase_code, result.version "
+    "and result.status. Compare these with the server-issued Workflow key and assigned task/namespace/agent; "
+    "include the Tracker task/root UUID, stage/status and actual input references from the authorized Tracker "
+    "reads. State an absent requirements revision as absent, not as invented evidence. The evidence is this "
+    "already returned instruction read, not a future PASS verdict from the report being submitted. Never invent "
+    "response values or substitute instruction text for the actual response; failed or mismatched reads remain "
+    "blockers. Omit credentials from the report."
 )
 REPORT = (
     "Submit only actual completed phase work with project-workflow --json step --task <workflow-task-key> "
