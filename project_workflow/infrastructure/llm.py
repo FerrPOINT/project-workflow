@@ -163,6 +163,10 @@ class PromptBuilder:
         previously_covered: list[str] | None = None,
         evaluation_items: list[tuple[str, str]] | None = None,
     ) -> str:
+        if phase.code == "PM-DRAFT-03":
+            from .configured_cli_instructions import precommit_phase
+
+            phase = precommit_phase(phase)
         lines: list[str] = [
             f"TASK: {task_key}",
             f"CURRENT PHASE: {phase.code} — {phase.name}",

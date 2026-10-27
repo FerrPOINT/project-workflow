@@ -132,9 +132,18 @@ PM_READBACK_CHECK = (
     "all actual feedback is resolved and no blockers remain."
 )
 PM_FINAL_CHECK = (
-    "Exact owner confirmation is saved while Tracker remains in Draft. Workflow completes first; "
-    "only subsequent Tracker PM completion may atomically move Draft to Backlog / Ready using "
-    "the authoritative terminal receipt. No external business verifier checklist or Analyst is required."
+    "The FULL latest saved requirements document is valid, actual feedback and blocking questions are resolved, "
+    "and real human owner confirmation matches the exact task/revision/hash/owner while Tracker remains in Draft."
+)
+PM_FINAL_PRECOMMIT = (
+    "PRECOMMIT ASSESSMENT ONLY: evaluate the FULL latest saved requirements document, actual resolved feedback "
+    "and blocking questions, and the real authorized human owner confirmation readback matching the exact "
+    "task/revision/content_hash/owner while Tracker remains in Draft. Missing, stale, mismatched or fabricated "
+    "document/consent/evidence must not pass. Preserve every additional security constraint. "
+    "The server generates the terminal receipt only AFTER an accepted final verdict and commit. Tracker PM "
+    "completion and its Backlog / Ready readback are SUBSEQUENT actions, NOT prerequisites or required evidence "
+    "for this verdict. Do not require proof of those future actions or mark their absence as missing. "
+    "This boundary does not grant PASS: judge every current required check/evidence against the actual report."
 )
 PM_FINAL_CHECK_REPLACEMENTS = {
     delivery.PM_CONFIRMATION_CHECKS[3]: PM_READBACK_CHECK,
@@ -153,6 +162,16 @@ PM_FINAL_EVIDENCE_REPLACEMENTS = {
     "Same-execution typed checkpoint/input references and feedback-to-revision history without fabricated answers.":
         PM_FEEDBACK_EVIDENCE,
 }
+
+
+def precommit_phase(source: Phase) -> Phase:
+    """Keep the configured worker's post-commit commands out of the judge contract."""
+    if source.code != "PM-DRAFT-03" or not any(FINAL in item.step for item in source.instructions):
+        return source
+    projected = deepcopy(source)
+    for item in projected.instructions:
+        item.step = item.step.replace(FINAL, PM_FINAL_PRECOMMIT)
+    return projected
 
 
 def phases(source: list[Phase]) -> list[Phase]:

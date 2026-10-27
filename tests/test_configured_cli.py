@@ -613,7 +613,8 @@ def test_instruction_projection_retains_business_rules_without_rewriting_catalog
     assert "Owner confirmation leaves the task in Draft" in text
     assert "atomic Draft -> Backlog / Ready" in text
     assert "not an external verifier checklist" in text
-    assert "Workflow completes first" in projected[0].checks[1].description
+    assert "while Tracker remains in Draft" in projected[0].checks[1].description
+    assert "terminal receipt" not in projected[0].checks[1].description
 
 
 def test_stored_legacy_pm_confirmation_contract_projects_for_read_and_evaluation(
@@ -722,6 +723,89 @@ def test_stored_legacy_pm_confirmation_contract_projects_for_read_and_evaluation
     partial = response.json()["result"]
     assert partial["verdict"] == "PARTIAL" and partial["complete"] is False
     assert "terminal_receipt" not in partial
-    assert prompts and all(instructions.FINAL in prompt and security in prompt for prompt in prompts)
+    assert prompts and all(instructions.PM_FINAL_PRECOMMIT in prompt and security in prompt for prompt in prompts)
+    assert all(instructions.FINAL not in prompt and "pm completion submit" not in prompt for prompt in prompts)
     assert all(legacy_policy not in prompt and legacy_check not in prompt for prompt in prompts)
     assert loaded and all(source == original for source, original in loaded)
+
+
+@pytest.mark.parametrize("evidence", ["valid", "missing-document", "mislabelled-future-completion"])
+def test_final_judge_assesses_precommit_facts_not_future_receipts(
+    configured, supervisor_llm, monkeypatch, evidence,
+):
+    from project_workflow.infrastructure import configured_cli_instructions as instructions
+    from project_workflow.infrastructure.llm import OpenAICompatibleClient
+
+    enroll(configured)
+    supervisor_llm("PASS")
+    for version in (1, 2):
+        assert step(configured, report="Actual preparation", operation_key=f"prepare-{version}",
+                    expected_version=version).status_code == 200
+    confirmed = {"id": str(uuid4()), "task_id": TRACKER_TASK, "revision": 2,
+                 "content_hash": "a" * 64, "owner_subject": OWNER, "stage": "Draft"}
+    monkeypatch.setattr(configured_cli, "confirmation", lambda _: dict(confirmed))
+    observed = step(configured).json()["result"]
+    assert instructions.FINAL in observed["instructions"]  # Worker still needs post-commit commands.
+    checks = observed["phase_contract"]["required_checks"]
+    assert instructions.PM_FINAL_CHECK in checks
+    assert all("terminal receipt" not in check and "Backlog" not in check for check in checks)
+    reports = {
+        "valid": "FULL saved document, exact owner receipt and resolved feedback; current task remains Draft.",
+        "missing-document": "Owner receipt is available, but the FULL saved requirements document is missing.",
+        "mislabelled-future-completion": "Backlog Ready claimed as current, but actual Tracker readback is Draft.",
+    }
+    supervisor_llm("PASS" if evidence == "valid" else "PARTIAL",
+                   missing=[] if evidence == "valid" else [checks[0]])
+    original_chat = OpenAICompatibleClient.chat
+    prompts = []
+
+    def chat(*args, **kwargs):
+        prompt = kwargs["user"]
+        prompts.append(prompt)
+        assert instructions.PM_FINAL_PRECOMMIT in prompt
+        assert instructions.FINAL not in prompt and "pm completion submit" not in prompt
+        assert "--requirements-revision" not in prompt  # Worker command is not a judge prerequisite.
+        assert instructions.PM_FINAL_CHECK in prompt
+        assert reports[evidence] in prompt
+        with SAUnitOfWork() as uow:
+            rows = uow.session.scalars(select(m.TaskStepHistoryEntry)).all()
+            assert len(rows) == 2
+            assert all("terminal_receipt" not in json.loads(row.supervisor_response) for row in rows)
+        return original_chat(*args, **kwargs)
+
+    monkeypatch.setattr(OpenAICompatibleClient, "chat", chat)
+    response = step(configured, report=reports[evidence], operation_key="final-precommit", expected_version=3,
+                    requirements_revision=2, requirements_sha256="a" * 64)
+    assert response.status_code == 200, response.text
+    result = response.json()["result"]
+    assert prompts
+    if evidence == "valid":
+        assert result["verdict"] == "PASS" and result["complete"] is True
+        assert result["terminal_receipt"]["requirements_sha256"] == confirmed["content_hash"]
+        assert result["terminal_receipt"]["confirmation_id"] == confirmed["id"]
+    else:
+        assert result["verdict"] == "PARTIAL" and result["missing"]
+        assert result["complete"] is False and "terminal_receipt" not in result
+        assert result["phase_code"] == "PM-DRAFT-03"
+
+
+def test_precommit_judge_projection_does_not_change_legacy_or_custom_security():
+    from copy import deepcopy
+
+    from project_workflow.infrastructure import configured_cli_instructions as instructions
+    from project_workflow.infrastructure import single_task_delivery_instructions as delivery
+    from project_workflow.infrastructure.llm import PromptBuilder
+    from project_workflow.supervisor.models import Phase, PhaseInstruction
+
+    security = "Custom policy: do not disclose credentials or impersonate the owner."
+    legacy = Phase(code="PM-DRAFT-03",
+                   instructions=[PhaseInstruction(delivery.terminal_instruction("project_manager"))])
+    other = Phase(code="OTHER-03", instructions=[PhaseInstruction(instructions.FINAL)])
+    for source in (legacy, other):
+        assert instructions.precommit_phase(source) is source
+    source = Phase(code="PM-DRAFT-03", instructions=[PhaseInstruction(instructions.FINAL + " " + security)])
+    before = deepcopy(source)
+    prompt = PromptBuilder.build_user_prompt("SDLC-901", source, "Actual report")
+    assert instructions.PM_FINAL_PRECOMMIT in prompt and security in prompt
+    assert "pm completion submit" not in prompt
+    assert source == before
