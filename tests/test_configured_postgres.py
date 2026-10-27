@@ -131,3 +131,85 @@ def test_assignment_changed_during_evaluation_cannot_publish_old_report(configur
         assert uow.session.scalar(select(func.count()).select_from(m.TaskStepHistoryEntry)) == 0
     current = protocol.step(configured).json()["result"]
     assert current["version"] == 2 and current["assignment_ref"] == replacement["assignment_ref"]
+
+
+@pytest.fixture
+def cli_server(configured):
+    import socket
+    import time
+    from threading import Thread
+
+    import uvicorn
+
+    # The existing TestClient owns application startup and the disposable PG
+    # fixture. Serve that actual app over HTTP without a second startup/reset.
+    sock = socket.socket()
+    sock.bind(("127.0.0.1", 0))
+    server = uvicorn.Server(uvicorn.Config(configured[0].app, log_level="error", lifespan="off"))
+    thread = Thread(target=lambda: server.run(sockets=[sock]), daemon=True)
+    thread.start()
+    try:
+        deadline = time.monotonic() + 10
+        while not server.started and thread.is_alive() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert server.started, "Actual configured API server did not start"
+        yield f"http://127.0.0.1:{sock.getsockname()[1]}"
+    finally:
+        server.should_exit = True
+        thread.join(timeout=10)
+        sock.close()
+        assert not thread.is_alive(), "Configured API test server did not stop"
+
+
+@pytest.mark.parametrize("configured", [("project_manager", "draft"), ("developer", "rework")], indirect=True)
+def test_cli_process_http_and_postgres_keep_one_report_and_no_workflow_files(
+    configured, cli_server, supervisor_llm, monkeypatch, tmp_path,
+):
+    import importlib.util
+    import json
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    assert importlib.util.find_spec("pdlc_cli_core"), "Install the qualified Base cli-core package before this gate"
+    initial = protocol.enroll(configured)
+    supervisor_llm("PASS")
+    confirmation = {"id": str(uuid4()), "task_id": protocol.TRACKER_TASK, "revision": 7,
+                    "content_hash": "a" * 64, "owner_subject": protocol.OWNER, "stage": "Draft"}
+    monkeypatch.setattr(configured_cli, "confirmation", lambda _: confirmation)
+    environment = {**os.environ, "PROJECT_WORKFLOW_URL": cli_server,
+                   "PROJECT_WORKFLOW_API_TOKEN": protocol.MACHINE["Authorization"].removeprefix("Bearer "),
+                   "FLEET_AGENT_ID": protocol.AGENT,
+                   "PROJECT_WORKFLOW_NAMESPACE_ID": str(configured[1]["namespace_id"]),
+                   "HOME": str(tmp_path), "USERPROFILE": str(tmp_path), "PYTHONDONTWRITEBYTECODE": "1"}
+    for key in ("DATABASE_URL", "TASK_WORKFLOW_DB", "PROJECT_WORKFLOW_DATABASE_URL"):
+        environment.pop(key, None)
+    before = set(tmp_path.rglob("*"))
+
+    def cli(*arguments, report=None):
+        completed = subprocess.run(
+            [sys.executable, "-m", "project_workflow.interfaces.cli", "--json", *arguments],
+            input=report, cwd=Path(__file__).resolve().parents[1], env=environment,
+            capture_output=True, text=True, encoding="utf-8", timeout=30, check=False,
+        )
+        assert completed.returncode == 0, (completed.stdout, completed.stderr)
+        return json.loads(completed.stdout)
+
+    base = ["--task", configured[1]["task"]]
+    assert cli("step", *base)["result"]["version"] == 1
+    for version in (1, 2, 3):
+        arguments = ["step", *base, "--report", "-", "--operation-key", f"cli-pg-{version}",
+                     "--expected-version", str(version)]
+        if configured[1]["role_key"] == "project_manager" and version == 3:
+            arguments += ["--requirements-revision", "7", "--requirements-sha256", "a" * 64]
+        accepted = cli(*arguments, report=f"Actual subprocess report {version}")
+        assert cli(*arguments, report=f"Actual subprocess report {version}") == accepted
+    assert accepted["result"]["complete"] is True
+    assert accepted["result"]["execution_ref"] == initial["execution_ref"]
+    records = cli("history", *base)["result"]["records"]
+    assert len(records) == 3
+    assert set(tmp_path.rglob("*")) == before
+    with SAUnitOfWork() as uow:
+        assert uow.session.scalar(select(func.count()).select_from(m.TaskStepHistoryEntry)) == 3
+        assert uow.session.scalar(select(func.count()).select_from(m.PMRun)) == 0

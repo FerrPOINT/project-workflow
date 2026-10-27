@@ -263,16 +263,16 @@ def test_version_one_cannot_bypass_runtime_or_human_step_guard(database):
         binding = installation.bindings[3]
         project_id = int(binding.namespace_id)
         uow.commit()
-        with pytest.raises(ConflictError, match="pending parent"):
-            TaskService(uow)._reject_single_task_execution(project_id)
-        with pytest.raises(ConflictError, match="pending parent"):
+        with pytest.raises(ConflictError, match="backend-assigned mode_key"):
+            TaskService(uow).create_task({"project_id": project_id, "task_key": "RUN-7"})
+        with pytest.raises(ConflictError, match="backend-assigned mode_key"):
             supervisor.SupervisorEngine("RUN-7", uow=uow, project_id=project_id)
         assert not uow.tasks.list()
         uow.tasks.create({"project_id": project_id, "workflow_id": int(binding.workflow_id),
                           "mode_id": int(binding.modes[0].mode_id), "task_key": "RUN-7", "title": "Unbound",
                           "status": "active", "current_phase_id": int(binding.modes[0].phase_ids[0])})
         uow.commit()
-        with pytest.raises(ConflictError, match="authenticated assigned"):
+        with pytest.raises(ConflictError, match="configured CLI API"):
             supervisor.SupervisorEngine("RUN-7", uow=uow, project_id=project_id, create_if_missing=False)
 
 
@@ -287,14 +287,19 @@ def test_actual_catalog_hashes_and_cli_publication_semantics():
     for workflow in catalog["workflows"]:
         role = workflow["role_key"]
         for mode in workflow["modes"]:
-            terminal = mode["phases"][-1]["instructions"][-1]["description"]
+            terminal = " ".join(item["description"] for item in mode["phases"][-1]["instructions"])
+            assert "PRECOMMIT ASSESSMENT ONLY" in terminal
+            assert "own future terminal receipt" in terminal
+            assert "--operation-key" in terminal and "--expected-version" in terminal
+            assert "discussion publish" not in terminal and "sdlc result propose" not in terminal
+            from project_workflow.infrastructure.single_task_delivery_instructions import completion_instruction
+
+            after = completion_instruction(role)
+            assert "discussion publish" in after
             if role == "project_manager":
-                assert "ONLY AFTER" in terminal and "confirmation receipt readback succeeds" in terminal
+                assert "pm completion submit" in after and "Backlog / Ready" in after
             else:
-                for required in ("sdlc result propose", "sdlc result operation", "DOES NOT transition",
-                                 "actual terminal", "schedulerComplete", "end the run", "lifecycle readback"):
-                    assert required in terminal
-                assert "fence, workflow_receipt, result, idempotency_key" in terminal
+                assert "sdlc result propose" in after and "Fleet verifies real terminal" in after
 
 
 def test_pm_confirmation_precedes_final_report_in_actual_installed_phase(database):
@@ -305,46 +310,24 @@ def test_pm_confirmation_precedes_final_report_in_actual_installed_phase(databas
         assert len(phases) == 3
         for phase in phases[:2]:
             instructions = [i["description"] for i in uow.phase_instructions.list(phase.id)]
-            assert "Stop at the returned next phase" in instructions[-1]
-            assert "until an accepted complete=true" not in " ".join(instructions)
+            assert "Follow the returned current phase" in instructions[-1]
         phase = phases[-1]
         instructions = [i["description"] for i in uow.phase_instructions.list(phase.id)]
         assert len(instructions) == 5
-        present, checkpoint, feedback, readback, report = instructions
-        assert "FULL server-saved requirements document" in present
-        assert "exact revision" in present and "content_hash" in present
-        assert "PM Workflow NOT completed" in checkpoint
-        assert "input_kind answer|feedback|confirmation" in checkpoint
-        assert "unified input {input_kind,input_id}" in checkpoint
-        assert "input_receipt {reference,sha256}" in checkpoint
-        assert "same execution/assignment/cycle" in checkpoint
-        assert "within the SAME execution" in feedback
-        assert "Any document change invalidates earlier consent" in feedback
-        assert "must not fabricate an answer ID" in feedback
-        assert "existing real owner confirmation receipt" in feedback
-        assert "sdlc confirmation read --task <task-uuid> --revision <confirmed-revision>" in readback
-        assert "direct GET requirements/{revision}/confirmation" in readback
-        assert "own-task PM grant" in readback
-        assert "historical confirmation receipt is not current lifecycle completion" in readback
-        assert "Missing" in checkpoint and "Missing" in readback
-        assert "answer_event_ref" not in feedback
-        assert "--report" not in " ".join(instructions[:-1])
-        assert "ONLY AFTER" in report and "--report <report-text>" in report
-        assert report.index("confirmation receipt readback succeeds") < report.index("--report")
-        assert "stage AND status are Backlog / Ready only" in report
-        assert "do not request an Analysis intent, wait for Analyst pickup" in report
-        assert "or treat either as a PM completion prerequisite" in report
-        assert "then Analysis / Ready" not in report and "Analyst reserve remains blocked" not in report
-        assert "PM does not dispatch Analyst" in report
-        assert "sdlc intent --task" not in " ".join(instructions)
-        checks = uow.phase_checks.list(phase.id)
-        evidence = uow.phase_evidence_requirements.list(phase.id)
-        assert any("real authorized readback receipt" in row["description"] for row in checks)
-        assert any("Direct PM confirmation readback dependencies" in row["description"]
-                   and "any authorized typed checkpoint/resume actually used" in row["description"]
-                   and "are satisfied" in row["description"] for row in checks)
-        assert any("Actual owner confirmation receipt" in row["description"] for row in evidence)
-        assert any("only when they occurred" in row["description"] for row in evidence)
+        present, wait, feedback, readback, report = instructions
+        assert "FULL latest saved requirements document" in present and "exact revision/content_hash" in present
+        assert "Never confirm as owner" in present
+        assert "same conversation" in wait and "phase unfinished" in wait
+        assert "SAME execution" in feedback and "Any document change invalidates earlier consent" in feedback
+        assert "sdlc confirmation read --task" in readback and "stage=Draft" in readback
+        assert "PRECOMMIT ASSESSMENT ONLY" in report and "--requirements-revision" in report
+        assert "--requirements-sha256" in report and "own future terminal receipt" in report
+        text = " ".join(instructions)
+        for retired in ("--runtime-request", "--execution-token-file", "input_receipt", "bind operation"):
+            assert retired not in text
+        checks = [row["description"] for row in uow.phase_checks.list(phase.id)]
+        assert any("only subsequent Tracker completion publishes Backlog / Ready" in check for check in checks)
+        assert any("No automatic Analyst" in check for check in checks)
 
 
 def assignment_payload():
@@ -376,51 +359,3 @@ def test_profile_assignment_shape_omits_decomposition_and_enforces_task_root():
     legacy = {k: v for k, v in payload.items() if not k.startswith("instruction_")}
     with pytest.raises(ValidationError):
         RuntimeAssignmentRequest.model_validate(legacy)
-
-
-def test_profile_assign_bind_step_keep_existing_auth_and_fail_closed(database, monkeypatch):
-    with SAUnitOfWork(database) as uow:
-        ensure_single_task_catalog(uow)
-    monkeypatch.setattr(config, "CATALOG_VARIANT", "single-task-v1")
-    monkeypatch.setattr(runtime_api, "SAUnitOfWork", lambda: SAUnitOfWork(database))
-    monkeypatch.setenv("PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON", json.dumps({"developer": "w" * 32}))
-    monkeypatch.setenv("PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON", json.dumps({"developer": "r" * 32}))
-    monkeypatch.setenv("PROJECT_WORKFLOW_PM_SCOPE_SECRET", "s" * 40)
-    config.get_settings.cache_clear()
-    with TestClient(create_app()) as client:
-        assignment = assignment_payload()
-        base = "/internal/runtime/"
-        writer = {"Authorization": "Bearer " + "w" * 32}
-        runner = {"Authorization": "Bearer " + "r" * 32}
-        assert client.post(base + "assign", json=assignment).status_code == 401
-        assert client.post(base + "assign", json=assignment, headers=runner).status_code == 403
-        response = client.post(base + "assign", json=assignment, headers=writer)
-        assert response.status_code == 200, response.text
-        bind = {"task": "RUN-7", "bind_operation_key": "bind-7", "assignment_operation_key": "assignment-7",
-                "assignment_revision": 1, "assignment_ref": assignment["assignment_ref"], "binding_ref": "bind-7",
-                "hermes_run_ref": "run-7", "mode_key": "initial", "cycle_number": 0, "attempt_number": 1,
-                "expected_binding_state": "unbound", "instruction_profile": "single-task-v1",
-                "instruction_manifest_sha256": MANIFEST_SHA256,
-                "session_run_id": "ffffffff-ffff-4fff-8fff-ffffffffffff",
-                "concrete_agent_ref": assignment["concrete_agent_ref"]}
-        assert client.post(base + "bind", json=bind, headers=runner).status_code == 403
-        response = client.post(base + "bind", json=bind, headers=writer)
-        assert response.status_code == 200, response.text
-        bound = response.json()
-        step = {"task": "RUN-7", "step_operation_key": "step-7", "assignment_revision": 1,
-                "assignment_ref": assignment["assignment_ref"], "binding_ref": "bind-7", "hermes_run_ref": "run-7",
-                "mode_key": "initial", "cycle_number": 0, "attempt_number": 1,
-                "expected_phase_code": "DV-INITIAL-01", "expected_status": "active",
-                "instruction_profile": "single-task-v1", "instruction_manifest_sha256": MANIFEST_SHA256,
-                "session_run_id": bind["session_run_id"],
-                "single_task_context_sha256": bound["result"]["single_task_context_sha256"]}
-        assert client.post(base + "step", json=step, headers=writer).status_code == 403
-        response = client.post(base + "step", json=step, headers=runner)
-        assert response.status_code == 403
-        response = client.post(base + "step", json=step,
-                               headers={**runner, "X-Workflow-Execution-Token": bound["execution_token"]})
-        assert response.status_code == 200, response.text
-    with SAUnitOfWork(database) as uow:
-        assert len(uow.tasks.list()) == 1
-        assignment = uow.tasks.get_assignment_by_operation_key("assignment-7")
-        assert assignment.work_item_ref is assignment.queue_item_ref is assignment.decomposition_revision_ref is None

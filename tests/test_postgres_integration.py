@@ -12,12 +12,10 @@ import os
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Barrier, Event, Thread, local
 from unittest.mock import patch
-from urllib.request import urlopen
 
 import psycopg
 import pytest
@@ -368,25 +366,6 @@ def _runtime_binding(operation_key: str) -> dict[str, object]:
     }
 
 
-def _bind_runtime_assignment(
-    uow: SAUnitOfWork, project_id: int, assignment: dict[str, object]
-) -> dict[str, object]:
-    operation_key = str(assignment["assignment_operation_key"])
-    return TaskService(uow).bind_runtime_assignment(
-        project_id=project_id,
-        task_key=str(assignment["task_key"]),
-        role_key=str(assignment["role_key"]),
-        bind_operation_key=f"bind:{operation_key}",
-        assignment_operation_key=operation_key,
-        assignment_revision=int(assignment["assignment_revision"]),
-        assignment_ref=str(assignment["assignment_ref"]),
-        binding_ref=f"binding:{operation_key}",
-        hermes_run_ref=f"hermes-run:{operation_key}",
-        mode_key=str(assignment["mode_key"]),
-        cycle_number=int(assignment["cycle_number"]),
-        attempt_number=int(assignment["attempt_number"]),
-        expected_binding_state="unbound",
-    )
 
 
 def _fixture_default_mode(connection, workflow_id: int) -> int:
@@ -1218,7 +1197,7 @@ class TestPostgresInitialMigration:
         with pytest.raises(RuntimeError, match="изолированных тестах SQLite"):
             ensure_schema(engine)
     @pytest.mark.parametrize("work_item_revision", [1790840000123, (1 << 63) - 1])
-    def test_upgrade_bound_assignment_preserves_rows_and_accepts_native_wide_revision(self, pg_url, work_item_revision):
+    def test_upgrade_bound_assignment_preserves_rows_and_reads_imported_wide_revision(self, pg_url, work_item_revision):
         engine = get_engine(pg_url)
         run_alembic_command("upgrade", engine, "0003_runtime_assignment_bind")
         # Seed the exact pre-0004 shape with SQL; current ORM includes later catalog columns.
@@ -1258,9 +1237,6 @@ class TestPostgresInitialMigration:
             connection.execute(text(
                 f"INSERT INTO project_workflow.task_runtime_assignments ({columns}) VALUES ({parameters})"
             ), legacy)
-        request = {"project_id": project_id, "task_key": "WIDE-1", "mode_key": "initial", "cycle_number": 0,
-            "operation_key": "wide-old-assignment", "expected_revision": 0, "expected_status": "missing",
-            **_runtime_binding("wide-old-assignment")}
         with engine.connect() as connection:
             before = connection.execute(text(
                 "SELECT to_jsonb(t)::text FROM project_workflow.task_runtime_assignments t ORDER BY id"
@@ -1273,29 +1249,23 @@ class TestPostgresInitialMigration:
         assert [json.loads(row) for row in after] == [
             {**json.loads(row), "concrete_agent_ref": None, "single_task_binding_json": None} for row in before
         ]
+        # Import another archived row through the current typed repository. This
+        # tests BIGINT storage/readback, not the retired native assignment command.
         with SAUnitOfWork(engine) as uow:
-            new_mode = uow.workflows.create_mode({"workflow_id": workflow_id, "key": "initial", "name": "Initial",
-                "mode_order": 1, "role_key": "developer", "execution_scope": "delivery",
-                "execution_scopes": ["delivery", "aggregate"], "tech_workspace_policy": "required",
-                "catalog_version": 2})
-            uow.phases.create({"workflow_id": workflow_id, "mode_id": new_mode, "code": "DV-WIDE-V2-01",
-                "name": "V2 intake", "phase_order": 1})
-            uow.workflows.update(workflow_id, {"active_catalog_version": 2})
+            imported = {**legacy, "operation_key": "wide-archived-assignment", "assignment_revision": 2,
+                        "work_item_revision": work_item_revision,
+                        "exact_input_refs": json.loads(legacy["exact_input_refs"]), "payload": {}}
+            imported_id = uow.tasks.create_assignment(imported)
             uow.commit()
-            request.update(task_key="WIDE-2", operation_key="wide-native-assignment",
-                           **_runtime_binding("wide-native-assignment"))
-            request["work_item_revision"] = work_item_revision
-            accepted = TaskService(uow).assign_runtime_task(**request)
-            assert accepted["work_item_revision"] == work_item_revision
-            assert TaskService(uow).assign_runtime_task(**request) == accepted
-            bound = _bind_runtime_assignment(uow, project_id, accepted)
-            assert bound["work_item_revision"] == work_item_revision
+            assert uow.tasks.get_assignment_by_operation_key("wide-archived-assignment").id == imported_id
         ensure_migrated(engine)
         assert schema_is_ready(engine)
         with SAUnitOfWork(engine) as uow:
-            assert uow.tasks.get_assignment_by_operation_key("wide-native-assignment").work_item_revision == (
+            assert uow.tasks.get_assignment_by_operation_key("wide-archived-assignment").work_item_revision == (
                 work_item_revision
             )
+            assert len(uow.tasks.list_assignments(task_id)) == 2
+
 
 
 @pytest.mark.integration
@@ -2122,115 +2092,10 @@ def test_concurrent_distinct_partial_reports_do_not_apply_stale_snapshot(pg_url)
     verify.close()
 
 
-class _ProviderState:
-    def __init__(self) -> None:
-        self.chat_requests: list[dict] = []
-        self.chat_phases: list[str] = []
-        self.model_requests = 0
 
 
-@contextmanager
-def _openai_compatible_server():
-    state = _ProviderState()
-
-    class Handler(BaseHTTPRequestHandler):
-        def log_message(self, _format, *_args):
-            return
-
-        def _send_json(self, status: int, payload: dict) -> None:
-            body = json.dumps(payload).encode("utf-8")
-            self.send_response(status)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-
-        def do_GET(self):
-            if self.path != "/v1/models":
-                self._send_json(404, {"error": "not found"})
-                return
-            state.model_requests += 1
-            self._send_json(200, {"object": "list", "data": [{"id": "e2e-contract-model"}]})
-
-        def do_POST(self):
-            if self.path != "/v1/chat/completions":
-                self._send_json(404, {"error": "not found"})
-                return
-            content_length = int(self.headers.get("Content-Length", "0"))
-            payload = json.loads(self.rfile.read(content_length).decode("utf-8"))
-            state.chat_requests.append(payload)
-            user_prompt = str(payload["messages"][-1]["content"])
-            phase_line = next(line for line in user_prompt.splitlines() if line.startswith("CURRENT PHASE:"))
-            state.chat_phases.append(phase_line.split(":", 1)[1].split(" — ", 1)[0].strip())
-            item_ids = [
-                line.strip()[5:].split('" — ', 1)[0]
-                for line in user_prompt.splitlines()
-                if line.strip().startswith('ID: "') and '" — ' in line
-            ]
-
-            if "MODE=HTTP_ERROR" in user_prompt:
-                self._send_json(503, {"error": "provider unavailable"})
-                return
-            if "MODE=INVALID" in user_prompt:
-                content = "not-json"
-            else:
-                verdict = "PASS"
-                covered = item_ids
-                missing: list[str] = []
-                blockers: list[str] = []
-                if "MODE=PARTIAL" in user_prompt:
-                    verdict, covered, missing = "PARTIAL", item_ids[:1], item_ids[1:] or item_ids
-                elif "MODE=BLOCKED" in user_prompt:
-                    verdict, covered, missing, blockers = "BLOCKED", [], item_ids, ["Controlled test blocker"]
-                elif "MODE=ROLLBACK" in user_prompt:
-                    verdict, covered, missing = "ROLLBACK", [], item_ids
-                elif "MODE=DELEGATE" in user_prompt:
-                    verdict, covered, missing = "DELEGATE", [], item_ids
-                content = json.dumps(
-                    {
-                        "verdict": verdict,
-                        "covered": covered,
-                        "missing": missing,
-                        "blockers": blockers,
-                        "message": f"Controlled {verdict}",
-                        "confidence": 1.0,
-                    }
-                )
-            self._send_json(
-                200,
-                {
-                    "id": "chatcmpl-e2e",
-                    "object": "chat.completion",
-                    "choices": [{"index": 0, "message": {"role": "assistant", "content": content}}],
-                },
-            )
-
-    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-    thread = Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    try:
-        yield f"http://127.0.0.1:{server.server_port}/v1", state
-    finally:
-        server.shutdown()
-        server.server_close()
-        thread.join(timeout=5)
 
 
-def _cli_env(pg_url: str, provider_url: str) -> dict[str, str]:
-    env = os.environ.copy()
-    env.update(
-        {
-            "DATABASE_URL": pg_url,
-            "DB_SCHEMA": "project_workflow",
-            "OPENAI_BASE_URL": provider_url,
-            "OPENAI_MODEL": "e2e-contract-model",
-            "OPENAI_TIMEOUT": "10",
-            "OPENAI_API_KEY": "integration-test-key",
-            "PYTHONUTF8": "1",
-        }
-    )
-    env.pop("PYTHONIOENCODING", None)
-    return env
 
 
 def _run_process(
@@ -2248,312 +2113,16 @@ def _run_process(
     )
 
 
-def _run_cli(env: dict[str, str], *args: str) -> tuple[subprocess.CompletedProcess[str], dict]:
-    result = _run_process(["-m", "project_workflow.interfaces.cli", *args], env)
-    try:
-        payload = json.loads(result.stdout)
-    except json.JSONDecodeError as exc:
-        raise AssertionError(f"CLI did not return JSON: stdout={result.stdout!r}, stderr={result.stderr!r}") from exc
-    return result, payload
 
 
-def _initialize_cli_database(env: dict[str, str]) -> None:
-    # This test exercises the explicitly unmanaged legacy CLI/Supervisor flow.
-    # Production init_db bootstraps the managed Hermes catalog instead.
-    from project_workflow.infrastructure.db import schema
-    from project_workflow.infrastructure.db.uow_bootstrap import bootstrap_default_project
-
-    engine = get_engine(env["DATABASE_URL"])
-    ensure_migrated(engine)
-    with SAUnitOfWork(engine) as uow:
-        schema.ensure_phase_catalog(
-            uow,
-            seed_path=config_module.LEGACY_UNMANAGED_SEED_PATH,
-        )
-        bootstrap_default_project(uow)
-        profession = uow.projects.get_by_code("RUN")
-        uow.projects.update(profession.id, {"launch_profile": "run-developer"})
-        uow.commit()
 
 
-def _step(env: dict[str, str], task_key: str, report: str) -> tuple[subprocess.CompletedProcess[str], dict]:
-    return _run_cli(env, "--json", "step", "--task", task_key, "--report", report)
 
 
-@pytest.mark.integration
-@pytest.mark.timeout(240)
-def test_full_supervisor_runtime_through_cli_postgres_and_http(pg_url):
-    expected_phases = [
-        "1.INTAKE",
-        "2.REQUIREMENTS",
-        "3.DOR_GATE",
-        "4.START",
-        "5.RESEARCH",
-        "6.SOLUTION",
-        "7.PLAN_GATE",
-        "8.IMPLEMENT",
-        "9.PR",
-        "10.REVIEW",
-        "11.RUNTIME",
-        "12.RELEASE_GATE",
-        "13.DELIVERY",
-        "14.CLOSE",
-        "15.RETRO",
-    ]
-    expected_groups = {
-        "5.RESEARCH": ["5.RESEARCH", "5.PREFLIGHT"],
-        "6.SOLUTION": ["6.SOLUTION", "6.TEST_PLAN"],
-        "10.REVIEW": ["10.REVIEW", "10.QA", "10.DATAFLOW"],
-    }
-    task_key = "RUN-82001"
-
-    with _openai_compatible_server() as (provider_url, provider_state):
-        env = _cli_env(pg_url, provider_url)
-        _initialize_cli_database(env)
-        with urlopen(f"{provider_url}/models", timeout=5) as response:
-            assert response.status == 200
-
-        bootstrap_uow = SAUnitOfWork(pg_url)
-        try:
-            workflows = list(bootstrap_uow.workflows.list())
-            projects = list(bootstrap_uow.projects.list())
-            assert [workflow.name for workflow in workflows] == [config_module.DEFAULT_WORKFLOW_NAME]
-            assert [project.code for project in projects] == ["RUN"]
-            assert len(bootstrap_uow.phases.list(workflow_id=workflows[0].id)) == 19
-        finally:
-            bootstrap_uow.close()
-
-        assignment_result, assignment = _run_cli(env, "--json", "step", "--task", task_key)
-        assert assignment_result.returncode == 0
-        assert assignment["prompt"]
-        assignment_contract = assignment["phase_contract"]
-        assert assignment_contract["phase_code"] == "1.INTAKE"
-        assert assignment_contract["phase_name"] == "Приём задачи"
-        assert assignment_contract["workflow_revision"] == "sdlc-business-tech-v1"
-        assert assignment_contract["actor"] == "hermes"
-        assert assignment_contract["skills"] == [
-            "project-workflow-executor",
-            "relevanter-business-operator",
-        ]
-        assert assignment_contract["execution_type"] == "sync"
-        assert assignment_contract["delegate_agent"] == "RUN"
-        assert assignment_contract["hermes_profile"] == "run-developer"
-        assert assignment_contract["group_phases"] is None
-
-        first_report = "E2E report 1 for phase 1.INTAKE"
-        for index, expected_phase in enumerate(expected_phases, start=1):
-            report = first_report if index == 1 else f"E2E report {index} for phase {expected_phase}"
-            result, payload = _step(env, task_key, report)
-            assert result.returncode == 0, result.stderr or result.stdout
-            assert payload["verdict"] == "PASS"
-            assert payload["phase_code"] == expected_phase
-            assert payload["group_phases"] == expected_groups.get(expected_phase)
-
-            if expected_phase == "5.RESEARCH":
-                assert payload["next_phase_code"] == "6.SOLUTION"
-                assert payload["next_phase_contract"]["group_phases"] == [
-                    "6.SOLUTION",
-                    "6.TEST_PLAN",
-                ]
-                assert [
-                    detail["hermes_profile"]
-                    for detail in payload["next_phase_contract"]["group_details"]
-                ] == ["run-developer", "run-developer"]
-                assert "workflow-writing-plans" in payload["next_phase_contract"]["skills"]
-                assert any(
-                    "workflow-code-intelligence" in instruction
-                    for instruction in payload["next_phase_contract"]["instructions"]
-                )
-                uow = SAUnitOfWork(pg_url)
-                task = uow.tasks.get_by_key(task_key)
-                assert task is not None
-                phases = {phase.id: phase.code for phase in uow.phases.list(workflow_id=task.workflow_id)}
-                events = [row.to_dict() for row in uow.tasks.list_phase_events(task.id)]
-                event_types = {
-                    phases[row["phase_id"]]: row["event_type"] for row in events
-                }
-                assert task.current_phase_code == "6.SOLUTION"
-                assert event_types["6.SOLUTION"] == "entered"
-                assert event_types.get("6.TEST_PLAN") != "completed"
-                uow.close()
-
-            if expected_phase == "6.SOLUTION":
-                assert payload["next_phase_code"] == "7.PLAN_GATE"
-
-            if expected_phase == "7.PLAN_GATE":
-                assert payload["next_phase_contract"]["group_phases"] is None
-                assert any(
-                    "test-driven-development" in instruction
-                    for instruction in payload["next_phase_contract"]["instructions"]
-                )
-
-        terminal_result, terminal = _run_cli(env, "--json", "step", "--task", task_key)
-        history_result, history_payload = _run_cli(env, "--json", "history", "--task", task_key)
-        assert terminal_result.returncode == history_result.returncode == 0
-        assert terminal["phase_code"] == "15.RETRO"
-        assert terminal["next_phase_code"] is None
-        assert terminal["phase_contract"]["hermes_profile"] == "run-developer"
-        assert terminal["status"] == "done"
-        assert history_payload["count"] == 15
-
-        completed_request_count = len(provider_state.chat_requests)
-        completed_result, completed = _step(env, task_key, "New report after workflow completion")
-        assert completed_result.returncode == 0
-        assert completed["verdict"] == "PASS"
-        assert completed["status"] == "done"
-        assert completed["next_phase_code"] is None
-        assert "уже завершён" in completed["message"]
-        assert len(provider_state.chat_requests) == completed_request_count
-
-        human_env = env.copy()
-        human_env.update({"PYTHONUTF8": "0", "PYTHONIOENCODING": "cp1251"})
-        human_step = _run_process(
-            ["-m", "project_workflow.interfaces.cli", "step", "--task", task_key],
-            human_env,
-            encoding="cp1251",
-        )
-        assert human_step.returncode == 0
-        assert "Улучшения" in human_step.stdout
-        assert "UnicodeEncodeError" not in human_step.stderr
-
-        assert provider_state.model_requests == 1
-        assert len(provider_state.chat_requests) == 15
-        assert provider_state.chat_phases == expected_phases
-        assert all(request["model"] == "e2e-contract-model" for request in provider_state.chat_requests)
-        assert all(
-            request["response_format"] == {"type": "json_object"}
-            for request in provider_state.chat_requests
-        )
-
-    uow = SAUnitOfWork(pg_url)
-    task = uow.tasks.get_by_key(task_key)
-    runs = list(uow.step_history.list(task_id=task.id, limit=100))
-    phase_events = list(uow.tasks.list_phase_events(task.id))
-    assert task.current_phase_code == "15.RETRO"
-    assert task.status == "done"
-    assert len(runs) == 15
-    assert phase_events[0].event_type == "entered"
-    assert phase_events[0].step_history_id is None
-    completed_phase_ids = {
-        event.phase_id for event in phase_events if event.event_type == "completed"
-    }
-    assert completed_phase_ids == {
-        int(phase.id) for phase in uow.phases.list(workflow_id=task.workflow_id)
-    }
-    assert all(
-        event.step_history_id is not None
-        for event in phase_events[1:]
-        if event.event_type in {"completed", "blocked", "resumed", "rolled_back"}
-    )
-    fingerprints = [run.replay_fingerprint for run in runs]
-    assert all(fingerprints)
-    assert len(set(fingerprints)) == 15
-    assert all(run.evaluation_snapshot["model"] == "e2e-contract-model" for run in runs)
-    assert all(run.evaluation_snapshot["endpoint_mode"] == "openai-compatible" for run in runs)
-    assert all(run.evaluation_snapshot["prompt_version"] == "supervisor-evaluator-v9" for run in runs)
-    assert all(run.evaluation_snapshot["contract_snapshot"]["evaluation_items"] for run in runs)
-    assert all(run.evaluation_snapshot["raw_evaluator"]["verdict"] == "PASS" for run in runs)
-    uow.close()
 
 
-def _advance_to_phase(env: dict[str, str], task_key: str, phases: list[str]) -> None:
-    for index, phase in enumerate(phases, start=1):
-        result, payload = _step(env, task_key, f"Advance {index} through {phase}")
-        assert result.returncode == 0
-        assert payload["verdict"] == "PASS"
-        assert payload["phase_code"] == phase
 
 
-@pytest.mark.integration
-@pytest.mark.timeout(240)
-def test_cli_verdicts_replay_and_fail_closed_through_postgres_and_http(pg_url):
-    with _openai_compatible_server() as (provider_url, provider_state):
-        env = _cli_env(pg_url, provider_url)
-        _initialize_cli_database(env)
-
-        first_cross_result, first_cross = _step(env, "RUN-82008", "identical cross-phase report")
-        second_cross_result, second_cross = _step(env, "RUN-82008", "identical cross-phase report")
-        assert first_cross_result.returncode == second_cross_result.returncode == 0
-        assert first_cross["phase_code"] != second_cross["phase_code"]
-        assert first_cross["replayed"] is second_cross["replayed"] is False
-
-        partial_result, partial = _step(env, "RUN-82002", "MODE=PARTIAL incomplete report")
-        request_count = len(provider_state.chat_requests)
-        progress_result, progress = _step(env, "RUN-82002", "MODE=PARTIAL incomplete report")
-        stable_request_count = len(provider_state.chat_requests)
-        replay_result, replay = _step(env, "RUN-82002", "MODE=PARTIAL incomplete report")
-        assert partial_result.returncode == progress_result.returncode == replay_result.returncode == 0
-        assert partial["verdict"] == progress["verdict"] == replay["verdict"] == "PARTIAL"
-        assert progress["replayed"] is False
-        assert stable_request_count == request_count + 1
-        assert replay["replayed"] is True
-        assert len(provider_state.chat_requests) == stable_request_count
-
-        blocked_result, blocked = _step(env, "RUN-82003", "MODE=BLOCKED blocked report")
-        assert blocked_result.returncode == 1
-        assert blocked["verdict"] == "BLOCKED"
-        assert blocked["retryable"] is False
-
-        invalid_result, invalid = _step(env, "RUN-82004", "MODE=INVALID invalid response")
-        invalid_retry_result, invalid_retry = _step(env, "RUN-82004", "MODE=INVALID invalid response")
-        assert invalid_result.returncode == invalid_retry_result.returncode == 1
-        assert invalid["verdict"] == invalid_retry["verdict"] == "BLOCKED"
-        assert invalid["retryable"] is invalid_retry["retryable"] is True
-        assert invalid["replayed"] is invalid_retry["replayed"] is False
-
-        http_result, http_error = _step(env, "RUN-82005", "MODE=HTTP_ERROR provider error")
-        assert http_result.returncode == 1
-        assert http_error["verdict"] == "BLOCKED"
-        assert http_error["retryable"] is True
-
-        phases_before_rollback = [
-            "1.INTAKE",
-            "2.REQUIREMENTS",
-            "3.DOR_GATE",
-            "4.START",
-            "5.RESEARCH",
-            "6.SOLUTION",
-            "7.PLAN_GATE",
-            "8.IMPLEMENT",
-            "9.PR",
-        ]
-        _advance_to_phase(env, "RUN-82006", phases_before_rollback)
-        rollback_result, rollback = _step(
-            env, "RUN-82006", "MODE=ROLLBACK return to implementation"
-        )
-        assert rollback_result.returncode == 0
-        assert rollback["verdict"] == "ROLLBACK"
-        assert rollback["rollback_phase_code"] == "8.IMPLEMENT"
-
-        _advance_to_phase(env, "RUN-82007", phases_before_rollback)
-        delegate_result, delegate = _step(env, "RUN-82007", "MODE=DELEGATE hand off review")
-        assert delegate_result.returncode == 0
-        assert delegate["verdict"] == "DELEGATE"
-
-    uow = SAUnitOfWork(pg_url)
-    partial_task = uow.tasks.get_by_key("RUN-82002")
-    blocked_task = uow.tasks.get_by_key("RUN-82003")
-    invalid_task = uow.tasks.get_by_key("RUN-82004")
-    http_task = uow.tasks.get_by_key("RUN-82005")
-    rollback_task = uow.tasks.get_by_key("RUN-82006")
-    delegate_task = uow.tasks.get_by_key("RUN-82007")
-    assert (partial_task.current_phase_code, partial_task.status) == ("1.INTAKE", "active")
-    assert (blocked_task.current_phase_code, blocked_task.status) == ("1.INTAKE", "blocked")
-    assert (invalid_task.current_phase_code, invalid_task.status) == ("1.INTAKE", "blocked")
-    assert (http_task.current_phase_code, http_task.status) == ("1.INTAKE", "blocked")
-    assert (rollback_task.current_phase_code, rollback_task.status) == ("8.IMPLEMENT", "active")
-    assert (delegate_task.current_phase_code, delegate_task.status) == ("10.REVIEW", "active")
-    invalid_runs = list(uow.step_history.list(task_id=invalid_task.id, limit=10))
-    assert len(invalid_runs) == 2
-    assert all(run.replay_fingerprint is None for run in invalid_runs)
-    assert [
-        item.event_type for item in uow.tasks.list_phase_events(invalid_task.id)
-    ] == ["entered", "blocked", "blocked"]
-    assert [item.event_type for item in uow.tasks.list_phase_events(http_task.id)] == [
-        "entered",
-        "blocked",
-    ]
-    uow.close()
 
 
 @pytest.mark.integration

@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 import io
-import json
 import os
 import subprocess
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import click
 import pytest
@@ -114,20 +112,6 @@ def test_require_valid_key_invalid():
         _require_valid_key("bad-1")
 
 
-def test_missing_database_configuration_returns_json_blocked(monkeypatch):
-    runner = CliRunner()
-    monkeypatch.setattr(
-        "project_workflow.interfaces.cli.ui.SAUnitOfWork",
-        MagicMock(side_effect=ValueError("Переменная DATABASE_URL обязательна")),
-    )
-
-    result = runner.invoke(runtime_cli, ["--json", "step", "--task", "RUN-1", "--report", "report"])
-
-    assert result.exit_code == 1
-    payload = json.loads(result.output)
-    assert payload["verdict"] == "BLOCKED"
-    assert payload["retryable"] is True
-    assert "DATABASE_URL" in payload["message"]
 
 
 def test_task_snapshot_cannot_reference_unknown_phase():

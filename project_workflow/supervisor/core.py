@@ -19,7 +19,8 @@ from ..application.project import ProjectService
 from ..application.task import TaskService
 from ..application.workflow import WorkflowService
 from ..domain.exceptions import ConflictError
-from ..domain.runtime_assignment import RuntimeStepFence
+from ..domain.runtime_assignment import MANAGED_WORKFLOW_KEYS, RuntimeStepFence
+from ..domain.single_task_profile import is_single_task_key
 from ..infrastructure.db import schema
 from ..infrastructure.db.uow import SAUnitOfWork
 from .context import SupervisorContextBuilder
@@ -165,15 +166,12 @@ class SupervisorEngine:
         project = self._resolve_project()
         if not project:
             raise ValueError(f"Не удалось определить неймспейс для ключа задачи: {self.task_key}")
-        self._task_service._reject_single_task_execution(project["id"])
-        current_phase_id = self._first_phase_id_for_project(project["id"])
         try:
             return self._task_service.create_task(
                 {
                     "project_id": project["id"],
                     "task_key": self.task_key,
                     "title": self.task_key,
-                    "current_phase_id": current_phase_id,
                     "status": "active",
                     "workflow_id": project["workflow_id"],
                 }
@@ -200,22 +198,6 @@ class SupervisorEngine:
                 "запустите через нужный wrapper"
             )
         return projects[0] if projects else None
-
-    def _first_phase_id_for_project(self, project_id: int) -> int:
-        project = self._project_service.get_project(project_id)
-        workflow_id = project["workflow_id"] if project else None
-        if not isinstance(workflow_id, int) or isinstance(workflow_id, bool) or workflow_id <= 0:
-            raise ValueError("У неймспейса отсутствует корректный workflow_id")
-        default_mode = self._uow.workflows.get_mode_by_key(workflow_id, "default")
-        if default_mode is None or default_mode.id is None:
-            raise ValueError("У воркфлоу отсутствует режим по умолчанию")
-        phases = schema.load_phases_from_db(self._uow, workflow_id=workflow_id, mode_id=default_mode.id)
-        if not phases:
-            raise ValueError("Каталог фаз воркфлоу пуст")
-        phase_id = phases[0].id
-        if not isinstance(phase_id, int) or isinstance(phase_id, bool) or phase_id <= 0:
-            raise ValueError("Начальная фаза воркфлоу не сохранена")
-        return phase_id
 
     def _resolve_current_phase_code(self) -> str:
         if not self.task:
@@ -558,8 +540,14 @@ class SupervisorEngine:
         if isinstance(self.runtime_fence, ConfiguredCliFence):
             self.runtime_fence.assert_task(self.task)
             return
-        if self.task is not None and self.task.get("assignment_operation_key") is not None:
-            raise ConflictError("Assigned execution requires the configured CLI API")
+        if self.task is not None:
+            if self.task.get("assignment_operation_key") is not None:
+                raise ConflictError("Assigned execution requires the configured CLI API")
+            workflow_id = self.task.get("workflow_id")
+            if isinstance(workflow_id, int) and not isinstance(workflow_id, bool):
+                workflow = self._uow.workflows.get_by_id(workflow_id)
+                if workflow and (workflow.key in MANAGED_WORKFLOW_KEYS or is_single_task_key(workflow.key)):
+                    raise ConflictError("Managed execution requires the configured CLI API")
 
     def _lock_runtime_fence(self) -> None:
         """Fence replay/persistence against an assignment switch in another transaction."""

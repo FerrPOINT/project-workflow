@@ -29,7 +29,8 @@ def test_cli_reference_can_render_namespace_entrypoint():
     assert usages["history"] == "workflow-qa history"
     assert all(not usage.startswith("project-workflow ") for usage in usages.values())
     serialized = repr(commands)
-    assert "workflow-qa step --task RUN-42" in serialized
-    assert "workflow-qa history --task RUN-42" in serialized
+    options = {cmd["name"]: {item["flags"] for item in cmd["options"]} for cmd in commands}
+    assert {"--task", "--report", "--operation-key", "--expected-version"} <= options["step"]
+    assert {"--task", "--operation-key", "--before-history-id"} <= options["history"]
     assert "project-workflow step" not in serialized
     assert "project-workflow history" not in serialized

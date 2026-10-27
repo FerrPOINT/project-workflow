@@ -6,24 +6,44 @@ import json
 
 import pytest
 
-from project_workflow.application import base_terminal
+from project_workflow.domain.configured_cli import ConfiguredTerminalReadback
 from project_workflow.domain.exceptions import ConflictError
+from project_workflow.domain.runtime_assignment import payload_sha256
 from project_workflow.infrastructure.db import models
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.supervisor.evaluate import _fingerprint_contract_state, _report_fingerprint
-from tests.base_candidate.test_admission import RUNTIME
-from tests.base_candidate.test_admission import base as base
-from tests.base_candidate.test_machine_readers import READER
-from tests.base_candidate.test_machine_readers import registered_readers as registered_readers
-from tests.base_candidate.test_terminal import READBACK, complete
+from project_workflow.supervisor.evidence import validate_frozen_evaluation
+from tests.test_configured_cli import WRITER, enroll
+from tests.test_configured_cli import configured as configured
+from tests.test_configured_cli import step as submit
+
+pytestmark = pytest.mark.parametrize("configured", [("developer", "initial")], indirect=True)
+READBACK = "/internal/runtime/terminal-receipt/readback"
+
+
+def operation_fingerprint():
+    return payload_sha256({"protocol": "configured-cli-v1", "assignment": "enroll-901",
+                           "operation_key": "frozen-proof-3"})
+
+
+def validate(step, evaluation):
+    return validate_frozen_evaluation(step, evaluation, replay_fingerprint=operation_fingerprint())
 
 
 @pytest.fixture
-def accepted(base, supervisor_llm):
-    request, lookup, receipt = complete(base, supervisor_llm)
+def accepted(configured, supervisor_llm):
+    enroll(configured)
+    supervisor_llm("PASS")
+    for version in (1, 2, 3):
+        command = {"report": f"Actual evidence {version}", "operation_key": f"frozen-proof-{version}",
+                   "expected_version": version}
+        response = submit(configured, **command)
+        assert response.status_code == 200, response.text
+    result = response.json()["result"]
+    selector = {key: result["terminal_receipt"][key] for key in ConfiguredTerminalReadback.model_fields}
     with SAUnitOfWork() as uow:
-        step = uow.step_history.get_by_step_operation_key(request["step_operation_key"]).to_dict()
-    return request, lookup, receipt, step
+        record = uow.step_history.get_by_id(result["terminal_receipt"]["history_id"]).to_dict()
+    return command, selector, result, record
 
 
 def test_actual_supervisor_freezes_full_existing_fingerprint_inputs(accepted):
@@ -43,8 +63,8 @@ def test_actual_supervisor_freezes_full_existing_fingerprint_inputs(accepted):
     assert state["contract"] == {
         key: value for key, value in evaluation["contract_snapshot"].items() if key != "evaluation_items"
     }
-    assert base_terminal._validate_frozen_evaluation(step, evaluation) == step["covered_item_ids"]
-    assert step["replay_fingerprint"] == _report_fingerprint(step["task_id"], step["worker_report"], expected)
+    assert validate(step, evaluation) == step["covered_item_ids"]
+    assert step["replay_fingerprint"] == operation_fingerprint()
 
 
 @pytest.mark.parametrize("value", [None, "", "bad", "a" * 63, "A" * 64, 42, "0" * 64])
@@ -53,7 +73,7 @@ def test_equal_missing_or_bad_fingerprints_are_not_proof(accepted, value):
     evaluation = copy.deepcopy(step["evaluation_snapshot"])
     evaluation.update(contract_fingerprint=value, evaluated_contract_fingerprint=value)
     with pytest.raises(ConflictError, match="fingerprint|proof mismatch"):
-        base_terminal._validate_frozen_evaluation(step, evaluation)
+        validate(step, evaluation)
 
 
 @pytest.mark.parametrize("field", [
@@ -64,7 +84,7 @@ def test_each_required_frozen_proof_field_must_exist(accepted, field):
     evaluation = copy.deepcopy(step["evaluation_snapshot"])
     evaluation.pop(field)
     with pytest.raises(ConflictError, match="fingerprint"):
-        base_terminal._validate_frozen_evaluation(step, evaluation)
+        validate(step, evaluation)
 
 
 @pytest.mark.parametrize("field", ["phase_graph", "transition_routes", "previously_covered_ids", "prompt_version"])
@@ -73,7 +93,7 @@ def test_equal_claimed_fingerprints_must_recompute_from_full_frozen_state(accept
     evaluation = copy.deepcopy(step["evaluation_snapshot"])
     evaluation["contract_fingerprint_state"][field] = "forged"
     with pytest.raises(ConflictError, match="proof mismatch"):
-        base_terminal._validate_frozen_evaluation(step, evaluation)
+        validate(step, evaluation)
 
 
 @pytest.mark.parametrize("location", ["contract", "covered", "snapshot_covered", "evaluator"])
@@ -93,7 +113,6 @@ def test_coverage_ids_cannot_be_empty_nonstring_or_duplicate_even_with_rehashed_
         evaluation["contract_fingerprint_state"]["evaluation_items"] = items
         fingerprint = _fingerprint_contract_state(evaluation["contract_fingerprint_state"])
         evaluation.update(contract_fingerprint=fingerprint, evaluated_contract_fingerprint=fingerprint)
-        step["replay_fingerprint"] = _report_fingerprint(step["task_id"], step["worker_report"], fingerprint)
     else:
         covered = list(step["covered_item_ids"])
         covered.append(covered[0] if bad == "duplicate" else bad)
@@ -104,7 +123,7 @@ def test_coverage_ids_cannot_be_empty_nonstring_or_duplicate_even_with_rehashed_
         else:
             evaluation["raw_evaluator"]["covered"] = covered
     with pytest.raises(ConflictError):
-        base_terminal._validate_frozen_evaluation(step, evaluation)
+        validate(step, evaluation)
 
 
 @pytest.mark.parametrize("location", ["contract", "covered", "snapshot_covered", "evaluator"])
@@ -120,12 +139,12 @@ def test_empty_coverage_lists_cannot_prove_terminal(accepted, location):
     else:
         evaluation["raw_evaluator"]["covered"] = []
     with pytest.raises(ConflictError):
-        base_terminal._validate_frozen_evaluation(step, evaluation)
+        validate(step, evaluation)
 
 
 @pytest.mark.parametrize("corruption", ["both_missing", "equal_forged", "frozen_snapshot", "raw_evaluator"])
 def test_readback_and_replay_independently_reject_bad_frozen_proof(
-    base, accepted, registered_readers, corruption,
+    configured, accepted, corruption,
 ):
     request, lookup, _, step = accepted
     evaluation = step["evaluation_snapshot"]
@@ -142,7 +161,31 @@ def test_readback_and_replay_independently_reject_bad_frozen_proof(
         row = uow.session.get(models.TaskStepHistoryEntry, step["id"])
         row.evaluation_snapshot = json.dumps(evaluation)
         uow.commit()
-    # Component fixture bypasses only missing external owner protocols. These
-    # 409s therefore prove the local frozen-proof validator, not that outer gate.
-    assert base[0].post(READBACK, headers=READER, json=lookup).status_code == 409
-    assert base[0].post("/internal/runtime/step", headers=RUNTIME, json=request).status_code == 409
+    assert configured[0].post(READBACK, headers=WRITER, json=lookup).status_code == 409
+    assert submit(configured, **request).status_code == 409
+    assert submit(configured).status_code == 409
+
+
+@pytest.mark.parametrize("field", ["worker_report", "covered_item_ids", "verdict", "evaluation_snapshot"])
+def test_saved_report_or_outcome_corruption_cannot_authorize_terminal(configured, accepted, field):
+    request, selector, result, record = accepted
+    with SAUnitOfWork() as uow:
+        row = uow.session.get(models.TaskStepHistoryEntry, record["id"])
+        setattr(row, field, {"worker_report": "Changed after acceptance", "covered_item_ids": "[]",
+                             "verdict": "partial", "evaluation_snapshot": "[]"}[field])
+        uow.commit()
+    assert configured[0].post(READBACK, headers=WRITER, json=selector).status_code == 409
+    assert submit(configured, **request).status_code == 409
+    assert submit(configured).status_code == 409
+
+
+def test_historical_report_fingerprint_keeps_the_same_frozen_proof_validation(accepted):
+    historical = copy.deepcopy(accepted[3])
+    evaluation = historical["evaluation_snapshot"]
+    historical["replay_fingerprint"] = _report_fingerprint(
+        historical["task_id"], historical["worker_report"], evaluation["contract_fingerprint"],
+    )
+    assert validate_frozen_evaluation(historical, evaluation) == historical["covered_item_ids"]
+    evaluation["contract_fingerprint_state"]["phase_graph"] = []
+    with pytest.raises(ConflictError):
+        validate_frozen_evaluation(historical, evaluation)

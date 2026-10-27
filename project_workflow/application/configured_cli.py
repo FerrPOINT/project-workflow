@@ -27,6 +27,7 @@ from project_workflow.infrastructure import configured_cli_tracker, namespace_au
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.single_task_catalog import observe_installation
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
+from project_workflow.supervisor.evidence import validate_frozen_evaluation
 from project_workflow.supervisor.types import VERDICT_LABELS
 
 
@@ -234,12 +235,19 @@ def _history_page(uow: SAUnitOfWork, task_id: int, n: int, before: int | None) -
             "next_before": rows[n - 1].id if len(rows) > n else None}
 
 
+def _evaluation(row: m.TaskStepHistoryEntry) -> dict[str, Any]:
+    value = json.loads(row.evaluation_snapshot)
+    if not isinstance(value, dict) or not isinstance(value.get("configured_cli"), dict):
+        raise ConflictError("Configured evaluation ledger is invalid")
+    return value
+
+
 def version(uow: SAUnitOfWork, task_id: int, payload: dict[str, Any]) -> int:
     current = uow.tasks.get_by_id(task_id)
     rows = _records(uow, task_id, limit=1, cycle=current.cycle_number, after_id=payload.get("history_after_id", 0))
     if not rows:
         return payload.get("initial_version", 1)
-    metadata = json.loads(rows[0].evaluation_snapshot).get("configured_cli", {})
+    metadata = _evaluation(rows[0])["configured_cli"]
     value = metadata.get("result_version")
     if (type(value) is not int or value < 2 or metadata.get("execution_ref") != payload["execution_ref"]):
         raise ConflictError("Configured step ledger differs from current assignment")
@@ -283,11 +291,14 @@ def _replay(uow: SAUnitOfWork, fence: ConfiguredCliFence) -> dict[str, Any] | No
     ))
     if row is None:
         return None
-    metadata = json.loads(row.evaluation_snapshot).get("configured_cli", {})
+    metadata = _evaluation(row)["configured_cli"]
     if (metadata.get("request_sha256") != fence.request_sha256
             or metadata.get("execution_ref") != fence.enrollment["execution_ref"]):
         raise ConflictError("Configured operation key payload conflict")
-    return json.loads(row.supervisor_response)
+    saved = json.loads(row.supervisor_response)
+    if saved.get("complete") is True:
+        _terminal_proof(row, fence.enrollment, saved)
+    return saved
 
 
 def assert_fence(uow: UnitOfWork, task: dict[str, Any], fence: ConfiguredCliFence | None) -> bool:
@@ -340,7 +351,9 @@ def step(uow: SAUnitOfWork, command: ConfiguredStep, authorization: str | None) 
         if phase is not None and phase.code == "PM-DRAFT-03" and task.status != "done":
             result["report_parameters"] = ["--requirements-revision", "--requirements-sha256"]
         if task.status == "done":
-            saved = json.loads(_records(uow, task.id, limit=1)[0].supervisor_response)
+            final_row = _records(uow, task.id, limit=1)[0]
+            saved = json.loads(final_row.supervisor_response)
+            _terminal_proof(final_row, payload, saved)
             for key in ("terminal_receipt", "workflow_receipt", "completion_instructions"):
                 if key in saved:
                     result[key] = saved[key]
@@ -483,6 +496,31 @@ def history(uow: SAUnitOfWork, task: str, namespace_id: int, authorization: str 
     return {"ok": True, "exit_code": 0, "result": {**cursor(uow, current, payload), **page}}
 
 
+def _terminal_proof(row: m.TaskStepHistoryEntry, payload: dict[str, Any], saved: dict[str, Any]) -> None:
+    receipt = saved.get("terminal_receipt")
+    if not isinstance(receipt, dict) or row.verdict != "pass":
+        raise ConflictError("Retained terminal accepted PASS receipt missing")
+    try:
+        report = ConfiguredStep.model_validate({
+            "interaction_protocol": PROTOCOL, "task": receipt.get("task"),
+            "namespace_id": receipt.get("namespace_id"), "operation_key": receipt.get("operation_key"),
+            "expected_version": receipt["result_version"] - 1, "report": row.worker_report,
+            "requirements_revision": receipt.get("requirements_revision"),
+            "requirements_sha256": receipt.get("requirements_sha256"),
+        })
+        evaluation = _evaluation(row)
+    except (KeyError, TypeError, ValueError):
+        raise ConflictError("Retained terminal report evidence is invalid") from None
+    fingerprint = payload_sha256({"protocol": PROTOCOL, "assignment": payload["request"]["operation_key"],
+                                  "operation_key": report.operation_key})
+    if payload_sha256(report.model_dump(mode="json")) != receipt.get("request_sha256"):
+        raise ConflictError("Retained terminal report differs from the committed request")
+    validate_frozen_evaluation({
+        "task_id": row.task_id, "worker_report": row.worker_report,
+        "covered_item_ids": json.loads(row.covered_item_ids), "replay_fingerprint": row.replay_fingerprint,
+    }, evaluation, replay_fingerprint=fingerprint)
+
+
 def terminal_readback(uow: SAUnitOfWork, command: ConfiguredTerminalReadback) -> dict[str, Any]:
     """Return only a retained terminal operation, not current authority or a fabricated result."""
     current, assignment, payload = _row(uow, command.task, command.namespace_id,
@@ -499,10 +537,11 @@ def terminal_readback(uow: SAUnitOfWork, command: ConfiguredTerminalReadback) ->
     if (saved.get("complete") is not True or saved.get("status") != "done"
             or row.cycle_number != assignment.cycle_number or row.mode_id != assignment.mode_id):
         raise ConflictError("Configured operation is not terminal")
+    _terminal_proof(row, payload, saved)
     result = ConfiguredTerminalResponse.model_validate({"ok": True, "complete": True,
         "receipt": saved.get("terminal_receipt"), "workflow_receipt": saved.get("workflow_receipt")})
     receipt = result.receipt.model_dump(mode="json")
-    metadata = json.loads(row.evaluation_snapshot).get("configured_cli", {})
+    metadata = _evaluation(row)["configured_cli"]
     enrollment = payload["request"]
     expected_reference = f"workflow-configured-cli:{command.execution_ref}:{row.id}"
     if (any(receipt.get(key) != value for key, value in command.model_dump(mode="json").items())

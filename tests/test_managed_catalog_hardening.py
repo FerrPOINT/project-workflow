@@ -20,7 +20,8 @@ from project_workflow.infrastructure.db.managed_catalog import (
 from project_workflow.infrastructure.db.session import ensure_schema
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.ui.app import create_app
-from tests.test_runtime_capabilities import _install_manifest, _valid_compatibility, _valid_manifest
+from tests.test_configured_cli import configured as configured
+from tests.test_runtime_capabilities import _install_manifest, _valid_manifest
 
 pytestmark = [pytest.mark.unit]
 
@@ -99,7 +100,7 @@ def _install_runtime_credentials(monkeypatch, tmp_path: Path) -> tuple[str, str]
     runtime_token = "r" * 48
     catalog_token = "c" * 48
     monkeypatch.setenv(
-        "PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON",
+        "PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON",
         json.dumps({"developer": runtime_token}),
     )
     monkeypatch.setenv("PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN", catalog_token)
@@ -130,134 +131,13 @@ def test_runtime_capabilities_require_installed_managed_catalog(
     }
 
 
-@pytest.mark.parametrize("edit", ["text", "order", "parallel", "new_phase"])
-def test_managed_catalog_keeps_runtime_step_and_history_available(monkeypatch, tmp_path, edit):
-    _install_manifest(monkeypatch, tmp_path, _valid_manifest())
-    _bootstrap_global_managed_catalog()
-    from project_workflow.application.instruction_service import InstructionService
-    from project_workflow.application.phase import PhaseServiceApp
-
-    with SAUnitOfWork() as editing:
-        namespace = editing.projects.get_by_cli_command("workflow-project_manager")
-        mode = editing.workflows.get_mode_by_key(namespace.workflow_id, "draft")
-        phases = editing.phases.list(namespace.workflow_id, mode_id=mode.id)
-        phase_service = PhaseServiceApp(editing)
-        if edit == "order":
-            phase_service.reorder_phases([(phase.id, position) for position, phase in enumerate(reversed(phases), 1)])
-        elif edit == "parallel":
-            phase_service.update_phase(phases[0].id, {"execution_type": "parallel"})
-        elif edit == "new_phase":
-            phase_service.create_phase({"workflow_id": namespace.workflow_id, "mode_id": mode.id, "phase_order": 1})
-        phase = editing.phases.list(namespace.workflow_id, mode_id=mode.id)[0]
-        instructions = editing.phase_instructions.list(phase.id)
-        instruction_service = InstructionService(editing)
-        if instructions:
-            instruction_service.update_instruction(instructions[0]["id"], {"description": "Saved runtime instruction"})
-        else:
-            instruction_service.create_instruction(phase.id, {"description": "Saved runtime instruction"})
-    runtime_token = "r" * 48
-    assignment_token = "a" * 48
-    monkeypatch.setenv(
-        "PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON",
-        json.dumps({"project_manager": runtime_token}),
-    )
-    monkeypatch.setenv(
-        "PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON",
-        json.dumps({"project_manager": assignment_token}),
-    )
-    config.get_settings.cache_clear()
-    assignment_payload = {
-        "runtime_compatibility": _valid_compatibility(),
-        "task": "PM-901",
-        "workflow_key": "hermes-sdlc:project_manager",
-        "role_key": "project_manager",
-        "mode_key": "draft",
-        "stage_key": "draft",
-        "execution_scope": "business",
-        "cycle_number": 0,
-        "attempt_number": 1,
-        "operation_key": "assign:pm-immutable-1",
-        "business_task_ref": "business-task:pm-immutable-1@1",
-        "root_task_ref": "business-task:pm-immutable-1@1",
-        "work_item_ref": "business-task:pm-immutable-1@1",
-        "work_item_revision": 1,
-        "queue_item_ref": "queue-item:pm-immutable-1",
-        "task_workspace_ref": "task-workspace:pm-immutable-1",
-        "workspace_revision": 1,
-        "decomposition_revision_ref": "decomposition:pm-immutable-1@1",
-        "stage_revision": "draft@1",
-        "assignment_ref": "assignment:pm-immutable-1",
-        "workspace_generation": 0,
-        "lease_generation": 0,
-        "exact_input_refs": [
-            {"kind": "business_task", "ref": "business-task:pm-immutable-1", "revision": "1"}
-        ],
-        "expected_revision": 0,
-        "expected_status": "missing",
-    }
-
-    with TestClient(create_app()) as client:
-        assigned_response = client.post(
-            "/internal/runtime/assign",
-            headers={"Authorization": f"Bearer {assignment_token}"},
-            json=assignment_payload,
-        )
-        assert assigned_response.status_code == 200, assigned_response.text
-        assigned = assigned_response.json()["result"]
-        bind_response = client.post(
-            "/internal/runtime/bind",
-            headers={"Authorization": f"Bearer {assignment_token}"},
-            json={
-                "task": assigned["task_key"],
-                "bind_operation_key": "bind:pm-immutable-1",
-                "assignment_operation_key": assigned["assignment_operation_key"],
-                "assignment_revision": assigned["assignment_revision"],
-                "assignment_ref": assigned["assignment_ref"],
-                "binding_ref": "binding:pm-immutable-1",
-                "hermes_run_ref": "hermes-run:pm-immutable-1",
-                "mode_key": assigned["mode_key"],
-                "cycle_number": assigned["cycle_number"],
-                "attempt_number": assigned["attempt_number"],
-                "expected_binding_state": "unbound",
-                "concrete_agent_ref": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-            },
-        )
-        assert bind_response.status_code == 200, bind_response.text
-        bound = bind_response.json()["result"]
-        step = client.post(
-            "/internal/runtime/step",
-            headers={"Authorization": f"Bearer {runtime_token}"},
-            json={
-                "task": bound["task_key"],
-                "step_operation_key": "step:pm-immutable-1:instructions",
-                "assignment_revision": bound["assignment_revision"],
-                "assignment_ref": bound["assignment_ref"],
-                "binding_ref": bound["binding_ref"],
-                "hermes_run_ref": bound["hermes_run_ref"],
-                "mode_key": bound["mode_key"],
-                "cycle_number": bound["cycle_number"],
-                "attempt_number": bound["attempt_number"],
-                "expected_phase_code": bound["current_phase_code"],
-                "expected_status": bound["status"],
-            },
-        )
-        history = client.get(
-            "/internal/runtime/history",
-            headers={"Authorization": f"Bearer {runtime_token}"},
-            params={"task": bound["task_key"]},
-        )
-
-    assert step.status_code == 200, step.text
-    assert step.json()["result"]["mode_key"] == "draft"
-    assert "Saved runtime instruction" in "\n".join(step.json()["result"]["phase_contract"]["instructions"])
-    assert history.status_code == 200, history.text
-    assert history.json()["result"]["count"] == 0
 
 
+@pytest.mark.parametrize("theme", [{"theme_color": "#22C55E"}, {"theme_icon": "folder"},
+                                  {"theme_color": "#DD5577", "theme_icon": "code"}])
 def test_namespace_theme_edits_keep_editor_and_executor_available(
-    monkeypatch, tmp_path: Path
+    configured, monkeypatch, tmp_path: Path, theme
 ):
-    _bootstrap_global_managed_catalog()
     runtime_token, catalog_token = _install_runtime_credentials(monkeypatch, tmp_path)
     monkeypatch.setattr(
         "project_workflow.infrastructure.db.session.schema_is_ready", lambda _engine: True
@@ -265,12 +145,15 @@ def test_namespace_theme_edits_keep_editor_and_executor_available(
 
     with TestClient(create_app()) as client:
         with SAUnitOfWork() as drift:
-            _workflow, _mode, _phases, _phase, _instruction, _agent, namespace = (
-                _managed_objects(drift)
-            )
-            row = drift.session.get(db_models.Project, int(namespace.id))
+            from project_workflow.infrastructure.db.single_task_catalog import observe_installation
+
+            installation = observe_installation(drift)
+            namespace = next(item for item in installation.bindings if item.role_key == "developer")
+            row = drift.session.get(db_models.Project, int(namespace.namespace_id))
             assert row is not None
-            row.theme_color = "#22C55E"
+            for field, value in theme.items():
+                setattr(row, field, value)
+            drift.commit()
 
         health = client.get("/health")
         capabilities = client.get(

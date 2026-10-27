@@ -267,3 +267,68 @@ bootstrap-процедурой. Новое назначение и исполн�
 Scoped проверки после этого изменения: 100 passed; collection без ошибок импорта
 (3155 selected, 110 integration excluded). Полный прогон и PostgreSQL остаются
 открытыми. Этот результат не является установкой или живой приёмкой.
+
+
+## Общая проверка сохранённого результата и завершение retirement тестов
+
+Новый terminal readback теперь проверяет полную сохранённую оценку отчёта:
+замороженный контракт и граф фаз, fingerprint, полный набор уникальных covered
+IDs, ответ evaluator, точный сохранённый текст отчёта и исходный command hash.
+Та же проверка действует на точный повтор финального отчёта и чтение завершённого
+шага. Чтение terminal receipt не обращается к текущему native run или к модели.
+Проверка извлечена из historical Base reader в общий `supervisor/evidence.py`;
+исторический report fingerprint и текущий operation fingerprint имеют явных
+владельцев, без двух реализаций валидатора. Supervisor сохраняет полное состояние,
+из которого он уже вычисляет fingerprint; JSON history и таблицы не заменяются.
+
+Сценарии Base-native admission/terminal/owner executor перенесены на текущий путь:
+общий configured API и `test_frozen_evaluation`. Удалены старые positive bind,
+rebind, callback и DB-CLI fallback тесты, требовавшие удалённых методов. Для mode,
+managed catalog и hardening сохранены проверки схемы, editing, прав и history.
+Широкая work-item revision PostgreSQL проверяется через импорт архивной записи и
+типизированное чтение, без восстановления native assignment writer.
+
+Локальные DB-CLI E2E retired: агентный CLI больше не создаёт задачу локально и не
+читает DATABASE_URL. Их custom/parallel/rollback evaluator поведение остаётся в
+Supervisor unit/application tests. Новый integration-сценарий запускает настоящий
+CLI subprocess → HTTP приложения → PostgreSQL для PM и Developer Rework, с точным
+повтором, stdin, history и контролем отсутствия служебных файлов. Все семь
+профессий и восемь режимов дополнительно покрыты API/PG сценариями. Внешние
+Tracker/Auth/evaluator там синтетические; PostgreSQL и subprocess scenarios пока
+не запускались. Они не заменяют отдельную ручную приёмку с настоящим Hermes.
+
+Scoped configured API и frozen-proof проверки: 101 passed за 94.75 s. Проверены
+повреждённые fingerprint, контракт, coverage, evaluator, worker report и outcome;
+положительные текущие и historical fingerprint варианты сохранены. Итоговый
+полный прогон, PostgreSQL, packaged CLI, установка и Hermes/IAB остаются открытыми.
+
+
+Дополнительно восстановлена граница обычного Supervisor: TaskService выбирает
+начальную фазу сам; удалён вызов уже удалённого private guard и дублировавший этот
+выбор helper. Managed/single-task задачи без назначения не исполняются через
+обычный Supervisor. Пользовательский специализированный workflow сохраняет
+обычное поведение. Проверки текущего назначения идут по общему configured fence.
+
+Иконка и цвет профессии исключены из технической идентичности Single-task
+каталога. Иначе обычное изменение оформления блокировало capabilities и работу
+всех профессий. Названия, ключи, workflow/mode membership и полное содержимое
+инструкций продолжают проверяться; bootstrap не переписывает оформление.
+Legacy managed comparator по умолчанию остаётся строгим. Проверены три варианта
+оформления и соседние отказы при повреждении инструкций/режимов.
+
+Для source CLI-проверок в отдельный task-venv установлен `pdlc-cli-core` из
+согласованного Base contract checkout. Это не обновление SDK pin или runtime.
+Первый install без build isolation обнаружил отсутствие hatchling; стандартный
+изолированный offline build из существующего cache завершился успешно.
+Scoped соседние проверки: 75 прошли; ещё четыре устаревших native instruction/API
+assertions перенесены на текущие контракт и guards. Следующий focused прогон
+прошёл 44 проверки, одна точная текстовая проверка исправлена на фактический
+`Backlog / Ready`; финальная проверка этого случая выполняется отдельно.
+Все PostgreSQL и итоговые release gates по-прежнему не выполнены.
+
+
+Последний focused catalog case прошёл: 1 passed. На фазах Reviewer/Tester
+сохраняются отдельные инструкции по честному verdict/rework после инструкции
+отправки отчёта; проверка учитывает весь terminal phase contract. Collection:
+2966 selected / 3076 total, 110 integration deselected, ошибок импорта нет.
+Новые subprocess/PG tests только собраны, их исполнение не заявляется.

@@ -431,7 +431,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         technical_error = True
         llm = _blocked(exc)
         transition_routes = {}
-    current_contract_fingerprint = _contract_fingerprint(
+    current_contract_state = _contract_fingerprint_state(
         builder=builder,
         phase=phase,
         group=group,
@@ -440,6 +440,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         previously_covered_ids=previously_ids,
         transition_routes=transition_routes,
     )
+    current_contract_fingerprint = _fingerprint_contract_state(current_contract_state)
     current_snapshot_fingerprint = _contract_fingerprint(
         builder=builder,
         phase=phase,
@@ -556,6 +557,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
             "prompt_version": PromptBuilder.PROMPT_VERSION,
             "contract_fingerprint": current_contract_fingerprint,
             "evaluated_contract_fingerprint": initial_contract_fingerprint,
+            "contract_fingerprint_state": current_contract_state,
             "contract_snapshot": {
                 **current_contract.to_dict(),
                 "evaluation_items": [{"id": item_id, "text": text} for item_id, text in evaluation_items],
