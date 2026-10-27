@@ -416,6 +416,8 @@ def api_workflow_update(
 ) -> dict[str, Any] | JSONResponse:
     if error := _workflow_profession_scope_error(workflow_id, namespace_id):
         return error
+    if error := _pm_workflow_write_error(workflow_id):
+        return error
     service = _app_state.workflow_service()
     updates = _updates_from_payload(payload, ["name", "description"])
     try:
@@ -433,6 +435,8 @@ def api_workflow_delete(
     workflow_id: PositivePathId, namespace_id: PositiveQueryId = None,
 ) -> dict[str, Any] | JSONResponse:
     if error := _workflow_profession_scope_error(workflow_id, namespace_id):
+        return error
+    if error := _pm_workflow_write_error(workflow_id):
         return error
     service = _app_state.workflow_service()
     try:

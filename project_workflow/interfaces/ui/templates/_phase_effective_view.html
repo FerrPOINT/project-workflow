@@ -1,4 +1,5 @@
 <div id="phaseEffectiveView" class="base-page-stack"
+     data-namespace-id="{{ selected_namespace.id if selected_namespace else '' }}"
      data-api-url="{{ ui_base_path() }}/api/phases/{{ phase.id }}{% if effective_instructions_only %}/instructions{% endif %}{% if selected_namespace %}?namespace_id={{ selected_namespace.id }}{% endif %}"
      data-instructions-only="{{ 'true' if effective_instructions_only else 'false' }}">
   <p id="phaseViewStatus" role="status">Проверка инструкций…</p>

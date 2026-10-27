@@ -43,6 +43,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   try {
+    const namespaceId = Number(view.dataset.namespaceId);
+    const apiUrl = new URL(view.dataset.apiUrl, window.location.origin);
+    if (!Number.isSafeInteger(namespaceId) || namespaceId <= 0 || apiUrl.searchParams.get('namespace_id') !== String(namespaceId)) {
+      throw new Error('Missing namespace scope');
+    }
     const response = await fetch(view.dataset.apiUrl, {cache: 'no-store'});
     const data = await response.json();
     if (!response.ok || !data.ok) throw new Error('unavailable');

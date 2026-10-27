@@ -3,13 +3,13 @@
 import os
 from copy import deepcopy
 from dataclasses import asdict
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from fastapi.testclient import TestClient
 
 from project_workflow import config
-from project_workflow.application import ProjectService
+from project_workflow.application import ProjectService, WorkflowService
 from project_workflow.infrastructure.configured_cli_instructions import phases
 from project_workflow.infrastructure.db import schema, single_task_catalog
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
@@ -190,6 +190,30 @@ def test_admin_raw_saves_refuse_sealed_pm_before_any_write(catalog, monkeypatch,
         assert single_task_catalog.observe_installation(uow) == installation
 
 
+@pytest.mark.parametrize("method,service_method", [("put", "update_workflow"), ("delete", "delete_workflow")])
+def test_pm_workflow_mutation_refused_before_write_but_local_workflow_allowed(
+    catalog, monkeypatch, method, service_method,
+):
+    client, installation, binding, _ = catalog
+    params = {"namespace_id": binding.namespace_id}
+    local = client.post("/api/workflows", params=params, json={"name": "Editable local workflow"}).json()
+    response = client.request(method, f'/api/workflows/{local["workflow_id"]}', params=params,
+                              json={"name": "Renamed local workflow"} if method == "put" else None)
+    assert response.status_code == 200, response.text
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("A sealed PM workflow mutation reached the write service")
+
+    monkeypatch.setattr(WorkflowService, service_method, forbidden)
+    for scope in ({}, params):
+        response = client.request(method, f"/api/workflows/{binding.workflow_id}", params=scope,
+                                  json={"name": "Forbidden"} if method == "put" else None)
+        assert response.status_code == 409, response.text
+        assert response.json()["error"] == "Configured PM catalog is historical/read-only"
+    with SAUnitOfWork() as uow:
+        assert single_task_catalog.observe_installation(uow) == installation
+
+
 def _browser():
     return pytest.importorskip("playwright.sync_api")
 
@@ -236,6 +260,8 @@ def test_configured_browser_read_only_history_and_no_writes(catalog, tmp_path, m
         baseline_errors = errors.copy()
         errors.clear()
         page.goto("http://workflow.test" + path)
+        api_url = page.locator("#phaseEffectiveView").get_attribute("data-api-url")
+        assert parse_qs(urlsplit(api_url).query)["namespace_id"] == [binding.namespace_id]
         page.locator("#phaseEffectiveContent").wait_for(state="visible")
         assert page.locator("#phaseStoredEditor").count() == 0
         assert page.locator("main textarea, main input, main [onclick]").count() == 0
@@ -277,5 +303,59 @@ def test_browser_legacy_editor_unlocks_only_after_confirmed_read(catalog, unavai
             assert name.is_editable()
             assert name.input_value() == phase.name
             assert not page.locator("#phaseEffectiveView").is_visible()
+        assert not writes
+        browser.close()
+
+
+@pytest.mark.parametrize("instructions_only", [False, True])
+def test_browser_omitted_namespace_never_unlocks_the_raw_pm_editor(catalog, instructions_only):
+    client, _, binding, mode = catalog
+    path = (f"/instructions?phase_id={mode.phase_ids[0]}&profession_id={binding.namespace_id}" if instructions_only
+            else f"/phase/{mode.phase_ids[0]}?profession_id={binding.namespace_id}")
+    with _browser().sync_playwright() as playwright:
+        browser = playwright.chromium.launch(channel=os.environ.get("WORKFLOW_UI_BROWSER_CHANNEL"), headless=True)
+        page = browser.new_page()
+        writes = _serve_ui(page, client)
+        reads = []
+        page.on("request", lambda request: reads.append(urlsplit(request.url).path))
+        page.add_init_script("""
+document.addEventListener('DOMContentLoaded', () => {
+  const view = document.getElementById('phaseEffectiveView');
+  const url = new URL(view.dataset.apiUrl, location.origin);
+  url.searchParams.delete('namespace_id');
+  view.dataset.apiUrl = url.pathname + url.search;
+});
+""")
+        page.goto("http://workflow.test" + path)
+        page.locator('#phaseViewStatus[role="alert"]').wait_for(state="visible")
+        assert page.locator("#phaseStoredEditor").evaluate("node => node.hidden && node.inert")
+        assert not any(path.startswith("/api/phases/") for path in reads)
+        assert not writes
+        browser.close()
+
+
+def test_browser_only_pm_workflow_edit_actions_are_hidden(catalog, tmp_path):
+    client, _, binding, _ = catalog
+    local = client.post("/api/workflows", params={"namespace_id": binding.namespace_id},
+                        json={"name": "Editable local workflow"}).json()
+    with _browser().sync_playwright() as playwright:
+        browser = playwright.chromium.launch(channel=os.environ.get("WORKFLOW_UI_BROWSER_CHANNEL"), headless=True)
+        page = browser.new_page(viewport={"width": 1440, "height": 900})
+        writes = _serve_ui(page, client)
+        page.goto(f"http://workflow.test/workflows?workflow_id={binding.workflow_id}"
+                  f"&profession_id={binding.namespace_id}")
+        assert not page.locator("#editWorkflowButton").is_visible()
+        assert not page.locator("#deleteWorkflowButton").is_visible()
+        assert page.locator(".phase-card-actions, .phase-add-btn").count() == 0
+        page.evaluate("startEditWorkflow()")
+        assert not page.locator("#workflowForm").is_visible()
+        page.screenshot(path=str(tmp_path / "pm-workflow-read-only.png"), full_page=True)
+        page.locator("#newWorkflowButton").click()
+        assert page.locator("#workflowName").is_editable()
+        page.goto(f'http://workflow.test/workflows?workflow_id={local["workflow_id"]}'
+                  f"&profession_id={binding.namespace_id}")
+        page.locator("#editWorkflowButton").click()
+        assert page.locator("#workflowName").is_editable()
+        assert page.locator("#deleteWorkflowButton").is_visible()
         assert not writes
         browser.close()
