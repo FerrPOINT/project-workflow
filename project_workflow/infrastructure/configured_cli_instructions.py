@@ -114,6 +114,46 @@ FINAL = (
     "do not create Analysis intent, dispatch Analyst or confirm requirements as the owner."
 )
 
+# Stored PM catalogs predate the current terminal policy. Replace only their known
+# transport/routing clauses, so appended or interleaved security constraints survive.
+PM_FINAL_REPLACEMENTS = {
+    delivery.terminal_instruction("project_manager").split(" Verify accepted Workflow complete=true,")[0]: FINAL,
+    " Verify accepted Workflow complete=true, then finalize the PM run. The allowed next "
+    "stage AND status are Backlog / Ready, then Analysis / Ready through Tracker/Fleet pickup. "
+    "Tracker may create an Analysis / Ready intent at consent, but Analyst reserve remains blocked "
+    "until PM actual completion is observed. PM does not dispatch Analyst or create another PM cycle. ": " ",
+    " Verify accepted Workflow complete=true, then finalize the PM run. The allowed next "
+    "stage AND status are Backlog / Ready only. Stop at Backlog / Ready; do not request an Analysis "
+    "intent, wait for Analyst pickup or treat either as a PM completion prerequisite. "
+    "PM does not dispatch Analyst or create another PM cycle. ": " ",
+}
+PM_READBACK_CHECK = (
+    "Direct authorized owner confirmation readback matches the latest task/revision/hash/owner in Draft; "
+    "all actual feedback is resolved and no blockers remain."
+)
+PM_FINAL_CHECK = (
+    "Exact owner confirmation is saved while Tracker remains in Draft. Workflow completes first; "
+    "only subsequent Tracker PM completion may atomically move Draft to Backlog / Ready using "
+    "the authoritative terminal receipt. No external business verifier checklist or Analyst is required."
+)
+PM_FINAL_CHECK_REPLACEMENTS = {
+    delivery.PM_CONFIRMATION_CHECKS[3]: PM_READBACK_CHECK,
+    "Authorized typed checkpoint/resume and direct PM confirmation readback dependencies are satisfied; "
+    "no blockers remain.": PM_READBACK_CHECK,
+    delivery.PM_CONFIRMATION_CHECKS[4]: PM_FINAL_CHECK,
+    "PM finalizes only; allowed next stage/status are Backlog / Ready then Analysis / Ready, not PM dispatch.":
+        PM_FINAL_CHECK,
+}
+PM_FEEDBACK_EVIDENCE = (
+    "Actual same-execution answer/feedback-to-revision references only when they occurred; "
+    "no fabricated answers or mandatory clarification history for a complete brief."
+)
+PM_FINAL_EVIDENCE_REPLACEMENTS = {
+    delivery.PM_CONFIRMATION_EVIDENCE[2]: PM_FEEDBACK_EVIDENCE,
+    "Same-execution typed checkpoint/input references and feedback-to-revision history without fabricated answers.":
+        PM_FEEDBACK_EVIDENCE,
+}
+
 
 def phases(source: list[Phase]) -> list[Phase]:
     replacements = {
@@ -131,14 +171,16 @@ def phases(source: list[Phase]) -> list[Phase]:
     projected = deepcopy(source)
     for phase in projected:
         for item in phase.instructions:
+            if phase.code == "PM-DRAFT-03":
+                for old, new in PM_FINAL_REPLACEMENTS.items():
+                    item.step = item.step.replace(old, new)
             for old, new in replacements.items():
                 item.step = item.step.replace(old, new)
-        for check in phase.checks:
-            if check.description == delivery.PM_CONFIRMATION_CHECKS[4]:
-                check.description = (
-                    "Exact owner confirmation is saved while Tracker remains in Draft. Workflow completes first; "
-                    "only subsequent Tracker PM completion may atomically move Draft to Backlog / Ready using "
-                    "the authoritative terminal receipt. No external business verifier checklist or Analyst "
-                    "is required."
-                )
+        if phase.code == "PM-DRAFT-03":
+            for check in phase.checks:
+                for old, new in PM_FINAL_CHECK_REPLACEMENTS.items():
+                    check.description = check.description.replace(old, new)
+            for evidence in phase.evidence:
+                for old, new in PM_FINAL_EVIDENCE_REPLACEMENTS.items():
+                    evidence.item = evidence.item.replace(old, new)
     return projected

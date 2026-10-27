@@ -614,3 +614,114 @@ def test_instruction_projection_retains_business_rules_without_rewriting_catalog
     assert "atomic Draft -> Backlog / Ready" in text
     assert "not an external verifier checklist" in text
     assert "Workflow completes first" in projected[0].checks[1].description
+
+
+def test_stored_legacy_pm_confirmation_contract_projects_for_read_and_evaluation(
+    configured, supervisor_llm, monkeypatch,
+):
+    from copy import deepcopy
+
+    from project_workflow.infrastructure import configured_cli_instructions as instructions
+    from project_workflow.infrastructure import single_task_delivery_instructions as delivery
+    from project_workflow.infrastructure.db import schema
+    from project_workflow.infrastructure.llm import OpenAICompatibleClient
+
+    # Frozen pre-4b155d5/4581911 catalog text, not regenerated from today's terminal_instruction().
+    legacy_terminal = (
+        "ONLY AFTER the preceding exact owner confirmation receipt readback succeeds and all feedback "
+        "is resolved, reconcile task-tracker sdlc confirmation read --task <task-uuid> "
+        "--revision <confirmed-revision>, then submit the FINAL phase report via terminal -> "
+        "project-workflow --json step "
+        "--task <workflow-task-key> --report <report-text> with the supplied --operation-key, --runtime-request "
+        "and --execution-token-file. body.report must equal --report. Include actual saved document and "
+        "confirmation receipt refs, revision/content_hash, owner_subject and check/evidence coverage; "
+        "never invent authority fields. Reconcile uncertain effects using the exact original key/body "
+        "before retry. Verify accepted Workflow complete=true, then finalize the PM run. The allowed next "
+        "stage AND status are Backlog / Ready, then Analysis / Ready through Tracker/Fleet pickup. "
+        "Tracker may create an Analysis / Ready intent at consent, but Analyst reserve remains blocked "
+        "until PM actual completion is observed. PM does not dispatch Analyst or create another PM cycle. "
+        "Installed instructions alone do not authorize live routing; use only the actually authorized API/policy. "
+        "Generic patch/issue transition/board move are forbidden substitutes."
+    )
+    legacy_check = (
+        "Authorized typed checkpoint/resume and direct PM confirmation readback dependencies are satisfied; "
+        "no blockers remain."
+    )
+    legacy_policy = (
+        "PM finalizes only; allowed next stage/status are Backlog / Ready then Analysis / Ready, not PM dispatch."
+    )
+    legacy_evidence = (
+        "Same-execution typed checkpoint/input references and feedback-to-revision history without fabricated answers."
+    )
+    security = "Custom security constraint: never disclose credentials or change the assigned owner."
+    assert legacy_terminal != delivery.terminal_instruction("project_manager")
+    enroll(configured)
+    supervisor_llm("PASS")
+    for version in (1, 2):
+        assert step(configured, report="Actual preparation", operation_key=f"prepare-{version}",
+                    expected_version=version).status_code == 200
+    original_load = schema.load_phases_from_db
+    loaded = []
+
+    def legacy_phases(*args, **kwargs):
+        phases = original_load(*args, **kwargs)
+        phase = next(row for row in phases if row.code == "PM-DRAFT-03")
+        terminal = next(row for row in phase.instructions
+                        if row.step == delivery.terminal_instruction("project_manager"))
+        # Keep an unknown constraint inside, not merely after, the legacy terminal instruction.
+        terminal.step = legacy_terminal.replace("before retry.", "before retry. " + security)
+        for row in phase.checks:
+            if row.description == delivery.PM_CONFIRMATION_CHECKS[3]:
+                row.description = legacy_check + " " + security
+            elif row.description == delivery.PM_CONFIRMATION_CHECKS[4]:
+                row.description = legacy_policy
+        for row in phase.evidence:
+            if row.item == delivery.PM_CONFIRMATION_EVIDENCE[2]:
+                row.item = legacy_evidence + " " + security
+        loaded.append((phases, deepcopy(phases)))
+        return phases
+
+    # Model the retained catalog at the raw loader boundary, not an unauthorized
+    # edit of a sealed SQLite catalog. All runtime/owner/version guards stay real.
+    monkeypatch.setattr(schema, "load_phases_from_db", legacy_phases)
+
+    read = step(configured)
+    assert read.status_code == 200, read.text
+    result = read.json()["result"]
+    assert result["phase_code"] == "PM-DRAFT-03"
+    assert instructions.FINAL in result["instructions"]
+    contract = result["phase_contract"]
+    rendered = json.dumps({"instructions": result["instructions"], "contract": contract})
+    for obsolete in ("--runtime-request", "--execution-token-file", "typed checkpoint", "then Analysis / Ready",
+                     "Tracker may create an Analysis / Ready intent at consent"):
+        assert obsolete not in rendered
+    assert security in result["instructions"]
+    assert security in " ".join(contract["required_checks"])
+    assert security in " ".join(contract["required_evidence"])
+    assert delivery.PM_CONFIRMATION_CHECKS[0] in contract["required_checks"]
+    assert delivery.PM_CONFIRMATION_CHECKS[1] in contract["required_checks"]
+    assert "Generic patch/issue transition/board move are forbidden substitutes" in result["instructions"]
+    assert "stage=Draft" in result["instructions"]
+
+    confirmation = {"id": str(uuid4()), "task_id": TRACKER_TASK, "revision": 2,
+                    "content_hash": "a" * 64, "owner_subject": OWNER, "stage": "Draft"}
+    monkeypatch.setattr(configured_cli, "confirmation", lambda _: dict(confirmation))
+    supervisor_llm("PARTIAL")
+    original_chat = OpenAICompatibleClient.chat
+    prompts = []
+
+    def chat(*args, **kwargs):
+        prompts.append(kwargs["user"])
+        return original_chat(*args, **kwargs)
+
+    monkeypatch.setattr(OpenAICompatibleClient, "chat", chat)
+    response = step(configured, report="Actual document and exact owner confirmation evidence",
+                    operation_key="final-reviewed", expected_version=3,
+                    requirements_revision=2, requirements_sha256="a" * 64)
+    assert response.status_code == 200, response.text
+    partial = response.json()["result"]
+    assert partial["verdict"] == "PARTIAL" and partial["complete"] is False
+    assert "terminal_receipt" not in partial
+    assert prompts and all(instructions.FINAL in prompt and security in prompt for prompt in prompts)
+    assert all(legacy_policy not in prompt and legacy_check not in prompt for prompt in prompts)
+    assert loaded and all(source == original for source, original in loaded)
