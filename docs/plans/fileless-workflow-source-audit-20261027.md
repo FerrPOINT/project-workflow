@@ -144,3 +144,16 @@ Forge CLI source и совместимость его Base layout квалифи
   вне обычной suite; наличие сценария не доказывает выполнение.
 - Чистые PR, точный кандидат, data-preserving установка, merge в согласованном
   порядке и проверка итоговых обслуживаемых ресурсов.
+
+
+## Additional Incoming Instruction Fix
+
+Workflow commit `7d0576d` makes questions, alternatives and preparation evidence
+conditional on actual gaps. The current canonical catalog already contains this
+behavior. Keep it in `single_task_delivery_instructions.py`, covered by
+`test_pm_clarifies_real_gaps_and_requires_saved_exact_owner_confirmation`.
+The removed runtime instruction replacement module is not restored: one
+persisted catalog supplies the worker and evaluator instructions. A modified
+historical catalog is rejected by the forward migration instead of silently
+replacing appended security constraints; see
+`test_upgrade_refuses_customized_catalog_without_changing_data_or_ledger`.

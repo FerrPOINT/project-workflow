@@ -1,5 +1,23 @@
 # Single-Task Instruction Audit
 
+## Configured CLI Content Review: 27 October 2026
+
+Source7d0576d corrects retained652a preparation wording, checks and evidence:
+complete, consistent briefs do not require invented questions or alternatives.
+Eight focused checks cover all three supported manifests, actual projected worker
+and judge text, idempotent projection and preservation of appended security
+constraints. No sealed catalog/history is rewritten; no live qualification is
+claimed by these tests. Final confirmation remains in Draft, then Workflow commits
+its terminal receipt, then Tracker completion moves to Backlog / Ready, no Analyst.
+
+Generic editor compatibility remains open: InstructionService can persist edits,
+but configured admission checks instructions/checks/evidence against a sealed
+catalog. Editor-save alone is not successful publication to the agent. Keep that
+guard; finish the existing versioned publication/adoption path before advertising
+rebuild-free arbitrary Workflow edits. SOUL/skills activation is a separate Fleet
+configuration lifecycle. Earlier native-file instructions below are historical
+and must not become prerequisites of configured CLI.
+
 ## Current Content Qualification: 16 October 2026
 
 Текущий исходник dfb содержит инструкции typed backend image build, current
