@@ -339,3 +339,17 @@ UI producer `94f2ccd9e6f09eba9fbf67f4582a9fa7a91c44b9` закреплён нез
 получены вместе с общим CSS. Это не перенос предметных workflow, namespace,
 HTTP/SSO handlers или финансовой логики в Base. React-зависимости не добавлены.
 Source adoption не означает сборку backend, установку или приёмку runtime.
+
+## Общие метки и inline-код UI 0.3.11 — 2026-10-27
+
+Точный UI producer `755c9f9a27ba81ddd841b43c511bb372a3c93e40` принят отдельно от SDK/skills.
+Штатный SSR export и --check пройдены. Получены inline_code и совместимый highlighted у resource_list_row, старый позиционный attributes сохранён. Предметные шаблоны, namespace и handlers не менялись; React-зависимости не добавлены.
+
+Настоящий архив UI содержит 900 файлов; все production bytes сверены с
+producer и шестью установленными frontend-пакетами. Offline frozen refresh,
+React singleton и CLI check пройдены; runtime и зависимости backend не менялись.
+
+IAB evidence относится к пяти изолированным композициям из настоящих owner/Base
+исходников: 60 сочетаний темы/ширины, 18 branding-пресетов, три статуса Wiki,
+readonly click и Enter/Space. Это не приёмка всех экранов, Auth или API продукта.
+Полный интеграционный gate остаётся отдельной открытой стадией.

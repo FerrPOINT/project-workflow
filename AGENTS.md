@@ -262,3 +262,13 @@ input/change handlers сохраняются Workflow. Dynamic options треб�
 Для resource_list/row, timeline/item/content и section_navigation_item применять
 штатные macros с owner attributes. Нативный ul/li/div и прежние IDs сохранять;
 card_title(tag='div') и label_control сохраняют подписи формы без product skin.
+
+## Общий inline-код и выделение записи
+
+После проверки UI pin используйте InlineCode для оформленного одиночного кода,
+Prose для prepared текста, CodeBlock для многострочного блока и
+ResourceListDescription technical для подписи без поверхности. Не копируйте
+фон/padding/radius native code. ResourceListRow highlighted задаёт только
+оформление: текущий ID, aria-current, ref/tabIndex и действия остаются у продукта.
+SSR: inline_code и resource_list_row из штатного экспорта Base.
+Каноническое руководство — Base docs/platform/DESIGN_SYSTEM.md и pdlc-ui.

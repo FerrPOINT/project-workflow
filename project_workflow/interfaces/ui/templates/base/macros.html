@@ -97,9 +97,9 @@
 <{{ element }} class="base-resource-list{% if class_name %} {{ class_name }}{% endif %}" data-variant="{{ variant }}" data-density="{{ density }}"{% if id %} id="{{ id }}"{% endif %}{% if label %} aria-label="{{ label }}"{% endif %}{{ _native_attributes(attributes, ['class','id','aria-label','data-variant','data-density']) }}>{{ caller() }}</{{ element }}>
 {%- endmacro %}
 
-{% macro resource_list_row(href=none, id=none, label=none, class_name='', attributes=none) -%}
+{% macro resource_list_row(href=none, id=none, label=none, class_name='', attributes=none, highlighted=false) -%}
 {% set tag = 'a' if href else 'div' -%}
-<{{ tag }} class="base-resource-list-row{% if class_name %} {{ class_name }}{% endif %}"{% if id %} id="{{ id }}"{% endif %}{% if href %} href="{{ href }}" data-interactive="true"{% endif %}{% if label %} aria-label="{{ label }}"{% endif %}{{ _native_attributes(attributes, ['class','id','href','data-interactive','aria-label']) }}>{{ caller() }}</{{ tag }}>
+<{{ tag }} class="base-resource-list-row{% if class_name %} {{ class_name }}{% endif %}"{% if id %} id="{{ id }}"{% endif %}{% if href %} href="{{ href }}" data-interactive="true"{% endif %}{% if highlighted %} data-highlighted="true"{% endif %}{% if label %} aria-label="{{ label }}"{% endif %}{{ _native_attributes(attributes, ['class','id','href','data-interactive','data-highlighted','aria-label']) }}>{{ caller() }}</{{ tag }}>
 {%- endmacro %}
 
 {% macro resource_list_title(label, heading_level=none, id=none, technical=false, tone='default') -%}
@@ -129,6 +129,10 @@
 
 {% macro badge(label=none, tone='neutral', appearance='badge', class_name='') -%}
 <span class="base-badge{% if class_name %} {{ class_name }}{% endif %}" data-tone="{{ tone }}" data-appearance="{{ appearance }}">{% if appearance == 'dot' %}<span class="base-badge-dot" aria-hidden="true"></span>{% endif %}{% if caller is defined %}{{ caller() }}{% elif label is not none %}{{ label }}{% endif %}</span>
+{%- endmacro %}
+
+{% macro inline_code(value=none, class_name='', attributes=none) -%}
+<code class="base-inline-code{% if class_name %} {{ class_name }}{% endif %}"{{ _native_attributes(attributes, ['class']) }}>{% if caller is defined %}{{ caller() }}{% elif value is not none %}{{ value }}{% endif %}</code>
 {%- endmacro %}
 
 {% macro progress(value, max=100, variant='default', label=none, value_text=none, class_name='') -%}
