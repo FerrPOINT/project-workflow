@@ -674,11 +674,16 @@ def workflows_page(request: Request) -> Response:
             "default_workflow_id": default_workflow_id,
         }
     )
-    return _template_response(
-        request=request,
-        name="workflows.html",
-        context=context,
-    )
+    # The full page and incremental editor share context, policy and Jinja macros.
+    # Errors/redirects above never carry the fragment marker and cannot replace the editor.
+    fragment = request.headers.get("x-workflow-view") == "editor-v1"
+    context["workflow_fragment"] = fragment
+    response = _template_response(request=request, name="workflows.html", context=context)
+    response.headers["Cache-Control"] = "private, no-store"
+    response.headers["Vary"] = "X-Workflow-View"
+    if fragment:
+        response.headers["X-Workflow-View"] = "editor-v1"
+    return response
 
 
 def task_detail_page(

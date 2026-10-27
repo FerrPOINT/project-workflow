@@ -119,7 +119,7 @@ let changed;
 const group={addEventListener(type,callback){if(type==='change')changed=callback;}};
 const document={getElementById:id=>id==='phasesTimeline'?timeline:id==='phaseView'?group:null,
  querySelectorAll:selector=>selector.includes('phase-card-actions')?[]:radios,
- addEventListener(type,callback){if(type==='DOMContentLoaded')ready.push(callback);}};
+ addEventListener(type,callback){if(type==='DOMContentLoaded')ready.push(callback);if(type==='change')changed=callback;}};
 const localStorage={getItem(){if(storage==='unavailable')throw Error('storage');return storage;},
  setItem(key,value){if(storage==='unavailable')throw Error('storage');writes.push([key,value]);}};
 SOURCE
