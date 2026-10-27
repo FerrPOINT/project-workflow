@@ -8,8 +8,20 @@ from typing import Any
 import httpx
 
 from project_workflow import config
+from project_workflow.domain.configured_cli import PROTOCOL
 from project_workflow.domain.exceptions import ConflictError
 from project_workflow.infrastructure import namespace_auth
+
+STAGES = {
+    ("project_manager", "draft"): {"Draft", "Backlog"},
+    ("analyst", "analysis"): {"Analysis"},
+    ("architect", "decomposition"): {"Architecture"},
+    ("developer", "initial"): {"Development"},
+    ("developer", "rework"): {"Rework"},
+    ("reviewer", "delivery"): {"Review"},
+    ("tester", "delivery"): {"Testing"},
+    ("devops", "delivery"): {"Deployment"},
+}
 
 
 def read(request: dict[str, Any], suffix: str) -> dict[str, Any]:
@@ -47,7 +59,10 @@ def assignment(request: dict[str, Any]) -> None:
                 "agent_id": request["concrete_agent_ref"], "version": request["assignment_version"],
                 "machine_subject": request["machine_subject"]}
     actual = context.get("assignment")
+    stages = STAGES.get((request["role_key"], request["mode_key"]), set())
     if (type(context.get("contract_version")) is not int or context.get("contract_version") != 1
+            or context.get("interaction_protocol") != PROTOCOL
+            or context.get("stage") not in stages
             or not isinstance(actual, dict) or type(actual.get("version")) is not int
             or context.get("task_id") != request["tracker_task_id"]
             or context.get("root_task_id") != request["tracker_task_id"]

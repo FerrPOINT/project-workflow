@@ -11,7 +11,6 @@ from sqlalchemy.exc import IntegrityError
 
 from ..domain.configured_cli import ConfiguredCliFence
 from ..domain.exceptions import ConcurrentTransitionError
-from ..domain.runtime_assignment import RuntimeStepFence
 from ..infrastructure.llm import (
     LlmConfigurationError,
     LlmVerdict,
@@ -103,80 +102,6 @@ def _report_fingerprint(task_id: int, report: str, contract_fingerprint: str) ->
     return hashlib.sha256(f"{task_id}\0{contract_fingerprint}\0{normalized}".encode()).hexdigest()
 
 
-def _runtime_assignment_cursor(engine: Any, fence: RuntimeStepFence) -> dict[str, Any]:
-    """Read the post-transition cursor from the transaction that will be committed."""
-    engine.db.refresh()
-    task_row = engine.db.tasks.get_by_id(int(engine.task["id"]))
-    assignment_row = engine.db.tasks.get_assignment_by_operation_key(
-        fence.assignment_operation_key
-    )
-    if task_row is None or assignment_row is None:
-        raise ConcurrentTransitionError("Runtime cursor исчез до commit")
-    task = task_row.to_dict()
-    assignment = assignment_row.to_dict()
-    pm_cursor: dict[str, Any] = {}
-    if fence.pm_version is not None:
-        from project_workflow.application.pm_execution import PMExecutionService
-
-        pm_service = PMExecutionService(engine.db)
-        execution = pm_service.supervisor_binding(int(engine.task["id"]), fence)
-        if execution is None:
-            raise ConcurrentTransitionError("PM execution disappeared before commit")
-        run = pm_service.run(execution)
-        assignment = {**assignment, "binding_ref": run.binding_ref, "hermes_run_ref": run.run_ref}
-        pm_cursor = {
-            "execution_ref": execution.execution_ref, "session_run_id": run.session_run_id,
-            "execution_version": execution.version, "execution_fence": execution.fence,
-        }
-    expected_task = {
-        "assignment_revision": fence.assignment_revision,
-        "assignment_operation_key": fence.assignment_operation_key,
-        "mode_id": fence.mode_id,
-        "mode_key": fence.mode_key,
-        "cycle_number": fence.cycle_number,
-    }
-    expected_assignment = {
-        "assignment_revision": fence.assignment_revision,
-        "operation_key": fence.assignment_operation_key,
-        "assignment_ref": fence.assignment_ref,
-        "binding_ref": fence.binding_ref,
-        "hermes_run_ref": fence.hermes_run_ref,
-        "mode_id": fence.mode_id,
-        "mode_key": fence.mode_key,
-        "cycle_number": fence.cycle_number,
-        "attempt_number": fence.attempt_number,
-        "role_key": fence.role_key,
-    }
-    if any(task.get(name) != value for name, value in expected_task.items()) or any(
-        assignment.get(name) != value for name, value in expected_assignment.items()
-    ):
-        raise ConcurrentTransitionError("Runtime cursor изменился до commit")
-    if (
-        assignment.get("bind_operation_key") is None
-        or assignment.get("bind_request_sha256") is None
-    ):
-        raise ConcurrentTransitionError("Runtime cursor не связан с Hermes run")
-    phase_id = task.get("current_phase_id")
-    phase = engine.db.phases.get_by_id(phase_id) if isinstance(phase_id, int) else None
-    if phase is None:
-        raise ConcurrentTransitionError("Runtime cursor ссылается на неизвестную фазу")
-    return {
-        "assignment_operation_key": fence.assignment_operation_key,
-        "assignment_revision": fence.assignment_revision,
-        "assignment_ref": fence.assignment_ref,
-        "binding_ref": fence.binding_ref,
-        "hermes_run_ref": fence.hermes_run_ref,
-        "binding_state": "bound",
-        "mode_key": fence.mode_key,
-        "cycle_number": fence.cycle_number,
-        "attempt_number": fence.attempt_number,
-        "status": task.get("status"),
-        "current_phase_code": phase.code,
-        "current_phase_name": phase.name,
-        **pm_cursor,
-    }
-
-
 def _blocked(exc: Exception) -> LlmVerdict:
     if isinstance(exc, LlmConfigurationError):
         blocker = "Проверяющий LLM не настроен: для OpenRouter требуется OPENAI_API_KEY."
@@ -228,21 +153,10 @@ def _replay(
     after_run_id: int | None = None,
 ) -> dict[str, Any] | None:
     runtime_fence = getattr(engine, "runtime_fence", None)
-    if isinstance(runtime_fence, RuntimeStepFence):
-        run = engine.db.step_history.get_by_step_operation_key(
-            runtime_fence.step_operation_key
-        )
-        if run is not None:
-            runtime_fence.assert_history(run.to_dict())
-    else:
-        runtime_fence = None
-        run = engine.db.step_history.get_by_fingerprint(
-            task_id,
-            phase_id,
-            fingerprint,
-            mode_id=int(engine.task.get("mode_id") or 0),
-            cycle_number=int(engine.task.get("cycle_number") or 0),
-        )
+    run = engine.db.step_history.get_by_fingerprint(
+        task_id, phase_id, fingerprint, mode_id=int(engine.task.get("mode_id") or 0),
+        cycle_number=int(engine.task.get("cycle_number") or 0),
+    )
     run_id = getattr(run, "id", None) if run is not None else None
     if after_run_id is not None and (run_id is None or int(run_id) <= after_run_id):
         return None
@@ -656,37 +570,6 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         from ..application.configured_cli import prepare_history
 
         prepare_history(runtime_fence, run_data)
-    if isinstance(runtime_fence, RuntimeStepFence):
-        if runtime_fence.single_task_context_sha256 is not None:
-            from ..application.single_task_runtime import current_binding
-
-            assignment = engine.db.tasks.get_assignment_by_operation_key(runtime_fence.assignment_operation_key)
-            if assignment is None:
-                raise ConcurrentTransitionError("Single-task assignment disappeared before history")
-            run_data["evaluation_snapshot"]["single_task_binding"] = current_binding(engine.db, assignment.to_dict())
-            run_data["evaluation_snapshot"]["single_task_context_sha256"] = runtime_fence.single_task_context_sha256
-        if (runtime_fence.base_admission_sha256 is not None
-            or runtime_fence.single_task_context_sha256 is not None):
-            # Persist the exact accepted hash inputs, not a partial/public contract
-            # or a reconstruction using future catalog/history state.
-            run_data["evaluation_snapshot"]["contract_fingerprint_state"] = _contract_fingerprint_state(
-                builder=builder, phase=phase, group=group, contract=current_contract,
-                evaluation_items=evaluation_items, previously_covered_ids=previously_ids,
-                transition_routes=transition_routes,
-            )
-        run_data.update(
-            {
-                "step_operation_key": runtime_fence.step_operation_key,
-                "request_sha256": runtime_fence.request_sha256,
-                "assignment_revision": runtime_fence.assignment_revision,
-                "assignment_operation_key": runtime_fence.assignment_operation_key,
-                "assignment_ref": runtime_fence.assignment_ref,
-                "binding_ref": runtime_fence.binding_ref,
-                "hermes_run_ref": runtime_fence.hermes_run_ref,
-                "attempt_number": runtime_fence.attempt_number,
-                "role_key": runtime_fence.role_key,
-            }
-        )
 
     try:
         step_history_id = engine.db.record_step(**run_data)
@@ -698,30 +581,6 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
             step_history_id,
             commit=False,
         )
-        if isinstance(runtime_fence, RuntimeStepFence):
-            result.update(_runtime_assignment_cursor(engine, runtime_fence))
-            if runtime_fence.single_task_context_sha256 is not None:
-                result["complete"] = False
-                result["single_task_context_sha256"] = runtime_fence.single_task_context_sha256
-            if runtime_fence.base_admission_sha256 is not None:
-                result["complete"] = False
-            engine.db.step_history.update_supervisor_response(step_history_id, result)
-            if runtime_fence.single_task_context_sha256 is not None and result.get("status") == "done":
-                from ..application.single_task_terminal import build_terminal_receipt as build_single_task_receipt
-
-                terminal = build_single_task_receipt(engine.db, runtime_fence.step_operation_key, fence=runtime_fence)
-                result["single_task_terminal_receipt"] = terminal["receipt"]
-                result["workflow_receipt"] = terminal["workflow_receipt"]
-                result["complete"] = True
-                engine.db.step_history.update_supervisor_response(step_history_id, result)
-            if runtime_fence.base_admission_sha256 is not None and result.get("status") == "done":
-                from ..application.base_terminal import build_terminal_receipt
-
-                result["base_terminal_receipt"] = build_terminal_receipt(
-                    engine.db, runtime_fence.step_operation_key, fence=runtime_fence,
-                )
-                result["complete"] = True
-                engine.db.step_history.update_supervisor_response(step_history_id, result)
         if isinstance(runtime_fence, ConfiguredCliFence):
             from ..application.configured_cli import finish_history
 
@@ -729,7 +588,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         engine.db.commit()
     except IntegrityError:
         engine.db.rollback()
-        if isinstance(getattr(engine, "runtime_fence", None), RuntimeStepFence):
+        if isinstance(getattr(engine, "runtime_fence", None), ConfiguredCliFence):
             raise
         replayed = _replay(engine, task_id, phase_id, fingerprint)
         if replayed is not None:

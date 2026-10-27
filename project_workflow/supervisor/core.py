@@ -124,10 +124,6 @@ class SupervisorEngine:
                 self._uow, workflow_id=self.workflow_id, mode_id=self.execution_mode_id,
                 profession_settings=self.project,
             )
-            if isinstance(self.runtime_fence, ConfiguredCliFence):
-                from ..infrastructure.configured_cli_instructions import phases
-
-                self._all_phases = phases(self._all_phases)
         return self._all_phases
 
     @all_phases.setter
@@ -544,38 +540,26 @@ class SupervisorEngine:
         )
         self.workflow_id = self._require_task_workflow_id(self.task) if self.task else None
         self.workflow = self._workflow_service.get_workflow(self.workflow_id) if self.workflow_id else None
-        if isinstance(self.runtime_fence, ConfiguredCliFence):
-            # Load through all_phases so the runtime-only projection survives provider IO.
-            self._all_phases = None
-        else:
-            self._all_phases = (
-                schema.load_phases_from_db(
-                    self._uow, workflow_id=self.workflow_id, mode_id=self.execution_mode_id,
-                    profession_settings=self.project,
-                )
-                if self.workflow_id
-                else []
+        self._all_phases = (
+            schema.load_phases_from_db(
+                self._uow, workflow_id=self.workflow_id, mode_id=self.execution_mode_id,
+                profession_settings=self.project,
             )
+            if self.workflow_id
+            else []
+        )
         self._phase_map = None
         self.current_phase_code = self._resolve_current_phase_code()
 
     def _assert_runtime_fence(self) -> None:
         """Fail closed when the current task no longer matches the owner-issued run."""
-        if isinstance(self._uow, SAUnitOfWork) and self.task is not None:
-            from ..application.base_admission import assert_base_supervisor
-
-            assert_base_supervisor(self._uow, self.task, self.runtime_fence)
+        if self.runtime_fence is not None and not isinstance(self.runtime_fence, ConfiguredCliFence):
+            raise ConflictError("Retired execution protocol; current configured assignment required")
         if isinstance(self.runtime_fence, ConfiguredCliFence):
             self.runtime_fence.assert_task(self.task)
             return
-        if isinstance(self._uow, SAUnitOfWork) and self.task is not None:
-            from project_workflow.application.pm_execution import PMExecutionService
-
-            pm_execution = PMExecutionService(self._uow).supervisor_binding(self.task["id"], self.runtime_fence)
-            if pm_execution is not None and self.runtime_fence is None:
-                raise ValueError("Bound PM execution requires the scoped runtime step API")
-        if self.runtime_fence is not None:
-            self.runtime_fence.assert_task(self.task)
+        if self.task is not None and self.task.get("assignment_operation_key") is not None:
+            raise ConflictError("Assigned execution requires the configured CLI API")
 
     def _lock_runtime_fence(self) -> None:
         """Fence replay/persistence against an assignment switch in another transaction."""

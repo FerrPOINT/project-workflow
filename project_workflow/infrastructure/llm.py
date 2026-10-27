@@ -112,7 +112,7 @@ class OpenAICompatibleClient:
 class PromptBuilder:
     """Build prompts from phase contracts + task context."""
 
-    PROMPT_VERSION = "supervisor-evaluator-v8"
+    PROMPT_VERSION = "supervisor-evaluator-v9"
 
     SYSTEM_PROMPT = (
         "You are a strict workflow supervisor. "
@@ -129,11 +129,10 @@ class PromptBuilder:
         "7. verdict = PARTIAL — some items are missing, but the CURRENT phase worker can "
         "complete them without changing an artifact produced by an earlier phase → stay on phase.\n"
         "8. verdict = BLOCKED — real blocker → stay on phase.\n"
-        "9. verdict = ROLLBACK — missing items require changing an artifact produced by an "
-        "earlier phase, or the current worker explicitly cannot/will not do this. Use ROLLBACK "
-        "for review/QA findings that require code, test, migration, or documentation fixes in "
-        "the configured rollback phase.\n"
-        "10. verdict = DELEGATE — worker delegates to another agent.\n"
+        "9. verdict = ROLLBACK — missing phase obligations require changing an earlier-phase artifact "
+        "AND a rollback target is configured. Never invent a target. When required work cannot be "
+        "completed and no target is configured, report the concrete blocker instead.\n"
+        "10. verdict = DELEGATE — only when the phase has a configured delegate.\n"
         "11. Mutually exclusive CURRENT facts about the same artifact or state prohibit PASS "
         "unless the report gives an explicit chronology backed by action evidence.\n"
         "12. If such a contradiction is repairable inside the current phase, return PARTIAL. "
@@ -143,6 +142,12 @@ class PromptBuilder:
         "13. A sequence such as 'first open, then merged' is valid only when timestamps and action "
         "evidence make the state change explicit.\n"
         "14. Return one bare JSON object. Never wrap it in Markdown or code fences, and add no commentary.\n"
+        "15. Evaluate performance of THIS phase: phase completion is not candidate approval or a Tracker "
+        "stage transition. An independent review/test can finish with a documented rework outcome when "
+        "the phase contract permits it. Pre-existing defects it correctly reports are not regressions "
+        "introduced by that worker, and do not by themselves require a Workflow ROLLBACK. "
+        "Never use a business outcome to excuse missing phase obligations, missing evidence or "
+        "contradictory claims of acceptance. Check every required item as usual.\n"
         "The Supervisor never chooses the next phase.\n\n"
         "Output STRICT JSON with these keys:\n"
         "{\n"
@@ -163,14 +168,16 @@ class PromptBuilder:
         previously_covered: list[str] | None = None,
         evaluation_items: list[tuple[str, str]] | None = None,
     ) -> str:
-        if phase.code == "PM-DRAFT-03":
-            from .configured_cli_instructions import precommit_phase
-
-            phase = precommit_phase(phase)
+        allowed = ["PASS", "PARTIAL", "BLOCKED"]
+        if getattr(phase, "rollback_target_phase_code", None):
+            allowed.append("ROLLBACK")
+        if getattr(phase, "delegate", None) is not None:
+            allowed.append("DELEGATE")
         lines: list[str] = [
             f"TASK: {task_key}",
             f"CURRENT PHASE: {phase.code} — {phase.name}",
             f"ROLLBACK TARGET: {getattr(phase, 'rollback_target_phase_code', None) or 'not configured'}",
+            f"ALLOWED VERDICTS: {', '.join(allowed)}",
             "",
             "PHASE CONTRACT:",
         ]

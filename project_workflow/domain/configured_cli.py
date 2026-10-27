@@ -1,4 +1,4 @@
-"""Fileless, business-assignment-scoped PM interaction; never a native run proof."""
+"""Business-assignment-scoped interaction; never a native run proof."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from project_workflow.domain.base_admission import Sha256
 from project_workflow.domain.namespace_ownership import UUIDRef
 from project_workflow.domain.runtime_assignment import FleetAgentRef, payload_sha256
+from project_workflow.domain.single_task_profile import ROLE_MODES
 from project_workflow.domain.single_task_runtime import WorkflowArtifactReceipt
 
 PROTOCOL: Literal["configured-cli-v1"] = "configured-cli-v1"
@@ -21,9 +22,9 @@ class ConfiguredAssignment(BaseModel):
     interaction_protocol: Literal["configured-cli-v1"]
     task: str = Field(min_length=1, max_length=128)
     namespace_id: int = Field(gt=0, strict=True)
-    workflow_key: Literal["single-task-v1:project_manager"]
-    mode_key: Literal["draft"]
-    role_key: Literal["project_manager"] = "project_manager"
+    workflow_key: str
+    mode_key: str
+    role_key: str = "project_manager"
     operation_key: str = Field(min_length=1, max_length=128)
     assignment_ref: UUIDRef
     tracker_execution_id: UUIDRef
@@ -33,20 +34,16 @@ class ConfiguredAssignment(BaseModel):
     concrete_agent_ref: FleetAgentRef
     tracker_task_id: UUIDRef
     owner_subject: UUIDRef
-    expected_version: Literal[0]
+    expected_version: int = Field(ge=0, strict=True)
 
     @model_validator(mode="after")
     def business_identity(self) -> ConfiguredAssignment:
         if self.business_task_ref != self.tracker_task_id:
             raise ValueError("business_task_ref must be the canonical Tracker task UUID")
+        if (self.role_key not in ROLE_MODES or self.mode_key not in ROLE_MODES[self.role_key]
+                or self.workflow_key != f"single-task-v1:{self.role_key}"):
+            raise ValueError("Workflow, profession and mode must match the installed catalog")
         return self
-
-    @field_validator("expected_version", mode="before")
-    @classmethod
-    def zero_version(cls, value: Any) -> int:
-        if type(value) is not int or value != 0:
-            raise ValueError("New enrollment requires integer expected_version=0")
-        return value
 
     @field_validator("task", "operation_key", "assignment_ref", "business_task_ref")
     @classmethod
@@ -94,8 +91,8 @@ class ConfiguredTerminalReadback(BaseModel):
     operation_key: str = Field(min_length=1, max_length=128)
     concrete_agent_ref: FleetAgentRef
     assignment_ref: UUIDRef
-    requirements_revision: int = Field(ge=1, strict=True)
-    requirements_sha256: Sha256
+    requirements_revision: int | None = Field(default=None, ge=1, strict=True)
+    requirements_sha256: Sha256 | None = None
     result_version: int = Field(ge=2, strict=True)
 
 
@@ -106,7 +103,7 @@ class ConfiguredTerminalReceipt(ConfiguredTerminalReadback):
     machine_subject: UUIDRef
     request_sha256: Sha256
     owner_subject: UUIDRef
-    confirmation_id: UUIDRef
+    confirmation_id: UUIDRef | None = None
     history_id: int = Field(gt=0, strict=True)
     status: Literal["done"]
 
@@ -118,6 +115,13 @@ class ConfiguredTerminalResponse(BaseModel):
     complete: Literal[True]
     workflow_receipt: WorkflowArtifactReceipt
     receipt: ConfiguredTerminalReceipt
+
+
+class ConfiguredArtifactReadback(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    interaction_protocol: Literal["configured-cli-v1"]
+    workflow_receipt: WorkflowArtifactReceipt
 
 
 @dataclass(frozen=True)

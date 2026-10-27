@@ -3,7 +3,6 @@
 import json
 import sys
 from contextlib import contextmanager
-from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -24,16 +23,11 @@ def agent_env(monkeypatch):
     monkeypatch.setenv("PROJECT_WORKFLOW_API_TOKEN", "sdlc_pat_configured-only-test")
     monkeypatch.setenv("PROJECT_WORKFLOW_URL", "https://workflow.test/workflow")
     monkeypatch.setenv("PDLC_API_TOKEN", "must-not-be-used")
-    class SharedError(Exception):
-        pass
-    def admitted(root, *, token):
-        assert token == "sdlc_pat_configured-only-test"
-        return SimpleNamespace(base_url=root.rstrip("/") + "/")
-    monkeypatch.setitem(sys.modules, "pdlc_cli_core", SimpleNamespace(ApiClient=admitted, ApiError=SharedError))
+    monkeypatch.setenv("SDLC_API_TOKEN", "conflicting-global-token-must-not-be-used")
     def forbidden(*a, **kw):
         raise AssertionError("Configured CLI must not open a DB or legacy transport")
-    monkeypatch.setattr(ui, "SAUnitOfWork", forbidden)
-    monkeypatch.setattr(ui, "_platform_request", forbidden)
+    from project_workflow.infrastructure.db.uow import SAUnitOfWork
+    monkeypatch.setattr(SAUnitOfWork, "__init__", forbidden)
 
 
 def fake_transport(monkeypatch, *, status=200, exception=None):
@@ -42,10 +36,8 @@ def fake_transport(monkeypatch, *, status=200, exception=None):
     calls = []
     class Response:
         status_code = status
-        def __enter__(self):
-            return self
-        def __exit__(self, *a):
-            return False
+        def close(self):
+            pass
         def iter_content(self, **kw):
             yield json.dumps({"ok": True, "exit_code": 0, "result": {
                 "interaction_protocol": "configured-cli-v1", "task": "SDLC-31", "namespace_id": 12,
@@ -68,6 +60,7 @@ def test_existing_commands_use_configured_runtime_routes(agent_env, monkeypatch,
     assert args[1] == "https://workflow.test/workflow/internal/runtime/" + command
     assert kwargs["headers"]["Authorization"] == "Bearer sdlc_pat_configured-only-test"
     assert kwargs["allow_redirects"] is False
+    assert kwargs["stream"] is True and kwargs["timeout"] == (3, 120)
     assert "X-Workflow-Execution-Token" not in kwargs["headers"]
 
 
@@ -79,6 +72,19 @@ def test_report_stdin_preserves_exact_key_version_and_text(agent_env, monkeypatc
     body = calls[0][1]["json"]
     assert body["report"] == "Real report\n" and body["operation_key"] == "report-a" and body["expected_version"] == 4
     assert "hermes_run_ref" not in body and "execution_token" not in body
+
+
+def test_history_cursor_uses_the_existing_command_without_files(agent_env, monkeypatch):
+    calls = fake_transport(monkeypatch)
+    result = CliRunner().invoke(cli, ["--json", "history", "--task", "SDLC-31", "--n", "1",
+                                     "--before-history-id", "9223372036854775807"])
+    assert result.exit_code == 0, result.output
+    assert calls[0][1]["params"]["before_history_id"] == 9223372036854775807
+    for args in (["--before-history-id", "0"], ["--before-history-id", "9223372036854775808"],
+                 ["--before-history-id", "10", "--operation-key", "exact-original"]):
+        rejected = CliRunner().invoke(cli, ["--json", "history", "--task", "SDLC-31", *args])
+        assert rejected.exit_code != 0
+    assert len(calls) == 1
 
 
 def test_final_report_flags_preserve_exact_requirements_evidence(agent_env, monkeypatch):
@@ -127,6 +133,14 @@ def test_unknown_post_has_no_retry_or_db_fallback(agent_env, monkeypatch):
     assert "private credential" not in result.output
 
 
+@pytest.mark.parametrize("command", ["step", "history"])
+def test_failed_instruction_or_history_read_has_no_unknown_write(agent_env, monkeypatch, command):
+    calls = fake_transport(monkeypatch, exception=requests.Timeout("private transport detail"))
+    result = CliRunner().invoke(cli, ["--json", command, "--task", "SDLC-31"])
+    assert result.exit_code == 1 and len(calls) == 1
+    assert json.loads(result.output)["acceptance_unknown"] is False
+
+
 def test_unknown_protocol_cannot_fall_back(agent_env, monkeypatch):
     monkeypatch.setenv("FLEET_CLI_PROTOCOL", "configured-cli-v2")
     calls = fake_transport(monkeypatch)
@@ -139,13 +153,13 @@ def test_http_origin_uses_permanent_base_admission_not_per_call_overrides(agent_
     monkeypatch.setenv("PROJECT_WORKFLOW_URL", origin)
     monkeypatch.setenv("PDLC_CLI_TRUSTED_HTTP_ORIGINS", origin)
     calls = fake_transport(monkeypatch)
-    admission = sys.modules["pdlc_cli_core"]
+    import pdlc_cli_core as admission
     admitted = admission.ApiClient
-    def permanent(root, *, token):
+    def permanent(root, **kwargs):
         import os
 
         assert root == origin and os.environ["PDLC_CLI_TRUSTED_HTTP_ORIGINS"] == root
-        return admitted(root, token=token)
+        return admitted(root, **kwargs)
     monkeypatch.setattr(admission, "ApiClient", permanent)
     assert CliRunner().invoke(cli, ["--json", "step", "--task", "SDLC-31"]).exit_code == 0
     assert len(calls) == 1

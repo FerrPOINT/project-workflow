@@ -469,7 +469,7 @@ def test_pm_ownership_catalog_lock_order_and_incomplete_schema(pg_url, winner):
     assert not schema_is_ready(engine)
     with pytest.raises(DatabaseRecreateRequired):
         ensure_migrated(engine)
-    assert database_revisions(engine) == {"0019_pm_terminal_resume_retry"}
+    assert database_revisions(engine) == {"0020_configured_cli_catalog"}
 
 
 @pytest.mark.integration
@@ -1196,7 +1196,7 @@ class TestPostgresInitialMigration:
             version = conn.execute(
                 text("SELECT version_num FROM project_workflow.alembic_version")
             ).scalar_one()
-        assert version == migration_head() == "0019_pm_terminal_resume_retry"
+        assert version == migration_head() == "0020_configured_cli_catalog"
         assert schema_is_ready(engine) is True
 
     def test_managed_bootstrap_serializes_with_public_catalog_creation(self, pg_url):
@@ -3512,7 +3512,7 @@ def test_full_supervisor_runtime_through_cli_postgres_and_http(pg_url):
     assert len(set(fingerprints)) == 15
     assert all(run.evaluation_snapshot["model"] == "e2e-contract-model" for run in runs)
     assert all(run.evaluation_snapshot["endpoint_mode"] == "openai-compatible" for run in runs)
-    assert all(run.evaluation_snapshot["prompt_version"] == "supervisor-evaluator-v8" for run in runs)
+    assert all(run.evaluation_snapshot["prompt_version"] == "supervisor-evaluator-v9" for run in runs)
     assert all(run.evaluation_snapshot["contract_snapshot"]["evaluation_items"] for run in runs)
     assert all(run.evaluation_snapshot["raw_evaluator"]["verdict"] == "PASS" for run in runs)
     uow.close()

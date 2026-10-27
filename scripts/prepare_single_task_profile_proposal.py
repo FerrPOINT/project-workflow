@@ -11,9 +11,9 @@ from project_workflow.infrastructure.single_task_catalog import load_single_task
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "docs/proposals"
-SOURCE_COMMIT = "fb9dd53c90cb4c421ffa12c0c766ca54961f2003"
+SOURCE_COMMIT = "SELF"
 SOURCE_PATH = "project_workflow/infrastructure/single_task_catalog.py"
-SOURCE_SHA256 = "aa9fd70897a14c62eb00dab9aa1691a99f19a17519ae67451a13faf5b0e6432d"
+SOURCE_SHA256 = "e11f970ba34111aee13ed81f2d7f73da619f2b7cb0a75f3023ee7b2271ded90a"
 DONOR_PATH = "project_workflow/references/base_sdlc_catalog_cli_v4.json"
 DONOR_SHA256 = "d6d18f98b55f14210a3f0e12404074705495d535aa8ba29ae449624b845668c9"
 CATALOG_PATH = "docs/proposals/single-task-v1.catalog.json"
@@ -37,6 +37,7 @@ def render() -> tuple[bytes, bytes]:
     source = {
         "repository": "https://github.com/FerrPOINT/project-workflow.git",
         "commit": SOURCE_COMMIT,
+        "commit_meaning": "exact commit containing this catalog; source bytes are checked by sha256",
         "path": SOURCE_PATH,
         "sha256": SOURCE_SHA256,
         "identity_donor": {"path": DONOR_PATH, "sha256": DONOR_SHA256},

@@ -1,14 +1,12 @@
 """Published family retention; synthetic SQLite ledgers, not installed FLEETQA3 proof."""
 
 import hashlib
-import json
 import shutil
 
 import pytest
 from pydantic import ValidationError
 from sqlalchemy import select
 
-from project_workflow.domain.exceptions import ConflictError
 from project_workflow.domain.single_task_profile import (
     MANIFEST_SHA256,
     RETAINED_CATALOG_SHA256,
@@ -19,7 +17,6 @@ from project_workflow.domain.single_task_runtime import SingleTaskContext
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db import single_task_catalog as catalog
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
-from tests import test_pm_bootstrap_retry as bootstrap
 from tests import test_single_task_installation as installation
 from tests import test_single_task_runtime as runtime
 
@@ -43,7 +40,6 @@ def retained_bridge(monkeypatch):
     install_retained(monkeypatch)
     profile = {**runtime.PROFILE, "instruction_manifest_sha256": RETAINED_MANIFEST_SHA256}
     monkeypatch.setattr(runtime, "PROFILE", profile)
-    monkeypatch.setattr(bootstrap, "PROFILE", profile)
     monkeypatch.setattr(installation, "MANIFEST_SHA256", RETAINED_MANIFEST_SHA256)
     yield from runtime.bridge.__wrapped__(monkeypatch)
 
@@ -112,7 +108,9 @@ def test_pre_backlog_profile_is_retained_without_rewriting_existing_instructions
         assert observed.workflow_catalog_sha256 == RETAINED_PROFILE_CATALOGS[manifest]
         assert all_rows(uow) == before
     old, _ = catalog.load_profile(manifest)
-    current, _ = catalog.load_profile()
+    # Compare the two published native families; current configured instructions
+    # intentionally changed every profession, without rewriting either archive.
+    current, _ = catalog.load_profile("1535516545520eb5ea489cf1583cfaebc458e5729a94762751515841078671c3")
     assert [w for w in old["workflows"] if w["role_key"] != "project_manager"] == [
         w for w in current["workflows"] if w["role_key"] != "project_manager"
     ]
@@ -137,47 +135,3 @@ def test_mixed_old_new_phase_content_is_denied_without_repair(monkeypatch):
             catalog.ensure_single_task_catalog(uow)
         uow.rollback()
         assert all_rows(uow) == before
-
-
-@pytest.mark.parametrize("state", ["bound", "unbound"])
-def test_retained_assignment_bind_and_retry_keep_original_manifest_and_history(retained_bridge, monkeypatch, state):
-    pending = bootstrap.prepare_pending(retained_bridge, monkeypatch, state)
-    original_key = pending["assignment"]["operation_key"]
-    assert pending["assignment"]["instruction_manifest_sha256"] == RETAINED_MANIFEST_SHA256
-    # A newer accepted parser hash is not permission to upgrade the frozen retry context.
-    changed = pending["proof"].model_copy(update={"current_context": pending["proof"].current_context.model_copy(
-        update={"instruction_manifest_sha256": MANIFEST_SHA256},
-    )})
-    with pytest.raises(ConflictError, match="manifest/namespace mismatch"):
-        bootstrap.retry(pending, bootstrap.command(pending, changed), lambda _: changed)
-    with SAUnitOfWork() as uow:
-        old = uow.tasks.get_assignment_by_operation_key(original_key).to_dict()
-    bootstrap.enroll_retry(pending, monkeypatch)
-    with SAUnitOfWork() as uow:
-        assert uow.tasks.get_assignment_by_operation_key(original_key).to_dict() == old
-        child = uow.tasks.get_assignment_by_operation_key("pm-bootstrap:" + bootstrap.NEXT).to_dict()
-        assert child["payload"]["single_task_context"]["instruction_manifest_sha256"] == RETAINED_MANIFEST_SHA256
-        identity = json.loads(uow.session.scalar(select(m.PMExecution.identity_json)))
-        assert identity["assignment_operation_key"] == original_key
-
-
-@pytest.mark.parametrize("state", ["bound", "unbound"])
-def test_retained_retry_keeps_original_family_through_confirmation_and_terminal(
-    retained_bridge, monkeypatch, supervisor_llm, state,
-):
-    pending = bootstrap.prepare_pending(retained_bridge, monkeypatch, state)
-    identity, native, command, step, headers = bootstrap.enroll_retry(pending, monkeypatch)
-    observations = {bootstrap.NEXT: native.model_copy(update={"status": "running"})}
-    monkeypatch.setattr(bootstrap.pm_readback, "observe_run", lambda run: observations[run])
-    bootstrap.finish_confirmed_retry(
-        pending, supervisor_llm, identity, native, command, step, headers, observations,
-    )
-    with SAUnitOfWork() as uow:
-        observed = catalog.observe_installation(uow)
-        assert observed.instruction_manifest_sha256 == RETAINED_MANIFEST_SHA256
-        execution = uow.session.scalar(select(m.PMExecution))
-        assignment = uow.tasks.get_assignment_by_operation_key("pm-bootstrap:" + bootstrap.NEXT)
-        assert execution.assignment_id == assignment.id
-        assert assignment.to_dict()["payload"]["single_task_context"]["instruction_manifest_sha256"] == (
-            RETAINED_MANIFEST_SHA256
-        )

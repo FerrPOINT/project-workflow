@@ -14,6 +14,7 @@ from project_workflow.infrastructure import configured_cli_tracker as tracker
 @pytest.fixture
 def authority(monkeypatch):
     request = {"task": "SDLC-901", "tracker_task_id": str(uuid4()), "owner_subject": str(uuid4()),
+               "role_key": "project_manager", "mode_key": "draft",
                "assignment_ref": str(uuid4()),
                "tracker_execution_id": str(uuid4()), "concrete_agent_ref": str(uuid4()),
                "machine_subject": str(uuid4()), "assignment_version": 2}
@@ -21,7 +22,9 @@ def authority(monkeypatch):
                   "execution_id": request["tracker_execution_id"],
                   "agent_id": request["concrete_agent_ref"],
                   "machine_subject": request["machine_subject"], "version": 2}
-    context = {"contract_version": 1, "task_id": request["tracker_task_id"],
+    context = {"contract_version": 1, "interaction_protocol": "configured-cli-v1",
+               "task_id": request["tracker_task_id"],
+               "stage": "Draft",
                "root_task_id": request["tracker_task_id"], "owner_subject": request["owner_subject"],
                "workflow_task_key": request["task"],
                "assignment": assignment}
@@ -79,10 +82,35 @@ def test_every_current_assignment_component_is_exact(authority, field):
         tracker.assignment(request)
 
 
+@pytest.mark.parametrize("role,mode,stage", [
+    ("project_manager", "draft", "Draft"), ("analyst", "analysis", "Analysis"),
+    ("architect", "decomposition", "Architecture"), ("developer", "initial", "Development"),
+    ("developer", "rework", "Rework"), ("reviewer", "delivery", "Review"),
+    ("tester", "delivery", "Testing"), ("devops", "delivery", "Deployment"),
+])
+def test_current_stage_must_match_the_assigned_profession_and_mode(authority, role, mode, stage):
+    request, bodies, _ = authority
+    request.update(role_key=role, mode_key=mode)
+    bodies["context"]["stage"] = stage
+    tracker.assignment(request)
+    for wrong in (None, "Completed", "Rework" if stage != "Rework" else "Development"):
+        bodies["context"]["stage"] = wrong
+        with pytest.raises(ConflictError):
+            tracker.assignment(request)
+
+
 @pytest.mark.parametrize("field", ["task_id", "root_task_id", "owner_subject"])
 def test_task_and_owner_cannot_be_borrowed(authority, field):
     request, bodies, _ = authority
     bodies["context"][field] = str(uuid4())
+    with pytest.raises(ConflictError):
+        tracker.assignment(request)
+
+
+@pytest.mark.parametrize("protocol", [None, "native-v1", "configured-cli-v2", True])
+def test_retired_or_unknown_execution_contract_is_not_current_authority(authority, protocol):
+    request, bodies, _ = authority
+    bodies["context"]["interaction_protocol"] = protocol
     with pytest.raises(ConflictError):
         tracker.assignment(request)
 

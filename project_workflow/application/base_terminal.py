@@ -178,12 +178,6 @@ def _terminal_evidence(
     return task, assignment, step, run, events[0]
 
 
-def build_terminal_receipt(
-    uow: SAUnitOfWork, step_operation_key: str, *, fence: RuntimeStepFence,
-) -> dict[str, Any]:
-    """Called inside the existing report/cursor transaction, before its commit."""
-    task, assignment, step, run, event = _terminal_evidence(uow, step_operation_key, fence=fence)
-    return _receipt(task, assignment, step, run, event)
 
 
 def _receipt(

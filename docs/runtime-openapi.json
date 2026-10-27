@@ -1,0 +1,999 @@
+{
+  "components": {
+    "schemas": {
+      "ConfiguredArtifactReadback": {
+        "additionalProperties": false,
+        "properties": {
+          "interaction_protocol": {
+            "const": "configured-cli-v1",
+            "title": "Interaction Protocol",
+            "type": "string"
+          },
+          "workflow_receipt": {
+            "$ref": "#/components/schemas/WorkflowArtifactReceipt"
+          }
+        },
+        "required": [
+          "interaction_protocol",
+          "workflow_receipt"
+        ],
+        "title": "ConfiguredArtifactReadback",
+        "type": "object"
+      },
+      "ConfiguredAssignment": {
+        "additionalProperties": false,
+        "properties": {
+          "assignment_ref": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Assignment Ref",
+            "type": "string"
+          },
+          "assignment_version": {
+            "exclusiveMinimum": 0.0,
+            "title": "Assignment Version",
+            "type": "integer"
+          },
+          "business_task_ref": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Business Task Ref",
+            "type": "string"
+          },
+          "concrete_agent_ref": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Concrete Agent Ref",
+            "type": "string"
+          },
+          "expected_version": {
+            "minimum": 0.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "interaction_protocol": {
+            "const": "configured-cli-v1",
+            "title": "Interaction Protocol",
+            "type": "string"
+          },
+          "machine_subject": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Machine Subject",
+            "type": "string"
+          },
+          "mode_key": {
+            "title": "Mode Key",
+            "type": "string"
+          },
+          "namespace_id": {
+            "exclusiveMinimum": 0.0,
+            "title": "Namespace Id",
+            "type": "integer"
+          },
+          "operation_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Operation Key",
+            "type": "string"
+          },
+          "owner_subject": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Owner Subject",
+            "type": "string"
+          },
+          "role_key": {
+            "default": "project_manager",
+            "title": "Role Key",
+            "type": "string"
+          },
+          "task": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Task",
+            "type": "string"
+          },
+          "tracker_execution_id": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Tracker Execution Id",
+            "type": "string"
+          },
+          "tracker_task_id": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Tracker Task Id",
+            "type": "string"
+          },
+          "workflow_key": {
+            "title": "Workflow Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "interaction_protocol",
+          "task",
+          "namespace_id",
+          "workflow_key",
+          "mode_key",
+          "operation_key",
+          "assignment_ref",
+          "tracker_execution_id",
+          "assignment_version",
+          "business_task_ref",
+          "machine_subject",
+          "concrete_agent_ref",
+          "tracker_task_id",
+          "owner_subject",
+          "expected_version"
+        ],
+        "title": "ConfiguredAssignment",
+        "type": "object"
+      },
+      "ConfiguredStep": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_version": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Version"
+          },
+          "interaction_protocol": {
+            "const": "configured-cli-v1",
+            "title": "Interaction Protocol",
+            "type": "string"
+          },
+          "namespace_id": {
+            "exclusiveMinimum": 0.0,
+            "title": "Namespace Id",
+            "type": "integer"
+          },
+          "operation_key": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operation Key"
+          },
+          "report": {
+            "anyOf": [
+              {
+                "maxLength": 32000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Report"
+          },
+          "requirements_revision": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requirements Revision"
+          },
+          "requirements_sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requirements Sha256"
+          },
+          "task": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Task",
+            "type": "string"
+          }
+        },
+        "required": [
+          "interaction_protocol",
+          "task",
+          "namespace_id"
+        ],
+        "title": "ConfiguredStep",
+        "type": "object"
+      },
+      "ConfiguredTerminalReadback": {
+        "additionalProperties": false,
+        "properties": {
+          "assignment_ref": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Assignment Ref",
+            "type": "string"
+          },
+          "concrete_agent_ref": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Concrete Agent Ref",
+            "type": "string"
+          },
+          "execution_ref": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Execution Ref",
+            "type": "string"
+          },
+          "interaction_protocol": {
+            "const": "configured-cli-v1",
+            "title": "Interaction Protocol",
+            "type": "string"
+          },
+          "namespace_id": {
+            "exclusiveMinimum": 0.0,
+            "title": "Namespace Id",
+            "type": "integer"
+          },
+          "operation_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Operation Key",
+            "type": "string"
+          },
+          "requirements_revision": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requirements Revision"
+          },
+          "requirements_sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requirements Sha256"
+          },
+          "result_version": {
+            "minimum": 2.0,
+            "title": "Result Version",
+            "type": "integer"
+          },
+          "task": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Task",
+            "type": "string"
+          }
+        },
+        "required": [
+          "interaction_protocol",
+          "task",
+          "namespace_id",
+          "execution_ref",
+          "operation_key",
+          "concrete_agent_ref",
+          "assignment_ref",
+          "result_version"
+        ],
+        "title": "ConfiguredTerminalReadback",
+        "type": "object"
+      },
+      "ConfiguredTerminalReceipt": {
+        "additionalProperties": false,
+        "properties": {
+          "assignment_ref": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Assignment Ref",
+            "type": "string"
+          },
+          "assignment_version": {
+            "exclusiveMinimum": 0.0,
+            "title": "Assignment Version",
+            "type": "integer"
+          },
+          "concrete_agent_ref": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Concrete Agent Ref",
+            "type": "string"
+          },
+          "confirmation_id": {
+            "anyOf": [
+              {
+                "not": {
+                  "const": "00000000-0000-0000-0000-000000000000"
+                },
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmation Id"
+          },
+          "execution_ref": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Execution Ref",
+            "type": "string"
+          },
+          "history_id": {
+            "exclusiveMinimum": 0.0,
+            "title": "History Id",
+            "type": "integer"
+          },
+          "interaction_protocol": {
+            "const": "configured-cli-v1",
+            "title": "Interaction Protocol",
+            "type": "string"
+          },
+          "machine_subject": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Machine Subject",
+            "type": "string"
+          },
+          "namespace_id": {
+            "exclusiveMinimum": 0.0,
+            "title": "Namespace Id",
+            "type": "integer"
+          },
+          "operation_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Operation Key",
+            "type": "string"
+          },
+          "owner_subject": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Owner Subject",
+            "type": "string"
+          },
+          "request_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Request Sha256",
+            "type": "string"
+          },
+          "requirements_revision": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requirements Revision"
+          },
+          "requirements_sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requirements Sha256"
+          },
+          "result_version": {
+            "minimum": 2.0,
+            "title": "Result Version",
+            "type": "integer"
+          },
+          "status": {
+            "const": "done",
+            "title": "Status",
+            "type": "string"
+          },
+          "task": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Task",
+            "type": "string"
+          },
+          "tracker_execution_id": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Tracker Execution Id",
+            "type": "string"
+          },
+          "tracker_task_id": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Tracker Task Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "interaction_protocol",
+          "task",
+          "namespace_id",
+          "execution_ref",
+          "operation_key",
+          "concrete_agent_ref",
+          "assignment_ref",
+          "result_version",
+          "tracker_task_id",
+          "assignment_version",
+          "tracker_execution_id",
+          "machine_subject",
+          "request_sha256",
+          "owner_subject",
+          "history_id",
+          "status"
+        ],
+        "title": "ConfiguredTerminalReceipt",
+        "type": "object"
+      },
+      "ConfiguredTerminalResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "complete": {
+            "const": true,
+            "title": "Complete",
+            "type": "boolean"
+          },
+          "ok": {
+            "const": true,
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "receipt": {
+            "$ref": "#/components/schemas/ConfiguredTerminalReceipt"
+          },
+          "workflow_receipt": {
+            "$ref": "#/components/schemas/WorkflowArtifactReceipt"
+          }
+        },
+        "required": [
+          "ok",
+          "complete",
+          "workflow_receipt",
+          "receipt"
+        ],
+        "title": "ConfiguredTerminalResponse",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "WorkflowArtifactReceipt": {
+        "additionalProperties": false,
+        "properties": {
+          "reference": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Reference",
+            "type": "string"
+          },
+          "sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reference",
+          "sha256"
+        ],
+        "title": "WorkflowArtifactReceipt",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "\u0418\u043d\u0442\u0435\u0440\u0444\u0435\u0439\u0441 project-workflow",
+    "version": "1.0.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/internal/runtime/assign": {
+      "post": {
+        "operationId": "runtime_assign_internal_runtime_assign_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfiguredAssignment"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Runtime Assign"
+      }
+    },
+    "/internal/runtime/capabilities": {
+      "get": {
+        "description": "Return authenticated runtime contract and immutable build provenance.",
+        "operationId": "runtime_capabilities_internal_runtime_capabilities_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Runtime Capabilities"
+      }
+    },
+    "/internal/runtime/history": {
+      "get": {
+        "description": "Read configured operations or retained history through the same authority.",
+        "operationId": "runtime_history_internal_runtime_history_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "task",
+            "required": true,
+            "schema": {
+              "title": "Task",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "n",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "N",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "interaction_protocol",
+            "required": true,
+            "schema": {
+              "const": "configured-cli-v1",
+              "title": "Interaction Protocol",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "namespace_id",
+            "required": true,
+            "schema": {
+              "exclusiveMinimum": 0,
+              "title": "Namespace Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "execution_ref",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Execution Ref"
+            }
+          },
+          {
+            "in": "query",
+            "name": "operation_key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operation Key"
+            }
+          },
+          {
+            "in": "query",
+            "name": "assignment_operation_key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Assignment Operation Key"
+            }
+          },
+          {
+            "in": "query",
+            "name": "projection",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "fleet-summary-v1",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Projection"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before_history_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "description": "Canonical ASCII decimal database ID in 1..9223372036854775807",
+                  "maxLength": 19,
+                  "pattern": "^[1-9][0-9]*$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before History Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Runtime History"
+      }
+    },
+    "/internal/runtime/step": {
+      "post": {
+        "operationId": "runtime_step_internal_runtime_step_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfiguredStep"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Runtime Step"
+      }
+    },
+    "/internal/runtime/terminal-receipt/readback": {
+      "post": {
+        "operationId": "runtime_terminal_readback_internal_runtime_terminal_receipt_readback_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ConfiguredTerminalReadback"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ConfiguredArtifactReadback"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfiguredTerminalResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Runtime Terminal Readback"
+      }
+    }
+  }
+}

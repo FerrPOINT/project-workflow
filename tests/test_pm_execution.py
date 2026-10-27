@@ -1,7 +1,6 @@
 """Persistent PM contract tests through the real namespace runtime API."""
 
 import json
-from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
@@ -13,12 +12,10 @@ from project_workflow.application.pm_execution import PMExecutionService
 from project_workflow.application.task import TaskService
 from project_workflow.domain.exceptions import ConflictError
 from project_workflow.domain.pm_execution import PMIdentity, RuntimeObservation
-from project_workflow.domain.runtime_assignment import NIL_FLEET_AGENT_REF
 from project_workflow.infrastructure import pm_readback
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.ui.app import create_app
-from scripts.export_pm_openapi import OUTPUT, pm_openapi
 from tests.test_runtime_api import TEST_RUNTIME_COMPATIBILITY, _assignment, _bind_payload, _namespace, _step_payload
 
 BASE = "/internal/runtime/v1/pm"
@@ -368,47 +365,6 @@ def test_initial_bind_rejects_session_run_id_reserved_by_pending_resume(pm):
     assert collision.status_code == 409, collision.text
 
 
-def test_openapi_exposes_pm_wire_and_callback_schema(pm):
-    schema = pm[0].get("/openapi.json").json()
-    assert set(schema["components"]["schemas"]["RuntimeObservation"]["required"]) == {
-        *PMIdentity.model_fields, "observation_ref", "binding_ref", "hermes_run_ref", "session_run_id",
-        "status", "dispatch_operation_key", "fence",
-    }
-    for route in ("bind", "checkpoint", "resume", "rebind", "readback"):
-        assert "post" in schema["paths"][BASE + "/" + route]
-    assert "new_session_run_id" in schema["components"]["schemas"]["PMRebind"]["required"]
-    callback = schema["components"]["schemas"]["RuntimeObservation"]
-    assert set(callback["properties"]) == {
-        "task", "execution_ref", "tracker_instance_ref", "tracker_project_ref", "task_ref", "root_ref", "agent_ref",
-        "assignment_operation_key", "assignment_ref", "assignment_revision", "observation_ref", "binding_ref",
-        "hermes_run_ref", "session_run_id", "status", "dispatch_operation_key", "checkpoint_ref", "fence",
-    }
-    assert callback["additionalProperties"] is False
-    for name in ("PMIdentity", "PMBind", "PMCheckpoint", "PMResume", "PMRebind", "PMReadback", "RuntimeObservation"):
-        assert schema["components"]["schemas"][name]["properties"]["agent_ref"]["pattern"] == (
-            r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-        )
-        assert schema["components"]["schemas"][name]["properties"]["agent_ref"]["not"] == {
-            "const": NIL_FLEET_AGENT_REF,
-        }
-    runtime_bind = schema["components"]["schemas"]["RuntimeBindRequest"]
-    assert "concrete_agent_ref" not in runtime_bind["required"]
-    assert runtime_bind["properties"]["concrete_agent_ref"]["anyOf"][0]["pattern"] == (
-        callback["properties"]["agent_ref"]["pattern"]
-    )
-    assert runtime_bind["properties"]["concrete_agent_ref"]["anyOf"][0]["not"] == {
-        "const": NIL_FLEET_AGENT_REF,
-    }
-    published = pm_openapi()
-    for path, method in (("/internal/runtime/pm-bootstrap/predecessor", "get"),
-                         ("/internal/runtime/pm-bootstrap/retry", "post")):
-        assert published["paths"][path][method] == schema["paths"][path][method]
-    retry = published["components"]["schemas"]["BootstrapRetry"]
-    expected = {"predecessor_operation_key", "predecessor_sha256", "operation_key",
-                "bootstrap_attempt_ref", "proof_sha256"}
-    assert set(retry["properties"]) == set(retry["required"]) == expected
-    assert retry["additionalProperties"] is False
-    assert json.loads(Path(OUTPUT).read_text(encoding="utf-8")) == published
 
 
 @pytest.mark.parametrize("field,value", [

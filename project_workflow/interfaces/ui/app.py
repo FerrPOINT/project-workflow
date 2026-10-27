@@ -23,11 +23,8 @@ from ...infrastructure.db.session import DatabaseUnavailable, get_engine, reset_
 from .platform_branding import platform_branding
 from .routes import (
     api,
-    cli_api,
     namespace_ownership_api,
     pages,
-    pm_api,
-    pm_bootstrap_api,
     resource_context,
     runtime_api,
 )
@@ -275,8 +272,6 @@ def create_app() -> FastAPI:
     )
     app.post("/internal/runtime/step", response_model=None)(runtime_api.runtime_step)
     app.post("/internal/runtime/assign", response_model=None)(runtime_api.runtime_assign)
-    app.post("/internal/runtime/bind", response_model=None)(runtime_api.runtime_bind)
-    app.post("/internal/runtime/rebind", response_model=None)(runtime_api.runtime_rebind)
     app.get("/internal/runtime/history", response_model=None)(runtime_api.runtime_history)
     app.get("/internal/runtime/catalog", response_model=None)(runtime_api.runtime_catalog)
     from project_workflow.domain.single_task_profile import (
@@ -306,29 +301,11 @@ def create_app() -> FastAPI:
     app.get("/internal/runtime/base/source-catalog", response_model=None)(base_api.source_catalog)
     app.get("/internal/runtime/base/source-capabilities", response_model=None)(base_api.source_capabilities)
     from project_workflow.domain.configured_cli import ConfiguredTerminalResponse
-    from project_workflow.domain.single_task_runtime import SingleTaskTerminalResponse
 
     app.post("/internal/runtime/terminal-receipt/readback",
-             response_model=ConfiguredTerminalResponse | SingleTaskTerminalResponse)(
+             response_model=ConfiguredTerminalResponse)(
         runtime_api.runtime_terminal_readback
     )
-    from project_workflow.domain.pm_execution import PMResponse, PMResumeRetryResponse
-
-    app.post("/internal/runtime/v1/pm/assign", response_model=None)(pm_api.assign)
-    app.post("/internal/runtime/v1/pm/bind", response_model=PMResponse,
-             response_model_exclude_unset=True)(pm_api.bind)
-    app.post("/internal/runtime/v1/pm/checkpoint", response_model=PMResponse,
-             response_model_exclude_unset=True)(pm_api.checkpoint)
-    app.post("/internal/runtime/v1/pm/resume", response_model=PMResponse,
-             response_model_exclude_unset=True)(pm_api.resume)
-    app.post("/internal/runtime/v1/pm/resume-retry", response_model=PMResumeRetryResponse,
-             response_model_exclude_unset=True)(pm_api.resume_retry)
-    app.post("/internal/runtime/v1/pm/rebind", response_model=PMResponse,
-             response_model_exclude_unset=True)(pm_api.rebind)
-    app.post("/internal/runtime/v1/pm/readback", response_model=PMResponse,
-             response_model_exclude_unset=True)(pm_api.readback)
-    app.get("/internal/runtime/pm-bootstrap/predecessor", response_model=None)(pm_bootstrap_api.predecessor)
-    app.post("/internal/runtime/pm-bootstrap/retry", response_model=None)(pm_bootstrap_api.retry)
     from project_workflow.domain.namespace_ownership import NamespaceOwnershipResponse
 
     app.put("/api/pm/namespace-ownership/{namespace_id}", response_model=NamespaceOwnershipResponse,
@@ -359,8 +336,6 @@ def create_app() -> FastAPI:
     app.get("/api/v1/space-admission", response_model=None)(space_admission)
     app.get("/api/v2/execution-contexts/{identity}")(resource_context.read)
     app.put("/api/v2/execution-contexts/{identity}")(resource_context.bind)
-    app.post("/api/cli/step", response_model=None)(cli_api.cli_step)
-    app.get("/api/cli/history", response_model=None)(cli_api.cli_history)
     app.get("/api/settings", response_model=None)(api.api_settings_get)
     app.get("/api/phases", response_model=None)(api.api_phases)
     app.get("/api/phases/{phase_id:int}", response_model=None)(api.api_phase_detail)

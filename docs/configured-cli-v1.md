@@ -1,317 +1,139 @@
-# Configured CLI V1
+# Единый CLI/API Workflow
 
-Source implementation for NEW PM tasks, not installation or live acceptance.
-Legacy assignments, native PMExecution/run/checkpoint receipts and request bytes
-are unchanged. Machine credentials never gain access to human routes.
+Source-контракт для семи профессий и восьми режимов. Установка, полный gate и
+живая приёмка подтверждаются отдельно. До переключения должны быть удалены
+оставшиеся старые исполняющие маршруты и завершены прежние активные попытки.
 
-## Agent Configuration
+Workflow хранит фазу, оценку отчёта и историю. Tracker владеет назначением,
+требованиями, комментариями и атомарными переходами. Fleet проверяет реальный
+terminal процесса. Native run ID не является идентичностью задачи Workflow.
 
-Required permanent environment: `FLEET_CLI_PROTOCOL=configured-cli-v1`,
-`PROJECT_WORKFLOW_URL`, dedicated Auth PAT `PROJECT_WORKFLOW_API_TOKEN`,
-`FLEET_AGENT_ID`, numeric `PROJECT_WORKFLOW_NAMESPACE_ID`. Owning deployment
-supplies secret references; messages do not rotate credentials or write files.
-Missing/unknown configuration fails before HTTP/DB. No global PDLC token,
-localhost default or local DB fallback is used. Only step/history remain.
-Existing Base pdlc-cli-core validates the service origin using the permanent
-PDLC_CLI_TRUSTED_HTTP_ORIGINS supplied by Fleet from admin-configured URLs;
-there is no per-message or per-call origin setup. A missing shared transport
-fails closed. Its explicit PAT argument is always the dedicated Workflow PAT.
-The initial message carries the Tracker UUID. Read its authorized context to
-obtain workflow_task_key, then use that SDLC-N key for step/history.
+## Настройка агента
 
-FLEET_AGENT_ID is a client response-consistency check, not server authority.
-Fresh Central Auth must prove service_account and project-workflow:read for
-reads or project-workflow:write for reports. The subject must match enrollment.
-Current Tracker context independently checks the task/root, owner and exact
-assignment/execution/version/concrete agent/machine subject. No Fleet/native
-callback or rebind is required.
-Its workflow_task_key must also exactly equal the enrolled SDLC-N key; missing
-or different keys refuse both enrollment and current agent access.
+Владелец конфигурации заранее задаёт `PROJECT_WORKFLOW_URL`,
+`PROJECT_WORKFLOW_API_TOKEN`, `PROJECT_WORKFLOW_NAMESPACE_ID`, `FLEET_AGENT_ID`.
+PAT принадлежит служебной identity, секреты в Fleet задаются через `secret_ref`.
+Адреса и credentials не создаются для каждого сообщения. CLI использует общий
+Base `pdlc_cli_core`; явный токен не подменяется глобальными aliases.
+Отсутствующий доступ запрещает вызов без обращения к локальной БД.
 
-## Enrollment
+| Профессия | Режим | Текущая стадия Tracker |
+| --- | --- | --- |
+| Project Manager | draft | Draft; Backlog только для чтения/повтора завершения |
+| Analyst | analysis | Analysis |
+| Architect | decomposition | Architecture |
+| Developer | initial / rework | Development / Rework |
+| Reviewer | delivery | Review |
+| Tester | delivery | Testing |
+| DevOps | delivery | Deployment |
 
-`POST /internal/runtime/assign` uses the existing PM assignment-service token,
-not an agent PAT. Closed body:
+Ключ `SDLC-N` берётся из `task-tracker sdlc context --task <Tracker-UUID>`,
+поле `workflow_task_key`. Его нельзя вычислять из номера задачи или native run.
+Профессия и режим определяются установленным каталогом и проверенным назначением.
 
-```json
-{
-  "interaction_protocol": "configured-cli-v1",
-  "task": "SDLC-901",
-  "namespace_id": 2,
-  "workflow_key": "single-task-v1:project_manager",
-  "mode_key": "draft",
-  "role_key": "project_manager",
-  "operation_key": "configured-pm-enroll:original-task-uuid",
-  "assignment_ref": "10000000-0000-4000-8000-000000000001",
-  "tracker_execution_id": "10000000-0000-4000-8000-000000000002",
-  "assignment_version": 1,
-  "business_task_ref": "10000000-0000-4000-8000-000000000005",
-  "machine_subject": "10000000-0000-4000-8000-000000000003",
-  "concrete_agent_ref": "10000000-0000-4000-8000-000000000004",
-  "tracker_task_id": "10000000-0000-4000-8000-000000000005",
-  "owner_subject": "10000000-0000-4000-8000-000000000006",
-  "expected_version": 0
-}
-```
+## Команды
 
-IDs/namespace above are illustrative, never defaults. role_key may be omitted;
-its default is project_manager. task retains the actual server-issued SDLC-N
-key. assignment_ref is Tracker assignment_id.
-business_task_ref is the canonical Tracker task UUID, equal to tracker_task_id.
-The namespace is the installed numeric Workflow PM namespace, not a task UUID.
-Workflow validates the installed single-task PM namespace and current Tracker assignment. Existing tasks cannot
-be converted or re-enrolled under another key. Exact original-key replay returns
-the original Workflow-issued execution_ref, with no new task/native binding.
-
-Response: `{ok:true,exit_code:0,result:{...}}`. Cursor fields:
-interaction_protocol, execution_ref, task, namespace_id, concrete_agent_ref,
-assignment_ref, business_task_ref, version, phase_code, status, workflow_id,
-mode_id. Initial version1 and PM-DRAFT-01/active. There is no native run ID.
-
-## Step And History
-
-`project-workflow --json step --task SDLC-901` sends existing
-`POST /internal/runtime/step` with interaction_protocol, task, namespace_id.
-Reads do not increment the version. Actual phase reports use:
+API-контракт генерируется из действующих моделей и маршрутов:
+`python -m scripts.export_runtime_openapi`; проверка совпадения — с `--check`.
+Результат: [runtime-openapi.json](runtime-openapi.json). Старый
+`pm-continuation-openapi.json` сохраняется как исторический снимок.
 
 ```sh
-project-workflow --json step --task SDLC-901 --operation-key report-a01 --expected-version 1 --report -
+project-workflow --json step --task <workflow-task-key>
+project-workflow --json step --task <workflow-task-key> --operation-key <stable-key> --expected-version <version> --report -
+project-workflow --json history --task <workflow-task-key> --operation-key <original-key>
+project-workflow --json history --task <workflow-task-key> --n 100
+project-workflow --json history --task <workflow-task-key> --before-history-id <next_before>
 ```
 
-Report text comes from bounded stdin, not a temporary file. The body adds
-report, operation_key, expected_version. Legacy runtime-request/execution-token
-file flags are refused in this protocol. The server supplies the full assignment
-fence internally. Exact key/version/report replay returns its saved result;
-changed payload conflicts. A committed report is not necessarily a completed
-phase: inspect verdict, status, missing/blockers and complete.
+Отчёт поступает текстом или на stdin. Чтение фазы не меняет версию. Запись требует
+ключа, точного payload и ожидаемой версии. Повтор возвращает исходный сохранённый
+ответ; другой payload с тем же ключом конфликтует. При неизвестном HTTP-результате
+сначала читать исходную операцию. `next_before=null` означает конец истории;
+нельзя считать первую страницу полным набором предыдущих результатов.
 
-The first-phase report must include actual response evidence from the successful
-no-report CLI call, not just repeat instructions or assert that the call happened.
-The CLI prints `interaction_protocol`, `task`, `namespace_id`,
-`concrete_agent_ref`, `assignment_ref`, `execution_ref`, `business_task_ref`,
-`phase_code`, `version` and `status` at the top level of stdout JSON. HTTP
-`ok/result` wrappers are not part of this CLI output. Include the actual Tracker
-task/root, stage/status and input references; omit credentials. The evidence is
-the instruction read already received, not a future PASS for the report. A PARTIAL
-response stays unfinished and must be handled using its returned version.
+`--runtime-request`, `--execution-token-file` и файловый bootstrap отсутствуют
+в агентном CLI. HTTP-ошибка не включает скрытый переход к БД, новый ключ или retry.
+При ошибке после отправки записи `acceptance_unknown=true` требует readback.
 
-After uncertain HTTP acceptance, retain the exact key/version/report and read
-the original operation; never allocate a replacement key or automatically
-redispatch. Safe JSON preserves HTTP status without raw HTTP bodies/secrets.
+## Назначение и продолжение
 
-`project-workflow --json history --task SDLC-901` calls existing
-`GET /internal/runtime/history` with interaction_protocol/namespace_id/task,
-bounded to 200 records. Optional --operation-key and --execution-ref select an
-exact saved operation. No DB fallback or human API is used.
+Fleet использует существующий `POST /internal/runtime/assign` со служебным
+assignment-токеном соответствующей профессии. Агент не назначает себя.
+Закрытый payload `ConfiguredAssignment` содержит protocol, task, namespace,
+workflow/mode/role, operation key, assignment/execution/version Tracker,
+конкретного агента, machine subject, business task/root UUID, owner и Workflow CAS.
 
-## Confirmation And Receipt
+Перед принятием назначения, чтением и отчётом Workflow сверяет актуальный context
+Tracker. Служебное чтение context проверяет также текущие проектные права
+назначенного producer; права самого reader их не заменяют. После оценки моделью
+назначение, версия и права проверяются повторно перед commit.
 
-Server settings PROJECT_WORKFLOW_CONFIGURED_TRACKER_URL and
-PROJECT_WORKFLOW_CONFIGURED_TRACKER_READ_TOKEN must have actual read admission
-to existing Tracker context/requirements/confirmation APIs. This source does not
-issue credentials or register/broaden permissions. Authority URLs are fixed in
-server configuration; reads are bounded, without redirects or environment proxy.
+Новое разрешённое назначение продолжает незавершённую фазу. После завершённого
+режима новое назначение может начать следующий цикл, включая Developer rework.
+Первоначальный enrollment result хранится для исходного operation key.
+Tracker assignment version и Workflow cursor version — разные счётчики.
 
-The final PM report requires the latest requirements revision/hash and its real
-saved owner confirmation. Workflow rechecks the same confirmation and current
-assignment before commit after evaluator IO. Prose, silence, a clarification
-answer or an older confirmed revision never substitutes for owner consent.
-Configured owner confirmation is saved while Tracker remains in Draft; its
-actual confirmation receipt must report stage=Draft, NOT Backlog. The sequence
-is owner consent in Draft -> terminal Workflow commit -> Tracker PM completion
-with server-to-server terminal readback -> atomic Draft to Backlog/Ready.
-Workflow complete=true/status=done describe only Workflow, not a prior Tracker
-transition. Tracker owns the final atomic document/questions/owner/receipt
-checks and transition. No external verifier checklist for business-document
-points is required in this path; CLI/runtime readiness is a separate check.
-Legacy confirmation/terminal contracts retain their existing stage rules.
+Исторический single-task assignment допускает только чтение и явное принятие
+новым проверенным назначением с текущим CAS. Его payload/hash и custody должны
+совпадать; старый native fence не сравнивается с новой версией Tracker.
+История и прежние assignment rows сохраняются. Это не разрешение продолжать
+прежний native run: его безопасное завершение обязательно до переключения.
 
-### Final Assessment Boundary
+## Принятие отчёта и бизнес-завершение
 
-The worker receives the full final instruction, including the subsequent Tracker
-completion/readback commands. The judge must assess only precommit work: the full
-saved document, resolved blocking questions/feedback and actual exact owner
-confirmation while Tracker remains in Draft. It must not require the terminal
-receipt produced by its own future accepting commit, or the later Tracker
-Backlog/Ready transition. Those are subsequent effects, not evidence already
-available to this report. Missing/stale/fabricated document or consent still
-cannot pass; server authority is rechecked before commit.
+Контракт фазы содержит текущую работу и уже существующие evidence. Он не требует
+собственного будущего receipt, ещё не опубликованного комментария или будущего
+перехода статуса. Reviewer/Tester могут полностью выполнить проверку и вернуть
+бизнес-результат rework; это не означает принятие дефектного кандидата.
 
-This projection applies only to the known configured PM final instruction and
-preserves additional custom security constraints. The stored legacy catalog and
-its native execution contract are not overwritten. Known PARTIAL results require
-actual missing work or a corrected report using the returned version; uncertain
-acceptance still requires original-key readback, not a new operation.
+У финального PM отчёта обязательны `--requirements-revision` и
+`--requirements-sha256`. Tracker должен подтвердить последнюю полную редакцию,
+точный hash, владельца и его настоящий consent до оценки и перед commit.
+Ожидание ответа оставляет фазу незавершённой, без native rebind/checkpoint.
 
-The final write MUST explicitly include requirements_revision and
-requirements_sha256. These must match the real latest confirmed document both
-before evaluation and before commit. Other phases reject those evidence fields.
-The CLI supplies them without creating another command:
+Принятый terminal ответ хранит три отдельные части:
 
-```sh
-project-workflow --json step --task SDLC-901 --operation-key final-a01 --expected-version 3 --requirements-revision 7 --requirements-sha256 <actual-content-hash> --report -
-```
+- `terminal_receipt`: неизменная идентичность принятого результата;
+- `workflow_receipt`: соседнее поле `{reference,sha256}`, не вложение terminal receipt;
+- `completion_instructions`: действия после commit.
 
-Version3/revision7 are examples, not a bypass or a required fixed cursor.
+Агент публикует проверяемый обычный итоговый комментарий текущего назначения и
+редакции, читает его operation receipt, затем выполняет разрешённый Tracker CLI.
+Редактирование/удаление комментария блокирует новую передачу. Tracker проверяет
+сохранённый Workflow receipt server-to-server через существующий
+`POST /internal/runtime/terminal-receipt/readback`, а не доверяет вставленному JSON.
 
-Terminal result contains terminal_receipt and workflow_receipt reference/SHA256.
-Receipt fields: interaction_protocol, execution_ref, task, tracker_task_id,
-namespace_id, concrete_agent_ref, assignment_ref, operation_key, request_sha256,
-result_version, requirements_revision, requirements_sha256, owner_subject,
-confirmation_id, history_id, status, assignment_version, tracker_execution_id,
-machine_subject. The last three fields come ONLY from the saved enrollment
-request, not step/readback caller claims. assignment_version is a strict positive
-integer; both identity fields are canonical non-nil UUIDs. They are included in
-the canonical receipt hash and checked against enrollment on readback, including
-when a corrupt receipt has a recomputed hash. The readback request body below
-is unchanged and does not accept these fields as caller-supplied authority.
-No native proof is claimed. Workflow does
-not move Tracker or dispatch Analyst. Tracker owns the Backlog/Ready transition.
+PM вызывает `sdlc pm completion submit` и заканчивает в Backlog / Ready, без
+автоматического Analyst. Техническая роль публикует typed result с ключом
+`delivery-result:<assignment_id>` и завершает run; Fleet проверяет реальный
+terminal и ресурсные доказательства перед Tracker Complete. Исправленный кандидат
+повторно проходит Review и Testing. Ни принятый отчёт, ни proposal сами не переходят стадию.
 
-After the actual terminal Workflow response, PM uses these existing commands:
+При критическом бизнес-возврате PM читает `critical_review` из актуального context
+Tracker и сверяет выбранный blocker, его версию/hash и исходную редакцию.
+Используются те же фазы, CLI и точное новое подтверждение владельца. Обычное
+системное сообщение Fleet не содержит второй копии инструкций. Завершение
+атомарно разрешает blocker и возвращает Backlog / Ready; Analyst не запускается.
+Этот путь требует PostgreSQL и живой квалификации вместе с остальным кандидатом.
 
-```sh
-task-tracker sdlc pm completion submit --task <Tracker-task-UUID> --from-file -
-task-tracker sdlc pm completion operation --task <Tracker-task-UUID> --key <original-completion-key>
-task-tracker sdlc pm completion read --task <Tracker-task-UUID>
-task-tracker sdlc context --task <Tracker-task-UUID>
-```
+Отдельный [ручной сценарий и бизнес-оракул](../manual/configured-workflow-proof/README.md)
+расположены вне обычной suite. Оракул проверяет фактический установленный сервис;
+прохождение всех профессий, происхождение артефакта и native terminal требуют
+собственных доказательств. Сценарий не помечен выполненным по наличию исходников.
 
-Submit consumes JSON on stdin, not an auth/context file. Its closed payload is
-the existing Tracker CompleteConfiguredPm DTO (no native/lease fields):
+## Каталог и переход данных
 
-| Field | Actual source |
-| --- | --- |
-| interaction_protocol | configured-cli-v1 |
-| fence | Fresh Tracker context.assignment: assignment_id, execution_id, agent_id, assignment_version |
-| requirement_revision | terminal_receipt.requirements_revision (singular request field) |
-| content_hash | terminal_receipt.requirements_sha256 |
-| namespace_id | terminal_receipt.namespace_id |
-| workflow_execution_ref | terminal_receipt.execution_ref |
-| workflow_operation_key | terminal_receipt.operation_key |
-| workflow_result_version | terminal_receipt.result_version |
-| idempotency_key | One stable completion key, retained after uncertain acceptance |
+`load_single_task_professions` собирает единственный канонический набор фаз;
+сборщик профиля только добавляет происхождение и hashes. Подмена инструкций
+во время исполнения отсутствует. Base хранит общие role/CLI инструкции.
 
-The fresh fence must match terminal_receipt.assignment_ref,
-tracker_execution_id, concrete_agent_ref and assignment_version respectively.
-Tracker execution_id is NOT the Workflow execution_ref. After uncertain submit,
-read the original operation before any further effect. Operation.result,
-completion read.current and fresh context must agree on task/root, exact
-revision/hash and the accepted Backlog/Ready state. A terminal Workflow result
-alone is not proof that Tracker completed its transition.
+Forward-миграция `0020_configured_cli_catalog` заменяет только полный известный
+sealed каталог. Частичная установка или пользовательские изменения блокируют
+миграцию без переписывания данных. Сохраняются task/phase IDs, отчёты, assignment
+rows и migration ledger. Предыдущие manifest/catalog сохраняются byte-exact в
+`references/retained`; применённые миграции не редактируются.
 
-Both fresh step and next_phase_contract after evaluator IO use this runtime-only
-instruction projection. A regression reproduces the former legacy-contract leak
-after reload and verifies its correction, including persisted history readback.
-Applied catalog bytes are not rewritten.
-This correction passed 69 host checks across test_configured_cli.py,
-test_configured_cli_tracker.py, test_pm_assignment_guard.py and
-test_supervisor_contracts.py, plus scoped Ruff (three changed Python files)
-and mypy (two source modules). The new actual-response regression failed on
-c8f626a at post-evaluation next_phase_contract and passes with the configured
-reload correction. No Tracker/Fleet calls, deployment or new live transition
-were performed for this check.
-
-Tracker verifies the actual retained result server-to-server at the EXISTING
-terminal-receipt endpoint. Authorization is the existing trusted PM assignment
-service Bearer, not an agent PAT or browser credential. Closed request:
-
-```json
-{
-  "interaction_protocol": "configured-cli-v1",
-  "task": "SDLC-901",
-  "namespace_id": 2,
-  "execution_ref": "10000000-0000-4000-8000-000000000007",
-  "operation_key": "final-a01",
-  "concrete_agent_ref": "10000000-0000-4000-8000-000000000004",
-  "assignment_ref": "10000000-0000-4000-8000-000000000001",
-  "requirements_revision": 7,
-  "requirements_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-  "result_version": 4
-}
-```
-
-`POST /internal/runtime/terminal-receipt/readback` returns
-`{ok:true,complete:true,workflow_receipt:{reference,sha256},receipt:{...}}`.
-The receipt is the exact retained terminal history result. The server checks
-the selected execution/operation/agent/assignment/revision/hash/version tuple,
-history/enrollment metadata, frozen confirmation and canonical receipt hash.
-Unknown operation is 404; nonterminal or mismatched tuple is 409; wrong service
-credential is 403. Error responses carry no private authority payload. No
-receipt is synthesized from current task status. This is historical evidence,
-not a fresh grant: completed receipt lookup does not require a live native run,
-nor does it move Tracker. Legacy terminal lookup remains its own strict branch.
-
-The existing history endpoint also permits exact trusted operation inspection:
-
-```text
-GET /internal/runtime/history?interaction_protocol=configured-cli-v1&namespace_id=<actual>&task=<SDLC-N>&execution_ref=<actual>&operation_key=<original>
-```
-
-The trusted PM assignment-service token can read only an exact
-execution+operation in this branch; agent PATs read their own current assignment.
-`result.records[].result` is the stored operation result, never a reconstructed
-success or new execution grant.
-
-## Storage And Gates
-
-No migration/table or applied-catalog rewrite. Existing append-only
-task_runtime_assignments.payload stores protocol, generated execution_ref and
-trusted enrollment request; native columns remain NULL, never synthetic.
-task_step_history.evaluation_snapshot.configured_cli stores key/request hash,
-assignment hash, frozen confirmation and result version. Existing replay
-fingerprint stores protocol/assignment/key hash. Business transition and receipt
-commit together; version is rechecked after provider IO. Concurrent provider
-evaluation may occur, but only matching version can commit.
-
-Configured instructions are a runtime projection; legacy catalog bytes and
-execution contracts are retained. Host tests use disposable SQLite ledgers,
-controlled Auth/Tracker responses and a controlled evaluator, including actual
-request interleaving while the provider releases the transaction. They do NOT
-qualify PostgreSQL locking, populated-copy preservation, packaged CLI,
-integrated Fleet/Tracker, real credentials, deployment or live new-chat behavior.
-
-Initial scoped host check (f275bdf): 72 PASS across test_configured_cli.py,
-test_configured_cli_transport.py, test_configured_cli_tracker.py and
-test_pm_assignment_guard.py. Ruff over the repository and mypy over all
-163 product/script source files pass. Python used: 3.13.13, with the already
-prepared host dependencies; no Compose or live requests were executed.
-The authoritative enrollment-metadata receipt follow-up passed all 24 cases
-in test_configured_cli.py, scoped Ruff on its three changed Python files and
-scoped mypy on its two changed source modules. Full Ruff/mypy were not repeated
-for this bounded receipt-only follow-up.
-The Draft-confirmation ordering correction passed 43 focused cases across
-test_configured_cli.py and test_configured_cli_tracker.py, scoped Ruff on five
-changed Python files and scoped mypy on three changed source modules. It adds
-an explicit Backlog-confirmation refusal for this protocol; legacy catalog and
-confirmation paths are not rewritten. These remain host checks, not live
-Tracker completion/transition acceptance.
-
-The wider 341-case host selection was not green: 337 passed, one skipped and
-three failed. Its extra legacy replay read was fixed and the whole affected
-assignment-guard module subsequently passed in the 72-case check. The other two
-failures are the current/retained19 exact-wire fixtures in
-test_single_task_pm_terminal.py, which expect SDLC-7 while their unchanged
-prepare helper supplies RUN-7. Both failures reproduce on unmodified PR148
-head60c4dd6. Old fixtures were not regenerated or waived. Full repository,
-coverage, PostgreSQL and deployed-cohort gates remain open.
-
-2026-10-27 correction210db1: all35 test_configured_cli.py cases pass, including
-actual judge-prompt boundaries, retained final variants, custom security,
-missing/stale consent and terminal replay. Normal Workflow-only build3b2c2094
-installs image182e4667 with all nine history tables unchanged. Actual retained
-PM CLI reads the new final checks. The SAME PM11/FLEETQA-8 live continuation then
-returned PASS/complete=true/version14/history13 for operation
-pm-draft-03-corrected-evidence-checks-v5. Receipt SHA256:
-eb144e86aee3295df0aef4f95d42da821db2a518450c9618c02e0fec5561cfd2.
-Tracker completion01a17d1c-ac7f-7aa1-aa80-1fa9025ab9e4 records Backlog/Ready.
-Exact completion replay preserves that ID/time/hash; task-scoped read-only counts
-are one task, one completion, zero Analysis intents/downstream assignments.
-Original Hermes and the PM container were not changed. This is assisted
-existing-task acceptance; fresh autonomous and full release gates remain separate.
-
-```sh
-python -B -m pytest -q tests/test_configured_cli.py tests/test_configured_cli_transport.py tests/test_configured_cli_tracker.py tests/test_pm_assignment_guard.py --timeout=60
-python -B -m ruff check .
-python -B -m mypy project_workflow scripts
-```
+Обычный unit/static gate не запускает живой Hermes. Ручной all-role/Rework прогон
+PDLC1, PostgreSQL на заполненной и новой БД, упакованные CLI, происхождение
+установленного образа и rollback остаются обязательными отдельными проверками.

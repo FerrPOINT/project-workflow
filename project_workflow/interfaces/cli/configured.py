@@ -7,21 +7,18 @@ import sys
 from typing import Any
 from urllib.parse import urlsplit
 
-import requests
-
 from project_workflow.domain.configured_cli import PROTOCOL, ConfiguredStep
 from project_workflow.domain.namespace_ownership import canonical_uuid
 from project_workflow.infrastructure.platform_namespace import is_personal_token
 
 
-def enabled() -> bool:
-    protocol = os.environ.get("FLEET_CLI_PROTOCOL")
-    if protocol is not None and protocol != PROTOCOL:
+def validate_protocol() -> None:
+    if os.environ.get("FLEET_CLI_PROTOCOL", PROTOCOL) != PROTOCOL:
         raise ValueError("Unsupported FLEET_CLI_PROTOCOL; no fallback")
-    return protocol == PROTOCOL
 
 
 def environment() -> tuple[str, str, str, int]:
+    validate_protocol()
     url = os.environ.get("PROJECT_WORKFLOW_URL", "").strip()
     token = os.environ.get("PROJECT_WORKFLOW_API_TOKEN", "")
     agent = os.environ.get("FLEET_AGENT_ID", "")
@@ -53,43 +50,26 @@ def failure(code: str, *, http_status: int | None = None, unknown: bool = False)
 
 def request(method: str, route: str, task: str, *, body: dict | None = None, params: dict | None = None) -> dict:
     root, token, agent, namespace = environment()
+    write = method == "POST" and body is not None and body.get("report") is not None
     try:
         from pdlc_cli_core import ApiClient, ApiError
     except ImportError:
         return failure("shared-transport-unavailable")
     try:
-        # Reuse Base origin admission and its permanent trusted-origin environment.
-        # The explicit token never falls back to the general PDLC PAT.
-        admitted = ApiClient(root, token=token)
+        client = ApiClient(root, token=token, timeout=(3, 120),
+                           max_response_bytes=1024 * 1024, trust_env=False)
     except ApiError:
         return failure("origin-or-credential-configuration-invalid")
     try:
-        with requests.Session() as client:
-            client.trust_env = False
-            with client.request(method, admitted.base_url + "internal/runtime/" + route, json=body, params=params,
-                                headers={"Authorization": "Bearer " + token, "Accept": "application/json"},
-                                timeout=(3, 120), allow_redirects=False, stream=True) as response:
-                status = response.status_code
-                if not 200 <= status < 300:
-                    return failure("http-refused", http_status=status, unknown=method == "POST" and status >= 500)
-                raw = bytearray()
-                for chunk in response.iter_content(chunk_size=4096):
-                    raw.extend(chunk)
-                    if len(raw) > 1024 * 1024:
-                        return failure("response-too-large", http_status=status, unknown=method == "POST")
-        import json
-
-        value = json.loads(raw)
-        result = value.get("result") if isinstance(value, dict) else None
+        value = client.request_json(method, "internal/runtime/" + route, body=body, params=params)
+        result = value.get("result")
         if (not isinstance(result, dict) or value.get("ok") is not True or value.get("exit_code") != 0
                 or result.get("interaction_protocol") != PROTOCOL or result.get("task") != task
                 or result.get("namespace_id") != namespace or result.get("concrete_agent_ref") != agent):
-            return failure("response-identity-invalid", http_status=status, unknown=method == "POST")
+            return failure("response-identity-invalid", unknown=write)
         return value
-    except requests.RequestException:
-        return failure("transport-unavailable", unknown=method == "POST")
-    except (ValueError, TypeError, KeyError):
-        return failure("response-invalid", unknown=method == "POST")
+    except ApiError as error:
+        return failure(error.code, http_status=error.http_status, unknown=write and error.acceptance_unknown)
 
 
 def step(task: str, report: str | None, operation_key: str | None, expected_version: int | None, *,
@@ -103,9 +83,13 @@ def step(task: str, report: str | None, operation_key: str | None, expected_vers
     return request("POST", "step", task, body=command.model_dump(mode="json"))
 
 
-def history(task: str, n: int | None, operation_key: str | None, execution_ref: str | None) -> dict:
+def history(task: str, n: int | None, operation_key: str | None, execution_ref: str | None,
+            before_history_id: int | None = None) -> dict:
     _, _, _, namespace = environment()
+    if before_history_id is not None and (before_history_id <= 0 or operation_key is not None):
+        raise ValueError("A history page cursor cannot select an operation")
     return request("GET", "history", task, params={"interaction_protocol": PROTOCOL, "task": task,
         "namespace_id": namespace, "n": min(n or 200, 200),
         **({"operation_key": operation_key} if operation_key else {}),
+        **({"before_history_id": before_history_id} if before_history_id is not None else {}),
         **({"execution_ref": execution_ref} if execution_ref else {})})

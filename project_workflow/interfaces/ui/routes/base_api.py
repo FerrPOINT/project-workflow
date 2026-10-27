@@ -19,7 +19,7 @@ from project_workflow.infrastructure.db.session import DatabaseUnavailable
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.infrastructure.namespace_auth import NamespaceAuthError
 
-from . import pm_api, runtime_api
+from . import legacy_receipt_auth, runtime_api
 
 
 def _binding_error(code: str, message: str, status: int) -> JSONResponse:
@@ -117,7 +117,7 @@ def terminal_readback(
                     snapshot = PMExecutionService(uow).snapshot(execution)
                     if payload.session_run_id != snapshot["session_run_id"]:
                         return runtime_api._error("Current Fleet session_run_id required", 409)
-                    if not pm_api.scope_matches(
+                    if not legacy_receipt_auth.scope_matches(
                         snapshot["identity"], snapshot["hermes_run_ref"], snapshot["binding_ref"],
                         snapshot["fence"], snapshot["session_run_id"], x_workflow_execution_token,
                     ):

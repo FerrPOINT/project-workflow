@@ -172,10 +172,6 @@ def _body(
     }).model_dump(mode="json", by_alias=True)
 
 
-def build_terminal_receipt(uow: SAUnitOfWork, operation_key: str, *, fence: RuntimeStepFence) -> dict[str, Any]:
-    """Called only inside the existing completion transaction."""
-    body = _body(uow, operation_key, fence=fence)
-    return {"receipt": body, "workflow_receipt": {"reference": body["reference"], "sha256": payload_sha256(body)}}
 
 
 def read_terminal_receipt(uow: SAUnitOfWork, operation_key: str) -> dict[str, Any]:

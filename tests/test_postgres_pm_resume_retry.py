@@ -27,7 +27,7 @@ pytestmark = pytest.mark.integration
 pg_url = pg_fixtures.pg_url
 pending = retry_cases.pending
 PREDECESSOR = "0018_identity_deletion_owner"
-HEAD = "0019_pm_terminal_resume_retry"
+HEAD = "0020_configured_cli_catalog"
 
 
 @pytest.fixture(autouse=True)
