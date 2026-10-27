@@ -157,3 +157,26 @@ persisted catalog supplies the worker and evaluator instructions. A modified
 historical catalog is rejected by the forward migration instead of silently
 replacing appended security constraints; see
 `test_upgrade_refuses_customized_catalog_without_changing_data_or_ledger`.
+
+
+## Retired Native Assignment Test Coverage
+
+`test_runtime_assignment_contract.py` retains the strict historical wire and
+catalog role-key tests. Its old positive `assign_runtime_task`, native bind,
+continuation and retry tests are removed together with those deleted commands.
+They must not force a second executable protocol back into `TaskService`.
+
+Current behavior is covered through the actual configured HTTP boundary:
+
+| Invariant | Current regression |
+| --- | --- |
+| All professions, Developer initial/rework | `test_professions_share_assignment_step_history_and_terminal` |
+| Resume unfinished work without native rebind | `test_new_assignment_continues_unfinished_phase_with_compare_and_swap` |
+| Exact retry and changed payload conflict | `test_exact_report_replay_and_changed_payload_conflict` |
+| Concurrent stale evaluator cannot commit | `test_report_interleaving_while_provider_releases_transaction` |
+| Preserve old rows and phase during adoption | `test_new_assignment_adopts_retired_business_cursor_without_rewriting_history` |
+| Tampered historical assignment cannot gain authority | `test_retired_history_and_adoption_refuse_unknown_or_tampered_assignment` |
+| No alternative old HTTP writers | `test_retired_native_routes_are_absent_and_cannot_write_any_ledger` |
+
+Historical DTOs, applied migrations and read-only history remain. This coverage
+map does not claim the full suite, PostgreSQL or manual Hermes gate has passed.
