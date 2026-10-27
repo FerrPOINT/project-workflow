@@ -79,6 +79,7 @@ const themes = {
     "destructive-foreground": "#ffffff",
   },
 };
+const selectionTint = 0.14;
 const channels = (color) =>
   [1, 3, 5].map((i) => parseInt(color.slice(i, i + 2), 16));
 const mix = (a, b, amount) =>
@@ -90,13 +91,21 @@ const mix = (a, b, amount) =>
         .padStart(2, "0"),
     )
     .join("");
-/** The smallest deterministic sRGB adjustment meeting the role's contrast floor. */
-function readable(seed, backgrounds, ratio) {
-  if (backgrounds.every((bg) => contrast(seed, bg) >= ratio)) return seed;
+/**
+ * The first sampled sRGB adjustment meeting the role's contrast floor.
+ * @param {string | null} [selectionBase] Also check the tint derived from this candidate.
+ */
+function readable(seed, backgrounds, ratio, selectionBase = null) {
+  const fits = (candidate) =>
+    backgrounds.every((bg) => contrast(candidate, bg) >= ratio) &&
+    (selectionBase === null ||
+      contrast(candidate, mix(selectionBase, candidate, selectionTint)) >=
+        ratio);
+  if (fits(seed)) return seed;
   const target = foreground(backgrounds[0]);
   for (let step = 1; step <= 100; step++) {
     const value = mix(seed, target, step / 100);
-    if (backgrounds.every((bg) => contrast(value, bg) >= ratio)) return value;
+    if (fits(value)) return value;
   }
   return target;
 }
@@ -302,14 +311,17 @@ export function resolveBrandingTokens(branding, theme = "dark") {
   if (value.surface_color)
     for (const key of ["background", "surface", "surface-raised"])
       colors[key] = mix(colors[key], value.surface_color, 0.08);
-  const selectionSurface = mix(colors.surface, accent, 0.14);
-  // Semantic descendants also render on selected rows and resource choices.
-  const backgrounds = [
+  const baseBackgrounds = [
     colors.background,
     colors.surface,
     colors["surface-raised"],
-    selectionSurface,
   ];
+  // A resolved palette can become an editor snapshot. Its selected surface must
+  // depend on the resolved accent so resolving that snapshot is idempotent.
+  const highlight = readable(accent, baseBackgrounds, 4.5, colors.surface);
+  const selectionSurface = mix(colors.surface, highlight, selectionTint);
+  // Semantic descendants also render on selected rows and resource choices.
+  const backgrounds = [...baseBackgrounds, selectionSurface];
   for (const key of [
     "text-primary",
     "text-secondary",
@@ -321,7 +333,6 @@ export function resolveBrandingTokens(branding, theme = "dark") {
     colors[key] = readable(colors[key], backgrounds, 4.5);
   colors["border-strong"] = readable(colors["border-strong"], backgrounds, 3);
   const action = readable(primary, backgrounds, 4.5);
-  const highlight = readable(accent, backgrounds, 4.5);
   const design = value.design ?? defaultDesign;
   const large = design.type_scale === "large";
   const radius =
