@@ -30,7 +30,6 @@ Base commit, точный UI pin и повторная квалификация 
 skills pins не меняются. Несовпадение source-кандидата с baseline не считать
 merge-ready или установкой.
 
-
 Датированные разделы ниже описывают историю квалификаций. Текущий pin сам по себе не подтверждает установку или authenticated-приёмку.
 
 Канонические определения находятся у Base: [TERMS](https://github.com/FerrPOINT/services-base/blob/02e1ebbd3d2fcbf1c5e0f55a39d3cf554b085217/docs/platform/TERMS.md),
@@ -243,7 +242,6 @@ UI pin не менялся; штатный SSR fingerprint совпадает, �
 не повторялись. Это source-компоненты и синтетические callbacks без API/Auth;
 не установленное приложение и не приёмка серверных операций.
 
-
 ## Общая подпись навигации — 2026-10-27
 
 Принят совместимый UI 0.3.4, producer `efa4babe176b42530a3e17fc25f10e8678f82d33`.
@@ -252,7 +250,6 @@ UI pin не менялся; штатный SSR fingerprint совпадает, �
 Проверены настоящий архив, offline CLI и frozen adoption: шесть React consumers
 с одним React, седьмой SSR consumer — через штатный export/check. SDK/skills
 pins неизменны; это source-кандидат, без установки и hosted CI.
-
 
 ## Нативные атрибуты SSR Button — 2026-10-27
 
@@ -264,7 +261,6 @@ pins неизменны; это source-кандидат, без установк
 badge совпадает полностью. UI contract gate и Ruff пройдены.
 Архив UI и offline frozen adoption проверены; общий интеграционный gate,
 hosted CI, публикация и установка здесь не выполнялись.
-
 
 ## Нативные поля, карточки и меню SSR — 2026-10-27
 
@@ -289,7 +285,6 @@ mouse/Enter, Escape/focus. У двух console MutationObserver сообщени
 React/JS/CSS/types и зависимости совпадают с 0.3.5, без повторной сборки этих
 артефактов. SDK/skills pins не менялись. Полный интеграционный gate, hosted CI,
 установка и приёмка приложения остаются отдельными этапами.
-
 
 ## SSR выбор и составные части — 2026-10-27
 
@@ -316,7 +311,6 @@ input/change, callback, refresh/reset и destroy/reinit без дублей.
 и 7 runtime cases. SDK/skills pins сохранены. Hosted CI, полный gate,
 push/PR/merge и установка остаются отдельными действиями.
 
-
 ## Рабочая область Base — 2026-10-27
 
 Текущий UI 0.3.9, producer `bab93d2683367117784c2f01fcbed7f80fd3ef15`.
@@ -330,7 +324,6 @@ adoption; приложение, backend и Storybook не пересобирал
 Штатный SSR export обновлён и --check прошёл. Изменение общего CSS добавляет
 React Workbench; Workflow не получает фиктивных контейнеров или React-зависимости.
 Прежние предметные шаблоны и HTTP/SSO обработчики не менялись.
-
 
 ## SSR-ресурсы общего UI 0.3.10 — 2026-10-27
 
@@ -354,7 +347,6 @@ IAB evidence относится к пяти изолированным комп�
 readonly click и Enter/Space. Это не приёмка всех экранов, Auth или API продукта.
 Полный интеграционный gate остаётся отдельной открытой стадией.
 
-
 ## Разделители редактора инструкций — 2026-10-27
 
 Строки инструкций и панель добавления используют существующий content_section
@@ -369,7 +361,6 @@ block inset следует общему token 4/8/12 px, кнопки и одн�
 product handlers отключены CSP, реальный API/Auth не запускался.
 Один unattributed MutationObserver warning сохранён отдельно; при нуле script
 элементов в композиции его источник не назначен продукту. Console clean не заявлен.
-
 
 ## Разделители компактного timeline — 2026-10-27
 
@@ -398,3 +389,21 @@ overflow и пересечений с действиями. Проверены �
 только третий финальный source-run. Unattributed MutationObserver warning
 сохранён отдельно, clean console не заявлен. Application/API/Auth/runtime
 и hosted CI этим доказательством не подменяются.
+
+## Общая render-граница UI 0.3.12 — 2026-10-27
+
+Точный UI producer `20633a6489dfd33e7afa782e0a06c23faea26b7a` принят отдельно от SDK/skills.
+React-граница не переносится в SSR. Изменён точный UI pin; штатный export/check подтверждает прежние SSR assets. Шаблоны, scripts и API Workflow не менялись.
+
+Настоящий UI-архив: 904 файла, offline CLI/reference и production bytes
+проверены вне workspace без Storybook. Шесть frontend-пакетов сверены с архивом;
+cached offline frozen refresh, React singleton и CLI check прошли.
+Общий механизм и ограничения: Base docs/platform/DESIGN_SYSTEM.md,
+раздел «Граница render-ошибки React». Данные, fallback, отчёт и reset identity
+принадлежат владельцу. HTTP/async/event/SSR ошибки обслуживаются отдельно.
+
+IAB evidence относится к фактическим Base/CatalogProviders source-композициям:
+12 сценариев ввода/сбоя/reset и 12 длинных fallback в трёх темах и четырёх
+ширинах; сохранены preview ready/error и черновик. Это не приёмка установленного
+продукта или Auth/API. Интеграционный gate, hosted CI и публикация остаются
+отдельными стадиями. Runtime не менялся.
