@@ -1,3 +1,12 @@
+{% macro _native_attributes(attributes=none, owned=[]) -%}
+{% set provided = namespace(values={}) -%}
+{% for name, value in (attributes or {}).items() if value is not none and (value is not sameas false or (name|lower).startswith('aria-')) -%}
+{% set key = name|lower -%}
+{% if key not in owned -%}{% set serialized = ('true' if value else 'false') if key.startswith('aria-') and value is boolean else ('' if value is sameas true else value) -%}{% set provided.values = dict(provided.values, **{key: serialized}) -%}{% endif -%}
+{% endfor -%}
+{{ provided.values|xmlattr }}
+{%- endmacro %}
+
 {% macro action_group(align='end', separated=false, stack_on_mobile=false, class_name='', id=none, orientation='horizontal') -%}
 {% set placement = align if align in ['start', 'end', 'between'] else 'end' -%}
 <div class="base-action-group{% if class_name %} {{ class_name }}{% endif %}" data-align="{{ placement }}"{% if orientation == 'vertical' %} data-orientation="vertical"{% endif %}{% if separated %} data-separated="true"{% endif %}{% if stack_on_mobile %} data-mobile-stack="true"{% endif %}{% if id %} id="{{ id }}"{% endif %}>{{ caller() }}</div>
@@ -100,6 +109,11 @@
 <details class="base-action-menu{% if class_name %} {{ class_name }}{% endif %}" data-base-menu{% if group %} data-base-menu-group="{{ group }}"{% endif %}{% if id %} id="{{ id }}"{% endif %}><summary class="base-control base-button base-icon-control" data-variant="secondary" data-size="icon" aria-label="{{ label }}" title="{{ label }}"{% if id %} aria-controls="{{ id }}-panel"{% endif %}><span aria-hidden="true">&#8943;</span></summary><div class="base-menu" data-base-menu-content{% if id %} id="{{ id }}-panel"{% endif %}>{{ caller() }}</div></details>
 {%- endmacro %}
 
+
+{% macro action_menu_item(label=none, disabled=false, tone='default', class_name='', attributes=none) -%}
+<button type="button" class="base-control base-menu-item{% if class_name %} {{ class_name }}{% endif %}"{% if tone == 'danger' %} data-tone="danger"{% endif %}{% if disabled %} disabled{% endif %}{{ _native_attributes(attributes, ['class','type','disabled','data-tone']) }}>{% if caller is defined %}{{ caller() }}{% elif label is not none %}{{ label }}{% endif %}</button>
+{%- endmacro %}
+
 {% macro icon_mark(color=none, label=none, size='md', class_name='') -%}
 {% set valid_color = color is string and color|length == 7 and color[0] == '#' and color[1:]|reject('in', '0123456789abcdefABCDEF')|list|length == 0 -%}
 <span class="base-icon-mark{% if class_name %} {{ class_name }}{% endif %}" data-size="{{ size if size in ['sm', 'md'] else 'md' }}"{% if label %} role="img" aria-label="{{ label }}"{% else %} aria-hidden="true"{% endif %} style="--base-icon-mark-color:{{ color if valid_color else 'var(--color-accent)' }}">{% if caller is defined %}{{ caller() }}{% endif %}</span>
@@ -116,18 +130,19 @@
 <div class="base-progress{% if class_name %} {{ class_name }}{% endif %}" role="progressbar" aria-valuemin="0"{% if known %} aria-valuemax="{{ max }}" aria-valuenow="{{ current }}"{% else %} data-unknown="true"{% endif %} data-variant="{{ variant }}"{% if label %} aria-label="{{ label }}"{% endif %}{% if value_text %} aria-valuetext="{{ value_text }}"{% endif %}><div class="base-progress-fill" style="width:{{ (current / max * 100) if known else 0 }}%"></div></div>
 {%- endmacro %}
 
-{% macro card(class_name='', id=none, href=none, label=none, surface='default', highlighted=false) -%}
-{% set tag = 'a' if href else 'div' -%}
-<{{ tag }} class="base-card{% if class_name %} {{ class_name }}{% endif %}" data-surface="{{ surface if surface in ['default', 'raised'] else 'default' }}"{% if highlighted %} data-highlighted="true"{% endif %}{% if id %} id="{{ id }}"{% endif %}{% if href %} href="{{ href }}" data-interactive="true"{% endif %}{% if label %} aria-label="{{ label }}"{% endif %}>{{ caller() }}</{{ tag }}>
+{% macro card(class_name='', id=none, href=none, label=none, surface='default', highlighted=false, tag='div', padded=false, density='default', type='button', attributes=none) -%}
+{% set tag = 'a' if href else (tag if tag in ['div', 'section', 'article', 'form', 'button'] else 'div') -%}
+<{{ tag }} class="base-card{% if padded %} base-card-content{% endif %}{% if class_name %} {{ class_name }}{% endif %}" data-surface="{{ surface if surface in ['default', 'raised'] else 'default' }}"{% if padded %} data-density="{{ density if density in ['default', 'compact'] else 'default' }}"{% endif %}{% if highlighted %} data-highlighted="true"{% endif %}{% if id %} id="{{ id }}"{% endif %}{% if href %} href="{{ href }}"{% endif %}{% if href or tag == 'button' %} data-interactive="true"{% endif %}{% if tag == 'button' %} type="{{ type }}"{% endif %}{% if label %} aria-label="{{ label }}"{% endif %}{{ _native_attributes(attributes, ['class','id','href','type','aria-label','data-surface','data-density','data-highlighted','data-interactive']) }}>{{ caller() }}</{{ tag }}>
 {%- endmacro %}
 
 {% macro card_header(class_name='', density='default') -%}
 <div class="base-card-header{% if class_name %} {{ class_name }}{% endif %}" data-density="{{ density if density in ['default', 'compact'] else 'default' }}">{{ caller() }}</div>
 {%- endmacro %}
 
-{% macro card_title(title, level=3, id=none) -%}
+{% macro card_title(title, level=3, id=none, tag=none, class_name='', attributes=none) -%}
 {% set heading = level if level in [1, 2, 3, 4, 5, 6] else 3 -%}
-<h{{ heading }} class="base-card-title"{% if id %} id="{{ id }}"{% endif %}>{{ title }}</h{{ heading }}>
+{% set element = 'span' if tag == 'span' else 'h' ~ heading -%}
+<{{ element }} class="base-card-title{% if class_name %} {{ class_name }}{% endif %}"{% if id %} id="{{ id }}"{% endif %}{{ _native_attributes(attributes, ['class','id']) }}>{{ title }}</{{ element }}>
 {%- endmacro %}
 
 {% macro card_description(text, tone='default', id=none) -%}
@@ -175,9 +190,9 @@
 <fieldset class="base-fieldset{% if class_name %} {{ class_name }}{% endif %}"{% if separated %} data-separated="true"{% endif %}{% if id %} id="{{ id }}"{% endif %}{% if name %} name="{{ name }}"{% endif %}{% if form %} form="{{ form }}"{% endif %}{% if labelled_by %} aria-labelledby="{{ labelled_by }}"{% endif %}{% if disabled %} disabled{% endif %}>{% if legend is not none and legend is not sameas false %}<legend class="base-fieldset-legend"{% if legend_visually_hidden %} data-visually-hidden="true"{% endif %}>{{ legend }}</legend>{% endif %}{{ caller() }}</fieldset>
 {%- endmacro %}
 
-{% macro input_control(id, name, value='', type='text', required=false, hint=none, error=none, disabled=false, min=none, max=none, step=none, autocomplete=none, placeholder=none, minlength=none, maxlength=none, pattern=none, described_by=none, class_name='', appearance='default', variant='default', aria_label=none, form=none, read_only=false) -%}
-{% set descriptions = [(id ~ '-hint') if hint else none, (id ~ '-error') if error else none, described_by] | select | join(' ') -%}
-<input class="base-control base-input{% if class_name %} {{ class_name }}{% endif %}" data-appearance="{{ appearance }}" data-variant="{{ variant }}" id="{{ id }}" name="{{ name }}"{% if form %} form="{{ form }}"{% endif %}{% if read_only %} readonly{% endif %} type="{{ type }}" value="{{ value }}"{% if required %} required{% endif %}{% if disabled %} disabled{% endif %}{% if error %} aria-invalid="true"{% endif %}{% if descriptions %} aria-describedby="{{ descriptions }}"{% endif %}{% if aria_label %} aria-label="{{ aria_label }}"{% endif %}{% if min is not none %} min="{{ min }}"{% endif %}{% if max is not none %} max="{{ max }}"{% endif %}{% if step is not none %} step="{{ step }}"{% endif %}{% if autocomplete %} autocomplete="{{ autocomplete }}"{% endif %}{% if placeholder is not none %} placeholder="{{ placeholder }}"{% endif %}{% if minlength is not none %} minlength="{{ minlength }}"{% endif %}{% if maxlength is not none %} maxlength="{{ maxlength }}"{% endif %}{% if pattern is not none %} pattern="{{ pattern }}"{% endif %}>
+{% macro input_control(id=none, name=none, value='', type='text', required=false, hint=none, error=none, disabled=false, min=none, max=none, step=none, autocomplete=none, placeholder=none, minlength=none, maxlength=none, pattern=none, described_by=none, class_name='', appearance='default', variant='default', aria_label=none, form=none, read_only=false, attributes=none) -%}
+{% set descriptions = [(id ~ '-hint') if id is not none and hint else none, (id ~ '-error') if id is not none and error else none, described_by] | select | join(' ') -%}
+<input class="base-control base-input{% if class_name %} {{ class_name }}{% endif %}" data-appearance="{{ appearance }}" data-variant="{{ variant }}"{% if id is not none %} id="{{ id }}"{% endif %}{% if name is not none %} name="{{ name }}"{% endif %}{% if form %} form="{{ form }}"{% endif %}{% if read_only %} readonly{% endif %} type="{{ type }}" value="{{ value }}"{% if required %} required{% endif %}{% if disabled %} disabled{% endif %}{% if error %} aria-invalid="true"{% endif %}{% if descriptions %} aria-describedby="{{ descriptions }}"{% endif %}{% if aria_label %} aria-label="{{ aria_label }}"{% endif %}{% if min is not none %} min="{{ min }}"{% endif %}{% if max is not none %} max="{{ max }}"{% endif %}{% if step is not none %} step="{{ step }}"{% endif %}{% if autocomplete %} autocomplete="{{ autocomplete }}"{% endif %}{% if placeholder is not none %} placeholder="{{ placeholder }}"{% endif %}{% if minlength is not none %} minlength="{{ minlength }}"{% endif %}{% if maxlength is not none %} maxlength="{{ maxlength }}"{% endif %}{% if pattern is not none %} pattern="{{ pattern }}"{% endif %}{{ _native_attributes(attributes, ['class','id','name','form','readonly','type','value','required','disabled','aria-invalid','aria-describedby','aria-label','min','max','step','autocomplete','placeholder','minlength','maxlength','pattern','data-appearance','data-variant']) }}>
 {%- endmacro %}
 
 {% macro input_with_action(id, name, value='', type='text', action_label=none, action_id=none, pressed=none, disabled=false, action_disabled=false, required=false, hint=none, error=none, autocomplete=none, placeholder=none, described_by=none, aria_label=none, class_name='', form=none, read_only=false) -%}
@@ -192,8 +207,8 @@
 <select{% if multiple %} multiple{% endif %} data-base-choice class="base-control" id="{{ id }}" name="{{ name }}"{% if required %} required{% endif %}{% if disabled %} disabled{% endif %}{% if error %} aria-invalid="true"{% endif %}{% if hint or error %} aria-describedby="{% if hint %}{{ id }}-hint{% endif %}{% if hint and error %} {% endif %}{% if error %}{{ id }}-error{% endif %}"{% endif %}>{{ caller() }}</select>
 {%- endmacro %}
 
-{% macro textarea_control(id, name, value='', required=false, hint=none, error=none, disabled=false, rows=4, class_name='', appearance='default', aria_label=none, autosize=false) -%}
-<textarea class="base-control base-textarea{% if class_name %} {{ class_name }}{% endif %}" data-appearance="{{ appearance }}"{% if autosize %} data-base-autosize{% endif %} id="{{ id }}" name="{{ name }}" rows="{{ rows }}"{% if required %} required{% endif %}{% if disabled %} disabled{% endif %}{% if aria_label %} aria-label="{{ aria_label }}"{% endif %}{% if error %} aria-invalid="true"{% endif %}{% if hint or error %} aria-describedby="{% if hint %}{{ id }}-hint{% endif %}{% if hint and error %} {% endif %}{% if error %}{{ id }}-error{% endif %}"{% endif %}>{{ value }}</textarea>
+{% macro textarea_control(id=none, name=none, value='', required=false, hint=none, error=none, disabled=false, rows=4, class_name='', appearance='default', aria_label=none, autosize=false, attributes=none) -%}
+<textarea class="base-control base-textarea{% if class_name %} {{ class_name }}{% endif %}" data-appearance="{{ appearance }}"{% if autosize %} data-base-autosize{% endif %}{% if id is not none %} id="{{ id }}"{% endif %}{% if name is not none %} name="{{ name }}"{% endif %} rows="{{ rows }}"{% if required %} required{% endif %}{% if disabled %} disabled{% endif %}{% if aria_label %} aria-label="{{ aria_label }}"{% endif %}{% if error %} aria-invalid="true"{% endif %}{% if id is not none and (hint or error) %} aria-describedby="{% if hint %}{{ id }}-hint{% endif %}{% if hint and error %} {% endif %}{% if error %}{{ id }}-error{% endif %}"{% endif %}{{ _native_attributes(attributes, ['class','id','name','rows','required','disabled','aria-label','aria-invalid','aria-describedby','data-appearance','data-base-autosize']) }}>{{ value }}</textarea>
 {%- endmacro %}
 
 {% macro resource_list_button(label=none, pressed=none, disabled=false, id=none, class_name='') -%}
@@ -208,15 +223,8 @@
 {% set public_variant = {'primary': 'default', 'danger': 'destructive'}.get(variant, variant) -%}
 {% set is_link = href is not none -%}
 {% set tag = 'a' if is_link else 'button' -%}
-{# Native attributes belong to the caller; explicit primitive state remains authoritative. #}
-{% set provided = namespace(values={}) -%}
-{% for name, value in (attributes or {}).items() if value is not none and value is not sameas false -%}
-{% set provided.values = dict(provided.values, **{name|lower: '' if value is sameas true else value}) -%}
-{% endfor -%}
-{% set native = provided.values -%}
-{% set native = dict(native, **{'class': none, 'type': none, 'href': none, 'disabled': none, 'id': none, 'data-variant': none, 'data-size': none, 'aria-busy': none, 'aria-disabled': none, 'aria-label': none, 'title': none, 'aria-pressed': none, 'aria-controls': none}) -%}
-{% if is_link and (disabled or pending) %}{% set native = dict(native, role=none, tabindex=none, **{'aria-disabled': none}) %}{% endif -%}
-<{{ tag }} class="base-control base-button base-button-{{ variant }}{% if size == 'icon' %} base-icon-control{% endif %}{% if class_name %} {{ class_name }}{% endif %}" data-variant="{{ public_variant }}" data-size="{{ size }}"{% if is_link %}{% if disabled or pending %} role="link" aria-disabled="true" tabindex="-1"{% else %} href="{{ href }}"{% endif %}{% else %} type="{{ type }}"{% if disabled or pending %} disabled{% endif %}{% endif %}{% if id %} id="{{ id }}"{% endif %}{% if pending %} aria-busy="true"{% endif %}{% if aria_label %} aria-label="{{ aria_label }}"{% endif %}{% if title %} title="{{ title }}"{% endif %}{% if not is_link and aria_pressed is not none %} aria-pressed="{{ 'true' if aria_pressed else 'false' }}"{% endif %}{% if aria_controls %} aria-controls="{{ aria_controls }}"{% endif %}{{ native | xmlattr }}>{% if caller is defined %}{{ caller() }}{% elif label is not none %}{{ label }}{% endif %}</{{ tag }}>
+{% set owned = ['class', 'type', 'href', 'disabled', 'id', 'data-variant', 'data-size', 'aria-busy', 'aria-disabled', 'aria-label', 'title', 'aria-pressed', 'aria-controls'] + (['role', 'tabindex'] if is_link and (disabled or pending) else []) -%}
+<{{ tag }} class="base-control base-button base-button-{{ variant }}{% if size == 'icon' %} base-icon-control{% endif %}{% if class_name %} {{ class_name }}{% endif %}" data-variant="{{ public_variant }}" data-size="{{ size }}"{% if is_link %}{% if disabled or pending %} role="link" aria-disabled="true" tabindex="-1"{% else %} href="{{ href }}"{% endif %}{% else %} type="{{ type }}"{% if disabled or pending %} disabled{% endif %}{% endif %}{% if id %} id="{{ id }}"{% endif %}{% if pending %} aria-busy="true"{% endif %}{% if aria_label %} aria-label="{{ aria_label }}"{% endif %}{% if title %} title="{{ title }}"{% endif %}{% if not is_link and aria_pressed is not none %} aria-pressed="{{ 'true' if aria_pressed else 'false' }}"{% endif %}{% if aria_controls %} aria-controls="{{ aria_controls }}"{% endif %}{{ _native_attributes(attributes, owned) }}>{% if caller is defined %}{{ caller() }}{% elif label is not none %}{{ label }}{% endif %}</{{ tag }}>
 {%- endmacro %}
 
 {% macro loader(size='md') -%}

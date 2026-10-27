@@ -25,10 +25,11 @@
 
 {% block content %}
 <template id="instruction-parallel-label-template">{{ base_ui.badge('⚡ параллельно', 'info', class_name='parallel-label') }}</template>
+<template id="instruction-parallel-group-template">{% call base_ui.card(padded=true, class_name='instruction-block parallel-group') %}{% endcall %}</template>
 <div class="instructions-layout" id="instructionsLayout">
   {% for group in instruction_groups %}
     {% set is_parallel_group = group | length > 1 %}
-    <div class="instruction-block {% if is_parallel_group %}parallel-group base-card base-card-content{% endif %}" data-block-index="{{ loop.index0 }}">
+    {% set group_body %}
       {% if is_parallel_group %}{{ base_ui.badge('⚡ параллельно', 'info', class_name='parallel-label') }}{% endif %}
       {% for instruction in group %}
       <div class="instruction-row" data-instruction-id="{{ instruction.id }}" data-step-num="{{ instruction.step_num }}">
@@ -39,7 +40,7 @@
         </div>
         <div class="instruction-body">
           <div class="instruction-desc">
-            <textarea data-base-autosize class="instruction-text base-control base-textarea" rows="1" data-original-description="{{ instruction.description }}" aria-label="Описание инструкции {{ instruction.step_num }}" onchange="updateInstruction(this)" data-appearance="inline">{{ instruction.description }}</textarea>
+            {{ base_ui.textarea_control(class_name="instruction-text", rows="1", aria_label="Описание инструкции " ~ (instruction.step_num), appearance="inline", autosize=true, value=(instruction.description), attributes={"data-original-description": (instruction.description), "onchange": "updateInstruction(this)"}) }}
           </div>
           <div class="execution-row">
             {% call base_ui.button(variant="outline", class_name="type-badge", type="button", aria_label="Параллельное выполнение инструкции " ~ (instruction.step_num), aria_pressed=((('true' if instruction.execution_type == 'parallel' else 'false')) == 'true'), attributes={"data-execution-type": (instruction.execution_type), "onclick": "toggleType(this)"}) %}{{ 'параллельно' if instruction.execution_type == 'parallel' else 'последовательно' }}{% endcall %}
@@ -48,7 +49,7 @@
             {% for skill in instruction.skills %}
             {{ base_ui.badge(skill, 'info') }}
             {% endfor %}
-            <input class="skills-input base-control base-input" type="text" value="{{ instruction.skills | join(', ') }}" placeholder="Навыки через запятую" aria-label="Навыки инструкции {{ instruction.step_num }}" onchange="updateSkills(this)">
+            {{ base_ui.input_control(class_name="skills-input", type="text", value=(instruction.skills | join(', ')), placeholder="Навыки через запятую", aria_label="Навыки инструкции " ~ (instruction.step_num), attributes={"onchange": "updateSkills(this)"}) }}
           </div>
         </div>
         {% call base_ui.action_group(class_name='row-actions') %}
@@ -56,7 +57,12 @@
         {% endcall %}
       </div>
       {% endfor %}
-    </div>
+    {% endset %}
+    {% if is_parallel_group %}
+    {% call base_ui.card(padded=true, class_name='instruction-block parallel-group', attributes={'data-block-index':loop.index0}) %}{{ group_body }}{% endcall %}
+    {% else %}
+    <div class="instruction-block" data-block-index="{{ loop.index0 }}">{{ group_body }}</div>
+    {% endif %}
   {% else %}
     {{ base_ui.state('empty', 'Инструкций пока нет.') }}
   {% endfor %}
@@ -64,7 +70,7 @@
 
 <div class="add-panel">
   <div class="add-row">
-    <input type="text" id="newInstructionText" placeholder="Новая инструкция…" aria-label="Новая инструкция" style="flex:1" class="base-control base-input">
+    {{ base_ui.input_control(id="newInstructionText", type="text", placeholder="Новая инструкция…", aria_label="Новая инструкция", attributes={"style": "flex:1"}) }}
     {% call base_ui.button(variant="primary", type="button", attributes={"onclick": "addInstruction()"}) %}Добавить{% endcall %}
   </div>
 </div>
@@ -116,8 +122,10 @@ function updateTimeline() {
   });
   groups.forEach(group => {
     const isParallelGroup = group.length > 1;
-    const block = document.createElement('div');
-    block.className = 'instruction-block' + (isParallelGroup ? ' parallel-group base-card base-card-content' : '');
+    const block = isParallelGroup
+      ? document.getElementById('instruction-parallel-group-template').content.firstElementChild.cloneNode(true)
+      : document.createElement('div');
+    if (!isParallelGroup) block.className = 'instruction-block';
     if (isParallelGroup) {
       const label = document.getElementById('instruction-parallel-label-template').content.firstElementChild.cloneNode(true);
       block.appendChild(label);

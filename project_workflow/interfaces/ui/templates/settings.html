@@ -13,7 +13,7 @@
 {% block content %}
 <div class="cli-reference">
   {% for command in commands %}
-  <section class="base-card" aria-labelledby="cliCommand{{ loop.index }}">
+  {% call base_ui.card(tag='section', attributes={'aria-labelledby':'cliCommand' ~ loop.index}) %}
     {% call base_ui.card_header() %}
       {{ base_ui.section_header(command.name, heading_id='cliCommand' ~ loop.index, context=command.summary) }}
     {% endcall %}
@@ -43,9 +43,9 @@
     </div>
     {% endif %}
     {% endcall %}
-  </section>
+  {% endcall %}
   {% else %}
-  {% call base_ui.card(class_name='base-card-content') %}{{ base_ui.notice('Доступные CLI-команды не найдены.', appearance='inline', role='status') }}{% endcall %}
+  {% call base_ui.card(padded=true) %}{{ base_ui.notice('Доступные CLI-команды не найдены.', appearance='inline', role='status') }}{% endcall %}
   {% endfor %}
 </div>
 {% endblock %}

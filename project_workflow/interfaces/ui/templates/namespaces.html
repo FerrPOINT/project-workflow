@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "namespace_card.html" import namespace_card %}
 
 {% block title %}Профессии — Workflow Engine{% endblock %}
 {% block header_title %}Профессии{% endblock %}
@@ -28,8 +29,7 @@
 {% endblock %}
 
 {% block content %}
-<template id="namespace-card-mark-template">{{ namespace_mark() }}</template>
-<template id="namespace-task-count-template">{{ base_ui.badge('', 'muted', 'inline') }}</template>
+<template id="namespace-card-template">{{ namespace_card() }}</template>
 <div class="namespace-crud{% if namespaces|length == 0 %} is-empty{% endif %}" id="namespaceCrud">
   <div class="namespace-picker" id="namespacePicker">
     <label class="base-label" for="namespaceSelect">Профессия</label>
@@ -42,21 +42,13 @@
   </div>
   <section class="namespace-nav side-nav-scroll" id="namespaceNav">
     {% for namespace in namespaces %}
-    <button type="button" class="namespace-nav-item base-card base-card-content" data-interactive="true" data-namespace-id="{{ namespace.id }}" aria-controls="namespaceForm" aria-pressed="{{ 'true' if selected_namespace and selected_namespace.id == namespace.id and not create_mode else 'false' }}" onclick="selectNamespace({{ namespace.id }})">
-      {{ namespace_mark(namespace.theme_icon, namespace.theme_color) }}
-      <span class="namespace-card-body">
-        <span class="namespace-name base-card-title">{{ namespace.name }}</span>
-        <span class="namespace-meta">
-          {{ base_ui.badge(namespace.task_count | pluralize('задача,задачи,задач'), 'muted', 'inline') }}
-        </span>
-      </span>
-    </button>
+    {{ namespace_card(namespace, selected=selected_namespace and selected_namespace.id == namespace.id and not create_mode) }}
     {% endfor %}
   </section>
 
   <section class="namespace-panel">
 {% if can_administer %}
-    <form id="namespaceForm" data-platform-draft class="base-card base-card-content form-stack" aria-labelledby="namespaceFormMode" onsubmit="event.preventDefault(); submitNamespace();">
+    {% call base_ui.card(tag="form", padded=true, class_name="form-stack", id="namespaceForm", attributes={"data-platform-draft": true, "aria-labelledby": "namespaceFormMode", "onsubmit": "event.preventDefault(); submitNamespace();"}) %}
       <div class="base-card-title" id="namespaceFormMode">{{ 'Создание' if create_mode else 'Редактирование' }}</div>
       <div class="namespace-identity-row">
       {% call base_ui.field('namespaceName', 'Название', required=true) %}
@@ -71,7 +63,7 @@
           {% endcall %}
         {% endcall %}
         {% call base_ui.field('namespaceThemeColor', 'Цвет') %}
-          <input type="color" id="namespaceThemeColor" name="namespaceThemeColor" class="base-control base-input" aria-label="Цвет" title="Цвет" value="{{ edited_namespace.theme_color if edited_namespace else '#5E6AD2' }}" oninput="updateNamespaceThemePreview()">
+          {{ base_ui.input_control(id="namespaceThemeColor", name="namespaceThemeColor", type="color", value=(edited_namespace.theme_color if edited_namespace else '#5E6AD2'), aria_label="Цвет", attributes={"title": "Цвет", "oninput": "updateNamespaceThemePreview()"}) }}
         {% endcall %}
       </div>
       </div>
@@ -88,13 +80,13 @@
         {% call base_ui.button(class_name="namespace-delete", id="deleteNamespaceButton", type="button", attributes={"onclick": "deleteNamespace()", "style": ('display:none' if create_mode else none)}) %}Удалить{% endcall %}
       {% endcall %}
       {{ base_ui.resource_list_description('Профессию с задачами нельзя удалить.', id='namespaceDeleteHint', tag='p', class_name='namespace-delete-hint', hidden=true) }}
-    </form>
+    {% endcall %}
 {% elif edited_namespace %}
-    <article class="base-card base-card-content form-stack" id="professionSummary">
+    {% call base_ui.card(tag="article", padded=true, class_name="form-stack", id="professionSummary") %}
       <h2 class="base-section-title">{{ edited_namespace.name }}</h2>
       <p>{{ edited_namespace.description or '' }}</p>
       <p>CLI-команда: <code>{{ edited_namespace.cli_command }}</code></p>
-    </article>
+    {% endcall %}
 {% else %}{{ base_ui.state('empty', 'Выберите профессию для просмотра.' if namespaces else 'Пока ничего не создано.') }}{% endif %}
 
   </section>
@@ -318,37 +310,22 @@ function renderNamespaceNav(){
   var nav = document.getElementById('namespaceNav');
   nav.replaceChildren();
   namespaceStore.forEach(function(namespace){
-    var button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'namespace-nav-item base-card base-card-content';
-    button.dataset.interactive = 'true';
+    var button = document.getElementById('namespace-card-template').content.firstElementChild.cloneNode(true);
     button.dataset.namespaceId = String(namespace.id);
     button.setAttribute('aria-controls', 'namespaceForm');
     button.setAttribute('aria-pressed', 'false');
     button.onclick = function(){ selectNamespace(namespace.id); };
 
-    var mark = document.getElementById('namespace-card-mark-template').content.firstElementChild.cloneNode(true);
+    var mark = button.firstElementChild;
     mark.style.setProperty('--base-icon-mark-color', namespace.theme_color || defaultNamespaceThemeColor);
     mark.querySelector('path').setAttribute('d', namespaceIconPaths[namespace.theme_icon || defaultNamespaceThemeIcon] || namespaceIconPaths[defaultNamespaceThemeIcon]);
 
-    var body = document.createElement('span');
-    body.className = 'namespace-card-body';
-
-    var name = document.createElement('span');
-    name.className = 'namespace-name base-card-title';
+    var name = button.querySelector('.namespace-name');
     name.textContent = namespace.name;
 
-    var meta = document.createElement('span');
-    meta.className = 'namespace-meta';
-
-    var tasks = document.getElementById('namespace-task-count-template').content.firstElementChild.cloneNode(true);
+    var tasks = button.querySelector('.namespace-meta').firstElementChild;
     tasks.textContent = pluralizeRu(namespace.task_count, 'задача', 'задачи', 'задач');
 
-    meta.appendChild(tasks);
-    body.appendChild(name);
-    body.appendChild(meta);
-    button.appendChild(mark);
-    button.appendChild(body);
     nav.appendChild(button);
   });
 }

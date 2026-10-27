@@ -249,6 +249,8 @@ resource_list_description Base. Внешние контейнеры, flex/grid, 
 Обычные SSR actions рендерятся штатным button Base с label либо caller.
 После проверки UI pin attributes передаёт owner handlers/data/hidden/form;
 Base сохраняет приоритет type/id/variant/size и disabled/pending/ARIA.
-Не копировать base-control/base-button или btn в product markup. Нативные
-card/menu contracts отличаются от обычной action button и проверяются отдельно.
+Не копировать base-control/base-button или btn в product markup. Card и формы
+используют card(tag=..., padded=true); пункты action_menu — action_menu_item.
+Input/Textarea — штатные macros с attributes и optional id/name, без фиктивных
+FormData keys. Один product template используется для initial/hydrated карточек.
 Новые параметры требуют штатного SSR export; runtime этим не обновляется.

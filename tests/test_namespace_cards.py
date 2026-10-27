@@ -47,7 +47,7 @@ def template_dom():
     )
     fragments = TemplateFragments(html).fragments
     # The product's DOM operations run in Node; the markup comes from real Jinja/Base.
-    return "const fragmentTrees=" + json.dumps(fragments, ensure_ascii=False) + ";\n" + """
+    return "const fragmentTrees=" + json.dumps(fragments, ensure_ascii=False) + ";\n" + r"""
 class Node {
   constructor(tag='span',attrs={},children=[]){
     this.tag=tag;this.attrs={...attrs};this.children=children;this.value='';
@@ -64,7 +64,9 @@ class Node {
   set textContent(value){this.value=String(value);this.children=[];}
   get textContent(){return this.value+this.children.map(child=>child.textContent).join('');}
   cloneNode(deep){return new Node(this.tag,this.attrs,deep?this.children.map(child=>child.cloneNode(true)):[]);}
-  querySelector(tag){for(const child of this.children){if(child.tag===tag)return child;
+  get firstElementChild(){return this.children[0]??null;}
+  querySelector(tag){for(const child of this.children){if(tag.startsWith('.')?
+    child.className.split(/\s+/).includes(tag.slice(1)):child.tag===tag)return child;
     const match=child.querySelector(tag);if(match)return match;}return null;}
 }
 function element(tree){return new Node(tree.tag,tree.attrs,tree.children.map(element));}
@@ -111,6 +113,39 @@ const pluralizeRu=()=> '0 задач';const selectNamespace=()=>{};
         },
         {"id": "23", "text": "qa-second0 задач", "mark": "base-icon-mark", "size": "md", "color": "#123456"},
     ]
+
+
+def test_card_template_clones_keep_distinct_ids_one_callback_and_independent_marks():
+    template = (Path(__file__).parents[1] / "project_workflow/interfaces/ui/templates/namespaces.html").read_text(
+        encoding="utf-8"
+    )
+    renderer = template[
+        template.index("function renderNamespaceNav()") : template.index("function renderNamespacePagePicker()")
+    ]
+    script = template_dom() + r"""
+const namespaceStore=[{id:17,name:'Same name',task_count:3},{id:23,name:'Same name',task_count:0}];
+const defaultNamespaceThemeColor='#123456',defaultNamespaceThemeIcon='folder';
+const namespaceIconPaths={folder:'M0 0h1'},calls=[];
+const pluralizeRu=count=>String(count)+' задач',selectNamespace=id=>calls.push(id);
+""" + renderer + r"""
+renderNamespaceNav();const before=calls.length;
+nav.children[1].onclick();
+nav.children[0].firstElementChild.style.setProperty('--base-icon-mark-color','#ffffff');
+console.log(JSON.stringify({before,calls,ids:nav.children.map(x=>x.dataset.namespaceId),
+  types:nav.children.map(x=>x.attrs.type),
+  controls:nav.children.map(x=>x.attrs['aria-controls']),
+  callbacks:nav.children.map(x=>typeof x.onclick),
+  templateHandler:fragments['namespace-card-template'].content.firstElementChild.attrs.onclick??null,
+  secondColor:nav.children[1].firstElementChild.style['--base-icon-mark-color']}));
+"""
+    result = subprocess.run(["node", "--input-type=module", "-"], input=script,
+                            text=True, encoding="utf-8", capture_output=True, timeout=10)
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == {
+        "before": 0, "calls": [23], "ids": ["17", "23"], "types": ["button", "button"],
+        "controls": ["namespaceForm", "namespaceForm"], "callbacks": ["function", "function"],
+        "templateHandler": None, "secondColor": "#123456",
+    }
 
 
 def test_profession_choice_uses_the_same_base_mark_without_changing_label_or_icon_data():
@@ -189,7 +224,7 @@ nav.children[1].onclick();
 if(nav.children[0].children[0]===nav.children[1].children[0])throw Error('Shared mutable mark');
 if(JSON.stringify(namespaceStore)!==originalRecords||JSON.stringify(fragments)!==originalTemplates)
  throw Error('Renderer changed source data');
-if(fragments['namespace-card-mark-template'].content.firstElementChild.querySelector('path').attrs.d==='M1 1h2')
+if(fragments['namespace-card-template'].content.firstElementChild.querySelector('path').attrs.d==='M1 1h2')
  throw Error('Renderer changed reusable fragment');
 namespaceStore.splice(0);renderNamespaceNav();
 console.log(JSON.stringify({rows,selected,empty:nav.children.length}));

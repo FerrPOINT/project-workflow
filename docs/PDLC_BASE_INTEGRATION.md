@@ -2,7 +2,7 @@
 
 ## Текущий source-кандидат UI
 
-Точный UI SHA: `8bdd8ecd54eb6a6f553bfbadcfaf07c99f4a801d` ([pin](../.base-ui-revision)).
+Точный UI SHA: `623deb7da5813fa9d1185ded7688c35bb15cd43e` ([pin](../.base-ui-revision)).
 Компоненты и reference берутся из этой версии Base; открытый справочник другой
 версии не подтверждает доступность контракта в продукте. SDK/skills pins
 независимы. Это исходники собственного checkout; установка и authenticated
@@ -264,3 +264,28 @@ pins неизменны; это source-кандидат, без установк
 badge совпадает полностью. UI contract gate и Ruff пройдены.
 Архив UI и offline frozen adoption проверены; общий интеграционный gate,
 hosted CI, публикация и установка здесь не выполнялись.
+
+
+## Нативные поля, карточки и меню SSR — 2026-10-27
+
+Принят UI 0.3.6, producer `623deb7da5813fa9d1185ded7688c35bb15cd43e`. Девять
+полей, четыре menu actions и десять Card-композиций используют общие macros;
+начальный namespace template также используется динамическим renderer. Две
+динамические параллельные группы клонируют Base Card; типы, IDs, данные,
+события, очередь сохранения и native FormData остаются Workflow. Settings
+сохраняет CLI-каталог, copy actions и область доступности без локального Card.
+
+Пройдены 82 scoped tests и 37 subtests, 22 полных DOM/FormData/JS-проекции
+пяти шаблонов и восемь role/group сценариев настоящих dynamic renderers.
+Заменённый тест проверяет неизменность целого Card template вместо удалённого
+отдельного mark template. Проверки новых raw primitive copies обязательны.
+
+Отдельная source-only IAB fixture проверяет macros/renderer/runtime в трёх темах
+и четырёх ширинах: размеры 40/44 px, autosize/reset, native события, FormData,
+mouse/Enter, Escape/focus. У двух console MutationObserver сообщений нет
+источника; они сохранены как неатрибутированные, не объявлены исправленными.
+
+Настоящий UI-архив, offline CLI, frozen adoption и SSR fingerprints проверены.
+React/JS/CSS/types и зависимости совпадают с 0.3.5, без повторной сборки этих
+артефактов. SDK/skills pins не менялись. Полный интеграционный gate, hosted CI,
+установка и приёмка приложения остаются отдельными этапами.

@@ -34,7 +34,7 @@
 {% call base_ui.resource_list_row(class_name='phase-text-row') %}
   <span class="phase-text-icon" aria-hidden="true">{{ '○' if checking else '📄' }}</span>
 {% if can_administer %}
-  <textarea data-base-autosize class="inline-input phase-text-content base-control base-textarea" rows="1" data-field="description" aria-label="{{ field_label }}" onblur="{{ 'saveNewTextItem(this)' if fresh else 'scheduleSave()' }}" data-appearance="inline">{{ item.description }}</textarea>
+  {{ base_ui.textarea_control(class_name="inline-input phase-text-content", rows="1", aria_label=(field_label), appearance="inline", autosize=true, value=(item.description), attributes={"data-field": "description", "onblur": ('saveNewTextItem(this)' if fresh else 'scheduleSave()')}) }}
   {% call base_ui.button(variant="destructive-outline", size="icon", class_name="item-delete", type="button", aria_label=(delete_label), attributes={"onclick": "deleteItem(this)"}) %}×{% endcall %}
 {% else %}
   <div class="phase-text-content">{% call base_ui.prose() %}{{ item.description }}{% endcall %}</div>
@@ -74,8 +74,8 @@
 {% set phase_heading %}
 {% if can_administer %}
     <div class="base-page-stack">
-      <input type="text" class="inline-input base-control base-input" value="{{ phase.name }}" data-field="name" aria-label="Название фазы" onblur="scheduleSave()" data-appearance="inline" data-variant="heading">
-      <textarea data-base-autosize class="inline-input wiki-subtitle base-control base-textarea" rows="1" data-field="description" aria-label="Описание фазы" onblur="scheduleSave()" data-appearance="inline">{{ phase.description or '' }}</textarea>
+      {{ base_ui.input_control(class_name="inline-input", type="text", value=(phase.name), aria_label="Название фазы", appearance="inline", variant="heading", attributes={"data-field": "name", "onblur": "scheduleSave()"}) }}
+      {{ base_ui.textarea_control(class_name="inline-input wiki-subtitle", rows="1", aria_label="Описание фазы", appearance="inline", autosize=true, value=(phase.description or ''), attributes={"data-field": "description", "onblur": "scheduleSave()"}) }}
     </div>
 {% else %}
     <h2 class="base-page-title">{{ phase.name }}</h2>
@@ -130,9 +130,9 @@
         {% call base_ui.button(variant="destructive-outline", size="icon", class_name="phase-delete-btn", type="button", aria_label="Удалить инструкцию " ~ (i.step_num), attributes={"onclick": "deleteInstruction(this)"}) %}×{% endcall %}
       </div>
 {% endif %}
-      <div class="timeline-card base-card base-card-content" data-instruction-id="{{ i.id }}" data-step-num="{{ i.step_num }}" data-type="{{ i.execution_type }}">
+      {% call base_ui.card(padded=true, class_name='timeline-card', attributes={'data-instruction-id':i.id, 'data-step-num':i.step_num, 'data-type':i.execution_type}) %}
 {% if can_administer %}
-        <textarea data-base-autosize class="timeline-name-input base-control base-textarea" rows="1" data-field="description" data-original-description="{{ i.description }}" aria-label="Описание инструкции {{ i.step_num }}" onblur="saveInstructionDescription(this)" data-appearance="inline">{{ i.description }}</textarea>
+        {{ base_ui.textarea_control(class_name="timeline-name-input", rows="1", aria_label="Описание инструкции " ~ (i.step_num), appearance="inline", autosize=true, value=(i.description), attributes={"data-field": "description", "data-original-description": (i.description), "onblur": "saveInstructionDescription(this)"}) }}
         <div class="execution-row">
           {% call base_ui.button(variant="outline", type="button", aria_label="Параллельное выполнение инструкции " ~ (i.step_num), aria_pressed=((('true' if i.execution_type == 'parallel' else 'false')) == 'true'), attributes={"onclick": "toggleInstructionType(this)"}) %}
             {% if i.execution_type == 'parallel' %}⚡ параллельно{% else %}⏱ последовательно{% endif %}
@@ -152,10 +152,10 @@
           {% endcall %}
           {% endfor %}
 {% if can_administer %}
-          <input class="skill-candidate base-control base-input" type="text" placeholder="Добавить навык" aria-label="Добавить навык к инструкции {{ i.step_num }}" onchange="addSkillToInstruction(this)">
+          {{ base_ui.input_control(class_name="skill-candidate", type="text", placeholder="Добавить навык", aria_label="Добавить навык к инструкции " ~ (i.step_num), attributes={"onchange": "addSkillToInstruction(this)"}) }}
 {% endif %}
         </div>
-      </div>
+      {% endcall %}
     </div>
     {% endmacro %}
 
@@ -163,7 +163,7 @@
       {% set runs = phase.instructions|group_instructions %}
       {% for run in runs %}
         {% if run|length > 1 %}
-          <div class="timeline-block timeline-parallel-group base-card base-card-content">
+          {% call base_ui.card(padded=true, class_name='timeline-block timeline-parallel-group') %}
             {{ base_ui.badge('⚡ параллельно', 'info', class_name='timeline-parallel-label') }}
             {% for i in run %}
               <div class="timeline-item" data-instruction-id="{{ i.id }}" data-step-num="{{ i.step_num }}" data-type="{{ i.execution_type }}">
@@ -171,7 +171,7 @@
                 <div class="timeline-arrow"{% if loop.last %} hidden{% endif %}>↓</div>
               </div>
             {% endfor %}
-          </div>
+          {% endcall %}
         {% else %}
           {% set i = run[0] %}
           <div class="timeline-block">
@@ -211,6 +211,7 @@
 {% if can_administer %}
   <template id="instructions-empty-template"><div class="empty-state">{{ base_ui.state('empty', 'Нет инструкций') }}</div></template>
   <template id="instruction-parallel-label-template">{{ base_ui.badge('⚡ параллельно', 'info', class_name='timeline-parallel-label') }}</template>
+  <template id="instruction-parallel-group-template">{% call base_ui.card(padded=true, class_name='timeline-block timeline-parallel-group') %}{% endcall %}</template>
 {% endif %}
 
     </div>
@@ -422,8 +423,10 @@ function renderInstructionTimeline(items) {
       idx++;
     }
     const isParallelGroup = group.length > 1;
-    const block = document.createElement('div');
-    block.className = 'timeline-block' + (isParallelGroup ? ' timeline-parallel-group base-card base-card-content' : '');
+    const block = isParallelGroup
+      ? document.getElementById('instruction-parallel-group-template').content.firstElementChild.cloneNode(true)
+      : document.createElement('div');
+    if (!isParallelGroup) block.className = 'timeline-block';
     if (isParallelGroup) {
       block.appendChild(document.getElementById('instruction-parallel-label-template').content.cloneNode(true));
     }
