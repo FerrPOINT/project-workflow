@@ -300,8 +300,15 @@ coverage, PostgreSQL and deployed-cohort gates remain open.
 actual judge-prompt boundaries, retained final variants, custom security,
 missing/stale consent and terminal replay. Normal Workflow-only build3b2c2094
 installs image182e4667 with all nine history tables unchanged. Actual retained
-PM CLI reads the new final checks. The live continuation is still required to
-qualify terminal receipt plus Tracker Backlog/Ready; host tests do not replace it.
+PM CLI reads the new final checks. The SAME PM11/FLEETQA-8 live continuation then
+returned PASS/complete=true/version14/history13 for operation
+pm-draft-03-corrected-evidence-checks-v5. Receipt SHA256:
+eb144e86aee3295df0aef4f95d42da821db2a518450c9618c02e0fec5561cfd2.
+Tracker completion01a17d1c-ac7f-7aa1-aa80-1fa9025ab9e4 records Backlog/Ready.
+Exact completion replay preserves that ID/time/hash; task-scoped read-only counts
+are one task, one completion, zero Analysis intents/downstream assignments.
+Original Hermes and the PM container were not changed. This is assisted
+existing-task acceptance; fresh autonomous and full release gates remain separate.
 
 ```sh
 python -B -m pytest -q tests/test_configured_cli.py tests/test_configured_cli_transport.py tests/test_configured_cli_tracker.py tests/test_pm_assignment_guard.py --timeout=60

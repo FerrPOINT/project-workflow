@@ -15,8 +15,12 @@
   terminal/check/evidence variants are projected without changing the legacy
   catalog or custom security constraints. No forced PASS or new authority.
   All35 configured tests and independent review pass on210db1; normal
-  Workflow-only installation preserves all nine history tables. Live PM final
-  continuation remains separate from these source/install checks.
+  Workflow-only installation preserves all nine history tables. The SAME real
+  PM11/FLEETQA-8 then produced PASS/complete=true/version14/history13 and an
+  authoritative terminal receipt. PM submitted Tracker completion through CLI;
+  Backlog/Ready, one completion and zero downstream assignments/intents were
+  verified, including original-key replay. This is assisted existing-task live
+  acceptance, not fresh autonomous or full release qualification.
 
 - Configured PM preparation instructions distinguish the independently generated
   Workflow execution_ref from Tracker assignment.execution_id, and Workflow
