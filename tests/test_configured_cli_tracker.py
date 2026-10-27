@@ -83,7 +83,7 @@ def test_every_current_assignment_component_is_exact(authority, field):
 
 
 @pytest.mark.parametrize("role,mode,stage", [
-    ("project_manager", "draft", "Draft"), ("project_manager", "draft", "Backlog"), ("analyst", "analysis", "Analysis"),
+    ("project_manager", "draft", "Draft"), ("analyst", "analysis", "Analysis"),
     ("architect", "decomposition", "Architecture"), ("developer", "initial", "Development"),
     ("developer", "rework", "Rework"), ("reviewer", "delivery", "Review"),
     ("tester", "delivery", "Testing"), ("devops", "delivery", "Deployment"),
@@ -97,6 +97,25 @@ def test_current_stage_must_match_the_assigned_profession_and_mode(authority, ro
         bodies["context"]["stage"] = wrong
         with pytest.raises(ConflictError):
             tracker.assignment(request)
+
+
+def test_settled_pm_read_still_requires_the_exact_current_assignment(authority):
+    request, bodies, _ = authority
+    bodies["context"].update(stage="Backlog", status="Ready")
+    tracker.assignment(request, allow_completed_read=True)
+    with pytest.raises(ConflictError):
+        tracker.assignment(request)
+    bodies["context"]["assignment"]["version"] += 1
+    with pytest.raises(ConflictError):
+        tracker.assignment(request, allow_completed_read=True)
+
+
+@pytest.mark.parametrize("stage,status", [("Backlog", "InProgress"), ("Draft", "Ready"), ("Backlog", "Completed")])
+def test_completed_read_does_not_admit_other_stage_status_pairs(authority, stage, status):
+    request, bodies, _ = authority
+    bodies["context"].update(stage=stage, status=status)
+    with pytest.raises(ConflictError):
+        tracker.assignment(request, allow_completed_read=True)
 
 
 @pytest.mark.parametrize("field", ["task_id", "root_task_id", "owner_subject"])

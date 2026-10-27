@@ -265,10 +265,11 @@ def _principal(authorization: str | None, *, write: bool) -> namespace_auth.Name
     return principal
 
 
-def _assignment(principal: namespace_auth.NamespacePrincipal, payload: dict[str, Any]) -> None:
+def _assignment(principal: namespace_auth.NamespacePrincipal, payload: dict[str, Any], *,
+                allow_completed_read: bool = False) -> None:
     if principal.subject != payload["request"]["machine_subject"]:
         raise namespace_auth.NamespaceAuthError(403)
-    configured_cli_tracker.assignment(payload["request"])
+    configured_cli_tracker.assignment(payload["request"], allow_completed_read=allow_completed_read)
 
 
 def authorize(authorization: str | None, payload: dict[str, Any], *, write: bool) -> None:
@@ -311,7 +312,7 @@ def step(uow: SAUnitOfWork, command: ConfiguredStep, authorization: str | None) 
 
     principal = _principal(authorization, write=command.report is not None)
     task, assignment, payload = _row(uow, command.task, command.namespace_id, execution=True)
-    _assignment(principal, payload)
+    _assignment(principal, payload, allow_completed_read=task.status == "done")
     fence = ConfiguredCliFence(task.id, task.project_id, task.workflow_id, task.mode_id, task.cycle_number,
         task.assignment_revision, task.assignment_operation_key, payload_sha256(payload), task.current_phase_id,
         task.status, version(uow, task.id, payload), command, payload, authorization or "")
@@ -440,7 +441,7 @@ def history(uow: SAUnitOfWork, task: str, namespace_id: int, authorization: str 
     if trusted is not None and trusted != payload["request"]["role_key"]:
         raise namespace_auth.NamespaceAuthError(403)
     if principal is not None:
-        _assignment(principal, payload)
+        _assignment(principal, payload, allow_completed_read=True)
     if projection is not None:
         if (projection != "fleet-summary-v1" or not 1 <= n <= 200
                 or any(value is not None for value in (execution_ref, operation_key, assignment_operation_key))

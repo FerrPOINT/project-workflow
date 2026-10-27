@@ -53,17 +53,22 @@ def read(request: dict[str, Any], suffix: str) -> dict[str, Any]:
         raise RuntimeError("Tracker authority readback unavailable") from None
 
 
-def assignment(request: dict[str, Any]) -> None:
+def assignment(request: dict[str, Any], *, allow_completed_read: bool = False) -> None:
     context = read(request, "context")
     expected = {"assignment_id": request["assignment_ref"], "execution_id": request["tracker_execution_id"],
                 "agent_id": request["concrete_agent_ref"], "version": request["assignment_version"],
                 "machine_subject": request["machine_subject"]}
     actual = context.get("assignment")
     stages = STAGES.get((request["role_key"], request["mode_key"]), set())
+    completed_pm = (allow_completed_read and request["role_key"] == "project_manager"
+                    and request["mode_key"] == "draft" and context.get("stage") == "Backlog"
+                    and context.get("status") == "Ready")
+    active = (context.get("status") == "InProgress"
+              and (request["role_key"] != "project_manager" or context.get("stage") == "Draft"))
     if (type(context.get("contract_version")) is not int or context.get("contract_version") != 1
             or context.get("interaction_protocol") != PROTOCOL
             or context.get("stage") not in stages
-            or context.get("status") != "InProgress"
+            or not (active or completed_pm)
             or not isinstance(actual, dict) or type(actual.get("version")) is not int
             or context.get("task_id") != request["tracker_task_id"]
             or context.get("root_task_id") != request["tracker_task_id"]

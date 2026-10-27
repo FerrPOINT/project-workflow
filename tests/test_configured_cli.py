@@ -11,6 +11,7 @@ from project_workflow import config
 from project_workflow.application import configured_cli
 from project_workflow.domain.configured_cli import ConfiguredStep
 from project_workflow.infrastructure import configured_cli_tracker, namespace_auth
+from project_workflow.infrastructure.configured_cli_tracker import assignment as check_tracker_assignment
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.single_task_catalog import ensure_single_task_catalog
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
@@ -42,7 +43,7 @@ def configured(monkeypatch, request):
         ]
 
     monkeypatch.setattr(namespace_auth, "introspect", introspect)
-    monkeypatch.setattr(configured_cli_tracker, "assignment", lambda request: None)
+    monkeypatch.setattr(configured_cli_tracker, "assignment", lambda request, **kwargs: None)
 
     assignment = {
         "interaction_protocol": "configured-cli-v1",
@@ -634,6 +635,53 @@ def test_owner_confirmation_is_required_before_final_report(configured, supervis
     monkeypatch.setattr(configured_cli, "confirmation", absent)
     assert step(configured, report="Owner said yes", operation_key="final", expected_version=3).status_code == 503
     assert step(configured).json()["result"]["version"] == 3
+
+
+def test_backlog_ready_pm_can_read_and_replay_but_cannot_submit_new_work(configured, supervisor_llm, monkeypatch):
+    from unittest.mock import Mock
+
+    from project_workflow.infrastructure.llm import OpenAICompatibleClient
+
+    enroll(configured)
+    supervisor_llm("PASS")
+    client, request = configured
+    confirmation = {
+        "id": str(uuid4()), "task_id": TRACKER_TASK, "revision": 2, "content_hash": "a" * 64,
+        "owner_subject": OWNER, "stage": "Draft",
+    }
+    monkeypatch.setattr(configured_cli, "confirmation", lambda _payload: confirmation)
+    for version in (1, 2, 3):
+        command = {"report": f"Actual report {version}", "operation_key": f"settled-{version}",
+                   "expected_version": version}
+        if version == 3:
+            command.update(requirements_revision=2, requirements_sha256="a" * 64)
+        accepted = step(configured, **command)
+        assert accepted.status_code == 200, accepted.text
+    context = {
+        "contract_version": 1, "interaction_protocol": "configured-cli-v1",
+        "task_id": TRACKER_TASK, "root_task_id": TRACKER_TASK, "owner_subject": OWNER,
+        "workflow_task_key": request["task"], "stage": "Backlog", "status": "Ready",
+        "assignment": {"assignment_id": request["assignment_ref"], "execution_id": request["tracker_execution_id"],
+                       "agent_id": AGENT, "version": request["assignment_version"], "machine_subject": SUBJECT},
+    }
+    monkeypatch.setattr(configured_cli_tracker, "assignment", check_tracker_assignment)
+    monkeypatch.setattr(configured_cli_tracker, "read", lambda _request, suffix: context)
+    provider = Mock(side_effect=AssertionError("completed work must not be evaluated again"))
+    monkeypatch.setattr(OpenAICompatibleClient, "chat", provider)
+    read = step(configured)
+    assert read.status_code == 200 and read.json()["result"]["complete"] is True
+    assert step(configured, **command).json() == accepted.json()
+    assert step(configured, **{**command, "report": "Changed body"}).status_code == 409
+    assert step(configured, **{**command, "operation_key": "new-work", "expected_version": 4}).status_code == 409
+    params = {"interaction_protocol": "configured-cli-v1", "task": request["task"],
+              "namespace_id": request["namespace_id"]}
+    assert client.get("/internal/runtime/history", headers=MACHINE, params=params).status_code == 200
+    context["assignment"]["version"] += 1
+    assert step(configured).status_code == 409
+    assert client.get("/internal/runtime/history", headers=MACHINE, params=params).status_code == 409
+    provider.assert_not_called()
+    with SAUnitOfWork() as uow:
+        assert uow.session.scalar(select(func.count()).select_from(m.TaskStepHistoryEntry)) == 3
 
 
 def test_final_phase_read_and_evaluation_have_no_future_handoff_prerequisite(configured, supervisor_llm):
