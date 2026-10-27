@@ -18,7 +18,7 @@ from project_workflow.domain.project_admission import (
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.session import get_engine, get_session
 from tests import test_postgres_integration as pg_fixtures
-from tests.test_pm_execution import PROJECT_REF
+from tests._retained_pm_history import PROJECT_REF
 from tests.test_project_admission import scope
 
 # Re-export the existing real database fixtures without a second fixture implementation.
@@ -29,10 +29,7 @@ pytestmark = pytest.mark.integration
 
 @pytest.fixture
 def owned(pm_postgres):
-    client, _, binding, _, _ = pm_postgres
-    result = client.post("/internal/runtime/v1/pm/bind",
-                         headers={"Authorization": "Bearer " + "a" * 40}, json=binding)
-    assert result.status_code == 200, result.text
+    assert pm_postgres[1]  # Direct sealed history fixture, no retired bind RPC.
     with get_session() as session:
         task = session.scalar(select(m.Task).join(m.PMExecution, m.Task.id == m.PMExecution.task_id))
         assert task is not None

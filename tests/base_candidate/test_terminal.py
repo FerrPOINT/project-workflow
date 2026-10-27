@@ -21,11 +21,8 @@ from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.ui.app import create_app
 from tests.base_candidate.test_admission import OWNER, REAL_GIT_READ, RUNTIME, assign_and_bind, snapshot, step
 from tests.base_candidate.test_admission import base as base
-from tests.base_candidate.test_machine_readers import CATALOG_READER, PM_READER, READER, TESTER_READER
+from tests.base_candidate.test_machine_readers import CATALOG_READER, READER, TESTER_READER
 from tests.base_candidate.test_machine_readers import registered_readers as registered_readers
-from tests.test_pm_execution import ADAPTER, OLD_RUN, bind_pm
-from tests.test_pm_execution import pm as pm
-from tests.test_runtime_api import _step_payload
 
 READBACK = "/internal/runtime/base/terminal-receipt/readback"
 pytestmark = pytest.mark.usefixtures("registered_readers")
@@ -181,27 +178,6 @@ def test_terminal_phase_requires_successful_evaluator_not_just_a_report(base, su
     assert client.post(READBACK, headers=READER, json=lookup).status_code == 409
 
 
-def test_pm_readback_retains_execution_scope_and_cannot_synthesize_base_ack(pm, supervisor_llm):
-    client, runtime, _, _, bound = bind_pm(pm)
-    supervisor_llm("PASS")
-    request = {**_step_payload(bound), "session_run_id": OLD_RUN, "report": "Synthetic legacy PM evidence"}
-    response = client.post("/internal/runtime/step", headers=runtime, json=request)
-    assert response.status_code == 200, response.text
-    lookup = {key: request[key] for key in (
-        "task", "step_operation_key", "assignment_revision", "assignment_ref", "binding_ref", "hermes_run_ref",
-        "mode_key", "cycle_number", "attempt_number", "session_run_id",
-    )}
-    lookup.update(base_config_ref="not-a-base-config", base_config_sha256="a" * 64)
-    before = client.get("/internal/runtime/history", headers=runtime, params={"task": lookup["task"]}).json()
-    no_scope = PM_READER
-    assert client.post(READBACK, headers=no_scope, json=lookup).status_code == 403
-    stale = {**lookup, "session_run_id": "22222222-2222-4222-8222-222222222222"}
-    scoped_reader = {**runtime, **PM_READER}
-    assert client.post(READBACK, headers=scoped_reader, json=stale).status_code == 409
-    # Correct scope still cannot turn a legacy report into a Base receipt.
-    assert client.post(READBACK, headers=scoped_reader, json=lookup).status_code == 409
-    assert client.post(READBACK, headers=ADAPTER, json=lookup).status_code == 401
-    assert client.get("/internal/runtime/history", headers=runtime, params={"task": lookup["task"]}).json() == before
 
 
 def test_receipt_failure_rolls_back_terminal_report_and_cursor(base, supervisor_llm, monkeypatch):

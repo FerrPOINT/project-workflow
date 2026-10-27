@@ -210,3 +210,32 @@ namespaces retain distinct records and reports, while only the configured
 namespace executes. The focused coexistence/legacy-wire/reader run passed11
 checks. Full pytest collection remains valid (3429 selected,149 excluded
 integration cases); collection is not execution evidence.
+
+
+## Перенос native PM проверок, 28 октября
+
+Удалены исполняющие тестовые семьи PM bind/checkpoint/rebind/native continuation:
+`test_pm_execution`, `test_pm_execution_edges`, `test_concrete_agent_mapping`,
+`test_pm_assignment_guard`, `test_pm_generic_continuation`, `test_pm_draft_assignment`.
+Удалены также один старый Base/PM executor-сценарий и 11 PostgreSQL-функций,
+проверявших эти же удалённые RPC. Их helper-код не переносится в новый транспорт.
+
+Права, идентичность исполнителя, CAS, повтор команд, смена назначения во время
+оценки и продолжение текущей фазы проверяются через `test_configured_cli`,
+`test_configured_cli_tracker`, `test_configured_service_auth` и API surface tests.
+Исторические данные проверяются через прямой sealed fixture в
+`test_retained_pm_readers`, `test_configured_namespace_coexistence` и отдельный
+`test_retained_pm_migrations`: заполненная SQLite с версии 0014 обновляется до
+0020 с сохранением прежних строк, идентификаторов и исходных JSON. Применённые
+миграции и архивы сохранены. PostgreSQL namespace/project ownership fixtures
+теперь создают исторические строки напрямую, без вызова удалённого bind RPC.
+
+Scoped прогон общего протокола, authority и сохранённой истории: 125 passed.
+Новый `test_configured_postgres` проверяет HTTP-путь всех семи профессий/восьми
+режимов, одновременные отчёты и смену назначения во время оценки на настоящем
+PostgreSQL. Внешние authority и evaluator в нём явно синтетические. Эти проверки
+ещё не запускались; они не заменяют ручной прогон с Hermes.
+
+Продолжается перенос оставшихся single-task/Base-native/retry test families и
+удаление неиспользуемых адаптеров. Полная suite, PostgreSQL, упаковка и живой gate
+ещё не пройдены. Уменьшение числа старых executor-тестов не является приёмкой.
