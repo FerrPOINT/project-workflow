@@ -22,6 +22,7 @@ from project_workflow.domain.configured_cli import (
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.domain.repositories import UnitOfWork
 from project_workflow.domain.runtime_assignment import canonical_json, payload_sha256
+from project_workflow.domain.single_task_profile import CATALOG_SHA256, MANIFEST_SHA256
 from project_workflow.infrastructure import configured_cli_tracker, namespace_auth
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.single_task_catalog import observe_installation
@@ -30,8 +31,12 @@ from project_workflow.supervisor.types import VERDICT_LABELS
 
 
 def _catalog(uow: SAUnitOfWork, namespace_id: int, *, workflow_key: str | None = None,
-             mode_key: str | None = None) -> tuple[Any, Any, Any]:
-    binding = next((b for b in observe_installation(uow).bindings if int(b.namespace_id) == namespace_id), None)
+             mode_key: str | None = None, execution: bool = False) -> tuple[Any, Any, Any]:
+    installed = observe_installation(uow)
+    if execution and (installed.instruction_manifest_sha256 != MANIFEST_SHA256
+                      or installed.workflow_catalog_sha256 != CATALOG_SHA256):
+        raise ConflictError("Current configured instruction catalog required; retained native profiles are read only")
+    binding = next((b for b in installed.bindings if int(b.namespace_id) == namespace_id), None)
     if binding is None or (workflow_key is not None and workflow_key != binding.workflow_key):
         raise ConflictError("Installed profession/workflow required")
     project = uow.projects.get_by_id(namespace_id)
@@ -46,8 +51,8 @@ def _catalog(uow: SAUnitOfWork, namespace_id: int, *, workflow_key: str | None =
 
 
 def _stored_row(uow: SAUnitOfWork, task: str, namespace_id: int, *,
-                execution_ref: str | None = None) -> tuple[Any, Any, dict[str, Any], Any]:
-    _, workflow, _ = _catalog(uow, namespace_id)  # Catalog -> workflow -> task, like Supervisor evaluation.
+                execution_ref: str | None = None, execution: bool = False) -> tuple[Any, Any, dict[str, Any], Any]:
+    _, workflow, _ = _catalog(uow, namespace_id, execution=execution)  # Catalog -> workflow -> task.
     found = uow.tasks.get_by_key(task, project_id=namespace_id)
     if found is None or found.id is None:
         raise NotFoundError("Configured task not enrolled")
@@ -90,9 +95,9 @@ def _configured_row(uow: SAUnitOfWork, task: str, namespace_id: int,
 
 
 def _row(uow: SAUnitOfWork, task: str, namespace_id: int, *,
-         execution_ref: str | None = None) -> tuple[Any, Any, dict[str, Any]]:
+         execution_ref: str | None = None, execution: bool = False) -> tuple[Any, Any, dict[str, Any]]:
     return _configured_row(uow, task, namespace_id, _stored_row(uow, task, namespace_id,
-                                                               execution_ref=execution_ref))
+                                                               execution_ref=execution_ref, execution=execution))
 
 
 def _legacy_cursor(uow: SAUnitOfWork, stored: tuple[Any, Any, dict[str, Any], Any]) -> dict[str, Any]:
@@ -129,7 +134,7 @@ def enroll(uow: SAUnitOfWork, request: ConfiguredAssignment) -> dict[str, Any]:
 
     _require_valid_key(request.task)
     project, workflow, mode = _catalog(uow, request.namespace_id,
-                                     workflow_key=request.workflow_key, mode_key=request.mode_key)
+                                     workflow_key=request.workflow_key, mode_key=request.mode_key, execution=True)
     saved = uow.session.scalar(select(m.TaskRuntimeAssignment).where(
         m.TaskRuntimeAssignment.operation_key == request.operation_key,
     ))
@@ -305,7 +310,7 @@ def step(uow: SAUnitOfWork, command: ConfiguredStep, authorization: str | None) 
     from project_workflow.supervisor import SupervisorEngine
 
     principal = _principal(authorization, write=command.report is not None)
-    task, assignment, payload = _row(uow, command.task, command.namespace_id)
+    task, assignment, payload = _row(uow, command.task, command.namespace_id, execution=True)
     _assignment(principal, payload)
     fence = ConfiguredCliFence(task.id, task.project_id, task.workflow_id, task.mode_id, task.cycle_number,
         task.assignment_revision, task.assignment_operation_key, payload_sha256(payload), task.current_phase_id,

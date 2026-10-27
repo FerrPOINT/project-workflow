@@ -58,8 +58,6 @@ class Settings(BaseSettings):
     PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON: str = ""
     PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON: str = ""
     PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN: str = ""
-    PROJECT_WORKFLOW_PM_READBACK_URL: str = ""
-    PROJECT_WORKFLOW_PM_READBACK_TOKEN: str = ""
     PROJECT_WORKFLOW_PM_SCOPE_SECRET: str = ""
     PROJECT_WORKFLOW_BASE_SKILLS_ROOT: str = ""
     # Deployment-registered Base reader subject UUID -> canonical role or "catalog".

@@ -1,6 +1,11 @@
 """Upgrade sealed historical PM data without replaying a retired native writer."""
 
+import importlib
+
 import pytest
+import sqlalchemy as sa
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
 from sqlalchemy import MetaData, create_engine, inspect, select, text
 
 from project_workflow.infrastructure.db.session import database_revisions, ensure_migrated, run_alembic_command
@@ -77,3 +82,24 @@ def test_pm_review_migration_preserves_populated_execution_and_history(tmp_path)
                 assert connection.execute(select(table)).mappings().all() == frozen[name], name
     finally:
         engine.dispose()
+
+
+def test_migration_only_extends_kind_and_refuses_to_drop_retained_retry(tmp_path, monkeypatch):
+    migration = importlib.import_module(
+        "project_workflow.infrastructure.db.migrations.versions.0019_pm_terminal_resume_retry"
+    )
+    engine = sa.create_engine("sqlite:///" + str(tmp_path / "kind-test.db"))
+    with engine.begin() as connection:
+        connection.exec_driver_sql(
+            "CREATE TABLE pm_operations (operation_key TEXT PRIMARY KEY, kind TEXT NOT NULL, "
+            "CONSTRAINT ck_pm_operation_kind CHECK(kind IN ('bind','checkpoint','resume','rebind')))"
+        )
+        connection.exec_driver_sql("INSERT INTO pm_operations VALUES ('old:resume','resume')")
+        monkeypatch.setattr(migration, "op", Operations(MigrationContext.configure(connection)))
+        migration.upgrade()
+        assert connection.exec_driver_sql("SELECT * FROM pm_operations").all() == [("old:resume", "resume")]
+        connection.exec_driver_sql("INSERT INTO pm_operations VALUES ('new:retry','resume_retry')")
+        with pytest.raises(RuntimeError, match="prevent downgrade"):
+            migration.downgrade()
+        assert connection.exec_driver_sql("SELECT count(*) FROM pm_operations").scalar() == 2
+    engine.dispose()

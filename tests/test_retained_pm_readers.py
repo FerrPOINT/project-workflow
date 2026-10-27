@@ -5,13 +5,14 @@ from unittest.mock import Mock
 from uuid import uuid4
 
 import pytest
+from pydantic import ValidationError
 from sqlalchemy import inspect, select
 
 from project_workflow import build_provenance
 from project_workflow.application.pm_execution import PMExecutionService
 from project_workflow.application.single_task_runtime import retained_context
 from project_workflow.domain.exceptions import ConflictError
-from project_workflow.domain.pm_execution import PMIdentity
+from project_workflow.domain.pm_execution import PMIdentity, PMReviewAdmissionContext
 from project_workflow.domain.runtime_assignment import canonical_json, payload_sha256
 from project_workflow.domain.single_task_profile import SUPPORTED_MANIFESTS
 from project_workflow.infrastructure.db import models as m
@@ -85,3 +86,20 @@ def test_retained_known_manifest_decoding_is_independent_from_new_installation(m
     assert retained_context(context) == context
     with pytest.raises(ValueError):
         retained_context({**context, "instruction_manifest_sha256": "0" * 64})
+
+
+@pytest.mark.parametrize("field,value", [
+    ("tracker_assignment_revision", 1), ("tracker_assignment_revision", True),
+    ("owner_version", 1), ("owner_version", 9007199254740992), ("blocker_version", "2"),
+    ("blocker_id", "not-a-uuid"), ("blocker_sha256", "not-a-hash"), ("purpose", "initial"),
+    ("requirements", {"revision": 7, "content_hash": "a" * 64, "foreign": True}),
+])
+def test_retained_review_context_remains_closed(field, value):
+    context = {
+        "purpose":"critical_business_review", "tracker_assignment_revision":8, "owner_version":2,
+        "blocker_id":"22222222-2222-4222-8222-222222222205", "blocker_sha256":"c"*64,
+        "blocker_version":2, "requirements":{"revision":7,"content_hash":"a"*64},
+    }
+    assert PMReviewAdmissionContext.model_validate(context).model_dump() == context
+    with pytest.raises(ValidationError):
+        PMReviewAdmissionContext.model_validate({**context,field:value})

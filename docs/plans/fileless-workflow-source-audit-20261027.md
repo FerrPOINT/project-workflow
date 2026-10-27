@@ -239,3 +239,31 @@ PostgreSQL. Внешние authority и evaluator в нём явно синте�
 Продолжается перенос оставшихся single-task/Base-native/retry test families и
 удаление неиспользуемых адаптеров. Полная suite, PostgreSQL, упаковка и живой gate
 ещё не пройдены. Уменьшение числа старых executor-тестов не является приёмкой.
+
+
+## Удаление неиспользуемых native адаптеров и проверка источника инструкций
+
+Удалены `infrastructure/pm_readback.py` и неиспользуемый
+`application/single_task_terminal.py`: у последнего не осталось продуктовых
+потребителей, текущий terminal endpoint принимает только configured selectors.
+Сохранённые отчёты и terminal JSON остаются в прежней истории; PM history reader,
+Base history reader и исходные таблицы сохранены. Удалены только ненужные
+PM readback URL/token из product config, Compose и примера окружения. Runtime
+и секреты установленной среды этим изменением не очищаются.
+
+Удалены single-task native execution/producer/terminal, PM native review/resume
+и PostgreSQL bootstrap/retry сценарии удалённых RPC. Проверки закрытого формата
+сохранённого review context и forward-миграции 0019 перенесены в самостоятельные
+retained history tests. PostgreSQL schema/catalog/UoW проверки сохранены;
+устаревшие assignment/bind/rebind методы в них ещё требуют отдельного разбора.
+
+Известный старый профиль остаётся доступен для чтения и не переписывается
+bootstrap-процедурой. Новое назначение и исполнение требуют точного текущего
+каталога configured-инструкций; иначе агент получил бы файловый bootstrap под
+новым транспортом. Проверено на трёх настоящих архивных профилях: новое назначение
+отвергается без изменения строк, архив продолжает читаться. Текущий профиль
+остаётся положительным соседним случаем в общей protocol suite.
+
+Scoped проверки после этого изменения: 100 passed; collection без ошибок импорта
+(3155 selected, 110 integration excluded). Полный прогон и PostgreSQL остаются
+открытыми. Этот результат не является установкой или живой приёмкой.

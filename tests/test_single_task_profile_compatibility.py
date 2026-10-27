@@ -2,6 +2,7 @@
 
 import hashlib
 import shutil
+from types import SimpleNamespace
 
 import pytest
 from pydantic import ValidationError
@@ -17,8 +18,8 @@ from project_workflow.domain.single_task_runtime import SingleTaskContext
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db import single_task_catalog as catalog
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
+from tests import test_configured_cli as protocol
 from tests import test_single_task_installation as installation
-from tests import test_single_task_runtime as runtime
 
 
 def install_retained(monkeypatch, manifest=RETAINED_MANIFEST_SHA256):
@@ -35,13 +36,24 @@ def all_rows(uow):
             for name, table in m.Base.metadata.tables.items()}
 
 
-@pytest.fixture
-def retained_bridge(monkeypatch):
-    install_retained(monkeypatch)
-    profile = {**runtime.PROFILE, "instruction_manifest_sha256": RETAINED_MANIFEST_SHA256}
-    monkeypatch.setattr(runtime, "PROFILE", profile)
-    monkeypatch.setattr(installation, "MANIFEST_SHA256", RETAINED_MANIFEST_SHA256)
-    yield from runtime.bridge.__wrapped__(monkeypatch)
+@pytest.mark.parametrize("manifest", list(RETAINED_PROFILE_CATALOGS))
+def test_retained_native_profile_is_readable_but_cannot_enroll_new_execution(monkeypatch, manifest):
+    original = install_retained(monkeypatch, manifest)
+    fixture = protocol.configured.__wrapped__(monkeypatch, SimpleNamespace())
+    try:
+        client, request = next(fixture)
+        with SAUnitOfWork() as uow:
+            before = all_rows(uow)
+            assert catalog.observe_installation(uow) == original
+        response = client.post("/internal/runtime/assign", headers=protocol.WRITER, json=request)
+        assert response.status_code == 409, response.text
+        with SAUnitOfWork() as uow:
+            assert all_rows(uow) == before
+            assert catalog.observe_installation(uow) == original
+    finally:
+        fixture.close()
+
+
 
 
 @pytest.mark.parametrize("manifest", [MANIFEST_SHA256, *RETAINED_PROFILE_CATALOGS])

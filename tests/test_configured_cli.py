@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 from project_workflow import config
 from project_workflow.application import configured_cli
 from project_workflow.domain.configured_cli import ConfiguredStep
-from project_workflow.infrastructure import configured_cli_tracker, namespace_auth, pm_readback
+from project_workflow.infrastructure import configured_cli_tracker, namespace_auth
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.single_task_catalog import ensure_single_task_catalog
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
@@ -44,11 +44,6 @@ def configured(monkeypatch, request):
     monkeypatch.setattr(namespace_auth, "introspect", introspect)
     monkeypatch.setattr(configured_cli_tracker, "assignment", lambda request: None)
 
-    def forbidden(*args, **kwargs):
-        raise AssertionError("Configured execution must not call native/Fleet proof")
-
-    monkeypatch.setattr(pm_readback, "observe_run", forbidden)
-    monkeypatch.setattr(pm_readback, "bootstrap_proof", forbidden)
     assignment = {
         "interaction_protocol": "configured-cli-v1",
         "task": "SDLC-901",
