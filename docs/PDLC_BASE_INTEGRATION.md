@@ -427,3 +427,19 @@ IAB source proof: 27 Tracker viewport transitions, 30 shell/drawer checks и
 сохранены. Это source-композиции, не приёмка полного authenticated приложения.
 Прежний IAB attachment gap закрыт новым успешным run; ошибки сохранены в истории.
 Полный интеграционный gate, Rust transport vectors, hosted CI и публикация отдельно.
+
+## Общая геометрия истории UI 0.3.14 — 2026-10-27
+
+UI producer `f3b99e3ce15a4a447d58790f118c6be70e931a18` принят независимо от SDK/skills.
+Архив содержит 910 файлов; offline CLI, шесть frozen refresh и production bytes
+проверены. В Workflow штатный SSR export остался byte-identical. Это обновление
+source-поставки; установленный runtime не менялся.
+
+React-only hook не подключается к SSR. API, запросы, frontend assets и поведение
+Workflow не менялись; UI pin фиксирует согласованный producer, штатные SSR
+fingerprints остаются прежними. React-механизмы не копируются в SSR-адаптеры.
+
+Base qualification: 17 hook tests, 69 primitive checks и 37 search assertions.
+IAB Base/Forge source-compositions: 24 theme/width cases плюс три intent/error
+cases; это не полная authenticated-приёмка продуктов. Полный интеграционный gate,
+Rust search transport, hosted CI и публикация остаются отдельными стадиями.
