@@ -55,6 +55,12 @@ WAIT = (
     "Revise and republish the whole document when needed; only explicit owner consent to the latest revision/hash "
     "permits PM completion. No checkpoint, native readback or Fleet rebind is required by this protocol."
 )
+PREPARATION_WAIT = WAIT.replace(
+    "Wait for missing human input or final owner consent in the same conversation with this phase unfinished.",
+    "Wait only for genuinely missing requirements input, leaving this phase unfinished. "
+    "Report completed preparation with the FULL saved Draft revision/hash; "
+    "do not wait for final owner consent in preparation. Request that exact confirmation in phase 3."
+)
 PREPARATION_REPORT = (
     "Brainstorming and owner feedback keep this same execution/assignment/cycle; no placeholder document or "
     "invented question is required. Apply saved answers and relevant feedback to the Draft. When substantive "
@@ -218,6 +224,7 @@ def phases(source: list[Phase]) -> list[Phase]:
     for phase in projected:
         for item in phase.instructions:
             if phase.code == "PM-DRAFT-02":
+                item.step = item.step.replace(catalog.WAITING, PREPARATION_WAIT)
                 for old, new in PM_PREPARATION_REPLACEMENTS.items():
                     item.step = item.step.replace(old, new)
             if phase.code == "PM-DRAFT-03":

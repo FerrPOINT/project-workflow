@@ -646,6 +646,9 @@ def test_preparation_projection_requires_only_actual_questions_and_choices(manif
     evidence = "\n".join(item.item for item in projected.evidence)
     assert "without asking for separate permission to save the draft" in worker
     assert "clarify only actual remaining gaps" in worker
+    assert "Wait only for genuinely missing requirements input" in worker
+    assert "do not wait for final owner consent in preparation" in worker
+    assert "Wait for missing human input or final owner consent" not in worker
     assert "When clarification is needed, brainstorm" in worker
     assert "Formal clarification is conditional on an actual unresolved gap" in worker
     assert delivery.PM_DRAFT_CHECKS[1] in checks
@@ -667,6 +670,9 @@ def test_preparation_projection_requires_only_actual_questions_and_choices(manif
             assert item.endswith(security)
     assert source == before and catalog == original_catalog
     assert instructions.phases([projected]) == [projected]
+    confirmation = Phase(code="PM-DRAFT-03", instructions=[
+        PhaseInstruction(delivery.PM_CONFIRMATION_INSTRUCTIONS[1] + security)])
+    assert instructions.phases([confirmation])[0].instructions[0].step == instructions.WAIT + security
     other = Phase(code="OTHER-02",
         instructions=[PhaseInstruction(next(iter(instructions.PM_PREPARATION_REPLACEMENTS)))],
         checks=[PhaseCheck(next(iter(instructions.PM_PREPARATION_CHECK_REPLACEMENTS)))],
