@@ -1,4 +1,4 @@
-"""Installed binding integrity on the existing bridge, without remote runtime probes."""
+"""Read-only integrity of retained native bindings and receipt context hashes."""
 
 from typing import Any
 
@@ -8,21 +8,21 @@ from project_workflow.domain.exceptions import ConflictError
 from project_workflow.domain.runtime_assignment import payload_sha256
 from project_workflow.domain.single_task_runtime import SingleTaskContext
 from project_workflow.infrastructure.db import models as m
-from project_workflow.infrastructure.db.single_task_catalog import observe_installation
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
 
-def installed_context(uow: Any, project_id: int, context: dict[str, Any]) -> dict[str, Any]:
-    parsed = SingleTaskContext.model_validate(context).model_dump(mode="json")
-    binding = next((b for b in observe_installation(uow).bindings if int(b.namespace_id) == project_id), None)
-    if binding is None or binding.instruction_manifest_sha256 != parsed["instruction_manifest_sha256"]:
-        raise ConflictError("Single-task installed manifest/namespace mismatch")
-    return parsed
+def retained_context(context: dict[str, Any]) -> dict[str, Any]:
+    """Decode a known saved profile without requiring it to equal the new image.
+
+    Current execution uses ConfiguredCliFence. These old bindings are only
+    consumed by retained receipt readers, which validate their stored hashes.
+    """
+    return SingleTaskContext.model_validate(context).model_dump(mode="json")
 
 
 def current_binding(uow: SAUnitOfWork, record: dict[str, Any]) -> dict[str, Any]:
     payload = record.get("payload", {})
-    context = installed_context(uow, record["project_id"], payload.get("single_task_context", {}))
+    context = retained_context(payload.get("single_task_context", {}))
     binding = record.get("single_task_binding")
     if not isinstance(binding, dict) or record.get("payload_sha256") != payload_sha256(payload):
         raise ConflictError("Single-task immutable assignment/binding integrity mismatch")

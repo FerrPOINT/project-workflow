@@ -21,7 +21,7 @@ from project_workflow.infrastructure.db.repositories.project import SAProjectRep
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.infrastructure.namespace_auth import NamespacePrincipal
 from project_workflow.interfaces.ui.app import create_app
-from tests.test_pm_execution import ADAPTER, BASE, NEW_RUN, OLD_RUN, PROJECT_REF, bind_pm, prepare_pm
+from tests._retained_pm_history import PROJECT_REF, retained_pm
 from tests.test_runtime_api import _namespace
 
 SUBJECT = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
@@ -29,6 +29,7 @@ OTHER_SUBJECT = "ffffffff-ffff-4fff-8fff-ffffffffffff"
 ISSUER = "http://auth.test"
 PAYLOAD = {"contract_version": 1, "tracker_instance_ref": "Tracker:ONE", "tracker_project_ref": PROJECT_REF}
 PAT = {"Authorization": "Bearer sdlc_pat_test-secret"}
+ADAPTER = {"Authorization": "Bearer " + "a" * 40}
 HTTP_CLIENT = httpx.Client
 
 
@@ -48,7 +49,7 @@ def test_pm_namespace_lock_preserves_generic_fk_key_share_compatibility():
 
 @pytest.fixture
 def pm(monkeypatch):
-    yield from prepare_pm(monkeypatch)
+    yield from retained_pm(monkeypatch)
 
 
 def install_auth(monkeypatch, namespace_id, *, status=200, value=None, response_headers=None):
@@ -342,36 +343,9 @@ def test_missing_and_non_pm_namespaces_cannot_be_provisioned(owned_namespace):
     assert client.put(f"/api/pm/namespace-ownership/{other}", headers=PAT, json=PAYLOAD).status_code == 409
 
 
-def test_new_enrollment_requires_mapping_but_legacy_replay_and_resume_remain(pm):
-    client, identity, bind, _, _ = pm
-    with SAUnitOfWork() as uow:
-        uow.session.execute(delete(m.PMNamespaceOwnership))
-    assert client.post(BASE + "/bind", headers=ADAPTER, json=bind).status_code == 409
-    with SAUnitOfWork() as uow:
-        assert uow.session.scalar(select(func.count()).select_from(m.PMExecution)) == 0
-        namespace_id = uow.projects.get_by_cli_command("workflow-project_manager").id
-        NamespaceOwnershipService(uow).provision(namespace_id, NamespaceOwnershipRequest(
-            contract_version=1, tracker_instance_ref=identity["tracker_instance_ref"], tracker_project_ref=PROJECT_REF,
-        ), NamespacePrincipal(issuer=ISSUER, subject=SUBJECT))
-    _, runtime, checkpoint, observations, _ = bind_pm(pm)
-    with SAUnitOfWork() as uow:
-        uow.session.execute(delete(m.PMNamespaceOwnership))
-    assert client.post(BASE + "/bind", headers=ADAPTER, json=bind).status_code == 200
-    changed = {**bind, "operation_key": "new-key", "execution_ref": "new-execution"}
-    assert client.post(BASE + "/bind", headers=ADAPTER, json=changed).status_code == 409
-    assert client.post(BASE + "/checkpoint", headers=runtime, json=checkpoint).status_code == 200
-    observations[OLD_RUN]["status"] = "stopped"
-    observations[OLD_RUN]["checkpoint_ref"] = checkpoint["checkpoint_ref"]
-    resume = {**checkpoint, "operation_key": "resume:1", "expected_version": 2,
-              "answer_event_ref": "answer:one", "new_session_run_id": NEW_RUN}
-    resumed = client.post(BASE + "/resume", headers=ADAPTER, json=resume)
-    assert resumed.status_code == 200, resumed.text
-    assert client.post(BASE + "/resume", headers=ADAPTER, json=resume).json() == resumed.json()
-    assert resumed.json()["result"]["state"] == "resume_pending"
 
 
 def test_existing_enrollment_is_not_implicitly_backfilled_or_reowned(pm):
-    bind_pm(pm)
     with SAUnitOfWork() as uow:
         namespace_id = uow.projects.get_by_cli_command("workflow-project_manager").id
         uow.session.execute(delete(m.PMNamespaceOwnership))
@@ -380,15 +354,15 @@ def test_existing_enrollment_is_not_implicitly_backfilled_or_reowned(pm):
             NamespaceOwnershipService(uow).provision(namespace_id, NamespaceOwnershipRequest.model_validate(PAYLOAD),
                                                       NamespacePrincipal(ISSUER, SUBJECT))
         assert uow.projects.get_pm_ownership(namespace_id) is None
-    assert pm[0].post(BASE + "/readback", headers=ADAPTER, json=pm[1]).status_code == 200
+    from project_workflow.application.pm_execution import PMExecutionService
+    from project_workflow.domain.pm_execution import PMIdentity
 
-
-def test_foreign_mapping_rejects_enrollment_without_mutations(pm):
-    client, _, bind, _, _ = pm
-    assert client.post(BASE + "/bind", headers=ADAPTER,
-                       json={**bind, "tracker_instance_ref": "another"}).status_code == 409
     with SAUnitOfWork() as uow:
-        assert uow.session.scalar(select(func.count()).select_from(m.PMExecution)) == 0
+        result = PMExecutionService(uow).readback(PMIdentity.model_validate(pm[1]), namespace_id, None)
+        assert result["identity"]["execution_ref"] == pm[1]["execution_ref"]
+        assert result["workflow_step_allowed"] is False
+
+
 
 
 def test_ownership_wire_is_generated_and_not_dispatch_admission(owned_namespace):

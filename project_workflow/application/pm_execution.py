@@ -80,6 +80,15 @@ class PMExecutionService:
         if assignment is None:
             raise ConflictError("Stale or foreign PM assignment identity")
         payload = json.loads(assignment.payload)
+        if (assignment.payload_sha256 != payload_sha256(payload)
+            or payload.get("task_key") != task.task_key
+            or payload.get("mode_key") != assignment.mode.key
+            or any(payload.get(key) != getattr(assignment, key) for key in (
+                "project_id", "workflow_id", "mode_id", "workflow_key", "role_key", "execution_scope",
+                "stage_key", "operation_key", "assignment_ref", "business_task_ref", "root_task_ref",
+                "cycle_number", "attempt_number",
+            ))):
+            raise ConflictError("Retained PM assignment hash or custody differs from its payload")
         review = None
         if "pm_review_context" in payload:
             try:
@@ -116,23 +125,25 @@ class PMExecutionService:
             or assignment.cycle_number != task.cycle_number
         ):
             raise ConflictError("Stale or foreign PM assignment identity")
-        from project_workflow.build_provenance import runtime_compatibility_descriptor
-
         single_context = json.loads(assignment.payload).get("single_task_context")
         if single_context is not None:
-            from project_workflow.application.single_task_runtime import installed_context
+            from project_workflow.application.single_task_runtime import retained_context
 
-            context = installed_context(self.uow, project_id, single_context)
+            context = retained_context(single_context)
             if (identity.task_ref != identity.root_ref
                 or any(context[k] != getattr(identity, k) for k in (
                     "execution_ref", "tracker_instance_ref", "tracker_project_ref",
                 ))):
                 raise ConflictError("Single-task PM differs from assignment identity")
-        elif (
-            assignment.mode.catalog_version != 2
-            or json.loads(assignment.payload).get("runtime_compatibility") != runtime_compatibility_descriptor()
-        ):
-            raise ConflictError("RUNTIME_VERSION_INCOMPATIBLE: frozen PM assignment descriptor mismatch")
+        else:
+            from project_workflow.build_provenance import BuildProvenanceError, validate_runtime_compatibility
+
+            try:
+                saved_descriptor = validate_runtime_compatibility(payload.get("runtime_compatibility"))
+            except BuildProvenanceError:
+                raise ConflictError("Retained PM assignment descriptor is invalid") from None
+            if assignment.mode.catalog_version != 2 or saved_descriptor["catalogVersion"] != 2:
+                raise ConflictError("Retained PM assignment catalog family is unsupported")
         draft_context = json.loads(assignment.payload).get("pm_draft_context")
         if draft_context is not None and {
             key: draft_context.get(key) for key in PMIdentity.model_fields
@@ -187,9 +198,7 @@ class PMExecutionService:
             "resume_operation_key": execution.resume_operation_key,
             "resume_session_run_id": execution.resume_session_run_id,
             "terminal_readback": json.loads(run.terminal_json) if run.terminal_json else None,
-            "workflow_step_allowed": (
-                execution.state == "active" and task.status in {"active", "blocked"}
-            ),
+            "workflow_step_allowed": False,
             "resume_delivered": execution.state == "active" and execution.resume_operation_key is not None,
         }
         assignment = self.session.get(m.TaskRuntimeAssignment, execution.assignment_id)

@@ -180,3 +180,19 @@ Current behavior is covered through the actual configured HTTP boundary:
 
 Historical DTOs, applied migrations and read-only history remain. This coverage
 map does not claim the full suite, PostgreSQL or manual Hermes gate has passed.
+
+
+## Retained PM History Reader
+
+The read-only PM decoder validates the saved descriptor and custody hashes,
+not equality with the current image's descriptor or installed manifest. Known
+old single-task manifests remain decodable after the catalog upgrade. Historical
+snapshots explicitly report `workflow_step_allowed=false`; no retired writer
+is reintroduced.
+
+`test_retained_pm_readers.py` checks unavailable current-image metadata, repeat
+reads without mutations, corrupted payloads (including rehashed foreign roots),
+agent/execution identity substitution and known archived manifests. Namespace
+ownership and human project-scope tests now seed retained records directly
+instead of invoking removed PM bind endpoints. Their focused combined run passed
+104 tests; real PostgreSQL filled-upgrade and live acceptance remain separate gates.
