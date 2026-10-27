@@ -112,9 +112,9 @@ window.WorkflowApplication = (() => {
       const scripts=[...parsed.querySelector('main.main').querySelectorAll('script')];
       if(scripts.filter(script=>script.hasAttribute('data-workflow-controller')).length!==1||scripts.some(script=>script.type!=='application/json'&&(!script.hasAttribute('data-workflow-controller')||script.src)))throw Error('Некорректный код раздела');
       const style=parsed.querySelector('[data-workflow-page-style]');style?.remove();
-      rememberScroll();active?.dispose();destroyControls(old);
+      if(options.history!=='none')rememberScroll();active?.dispose();destroyControls(old);
       if(options.history!=='none')sync(path(final),!!options.replace);
-      else{committed=path(final);position=options.position??position;}
+      else{committed=path(final);position=options.position??position;originalSync(committed,true,{...history.state,workflowAppPosition:position});}
       document.querySelector('[data-workflow-page-style]').textContent=style?.textContent||'';
       updateShell(next);
       // htmx inserts the new main before removing the old one. Mount only after settle,

@@ -79,9 +79,9 @@ assert.equal(d.querySelector('#namespaceName').value,'Изолированная
 // Back and forward render their authoritative work areas, preserving the shell.
 await go('/settings');await go('/tasks');w.history.back();
 for(let attempt=0;attempt<100&&page().page!=='settings';attempt++)await new Promise(resolve=>setTimeout(resolve,10));
-assert.equal(page().page,'settings');w.history.forward();
+assert.equal(page().page,'settings');assert.equal(w.location.pathname,'/workflow/settings');w.history.forward();
 for(let attempt=0;attempt<100&&page().page!=='tasks';attempt++)await new Promise(resolve=>setTimeout(resolve,10));
-assert.equal(page().page,'tasks');
+assert.equal(page().page,'tasks');assert.equal(w.location.pathname,'/workflow/tasks');
 // A response after admission retirement never resurrects protected content.
 let retireRelease;delay=new Promise(resolve=>{retireRelease=resolve;});const retired=w.WorkflowApplication.navigate('/workflow/settings');await new Promise(resolve=>setImmediate(resolve));current=false;d.body.replaceChildren();retireRelease();assert.equal(await retired,false);assert.equal(d.body.childElementCount,0);
 assert.equal(native,0);assert.deepEqual(errors,[]);assert.equal(messages.length,0,messages.join('; '));
