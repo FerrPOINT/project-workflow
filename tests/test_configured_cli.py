@@ -213,6 +213,94 @@ def test_wrong_identity_namespace_and_scope_are_denied(configured, monkeypatch):
     assert step(configured, namespace_id=configured[1]["namespace_id"] + 1000).status_code in {403, 409}
 
 
+def test_saved_answer_allows_draft_update_and_preparation_without_final_consent(
+    configured, supervisor_llm, monkeypatch,
+):
+    enroll(configured)
+    supervisor_llm("PASS")
+
+    def absent(_payload):
+        raise RuntimeError("Controlled missing owner confirmation")
+
+    monkeypatch.setattr(configured_cli, "confirmation", absent)
+    first = step(configured, report="Actual first phase evidence", operation_key="first", expected_version=1)
+    assert first.status_code == 200, first.text
+    preparation = step(configured).json()["result"]
+    assert preparation["phase_code"] == "PM-DRAFT-02"
+    text = preparation["instructions"]
+    assert "Apply saved answers and relevant feedback to the Draft" in text
+    assert "publish the next FULL requirements revision without asking for separate permission" in text
+    assert "'Not confirmation of the final revision' does not prohibit updating the Draft" in text
+    assert "Report only this completed preparation phase" in text
+    assert "Do not invent unresolved business choices" in text
+
+    # Controlled phase report, not a claim that this test published a real Tracker revision.
+    response = step(configured, report="Saved answer applied to full Draft; preparation only, no owner consent",
+                    operation_key="prepare-after-answer", expected_version=2)
+    assert response.status_code == 200, response.text
+    result = response.json()["result"]
+    assert result["phase_code"] == "PM-DRAFT-03" and result["version"] == 3
+    assert result["complete"] is False and "terminal_receipt" not in result
+    text = step(configured).json()["result"]["instructions"]
+    assert "An already saved answer or feedback may be applied to the Draft without final owner consent" in text
+    assert "publishing a Draft revision is NOT owner confirmation or PM completion" in text
+    assert "Confirmation must be the real owner's saved receipt for the latest exact revision/hash" in text
+    assert "no final Workflow report is permitted yet" in text
+    assert step(configured, report="Feedback is not consent", operation_key="final-without-consent",
+                expected_version=3).status_code == 503
+    assert step(configured).json()["result"]["version"] == 3
+
+
+def test_known_preparation_partial_requires_corrected_report_not_early_consent(
+    configured, supervisor_llm, monkeypatch,
+):
+    enroll(configured)
+    supervisor_llm("PASS")
+    assert step(configured, report="Actual first phase evidence", operation_key="first",
+                expected_version=1).status_code == 200
+
+    def absent(_payload):
+        raise AssertionError("Preparation must not require owner confirmation")
+
+    monkeypatch.setattr(configured_cli, "confirmation", absent)
+    before = step(configured).json()["result"]
+    required = before["phase_contract"]["required_checks"]
+    assert required
+    supervisor_llm("PARTIAL", missing=required)
+    command = {"report": "Full Draft saved, but report evidence is incomplete",
+               "operation_key": "preparation-incomplete", "expected_version": 2}
+    response = step(configured, **command)
+    assert response.status_code == 200, response.text
+    partial = response.json()["result"]
+    assert partial["verdict"] == "PARTIAL" and partial["missing"]
+    assert partial["phase_code"] == "PM-DRAFT-02" and partial["version"] == 3
+    assert partial["execution_ref"] == before["execution_ref"]
+    assert partial["complete"] is False and "terminal_receipt" not in partial
+    instructions = step(configured).json()["result"]["instructions"]
+    for text in (
+        "check EVERY required_check against actual evidence",
+        "reference saved alternatives/tradeoffs when they exist",
+        "actual blockers and the no-additional-tasks check",
+        "do not invent alternatives, checks or evidence",
+        "A known PARTIAL is not phase acceptance",
+        "using the returned version and a NEW operation key ONLY for a new corrected report body",
+        "Do not request owner consent or claim preparation complete while preparation remains PARTIAL",
+        "Provider/transport failure or unknown acceptance is NOT a known PARTIAL",
+        "After an unknown response retain exactly that key, version and report",
+    ):
+        assert text in instructions
+    assert step(configured, **command).json() == response.json()
+    assert step(configured, **{**command, "report": "Changed body under old key"}).status_code == 409
+    supervisor_llm("PASS")
+    corrected = step(configured, report="Controlled corrected report with actual missing phase evidence",
+                     operation_key="preparation-corrected", expected_version=partial["version"])
+    assert corrected.status_code == 200, corrected.text
+    result = corrected.json()["result"]
+    assert result["phase_code"] == "PM-DRAFT-03" and result["version"] == 4
+    assert result["execution_ref"] == before["execution_ref"]
+    assert result["complete"] is False and "terminal_receipt" not in result
+
+
 def test_owner_confirmation_is_required_before_final_report(configured, supervisor_llm, monkeypatch):
     enroll(configured)
     supervisor_llm("PASS")

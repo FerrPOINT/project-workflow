@@ -37,23 +37,39 @@ FIRST = (
 REPORT = (
     "Submit only actual completed phase work with project-workflow --json step --task <workflow-task-key> "
     "--operation-key <stable-key> --expected-version <last-returned-version> --report -. Supply report text on stdin. "
+    "Before submission, check EVERY required_check against actual evidence and include the required_evidence: "
+    "reference saved alternatives/tradeoffs when they exist, actual blockers and the no-additional-tasks check; "
+    "do not invent alternatives, checks or evidence. Inspect the returned verdict, missing, blockers, phase and "
+    "version. A known PARTIAL is not phase acceptance: do the missing work or correct its report in the SAME "
+    "execution, using the returned version and a NEW operation key ONLY for a new corrected report body. "
+    "Do not request owner consent or claim preparation complete while preparation remains PARTIAL. "
     "After an unknown response retain exactly that key, version and report; read back history for the operation. "
-    "Do not select a replacement key merely because acceptance is unknown. Follow the returned current phase."
+    "Provider/transport failure or unknown acceptance is NOT a known PARTIAL and does not permit automatic "
+    "resubmission. Do not select a replacement key merely because acceptance is unknown. "
+    "Follow the returned current phase."
 )
 WAIT = (
-    "Wait for actual human input in the same conversation with this phase unfinished. Feedback is not confirmation. "
+    "Wait for missing human input or final owner consent in the same conversation with this phase unfinished. "
+    "An already saved answer or feedback may be applied to the Draft without final owner consent. "
+    "Feedback is not confirmation. "
     "Revise and republish the whole document when needed; only explicit owner consent to the latest revision/hash "
     "permits PM completion. No checkpoint, native readback or Fleet rebind is required by this protocol."
 )
 PREPARATION_REPORT = (
     "Brainstorming and owner feedback keep this same execution/assignment/cycle; no placeholder document or "
-    "invented question is required. " + REPORT + " Report only this completed preparation phase, then stop at "
+    "invented question is required. Apply saved answers and relevant feedback to the Draft. When substantive "
+    "facts are sufficient, publish the next FULL requirements revision without asking for separate permission "
+    "to save the draft. 'Not confirmation of the final revision' does not prohibit updating the Draft. "
+    "Do not invent unresolved business choices; clarify only actual remaining gaps. " + REPORT +
+    " Report only this completed preparation phase, then stop at "
     "the returned next phase. Actual owner confirmation belongs to phase 3 in this SAME execution. "
     "Never complete the PM Workflow or create another assignment/cycle merely to wait for consent."
 )
 FEEDBACK = (
     "Handle feedback by revising and publishing the document within the SAME execution, then present the FULL "
-    "new saved revision/content_hash. Any document change invalidates earlier consent. Free feedback and "
+    "new saved revision/content_hash. Apply saved answers and relevant feedback without asking for separate "
+    "permission to save the draft; publishing a Draft revision is NOT owner confirmation or PM completion. "
+    "Any document change invalidates earlier consent. Free feedback and "
     "confirmation must not fabricate an answer ID, question or clarification request. Only actual unresolved "
     "gaps require clarification. Confirmation must be the real owner's saved receipt for the latest exact "
     "revision/hash, not a conversational assertion. Unresolved feedback keeps phase 3 unfinished; no final "
