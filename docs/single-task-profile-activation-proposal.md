@@ -41,8 +41,10 @@ Tracker preflight сейчас проверяет наличие запроше�
   checks/evidence и отдельные новые identities.
 - [Draft profile manifest](proposals/single-task-v1.manifest.json): exact catalog hash,
   семь role instruction hashes, source commit/hash и полный разрешённый inventory.
-- `python -m scripts.prepare_single_task_profile_proposal --check`: воспроизводимость
-  committed artifacts, без установки, DB или API calls.
+- Прежний `scripts.prepare_single_task_profile_proposal` удалён. Актуальный
+  `python -m scripts.build_single_task_profile --check` проверяет устанавливаемый
+  каталог и manifest, без установки, DB или API calls. Review artifacts выше
+  остаются замороженной исторической редакцией и больше не генерируются заново.
 
 Schema names этих двух файлов являются **предложенными форматами review artifacts**,
 а не зарегистрированными публичными API schemas. Manifest содержит `proposal=true`.

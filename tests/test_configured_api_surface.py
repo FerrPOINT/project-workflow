@@ -61,7 +61,8 @@ def test_openapi_exposes_only_common_execution_commands(configured):
     assert {"/internal/runtime/assign", "/internal/runtime/step", "/internal/runtime/history",
             "/internal/runtime/terminal-receipt/readback"} <= runtime
     assert not any(path.startswith(("/internal/runtime/v1/pm/", "/internal/runtime/pm-bootstrap/"))
-                   or path in {"/internal/runtime/bind", "/internal/runtime/rebind"} for path in runtime)
+                   or path in {"/internal/runtime/bind", "/internal/runtime/rebind",
+                               "/internal/runtime/base/terminal-receipt/readback"} for path in runtime)
     assert "/api/cli/step" not in paths and "/api/cli/history" not in paths
 
 
@@ -108,6 +109,7 @@ def test_native_terminal_selector_cannot_be_reinterpreted_as_business_receipt(co
 
 def test_retired_native_routes_are_absent_and_cannot_write_any_ledger(configured):
     from sqlalchemy import func, select
+
     from project_workflow.infrastructure.db import models as m
     from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
@@ -123,7 +125,8 @@ def test_retired_native_routes_are_absent_and_cannot_write_any_ledger(configured
                  "/internal/runtime/v1/pm/assign", "/internal/runtime/v1/pm/bind",
                  "/internal/runtime/v1/pm/checkpoint", "/internal/runtime/v1/pm/rebind",
                  "/internal/runtime/v1/pm/resume", "/internal/runtime/v1/pm/resume-retry",
-                 "/internal/runtime/pm-bootstrap/retry"]:
+                 "/internal/runtime/pm-bootstrap/retry",
+                 "/internal/runtime/base/terminal-receipt/readback"]:
         response = client.post(path, headers=WRITER, json={"task": assignment["task"]})
         assert response.status_code == 404, (path, response.text)
     assert counts() == before

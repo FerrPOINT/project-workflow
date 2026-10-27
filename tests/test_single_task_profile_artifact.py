@@ -1,4 +1,4 @@
-"""Hash/provenance checks for unregistered profile review artifacts."""
+"""Hash/provenance checks for the canonical installed profile artifacts."""
 
 import hashlib
 import json
@@ -8,16 +8,16 @@ import pytest
 from project_workflow import config
 from project_workflow.domain.namespace import legacy_code_from_cli_command, normalize_namespace_cli_command
 from project_workflow.infrastructure.db.managed_catalog import ManagedCatalog, ManagedMode
-from scripts import prepare_single_task_profile_proposal as builder
-from scripts.prepare_single_task_profile_proposal import CATALOG_PATH, MANIFEST_PATH, ROOT, encoded, render
+from scripts import build_single_task_profile as builder
+from scripts.build_single_task_profile import CATALOG_PATH, MANIFEST_PATH, ROOT, encoded, render
 
 
-def test_proposal_matches_actual_source_and_committed_artifact_hashes():
+def test_profile_matches_actual_source_and_committed_artifact_hashes():
     catalog_bytes, manifest_bytes = render()
     assert (ROOT / CATALOG_PATH).read_bytes() == catalog_bytes
     assert (ROOT / MANIFEST_PATH).read_bytes() == manifest_bytes
     catalog, manifest = json.loads(catalog_bytes), json.loads(manifest_bytes)
-    assert manifest["proposal"] is True
+    assert manifest["proposal"] is False
     assert manifest["workflow_catalog"]["sha256"] == hashlib.sha256(catalog_bytes).hexdigest()
     assert manifest["instruction_source"] == catalog["instruction_source"]
     assert catalog["catalog_version"] == manifest["workflow_catalog"]["version"] == 1
@@ -54,7 +54,7 @@ def test_new_profile_identities_cannot_impersonate_legacy_or_base_metadata():
     assert all(r["fleet_role"] == role for role, r in manifest["roles"].items() if role != "devops")
     for forbidden in ("package_commit", "skills_revision", "hermes_namespace", "hermes_profile"):
         assert forbidden not in catalog_bytes.decode() and forbidden not in manifest_bytes.decode()
-    # The existing public catalog parser must not silently accept an unregistered proposal.
+    # The existing public catalog parser must not silently accept the separate single-task schema.
     with pytest.raises(ValueError):
         ManagedCatalog.model_validate(catalog)
 

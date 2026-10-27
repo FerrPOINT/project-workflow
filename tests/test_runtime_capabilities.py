@@ -162,5 +162,6 @@ def _install_manifest(monkeypatch, tmp_path, value=None):
     descriptor = tmp_path / "runtime-compatibility.json"
     descriptor.write_text(json.dumps(_valid_compatibility()), encoding="utf-8")
     reader = build_provenance.runtime_compatibility_descriptor
-    monkeypatch.setattr(build_provenance, "runtime_compatibility_descriptor", lambda **kwargs: reader(descriptor, **kwargs))
+    monkeypatch.setattr(build_provenance, "runtime_compatibility_descriptor",
+                        lambda **kwargs: reader(descriptor, **kwargs))
     return path

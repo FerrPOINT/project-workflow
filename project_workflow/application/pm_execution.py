@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
-import hmac
 import json
 from typing import Any
 
@@ -15,7 +13,6 @@ from project_workflow.domain.pm_execution import (
     PMReviewAdmissionContext,
 )
 from project_workflow.domain.runtime_assignment import (
-    RuntimeStepFence,
     canonical_json,
     payload_sha256,
     validate_concrete_agent_ref,
@@ -175,7 +172,6 @@ class PMExecutionService:
         return run
 
 
-
     @staticmethod
     def identity(command: PMIdentity) -> PMIdentity:
         return PMIdentity.model_validate(command.model_dump(include=set(PMIdentity.model_fields)))
@@ -217,14 +213,6 @@ class PMExecutionService:
         return snapshot
 
 
-
-
-
-
-
-
-
-
     def readback(self, identity: PMIdentity, project_id: int, operation_key: str | None) -> dict[str, Any]:
         execution, _ = self.execution(identity, project_id)
         result = self.snapshot(execution)
@@ -239,46 +227,3 @@ class PMExecutionService:
                     "request_sha256": operation.request_sha256, "result": json.loads(operation.result_json),
                 }
         return result
-
-    @staticmethod
-    def scoped_token(snapshot: dict[str, Any], secret: str) -> str:
-        scope = {key: snapshot[key] for key in (
-            "identity", "session_run_id", "hermes_run_ref", "binding_ref", "fence",
-        )}
-        return hmac.new(secret.encode(), ("pm-v1:" + canonical_json(scope)).encode(), hashlib.sha256).hexdigest()
-
-    def supervisor_binding(self, task_id: int, fence: RuntimeStepFence | None = None) -> m.PMExecution | None:
-        execution = self.session.scalar(select(m.PMExecution).where(
-            m.PMExecution.task_id == task_id,
-        ).execution_options(populate_existing=True))
-        if execution is not None:
-            task = self.session.get(m.Task, task_id, populate_existing=True)
-            assignment = self.session.get(m.TaskRuntimeAssignment, execution.assignment_id)
-            if (
-                execution.state != "active" or task is None or assignment is None
-                or task.assignment_revision != assignment.assignment_revision
-                or task.assignment_operation_key != assignment.operation_key
-            ):
-                raise ConflictError("PM execution is waiting, pending or assigned elsewhere")
-            self.execution(PMIdentity.model_validate_json(execution.identity_json), task.project_id)
-            if fence is not None:
-                run = self.run(execution)
-                if (
-                    fence.pm_version != execution.version or fence.pm_fence != execution.fence
-                    or fence.hermes_run_ref != run.run_ref or fence.binding_ref != run.binding_ref
-                ):
-                    raise ConflictError("Supervisor step belongs to a stale PM execution/run")
-        else:
-            task = self.session.get(m.Task, task_id, populate_existing=True)
-            if task is not None and task.assignment_operation_key is not None:
-                assignment = self.session.scalar(select(m.TaskRuntimeAssignment).where(
-                    m.TaskRuntimeAssignment.operation_key == task.assignment_operation_key,
-                    m.TaskRuntimeAssignment.task_id == task.id,
-                ).execution_options(populate_existing=True))
-                if assignment is not None and assignment.role_key == "project_manager":
-                    if json.loads(assignment.payload).get("single_task_context") is not None:
-                        raise ConflictError("Single-task PM requires existing PM execution enrollment")
-                    if json.loads(assignment.payload).get("pm_draft_context") is not None:
-                        raise ConflictError("PM Draft requires verified execution enrollment before a step")
-                    self.concrete_agent_ref(assignment)
-        return execution

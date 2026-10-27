@@ -166,6 +166,8 @@ def compatible_build_context(snapshot: GitSourceSnapshot, skills_root: Path | No
     if catalog_variant == "single-task-v1":
         # Instructions are sealed Workflow artifacts, not a native skill bootstrap.
         return _derive_context_descriptor(context, catalog_variant)
+    if not isinstance(catalog, dict):
+        raise BuildProvenanceError("Native catalog must be a JSON object")
     if skills_root is None:
         raise BuildProvenanceError("Native catalog build requires an explicit skills checkout")
     pin = catalog["skills_source"]

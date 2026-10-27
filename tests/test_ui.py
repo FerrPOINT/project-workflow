@@ -2975,7 +2975,7 @@ class TestSettingsPage:
         assert "--n" in response.text
         assert ">--repo<" not in response.text
         assert ">--skip<" not in response.text
-        assert "по умолчанию: все" in response.text
+        assert "не больше 200" in response.text
         assert "default:" not in response.text
         assert re.search(r'<h2\b[^>]*class="base-section-title"[^>]*>step</h2>', response.text)
         assert 'id="cliUsage1"' in response.text
@@ -3045,15 +3045,16 @@ class TestSettingsPage:
         history_options = {option["flags"]: option for option in history["options"]}
 
         assert set(step_options) == {
-            "--task", "--report", "--operation-key", "--runtime-request", "--execution-token-file",
+            "--task", "--report", "--operation-key", "--expected-version",
+            "--requirements-revision", "--requirements-sha256",
         }
-        assert set(history_options) == {"--task", "--n"}
+        assert set(history_options) == {"--task", "--n", "--operation-key", "--execution-ref", "--before-history-id"}
         assert "default" not in step_options["--task"]
         assert "default" not in step_options["--report"]
-        for flag in ("--operation-key", "--runtime-request", "--execution-token-file"):
+        for flag in ("--operation-key", "--expected-version", "--requirements-revision", "--requirements-sha256"):
             assert "default" not in step_options[flag]
         assert "default" not in history_options["--n"]
-        assert "по умолчанию: все" in history_options["--n"]["help"]
+        assert "не больше 200" in history_options["--n"]["help"]
 
     def test_settings_helper_ignores_click_unset_default_sentinel(self):
         @click.command(name="temp-unset-default")

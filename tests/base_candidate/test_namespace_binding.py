@@ -14,11 +14,10 @@ from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
 
 from project_workflow import config
-from project_workflow.application import base_admission, base_binding, base_source
+from project_workflow.application import base_binding, base_source
 from project_workflow.application import state as app_state
 from project_workflow.domain.base_admission import BASE_SKILLS_REVISION
 from project_workflow.domain.base_binding import BaseBindingInvalidRequest
-from project_workflow.domain.exceptions import ConflictError
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.managed_catalog import (
     _persist_mode,
@@ -100,8 +99,6 @@ def test_persisted_fk_registered_profile_and_exact_source_binding(source, regist
     assert snapshot() == before
     assert base_source.export_base_source()["roles"][role]["namespace"] == namespace["name"]
     assert "observed_at" not in response.text
-    with pytest.raises(ConflictError, match="trusted owner"):
-        base_admission.require_owner_execution_evidence()
     assert load_managed_catalog().catalog_version == 2
 
 

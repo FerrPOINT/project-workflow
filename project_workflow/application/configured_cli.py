@@ -198,10 +198,13 @@ def enroll(uow: SAUnitOfWork, request: ConfiguredAssignment) -> dict[str, Any]:
         initial_version = current_version + 1
         last = _records(uow, task_id, limit=1)
         history_after_id = last[0].id if last else 0
+        phase_id = phases[0].id if current.status == "done" else current.current_phase_id
+        if phase_id is None:
+            raise ConflictError("Current Workflow phase missing")
         uow.tasks.update(task_id, {"mode_id": mode.id, "cycle_number": cycle,
-            "current_phase_id": phases[0].id if current.status == "done" else current.current_phase_id,
+            "current_phase_id": phase_id,
             "status": "active", "assignment_operation_key": request.operation_key, "assignment_revision": revision})
-        uow.tasks.record_phase_event(task_id, phases[0].id if current.status == "done" else current.current_phase_id,
+        uow.tasks.record_phase_event(task_id, phase_id,
                                     "entered" if current.status == "done" else "resumed")
     payload = {"interaction_protocol": PROTOCOL, "execution_ref": str(uuid4()),
                "initial_version": initial_version, "history_after_id": history_after_id,
@@ -244,6 +247,8 @@ def _evaluation(row: m.TaskStepHistoryEntry) -> dict[str, Any]:
 
 def version(uow: SAUnitOfWork, task_id: int, payload: dict[str, Any]) -> int:
     current = uow.tasks.get_by_id(task_id)
+    if current is None:
+        raise ConflictError("Current Workflow task missing")
     rows = _records(uow, task_id, limit=1, cycle=current.cycle_number, after_id=payload.get("history_after_id", 0))
     if not rows:
         return payload.get("initial_version", 1)

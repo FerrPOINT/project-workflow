@@ -297,7 +297,6 @@ def create_app() -> FastAPI:
         responses={**{status: {"model": BaseNamespaceBindingError} for status in (401, 403, 409, 503)},
                    422: {"model": BaseBindingInvalidRequest, "description": "Unprocessable Content"}},
     )(base_api.namespace_binding)
-    app.post("/internal/runtime/base/terminal-receipt/readback", response_model=None)(base_api.terminal_readback)
     app.get("/internal/runtime/base/source-catalog", response_model=None)(base_api.source_catalog)
     app.get("/internal/runtime/base/source-capabilities", response_model=None)(base_api.source_capabilities)
     from project_workflow.domain.configured_cli import ConfiguredTerminalResponse

@@ -216,41 +216,6 @@ def test_unrecognized_frozen_v3_edits_stop_adoption(database):
         assert uow.workflows.get_by_id(profession.workflow_id).active_catalog_version == 3
 
 
-def test_historical_admission_uses_its_frozen_recipe_digest(database, monkeypatch, tmp_path):
-    from project_workflow.application import base_admission
-    from project_workflow.infrastructure.base_package import digest
-
-    path = OLD.with_name("base_sdlc_catalog_v1_frozen.json")
-    catalog = load_managed_catalog(path)
-    definition = next(item for item in catalog.workflows if item.role_key == "developer")
-    role = {"namespace": definition.hermes_namespace, "profile": definition.hermes_profile,
-            "modes": [mode.key for mode in definition.modes], "physicalSkills": definition.skill_allowlist,
-            "roleInstruction": {"sha256": "d" * 64}}
-    monkeypatch.setattr(base_admission, "load_pinned_package", lambda *_: {"roles": {"developer": role}})
-    monkeypatch.setattr(base_admission.GitPackage, "read", lambda *_: b"synthetic manifest")
-    monkeypatch.setenv("PROJECT_WORKFLOW_BASE_SKILLS_ROOT", str(tmp_path / "agent-skills"))
-    config.get_settings.cache_clear()
-    with SAUnitOfWork(database) as uow:
-        ensure_managed_catalog(uow, path)
-        profession = uow.projects.get_by_cli_command("workflow-developer")
-        mode = uow.workflows.get_mode_by_key(profession.workflow_id, "initial")
-        ensure_managed_catalog(uow, NEW)
-        admission = {
-            "contract": "base-sdlc-admission/v1", "config_ref": "fleet-config:synthetic@1",
-            "config_sha256": "a" * 64, "concrete_agent_ref": "11111111-1111-4111-8111-111111111111",
-            "namespace": definition.hermes_namespace, "profile": definition.hermes_profile,
-            "catalog_sha256": digest(path.read_bytes()), "skills_revision": catalog.skills_source.revision,
-            "skills_manifest_sha256": digest(b"synthetic manifest"), "role_instruction_sha256": "d" * 64,
-            "physical_skills": definition.skill_allowlist,
-        }
-        arguments = dict(project_id=profession.id, role_key="developer", workflow_key=definition.key,
-                         mode_key="initial", execution_scope=definition.modes[0].execution_scopes[0],
-                         historical_mode_id=mode.id)
-        assert base_admission.validate_base_admission(uow, admission, **arguments) == admission
-        with pytest.raises(ConflictError, match="pinned package/config validation failed"):
-            base_admission.validate_base_admission(uow, {**admission, "catalog_sha256": "0" * 64}, **arguments)
-
-
 def test_v4_source_and_binding_use_exact_current_package_and_keep_runtime_blocked(database, monkeypatch, tmp_path):
     from project_workflow.application import base_source
     catalog = load_managed_catalog(NEW)

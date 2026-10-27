@@ -332,3 +332,24 @@ assertions перенесены на текущие контракт и guards. 
 отправки отчёта; проверка учитывает весь terminal phase contract. Collection:
 2966 selected / 3076 total, 110 integration deselected, ошибок импорта нет.
 Новые subprocess/PG tests только собраны, их исполнение не заявляется.
+
+
+## Source qualification recovery, 2026-10-28
+
+The first complete Workflow unit run found 35 failures and did not meet the
+94% coverage threshold. It is not a passed qualification. Fixture/head assertions,
+current CLI help and the no-bootstrap error expectation were corrected; the first
+recovery batch passed 86 tests, then 13 UI/help/catalog tests. Ruff and mypy passed.
+
+The canonical SingleTask builder now owns rendering directly. Its catalog and
+manifest hashes are unchanged. The unused intermediate proposal builder and the
+uninstalled PM Draft CLI prototype were removed; historical descriptions link to
+the frozen Git version. Applied migrations and published history were retained.
+
+The unconsumed `/internal/runtime/base/terminal-receipt/readback` route, its
+admission placeholder, temporary PM token verifier and native Supervisor fence
+were removed. They had no Tracker/Fleet/Base consumer. The configured terminal
+route and read-only retained PM history remain. The obsolete admission-executor
+test was retired with that executor; actual source binding/catalog/history and
+retired-route refusal checks passed 121 tests, with three environment skips.
+Final coverage, PostgreSQL, packaged CLI and live acceptance remain outstanding.

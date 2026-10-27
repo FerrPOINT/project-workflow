@@ -32,7 +32,13 @@ def _output(ctx: click.Context, response: dict[str, Any]) -> None:
 def step_cmd(ctx: click.Context, task: str, report: str | None, operation_key: str | None,
              expected_version: int | None, requirements_revision: int | None,
              requirements_sha256: str | None) -> None:
-    """Получить текущую фазу или отправить отчёт для оценки."""
+    """Получить текущую фазу или отправить отчёт для оценки.
+
+    Чтение: project-workflow --json step --task SDLC-42
+
+    Отчёт через stdin: project-workflow --json step --task SDLC-42 --report -
+    --operation-key phase-1-v1 --expected-version 1
+    """
     try:
         response = configured.step(task, report, operation_key, expected_version,
             requirements_revision=requirements_revision, requirements_sha256=requirements_sha256)
@@ -52,7 +58,13 @@ def step_cmd(ctx: click.Context, task: str, report: str | None, operation_key: s
 @click.pass_context
 def history_cmd(ctx: click.Context, task: str, n: int | None, operation_key: str | None,
                 execution_ref: str | None, before_history_id: int | None) -> None:
-    """Прочитать сохранённую историю и результат операции."""
+    """Прочитать сохранённую историю и результат операции.
+
+    История: project-workflow --json history --task SDLC-42 --n 20
+
+    Результат исходной операции: project-workflow --json history --task SDLC-42
+    --operation-key phase-1-v1
+    """
     try:
         response = configured.history(task, n, operation_key, execution_ref, before_history_id)
     except ValueError:

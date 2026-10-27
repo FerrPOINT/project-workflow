@@ -7,6 +7,7 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 from sqlalchemy import inspect, select
+from sqlalchemy.exc import IntegrityError
 
 from project_workflow import build_provenance
 from project_workflow.application.pm_execution import PMExecutionService
@@ -103,3 +104,49 @@ def test_retained_review_context_remains_closed(field, value):
     assert PMReviewAdmissionContext.model_validate(context).model_dump() == context
     with pytest.raises(ValidationError):
         PMReviewAdmissionContext.model_validate({**context,field:value})
+
+
+@pytest.mark.parametrize("kind", ["bind", "checkpoint", "resume", "rebind", "resume_retry"])
+def test_saved_operation_readback_returns_original_result_without_reexecution(historical, kind):
+    identity = PMIdentity.model_validate(historical[1])
+    saved = {"state": "waiting", "version": 7, "original": {"text": "saved owner input"}}
+    with SAUnitOfWork() as uow:
+        uow.session.add(m.PMOperation(
+            operation_key="retained:operation", execution_ref=identity.execution_ref,
+            kind=kind, request_sha256="a" * 64, result_json=canonical_json(saved),
+        ))
+    before = snapshot()
+    with SAUnitOfWork() as uow:
+        namespace = uow.projects.get_by_cli_command("workflow-project_manager")
+        service = PMExecutionService(uow)
+        for _ in range(2):
+            result = service.readback(identity, namespace.id, "retained:operation")
+            assert result["operation"] == {
+                "operation_key": "retained:operation", "kind": kind,
+                "request_sha256": "a" * 64, "result": saved,
+            }
+            assert result["workflow_step_allowed"] is False
+        assert service.readback(identity, namespace.id, "missing:operation")["operation"] is None
+    assert snapshot() == before
+
+
+@pytest.mark.parametrize("field,value", [
+    ("bind_operation_key", None), ("bind_request_sha256", "0" * 64),
+    ("binding_ref", None), ("hermes_run_ref", None),
+])
+def test_database_or_reader_rejects_missing_or_forged_binding_provenance(historical, field, value):
+    if value is None:
+        before = snapshot()
+        with pytest.raises(IntegrityError), SAUnitOfWork() as uow:
+            assignment = uow.session.scalar(select(m.TaskRuntimeAssignment))
+            setattr(assignment, field, value)
+        assert snapshot() == before
+        assert read(historical[1])["workflow_step_allowed"] is False
+        return
+    with SAUnitOfWork() as uow:
+        assignment = uow.session.scalar(select(m.TaskRuntimeAssignment))
+        setattr(assignment, field, value)
+    before = snapshot()
+    with pytest.raises(ConflictError):
+        read(historical[1])
+    assert snapshot() == before

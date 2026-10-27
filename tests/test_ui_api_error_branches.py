@@ -27,6 +27,14 @@ from project_workflow.interfaces.ui.schemas import (
 pytestmark = [pytest.mark.ui]
 
 
+@pytest.fixture(autouse=True)
+def ordinary_editor_scope(monkeypatch):
+    # This suite isolates service-error translation for ordinary workflows.
+    # Real sealed-catalog authorization is exercised by test_phase_effective_view.
+    for name in ("_pm_workflow_write_error", "_pm_phase_write_error", "_pm_instruction_write_error"):
+        monkeypatch.setattr(api, name, lambda _identifier: None)
+
+
 def _raise(exc: Exception) -> None:
     raise exc
 
