@@ -97,17 +97,32 @@ def test_instruction_and_history_do_not_require_execution_files_or_native_proof(
     assert history.status_code == 200 and history.json()["result"]["records"] == []
 
 
-def test_first_phase_names_actual_response_evidence_without_changing_checks(configured):
+def test_first_phase_names_actual_response_evidence_without_changing_checks(configured, monkeypatch):
+    from click.testing import CliRunner
+
+    from project_workflow.interfaces.cli import configured as transport
+    from project_workflow.interfaces.cli import ui  # noqa: F401 -- register the real step formatter
+    from project_workflow.interfaces.cli.core import cli
+
     enroll(configured)
     response = step(configured).json()
-    result = response["result"]
+    monkeypatch.setenv("FLEET_CLI_PROTOCOL", "configured-cli-v1")
+    monkeypatch.setattr(transport, "environment", lambda: ("https://workflow.test", "test-only", AGENT,
+                                                        configured[1]["namespace_id"]))
+    monkeypatch.setattr(transport, "request", lambda *args, **kwargs: response)
+    command = CliRunner().invoke(cli, ["--json", "step", "--task", configured[1]["task"]])
+    assert command.exit_code == 0, command.output
+    result = json.loads(command.output)
+    assert result == response["result"]
+    assert not {"ok", "result", "exit_code"} & result.keys()
     instructions = result["instructions"]
     assert "Actual first Workflow step response" in instructions
-    assert "ok=true" in instructions and "exit_code=0" in instructions
+    assert "parsed stdout JSON" in instructions and "fields at top level" in instructions
     for field in ("interaction_protocol", "task", "namespace_id", "concrete_agent_ref", "assignment_ref",
                   "execution_ref", "business_task_ref", "phase_code", "version", "status"):
         assert field in result
-        assert "result." + field in instructions
+        assert field in instructions
+        assert "result." + field not in instructions
     assert "not a future PASS verdict" in instructions
     assert "Never invent response values" in instructions
     assert "Tracker task/root UUID, stage/status and actual input references" in instructions
@@ -131,8 +146,7 @@ def test_first_phase_response_evidence_reaches_verifier_without_forcing_pass(
     if include_response:
         fields = ("interaction_protocol", "task", "namespace_id", "concrete_agent_ref", "assignment_ref",
                   "execution_ref", "business_task_ref", "phase_code", "version", "status")
-        evidence = {"ok": observed["ok"], "exit_code": observed["exit_code"],
-                    "result": {name: observed["result"][name] for name in fields}}
+        evidence = {name: observed["result"][name] for name in fields}
         report += "\nActual first Workflow step response: " + json.dumps(evidence, sort_keys=True)
     required = "Actual first Workflow step response and task/input references."
     supervisor_llm("PARTIAL", missing=[required])
