@@ -8,6 +8,16 @@
 
 ### Added
 
+- Configured PM preparation instructions distinguish the independently generated
+  Workflow execution_ref from Tracker assignment.execution_id, and Workflow
+  cursor versions from Tracker assignment versions. Match task/assignment/agent
+  identities by authority; do not rebind or invent IDs to make unrelated IDs
+  equal. Eight focused source tests pass, including evaluator prompt coverage.
+  This instruction correction is source-only until installed. In the existing
+  live PM chat, an explicit explanation allowed the agent to submit a corrected
+  report and advance PM-DRAFT-01 to PM-DRAFT-02; that assisted check is not full
+  autonomous PM or Backlog acceptance.
+
 - Opt-in configured-cli-v1 for new PM tasks: existing trusted assignment and
   direct step/history endpoints with a dedicated per-agent Auth PAT, current
   Tracker assignment validation, version/key replay and actual owner-confirmed
