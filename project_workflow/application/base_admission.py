@@ -6,11 +6,10 @@ from typing import Any
 from project_workflow import config
 from project_workflow.domain.base_admission import BaseAdmission
 from project_workflow.domain.base_catalog import BASE_CATALOG_ARTIFACTS, BASE_CATALOG_SKILLS, FROZEN_BASE_CATALOG_V3
-from project_workflow.domain.configured_cli import ConfiguredCliFence
 from project_workflow.domain.exceptions import ConflictError
 from project_workflow.domain.project_theme import MANAGED_PROFESSION_PRESENTATION
 from project_workflow.domain.repositories import UnitOfWork
-from project_workflow.domain.runtime_assignment import RuntimeStepFence, payload_sha256
+from project_workflow.domain.runtime_assignment import payload_sha256
 from project_workflow.infrastructure.base_package import GitPackage, digest, load_pinned_package
 from project_workflow.infrastructure.db.managed_catalog import load_managed_catalog, validate_managed_catalog_state
 
@@ -123,38 +122,6 @@ def assert_base_step(
     return validated
 
 
-def assert_base_supervisor(
-    uow: UnitOfWork, task: dict[str, Any], fence: RuntimeStepFence | ConfiguredCliFence | None,
-) -> None:
-    """Keep legacy CLI/human step from bypassing admitted candidate execution."""
-    from project_workflow.application.configured_cli import assert_fence
-    if isinstance(fence, ConfiguredCliFence):
-        assert_fence(uow, task, fence)
-        return
-    assert_fence(uow, task, None)
-    from project_workflow.domain.single_task_profile import is_single_task_key
-
-    workflow = uow.workflows.get_by_id(task["workflow_id"]) if task.get("workflow_id") else None
-    if workflow is not None and is_single_task_key(workflow.key):
-        from project_workflow.application.single_task_runtime import context_hash
-
-        assignment = uow.tasks.get_assignment_by_operation_key(task.get("assignment_operation_key") or "")
-        if (assignment is None or fence is None or fence.single_task_context_sha256 is None
-            or context_hash(uow, assignment.to_dict()) != fence.single_task_context_sha256):  # type: ignore[arg-type]
-            raise ConflictError("Single-task requires authenticated assigned runtime step")
-        return
-    assignment = uow.tasks.get_assignment_by_operation_key(task.get("assignment_operation_key") or "")
-    record = assignment.to_dict() if assignment is not None else {}
-    admission = record.get("payload", {}).get("base_admission")
-    mode_id = task.get("mode_id")
-    mode = uow.workflows.get_mode(mode_id) if isinstance(mode_id, int) else None
-    if admission is None and (mode is None or mode.catalog_version < 3):
-        return
-    if admission is None or fence is None or fence.base_admission_sha256 != payload_sha256(admission):
-        raise ConflictError("Base candidate requires admitted runtime step")
-    assert_base_step(
-        uow, task, record, config_ref=admission["config_ref"], config_sha256=admission["config_sha256"],
-    )
 
 
 def admission_receipt(record: dict[str, Any], task: dict[str, Any]) -> dict[str, Any] | None:
