@@ -8,6 +8,13 @@
 
 ### Added
 
+- Configured PM preparation in retained652a now asks questions/offers alternatives
+  only for actual gaps or meaningful choices. Eight focused content checks cover
+  all supported families, real judge prompts and appended security constraints;
+  Ruff/diff checks pass. Catalog bytes and legacy execution remain unchanged.
+  This source correction is not installed live acceptance. The generic editor
+  still requires compatible sealed-catalog publication/adoption before arbitrary
+  text edits can be consumed by configured execution; that gap is not bypassed.
 - Configured PM final judging is precommit-only: valid full saved requirements,
   resolved feedback/questions and exact actual owner consent in Draft. The
   worker retains its full terminal-receipt/Tracker completion commands, but the
