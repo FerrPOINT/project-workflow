@@ -315,3 +315,18 @@ input/change, callback, refresh/reset и destroy/reinit без дублей.
 проверены checked JS, declarations, lint, 3 reset/native-composition cases
 и 7 runtime cases. SDK/skills pins сохранены. Hosted CI, полный gate,
 push/PR/merge и установка остаются отдельными действиями.
+
+
+## Рабочая область Base — 2026-10-27
+
+Текущий UI 0.3.9, producer `bab93d2683367117784c2f01fcbed7f80fd3ef15`.
+Workbench и семь частей добавляют общий каркас рабочей области внутри PageFrame:
+высота по настоящим gutter, внутренний scroll, адаптивные Aside/AsideAction и
+mobileFlow для длинной формы. SSR-аналога этого React-контракта нет.
+Настоящий архив из 882 файлов сверён с установленным UI; offline frozen install,
+singleton React и CLI check пройдены. SDK/skills pins сохранены. Это source
+adoption; приложение, backend и Storybook не пересобирались, runtime не менялся.
+
+Штатный SSR export обновлён и --check прошёл. Изменение общего CSS добавляет
+React Workbench; Workflow не получает фиктивных контейнеров или React-зависимости.
+Прежние предметные шаблоны и HTTP/SSO обработчики не менялись.

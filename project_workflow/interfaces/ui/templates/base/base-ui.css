@@ -3792,6 +3792,93 @@ label.base-card[data-interactive="true"]:has(input:disabled) {
 }
 
 
+/* A page-bounded workspace shares PageFrame's actual gutter at every width. */
+@layer components {
+  .base-workbench {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    height: calc(100dvh - var(--shell-header-height) - var(--shell-page-gutter) * 2);
+  }
+  .base-workbench-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+  }
+  .base-workbench-main,
+  .base-workbench-panel {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+  }
+  .base-workbench-panel { margin: 0; }
+  .base-workbench-panel > .base-tabs-list { flex-shrink: 0; }
+  .base-workbench-scroll {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    overflow: auto;
+    overflow-wrap: anywhere;
+    padding-block: var(--base-panel-padding);
+    padding-inline: 0 calc(var(--base-control-padding-block) / 2);
+  }
+  .base-workbench-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: calc(var(--base-control-padding-block) * 1.25);
+    min-width: 0;
+    padding-block: calc(var(--base-control-padding-block) * 1.75);
+    border-block-end: 1px solid var(--color-border);
+  }
+  .base-workbench-aside {
+    display: none;
+    min-width: 0;
+    min-height: 0;
+    overflow: auto;
+    border-inline-start: 1px solid var(--color-border);
+    padding-block-start: calc(var(--base-panel-padding) * 1.2);
+    padding-inline-start: calc(var(--base-panel-padding) * 1.2);
+  }
+  @media (min-width: 1200px) {
+    .base-workbench-grid:has(> .base-workbench-aside) {
+      grid-template-columns: minmax(0, 1fr) var(--base-workbench-aside-width, 300px);
+    }
+    .base-workbench-grid:has(> .base-workbench-aside) > .base-workbench-main {
+      padding-inline-end: calc(var(--base-panel-padding) * 1.2);
+    }
+    .base-workbench-aside { display: block; }
+  }
+  @media (max-width: 640px) {
+    .base-workbench[data-mobile-flow="true"] {
+      height: auto;
+      min-height: calc(100dvh - var(--shell-header-height) - var(--shell-page-gutter) * 2);
+    }
+    .base-workbench[data-mobile-flow="true"] .base-workbench-scroll {
+      flex: none;
+      overflow: visible;
+    }
+    .base-workbench-toolbar {
+      gap: calc(var(--base-control-padding-block) * .75);
+      padding-block: calc(var(--base-control-padding-block) * 1.25);
+    }
+    .base-workbench-scroll {
+      padding-block-start: calc(var(--base-panel-padding) * .7);
+    }
+  }
+}
+
+/* Responsive action visibility wins over Button's display utility. */
+.base-workbench-aside-action { display: inline-flex; }
+@media (min-width: 1200px) {
+  .base-workbench-aside-action { display: none; }
+}
+
 /* SSR context moves into the shared navigation drawer at the same breakpoint. */
 @media (max-width: 767px) {
   .base-ssr-app .platform-header-context { display: none; }
