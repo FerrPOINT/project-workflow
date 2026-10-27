@@ -126,6 +126,22 @@ def test_first_phase_names_actual_response_evidence_without_changing_checks(conf
     assert "not a future PASS verdict" in instructions
     assert "Never invent response values" in instructions
     assert "Tracker task/root UUID, stage/status and actual input references" in instructions
+    assignment = configured[1]
+    assert result["execution_ref"] != assignment["tracker_execution_id"]
+    assert result["assignment_ref"] == assignment["assignment_ref"]
+    assert result["concrete_agent_ref"] == assignment["concrete_agent_ref"]
+    assert result["business_task_ref"] == assignment["tracker_task_id"]
+    assert result["task"] == assignment["task"]
+    for mapping in (
+        "Tracker context.assignment.assignment_id equals Workflow assignment_ref",
+        "Tracker context.assignment.agent_id equals Workflow concrete_agent_ref",
+        "Tracker context.task_id and root_task_id equal Workflow business_task_ref",
+        "Tracker workflow_task_key equals Workflow task",
+        "Tracker context.assignment.execution_id is the retained tracker_execution_id, NOT Workflow execution_ref",
+    ):
+        assert mapping in instructions
+    assert "two execution IDs are intentionally separate and are not required to be equal" in instructions
+    assert "Actual task/assignment/agent mismatches remain blockers" in instructions
     contract = result["phase_contract"]
     assert contract["required_checks"] == [
         "The returned Workflow step is admitted in the assigned namespace.",
@@ -148,6 +164,8 @@ def test_first_phase_response_evidence_reaches_verifier_without_forcing_pass(
                   "execution_ref", "business_task_ref", "phase_code", "version", "status")
         evidence = {name: observed["result"][name] for name in fields}
         report += "\nActual first Workflow step response: " + json.dumps(evidence, sort_keys=True)
+        report += "\nTracker assignment.execution_id: " + configured[1]["tracker_execution_id"]
+        assert evidence["execution_ref"] != configured[1]["tracker_execution_id"]
     required = "Actual first Workflow step response and task/input references."
     supervisor_llm("PARTIAL", missing=[required])
     original_chat = OpenAICompatibleClient.chat
@@ -162,6 +180,9 @@ def test_first_phase_response_evidence_reaches_verifier_without_forcing_pass(
     assert response.status_code == 200, response.text
     result = response.json()["result"]
     assert prompts and any(report in prompt and required in prompt for prompt in prompts)
+    assert all("two execution IDs are intentionally separate and are not required to be equal" in prompt
+               for prompt in prompts)
+    assert all("Actual task/assignment/agent mismatches remain blockers" in prompt for prompt in prompts)
     assert result["verdict"] == "PARTIAL" and required in result["missing"]
     assert result["phase_code"] == "PM-DRAFT-01" and result["version"] == 2
     assert result["complete"] is False and "terminal_receipt" not in result
