@@ -63,6 +63,7 @@ def assignment(request: dict[str, Any]) -> None:
     if (type(context.get("contract_version")) is not int or context.get("contract_version") != 1
             or context.get("interaction_protocol") != PROTOCOL
             or context.get("stage") not in stages
+            or context.get("status") != "InProgress"
             or not isinstance(actual, dict) or type(actual.get("version")) is not int
             or context.get("task_id") != request["tracker_task_id"]
             or context.get("root_task_id") != request["tracker_task_id"]

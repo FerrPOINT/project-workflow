@@ -24,7 +24,7 @@ def authority(monkeypatch):
                   "machine_subject": request["machine_subject"], "version": 2}
     context = {"contract_version": 1, "interaction_protocol": "configured-cli-v1",
                "task_id": request["tracker_task_id"],
-               "stage": "Draft",
+               "stage": "Draft", "status": "InProgress",
                "root_task_id": request["tracker_task_id"], "owner_subject": request["owner_subject"],
                "workflow_task_key": request["task"],
                "assignment": assignment}
@@ -83,7 +83,7 @@ def test_every_current_assignment_component_is_exact(authority, field):
 
 
 @pytest.mark.parametrize("role,mode,stage", [
-    ("project_manager", "draft", "Draft"), ("analyst", "analysis", "Analysis"),
+    ("project_manager", "draft", "Draft"), ("project_manager", "draft", "Backlog"), ("analyst", "analysis", "Analysis"),
     ("architect", "decomposition", "Architecture"), ("developer", "initial", "Development"),
     ("developer", "rework", "Rework"), ("reviewer", "delivery", "Review"),
     ("tester", "delivery", "Testing"), ("devops", "delivery", "Deployment"),
@@ -132,3 +132,12 @@ def test_no_caller_supplied_url_or_missing_credential_fallback(authority, monkey
     with pytest.raises(RuntimeError):
         tracker.assignment(request)
     assert calls == []
+
+
+@pytest.mark.parametrize("status", [None, "Ready", "Completed", "Blocked", "in_progress", True])
+@pytest.mark.parametrize("stage", ["Draft", "Backlog"])
+def test_retained_assignment_does_not_authorize_work_outside_in_progress(authority, stage, status):
+    request, bodies, _ = authority
+    bodies["context"].update(stage=stage, status=status)
+    with pytest.raises(ConflictError):
+        tracker.assignment(request)
