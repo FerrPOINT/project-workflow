@@ -8,6 +8,7 @@ let workflowReadRevision = 0;
 let workflowCommittedUrl = location.pathname + location.search + location.hash;
 const workflowInitialRole = {{ can_administer|tojson }};
 function initializeWorkflowPhases(root=document){
+  window.PdlcBaseUI.initMenus?.(root);
   root.querySelectorAll('select[data-base-choice]').forEach(control=>window.PdlcChoice?.initChoice(control));
   root.querySelectorAll('textarea[data-base-autosize]').forEach(control=>window.PdlcTextarea?.initTextareaAutosize(control));
   const items=Array.from(document.querySelectorAll('#phasesTimeline .timeline-item'));
@@ -68,6 +69,7 @@ async function loadWorkflowEditor(value,options={}){
     const target=keepForm?document.getElementById('workflowPhases'):editor;
     const restorePhaseFocus=keepForm&&target.contains(document.activeElement);
     const focusedPhase=document.activeElement.closest?.('.timeline-item')?.id;
+    window.PdlcBaseUI.destroyMenus?.(target);
     target.querySelectorAll('select[data-base-choice]').forEach(control=>window.PdlcChoice?.destroyChoice(control));
     target.querySelectorAll('textarea[data-base-autosize]').forEach(control=>window.PdlcTextarea?.destroyTextareaAutosize(control));
     if(keepForm){
@@ -129,16 +131,16 @@ async function retryWorkflowReadback(){
     else await refreshWorkflowPhases();
   }finally{setPhaseWritePending(false);}
 }
-document.addEventListener('click',event=>{
+page.on(document,'click',event=>{
   const link=event.target.closest?.('.mode-tab[href]');
   if(!link||event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
   event.preventDefault();event.stopImmediatePropagation();
   void loadWorkflowEditor(link.href,{keepForm:true});
 },true);
-document.addEventListener('DOMContentLoaded',()=>{
+page.ready(()=>{
   window.PdlcPlatformNavigation.syncRoute(workflowCommittedUrl,true,{...history.state,workflowPosition:workflowHistoryPosition});
 });
-window.addEventListener('popstate',event=>{
+page.on(window,'popstate',event=>{
   const target=location.pathname+location.search+location.hash;
   if(target===workflowCommittedUrl)return;
   const position=event.state?.workflowPosition;
@@ -154,4 +156,4 @@ window.addEventListener('popstate',event=>{
     else window.PdlcPlatformNavigation.syncRoute(workflowCommittedUrl,true,{...history.state,workflowPosition:workflowHistoryPosition});
   });
 });
-window.addEventListener('pagehide',()=>{workflowReadRevision++;workflowReadController?.abort();});
+page.on(window,'pagehide',()=>{workflowReadRevision++;workflowReadController?.abort();});

@@ -179,7 +179,7 @@
 {% endset %}
 {{ base_ui.section_header('Фазы процесса', heading_id='workflowPhasesTitle', actions=phase_view_actions) }}
     {% if selected_workflow and modes | length > 1 %}
-    <nav class="mode-navigation" aria-label="Режимы воркфлоу" data-testid="workflow-mode-navigation">
+    <nav data-workflow-local-navigation class="mode-navigation" aria-label="Режимы воркфлоу" data-testid="workflow-mode-navigation">
       <div class="mode-tabs" data-testid="workflow-mode-tabs">
         {% for mode in modes %}
         <a
@@ -268,8 +268,8 @@ function jumpToPhase(select){
   item.querySelector('.timeline-card')?.focus({preventScroll:true});
 }
 
-document.addEventListener('DOMContentLoaded',()=>{
-  document.addEventListener('change',event=>{
+page.ready(()=>{
+  page.on(document,'change',event=>{
     const input=event.target;
     if(input instanceof HTMLInputElement&&input.name==='phase-view'&&input.checked)setPhaseView(input.value);
   });
@@ -526,7 +526,7 @@ function submitWorkflow(){
   setWorkflowWritePending(true);
   button.textContent = workflowFormMode === 'create' ? 'Создание…' : 'Сохранение…';
   var operation = workflowFormMode === 'create' ? createWorkflow() : saveWorkflow();
-  Promise.resolve(operation).finally(function(){ setWorkflowWritePending(false); });
+  return Promise.resolve(operation).finally(function(){ setWorkflowWritePending(false); });
 }
 renderWorkflowNav();
 if(selectedWorkflowId == null){
@@ -624,5 +624,49 @@ function selectWorkflow(id){
 }
 
 {% endif %}
-document.addEventListener('DOMContentLoaded',()=>initializeWorkflowPhases());
+page.ready(()=>initializeWorkflowPhases());
 {% endblock %}
+
+{% block page_exports %}
+addPhaseAfter:typeof addPhaseAfter==='function'?addPhaseAfter:undefined,
+cancelCreateWorkflow:typeof cancelCreateWorkflow==='function'?cancelCreateWorkflow:undefined,
+cancelWorkflowForm:typeof cancelWorkflowForm==='function'?cancelWorkflowForm:undefined,
+createWorkflow:typeof createWorkflow==='function'?createWorkflow:undefined,
+currentWorkflowPayload:typeof currentWorkflowPayload==='function'?currentWorkflowPayload:undefined,
+deletePhase:typeof deletePhase==='function'?deletePhase:undefined,
+deleteWorkflow:typeof deleteWorkflow==='function'?deleteWorkflow:undefined,
+fillWorkflowForm:typeof fillWorkflowForm==='function'?fillWorkflowForm:undefined,
+getPhaseTimelineItems:typeof getPhaseTimelineItems==='function'?getPhaseTimelineItems:undefined,
+initializeWorkflowPhases:typeof initializeWorkflowPhases==='function'?initializeWorkflowPhases:undefined,
+jumpToPhase:typeof jumpToPhase==='function'?jumpToPhase:undefined,
+loadWorkflowEditor:typeof loadWorkflowEditor==='function'?loadWorkflowEditor:undefined,
+movePhase:typeof movePhase==='function'?movePhase:undefined,
+refreshAfterWorkflowWrite:typeof refreshAfterWorkflowWrite==='function'?refreshAfterWorkflowWrite:undefined,
+refreshWorkflowPhases:typeof refreshWorkflowPhases==='function'?refreshWorkflowPhases:undefined,
+reloadWorkflows:typeof reloadWorkflows==='function'?reloadWorkflows:undefined,
+renderWorkflowNav:typeof renderWorkflowNav==='function'?renderWorkflowNav:undefined,
+requireWorkflowReadback:typeof requireWorkflowReadback==='function'?requireWorkflowReadback:undefined,
+retireWorkflowEditor:typeof retireWorkflowEditor==='function'?retireWorkflowEditor:undefined,
+retryWorkflowReadback:typeof retryWorkflowReadback==='function'?retryWorkflowReadback:undefined,
+saveWorkflow:typeof saveWorkflow==='function'?saveWorkflow:undefined,
+selectMode:typeof selectMode==='function'?selectMode:undefined,
+selectWorkflow:typeof selectWorkflow==='function'?selectWorkflow:undefined,
+setPhaseView:typeof setPhaseView==='function'?setPhaseView:undefined,
+setPhaseWritePending:typeof setPhaseWritePending==='function'?setPhaseWritePending:undefined,
+setWorkflowEditorVisible:typeof setWorkflowEditorVisible==='function'?setWorkflowEditorVisible:undefined,
+setWorkflowFormMode:typeof setWorkflowFormMode==='function'?setWorkflowFormMode:undefined,
+setWorkflowWritePending:typeof setWorkflowWritePending==='function'?setWorkflowWritePending:undefined,
+startCreateWorkflow:typeof startCreateWorkflow==='function'?startCreateWorkflow:undefined,
+startEditWorkflow:typeof startEditWorkflow==='function'?startEditWorkflow:undefined,
+submitWorkflow:typeof submitWorkflow==='function'?submitWorkflow:undefined,
+syncWorkflowNav:typeof syncWorkflowNav==='function'?syncWorkflowNav:undefined,
+syncWorkflowUrl:typeof syncWorkflowUrl==='function'?syncWorkflowUrl:undefined,
+togglePhaseType:typeof togglePhaseType==='function'?togglePhaseType:undefined,
+workflowApiUrl:typeof workflowApiUrl==='function'?workflowApiUrl:undefined,
+workflowById:typeof workflowById==='function'?workflowById:undefined,
+workflowFormDirty:typeof workflowFormDirty==='function'?workflowFormDirty:undefined,
+workflowIdFromUrl:typeof workflowIdFromUrl==='function'?workflowIdFromUrl:undefined,
+workflowSelectionUrl:typeof workflowSelectionUrl==='function'?workflowSelectionUrl:undefined,
+{% endblock %}
+{% block page_handles_history %}true{% endblock %}
+{% block page_busy %}typeof workflowWritePending!=='undefined'&&(workflowWritePending||phaseWritePending){% endblock %}

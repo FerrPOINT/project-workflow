@@ -73,21 +73,23 @@
   window.PdlcBaseUI = window.SdlcBaseUI = { ...(window.PdlcBaseUI || window.SdlcBaseUI), notify };
 })();
 
-(() => {
-  const preference = window.PdlcThemePreference || window.SdlcThemePreference;
-  if (preference) {
-    const legacyKey = document.documentElement.dataset.themeStorageKey || 'theme';
-    const apply = () => {
-      const theme = preference.read(legacyKey);
-      document.documentElement.dataset.theme = theme;
-      for (const option of /** @type {NodeListOf<HTMLInputElement>} */ (document.querySelectorAll('[data-base-theme-option]'))) option.checked = option.value === theme;
-    };
-    for (const option of /** @type {NodeListOf<HTMLInputElement>} */ (document.querySelectorAll('[data-base-theme-option]'))) option.addEventListener('change', () => { preference.set(/** @type {import("../src/lib/theme-preference.js").Theme} */ (option.value), legacyKey); apply(); });
-    apply();
-    preference.subscribe(apply);
+// Dynamic SSR work areas reuse menu behavior without retaining removed DOM.
+const menuControllers = new Map();
+function destroyMenus(root) {
+  for (const [menu, dispose] of menuControllers) {
+    if (!menu.isConnected || root && (menu === root || root.contains(menu))) {
+      dispose(); menuControllers.delete(menu);
+    }
   }
-  const menus = /** @type {NodeListOf<HTMLDetailsElement>} */ (document.querySelectorAll('.base-ssr-account,[data-base-menu]'));
+}
+function initMenus(root = document) {
+  destroyMenus();
+  const menus = /** @type {NodeListOf<HTMLDetailsElement>} */ (root.querySelectorAll('.base-ssr-account,[data-base-menu]'));
   for (const account of menus) {
+    if (menuControllers.has(account)) continue;
+    const abort = new AbortController();
+    const listen = (target, type, callback, options = {}) => target.addEventListener(type, callback, { ...(typeof options === 'boolean' ? {capture:options} : options), signal:abort.signal });
+    let resizeObserver;
     const toggle = account.querySelector('summary');
     const panel = /** @type {HTMLElement} */ (account.querySelector(':scope > [data-base-menu-content]'));
     let pointerInAccount = false;
@@ -110,28 +112,46 @@
       const shift = bounds.left < padding ? padding - bounds.left : Math.min(0, width - padding - bounds.right);
       panel.style.translate = shift + 'px';
     }
-    account.addEventListener('toggle', () => {
+    listen(account, 'toggle', () => {
       const group = account.dataset.baseMenuGroup;
-      if (account.open && group) for (const other of menus) {
+      if (account.open && group) for (const other of /** @type {NodeListOf<HTMLDetailsElement>} */ (document.querySelectorAll('.base-ssr-account,[data-base-menu]'))) {
         if (other !== account && other.dataset.baseMenuGroup === group) other.open = false;
       }
       positionPanel();
     });
     if (panel) {
-      window.addEventListener('resize', positionPanel);
-      document.addEventListener('scroll', positionPanel, true);
+      listen(window, 'resize', positionPanel);
+      listen(document, 'scroll', positionPanel, true);
       // Published font/density changes can resize an already-open popup.
-      if (typeof ResizeObserver !== 'undefined') new ResizeObserver(positionPanel).observe(panel);
+      if (typeof ResizeObserver !== 'undefined') { resizeObserver = new ResizeObserver(positionPanel); resizeObserver.observe(panel); }
     }
     // WebKit focuses an ancestor main before clicking a non-focusable link.
     // Keep the pressed menu item mounted until its click can be delivered.
-    document.addEventListener('pointerdown', (event) => { pointerInAccount = event.target instanceof Node && account.contains(event.target); });
-    document.addEventListener('pointerup', () => { pointerInAccount = false; });
-    document.addEventListener('pointercancel', () => { pointerInAccount = false; });
-    account.addEventListener('keydown', (event) => { if (event.key === 'Escape' && account.open) { event.preventDefault(); event.stopPropagation(); closeAccount(true); } });
-    document.addEventListener('click', (event) => { if (event.target instanceof Node && !account.contains(event.target)) closeAccount(false); });
-    account.addEventListener('focusout', (event) => { if (!pointerInAccount && event.relatedTarget instanceof Node && !account.contains(event.relatedTarget)) closeAccount(false); });
+    listen(document, 'pointerdown', (event) => { pointerInAccount = event.target instanceof Node && account.contains(event.target); });
+    listen(document, 'pointerup', () => { pointerInAccount = false; });
+    listen(document, 'pointercancel', () => { pointerInAccount = false; });
+    listen(account, 'keydown', (event) => { if (event.key === 'Escape' && account.open) { event.preventDefault(); event.stopPropagation(); closeAccount(true); } });
+    listen(document, 'click', (event) => { if (event.target instanceof Node && !account.contains(event.target)) closeAccount(false); });
+    listen(account, 'focusout', (event) => { if (!pointerInAccount && event.relatedTarget instanceof Node && !account.contains(event.relatedTarget)) closeAccount(false); });
+    menuControllers.set(account, () => { abort.abort(); resizeObserver?.disconnect(); });
   }
+}
+window.PdlcBaseUI = window.SdlcBaseUI = { ...(window.PdlcBaseUI || window.SdlcBaseUI), initMenus, destroyMenus };
+
+(() => {
+  const preference = window.PdlcThemePreference || window.SdlcThemePreference;
+  if (preference) {
+    const legacyKey = document.documentElement.dataset.themeStorageKey || 'theme';
+    const apply = () => {
+      const theme = preference.read(legacyKey);
+      document.documentElement.dataset.theme = theme;
+      for (const option of /** @type {NodeListOf<HTMLInputElement>} */ (document.querySelectorAll('[data-base-theme-option]'))) option.checked = option.value === theme;
+    };
+    for (const option of /** @type {NodeListOf<HTMLInputElement>} */ (document.querySelectorAll('[data-base-theme-option]'))) option.addEventListener('change', () => { preference.set(/** @type {import("../src/lib/theme-preference.js").Theme} */ (option.value), legacyKey); apply(); });
+    apply();
+    preference.subscribe(apply);
+  }
+  initMenus();
   const trigger = /** @type {HTMLElement} */ (document.querySelector('[data-base-drawer-trigger]'));
   const drawer = /** @type {HTMLDialogElement} */ (document.querySelector('[data-base-drawer]'));
   if (!trigger || !drawer) return;
@@ -146,6 +166,7 @@
     target?.focus();
   }
   function close() { if (drawer.open) drawer.close(); finishClose(); }
+  window.PdlcBaseUI.closeNavigation = close;
   trigger.addEventListener('click', () => {
     if (drawer.open) return;
     previousOverflow = document.body.style.overflow;

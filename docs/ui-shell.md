@@ -147,5 +147,28 @@ The fixture binds loopback, selects a fresh SQLite database, disables external
 Auth and refuses an existing fixture DB. The integration command requires its
 explicit fixture marker. `--tooling-from` resolves the existing jsdom package;
 it does not install dependencies. Browser acceptance remains a separate IAB gate.
-Sidebar section navigation and phase-detail pages retain their existing document
-navigation; this editor change does not claim conversion of every Workflow route.
+## Persistent application shell
+
+All ordinary owner routes use `X-Workflow-View: page-v1`: dashboard, professions,
+creation, workflows, phase detail, instructions, tasks/details and CLI reference.
+The server renders the same `Base.app_main` and owner context. Header/sidebar,
+Base SDK, branding and original admission clock are installed once. Page controllers
+are scoped factories: explicit event callbacks are exported, window/document
+listeners use an AbortController, and timers/observers/drafts are disposed before
+replacement. Base menus and other controls use their public init/destroy APIs.
+
+The pinned, unmodified htmx 2.0.11 runtime is served locally from `ui-assets`.
+It handles HTML swapping and controller script installation. It does not own
+history, request authorization or forms: the existing Base bridge owns routes,
+the owner still checks every request, and write endpoints remain unchanged.
+htmx history/storage caching is disabled. Session/access changes retire the
+protected document; login/logout and other applications retain their explicit
+navigation boundary. Failed/aborted reads preserve the old page and URL; dirty
+input needs confirmation, including edits made during a request. Pending writes
+block a departure; acknowledged writes can request a work-area readback.
+
+Run `scripts/check_workflow_application.mjs` with the same `--tooling-from` and
+`--fixture-url` arguments for whole-app routes, repeated lifecycles, history,
+creation, failed/stale reads and access retirement. Both manual integration gates
+are separate from default build/check. IAB acceptance must traverse every sidebar
+section on the final installed artifact; editor-only proof is insufficient.

@@ -18,7 +18,7 @@ let confirmation=true,networkFailure=false,deferred=null,retireAttempts=0;
 const notifications=[];w.AbortController=globalThis.AbortController;
 w.PdlcChoice={initChoice(){},refreshChoice(){},destroyChoice(){}};
 w.PdlcTextarea={initTextareaAutosize(){},destroyTextareaAutosize(){}};
-w.PdlcBaseUI={notify(message){notifications.push(message);},requestConfirmation:async()=>confirmation};
+w.PdlcBaseUI={initMenus(){},destroyMenus(){},notify(message){notifications.push(message);},requestConfirmation:async()=>confirmation};
 w.WorkflowNavigation={preserveProjectContext(){}};
 w.PdlcPlatformNavigation={saved(){},syncRoute(value,replace,state){w.history[replace?'replaceState':'pushState'](state??null,'',value);},navigate(){retireAttempts++;throw Error('Unexpected full navigation');},reload(){retireAttempts++;throw Error('Unexpected document reload');}};
 w.fetch=async(value,options)=>{
@@ -29,7 +29,16 @@ w.fetch=async(value,options)=>{
  return fetch(new URL(value,w.location.href),options);
 };
 const controller=Array.from(d.scripts).find(script=>script.textContent.includes('async function loadWorkflowEditor('));
-assert.ok(controller);w.eval(controller.textContent);
+assert.ok(controller);
+const pageReady=[];
+w.WorkflowApplication={mount(factory){factory({
+ on(target,type,callback,options){target.addEventListener(type,callback,options);},
+ ready(callback){pageReady.push(callback);},cleanup(){},
+ fetch:(...args)=>w.fetch(...args),notify:message=>notifications.push(message),
+ expose:functions=>Object.assign(w,functions),
+});}};
+w.eval([...d.scripts].find(script=>script.textContent.includes('function pluralizeRu(')).textContent);
+w.eval(controller.textContent);pageReady.forEach(callback=>callback());
 d.dispatchEvent(new w.Event('DOMContentLoaded'));
 const state=()=>JSON.parse(d.querySelector('#workflowEditorState').textContent);
 assert.equal(state().selected_workflow_id,a.id);

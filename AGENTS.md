@@ -170,7 +170,9 @@ SSR-каркас и page-frame/page-wide/page-readable/page-split принадл
 Заголовок страницы использует base-page-title, раздел — section_header с прежним
 heading_id. Native home link использует button(href=..., variant=ghost, size=icon),
 ссылки действий — text_link, подтверждённая пустота — state. URL и namespace
-остаются у Workflow; не добавлять локальный skin или обработчик навигации.
+остаются у Workflow. Не добавлять локальный skin или второй leave/history runtime.
+Для частичной навигации использовать общий app_main и lifecycle Base; продукт
+владеет загрузкой своего HTML и очисткой страничных обработчиков (docs/ui-shell.md).
 
 ## Единое пространство PDLC
 
