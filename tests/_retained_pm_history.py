@@ -18,12 +18,12 @@ AGENT_REF = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 OLD_RUN = "11111111-1111-4111-8111-111111111111"
 
 
-def retained_pm(monkeypatch):
+def retained_pm(monkeypatch, task_key="PM-1"):
     monkeypatch.setenv("PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON", json.dumps({"project_manager": "a" * 40}))
     monkeypatch.setenv("PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON", json.dumps({"project_manager": "r" * 40}))
     config.get_settings.cache_clear()
     _namespace("PM", "workflow-project_manager", "PM")
-    request = RuntimeAssignmentRequest.model_validate(_assignment("PM-1", "assign:pm:1", "project_manager"))
+    request = RuntimeAssignmentRequest.model_validate(_assignment(task_key, "assign:pm:1", "project_manager"))
     with SAUnitOfWork() as uow:
         namespace = uow.projects.get_by_cli_command("workflow-project_manager")
         mode = uow.workflows.get_mode_by_key(namespace.workflow_id, "assigned")
@@ -42,7 +42,7 @@ def retained_pm(monkeypatch):
         binding = _bind_payload(bound)
         binding["concrete_agent_ref"] = AGENT_REF
         digest = {k: v for k, v in binding.items() if k != "task"}
-        digest.update(project_id=namespace.id, task_key="PM-1", role_key="project_manager")
+        digest.update(project_id=namespace.id, task_key=task_key, role_key="project_manager")
         values.update(
             task_id=task_id,
             binding_ref=binding["binding_ref"],
@@ -68,7 +68,7 @@ def retained_pm(monkeypatch):
         )
         identity = PMIdentity.model_validate(
             {
-                "task": "PM-1",
+                "task": task_key,
                 "execution_ref": "execution:pm:1",
                 "tracker_instance_ref": "tracker:one",
                 "tracker_project_ref": PROJECT_REF,

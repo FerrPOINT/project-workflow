@@ -7,7 +7,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import IntegrityError
 

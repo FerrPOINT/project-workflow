@@ -196,3 +196,17 @@ agent/execution identity substitution and known archived manifests. Namespace
 ownership and human project-scope tests now seed retained records directly
 instead of invoking removed PM bind endpoints. Their focused combined run passed
 104 tests; real PostgreSQL filled-upgrade and live acceptance remain separate gates.
+
+
+The old `test_runtime_api.py` positive native assign/bind/rebind/step families
+are retired with their HTTP writers. Its packet constructors and closed legacy
+hash check remain for history fixtures. Credential isolation is now exercised
+by `test_configured_service_auth.py`; replay, conflict and evaluator races use
+`test_configured_cli.py`.
+
+The former simultaneous legacy/current execution scenario is replaced by
+`test_configured_namespace_coexistence.py`: identical human task keys in two
+namespaces retain distinct records and reports, while only the configured
+namespace executes. The focused coexistence/legacy-wire/reader run passed11
+checks. Full pytest collection remains valid (3429 selected,149 excluded
+integration cases); collection is not execution evidence.
