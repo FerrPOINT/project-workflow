@@ -495,6 +495,27 @@
     }
   }
 }
+.base-content-section {
+  --base-content-section-padding: var(--base-panel-padding);
+  min-width: 0;
+  border-block: 0;
+  padding-block: 0;
+}
+.base-content-section[data-density="compact"] {
+  --base-content-section-padding: var(--base-control-padding-block);
+}
+.base-content-section:is([data-dividers="start"], [data-dividers="both"]) {
+  border-block-start: 1px solid var(--color-border);
+}
+.base-content-section:is([data-dividers="end"], [data-dividers="both"]) {
+  border-block-end: 1px solid var(--color-border);
+}
+.base-content-section:is([data-inset="start"], [data-inset="both"]) {
+  padding-block-start: var(--base-content-section-padding);
+}
+.base-content-section:is([data-inset="end"], [data-inset="both"]) {
+  padding-block-end: var(--base-content-section-padding);
+}
 .base-resource-list {
   --resource-row-padding-inline: var(--base-control-padding-inline);
   --resource-row-padding-block: var(--base-control-padding-block);
@@ -513,6 +534,9 @@
   border: 1px solid var(--color-border);
   border-radius: var(--base-radius);
   background: var(--color-surface);
+}
+.base-resource-list:empty {
+  border-width: 0;
 }
 :where(button.base-resource-list-row) {
   width: 100%;
@@ -2265,18 +2289,43 @@ body > .base-loading-state:not([data-scope="local"]) {
     border-radius: 50%;
     background: var(--base-badge-color);
   }
-  .base-progress {
+  .base-progress,
+  .base-data-bar {
     position: relative;
     width: 100%;
-    height: 8px;
+    height: var(--base-control-padding-block);
     overflow: hidden;
     border-radius: var(--base-radius);
     background: var(--color-surface-raised);
   }
-  .base-progress-fill {
+  .base-progress-fill,
+  .base-data-bar-segment {
     height: 100%;
     background: var(--color-accent);
+  }
+  .base-progress-fill {
     transition: width 0.3s;
+  }
+  .base-data-bar {
+    display: flex;
+  }
+  .base-data-bar-segment {
+    flex-shrink: 0;
+  }
+  .base-data-bar-segment[data-tone="success"] {
+    background: var(--color-success);
+  }
+  .base-data-bar-segment[data-tone="danger"] {
+    background: var(--color-danger);
+  }
+  .base-data-bar-segment[data-tone="warning"] {
+    background: var(--color-warning);
+  }
+  .base-data-bar-segment[data-tone="muted"] {
+    background: var(--color-text-muted);
+  }
+  .base-data-bar-segment[data-tone="info"] {
+    background: var(--color-highlight);
   }
   .base-progress[data-variant="success"] > .base-progress-fill {
     background: var(--color-success);

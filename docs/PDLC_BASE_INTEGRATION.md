@@ -330,3 +330,12 @@ adoption; приложение, backend и Storybook не пересобирал
 Штатный SSR export обновлён и --check прошёл. Изменение общего CSS добавляет
 React Workbench; Workflow не получает фиктивных контейнеров или React-зависимости.
 Прежние предметные шаблоны и HTTP/SSO обработчики не менялись.
+
+
+## SSR-ресурсы общего UI 0.3.10 — 2026-10-27
+
+UI producer `94f2ccd9e6f09eba9fbf67f4582a9fa7a91c44b9` закреплён независимо от SDK/skills.
+Штатный export и fingerprint --check прошли; новые content_section/data_bar
+получены вместе с общим CSS. Это не перенос предметных workflow, namespace,
+HTTP/SSO handlers или финансовой логики в Base. React-зависимости не добавлены.
+Source adoption не означает сборку backend, установку или приёмку runtime.

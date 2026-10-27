@@ -24,6 +24,13 @@
 <div class="base-section-header{% if class_name %} {{ class_name }}{% endif %}"{% if separated %} data-separated="true"{% endif %}><div class="base-section-heading"><h{{ heading_level }} class="base-section-title" data-level="{{ heading_level }}"{% if heading_id %} id="{{ heading_id }}"{% endif %}>{{ title }}</h{{ heading_level }}>{% if context is defined and context is not none and context is not sameas false and context != '' %}<div class="base-section-context">{{ context }}</div>{% endif %}</div>{% if actions is defined and actions is not none and actions is not sameas false and actions != '' %}<div class="base-action-group base-page-actions" data-align="start">{{ actions }}</div>{% endif %}</div>
 {%- endmacro %}
 
+{% macro content_section(tag='section', dividers='start', inset='auto', density='default', class_name='', attributes=none) -%}
+{% set element = tag if tag in ['section', 'div', 'article', 'aside', 'form', 'header', 'footer'] else 'section' -%}
+{% set edges = dividers if dividers in ['start', 'end', 'both', 'none'] else 'start' -%}
+{% set spacing = (inset if inset in ['start', 'end', 'both', 'none'] else edges) -%}
+<{{ element }} class="base-content-section{% if class_name %} {{ class_name }}{% endif %}" data-dividers="{{ edges }}" data-inset="{{ spacing }}" data-density="{{ density if density in ['default', 'compact'] else 'default' }}"{{ _native_attributes(attributes, ['class', 'data-dividers', 'data-inset', 'data-density']) }}>{{ caller() }}</{{ element }}>
+{%- endmacro %}
+
 {% macro code_block(value, id=none, label='Код', labelled_by=none, described_by=none, wrap=true, class_name='') -%}
 <pre class="base-code-block{% if class_name %} {{ class_name }}{% endif %}" role="region" tabindex="0" data-wrap="{{ 'true' if wrap else 'false' }}"{% if id %} id="{{ id }}"{% endif %}{% if labelled_by %} aria-labelledby="{{ labelled_by }}"{% else %} aria-label="{{ label }}"{% endif %}{% if described_by %} aria-describedby="{{ described_by }}"{% endif %}><code>{{ value }}</code></pre>
 {%- endmacro %}
@@ -129,6 +136,13 @@
 {% set known = value is number and value is not boolean and max is number and max is not boolean and max > 0 and value - value == 0 and max - max == 0 -%}
 {% set current = [max, [0, value]|max]|min if known else none -%}
 <div class="base-progress{% if class_name %} {{ class_name }}{% endif %}" role="progressbar" aria-valuemin="0"{% if known %} aria-valuemax="{{ max }}" aria-valuenow="{{ current }}"{% else %} data-unknown="true"{% endif %} data-variant="{{ variant }}"{% if label %} aria-label="{{ label }}"{% endif %}{% if value_text %} aria-valuetext="{{ value_text }}"{% endif %}><div class="base-progress-fill" style="width:{{ (current / max * 100) if known else 0 }}%"></div></div>
+{%- endmacro %}
+
+{% macro data_bar(segments, max=100, label=none, class_name='', attributes=none) -%}
+{% set scale = max is number and max is not boolean and max > 0 and max - max == 0 -%}
+{% set state = namespace(known=scale) -%}
+{% for item in segments -%}{% if item.value is not number or item.value is boolean or item.value - item.value != 0 -%}{% set state.known = false -%}{% endif -%}{% endfor -%}
+<div class="base-data-bar{% if class_name %} {{ class_name }}{% endif %}"{% if label %} role="img" aria-label="{{ label }}"{% else %} aria-hidden="true"{% endif %}{% if not state.known %} data-unknown="true"{% endif %}{{ _native_attributes(attributes, ['class','role','aria-label','aria-hidden','data-unknown']) }}>{% for item in segments -%}{% set valid = scale and item.value is number and item.value is not boolean and item.value - item.value == 0 -%}{% set portion = ([0, ([100, item.value / max * 100]|min)]|max) if valid else 0 -%}<span class="base-data-bar-segment" data-tone="{{ item.tone if item.tone in ['accent','success','danger','warning','muted','info'] else 'accent' }}" style="width:{{ portion }}%"></span>{% endfor %}</div>
 {%- endmacro %}
 
 {% macro card(class_name='', id=none, href=none, label=none, surface='default', highlighted=false, tag='div', padded=false, density='default', type='button', attributes=none) -%}
