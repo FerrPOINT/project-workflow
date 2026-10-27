@@ -89,6 +89,16 @@ def derive_compatibility(root: Path) -> dict[str, object]:
     )
 
     variant = os.environ.get("PROJECT_WORKFLOW_CATALOG_VARIANT", "legacy")
+    if variant == "single-task-v1":
+        from project_workflow.build_provenance import configured_runtime_compatibility
+        from project_workflow.domain.single_task_profile import CATALOG_SHA256, MANIFEST_SHA256
+
+        for filename, expected in (("single_task_catalog_v1.json", CATALOG_SHA256),
+                                   ("single_task_manifest_v1.json", MANIFEST_SHA256)):
+            if hashlib.sha256((root / "project_workflow/references" / filename).read_bytes()).hexdigest() != expected:
+                raise BuildProvenanceError("Configured Workflow profile differs from immutable inputs")
+        provenance = load_build_provenance(root / "runtime-build-manifest.json")
+        return configured_runtime_compatibility(provenance)
     catalog_path = BASE_CATALOG_PATH if variant == "base" else CATALOG_PATH
     catalog = load_managed_catalog(root / catalog_path)
     if variant not in {"legacy", "base"} or catalog.catalog_version != (4 if variant == "base" else 2):
@@ -142,17 +152,22 @@ def _add_context_files(context: bytes, files: dict[str, bytes]) -> bytes:
     return output.getvalue()
 
 
-def compatible_build_context(snapshot: GitSourceSnapshot, skills_root: Path,
+def compatible_build_context(snapshot: GitSourceSnapshot, skills_root: Path | None,
                              catalog_variant: str = "legacy") -> bytes:
-    if catalog_variant not in {"legacy", "base"}:
+    if catalog_variant not in {"legacy", "base", "single-task-v1"}:
         raise BuildProvenanceError("Unknown catalog variant")
     catalog_path = BASE_CATALOG_PATH if catalog_variant == "base" else CATALOG_PATH
     context = docker_context_with_manifest(snapshot.archive, snapshot.provenance)
     with tarfile.open(fileobj=io.BytesIO(context)) as source:
-        catalog_file = source.extractfile(catalog_path)
-        if catalog_file is None:
+        catalog_file = source.extractfile(catalog_path) if catalog_variant != "single-task-v1" else None
+        if catalog_file is None and catalog_variant != "single-task-v1":
             raise BuildProvenanceError("Canonical catalog missing from immutable archive")
-        catalog = json.load(catalog_file)
+        catalog = json.load(catalog_file) if catalog_file else None
+    if catalog_variant == "single-task-v1":
+        # Instructions are sealed Workflow artifacts, not a native skill bootstrap.
+        return _derive_context_descriptor(context, catalog_variant)
+    if skills_root is None:
+        raise BuildProvenanceError("Native catalog build requires an explicit skills checkout")
     pin = catalog["skills_source"]
     if catalog_variant == "base":
         from project_workflow.infrastructure.db.managed_catalog import CatalogSource
@@ -172,6 +187,10 @@ def compatible_build_context(snapshot: GitSourceSnapshot, skills_root: Path,
     if not isinstance(manifest, bytes):
         raise BuildProvenanceError("Native skills manifest is unavailable")
     context = _add_context_files(context, {SKILLS_MANIFEST_PATH: manifest})
+    return _derive_context_descriptor(context, catalog_variant)
+
+
+def _derive_context_descriptor(context: bytes, catalog_variant: str) -> bytes:
     # Execute the exporter from the same archived source that Docker will install.
     # Neither a dirty builder checkout nor its installed policy can change pins.
     with tempfile.TemporaryDirectory(prefix="workflow-compatibility-") as directory:
@@ -218,7 +237,7 @@ def build_resource_args() -> list[str]:
 
 
 def build_image(root: Path, image: str, docker: str, revision: str = "HEAD",
-                *, skills_root: Path, catalog_variant: str = "legacy") -> None:
+                *, skills_root: Path | None = None, catalog_variant: str = "legacy") -> None:
     resources = build_resource_args()
     snapshot = immutable_git_snapshot(root, revision)
     provenance = snapshot.provenance
@@ -263,8 +282,8 @@ def main(argv: list[str] | None = None) -> int:
     build.add_argument("--docker", default="docker")
     build.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
     build.add_argument("--revision", default="HEAD")
-    build.add_argument("--skills-root", type=Path, required=True)
-    build.add_argument("--catalog-variant", choices=("legacy", "base"), default="legacy")
+    build.add_argument("--skills-root", type=Path)
+    build.add_argument("--catalog-variant", choices=("legacy", "base", "single-task-v1"), default="legacy")
 
     for name in ("derive-compatibility", "verify-compatibility"):
         subparsers.add_parser(name).add_argument("--root", type=Path, required=True)
@@ -280,7 +299,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "build":
             build_image(args.root.resolve(), args.image, args.docker, args.revision,
-                        skills_root=args.skills_root.resolve(), catalog_variant=args.catalog_variant)
+                        skills_root=args.skills_root.resolve() if args.skills_root else None,
+                        catalog_variant=args.catalog_variant)
         elif args.command == "derive-compatibility":
             (args.root / COMPATIBILITY_PATH).write_bytes(_json_bytes(derive_compatibility(args.root)))
         elif args.command == "verify-compatibility":

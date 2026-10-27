@@ -618,6 +618,61 @@ def test_compatible_image_delivers_descriptor_to_docker(compatible_sources):
     assert "COPY --from=builder /app/runtime-compatibility.json /app/runtime-compatibility.json" in dockerfile
 
 
+def test_configured_image_derives_its_sealed_profile_without_native_skills(compatible_sources, tmp_path):
+    from project_workflow.build_provenance import validate_runtime_compatibility
+    from project_workflow.domain.single_task_profile import CATALOG_SHA256, MANIFEST_SHA256
+
+    source, _, _, _ = compatible_sources
+    builder = _builder_module()
+    snapshot = builder.immutable_git_snapshot(source, "HEAD")
+    context = builder.compatible_build_context(snapshot, None, "single-task-v1")
+    descriptor = json.loads(_member_bytes(context, builder.COMPATIBILITY_PATH))
+    assert validate_runtime_compatibility(descriptor) == descriptor
+    assert descriptor["catalogRevision"] == snapshot.provenance.source_revision
+    assert descriptor["catalogVersion"] == 1
+    assert descriptor["catalogSha256"] == CATALOG_SHA256
+    assert descriptor["instructionManifestSha256"] == MANIFEST_SHA256
+    assert descriptor["capabilityRevision"] == "configured-workflow-cli/v1"
+    assert "skillsRevision" not in descriptor
+    assert runtime_bundle_sha256_from_archive(context) == snapshot.provenance.runtime_bundle_sha256
+    extracted = tmp_path / "configured-context"
+    extracted.mkdir()
+    _extract_regular_context(context, extracted)
+    environment = dict(os.environ, PROJECT_WORKFLOW_CATALOG_VARIANT="single-task-v1")
+    command = [sys.executable, "-m", "scripts.build_runtime_image", "verify-compatibility", "--root", str(extracted)]
+    result = subprocess.run(command, cwd=extracted, env=environment, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    path = extracted / "project_workflow/references/single_task_catalog_v1.json"
+    path.chmod(0o644)
+    path.write_bytes(path.read_bytes().replace(b"PM-DRAFT-01", b"PM-DRAFT-99"))
+    result = subprocess.run(command, cwd=extracted, env=environment, capture_output=True, text=True)
+    assert result.returncode == 2 and "profile" in result.stderr.lower()
+
+
+def test_native_build_still_requires_its_explicit_skills_input(compatible_sources):
+    source, _, _, _ = compatible_sources
+    builder = _builder_module()
+    snapshot = builder.immutable_git_snapshot(source, "HEAD")
+    with pytest.raises(BuildProvenanceError, match="explicit skills checkout"):
+        builder.compatible_build_context(snapshot, None, "legacy")
+
+
+@pytest.mark.parametrize("change", [
+    {"catalogVersion": 4}, {"instructionManifestSha256": "invalid"},
+    {"skillsRevision": "a" * 40}, {"capabilityRevision": "unknown/v1"},
+])
+def test_configured_descriptor_rejects_mixed_or_invalid_contract(change):
+    from project_workflow.build_provenance import validate_runtime_compatibility
+
+    descriptor = {
+        "catalogVersion": 1, "catalogRevision": "a" * 40,
+        "catalogSha256": "b" * 64, "instructionManifestSha256": "c" * 64,
+        "capabilityRevision": "configured-workflow-cli/v1", "capabilitySha256": "d" * 64,
+    }
+    with pytest.raises(BuildProvenanceError):
+        validate_runtime_compatibility({**descriptor, **change})
+
+
 @pytest.mark.parametrize("limits", [None, ("256", "1"), ("2048", "2"), ("32768", "8")])
 def test_build_resource_limits_preserve_context_and_provenance(git_source, monkeypatch, limits):
     builder = _builder_module()

@@ -94,6 +94,9 @@ def validate_runtime_compatibility(value: Any) -> dict[str, Any]:
         "capabilityRevision",
         "capabilitySha256",
     }
+    configured = isinstance(value, dict) and value.get("capabilityRevision") == "configured-workflow-cli/v1"
+    if configured:
+        keys = keys - {"skillsRevision", "skillsManifestSha256"} | {"instructionManifestSha256"}
     if not isinstance(value, dict) or set(value) != keys:
         raise BuildProvenanceError("Runtime compatibility schema invalid")
     if (
@@ -101,13 +104,16 @@ def validate_runtime_compatibility(value: Any) -> dict[str, Any]:
         or not (
             value["catalogVersion"] == 2 and value["capabilityRevision"] == "hermes-sdlc-runtime/v2"
             or value["catalogVersion"] in {3, 4} and value["capabilityRevision"] == "base-workflow-controlplane/v1"
+            or value["catalogVersion"] == 1 and configured
         )
     ):
         raise BuildProvenanceError("Runtime compatibility version invalid")
-    for name in ("catalogRevision", "skillsRevision"):
+    for name in (("catalogRevision",) if configured else ("catalogRevision", "skillsRevision")):
         if not isinstance(value[name], str) or re.fullmatch(r"[a-f0-9]{40}", value[name]) is None:
             raise BuildProvenanceError("Runtime compatibility revision invalid")
-    for name in ("catalogSha256", "skillsManifestSha256", "capabilitySha256"):
+    hashes = ("catalogSha256", "capabilitySha256",
+              "instructionManifestSha256" if configured else "skillsManifestSha256")
+    for name in hashes:
         if not isinstance(value[name], str) or _SHA256_PATTERN.fullmatch(value[name]) is None:
             raise BuildProvenanceError("Runtime compatibility hash invalid")
     return dict(value)
@@ -125,6 +131,24 @@ def runtime_compatibility_descriptor(
     if descriptor["catalogRevision"] != (provenance or load_build_provenance()).source_revision:
         raise BuildProvenanceError("Runtime compatibility source revision mismatch")
     return descriptor
+
+
+def configured_runtime_compatibility(provenance: BuildProvenance) -> dict[str, Any]:
+    """Describe the actual installed instruction package, without a skills bootstrap."""
+    from project_workflow.domain.single_task_profile import CATALOG_SHA256, MANIFEST_SHA256
+    from project_workflow.infrastructure.db.single_task_catalog import load_profile
+
+    load_profile()
+    capabilities = {"catalogRead": True, "configuredExecution": True}
+    canonical = (json.dumps(capabilities, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode()
+    return {
+        "catalogVersion": 1,
+        "catalogRevision": provenance.source_revision,
+        "catalogSha256": CATALOG_SHA256,
+        "instructionManifestSha256": MANIFEST_SHA256,
+        "capabilityRevision": "configured-workflow-cli/v1",
+        "capabilitySha256": hashlib.sha256(canonical).hexdigest(),
+    }
 
 
 def _canonical_digest(records: list[dict[str, str]]) -> str:

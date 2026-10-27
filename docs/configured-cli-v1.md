@@ -137,3 +137,17 @@ rows и migration ledger. Предыдущие manifest/catalog сохраняю
 Обычный unit/static gate не запускает живой Hermes. Ручной all-role/Rework прогон
 PDLC1, PostgreSQL на заполненной и новой БД, упакованные CLI, происхождение
 установленного образа и rollback остаются обязательными отдельными проверками.
+
+## Immutable image
+
+Producer принимает `--catalog-variant single-task-v1` без `--skills-root`.
+Он читает каталог и manifest из точного Git-архива, проверяет sealed hashes и
+семь профессий / восемь режимов, затем включает `runtime-compatibility.json`.
+Дескриптор `configured-workflow-cli/v1` фиксирует source SHA, каталог,
+instruction manifest и возможности API. Native skills revision в нём отсутствует:
+инструкции этого пути принадлежат установленному пакету Workflow.
+
+При проверке образа Base сравнивает дескриптор с фактически установленным
+пакетом, сохраняя проверки image ID, source archive и runtime bundle. Сохранённые
+legacy/base-дескрипторы читаются своим закрытым форматом; это не второй
+исполняющий путь и не автоматический выбор старого протокола.
