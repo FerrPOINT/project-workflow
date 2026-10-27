@@ -85,6 +85,16 @@ fence internally. Exact key/version/report replay returns its saved result;
 changed payload conflicts. A committed report is not necessarily a completed
 phase: inspect verdict, status, missing/blockers and complete.
 
+The first-phase report must include actual response evidence from the successful
+no-report CLI call, not just repeat instructions or assert that the call happened.
+The CLI prints `interaction_protocol`, `task`, `namespace_id`,
+`concrete_agent_ref`, `assignment_ref`, `execution_ref`, `business_task_ref`,
+`phase_code`, `version` and `status` at the top level of stdout JSON. HTTP
+`ok/result` wrappers are not part of this CLI output. Include the actual Tracker
+task/root, stage/status and input references; omit credentials. The evidence is
+the instruction read already received, not a future PASS for the report. A PARTIAL
+response stays unfinished and must be handled using its returned version.
+
 After uncertain HTTP acceptance, retain the exact key/version/report and read
 the original operation; never allocate a replacement key or automatically
 redispatch. Safe JSON preserves HTTP status without raw HTTP bodies/secrets.

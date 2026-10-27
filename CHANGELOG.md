@@ -48,6 +48,11 @@
 
 
 ### Changed
+- Configured PM first-step reports explicitly include the already observed CLI
+  stdout fields and Tracker task/input references. CLI JSON is flattened; do not
+  invent HTTP ok/result wrappers or a future report verdict as evidence. Existing
+  verifier/check lists remain unchanged. Fifty-one focused tests and Ruff pass;
+  the instruction update is not installed or live-accepted yet.
 - Actual retained0015-copy migration-only qualification passes on `6c98e83`:
   two existing `ensure_migrated()` calls preserve old data/catalog/PM history,
   add only four identity tables and reach0019; outer cleanup is verified.
