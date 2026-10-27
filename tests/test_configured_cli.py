@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from project_workflow import config
 from project_workflow.application import configured_cli
 from project_workflow.domain.configured_cli import ConfiguredStep
+from project_workflow.domain.single_task_profile import RETAINED_MANIFEST_SHA256, SUPPORTED_MANIFESTS
 from project_workflow.infrastructure import configured_cli_tracker, namespace_auth, pm_readback
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.single_task_catalog import ensure_single_task_catalog
@@ -615,6 +616,62 @@ def test_instruction_projection_retains_business_rules_without_rewriting_catalog
     assert "not an external verifier checklist" in text
     assert "while Tracker remains in Draft" in projected[0].checks[1].description
     assert "terminal receipt" not in projected[0].checks[1].description
+
+
+@pytest.mark.parametrize("manifest", SUPPORTED_MANIFESTS)
+@pytest.mark.parametrize("security", [
+    "", " Custom security constraint: never disclose credentials or change the owner.",
+])
+def test_preparation_projection_requires_only_actual_questions_and_choices(manifest, security):
+    from copy import deepcopy
+
+    from project_workflow.infrastructure import configured_cli_instructions as instructions
+    from project_workflow.infrastructure import single_task_delivery_instructions as delivery
+    from project_workflow.infrastructure.db.single_task_catalog import load_profile
+    from project_workflow.infrastructure.llm import PromptBuilder
+    from project_workflow.supervisor.models import Phase, PhaseCheck, PhaseEvidence, PhaseInstruction
+
+    catalog, _ = load_profile(manifest)
+    original_catalog = deepcopy(catalog)
+    pm = next(workflow for workflow in catalog["workflows"] if workflow["role_key"] == "project_manager")
+    preparation = next(phase for phase in pm["modes"][0]["phases"] if phase["code"] == "PM-DRAFT-02")
+    source = Phase(code=preparation["code"],
+        instructions=[PhaseInstruction(item["description"] + security) for item in preparation["instructions"]],
+        checks=[PhaseCheck(item + security) for item in preparation["checks"]],
+        evidence=[PhaseEvidence(item + security) for item in preparation["evidence"]])
+    before = deepcopy(source)
+    projected = instructions.phases([source])[0]
+    worker = "\n".join(item.step for item in projected.instructions)
+    checks = "\n".join(item.description for item in projected.checks)
+    evidence = "\n".join(item.item for item in projected.evidence)
+    assert "without asking for separate permission to save the draft" in worker
+    assert "clarify only actual remaining gaps" in worker
+    assert "When clarification is needed, brainstorm" in worker
+    assert "Formal clarification is conditional on an actual unresolved gap" in worker
+    assert delivery.PM_DRAFT_CHECKS[1] in checks
+    assert delivery.PM_DRAFT_CHECKS[2] in checks
+    assert delivery.PM_DRAFT_EVIDENCE[1] in evidence
+    assert "Ask one useful question at a time and accept free-form answers." not in worker
+    assert "Offer a few meaningful alternatives with tradeoffs;" not in worker
+    assert "Alternatives, tradeoffs and contradictions were reviewed" not in checks
+    if manifest == RETAINED_MANIFEST_SHA256:
+        assert "Offer alternatives with tradeoffs only when meaningful unresolved choices exist" in worker
+        assert "without clarification questions or invented alternatives" in worker
+        assert "Alternatives and tradeoffs were reviewed only when meaningful unresolved choices existed" in checks
+        assert "Choices/tradeoffs evidence is required only when meaningful unresolved choices existed" in evidence
+    prompt = PromptBuilder.build_user_prompt("SDLC-901", projected, "Actual saved Draft derived from a complete brief")
+    for item in [*(row.step for row in projected.instructions), *(row.description for row in projected.checks),
+                 *(row.item for row in projected.evidence)]:
+        assert item in prompt
+        if security:
+            assert item.endswith(security)
+    assert source == before and catalog == original_catalog
+    assert instructions.phases([projected]) == [projected]
+    other = Phase(code="OTHER-02",
+        instructions=[PhaseInstruction(next(iter(instructions.PM_PREPARATION_REPLACEMENTS)))],
+        checks=[PhaseCheck(next(iter(instructions.PM_PREPARATION_CHECK_REPLACEMENTS)))],
+        evidence=[PhaseEvidence(next(iter(instructions.PM_PREPARATION_EVIDENCE_REPLACEMENTS)))])
+    assert instructions.phases([other]) == [other]
 
 
 def test_stored_legacy_pm_confirmation_contract_projects_for_read_and_evaluation(

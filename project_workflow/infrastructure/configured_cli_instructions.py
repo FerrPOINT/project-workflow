@@ -114,6 +114,33 @@ FINAL = (
     "do not create Analysis intent, dispatch Analyst or confirm requirements as the owner."
 )
 
+# Retained preparation must not turn a complete brief into a mandatory questionnaire.
+PM_PREPARATION_REPLACEMENTS = {
+    "Offer a few meaningful alternatives with tradeoffs; surface contradictions and test assumptions together. "
+    "Ask one useful question at a time and accept free-form answers.":
+        "Offer alternatives with tradeoffs only when meaningful unresolved choices exist. "
+        "Ask one useful question at a time only for actual incomplete or contradictory input; "
+        "accept free-form answers. For a complete, consistent brief, proceed directly to requirements "
+        "without clarification questions or invented alternatives.",
+    "Brainstorm in small free-form iterations before a document exists;":
+        "When clarification is needed, brainstorm in small free-form iterations before a document exists;",
+    "Formal clarification requires an existing requirements revision:":
+        "Formal clarification is conditional on an actual unresolved gap and requires an existing "
+        "requirements revision:",
+}
+PM_PREPARATION_CHECK_REPLACEMENTS = {
+    "Alternatives, tradeoffs and contradictions were reviewed without preselection or implied consent.":
+        delivery.PM_DRAFT_CHECKS[1] + " Alternatives and tradeoffs were reviewed only when meaningful unresolved "
+        "choices existed, without preselection or implied consent.",
+    "Unanswered business questions remain explicit; owner confirmation is a separate exact action.":
+        delivery.PM_DRAFT_CHECKS[2],
+}
+PM_PREPARATION_EVIDENCE_REPLACEMENTS = {
+    "Saved Draft revision/hash, agreed choices, open questions and owner review presentation.":
+        " ".join(delivery.PM_DRAFT_EVIDENCE) + " Choices/tradeoffs evidence is required only when meaningful "
+        "unresolved choices existed; never invent questions, answers or alternatives.",
+}
+
 # Stored PM catalogs predate the current terminal policy. Replace only their known
 # transport/routing clauses, so appended or interleaved security constraints survive.
 PM_FINAL_REPLACEMENTS = {
@@ -190,11 +217,21 @@ def phases(source: list[Phase]) -> list[Phase]:
     projected = deepcopy(source)
     for phase in projected:
         for item in phase.instructions:
+            if phase.code == "PM-DRAFT-02":
+                for old, new in PM_PREPARATION_REPLACEMENTS.items():
+                    item.step = item.step.replace(old, new)
             if phase.code == "PM-DRAFT-03":
                 for old, new in PM_FINAL_REPLACEMENTS.items():
                     item.step = item.step.replace(old, new)
             for old, new in replacements.items():
                 item.step = item.step.replace(old, new)
+        if phase.code == "PM-DRAFT-02":
+            for check in phase.checks:
+                for old, new in PM_PREPARATION_CHECK_REPLACEMENTS.items():
+                    check.description = check.description.replace(old, new)
+            for evidence in phase.evidence:
+                for old, new in PM_PREPARATION_EVIDENCE_REPLACEMENTS.items():
+                    evidence.item = evidence.item.replace(old, new)
         if phase.code == "PM-DRAFT-03":
             for check in phase.checks:
                 for old, new in PM_FINAL_CHECK_REPLACEMENTS.items():
