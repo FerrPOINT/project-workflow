@@ -50,8 +50,6 @@
 .timeline-connector::before{top:0;bottom:calc(50% + 21px)}
 .timeline-connector::after{top:calc(50% + 21px);bottom:0}
 .phase-add-btn{position:relative;z-index:1}
-.timeline.is-compact{border-top:1px solid var(--border)}
-.timeline.is-compact .timeline-block{border-bottom:1px solid var(--border)}
 .timeline.is-compact .phase-card-shell{min-height:0}
 .timeline.is-compact .timeline-card{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-inline-end:104px}
 .timeline.is-compact .timeline-card .timeline-name{padding-right:0;overflow-wrap:anywhere}
@@ -62,15 +60,17 @@
 .timeline.is-compact .timeline-parallel-header{margin:0}
 .timeline.is-compact .timeline-parallel-grid{display:block}
 .timeline.is-compact .timeline-group-transition{margin:0}
-.timeline.is-compact .timeline-parallel-grid .timeline-item:not(:last-child){border-bottom:1px solid var(--border)}
 .timeline.is-compact .timeline-connector{height:0}
 .timeline.is-compact .timeline-connector::before,.timeline.is-compact .timeline-connector::after{display:none}
 .timeline.is-compact .timeline-connector .phase-add-btn{position:absolute;right:58px;bottom:8px}
+/* A group barrier is content, not a phase row with reserved action space. */
+.timeline.is-compact .timeline-parallel-group + .timeline-connector{height:52px}
+.timeline.is-compact .timeline-parallel-group + .timeline-connector .phase-add-btn{position:static}
 @media(max-width:760px){.mode-tabs{display:none}.mode-picker{display:block}.phase-view-controls{width:100%}.phase-jump-select{flex:1 1 100%}.timeline-parallel-grid{grid-template-columns:1fr}.phase-card-shell{min-height:0}.timeline.is-compact .timeline-card{display:block}.timeline.is-compact .timeline-desc{display:none}.timeline.is-compact .execution-row{width:auto;max-width:none;margin-top:4px;justify-content:flex-start}}
 {% endblock %}
 
-{% macro phase_card(p) -%}
-<div class="timeline-item" id="phase-{{ p.id }}" data-phase-id="{{ p.id }}" data-phase-order="{{ p.phase_num }}" data-execution-type="{{ p.execution_type }}">
+{% macro phase_card(p, divider=false) -%}
+{% call base_ui.content_section(tag='div', dividers='end' if divider and phase_count >= 8 else 'none', inset='none', class_name='timeline-item', attributes={'id':'phase-' ~ p.id, 'data-phase-id':p.id, 'data-phase-order':p.phase_num, 'data-execution-type':p.execution_type, 'data-phase-divider':'end' if divider else none}) %}
   <div class="phase-card-shell">
     {% set compact = phase_count >= 8 %}
     {% set render_panel = base_ui.resource_list_row if compact else base_ui.card %}
@@ -96,7 +96,7 @@
     {% endcall %}
 {% endif %}
   </div>
-</div>
+{% endcall %}
 {%- endmacro %}
 
 {% macro workflow_nav_item(workflow) -%}
@@ -192,7 +192,7 @@
     </div>
     {% endif %}
 
-    <div class="timeline{% if phase_count >= 8 %} is-compact{% endif %}" id="phasesTimeline"{% if selected_workflow_id %} data-workflow-id="{{ selected_workflow_id }}"{% endif %}{% if selected_mode_id %} data-mode-id="{{ selected_mode_id }}"{% endif %} data-testid="workflow-mode-phases" aria-live="polite" aria-busy="false">
+    {% call base_ui.content_section(tag='div', dividers='start' if phase_count >= 8 else 'none', inset='none', class_name='timeline' ~ (' is-compact' if phase_count >= 8 else ''), attributes={'id':'phasesTimeline', 'data-workflow-id':selected_workflow_id if selected_workflow_id else none, 'data-mode-id':selected_mode_id if selected_mode_id else none, 'data-testid':'workflow-mode-phases', 'aria-live':'polite', 'aria-busy':'false'}) %}
       {% for block in phase_blocks %}
         {% if block.kind == 'parallel' %}
         {% call base_ui.card(tag="section", padded=true, class_name="timeline-block timeline-parallel-group", label="Параллельная группа: " ~ (block.phases | map(attribute='name') | join(', '))) %}
@@ -200,10 +200,10 @@
             {{ base_ui.badge('Параллельная группа', 'info', class_name='timeline-parallel-label') }}
             {{ base_ui.resource_list_description((block.phases|length) ~ ' одновременно', tag='div', class_name='timeline-parallel-count') }}
           </div>
-          <div class="timeline-parallel-grid">{% for p in block.phases %}{{ phase_card(p) }}{% endfor %}</div>
+          <div class="timeline-parallel-grid">{% for p in block.phases %}{{ phase_card(p, divider=not loop.last) }}{% endfor %}</div>
           {% if not loop.last %}<div class="timeline-group-transition">{{ base_ui.notice(base_ui.resource_list_description('Следующий этап — после завершения всех фаз группы.'), appearance='inline', separated=true) }}</div>{% endif %}
         {% endcall %}
-        {% else %}<section class="timeline-block">{{ phase_card(block.phases[0]) }}</section>{% endif %}
+        {% else %}{% call base_ui.content_section(tag='section', dividers='end' if phase_count >= 8 else 'none', inset='none', class_name='timeline-block', attributes={'data-phase-divider':'end'}) %}{{ phase_card(block.phases[0]) }}{% endcall %}{% endif %}
 {% if can_administer %}
         <div class="timeline-connector">
           {% call base_ui.button(variant="outline", size="icon", class_name="phase-add-btn", type="button", aria_label="Добавить фазу после блока", title="Добавить фазу после блока", attributes={"data-after-order": (block.phases[-1].phase_num), "onclick": "addPhaseAfter(this)"}) %}+{% endcall %}
@@ -213,7 +213,7 @@
         <div data-testid="workflow-mode-empty">{{ base_ui.state('empty', 'В этом режиме фаз пока нет.') }}</div>
         {% if can_administer and selected_workflow_id %}<div class="timeline-connector">{% call base_ui.button(variant="outline", size="icon", class_name="phase-add-btn", type="button", aria_label="Добавить первую фазу", attributes={"data-after-order": "0", "onclick": "addPhaseAfter(this)"}) %}+{% endcall %}</div>{% endif %}
       {% endfor %}
-    </div>
+    {% endcall %}
 
 </section>
   </section>
@@ -235,6 +235,10 @@ function setPhaseView(view,persist=true){
   const timeline=document.getElementById('phasesTimeline');
   if(!timeline||!['compact','timeline'].includes(view))return;
   timeline.classList.toggle('is-compact',view==='compact');
+  timeline.dataset.dividers=view==='compact'?'start':'none';
+  timeline.querySelectorAll('[data-phase-divider]').forEach(section=>{
+    section.dataset.dividers=view==='compact'?section.dataset.phaseDivider:'none';
+  });
   timeline.querySelectorAll('a.timeline-card').forEach(card=>{
     card.classList.toggle('base-card',view==='timeline');
     card.classList.toggle('base-card-content',view==='timeline');

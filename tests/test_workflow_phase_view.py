@@ -11,16 +11,19 @@ from tests import test_ui_shell_template as shell
 pytestmark = pytest.mark.ui
 
 
-def render_editor(admin, count=8):
+def render_editor(admin, count=8, *, parallel=False):
     workflow = dict(id=3, name="Delivery <3>", description="", phase_count=count, namespace_count=0)
     phases = [dict(id=i, phase_num=i, name=f"Phase {i}", description="", execution_type="sync")
               for i in range(1, count + 1)]
+    blocks = ([dict(kind="parallel", phases=phases[:2])] if parallel else []) + [
+        dict(kind="sync", phases=[phase]) for phase in phases[2 if parallel else 0:]
+    ]
     return shell.SharedShellTemplateTests().render_shell(
         [], template="workflows.html", can_administer=admin,
         workflows=[workflow], selected_workflow=workflow, selected_workflow_id=3,
         selected_namespace=None, modes=[], selected_mode_id=None,
         phases=phases, phase_count=count,
-        phase_blocks=[dict(kind="sync", phases=[phase]) for phase in phases],
+        phase_blocks=blocks,
     )
 
 
@@ -45,6 +48,31 @@ def test_editor_header_actions_keep_native_semantics_and_product_handlers(admin)
 
 
 @pytest.mark.parametrize("admin", [False, True])
+@pytest.mark.parametrize("count,parallel", [(0, False), (1, False), (2, False), (8, False), (2, True), (8, True)])
+def test_phase_dividers_follow_the_initial_view_without_changing_native_phase_links(admin, count, parallel):
+    elements = shell.Elements(render_editor(admin, count, parallel=parallel)).elements
+    timeline = next(attrs for _, attrs in elements if attrs.get("id") == "phasesTimeline")
+    assert "base-content-section" in timeline["class"].split()
+    assert timeline["data-dividers"] == ("start" if count >= 8 else "none")
+    assert timeline["data-inset"] == "none"
+    assert timeline["data-workflow-id"] == "3"
+    assert timeline["aria-live"] == "polite" and timeline["aria-busy"] == "false"
+    phases = [(tag, attrs) for tag, attrs in elements if "data-phase-id" in attrs]
+    assert [attrs["data-phase-id"] for _, attrs in phases] == [str(i) for i in range(1, count + 1)]
+    assert all(tag == "div" and "base-content-section" in attrs["class"].split() for tag, attrs in phases)
+    assert all("role" not in attrs and "tabindex" not in attrs for _, attrs in phases)
+    markers = [attrs for _, attrs in elements if "data-phase-divider" in attrs]
+    assert len(markers) == count - int(parallel)
+    assert all(attrs["data-phase-divider"] == "end" for attrs in markers)
+    assert all(attrs["data-dividers"] == ("end" if count >= 8 else "none") for attrs in markers)
+    links = [attrs for tag, attrs in elements if tag == "a" and "timeline-card" in attrs.get("class", "").split()]
+    assert [attrs["href"] for attrs in links] == [f"/workflow/phase/{i}" for i in range(1, count + 1)]
+    assert all(attrs["data-interactive"] == "true" for attrs in links)
+    assert sum(tag == "details" and "phase-card-actions" in attrs.get("class", "").split()
+               for tag, attrs in elements) == (count if admin else 0)
+
+
+@pytest.mark.parametrize("admin", [False, True])
 @pytest.mark.parametrize("view", ["compact", "timeline"])
 def test_phase_view_changes_base_skin_for_each_role_without_writing_during_restore(admin, view):
     html = render_editor(admin)
@@ -56,7 +84,9 @@ const classes=new Set(['base-resource-list-row']);
 const toggles=values=>({toggle(name,on){on?values.add(name):values.delete(name);}});
 const card={classList:toggles(classes)};
 const timelineClasses=new Set(['is-compact']);
-const timeline={classList:toggles(timelineClasses),querySelectorAll:()=>[card]};
+const sections=[{dataset:{phaseDivider:'end',dividers:'end'}},{dataset:{phaseDivider:'end',dividers:'end'}}];
+const timeline={dataset:{dividers:'start'},classList:toggles(timelineClasses),
+ querySelectorAll:selector=>selector==='a.timeline-card'?[card]:sections};
 const radios=['compact','timeline'].map(value=>({value,checked:value==='compact'}));
 const legacyButtons=radios.map(r=>({dataset:{phaseView:r.value},setAttribute(){}}));
 const menus=[{open:true}];let writes=[];
@@ -67,6 +97,7 @@ const localStorage={setItem:(key,value)=>writes.push([key,value])};
 SOURCE
 setPhaseView(view,false);
 const restored={classes:[...classes].sort(),compact:timelineClasses.has('is-compact'),
+ dividers:{root:timeline.dataset.dividers,sections:sections.map(section=>section.dataset.dividers)},
  radios:radios.map(r=>r.checked),menusClosed:menus.every(m=>!m.open),writes:[...writes]};
 setPhaseView(view);
 setPhaseView('invalid');
@@ -79,6 +110,8 @@ console.log(JSON.stringify({restored,writes}));
         "restored": {
             "classes": ["base-resource-list-row"] if view == "compact" else ["base-card", "base-card-content"],
             "compact": view == "compact", "radios": [view == "compact", view == "timeline"],
+            "dividers": {"root": "start" if view == "compact" else "none",
+                         "sections": ["end" if view == "compact" else "none"] * 2},
             "menusClosed": True, "writes": [],
         },
         "writes": [["phase-view-mode", view]],
@@ -134,7 +167,9 @@ const radios=['compact','timeline'].map(value=>new HTMLInputElement(value));
 const classes=new Set(['base-resource-list-row']);
 const toggles=values=>({toggle(name,on){on?values.add(name):values.delete(name);}});
 const timelineClasses=new Set(['is-compact']);
-const timeline={classList:toggles(timelineClasses),querySelectorAll:()=>[{classList:toggles(classes)}]};
+const sections=[{dataset:{phaseDivider:'end',dividers:'end'}}];
+const timeline={dataset:{dividers:'start'},classList:toggles(timelineClasses),
+ querySelectorAll:selector=>selector==='a.timeline-card'?[{classList:toggles(classes)}]:sections};
 let changed;
 const group={addEventListener(type,callback){if(type==='change')changed=callback;}};
 const document={getElementById:id=>id==='phasesTimeline'?timeline:id==='phaseView'?group:null,
@@ -144,7 +179,8 @@ const localStorage={getItem(){if(storage==='unavailable')throw Error('storage');
  setItem(key,value){if(storage==='unavailable')throw Error('storage');writes.push([key,value]);}};
 SOURCE
 ready.forEach(callback=>callback());
-const restored={writes:[...writes],selected:radios.filter(r=>r.checked).map(r=>r.value)};
+const restored={writes:[...writes],selected:radios.filter(r=>r.checked).map(r=>r.value),
+ dividers:{root:timeline.dataset.dividers,sections:sections.map(section=>section.dataset.dividers)}};
 radios[1].checked=false;changed({target:radios[1]});changed({target:{name:'phase-view',checked:true,value:'timeline'}});
 const ignored=writes.length;
 radios[1].checked=true;changed({target:radios[1]});
@@ -154,7 +190,9 @@ console.log(JSON.stringify({restored,ignored,selected:radios.filter(r=>r.checked
                             encoding="utf-8", capture_output=True, timeout=10)
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout) == {
-        "restored": {"writes": [], "selected": [storage if storage in ["compact", "timeline"] else "compact"]},
+        "restored": {"writes": [], "selected": [storage if storage in ["compact", "timeline"] else "compact"],
+                     "dividers": {"root": "none" if storage == "timeline" else "start",
+                                  "sections": ["none" if storage == "timeline" else "end"]}},
         "ignored": 0, "selected": ["timeline"],
         "writes": [] if storage == "unavailable" else [["phase-view-mode", "timeline"]],
     }
