@@ -8,6 +8,13 @@
 
 ### Added
 
+- Configured PM phase pages now show the actual projected instructions, with
+  stored legacy content explicitly historical/read-only. Existing read APIs add
+  effective_view without replacing raw fields. Raw PM catalog mutations refuse
+  before writes; unrelated editing remains available. Preparation no longer
+  waits for final owner consent, which belongs to phase3. Source validation and
+  UI evidence are separate from installing this candidate or live PM acceptance.
+
 - Configured PM preparation in retained652a now asks questions/offers alternatives
   only for actual gaps or meaningful choices. Eight focused content checks cover
   all supported families, real judge prompts and appended security constraints;

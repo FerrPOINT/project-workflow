@@ -240,9 +240,9 @@ def _serve_ui(page, client, *, unavailable=False):
     return writes
 
 
-@pytest.mark.parametrize("mobile", [False, True])
+@pytest.mark.parametrize("viewport", [(375, 812), (1920, 1080), (2560, 1440)])
 @pytest.mark.parametrize("instructions_only", [False, True])
-def test_configured_browser_read_only_history_and_no_writes(catalog, tmp_path, mobile, instructions_only):
+def test_configured_browser_read_only_history_and_no_writes(catalog, tmp_path, viewport, instructions_only):
     client, _, binding, mode = catalog
     phase_id = mode.phase_ids[0]
     path = (f"/instructions?phase_id={phase_id}&profession_id={binding.namespace_id}" if instructions_only
@@ -251,7 +251,7 @@ def test_configured_browser_read_only_history_and_no_writes(catalog, tmp_path, m
     errors = []
     with _browser().sync_playwright() as playwright:
         browser = playwright.chromium.launch(channel=os.environ.get("WORKFLOW_UI_BROWSER_CHANNEL"), headless=True)
-        page = browser.new_page(viewport={"width": 390 if mobile else 1440, "height": 900})
+        page = browser.new_page(viewport={"width": viewport[0], "height": viewport[1]})
 
         writes = _serve_ui(page, client)
         page.on("pageerror", lambda error: errors.append(str(error)))
@@ -276,7 +276,7 @@ def test_configured_browser_read_only_history_and_no_writes(catalog, tmp_path, m
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
         page.locator("#phaseStoredHistory summary").click()
         page.evaluate("scrollTo(0, 0)")
-        page.screenshot(path=str(tmp_path / f"phase-effective-{'mobile' if mobile else 'desktop'}.png"), full_page=True)
+        page.screenshot(path=str(tmp_path / f"phase-effective-{viewport[0]}x{viewport[1]}.png"), full_page=True)
         assert not writes
         assert errors == baseline_errors
         browser.close()

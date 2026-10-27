@@ -4,6 +4,30 @@ Source implementation for NEW PM tasks, not installation or live acceptance.
 Legacy assignments, native PMExecution/run/checkpoint receipts and request bytes
 are unchanged. Machine credentials never gain access to human routes.
 
+## Effective Phase View
+
+The existing `GET /api/phases/{id}` and
+`GET /api/phases/{id}/instructions` keep their raw fields. For a server-validated
+installed PM binding and explicit `namespace_id`, they additionally return
+`effective_view`: `interaction_protocol`, `namespace_id`, `read_only=true` and
+the projected `phase`. The same `phases` transformation supplies the agent;
+the view does not invent a second instruction source or rewrite the sealed catalog.
+
+The phase and instructions pages display this effective contract. Stored legacy
+instructions remain a collapsed historical read-only section. A failed scoped
+read never unlocks the raw editor. Other workflows retain their existing editors.
+PM workflow/phase/instruction mutations return409 before the write service,
+including rename/delete and calls without a namespace. Ordinary route access
+and admin authorization remain in force; there is no new permission or endpoint.
+Versioned publication/adoption of arbitrary edited catalogs remains separate work.
+
+Preparation waits only for genuinely missing requirements input. Once the full
+Draft document is saved, PM reports preparation and moves to phase3 for exact
+owner confirmation. It must not wait for that final consent in phase2. The final
+instruction still requires Workflow terminal commit, then Tracker completion and
+verified Backlog / Ready, without Analyst. Additional security constraints and
+historical execution data are preserved.
+
 ## Agent Configuration
 
 Required permanent environment: `FLEET_CLI_PROTOCOL=configured-cli-v1`,
