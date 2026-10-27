@@ -155,7 +155,8 @@ The server renders the same `Base.app_main` and owner context. Header/sidebar,
 Base SDK, branding and original admission clock are installed once. Page controllers
 are scoped factories: explicit event callbacks are exported, window/document
 listeners use an AbortController, and timers/observers/drafts are disposed before
-replacement. Base menus and other controls use their public init/destroy APIs.
+replacement. Incoming controllers mount only after the swap settles and the old
+main is removed; synchronous inline scripts must not initialize outgoing controls. Base menus and other controls use their public init/destroy APIs.
 
 The pinned, unmodified htmx 2.0.11 runtime is served locally from `ui-assets`.
 It handles HTML swapping and controller script installation. It does not own

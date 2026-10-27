@@ -1,7 +1,7 @@
 // One persistent shell; page-local code owns only its current work area.
 window.WorkflowApplication = (() => {
   const basePath={{ ui_base_path()|tojson }};
-  let controller,active,pendingFactory,metadata,epoch=0,request=null;
+  let controller,active,pendingFactory,metadata,epoch=0,request=null,swapping=false;
   let committed=location.pathname+location.search+location.hash;
   let position=history.state?.workflowAppPosition??0;
   let originalNavigate,originalSync;
@@ -22,7 +22,7 @@ window.WorkflowApplication = (() => {
     root.querySelectorAll('[data-base-copy-target]').forEach(control=>window.PdlcClipboard.destroyCopyButton(control));
   }
   function mount(factory){
-    if(!controller){pendingFactory=factory;return;}
+    if(!controller||swapping){pendingFactory=factory;return;}
     const abort=new AbortController(),cleanups=[],exports=new Map(),ready=[];
     const scope={alive:true,writes:0,busy:()=>false,handlesHistory:false,
       on(target,type,callback,options={}){
@@ -117,7 +117,14 @@ window.WorkflowApplication = (() => {
       else{committed=path(final);position=options.position??position;}
       document.querySelector('[data-workflow-page-style]').textContent=style?.textContent||'';
       updateShell(next);
-      await new Promise(resolve=>htmx.swap(old,parsed.body.innerHTML,{swapStyle:'outerHTML',settleDelay:0,swapDelay:0},{select:'main.main',afterSettleCallback:resolve}));
+      // htmx inserts the new main before removing the old one. Mount only after settle,
+      // otherwise document-wide selectors initialize the outgoing page with duplicate IDs.
+      swapping=true;
+      try{
+        await new Promise(resolve=>htmx.swap(old,parsed.body.innerHTML,{swapStyle:'outerHTML',settleDelay:0,swapDelay:0},{select:'main.main',afterSettleCallback:()=>{
+          swapping=false;const factory=pendingFactory;pendingFactory=null;if(factory)mount(factory);resolve();
+        }}));
+      }finally{swapping=false;pendingFactory=null;}
       if(revision!==epoch||!controller.isCurrent())return false;
       if(options.scroll)window.scrollTo(options.scroll.x,options.scroll.y);
       else if(options.refresh){}else if(final.hash)document.getElementById(decodeURIComponent(final.hash.slice(1)))?.scrollIntoView();

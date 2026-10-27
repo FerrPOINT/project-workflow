@@ -28,6 +28,7 @@ const vendor=await(await fetch(new URL('/workflow/ui-assets/htmx-2.0.11.min.js',
 const evaluate=w.XPathExpression.prototype.evaluate;w.XPathExpression.prototype.evaluate=function(node,type,result){return evaluate.call(this,node,type??0,result);};
 w.eval(vendor);
 w.eval(readFileSync(new URL('../project_workflow/interfaces/ui/templates/base/draft-state.js',import.meta.url),'utf8').replaceAll('export ','')+';window.PdlcPlatformNavigation.createDraftTracker=createDraftTracker;');
+w.localStorage.setItem('phase-view-mode','timeline');
 let current=true,confirmation=true,native=0;
 let fail=false,delay=null;const realFetch=w.fetch;w.fetch=async(value,options)=>{if(options?.headers?.['X-Workflow-View']==='page-v1'){if(fail)return new Response('Unavailable',{status:503});if(delay){const pending=delay;delay=null;await pending;}}return realFetch(value,options);};
 w.PdlcPlatformNavigation.navigate=()=>{native++;};w.PdlcPlatformNavigation.reload=()=>{native++;};
@@ -36,8 +37,19 @@ await new Promise(resolve=>setImmediate(resolve));
 const shell=d.querySelector('#sidebar'),header=d.querySelector('[data-platform-header]');
 const page=()=>JSON.parse(d.querySelector('[data-workflow-page]').textContent);
 const assertShell=()=>{assert.equal(d.querySelector('#sidebar'),shell);assert.equal(d.querySelector('[data-platform-header]'),header);assert.equal(native,0);};
-const go=async path=>{assert.equal(await w.WorkflowApplication.navigate('/workflow'+path),true,JSON.stringify({path,messages,errors,current,url:w.location.href}));assertShell();assert.equal(d.querySelector('main').getAttribute('aria-busy'),'false');};
+const go=async path=>{assert.equal(await w.WorkflowApplication.navigate('/workflow'+path),true,JSON.stringify({path,messages,errors,current,url:w.location.href}));assertShell();assert.equal(d.querySelector('main').getAttribute('aria-busy'),'false');const radios=[...d.querySelectorAll('input[name="phase-view"]')];if(radios.length)assert.deepEqual(radios.filter(radio=>radio.checked).map(radio=>radio.value),['timeline'],'new page phase-view must initialize after old main is removed');};
 for(let round=0;round<3;round++)for(const path of ['/namespaces?profession_id=1','/namespaces/new','/workflows?profession_id=1','/tasks?profession_id=1','/settings','/'])await go(path);
+await go('/workflows?profession_id=1&workflow_id='+metadata.workflows[0].id);
+// Exercise the browser's synchronous inline-script timing explicitly: incoming
+// main is inserted before outgoing main removal. jsdom normally defers scripts.
+const realSwap=w.htmx.swap;
+w.htmx.swap=(old,html,options,context)=>{
+ const template=d.createElement('template');template.innerHTML=html;
+ const main=template.content.querySelector('main.main');old.before(main);
+ w.eval(main.querySelector('[data-workflow-controller]').textContent);
+ old.remove();context.afterSettleCallback();
+};
+try{await go('/workflows?profession_id=1&workflow_id='+metadata.workflows[1].id);}finally{w.htmx.swap=realSwap;}
 await go('/workflows?profession_id=1&workflow_id='+metadata.workflows[0].id);
 assert.equal(typeof w.selectWorkflow,'function');w.startEditWorkflow();
 const input=d.querySelector('#workflowName');input.value='Сохранить черновик';confirmation=false;
