@@ -44,6 +44,8 @@
 {%- endmacro %}
 
 {% block content %}
+{% include '_phase_effective_view.html' %}
+<div id="phaseStoredEditor" hidden inert>
 <div class="phase-editor-layout">
   <div class="phase-outline">
     <h2 class="phase-outline-title base-label" id="phase-outline-title">Структура фазы</h2>
@@ -215,6 +217,7 @@
 
     </div>
   </div>
+</div>
 </div>
 {% endblock %}
 

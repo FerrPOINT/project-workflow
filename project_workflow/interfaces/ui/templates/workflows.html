@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% set pm_catalog_read_only = selected_workflow and selected_workflow.key == 'single-task-v1:project_manager' %}
 {% set phase_scope_suffix = ('&project_scope=all' if selected_namespace else '?project_scope=all') if request is defined and request.query_params.get('project_scope') == 'all' else '' %}
 {% set mode_scope_suffix = '&project_scope=all' if request is defined and request.query_params.get('project_scope') == 'all' else '' %}
 
@@ -6,7 +7,7 @@
 {% block header_title %}Воркфлоу{% endblock %}
 {% block header_actions %}
 {% if can_administer %}
-  <button type="button" class="btn btn-secondary workflow-header-action" id="editWorkflowButton" data-workflow-edit aria-controls="workflowForm" aria-expanded="false"{% if not selected_workflow %} disabled{% endif %} onclick="startEditWorkflow()">Редактировать воркфлоу</button>
+  <button type="button" class="btn btn-secondary workflow-header-action" id="editWorkflowButton" data-workflow-edit aria-controls="workflowForm" aria-expanded="false"{% if not selected_workflow %} disabled{% endif %}{% if pm_catalog_read_only %} hidden{% endif %} onclick="startEditWorkflow()">Редактировать воркфлоу</button>
   <button type="button" class="btn btn-primary workflow-header-action" id="newWorkflowButton" onclick="startCreateWorkflow()">+ Новый воркфлоу</button>
 {% endif %}
 {% endblock %}
@@ -88,7 +89,7 @@
         {{ base_ui.badge('параллельно' if p.execution_type == 'parallel' else 'последовательно', 'info' if p.execution_type == 'parallel' else 'neutral') }}
       </div>
     {% endcall %}
-{% if can_administer %}
+{% if can_administer and not pm_catalog_read_only %}
     {% call base_ui.action_menu('Действия фазы ' ~ p.name, id='phase-actions-' ~ p.id, class_name='phase-card-actions', group='phase-actions') %}
         <button type="button" class="base-control base-menu-item move-up-btn" onclick="movePhase(this,-1)" aria-label="Поднять фазу {{ p.name }} выше">Поднять выше</button>
         <button type="button" class="base-control base-menu-item move-down-btn" onclick="movePhase(this,1)" aria-label="Опустить фазу {{ p.name }} ниже">Опустить ниже</button>
@@ -151,7 +152,7 @@
       <div class="panel-actions">
         <button class="btn btn-primary" type="submit" id="workflowSubmitButton">Сохранить</button>
         <button class="btn btn-secondary" type="button" id="cancelCreateWorkflowButton" onclick="cancelWorkflowForm()" style="display:none">Отмена</button>
-        <button class="btn btn-secondary workflow-delete" type="button" id="deleteWorkflowButton" onclick="deleteWorkflow()">Удалить</button>
+        <button class="btn btn-secondary workflow-delete" type="button" id="deleteWorkflowButton"{% if pm_catalog_read_only %} hidden{% endif %} onclick="deleteWorkflow()">Удалить</button>
       </div>
       {% call base_ui.prose(compact=true) %}<p id="workflowDeleteHint" hidden>Воркфлоу по умолчанию нельзя удалить.</p>{% endcall %}
     </form>
@@ -209,14 +210,14 @@
           {% if not loop.last %}<p class="timeline-group-transition">Следующий этап — после завершения всех фаз группы.</p>{% endif %}
         </section>
         {% else %}<section class="timeline-block">{{ phase_card(block.phases[0]) }}</section>{% endif %}
-{% if can_administer %}
+{% if can_administer and not pm_catalog_read_only %}
         <div class="timeline-connector">
           <button type="button" class="base-control base-button base-icon-control phase-add-btn" data-variant="outline" data-size="icon" data-after-order="{{ block.phases[-1].phase_num }}" onclick="addPhaseAfter(this)" title="Добавить фазу после блока" aria-label="Добавить фазу после блока">+</button>
         </div>
 {% endif %}
       {% else %}
         <div data-testid="workflow-mode-empty">{{ base_ui.state('empty', 'В этом режиме фаз пока нет.') }}</div>
-        {% if can_administer and selected_workflow_id %}<div class="timeline-connector"><button type="button" class="base-control base-button base-icon-control phase-add-btn" data-variant="outline" data-size="icon" data-after-order="0" onclick="addPhaseAfter(this)" aria-label="Добавить первую фазу">+</button></div>{% endif %}
+        {% if can_administer and selected_workflow_id and not pm_catalog_read_only %}<div class="timeline-connector"><button type="button" class="base-control base-button base-icon-control phase-add-btn" data-variant="outline" data-size="icon" data-after-order="0" onclick="addPhaseAfter(this)" aria-label="Добавить первую фазу">+</button></div>{% endif %}
       {% endfor %}
     </div>
 
@@ -290,6 +291,7 @@ function workflowApiUrl(workflowId){
   return url.pathname + url.search;
 }
 function workflowById(id){ return workflowStore.find(function(workflow){ return workflow.id === id; }); }
+function historicalPmSelected(){ return workflowById(selectedWorkflowId)?.key === 'single-task-v1:project_manager'; }
 function workflowSelectionUrl(workflowId){
   var url = new URL(window.location.href);
   url.pathname = '{{ ui_base_path() }}/workflows';
@@ -338,17 +340,21 @@ function fillWorkflowForm(workflow){
   description.hidden = !description.textContent;
 }
 function setWorkflowEditorVisible(visible){
-  workflowEditorVisible = visible;
   var creating = workflowFormMode === 'create';
+  var historical = !creating && historicalPmSelected();
+  visible = visible && !historical;
+  workflowEditorVisible = visible;
   document.getElementById('workflowForm').hidden = !visible && !creating;
   document.getElementById('workflowSummary').hidden = visible || creating || selectedWorkflowId == null;
   document.querySelectorAll('[data-workflow-edit]').forEach(function(button){
-    button.disabled = workflowWritePending || creating || selectedWorkflowId == null;
+    button.hidden = historical;
+    button.disabled = workflowWritePending || creating || selectedWorkflowId == null || historical;
     button.setAttribute('aria-expanded', String(visible && !creating));
   });
 }
 function startEditWorkflow(){
   if(workflowWritePending)return;
+  if(historicalPmSelected())return;
   if(selectedWorkflowId == null)return;
   if(!workflowEditorVisible){ fillWorkflowForm(workflowById(selectedWorkflowId)); }
   setWorkflowEditorVisible(true);
@@ -370,6 +376,7 @@ function setWorkflowFormMode(mode){
   var workflow = workflowById(selectedWorkflowId);
   var protectedDefault = !createMode && Boolean(workflow && workflow.is_default);
   var deleteButton = document.getElementById('deleteWorkflowButton');
+  deleteButton.hidden = !createMode && historicalPmSelected();
   document.getElementById('workflowFormMode').textContent = createMode ? 'Новый воркфлоу' : 'Редактирование воркфлоу';
   document.getElementById('workflowSubmitButton').textContent = createMode ? 'Создать воркфлоу' : 'Сохранить';
   deleteButton.textContent = 'Удалить';

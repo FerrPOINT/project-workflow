@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict
 from typing import Annotated, Any
 
 from fastapi import Path, Query
@@ -109,6 +110,54 @@ def _instruction_namespace_scope_error(instruction_id: int, namespace_id: int | 
     if not _app_state.workflow_service().belongs_to_profession(phase["workflow_id"], namespace_id):
         return _error("Фаза недоступна в выбранной профессии", 409)
     return None
+
+
+def _effective_phase_view(phase: dict[str, Any], namespace_id: int | None) -> dict[str, Any] | None:
+    """Expose the actual sealed phase only for a verified installed binding."""
+    from project_workflow.infrastructure.db.schema import load_phases_from_db
+    from project_workflow.infrastructure.db.single_task_catalog import observe_installation
+
+    if namespace_id is None:
+        return None
+    uow = _app_state.get_uow()
+    workflow = uow.workflows.get_by_id(phase["workflow_id"])
+    if workflow is None or workflow.key != "single-task-v1:project_manager":
+        return None
+    # A workflow key is only a hint. The sealed binding and mode membership are authority.
+    installation = observe_installation(uow)
+    binding = next((item for item in installation.bindings
+                    if item.role_key == "project_manager" and int(item.namespace_id) == namespace_id
+                    and int(item.workflow_id) == phase["workflow_id"]), None)
+    mode = next((item for item in binding.modes if item.key == "draft"), None) if binding else None
+    if mode is None or phase["id"] not in [int(value) for value in mode.phase_ids]:
+        raise ValueError("Configured PM phase is outside the installed namespace/mode")
+    projected = load_phases_from_db(
+        uow, workflow_id=phase["workflow_id"], mode_id=int(mode.mode_id),
+        profession_settings=_app_state.project_service().get_project(namespace_id),
+    )
+    effective = next((item for item in projected if item.id == phase["id"]), None)
+    if effective is None:
+        raise ValueError("Configured PM phase is unavailable")
+    return {"interaction_protocol": "configured-cli-v1", "namespace_id": namespace_id,
+            "read_only": True, "phase": asdict(effective)}
+
+
+def _pm_workflow_write_error(workflow_id: int) -> JSONResponse | None:
+    workflow = _app_state.get_uow().workflows.get_by_id(workflow_id)
+    if workflow is not None and workflow.key == "single-task-v1:project_manager":
+        # Refuse even if the catalog already drifted; a raw save is not a publisher.
+        return _error("Configured PM catalog is historical/read-only", 409)
+    return None
+
+
+def _pm_phase_write_error(phase_id: int) -> JSONResponse | None:
+    phase = _app_state.phase_service().get_phase(phase_id)
+    return _pm_workflow_write_error(phase["workflow_id"]) if phase else None
+
+
+def _pm_instruction_write_error(instruction_id: int) -> JSONResponse | None:
+    instruction = _app_state.instruction_service().get_instruction(instruction_id)
+    return _pm_phase_write_error(instruction["phase_id"]) if instruction else None
 
 
 def api_settings_get(namespace_id: int | None = Query(default=None, gt=0)) -> dict[str, Any] | JSONResponse:
@@ -224,6 +273,8 @@ def api_workflows(namespace_id: PositiveQueryId = None) -> dict[str, Any] | JSON
 
 def api_phase_create(payload: PhaseCreate) -> dict[str, Any] | JSONResponse:
     workflow_id = payload.workflow_id
+    if error := _pm_workflow_write_error(workflow_id):
+        return error
     assert payload.phase_order is not None
     data = {
         "name": payload.name,
@@ -260,6 +311,8 @@ def api_phase_update(
 ) -> dict[str, Any] | JSONResponse:
     if error := _phase_namespace_scope_error(phase_id, namespace_id):
         return error
+    if error := _pm_phase_write_error(phase_id):
+        return error
     srv = _app_state.get_service()
     scalar_fields = {
         "name",
@@ -292,6 +345,8 @@ def api_phase_delete(
 ) -> dict[str, Any] | JSONResponse:
     if error := _phase_namespace_scope_error(phase_id, namespace_id):
         return error
+    if error := _pm_phase_write_error(phase_id):
+        return error
     try:
         _app_state.phase_service().delete_phase(phase_id)
     except NotFoundError:
@@ -305,6 +360,8 @@ def api_phase_batch_order(payload: PhaseOrderUpdate) -> dict[str, Any] | JSONRes
     batch: list[tuple[int, int]] = []
     for item in payload.orders:
         resolved_phase_id = item.phase_id
+        if error := _pm_phase_write_error(resolved_phase_id):
+            return error
         if item.workflow_id is not None:
             phase = _app_state.phase_service().get_phase(resolved_phase_id)
             if phase is None:
@@ -358,6 +415,8 @@ def api_workflow_update(
 ) -> dict[str, Any] | JSONResponse:
     if error := _workflow_profession_scope_error(workflow_id, namespace_id):
         return error
+    if error := _pm_workflow_write_error(workflow_id):
+        return error
     service = _app_state.workflow_service()
     updates = _updates_from_payload(payload, ["name", "description"])
     try:
@@ -375,6 +434,8 @@ def api_workflow_delete(
     workflow_id: PositivePathId, namespace_id: PositiveQueryId = None,
 ) -> dict[str, Any] | JSONResponse:
     if error := _workflow_profession_scope_error(workflow_id, namespace_id):
+        return error
+    if error := _pm_workflow_write_error(workflow_id):
         return error
     service = _app_state.workflow_service()
     try:
@@ -461,7 +522,11 @@ def api_phase_detail(
     phase = _load_phase_detail(phase_id)
     if not phase:
         return _error(f"Фаза {phase_id} не найдена", 404)
-    return {"ok": True, "phase": phase}
+    try:
+        effective = _effective_phase_view(phase, namespace_id)
+    except ValueError:
+        return _error("Configured PM catalog validation failed", 409)
+    return {"ok": True, "phase": phase, **({"effective_view": effective} if effective is not None else {})}
 
 
 def api_instructions_list(
@@ -474,7 +539,12 @@ def api_instructions_list(
     if phase is None:
         return _error(f"Фаза {phase_id} не найдена", 404)
     instructions = _app_state.instruction_service().list_instructions(phase_id)
-    return {"ok": True, "phase": phase, "instructions": instructions}
+    try:
+        effective = _effective_phase_view(phase, namespace_id)
+    except ValueError:
+        return _error("Configured PM catalog validation failed", 409)
+    return {"ok": True, "phase": phase, "instructions": instructions,
+            **({"effective_view": effective} if effective is not None else {})}
 
 
 def api_instruction_create(
@@ -482,6 +552,8 @@ def api_instruction_create(
     namespace_id: PositiveQueryId = None,
 ) -> dict[str, Any] | JSONResponse:
     if error := _phase_namespace_scope_error(payload.phase_id, namespace_id):
+        return error
+    if error := _pm_phase_write_error(payload.phase_id):
         return error
     try:
         item = _app_state.instruction_service().create_instruction(
@@ -509,6 +581,8 @@ def api_instruction_update(
 ) -> dict[str, Any] | JSONResponse:
     if error := _instruction_namespace_scope_error(instruction_id, namespace_id):
         return error
+    if error := _pm_instruction_write_error(instruction_id):
+        return error
     updates = _updates_from_payload(payload, ["description", "execution_type"])
     if "skills" in payload.model_fields_set:
         updates["skills"] = payload.skills
@@ -529,6 +603,8 @@ def api_instruction_delete(
 ) -> dict[str, Any] | JSONResponse:
     if error := _instruction_namespace_scope_error(instruction_id, namespace_id):
         return error
+    if error := _pm_instruction_write_error(instruction_id):
+        return error
     try:
         _app_state.instruction_service().delete_instruction(instruction_id)
     except NotFoundError as exc:
@@ -544,6 +620,8 @@ def api_instructions_reorder(
     namespace_id: PositiveQueryId = None,
 ) -> dict[str, Any] | JSONResponse:
     if error := _phase_namespace_scope_error(phase_id, namespace_id):
+        return error
+    if error := _pm_phase_write_error(phase_id):
         return error
     try:
         _app_state.instruction_service().reorder_instructions(phase_id, payload.instruction_ids)

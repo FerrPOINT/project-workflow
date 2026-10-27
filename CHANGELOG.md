@@ -8,6 +8,12 @@
 
 ### Added
 
+- Страницы фаз PM показывают один набор инструкций установленного каталога.
+  `effective_view` сохраняет raw-поля API без подмены инструкций при исполнении.
+  Запись в sealed PM каталог отклоняется; обычные workflow сохраняют редактор.
+  Подтверждение владельца относится к третьей фазе. Проверка исходников, UI,
+  установка кандидата и живая приёмка учитываются отдельно.
+
 - Configured PM preparation in retained652a now asks questions/offers alternatives
   only for actual gaps or meaningful choices. Eight focused content checks cover
   all supported families, real judge prompts and appended security constraints;
