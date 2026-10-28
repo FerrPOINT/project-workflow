@@ -8,14 +8,14 @@
 {% block extra_style %}
 {% include "workflow-cards.css" %}
 /* ── Structured phase editor ───────────────────────────────────────── */
-.phase-editor-layout{display:grid;grid-template-columns:220px minmax(0,1fr);gap:32px;align-items:start;max-width:1280px;margin:0 auto}
-.phase-outline{position:sticky;top:calc(var(--shell-header-height) + 16px);max-height:calc(100dvh - var(--shell-header-height) - 32px);overflow:auto;border-right:1px solid var(--border);padding:8px 20px 8px 0}
+.phase-editor-layout{display:grid;grid-template-columns:176px minmax(0,1fr);gap:24px;align-items:start;width:100%;min-width:0}
+.phase-outline{position:sticky;top:calc(var(--shell-header-height) + 16px);max-height:calc(100dvh - var(--shell-header-height) - 32px);overflow:auto;border-right:1px solid var(--border);padding:8px 12px 8px 0;min-width:0}
 .phase-outline-title{margin:0 0 10px}
-.phase-editor-main{min-width:0;max-width:980px}
+.phase-editor-main{min-width:0}
 .phase-section-picker{display:none;margin-bottom:16px}
 .phase-editor-section{scroll-margin-top:calc(var(--shell-header-height) + 24px)}
 .wiki-page{max-width:none;margin:0;padding:0}
-@media(max-width:960px){.phase-editor-layout{display:block;max-width:920px}.phase-outline{display:none}.phase-section-picker{display:block}.phase-editor-main{max-width:none}}
+@media(max-width:960px){.phase-editor-layout{display:block}.phase-outline{display:none}.phase-section-picker{display:block}}
 
 .phase-text-row{display:flex;align-items:flex-start;gap:12px}
 .phase-text-content{flex:1;min-width:0}
