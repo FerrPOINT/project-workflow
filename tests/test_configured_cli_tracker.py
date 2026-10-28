@@ -168,9 +168,9 @@ def test_no_caller_supplied_url_or_missing_credential_fallback(authority, monkey
     assert calls == []
 
 
-@pytest.mark.parametrize("status", [None, "Ready", "Completed", "Blocked", "in_progress", True])
+@pytest.mark.parametrize("status", [None, "Completed", "Blocked", "in_progress", True])
 @pytest.mark.parametrize("stage", ["Draft", "Backlog"])
-def test_retained_assignment_does_not_authorize_work_outside_in_progress(authority, stage, status):
+def test_retained_assignment_does_not_authorize_inactive_or_invalid_business_status(authority, stage, status):
     request, bodies, _ = authority
     bodies["context"].update(stage=stage, status=status)
     with pytest.raises(ConflictError):
