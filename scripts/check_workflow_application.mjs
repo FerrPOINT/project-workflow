@@ -66,7 +66,10 @@ assert.equal(typeof w.scheduleSave,'function');
 const instructionRows=()=>[...d.querySelectorAll('#instructionsTimeline .timeline-item')];
 async function instructionReadback(predicate){
  for(let attempt=0;attempt<200;attempt++){
-  if(d.querySelector('main')?.dataset.workflowReadState==='ready'&&!d.querySelector('#phaseSaveEditor')?.matches('[aria-busy="true"]')&&!d.querySelector('.instruction-card-actions .phase-add-btn')?.disabled&&predicate())return;
+  if(d.querySelector('main')?.dataset.workflowReadState==='ready'&&!d.querySelector('#phaseSaveEditor')?.matches('[aria-busy="true"]')&&!d.querySelector('.instruction-card-actions .phase-add-btn')?.disabled&&predicate()){
+   assert.equal(d.querySelector('#instructionsTimeline .timeline-arrow'),null,'instruction updates must not recreate arrow spacers');
+   return;
+  }
   await new Promise(resolve=>setTimeout(resolve,10));
  }
  assert.fail('Instruction readback did not settle: '+messages.join('; '));

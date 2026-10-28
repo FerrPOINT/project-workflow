@@ -16,6 +16,8 @@ def test_both_card_kinds_share_the_action_contract(admin):
     instruction_html = instruction_editor(admin, True)
     toolbars = []
     for html, kind in [(phase_html, "phase"), (instruction_html, "instruction")]:
+        assert not any("timeline-arrow" in attrs.get("class", "").split()
+                       for _, attrs in Elements(html).elements)
         match = re.search(r'<div class="workflow-card-actions ' + kind + r'-card-actions".*?</div>', html, re.S)
         assert (match is not None) == admin
         if match:

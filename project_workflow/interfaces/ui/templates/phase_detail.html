@@ -32,7 +32,6 @@
 .skill-add-item{display:inline-flex;flex:none;min-width:0;max-width:100%}
 .skill-add-form{display:inline-flex;align-items:center;max-width:100%;min-width:0}
 .skill-add-form[hidden],.skill-add-trigger[hidden]{display:none}
-#instructionsTimeline{gap:12px;max-width:none}
 
 {% endblock %}
 
@@ -148,7 +147,6 @@
             {% for i in run %}
               <div class="timeline-item" data-instruction-id="{{ i.id }}" data-step-num="{{ i.step_num }}" data-type="{{ i.execution_type }}">
                 {{ instruction_body(i, phase.instructions|length) }}
-                <div class="timeline-arrow"{% if loop.last %} hidden{% endif %}>↓</div>
               </div>
             {% endfor %}
           {% endcall %}
@@ -157,11 +155,9 @@
           <div class="timeline-block">
             <div class="timeline-item" data-instruction-id="{{ i.id }}" data-step-num="{{ i.step_num }}" data-type="{{ i.execution_type }}">
               {{ instruction_body(i, phase.instructions|length) }}
-              <div class="timeline-arrow" hidden>↓</div>
             </div>
           </div>
         {% endif %}
-        <div class="timeline-arrow timeline-arrow-block"{% if loop.last %} hidden{% endif %}>↓</div>
       {% else %}
         <div class="empty-state">{{ base_ui.state('empty', 'Нет инструкций') }}</div>
       {% endfor %}

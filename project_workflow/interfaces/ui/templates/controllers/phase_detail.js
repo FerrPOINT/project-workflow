@@ -182,17 +182,8 @@ function renderInstructionTimeline(items) {
       ? document.getElementById('instruction-parallel-group-template').content.firstElementChild.cloneNode(true)
       : document.createElement('div');
     if (!isParallelGroup) block.className = 'timeline-block';
-    group.forEach((item, groupIndex) => {
-      const innerArrow = item.querySelector('.timeline-arrow');
-      if (innerArrow) innerArrow.hidden = !(isParallelGroup && groupIndex < group.length - 1);
-      block.appendChild(item);
-    });
+    group.forEach(item => block.appendChild(item));
     timeline.appendChild(block);
-    const blockArrow = document.createElement('div');
-    blockArrow.className = 'timeline-arrow timeline-arrow-block';
-    blockArrow.textContent = '↓';
-    blockArrow.hidden = idx >= items.length;
-    timeline.appendChild(blockArrow);
   }
   timeline.querySelectorAll('textarea[data-base-autosize]').forEach(field => window.PdlcTextarea?.initTextareaAutosize(field));
 }

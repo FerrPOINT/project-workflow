@@ -513,10 +513,11 @@ class TestPhasesPage:
         assert response.status_code == 200
         assert "timeline-card" in response.text
 
-    def test_phases_timeline_has_arrows(self):
+    def test_phases_timeline_has_no_arrow_spacers(self):
         response = client.get("/phases")
         assert response.status_code == 200
-        assert "timeline-arrow" in response.text
+        assert not any("timeline-arrow" in attrs.get("class", "").split()
+                       for _, attrs in Elements(response.text).elements)
 
     def test_phases_timeline_cards_clickable(self):
         response = client.get("/phases")
@@ -1900,10 +1901,11 @@ class TestTimelineHTML:
         assert response.status_code == 200
         assert "timeline-card" in response.text
 
-    def test_timeline_has_arrows(self):
+    def test_timeline_has_no_arrow_spacers(self):
         response = client.get("/phases")
         assert response.status_code == 200
-        assert "timeline-arrow" in response.text
+        assert not any("timeline-arrow" in attrs.get("class", "").split()
+                       for _, attrs in Elements(response.text).elements)
 
     def test_timeline_card_clickable(self):
         response = client.get("/phases")
