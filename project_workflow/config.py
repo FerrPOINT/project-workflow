@@ -91,7 +91,7 @@ def get_settings() -> Settings:
 # Bootstrap-only constants.  The managed Hermes catalog is the only source used
 # by application startup.  The legacy single-workflow seed is retained solely
 # for explicit unmanaged compatibility/tests and is never an automatic fallback.
-CATALOG_VARIANT = os.environ.get("PROJECT_WORKFLOW_CATALOG_VARIANT", "legacy")
+CATALOG_VARIANT = os.environ.get("PROJECT_WORKFLOW_CATALOG_VARIANT", "single-task-v1")
 if CATALOG_VARIANT not in {"legacy", "base", "single-task-v1"}:
     raise ValueError("Unknown managed catalog variant")
 MANAGED_CATALOG_PATH = (

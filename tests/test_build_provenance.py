@@ -200,7 +200,10 @@ def test_post_snapshot_worktree_mutation_cannot_change_docker_context(git_source
         patch.object(builder, "compatible_build_context",
                      return_value=docker_context_with_manifest(snapshot.archive, snapshot.provenance)),
     ):
-        builder.build_image(git_source, "project-workflow:test", "docker", skills_root=git_source)
+        builder.build_image(
+            git_source, "project-workflow:test", "docker",
+            skills_root=git_source, catalog_variant="legacy",
+        )
 
     command = docker_run.call_args.args[0]
     context = docker_run.call_args.kwargs["input"]
@@ -339,7 +342,10 @@ def test_image_builder_passes_one_snapshot_to_docker(git_source: Path):
         patch.object(builder, "compatible_build_context",
                      return_value=docker_context_with_manifest(snapshot.archive, snapshot.provenance)),
     ):
-        builder.build_image(git_source, "project-workflow:test", "docker", skills_root=git_source)
+        builder.build_image(
+            git_source, "project-workflow:test", "docker",
+            skills_root=git_source, catalog_variant="legacy",
+        )
 
     command = docker_run.call_args.args[0]
     context = docker_run.call_args.kwargs["input"]
@@ -379,8 +385,14 @@ def test_pax_context_uses_deterministic_gzip_transport(git_source: Path):
         patch.object(builder, "compatible_build_context",
                      return_value=docker_context_with_manifest(snapshot.archive, snapshot.provenance)),
     ):
-        builder.build_image(git_source, "project-workflow:test", "docker", skills_root=git_source)
-        builder.build_image(git_source, "project-workflow:test", "docker", skills_root=git_source)
+        builder.build_image(
+            git_source, "project-workflow:test", "docker",
+            skills_root=git_source, catalog_variant="legacy",
+        )
+        builder.build_image(
+            git_source, "project-workflow:test", "docker",
+            skills_root=git_source, catalog_variant="legacy",
+        )
 
     first = docker_run.call_args_list[0].kwargs["input"]
     second = docker_run.call_args_list[1].kwargs["input"]
@@ -566,10 +578,10 @@ def test_compatible_context_uses_exact_commits_and_is_verified(compatible_source
     source, skills, manifest, catalog = compatible_sources
     builder = _builder_module()
     snapshot = builder.immutable_git_snapshot(source, "HEAD")
-    context = builder.compatible_build_context(snapshot, skills)
+    context = builder.compatible_build_context(snapshot, skills, "legacy")
     (source / builder.CATALOG_PATH).write_text("dirty catalog", encoding="utf-8")
     manifest.write_text("dirty skills", encoding="utf-8")
-    assert builder.compatible_build_context(snapshot, skills) == context
+    assert builder.compatible_build_context(snapshot, skills, "legacy") == context
     descriptor = json.loads(_member_bytes(context, builder.COMPATIBILITY_PATH))
     assert descriptor["catalogRevision"] == snapshot.provenance.source_revision
     assert descriptor["skillsRevision"] == catalog["skills_source"]["revision"]
@@ -582,7 +594,8 @@ def test_compatible_context_uses_exact_commits_and_is_verified(compatible_source
     # Actual Docker verification command, with its source package on sys.path.
     result = subprocess.run([sys.executable, "-m", "scripts.build_runtime_image",
                              "verify-compatibility", "--root", str(extracted)],
-                            cwd=extracted, capture_output=True, text=True)
+                            cwd=extracted, capture_output=True, text=True,
+                            env=dict(os.environ, PROJECT_WORKFLOW_CATALOG_VARIANT="legacy"))
     assert result.returncode == 0, result.stderr
     descriptor["catalogRevision"] = "f" * 40
     # The release context deliberately carries read-only generated inputs.
@@ -591,7 +604,8 @@ def test_compatible_context_uses_exact_commits_and_is_verified(compatible_source
     (extracted / builder.COMPATIBILITY_PATH).write_text(json.dumps(descriptor), encoding="utf-8")
     result = subprocess.run([sys.executable, "-m", "scripts.build_runtime_image",
                              "verify-compatibility", "--root", str(extracted)],
-                            cwd=extracted, capture_output=True, text=True)
+                            cwd=extracted, capture_output=True, text=True,
+                            env=dict(os.environ, PROJECT_WORKFLOW_CATALOG_VARIANT="legacy"))
     assert result.returncode == 2 and "immutable source inputs" in result.stderr
 
 
@@ -608,7 +622,7 @@ def test_compatible_image_delivers_descriptor_to_docker(compatible_sources):
         return actual_run(command, **kwargs)
 
     with patch.object(builder.subprocess, "run", side_effect=run):
-        builder.build_image(source, "workflow:test", "fixture-docker", skills_root=skills)
+        builder.build_image(source, "workflow:test", "fixture-docker", skills_root=skills, catalog_variant="legacy")
     assert len(docker_calls) == 1
     command, kwargs = docker_calls[0]
     descriptor = json.loads(_member_bytes(kwargs["input"], builder.COMPATIBILITY_PATH))
@@ -618,14 +632,16 @@ def test_compatible_image_delivers_descriptor_to_docker(compatible_sources):
     assert "COPY --from=builder /app/runtime-compatibility.json /app/runtime-compatibility.json" in dockerfile
 
 
-def test_configured_image_derives_its_sealed_profile_without_native_skills(compatible_sources, tmp_path):
+@pytest.mark.parametrize("explicit", [False, True])
+def test_configured_image_derives_its_sealed_profile_without_native_skills(compatible_sources, tmp_path, explicit):
     from project_workflow.build_provenance import validate_runtime_compatibility
     from project_workflow.domain.single_task_profile import CATALOG_SHA256, MANIFEST_SHA256
 
     source, _, _, _ = compatible_sources
     builder = _builder_module()
     snapshot = builder.immutable_git_snapshot(source, "HEAD")
-    context = builder.compatible_build_context(snapshot, None, "single-task-v1")
+    options = {"catalog_variant": "single-task-v1"} if explicit else {}
+    context = builder.compatible_build_context(snapshot, None, **options)
     descriptor = json.loads(_member_bytes(context, builder.COMPATIBILITY_PATH))
     assert validate_runtime_compatibility(descriptor) == descriptor
     assert descriptor["catalogRevision"] == snapshot.provenance.source_revision
@@ -686,7 +702,10 @@ def test_build_resource_limits_preserve_context_and_provenance(git_source, monke
         patch.object(builder, "compatible_build_context", return_value=context),
         patch.object(builder.subprocess, "run", docker_run),
     ):
-        builder.build_image(git_source, "workflow:test", "fixture-docker", skills_root=git_source)
+        builder.build_image(
+            git_source, "workflow:test", "fixture-docker",
+            skills_root=git_source, catalog_variant="legacy",
+        )
         legacy = docker_run.call_args
         provenance = snapshot.provenance
         assert legacy.args[0] == [
@@ -705,7 +724,10 @@ def test_build_resource_limits_preserve_context_and_provenance(git_source, monke
             memory, cpus = limits
             monkeypatch.setenv("PROJECT_WORKFLOW_BUILD_MEMORY_MIB", memory)
             monkeypatch.setenv("PROJECT_WORKFLOW_BUILD_CPUS", cpus)
-        builder.build_image(git_source, "workflow:test", "fixture-docker", skills_root=git_source)
+        builder.build_image(
+            git_source, "workflow:test", "fixture-docker",
+            skills_root=git_source, catalog_variant="legacy",
+        )
 
     docker_run.assert_called_once()
     actual = docker_run.call_args
@@ -738,7 +760,10 @@ def test_build_resource_limits_refuse_invalid_before_process(tmp_path, monkeypat
             monkeypatch.setenv(name, value)
     with patch.object(builder.subprocess, "run") as process:
         with pytest.raises(BuildProvenanceError, match="Set both PROJECT_WORKFLOW_BUILD"):
-            builder.build_image(tmp_path, "workflow:test", "fixture-docker", skills_root=tmp_path)
+            builder.build_image(
+                tmp_path, "workflow:test", "fixture-docker",
+                skills_root=tmp_path, catalog_variant="legacy",
+            )
     process.assert_not_called()
 
 
@@ -752,7 +777,7 @@ def test_missing_pinned_skills_ref_fails_before_docker(compatible_sources):
     _run_git(source, "add", ".")
     _run_git(source, "commit", "-m", "unavailable native pin")
     with pytest.raises(subprocess.CalledProcessError):
-        builder.build_image(source, "workflow:test", "fixture-docker", skills_root=skills)
+        builder.build_image(source, "workflow:test", "fixture-docker", skills_root=skills, catalog_variant="legacy")
 
 
 def test_frozen_runtime_compatibility_rejects_missing_and_source_mismatch(tmp_path):
@@ -780,3 +805,19 @@ def test_frozen_runtime_compatibility_rejects_missing_and_source_mismatch(tmp_pa
     path.write_text(json.dumps({**descriptor, "injected": True}), encoding="utf-8")
     with pytest.raises(BuildProvenanceError, match="schema"):
         runtime_compatibility_descriptor(path, provenance)
+
+
+def test_current_cli_build_chooses_the_configured_catalog_without_native_skills():
+    builder = _builder_module()
+    with patch.object(builder, "build_image") as build:
+        assert builder.main(["build", "--image", "owned:configured"]) == 0
+    assert build.call_args.kwargs["catalog_variant"] == "single-task-v1"
+    assert build.call_args.kwargs["skills_root"] is None
+
+
+def test_current_build_rejects_an_irrelevant_native_skills_checkout(compatible_sources):
+    source, skills, _, _ = compatible_sources
+    builder = _builder_module()
+    snapshot = builder.immutable_git_snapshot(source, "HEAD")
+    with pytest.raises(BuildProvenanceError, match="no native skills"):
+        builder.compatible_build_context(snapshot, skills)

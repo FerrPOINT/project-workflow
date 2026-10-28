@@ -88,7 +88,7 @@ def derive_compatibility(root: Path) -> dict[str, object]:
         load_managed_catalog,
     )
 
-    variant = os.environ.get("PROJECT_WORKFLOW_CATALOG_VARIANT", "legacy")
+    variant = os.environ.get("PROJECT_WORKFLOW_CATALOG_VARIANT", "single-task-v1")
     if variant == "single-task-v1":
         from project_workflow.build_provenance import configured_runtime_compatibility
         from project_workflow.domain.single_task_profile import CATALOG_SHA256, MANIFEST_SHA256
@@ -153,7 +153,7 @@ def _add_context_files(context: bytes, files: dict[str, bytes]) -> bytes:
 
 
 def compatible_build_context(snapshot: GitSourceSnapshot, skills_root: Path | None,
-                             catalog_variant: str = "legacy") -> bytes:
+                             catalog_variant: str = "single-task-v1") -> bytes:
     if catalog_variant not in {"legacy", "base", "single-task-v1"}:
         raise BuildProvenanceError("Unknown catalog variant")
     catalog_path = BASE_CATALOG_PATH if catalog_variant == "base" else CATALOG_PATH
@@ -164,6 +164,8 @@ def compatible_build_context(snapshot: GitSourceSnapshot, skills_root: Path | No
             raise BuildProvenanceError("Canonical catalog missing from immutable archive")
         catalog = json.load(catalog_file) if catalog_file else None
     if catalog_variant == "single-task-v1":
+        if skills_root is not None:
+            raise BuildProvenanceError("Configured catalog has no native skills build input")
         # Instructions are sealed Workflow artifacts, not a native skill bootstrap.
         return _derive_context_descriptor(context, catalog_variant)
     if not isinstance(catalog, dict):
@@ -239,12 +241,11 @@ def build_resource_args() -> list[str]:
 
 
 def build_image(root: Path, image: str, docker: str, revision: str = "HEAD",
-                *, skills_root: Path | None = None, catalog_variant: str = "legacy") -> None:
+                *, skills_root: Path | None = None, catalog_variant: str = "single-task-v1") -> None:
     resources = build_resource_args()
     snapshot = immutable_git_snapshot(root, revision)
     provenance = snapshot.provenance
-    context = (compatible_build_context(snapshot, skills_root, catalog_variant)
-               if catalog_variant != "legacy" else compatible_build_context(snapshot, skills_root))
+    context = compatible_build_context(snapshot, skills_root, catalog_variant)
     # A PAX-first plain tar can be mistaken for a Dockerfile on stdin.
     transport = gzip.compress(context, mtime=0)
     subprocess.run(
@@ -285,7 +286,7 @@ def main(argv: list[str] | None = None) -> int:
     build.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
     build.add_argument("--revision", default="HEAD")
     build.add_argument("--skills-root", type=Path)
-    build.add_argument("--catalog-variant", choices=("legacy", "base", "single-task-v1"), default="legacy")
+    build.add_argument("--catalog-variant", choices=("legacy", "base", "single-task-v1"), default="single-task-v1")
 
     for name in ("derive-compatibility", "verify-compatibility"):
         subparsers.add_parser(name).add_argument("--root", type=Path, required=True)

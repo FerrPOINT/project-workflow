@@ -20,7 +20,6 @@ from project_workflow.domain.configured_cli import (
     ConfiguredTerminalResponse,
 )
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
-from project_workflow.domain.repositories import UnitOfWork
 from project_workflow.domain.runtime_assignment import canonical_json, payload_sha256
 from project_workflow.domain.single_task_profile import CATALOG_SHA256, MANIFEST_SHA256
 from project_workflow.infrastructure import configured_cli_tracker, namespace_auth
@@ -304,23 +303,6 @@ def _replay(uow: SAUnitOfWork, fence: ConfiguredCliFence) -> dict[str, Any] | No
     if saved.get("complete") is True:
         _terminal_proof(row, fence.enrollment, saved)
     return saved
-
-
-def assert_fence(uow: UnitOfWork, task: dict[str, Any], fence: ConfiguredCliFence | None) -> bool:
-    assignment = uow.tasks.get_assignment_by_operation_key(task.get("assignment_operation_key") or "")
-    payload = assignment.payload if assignment is not None else {}
-    if payload.get("interaction_protocol") != PROTOCOL:
-        if fence is not None:
-            raise ConflictError("Configured protocol cannot authorize legacy tasks")
-        return False
-    if fence is None or payload != fence.enrollment or payload_sha256(payload) != fence.assignment_sha256:
-        raise ConflictError("Configured task requires authenticated configured runtime step")
-    fence.assert_task(task)
-    if not isinstance(uow, SAUnitOfWork):
-        raise ConflictError("Configured step requires the durable business ledger")
-    if version(uow, fence.task_id, payload) != fence.version:
-        raise ConflictError("Configured expected version changed")
-    return True
 
 
 def step(uow: SAUnitOfWork, command: ConfiguredStep, authorization: str | None) -> dict[str, Any]:

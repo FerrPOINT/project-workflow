@@ -23,14 +23,12 @@ from project_workflow.domain.configured_cli import (
     ConfiguredStep,
     ConfiguredTerminalReadback,
 )
-from project_workflow.domain.exceptions import ConflictError
 from project_workflow.domain.runtime_assignment import (
     MANAGED_ROLE_MODE_SCOPES,
     MANAGED_WORKFLOW_KEYS,
     normalize_role_key,
 )
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
-from project_workflow.interfaces.cli.core import _resolve_namespace_id
 
 _CATALOG_ROLE = "fleet-control"
 
@@ -193,35 +191,6 @@ def runtime_capabilities(
     }
 
 
-def _namespace_id(
-    uow: SAUnitOfWork, role: str, *, single_task: bool = False,
-    assignment_operation_key: str | None = None,
-) -> int:
-    assignment = None
-    if assignment_operation_key is not None:
-        assignment = uow.tasks.get_assignment_by_operation_key(assignment_operation_key)
-        if assignment is None or assignment.role_key != role:
-            raise ConflictError("Original role assignment required")
-        if (assignment.payload.get("single_task_context") is not None) != single_task:
-            raise ConflictError("Packet differs from the original assignment family")
-    value: int | None
-    if single_task:
-        from project_workflow.infrastructure.db.single_task_catalog import observe_installation
-
-        installation = observe_installation(uow)
-        binding = next((item for item in installation.bindings if item.role_key == role), None)
-        if binding is None:
-            raise ConflictError("Installed single-task role required")
-        value = int(binding.namespace_id)
-    else:
-        value = _resolve_namespace_id(uow, f"workflow-{role}")
-    if value is None:
-        raise ValueError("Namespace роли не найден")
-    if assignment is not None and assignment.project_id != value:
-        raise ConflictError("Original assignment namespace mismatch")
-    return value
-
-
 def _single_task_observation(authorization: str | None) -> Any:
     """Existing catalog credential; persisted observation only, no new registry."""
     from project_workflow.domain.single_task_profile import SingleTaskInstallationResponse
@@ -267,23 +236,6 @@ def single_task_namespace_binding(namespace_id: str, authorization: str | None =
         return _error("Single-task namespace not found", 404)
     response = SingleTaskBindingResponse(binding=binding)
     return JSONResponse(response.model_dump(mode="json", by_alias=True), headers={"Cache-Control": "no-store"})
-
-
-def _assert_task_key_in_namespace(uow: SAUnitOfWork, namespace_id: int, task_key: str) -> None:
-    """Role token may only touch tasks whose key prefix belongs to its namespace.
-
-    Namespaces without configured prefixes impose no prefix policy (master
-    treats key_prefixes as metadata, not routing rules); namespaces with
-    prefixes restrict the bridge to their own keys.
-    """
-    project = uow.projects.get_by_id(namespace_id)
-    if project is None:
-        raise ValueError("Namespace роли не найден")
-    prefixes = [prefix for prefix in (project.to_dict().get("key_prefixes") or []) if prefix]
-    if not prefixes:
-        return
-    if not any(task_key == prefix or task_key.startswith(f"{prefix}-") for prefix in prefixes):
-        raise ValueError(f"Ключ задачи {task_key!r} не соответствует префиксам профессии роли")
 
 
 def runtime_catalog(

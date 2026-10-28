@@ -11,6 +11,31 @@ from tests.test_configured_cli import configured as configured
 CATALOG = {"Authorization": "Bearer " + "c" * 40}
 
 
+def test_installed_catalog_readback_is_complete_uncached_and_catalog_only(configured, monkeypatch):
+    client, _ = configured
+    monkeypatch.setenv("PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN", "c" * 40)
+    config.get_settings.cache_clear()
+    prefix = "/internal/runtime/profiles/single-task-v1"
+    response = client.get(prefix + "/installation", headers=CATALOG)
+    assert response.status_code == 200, response.text
+    assert response.headers["cache-control"] == "no-store"
+    bindings = response.json()["installation"]["bindings"]
+    assert {binding["role_key"] for binding in bindings} == {
+        "project_manager", "analyst", "architect", "developer", "reviewer", "tester", "devops"}
+    assert sum(len(binding["modes"]) for binding in bindings) == 8
+    for binding in bindings:
+        path = prefix + "/namespace-bindings/" + binding["namespace_id"]
+        read = client.get(path, headers=CATALOG)
+        assert read.status_code == 200, read.text
+        assert read.headers["cache-control"] == "no-store"
+        assert read.json()["binding"] == binding
+        assert client.get(path, headers=WRITER).status_code == 403
+    assert client.get(prefix + "/installation", headers=WRITER).status_code == 403
+    assert client.get(prefix + "/installation").status_code == 401
+    assert client.get(prefix + "/namespace-bindings/not-a-number", headers=CATALOG).status_code == 422
+    assert client.get(prefix + "/namespace-bindings/999999", headers=CATALOG).status_code == 404
+
+
 def test_catalog_and_assignment_credentials_have_separate_capabilities(configured, monkeypatch):
     client, assignment = configured
     monkeypatch.setenv("PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN", "c" * 40)
