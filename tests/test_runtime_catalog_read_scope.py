@@ -2,7 +2,7 @@
 from unittest.mock import Mock, patch
 
 import pytest
-from sqlalchemy import event, false, select, text, update
+from sqlalchemy import delete, event, false, select, text, update
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.engine import Engine
 from starlette.testclient import TestClient
@@ -181,10 +181,27 @@ def test_configured_step_bounds_full_validations_per_runtime_uow(
         })
         assert history.status_code == 200, history.text
         assert len(history.json()["result"]["records"]) == 1
+        saved_records = history.json()["result"]["records"]
+        with SAUnitOfWork() as uow:
+            workflow = next(w for w in uow.workflows.list_by_profession(assignment["namespace_id"])
+                            if w.key == assignment["workflow_key"])
+            uow.session.execute(delete(m.ProfessionWorkflow).where(
+                m.ProfessionWorkflow.profession_id == assignment["namespace_id"],
+                m.ProfessionWorkflow.workflow_id == workflow.id,
+            ))
+        assert step(configured).status_code == 409
+        history = client.get("/internal/runtime/history", headers=WRITER, params={
+            "task": assignment["task"], "namespace_id": assignment["namespace_id"],
+            "interaction_protocol": "configured-cli-v1", "projection": "fleet-summary-v1", "n": 1,
+        })
+        assert history.status_code == 200, history.text
+        assert history.json()["result"]["records"] == saved_records
     finally:
         event.remove(Engine, "before_cursor_execute", sql)
     steps = [count for route, count, _queries in counts if route == "step"]
     assert steps and max(steps) <= 8
     assert all(queries <= 800 for route, _count, queries in counts if route == "step")
-    assert counts[-1][:2] == ("history", 1)
+    # Saved history is independent of current collection/sealed catalog admission.
+    assert all(count == 0 for route, count, _queries in counts if route == "history")
+    assert counts[-1][:2] == ("history", 0)
     assert counts[-1][2] <= 200

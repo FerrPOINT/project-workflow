@@ -193,6 +193,8 @@ def setup_db(isolate_ui_runtime_state, request):
     """Populate DB with seed.json + sample task before UI tests."""
     from project_workflow.infrastructure.db.schema import ensure_phase_catalog
 
+    client.cookies.clear()
+    request.addfinalizer(client.cookies.clear)
     uow = ui_app_state.get_db()
     request.addfinalizer(uow.close)
     if not uow.phases.list():
@@ -660,7 +662,7 @@ class TestPhasesPage:
         response = client.get("/phases")
         assert response.status_code == 200
 
-        sidebar_nav = re.search(r'<nav class="sidebar-nav"[^>]*>(.*?)</nav>', response.text, re.S)
+        sidebar_nav = re.search(r'<nav class="[^"]*\bsidebar-nav\b[^"]*"[^>]*>(.*?)</nav>', response.text, re.S)
         assert sidebar_nav is not None
 
         hrefs = re.findall(r'href="([^"]+)"', sidebar_nav.group(1))
@@ -1483,8 +1485,8 @@ class TestPhaseDetail:
         assert "function releasePhaseSectionNavigationLock()" in response.text
         assert "jumpToPhaseSection(sectionId, 'none');" in response.text
         assert "jumpToPhaseSection(requestedSection, 'replace')" in response.text
-        assert "window.addEventListener('popstate', restorePhaseSectionFromLocation);" in response.text
-        assert "window.addEventListener('wheel', releasePhaseSectionNavigationLock" in response.text
+        assert "page.on(window,'popstate', restorePhaseSectionFromLocation);" in response.text
+        assert "page.on(window,'wheel', releasePhaseSectionNavigationLock" in response.text
 
     def test_phase_detail_empty_name_is_sent_to_backend_validation(self):
         response = client.get(_phase_detail_path("4.START"))
@@ -2473,7 +2475,7 @@ class TestProjectsPage:
         assert "function namespaceIdFromUrl(url)" in response.text
         assert "rememberNamespaceSelection(namespace.id, historyMode || 'push');" in response.text
         assert "rememberNamespaceSelection(selectedNamespaceId, 'replace');" in response.text
-        assert "window.addEventListener('popstate', restoreNamespaceLocation);" in response.text
+        assert "page.on(window,'popstate', restoreNamespaceLocation);" in response.text
         assert "if(namespaceId != null){ selectNamespace(namespaceId, 'none'); }" in response.text
 
     def test_namespace_history_restores_create_mode_and_cancel_context(self):
@@ -2517,7 +2519,7 @@ class TestProjectsPage:
         response = client.get("/namespaces/new")
         assert response.status_code == 200
         assert (
-            "window.PdlcPlatformNavigation.navigate(namespaceScopedPath('/namespaces', d.namespace_id));"
+            "page.navigateAfterWrite(namespaceScopedPath('/namespaces', d.namespace_id));"
             in response.text
         )
 
@@ -2744,9 +2746,13 @@ class TestWorkflowsPage:
         assert "url.searchParams.set('workflow_id', String(workflowId));" in response.text
         assert "url.searchParams.delete('workflow_id');" in response.text
         assert "window.PdlcPlatformNavigation.syncRoute(nextUrl, mode === 'replace'" in response.text
-        assert "window.addEventListener('popstate'" in response.text
-        assert "selectWorkflow(workflowId, {updateUrl:false});" in response.text
-        assert "syncWorkflowUrl(selectedWorkflowId, 'replace');" in response.text
+        assert "page.on(window,'popstate'" in response.text
+        assert (
+            "loadWorkflowEditor(target,{history:'none',keepForm:workflowId===state.selected_workflow_id})"
+            in response.text
+        )
+        assert "history.go(workflowHistoryPosition-position)" in response.text
+        assert "syncRoute(workflowCommittedUrl,true" in response.text
         assert "return workflowById(defaultWorkflowId) ? defaultWorkflowId" in response.text
 
     def test_workflows_page_defaults_to_active_namespace_workflow(self):
@@ -2814,7 +2820,7 @@ class TestWorkflowsPage:
         assert "CRUD workflow" not in response.text
         assert "именованные workflow-контейнеры" not in response.text
 
-    def test_workflows_create_redirect_omits_namespace_until_bound(self):
+    def test_workflows_create_refresh_preserves_the_current_profession_context(self):
         uow = ui_app_state.get_db()
         try:
             namespace_id = _as_dict(uow.projects.get_by_code("UITEST"))["id"]
@@ -2827,7 +2833,7 @@ class TestWorkflowsPage:
         assert "function workflowSelectionUrl(workflowId)" in response.text
         assert "url.searchParams.set('workflow_id', String(workflowId));" in response.text
         assert "url.searchParams.set('namespace_id', String(activeNamespaceId));" not in response.text
-        assert "window.PdlcPlatformNavigation.navigate(workflowSelectionUrl(d.workflow_id));" in response.text
+        assert "return refreshAfterWorkflowWrite(workflowSelectionUrl(d.workflow_id));" in response.text
         assert "window.location.href = '/phases?workflow_id=' + d.workflow_id;" not in response.text
 
     def test_workflows_api_create_update_and_delete(self):
@@ -3076,15 +3082,22 @@ class TestSettingsPage:
 
 class TestUiNetworkFailures:
     @pytest.mark.parametrize(
-        ("path", "minimum_handlers"),
-        [("/namespaces", 4), ("/workflows", 4)],
+        ("path", "actions"),
+        [("/namespaces", ["saveNamespace", "createNamespace", "deleteNamespace", "reloadNamespaces"]),
+         ("/workflows", ["saveWorkflow", "createWorkflow", "deleteWorkflow"])],
     )
-    def test_crud_reports_network_errors(self, path, minimum_handlers):
+    def test_crud_reports_network_errors(self, path, actions):
         response = client.get(path)
 
         assert response.status_code == 200
-        handler = "catch(error){showRequestError(error)}" if path == "/agents" else ".catch(showRequestError)"
-        assert response.text.count(handler) >= minimum_handlers
+        for action in actions:
+            start = response.text.index(f"function {action}(")
+            end = response.text.index("\n}", start) + 2
+            assert ".catch(showRequestError)" in response.text[start:end], action
+        if path == "/workflows":
+            assert "async function loadWorkflowEditor(value,options={})" in response.text
+            assert "throw Error('Не удалось обновить воркфлоу')" in response.text
+            assert "showToast(error.message" in response.text
         assert "Не удалось связаться с сервером" in response.text
 
     def test_task_deletion_is_absent_from_ui_and_routes(self):
@@ -3112,7 +3125,10 @@ class TestUiNetworkFailures:
         detail_page = client.get(f"/phase/{phase_id}")
 
         assert phases_page.status_code == 200
-        assert phases_page.text.count("catch(_error){showRequestError();") >= 4
+        for action in ["addPhaseAfter", "deletePhase", "togglePhaseType", "movePhase"]:
+            start = phases_page.text.index(f"async function {action}(")
+            end = phases_page.text.index("\n}", start) + 2
+            assert "catch(_error){requireWorkflowReadback();showRequestError();" in phases_page.text[start:end], action
         assert instructions_page.status_code == 200
         assert "async function requestInstruction(url, options)" in instructions_page.text
         assert "showRequestError();" in instructions_page.text

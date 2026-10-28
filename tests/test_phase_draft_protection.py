@@ -21,9 +21,11 @@ def editor_script():
     prefix = template[template.index("const phaseId ="):template.index("const selectedNamespaceId =")]
     prefix = prefix.replace("{{ phase.id }}", "7")
     # Autosize now belongs to Base; keep this boundary tied to the input listener.
-    listener_start = template.index("document.addEventListener('input'")
+    listener_binding = "document.addEventListener('input'" if baseline else "page.on(document,'input'"
+    listener_start = template.index(listener_binding)
     listener = template[listener_start:template.index("\n});", listener_start) + len("\n});")]
-    save = template[template.index("let _saveTimer"):template.index("document.addEventListener('DOMContentLoaded'")]
+    ready_binding = "document.addEventListener('DOMContentLoaded'" if baseline else "page.ready("
+    save = template[template.index("let _saveTimer"):template.index(ready_binding)]
     return "\n".join([
         tracker,
         "const listeners=new Map();const fields=[{dataset:{field:'name'},value:'Original'},"
@@ -32,6 +34,7 @@ def editor_script():
         "const document={addEventListener:(type,fn)=>listeners.set(type,fn),getElementById:()=>null,",
         "querySelector:s=>s==='.wiki-header'?{querySelectorAll:()=>fields}:null,",
         "querySelectorAll:s=>s.startsWith('.wiki-header')?fields:[]};",
+        "const page={on:(target,type,fn)=>target.addEventListener(type,fn)};",
         "const showToast=()=>{};const phaseApiUrl=u=>u;const resizeInlineTextarea=()=>{};",
         prefix, listener, save,
         "if(typeof phaseDraft!=='undefined'){phaseDraft=createDraftTracker();phaseSignature=currentPhaseSignature();",

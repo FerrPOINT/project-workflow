@@ -1,232 +1,71 @@
-# Архитектура project-workflow
+# Архитектура Workflow
 
-Новые PM-задачи могут явно выбрать [configured-cli-v1](configured-cli-v1.md):
-постоянный agent PAT, существующие runtime assign/step/history и business-version
-CAS без native bind/rebind и временных CLI-файлов. Машины не получают human API.
-Текущий Tracker assignment и реальное owner confirmation проверяются сервером;
-legacy PMExecution/receipts не переписываются. Source implementation не означает
-установку или live acceptance.
+Workflow ведёт агента по сохранённым фазам: возвращает инструкции, принимает
+отчёт, оценивает его через advisor и сохраняет результат и историю. Один
+[configured-cli-v1](configured-cli-v1.md) обслуживает семь профессий и восемь
+режимов, включая Developer initial/rework.
 
-Отдельный [Base SDLC candidate](base-sdlc-candidate.md) не изменяет описанный ниже
-runtime. В целевом Base Task lifecycle принадлежит Tracker, чаты/config/runs —
-Fleet, технические workspace/receipts — Forge. Business-привязки действующего
-exporter требуют отдельной адаптации, а не переименования фактов текущего runtime.
+## Ответственность
 
-Сквозной бизнес-Namespace получает отдельный
-[execution context v2](resource-execution-context.md). Он сохраняет instance-qualified
-Task/Repository refs и выбранную версию profile/mode; legacy CLI namespaces и
-общий каталог profiles сохраняются. Контекст не открывает runtime/dispatch gates.
+| Компонент | Владеет |
+| --- | --- |
+| Workflow | Каталог инструкций, фазы, оценка отчётов и история |
+| Tracker | Задача, требования, назначение, комментарии и переход стадии |
+| Fleet | Конфигурация, доставка сообщений и фактическое исполнение агента |
+| Base | Общий CLI-транспорт, упаковка и канонические инструкции |
+| Central Auth | Учётные записи, служебные PAT и браузерные сессии |
 
-`project-workflow` - внутренняя loopback/private утилита для пофазного ведения
-задач. Она не владеет human identity, browser sessions или personal tokens:
-ими управляет Central Auth. Приложение проверяет их через server-side OIDC и
-introspection, а также сохраняет отдельный private runtime bridge для машинных
-исполнителей.
+Агент не назначает себя. Fleet передаёт проверенное назначение через существующий
+`POST /internal/runtime/assign`. Workflow сверяет текущий контекст Tracker,
+служебную identity, профессию, выбранный workflow и режим. Назначение создаёт
+или продолжает сохранённое исполнение; чтение `step` не создаёт бизнес-задачу.
 
-## Границы компонентов
+## Путь исполнения
 
-- **CLI** предоставляет только `step` и `history`. Пользовательские команды для
-  отдельных неймспейсов создаются wrapper-скриптами и внутри вызывают тот же
-  `project-workflow step/history`. В token mode команды используют защищённый
-  HTTP API через общий `pdlc-cli-core` (опциональный пакет из services-base;
-  без него CLI работает в локальном direct DB режиме); direct DB mode остаётся локальным
-  legacy/dev вариантом.
-- **Browser SSO** включается только при заданном `AUTH_ISSUER`: использует
-  Authorization Code + PKCE, проверяет signature, issuer, audience, expiry,
-  state и nonce, хранит access token только в зашифрованной HttpOnly cookie и
-  проверяет активность central session на защищённых запросах. Недоступность
-  Central Auth даёт `503` без local login. Пустой `AUTH_ISSUER` оставляет
-  standalone UI/API без browser-auth на loopback.
-- **Web UI** владеет CRUD для workflow, фаз и профессий через
-  FastAPI/Jinja. Задачи в UI доступны только для наблюдения: список, состояние,
-  phase/audit history, checks/evidence и verdict. Создание и переходы задач
-  выполняются только CLI `step`. Выбор в верхней панели полностью задаёт
-  связанный workflow, задачи, название, простую иконку, цвет темы,
-  и CLI-команду.
-- **Внешний runtime bridge** обслуживает изолированные контейнеры исполнителей
-  через `POST /internal/runtime/step` и `GET /internal/runtime/history`. Он
-  аутентифицируется role token из `PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON`, не
-  доступен как browser UI API и должен публиковаться только во внутреннюю сеть
-  или на host loopback. Изменяющий step содержит owner-issued
-  `step_operation_key`, canonical request digest и immutable assignment/run
-  fence; history и Supervisor result сохраняются с ними в одной транзакции.
-  Exact replay разрешён до cursor-проверки только пока текущий assignment/run
-  совпадает, а collision или stale run закрываются с conflict.
-- **Capability/readback boundary** — аутентифицированный
-  `GET /internal/runtime/capabilities`. Он принимает существующий assignment
-  либо runtime role token, возвращает только его роль, тип и разрешённые
-  операции, а также DB/schema readiness и строгий immutable build manifest.
-  Значения provenance не читаются из environment: candidate build получает
-  revision, оба digest и Docker context из одного `git archive <exact-sha>`.
-  Bundle digest учитывает path, regular-file type, executable mode и content;
-  non-regular runtime inputs отклоняются. Dockerfile проверяет manifest,
-  copied bundle и OCI-label build args. Публичный `/health` не является
-  доказательством runtime capability или source revision.
-- **SupervisorEngine** маршрутизирует задачу, строит phase contract, вызывает
-  обязательный OpenAI-compatible evaluator и сохраняет результат атомарно.
-- **Managed workflow catalog** — versioned source
-  `project_workflow/references/hermes_sdlc_catalog_v1.json`. Он содержит ровно
-  семь role workflows и одиннадцать modes в catalog v2, ordered phases, checks, evidence и
-  instruction-level skills. Bootstrap создаёт начальные данные; после установки
-  UI/API редактируют сохранённый каталог. Повторная migration-инициализация
-  сохраняет эти правки. Startup и health проверяют доступность БД и schema,
-  а соответствие закреплённому executor-каталогу проверяется отдельно для роли
-  вызывающего сервиса в runtime API. Оформление и посторонние пользовательские
-  workflow не меняют readiness роли. Directory проверяет связи namespace/workflow,
-  без проверки инструкций всех ролей. Routing, stage/status, priority, workspace, cycle и next
-  stage в каталог фаз не входят и поступают только из backend assignment.
-  Developer `initial|rework` допускают независимые scopes `delivery|aggregate`.
-  Additive adoption сохраняет exact v1 registry, assignments и историю;
-  несовместимый v1 dispatch блокируется, historical cleanup не допускает
-  новых effects. Canonical bundles экспортируются из exact Git archive и
-  проверяются вместе с native skills и capability descriptor.
-  В действующем v2 исполнении текст фаз, инструкций, checks и evidence читается
-  из БД через `step`; редактор сохраняет его без отдельного выбора версии.
-  Runtime проверяет сохранённый граф, настройки выполнения профессии и наличие skills в разрешённом
-  пакете роли. Текст seed не используется как запрет редактирования. Exact source
-  verification при bootstrap и отдельном Base candidate admission сохраняется.
-  Изменение графа не расширяет machine tool permissions: они определяются
-  действующей политикой роли/кода фазы, а не порядком, названием или текстом.
-- **Continuation boundary** — owner-only `POST /internal/runtime/rebind`.
-  Он подготавливает новый immutable assignment с прежними cycle/attempt,
-  текущей фазой и входными refs, увеличивает runSequence и проверяет checkpoint
-  provenance. Старый run не получает новый cursor; bind нового run требует
-  отдельного owner confirmation. Operation ledger и CAS предотвращают двойное
-  продвижение при retry/crash. Business владеет вопросом, ответом и освобождением
-  slot после durable checkpoint и terminal acknowledgement.
-- **PostgreSQL** - единственный runtime data store. SQLite допустим только в
-  изолированных тестах с явным test DSN.
-- **Внешний исполнитель** находится за границей приложения. Здесь хранится
-  nullable ключ профиля запуска в профессии и список рекомендованных skills
-  в инструкциях. Идентификатор профессии — её существующий `code`; роль задачи
-  задаётся назначением и режимом. Отдельного
-  реестра агентов и назначения исполнителей в фазах нет. Секреты и конфигурация
-  профиля остаются во внешнем исполнителе. Несколько профессий могут использовать
-  один профиль; смена ключа запуска не требует изменения внешнего исполнителя.
+1. URL, служебный PAT и идентификаторы настраиваются у агента заранее.
+2. `project-workflow --json step --task <key>` возвращает текущую фазу и версию.
+3. Агент выполняет инструкции и подаёт фактический отчёт на stdin `step --report -`
+   со стабильным ключом операции и ожидаемой версией.
+4. Workflow оценивает отчёт через настроенную модель. Перед commit повторно
+   проверяются назначение, права, версия и принадлежность workflow профессии.
+5. `history` читает сохранённые отчёты и ответы. Повтор той же операции возвращает
+   исходный результат; изменённое тело с тем же ключом конфликтует.
 
-Физическая таблица для неймспейсов пока называется `projects`. Это внутренний
-слой хранения, оставленный ради безопасной миграции. Публичный пользовательский
-слой работает через `/namespaces` и `/api/namespaces`.
+CLI использует общий HTTP-клиент Base. Ошибка HTTP не включает прямую запись
+в локальную БД, файловый bootstrap или скрытый повтор. При неизвестном результате
+записи агент читает `history --operation-key` исходной операции.
 
-## Web Auth Modes
+Профессия содержит коллекцию workflow. Сохранённая задача ссылается на профессию
+и конкретный workflow независимо от прежнего дефолта. Удаление workflow из
+коллекции запрещает дальнейшее исполнение, сохраняя авторизованное чтение истории.
+Миграции и уже опубликованные идентификаторы и отчёты сохраняются.
 
-Browser SSO is optional. With an empty `AUTH_ISSUER` the application does not
-install `_SsoMiddleware`: standalone Compose exposes UI and human API on its
-loopback-only binding without a login boundary. This is the default local mode
-and does not require `services-base`.
+## Завершение и доступ
 
-When all of `AUTH_ISSUER`, `AUTH_INTERNAL_BASE_URL`, `AUTH_PUBLIC_ORIGIN` and a
-32+-character `AUTH_SESSION_SECRET` are configured, **Browser SSO** uses
-Authorization Code + PKCE, validates signature, issuer, audience, expiry,
-state and nonce, stores the access token only in an encrypted HttpOnly cookie,
-and checks active central session on protected requests. Central Auth outage
-returns `503`; there is no local password fallback. `AUTH_ISSUER` is the
-browser-reachable issuer and must exactly match its token issuer;
-`AUTH_INTERNAL_BASE_URL` is reachable from the API process/container and serves
-token exchange, JWKS and introspection.
+Принятая финальная фаза создаёт сохранённый terminal receipt и инструкции
+завершения. Она сама не переводит задачу Tracker. Агент публикует итоговый
+комментарий; Tracker проверяет его и сохранённый результат Workflow
+server-to-server перед атомарным переходом. PM заканчивает в Backlog / Ready,
+без автоматического запуска Analyst. Финальный PM-отчёт требует действительного
+подтверждения владельцем точной редакции требований.
 
-The `project-workflow` OIDC client must register exactly
-`AUTH_PUBLIC_ORIGIN/sso/callback`; the standard local central deployment uses
-`http://localhost:8812/sso/callback`. Cookie `Secure` must be `true` for HTTPS.
+Web UI показывает каталог, фазы и историю; человеческий доступ проверяется
+через Central Auth и продуктовый admission. Машинный PAT не становится
+браузерной сессией. Native run ID и фактическое завершение процесса принадлежат
+Fleet, а не отдельному протоколу привязки Workflow.
 
-Personal-token CLI is a separate optional integration: `SDLC_API_TOKEN` causes
-CLI calls to use protected HTTP transport via separately installed
-`pdlc-cli-core`; Central Auth enforces `project-workflow:read/write` scopes.
-Without that package and token, CLI operates in local direct-DB mode.
+## Проверка и история изменений
 
-## State And Audit
+Source-тесты, собранный образ, установленная версия и живой прогон являются
+отдельными результатами. До переключения установки проверяются сохранность
+данных, завершение прежних попыток и совместимость выбранного комплекта.
 
-`tasks` хранит текущий snapshot задачи: статус, выбранный неймспейс, workflow и
-текущую фазу. `task_key` уникален внутри одного неймспейса, а не глобально по базе. Это
-позволяет вести одну внешнюю задачу, например `RUN-42`, через несколько
-неймспейсов: для разработки, проверки, релиза или любого другого сценария.
+- [CLI-контракт и API](configured-cli-v1.md).
+- [Обязательные локальные проверки](quality-gate.md).
+- [Ручная приёмка настоящего CLI и advisor](../manual/file-sandbox/README.md).
+- [Каркас UI](ui-shell.md).
+- [Историческая native-архитектура](architecture-native-history.md).
 
-Ключ задачи валидируется как внешний идентификатор формата `TASK-123`, но не
-маршрутизирует неймспейс сам по себе. Когда одна и та же внешняя задача ведётся в
-нескольких неймспейсах, нужный workflow выбирается явно: wrapper-командой,
-query-параметром или сохранённым UI selector.
-
-`task_phase_events` является append-only журналом переходов фаз.
-`task_step_history` хранит каждую пару "отчёт исполнителя - verdict
-Supervisor" вместе со снимком контракта и evaluator response.
-
-Удаление задач намеренно не поддерживается публичным UI/API/repository flow:
-история должна оставаться проверяемой. Связи task/phase/history закреплены
-составными FK, чтобы записи audit не могли относиться к чужому workflow или
-задаче.
-
-## Supervisor Contract
-
-Supervisor никогда не полагается на локальный fallback evaluator. Если provider
-недоступен, ответ некорректен или контракт изменился во время оценки, задача
-остаётся на текущей фазе и получает retryable `BLOCKED`.
-
-Replay допускается только для той же задачи, фазы, нормализованного отчёта и
-того же contract fingerprint. Fingerprint включает prompt version, phase graph,
-evaluation items, transition routes и накопленное покрытие. DB lock не
-удерживается во время provider call; перед commit состояние задачи и каталог
-перечитываются.
-
-Когда одна внешняя задача существует через несколько неймспейсов, исполнитель
-использует configured CLI-команду нужного неймспейса, например
-`workflow-qa step --task RUN-42`. Wrapper выставляет
-`PROJECT_WORKFLOW_NAMESPACE_ID=<id>`, поэтому контракт Supervisor показывает
-именно configured command без дополнительных selector-флагов.
-
-## Runtime Scope
-
-Текущий scope зафиксирован как внутренняя утилита:
-
-- стандартный Compose публикует PostgreSQL и API только на `127.0.0.1`;
-- `/health` проверяет DB connectivity, schema readiness и migration head;
-- `/internal/runtime/capabilities` дополнительно и fail-closed проверяет
-  role credential и immutable source provenance перед тем, как Business
-  adapter разрешает dispatch;
-- lifecycle освобождает SQLAlchemy connection pool при graceful shutdown;
-- append-only `task_phase_events` и `task_step_history` образуют audit log
-  переходов и evaluator verdicts;
-- startup распознаёт только точный versioned legacy unmanaged catalog,
-  сохраняет его identifiers и audit references и атомарно добавляет managed
-  registry; неоднозначный или изменённый legacy catalog остаётся fail-closed;
-- `/openapi.json` describes private machine contracts, including the opt-in PM
-  continuation request, response and trusted runtime observation schemas;
-  keep runtime endpoints inside the protected service network;
-- CORS не включается: browser UI и API работают с одного origin. Для cookie SSO
-  unsafe requests дополнительно требуют точный `Origin == AUTH_PUBLIC_ORIGIN`;
-  это CSRF boundary, а не замена security review для публичного доступа;
-- request logging и readiness считаются достаточными для локальной эксплуатации;
-- rate limits, CSP и metrics не добавляются, пока приложение не становится
-  внешним многопользовательским сервисом.
-
-## PM operation history
-
-PM checkpoint uniqueness reads operation history by execution and kind.
-`pm_operations` has the matching `(execution_ref, kind)` index in both ORM
-metadata and the pending `0007_pm_execution` migration. The operation-key
-primary key still owns replay identity; the index adds no uniqueness rule
-and does not change execution fences, authorization or HTTP responses.
-
-## References
-
-- [PM Continuation](pm-continuation-contract.md) — execution identity, persistent
-  checkpoint/resume, Fleet UUID mapping and trusted runtime proof.
-- [PM Verification](pm-continuation-verification.md) — local evidence and remaining
-  cross-service release and live acceptance.
-
-- [UI Shell Contract](ui-shell.md) — sidebar/header/work-area behavior and page width classes.
-- [README](../README.md) — deployment modes and local launch.
-- [Quality Gate](quality-gate.md) — repeatable verification commands.
-- [Database Reset](database-reset.md) — destructive local database recovery.
-- Central Auth contract in the sibling `services-base` repository (`AUTH.md`) — issuer, OIDC and token ownership.
-
-## Человеческие роли и приложения
-
-[Контракт и текущие gates](human-application-access.md) описывают feature-исходники.
-До установки полного совместимого cohort политика не активируется.
-
-## Кандидат владельца жизненного цикла identity
-
-[Inventory, протокол, миграция и gates](plans/2026-10-22-identity-deletion-owner.md)
-описывают закрытый транспорт координатора Auth и транзакционные fences для ссылок
-на автора execution context и инициатора namespace. История продукта сохраняется;
-локальная директория пользователей и browser credential не добавляются.
+Прямой вызов движка или тестовая подмена Auth, Tracker либо advisor не является
+живой CLI-приёмкой. Историческое описание сохраняется для чтения старых данных;
+оно не разрешает второй активный путь исполнения.

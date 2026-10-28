@@ -31,31 +31,43 @@ from project_workflow.supervisor.types import VERDICT_LABELS
 
 
 def _catalog(uow: SAUnitOfWork, namespace_id: int, *, workflow_key: str | None = None,
-             mode_key: str | None = None, execution: bool = False) -> tuple[Any, Any, Any]:
-    installed = observe_installation(uow)
-    if execution and (installed.instruction_manifest_sha256 != MANIFEST_SHA256
-                      or installed.workflow_catalog_sha256 != CATALOG_SHA256):
-        raise ConflictError("Current configured instruction catalog required; retained native profiles are read only")
-    binding = next((b for b in installed.bindings if int(b.namespace_id) == namespace_id), None)
-    if binding is None or (workflow_key is not None and workflow_key != binding.workflow_key):
-        raise ConflictError("Installed profession/workflow required")
+             workflow_id: int | None = None, mode_key: str | None = None,
+             execution: bool = False) -> tuple[Any, Any, Any]:
+    uow.lock_catalog_state(shared=True)
     project = uow.projects.get_by_id(namespace_id)
     if project is None:
         raise NotFoundError("Namespace not found")
-    workflow = uow.workflows.lock(int(binding.workflow_id))
-    mode = uow.workflows.get_mode_by_key(int(binding.workflow_id), mode_key) if mode_key is not None else None
-    if (workflow is None or workflow.key != binding.workflow_key
-            or mode_key is not None and (mode is None or mode.id not in {int(m.mode_id) for m in binding.modes})):
+    selected = (uow.workflows.get_by_id(workflow_id) if workflow_id is not None and not execution else
+                next((w for w in uow.workflows.list_by_profession(namespace_id)
+                     if (workflow_key is not None and w.key == workflow_key)
+                     or (workflow_id is not None and w.id == workflow_id)), None))
+    if selected is None or selected.id is None:
+        raise ConflictError("Workflow must belong to the assigned profession")
+    workflow = uow.workflows.lock(selected.id)
+    if (workflow is None or workflow.id is None or workflow.key is None
+            or execution and not uow.workflows.belongs_to_profession(workflow.id, namespace_id)):
+        raise ConflictError("Profession workflow changed during admission")
+    mode = uow.workflows.get_mode_by_key(workflow.id, mode_key) if mode_key is not None else None
+    if mode_key is not None and mode is None:
         raise ConflictError("Installed profession mode required")
+    if execution and workflow.key.startswith("single-task-v1:"):
+        installed = observe_installation(uow)
+        if execution and (installed.instruction_manifest_sha256 != MANIFEST_SHA256
+                          or installed.workflow_catalog_sha256 != CATALOG_SHA256):
+            raise ConflictError(
+                "Current configured instruction catalog required; retained native profiles are read only")
+        if not any(int(b.namespace_id) == namespace_id and int(b.workflow_id) == workflow.id
+                   for b in installed.bindings):
+            raise ConflictError("Installed profession/workflow required")
     return project, workflow, mode
 
 
 def _stored_row(uow: SAUnitOfWork, task: str, namespace_id: int, *,
                 execution_ref: str | None = None, execution: bool = False) -> tuple[Any, Any, dict[str, Any], Any]:
-    _, workflow, _ = _catalog(uow, namespace_id, execution=execution)  # Catalog -> workflow -> task.
     found = uow.tasks.get_by_key(task, project_id=namespace_id)
     if found is None or found.id is None:
         raise NotFoundError("Configured task not enrolled")
+    _, workflow, _ = _catalog(uow, namespace_id, workflow_id=found.workflow_id, execution=execution)
     current = uow.tasks.lock(found.id)
     if current is None:
         raise ConflictError("Configured task changed during admission")
@@ -320,22 +332,27 @@ def step(uow: SAUnitOfWork, command: ConfiguredStep, authorization: str | None) 
             return {"ok": True, "exit_code": 0, "result": replay, "output": replay.get("instructions", "")}
         if command.expected_version != fence.version or task.status == "done":
             raise ConflictError("Configured expected_version does not match current cursor")
-    phase = uow.phases.get_by_id(task.current_phase_id)
-    if command.report is not None and phase is not None and phase.code == "PM-DRAFT-03":
+    engine = SupervisorEngine(command.task, uow=uow, project_id=task.project_id,
+                              create_if_missing=False, runtime_fence=fence)
+    phase = engine.phase_map.get(engine.current_phase_code or "")
+    final_pm = False
+    if payload["request"]["role_key"] == "project_manager" and phase is not None:
+        group = engine.contract_builder.get_parallel_group(phase) if phase.execution_type == "parallel" else [phase]
+        final_pm = engine._resolve_transition(phase, "pass", group)[0] is None
+    if command.report is not None and final_pm:
         confirmed = confirmation(payload)
         if (command.requirements_revision != confirmed["revision"]
                 or command.requirements_sha256 != confirmed["content_hash"]):
             raise ConflictError("Final report must name the exact confirmed requirements revision/hash")
         fence = replace(fence, confirmation=confirmed)
+        engine.runtime_fence = fence
     elif command.requirements_revision is not None:
         raise ConflictError("Requirements evidence is only accepted for the final PM report")
-    engine = SupervisorEngine(command.task, uow=uow, project_id=task.project_id,
-                              create_if_missing=False, runtime_fence=fence)
     if command.report is None:
         instructions = engine.format_current_phase_instructions()
         result = {**cursor(uow, task, payload), "instructions": instructions,
                   "phase_contract": engine.get_phase_contract(), "complete": task.status == "done"}
-        if phase is not None and phase.code == "PM-DRAFT-03" and task.status != "done":
+        if final_pm and task.status != "done":
             result["report_parameters"] = ["--requirements-revision", "--requirements-sha256"]
         if task.status == "done":
             final_row = _records(uow, task.id, limit=1)[0]
@@ -372,6 +389,8 @@ def prepare_history(fence: ConfiguredCliFence, run_data: dict[str, Any]) -> None
 
 def finish_history(uow: SAUnitOfWork, fence: ConfiguredCliFence, history_id: int, result: dict[str, Any]) -> None:
     authorize(fence.authorization, fence.enrollment, write=True)
+    if not uow.workflows.belongs_to_profession(fence.workflow_id, fence.namespace_id):
+        raise ConflictError("Workflow left the profession during evaluation")
     task = uow.tasks.get_by_id(fence.task_id)
     if task is None:
         raise ConflictError("Configured task disappeared before commit")

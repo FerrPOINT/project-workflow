@@ -121,6 +121,8 @@
             "type": "string"
           },
           "workflow_key": {
+            "maxLength": 128,
+            "minLength": 1,
             "title": "Workflow Key",
             "type": "string"
           }

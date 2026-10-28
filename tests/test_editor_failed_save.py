@@ -108,7 +108,7 @@ def test_phase_save_keeps_response_ids_attached_to_submitted_rows(change, field)
         encoding="utf-8",
     )
     start = template.index("async function persistPhase()")
-    end = template.index("document.addEventListener('DOMContentLoaded'", start)
+    end = template.index("page.ready(", start)
     script = "\n".join([
         "const messages=[];let payload=null;const phaseDraft=null;let confirmedPhase=null;"
         "const updatePhaseSaveStatus=()=>{};",

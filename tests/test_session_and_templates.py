@@ -268,7 +268,7 @@ class TestSessionHelpers:
 
         monkeypatch.chdir(tmp_path)
 
-        assert migration_head() == "0020_configured_cli_catalog"
+        assert migration_head() == "0021_profession_task_workflows"
 
     @pytest.mark.parametrize("use_connection", [False, True])
     @pytest.mark.parametrize("partial_archive", [False, True])

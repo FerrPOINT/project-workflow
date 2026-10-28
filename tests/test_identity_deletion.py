@@ -247,7 +247,7 @@ def test_supported_human_guard_predecessor_upgrades_without_recreating_history(t
                 {"id": str(uuid4()), "operation": str(uuid4()), "workflow": workflow, "mode": mode, "subject": subject})
             before = connection.execute(text("SELECT * FROM resource_execution_contexts")).all()
         ensure_migrated(engine)
-        assert database_revisions(engine) == {"0020_configured_cli_catalog"}
+        assert database_revisions(engine) == {"0021_profession_task_workflows"}
         assert schema_is_ready(engine)
         with engine.connect() as connection:
             assert connection.execute(text("SELECT * FROM resource_execution_contexts")).all() == before

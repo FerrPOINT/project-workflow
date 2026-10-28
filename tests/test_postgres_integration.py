@@ -250,7 +250,7 @@ def test_pm_ownership_catalog_lock_order_and_incomplete_schema(pg_url, winner):
     assert not schema_is_ready(engine)
     with pytest.raises(DatabaseRecreateRequired):
         ensure_migrated(engine)
-    assert database_revisions(engine) == {"0020_configured_cli_catalog"}
+    assert database_revisions(engine) == {"0021_profession_task_workflows"}
 
 
 @pytest.mark.integration
@@ -438,6 +438,15 @@ def test_namespace_defaults_upgrade_preserves_catalog_on_postgres(pg_url, tmp_pa
 
 
 @pytest.mark.integration
+def test_profession_collection_upgrade_preserves_history_on_postgres(pg_url):
+    from tests.test_profession_execution_membership_migration import (
+        assert_populated_upgrade_preserves_collection_history,
+    )
+
+    assert_populated_upgrade_preserves_collection_history(get_engine(pg_url))
+
+
+@pytest.mark.integration
 class TestPostgresInitialMigration:
     def test_get_engine_postgresql(self, pg_url):
         engine = get_engine(pg_url)
@@ -472,7 +481,7 @@ class TestPostgresInitialMigration:
             version = conn.execute(
                 text("SELECT version_num FROM project_workflow.alembic_version")
             ).scalar_one()
-        assert version == migration_head() == "0020_configured_cli_catalog"
+        assert version == migration_head() == "0021_profession_task_workflows"
         assert schema_is_ready(engine) is True
 
     def test_managed_bootstrap_serializes_with_public_catalog_creation(self, pg_url):
@@ -996,8 +1005,24 @@ class TestPostgresInitialMigration:
                 project_ids.append(project_id)
                 phase_ids.append(phase_id)
 
-        with pytest.raises(IntegrityError, match="fk_tasks_project_workflow"):
+        # Stored history may use a workflow other than the profession's old
+        # default. Current collection admission belongs to the execution API.
+        with engine.begin() as conn:
+            extra_id = conn.execute(text(
+                "INSERT INTO project_workflow.tasks "
+                "(project_id, workflow_id, mode_id, task_key, current_phase_id, status) "
+                "VALUES (:project_id, :workflow_id, :mode_id, 'PA-EXTRA', :phase_id, 'active') RETURNING id"
+            ), {"project_id": project_ids[0], "workflow_id": workflow_ids[1],
+                "mode_id": mode_ids[1], "phase_id": phase_ids[1]}).scalar_one()
+            assert conn.execute(text(
+                "SELECT project_id, workflow_id FROM project_workflow.tasks WHERE id=:id"
+            ), {"id": extra_id}).one() == (project_ids[0], workflow_ids[1])
+
+        with pytest.raises(IntegrityError, match="fk_tasks_project"):
             with engine.begin() as conn:
+                absent_project = conn.execute(text(
+                    "SELECT coalesce(max(id), 0) + 1 FROM project_workflow.projects"
+                )).scalar_one()
                 conn.execute(
                     text(
                         "INSERT INTO project_workflow.tasks "
@@ -1005,7 +1030,7 @@ class TestPostgresInitialMigration:
                         "VALUES (:project_id, :workflow_id, :mode_id, 'PA-BAD', :phase_id, 'active')"
                     ),
                     {
-                        "project_id": project_ids[0],
+                        "project_id": absent_project,
                         "workflow_id": workflow_ids[1],
                         "mode_id": mode_ids[1],
                         "phase_id": phase_ids[1],

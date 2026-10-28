@@ -1,6 +1,9 @@
 """Profession appearance uses the existing icon/color fields in one visual row."""
 
+import json
+import subprocess
 from html.parser import HTMLParser
+from pathlib import Path
 
 import pytest
 
@@ -78,8 +81,7 @@ def test_theme_controls_show_all_icons_and_select_current_value(icon):
     assert [option["value"] for option in parsed.icon_options if "selected" in option] == [icon or "folder"]
     assert 'for="namespaceThemeIcon">Иконка</label>' in html
     assert 'data-base-choice class="base-control" id="namespaceThemeIcon"' in html
-    assert 'renderOption: renderNamespaceIconChoice' in html
-    assert "appearance: 'icons', renderOption: renderNamespaceIconChoice" in html
+    assert "renderNamespaceIconChoice:typeof renderNamespaceIconChoice==='function'" in html
     assert "name.className = 'base-visually-hidden'" in html
     assert "visual.appendChild(document.createTextNode(option.label))" not in html
     assert 'namespaceIconSelect' not in html
@@ -107,7 +109,7 @@ def test_header_logo_is_constant_and_each_profession_option_has_its_own_identity
         assert len(selected) == 1
         assert all(option["data-color"] == current["theme_color"] for option in selected)
         assert all(option["value"] == str(current["id"]) for option in selected)
-        assert "initChoice(control" in html
+        assert "data-base-choice" in parsed.selector_attrs[0]
         for profession in professions:
             assert html.count(f'data-icon="{profession["theme_icon"]}" data-color="{profession["theme_color"]}"') == 1
             assert sum(option['value'] == str(profession['id']) for option in parsed.selector_options) == 1
@@ -118,6 +120,29 @@ def test_header_logo_is_constant_and_each_profession_option_has_its_own_identity
     assert logos[0] == logos[1]
     assert 'data-base-platform-mark' in logos[0][1]
     assert 'data-base-brand-initials' in logos[0][2]
+
+
+def test_current_page_controller_initializes_the_actual_icon_and_profession_renderers():
+    path = Path(__file__).parents[1] / "project_workflow/interfaces/ui/templates/application-navigation.js"
+    source = path.read_text(encoding="utf-8")
+    controls = source[source.index("  function controls(root){"):source.index("  function destroyControls(root){")]
+    script = "\n".join([
+        "const calls=[];const renderNamespaceChoice=()=>{};const renderNamespaceIconChoice=()=>{};",
+        "const window={PdlcBaseUI:{initMenus(){}},PdlcChoice:{initChoice(select,config){",
+        "calls.push({id:select.id,appearance:config.appearance,icon:config.renderOption===renderNamespaceIconChoice,",
+        "profession:config.renderOption===renderNamespaceChoice});}}};",
+        "const selects=[{id:'profession',hasAttribute:()=>true},",
+        "{id:'namespaceThemeIcon',hasAttribute:()=>false},{id:'ordinary',hasAttribute:()=>false}];",
+        "const root={querySelectorAll:selector=>selector.startsWith('select')?selects:[]};",
+        controls, "controls(root);console.log(JSON.stringify(calls));",
+    ])
+    result = subprocess.run(["node", "--input-type=module", "-"], input=script, text=True, encoding="utf-8",
+                            capture_output=True, check=True, timeout=10)
+    assert json.loads(result.stdout) == [
+        {"id": "profession", "icon": False, "profession": True},
+        {"id": "namespaceThemeIcon", "appearance": "icons", "icon": True, "profession": False},
+        {"id": "ordinary", "icon": False, "profession": False},
+    ]
 
 
 @pytest.mark.parametrize("icon", PROJECT_THEME_ICONS)

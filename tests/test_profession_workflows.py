@@ -33,11 +33,13 @@ def test_profession_collection_excludes_neighbors_on_load_reload_and_save():
             assert all(row["namespace_count"] == 1 for row in rows)
             html = client.get(f"/workflows?namespace_id={profession}&workflow_id={workflow}").text
             assert workflow_ids(html) == own
-            assert "fetch(workflowApiUrl(null))" in html
             assert "namespace_id', String(professionId)" in html
             assert 'id="newWorkflowButton"' in html
             saved = client.put(f"/api/workflows/{workflow}?namespace_id={profession}", json={"description": "Saved"})
             assert saved.status_code == 200
+            reloaded = client.get(f"/workflows?namespace_id={profession}&workflow_id={workflow}")
+            assert reloaded.status_code == 200
+            assert workflow_ids(reloaded.text) == own
             denied = client.put(f"/api/workflows/{workflow}?namespace_id={neighbor}", json={"description": "Wrong"})
             assert denied.status_code == 409
             assert client.delete(f"/api/workflows/{workflow}?namespace_id={neighbor}").status_code == 409
