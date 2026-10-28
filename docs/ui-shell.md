@@ -234,3 +234,12 @@ also retains the explicit edge and rollback target through the existing owner AP
 Instruction toolbar actions remain disabled until mutation/order acknowledgement;
 uncertain writes are not repeated automatically. Pending writes and drafts still
 block navigation. Default build/check does not run the manual DOM/API fixtures.
+
+### Плотность карточек
+
+Режим исполнения и общие действия располагаются в нижней строке карточки.
+На узком экране строка переносится без наложений; размеры кнопок остаются Base.
+Ссылка фазы и панель действий — соседние элементы внутри общей карточки,
+без кнопок внутри ссылки. Оранжевая рамка относится ко всей параллельной группе.
+Навыки инструкции видны компактными плашками. Добавление и удаление открываются
+в штатном Base Disclosure; поле добавления не занимает место до редактирования.

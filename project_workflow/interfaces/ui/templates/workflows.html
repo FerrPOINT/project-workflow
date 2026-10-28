@@ -41,10 +41,9 @@
 .phase-jump-select{flex:0 1 240px;min-width:180px;max-width:100%}
 .timeline{display:flex;flex-direction:column;align-items:stretch;max-width:none;gap:12px}
 .timeline-block,.timeline-item{width:100%}
-.phase-card-shell{position:relative;display:grid;min-height:112px}
-.phase-card-shell:has(.phase-card-actions) > .timeline-card{padding-bottom:64px}
-.phase-card-actions{position:absolute;right:12px;bottom:12px;display:flex;align-items:center;gap:6px;max-width:calc(100% - 24px);z-index:2}
-.execution-row{margin-top:10px;min-height:0}
+.phase-card-shell{min-width:0}
+.phase-card-link{display:block;min-width:0}
+.phase-card-footer{padding:0 12px 12px}
 .timeline-parallel-header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
 .timeline-parallel-count{font-size:var(--base-font-label);color:var(--text-dim)}
 .timeline-group-transition{margin:12px 0 0;padding-top:10px;border-top:1px solid var(--border);color:var(--text-secondary);font-size:var(--base-font-label);line-height:var(--base-line-body)}
@@ -52,40 +51,35 @@
 .timeline.is-compact{gap:0;border-top:1px solid var(--border)}
 .timeline.is-compact > .timeline-block:not(.timeline-parallel-group){border-bottom:1px solid var(--border)}
 .timeline.is-compact > .timeline-parallel-group{margin-block:8px}
-.timeline.is-compact .phase-card-shell{min-height:64px}
-.timeline.is-compact .timeline-card{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-inline-end:12px;padding-bottom:12px}
-.timeline.is-compact .phase-card-shell:has(.phase-card-actions) > .timeline-card{padding-inline-end:256px;padding-bottom:12px}
-.timeline.is-compact .timeline-card .timeline-name{padding-right:0;overflow-wrap:anywhere}
-.timeline.is-compact .phase-card-copy{flex:1 1 auto;min-width:0}
+.timeline.is-compact .phase-card-shell{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 12px}
+.timeline.is-compact .phase-card-link{flex:1 1 200px;padding:0}
+.timeline.is-compact .timeline-name{overflow-wrap:anywhere}
 .timeline.is-compact .timeline-desc{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.timeline.is-compact .execution-row{flex:0 0 auto;width:auto;max-width:none;min-width:0;margin:0;flex-wrap:wrap;justify-content:flex-end}
-.timeline.is-compact .phase-card-actions{top:50%;bottom:auto;transform:translateY(-50%)}
+.timeline.is-compact .phase-card-footer{flex:0 1 auto;padding:0;margin-left:auto}
 .timeline.is-compact .timeline-parallel-header{margin:0}
 .timeline.is-compact .timeline-parallel-grid{display:block}
 .timeline.is-compact .timeline-group-transition{margin:0;padding:8px 12px}
 .timeline.is-compact .timeline-parallel-grid .timeline-item:not(:last-child){border-bottom:1px solid var(--border)}
-@media(max-width:760px){.mode-tabs{display:none}.mode-picker{display:block}.phase-view-controls{width:100%;justify-content:space-between}.phase-jump-select{flex:1 1 100%}.timeline-parallel-grid{grid-template-columns:1fr}.phase-card-shell{min-height:0}.timeline.is-compact .timeline-card{display:block}.timeline.is-compact .phase-card-shell:has(.phase-card-actions) > .timeline-card{padding-inline-end:12px;padding-bottom:64px}.timeline.is-compact .phase-card-actions{top:auto;bottom:12px;transform:none}.timeline.is-compact .timeline-desc{display:none}.timeline.is-compact .execution-row{width:auto;max-width:none;margin-top:4px;justify-content:flex-start}}
+@media(max-width:760px){.mode-tabs{display:none}.mode-picker{display:block}.phase-view-controls{width:100%;justify-content:space-between}.phase-jump-select{flex:1 1 100%}.timeline-parallel-grid{grid-template-columns:1fr}.timeline.is-compact .phase-card-link{flex-basis:100%}.timeline.is-compact .timeline-desc{display:none}.timeline.is-compact .phase-card-footer{width:100%}}
 {% endblock %}
 
 {% macro phase_card(p) -%}
 <div class="timeline-item" id="phase-{{ p.id }}" data-phase-id="{{ p.id }}" data-phase-order="{{ p.phase_num }}" data-execution-type="{{ p.execution_type }}" data-rollback-target-phase-id="{{ p.rollback_target_phase_id|default('') or '' }}">
-  <div class="phase-card-shell">
-    {% set compact = phase_count >= 8 %}
-    {% set render_panel = base_ui.resource_list_row if compact else base_ui.card %}
+  <div class="phase-card-shell {{ 'base-resource-list-row' if phase_count >= 8 else 'base-card' }}">
     {% set phase_href = ui_base_path() ~ '/phase/' ~ p.id ~ ('?profession_id=' ~ selected_namespace.id if selected_namespace else '') ~ phase_scope_suffix %}
-    {% call render_panel(href=phase_href, class_name='timeline-card' ~ ('' if compact else ' base-card-content')) %}
+    {% call base_ui.resource_list_row(href=phase_href, class_name='timeline-card phase-card-link') %}
       <div class="phase-card-copy">
         <div class="timeline-name">{{ p.name }}</div>
         {% set description = p.description | default('') %}
         {% if description %}<div class="timeline-desc">{{ description[:120] }}{% if description|length > 120 %}...{% endif %}</div>{% endif %}
       </div>
-      <div class="execution-row">
-        {{ base_ui.badge('параллельно' if p.execution_type == 'parallel' else 'последовательно', 'info' if p.execution_type == 'parallel' else 'neutral') }}
-      </div>
     {% endcall %}
+    <div class="workflow-card-footer phase-card-footer">
+      {{ base_ui.badge('параллельно' if p.execution_type == 'parallel' else 'последовательно', 'info' if p.execution_type == 'parallel' else 'neutral') }}
 {% if can_administer %}
-    {{ workflow_cards.actions('phase', p.name, parallel=p.execution_type == 'parallel', first=p.phase_num == 1, last=p.phase_num == phase_count, delete_disabled=phase_count <= 1) }}
+      {{ workflow_cards.actions('phase', p.name, parallel=p.execution_type == 'parallel', first=p.phase_num == 1, last=p.phase_num == phase_count, delete_disabled=phase_count <= 1) }}
 {% endif %}
+    </div>
   </div>
 </div>
 {%- endmacro %}

@@ -461,6 +461,7 @@ async function addSkillToInstruction(input) {
       showToast('Не удалось добавить навык', 'error');
       return;
     }
+    input.value = '';
     window.PdlcPlatformNavigation.reload();
   } finally {
     input.disabled = false;

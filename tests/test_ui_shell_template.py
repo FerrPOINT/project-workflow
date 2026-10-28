@@ -825,9 +825,17 @@ class SharedShellTemplateTests(TestCase):
                 )
                 for panel in panels:
                     classes = set(panel["class"].split())
-                    self.assertEqual("base-card" in classes, count < 8)
-                    self.assertEqual("base-resource-list-row" in classes, count >= 8)
+                    self.assertIn("base-resource-list-row", classes)
                     self.assertEqual(panel["data-interactive"], "true")
+                shells = [attrs for _, attrs in elements
+                          if "phase-card-shell" in attrs.get("class", "").split()]
+                self.assertEqual(len(shells), count)
+                for shell in shells:
+                    self.assertEqual("base-card" in shell["class"].split(), count < 8)
+                    self.assertEqual("base-resource-list-row" in shell["class"].split(), count >= 8)
+                links = re.findall(r'<a[^>]+class="[^"]*timeline-card[^>]*>(.*?)</a>', html, re.S)
+                self.assertTrue(links)
+                self.assertTrue(all("<button" not in link for link in links))
 
     def test_editor_uses_base_controls_and_exact_skill_values_for_sync_and_parallel_instructions(self):
         for parallel in [False, True]:

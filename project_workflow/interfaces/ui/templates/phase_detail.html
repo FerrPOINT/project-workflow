@@ -24,7 +24,10 @@
 
 .timeline-badges input.skill-candidate{width:180px}
 .wiki-page .timeline-row{grid-template-columns:minmax(0,1fr);gap:8px}
-.instruction-card-actions{justify-content:flex-end;margin-top:12px}
+.instruction-card-footer{margin-top:8px}
+.instruction-skills{margin-top:8px}
+.instruction-skill-labels{display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px}
+.instruction-skill-editor .timeline-badges{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
 #instructionsTimeline{gap:12px;max-width:none}
 #instructionsTimeline .timeline-badges input.skill-candidate{max-width:100%}
 
@@ -129,27 +132,33 @@
       <div class="timeline-card base-card base-card-content" data-instruction-id="{{ i.id }}" data-step-num="{{ i.step_num }}" data-type="{{ i.execution_type }}">
 {% if can_administer %}
         <textarea data-base-autosize class="timeline-name-input base-control base-textarea" rows="1" data-field="description" data-original-description="{{ i.description }}" aria-label="Описание инструкции {{ i.step_num }}" onblur="saveInstructionDescription(this)" data-appearance="inline">{{ i.description }}</textarea>
-        {{ base_ui.badge('параллельно' if i.execution_type == 'parallel' else 'последовательно', 'info' if i.execution_type == 'parallel' else 'neutral') }}
 {% else %}
         {% call base_ui.prose() %}<p>{{ i.description }}</p>{% endcall %}
-        {{ base_ui.badge('параллельно' if i.execution_type == 'parallel' else 'последовательно', 'info' if i.execution_type == 'parallel' else 'neutral') }}
 {% endif %}
-        <div class="timeline-badges">
-          {% for s in i.skills or [] %}
-          {% call base_ui.badge(tone='info') %}
-            <span data-instruction-skill="{{ s }}">{{ s }}</span>
+        <div class="instruction-skills">
 {% if can_administer %}
-            <button type="button" class="base-control base-button base-icon-control skill-remove-btn" data-variant="ghost" data-size="icon" data-skill="{{ s }}" onclick="removeSkillFromInstruction(this)" aria-label="Убрать навык {{ s }} из инструкции {{ i.step_num }}">×</button>
-{% endif %}
+          {% set skill_summary %}<span class="instruction-skill-labels"><span>Навыки{% if not i.skills %}: не выбраны{% endif %}</span>{% for s in i.skills or [] %}{{ base_ui.badge(s, 'info') }}{% endfor %}</span>{% endset %}
+          {% call base_ui.disclosure(skill_summary, appearance='row', class_name='instruction-skill-editor') %}
+          <div class="timeline-badges">
+            {% for s in i.skills or [] %}
+            {% call base_ui.badge(tone='info', appearance='inline') %}
+              <span data-instruction-skill="{{ s }}">{{ s }}</span>
+              <button type="button" class="base-control base-button base-icon-control skill-remove-btn" data-variant="ghost" data-size="icon" data-skill="{{ s }}" onclick="removeSkillFromInstruction(this)" aria-label="Убрать навык {{ s }} из инструкции {{ i.step_num }}">×</button>
+            {% endcall %}
+            {% endfor %}
+            <input class="skill-candidate base-control base-input" type="text" placeholder="Добавить навык" aria-label="Добавить навык к инструкции {{ i.step_num }}" onchange="addSkillToInstruction(this)">
+          </div>
           {% endcall %}
-          {% endfor %}
-{% if can_administer %}
-          <input class="skill-candidate base-control base-input" type="text" placeholder="Добавить навык" aria-label="Добавить навык к инструкции {{ i.step_num }}" onchange="addSkillToInstruction(this)">
+{% elif i.skills %}
+          <div class="instruction-skill-labels">{% for s in i.skills %}{{ base_ui.badge(s, 'info') }}{% endfor %}</div>
 {% endif %}
         </div>
+        <div class="workflow-card-footer instruction-card-footer">
+          {{ base_ui.badge('параллельно' if i.execution_type == 'parallel' else 'последовательно', 'info' if i.execution_type == 'parallel' else 'neutral') }}
 {% if can_administer %}
-        {{ workflow_cards.actions('instruction', i.step_num, parallel=i.execution_type == 'parallel', first=i.step_num == 1, last=i.step_num == instruction_count) }}
+          {{ workflow_cards.actions('instruction', i.step_num, parallel=i.execution_type == 'parallel', first=i.step_num == 1, last=i.step_num == instruction_count) }}
 {% endif %}
+        </div>
       </div>
     </div>
     {% endmacro %}

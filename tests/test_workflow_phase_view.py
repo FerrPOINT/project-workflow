@@ -57,7 +57,7 @@ console.log(JSON.stringify({restored,writes}));
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout) == {
         "restored": {
-            "classes": ["base-resource-list-row"] if view == "compact" else ["base-card", "base-card-content"],
+            "classes": ["base-resource-list-row"] if view == "compact" else ["base-card"],
             "compact": view == "compact", "radios": [view == "compact", view == "timeline"],
             "writes": [],
         },

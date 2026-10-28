@@ -18,9 +18,8 @@ function setPhaseView(view,persist=true){
   const timeline=document.getElementById('phasesTimeline');
   if(!timeline||!['compact','timeline'].includes(view))return;
   timeline.classList.toggle('is-compact',view==='compact');
-  timeline.querySelectorAll('a.timeline-card').forEach(card=>{
+  timeline.querySelectorAll('.phase-card-shell').forEach(card=>{
     card.classList.toggle('base-card',view==='timeline');
-    card.classList.toggle('base-card-content',view==='timeline');
     card.classList.toggle('base-resource-list-row',view==='compact');
   });
   document.querySelectorAll('#phaseView input[name="phase-view"]').forEach(input=>{
