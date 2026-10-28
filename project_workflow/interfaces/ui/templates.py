@@ -14,7 +14,7 @@ from project_workflow.domain.project_theme import (
     PROJECT_THEME_ICONS,
     normalize_theme_color,
 )
-from project_workflow.interfaces.ui.controller_assets import page_controller_assets
+from project_workflow.interfaces.ui.controller_assets import page_controller_assets, page_controller_identity
 from project_workflow.interfaces.ui.project_admission import display_window
 
 BASE_DIR = Path(__file__).parent
@@ -138,3 +138,4 @@ templates.env.globals["default_project_icon"] = DEFAULT_PROJECT_ICON
 env = templates.env
 
 templates.env.globals["page_controller_assets"] = page_controller_assets
+templates.env.globals["page_controller_identity"] = page_controller_identity

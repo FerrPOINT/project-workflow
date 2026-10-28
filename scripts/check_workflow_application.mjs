@@ -62,38 +62,50 @@ confirmation=true;await go('/settings');assert.equal(w.startEditWorkflow,undefin
 await go('/workflows?profession_id=1&workflow_id='+metadata.workflows[0].id);
 const phaseLink=d.querySelector('a[href*="/phase/"]');assert.ok(phaseLink);const phaseUrl=new URL(phaseLink.href);await go(phaseUrl.pathname.slice('/workflow'.length)+phaseUrl.search);
 assert.equal(typeof w.scheduleSave,'function');await go('/settings');assert.equal(w.scheduleSave,undefined);
-// Failure and stale reads retain the committed page and route.
-const oldMain=d.querySelector('main'),oldUrl=w.location.href;fail=true;
-assert.equal(await w.WorkflowApplication.navigate('/workflow/tasks'),false);
-assert.equal(d.querySelector('main'),oldMain);assert.equal(w.location.href,oldUrl);
-assert.match(messages.pop(),/открыть раздел/);fail=false;
+// An accepted route commits before the owner data is available. Errors belong
+// to the target route and retry does not resurrect data from the outgoing page.
+const outgoing=d.querySelector('main');fail=true;
+assert.equal(await w.WorkflowApplication.navigate('/workflow/tasks'),true);
+assert.equal(outgoing.isConnected,false);assert.equal(w.location.pathname,'/workflow/tasks');
+assert.equal(d.querySelector('main').dataset.workflowReadState,'error');
+assert.ok(d.querySelector('main [data-page-state="error"]'));
+assert.equal(d.querySelector('[data-workflow-route="tasks"]').getAttribute('aria-current'),'page');
+const retry=d.querySelector('[data-workflow-retry]');assert.equal(new URL(retry.href).pathname,'/workflow/tasks');
+fail=false;retry.click();
+for(let attempt=0;attempt<100&&d.querySelector('main').dataset.workflowReadState!=='ready';attempt++)await new Promise(resolve=>setTimeout(resolve,10));
+assert.equal(d.querySelector('main').dataset.workflowReadState,'ready');
 let release;delay=new Promise(resolve=>{release=resolve;});
-const stale=w.WorkflowApplication.navigate('/workflow/tasks');await new Promise(resolve=>setImmediate(resolve));
+const stale=w.WorkflowApplication.navigate('/workflow/settings');await new Promise(resolve=>setImmediate(resolve));
+assert.equal(w.location.pathname,'/workflow/settings');
 await go('/');release();assert.equal(await stale,false);assert.equal(page().page,'dashboard');
-// The shared toaster and target label are visible pending state; committed route stays put.
 let pendingRelease;delay=new Promise(resolve=>{pendingRelease=resolve;});
+const previous=d.querySelector('main');
 const pending=w.WorkflowApplication.navigate('/workflow/tasks');await new Promise(resolve=>setImmediate(resolve));
+assert.equal(previous.isConnected,false);assert.equal(w.location.pathname,'/workflow/tasks');
+assert.equal(d.querySelector('h1').textContent.trim(),'Задачи воркфлоу');
 assert.equal(d.querySelector('main').getAttribute('aria-busy'),'true');
-assert.match(d.querySelector('[data-base-toast-status]').textContent,/Открываем/);
-assert.equal(d.querySelector('[data-workflow-route="tasks"]').getAttribute('data-workflow-pending'),'true');
-pendingRelease();assert.equal(await pending,true);
-assert.equal(d.querySelector('[data-workflow-pending]'),null);
+assert.equal(d.querySelector('main').dataset.workflowReadState,'loading');
+assert.ok(d.querySelector('main [data-page-state="loading"]'));
+assert.equal(d.querySelector('[data-workflow-route="tasks"]').getAttribute('aria-current'),'page');
 assert.equal(d.querySelector('[data-base-toast-status]').textContent,'');
-// An edit made while fetching needs a second leave decision.
-await go('/namespaces?profession_id=1');let lateRelease;delay=new Promise(resolve=>{lateRelease=resolve;});
+pendingRelease();assert.equal(await pending,true);assert.equal(d.querySelector('main').dataset.workflowReadState,'ready');
+// Once departure is confirmed, the old form/callbacks cannot accept late edits.
+await go('/namespaces?profession_id=1');const form=d.querySelector('#namespaceName');
+let lateRelease;delay=new Promise(resolve=>{lateRelease=resolve;});
 const late=w.WorkflowApplication.navigate('/workflow/settings');await new Promise(resolve=>setImmediate(resolve));
-d.querySelector('#namespaceName').value='Поздняя правка';d.querySelector('#namespaceName').dispatchEvent(new w.Event('input',{bubbles:true}));confirmation=false;lateRelease();assert.equal(await late,false);assert.equal(page().page,'namespace');confirmation=true;
+assert.equal(form.isConnected,false);assert.equal(w.submitNamespace,undefined);
+form.value='Detached late edit';lateRelease();assert.equal(await late,true);assert.equal(page().page,'settings');
 // A successful create schedules its transition after the write is acknowledged.
 await go('/namespaces/new');assert.notEqual(d.querySelector('[data-namespace-selector]').selectedOptions[0].textContent,'Поздняя правка');d.querySelector('#namespaceName').value='Изолированная профессия';d.querySelector('#namespaceCliCommand').value='isolated-'+Date.now();
 await w.submitNamespace();
-for(let attempt=0;attempt<100&&w.location.pathname.endsWith('/new');attempt++)await new Promise(resolve=>setTimeout(resolve,10));
+for(let attempt=0;attempt<100&&(w.location.pathname.endsWith('/new')||d.querySelector('main').dataset.workflowReadState!=='ready');attempt++)await new Promise(resolve=>setTimeout(resolve,10));
 assert.equal(w.location.pathname,'/workflow/namespaces',messages.join('; '));
 assert.equal(d.querySelector('#namespaceName').value,'Изолированная профессия');assert.equal(messages.pop(),'Профессия создан');
 // Back and forward render their authoritative work areas, preserving the shell.
 await go('/settings');await go('/tasks');w.history.back();
-for(let attempt=0;attempt<100&&page().page!=='settings';attempt++)await new Promise(resolve=>setTimeout(resolve,10));
+for(let attempt=0;attempt<100&&(page().page!=='settings'||d.querySelector('main').dataset.workflowReadState!=='ready');attempt++)await new Promise(resolve=>setTimeout(resolve,10));
 assert.equal(page().page,'settings');assert.equal(w.location.pathname,'/workflow/settings');w.history.forward();
-for(let attempt=0;attempt<100&&page().page!=='tasks';attempt++)await new Promise(resolve=>setTimeout(resolve,10));
+for(let attempt=0;attempt<100&&(page().page!=='tasks'||d.querySelector('main').dataset.workflowReadState!=='ready');attempt++)await new Promise(resolve=>setTimeout(resolve,10));
 assert.equal(page().page,'tasks');assert.equal(w.location.pathname,'/workflow/tasks');
 // A response after admission retirement never resurrects protected content.
 let retireRelease;delay=new Promise(resolve=>{retireRelease=resolve;});const retired=w.WorkflowApplication.navigate('/workflow/settings');await new Promise(resolve=>setImmediate(resolve));current=false;d.body.replaceChildren();retireRelease();assert.equal(await retired,false);assert.equal(d.body.childElementCount,0);

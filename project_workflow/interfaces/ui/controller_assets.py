@@ -36,6 +36,22 @@ def page_controller_assets(administration: bool) -> list[str]:
             for name in CONTROLLERS]
 
 
+@lru_cache(maxsize=1)
+def _shell_revision() -> str:
+    # Installed source is immutable. Include shell code separately from factory URLs
+    # so an already-open older shell upgrades even when factory bytes are unchanged.
+    root = Path(__file__).parent / "templates"
+    files = ("base.html", "application-navigation.js", "route-read-state.html", "base/fingerprint.json")
+    digest = sha256()
+    for name in files:
+        digest.update(name.encode() + b"\0" + (root / name).read_bytes() + b"\0")
+    return digest.hexdigest()
+
+
+def page_controller_identity(administration: bool) -> list[str]:
+    return [*page_controller_assets(administration), f"shell-sha256:{_shell_revision()}"]
+
+
 def controller_response(variant: str, digest: str, name: str) -> Response:
     if variant not in {"admin", "user"} or name not in CONTROLLERS:
         raise HTTPException(404)

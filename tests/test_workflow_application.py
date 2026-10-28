@@ -115,3 +115,18 @@ def test_fragments_include_private_data_but_not_repeated_controller_code():
     full = client.get(url)
     assert len(re.findall(r'<script src="/ui-assets/controllers/[^"]+" defer>', full.text)) == 4
     assert 'data-base-toaster' in full.text
+
+
+@pytest.mark.parametrize("admin", [False, True])
+def test_route_states_use_base_frames_and_shell_identity(admin):
+    from project_workflow.interfaces.ui.controller_assets import page_controller_assets, page_controller_identity
+    response = client.get("/settings")
+    identity = page_controller_identity(admin)
+    assert identity[:-1] == page_controller_assets(admin)
+    assert re.fullmatch(r"shell-sha256:[0-9a-f]{64}", identity[-1])
+    assert len(re.findall(r'<template data-workflow-read-template="', response.text)) == 6
+    assert 'data-page-state="loading"' in response.text
+    assert 'data-page-state="error"' in response.text
+    for mode in ("wide", "reading", "detail-with-aside"):
+        assert f'data-workflow-read-template="loading-{mode}"' in response.text
+        assert f'data-workflow-read-template="error-{mode}"' in response.text

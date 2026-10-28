@@ -5,21 +5,33 @@ window.WorkflowApplication = (() => {
   let controller,active,pendingFactory,metadata,epoch=0,request=null,swapping=false;
   let committed=location.pathname+location.search+location.hash;
   let position=history.state?.workflowAppPosition??0;
-  let originalNavigate,originalSync,dismissPending;
-  const pendingLabels=new Map();
-  function clearPending(){
-    dismissPending?.();dismissPending=null;
-    for(const [link,label] of pendingLabels){link.removeAttribute('aria-busy');link.removeAttribute('data-workflow-pending');const text=link.querySelector('.sidebar-label');if(text)text.textContent=label;}
-    pendingLabels.clear();
+  let originalNavigate,originalSync;
+  function route(url){
+    const local=url.pathname.slice(basePath.length).replace(/\/$/,'')||'/';
+    if(local==='/')return {page:'dashboard',title:'Дашборд',layout:'wide'};
+    if(/^\/namespaces(?:\/new)?$/.test(local))return {page:'namespace',title:'Профессии',layout:'wide'};
+    if(local==='/workflows'||local==='/phases')return {page:'workflows',title:'Воркфлоу',layout:'wide'};
+    if(local==='/instructions')return {page:'phases',title:'Инструкции фазы',layout:'reading'};
+    if(/^\/phase\/[^/]+$/.test(local))return {page:'phases',title:'Детали фазы',layout:'detail-with-aside'};
+    if(local==='/tasks')return {page:'tasks',title:'Задачи воркфлоу',layout:'wide'};
+    if(/^\/task\/[^/]+$/.test(local))return {page:'tasks',title:'Задача воркфлоу',layout:'detail-with-aside'};
+    if(local==='/settings')return {page:'settings',title:'Команды CLI',layout:'wide'};
+    return {page:'',title:'Workflow',layout:'wide'};
   }
-  function showPending(url){
-    let label='раздел';
-    for(const link of document.querySelectorAll('[data-workflow-route]')){
-      if(new URL(link.href).pathname!==url.pathname)continue;
-      const text=link.querySelector('.sidebar-label');label=link.getAttribute('aria-label')||text?.textContent||label;
-      pendingLabels.set(link,text?.textContent||label);link.setAttribute('aria-busy','true');link.setAttribute('data-workflow-pending','true');if(text)text.textContent=label+'…';
-    }
-    dismissPending=window.PdlcBaseUI.notify('Открываем: '+label,{duration:Infinity});
+  function selectRoute(next){
+    document.querySelectorAll('[data-workflow-route]').forEach(link=>{
+      const selected=link.dataset.workflowRoute===next.page||(link.dataset.workflowRoute==='workflows'&&next.page==='phases');
+      link.classList.toggle('active',selected);if(selected)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');
+    });
+    const title=document.querySelector('title');title.dataset.baseBrandTitle=next.title;document.title=next.title;
+  }
+  function readState(next,kind,url){
+    const main=document.querySelector('template[data-workflow-read-template="'+kind+'-'+next.layout+'"]').content.firstElementChild.cloneNode(true);
+    main.dataset.workflowReadState=kind;main.setAttribute('aria-busy',String(kind==='loading'));
+    main.querySelector('[data-workflow-route-heading]').textContent=next.title;
+    main.querySelector('[data-workflow-page]').textContent=JSON.stringify({schema_version:1,page:next.page,title:next.title,read_state:kind});
+    const retry=main.querySelector('a[href]');if(retry){retry.href=path(url);retry.dataset.workflowRetry='';}
+    return main;
   }
   const path=url=>url.pathname+url.search+url.hash;
   const eligible=url=>url.origin===location.origin&&(basePath===''||url.pathname===basePath||url.pathname.startsWith(basePath+'/'))&&!new RegExp('^'+basePath+'/(api|internal|base-assets|ui-assets|login|logout|sso)(/|$)').test(url.pathname);
@@ -90,70 +102,75 @@ window.WorkflowApplication = (() => {
     if(context&&(metadata.context_html!==next.context_html||identity(context)!==identity(template.content))){
       destroyControls(context);context.replaceChildren(template.content);controls(context);refreshNamespaceSelectors();
     }
-    document.querySelectorAll('[data-workflow-route]').forEach(link=>{
-      const selected=link.dataset.workflowRoute===next.page||(link.dataset.workflowRoute==='workflows'&&next.page==='phases');
-      link.classList.toggle('active',selected);if(selected)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');
-    });
-    const title=document.querySelector('title');title.dataset.baseBrandTitle=next.title;document.title=next.title;
+    selectRoute(next);
     metadata=next;window.WorkflowNavigation.preserveProjectContext();
   }
-  function formVersion(){return JSON.stringify([...document.querySelectorAll('main input,main textarea,main select')].map(input=>[input.id,input.value,input.checked]));}
   async function navigate(value,options={}){
     const url=new URL(value,location.href);
     if(!eligible(url)){originalNavigate(url.href,options);return false;}
     const revision=++epoch;request?.abort();request=null;
-    document.querySelector('main.main')?.setAttribute('aria-busy','false');clearPending();
     if(active?.writes||active?.busy()){notify('Дождитесь завершения сохранения.');return false;}
     if(!controller.isCurrent())return false;
     if(!await controller.canLeave()||revision!==epoch)return false;
     window.PdlcBaseUI.closeNavigation?.();
-    const version=formVersion(),old=document.querySelector('main.main');
-    const abort=new AbortController();request=abort;old.setAttribute('aria-busy','true');
-    showPending(url);
+    const old=document.querySelector('main.main'),target=route(url);
+    const restoreScroll=options.scroll||(options.refresh?{x:scrollX,y:scrollY}:null);
+    if(options.history!=='none')rememberScroll();
+    active?.dispose();active=null;destroyControls(old);
+    if(options.history!=='none')sync(path(url),!!options.replace);
+    else{committed=path(url);position=options.position??position;originalSync(committed,true,{...history.state,workflowAppPosition:position});}
+    selectRoute(target);
+    const loading=readState(target,'loading',url);old.replaceWith(loading);
+    document.querySelector('[data-workflow-page-style]').textContent='';
+    controller.trackForms(loading);window.WorkflowNavigation.preserveProjectContext();
+    window.scrollTo(0,0);loading.focus({preventScroll:true});
+    const abort=new AbortController();request=abort;
     try{
       const response=await fetch(path(url),{signal:abort.signal,cache:'no-store',headers:{'X-Workflow-View':'page-v1','Accept':'text/html'}});
       const final=new URL(response.url||url.href);
-      if(revision!==epoch||!controller.isCurrent()||!old.isConnected)return false;
+      if(revision!==epoch||!controller.isCurrent()||!loading.isConnected)return false;
       if(response.headers.get('X-Workflow-View')!=='page-v1'){
-        if(response.status===401||response.status===403||response.redirected&&!eligible(final)){originalNavigate(url.href,{replace:true});return false;}
+        if(response.status===401||response.status===403||response.redirected&&!eligible(final)){originalNavigate(url.href,{replace:true});return true;}
         throw Error('Не удалось открыть раздел');
       }
       const html=await response.text();const parsed=new DOMParser().parseFromString(html,'text/html');
+      if(revision!==epoch||!controller.isCurrent()||!loading.isConnected)return false;
       const next=JSON.parse(parsed.querySelector('[data-workflow-page]')?.textContent||'null');
       if(!next||next.schema_version!==1||typeof next.context_html!=='string'||!parsed.querySelector('main.main')||!eligible(final))throw Error('Некорректный ответ раздела');
-      if(next.access_revision!==metadata.access_revision||next.access_enforced!==metadata.access_enforced||next.can_administer!==metadata.can_administer){controller.retire();return false;}
-      if(JSON.stringify(next.controller_assets)!==JSON.stringify(metadata.controller_assets)){originalNavigate(url.href,{replace:true});return false;}
-      if(revision!==epoch||!controller.isCurrent()||!old.isConnected)return false;
-      if(formVersion()!==version&&!await controller.canLeave())return false;
-      if(revision!==epoch||active?.writes||active?.busy()||!controller.isCurrent())return false;
+      if(next.access_revision!==metadata.access_revision||next.access_enforced!==metadata.access_enforced||next.can_administer!==metadata.can_administer){controller.retire();return true;}
+      if(JSON.stringify(next.controller_assets)!==JSON.stringify(metadata.controller_assets)){originalNavigate(url.href,{replace:true});return true;}
       const scripts=[...parsed.querySelector('main.main').querySelectorAll('script')];
       if(scripts.filter(script=>script.hasAttribute('data-workflow-controller')).length!==1||scripts.some(script=>script.type!=='application/json'&&(!script.hasAttribute('data-workflow-controller')||script.src)))throw Error('Некорректный код раздела');
       const style=parsed.querySelector('[data-workflow-page-style]');style?.remove();
-      if(options.history!=='none')rememberScroll();active?.dispose();destroyControls(old);
-      if(options.history!=='none')sync(path(final),!!options.replace);
-      else{committed=path(final);position=options.position??position;originalSync(committed,true,{...history.state,workflowAppPosition:position});}
+      if(path(final)!==committed)sync(path(final),true);
       document.querySelector('[data-workflow-page-style]').textContent=style?.textContent||'';
+      const incoming=parsed.querySelector('main.main');incoming.dataset.workflowReadState=response.ok?'ready':'error';incoming.setAttribute('aria-busy','false');
       updateShell(next);
-      // htmx inserts the new main before removing the old one. Mount only after settle,
-      // otherwise document-wide selectors initialize the outgoing page with duplicate IDs.
+      // htmx inserts the new main before removing the old one. Mount after settle.
+      const focusWorkArea=loading.contains(document.activeElement)||document.activeElement===document.body;
       swapping=true;
       try{
-        await new Promise(resolve=>htmx.swap(old,parsed.body.innerHTML,{swapStyle:'outerHTML',settleDelay:0,swapDelay:0},{select:'main.main',afterSettleCallback:()=>{
+        await new Promise(resolve=>htmx.swap(loading,parsed.body.innerHTML,{swapStyle:'outerHTML',settleDelay:0,swapDelay:0},{select:'main.main',afterSettleCallback:()=>{
           swapping=false;const factory=pendingFactory;pendingFactory=null;if(factory)mount(factory);resolve();
         }}));
       }finally{swapping=false;pendingFactory=null;}
       if(revision!==epoch||!controller.isCurrent())return false;
-      if(options.scroll)window.scrollTo(options.scroll.x,options.scroll.y);
-      else if(options.refresh){}else if(final.hash)document.getElementById(decodeURIComponent(final.hash.slice(1)))?.scrollIntoView();
-      else window.scrollTo(0,0);
-      document.querySelector('main.main')?.focus({preventScroll:true});
+      if(restoreScroll)window.scrollTo(restoreScroll.x,restoreScroll.y);
+      else if(final.hash)document.getElementById(decodeURIComponent(final.hash.slice(1)))?.scrollIntoView();
+      if(focusWorkArea)document.querySelector('main.main')?.focus({preventScroll:true});
       return true;
-    }catch(error){if(revision===epoch&&error.name!=='AbortError')notify(error.message||'Не удалось открыть раздел');return false;}
-    finally{if(revision===epoch){request=null;document.querySelector('main.main')?.setAttribute('aria-busy','false');clearPending();}}
+    }catch(error){
+      if(revision!==epoch||!controller.isCurrent()||!loading.isConnected)return false;
+      if(error.name==='AbortError')return false;
+      const failed=readState(target,'error',url),focused=loading.contains(document.activeElement);
+      loading.replaceWith(failed);controller.trackForms(failed);if(focused)failed.focus({preventScroll:true});
+      return true;
+    }finally{if(revision===epoch)request=null;}
   }
   function start(value){
     const initialize=()=>{
       controller=value;if(!controller.isCurrent())return;
+      document.querySelector('main.main').dataset.workflowReadState='ready';
       metadata=state();originalNavigate=window.PdlcPlatformNavigation.navigate;originalSync=window.PdlcPlatformNavigation.syncRoute;
       htmx.config.historyEnabled=false;htmx.config.historyCacheSize=0;htmx.config.selfRequestsOnly=true;htmx.config.allowEval=false;
       window.PdlcPlatformNavigation.syncRoute=sync;
@@ -166,7 +183,7 @@ window.WorkflowApplication = (() => {
         if(!link||event.defaultPrevented||event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey||link.hasAttribute('download')||link.target&&link.target!=='_self'||link.closest('[data-workflow-local-navigation]'))return;
         const url=new URL(link.href);if(!eligible(url))return;
         if(url.pathname===location.pathname&&url.search===location.search&&url.hash)return;
-        event.preventDefault();event.stopImmediatePropagation();void navigate(url.href);
+        event.preventDefault();event.stopImmediatePropagation();void navigate(url.href,{replace:link.hasAttribute('data-workflow-retry')});
       },true);
       window.addEventListener('popstate',event=>{
         const target=path(new URL(location.href));

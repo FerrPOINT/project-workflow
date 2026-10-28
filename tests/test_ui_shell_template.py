@@ -64,7 +64,7 @@ class SharedShellTemplateTests(TestCase):
                 self.assertIn("Owner &lt;title&gt;", html)
                 self.assertIn("Owner &lt;message&gt;", html)
                 self.assertIn("← К фазам &lt;73&gt;", html)
-                self.assertNotIn("base-state-retry-icon", html.split("<body", 1)[1])
+                self.assertNotIn("base-state-retry-icon", re.search(r"<main .*?</main>", html, re.S).group())
 
     def test_dashboard_metrics_reuse_base_instead_of_a_product_skin(self):
         source = (Path(__file__).parents[1] / "project_workflow/interfaces/ui/templates/dashboard.html").read_text(

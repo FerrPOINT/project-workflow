@@ -166,8 +166,11 @@ history, request authorization or forms: the existing Base bridge owns routes,
 the owner still checks every request, and write endpoints remain unchanged.
 htmx history/storage caching is disabled. Session/access changes retire the
 protected document; login/logout and other applications retain their explicit
-navigation boundary. Failed/aborted reads preserve the old page and URL; dirty
-input needs confirmation, including edits made during a request. Pending writes
+navigation boundary. Before fetching, confirmed navigation commits the target URL, sidebar, heading
+and a Base loading work area. Previous page data and controller callbacks are
+disposed at that boundary. A failed read keeps the target route with Base error
+and an explicit read retry; superseded responses cannot change a newer route.
+Dirty cancellation preserves the original form and URL. Pending writes
 block a departure; acknowledged writes can request a work-area readback.
 
 Run `scripts/check_workflow_application.mjs` with the same `--tooling-from` and
@@ -193,12 +196,17 @@ page reads carry only a small bootstrap and data. No new build tool or dependenc
 is required. The existing scoped mount/dispose contract remains authoritative.
 
 An already-open inline-controller shell upgrades once by document navigation.
-An asset-set change also upgrades the document after current authorization is
+A shell-code fingerprint or asset-set change also upgrades the document after current authorization is
 confirmed. Ordinary navigation on a compatible shell remains partial. A failed
 asset load shows an error and does not enter an automatic reload loop.
 
-Pending reads use the existing Base notification host with an explicit lifetime;
-sidebar links have a pending label/aria-busy while the committed active selection
-stays intact. Superseded, failed and cancelled reads clear their own indicator.
-The notification remains within desktop/mobile viewport and introduces no local
-paint, timer, polling, optimistic writes or second routing runtime.
+Pending reads render inert templates composed with the public Base `app_main`,
+`page_header` and `state` macros. Route descriptors supply only generic headings
+and layouts; names and records arrive from the owner. No toast, old-page overlay,
+HTML history cache, background polling or second router is used. Loading and
+error states remove outgoing data. After a successful read, owner metadata and
+page controllers replace the loading area, keeping the persistent shell intact.
+The manual gate deliberately holds the data response unresolved and checks the
+new URL, selection, heading and loading state before releasing it. It also checks
+failure/retry, cancelled departure, stale reads, history and admission retirement.
+The child workflow editor keeps its independent form-preserving/late-edit guard.
