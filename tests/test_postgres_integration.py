@@ -1149,7 +1149,7 @@ class TestPostgresInitialMigration:
         uow = SAUnitOfWork(pg_url)
         assert {project.cli_command for project in uow.projects.list()} == {
             f"workflow-single-task-{role}" for role in (
-                "project_manager", "analyst", "architect", "developer", "reviewer", "tester", "devops")}
+                "project-manager", "analyst", "architect", "developer", "reviewer", "tester", "devops")}
         assert len([workflow for workflow in uow.workflows.list() if workflow.is_default]) == 1
         uow.close()
 
