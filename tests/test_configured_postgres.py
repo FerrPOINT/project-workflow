@@ -197,7 +197,7 @@ def test_cli_process_http_and_postgres_keep_one_report_and_no_workflow_files(
         return json.loads(completed.stdout)
 
     base = ["--task", configured[1]["task"]]
-    assert cli("step", *base)["result"]["version"] == 1
+    assert cli("step", *base)["version"] == 1
     for version in (1, 2, 3):
         arguments = ["step", *base, "--report", "-", "--operation-key", f"cli-pg-{version}",
                      "--expected-version", str(version)]
@@ -205,9 +205,9 @@ def test_cli_process_http_and_postgres_keep_one_report_and_no_workflow_files(
             arguments += ["--requirements-revision", "7", "--requirements-sha256", "a" * 64]
         accepted = cli(*arguments, report=f"Actual subprocess report {version}")
         assert cli(*arguments, report=f"Actual subprocess report {version}") == accepted
-    assert accepted["result"]["complete"] is True
-    assert accepted["result"]["execution_ref"] == initial["execution_ref"]
-    records = cli("history", *base)["result"]["records"]
+    assert accepted["complete"] is True
+    assert accepted["execution_ref"] == initial["execution_ref"]
+    records = cli("history", *base)["records"]
     assert len(records) == 3
     assert set(tmp_path.rglob("*")) == before
     with SAUnitOfWork() as uow:

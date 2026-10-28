@@ -1148,14 +1148,8 @@ class TestPostgresInitialMigration:
 
         uow = SAUnitOfWork(pg_url)
         assert {project.cli_command for project in uow.projects.list()} == {
-            "workflow-project_manager",
-            "workflow-analyst",
-            "workflow-architect",
-            "workflow-developer",
-            "workflow-reviewer",
-            "workflow-tester",
-            "workflow-devops",
-        }
+            f"workflow-single-task-{role}" for role in (
+                "project_manager", "analyst", "architect", "developer", "reviewer", "tester", "devops")}
         assert len([workflow for workflow in uow.workflows.list() if workflow.is_default]) == 1
         uow.close()
 
@@ -1253,6 +1247,7 @@ class TestPostgresInitialMigration:
         # tests BIGINT storage/readback, not the retired native assignment command.
         with SAUnitOfWork(engine) as uow:
             imported = {**legacy, "operation_key": "wide-archived-assignment", "assignment_revision": 2,
+                        "bind_operation_key": "wide-archived-bind",
                         "work_item_revision": work_item_revision,
                         "exact_input_refs": json.loads(legacy["exact_input_refs"]), "payload": {}}
             imported_id = uow.tasks.create_assignment(imported)

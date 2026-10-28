@@ -74,9 +74,11 @@ def test_sql_wait_cannot_extend_original_human_permit(owned):
     task_id, original_title = owned
     engine = get_engine()
     entered = Event()
+    deadlines = []
 
     def waiting_write():
-        proof = scope((PROJECT_REF,), role="operator", seconds=0.6)
+        proof = scope((PROJECT_REF,), role="operator", seconds=3)
+        deadlines.append(proof.deadline)
         token = human_scope.set(proof)
         try:
             with get_session() as session:
@@ -98,7 +100,7 @@ def test_sql_wait_cannot_extend_original_human_permit(owned):
             pending = pool.submit(waiting_write)
             try:
                 assert entered.wait(5)
-                with engine.connect() as observer:
+                with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as observer:
                     for _ in range(100):
                         waiting = observer.scalar(text(
                             "SELECT count(*) FROM pg_stat_activity WHERE wait_event_type='Lock' "
@@ -108,7 +110,7 @@ def test_sql_wait_cannot_extend_original_human_permit(owned):
                             break
                         time.sleep(0.01)
                     assert waiting, "The regression must cross an actual PostgreSQL row lock"
-                time.sleep(0.7)
+                time.sleep(max(0, deadlines[0] - time.monotonic()) + 0.1)
             finally:
                 lock.rollback()
             pending.result(timeout=10)

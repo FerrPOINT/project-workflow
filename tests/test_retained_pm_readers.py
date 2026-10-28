@@ -19,6 +19,7 @@ from project_workflow.domain.single_task_profile import SUPPORTED_MANIFESTS
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from tests._retained_pm_history import retained_pm
+from tests.test_retained_single_task_binding import stored_pm as stored_pm
 
 
 @pytest.fixture
@@ -149,4 +150,39 @@ def test_database_or_reader_rejects_missing_or_forged_binding_provenance(histori
     before = snapshot()
     with pytest.raises(ConflictError):
         read(historical[1])
+    assert snapshot() == before
+
+
+@pytest.mark.parametrize("corruption", ["descriptor", "execution_identity", "missing_run"])
+def test_retained_pm_authority_is_checked_before_returning_saved_results(historical, corruption):
+    with SAUnitOfWork() as uow:
+        assignment = uow.session.scalar(select(m.TaskRuntimeAssignment))
+        if corruption == "descriptor":
+            payload = json.loads(assignment.payload)
+            payload["runtime_compatibility"] = {"catalogVersion": 999}
+            assignment.payload = canonical_json(payload)
+            assignment.payload_sha256 = payload_sha256(payload)
+        elif corruption == "execution_identity":
+            execution = uow.session.scalar(select(m.PMExecution))
+            identity = json.loads(execution.identity_json)
+            identity["tracker_project_ref"] = str(uuid4())
+            execution.identity_json = canonical_json(identity)
+        else:
+            uow.session.delete(uow.session.scalar(select(m.PMRun)))
+    before = snapshot()
+    with pytest.raises(ConflictError):
+        read(historical[1])
+    assert snapshot() == before
+
+
+def test_retained_pm_operation_cannot_be_read_through_another_execution(historical, stored_pm):
+    with SAUnitOfWork() as uow:
+        uow.session.add(m.PMOperation(
+            operation_key="foreign:operation", execution_ref=stored_pm[0].execution_ref, kind="checkpoint",
+            request_sha256="a" * 64, result_json=canonical_json({"private": "foreign saved result"}),
+        ))
+    before = snapshot()
+    with pytest.raises(ConflictError, match="Foreign command key"), SAUnitOfWork() as uow:
+        namespace = uow.projects.get_by_cli_command("workflow-project_manager")
+        PMExecutionService(uow).readback(PMIdentity.model_validate(historical[1]), namespace.id, "foreign:operation")
     assert snapshot() == before
