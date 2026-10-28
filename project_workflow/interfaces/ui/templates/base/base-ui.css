@@ -1725,7 +1725,7 @@ body > .base-loading-state {
 @layer components {
   .base-label {
     font-family: var(--base-font-sans);
-    font-size: var(--base-font-body);
+    font-size: var(--base-font-label);
     line-height: 1;
     font-weight: 500;
     color: var(--color-text-secondary);

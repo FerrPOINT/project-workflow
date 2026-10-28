@@ -279,6 +279,12 @@ wrapping-ряду сразу после последнего навыка, вк�
 
 An operator-managed HTTPS alias may be listed explicitly in `AUTH_BROWSER_ORIGINS` (JSON array). The default is empty; the canonical AUTH_PUBLIC_ORIGIN remains accepted. Each entry must be an exact HTTP(S) origin with no wildcard, userinfo, path, query or fragment. Cookie writes require an exact Origin match; absent/foreign/scheme-or-port-changed origins remain forbidden. This setting does not change OIDC issuer, registered redirects, PAT scopes or roles. A proxy must preserve the browser's Origin header.
 
+### Типографика подписей
+
+«Навыки» использует общий Base Label с --base-font-label:12px standard/14px large.
+Текст инструкции использует --base-font-body:14/16px. Размеры определяет branding,
+а не локальная таблица Workflow; навыки остаются связанными с лейблом через aria-labelledby.
+
 ### Выравнивание текста фазы
 
 Inline Input/Textarea используют общий Base appearance без горизонтального inset: текст инструкции совпадает с левым краем её содержимого. Строки проверок и подтверждений центрируют текст, действия и декоративные SVG 16×16 по вертикали; одинаковая геометрия сохраняется для одной и нескольких строк, admin и read-only. Обычные поля формы сохраняют штатные отступы.
