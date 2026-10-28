@@ -325,6 +325,8 @@ class SharedShellTemplateTests(TestCase):
                                                      required=True, default=0)])],
         )
         elements = Elements(html).elements
+        frame = next(attrs for _, attrs in elements if "data-page-layout" in attrs)
+        self.assertEqual(frame["data-page-layout"], "wide")
         heading = next(attrs for tag, attrs in elements if tag == "h2" and attrs.get("id") == "cliCommand1")
         self.assertIn("base-section-title", heading["class"].split())
         block = next(attrs for tag, attrs in elements if tag == "pre" and attrs.get("id") == "cliUsage1")

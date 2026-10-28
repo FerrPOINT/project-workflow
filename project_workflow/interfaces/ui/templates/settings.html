@@ -1,17 +1,16 @@
 {% extends "base.html" %}
-{% block page_layout %}reading{% endblock %}
+{% block page_layout %}wide{% endblock %}
 {% block title %}Команды CLI{% endblock %}
 {% block header_title %}Команды CLI{% endblock %}
 
 {% block extra_style %}
-.cli-reference{display:flex;flex-direction:column;gap:12px;max-width:980px}
 .cli-usage-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:start}
 .cli-copy{align-self:start}
 @media (max-width: 520px){.cli-usage-row{grid-template-columns:minmax(0,1fr)}.cli-copy{justify-self:start}}
 {% endblock %}
 
 {% block content %}
-<div class="cli-reference">
+<div class="cli-reference base-page-stack">
   {% for command in commands %}
   <section class="base-card" aria-labelledby="cliCommand{{ loop.index }}">
     {% call base_ui.card_header() %}

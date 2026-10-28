@@ -36,7 +36,9 @@ removed. Timeline/phase execution rules remain product-owned. This cleanup keeps
 the template markup, navigation and scripts unchanged; generated assets and
 installed runtime acceptance remain separate gates.
 
-- Dashboard, tasks, workflows, phases and instructions use `wide`.
+- Dashboard, tasks, workflows, phases, instructions and the CLI reference use `wide`.
+  CLI command cards fill that work area through the shared Base page stack;
+  the reference is structured operational UI, not a bounded reading column.
   Tables, lists and timelines use `minmax(0, 1fr)`; technical horizontal
   scrolling remains local to its data container.
 - Profession, workflow and phase editors use `reading/form`: only the
