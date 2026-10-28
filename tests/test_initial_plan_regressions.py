@@ -12,6 +12,7 @@ from project_workflow.domain.exceptions import ConflictError
 from project_workflow.interfaces.ui import app
 from project_workflow.interfaces.ui.state import _app_state
 from tests._phase_helpers import create_empty_workflow
+from tests._ui_source_helpers import page_source as _page_source
 
 pytestmark = [pytest.mark.ui]
 
@@ -91,8 +92,8 @@ def test_batch_reorder_is_complete_single_workflow_and_atomic():
     [
         ({"code": "duplicate"}, 409),
         ({"agent_id": 999999}, 422),
-        ({"execution_type": "parallel", "parallel_with_phase_id": 999999}, 409),
-        ({"rollback_target_phase_id": 999999}, 409),
+        ({"execution_type": "parallel", "parallel_with_phase_id": 999999}, 422),
+        ({"rollback_target_phase_id": 999999}, 422),
     ],
 )
 def test_phase_create_validates_references_before_shifting_order(extra, status):
@@ -116,18 +117,9 @@ def test_phase_create_validates_references_before_shifting_order(extra, status):
     assert [(phase["id"], phase["phase_order"]) for phase in service.list_phases(workflow_id)] == original
 
 
-def test_phase_delete_rejects_links_current_tasks_and_history():
+def test_phase_delete_rejects_current_tasks_and_history():
     workflow_id, phases = _workflow_with_phases(3)
-    first, second, third = phases
-    service = _app_state.phase_service()
-
-    service.update_phase(first["id"], {"execution_type": "parallel"})
-    service.update_phase(
-        second["id"],
-        {"execution_type": "parallel", "parallel_with_phase_id": first["id"]},
-    )
-    assert client.delete(f"/api/phases/{first['id']}").status_code == 409
-    service.update_phase(second["id"], {"parallel_with_phase_id": None})
+    first, _, third = phases
 
     prefix = _task_key_stem("DEL")
     project = _app_state.project_service().create_project(
@@ -338,51 +330,26 @@ def test_explicit_project_task_validates_key_shape_and_scoped_phase_before_write
     assert not any(task["task_key"] in {"BAD-KEY", f"{prefix}-1"} for task in service.list_tasks())
 
 
-def test_nullable_phase_fields_distinguish_omitted_from_explicit_null():
-    workflow_id, phases = _workflow_with_phases(3)
-    rollback_target, first, second = phases
+def test_nullable_phase_description_distinguishes_omitted_from_explicit_null():
+    _, phases = _workflow_with_phases(2)
     service = _app_state.phase_service()
-    service.update_phase(
-        first["id"],
-        {
-            "execution_type": "parallel",
-            "rollback_target_phase_id": rollback_target["id"],
-        },
-    )
-    service.update_phase(
-        second["id"],
-        {
-            "description": "Present",
-            "execution_type": "parallel",
-            "parallel_with_phase_id": first["id"],
-            "rollback_target_phase_id": rollback_target["id"],
-        },
-    )
-
-    response = client.put(
-        f"/api/phases/{second['id']}",
-        json={
-            "description": None,
-            "parallel_with_phase_id": None,
-            "rollback_target_phase_id": None,
-        },
-    )
-    assert response.status_code == 200
-    updated = service.get_phase(second["id"])
-    assert updated["description"] is None
-    assert updated["parallel_with_phase_id"] is None
-    assert updated["rollback_target_phase_id"] is None
-
-    with pytest.raises(ConflictError):
-        service.update_phase(first["id"], {"parallel_with_phase_id": 999999})
-    assert service.get_phase(first["id"])["parallel_with_phase_id"] is None
+    phase = phases[1]
+    service.update_phase(phase["id"], {"description": "Present"})
+    assert client.put(f"/api/phases/{phase['id']}", json={"name": "Renamed"}).status_code == 200
+    assert service.get_phase(phase["id"])["description"] == "Present"
+    assert client.put(f"/api/phases/{phase['id']}", json={"description": None}).status_code == 200
+    assert service.get_phase(phase["id"])["description"] is None
+    before = service.get_phase(phase["id"])
+    for field in ["parallel_with_phase_id", "rollback_target_phase_id"]:
+        assert client.put(f"/api/phases/{phase['id']}", json={field: None}).status_code == 422
+        assert service.get_phase(phase["id"]) == before
 
 
 def test_namespaces_page_exposes_description_editor():
     response = client.get("/namespaces")
     assert response.status_code == 200
-    assert 'id="namespaceDescription"' in response.text
-    assert "description: document.getElementById('namespaceDescription').value.trim()" in response.text
+    assert 'id="namespaceDescription"' in _page_source(client, response)
+    assert "description: document.getElementById('namespaceDescription').value.trim()" in _page_source(client, response)
 
 
 def test_phase_detail_header_does_not_repeat_execution_graph_controls():
@@ -400,11 +367,15 @@ def test_phase_copy_update_preserves_parallel_links():
     _, phases = _workflow_with_phases(2)
     service = _app_state.phase_service()
     service.update_phase(phases[0]["id"], {"execution_type": "parallel"})
-    service.update_phase(phases[1]["id"], {"execution_type": "parallel",
-                                         "parallel_with_phase_id": phases[0]["id"]})
+    service.update_phase(phases[1]["id"], {"execution_type": "parallel"})
+    # Historical metadata remains readable but is never authored by the public API.
+    uow = _app_state.get_db()
+    uow.phases.update(phases[1]["id"], {"parallel_with_phase_id": phases[0]["id"]})
+    uow.commit()
     before = service.get_phase(phases[1]["id"])
-    response = client.put(f"/api/phases/{phases[1]['id']}",
-                          json={"name": "Переименованная фаза", "description": "Новое описание"})
+    response = client.put(
+        f"/api/phases/{phases[1]['id']}", json={"name": "Переименованная фаза", "description": "Новое описание"}
+    )
     assert response.status_code == 200
     after = service.get_phase(phases[1]["id"])
     assert after["name"] == "Переименованная фаза"
@@ -428,3 +399,21 @@ def test_corrupted_persisted_instruction_skills_fail_loudly(raw_skills):
 
     with pytest.raises(ValueError, match="некорректный JSON"):
         _app_state.instruction_service().get_instruction(instruction["id"])
+
+
+def test_deleted_phase_clears_only_retired_incoming_metadata():
+    workflow_id, phases = _workflow_with_phases(3)
+    first, second, third = phases
+    uow = _app_state.get_db()
+    uow.phases.update(second["id"], {"parallel_with_phase_id": first["id"], "rollback_target_phase_id": third["id"]})
+    uow.phases.update(third["id"], {"rollback_target_phase_id": first["id"]})
+    uow.commit()
+
+    assert client.delete(f"/api/phases/{first['id']}").status_code == 200
+
+    service = _app_state.phase_service()
+    assert service.get_phase(first["id"]) is None
+    assert service.get_phase(second["id"])["parallel_with_phase_id"] is None
+    assert service.get_phase(second["id"])["rollback_target_phase_id"] == third["id"]
+    assert service.get_phase(third["id"])["rollback_target_phase_id"] is None
+    assert [p["phase_order"] for p in service.list_phases(workflow_id)] == [1, 2]
