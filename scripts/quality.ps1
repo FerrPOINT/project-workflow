@@ -57,6 +57,7 @@ switch ($Target) {
     "coverage" { Invoke-Coverage }
     "lint" { Invoke-Lint }
     "quality" {
+        Invoke-Checked @("python", "-B", "scripts/check_repository_hygiene.py", "--index")
         Invoke-Test
         Invoke-TestIntegration
         Invoke-Coverage

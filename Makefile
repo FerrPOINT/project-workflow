@@ -34,7 +34,7 @@ lint:
 lint-fix:
 	$(UV) ruff check --fix .
 
-quality: test test-integration coverage lint
+quality: repository-hygiene test test-integration coverage lint
 
 compose-ready:
 	docker compose up --build -d --wait
@@ -49,3 +49,10 @@ clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name '*.pyc' -delete 2>/dev/null || true
 	rm -rf .coverage htmlcov/ .pytest_cache/
+
+.PHONY: repository-hygiene repository-hygiene-ref
+repository-hygiene:
+	python3 -B scripts/check_repository_hygiene.py --index
+
+repository-hygiene-ref:
+	python3 -B scripts/check_repository_hygiene.py --ref HEAD
