@@ -14,8 +14,18 @@ from pathlib import Path
 UV = "uv run --python 3.11.15 --frozen --all-extras"
 TARGETS = (
     "test", "test-verbose", "test-integration", "coverage", "lint", "quality", "warnings",
-    "compose-ready", "unit", "integration", "slow", "release",
+    "compose-ready", "unit", "integration", "slow", "release", "coverage-html", "install-dev",
 )
+
+
+def runtime_prefix(target: str) -> tuple[list[str], bool]:
+    prefix = shlex.split(os.environ.get("WORKFLOW_QUALITY_UV", UV))
+    canonical = prefix == shlex.split(UV)
+    if canonical and target == "coverage-html":
+        # Rendering saved data must not sync a changed environment or download
+        # an interpreter. Missing tools/data fail; tests are a separate operation.
+        prefix += ["--no-sync", "--no-python-downloads"]
+    return prefix, canonical
 
 
 def verify_constraint_versions(root: Path) -> None:
@@ -65,8 +75,11 @@ def unit_test_paths() -> list[str]:
     return ["tests/" + name for name in names]
 
 
-def commands(target: str, *, scoped: bool = False, prepared: bool = False) -> list[list[str]]:
-    prefix = [sys.executable, "-m"] if prepared else shlex.split(os.environ.get("WORKFLOW_QUALITY_UV", UV))
+def commands(target: str, *, scoped: bool = False, prepared: bool = False,
+             html_report: bool = False) -> list[list[str]]:
+    if html_report and target not in ("coverage", "release"):
+        raise ValueError("HTML report option requires coverage or release")
+    prefix = [sys.executable, "-m"] if prepared else runtime_prefix(target)[0]
     test = ["pytest", "-v" if target == "test-verbose" else "-q", "--timeout=60", "--durations=25"]
     # Filtering markers after collecting every integration module still imports
     # its dependencies. Default builds collect only the reviewed unit files.
@@ -97,6 +110,8 @@ def commands(target: str, *, scoped: bool = False, prepared: bool = False) -> li
         "-W",
         "error::pytest.PytestUnraisableExceptionWarning",
     ]
+    if html_report:
+        coverage.append("--cov-report=html")
     integration = [
         "pytest",
         "-q",
@@ -115,6 +130,9 @@ def commands(target: str, *, scoped: bool = False, prepared: bool = False) -> li
         "slow": [prefix + test + ["-m", "slow and not postgres"]],
         "test-integration": [prefix + integration],
         "coverage": [prefix + coverage],
+        "coverage-html": [prefix + ["coverage", "html", "--fail-under=94"]],
+        # The outer pinned uv invocation already prepared the shared environment.
+        "install-dev": [],
         "lint": lint,
         "quality": [prefix + unit, *lint, ["git", "diff", "--check"]],
         "release": [prefix + coverage, prefix + integration, *lint, ["git", "diff", "--check"]],
@@ -132,9 +150,12 @@ def commands(target: str, *, scoped: bool = False, prepared: bool = False) -> li
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--prepared", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--html-report", action="store_true", help="Add HTML to explicit coverage or release")
     parser.add_argument("target", choices=TARGETS, default="quality", nargs="?")
     parser.add_argument("pytest_args", nargs=argparse.REMAINDER)
     args = parser.parse_args()
+    if args.html_report and args.target not in ("coverage", "release"):
+        parser.error("HTML report option requires coverage or release")
     extra = args.pytest_args[1:] if args.pytest_args[:1] == ["--"] else args.pytest_args
     if extra and args.target not in ("test", "unit", "integration", "slow"):
         parser.error("Scoped pytest arguments require a single test lane")
@@ -150,8 +171,8 @@ def main() -> int:
     environment.pop("VIRTUAL_ENV", None)
     if args.prepared and sys.version_info[:3] != (3, 11, 15):
         parser.error("Prepared quality operation requires the pinned Python 3.11.15")
-    prefix = shlex.split(os.environ.get("WORKFLOW_QUALITY_UV", UV))
-    if args.target != "compose-ready" and (args.prepared or prefix == shlex.split(UV)):
+    prefix, canonical = runtime_prefix(args.target)
+    if args.target != "compose-ready" and (args.prepared or canonical):
         # A Python 3.10 launcher has no stdlib TOML reader; its pinned 3.11 child
         # validates before any tool. Newer launchers also refuse before uv sync.
         if args.prepared or sys.version_info >= (3, 11):
@@ -159,14 +180,17 @@ def main() -> int:
                 verify_constraint_versions(root)
             except (OSError, ValueError, KeyError, TypeError) as error:
                 parser.error(str(error))
-    if not args.prepared and args.target != "compose-ready" and prefix == shlex.split(UV):
+    if not args.prepared and args.target != "compose-ready" and (canonical or args.target == "install-dev"):
         # uv prepares one frozen project environment. Every tool
         # then runs inside that operation with the prepared interpreter.
-        child = prefix + ["python", str(Path(__file__).resolve()), "--prepared", args.target]
+        child = prefix + ["python", str(Path(__file__).resolve()), "--prepared"]
+        if args.html_report:
+            child.append("--html-report")
+        child.append(args.target)
         if extra:
             child += ["--", *extra]
         return subprocess.run(child, cwd=root, env=environment, check=False).returncode
-    for command in commands(args.target, scoped=bool(extra), prepared=args.prepared):
+    for command in commands(args.target, scoped=bool(extra), prepared=args.prepared, html_report=args.html_report):
         if args.target in ("test", "unit", "integration", "slow"):
             command = [*command, *extra]
         result = subprocess.run(command, cwd=root, env=environment, check=False)

@@ -1,9 +1,9 @@
 {
   "schema": "workflow-test-lanes/v1",
   "unit": [
-    "test_controlled_source_archive.py",
     "test_build_producer_imports.py",
     "test_build_resource_options.py",
+    "test_controlled_source_archive.py",
     "test_dependency_inputs.py",
     "test_dependency_locks.py",
     "test_domain_entities.py",
@@ -11,6 +11,7 @@
     "test_phase_graph.py",
     "test_phase_grouping.py",
     "test_prepared_context.py",
+    "test_quality_auxiliary.py",
     "test_quality_runner.py",
     "test_supervisor_format_result.py",
     "test_supervisor_models.py",
