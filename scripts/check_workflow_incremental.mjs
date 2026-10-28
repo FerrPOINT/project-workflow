@@ -70,6 +70,9 @@ await new Promise(resolve=>setImmediate(resolve));d.querySelector('#workflowName
 assert.equal(d.querySelector('#workflowName').value,'Правка во время запроса');w.cancelWorkflowForm();
 // The four real owner mutations refresh the phase block without remounting the shell.
 const count=()=>d.querySelectorAll('#phasesTimeline .timeline-item').length;
+const legacyUrl=new URL(w.location.href);legacyUrl.pathname='/workflow/phases';
+assert.equal(await w.loadWorkflowEditor(legacyUrl.href,{keepForm:true}),true);
+assert.equal(w.location.pathname,'/workflow/phases');
 const initial=count();const first=d.querySelector('.timeline-item');
 const firstOrder=Number(first.dataset.phaseOrder),nextId=d.querySelectorAll('.timeline-item')[1].dataset.phaseId;
 assert.equal(first.querySelectorAll('.phase-card-actions button').length,5);
@@ -87,9 +90,23 @@ await w.deletePhase(d.querySelector(`#phase-${phaseId} .phase-delete-btn`));asse
 // Inserting inside explicit parallel edges preserves the group and owner links.
 let parallelItems=[...d.querySelectorAll('.timeline-item')];const parallelFirst=parallelItems[0].dataset.phaseId,parallelSecond=parallelItems[1].dataset.phaseId;
 await w.togglePhaseType(parallelItems[0].querySelector('.execution-toggle'));
+// A real owner rejection must not forge a group or rewrite rollback settings.
+const setRollback=async target=>{const response=await w.fetch('/workflow/api/phases/'+parallelSecond,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({rollback_target_phase_id:target})});assert.equal(response.status,200);};
+await setRollback(Number(parallelFirst));await w.loadWorkflowEditor(w.location.href,{keepForm:true});
 await w.togglePhaseType(d.querySelector(`#phase-${parallelSecond} .execution-toggle`));
-const linkResponse=await w.fetch('/workflow/api/phases/'+parallelSecond,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({parallel_with_phase_id:Number(parallelFirst)})});assert.equal(linkResponse.status,200);
-await w.loadWorkflowEditor(w.location.href,{keepForm:true});
+assert.equal(d.querySelector(`#phase-${parallelSecond}`).dataset.executionType,'sync');
+assert.equal(d.querySelector(`#phase-${parallelSecond}`).closest('.timeline-parallel-group'),null);
+await setRollback(null);await w.loadWorkflowEditor(w.location.href,{keepForm:true});
+await w.togglePhaseType(d.querySelector(`#phase-${parallelSecond} .execution-toggle`));
+assert.ok(d.querySelector(`#phase-${parallelFirst}`).closest('.timeline-parallel-group'));
+assert.equal(d.querySelector(`#phase-${parallelSecond}`).closest('.timeline-parallel-group'),d.querySelector(`#phase-${parallelFirst}`).closest('.timeline-parallel-group'));
+let ownerPhase=await (await w.fetch('/workflow/api/phases/'+parallelSecond)).json();assert.equal(ownerPhase.phase.parallel_with_phase_id,Number(parallelFirst));
+// Leaving removes the frame; rejoining the first phase can use the next neighbor.
+await w.togglePhaseType(d.querySelector(`#phase-${parallelFirst} .execution-toggle`));
+assert.equal(d.querySelector(`#phase-${parallelSecond}`).closest('.timeline-parallel-group'),null);
+await w.togglePhaseType(d.querySelector(`#phase-${parallelFirst} .execution-toggle`));
+assert.ok(d.querySelector(`#phase-${parallelFirst}`).closest('.timeline-parallel-group'));
+assert.equal(d.querySelector(`#phase-${parallelSecond}`).closest('.timeline-parallel-group'),d.querySelector(`#phase-${parallelFirst}`).closest('.timeline-parallel-group'));
 const parallelBefore=[...d.querySelectorAll('.timeline-item')].map(n=>n.dataset.phaseId);
 d.querySelector(`#phase-${parallelFirst} .phase-add-btn`).click();
 for(let attempt=0;attempt<100&&count()===parallelBefore.length;attempt++)await new Promise(resolve=>setTimeout(resolve,10));

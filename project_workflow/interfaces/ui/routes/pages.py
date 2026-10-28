@@ -453,6 +453,20 @@ def _add_workflow_phases(
     return None
 
 
+def _workflow_editor_response(
+    request: Request, context: dict[str, Any], name: str = "workflows.html",
+) -> HTMLResponse:
+    """Both entry points share the editor fragment and cache contract."""
+    fragment = request.headers.get("x-workflow-view") == "editor-v1"
+    context["workflow_fragment"] = fragment
+    response = _template_response(request=request, name=name, context=context)
+    response.headers["Cache-Control"] = "private, no-store"
+    response.headers["Vary"] = "X-Workflow-View"
+    if fragment:
+        response.headers["X-Workflow-View"] = "editor-v1"
+    return response
+
+
 def phases_page(request: Request) -> HTMLResponse:
     context = _namespace_context(request, page="phases")
     if error_response := _namespace_error_page(request, context, page="phases"):
@@ -507,11 +521,7 @@ def phases_page(request: Request) -> HTMLResponse:
             "selected_workflow_id": selected_workflow_id,
         }
     )
-    return _template_response(
-        request=request,
-        name="phases.html",
-        context=context,
-    )
+    return _workflow_editor_response(request, context, name="phases.html")
 
 
 def phase_detail(request: Request, phase_id: PositivePathId) -> HTMLResponse:
@@ -646,16 +656,7 @@ def workflows_page(request: Request) -> Response:
             "default_workflow_id": default_workflow_id,
         }
     )
-    # The full page and incremental editor share context, policy and Jinja macros.
-    # Errors/redirects above never carry the fragment marker and cannot replace the editor.
-    fragment = request.headers.get("x-workflow-view") == "editor-v1"
-    context["workflow_fragment"] = fragment
-    response = _template_response(request=request, name="workflows.html", context=context)
-    response.headers["Cache-Control"] = "private, no-store"
-    response.headers["Vary"] = "X-Workflow-View"
-    if fragment:
-        response.headers["X-Workflow-View"] = "editor-v1"
-    return response
+    return _workflow_editor_response(request, context)
 
 
 def task_detail_page(

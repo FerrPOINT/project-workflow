@@ -30,7 +30,7 @@ function retireWorkflowEditor(){
 }
 async function loadWorkflowEditor(value,options={}){
   const url=new URL(value,location.href);
-  if(url.origin!==location.origin||url.pathname!=='' + config.basePath + '/workflows')return false;
+  if(url.origin!==location.origin||![config.basePath+'/workflows',config.basePath+'/phases'].includes(url.pathname))return false;
   if(workflowNeedsReadback&&!options.afterWrite){showToast('Сначала обновите состояние сохранённого изменения','error');return false;}
   if(phaseWritePending&&!options.afterWrite)return false;
 {% if can_administer %}

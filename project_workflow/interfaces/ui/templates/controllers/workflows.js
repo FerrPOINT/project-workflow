@@ -372,7 +372,13 @@ async function togglePhaseType(button){
   if(phaseWritePending||workflowWritePending||workflowNeedsReadback||workflowReadController)return;
   setPhaseWritePending(true);
   try{
-    const resp=await fetch('' + config.basePath + '/api/phases/'+item.dataset.phaseId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({execution_type:nextType})});
+    const payload={execution_type:nextType};
+    if(nextType==='parallel'){
+      const items=getPhaseTimelineItems(),index=items.indexOf(item);
+      const partner=[items[index-1],items[index+1]].find(phase=>phase?.dataset.executionType==='parallel');
+      if(partner)payload.parallel_with_phase_id=Number(partner.dataset.phaseId);
+    }
+    const resp=await fetch('' + config.basePath + '/api/phases/'+item.dataset.phaseId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     const data=await resp.json().catch(()=>({}));
     if(!resp.ok||!data.ok){if(resp.status>=500)requireWorkflowReadback();showToast(data.error||'Не удалось сменить режим','error');return;}
     await refreshWorkflowPhases();
