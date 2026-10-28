@@ -152,7 +152,12 @@ UI/SDK/skills pins независимы; установка и production — о
 Общий контракт добавлять в Base вместе с metadata и примером, затем явно
 обновлять UI pin потребителя. Локальная копия не заменяет эту интеграцию.
 
-Перед изменением SSR UI читать [маршрут разработки со справочником Base](https://github.com/FerrPOINT/services-base/blob/ae2b41291eee5af752daff89f760fba5aff41783/base-modules/ui/reference/guides/agent.md),
+Перед изменением SSR UI читать [маршрут разработки со справочником Base](https://github.com/FerrPOINT/services-base/blob/f7998b33d87e9ade59bbd6907a8145a70b0b8c00/base-modules/ui/reference/guides/agent.md),
+
+Для компоновки и ревью web UI применять [рабочий маршрут Base](https://github.com/FerrPOINT/services-base/blob/f7998b33d87e9ade59bbd6907a8145a70b0b8c00/docs/platform/DESIGN_SYSTEM.md#рабочий-маршрут-изменения-ui):
+задача → контракт → группы полей → применимые состояния → доказательство.
+Source guard, unit и browser-приёмка различаются; ссылка на правила не обновляет UI/SDK/skills pins.
+
 включая раздел для Workflow без Node frontend. Прочитать `.base-ui-revision`;
 подготовить отдельный checkout этого SHA без переключения соседней рабочей ветки.
 Запуск из него: `node base-modules/ui/tools/ui-reference/cli.mjs check`, затем
