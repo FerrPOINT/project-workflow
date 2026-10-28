@@ -175,3 +175,30 @@ Run `scripts/check_workflow_application.mjs` with the same `--tooling-from` and
 creation, failed/stale reads and access retirement. Both manual integration gates
 are separate from default build/check. IAB acceptance must traverse every sidebar
 section on the final installed artifact; editor-only proof is insufficient.
+
+
+## Fast navigation and immutable controllers
+
+Ordinary page reads still use the same protected owner route and private,
+no-store HTML. Fragments do not read the service catalog for a header they do not
+replace. Authorization, view data, identity and original admission deadlines are
+checked as before; protected HTML is not put in browser history or a shared cache.
+
+Request-independent controller templates live in `templates/controllers/`.
+The existing Jinja engine produces a fixed user/admin code variant, addressed by
+SHA256. Only code and public icon constants enter these immutable responses.
+Private page configuration is an inert JSON block in the owner HTML. The four
+controllers load once with deferred scripts before initial page mounting; later
+page reads carry only a small bootstrap and data. No new build tool or dependency
+is required. The existing scoped mount/dispose contract remains authoritative.
+
+An already-open inline-controller shell upgrades once by document navigation.
+An asset-set change also upgrades the document after current authorization is
+confirmed. Ordinary navigation on a compatible shell remains partial. A failed
+asset load shows an error and does not enter an automatic reload loop.
+
+Pending reads use the existing Base notification host with an explicit lifetime;
+sidebar links have a pending label/aria-busy while the committed active selection
+stays intact. Superseded, failed and cancelled reads clear their own indicator.
+The notification remains within desktop/mobile viewport and introduces no local
+paint, timer, polling, optimistic writes or second routing runtime.

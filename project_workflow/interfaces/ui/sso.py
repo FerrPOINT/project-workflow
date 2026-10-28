@@ -97,6 +97,7 @@ class _SsoMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         if path in _PUBLIC_PATHS or path.startswith((
             "/internal/runtime/", "/api/pm/namespace-ownership/", "/api/internal/v1/user-deletions/",
+            "/ui-assets/controllers/",
         )):
             return await call_next(request)
         canonical_hostname = urlparse(settings.AUTH_PUBLIC_ORIGIN).hostname

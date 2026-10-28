@@ -28,7 +28,7 @@ w.fetch=async(value,options)=>{
  }
  return fetch(new URL(value,w.location.href),options);
 };
-const controller=Array.from(d.scripts).find(script=>script.textContent.includes('async function loadWorkflowEditor('));
+const controller=d.querySelector('script[data-workflow-controller]');
 assert.ok(controller);
 const pageReady=[];
 w.WorkflowApplication={mount(factory){factory({
@@ -38,6 +38,10 @@ w.WorkflowApplication={mount(factory){factory({
  expose:functions=>Object.assign(w,functions),
 });}};
 w.eval([...d.scripts].find(script=>script.textContent.includes('function pluralizeRu(')).textContent);
+w.WorkflowPageControllers=Object.create(null);
+for(const asset of d.querySelectorAll('script[src*="/ui-assets/controllers/"]')){
+ const response=await fetch(new URL(asset.src,base));assert.equal(response.status,200);w.eval(await response.text());
+}
 w.eval(controller.textContent);pageReady.forEach(callback=>callback());
 d.dispatchEvent(new w.Event('DOMContentLoaded'));
 const state=()=>JSON.parse(d.querySelector('#workflowEditorState').textContent);

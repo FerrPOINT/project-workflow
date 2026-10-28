@@ -6,7 +6,7 @@ from pathlib import Path
 
 def test_hydrated_namespace_cards_show_names_without_an_extra_cli_command():
     template = (
-        Path(__file__).parents[1] / "project_workflow/interfaces/ui/templates/namespaces.html"
+        Path(__file__).parents[1] / "project_workflow/interfaces/ui/templates/controllers/namespaces.js"
     ).read_text(encoding="utf-8")
     render = template[
         template.index("function renderNamespaceNav()"):

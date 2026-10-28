@@ -22,7 +22,11 @@ const dom=new JSDOM((await(await fetch(url)).text()).replace(/<style[\s\S]*?<\/s
  w.PdlcClipboard={initCopyButton(){},destroyCopyButton(){}};
 }});
 const w=dom.window,d=w.document;await new Promise(resolve=>w.addEventListener('load',resolve,{once:true}));
-w.PdlcBaseUI.notify=message=>messages.push(message);
+const realNotify=w.PdlcBaseUI.notify;
+w.PdlcBaseUI.notify=(message,options={})=>{if(options.duration===Infinity)return realNotify(message,options);messages.push(message);};
+for(const asset of d.querySelectorAll('script[src*="/ui-assets/controllers/"]')){
+ const response=await fetch(new URL(asset.src,base));assert.equal(response.status,200);assert.match(response.headers.get('cache-control'),/immutable/);w.eval(await response.text());
+}
 const vendor=await(await fetch(new URL('/workflow/ui-assets/htmx-2.0.11.min.js',base))).text();
 // jsdom requires the XPath result type, unlike browser XPathExpression.evaluate.
 const evaluate=w.XPathExpression.prototype.evaluate;w.XPathExpression.prototype.evaluate=function(node,type,result){return evaluate.call(this,node,type??0,result);};
@@ -66,6 +70,15 @@ assert.match(messages.pop(),/открыть раздел/);fail=false;
 let release;delay=new Promise(resolve=>{release=resolve;});
 const stale=w.WorkflowApplication.navigate('/workflow/tasks');await new Promise(resolve=>setImmediate(resolve));
 await go('/');release();assert.equal(await stale,false);assert.equal(page().page,'dashboard');
+// The shared toaster and target label are visible pending state; committed route stays put.
+let pendingRelease;delay=new Promise(resolve=>{pendingRelease=resolve;});
+const pending=w.WorkflowApplication.navigate('/workflow/tasks');await new Promise(resolve=>setImmediate(resolve));
+assert.equal(d.querySelector('main').getAttribute('aria-busy'),'true');
+assert.match(d.querySelector('[data-base-toast-status]').textContent,/Открываем/);
+assert.equal(d.querySelector('[data-workflow-route="tasks"]').getAttribute('data-workflow-pending'),'true');
+pendingRelease();assert.equal(await pending,true);
+assert.equal(d.querySelector('[data-workflow-pending]'),null);
+assert.equal(d.querySelector('[data-base-toast-status]').textContent,'');
 // An edit made while fetching needs a second leave decision.
 await go('/namespaces?profession_id=1');let lateRelease;delay=new Promise(resolve=>{lateRelease=resolve;});
 const late=w.WorkflowApplication.navigate('/workflow/settings');await new Promise(resolve=>setImmediate(resolve));

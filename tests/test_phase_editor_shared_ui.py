@@ -6,6 +6,7 @@ import subprocess
 
 import pytest
 
+from project_workflow.interfaces.ui.controller_assets import controller_source
 from tests import test_ui_shell_template as shell
 
 pytestmark = pytest.mark.ui
@@ -56,9 +57,9 @@ def test_phase_editor_uses_shared_presentation_with_native_list_and_role_semanti
     if populated:
         for text in ["Instruction &lt;safe&gt;", "Check &lt;safe&gt;", "Evidence &lt;safe&gt;"]:
             assert text in html
-    scripts = re.findall(r"<script[^>]*>([\s\S]*?)</script>", html)
+    owner = controller_source("phase_detail", admin)[0].decode()
     marker = "const phaseId =" if admin else "const select=document.getElementById('phaseSectionSelect');"
-    owner = next(script for script in scripts if marker in script)
+    assert marker in owner
     checked = subprocess.run(["node", "--check", "-"], input=owner, text=True,
                              encoding="utf-8", capture_output=True, timeout=10)
     assert checked.returncode == 0, checked.stderr
@@ -77,11 +78,12 @@ def test_dynamic_text_rows_use_the_rendered_template_without_saving_on_add_and_r
     assert field["onblur"] == "saveNewTextItem(this)"
     assert "base-textarea" in field["class"].split()
     assert 'data-page-state="empty"' not in fragment.group(1)
+    code = controller_source("phase_detail", True)[0].decode()
     source = "\n".join([
-        html[html.index("function syncTextItemList("):html.index("async function saveNewTextItem(")],
-        html[html.index("async function deleteItem("):html.index("function appendTextItem(")],
-        html[html.index("function appendTextItem("):
-             html.index("/* ---------- Debounced phase meta save ---------- */")],
+        code[code.index("function syncTextItemList("):code.index("async function saveNewTextItem(")],
+        code[code.index("async function deleteItem("):code.index("function appendTextItem(")],
+        code[code.index("function appendTextItem("):
+             code.index("/* ---------- Debounced phase meta save ---------- */")],
     ])
     script = """
 const kind=KIND,saved=SAVED;

@@ -4,6 +4,8 @@ import os
 import subprocess
 from pathlib import Path
 
+from project_workflow.interfaces.ui.controller_assets import controller_source
+
 ROOT = Path(__file__).parents[1]
 TEMPLATES = ROOT / "project_workflow/interfaces/ui/templates"
 
@@ -16,14 +18,19 @@ def editor_script():
             cwd=ROOT, text=True, encoding="utf-8",
         )
     else:
-        template = (TEMPLATES / "phase_detail.html").read_text(encoding="utf-8")
+        template = controller_source("phase_detail", True)[0].decode()
     tracker = (TEMPLATES / "base/draft-state.js").read_text(encoding="utf-8").replace("export function", "function")
     prefix = template[template.index("const phaseId ="):template.index("const selectedNamespaceId =")]
-    prefix = prefix.replace("{{ phase.id }}", "7")
+    prefix = prefix.replace("{{ phase.id }}", "7").replace("config.phaseId", "7")
     # Autosize now belongs to Base; keep this boundary tied to the input listener.
-    listener_start = template.index("document.addEventListener('input'")
+    listener_marker = (
+        "page.on(document,'input'" if "page.on(document,'input'" in template
+        else "document.addEventListener('input'"
+    )
+    listener_start = template.index(listener_marker)
     listener = template[listener_start:template.index("\n});", listener_start) + len("\n});")]
-    save = template[template.index("let _saveTimer"):template.index("document.addEventListener('DOMContentLoaded'")]
+    ready_marker = "page.ready(" if "page.ready(" in template else "document.addEventListener('DOMContentLoaded'"
+    save = template[template.index("let _saveTimer"):template.index(ready_marker, template.index("let _saveTimer"))]
     return "\n".join([
         tracker,
         "const listeners=new Map();const fields=[{dataset:{field:'name'},value:'Original'},"
@@ -33,6 +40,7 @@ def editor_script():
         "querySelector:s=>s==='.wiki-header'?{querySelectorAll:()=>fields}:null,",
         "querySelectorAll:s=>s.startsWith('.wiki-header')?fields:[]};",
         "const showToast=()=>{};const phaseApiUrl=u=>u;const resizeInlineTextarea=()=>{};",
+        "const config={basePath:''};const page={on:(target,type,fn)=>target.addEventListener(type,fn)};",
         prefix, listener, save,
         "if(typeof phaseDraft!=='undefined'){phaseDraft=createDraftTracker();phaseSignature=currentPhaseSignature();",
         "confirmedPhase={name:'Original',description:'',execution_type:'sync',parallel_with_phase_id:null,checks:[],evidence:[]};}",
@@ -131,7 +139,7 @@ console.log(JSON.stringify({writes,dirty:dirty()}));
 
 
 def test_phase_mode_failure_keeps_the_chosen_value_as_a_draft():
-    template = (TEMPLATES / "phase_detail.html").read_text(encoding="utf-8")
+    template = controller_source("phase_detail", True)[0].decode()
     start = template.index("async function togglePhaseMode(el)")
     end = template.index("/* ---------- Instructions list", start)
     result = subprocess.run(

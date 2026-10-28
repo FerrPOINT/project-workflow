@@ -6,6 +6,7 @@ import subprocess
 
 import pytest
 
+from project_workflow.interfaces.ui.controller_assets import controller_source
 from tests import test_ui_shell_template as shell
 
 pytestmark = pytest.mark.ui
@@ -27,9 +28,9 @@ def render_editor(admin, count=8):
 @pytest.mark.parametrize("admin", [False, True])
 @pytest.mark.parametrize("view", ["compact", "timeline"])
 def test_phase_view_changes_base_skin_for_each_role_without_writing_during_restore(admin, view):
-    html = render_editor(admin)
-    start = html.index("function setPhaseView(")
-    source = html[start:html.index("function jumpToPhase(", start)]
+    code = controller_source("workflows", admin)[0].decode()
+    start = code.index("function setPhaseView(")
+    source = code[start:code.index("function jumpToPhase(", start)]
     script = """
 const view=VIEW;
 const classes=new Set(['base-resource-list-row']);
@@ -80,9 +81,9 @@ def test_editor_uses_the_shared_segmented_radio_group_and_preserves_permissions(
         assert groups[0]["data-appearance"] == "segmented"
         assert [item["value"] for item in radios] == ["compact", "timeline"]
         assert [item["value"] for item in radios if "checked" in item] == ["compact" if count >= 8 else "timeline"]
-    assert html.count("function setPhaseView(") == 1
-    assert html.count("function selectMode(") == 1
-    assert html.count("function jumpToPhase(") == 1
+    assert controller_source("workflows", admin)[0].decode().count("function setPhaseView(") == 1
+    assert controller_source("workflows", admin)[0].decode().count("function selectMode(") == 1
+    assert controller_source("workflows", admin)[0].decode().count("function jumpToPhase(") == 1
     assert ('id="workflowForm"' in html) == admin
     assert ('onclick="addPhaseAfter(this)"' in html) == admin
     headings = {attrs.get("id"): attrs for tag, attrs in elements if tag == "h2"}
@@ -103,10 +104,10 @@ def test_editor_uses_the_shared_segmented_radio_group_and_preserves_permissions(
 @pytest.mark.parametrize("admin", [False, True])
 @pytest.mark.parametrize("storage", ["compact", "timeline", "invalid", "unavailable"])
 def test_phase_view_restores_without_a_write_and_changes_only_on_a_checked_selection(admin, storage):
-    html = render_editor(admin)
-    start = html.index("function setPhaseView(")
-    end = html.index("const professionId =", start) if admin else html.index("function selectWorkflow(", start)
-    source = html[start:end]
+    code = controller_source("workflows", admin)[0].decode()
+    start = code.index("function setPhaseView(")
+    end = code.index("const professionId =", start) if admin else code.index("function selectWorkflow(", start)
+    source = code[start:end]
     script = """
 const storage=STORAGE;const writes=[],ready=[];
 const page={ready:callback=>ready.push(callback),on:(target,type,callback)=>target.addEventListener(type,callback)};
@@ -143,8 +144,7 @@ console.log(JSON.stringify({restored,ignored,selected:radios.filter(r=>r.checked
 
 @pytest.mark.parametrize("admin", [False, True])
 def test_editor_script_is_valid_after_role_specific_rendering(admin):
-    scripts = re.findall(r"<script[^>]*>([\s\S]*?)</script>", render_editor(admin))
-    owner_script = next(script for script in scripts if "function setPhaseView(" in script)
+    owner_script = controller_source("workflows", admin)[0].decode()
     result = subprocess.run(["node", "--check", "-"], input=owner_script, text=True,
                             encoding="utf-8", capture_output=True, timeout=10)
     assert result.returncode == 0, result.stderr

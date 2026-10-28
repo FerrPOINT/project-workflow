@@ -6,7 +6,7 @@ let workflowReadbackRequest = null;
 let workflowHistoryPosition = history.state?.workflowPosition ?? 0;
 let workflowReadRevision = 0;
 let workflowCommittedUrl = location.pathname + location.search + location.hash;
-const workflowInitialRole = {{ can_administer|tojson }};
+const workflowInitialRole = config.canAdminister;
 function initializeWorkflowPhases(root=document){
   window.PdlcBaseUI.initMenus?.(root);
   root.querySelectorAll('select[data-base-choice]').forEach(control=>window.PdlcChoice?.initChoice(control));
@@ -29,7 +29,7 @@ function retireWorkflowEditor(){
 }
 async function loadWorkflowEditor(value,options={}){
   const url=new URL(value,location.href);
-  if(url.origin!==location.origin||url.pathname!=='{{ ui_base_path() }}/workflows')return false;
+  if(url.origin!==location.origin||url.pathname!=='' + config.basePath + '/workflows')return false;
   if(workflowNeedsReadback&&!options.afterWrite){showToast('Сначала обновите состояние сохранённого изменения','error');return false;}
   if(phaseWritePending&&!options.afterWrite)return false;
 {% if can_administer %}

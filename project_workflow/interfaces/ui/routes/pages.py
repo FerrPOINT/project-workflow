@@ -86,8 +86,11 @@ def _namespace_context(
     missing_namespace_id = selected_id if explicit_namespace_id is not None and selected_namespace is None else None
     if selected_namespace is None and namespaces and missing_namespace_id is None and not invalid_query_namespace_id:
         selected_namespace = namespaces[0]
-    catalog = load_service_catalog(
-        get_settings().PLATFORM_SERVICES_URL,
+    # Fragments retain the existing header; do not make their critical path depend
+    # on its service catalog. All identity/data checks still run on the request.
+    fragment = request.headers.get("x-workflow-view") in {"page-v1", "editor-v1"}
+    catalog = None if fragment else load_service_catalog(
+        settings.PLATFORM_SERVICES_URL,
         request_url=str(request.url),
     )
     return {
@@ -104,8 +107,8 @@ def _namespace_context(
         "selected_namespace": selected_namespace,
         "invalid_query_namespace_id": invalid_query_namespace_id,
         "missing_namespace_id": missing_namespace_id,
-        "other_services": visible_services(request, catalog.services),
-        "services_source": catalog.source,
+        "other_services": visible_services(request, catalog.services) if catalog else [],
+        "services_source": catalog.source if catalog else "persistent-shell",
         **_theme_context(selected_namespace),
     }
 

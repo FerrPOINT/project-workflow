@@ -8,6 +8,7 @@ from unittest import TestCase
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
+from project_workflow.interfaces.ui.controller_assets import controller_source
 from project_workflow.interfaces.ui.templates import env as product_template_environment
 
 
@@ -441,8 +442,9 @@ class SharedShellTemplateTests(TestCase):
                 self.assertNotIn("empty-note", html)
                 self.assertNotIn("nav.appendChild(empty)", html)
                 if admin:
-                    self.assertIn("setNamespaceFormMode('create');", html)
-                    self.assertIn("document.getElementById('namespaceName').focus();", html)
+                    code = controller_source("namespaces", True)[0].decode()
+                    self.assertIn("setNamespaceFormMode('create');", code)
+                    self.assertIn("document.getElementById('namespaceName').focus();", code)
 
     def test_namespace_form_preserves_names_patterns_help_and_values_with_base_fields(self):
         html = self.render_shell(
@@ -873,8 +875,9 @@ class SharedShellTemplateTests(TestCase):
                 ]
                 self.assertEqual(len(actions), 4)
                 self.assertTrue(all("base-button" in button["class"].split() for button in actions))
-                self.assertIn("item.dataset.instructionSkill", html)
-                self.assertNotIn("b.textContent.replace('×'", html)
+                code = controller_source("phase_detail", True)[0].decode()
+                self.assertIn("item.dataset.instructionSkill", code)
+                self.assertNotIn("b.textContent.replace('×'", code)
                 self.assertNotIn(".skill-remove-btn{", html)
                 self.assertNotIn(".badge-sync", html)
 
@@ -1045,7 +1048,7 @@ class SharedShellTemplateTests(TestCase):
             self.assertNotIn("resizeInstructionTextarea", html)
             self.assertIn("destroyTextareaAutosize", html)
             self.assertIn("data-original-description=", html)
-        phase = self.render_instruction_editor()
+        phase = controller_source("phase_detail", True)[0].decode()
         self.assertIn("window.PdlcTextarea.initTextareaAutosize(li.querySelector('textarea'));", phase)
         self.assertIn("window.PdlcTextarea.refreshTextareaAutosize(input);", phase)
         self.assertIn("instructionDraft(event.target).edit();", phase)
@@ -1090,10 +1093,11 @@ class SharedShellTemplateTests(TestCase):
         self.assertTrue(all("aria-current" not in link for link in links[1:]))
         self.assertNotIn(".phase-outline-link", html)
         self.assertNotIn(".phase-outline-list", html)
-        self.assertIn("link.hash.slice(1)", html)
-        self.assertIn("phaseSectionNavigationLock = sectionId;", html)
-        self.assertIn("window.PdlcPlatformNavigation.syncRoute(nextUrl, method === 'replaceState');", html)
-        self.assertIn("page.on(window,'popstate', restorePhaseSectionFromLocation);", html)
+        code = controller_source("phase_detail", True)[0].decode()
+        self.assertIn("link.hash.slice(1)", code)
+        self.assertIn("phaseSectionNavigationLock = sectionId;", code)
+        self.assertIn("window.PdlcPlatformNavigation.syncRoute(nextUrl, method === 'replaceState');", code)
+        self.assertIn("page.on(window,'popstate', restorePhaseSectionFromLocation);", code)
 
     def test_section_navigation_macros_keep_native_links_and_escape_labels(self):
         templates = Path(__file__).parents[1] / "project_workflow/interfaces/ui/templates"

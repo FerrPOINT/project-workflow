@@ -10,7 +10,7 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from pydantic import ValidationError
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
@@ -205,6 +205,11 @@ def create_app() -> FastAPI:
             media_type="text/javascript",
             headers={"Cache-Control": "public, max-age=31536000, immutable"},
         )
+
+    @app.get("/ui-assets/controllers/{variant}/{digest}/{name}.js", include_in_schema=False)
+    def page_controller(variant: str, digest: str, name: str) -> Response:
+        from .controller_assets import controller_response
+        return controller_response(variant, digest, name)
 
     app.add_middleware(_RequestLoggingMiddleware)
     app.add_middleware(_UoWMiddleware)

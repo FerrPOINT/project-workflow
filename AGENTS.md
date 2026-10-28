@@ -173,6 +173,9 @@ heading_id. Native home link использует button(href=..., variant=ghost
 остаются у Workflow. Не добавлять локальный skin или второй leave/history runtime.
 Для частичной навигации использовать общий app_main и lifecycle Base; продукт
 владеет загрузкой своего HTML и очисткой страничных обработчиков (docs/ui-shell.md).
+Неизменяемые контроллеры находятся в templates/controllers и раздаются по хешу;
+персональные данные остаются в private no-store HTML. Правила загрузки и
+совместимости открытых вкладок — в docs/ui-shell.md.
 
 ## Единое пространство PDLC
 

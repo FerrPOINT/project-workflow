@@ -1,10 +1,26 @@
 // One persistent shell; page-local code owns only its current work area.
+window.WorkflowPageControllers = Object.create(null);
 window.WorkflowApplication = (() => {
   const basePath={{ ui_base_path()|tojson }};
   let controller,active,pendingFactory,metadata,epoch=0,request=null,swapping=false;
   let committed=location.pathname+location.search+location.hash;
   let position=history.state?.workflowAppPosition??0;
-  let originalNavigate,originalSync;
+  let originalNavigate,originalSync,dismissPending;
+  const pendingLabels=new Map();
+  function clearPending(){
+    dismissPending?.();dismissPending=null;
+    for(const [link,label] of pendingLabels){link.removeAttribute('aria-busy');link.removeAttribute('data-workflow-pending');const text=link.querySelector('.sidebar-label');if(text)text.textContent=label;}
+    pendingLabels.clear();
+  }
+  function showPending(url){
+    let label='раздел';
+    for(const link of document.querySelectorAll('[data-workflow-route]')){
+      if(new URL(link.href).pathname!==url.pathname)continue;
+      const text=link.querySelector('.sidebar-label');label=link.getAttribute('aria-label')||text?.textContent||label;
+      pendingLabels.set(link,text?.textContent||label);link.setAttribute('aria-busy','true');link.setAttribute('data-workflow-pending','true');if(text)text.textContent=label+'…';
+    }
+    dismissPending=window.PdlcBaseUI.notify('Открываем: '+label,{duration:Infinity});
+  }
   const path=url=>url.pathname+url.search+url.hash;
   const eligible=url=>url.origin===location.origin&&(basePath===''||url.pathname===basePath||url.pathname.startsWith(basePath+'/'))&&!new RegExp('^'+basePath+'/(api|internal|base-assets|ui-assets|login|logout|sso)(/|$)').test(url.pathname);
   const notify=(message,type='error')=>window.PdlcBaseUI.notify(message,{type});
@@ -86,14 +102,14 @@ window.WorkflowApplication = (() => {
     const url=new URL(value,location.href);
     if(!eligible(url)){originalNavigate(url.href,options);return false;}
     const revision=++epoch;request?.abort();request=null;
-    document.querySelector('main.main')?.setAttribute('aria-busy','false');document.getElementById('workflowNavigationStatus').hidden=true;
+    document.querySelector('main.main')?.setAttribute('aria-busy','false');clearPending();
     if(active?.writes||active?.busy()){notify('Дождитесь завершения сохранения.');return false;}
     if(!controller.isCurrent())return false;
     if(!await controller.canLeave()||revision!==epoch)return false;
     window.PdlcBaseUI.closeNavigation?.();
     const version=formVersion(),old=document.querySelector('main.main');
     const abort=new AbortController();request=abort;old.setAttribute('aria-busy','true');
-    const indicator=document.getElementById('workflowNavigationStatus');indicator.hidden=false;
+    showPending(url);
     try{
       const response=await fetch(path(url),{signal:abort.signal,cache:'no-store',headers:{'X-Workflow-View':'page-v1','Accept':'text/html'}});
       const final=new URL(response.url||url.href);
@@ -106,6 +122,7 @@ window.WorkflowApplication = (() => {
       const next=JSON.parse(parsed.querySelector('[data-workflow-page]')?.textContent||'null');
       if(!next||next.schema_version!==1||typeof next.context_html!=='string'||!parsed.querySelector('main.main')||!eligible(final))throw Error('Некорректный ответ раздела');
       if(next.access_revision!==metadata.access_revision||next.access_enforced!==metadata.access_enforced||next.can_administer!==metadata.can_administer){controller.retire();return false;}
+      if(JSON.stringify(next.controller_assets)!==JSON.stringify(metadata.controller_assets)){originalNavigate(url.href,{replace:true});return false;}
       if(revision!==epoch||!controller.isCurrent()||!old.isConnected)return false;
       if(formVersion()!==version&&!await controller.canLeave())return false;
       if(revision!==epoch||active?.writes||active?.busy()||!controller.isCurrent())return false;
@@ -132,7 +149,7 @@ window.WorkflowApplication = (() => {
       document.querySelector('main.main')?.focus({preventScroll:true});
       return true;
     }catch(error){if(revision===epoch&&error.name!=='AbortError')notify(error.message||'Не удалось открыть раздел');return false;}
-    finally{if(revision===epoch){request=null;document.querySelector('main.main')?.setAttribute('aria-busy','false');indicator.hidden=true;}}
+    finally{if(revision===epoch){request=null;document.querySelector('main.main')?.setAttribute('aria-busy','false');clearPending();}}
   }
   function start(value){
     const initialize=()=>{
