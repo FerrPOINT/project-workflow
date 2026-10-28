@@ -40,6 +40,6 @@ class TestTextHelpers:
 
 class TestVerdictLabels:
     def test_all_verdicts_present(self):
-        for v in ("pass", "partial", "blocked", "rollback", "delegate"):
+        for v in ("pass", "partial", "blocked", "delegate"):
             assert v in VERDICT_LABELS
             assert VERDICT_LABELS[v].isupper()

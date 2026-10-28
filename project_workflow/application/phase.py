@@ -46,12 +46,6 @@ class PhaseServiceApp:
             graph_id=phase.id,
             phase_order=int(updates.get("phase_order", phase.phase_order)),
             execution_type=str(updates.get("execution_type", phase.execution_type)),
-            parallel_with_phase_id=updates.get(
-                "parallel_with_phase_id", phase.parallel_with_phase_id
-            ),
-            rollback_target_phase_id=updates.get(
-                "rollback_target_phase_id", phase.rollback_target_phase_id
-            ),
         )
 
     @staticmethod
@@ -62,12 +56,10 @@ class PhaseServiceApp:
             raise ConflictError(str(exc)) from exc
 
     @staticmethod
-    def _normalize_links(data: dict[str, Any]) -> None:
-        for field in ("parallel_with_phase_id", "rollback_target_phase_id"):
-            if field not in data or data[field] is None:
-                continue
-            if not isinstance(data[field], int) or isinstance(data[field], bool) or data[field] <= 0:
-                raise ValueError(f"{field} должен быть положительным целым числом или null")
+    def _reject_retired_fields(data: dict[str, Any]) -> None:
+        retired = {"parallel_with_phase_id", "rollback_target_phase_id"}.intersection(data)
+        if retired:
+            raise ValueError(f"Устаревшие настройки фазы не поддерживаются: {', '.join(sorted(retired))}")
 
     def _rollback_if_owning_transaction(self, commit: bool) -> None:
         if commit:
@@ -76,7 +68,6 @@ class PhaseServiceApp:
     def create_phase(self, data: dict[str, Any], *, commit: bool = True) -> dict[str, Any]:
         allowed = {
             "workflow_id", "mode_id", "code", "name", "description", "phase_order", "execution_type",
-            "parallel_with_phase_id", "rollback_target_phase_id",
         }
         if unknown := set(data) - allowed:
             raise ValueError(f"Неизвестные поля фазы: {', '.join(sorted(unknown))}")
@@ -114,7 +105,7 @@ class PhaseServiceApp:
             if any(phase.code == code for phase in existing):
                 raise ConflictError(f"Код фазы {code!r} уже существует в этом воркфлоу")
             validated = dict(data)
-            self._normalize_links(validated)
+            self._reject_retired_fields(validated)
             prospective = [
                 self._node(
                     phase,
@@ -128,8 +119,6 @@ class PhaseServiceApp:
                     graph_id=f"new:{code}",
                     phase_order=order,
                     execution_type=validated.get("execution_type", "sync"),
-                    parallel_with_phase_id=validated.get("parallel_with_phase_id"),
-                    rollback_target_phase_id=validated.get("rollback_target_phase_id"),
                 )
             )
             self._validate_graph(prospective)
@@ -143,8 +132,6 @@ class PhaseServiceApp:
                 "description": validated.get("description", ""),
                 "execution_type": validated.get("execution_type", "sync"),
                 "phase_order": order,
-                "parallel_with_phase_id": validated.get("parallel_with_phase_id"),
-                "rollback_target_phase_id": validated.get("rollback_target_phase_id"),
             }
             pid = self._uow.phases.create(phase_data)
             phase = self._uow.phases.get_by_id(pid)
@@ -177,7 +164,7 @@ class PhaseServiceApp:
                 raise ConflictError("Фаза уже принадлежит режиму; перенос между режимами не поддерживается")
             updates.pop("mode_id")
         self._lock_workflow(workflow_id)
-        self._normalize_links(updates)
+        self._reject_retired_fields(updates)
         phases = list(self._uow.phases.list(workflow_id, mode_id=phase.mode_id))
         phase = next((item for item in phases if item.id == phase_id), None)
         if phase is None:

@@ -10,7 +10,7 @@ from tests.test_ui_shell_template import Elements
 
 def render_detail(**overrides):
     context = {
-        "page": "tasks",
+        "page": "tasks", "can_administer": False,
         "ui_base_path": lambda: "/workflow",
         "namespace_cookie_name": "workflow_namespace_id",
         "namespace_cookie_secure": False,

@@ -86,8 +86,11 @@ def _namespace_context(
     missing_namespace_id = selected_id if explicit_namespace_id is not None and selected_namespace is None else None
     if selected_namespace is None and namespaces and missing_namespace_id is None and not invalid_query_namespace_id:
         selected_namespace = namespaces[0]
-    catalog = load_service_catalog(
-        get_settings().PLATFORM_SERVICES_URL,
+    # Fragments retain the existing header; do not make their critical path depend
+    # on its service catalog. All identity/data checks still run on the request.
+    fragment = request.headers.get("x-workflow-view") in {"page-v1", "editor-v1"}
+    catalog = None if fragment else load_service_catalog(
+        settings.PLATFORM_SERVICES_URL,
         request_url=str(request.url),
     )
     return {
@@ -104,8 +107,8 @@ def _namespace_context(
         "selected_namespace": selected_namespace,
         "invalid_query_namespace_id": invalid_query_namespace_id,
         "missing_namespace_id": missing_namespace_id,
-        "other_services": visible_services(request, catalog.services),
-        "services_source": catalog.source,
+        "other_services": visible_services(request, catalog.services) if catalog else [],
+        "services_source": catalog.source if catalog else "persistent-shell",
         **_theme_context(selected_namespace),
     }
 
@@ -450,6 +453,20 @@ def _add_workflow_phases(
     return None
 
 
+def _workflow_editor_response(
+    request: Request, context: dict[str, Any], name: str = "workflows.html",
+) -> HTMLResponse:
+    """Both entry points share the editor fragment and cache contract."""
+    fragment = request.headers.get("x-workflow-view") == "editor-v1"
+    context["workflow_fragment"] = fragment
+    response = _template_response(request=request, name=name, context=context)
+    response.headers["Cache-Control"] = "private, no-store"
+    response.headers["Vary"] = "X-Workflow-View"
+    if fragment:
+        response.headers["X-Workflow-View"] = "editor-v1"
+    return response
+
+
 def phases_page(request: Request) -> HTMLResponse:
     context = _namespace_context(request, page="phases")
     if error_response := _namespace_error_page(request, context, page="phases"):
@@ -504,11 +521,7 @@ def phases_page(request: Request) -> HTMLResponse:
             "selected_workflow_id": selected_workflow_id,
         }
     )
-    return _template_response(
-        request=request,
-        name="phases.html",
-        context=context,
-    )
+    return _workflow_editor_response(request, context, name="phases.html")
 
 
 def phase_detail(request: Request, phase_id: PositivePathId) -> HTMLResponse:
@@ -528,46 +541,9 @@ def phase_detail(request: Request, phase_id: PositivePathId) -> HTMLResponse:
         )
     if not _workflow_matches_selected_namespace(phase.get("workflow_id"), context):
         return _phase_not_in_selected_namespace_page(request, context)
-    workflow_phases = _app_state.phase_service().list_phases(
-        phase.get("workflow_id"), mode_id=phase.get("mode_id")
-    )
-    current_index = next(
-        (index for index, item in enumerate(workflow_phases) if item.get("id") == phase.get("id")),
-        None,
-    )
-    parallel_candidates = []
-    rollback_target_phase = next(
-        (
-            item
-            for item in workflow_phases
-            if item.get("id") == phase.get("rollback_target_phase_id")
-        ),
-        None,
-    )
-    if current_index is not None:
-        left = current_index - 1
-        right = current_index + 1
-        while left >= 0 and workflow_phases[left].get("execution_type") == "parallel":
-            left -= 1
-        while right < len(workflow_phases) and workflow_phases[right].get("execution_type") == "parallel":
-            right += 1
-        parallel_candidates = [
-            item
-            for index, item in enumerate(workflow_phases)
-            if left < index < right
-            and index != current_index
-            and item.get("execution_type") == "parallel"
-        ]
     for instruction in phase.get("instructions", []):
         instruction["skills"] = PhaseService.normalize_skills(instruction.get("skills"))
-    context.update(
-        {
-            "phase": phase,
-            "workflow_phases": workflow_phases,
-            "parallel_candidates": parallel_candidates,
-            "rollback_target_phase": rollback_target_phase,
-        }
-    )
+    context["phase"] = phase
     return _template_response(
         request=request,
         name="phase_detail.html",
@@ -680,16 +656,7 @@ def workflows_page(request: Request) -> Response:
             "default_workflow_id": default_workflow_id,
         }
     )
-    # The full page and incremental editor share context, policy and Jinja macros.
-    # Errors/redirects above never carry the fragment marker and cannot replace the editor.
-    fragment = request.headers.get("x-workflow-view") == "editor-v1"
-    context["workflow_fragment"] = fragment
-    response = _template_response(request=request, name="workflows.html", context=context)
-    response.headers["Cache-Control"] = "private, no-store"
-    response.headers["Vary"] = "X-Workflow-View"
-    if fragment:
-        response.headers["X-Workflow-View"] = "editor-v1"
-    return response
+    return _workflow_editor_response(request, context)
 
 
 def task_detail_page(

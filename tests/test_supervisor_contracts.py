@@ -123,7 +123,7 @@ def test_get_parallel_group():
     assert [p.code for p in group] == ["p2", "p3"]
 
 
-def test_get_parallel_group_keeps_adjacent_pairs_separate_from_any_member():
+def test_get_parallel_group_merges_adjacent_modes_from_any_member():
     phases = [
         Phase(id=1, code="a", execution_type="parallel", parallel_with_phase_code="b"),
         Phase(id=2, code="b", execution_type="parallel", parallel_with_phase_code="a"),
@@ -132,10 +132,10 @@ def test_get_parallel_group_keeps_adjacent_pairs_separate_from_any_member():
     ]
     builder = PhaseContractBuilder(phases)
 
-    assert [phase.code for phase in builder.get_parallel_group(phases[0])] == ["a", "b"]
-    assert [phase.code for phase in builder.get_parallel_group(phases[1])] == ["a", "b"]
-    assert [phase.code for phase in builder.get_parallel_group(phases[2])] == ["c", "d"]
-    assert [phase.code for phase in builder.get_parallel_group(phases[3])] == ["c", "d"]
+    assert [phase.code for phase in builder.get_parallel_group(phases[0])] == ["a", "b", "c", "d"]
+    assert [phase.code for phase in builder.get_parallel_group(phases[1])] == ["a", "b", "c", "d"]
+    assert [phase.code for phase in builder.get_parallel_group(phases[2])] == ["a", "b", "c", "d"]
+    assert [phase.code for phase in builder.get_parallel_group(phases[3])] == ["a", "b", "c", "d"]
 
 
 def test_get_parallel_group_follows_transitive_and_one_way_links():
@@ -157,8 +157,8 @@ def test_get_parallel_group_ignores_unknown_cross_run_and_self_links():
     cross_run = Phase(id=4, code="c", execution_type="parallel", parallel_with_phase_code="a")
     builder = PhaseContractBuilder([isolated, self_linked, sync, cross_run])
 
-    assert builder.get_parallel_group(isolated) == [isolated]
-    assert builder.get_parallel_group(self_linked) == [self_linked]
+    assert builder.get_parallel_group(isolated) == [isolated, self_linked]
+    assert builder.get_parallel_group(self_linked) == [isolated, self_linked]
     assert builder.get_parallel_group(cross_run) == [cross_run]
 
 
@@ -178,7 +178,7 @@ def test_get_next_phase():
     assert cb.get_next_phase("px") == (None, None)
 
 
-def test_next_phase_follows_parallel_components_instead_of_physical_last_member():
+def test_next_phase_follows_the_complete_contiguous_run():
     phases = [
         Phase(id=1, code="a", name="A", execution_type="parallel", parallel_with_phase_code="c"),
         Phase(id=2, code="b", name="B", execution_type="parallel"),
@@ -188,10 +188,10 @@ def test_next_phase_follows_parallel_components_instead_of_physical_last_member(
     builder = PhaseContractBuilder(phases)
     linked_group = builder.get_parallel_group(phases[0])
 
-    assert [phase.code for phase in linked_group] == ["a", "c"]
-    assert builder._next_after_group(linked_group) == ("b", "B")
+    assert [phase.code for phase in linked_group] == ["a", "b", "c"]
+    assert builder._next_after_group(linked_group) == ("done", "Done")
     assert builder.get_next_phase("b") == ("done", "Done")
-    assert builder.get_next_phase("c") == ("b", "B")
+    assert builder.get_next_phase("c") == ("done", "Done")
 
 
 def test_contract_fingerprint_changes_with_evaluator_prompt_version(monkeypatch):

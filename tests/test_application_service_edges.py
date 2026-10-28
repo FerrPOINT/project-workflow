@@ -338,9 +338,9 @@ def test_instruction_lock_rejects_phase_removed_after_workflow_lock():
         {"parallel_with_phase_id": "2"},
     ],
 )
-def test_phase_link_normalization_rejects_non_positive_or_non_integer_values(data):
+def test_retired_phase_fields_are_rejected(data):
     with pytest.raises(ValueError):
-        PhaseServiceApp._normalize_links(data)
+        PhaseServiceApp._reject_retired_fields(data)
 
 
 @pytest.mark.parametrize("agent_id", [True, 0, -1, "1"])

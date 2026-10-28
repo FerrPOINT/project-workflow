@@ -112,7 +112,7 @@ class OpenAICompatibleClient:
 class PromptBuilder:
     """Build prompts from phase contracts + task context."""
 
-    PROMPT_VERSION = "supervisor-evaluator-v8"
+    PROMPT_VERSION = "supervisor-evaluator-v8-no-backtracking"
 
     SYSTEM_PROMPT = (
         "You are a strict workflow supervisor. "
@@ -129,16 +129,12 @@ class PromptBuilder:
         "7. verdict = PARTIAL — some items are missing, but the CURRENT phase worker can "
         "complete them without changing an artifact produced by an earlier phase → stay on phase.\n"
         "8. verdict = BLOCKED — real blocker → stay on phase.\n"
-        "9. verdict = ROLLBACK — missing items require changing an artifact produced by an "
-        "earlier phase, or the current worker explicitly cannot/will not do this. Use ROLLBACK "
-        "for review/QA findings that require code, test, migration, or documentation fixes in "
-        "the configured rollback phase.\n"
         "10. verdict = DELEGATE — worker delegates to another agent.\n"
         "11. Mutually exclusive CURRENT facts about the same artifact or state prohibit PASS "
         "unless the report gives an explicit chronology backed by action evidence.\n"
         "12. If such a contradiction is repairable inside the current phase, return PARTIAL. "
-        "If repair requires changing an earlier-phase artifact and a rollback target is configured, "
-        "return ROLLBACK. Put affected required item IDs in missing and keep blockers empty. "
+        "If repair requires work outside the current phase, "
+        "return BLOCKED and explain the required work. "
         "A real external blocker still returns BLOCKED.\n"
         "13. A sequence such as 'first open, then merged' is valid only when timestamps and action "
         "evidence make the state change explicit.\n"
@@ -146,7 +142,7 @@ class PromptBuilder:
         "The Supervisor never chooses the next phase.\n\n"
         "Output STRICT JSON with these keys:\n"
         "{\n"
-        '  "verdict": "PASS" | "PARTIAL" | "BLOCKED" | "ROLLBACK" | "DELEGATE",\n'
+        '  "verdict": "PASS" | "PARTIAL" | "BLOCKED" | "DELEGATE",\n'
         '  "covered": ["required item ID"],\n'
         '  "missing": ["required item ID"],\n'
         '  "blockers": ["specific blocker description"],\n'
@@ -166,7 +162,6 @@ class PromptBuilder:
         lines: list[str] = [
             f"TASK: {task_key}",
             f"CURRENT PHASE: {phase.code} — {phase.name}",
-            f"ROLLBACK TARGET: {getattr(phase, 'rollback_target_phase_code', None) or 'not configured'}",
             "",
             "PHASE CONTRACT:",
         ]
@@ -226,7 +221,7 @@ class _LlmResponse(BaseModel):
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
-    verdict: Literal["PASS", "PARTIAL", "BLOCKED", "ROLLBACK", "DELEGATE"]
+    verdict: Literal["PASS", "PARTIAL", "BLOCKED", "DELEGATE"]
     covered: list[str]
     missing: list[str]
     blockers: list[str]
@@ -280,7 +275,7 @@ class ResponseParser:
                 raise ValueError("PARTIAL requires missing items and no blockers")
             if response.verdict == "BLOCKED" and not response.blockers:
                 raise ValueError("BLOCKED requires a blocker reason")
-            if response.verdict in {"ROLLBACK", "DELEGATE"}:
+            if response.verdict == "DELEGATE":
                 if response.blockers:
                     raise ValueError(f"{response.verdict} must not contain blockers")
                 if required and not missing:
@@ -292,7 +287,7 @@ class ResponseParser:
                 raise ValueError("PARTIAL requires missing items and no blockers")
             if response.verdict == "BLOCKED" and not response.blockers:
                 raise ValueError("BLOCKED requires a blocker reason")
-            if response.verdict in {"ROLLBACK", "DELEGATE"} and response.blockers:
+            if response.verdict == "DELEGATE" and response.blockers:
                 raise ValueError(f"{response.verdict} must not contain blockers")
 
         return LlmVerdict(

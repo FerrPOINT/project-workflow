@@ -119,8 +119,18 @@ def test_login_logout_and_canonical_origin(monkeypatch):
         assert canonical.headers["location"] == "http://localhost:8812/api/tasks?state=open"
 
 
-def test_cookie_session_checks_identity_and_csrf(monkeypatch):
-    app, settings = _app(monkeypatch)
+@pytest.mark.parametrize("extra,origin,expected", [
+    ([], "http://localhost:8812", 200),
+    ([], "https://192.168.1.69:18443", 403),
+    (["https://192.168.1.69:18443"], "http://localhost:8812", 200),
+    (["https://192.168.1.69:18443"], "https://192.168.1.69:18443", 200),
+    (["https://192.168.1.69:18443"], "https://192.168.1.69:18444", 403),
+    (["https://192.168.1.69:18443"], "http://192.168.1.69:18443", 403),
+    (["https://192.168.1.69:18443"], "https://evil.example", 403),
+    (["https://192.168.1.69:18443"], "null", 403),
+])
+def test_cookie_session_checks_identity_and_csrf(monkeypatch, extra, origin, expected):
+    app, settings = _app(monkeypatch, AUTH_BROWSER_ORIGINS=extra)
     original_client = httpx.AsyncClient
 
     def identity(request: httpx.Request) -> httpx.Response:
@@ -139,8 +149,8 @@ def test_cookie_session_checks_identity_and_csrf(monkeypatch):
         )
         assert client.get("/").status_code == 200
         assert client.post("/api/tasks").status_code == 403
-        accepted = client.post("/api/tasks", headers={"origin": "http://localhost:8812"})
-        assert accepted.status_code == 200
+        accepted = client.post("/api/tasks", headers={"origin": origin})
+        assert accepted.status_code == expected
 
 
 @pytest.mark.parametrize("prefix", ["sdlc_pat_", "pdlc_pat_"])
@@ -421,3 +431,19 @@ def test_real_configuration_routes_declare_administrator_dependency():
             assert any(dependency.call is sso.require_administrator for dependency in route.dependant.dependencies)
             seen.add(route.name)
     assert seen == configuration
+
+
+@pytest.mark.parametrize("origin", [
+    "null", "*", "https://*.example", "https://user:pass@example.test", "https://example.test/path",
+    "https://example.test?query", "https://example.test#fragment", "https://example.test:bad",
+])
+def test_browser_origin_configuration_rejects_non_origins(origin):
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        Settings(DATABASE_URL="sqlite:///:memory:", AUTH_BROWSER_ORIGINS=[origin])
+
+
+def test_browser_origin_configuration_normalizes_exact_origins():
+    settings = Settings(DATABASE_URL="sqlite:///:memory:", AUTH_BROWSER_ORIGINS=["https://EXAMPLE.test/", "https://example.test"])
+    assert settings.AUTH_BROWSER_ORIGINS == ["https://example.test"]

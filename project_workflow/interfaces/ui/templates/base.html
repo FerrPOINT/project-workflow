@@ -8,19 +8,23 @@
 {% set shell_context %}{% if namespaces is defined and namespaces %}{{ profession_selector('namespaceSelector', namespaces, active_namespace) }}{% endif %}{% endset %}
 {% macro page_content() %}
   {% if workflow_page_fragment %}<style data-workflow-page-style>{{ self.extra_style() }}</style>{% endif %}
-  <script type="application/json" data-workflow-page>{{ {'schema_version':1, 'page':page|default(''), 'title':self.title()|striptags|trim, 'context_html':shell_context|trim, 'access_revision':access_window.scope_revision, 'access_enforced':access_window.enforced, 'can_administer':can_administer}|tojson }}</script>
+  <script type="application/json" data-workflow-page>{{ {'schema_version':1, 'page':page|default(''), 'title':self.title()|striptags|trim, 'context_html':shell_context|trim, 'access_revision':access_window.scope_revision, 'access_enforced':access_window.enforced, 'can_administer':can_administer, 'controller_assets':page_controller_identity(can_administer)}|tojson }}</script>
   {% set page_heading_markup %}{% block page_heading %}<h1 class="base-page-title">{% block header_title %}{% endblock %}</h1>{% endblock %}{% endset %}
   {% set page_actions_markup %}{% block header_actions %}{% endblock %}{% endset %}
   {{ base_ui.page_header(heading=page_heading_markup, actions=page_actions_markup) }}
   {% block content %}{% endblock %}
+  <script type="application/json" data-workflow-view-data>{% block controller_data %}{}{% endblock %}</script>
   <script data-workflow-controller>
   window.WorkflowApplication.mount(function(page){
-    const fetch=page.fetch,showToast=page.notify,showRequestError=()=>showToast('Не удалось связаться с сервером','error');
-    {% block extra_script %}{% endblock %}
-    page.expose({
-    {% block page_exports %}{% endblock %}});
-    page.handlesHistory={% block page_handles_history %}false{% endblock %};
-    page.busy=()=>{% block page_busy %}false{% endblock %};
+    {% set controller_id %}{% block controller_name %}{% endblock %}{% endset %}
+    {% if controller_id|trim %}
+    const config=JSON.parse(document.querySelector('main.main [data-workflow-view-data]').textContent);
+    // An already-open pre-asset shell needs one document upgrade after delivery.
+    if(!window.WorkflowPageControllers){window.location.replace(window.location.href);return;}
+    const factory=window.WorkflowPageControllers[{{ controller_id|trim|tojson }}];
+    if(!factory)throw Error('Не удалось загрузить код раздела. Обновите страницу.');
+    factory(page,config);
+    {% endif %}
   });
   </script>
 {% endmacro %}
@@ -37,6 +41,7 @@
 <title data-base-brand-title="Workflow Engine">{% block title %}Workflow Engine{% endblock %}</title>
 <script src="{{ ui_base_path() }}/ui-assets/htmx-2.0.11.min.js" integrity="sha384-2OatzQy1H+Zd/IIrjr1TcuDGqLXeHhbooAyJY1KdQMKnr4LZ22k31GBLdYKHmVjg" defer></script>
 <script>{% include "application-navigation.js" %}</script>
+{% for asset in page_controller_assets(can_administer) %}<script src="{{ ui_base_path() }}{{ asset }}" defer></script>{% endfor %}
 <script>{% include "base/theme-preference.js" %}
 document.documentElement.dataset.theme=window.PdlcThemePreference.read("workflow-theme");</script>
 <style>
@@ -63,7 +68,6 @@ html[data-pdlc-access-pending] body{visibility:hidden}
 
 
 /* ── Timeline (shared by phases list and phase detail instructions) ─── */
-.timeline{display:flex;flex-direction:column;align-items:center;max-width:860px;margin:0 auto;width:100%}
 .timeline-block{width:100%}
 .timeline-item{width:100%}
 .timeline-row{display:grid;grid-template-columns:84px minmax(0,1fr);gap:12px;align-items:stretch}
@@ -71,7 +75,6 @@ html[data-pdlc-access-pending] body{visibility:hidden}
 .timeline-card{width:100%;display:block;position:relative}
 .timeline-parallel-group{width:100%;display:flex;flex-direction:column;gap:10px}
 .timeline-parallel-label{align-self:flex-start}
-.timeline-arrow{text-align:center;padding:8px 0;color:var(--text-dim);font-size:18px}
 .timeline-name{font-size:var(--base-font-body);font-weight:500;color:var(--text);line-height:var(--base-line-body)}
 .timeline-badges{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;align-items:center}
 .execution-row{display:flex;gap:6px;margin-top:10px;align-items:center;min-height:32px;width:100%}
@@ -153,7 +156,8 @@ window.addEventListener('pagehide',function(event){if(!event.persisted)window.Wo
       {{ page_content() }}
 {% endcall %}
 
-<div id="workflowNavigationStatus" role="status" hidden>Загрузка раздела…</div>
+{% include 'route-read-state.html' %}
+
 {{ base_ui.toaster() }}
 {{ base_ui.confirmation_dialog() }}
 

@@ -1,0 +1,14 @@
+{# Data-independent work areas rendered with the same Base frame as owner pages. #}
+{% for mode in ['wide', 'reading', 'detail-with-aside'] %}
+{% for kind in ['loading', 'error'] %}
+<template data-workflow-read-template="{{ kind }}-{{ mode }}">
+{% call base_ui.app_main('Project Workflow', mode) %}
+<script type="application/json" data-workflow-page>{}</script>
+{% set heading %}<h1 class="base-page-title" data-workflow-route-heading></h1>{% endset %}
+{{ base_ui.page_header(heading=heading) }}
+{% if kind == 'loading' %}{{ base_ui.state('loading', 'Загружаем данные раздела…') }}
+{% else %}{{ base_ui.state('error', 'Не удалось загрузить данные раздела.', retry_url='#', retry_label='Повторить') }}{% endif %}
+{% endcall %}
+</template>
+{% endfor %}
+{% endfor %}

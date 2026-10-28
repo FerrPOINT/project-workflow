@@ -21,12 +21,20 @@ from project_workflow.interfaces.cli.core import cli
 from project_workflow.interfaces.ui import _app_state as ui_app_state
 from project_workflow.interfaces.ui import _load_cli_reference, app
 from tests._db_helpers import phase_by_code
+from tests._ui_source_helpers import page_source as _page_source
+from tests._ui_source_helpers import parallel_groups
 from tests.test_ui_shell_template import Elements
 
 client = TestClient(app)
 UNKNOWN_NAMESPACE_ID = 999999
 UNKNOWN_WORKFLOW_ID = 999998
 TEMPLATES_DIR = Path(__file__).resolve().parents[1] / "project_workflow" / "interfaces" / "ui" / "templates"
+
+
+def _view_data(response):
+    match = re.search(r"<script[^>]*data-workflow-view-data[^>]*>(.*?)</script>", response.text, re.S)
+    assert match is not None
+    return json.loads(match.group(1))
 
 
 def _as_dict(record: object) -> dict | None:
@@ -500,23 +508,26 @@ class TestPhasesPage:
 
         assert response.status_code == 200
         selected = client.get(f"/api/phases?namespace_id={namespace_id}").json()
-        assert response.text.count('id="workflowNav"') == 1
-        assert response.text.count('id="workflowForm"') == 1
-        assert response.text.index('id="workflowForm"') < response.text.index('id="phasesTimeline"')
-        assert f'data-workflow-id="{selected["workflow"]["id"]}"' in response.text
-        assert f'data-mode-id="{selected["mode"]["id"]}"' in response.text
-        assert f"const professionId = {namespace_id};" in response.text
-        assert "← К воркфлоу" not in response.text
+        assert _page_source(client, response).count('id="workflowNav"') == 1
+        assert _page_source(client, response).count('id="workflowForm"') == 1
+        assert _page_source(client, response).index('id="workflowForm"') < _page_source(client, response).index(
+            'id="phasesTimeline"'
+        )
+        assert f'data-workflow-id="{selected["workflow"]["id"]}"' in _page_source(client, response)
+        assert f'data-mode-id="{selected["mode"]["id"]}"' in _page_source(client, response)
+        assert f'"professionId": {namespace_id}' in _page_source(client, response)
+        assert "← К воркфлоу" not in _page_source(client, response)
 
     def test_phases_has_phase_rows(self):
         response = client.get("/phases")
         assert response.status_code == 200
         assert "timeline-card" in response.text
 
-    def test_phases_timeline_has_arrows(self):
+    def test_phases_timeline_has_no_arrow_spacers(self):
         response = client.get("/phases")
         assert response.status_code == 200
-        assert "timeline-arrow" in response.text
+        assert not any("timeline-arrow" in attrs.get("class", "").split()
+                       for _, attrs in Elements(response.text).elements)
 
     def test_phases_timeline_cards_clickable(self):
         response = client.get("/phases")
@@ -659,18 +670,12 @@ class TestPhasesPage:
     def test_sidebar_places_namespaces_first(self):
         response = client.get("/phases")
         assert response.status_code == 200
-
-        sidebar_nav = re.search(r'<nav class="sidebar-nav"[^>]*>(.*?)</nav>', response.text, re.S)
-        assert sidebar_nav is not None
-
-        hrefs = re.findall(r'href="([^"]+)"', sidebar_nav.group(1))
-        assert hrefs[:5] == ["/namespaces", "/", "/workflows", "/tasks", "/settings"]
-        assert 'aria-label="Основная навигация"' in response.text
-        assert re.search(
-            r'<a class="sidebar-link active" href="/workflows"[^>]*aria-current="page">',
-            response.text,
-        )
-        assert sidebar_nav.group(1).count('aria-current="page"') == 1
+        sidebar = re.search(r"<aside\b[^>]*data-base-desktop-navigation[^>]*>(.*?)</aside>", response.text, re.S)
+        assert sidebar is not None
+        links = [attrs for tag, attrs in Elements(sidebar.group(1)).elements if tag == "a"]
+        assert [a["href"] for a in links][:5] == ["/namespaces", "/", "/workflows", "/tasks", "/settings"]
+        current = [a for a in links if a.get("aria-current") == "page"]
+        assert len(current) == 1 and current[0]["href"] == "/workflows"
 
     def test_phases_page_hides_duplicate_nav_for_single_workflow(self):
         response = client.get("/phases")
@@ -884,105 +889,86 @@ class TestPhasesPage:
 
     def test_phases_page_has_reorder_controls_and_batch_order_api_hook(self):
         response = client.get("/phases")
-        assert response.status_code == 200
-        assert "phase-card-actions" in response.text
-        assert 'data-phase-id="' in response.text
-        assert "movePhase(this,-1)" in response.text
-        assert "movePhase(this,1)" in response.text
-        assert "addPhaseAfter(this)" in response.text
-        assert "fetch('/api/phases/order'" in response.text
-        assert "fetch('/api/phases'," in response.text
+        source = _page_source(client, response)
+        for action in ["move-up-btn", "move-down-btn", "phase-add-btn"]:
+            assert any(action in attrs.get("class", "").split() for _, attrs in Elements(response.text).elements)
+        assert "async function movePhase(button,direction)" in source
+        assert "async function addPhaseAfter(button)" in source
+        assert "config.basePath + '/api/phases/order'" in source
+        assert "config.basePath + '/api/phases'" in source
 
     def test_phases_page_keeps_insertion_visible_and_groups_other_actions(self):
         response = client.get("/phases")
-        assert response.status_code == 200
-        assert 'base-icon-control phase-add-btn"' in response.text
-        assert 'onclick="addPhaseAfter(this)"' in response.text
-        assert '<details class="base-action-menu phase-card-actions" data-base-menu' in response.text
-        assert 'data-base-menu-group="phase-actions"' in response.text
-        assert 'aria-label="Действия фазы ' in response.text
-        assert 'class="base-control base-menu-item move-up-btn"' in response.text
-        assert "Параллельно" in response.text
-        assert "Последовательно" in response.text
-        assert 'data-size="icon"' in response.text
-        insertions = [attrs for tag, attrs in Elements(response.text).elements
-                      if tag == "button" and attrs.get("onclick") == "addPhaseAfter(this)"]
-        assert insertions
-        assert all({"base-control", "base-button", "base-icon-control"} <= set(item["class"].split())
-                   and item["data-size"] == "icon" and item["aria-label"] for item in insertions)
-        assert "const phaseName=item.querySelector('.timeline-name')?.textContent.trim()||'эту фазу'" in response.text
-        assert "title:'Удалить фазу «'+phaseName+'»?'" in response.text
-        assert "if(!await window.PdlcBaseUI.requestConfirmation({eyebrow:'Удаление фазы'" in response.text
-        assert "const confirmationDialog=" not in response.text
+        elements = Elements(response.text).elements
+        groups = [attrs for _, attrs in elements if "phase-card-actions" in attrs.get("class", "").split()]
+        assert len(groups) == len(client.get("/api/phases").json()["phases"])
+        assert all(g["role"] == "group" and g["aria-label"].startswith("Действия фазы") for g in groups)
+        actions = [
+            attrs for tag, attrs in elements if tag == "button" and "phase-add-btn" in attrs.get("class", "").split()
+        ]
+        assert len(actions) == len(groups)
+        assert all(a.get("data-size") == "icon" and a.get("aria-label") and a.get("title") for a in actions)
+        assert not any(
+            tag == "details" and "phase-card-actions" in attrs.get("class", "").split() for tag, attrs in elements
+        )
+        assert "requestConfirmation({eyebrow:'Удаление фазы'" in _page_source(client, response)
 
     def test_long_phase_list_has_named_jump_to_phase_control(self):
         response = client.get("/phases")
         phase = _phase_row("4.START")
 
         assert response.status_code == 200
-        assert 'id="phaseJump"' in response.text
-        assert 'aria-label="Перейти к фазе"' in response.text
-        assert f'<option value="{phase["id"]}">' in response.text
-        assert f'id="phase-{phase["id"]}"' in response.text
-        assert "function jumpToPhase(select)" in response.text
-        assert "focus({preventScroll:true})" in response.text
-        assert 'data-base-choice id="phaseJump"' in response.text
+        assert 'id="phaseJump"' in _page_source(client, response)
+        assert 'aria-label="Перейти к фазе"' in _page_source(client, response)
+        assert f'<option value="{phase["id"]}">' in _page_source(client, response)
+        assert f'id="phase-{phase["id"]}"' in _page_source(client, response)
+        assert "function jumpToPhase(select)" in _page_source(client, response)
+        assert "focus({preventScroll:true})" in _page_source(client, response)
+        assert 'data-base-choice id="phaseJump"' in _page_source(client, response)
 
     def test_long_phase_list_defaults_to_compact_with_switchable_timeline(self):
         response = client.get("/phases")
 
         assert response.status_code == 200
-        assert 'class="timeline is-compact" id="phasesTimeline"' in response.text
-        radios = [attrs for tag, attrs in Elements(response.text).elements
-                  if tag == "input" and attrs.get("name") == "phase-view"]
+        assert 'class="timeline is-compact" id="phasesTimeline"' in _page_source(client, response)
+        radios = [
+            attrs
+            for tag, attrs in Elements(_page_source(client, response)).elements
+            if tag == "input" and attrs.get("name") == "phase-view"
+        ]
         assert [radio["value"] for radio in radios] == ["compact", "timeline"]
         assert [radio["value"] for radio in radios if "checked" in radio] == ["compact"]
         assert all(radio["type"] == "radio" and radio["class"] == "base-check-input" for radio in radios)
-        assert 'role="radiogroup" aria-label="Отображение фаз"' in response.text
-        assert "function setPhaseView(view,persist=true)" in response.text
-        assert "localStorage.getItem('phase-view-mode')" in response.text
+        assert 'role="radiogroup" aria-label="Отображение фаз"' in _page_source(client, response)
+        assert "function setPhaseView(view,persist=true)" in _page_source(client, response)
+        assert "localStorage.getItem('phase-view-mode')" in _page_source(client, response)
 
-    def test_phases_add_button_breaks_the_vertical_connector_line(self):
+    def test_phase_insertion_stays_in_card_without_arrow_spacers(self):
         response = client.get("/phases")
-
-        assert response.status_code == 200
-        assert ".timeline-connector::before,.timeline-connector::after" in response.text
-        assert ".timeline-connector::before{top:0;bottom:calc(50% + 21px)}" in response.text
-        assert ".timeline-connector::after{top:calc(50% + 21px);bottom:0}" in response.text
-        assert ".timeline-connector::before{content:'';position:absolute;top:0;bottom:0" not in response.text
+        elements = Elements(response.text).elements
+        assert not any(
+            set(attrs.get("class", "").split()) & {"timeline-arrow", "timeline-connector"} for _, attrs in elements
+        )
+        assert sum("phase-add-btn" in attrs.get("class", "").split() for _, attrs in elements) == len(
+            client.get("/api/phases").json()["phases"]
+        )
 
     def test_parallel_groups_keep_their_members_and_explain_the_next_stage_barrier(self):
         response = client.get("/phases")
-        assert response.status_code == 200
-        groups = re.findall(
-            r'<section class="timeline-block timeline-parallel-group base-card base-card-content"[^>]*>(.*?)</section>',
-            response.text,
-            re.DOTALL,
-        )
-        expected = [
-            ["5.RESEARCH", "5.PREFLIGHT"],
-            ["6.SOLUTION", "6.TEST_PLAN"],
-            ["10.REVIEW", "10.QA", "10.DATAFLOW"],
-        ]
-        assert [re.findall(r'data-phase-id="(\d+)"', group) for group in groups] == [
-            [str(_phase_id(code)) for code in codes] for codes in expected
-        ]
-        for group in groups:
-            assert "Параллельная группа" in group
-            assert "Следующий этап — после завершения всех фаз группы." in group
-        singles = re.findall(r'<section class="timeline-block">(.*?)</section>', response.text, re.DOTALL)
-        assert singles
-        assert all("timeline-group-transition" not in single for single in singles)
+        groups = parallel_groups(response.text)
+        expected = [["5.RESEARCH", "5.PREFLIGHT", "6.SOLUTION", "6.TEST_PLAN"], ["10.REVIEW", "10.QA", "10.DATAFLOW"]]
+        assert [group["ids"] for group in groups] == [[str(_phase_id(code)) for code in codes] for codes in expected]
+        barrier = "Следующий этап — после завершения всех фаз группы."
+        assert all(barrier in group["text"] for group in groups)
+        assert response.text.count(barrier) == len(groups)
 
-    def test_phase_card_reserves_space_for_menu_only_in_its_heading(self):
+    def test_phase_actions_use_a_footer_without_overlaying_the_heading(self):
         response = client.get("/phases")
-
-        assert response.status_code == 200
-        assert ".phase-card-shell{position:relative;display:grid;min-height:112px}" in response.text
-        assert "base-card-content" in response.text
-        assert ".timeline-card .timeline-name{padding-right:48px}" in response.text
-        assert ".timeline-card{min-height:112px;padding:16px 148px" not in response.text
-        assert ".timeline-card{padding-top:52px}" not in response.text
+        elements = Elements(response.text).elements
+        assert any("phase-card-footer" in attrs.get("class", "").split() for _, attrs in elements)
+        assert any("phase-card-link" in attrs.get("class", "").split() for _, attrs in elements)
+        assert ".timeline-card .timeline-name{padding-right:48px}" not in response.text
+        assert "position:absolute" not in re.search(r"\.workflow-card-actions\{([^}]+)", response.text).group(1)
 
     def test_parallel_phase_places_agent_beside_execution_type(self):
         response = client.get("/phases")
@@ -996,8 +982,8 @@ class TestPhasesPage:
         assert response.status_code == 200
 
         workflow = _workflow_row("default")
-        assert f'id="phasesTimeline" data-workflow-id="{workflow["id"]}"' in response.text
-        assert "document.getElementById('phasesTimeline')?.dataset.workflowId" in response.text
+        assert f'id="phasesTimeline" data-workflow-id="{workflow["id"]}"' in _page_source(client, response)
+        assert "document.getElementById('phasesTimeline')?.dataset.workflowId" in _page_source(client, response)
 
     def test_phases_page_links_phase_detail_by_numeric_resource_id(self):
         response = client.get("/phases")
@@ -1022,13 +1008,11 @@ class TestPhasesPage:
 
     def test_phases_page_add_phase_button_uses_server_phase_order_attribute(self):
         response = client.get("/phases")
-        assert response.status_code == 200
-
-        # Each row exposes server order; block add buttons carry the exact insertion order.
+        source = _page_source(client, response)
         assert "data-phase-order=" in response.text
-        assert "data-after-order=" in response.text
-        assert "parseInt(button.dataset.afterOrder" in response.text
-        assert "currentIndex + 2" not in response.text
+        assert "item?.dataset.phaseOrder??button.dataset.afterOrder??'0'" in source
+        assert "phase_order:currentOrder+1" in source
+        assert "currentIndex + 2" not in source
 
     def test_phases_page_add_phase_api_flow_creates_phase_in_default_workflow(self):
         from project_workflow.infrastructure.db import schema as db_schema
@@ -1085,9 +1069,9 @@ class TestPhasesPage:
         try:
             page = client.get(f"/phases?workflow_id={workflow_id}")
             assert page.status_code == 200
-            assert "phase-delete-btn" in page.text
-            assert "deletePhase(this)" in page.text
-            assert "fetch('/api/phases/'" in page.text
+            assert "phase-delete-btn" in _page_source(client, page)
+            assert "async function deletePhase(button)" in _page_source(client, page)
+            assert "fetch('' + config.basePath + '/api/phases/'" in _page_source(client, page)
 
             phases = [p.to_dict() for p in uow.phases.list(workflow_id=workflow_id)]
             assert len(phases) == 1
@@ -1121,18 +1105,18 @@ class TestPhasesPage:
 
         phase = _phase_row("4.START")
 
-        assert f'data-phase-id="{phase["id"]}"' in response.text
-        assert 'data-phase-id="4.START"' not in response.text
-        assert "phase_id:Number(phase.dataset.phaseId)" in response.text
+        assert f'data-phase-id="{phase["id"]}"' in _page_source(client, response)
+        assert 'data-phase-id="4.START"' not in _page_source(client, response)
+        assert "phase_id:Number(phase.dataset.phaseId)" in _page_source(client, response)
 
     def test_phases_page_rebuilds_parallel_groups_from_execution_sequence(self):
         response = client.get("/phases")
         assert response.status_code == 200
 
-        assert 'data-execution-type="parallel"' in response.text
-        assert 'data-execution-type="sync"' in response.text
-        assert "dataset.executionType" in response.text
-        assert "dataset.parallelKey" not in response.text
+        assert 'data-execution-type="parallel"' in _page_source(client, response)
+        assert 'data-execution-type="sync"' in _page_source(client, response)
+        assert "dataset.executionType" in _page_source(client, response)
+        assert "dataset.parallelKey" not in _page_source(client, response)
 
     def test_phases_order_api_persists_only_in_database(self):
         from project_workflow import config
@@ -1199,12 +1183,13 @@ class TestPhasesPage:
         assert response.status_code == 200
         assert 'class="badge badge-agent"' not in response.text
 
-
     def test_phases_page_uses_real_phase_execution_type_for_parallel_badge(self):
         response = client.get("/phases")
         assert response.status_code == 200
 
-        phase_html = response.text.split(_phase_href("10.REVIEW"), 1)[1].split("</a>", 1)[0]
+        phase_html = response.text.split(f'data-phase-id="{_phase_id("10.REVIEW")}"', 1)[1].split('data-phase-id="', 1)[
+            0
+        ]
 
         assert "Проверка кода" in phase_html
         assert 'class="base-badge" data-tone="info"' in phase_html
@@ -1255,15 +1240,10 @@ class TestPhasesPage:
 
         workflow = _workflow_row("default")
         blocks = _build_parallel_phase_blocks(_load_phases(workflow["id"]))
-        groups = [
-            [phase["code"] for phase in block["phases"]]
-            for block in blocks
-            if block["kind"] == "parallel"
-        ]
+        groups = [[phase["code"] for phase in block["phases"]] for block in blocks if block["kind"] == "parallel"]
 
         assert groups == [
-            ["5.RESEARCH", "5.PREFLIGHT"],
-            ["6.SOLUTION", "6.TEST_PLAN"],
+            ["5.RESEARCH", "5.PREFLIGHT", "6.SOLUTION", "6.TEST_PLAN"],
             ["10.REVIEW", "10.QA", "10.DATAFLOW"],
         ]
 
@@ -1299,15 +1279,15 @@ class TestPhaseDetail:
         assert "move-up-btn" in response.text
         assert "move-down-btn" in response.text
 
-    def test_phase_detail_names_inline_fields_and_exposes_keyboard_mode_toggle(self):
+    def test_phase_detail_names_inline_fields_without_header_mode_controls(self):
         response = client.get(_phase_detail_path("1.INTAKE"))
 
         assert response.status_code == 200
         assert 'aria-label="Название фазы"' in response.text
         assert 'aria-label="Описание фазы"' in response.text
         assert 'id="agentSelect"' not in response.text
-        assert '<button type="button" class="base-control base-button execution-toggle"' in response.text
-        assert 'aria-pressed="false"' in response.text
+        assert 'onclick="togglePhaseMode(this)"' not in response.text
+        assert 'id="parallelPartnerSelect"' not in response.text
         assert 'aria-label="Описание инструкции ' in response.text
         assert 'aria-label="Добавить навык к инструкции ' in response.text
         assert 'aria-label="Описание проверки ' in response.text
@@ -1319,24 +1299,41 @@ class TestPhaseDetail:
         assert response.status_code == 200
         assert (
             '<textarea data-base-autosize class="inline-input wiki-subtitle base-control base-textarea"'
-            in response.text
+            in _page_source(client, response)
         )
-        assert '<textarea data-base-autosize class="timeline-name-input base-control base-textarea"' in response.text
-        row_fields = [attrs for tag, attrs in Elements(response.text).elements if tag == "textarea"
-                      and "phase-text-content" in attrs.get("class", "").split()]
+        assert '<textarea data-base-autosize class="timeline-name-input base-control base-textarea"' in _page_source(
+            client, response
+        )
+        row_fields = [
+            attrs
+            for tag, attrs in Elements(_page_source(client, response)).elements
+            if tag == "textarea" and "phase-text-content" in attrs.get("class", "").split()
+        ]
         assert any(field["aria-label"].startswith("Описание проверки ") for field in row_fields)
         assert any(field["aria-label"].startswith("Описание подтверждения ") for field in row_fields)
-        assert all({"base-control", "base-textarea"} <= set(field["class"].split())
-                   and "data-base-autosize" in field and field["rows"] == "1" for field in row_fields)
-        assert '<h1 class="base-page-title">Детали фазы</h1>' in response.text
-        assert "phase-detail-desktop-title" not in response.text
-        assert "phase-detail-mobile-title" not in response.text
-        assert "function resizeInlineTextarea" not in response.text
-        assert "resizeAllInlineTextareas" not in response.text
-        assert "export function initTextareaAutosize(field)" in response.text
-        assert "window.PdlcTextarea.refreshTextareaAutosize(input);" in response.text
-        assert 'data-variant="outline" aria-label="Параллельное выполнение фазы"' in response.text
-        assert 'data-size="icon" data-skill=' in response.text
+        assert all(
+            {"base-control", "base-textarea"} <= set(field["class"].split())
+            and "data-base-autosize" in field
+            and field["rows"] == "1"
+            for field in row_fields
+        )
+        assert '<h1 class="base-page-title">Детали фазы</h1>' in _page_source(client, response)
+        assert "phase-detail-desktop-title" not in _page_source(client, response)
+        assert "phase-detail-mobile-title" not in _page_source(client, response)
+        assert "function resizeInlineTextarea" not in _page_source(client, response)
+        assert "resizeAllInlineTextareas" not in _page_source(client, response)
+        assert "export function initTextareaAutosize(field)" in _page_source(client, response)
+        assert "window.PdlcTextarea.refreshTextareaAutosize(input);" in _page_source(client, response)
+        buttons = [attrs for tag, attrs in Elements(response.text).elements if tag == "button"]
+        assert any(
+            attrs.get("aria-label", "").startswith("Параллельное выполнение инструкции «")
+            and attrs.get("data-variant") == "outline"
+            for attrs in buttons
+        )
+        assert any(
+            attrs.get("aria-label", "").startswith("Убрать навык ") and attrs.get("data-appearance") == "inline"
+            for attrs in buttons
+        )
 
     def test_phase_detail_keeps_sequential_cards_when_phase_instructions_are_sync(self):
         response = client.get(_phase_detail_path("4.START"))
@@ -1348,8 +1345,8 @@ class TestPhaseDetail:
     def test_phase_detail_renders_parallel_group_for_parallel_instructions(self):
         response = client.get(_phase_detail_path("4.START"))
         assert response.status_code == 200
-        assert "renderInstructionTimeline(getInstructionItems())" in response.text
-        assert "function updateInstructionControls()" in response.text
+        assert "renderInstructionTimeline(getInstructionItems())" in _page_source(client, response)
+        assert "function updateInstructionControls()" in _page_source(client, response)
 
     def test_phase_detail_hides_code_and_order_meta(self):
         response = client.get(_phase_detail_path("5.PREFLIGHT"))
@@ -1448,50 +1445,54 @@ class TestPhaseDetail:
 
         phase = _phase_row("4.START")
 
-        assert f"const phaseId = {phase['id']};" in response.text
-        assert "fetch(phaseApiUrl('/api/phases/' + phaseId)" in response.text
-        assert "fetch('/api/phases/4.START'" not in response.text
+        assert f'"phaseId": {phase["id"]}' in _page_source(client, response)
+        assert "fetch(phaseApiUrl('' + config.basePath + '/api/phases/' + phaseId)" in _page_source(client, response)
+        assert "fetch('/api/phases/4.START'" not in _page_source(client, response)
 
     def test_phase_detail_has_responsive_structured_outline(self):
         response = client.get(_phase_detail_path("4.START"))
 
         assert response.status_code == 200
-        assert 'class="phase-editor-layout"' in response.text
-        assert 'aria-labelledby="phase-outline-title"' in response.text
-        assert 'href="#phase-overview" aria-current="location"' in response.text
-        assert 'href="#phase-instructions"' in response.text
-        assert 'href="#phase-checks"' in response.text
-        assert 'href="#phase-evidence"' in response.text
-        assert 'id="phaseSectionSelect"' in response.text
-        assert 'id="phase-overview" data-phase-section tabindex="-1"' in response.text
-        assert 'id="phase-instructions" data-phase-section tabindex="-1"' in response.text
-        assert 'id="phase-checks" data-phase-section tabindex="-1"' in response.text
-        assert 'id="phase-evidence" data-phase-section tabindex="-1"' in response.text
-        assert "function initializePhaseOutline()" in response.text
-        assert "phaseSectionNavigationLock = sectionId" in response.text
-        assert "section.scrollIntoView({behavior: 'auto', block: 'start'});" in response.text
-        assert "@media(max-width:960px)" in response.text
+        assert 'class="phase-editor-layout"' in _page_source(client, response)
+        assert 'aria-labelledby="phase-outline-title"' in _page_source(client, response)
+        assert 'href="#phase-overview" aria-current="location"' in _page_source(client, response)
+        assert 'href="#phase-instructions"' in _page_source(client, response)
+        assert 'href="#phase-checks"' in _page_source(client, response)
+        assert 'href="#phase-evidence"' in _page_source(client, response)
+        assert 'id="phaseSectionSelect"' in _page_source(client, response)
+        assert 'id="phase-overview" data-phase-section tabindex="-1"' in _page_source(client, response)
+        assert 'id="phase-instructions" data-phase-section tabindex="-1"' in _page_source(client, response)
+        assert 'id="phase-checks" data-phase-section tabindex="-1"' in _page_source(client, response)
+        assert 'id="phase-evidence" data-phase-section tabindex="-1"' in _page_source(client, response)
+        assert "function initializePhaseOutline()" in _page_source(client, response)
+        assert "phaseSectionNavigationLock = sectionId" in _page_source(client, response)
+        assert "section.scrollIntoView({behavior: 'auto', block: 'start'});" in _page_source(client, response)
+        assert "@media(max-width:960px)" in _page_source(client, response)
 
     def test_phase_detail_outline_uses_restorable_browser_history(self):
         response = client.get(_phase_detail_path("4.START"))
 
         assert response.status_code == 200
-        assert "function syncPhaseSectionUrl(sectionId, historyMode)" in response.text
-        assert "const method = historyMode === 'replace' ? 'replaceState' : 'pushState';" in response.text
-        assert "window.PdlcPlatformNavigation.syncRoute(nextUrl, method === 'replaceState');" in response.text
-        assert "function jumpToPhaseSection(sectionId, historyMode = 'push')" in response.text
-        assert "function releasePhaseSectionNavigationLock()" in response.text
-        assert "jumpToPhaseSection(sectionId, 'none');" in response.text
-        assert "jumpToPhaseSection(requestedSection, 'replace')" in response.text
-        assert "window.addEventListener('popstate', restorePhaseSectionFromLocation);" in response.text
-        assert "window.addEventListener('wheel', releasePhaseSectionNavigationLock" in response.text
+        assert "function syncPhaseSectionUrl(sectionId, historyMode)" in _page_source(client, response)
+        assert "const method = historyMode === 'replace' ? 'replaceState' : 'pushState';" in _page_source(
+            client, response
+        )
+        assert "window.PdlcPlatformNavigation.syncRoute(nextUrl, method === 'replaceState');" in _page_source(
+            client, response
+        )
+        assert "function jumpToPhaseSection(sectionId, historyMode = 'push')" in _page_source(client, response)
+        assert "function releasePhaseSectionNavigationLock()" in _page_source(client, response)
+        assert "jumpToPhaseSection(sectionId, 'none');" in _page_source(client, response)
+        assert "jumpToPhaseSection(requestedSection, 'replace')" in _page_source(client, response)
+        assert "page.on(window,'popstate', restorePhaseSectionFromLocation);" in _page_source(client, response)
+        assert "page.on(window,'wheel', releasePhaseSectionNavigationLock" in _page_source(client, response)
 
     def test_phase_detail_empty_name_is_sent_to_backend_validation(self):
         response = client.get(_phase_detail_path("4.START"))
         assert response.status_code == 200
 
-        assert "name: meta.name ||" not in response.text
-        assert "name: meta.name," in response.text
+        assert "name: meta.name ||" not in _page_source(client, response)
+        assert "name: meta.name," in _page_source(client, response)
 
     def test_phase_detail_allows_deleting_last_instruction_like_api(self):
         phase_response = client.get(_phase_api_path("1.INTAKE"))
@@ -1538,76 +1539,86 @@ class TestPhaseDetail:
             assert response.status_code == 200
             assert f'data-instruction-skill="{skills[0]}"' in response.text
             assert f'data-instruction-skill="{skills[1]}"' in response.text
-            assert (
-                'class="skill-candidate base-control base-input" type="text" placeholder="Добавить навык"'
-                in response.text
-            )
+            from tests.test_ui_shell_template import Elements
+
+            fields = [attrs for tag, attrs in Elements(response.text).elements
+                      if tag == "input" and "skill-candidate" in attrs.get("class", "").split()]
+            assert fields and all("base-badge-input" in field["class"].split() for field in fields)
+            rename = [attrs for tag, attrs in Elements(response.text).elements
+                      if tag == "input" and "skill-rename-input" in attrs.get("class", "").split()
+                      and attrs.get("value")]
+            assert [field["value"] for field in rename] == skills
         finally:
             client.put(_phase_api_path("1.INTAKE"), json=restore_payload)
 
     def test_phase_detail_javascript_uses_per_instruction_api_calls(self):
         response = client.get(_phase_detail_path("1.INTAKE"))
         assert response.status_code == 200
-        assert "function saveInstructionDescription(input)" in response.text
-        assert "function toggleInstructionType(badge)" in response.text
-        assert "function addSkillToInstruction(input)" in response.text
-        assert "function removeSkillFromInstruction(button)" in response.text
-        assert 'placeholder="Добавить навык"' in response.text
+        assert "function saveInstructionDescription(input)" in _page_source(client, response)
+        assert "function toggleInstructionType(badge)" in _page_source(client, response)
+        assert "function addSkillToInstruction(input)" in _page_source(client, response)
+        assert "function removeSkillFromInstruction(button)" in _page_source(client, response)
+        assert 'aria-label="Добавить навык к инструкции ' in response.text
 
     def test_phase_detail_skill_names_do_not_leak_into_js_string_context(self):
-        """Навыки попадают в JS только через data-атрибуты (autoescape), не в строки.
-
-        Регрессия XSS: раньше имя навыка подставлялось в onclick='...{{ s }}...'
-        и могло разорвать JS-строку. Сейчас обработчик читает data-skill.
-        """
+        """Skill values stay in escaped native button values, never inline JS."""
         response = client.get(_phase_detail_path("1.INTAKE"))
         assert response.status_code == 200
-        # Навык передаётся через data-атрибут (HTML-контекст, автоэскейпится)
-        assert 'onclick="removeSkillFromInstruction(this)"' in response.text
+        elements = Elements(response.text).elements
+        skills = [attrs["data-instruction-skill"] for _, attrs in elements if "data-instruction-skill" in attrs]
+        remove = [attrs for tag, attrs in elements if tag == "button" and
+                  "skill-remove-btn" in attrs.get("class", "").split() and attrs.get("value")]
+        assert [item["value"] for item in remove] == skills
+        assert all("onclick" not in item for item in remove)
         assert "removeSkillFromInstruction(this, '" not in response.text
-        # Имя фазы не интерполируется в JS-литералы (эталон tojson-фикса 5054858)
-        assert "meta.name || '" not in response.text
 
-    def test_phase_detail_serializes_phase_mode_toggles(self):
+    def test_phase_detail_keeps_autosave_without_header_mode_controls(self):
         response = client.get(_phase_detail_path("1.INTAKE"))
-
         assert response.status_code == 200
-        assert "async function togglePhaseMode(el)" in response.text
-        assert "if (el.dataset.saving === 'true') return;" in response.text
-        assert "await savePhase();" in response.text
-        assert "el.setAttribute('aria-busy', 'true');" in response.text
-        assert "notePhaseEdit();" in response.text
-        assert "partnerSelect.value = previousPartner;" not in response.text
-        assert "return true;" in response.text
+        assert 'onclick="togglePhaseMode(this)"' not in response.text
+        assert "async function togglePhaseMode(el)" not in response.text
+        assert 'onblur="scheduleSave()"' in response.text
+        from project_workflow.interfaces.ui.controller_assets import controller_source
+
+        assert "let _phaseSaveQueue = Promise.resolve(true);" in controller_source("phase_detail", True)[0].decode()
 
     def test_phase_detail_serializes_all_phase_aggregate_saves(self):
         response = client.get(_phase_detail_path("1.INTAKE"))
 
         assert response.status_code == 200
-        assert "let _phaseSaveQueue = Promise.resolve(true);" in response.text
-        assert "const queued = _phaseSaveQueue.then(() => savingStopped ? false : persistPhase());" in response.text
-        assert "_phaseSaveQueue = queued.catch(() => false);" in response.text
-        assert "async function persistPhase()" in response.text
+        assert "let _phaseSaveQueue = Promise.resolve(true);" in _page_source(client, response)
+        assert "const queued = _phaseSaveQueue.then(() => savingStopped ? false : persistPhase());" in _page_source(
+            client, response
+        )
+        assert "_phaseSaveQueue = queued.catch(() => false);" in _page_source(client, response)
+        assert "async function persistPhase()" in _page_source(client, response)
 
     def test_new_check_and_evidence_wait_for_user_input_before_saving(self):
         response = client.get(_phase_detail_path("1.INTAKE"))
 
         assert response.status_code == 200
-        add_check = response.text.split("function addCheck()", 1)[1].split("function addEvidence()", 1)[0]
-        add_evidence = response.text.split("function addEvidence()", 1)[1].split(
-            "/* ---------- Debounced phase meta save ---------- */", 1
-        )[0]
+        add_check = (
+            _page_source(client, response).split("function addCheck()", 1)[1].split("function addEvidence()", 1)[0]
+        )
+        add_evidence = (
+            _page_source(client, response)
+            .split("function addEvidence()", 1)[1]
+            .split("/* ---------- Debounced phase meta save ---------- */", 1)[0]
+        )
         assert "savePhase();" not in add_check
         assert "savePhase();" not in add_evidence
         assert "appendTextItem('checks-list')" in add_check
         assert "appendTextItem('evidence-list')" in add_evidence
-        append = response.text.split("function appendTextItem(", 1)[1].split("function addCheck()", 1)[0]
+        append = (
+            _page_source(client, response).split("function appendTextItem(", 1)[1].split("function addCheck()", 1)[0]
+        )
         assert "savePhase(" not in append
         assert "syncTextItemList(list);" in append
         assert "li.querySelector('textarea')?.focus();" in append
         for kind in ["checks", "evidence"]:
             fragment = re.search(
-                r'<template id="' + kind + r'-list-item-template">([\s\S]*?)</template>', response.text,
+                r'<template id="' + kind + r'-list-item-template">([\s\S]*?)</template>',
+                _page_source(client, response),
             )
             assert fragment is not None
             field = next(attrs for tag, attrs in Elements(fragment.group(1)).elements if tag == "textarea")
@@ -1643,22 +1654,22 @@ class TestPhaseDetail:
         response = client.get(_phase_detail_path("1.INTAKE"))
 
         assert response.status_code == 200
-        assert 'data-original-description="' in response.text
-        assert "const description = input.value.trim();" in response.text
-        assert "input.value = previousDescription;" not in response.text
-        assert "input.dataset.originalDescription = savedDescription;" in response.text
-        assert "showToast('Описание инструкции обязательно', 'error');" in response.text
+        assert 'data-original-description="' in _page_source(client, response)
+        assert "const description = input.value.trim();" in _page_source(client, response)
+        assert "input.value = previousDescription;" not in _page_source(client, response)
+        assert "input.dataset.originalDescription = savedDescription;" in _page_source(client, response)
+        assert "showToast('Описание инструкции обязательно', 'error');" in _page_source(client, response)
 
     def test_instructions_page_instruction_description_retains_input_after_rejected_save(self):
         phase_id = _phase_id("1.INTAKE")
         response = client.get(f"/instructions?phase_id={phase_id}")
 
         assert response.status_code == 200
-        assert 'data-original-description="' in response.text
-        assert "const description = textarea.value.trim();" in response.text
-        assert "textarea.value = previousDescription;" not in response.text
-        assert "textarea.dataset.originalDescription = savedDescription;" in response.text
-        assert "showToast('Описание инструкции обязательно', 'error');" in response.text
+        assert 'data-original-description="' in _page_source(client, response)
+        assert "const description = textarea.value.trim();" in _page_source(client, response)
+        assert "textarea.value = previousDescription;" not in _page_source(client, response)
+        assert "textarea.dataset.originalDescription = savedDescription;" in _page_source(client, response)
+        assert "showToast('Описание инструкции обязательно', 'error');" in _page_source(client, response)
 
     def test_phase_detail_can_toggle_instruction_execution_type(self):
         phase_response = client.get(_phase_api_path("1.INTAKE"))
@@ -1694,8 +1705,8 @@ class TestPhaseDetail:
     def test_phase_detail_reorder_success_uses_success_toast(self):
         response = client.get(_phase_detail_path("1.INTAKE"))
 
-        assert "showToast('Порядок инструкций сохранён', 'success');" in response.text
-        assert "showToast('Порядок инструкций сохранён');" not in response.text
+        assert "showToast('Порядок инструкций сохранён', 'success');" in _page_source(client, response)
+        assert "showToast('Порядок инструкций сохранён');" not in _page_source(client, response)
 
     def test_phase_detail_can_add_and_delete_instruction(self):
         phase_response = client.get(_phase_api_path("1.INTAKE"))
@@ -1860,26 +1871,26 @@ class TestPhaseUpdate:
 class TestDragDropAPI:
     """Tests for drag-and-drop backend APIs."""
 
-    def test_api_batch_order_rejects_invalid_graph_atomically(self):
-        uow = ui_app_state.get_db()
-        phases = [phase.to_dict() for phase in uow.phases.list()]
-        original_rows = [(phase["code"], phase["phase_order"]) for phase in phases]
-        reordered_rows = list(reversed(phases))
-
+    def test_api_batch_order_accepts_complete_order_despite_retired_links(self):
+        original = client.get("/api/phases").json()["phases"]
         try:
-            resp = client.put(
+            reversed_rows = list(reversed(original))
+            response = client.put(
                 "/api/phases/order",
                 json={
                     "orders": [
-                        {"phase_id": phase["id"], "phase_order": order}
-                        for order, phase in enumerate(reordered_rows, start=1)
+                        {"phase_id": p["id"], "phase_order": order} for order, p in enumerate(reversed_rows, start=1)
                     ]
                 },
             )
-            assert resp.status_code == 409
-            assert [(phase.code, phase.phase_order) for phase in uow.phases.list()] == original_rows
+            assert response.status_code == 200
+            assert [p["id"] for p in client.get("/api/phases").json()["phases"]] == [p["id"] for p in reversed_rows]
         finally:
-            _batch_update_orders(uow, original_rows)
+            response = client.put(
+                "/api/phases/order",
+                json={"orders": [{"phase_id": p["id"], "phase_order": p["phase_order"]} for p in original]},
+            )
+            assert response.status_code == 200
 
     def test_api_batch_order_empty_error(self):
         resp = client.put("/api/phases/order", json={"orders": []})
@@ -1899,10 +1910,11 @@ class TestTimelineHTML:
         assert response.status_code == 200
         assert "timeline-card" in response.text
 
-    def test_timeline_has_arrows(self):
+    def test_timeline_has_no_arrow_spacers(self):
         response = client.get("/phases")
         assert response.status_code == 200
-        assert "timeline-arrow" in response.text
+        assert not any("timeline-arrow" in attrs.get("class", "").split()
+                       for _, attrs in Elements(response.text).elements)
 
     def test_timeline_card_clickable(self):
         response = client.get("/phases")
@@ -2340,15 +2352,15 @@ class TestProjectsPage:
     def test_namespace_page_shows_rows_without_key_prefix_settings(self):
         response = client.get("/namespaces")
         assert response.status_code == 200
-        assert "UI Test Namespace" in response.text
-        assert "workflow-uitest" in response.text
-        assert "UITEST" not in response.text
-        assert "Префиксы ключей задач" not in response.text
-        assert "projectPrefixesList" not in response.text
-        assert "key_prefixes" not in response.text
-        assert '"namespace_code"' not in response.text
-        assert '"project":' not in response.text
-        assert 'const defaultNamespaceThemeIcon = "folder";' in response.text
+        assert "UI Test Namespace" in _page_source(client, response)
+        assert "workflow-uitest" in _page_source(client, response)
+        assert "UITEST" not in _page_source(client, response)
+        assert "Префиксы ключей задач" not in _page_source(client, response)
+        assert "projectPrefixesList" not in _page_source(client, response)
+        assert "key_prefixes" not in _page_source(client, response)
+        assert '"namespace_code"' not in _page_source(client, response)
+        assert all("project" not in row for row in _view_data(response)["namespaces"])
+        assert 'const defaultNamespaceThemeIcon = "folder";' in _page_source(client, response)
 
     def test_namespace_page_uses_single_editor_without_duplicate_create_button(self):
         response = client.get("/namespaces")
@@ -2374,7 +2386,9 @@ class TestProjectsPage:
     def test_namespace_editor_exposes_validation_and_safe_action_states(self):
         response = client.get("/namespaces")
         assert response.status_code == 200
-        fields = {attrs.get("id"): attrs for tag, attrs in Elements(response.text).elements if tag == "input"}
+        fields = {
+            attrs.get("id"): attrs for tag, attrs in Elements(_page_source(client, response)).elements if tag == "input"
+        }
         name = fields["namespaceName"]
         assert name["name"] == "namespaceName" and name["value"]
         assert "required" in name
@@ -2384,21 +2398,23 @@ class TestProjectsPage:
         assert command["minlength"] == "2" and command["maxlength"] == "64"
         assert command["pattern"] == r"[a-z][a-z0-9_\-]{1,63}"
         assert command["aria-describedby"] == "namespaceCliHelp"
-        assert 'id="namespaceWorkflowId"' not in response.text
-        assert 'id="namespaceDeleteHint" hidden' in response.text
+        assert 'id="namespaceWorkflowId"' not in _page_source(client, response)
+        assert 'id="namespaceDeleteHint" hidden' in _page_source(client, response)
         assert "var protectedByTasks = !createMode && Boolean(namespace && Number(namespace.task_count) > 0);" in (
-            response.text
+            _page_source(client, response)
         )
-        assert "button.textContent = 'Удаление…';" in response.text
-        assert "button.textContent = namespaceFormMode === 'create' ? 'Создание…' : 'Сохранение…';" in response.text
-        assert "'Удалить профессию «' + namespace.name + '»?'" in response.text
+        assert "button.textContent = 'Удаление…';" in _page_source(client, response)
+        assert "button.textContent = namespaceFormMode === 'create' ? 'Создание…' : 'Сохранение…';" in _page_source(
+            client, response
+        )
+        assert "'Удалить профессию «' + namespace.name + '»?'" in _page_source(client, response)
 
     def test_namespace_theme_preview_does_not_change_interface_accent(self):
         response = client.get("/namespaces")
         assert response.status_code == 200
-        assert "function applyPageTheme(" not in response.text
-        assert "document.documentElement.style.setProperty('--accent" not in response.text
-        assert "option.dataset.color = color || defaultNamespaceThemeColor" in response.text
+        assert "function applyPageTheme(" not in _page_source(client, response)
+        assert "document.documentElement.style.setProperty('--accent" not in _page_source(client, response)
+        assert "option.dataset.color = color || defaultNamespaceThemeColor" in _page_source(client, response)
 
     def test_namespace_create_page_uses_plus_without_duplicate_add_label(self):
         response = client.get("/namespaces/new")
@@ -2415,13 +2431,13 @@ class TestProjectsPage:
         namespace_id = _as_dict(uow.projects.get_by_code("UITEST"))["id"]
         response = client.get(f"/namespaces/new?namespace_id={namespace_id}")
         assert response.status_code == 200
-        assert "let selectedNamespaceId = null;" in response.text
-        assert f"let previousNamespaceId = {namespace_id};" in response.text
-        assert "if(namespaceFormMode === 'create'){ return; }" in response.text
+        assert _view_data(response)["selectedId"] is None
+        assert _view_data(response)["previousId"] == namespace_id
+        assert "if(namespaceFormMode === 'create'){ return; }" in _page_source(client, response)
         assert "var selectorNamespaceId = selectedNamespaceId == null ? previousNamespaceId : selectedNamespaceId;" in (
-            response.text
+            _page_source(client, response)
         )
-        assert "option.selected = namespace.id === selectorNamespaceId;" in response.text
+        assert "option.selected = namespace.id === selectorNamespaceId;" in _page_source(client, response)
 
     def test_global_namespace_switch_leaves_create_page_for_selected_namespace(self):
         response = client.get("/namespaces/new")
@@ -2447,78 +2463,86 @@ class TestProjectsPage:
     def test_namespace_card_selection_updates_global_selection_state(self):
         response = client.get("/namespaces")
         assert response.status_code == 200
-        assert "function rememberNamespaceSelection(id, historyMode)" in response.text
+        assert "function rememberNamespaceSelection(id, historyMode)" in _page_source(client, response)
         assert (
-            'document.cookie="workflow_namespace_id"+\'=\'+encodeURIComponent(id)+\'; path=/; SameSite=Lax\';'
-            in response.text
+            "document.cookie=config.cookieName+'='+encodeURIComponent(id)+'; path=/; SameSite=Lax'"
+            "+(config.cookieSecure?'; Secure':'');" in _page_source(client, response)
         )
         assert (
             "document.querySelectorAll('[data-namespace-selector]')"
             ".forEach(function(selector){ selector.value = String(id); "
-            "window.PdlcChoice?.refreshChoice(selector); });" in response.text
+            "window.PdlcChoice?.refreshChoice(selector); });" in _page_source(client, response)
         )
-        assert "url.pathname = '/namespaces';" in response.text
-        assert "var method = historyMode === 'push' ? 'pushState' : 'replaceState';" in response.text
-        assert "window.PdlcPlatformNavigation.syncRoute(url.toString(), method === 'replaceState');" in response.text
+        assert "url.pathname = '' + config.basePath + '/namespaces';" in _page_source(client, response)
+        assert "var method = historyMode === 'push' ? 'pushState' : 'replaceState';" in _page_source(client, response)
+        assert "window.PdlcPlatformNavigation.syncRoute(url.toString(), method === 'replaceState');" in _page_source(
+            client, response
+        )
         assert re.search(
             r"function selectNamespace\(id, historyMode\)\{\s*"
             r"var namespace = namespaceById\(Number\(id\)\);\s*if\(!namespace\)\{ return; \}\s*"
             r"selectedNamespaceId = namespace.id;\s*previousNamespaceId = namespace.id;",
-            response.text,
+            _page_source(client, response),
         )
 
     def test_namespace_selection_restores_edit_state_from_browser_history(self):
         response = client.get("/namespaces")
         assert response.status_code == 200
-        assert "function namespaceIdFromUrl(url)" in response.text
-        assert "rememberNamespaceSelection(namespace.id, historyMode || 'push');" in response.text
-        assert "rememberNamespaceSelection(selectedNamespaceId, 'replace');" in response.text
-        assert "window.addEventListener('popstate', restoreNamespaceLocation);" in response.text
-        assert "if(namespaceId != null){ selectNamespace(namespaceId, 'none'); }" in response.text
+        assert "function namespaceIdFromUrl(url)" in _page_source(client, response)
+        assert "rememberNamespaceSelection(namespace.id, historyMode || 'push');" in _page_source(client, response)
+        assert "rememberNamespaceSelection(selectedNamespaceId, 'replace');" in _page_source(client, response)
+        assert "page.on(window,'popstate', restoreNamespaceLocation);" in _page_source(client, response)
+        assert "if(namespaceId != null){ selectNamespace(namespaceId, 'none'); }" in _page_source(client, response)
 
     def test_namespace_history_restores_create_mode_and_cancel_context(self):
         uow = ui_app_state.get_db()
         namespace_id = _as_dict(uow.projects.get_by_code("UITEST"))["id"]
         response = client.get(f"/namespaces/new?namespace_id={namespace_id}")
         assert response.status_code == 200
-        assert "if(url.pathname === '/namespaces/new'){" in response.text
-        assert "selectedNamespaceId = null;" in response.text
-        assert "previousNamespaceId = contextId;" in response.text
-        assert "setNamespaceFormMode('create');" in response.text
-        assert "renderNamespaceSelector();" in response.text
+        assert "if(url.pathname === '/namespaces/new'){" in _page_source(client, response)
+        assert "selectedNamespaceId = null;" in _page_source(client, response)
+        assert "previousNamespaceId = contextId;" in _page_source(client, response)
+        assert "setNamespaceFormMode('create');" in _page_source(client, response)
+        assert "renderNamespaceSelector();" in _page_source(client, response)
 
     def test_namespace_card_selection_updates_header_action_links(self):
         response = client.get("/namespaces")
         assert response.status_code == 200
-        assert 'id="namespaceCreateLink"' in response.text
-        assert 'id="namespaceEditLink"' not in response.text
-        assert "function updateNamespaceHeaderLinks(id)" in response.text
-        assert "createLink.href = namespaceScopedPath('/namespaces/new', id);" in response.text
-        assert "editLink.href = namespaceScopedPath('/namespaces', id);" in response.text
-        assert "updateNamespaceHeaderLinks(id);" in response.text
-        assert "updateNamespaceHeaderLinks(selectorNamespaceId);" in response.text
+        assert 'id="namespaceCreateLink"' in _page_source(client, response)
+        assert 'id="namespaceEditLink"' not in _page_source(client, response)
+        assert "function updateNamespaceHeaderLinks(id)" in _page_source(client, response)
+        assert "createLink.href = namespaceScopedPath('' + config.basePath + '/namespaces/new', id);" in _page_source(
+            client, response
+        )
+        assert "editLink.href = namespaceScopedPath('' + config.basePath + '/namespaces', id);" in _page_source(
+            client, response
+        )
+        assert "updateNamespaceHeaderLinks(id);" in _page_source(client, response)
+        assert "updateNamespaceHeaderLinks(selectorNamespaceId);" in _page_source(client, response)
 
     def test_namespace_editor_refreshes_header_selector_and_profession_identity(self):
         response = client.get("/namespaces")
         assert response.status_code == 200
-        assert "document.querySelector('.brand-name')" not in response.text
-        assert "document.querySelector('.brand-subname')" not in response.text
-        assert "option.textContent = name;" in response.text
-        assert "option.dataset.icon = namespace.theme_icon" in response.text
-        assert "option.dataset.color = namespace.theme_color" in response.text
-        assert "refreshNamespaceSelectors();" in response.text
-        assert "function renderNamespaceSelector()" in response.text
-        assert "selector.replaceChildren();" in response.text
-        assert "option.textContent = namespaceContextLabel(namespace);" in response.text
-        assert "renderNamespaceSelector();" in response.text
-        assert "document.querySelectorAll('[data-namespace-selector]').forEach(function(selector)" in response.text
+        assert "document.querySelector('.brand-name')" not in _page_source(client, response)
+        assert "document.querySelector('.brand-subname')" not in _page_source(client, response)
+        assert "option.textContent = name;" in _page_source(client, response)
+        assert "option.dataset.icon = namespace.theme_icon" in _page_source(client, response)
+        assert "option.dataset.color = namespace.theme_color" in _page_source(client, response)
+        assert "refreshNamespaceSelectors();" in _page_source(client, response)
+        assert "function renderNamespaceSelector()" in _page_source(client, response)
+        assert "selector.replaceChildren();" in _page_source(client, response)
+        assert "option.textContent = namespaceContextLabel(namespace);" in _page_source(client, response)
+        assert "renderNamespaceSelector();" in _page_source(client, response)
+        assert "document.querySelectorAll('[data-namespace-selector]').forEach(function(selector)" in _page_source(
+            client, response
+        )
 
     def test_namespace_create_redirects_to_edit_page_after_success(self):
         response = client.get("/namespaces/new")
         assert response.status_code == 200
         assert (
-            "window.PdlcPlatformNavigation.navigate(namespaceScopedPath('/namespaces', d.namespace_id));"
-            in response.text
+            "page.navigateAfterWrite(namespaceScopedPath('' + config.basePath + '/namespaces', d.namespace_id));"
+            in _page_source(client, response)
         )
 
     def test_profession_page_has_no_workflow_selector(self):
@@ -2671,31 +2695,36 @@ class TestWorkflowsPage:
     def test_workflows_page_keeps_list_with_one_workflow(self):
         response = client.get("/workflows")
         assert response.status_code == 200
-        assert 'class="workflow-crud "' in response.text
-        assert 'id="workflowNav"' in response.text
-        assert 'id="workflowForm"' in response.text
-        assert 'id="newWorkflowButton"' in response.text
-        assert 'id="workflowFormMode"' in response.text
-        assert 'id="workflowSelect"' in response.text
-        description = next(attrs for tag, attrs in Elements(response.text).elements
-                           if tag == "textarea" and attrs.get("id") == "workflowDescription")
+        assert 'class="workflow-crud "' in _page_source(client, response)
+        assert 'id="workflowNav"' in _page_source(client, response)
+        assert 'id="workflowForm"' in _page_source(client, response)
+        assert 'id="newWorkflowButton"' in _page_source(client, response)
+        assert 'id="workflowFormMode"' in _page_source(client, response)
+        assert 'id="workflowSelect"' in _page_source(client, response)
+        description = next(
+            attrs
+            for tag, attrs in Elements(_page_source(client, response)).elements
+            if tag == "textarea" and attrs.get("id") == "workflowDescription"
+        )
         assert {"base-control", "base-textarea", "workflow-description"} <= set(description["class"].split())
         assert description["name"] == "workflowDescription"
         assert description["rows"] == "2"
-        assert 'id="workflowName"' in response.text and "required" in response.text
-        assert 'id="workflowDeleteHint" hidden' in response.text
-        assert 'aria-controls="workflowForm" aria-pressed="true"' in response.text
-        assert "node.setAttribute('aria-pressed', String(active))" in response.text
-        assert response.text.count("document.getElementById('workflowName').focus()") == 2
-        assert "deleteButton.disabled = workflowWritePending || protectedDefault" in response.text
-        assert "title = workflow ? 'Удалить воркфлоу «' + workflow.name + '»?'" in response.text
-        assert "Promise.resolve(operation).finally" in response.text
-        assert "button.textContent = workflowFormMode === 'create' ? 'Создание…' : 'Сохранение…'" in response.text
-        assert "button.textContent = 'Удаление…'" in response.text
-        assert 'spellcheck="false"' not in response.text
-        assert 'id="workflowThemeIcon"' not in response.text
-        assert 'id="workflowThemeColor"' not in response.text
-        assert 'id="workflowThemePreview"' not in response.text
+        assert 'id="workflowName"' in _page_source(client, response) and "required" in _page_source(client, response)
+        assert 'id="workflowDeleteHint" hidden' in _page_source(client, response)
+        assert 'aria-controls="workflowForm" aria-pressed="true"' in _page_source(client, response)
+        assert "node.setAttribute('aria-pressed', String(active))" in _page_source(client, response)
+        assert _page_source(client, response).count("document.getElementById('workflowName').focus()") == 2
+        assert "deleteButton.disabled = workflowWritePending || protectedDefault" in _page_source(client, response)
+        assert "title = workflow ? 'Удалить воркфлоу «' + workflow.name + '»?'" in _page_source(client, response)
+        assert "Promise.resolve(operation).finally" in _page_source(client, response)
+        assert "button.textContent = workflowFormMode === 'create' ? 'Создание…' : 'Сохранение…'" in _page_source(
+            client, response
+        )
+        assert "button.textContent = 'Удаление…'" in _page_source(client, response)
+        assert 'spellcheck="false"' not in _page_source(client, response)
+        assert 'id="workflowThemeIcon"' not in _page_source(client, response)
+        assert 'id="workflowThemeColor"' not in _page_source(client, response)
+        assert 'id="workflowThemePreview"' not in _page_source(client, response)
 
     def test_workflows_use_one_shared_adaptive_action_block(self):
         response = client.get("/workflows")
@@ -2718,14 +2747,14 @@ class TestWorkflowsPage:
         try:
             response = client.get(f"/workflows?namespace_id={profession_id}&workflow_id={workflow_id}")
             assert response.status_code == 200
-            assert 'class="workflow-crud "' in response.text
-            assert f'<option value="{workflow_id}" selected' in response.text
-            assert "Secondary UI workflow</option>" in response.text
-            assert f"let selectedWorkflowId = {workflow_id};" in response.text
-            assert 'value="Secondary UI workflow"' in response.text
-            assert ".workflow-picker{display:block}" in response.text
-            assert ".workflow-nav{display:none}" in response.text
-            assert "classList.toggle('is-empty', workflowStore.length === 0)" in response.text
+            assert 'class="workflow-crud "' in _page_source(client, response)
+            assert f'<option value="{workflow_id}" selected' in _page_source(client, response)
+            assert "Secondary UI workflow</option>" in _page_source(client, response)
+            assert f'"selected_workflow_id": {workflow_id}' in _page_source(client, response)
+            assert 'value="Secondary UI workflow"' in _page_source(client, response)
+            assert ".workflow-picker{display:block}" in _page_source(client, response)
+            assert ".workflow-nav{display:none}" in _page_source(client, response)
+            assert "classList.toggle('is-empty', workflowStore.length === 0)" in _page_source(client, response)
         finally:
             deleted = client.delete(f"/api/workflows/{workflow_id}")
             assert deleted.status_code == 200
@@ -2740,14 +2769,15 @@ class TestWorkflowsPage:
         response = client.get("/workflows")
 
         assert response.status_code == 200
-        assert "function workflowSelectionUrl(workflowId)" in response.text
-        assert "url.searchParams.set('workflow_id', String(workflowId));" in response.text
-        assert "url.searchParams.delete('workflow_id');" in response.text
-        assert "window.PdlcPlatformNavigation.syncRoute(nextUrl, mode === 'replace'" in response.text
-        assert "window.addEventListener('popstate'" in response.text
-        assert "selectWorkflow(workflowId, {updateUrl:false});" in response.text
-        assert "syncWorkflowUrl(selectedWorkflowId, 'replace');" in response.text
-        assert "return workflowById(defaultWorkflowId) ? defaultWorkflowId" in response.text
+        assert "function workflowSelectionUrl(workflowId)" in _page_source(client, response)
+        assert "url.searchParams.set('workflow_id', String(workflowId));" in _page_source(client, response)
+        assert "url.searchParams.delete('workflow_id');" in _page_source(client, response)
+        assert "window.PdlcPlatformNavigation.syncRoute(nextUrl, mode === 'replace'" in _page_source(client, response)
+        assert "window.addEventListener('popstate'" in _page_source(client, response)
+        assert "page.handlesHistory=true;" in _page_source(client, response)
+        assert "active?.handlesHistory" in _page_source(client, response)
+        assert "window.PdlcPlatformNavigation.syncRoute(workflowCommittedUrl,true," in _page_source(client, response)
+        assert "return workflowById(defaultWorkflowId) ? defaultWorkflowId" in _page_source(client, response)
 
     def test_workflows_page_defaults_to_active_namespace_workflow(self):
         workflow = client.post("/api/workflows", json={"name": "Namespace selected workflow"})
@@ -2767,9 +2797,9 @@ class TestWorkflowsPage:
             response = client.get(f"/workflows?namespace_id={namespace_id}")
 
             assert response.status_code == 200
-            assert f"let selectedWorkflowId = {workflow_id};" in response.text
-            assert f"const defaultWorkflowId = {workflow_id};" in response.text
-            assert 'value="Namespace selected workflow"' in response.text
+            assert f'"selected_workflow_id": {workflow_id}' in _page_source(client, response)
+            assert _view_data(response)["defaultId"] == workflow_id
+            assert 'value="Namespace selected workflow"' in _page_source(client, response)
         finally:
             deleted_namespace = client.delete(f"/api/namespaces/{namespace_id}")
             assert deleted_namespace.status_code == 200
@@ -2792,16 +2822,14 @@ class TestWorkflowsPage:
         assert namespace.status_code == 200
         namespace_id = namespace.json()["namespace_id"]
         try:
-            response = client.get(
-                f"/workflows?namespace_id={namespace_id}&workflow_id={existing_workflow_id}"
-            )
+            response = client.get(f"/workflows?namespace_id={namespace_id}&workflow_id={existing_workflow_id}")
 
             assert response.status_code == 200
             assert response.history[0].status_code == 303
-            assert f"let selectedWorkflowId = {namespace_workflow_id};" in response.text
-            store = json.loads(re.search(r"const workflowStore = (.*);", response.text).group(1))
+            assert f'"selected_workflow_id": {namespace_workflow_id}' in _page_source(client, response)
+            store = _view_data(response)["workflows"]
             assert [item["id"] for item in store] == [namespace_workflow_id]
-            assert f"const defaultWorkflowId = {namespace_workflow_id};" in response.text
+            assert _view_data(response)["defaultId"] == namespace_workflow_id
         finally:
             deleted_namespace = client.delete(f"/api/namespaces/{namespace_id}")
             assert deleted_namespace.status_code == 200
@@ -2824,11 +2852,11 @@ class TestWorkflowsPage:
         response = client.get(f"/workflows?namespace_id={namespace_id}")
 
         assert response.status_code == 200
-        assert "function workflowSelectionUrl(workflowId)" in response.text
-        assert "url.searchParams.set('workflow_id', String(workflowId));" in response.text
-        assert "url.searchParams.set('namespace_id', String(activeNamespaceId));" not in response.text
-        assert "window.PdlcPlatformNavigation.navigate(workflowSelectionUrl(d.workflow_id));" in response.text
-        assert "window.location.href = '/phases?workflow_id=' + d.workflow_id;" not in response.text
+        assert "function workflowSelectionUrl(workflowId)" in _page_source(client, response)
+        assert "url.searchParams.set('workflow_id', String(workflowId));" in _page_source(client, response)
+        assert "url.searchParams.set('namespace_id', String(activeNamespaceId));" not in _page_source(client, response)
+        assert "refreshAfterWorkflowWrite(workflowSelectionUrl(d.workflow_id))" in _page_source(client, response)
+        assert "window.location.href = '/phases?workflow_id=' + d.workflow_id;" not in _page_source(client, response)
 
     def test_workflows_api_create_update_and_delete(self):
         create = client.post(
@@ -2896,9 +2924,9 @@ def test_workflows_page_uses_product_modal_not_browser_confirm():
     response = client.get("/workflows")
 
     assert response.status_code == 200
-    assert "id=\"confirmDialog\"" in response.text
-    assert "requestConfirmation({eyebrow:'Удаление воркфлоу'" in response.text
-    assert "confirm('Удалить воркфлоу?')" not in response.text
+    assert 'id="confirmDialog"' in _page_source(client, response)
+    assert "requestConfirmation({eyebrow:'Удаление воркфлоу'" in _page_source(client, response)
+    assert "confirm('Удалить воркфлоу?')" not in _page_source(client, response)
 
 
 def test_workflows_list_scrolls_with_page_and_labels_fields():
@@ -3083,8 +3111,10 @@ class TestUiNetworkFailures:
 
         assert response.status_code == 200
         handler = "catch(error){showRequestError(error)}" if path == "/agents" else ".catch(showRequestError)"
-        assert response.text.count(handler) >= minimum_handlers
-        assert "Не удалось связаться с сервером" in response.text
+        source = _page_source(client, response)
+        async_handlers = re.findall(r"catch\([^)]*\)\{[^}]*showRequestError\(", source)
+        assert source.count(handler) + len(async_handlers) >= minimum_handlers
+        assert "Не удалось связаться с сервером" in _page_source(client, response)
 
     def test_task_deletion_is_absent_from_ui_and_routes(self):
         response = client.get("/tasks")
@@ -3111,15 +3141,19 @@ class TestUiNetworkFailures:
         detail_page = client.get(f"/phase/{phase_id}")
 
         assert phases_page.status_code == 200
-        assert phases_page.text.count("catch(_error){showRequestError();") >= 4
+        assert (
+            _page_source(client, phases_page).count("catch(_error){requireWorkflowReadback();showRequestError();") >= 4
+        )
         assert instructions_page.status_code == 200
-        assert "async function requestInstruction(url, options)" in instructions_page.text
-        assert "showRequestError();" in instructions_page.text
+        assert "async function requestInstruction(url, options)" in _page_source(client, instructions_page)
+        assert "showRequestError();" in _page_source(client, instructions_page)
         assert detail_page.status_code == 200
-        assert "async function requestPhaseDetail(url, options, trackedDraft = false)" in detail_page.text
-        assert "if (!await savePhase())" in detail_page.text
-        assert "list.insertBefore(li, nextSibling)" in detail_page.text
-        assert "await deleteItem(input);" in detail_page.text
+        assert "async function requestPhaseDetail(url, options, trackedDraft = false)" in _page_source(
+            client, detail_page
+        )
+        assert "if (!await savePhase())" in _page_source(client, detail_page)
+        assert "list.insertBefore(li, nextSibling)" in _page_source(client, detail_page)
+        assert "await deleteItem(input);" in _page_source(client, detail_page)
 
     def test_instructions_page_rejects_unknown_query_namespace(self):
         phase_id = _phase_id("1.INTAKE")
@@ -3144,24 +3178,26 @@ class TestUiNetworkFailures:
         response = client.get(f"/instructions?phase_id={phase_id}")
 
         assert response.status_code == 200
-        assert len(re.findall(rf'href="/phase/{phase_id}(?:\?profession_id=\d+)?"', response.text)) == 1
-        assert 'class="base-page-header"' in response.text
-        assert 'class="base-page-title">Инструкции фазы ' in response.text
-        assert 'data-appearance="counter"' in response.text
-        assert "instructions-mobile" not in response.text
-        assert "instructions-context" not in response.text
-        assert "Добавляй, удаляй и меняй порядок инструкций" not in response.text
-        assert 'class="instruction-text base-control base-textarea" rows="1"' in response.text
-        assert 'aria-label="Описание инструкции 1"' in response.text
-        assert 'class="base-control base-button type-badge" data-variant="outline"' in response.text
-        assert 'aria-pressed="false" onclick="toggleType(this)"' in response.text
-        assert 'aria-label="Новая инструкция"' in response.text
-        assert 'base-icon-control order-btn move-up"' in response.text
-        assert 'data-variant="destructive-outline" data-size="icon"' in response.text
-        assert "function resizeInstructionTextarea" not in response.text
-        assert "resizeInstructionTextareas" not in response.text
-        assert "export function initTextareaAutosize(field)" in response.text
-        assert "window.PdlcTextarea.refreshTextareaAutosize(textarea);" in response.text
+        assert (
+            len(re.findall(rf'href="/phase/{phase_id}(?:\?profession_id=\d+)?"', _page_source(client, response))) == 1
+        )
+        assert 'class="base-page-header"' in _page_source(client, response)
+        assert 'class="base-page-title">Инструкции фазы ' in _page_source(client, response)
+        assert 'data-appearance="counter"' in _page_source(client, response)
+        assert "instructions-mobile" not in _page_source(client, response)
+        assert "instructions-context" not in _page_source(client, response)
+        assert "Добавляй, удаляй и меняй порядок инструкций" not in _page_source(client, response)
+        assert 'class="instruction-text base-control base-textarea" rows="1"' in _page_source(client, response)
+        assert 'aria-label="Описание инструкции 1"' in _page_source(client, response)
+        assert 'class="base-control base-button type-badge" data-variant="outline"' in _page_source(client, response)
+        assert 'aria-pressed="false" onclick="toggleType(this)"' in _page_source(client, response)
+        assert 'aria-label="Новая инструкция"' in _page_source(client, response)
+        assert 'base-icon-control order-btn move-up"' in _page_source(client, response)
+        assert 'data-variant="destructive-outline" data-size="icon"' in _page_source(client, response)
+        assert "function resizeInstructionTextarea" not in _page_source(client, response)
+        assert "resizeInstructionTextareas" not in _page_source(client, response)
+        assert "export function initTextareaAutosize(field)" in _page_source(client, response)
+        assert "window.PdlcTextarea.refreshTextareaAutosize(textarea);" in _page_source(client, response)
 
     def test_instructions_page_rejects_phase_outside_selected_namespace_workflow(self):
         workflow = client.post(

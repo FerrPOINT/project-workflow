@@ -152,6 +152,14 @@ class SAPhaseRepository(PhaseRepository):
         )
         if not remaining:
             raise LastPhaseError("Нельзя удалить единственную фазу воркфлоу")
+        # Retired catalog edges are inert metadata. Clear incoming edges only
+        # when the user deletes their target; task/evaluation history still blocks
+        # deletion in the application service and is never rewritten here.
+        for phase in remaining:
+            for field in ("parallel_with_phase_id", "rollback_target_phase_id"):
+                if getattr(phase, field) == phase_id:
+                    setattr(phase, field, None)
+        self._session.flush()
         # Cascade delete content rows explicitly (mirror ON DELETE CASCADE).
         for child_class in (m.PhaseInstruction, m.PhaseCheck, m.PhaseEvidenceRequirement):
             self._session.execute(
@@ -240,20 +248,6 @@ class SAPhaseRepository(PhaseRepository):
         if run is not None:
             kinds.add("проверка Supervisor")
 
-        catalog_link = self._session.execute(
-            select(m.Phase.id)
-            .where(
-                m.Phase.workflow_id == row.workflow_id,
-                m.Phase.id != phase_id,
-                or_(
-                    m.Phase.parallel_with_phase_id == phase_id,
-                    m.Phase.rollback_target_phase_id == phase_id,
-                ),
-            )
-            .limit(1)
-        ).scalar_one_or_none()
-        if catalog_link is not None:
-            kinds.add("ссылка фазы")
         return kinds
 
 

@@ -4,6 +4,8 @@ import os
 import subprocess
 from pathlib import Path
 
+from project_workflow.interfaces.ui.controller_assets import controller_source
+
 ROOT = Path(__file__).parents[1]
 TEMPLATES = ROOT / "project_workflow/interfaces/ui/templates"
 
@@ -16,14 +18,28 @@ def editor_script():
             cwd=ROOT, text=True, encoding="utf-8",
         )
     else:
-        template = (TEMPLATES / "phase_detail.html").read_text(encoding="utf-8")
+        template = controller_source("phase_detail", True)[0].decode()
     tracker = (TEMPLATES / "base/draft-state.js").read_text(encoding="utf-8").replace("export function", "function")
     prefix = template[template.index("const phaseId ="):template.index("const selectedNamespaceId =")]
-    prefix = prefix.replace("{{ phase.id }}", "7")
+    prefix = prefix.replace("{{ phase.id }}", "7").replace("config.phaseId", "7")
     # Autosize now belongs to Base; keep this boundary tied to the input listener.
-    listener_start = template.index("document.addEventListener('input'")
+    listener_marker = (
+        "page.on(document,'input'" if "page.on(document,'input'" in template
+        else "document.addEventListener('input'"
+    )
+    listener_start = template.index(listener_marker)
     listener = template[listener_start:template.index("\n});", listener_start) + len("\n});")]
-    save = template[template.index("let _saveTimer"):template.index("document.addEventListener('DOMContentLoaded'")]
+    ready_marker = "page.ready(" if "page.ready(" in template else "document.addEventListener('DOMContentLoaded'"
+    save = template[template.index("let _saveTimer"):template.index(ready_marker, template.index("let _saveTimer"))]
+    controls_start = template.index("function updateInstructionControls()")
+    controls = "\n".join([
+        template[
+            template.index("function getInstructionItems()"):template.index("function renderInstructionTimeline(")
+        ],
+        template[
+            controls_start:template.index("async function persistInstructionOrder(")
+        ],
+    ])
     return "\n".join([
         tracker,
         "const listeners=new Map();const fields=[{dataset:{field:'name'},value:'Original'},"
@@ -33,7 +49,8 @@ def editor_script():
         "querySelector:s=>s==='.wiki-header'?{querySelectorAll:()=>fields}:null,",
         "querySelectorAll:s=>s.startsWith('.wiki-header')?fields:[]};",
         "const showToast=()=>{};const phaseApiUrl=u=>u;const resizeInlineTextarea=()=>{};",
-        prefix, listener, save,
+        "const config={basePath:''};const page={on:(target,type,fn)=>target.addEventListener(type,fn)};",
+        prefix, controls, listener, save,
         "if(typeof phaseDraft!=='undefined'){phaseDraft=createDraftTracker();phaseSignature=currentPhaseSignature();",
         "confirmedPhase={name:'Original',description:'',execution_type:'sync',parallel_with_phase_id:null,checks:[],evidence:[]};}",
         "const edit=value=>{fields[0].value=value;"
@@ -130,18 +147,29 @@ console.log(JSON.stringify({writes,dirty:dirty()}));
     assert result == {"writes": 0, "dirty": True}
 
 
-def test_phase_mode_failure_keeps_the_chosen_value_as_a_draft():
-    template = (TEMPLATES / "phase_detail.html").read_text(encoding="utf-8")
-    start = template.index("async function togglePhaseMode(el)")
-    end = template.index("/* ---------- Instructions list", start)
-    result = subprocess.run(
-        ["node", "--input-type=module", "-"], input="\n".join([
-            "let edits=0,mode='sync';const setPhaseMode=(el,next)=>{mode=next;el.dataset.mode=next};",
-            "const notePhaseEdit=()=>{edits++};const savePhase=async()=>false;",
-            template[start:end],
-            "const el={dataset:{mode:'sync'},setAttribute:()=>{},removeAttribute:()=>{}};",
-            "await togglePhaseMode(el);console.log(JSON.stringify({mode,edits,pending:el.dataset.saving??null}));",
-        ]), text=True, encoding="utf-8", capture_output=True, timeout=10,
-    )
-    assert result.returncode == 0, result.stderr
-    assert json.loads(result.stdout) == {"mode": "parallel", "edits": 1, "pending": None}
+def test_header_save_does_not_write_execution_graph_fields():
+    result = run_editor("""
+let submitted;globalThis.fetch=async(u,o)=>{
+ submitted=JSON.parse(o.body);return {ok:true,json:async()=>({ok:true,ids:{checks:[],evidence:[]}})};
+};
+confirmedPhase={name:'Original',description:'',execution_type:'parallel',parallel_with_phase_id:42,
+ checks:[],evidence:[]};
+edit('Renamed');await savePhase();
+console.log(JSON.stringify({fields:Object.keys(submitted).sort(),name:submitted.name,dirty:dirty()}));
+""")
+    assert result == {"fields": ["checks", "description", "evidence", "name"],
+                      "name": "Renamed", "dirty": False}
+
+
+def test_recovery_actions_only_appear_for_an_unfinished_save():
+    result = run_editor("""
+const save={hidden:true,setAttribute(){}},readback={hidden:true},recovery={hidden:true};
+document.getElementById=id=>({phaseSaveEditor:save,phaseSaveReadback:readback,phaseSaveRecovery:recovery}[id]??null);
+updatePhaseSaveStatus();const clean=recovery.hidden;
+edit('Renamed');let ticket=phaseDraft.beginSave();updatePhaseSaveStatus();const pending=recovery.hidden;
+phaseDraft.finishSave(ticket,'failed');updatePhaseSaveStatus();const failed={hidden:recovery.hidden,retry:!save.hidden};
+ticket=phaseDraft.beginSave();phaseDraft.finishSave(ticket,'saved');updatePhaseSaveStatus();
+console.log(JSON.stringify({clean,pending,failed,saved:recovery.hidden}));
+""")
+    assert result == {"clean": True, "pending": True,
+                      "failed": {"hidden": False, "retry": True}, "saved": True}
