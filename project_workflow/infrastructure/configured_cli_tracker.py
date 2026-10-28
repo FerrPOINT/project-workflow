@@ -63,7 +63,11 @@ def assignment(request: dict[str, Any], *, allow_completed_read: bool = False) -
     completed_pm = (allow_completed_read and request["role_key"] == "project_manager"
                     and request["mode_key"] == "draft" and context.get("stage") == "Backlog"
                     and context.get("status") == "Ready")
-    active = (context.get("status") == "InProgress"
+    # Tracker reserves PM before work/owner consent, and publishes questions or
+    # revisions in Ready too. Those business waits must not prevent reading the
+    # next Workflow instruction. Final PM commit separately proves exact consent.
+    active = (context.get("status") in ({"Ready", "InProgress"}
+              if request["role_key"] == "project_manager" else {"InProgress"})
               and (request["role_key"] != "project_manager" or context.get("stage") == "Draft"))
     if (type(context.get("contract_version")) is not int or context.get("contract_version") != 1
             or context.get("interaction_protocol") != PROTOCOL

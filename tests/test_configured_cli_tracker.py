@@ -112,12 +112,25 @@ def test_settled_pm_read_still_requires_the_exact_current_assignment(authority):
         tracker.assignment(request, allow_completed_read=True)
 
 
-@pytest.mark.parametrize("stage,status", [("Backlog", "InProgress"), ("Draft", "Ready"), ("Backlog", "Completed")])
+@pytest.mark.parametrize("stage,status", [("Backlog", "InProgress"), ("Draft", "Completed"), ("Backlog", "Completed")])
 def test_completed_read_does_not_admit_other_stage_status_pairs(authority, stage, status):
     request, bodies, _ = authority
     bodies["context"].update(stage=stage, status=status)
     with pytest.raises(ConflictError):
         tracker.assignment(request, allow_completed_read=True)
+
+
+def test_real_pm_reservation_and_owner_wait_can_read_and_report_before_confirmation(authority):
+    request, bodies, _ = authority
+    bodies["context"].update(stage="Draft", status="Ready", draft_submode="brainstorming")
+    tracker.assignment(request)
+    bodies["context"]["draft_submode"] = "awaiting_confirmation"
+    tracker.assignment(request)
+    # Ready is not a shortcut into technical execution or a missing assignment.
+    request.update(role_key="analyst", mode_key="analysis")
+    bodies["context"].update(stage="Analysis")
+    with pytest.raises(ConflictError):
+        tracker.assignment(request)
 
 
 @pytest.mark.parametrize("field", ["task_id", "root_task_id", "owner_subject"])
