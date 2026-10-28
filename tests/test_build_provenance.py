@@ -332,6 +332,35 @@ def test_dockerfile_manifest_and_oci_labels_use_same_build_args():
     assert "COPY runtime-*.json ./" in dockerfile
 
 
+@pytest.mark.skipif(os.name == "nt", reason="NTFS does not represent Git executable modes")
+def test_dockerfile_verification_preserves_a_committed_executable(git_source: Path, tmp_path: Path):
+    repo = Path(__file__).resolve().parents[1]
+    for name in ("scripts/__init__.py", "project_workflow/__init__.py"):
+        (git_source / name).write_text("", encoding="utf-8")
+    for name in ("scripts/build_runtime_image.py", "project_workflow/build_provenance.py"):
+        shutil.copyfile(repo / name, git_source / name)
+    _run_git(git_source, "add", ".")
+    _run_git(git_source, "update-index", "--chmod=+x", "scripts/source.py")
+    _run_git(git_source, "commit", "-m", "runtime verifier and executable fixture")
+    builder = _builder_module()
+    snapshot = builder.immutable_git_snapshot(git_source, "HEAD")
+    extracted = tmp_path / "image"
+    _extract_regular_context(docker_context_with_manifest(snapshot.archive, snapshot.provenance), extracted)
+    dockerfile = (repo / "Dockerfile").read_text(encoding="utf-8")
+    instructions = dockerfile.replace("\\\n", "\n")
+    commands = re.findall(r"^RUN (.*?)(?=\n[A-Z]+ |\Z)", instructions, flags=re.MULTILINE | re.DOTALL)
+    command = next(value for value in commands if "verify-manifest" in value)
+    environment = dict(os.environ, SOURCE_REVISION=snapshot.revision,
+                       SOURCE_ARCHIVE_SHA256=snapshot.provenance.source_archive_sha256,
+                       RUNTIME_BUNDLE_SHA256=snapshot.provenance.runtime_bundle_sha256,
+                       PYTHONPATH=str(extracted))
+    result = subprocess.run(["sh", "-c", command.replace("/app", shlex.quote(str(extracted)))],
+                            cwd=extracted, env=environment, capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert runtime_bundle_sha256(extracted) == snapshot.provenance.runtime_bundle_sha256
+    assert (extracted / "scripts/source.py").stat().st_mode & 0o111 == 0o111
+
+
 def test_image_builder_passes_one_snapshot_to_docker(git_source: Path):
     builder = _builder_module()
     snapshot = builder.immutable_git_snapshot(git_source, "HEAD")
