@@ -812,7 +812,7 @@ class SharedShellTemplateTests(TestCase):
                 self.assertTrue(all(("disabled" in item) == (count == 1) for item in deletes))
                 self.assertTrue(all(item["data-variant"] == "destructive-outline" for item in deletes))
                 self.assertNotIn('class="timeline-connector"', html)
-                self.assertIn("Действия фазы Phase &lt;1&gt;", html)
+                self.assertIn("Действия фазы «Phase &lt;1&gt;»", html)
                 self.assertNotIn(".phase-actions-menu{", html)
                 self.assertNotIn(".phase-move-btn{", html)
                 self.assertNotIn("const confirmationDialog=", html)
@@ -845,7 +845,7 @@ class SharedShellTemplateTests(TestCase):
                 toggles = [
                     attrs
                     for tag, attrs in elements
-                    if tag == "button" and attrs.get("onclick") == "toggleInstructionType(this)"
+                    if tag == "button" and "instruction-execution-toggle" in attrs.get("class", "").split()
                 ]
                 self.assertEqual(
                     [button["aria-pressed"] for button in toggles], ["false", "true" if parallel else "false"]

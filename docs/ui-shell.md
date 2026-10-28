@@ -212,18 +212,25 @@ failure/retry, cancelled departure, stale reads, history and admission retiremen
 The child workflow editor keeps its independent form-preserving/late-edit guard.
 
 
-## Phase card actions
+## Phase and instruction card actions
 
-The phase list and diagram expose five native Base icon buttons on each admin
-card: insert after this phase, move up/down, toggle execution type and delete.
-The action group is a sibling of the existing card link, never a nested control.
-Each button has a stable accessible name and tooltip; the execution toggle uses
-aria-pressed and the existing owner callback. The empty list retains its initial
-add action. There are no insertion controls between populated cards.
+`workflow-cards.html` renders the same five public Base icon buttons for phase
+and instruction cards: add after, move up, move down, parallel mode and delete.
+The icon, variant, order, size and tooltip contract have one source. Products
+supply labels, permission and disabled state. Phase cards keep the toolbar outside
+the native link; instruction cards contain it after editable content and skills.
+The sole phase cannot be deleted; an instruction list may become empty.
 
-Insertion uses the card phase_order, including a card inside a parallel group;
-inside a parallel group the new phase inherits parallel execution, an explicit
-link to the selected phase and the same rollback target. Owner graph validation
-still defines grouping; existing edges are not split by a new sync barrier. View changes do not mutate phases.
-Deleting the sole phase and moving beyond list boundaries remain disabled;
-confirmation, serialized writes and uncertain-write readback remain unchanged.
+Parallel frames use the same Base Card composition and the same product class.
+Orange is an explicit domain presentation requirement, retained across themes;
+Base's warning palette is not used because it becomes yellow in the gray theme.
+The shared CSS sets only this semantic border color and toolbar geometry; Base
+still owns control states, card geometry and typography. Dynamic instruction
+regrouping clones the rendered frame template, retaining the same classes and
+color after reorder. Sequential records are not shown as a parallel group.
+
+Adding inside a parallel group preserves its execution context. Phase insertion
+also retains the explicit edge and rollback target through the existing owner API.
+Instruction toolbar actions remain disabled until mutation/order acknowledgement;
+uncertain writes are not repeated automatically. Pending writes and drafts still
+block navigation. Default build/check does not run the manual DOM/API fixtures.

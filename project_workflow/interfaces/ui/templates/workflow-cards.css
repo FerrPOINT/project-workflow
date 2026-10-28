@@ -1,0 +1,4 @@
+.workflow-card-actions{display:flex;align-items:center;gap:6px;max-width:100%}
+.workflow-card-actions svg{width:16px;height:16px;flex-shrink:0}
+/* Product meaning: parallel groups retain the requested orange frame in every theme. */
+.workflow-parallel-group.base-card{border-color:#d97706}

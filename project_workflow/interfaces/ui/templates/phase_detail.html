@@ -1,10 +1,12 @@
 {% extends "base.html" %}
+{% import "workflow-cards.html" as workflow_cards %}
 {% block page_layout %}detail-with-aside{% endblock %}
 
 {% block title %}{{ phase.name }} — Workflow Engine{% endblock %}
 {% block header_title %}Детали фазы{% endblock %}
 
 {% block extra_style %}
+{% include "workflow-cards.css" %}
 /* ── Structured phase editor ───────────────────────────────────────── */
 .phase-editor-layout{display:grid;grid-template-columns:220px minmax(0,1fr);gap:32px;align-items:start;max-width:1280px;margin:0 auto}
 .phase-outline{position:sticky;top:calc(var(--shell-header-height) + 16px);max-height:calc(100dvh - var(--shell-header-height) - 32px);overflow:auto;border-right:1px solid var(--border);padding:8px 20px 8px 0}
@@ -22,7 +24,9 @@
 
 .timeline-badges input.skill-candidate{width:180px}
 .wiki-page .timeline-row{grid-template-columns:minmax(0,1fr);gap:8px}
-.wiki-page .phase-order-controls{width:100%;flex-direction:row;flex-wrap:nowrap;justify-content:flex-start;gap:4px;padding-top:0}
+.instruction-card-actions{justify-content:flex-end;margin-top:12px}
+#instructionsTimeline{gap:12px;max-width:none}
+#instructionsTimeline .timeline-badges input.skill-candidate{max-width:100%}
 
 {% endblock %}
 
@@ -122,22 +126,10 @@
 
     {% macro instruction_body(i, instruction_count) %}
     <div class="timeline-row" >
-{% if can_administer %}
-      <div class="phase-order-controls">
-        <button type="button" class="base-control base-button base-icon-control phase-move-btn move-up-btn" data-variant="secondary" data-size="icon" onclick="moveInstruction(this, -1)" aria-label="Поднять инструкцию {{ i.step_num }} выше">↑</button>
-        <button type="button" class="base-control base-button base-icon-control phase-add-btn" data-variant="outline" data-size="icon" onclick="addInstructionAfter(this)" aria-label="Добавить инструкцию после {{ i.step_num }}">+</button>
-        <button type="button" class="base-control base-button base-icon-control phase-move-btn move-down-btn" data-variant="secondary" data-size="icon" onclick="moveInstruction(this, 1)" aria-label="Опустить инструкцию {{ i.step_num }} ниже">↓</button>
-        <button type="button" class="base-control base-button base-icon-control phase-delete-btn" data-variant="destructive-outline" data-size="icon" onclick="deleteInstruction(this)" aria-label="Удалить инструкцию {{ i.step_num }}">×</button>
-      </div>
-{% endif %}
       <div class="timeline-card base-card base-card-content" data-instruction-id="{{ i.id }}" data-step-num="{{ i.step_num }}" data-type="{{ i.execution_type }}">
 {% if can_administer %}
         <textarea data-base-autosize class="timeline-name-input base-control base-textarea" rows="1" data-field="description" data-original-description="{{ i.description }}" aria-label="Описание инструкции {{ i.step_num }}" onblur="saveInstructionDescription(this)" data-appearance="inline">{{ i.description }}</textarea>
-        <div class="execution-row">
-          <button type="button" class="base-control base-button" data-variant="outline" aria-pressed="{{ 'true' if i.execution_type == 'parallel' else 'false' }}" onclick="toggleInstructionType(this)" aria-label="Параллельное выполнение инструкции {{ i.step_num }}">
-            {% if i.execution_type == 'parallel' %}⚡ параллельно{% else %}⏱ последовательно{% endif %}
-          </button>
-        </div>
+        {{ base_ui.badge('параллельно' if i.execution_type == 'parallel' else 'последовательно', 'info' if i.execution_type == 'parallel' else 'neutral') }}
 {% else %}
         {% call base_ui.prose() %}<p>{{ i.description }}</p>{% endcall %}
         {{ base_ui.badge('параллельно' if i.execution_type == 'parallel' else 'последовательно', 'info' if i.execution_type == 'parallel' else 'neutral') }}
@@ -155,6 +147,9 @@
           <input class="skill-candidate base-control base-input" type="text" placeholder="Добавить навык" aria-label="Добавить навык к инструкции {{ i.step_num }}" onchange="addSkillToInstruction(this)">
 {% endif %}
         </div>
+{% if can_administer %}
+        {{ workflow_cards.actions('instruction', i.step_num, parallel=i.execution_type == 'parallel', first=i.step_num == 1, last=i.step_num == instruction_count) }}
+{% endif %}
       </div>
     </div>
     {% endmacro %}
@@ -163,15 +158,15 @@
       {% set runs = phase.instructions|group_instructions %}
       {% for run in runs %}
         {% if run|length > 1 %}
-          <div class="timeline-block timeline-parallel-group base-card base-card-content">
-            {{ base_ui.badge('⚡ параллельно', 'info', class_name='timeline-parallel-label') }}
+          {% call workflow_cards.parallel_group('Параллельная группа инструкций') %}
+            {{ base_ui.badge('Параллельная группа', 'info', class_name='timeline-parallel-label') }}
             {% for i in run %}
               <div class="timeline-item" data-instruction-id="{{ i.id }}" data-step-num="{{ i.step_num }}" data-type="{{ i.execution_type }}">
                 {{ instruction_body(i, phase.instructions|length) }}
                 <div class="timeline-arrow"{% if loop.last %} hidden{% endif %}>↓</div>
               </div>
             {% endfor %}
-          </div>
+          {% endcall %}
         {% else %}
           {% set i = run[0] %}
           <div class="timeline-block">
@@ -210,7 +205,7 @@
   {% endfor %}
 {% if can_administer %}
   <template id="instructions-empty-template"><div class="empty-state">{{ base_ui.state('empty', 'Нет инструкций') }}</div></template>
-  <template id="instruction-parallel-label-template">{{ base_ui.badge('⚡ параллельно', 'info', class_name='timeline-parallel-label') }}</template>
+  <template id="instruction-parallel-group-template">{% call workflow_cards.parallel_group('Параллельная группа инструкций') %}{{ base_ui.badge('Параллельная группа', 'info', class_name='timeline-parallel-label') }}{% endcall %}</template>
 {% endif %}
 
     </div>

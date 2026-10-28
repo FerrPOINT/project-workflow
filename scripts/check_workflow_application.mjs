@@ -61,7 +61,39 @@ assert.equal(await w.WorkflowApplication.navigate('/workflow/settings'),false);a
 confirmation=true;await go('/settings');assert.equal(w.startEditWorkflow,undefined);
 await go('/workflows?profession_id=1&workflow_id='+metadata.workflows[0].id);
 const phaseLink=d.querySelector('a[href*="/phase/"]');assert.ok(phaseLink);const phaseUrl=new URL(phaseLink.href);await go(phaseUrl.pathname.slice('/workflow'.length)+phaseUrl.search);
-assert.equal(typeof w.scheduleSave,'function');await go('/settings');assert.equal(w.scheduleSave,undefined);
+assert.equal(typeof w.scheduleSave,'function');
+// Shared instruction actions exercise the real owner API and page readback.
+const instructionRows=()=>[...d.querySelectorAll('#instructionsTimeline .timeline-item')];
+async function instructionReadback(predicate){
+ for(let attempt=0;attempt<200;attempt++){
+  if(d.querySelector('main')?.dataset.workflowReadState==='ready'&&!d.querySelector('#phaseSaveEditor')?.matches('[aria-busy="true"]')&&!d.querySelector('.instruction-card-actions .phase-add-btn')?.disabled&&predicate())return;
+  await new Promise(resolve=>setTimeout(resolve,10));
+ }
+ assert.fail('Instruction readback did not settle: '+messages.join('; '));
+}
+await w.addInstructionLast();await instructionReadback(()=>instructionRows().length===1);
+let instructionFirst=instructionRows()[0].dataset.instructionId;
+assert.equal(d.querySelector('.instruction-card-actions').querySelectorAll('button').length,5);
+assert.equal(d.querySelector('.phase-order-controls'),null);
+d.querySelector('.instruction-card-actions .phase-add-btn').click();await instructionReadback(()=>instructionRows().length===2);
+instructionRows()[1].querySelector('.execution-toggle').click();
+await instructionReadback(()=>instructionRows()[1]?.dataset.type==='parallel');
+let instructionGroup=d.querySelector('#instructionsTimeline .workflow-parallel-group');assert.ok(instructionGroup);
+assert.equal(instructionGroup.querySelectorAll('.timeline-item').length,2);
+instructionRows()[1].querySelector('.phase-add-btn').click();await instructionReadback(()=>instructionRows().length===3);
+assert.equal(instructionRows()[2].dataset.type,'parallel','in-group add preserves parallel execution');
+const instructionThird=instructionRows()[2].dataset.instructionId;
+instructionRows()[2].querySelector('.move-up-btn').click();
+await instructionReadback(()=>instructionRows()[1]?.dataset.instructionId===instructionThird);
+assert.equal(messages.pop(),'Порядок инструкций сохранён');
+instructionGroup=d.querySelector('#instructionsTimeline .workflow-parallel-group');assert.equal(instructionGroup.querySelectorAll('.timeline-item').length,3,'reorder keeps the visible shared frame');
+instructionRows()[1].querySelector('.phase-delete-btn').click();
+assert.equal(d.querySelector('#confirmDialog').hidden,false);d.querySelector('#confirmDialogAccept').click();
+await instructionReadback(()=>instructionRows().length===2);
+assert.equal(instructionRows()[0].dataset.instructionId,instructionFirst);
+assert.equal(instructionRows()[0].querySelector('.move-up-btn').disabled,true);
+assert.equal(instructionRows()[1].querySelector('.move-down-btn').disabled,true);
+assertShell();await go('/settings');assert.equal(w.scheduleSave,undefined);
 // An accepted route commits before the owner data is available. Errors belong
 // to the target route and retry does not resurrect data from the outgoing page.
 const outgoing=d.querySelector('main');fail=true;

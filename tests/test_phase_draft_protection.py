@@ -31,6 +31,15 @@ def editor_script():
     listener = template[listener_start:template.index("\n});", listener_start) + len("\n});")]
     ready_marker = "page.ready(" if "page.ready(" in template else "document.addEventListener('DOMContentLoaded'"
     save = template[template.index("let _saveTimer"):template.index(ready_marker, template.index("let _saveTimer"))]
+    controls_start = template.index("function updateInstructionControls()")
+    controls = "\n".join([
+        template[
+            template.index("function getInstructionItems()"):template.index("function renderInstructionTimeline(")
+        ],
+        template[
+            controls_start:template.index("async function persistInstructionOrder(")
+        ],
+    ])
     return "\n".join([
         tracker,
         "const listeners=new Map();const fields=[{dataset:{field:'name'},value:'Original'},"
@@ -41,7 +50,7 @@ def editor_script():
         "querySelectorAll:s=>s.startsWith('.wiki-header')?fields:[]};",
         "const showToast=()=>{};const phaseApiUrl=u=>u;const resizeInlineTextarea=()=>{};",
         "const config={basePath:''};const page={on:(target,type,fn)=>target.addEventListener(type,fn)};",
-        prefix, listener, save,
+        prefix, controls, listener, save,
         "if(typeof phaseDraft!=='undefined'){phaseDraft=createDraftTracker();phaseSignature=currentPhaseSignature();",
         "confirmedPhase={name:'Original',description:'',execution_type:'sync',parallel_with_phase_id:null,checks:[],evidence:[]};}",
         "const edit=value=>{fields[0].value=value;"

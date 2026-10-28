@@ -10,12 +10,13 @@ let phaseSignature = '';
 let confirmedPhase = null;
 let unknownPhaseSave = null;
 let mutationPending = 0;
+let instructionOrderSaving = false;
 let mutationNeedsReadback = false;
 let mutationRequiresReload = false;
 let savingStopped = false;
 const instructionDrafts = new Map();
 const unknownInstructionSaves = new Map();
-window.hasUnsavedWorkflowChanges = () => mutationPending > 0 || mutationNeedsReadback || [...document.querySelectorAll('.skill-candidate')].some(input => input.value.trim()) || !!phaseDraft?.dirty || [...instructionDrafts.values()].some(draft => draft.dirty);
+window.hasUnsavedWorkflowChanges = () => mutationPending > 0 || instructionOrderSaving || mutationNeedsReadback || [...document.querySelectorAll('.skill-candidate')].some(input => input.value.trim()) || !!phaseDraft?.dirty || [...instructionDrafts.values()].some(draft => draft.dirty);
 
 function instructionDraft(input) {
   const id = input.closest('.timeline-card').dataset.instructionId;
@@ -36,6 +37,7 @@ function updatePhaseSaveStatus() {
   if (button) button.hidden = !unknownPhaseSave && !unknownInstructionSaves.size && !mutationNeedsReadback && !mutationRequiresReload;
   const save = document.getElementById('phaseSaveEditor');
   if (save) { save.disabled = mutationPending > 0 || !!phaseDraft?.pending || [...instructionDrafts.values()].some(draft => draft.pending); save.setAttribute('aria-busy', String(save.disabled)); }
+  updateInstructionControls();
 }
 const selectedNamespaceId = config.professionId;
 const phaseSectionIds = ['phase-overview', 'phase-instructions', 'phase-checks', 'phase-evidence'];
@@ -208,11 +210,10 @@ function renderInstructionTimeline(items) {
       idx++;
     }
     const isParallelGroup = group.length > 1;
-    const block = document.createElement('div');
-    block.className = 'timeline-block' + (isParallelGroup ? ' timeline-parallel-group base-card base-card-content' : '');
-    if (isParallelGroup) {
-      block.appendChild(document.getElementById('instruction-parallel-label-template').content.cloneNode(true));
-    }
+    const block = isParallelGroup
+      ? document.getElementById('instruction-parallel-group-template').content.firstElementChild.cloneNode(true)
+      : document.createElement('div');
+    if (!isParallelGroup) block.className = 'timeline-block';
     group.forEach((item, groupIndex) => {
       const innerArrow = item.querySelector('.timeline-arrow');
       if (innerArrow) innerArrow.hidden = !(isParallelGroup && groupIndex < group.length - 1);
@@ -228,15 +229,16 @@ function renderInstructionTimeline(items) {
   timeline.querySelectorAll('textarea[data-base-autosize]').forEach(field => window.PdlcTextarea?.initTextareaAutosize(field));
 }
 
-let instructionOrderSaving = false;
 
 function updateInstructionControls() {
   const items = getInstructionItems();
   items.forEach((item, idx) => {
     const up = item.querySelector('.move-up-btn');
     const down = item.querySelector('.move-down-btn');
-    if (up) up.disabled = instructionOrderSaving || idx === 0;
-    if (down) down.disabled = instructionOrderSaving || idx === items.length - 1;
+    const pending = instructionOrderSaving || mutationPending > 0;
+    item.querySelectorAll('.instruction-card-actions button').forEach(button => { button.disabled = pending; });
+    if (up) up.disabled = pending || idx === 0;
+    if (down) down.disabled = pending || idx === items.length - 1;
   });
 }
 
@@ -313,7 +315,7 @@ async function addInstructionAfter(button) {
     const result = await requestPhaseDetail(phaseApiUrl('' + config.basePath + '/api/instructions'), {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({phase_id: phaseId, description: 'Новая инструкция', step_num: stepNum}),
+      body: JSON.stringify({phase_id: phaseId, description: 'Новая инструкция', step_num: stepNum, execution_type: item.closest('.workflow-parallel-group') ? 'parallel' : 'sync'}),
     });
     if (!result) return;
     const {resp, data} = result;
@@ -703,6 +705,15 @@ page.ready(() => {
   renderInstructionTimeline(getInstructionItems());
   updateInstructionControls();
 });
+page.on(document,'click',event=>{
+  const button=event.target.closest?.('.instruction-card-actions button');
+  if(!button||button.disabled)return;
+  if(button.matches('.phase-add-btn'))void addInstructionAfter(button);
+  else if(button.matches('.move-up-btn'))void moveInstruction(button,-1);
+  else if(button.matches('.move-down-btn'))void moveInstruction(button,1);
+  else if(button.matches('.execution-toggle'))void toggleInstructionType(button);
+  else if(button.matches('.phase-delete-btn'))void deleteInstruction(button);
+});
 page.on(document,'input', (event) => {
   if (event.target.matches('.timeline-name-input')) instructionDraft(event.target).edit();
   else if (event.target.closest('.wiki-header, #checks-list, #evidence-list')) notePhaseEdit();
@@ -760,6 +771,6 @@ updateInstructionControls:typeof updateInstructionControls==='function'?updateIn
 updatePhaseSaveStatus:typeof updatePhaseSaveStatus==='function'?updatePhaseSaveStatus:undefined,
 });
 page.handlesHistory=true;
-page.busy=()=>typeof mutationPending!=='undefined'&&(mutationPending>0||!!phaseDraft?.pending||[...instructionDrafts.values()].some(draft=>draft.pending));
+page.busy=()=>typeof mutationPending!=='undefined'&&(mutationPending>0||instructionOrderSaving||!!phaseDraft?.pending||[...instructionDrafts.values()].some(draft=>draft.pending));
 };
 })();

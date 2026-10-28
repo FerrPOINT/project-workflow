@@ -84,7 +84,7 @@ def test_editor_uses_the_shared_segmented_radio_group_and_preserves_permissions(
     assert controller_source("workflows", admin)[0].decode().count("function selectMode(") == 1
     assert controller_source("workflows", admin)[0].decode().count("function jumpToPhase(") == 1
     assert ('id="workflowForm"' in html) == admin
-    assert ('class="phase-card-actions"' in html) == admin
+    assert any('phase-card-actions' in attrs.get('class', '').split() for _, attrs in elements) == admin
     headings = {attrs.get("id"): attrs for tag, attrs in elements if tag == "h2"}
     for heading_id in ["workflowSummaryName", "workflowPhasesTitle"]:
         assert "base-section-title" in headings[heading_id]["class"].split()
