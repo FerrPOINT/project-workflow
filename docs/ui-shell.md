@@ -274,3 +274,7 @@ wrapping-ряду сразу после последнего навыка, вк�
 На узком экране оглавление заменяется существующим выбором раздела. Проверять
 совпадение краёв редактора/контента с PageFrame и отсутствие overflow, а не
 только наличие wide/detail класса. Сам PageFrame и общие gutters принадлежат Base.
+
+### Additional browser origin
+
+An operator-managed HTTPS alias may be listed explicitly in `AUTH_BROWSER_ORIGINS` (JSON array). The default is empty; the canonical AUTH_PUBLIC_ORIGIN remains accepted. Each entry must be an exact HTTP(S) origin with no wildcard, userinfo, path, query or fragment. Cookie writes require an exact Origin match; absent/foreign/scheme-or-port-changed origins remain forbidden. This setting does not change OIDC issuer, registered redirects, PAT scopes or roles. A proxy must preserve the browser's Origin header.
