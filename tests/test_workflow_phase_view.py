@@ -109,6 +109,7 @@ def test_phase_view_restores_without_a_write_and_changes_only_on_a_checked_selec
     source = html[start:end]
     script = """
 const storage=STORAGE;const writes=[],ready=[];
+const page={ready:callback=>ready.push(callback),on:(target,type,callback)=>target.addEventListener(type,callback)};
 class HTMLInputElement{constructor(value){this.value=value;this.name='phase-view';this.checked=value==='compact';}}
 const radios=['compact','timeline'].map(value=>new HTMLInputElement(value));
 const classes=new Set(['base-resource-list-row']);
@@ -119,7 +120,7 @@ let changed;
 const group={addEventListener(type,callback){if(type==='change')changed=callback;}};
 const document={getElementById:id=>id==='phasesTimeline'?timeline:id==='phaseView'?group:null,
  querySelectorAll:selector=>selector.includes('phase-card-actions')?[]:radios,
- addEventListener(type,callback){if(type==='DOMContentLoaded')ready.push(callback);}};
+ addEventListener(type,callback){if(type==='DOMContentLoaded')ready.push(callback);if(type==='change')changed=callback;}};
 const localStorage={getItem(){if(storage==='unavailable')throw Error('storage');return storage;},
  setItem(key,value){if(storage==='unavailable')throw Error('storage');writes.push([key,value]);}};
 SOURCE

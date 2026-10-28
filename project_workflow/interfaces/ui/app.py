@@ -10,7 +10,7 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from pydantic import ValidationError
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
@@ -195,6 +195,14 @@ def create_app() -> FastAPI:
         StaticFiles(directory=Path(__file__).parent / "templates/base/fonts"),
         name="base-fonts",
     )
+    @app.get("/ui-assets/htmx-2.0.11.min.js", include_in_schema=False)
+    def navigation_runtime() -> FileResponse:
+        return FileResponse(
+            Path(__file__).parent / "templates/vendor/htmx-2.0.11.min.js",
+            media_type="text/javascript",
+            headers={"Cache-Control": "public, max-age=31536000, immutable"},
+        )
+
     app.add_middleware(_RequestLoggingMiddleware)
     app.add_middleware(_UoWMiddleware)
     install_sso(app)

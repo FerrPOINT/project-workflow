@@ -11,7 +11,13 @@ export function installServerProduct(runtime, options) {
       : field.tagName === 'SELECT' && field.multiple ? [...field.selectedOptions].map(option => option.value) : field.value,
     ['checkbox', 'radio'].includes(field.type) ? field.checked : null,
   ]))
-  for (const form of document.querySelectorAll('form[data-platform-draft]')) snapshots.set(form, snapshot(form))
+  /** @param {ParentNode} [root] */
+  const trackForms = (root = document) => {
+    for (const form of snapshots.keys()) if (!form.isConnected) snapshots.delete(form)
+    if (root instanceof HTMLFormElement && root.matches('form[data-platform-draft]')) snapshots.set(root, snapshot(root))
+    for (const form of root.querySelectorAll('form[data-platform-draft]')) snapshots.set(form, snapshot(form))
+  }
+  trackForms()
   let retired = false
   const dirty = () => !retired && (!!options.hasUnsavedChanges?.() || [...snapshots].some(([form, saved]) => form.isConnected && saved !== snapshot(form)))
   let pendingLeave = null
@@ -29,13 +35,13 @@ export function installServerProduct(runtime, options) {
   document.addEventListener('input', event => {
     if (event.target instanceof Element && event.target.closest('form[data-platform-draft]')) refreshDrafts()
   })
-  const checkLeave = () => {
+  const checkLeave = (discard = true) => {
     if (!dirty()) return true
     return new Promise(resolve => {
       pendingLeave?.(false); pendingLeave = resolve
       Promise.resolve(options.confirmLeave ? options.confirmLeave() : window.confirm('На странице есть несохранённые изменения. Покинуть страницу?')).then(allowed => {
         if (pendingLeave !== resolve) return
-        pendingLeave = null; if (allowed) options.onDiscard?.(); resolve(allowed)
+        pendingLeave = null; if (allowed && discard) options.onDiscard?.(); resolve(allowed)
       }, () => { if (pendingLeave === resolve) { pendingLeave = null; resolve(false) } })
     })
   }
@@ -55,6 +61,9 @@ export function installServerProduct(runtime, options) {
     }
   }
   const access = options.admission ? installAdmissionWindow(options.admission, retireAccess) : null
+  // Partial navigation confirms before fetching and discards only after a successful swap.
+  const controller = { retire: retireAccess, canLeave: () => checkLeave(false), trackForms,
+    isCurrent: () => !retired && (!access || access.current()) }
   if (!client) {
     const depart = action => { void Promise.resolve(checkLeave()).then(allowed => { if (allowed) { approvedUnload = true; action() } }) }
     window.PdlcPlatformNavigation.navigate = (url, navigationOptions) => depart(() => runtime.platformNavigate(url, navigationOptions))
@@ -67,7 +76,7 @@ export function installServerProduct(runtime, options) {
       event.preventDefault()
       window.PdlcPlatformNavigation.navigate(url.href)
     })
-    return
+    return controller
   }
   window.PdlcPlatformNavigation.embedded = true
   window.PdlcPlatformNavigation.syncRoute = (url, replace = false, state = null) => {
@@ -109,9 +118,9 @@ export function installServerProduct(runtime, options) {
   })
   if (document.documentElement.hasAttribute('data-platform-login-required')) {
     client.requireLogin('/')
-    return
+    return controller
   }
-  if (options.error) { client.readiness({ ready: false, error: options.error }); return }
+  if (options.error) { client.readiness({ ready: false, error: options.error }); return controller }
   const finish = () => {
     const main = document.querySelector('main')
     client.readiness({ ready: !retired && (!access || access.current()) && !!main?.textContent?.trim(), error: main ? null : 'Основное содержимое страницы отсутствует.' })
@@ -119,6 +128,7 @@ export function installServerProduct(runtime, options) {
   // SSR primary data has already been loaded by the owner before producing HTML.
   if (document.fonts) void document.fonts.ready.then(finish)
   else finish()
+  return controller
 }
 
 

@@ -259,10 +259,10 @@ class SharedShellTemplateTests(TestCase):
         self.assertNotIn("href", wiki)
         self.assertEqual(wiki["aria-disabled"], "true")
 
-    def test_empty_profession_catalog_does_not_create_an_empty_selector(self):
+    def test_empty_catalog_reserves_context_slot_without_an_empty_selector(self):
         elements = Elements(self.render_shell([])).elements
         self.assertFalse(any(tag == "select" and "data-namespace-selector" in attrs for tag, attrs in elements))
-        self.assertFalse(any("data-base-responsive-context" in attrs for _, attrs in elements))
+        self.assertEqual(sum("data-base-responsive-context" in attrs for _, attrs in elements), 1)
         main = next(attrs for tag, attrs in elements if tag == "main")
         self.assertEqual(main["tabindex"], "-1")
         self.assertEqual(main["aria-label"], "Project Workflow")
@@ -325,6 +325,8 @@ class SharedShellTemplateTests(TestCase):
                                                      required=True, default=0)])],
         )
         elements = Elements(html).elements
+        frame = next(attrs for _, attrs in elements if "data-page-layout" in attrs)
+        self.assertEqual(frame["data-page-layout"], "wide")
         heading = next(attrs for tag, attrs in elements if tag == "h2" and attrs.get("id") == "cliCommand1")
         self.assertIn("base-section-title", heading["class"].split())
         block = next(attrs for tag, attrs in elements if tag == "pre" and attrs.get("id") == "cliUsage1")
@@ -1091,7 +1093,7 @@ class SharedShellTemplateTests(TestCase):
         self.assertIn("link.hash.slice(1)", html)
         self.assertIn("phaseSectionNavigationLock = sectionId;", html)
         self.assertIn("window.PdlcPlatformNavigation.syncRoute(nextUrl, method === 'replaceState');", html)
-        self.assertIn("window.addEventListener('popstate', restorePhaseSectionFromLocation);", html)
+        self.assertIn("page.on(window,'popstate', restorePhaseSectionFromLocation);", html)
 
     def test_section_navigation_macros_keep_native_links_and_escape_labels(self):
         templates = Path(__file__).parents[1] / "project_workflow/interfaces/ui/templates"
