@@ -120,18 +120,36 @@
             "title": "Tracker Task Id",
             "type": "string"
           },
+          "workflow_id": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Id"
+          },
           "workflow_key": {
-            "maxLength": 128,
-            "minLength": 1,
-            "title": "Workflow Key",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Key"
           }
         },
         "required": [
           "interaction_protocol",
           "task",
           "namespace_id",
-          "workflow_key",
           "mode_key",
           "operation_key",
           "assignment_ref",

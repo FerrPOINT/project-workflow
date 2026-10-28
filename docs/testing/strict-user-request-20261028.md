@@ -53,7 +53,7 @@ Fleet установлен из образа
 Предварительная проверка обновления сохранила 43 исходные таблицы, 33 старые
 строки migration ledger и файлы агентов. Это подготовка среды, не живая приёмка.
 
-Сырые evidence находятся в локальном защищённом каталоге
+Сырые evidence находятся в локальном каталоге
 `.local/workflow-fileless-20261027/qualification/strict-user-request-20261028-01/`:
 `freeze.json`, исходный POST, original-key GET, сообщения и запуск Fleet,
 отдельно помеченные forensic CLI context/step/history. Секреты не публикуются.

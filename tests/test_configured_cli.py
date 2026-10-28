@@ -90,6 +90,78 @@ def step(f, **extra):
     )
 
 
+@pytest.mark.parametrize("configured", [("project_manager", "draft"), ("developer", "rework")], indirect=True)
+def test_numeric_workflow_selection_keeps_custom_workflow_in_profession(configured):
+    client, assignment = configured
+    with SAUnitOfWork() as uow:
+        selected = uow.workflows.create({"name": "Selected sandbox"})
+        uow.workflows.assign_profession(selected, assignment["namespace_id"])
+        mode = uow.workflows.create_mode({"workflow_id": selected, "key": assignment["mode_key"],
+                                          "name": "Selected mode", "mode_order": 2})
+        uow.phases.create({"workflow_id": selected, "mode_id": mode, "code": "SELECTED-01",
+                           "name": "Selected phase", "phase_order": 1})
+        uow.commit()
+    request = {key: value for key, value in assignment.items() if key != "workflow_key"}
+    request["workflow_id"] = selected
+    response = client.post("/internal/runtime/assign", headers=WRITER, json=request)
+    assert response.status_code == 200, response.text
+    original = response.json()["result"]
+    assert original["workflow_id"] == selected
+    assert original["phase_code"] == "SELECTED-01"
+    assert step(configured).json()["result"]["workflow_id"] == selected
+    assert client.post("/internal/runtime/assign", headers=WRITER, json=request).json()["result"] == original
+
+
+@pytest.mark.parametrize("reference", [{}, {"workflow_id": 0}, {"workflow_id": True},
+                                        {"workflow_id": "1"}, {"workflow_id": 1, "workflow_key": "other"}])
+def test_enrollment_requires_one_canonical_workflow_reference(configured, reference):
+    client, assignment = configured
+    request = {key: value for key, value in assignment.items() if key != "workflow_key"}
+    assert client.post("/internal/runtime/assign", headers=WRITER, json={**request, **reference}).status_code == 422
+
+
+def test_numeric_workflow_selection_rejects_another_profession(configured):
+    client, assignment = configured
+    with SAUnitOfWork() as uow:
+        foreign = next(w for w in uow.workflows.list()
+                       if not uow.workflows.belongs_to_profession(w.id, assignment["namespace_id"]))
+    request = {key: value for key, value in assignment.items() if key != "workflow_key"}
+    response = client.post("/internal/runtime/assign", headers=WRITER, json={**request, "workflow_id": foreign.id})
+    assert response.status_code == 409
+
+
+@pytest.mark.parametrize("catalog_state", ["missing-mode", "empty-mode"])
+def test_selected_workflow_must_have_executable_assigned_mode(configured, catalog_state):
+    client, assignment = configured
+    with SAUnitOfWork() as uow:
+        selected = uow.workflows.create({"name": "Incomplete custom workflow"})
+        uow.workflows.assign_profession(selected, assignment["namespace_id"])
+        if catalog_state == "empty-mode":
+            uow.workflows.create_mode({"workflow_id": selected, "key": assignment["mode_key"],
+                                      "name": "Empty mode", "mode_order": 2})
+        uow.commit()
+    request = {key: value for key, value in assignment.items() if key != "workflow_key"}
+    response = client.post("/internal/runtime/assign", headers=WRITER, json={**request, "workflow_id": selected})
+    assert response.status_code == 409, response.text
+    with SAUnitOfWork() as uow:
+        assert uow.tasks.get_by_key(assignment["task"], project_id=assignment["namespace_id"]) is None
+
+
+@pytest.mark.parametrize("reference", [
+    {"workflow_id": None, "workflow_key": "single-task-v1:project_manager"},
+    {"workflow_id": None, "workflow_key": " single-task-v1:project_manager"},
+    {"workflow_id": None, "workflow_key": "single-task-v1:analyst"},
+])
+def test_keyed_workflow_reference_preserves_validation_and_replay(configured, reference):
+    client, assignment = configured
+    response = client.post("/internal/runtime/assign", headers=WRITER, json={**assignment, **reference})
+    if reference["workflow_key"] == assignment["workflow_key"]:
+        assert response.status_code == 200, response.text
+        assert enroll(configured) == response.json()["result"]
+    else:
+        assert response.status_code == 422, response.text
+
+
 @pytest.mark.parametrize(
     "configured",
     [

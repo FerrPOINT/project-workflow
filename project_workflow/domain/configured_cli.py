@@ -22,7 +22,8 @@ class ConfiguredAssignment(BaseModel):
     interaction_protocol: Literal["configured-cli-v1"]
     task: str = Field(min_length=1, max_length=128)
     namespace_id: int = Field(gt=0, strict=True)
-    workflow_key: str = Field(min_length=1, max_length=128)
+    workflow_id: int | None = Field(default=None, gt=0, strict=True)
+    workflow_key: str | None = Field(default=None, min_length=1, max_length=128)
     mode_key: str
     role_key: str = "project_manager"
     operation_key: str = Field(min_length=1, max_length=128)
@@ -38,17 +39,21 @@ class ConfiguredAssignment(BaseModel):
 
     @model_validator(mode="after")
     def business_identity(self) -> ConfiguredAssignment:
+        if (self.workflow_id is None) == (self.workflow_key is None):
+            raise ValueError("Exactly one workflow reference required")
         if self.business_task_ref != self.tracker_task_id:
             raise ValueError("business_task_ref must be the canonical Tracker task UUID")
         if (self.role_key not in ROLE_MODES or self.mode_key not in ROLE_MODES[self.role_key]
-                or (self.workflow_key.startswith("single-task-v1:")
+                or (self.workflow_key is not None and self.workflow_key.startswith("single-task-v1:")
                     and self.workflow_key != f"single-task-v1:{self.role_key}")):
             raise ValueError("Workflow, profession and mode must match the installed catalog")
         return self
 
     @field_validator("task", "workflow_key", "operation_key", "assignment_ref", "business_task_ref")
     @classmethod
-    def bounded_text(cls, value: str) -> str:
+    def bounded_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
         if value != value.strip() or not value or any(ord(c) < 32 or ord(c) == 127 for c in value):
             raise ValueError("Nonempty canonical text required")
         return value

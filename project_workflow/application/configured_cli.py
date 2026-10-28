@@ -98,7 +98,8 @@ def _configured_row(uow: SAUnitOfWork, task: str, namespace_id: int,
     mode = uow.workflows.get_mode(assignment.mode_id, workflow.id)
     if (payload.get("interaction_protocol") != PROTOCOL or request.task != task
             or request.namespace_id != namespace_id or request.operation_key != assignment.operation_key
-            or request.workflow_key != workflow.key
+            or (request.workflow_id != workflow.id if request.workflow_id is not None
+                else request.workflow_key != workflow.key)
             or mode is None or mode.key != request.mode_key
             or assignment.payload_sha256 is not None or assignment.hermes_run_ref is not None
             or assignment.bind_operation_key is not None):
@@ -146,13 +147,15 @@ def enroll(uow: SAUnitOfWork, request: ConfiguredAssignment) -> dict[str, Any]:
 
     _require_valid_key(request.task)
     project, workflow, mode = _catalog(uow, request.namespace_id,
-                                     workflow_key=request.workflow_key, mode_key=request.mode_key, execution=True)
+                                     workflow_key=request.workflow_key, workflow_id=request.workflow_id,
+                                     mode_key=request.mode_key, execution=True)
+    request_data = request.model_dump(mode="json", exclude_none=True)
     saved = uow.session.scalar(select(m.TaskRuntimeAssignment).where(
         m.TaskRuntimeAssignment.operation_key == request.operation_key,
     ))
     if saved is not None:
         payload = json.loads(saved.payload)
-        if payload.get("request") != request.model_dump(mode="json"):
+        if payload.get("request") != request_data:
             raise ConflictError("Enrollment operation key payload conflict")
         _, current, _ = _row(uow, request.task, request.namespace_id)
         if current.id != saved.id:
@@ -161,7 +164,7 @@ def enroll(uow: SAUnitOfWork, request: ConfiguredAssignment) -> dict[str, Any]:
         if not isinstance(original, dict):
             raise ConflictError("Historical enrollment has no original cursor; use history readback")
         return original
-    configured_cli_tracker.assignment(request.model_dump(mode="json"))
+    configured_cli_tracker.assignment(request_data)
     phases = list(uow.phases.list(workflow.id, mode_id=mode.id))
     if not phases:
         raise ConflictError("Assigned mode has no initial phase")
@@ -219,7 +222,7 @@ def enroll(uow: SAUnitOfWork, request: ConfiguredAssignment) -> dict[str, Any]:
                                     "entered" if current.status == "done" else "resumed")
     payload = {"interaction_protocol": PROTOCOL, "execution_ref": str(uuid4()),
                "initial_version": initial_version, "history_after_id": history_after_id,
-               "request": request.model_dump(mode="json")}
+               "request": request_data}
     result = cursor(uow, uow.tasks.get_by_id(task_id), payload)
     payload["enrollment_result"] = result
     # Existing nullable metadata family; do not fabricate any native binding columns.
