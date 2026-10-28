@@ -78,5 +78,32 @@ class RecorderChecks(unittest.TestCase):
         run.assert_not_called()
 
 
+class OperationReadbackChecks(unittest.TestCase):
+    def test_absent_result_keys_cannot_falsely_prove_operation_identity(self):
+        response = {"execution_ref": "synthetic-unit-execution", "verdict": "PASS"}
+        row = {"history_id": 1, "worker_report": "same text", "result": response}
+        write = {"argv": ["project-workflow", "step", "--operation-key", "first"],
+                 "report": "same text", "stdout": json.dumps(response), "exit_code": 0}
+        # Neither response contains operation_key. None == None is not proof.
+        with self.assertRaisesRegex(ValueError, "Actual CLI operation readback"):
+            cli.verify_operation_readbacks([write], [write], [row], "unit-only")
+
+    def test_operation_selector_must_match_both_key_and_saved_response(self):
+        response = {"execution_ref": "synthetic-unit-execution", "verdict": "PARTIAL"}
+        row = {"history_id": 1, "worker_report": "actual unit report", "result": response}
+        write = {"argv": ["project-workflow", "step", "--operation-key", "first"],
+                 "report": row["worker_report"], "stdout": json.dumps(response), "exit_code": 0}
+        read = {"argv": ["project-workflow", "history", "--operation-key", "first"], "exit_code": 0,
+                "stdout": json.dumps({"execution_ref": response["execution_ref"],
+                                      "records": [row], "next_before": None})}
+        cli.verify_operation_readbacks([write], [write, read], [row], "unit-only")
+        foreign = {**read, "argv": ["project-workflow", "history", "--operation-key", "second"]}
+        with self.assertRaisesRegex(ValueError, "Actual CLI operation readback"):
+            cli.verify_operation_readbacks([write], [write, foreign], [row], "unit-only")
+        changed = {**write, "stdout": json.dumps({**response, "verdict": "PASS"})}
+        with self.assertRaisesRegex(ValueError, "Actual CLI operation readback"):
+            cli.verify_operation_readbacks([changed], [changed, read], [row], "unit-only")
+
+
 if __name__ == "__main__":
     unittest.main()

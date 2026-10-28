@@ -100,6 +100,33 @@ def invoke(root: Path, case: str, task: str, action: str, *, executable: str,
     return exit_code
 
 
+def verify_operation_readbacks(writes: list[dict], calls: list[dict], records: list[dict], case: str) -> None:
+    """Bind every successful write to its actual CLI operation-selector readback."""
+    for call in writes:
+        arguments = call["argv"]
+        if "--operation-key" not in arguments:
+            raise ValueError(f"Submitted operation key is missing for {case}")
+        key = arguments[arguments.index("--operation-key") + 1]
+        response = json.loads(call["stdout"])
+        proven = False
+        for read in calls:
+            args = read["argv"]
+            if (read["exit_code"] or "history" not in args or "--operation-key" not in args
+                    or args[args.index("--operation-key") + 1] != key):
+                continue
+            selected = json.loads(read["stdout"])
+            rows = selected.get("records", [])
+            if (len(rows) == 1 and selected.get("next_before") is None
+                    and selected.get("execution_ref") == response["execution_ref"]
+                    and rows[0].get("worker_report") == call["report"]
+                    and rows[0].get("result") == response
+                    and rows[0] in records):
+                proven = True
+                break
+        if not proven:
+            raise ValueError(f"Actual CLI operation readback is missing or differs for {case}: {key}")
+
+
 def finish(root: Path) -> None:
     from oracle import check_calculator
 
@@ -143,11 +170,7 @@ def finish(root: Path) -> None:
                     or not response.get("current_phase_code")
                     or response.get("phase_code") != response["current_phase_code"]):
                 raise ValueError(f"Advisor advanced or did not reject the actual incomplete report for {name}")
-        for call in writes:
-            response = json.loads(call["stdout"])
-            if not any(row["worker_report"] == call["report"]
-                       and row["result"].get("operation_key") == response.get("operation_key") for row in records):
-                raise ValueError(f"CLI history does not contain the submitted operation for {name}")
+        verify_operation_readbacks(writes, own, records, name)
         accepted = {row["result"].get("current_phase_code") for row in records
                     if row["result"].get("verdict") == "PASS"}
         workflow = next(w for w in prepared_catalog["workflows"] if w["role_key"] == pair[0])
