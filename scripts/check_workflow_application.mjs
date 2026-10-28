@@ -109,6 +109,30 @@ skillForm.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));aw
 skillCard.querySelector('.skill-add-trigger').click();skillInput.value='Отменённый ввод';const beforeCancel=skillWrites;
 skillInput.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));
 assert.equal(skillForm.hidden,true);assert.equal(skillInput.value,'');assert.equal(skillWrites,beforeCancel);
+// The compact field is a tag input, and each existing name opens its own editor.
+assert.ok(skillInput.classList.contains('base-badge-input'));
+assert.equal(skillForm.querySelectorAll('button').length,0,'Enter/Escape own the compact field without a large action row');
+function renameEditor(){skillCard.querySelector('.skill-rename-btn').click();const input=skillCard.querySelector('.skill-rename-input:not([hidden])');assert.equal(d.activeElement,input);return input;}
+const renameKey=(input,key)=>input.dispatchEvent(new w.KeyboardEvent('keydown',{key,bubbles:true,cancelable:true}));
+let editor=renameEditor();editor.value='Отмена переименования';let renameWrites=skillWrites;renameKey(editor,'Escape');
+assert.equal(editor.hidden,true);assert.deepEqual(skillNames(),[skillName]);assert.equal(skillWrites,renameWrites);
+editor=renameEditor();const renamed='переименованный <safe> "навык"';editor.value=renamed;skillFailure=true;renameKey(editor,'Enter');
+await instructionReadback(()=>!skillsGroup.hasAttribute('aria-busy'));
+assert.equal(messages.pop(),'Skill rejected');assert.equal(editor.hidden,false);assert.equal(editor.value,renamed);assert.deepEqual(skillNames(),[skillName]);
+skillFailure=false;renameWrites=skillWrites;renameKey(editor,'Enter');renameKey(editor,'Enter');
+await instructionReadback(()=>!skillsGroup.hasAttribute('aria-busy')&&skillNames()[0]===renamed);
+assert.equal(skillWrites-renameWrites,1);assert.equal(skillCard.querySelector('.skill-rename-btn').textContent,renamed);assert.equal(skillCard.querySelector('safe'),null);assert.equal(skillPlacement(),true);assertShell();
+// A duplicate/empty rename never silently merges or deletes a different tag.
+skillCard.querySelector('.skill-add-trigger').click();skillInput.value='Другой навык';await w.addSkillToInstruction(skillInput);
+editor=renameEditor();renameWrites=skillWrites;editor.value='Другой навык';renameKey(editor,'Enter');
+assert.equal(messages.pop(),'Такой навык уже добавлен');assert.equal(skillWrites,renameWrites);assert.deepEqual(skillNames(),[renamed,'Другой навык']);
+editor.value='   ';renameKey(editor,'Enter');assert.equal(editor.hidden,true);assert.equal(skillWrites,renameWrites);assert.deepEqual(skillNames(),[renamed,'Другой навык']);
+// Blur commits at the same boundary; a remove click does not commit the text draft.
+editor=renameEditor();editor.value='Сохранено при уходе';skillCard.querySelector('.skill-add-trigger').focus();
+await instructionReadback(()=>!skillsGroup.hasAttribute('aria-busy')&&skillNames()[0]==='Сохранено при уходе');
+editor=renameEditor();editor.value='Не сохранять перед удалением';renameWrites=skillWrites;const removeDuringRename=skillCard.querySelector('.skill-remove-btn');removeDuringRename.focus();removeDuringRename.click();
+await instructionReadback(()=>!skillsGroup.hasAttribute('aria-busy')&&skillNames().length===1);
+assert.equal(skillWrites-renameWrites,1,'cross deletes without a competing rename');assert.deepEqual(skillNames(),['Другой навык']);assertShell();
 await w.removeSkillFromInstruction(skillCard.querySelector('.skill-remove-btn'));
 assert.deepEqual(skillNames(),[]);assert.equal(skillCard.isConnected,true);assert.equal(skillCard.querySelector('.skill-add-trigger').hidden,false);assertShell();
 

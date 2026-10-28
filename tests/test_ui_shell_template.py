@@ -847,6 +847,14 @@ class SharedShellTemplateTests(TestCase):
                 remove = [attrs for tag, attrs in elements if tag == "button" and
                           "skill-remove-btn" in attrs.get("class", "").split() and attrs.get("value")]
                 self.assertEqual([button["value"] for button in remove], skills)
+                rename = [attrs for tag, attrs in elements if tag == "button" and
+                          "skill-rename-btn" in attrs.get("class", "").split() and attrs.get("value")]
+                self.assertEqual([button["value"] for button in rename], skills)
+                editors = [attrs for tag, attrs in elements if tag == "input" and
+                           "skill-rename-input" in attrs.get("class", "").split() and attrs.get("value")]
+                self.assertEqual([editor["value"] for editor in editors], skills)
+                self.assertTrue(all("hidden" in editor and "base-badge-input" in editor["class"].split()
+                                    for editor in editors))
                 for button in remove:
                     self.assertTrue({"base-badge", "base-badge-button"} <= set(button["class"].split()))
                     self.assertEqual(button["data-appearance"], "inline")

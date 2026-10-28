@@ -30,10 +30,8 @@
 .instruction-skill-chip{display:inline-flex;align-items:center;gap:0;min-width:0;max-width:100%}
 .instruction-skill-chip > .base-badge{min-width:0}
 .skill-add-item{display:inline-flex;flex:none;min-width:0;max-width:100%}
-.skill-add-item:has(.skill-add-form:not([hidden])){flex:0 1 320px}
-.skill-add-form{display:flex;align-items:center;gap:6px;width:100%;max-width:320px;min-width:0}
+.skill-add-form{display:inline-flex;align-items:center;max-width:100%;min-width:0}
 .skill-add-form[hidden],.skill-add-trigger[hidden]{display:none}
-.skill-add-form .skill-candidate{flex:1;min-width:0;width:100%}
 #instructionsTimeline{gap:12px;max-width:none}
 
 {% endblock %}
@@ -124,9 +122,7 @@
 {% if can_administer %}
             <span class="skill-add-item" role="listitem">{{ base_ui.badge_button('+', tone='info', class_name='skill-add-trigger', aria_label='Добавить навык к инструкции ' ~ i.step_num, aria_controls='instruction-skill-form-' ~ i.id, title='Добавить навык') }}
           <form method="post" class="skill-add-form" id="instruction-skill-form-{{ i.id }}" hidden aria-label="Добавление навыка к инструкции {{ i.step_num }}">
-            <input class="skill-candidate base-control base-input" type="text" placeholder="Название навыка" aria-label="Название нового навыка к инструкции {{ i.step_num }}" autocomplete="off" required>
-            {{ base_ui.button('✓', type='submit', size='icon', variant='outline', aria_label='Добавить введённый навык', title='Добавить навык · Enter') }}
-            {{ base_ui.button('×', size='icon', variant='ghost', class_name='skill-add-cancel', aria_label='Отменить добавление навыка', title='Отменить · Escape') }}
+            {{ base_ui.badge_input(tone='info', class_name='skill-candidate', placeholder='Навык', aria_label='Название нового навыка к инструкции ' ~ i.step_num, size=6) }}
           </form>
             </span>
 {% endif %}

@@ -286,3 +286,7 @@
 {% macro service_switcher_item(key, label, href=none, current=false, health='unknown') -%}
 <a class="base-ssr-service-item" data-platform-service="{{ key }}"{% if href %} href="{{ href }}"{% else %} aria-disabled="true" tabindex="-1" title="Адрес сервиса недоступен: дождитесь восстановления каталога своего стенда"{% endif %}{% if current %} aria-current="page"{% endif %}><span class="base-ssr-service-health" data-health="{{ health if health in ['healthy', 'unreachable'] else 'unknown' }}" role="img" aria-label="{{ 'Работает' if health == 'healthy' else 'Недоступен' if health == 'unreachable' else 'Состояние неизвестно' }}"></span><span>{{ label }}</span>{% if current %}<span class="base-ssr-service-current">Текущий</span>{% endif %}</a>
 {%- endmacro %}
+
+{% macro badge_input(value='', tone='neutral', appearance='badge', class_name='', aria_label=none, placeholder=none, size=8, hidden=false, disabled=false) -%}
+<input type="text" class="base-badge base-badge-input{% if class_name %} {{ class_name }}{% endif %}" data-tone="{{ tone }}" data-appearance="{{ appearance }}" value="{{ value }}" size="{{ size }}" autocomplete="off"{% if aria_label %} aria-label="{{ aria_label }}"{% endif %}{% if placeholder %} placeholder="{{ placeholder }}"{% endif %}{% if hidden %} hidden{% endif %}{% if disabled %} disabled{% endif %}>
+{%- endmacro %}

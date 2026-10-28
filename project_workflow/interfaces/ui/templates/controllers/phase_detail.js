@@ -432,8 +432,15 @@ function renderInstructionSkills(card, skills) {
   const chips = skills.map(skill => {
     const chip = template.content.firstElementChild.cloneNode(true);
     const label = chip.querySelector('.instruction-skill-name');
-    label.textContent = skill;
     label.dataset.instructionSkill = skill;
+    const rename = label.querySelector('.skill-rename-btn');
+    rename.textContent = skill;
+    rename.value = skill;
+    rename.setAttribute('aria-label', 'Переименовать навык ' + skill + ' в инструкции ' + card.dataset.stepNum);
+    const editor = chip.querySelector('.skill-rename-input');
+    editor.value = editor.defaultValue = skill;
+    editor.setAttribute('aria-label', 'Новое название навыка ' + skill + ' в инструкции ' + card.dataset.stepNum);
+    editor.size = Math.max(3, Math.min(32, Array.from(skill).length + 1));
     const remove = chip.querySelector('.skill-remove-btn');
     remove.value = skill;
     remove.setAttribute('aria-label', 'Убрать навык ' + skill + ' из инструкции ' + card.dataset.stepNum);
@@ -482,6 +489,42 @@ async function addSkillToInstruction(input) {
   const existing = Array.from(card.querySelectorAll('[data-instruction-skill]'), item => item.dataset.instructionSkill);
   if (await saveInstructionSkills(card, normalizeSkillNames([...existing, skill]))) {
     closeInstructionSkillEditor(input.closest('.skill-add-form'));
+    window.PdlcPlatformNavigation.refreshDrafts?.();
+  }
+}
+
+function openInstructionSkillRename(button) {
+  const chip = button.closest('.instruction-skill-chip');
+  if (chip.closest('.timeline-card').dataset.skillSaving === 'true') return;
+  const input = chip.querySelector('.skill-rename-input');
+  input.value = button.value;
+  input.dataset.originalSkill = button.value;
+  chip.querySelector('.instruction-skill-name').hidden = true;
+  input.hidden = false;
+  input.focus();
+  input.select();
+}
+
+function cancelInstructionSkillRename(input) {
+  const chip = input.closest('.instruction-skill-chip');
+  input.value = input.dataset.originalSkill;
+  input.hidden = true;
+  chip.querySelector('.instruction-skill-name').hidden = false;
+}
+
+async function saveInstructionSkillRename(input, focusAfter = false) {
+  const card = input.closest('.timeline-card');
+  if (input.hidden || card.dataset.skillSaving === 'true') return;
+  const previous = input.dataset.originalSkill, value = input.value.trim();
+  if (!value || value === previous) {
+    cancelInstructionSkillRename(input);
+    if (focusAfter) input.closest('.instruction-skill-chip').querySelector('.skill-rename-btn').focus();
+    return;
+  }
+  const skills = Array.from(card.querySelectorAll('[data-instruction-skill]'), item => item.dataset.instructionSkill);
+  if (skills.includes(value)) { showToast('Такой навык уже добавлен', 'error'); return; }
+  if (await saveInstructionSkills(card, skills.map(skill => skill === previous ? value : skill))) {
+    if (focusAfter) Array.from(card.querySelectorAll('.skill-rename-btn')).find(button => button.value === value)?.focus();
     window.PdlcPlatformNavigation.refreshDrafts?.();
   }
 }
@@ -713,18 +756,32 @@ page.on(document,'submit',event=>{
   void addSkillToInstruction(form.querySelector('.skill-candidate'));
 });
 page.on(document,'keydown',event=>{
+  if(event.target.matches?.('.skill-rename-input')) {
+    if(event.key==='Enter') { event.preventDefault(); void saveInstructionSkillRename(event.target, true); }
+    else if(event.key==='Escape') {
+      event.preventDefault(); event.stopPropagation();
+      const chip=event.target.closest('.instruction-skill-chip');
+      cancelInstructionSkillRename(event.target); chip.querySelector('.skill-rename-btn').focus();
+    }
+    return;
+  }
   if (event.key !== 'Escape' || !event.target.matches?.('.skill-candidate')) return;
-  event.preventDefault();
-  event.stopPropagation();
+  event.preventDefault(); event.stopPropagation();
   closeInstructionSkillEditor(event.target.closest('.skill-add-form'));
 });
+page.on(document,'focusout',event=>{
+  if(!event.target.matches?.('.skill-rename-input') || event.target.hidden) return;
+  const remove=event.relatedTarget?.closest?.('.skill-remove-btn');
+  if(remove?.closest('.instruction-skill-chip')===event.target.closest('.instruction-skill-chip')) return;
+  void saveInstructionSkillRename(event.target);
+});
 page.on(document,'click',event=>{
-  const skillButton=event.target.closest?.('.skill-add-trigger,.skill-add-cancel,.skill-remove-btn');
+  const skillButton=event.target.closest?.('.skill-add-trigger,.skill-rename-btn,.skill-remove-btn');
   if(skillButton){
     if(skillButton.disabled)return;
     if(skillButton.matches('.skill-remove-btn'))void removeSkillFromInstruction(skillButton);
     else if(skillButton.matches('.skill-add-trigger'))openInstructionSkillEditor(skillButton);
-    else closeInstructionSkillEditor(skillButton.closest('.skill-add-form'));
+    else openInstructionSkillRename(skillButton);
     return;
   }
   const button=event.target.closest?.('.instruction-card-actions button');

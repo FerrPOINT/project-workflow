@@ -1067,6 +1067,33 @@ dialog.base-shell-drawer::backdrop {
   flex: none;
 }
 
+.base-badge-input {
+  display: inline-block;
+  box-sizing: border-box;
+  font-family: inherit;
+  min-height: 26px;
+  min-width: 6ch;
+  max-width: min(32ch, 100%);
+  field-sizing: content;
+}
+.base-badge-input[data-appearance="inline"] {
+  min-height: 24px;
+  min-width: 3ch;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.base-badge-input:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 1px;
+}
+.base-badge-input:disabled {
+  opacity: 0.5;
+}
+.base-badge-input[hidden] {
+  display: none;
+}
+
 .base-badge > svg {
   width: 1em;
   height: 1em;
@@ -3561,7 +3588,7 @@ label.base-card[data-interactive="true"]:has(input:disabled) {
     .namespace-icon-action,
     .brand-link,
     .sidebar-service-link
-  ):not(.base-resource-list-row, .base-badge-button) {
+  ):not(.base-resource-list-row, .base-badge-button, .base-badge-input) {
   min-height: var(--shell-control-min);
 }
 .base-ssr-shell
@@ -3610,7 +3637,7 @@ label.base-card[data-interactive="true"]:has(input:disabled) {
       .brand-link,
       .sidebar-service-link,
       .sidebar-link
-    ):not(.base-resource-list-row, .base-badge-button) {
+    ):not(.base-resource-list-row, .base-badge-button, .base-badge-input) {
     min-height: var(--shell-control-mobile-min);
   }
   .base-ssr-shell

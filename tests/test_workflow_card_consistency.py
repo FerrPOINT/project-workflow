@@ -64,3 +64,11 @@ def test_instruction_skill_chips_have_no_disclosure_and_use_plus_for_free_text(a
     assert all("base-badge-button" in button["class"].split() and button["data-appearance"] == "badge"
                for button in triggers)
     assert ('id="instruction-skill-chip-template"' in html) == admin
+    rename = [attrs for tag, attrs in elements
+              if tag == "button" and "skill-rename-btn" in attrs.get("class", "").split()]
+    assert not rename, "An empty skill list has no rename targets"
+    fields = [attrs for tag, attrs in elements
+              if tag == "input" and "skill-candidate" in attrs.get("class", "").split()]
+    assert bool(fields) == admin
+    assert all("base-badge-input" in field["class"].split() for field in fields)
+    assert all(button.get("type") == "button" and button.get("aria-label") for button in rename)

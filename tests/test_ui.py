@@ -1538,10 +1538,15 @@ class TestPhaseDetail:
             assert response.status_code == 200
             assert f'data-instruction-skill="{skills[0]}"' in response.text
             assert f'data-instruction-skill="{skills[1]}"' in response.text
-            assert (
-                'class="skill-candidate base-control base-input" type="text" placeholder="Название навыка"'
-                in response.text
-            )
+            from tests.test_ui_shell_template import Elements
+
+            fields = [attrs for tag, attrs in Elements(response.text).elements
+                      if tag == "input" and "skill-candidate" in attrs.get("class", "").split()]
+            assert fields and all("base-badge-input" in field["class"].split() for field in fields)
+            rename = [attrs for tag, attrs in Elements(response.text).elements
+                      if tag == "input" and "skill-rename-input" in attrs.get("class", "").split()
+                      and attrs.get("value")]
+            assert [field["value"] for field in rename] == skills
         finally:
             client.put(_phase_api_path("1.INTAKE"), json=restore_payload)
 

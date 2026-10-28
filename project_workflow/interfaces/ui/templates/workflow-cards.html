@@ -25,7 +25,10 @@
 {% macro skill_chip(skill, step_num, administrative=false) -%}
 <span class="instruction-skill-chip" role="listitem">
   {% call base_ui.badge(tone='info') %}
-    <span class="instruction-skill-name"{% if skill %} data-instruction-skill="{{ skill }}"{% endif %}>{{ skill }}</span>
+    <span class="instruction-skill-name"{% if skill %} data-instruction-skill="{{ skill }}"{% endif %}>{% if administrative %}{{ base_ui.badge_button(skill, tone='info', appearance='inline', class_name='skill-rename-btn', value=skill, aria_label='Переименовать навык ' ~ skill ~ ' в инструкции ' ~ step_num, title='Переименовать навык') }}{% else %}{{ skill }}{% endif %}</span>
+{% if administrative %}
+    {{ base_ui.badge_input(skill, tone='info', appearance='inline', class_name='skill-rename-input', aria_label='Новое название навыка ' ~ skill ~ ' в инструкции ' ~ step_num, size=skill|length + 1, hidden=true) }}
+{% endif %}
 {% if administrative %}
     {% set remove_icon %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>{% endset %}
     {{ base_ui.badge_button(remove_icon, tone='info', appearance='inline', class_name='skill-remove-btn', value=skill, aria_label='Убрать навык ' ~ skill ~ ' из инструкции ' ~ step_num, title='Убрать навык ' ~ skill) }}
