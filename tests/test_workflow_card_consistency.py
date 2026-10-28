@@ -49,6 +49,11 @@ def test_instruction_skill_chips_have_no_disclosure_and_use_plus_for_free_text(a
     elements = Elements(html).elements
     assert "instruction-skill-editor" not in html
     assert "skill_summary" not in html
+    labels = [attrs["id"] for _, attrs in elements
+              if attrs.get("id", "").startswith("instruction-skills-label-")]
+    groups = [attrs.get("aria-labelledby") for _, attrs in elements
+              if "instruction-skills" in attrs.get("class", "").split()]
+    assert labels and groups == labels
     triggers = [attrs for tag, attrs in elements
                 if tag == "button" and "skill-add-trigger" in attrs.get("class", "").split()]
     forms = [attrs for tag, attrs in elements if tag == "form" and "skill-add-form" in attrs.get("class", "").split()]

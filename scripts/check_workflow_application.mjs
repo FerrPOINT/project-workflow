@@ -81,6 +81,9 @@ const skillInput=skillCard.querySelector('.skill-candidate'),skillForm=skillCard
 const skillNames=()=>[...skillCard.querySelectorAll('[data-instruction-skill]')].map(x=>x.dataset.instructionSkill);
 const skillName='инструмент × <skill> "тест"';
 assert.equal(skillCard.querySelector('details'),null);assert.equal(skillForm.hidden,true);
+const skillsGroup=skillCard.querySelector('.instruction-skills');
+assert.equal(d.getElementById(skillsGroup.getAttribute('aria-labelledby')).textContent,'Навыки');
+
 skillCard.querySelector('.skill-add-trigger').click();assert.equal(d.activeElement,skillInput);
 skillInput.value=skillName;skillFailure=true;await w.addSkillToInstruction(skillInput);
 assert.equal(messages.pop(),'Skill rejected');assert.equal(skillInput.value,skillName);assert.deepEqual(skillNames(),[]);assert.equal(skillInput.disabled,false);
@@ -89,6 +92,12 @@ pendingDescription.value='Несохранённое описание рядом
 const beforeSkillWrites=skillWrites;await Promise.all([w.addSkillToInstruction(skillInput),w.addSkillToInstruction(skillInput)]);
 assert.equal(skillWrites-beforeSkillWrites,1,'one in-flight write per instruction');
 assert.deepEqual(skillNames(),[skillName]);assert.equal(skillCard.isConnected,true);
+const chipRemove=skillCard.querySelector('.skill-remove-btn');
+assert.ok(chipRemove.closest('.base-badge'),'remove belongs to the same visible pill');
+assert.ok(chipRemove.querySelector('svg[aria-hidden="true"]'));
+assert.equal(chipRemove.getAttribute('aria-label'),'Убрать навык '+skillName+' из инструкции 1');
+assert.equal(chipRemove.title,'Убрать навык '+skillName);
+
 assert.equal(pendingDescription.value,'Несохранённое описание рядом с навыками');assert.equal(w.hasUnsavedWorkflowChanges(),true);
 assert.equal(skillCard.querySelector('skill'),null);assert.equal(skillForm.hidden,true);assert.equal(d.activeElement,skillCard.querySelector('.skill-add-trigger'));
 await w.saveInstructionDescription(pendingDescription);

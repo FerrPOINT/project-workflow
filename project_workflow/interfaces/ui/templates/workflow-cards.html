@@ -24,9 +24,11 @@
 
 {% macro skill_chip(skill, step_num, administrative=false) -%}
 <span class="instruction-skill-chip" role="listitem">
-  {% call base_ui.badge(tone='info') %}<span class="instruction-skill-name"{% if skill %} data-instruction-skill="{{ skill }}"{% endif %}>{{ skill }}</span>{% endcall %}
+  {% call base_ui.badge(tone='info') %}
+    <span class="instruction-skill-name"{% if skill %} data-instruction-skill="{{ skill }}"{% endif %}>{{ skill }}</span>
 {% if administrative %}
-  <button type="button" class="base-control base-button base-icon-control skill-remove-btn" data-variant="ghost" data-size="icon"{% if skill %} data-skill="{{ skill }}"{% endif %} onclick="removeSkillFromInstruction(this)" aria-label="Убрать навык {{ skill }} из инструкции {{ step_num }}" title="Убрать навык">×</button>
+    <button type="button" class="base-control base-button base-icon-control skill-remove-btn" data-variant="ghost" data-size="icon"{% if skill %} data-skill="{{ skill }}"{% endif %} onclick="removeSkillFromInstruction(this)" aria-label="Убрать навык {{ skill }} из инструкции {{ step_num }}" title="Убрать навык {{ skill }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
 {% endif %}
+  {% endcall %}
 </span>
 {%- endmacro %}

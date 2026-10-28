@@ -437,6 +437,7 @@ function renderInstructionSkills(card, skills) {
     const remove = chip.querySelector('.skill-remove-btn');
     remove.dataset.skill = skill;
     remove.setAttribute('aria-label', 'Убрать навык ' + skill + ' из инструкции ' + card.dataset.stepNum);
+    remove.setAttribute('title', 'Убрать навык ' + skill);
     return chip;
   });
   card.querySelector('.instruction-skill-labels').replaceChildren(...chips);

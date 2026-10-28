@@ -24,7 +24,8 @@
 
 .wiki-page .timeline-row{grid-template-columns:minmax(0,1fr);gap:8px}
 .instruction-card-footer{margin-top:8px}
-.instruction-skills{display:flex;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-top:8px;min-width:0}
+.instruction-skills-field{display:grid;gap:4px;margin-top:8px;min-width:0}
+.instruction-skills{display:flex;align-items:flex-start;flex-wrap:wrap;gap:8px;min-width:0}
 .instruction-skill-labels{display:flex;align-items:center;flex-wrap:wrap;gap:0 8px;flex:1 1 0;min-width:0}
 .instruction-skill-chip{display:inline-flex;align-items:center;gap:0;min-width:0;max-width:100%}
 .instruction-skill-chip > .base-badge{min-width:0}
@@ -114,7 +115,9 @@
 {% else %}
         {% call base_ui.prose() %}<p>{{ i.description }}</p>{% endcall %}
 {% endif %}
-        <div class="instruction-skills">
+        <div class="instruction-skills-field">
+          <div class="base-label" id="instruction-skills-label-{{ i.id }}">Навыки</div>
+        <div class="instruction-skills" role="group" aria-labelledby="instruction-skills-label-{{ i.id }}">
           <div class="instruction-skill-labels" role="list" aria-label="Навыки инструкции {{ i.step_num }}">
             {% for s in i.skills or [] %}{{ workflow_cards.skill_chip(s, i.step_num, can_administer) }}{% endfor %}
           </div>
@@ -126,6 +129,7 @@
             {{ base_ui.button('×', size='icon', variant='ghost', class_name='skill-add-cancel', aria_label='Отменить добавление навыка', title='Отменить · Escape') }}
           </form>
 {% endif %}
+        </div>
         </div>
         <div class="workflow-card-footer instruction-card-footer">
           {{ base_ui.badge('параллельно' if i.execution_type == 'parallel' else 'последовательно', 'info' if i.execution_type == 'parallel' else 'neutral') }}
