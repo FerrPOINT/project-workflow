@@ -377,7 +377,7 @@ def live(root: Path, command_file: Path, tooling: Path, attempts: int, timeout: 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("prepare", "run"))
+    parser.add_argument("action", choices=("prepare", "engine-diagnostic"))
     parser.add_argument("--root", required=True, type=Path)
     parser.add_argument("--live", action="store_true")
     parser.add_argument("--agent-command", type=Path)
@@ -391,9 +391,10 @@ def main() -> int:
         print(f"Prepared 7 professions / 8 modes / 24 phases at {root}; LIVE NOT RUN")
         return 0
     if not args.live or not args.agent_command or not args.quality_tooling:
-        parser.error("run requires --live, --agent-command and --quality-tooling")
+        parser.error("engine-diagnostic requires --live, --agent-command and --quality-tooling; not CLI acceptance")
     if not 1 <= args.agent_timeout <= 1800:
         parser.error("agent timeout must be between 1 and 1800 seconds")
+    print("ENGINE DIAGNOSTIC ONLY: this bypasses the product CLI and never qualifies agent acceptance.")
     return live(root, args.agent_command, args.quality_tooling, args.attempts, args.agent_timeout)
 
 
