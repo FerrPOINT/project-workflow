@@ -1,0 +1,7 @@
+{
+  "repository": "https://github.com/FerrPOINT/services-base",
+  "revision": "dec33c9a284db574868d39e458d50fd6511e95f7",
+  "path": "base-modules/python/cli-core/pdlc_cli_core/human_access.py",
+  "sha256": "e9da0d75ad61da065657f0ae3c314650e9c8a027adaabeec62aa2a713136e855",
+  "destination": "project_workflow/infrastructure/platform_auth.py"
+}

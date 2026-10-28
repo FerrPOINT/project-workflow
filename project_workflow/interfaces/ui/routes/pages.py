@@ -25,6 +25,7 @@ from project_workflow.interfaces.ui.services import (
     _load_tasks,
     _load_workflows,
 )
+from project_workflow.interfaces.ui.sso import visible_services
 from project_workflow.interfaces.ui.state import _app_state
 from project_workflow.interfaces.ui.templates import _group_instructions, templates
 
@@ -102,7 +103,7 @@ def _namespace_context(
         "selected_namespace": selected_namespace,
         "invalid_query_namespace_id": invalid_query_namespace_id,
         "missing_namespace_id": missing_namespace_id,
-        "other_services": catalog.services,
+        "other_services": visible_services(request, catalog.services),
         "services_source": catalog.source,
         **_theme_context(selected_namespace),
     }

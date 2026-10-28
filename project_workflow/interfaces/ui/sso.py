@@ -9,6 +9,7 @@ import json
 import os
 import secrets
 import time
+from datetime import datetime, timezone
 from urllib.parse import urlencode, urlparse
 
 import httpx
@@ -20,6 +21,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
 from project_workflow.config import Settings, get_settings
+from project_workflow.infrastructure.platform_auth import HumanAccess, human_access
 from project_workflow.infrastructure.platform_namespace import is_personal_token as platform_personal_token
 from project_workflow.interfaces.ui.cookies import cookie_name
 from project_workflow.interfaces.ui.templates import templates
@@ -106,6 +108,7 @@ class _SsoMiddleware(BaseHTTPMiddleware):
 
         is_personal_token = platform_personal_token(bearer)
         path = "/auth/tokens/introspect" if is_personal_token else "/auth/me"
+        started, wall_started = time.monotonic(), datetime.now(timezone.utc)
         try:
             async with httpx.AsyncClient(timeout=5) as client:
                 response = await client.get(settings.AUTH_INTERNAL_BASE_URL.rstrip("/") + path,
@@ -130,9 +133,25 @@ class _SsoMiddleware(BaseHTTPMiddleware):
                 if f"project-workflow:{action}" not in identity["scopes"]:
                     return _auth_error(request, 403, "Недостаточно прав токена")
             request.state.central_subject = subject
-        except (KeyError, TypeError, ValueError):
+            if identity.get("application_access") is not None:
+                request.state.central_access = human_access(
+                    identity, issuer=settings.AUTH_ISSUER.rstrip("/"), subject=subject,
+                    started=started, wall_started=wall_started, require_proof=True,
+                )
+        except (KeyError, TypeError, ValueError, PermissionError):
             return _auth_error(request, 503, "Central Auth вернул некорректный ответ")
         return await call_next(request)
+
+
+def visible_services(request: Request, services: list[dict]) -> list[dict]:
+    """Персональная проекция каталога по свежему допуску Central Auth."""
+    if not get_settings().AUTH_ISSUER:
+        return list(services)
+    access = getattr(request.state, "central_access", None)
+    if not isinstance(access, HumanAccess):
+        return []
+    return [service for service in services
+            if isinstance(service.get("key"), str) and access.permits([service["key"]])]
 
 
 def install_sso(app: FastAPI) -> None:

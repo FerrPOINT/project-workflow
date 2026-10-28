@@ -3,6 +3,7 @@
 import json
 import shutil
 import subprocess
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import httpx
@@ -12,6 +13,38 @@ from fastapi.testclient import TestClient
 
 from project_workflow.config import Settings
 from project_workflow.interfaces.ui import sso
+
+
+@pytest.mark.parametrize("role, applications, expected", [
+    ("admin", ["project-workflow", "recruiter"], ["project-workflow", "recruiter"]),
+    ("user", ["project-workflow"], ["project-workflow"]),
+    ("user", [], []),
+])
+def test_navigation_uses_live_central_access(monkeypatch, role, applications, expected):
+    from fastapi import Request
+
+    app, _ = _app(monkeypatch)
+    catalog = [{"key": "project-workflow"}, {"key": "recruiter"}]
+    @app.get("/navigation")
+    def navigation(request: Request):
+        return [item["key"] for item in sso.visible_services(request, catalog)]
+
+    now = datetime.now(timezone.utc)
+    proof = {"schema_version": 1, "issuer": "http://localhost:7701", "subject": "user-1",
+             "role": role, "applications": applications, "revision": 1, "enforced": True,
+             "observed_at": now.isoformat(), "expires_at": (now + timedelta(seconds=60)).isoformat()}
+    body = {"id": "user-1", "role": role, "application_access": proof}
+    original = httpx.AsyncClient
+    monkeypatch.setattr(sso.httpx, "AsyncClient", lambda **kwargs: original(
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, json=body)), **kwargs))
+    with TestClient(app) as client:
+        headers = {"authorization": "Bearer test-browser-session"}
+        assert client.get("/navigation", headers=headers).json() == expected
+        body.pop("application_access")
+        assert client.get("/navigation", headers=headers).json() == []
+        body["application_access"] = {**proof, "subject": "different-account"}
+        assert client.get("/navigation", headers=headers).status_code == 503
+    assert catalog == [{"key": "project-workflow"}, {"key": "recruiter"}]
 
 
 @pytest.mark.parametrize("result", ["error", "login-required"])
