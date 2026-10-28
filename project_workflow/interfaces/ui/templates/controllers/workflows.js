@@ -331,11 +331,9 @@ async function addPhaseAfter(button){
   setPhaseWritePending(true);
   try{
     const payload={workflow_id:parseInt(workflowId,10),mode_id:parseInt(modeId,10),phase_order:currentOrder+1};
-    // A card insertion inside an existing parallel group must not split its
-    // explicit edges or change the group's confirmed rollback target.
+    // An in-group insertion keeps the same execution mode.
     if(item?.dataset.executionType==='parallel'){
-      payload.execution_type='parallel';payload.parallel_with_phase_id=Number(item.dataset.phaseId);
-      payload.rollback_target_phase_id=item.dataset.rollbackTargetPhaseId?Number(item.dataset.rollbackTargetPhaseId):null;
+      payload.execution_type='parallel';
     }
     const resp=await fetch('' + config.basePath + '/api/phases',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     const data=await resp.json().catch(()=>({}));
@@ -373,11 +371,6 @@ async function togglePhaseType(button){
   setPhaseWritePending(true);
   try{
     const payload={execution_type:nextType};
-    if(nextType==='parallel'){
-      const items=getPhaseTimelineItems(),index=items.indexOf(item);
-      const partner=[items[index-1],items[index+1]].find(phase=>phase?.dataset.executionType==='parallel');
-      if(partner)payload.parallel_with_phase_id=Number(partner.dataset.phaseId);
-    }
     const resp=await fetch('' + config.basePath + '/api/phases/'+item.dataset.phaseId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     const data=await resp.json().catch(()=>({}));
     if(!resp.ok||!data.ok){if(resp.status>=500)requireWorkflowReadback();showToast(data.error||'Не удалось сменить режим','error');return;}

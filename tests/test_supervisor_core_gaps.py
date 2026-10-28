@@ -63,7 +63,7 @@ class TestSupervisorCoreGaps:
         engine.task = None
         assert engine._get_previously_covered("1") == set()
 
-    def test_phase_contract_includes_feedback_after_rollback(self):
+    def test_phase_contract_does_not_route_historical_rollback_feedback(self):
         engine = SupervisorEngine("RUN-1")
         implementation = self._phase(code="8.IMPLEMENT", id=8)
         engine.all_phases = [implementation]
@@ -87,10 +87,7 @@ class TestSupervisorCoreGaps:
         contract = engine.get_phase_contract()
 
         assert contract is not None
-        assert contract["evaluation_feedback"]["verdict"] == "ROLLBACK"
-        assert contract["evaluation_feedback"]["message"] == (
-            "Fix the JavaScript syntax error"
-        )
+        assert "evaluation_feedback" not in contract
 
     def test_get_previously_covered_no_task_id(self):
         engine = SupervisorEngine("RUN-1")
@@ -171,15 +168,16 @@ class TestSupervisorCoreGaps:
         engine._record_parallel_transition([ph], "blocked", None, step_history_id=55)
         db.tasks.update_if_state.assert_called_once()
 
-    def test_record_parallel_transition_rollback(self):
+    def test_removed_parallel_transition_is_rejected(self):
         engine = SupervisorEngine("RUN-1")
         engine.task = {"id": 1, "current_phase_id": 1, "current_phase_code": "1", "status": "active"}
         ph = self._phase(code="1", id=1)
         engine.phase_map = {"1": ph, "0": self._phase(id=2, code="0")}
         db = MagicMock()
         engine.db = db
-        engine._record_parallel_transition([ph], "rollback", None, "0", step_history_id=55)
-        db.tasks.update_if_state.assert_called_once()
+        with pytest.raises(ValueError, match="вердикт"):
+            engine._record_parallel_transition([ph], "rollback", None, "0", step_history_id=55)
+        db.tasks.update_if_state.assert_not_called()
 
     def test_reload_task_state_does_not_keep_deleted_task(self):
         engine = SupervisorEngine("RUN-1")

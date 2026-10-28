@@ -90,23 +90,17 @@ await w.deletePhase(d.querySelector(`#phase-${phaseId} .phase-delete-btn`));asse
 // Inserting inside explicit parallel edges preserves the group and owner links.
 let parallelItems=[...d.querySelectorAll('.timeline-item')];const parallelFirst=parallelItems[0].dataset.phaseId,parallelSecond=parallelItems[1].dataset.phaseId;
 await w.togglePhaseType(parallelItems[0].querySelector('.execution-toggle'));
-// A real owner rejection must not forge a group or rewrite rollback settings.
-const setRollback=async target=>{const response=await w.fetch('/workflow/api/phases/'+parallelSecond,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({rollback_target_phase_id:target})});assert.equal(response.status,200);};
-await setRollback(Number(parallelFirst));await w.loadWorkflowEditor(w.location.href,{keepForm:true});
-await w.togglePhaseType(d.querySelector(`#phase-${parallelSecond} .execution-toggle`));
-assert.equal(d.querySelector(`#phase-${parallelSecond}`).dataset.executionType,'sync');
-assert.equal(d.querySelector(`#phase-${parallelSecond}`).closest('.timeline-parallel-group'),null);
-await setRollback(null);await w.loadWorkflowEditor(w.location.href,{keepForm:true});
+// Modes alone form the group; removed hidden settings fail closed at authoring.
 await w.togglePhaseType(d.querySelector(`#phase-${parallelSecond} .execution-toggle`));
 assert.ok(d.querySelector(`#phase-${parallelFirst}`).closest('.timeline-parallel-group'));
 assert.equal(d.querySelector(`#phase-${parallelSecond}`).closest('.timeline-parallel-group'),d.querySelector(`#phase-${parallelFirst}`).closest('.timeline-parallel-group'));
-let ownerPhase=await (await w.fetch('/workflow/api/phases/'+parallelSecond)).json();assert.equal(ownerPhase.phase.parallel_with_phase_id,Number(parallelFirst));
-// Leaving removes the frame; rejoining the first phase can use the next neighbor.
+for(const field of ['parallel_with_phase_id','rollback_target_phase_id']){
+ const response=await w.fetch('/workflow/api/phases/'+parallelSecond,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({[field]:Number(parallelFirst)})});assert.equal(response.status,422);
+}
 await w.togglePhaseType(d.querySelector(`#phase-${parallelFirst} .execution-toggle`));
 assert.equal(d.querySelector(`#phase-${parallelSecond}`).closest('.timeline-parallel-group'),null);
 await w.togglePhaseType(d.querySelector(`#phase-${parallelFirst} .execution-toggle`));
 assert.ok(d.querySelector(`#phase-${parallelFirst}`).closest('.timeline-parallel-group'));
-assert.equal(d.querySelector(`#phase-${parallelSecond}`).closest('.timeline-parallel-group'),d.querySelector(`#phase-${parallelFirst}`).closest('.timeline-parallel-group'));
 const parallelBefore=[...d.querySelectorAll('.timeline-item')].map(n=>n.dataset.phaseId);
 d.querySelector(`#phase-${parallelFirst} .phase-add-btn`).click();
 for(let attempt=0;attempt<100&&count()===parallelBefore.length;attempt++)await new Promise(resolve=>setTimeout(resolve,10));

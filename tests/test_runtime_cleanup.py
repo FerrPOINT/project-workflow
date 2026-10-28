@@ -169,15 +169,12 @@ def test_seed_catalog_has_exact_codes_and_order():
 def test_seed_catalog_has_exact_assignment_groups():
     groups = group_parallel_phases(
         _items(),
-        id_of=lambda phase: phase["code"],
         execution_type_of=lambda phase: phase.get("execution_type", "sync"),
-        parallel_with_phase_id_of=lambda phase: phase.get("parallel_with_phase_code"),
     )
     codes = [[phase["code"] for phase in group] for group in groups]
-    assert len(codes) == 15
+    assert len(codes) == 14
     assert [group for group in codes if len(group) > 1] == [
-        ["5.RESEARCH", "5.PREFLIGHT"],
-        ["6.SOLUTION", "6.TEST_PLAN"],
+        ["5.RESEARCH", "5.PREFLIGHT", "6.SOLUTION", "6.TEST_PLAN"],
         ["10.REVIEW", "10.QA", "10.DATAFLOW"],
     ]
 
@@ -232,7 +229,7 @@ def test_tech_phases_reference_the_canonical_using_rtech_skill():
     )
 
 
-def test_post_merge_phases_have_no_workflow_rollback_target():
+def test_historical_seed_targets_are_preserved_as_storage_metadata():
     by_code = {phase["code"]: phase for phase in _items()}
     assert by_code["12.RELEASE_GATE"]["rollback_target_phase_code"] == "8.IMPLEMENT"
     for code in ("13.DELIVERY", "14.CLOSE", "15.RETRO"):

@@ -230,7 +230,7 @@ regrouping clones the rendered frame template, retaining the same classes and
 color after reorder. Sequential records are not shown as a parallel group.
 
 Adding inside a parallel group preserves its execution context. Phase insertion
-also retains the explicit edge and rollback target through the existing owner API.
+keeps the inserted phase in the same contiguous parallel run.
 Instruction toolbar actions remain disabled until mutation/order acknowledgement;
 uncertain writes are not repeated automatically. Pending writes and drafts still
 block navigation. Default build/check does not run the manual DOM/API fixtures.
@@ -260,8 +260,7 @@ wrapping-ряду сразу после последнего навыка, вк�
 
 Верхний блок содержит только название, описание и ссылку «Назад к фазам».
 Название/описание сохраняются после blur через существующую очередь и draft guard.
-Режим исполнения, параллельные связи и откат в шапке не редактируются и не
-передаются при сохранении текста: частичный owner API сохраняет граф независимо.
+Режим исполнения задаётся на карточке списка; шапка сохраняет только текст.
 Кнопки повторного сохранения/readback скрыты в обычном состоянии и появляются
 только при незавершённом сохранении. Инструкции сохраняют собственные действия.
 
@@ -299,11 +298,9 @@ Inline Input/Textarea используют общий Base appearance без г�
 
 ### Переключение параллельности фаз
 
-Кнопка карточки меняет режим и, при включении, задаёт parallel_with_phase_id
-соседней параллельной фазы: сначала предыдущей, иначе следующей. Если таких соседей
-нет, фаза остаётся изолированной параллельной фазой без групповой рамки. Чужие
-существующие группы и rollback не переписываются; несовместимый граф отвергает
-владелец. Рамка и состояние кнопок берутся из подтверждённого серверного readback.
-Оба адреса редактора, /workflows и /phases, поддерживают editor-v1 с теми же
-проверками контекста и роли, private/no-store и ошибками без fragment marker.
-Повторное обновление после записи не заменяет оболочку или черновик формы.
+Кнопка меняет только execution_type. Все соседние parallel-фазы входят в одну
+группу до первой sync-фазы. Рамка берётся из подтверждённого readback с тем же
+правилом, что Supervisor; старые скрытые связи не влияют на неё. /workflows и
+/phases поддерживают editor-v1, проверки роли/контекста и private/no-store.
+Сохранение не заменяет оболочку или черновик формы. Устаревший возврат заданий
+удалён; [актуальный контракт](phase-execution.md).

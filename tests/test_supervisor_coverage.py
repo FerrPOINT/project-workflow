@@ -41,5 +41,9 @@ class TestBuildChecklist:
 
 
 def test_all_runtime_verdicts_have_labels():
-    for verdict in ("pass", "partial", "blocked", "rollback", "delegate"):
+    for verdict in ("pass", "partial", "blocked", "delegate"):
         assert VERDICT_LABELS[verdict].isupper()
+
+
+def test_retired_verdict_is_not_in_active_labels():
+    assert "rollback" not in VERDICT_LABELS

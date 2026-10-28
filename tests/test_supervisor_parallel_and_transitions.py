@@ -158,7 +158,7 @@ class TestGetParallelGroup:
         codes = [p.code for p in group]
         assert codes == ["1", "2"]
 
-    def test_single_parallel_when_last(self, engine):
+    def test_last_parallel_joins_the_preceding_run(self, engine):
         # Mock last phase as parallel
         engine.all_phases[-1] = Phase(
             id=5,
@@ -176,14 +176,14 @@ class TestGetParallelGroup:
         engine.phase_map["3"] = engine.all_phases[-1]
         group = engine._get_parallel_group(engine.phase_map["3"])
         codes = [p.code for p in group]
-        assert codes == ["3"]
+        assert codes == ["1", "2", "3"]
 
     def test_value_error_returns_single(self, engine):
         orphan = Phase(id=99, code="orphan", name="O", description="")
         group = engine._get_parallel_group(orphan)
         assert group == [orphan]
 
-    def test_adjacent_parallel_pairs_have_independent_next_phases(self, engine):
+    def test_adjacent_parallel_pairs_share_the_same_next_phase(self, engine):
         pair_c = Phase(id=5, code="3", name="Parallel C", execution_type="parallel", parallel_with_phase_code="4")
         pair_d = Phase(id=6, code="4", name="Parallel D", execution_type="parallel", parallel_with_phase_code="3")
         done = Phase(id=7, code="5", name="Done", execution_type="sync")
@@ -193,9 +193,9 @@ class TestGetParallelGroup:
         first = engine._get_parallel_group(engine.phase_map["1"])
         second = engine._get_parallel_group(engine.phase_map["3"])
 
-        assert [phase.code for phase in first] == ["1", "2"]
-        assert engine._get_next_phase_after_group(first) == ("3", "Parallel C")
-        assert [phase.code for phase in second] == ["3", "4"]
+        assert [phase.code for phase in first] == ["1", "2", "3", "4"]
+        assert engine._get_next_phase_after_group(first) == ("5", "Done")
+        assert [phase.code for phase in second] == ["1", "2", "3", "4"]
         assert engine._get_next_phase_after_group(second) == ("5", "Done")
 
     def test_interleaved_parallel_component_does_not_skip_isolated_phase(self, engine):
@@ -209,14 +209,14 @@ class TestGetParallelGroup:
         linked_group = engine._get_parallel_group(linked_a)
         isolated_group = engine._get_parallel_group(isolated_b)
 
-        assert engine._resolve_transition(linked_a, "pass", linked_group) == ("b", "B", None)
+        assert engine._resolve_transition(linked_a, "pass", linked_group) == ("done", "Done", None)
         assert engine._resolve_transition(isolated_b, "pass", isolated_group) == ("done", "Done", None)
 
-    def test_transition_rejects_parallel_group_with_different_rollback_targets(self, engine):
+    def test_old_targets_do_not_restrict_current_group_progress(self, engine):
         group = engine._get_parallel_group(engine.phase_map["1"])
         group[1].rollback_target_phase_code = "-1"
-
-        with pytest.raises(ValueError, match="разные цели отката"):
+        assert engine._resolve_transition(group[0], "pass", group) == ("3", "Done", None)
+        with pytest.raises(ValueError, match="вердикт"):
             engine._resolve_transition(group[0], "rollback", group)
 
 
@@ -277,17 +277,13 @@ class TestRecordTransition:
         assert events == ([(7, 1, event_type, 55)] if event_type else [])
         assert update[-1] == {"current_phase_id": 1, "status": task_status}
 
-    def test_rollback(self, engine):
-        ph = engine.phase_map["0"]
-        events, update = _record_calls(
-            engine, lambda: engine._record_transition(ph, "rollback", None, "-1", 55)
-        )
-        assert events == [(7, 2, "rolled_back", 55), (7, 1, "entered", 55)]
-        assert update[-1] == {"current_phase_id": 1, "status": "active"}
+    def test_removed_verdict_is_rejected(self, engine):
+        with pytest.raises(ValueError, match="вердикт"):
+            _record_calls(engine, lambda: engine._record_transition(engine.phase_map["0"], "rollback", None, "-1", 55))
 
     def test_rollback_without_target_is_rejected(self, engine):
         ph = engine.phase_map["0"]
-        with pytest.raises(ConcurrentTransitionError, match="Цель отката"):
+        with pytest.raises(ValueError, match="вердикт"):
             _record_calls(engine, lambda: engine._record_transition(ph, "rollback", None, None, 55))
 
     def test_unknown_next_phase_is_not_treated_as_workflow_completion(self, engine):
@@ -339,31 +335,26 @@ class TestRecordParallelTransition:
         )
         assert update[-1] == {"current_phase_id": 3, "status": task_status}
 
-    def test_rollback_records_group_and_target(self, engine):
+    def test_removed_group_verdict_is_rejected(self, engine):
         group = [engine.phase_map["1"], engine.phase_map["2"]]
-        events, update = _record_calls(
-            engine,
-            lambda: engine._record_parallel_transition(
-                group, "rollback", None, "0", step_history_id=55
-            ),
-        )
-        assert events == [
-            (7, 3, "rolled_back", 55),
-            (7, 4, "rolled_back", 55),
-            (7, 2, "entered", 55),
-        ]
-        assert update[-1] == {"current_phase_id": 2, "status": "active"}
+        with pytest.raises(ValueError, match="вердикт"):
+            _record_calls(
+                engine, lambda: engine._record_parallel_transition(
+                    group, "rollback", None, "0", step_history_id=55
+                )
+            )
 
     @pytest.mark.parametrize(
         ("verdict", "next_phase", "rollback_target", "message"),
         [
             ("pass", "missing", None, "Следующая фаза"),
-            ("rollback", None, None, "Цель отката"),
+            ("rollback", None, None, "вердикт"),
         ],
     )
     def test_invalid_parallel_target_is_rejected(self, engine, verdict, next_phase, rollback_target, message):
         group = [engine.phase_map["1"], engine.phase_map["2"]]
-        with pytest.raises(ConcurrentTransitionError, match=message):
+        expected_error = ValueError if verdict == "rollback" else ConcurrentTransitionError
+        with pytest.raises(expected_error, match=message):
             _record_calls(
                 engine,
                 lambda: engine._record_parallel_transition(

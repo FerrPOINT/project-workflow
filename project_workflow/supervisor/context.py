@@ -122,8 +122,6 @@ class SupervisorContextBuilder:
                     "code": phase.code,
                     "name": phase.name,
                     "status": status_lookup.get(phase.code, "pending"),
-                    "parallel_with_phase_code": phase.parallel_with_phase_code,
-                    "rollback_target_phase_code": phase.rollback_target_phase_code,
                 }
             )
         return path
