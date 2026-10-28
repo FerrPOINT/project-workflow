@@ -97,6 +97,20 @@ def test_history_requires_explicit_protocol_and_namespace(configured):
         assert client.get("/internal/runtime/history", headers=WRITER, params=params).status_code == 422
 
 
+def test_unknown_history_operation_is_not_an_empty_success_and_selectors_cannot_mix(configured):
+    client, assignment = configured
+    initial = enroll(configured)
+    query = {"interaction_protocol": "configured-cli-v1", "task": assignment["task"],
+             "namespace_id": assignment["namespace_id"]}
+    for key in ("operation_key", "assignment_operation_key"):
+        response = client.get("/internal/runtime/history", headers=WRITER,
+                              params={**query, key: "missing:operation"})
+        assert response.status_code == 404, response.text
+    mixed = {**query, "operation_key": "missing:operation", "assignment_operation_key": assignment["operation_key"]}
+    assert client.get("/internal/runtime/history", headers=WRITER, params=mixed).status_code == 409
+    assert enroll(configured) == initial
+
+
 def test_native_terminal_selector_cannot_be_reinterpreted_as_business_receipt(configured):
     client, assignment = configured
     enroll(configured)

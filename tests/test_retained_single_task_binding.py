@@ -187,7 +187,8 @@ def test_saved_single_task_pm_keeps_resume_input_without_requiring_the_old_image
     assert snapshot() == before
 
 
-@pytest.mark.parametrize("corruption", ["foreign_run", "missing_run", "foreign_context", "draft_context"])
+@pytest.mark.parametrize("corruption", ["foreign_run", "missing_run", "foreign_context", "draft_context",
+    "malformed_review", "wrong_review_scope", "retired_bootstrap"])
 def test_retained_pm_rejects_saved_custody_drift_without_modifying_history(stored_pm, corruption):
     import json
 
@@ -213,8 +214,17 @@ def test_retained_pm_rejects_saved_custody_drift_without_modifying_history(store
             payload = json.loads(assignment.payload)
             if corruption == "foreign_context":
                 payload["single_task_context"]["tracker_project_ref"] = str(uuid4())
-            else:
+            elif corruption == "draft_context":
                 payload["pm_draft_context"] = {**identity.model_dump(), "agent_ref": str(uuid4())}
+            elif corruption == "malformed_review":
+                payload["pm_review_context"] = {}
+            elif corruption == "wrong_review_scope":
+                payload["pm_review_context"] = {
+                    "purpose": "critical_business_review", "tracker_assignment_revision": 8,
+                    "owner_version": 2, "blocker_id": str(uuid4()), "blocker_sha256": "c" * 64,
+                    "blocker_version": 2, "requirements": {"revision": 7, "content_hash": "a" * 64}}
+            else:
+                payload["pm_bootstrap_context"] = {}
             assignment.payload = canonical_json(payload)
             assignment.payload_sha256 = payload_sha256(payload)
     before = snapshot()

@@ -4,7 +4,9 @@ import json
 from contextlib import contextmanager
 from uuid import uuid4
 
+import httpx
 import pytest
+from httpx import Client as NativeHttpClient
 
 from project_workflow import config
 from project_workflow.domain.exceptions import ConflictError
@@ -160,3 +162,44 @@ def test_retained_assignment_does_not_authorize_work_outside_in_progress(authori
     bodies["context"].update(stage=stage, status=status)
     with pytest.raises(ConflictError):
         tracker.assignment(request)
+@pytest.mark.parametrize("fault", ["redirect", "denied", "malformed", "array", "duplicates", "timeout", "oversized"])
+def test_authority_transport_fails_closed_once_without_exposing_private_body(authority, monkeypatch, fault):
+    request, _, _ = authority
+    calls = []
+    native_client = NativeHttpClient
+
+    def reply(incoming):
+        calls.append(incoming)
+        assert incoming.method == "GET"
+        assert incoming.headers["Authorization"] == "Bearer private-read-token"
+        if fault == "timeout":
+            raise httpx.ReadTimeout("private upstream diagnostic", request=incoming)
+        status = 302 if fault == "redirect" else 403 if fault == "denied" else 200
+        body = {"malformed": b"private upstream diagnostic", "array": b"[]",
+                "duplicates": b'{"assignment":1,"assignment":2}', "oversized": b"x" * 262145}.get(fault, b"{}")
+        return httpx.Response(status, content=body, headers={"Location": "https://foreign.test"})
+
+    monkeypatch.setattr(tracker.httpx, "Client", lambda **kw: native_client(
+        **kw, transport=httpx.MockTransport(reply)))
+    with pytest.raises((RuntimeError, ConflictError)) as rejected:
+        tracker.read(request, "context")
+    assert "private upstream diagnostic" not in str(rejected.value)
+    assert len(calls) == 1
+
+
+def test_invalid_authority_origin_is_rejected_before_opening_a_client(authority, monkeypatch):
+    request, _, _ = authority
+    monkeypatch.setenv("PROJECT_WORKFLOW_CONFIGURED_TRACKER_URL", "not-an-origin")
+    config.get_settings.cache_clear()
+    with pytest.raises(RuntimeError, match="authority unavailable"):
+        tracker.read(request, "context")
+
+
+@pytest.mark.parametrize("revision", [{"revision": True, "content_hash": "a" * 64},
+    {"revision": 0, "content_hash": "a" * 64}, {"revision": 3, "content_hash": "not-a-hash"}])
+def test_latest_requirement_identity_is_validated_before_confirmation_lookup(authority, revision):
+    request, bodies, calls = authority
+    bodies["requirements"] = revision
+    with pytest.raises(ConflictError, match="Latest requirements identity"):
+        tracker.confirmation(request)
+    assert len(calls) == 1

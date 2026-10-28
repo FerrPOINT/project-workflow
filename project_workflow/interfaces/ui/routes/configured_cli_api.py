@@ -15,6 +15,8 @@ from project_workflow.infrastructure.db.single_task_catalog import runtime_catal
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.infrastructure.namespace_auth import NamespaceAuthError
 
+_REQUEST_ERRORS = (NamespaceAuthError, NotFoundError, ConflictError, ValueError, RuntimeError, OSError, SQLAlchemyError)
+
 
 def error(exc: Exception) -> JSONResponse:
     if isinstance(exc, NamespaceAuthError):
@@ -38,7 +40,7 @@ def assign(command: ConfiguredAssignment, authorization: str | None):
             raise NamespaceAuthError(403)
         with SAUnitOfWork() as uow, runtime_catalog_read(uow):
             return {"ok": True, "exit_code": 0, "result": configured_cli.enroll(uow, command)}
-    except (NamespaceAuthError, NotFoundError, ConflictError, ValueError, RuntimeError, SQLAlchemyError) as exc:
+    except _REQUEST_ERRORS as exc:
         return error(exc)
 
 
@@ -46,7 +48,7 @@ def step(command: ConfiguredStep, authorization: str | None):
     try:
         with SAUnitOfWork() as uow, runtime_catalog_read(uow):
             return configured_cli.step(uow, command, authorization)
-    except (NamespaceAuthError, NotFoundError, ConflictError, ValueError, RuntimeError, SQLAlchemyError) as exc:
+    except _REQUEST_ERRORS as exc:
         return error(exc)
 
 
@@ -64,7 +66,7 @@ def history(task: str, namespace_id: int | None, authorization: str | None, *, n
                 execution_ref=execution_ref, operation_key=operation_key, trusted=trusted,
                 assignment_operation_key=assignment_operation_key, projection=projection,
                 before_history_id=before_history_id)
-    except (NamespaceAuthError, NotFoundError, ConflictError, ValueError, RuntimeError, SQLAlchemyError) as exc:
+    except _REQUEST_ERRORS as exc:
         return error(exc)
 
 
@@ -80,7 +82,7 @@ def terminal_readback(command: ConfiguredTerminalReadback, authorization: str | 
                 raise NamespaceAuthError(403)
             return JSONResponse(configured_cli.terminal_readback(uow, command),
                                 headers={"Cache-Control": "no-store"})
-    except (NamespaceAuthError, NotFoundError, ConflictError, ValueError, RuntimeError, SQLAlchemyError) as exc:
+    except _REQUEST_ERRORS as exc:
         return error(exc)
 
 
@@ -94,5 +96,5 @@ def artifact_readback(command: ConfiguredArtifactReadback, authorization: str | 
         with SAUnitOfWork() as uow, runtime_catalog_read(uow):
             return JSONResponse(configured_cli.artifact_readback(uow, command, role),
                                 headers={"Cache-Control": "no-store"})
-    except (NamespaceAuthError, NotFoundError, ConflictError, ValueError, RuntimeError, SQLAlchemyError) as exc:
+    except _REQUEST_ERRORS as exc:
         return error(exc)

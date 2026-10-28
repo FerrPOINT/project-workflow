@@ -57,13 +57,15 @@ def test_unknown_variant_fails_closed(base_input, monkeypatch):
         builder.derive_compatibility(root)
 
 
-def test_selector_keeps_legacy_default_and_explicit_base(monkeypatch):
+def test_selector_uses_configured_default_and_explicit_retained_variants(monkeypatch):
     monkeypatch.delenv("PROJECT_WORKFLOW_CATALOG_VARIANT", raising=False)
     command = [sys.executable, "-c",
                "from project_workflow.config import MANAGED_CATALOG_PATH; print(MANAGED_CATALOG_PATH.name)"]
-    assert subprocess.check_output(command, cwd=ROOT, text=True).strip() == "hermes_sdlc_catalog_v1.json"
+    assert subprocess.check_output(command, cwd=ROOT, text=True).strip() == "single_task_catalog_v1.json"
     monkeypatch.setenv("PROJECT_WORKFLOW_CATALOG_VARIANT", "base")
     assert subprocess.check_output(command, cwd=ROOT, text=True).strip() == "base_sdlc_catalog_v2.json"
+    monkeypatch.setenv("PROJECT_WORKFLOW_CATALOG_VARIANT", "legacy")
+    assert subprocess.check_output(command, cwd=ROOT, text=True).strip() == "hermes_sdlc_catalog_v1.json"
 
 
 def test_base_execution_credentials_are_rejected(monkeypatch):

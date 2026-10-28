@@ -36,6 +36,42 @@ def test_installed_catalog_readback_is_complete_uncached_and_catalog_only(config
     assert client.get(prefix + "/namespace-bindings/999999", headers=CATALOG).status_code == 404
 
 
+@pytest.mark.parametrize("failure", [RuntimeError, OSError])
+def test_catalog_observation_outage_is_unavailable_without_consuming_an_assignment(configured, monkeypatch, failure):
+    from project_workflow.application import configured_cli
+    from project_workflow.infrastructure.db import single_task_catalog
+
+    client, assignment = configured
+    monkeypatch.setenv("PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN", "c" * 40)
+    config.get_settings.cache_clear()
+    with monkeypatch.context() as unavailable:
+        def fail(_uow):
+            raise failure("private catalog diagnostic")
+        unavailable.setattr(single_task_catalog, "observe_installation", fail)
+        unavailable.setattr(configured_cli, "observe_installation", fail)
+        for route in ("catalog", "profiles/single-task-v1/installation"):
+            response = client.get("/internal/runtime/" + route, headers=CATALOG)
+            assert response.status_code == 503, response.text
+            assert "private catalog diagnostic" not in response.text
+        assert client.post("/internal/runtime/assign", headers=WRITER, json=assignment).status_code == 503
+    assert enroll(configured)["version"] == 1
+
+
+@pytest.mark.parametrize("configured", [("developer", "initial")], indirect=True)
+def test_server_history_credential_cannot_cross_profession_even_with_an_existing_task(configured, monkeypatch):
+    client, assignment = configured
+    enroll(configured)
+    monkeypatch.setenv("PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON", json.dumps({
+        "developer": "w" * 40, "project_manager": "p" * 40}))
+    config.get_settings.cache_clear()
+    query = {"interaction_protocol": "configured-cli-v1", "task": assignment["task"],
+             "namespace_id": assignment["namespace_id"]}
+    response = client.get("/internal/runtime/history", params=query,
+                          headers={"Authorization": "Bearer " + "p" * 40})
+    assert response.status_code == 403
+    assert client.get("/internal/runtime/history", params=query, headers=WRITER).status_code == 200
+
+
 def test_catalog_and_assignment_credentials_have_separate_capabilities(configured, monkeypatch):
     client, assignment = configured
     monkeypatch.setenv("PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN", "c" * 40)
