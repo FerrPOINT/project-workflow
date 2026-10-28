@@ -347,10 +347,10 @@ def test_dockerfile_verification_preserves_a_committed_executable(git_source: Pa
     extracted = tmp_path / "image"
     _extract_regular_context(docker_context_with_manifest(snapshot.archive, snapshot.provenance), extracted)
     dockerfile = (repo / "Dockerfile").read_text(encoding="utf-8")
-    instructions = dockerfile.replace("\\\n", "\n")
+    instructions = dockerfile.replace("\\\n", " ")
     commands = re.findall(r"^RUN (.*?)(?=\n[A-Z]+ |\Z)", instructions, flags=re.MULTILINE | re.DOTALL)
     command = next(value for value in commands if "verify-manifest" in value)
-    environment = dict(os.environ, SOURCE_REVISION=snapshot.revision,
+    environment = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", SOURCE_REVISION=snapshot.revision,
                        SOURCE_ARCHIVE_SHA256=snapshot.provenance.source_archive_sha256,
                        RUNTIME_BUNDLE_SHA256=snapshot.provenance.runtime_bundle_sha256,
                        PYTHONPATH=str(extracted))
