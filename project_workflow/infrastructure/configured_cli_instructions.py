@@ -67,8 +67,10 @@ PREPARATION_REPORT = (
     "facts are sufficient, publish the next FULL requirements revision without asking for separate permission "
     "to save the draft. 'Not confirmation of the final revision' does not prohibit updating the Draft. "
     "Do not invent unresolved business choices; clarify only actual remaining gaps. " + REPORT +
-    " Report only this completed preparation phase, then stop at "
-    "the returned next phase. Actual owner confirmation belongs to phase 3 in this SAME execution. "
+    " Report only this completed preparation phase. After an accepted report, continue with the returned next "
+    "phase in this SAME execution; do not stop merely because the phase changed. "
+    "Wait only for genuinely missing input or owner confirmation required by the current phase. "
+    "Actual owner confirmation belongs to phase 3 in this SAME execution. "
     "Never complete the PM Workflow or create another assignment/cycle merely to wait for consent."
 )
 FEEDBACK = (
