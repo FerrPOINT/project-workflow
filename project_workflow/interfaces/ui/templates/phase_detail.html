@@ -22,14 +22,17 @@
 .phase-text-icon{flex-shrink:0}
 .phase-add-action{align-self:flex-start}
 
-.timeline-badges input.skill-candidate{width:180px}
 .wiki-page .timeline-row{grid-template-columns:minmax(0,1fr);gap:8px}
 .instruction-card-footer{margin-top:8px}
-.instruction-skills{margin-top:8px}
-.instruction-skill-labels{display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px}
-.instruction-skill-editor .timeline-badges{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.instruction-skills{display:flex;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-top:8px;min-width:0}
+.instruction-skill-labels{display:flex;align-items:center;flex-wrap:wrap;gap:0 8px;flex:1 1 0;min-width:0}
+.instruction-skill-chip{display:inline-flex;align-items:center;gap:0;min-width:0;max-width:100%}
+.instruction-skill-chip > .base-badge{min-width:0}
+.skill-add-trigger{flex-shrink:0;margin-left:auto}
+.skill-add-form{display:flex;align-items:center;gap:6px;flex:1 0 100%;min-width:0}
+.skill-add-form[hidden],.skill-add-trigger[hidden]{display:none}
+.skill-add-form .skill-candidate{flex:1;min-width:0;width:100%}
 #instructionsTimeline{gap:12px;max-width:none}
-#instructionsTimeline .timeline-badges input.skill-candidate{max-width:100%}
 
 {% endblock %}
 
@@ -112,21 +115,16 @@
         {% call base_ui.prose() %}<p>{{ i.description }}</p>{% endcall %}
 {% endif %}
         <div class="instruction-skills">
-{% if can_administer %}
-          {% set skill_summary %}<span class="instruction-skill-labels"><span>Навыки{% if not i.skills %}: не выбраны{% endif %}</span>{% for s in i.skills or [] %}{{ base_ui.badge(s, 'info') }}{% endfor %}</span>{% endset %}
-          {% call base_ui.disclosure(skill_summary, appearance='row', class_name='instruction-skill-editor') %}
-          <div class="timeline-badges">
-            {% for s in i.skills or [] %}
-            {% call base_ui.badge(tone='info', appearance='inline') %}
-              <span data-instruction-skill="{{ s }}">{{ s }}</span>
-              <button type="button" class="base-control base-button base-icon-control skill-remove-btn" data-variant="ghost" data-size="icon" data-skill="{{ s }}" onclick="removeSkillFromInstruction(this)" aria-label="Убрать навык {{ s }} из инструкции {{ i.step_num }}">×</button>
-            {% endcall %}
-            {% endfor %}
-            <input class="skill-candidate base-control base-input" type="text" placeholder="Добавить навык" aria-label="Добавить навык к инструкции {{ i.step_num }}" onchange="addSkillToInstruction(this)">
+          <div class="instruction-skill-labels" role="list" aria-label="Навыки инструкции {{ i.step_num }}">
+            {% for s in i.skills or [] %}{{ workflow_cards.skill_chip(s, i.step_num, can_administer) }}{% endfor %}
           </div>
-          {% endcall %}
-{% elif i.skills %}
-          <div class="instruction-skill-labels">{% for s in i.skills %}{{ base_ui.badge(s, 'info') }}{% endfor %}</div>
+{% if can_administer %}
+          {{ base_ui.button('+', variant='ghost', size='icon', class_name='skill-add-trigger', aria_label='Добавить навык к инструкции ' ~ i.step_num, aria_controls='instruction-skill-form-' ~ i.id, title='Добавить навык') }}
+          <form method="post" class="skill-add-form" id="instruction-skill-form-{{ i.id }}" hidden aria-label="Добавление навыка к инструкции {{ i.step_num }}">
+            <input class="skill-candidate base-control base-input" type="text" placeholder="Название навыка" aria-label="Название нового навыка к инструкции {{ i.step_num }}" autocomplete="off" required>
+            {{ base_ui.button('✓', type='submit', size='icon', variant='outline', aria_label='Добавить введённый навык', title='Добавить навык · Enter') }}
+            {{ base_ui.button('×', size='icon', variant='ghost', class_name='skill-add-cancel', aria_label='Отменить добавление навыка', title='Отменить · Escape') }}
+          </form>
 {% endif %}
         </div>
         <div class="workflow-card-footer instruction-card-footer">
@@ -190,6 +188,7 @@
   {% endfor %}
 {% if can_administer %}
   <template id="instructions-empty-template"><div class="empty-state">{{ base_ui.state('empty', 'Нет инструкций') }}</div></template>
+  <template id="instruction-skill-chip-template">{{ workflow_cards.skill_chip('', 0, true) }}</template>
   <template id="instruction-parallel-group-template">{% call workflow_cards.parallel_group('Параллельная группа инструкций') %}{{ base_ui.badge('Параллельная группа', 'info', class_name='timeline-parallel-label') }}{% endcall %}</template>
 {% endif %}
 

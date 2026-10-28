@@ -21,3 +21,12 @@
 {% set group_content = caller() %}
 {% call base_ui.card(class_name='timeline-block timeline-parallel-group workflow-parallel-group base-card-content', label=label) %}{{ group_content }}{% endcall %}
 {%- endmacro %}
+
+{% macro skill_chip(skill, step_num, administrative=false) -%}
+<span class="instruction-skill-chip" role="listitem">
+  {% call base_ui.badge(tone='info') %}<span class="instruction-skill-name"{% if skill %} data-instruction-skill="{{ skill }}"{% endif %}>{{ skill }}</span>{% endcall %}
+{% if administrative %}
+  <button type="button" class="base-control base-button base-icon-control skill-remove-btn" data-variant="ghost" data-size="icon"{% if skill %} data-skill="{{ skill }}"{% endif %} onclick="removeSkillFromInstruction(this)" aria-label="Убрать навык {{ skill }} из инструкции {{ step_num }}" title="Убрать навык">×</button>
+{% endif %}
+</span>
+{%- endmacro %}

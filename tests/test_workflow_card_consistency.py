@@ -41,3 +41,20 @@ def test_parallel_instruction_frame_and_rebuild_use_shared_template():
     assert 'id="instruction-parallel-group-template"' in html
     css = (Path(__file__).parents[1] / "project_workflow/interfaces/ui/templates/workflow-cards.css").read_text()
     assert 'border-color:#d97706' in css
+
+
+@pytest.mark.parametrize("admin", [False, True])
+def test_instruction_skill_chips_have_no_disclosure_and_use_plus_for_free_text(admin):
+    html = instruction_editor(admin, True)
+    elements = Elements(html).elements
+    assert "instruction-skill-editor" not in html
+    assert "skill_summary" not in html
+    triggers = [attrs for tag, attrs in elements
+                if tag == "button" and "skill-add-trigger" in attrs.get("class", "").split()]
+    forms = [attrs for tag, attrs in elements if tag == "form" and "skill-add-form" in attrs.get("class", "").split()]
+    assert bool(triggers) == admin
+    assert bool(forms) == admin
+    assert all("hidden" in form and form.get("method") == "post" for form in forms)
+    assert all(button["aria-label"].startswith("Добавить навык") for button in triggers)
+    assert all(button["data-size"] == "icon" for button in triggers)
+    assert ('id="instruction-skill-chip-template"' in html) == admin

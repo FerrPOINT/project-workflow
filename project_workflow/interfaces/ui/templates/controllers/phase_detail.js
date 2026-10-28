@@ -409,51 +409,88 @@ async function saveInstructionDescription(input) {
   }
 }
 
+function openInstructionSkillEditor(button) {
+  const form = button.closest('.timeline-card').querySelector('.skill-add-form');
+  if (form.closest('.timeline-card').dataset.skillSaving === 'true') return;
+  button.hidden = true;
+  form.hidden = false;
+  form.querySelector('.skill-candidate').focus();
+}
+
+function closeInstructionSkillEditor(form) {
+  const card = form.closest('.timeline-card');
+  if (card.dataset.skillSaving === 'true') return;
+  form.querySelector('.skill-candidate').value = '';
+  form.hidden = true;
+  const trigger = card.querySelector('.skill-add-trigger');
+  trigger.hidden = false;
+  trigger.focus();
+}
+
+function renderInstructionSkills(card, skills) {
+  const template = document.getElementById('instruction-skill-chip-template');
+  const chips = skills.map(skill => {
+    const chip = template.content.firstElementChild.cloneNode(true);
+    const label = chip.querySelector('.instruction-skill-name');
+    label.textContent = skill;
+    label.dataset.instructionSkill = skill;
+    const remove = chip.querySelector('.skill-remove-btn');
+    remove.dataset.skill = skill;
+    remove.setAttribute('aria-label', 'Убрать навык ' + skill + ' из инструкции ' + card.dataset.stepNum);
+    return chip;
+  });
+  card.querySelector('.instruction-skill-labels').replaceChildren(...chips);
+}
+
+async function saveInstructionSkills(card, skills) {
+  if (card.dataset.skillSaving === 'true') return false;
+  card.dataset.skillSaving = 'true';
+  const widget = card.querySelector('.instruction-skills');
+  widget.setAttribute('aria-busy', 'true');
+  widget.querySelectorAll('button,input').forEach(control => { control.disabled = true; });
+  try {
+    const result = await requestPhaseDetail(phaseApiUrl(config.basePath + '/api/instructions/' + card.dataset.instructionId), {
+      method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({skills}),
+    });
+    if (!result) return false;
+    const {resp, data} = result;
+    if (!resp.ok || !data.ok) { showToast(data.error || 'Не удалось сохранить навыки', 'error'); return false; }
+    if (String(data.instruction?.id) !== card.dataset.instructionId || !Array.isArray(data.instruction?.skills)
+        || data.instruction.skills.some(skill => typeof skill !== 'string')) {
+      mutationNeedsReadback = true;
+      mutationRequiresReload = true;
+      updatePhaseSaveStatus();
+      showToast('Не удалось подтвердить сохранённые навыки. Проверьте состояние.', 'error');
+      return false;
+    }
+    renderInstructionSkills(card, normalizeSkillNames(data.instruction.skills));
+    return true;
+  } finally {
+    delete card.dataset.skillSaving;
+    widget.removeAttribute('aria-busy');
+    widget.querySelectorAll('button,input').forEach(control => { control.disabled = false; });
+  }
+}
+
 async function addSkillToInstruction(input) {
   const card = input.closest('.timeline-card');
-  const id = card.dataset.instructionId;
   const skill = String(input.value || '').trim();
-  if (!skill) return;
-  const existing = Array.from(card.querySelectorAll('[data-instruction-skill]'), (item) => item.dataset.instructionSkill);
-  const skills = normalizeSkillNames([...existing, skill]);
-  input.disabled = true;
-  try {
-    const result = await requestPhaseDetail(phaseApiUrl('' + config.basePath + '/api/instructions/' + id), {
-      method: 'PUT',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({skills: skills}),
-    });
-    if (!result) return;
-    const {resp} = result;
-    if (!resp.ok) {
-      showToast('Не удалось добавить навык', 'error');
-      return;
-    }
-    input.value = '';
-    window.PdlcPlatformNavigation.reload();
-  } finally {
-    input.disabled = false;
+  if (!skill || card.dataset.skillSaving === 'true') return;
+  const existing = Array.from(card.querySelectorAll('[data-instruction-skill]'), item => item.dataset.instructionSkill);
+  if (await saveInstructionSkills(card, normalizeSkillNames([...existing, skill]))) {
+    closeInstructionSkillEditor(input.closest('.skill-add-form'));
+    window.PdlcPlatformNavigation.refreshDrafts?.();
   }
 }
 
 async function removeSkillFromInstruction(button) {
   const card = button.closest('.timeline-card');
-  const id = card.dataset.instructionId;
-  const skillName = button.dataset.skill;
-  const existing = Array.from(card.querySelectorAll('[data-instruction-skill]'), (item) => item.dataset.instructionSkill);
-  const skills = normalizeSkillNames(existing.filter((s) => s !== skillName));
-  const result = await requestPhaseDetail(phaseApiUrl('' + config.basePath + '/api/instructions/' + id), {
-    method: 'PUT',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({skills: skills}),
-  });
-  if (!result) return;
-  const {resp} = result;
-  if (!resp.ok) {
-    showToast('Не удалось убрать навык', 'error');
-    return;
+  const skill = button.dataset.skill;
+  const existing = Array.from(card.querySelectorAll('[data-instruction-skill]'), item => item.dataset.instructionSkill);
+  if (await saveInstructionSkills(card, existing.filter(name => name !== skill))) {
+    const form = card.querySelector('.skill-add-form');
+    (form.hidden ? card.querySelector('.skill-add-trigger') : form.querySelector('.skill-candidate')).focus();
   }
-  window.PdlcPlatformNavigation.reload();
 }
 
 /* ---------- Checks & Evidence ---------- */
@@ -666,7 +703,26 @@ page.ready(() => {
   renderInstructionTimeline(getInstructionItems());
   updateInstructionControls();
 });
+page.on(document,'submit',event=>{
+  const form = event.target.closest?.('.skill-add-form');
+  if (!form) return;
+  event.preventDefault();
+  void addSkillToInstruction(form.querySelector('.skill-candidate'));
+});
+page.on(document,'keydown',event=>{
+  if (event.key !== 'Escape' || !event.target.matches?.('.skill-candidate')) return;
+  event.preventDefault();
+  event.stopPropagation();
+  closeInstructionSkillEditor(event.target.closest('.skill-add-form'));
+});
 page.on(document,'click',event=>{
+  const skillButton=event.target.closest?.('.skill-add-trigger,.skill-add-cancel');
+  if(skillButton){
+    if(skillButton.disabled)return;
+    if(skillButton.matches('.skill-add-trigger'))openInstructionSkillEditor(skillButton);
+    else closeInstructionSkillEditor(skillButton.closest('.skill-add-form'));
+    return;
+  }
   const button=event.target.closest?.('.instruction-card-actions button');
   if(!button||button.disabled)return;
   if(button.matches('.phase-add-btn'))void addInstructionAfter(button);

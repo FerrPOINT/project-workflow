@@ -1539,7 +1539,7 @@ class TestPhaseDetail:
             assert f'data-instruction-skill="{skills[0]}"' in response.text
             assert f'data-instruction-skill="{skills[1]}"' in response.text
             assert (
-                'class="skill-candidate base-control base-input" type="text" placeholder="Добавить навык"'
+                'class="skill-candidate base-control base-input" type="text" placeholder="Название навыка"'
                 in response.text
             )
         finally:
