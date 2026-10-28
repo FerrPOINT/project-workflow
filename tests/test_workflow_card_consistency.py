@@ -61,5 +61,6 @@ def test_instruction_skill_chips_have_no_disclosure_and_use_plus_for_free_text(a
     assert bool(forms) == admin
     assert all("hidden" in form and form.get("method") == "post" for form in forms)
     assert all(button["aria-label"].startswith("Добавить навык") for button in triggers)
-    assert all(button["data-size"] == "icon" for button in triggers)
+    assert all("base-badge-button" in button["class"].split() and button["data-appearance"] == "badge"
+               for button in triggers)
     assert ('id="instruction-skill-chip-template"' in html) == admin

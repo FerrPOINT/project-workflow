@@ -844,12 +844,14 @@ class SharedShellTemplateTests(TestCase):
                 elements = Elements(html).elements
                 skills = [attrs["data-instruction-skill"] for _, attrs in elements if "data-instruction-skill" in attrs]
                 self.assertEqual(skills, ["tool×safe", '<script> "quoted"'])
-                remove = [attrs for tag, attrs in elements if tag == "button" and "data-skill" in attrs]
-                self.assertEqual([button["data-skill"] for button in remove], skills)
+                remove = [attrs for tag, attrs in elements if tag == "button" and
+                          "skill-remove-btn" in attrs.get("class", "").split() and attrs.get("value")]
+                self.assertEqual([button["value"] for button in remove], skills)
                 for button in remove:
-                    self.assertTrue({"base-control", "base-button"} <= set(button["class"].split()))
-                    self.assertEqual(button["data-size"], "icon")
-                    self.assertEqual(button["onclick"], "removeSkillFromInstruction(this)")
+                    self.assertTrue({"base-badge", "base-badge-button"} <= set(button["class"].split()))
+                    self.assertEqual(button["data-appearance"], "inline")
+                    self.assertEqual(button["type"], "button")
+                    self.assertNotIn("onclick", button)
                 toggles = [
                     attrs
                     for tag, attrs in elements

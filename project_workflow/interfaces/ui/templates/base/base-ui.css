@@ -1032,6 +1032,41 @@ dialog.base-shell-drawer::backdrop {
     grid-template-columns: 10rem minmax(0, 1fr);
   }
 }
+/* Explicit dense tag actions keep a 24px minimum target without shrinking regular controls. */
+.base-badge-button {
+  font-family: inherit;
+  cursor: pointer;
+  justify-content: center;
+  flex: none;
+  min-width: 26px;
+  min-height: 26px;
+  vertical-align: middle;
+}
+.base-badge-button[data-appearance="inline"] {
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--base-radius);
+  background: transparent;
+}
+.base-badge-button:not(:disabled):hover {
+  background: color-mix(in oklab, var(--base-badge-color) 20%, transparent);
+}
+.base-badge-button:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+.base-badge-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.base-badge-button > svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
 .base-badge > svg {
   width: 1em;
   height: 1em;
@@ -3148,14 +3183,35 @@ label.base-card[data-interactive="true"]:has(input:disabled) {
 
 /* The SSR reset precedes shared component styles without overriding their layer. */
 @layer base {
-  .base-ssr-shell, .base-ssr-shell * { box-sizing: border-box; margin: 0; padding: 0; }
+  .base-ssr-shell,
+  .base-ssr-shell * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
 }
 /* Adapter for server-rendered markup. Values come only from canonical tokens. */
-.base-ssr-copy { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; min-width: 0; }
-.base-ssr-copy [data-base-copy-status], .base-ssr-copy [data-base-copy-error] { font-size: var(--base-font-label); overflow-wrap: anywhere; }
-.base-ssr-copy [data-base-copy-status] { color: var(--color-text-secondary); }
-.base-ssr-copy [data-base-copy-error] { color: var(--color-danger); }
-.base-ssr-copy [aria-busy="true"] { cursor: progress; }
+.base-ssr-copy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.base-ssr-copy [data-base-copy-status],
+.base-ssr-copy [data-base-copy-error] {
+  font-size: var(--base-font-label);
+  overflow-wrap: anywhere;
+}
+.base-ssr-copy [data-base-copy-status] {
+  color: var(--color-text-secondary);
+}
+.base-ssr-copy [data-base-copy-error] {
+  color: var(--color-danger);
+}
+.base-ssr-copy [aria-busy="true"] {
+  cursor: progress;
+}
 :root {
   --bg: var(--color-background);
   --panel: var(--color-surface);
@@ -3263,7 +3319,9 @@ label.base-card[data-interactive="true"]:has(input:disabled) {
   text-align: center;
   overflow-wrap: anywhere;
 }
-.base-ssr-shell .btn { border-color: var(--color-border); }
+.base-ssr-shell .btn {
+  border-color: var(--color-border);
+}
 .base-button-secondary,
 .base-ssr-shell .btn-secondary {
   background: var(--color-surface-raised);
@@ -3503,10 +3561,11 @@ label.base-card[data-interactive="true"]:has(input:disabled) {
     .namespace-icon-action,
     .brand-link,
     .sidebar-service-link
-  ):not(.base-resource-list-row) {
+  ):not(.base-resource-list-row, .base-badge-button) {
   min-height: var(--shell-control-min);
 }
-.base-ssr-shell :is(button, summary, .namespace-icon-action) {
+.base-ssr-shell
+  :is(button, summary, .namespace-icon-action):not(.base-badge-button) {
   min-width: var(--shell-control-min);
 }
 .base-ssr-shell label:has(input[type="checkbox"]),
@@ -3551,10 +3610,11 @@ label.base-card[data-interactive="true"]:has(input:disabled) {
       .brand-link,
       .sidebar-service-link,
       .sidebar-link
-    ):not(.base-resource-list-row) {
+    ):not(.base-resource-list-row, .base-badge-button) {
     min-height: var(--shell-control-mobile-min);
   }
-  .base-ssr-shell :is(button, summary, .namespace-icon-action) {
+  .base-ssr-shell
+    :is(button, summary, .namespace-icon-action):not(.base-badge-button) {
     min-width: var(--shell-control-mobile-min);
   }
   .base-ssr-shell label:has(input[type="checkbox"]),

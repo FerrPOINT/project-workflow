@@ -435,12 +435,14 @@ function renderInstructionSkills(card, skills) {
     label.textContent = skill;
     label.dataset.instructionSkill = skill;
     const remove = chip.querySelector('.skill-remove-btn');
-    remove.dataset.skill = skill;
+    remove.value = skill;
     remove.setAttribute('aria-label', 'Убрать навык ' + skill + ' из инструкции ' + card.dataset.stepNum);
     remove.setAttribute('title', 'Убрать навык ' + skill);
     return chip;
   });
-  card.querySelector('.instruction-skill-labels').replaceChildren(...chips);
+  const list = card.querySelector('.instruction-skill-labels');
+  const addItem = list.querySelector('.skill-add-item');
+  list.replaceChildren(...chips, addItem);
 }
 
 async function saveInstructionSkills(card, skills) {
@@ -486,7 +488,7 @@ async function addSkillToInstruction(input) {
 
 async function removeSkillFromInstruction(button) {
   const card = button.closest('.timeline-card');
-  const skill = button.dataset.skill;
+  const skill = button.value;
   const existing = Array.from(card.querySelectorAll('[data-instruction-skill]'), item => item.dataset.instructionSkill);
   if (await saveInstructionSkills(card, existing.filter(name => name !== skill))) {
     const form = card.querySelector('.skill-add-form');
@@ -717,10 +719,11 @@ page.on(document,'keydown',event=>{
   closeInstructionSkillEditor(event.target.closest('.skill-add-form'));
 });
 page.on(document,'click',event=>{
-  const skillButton=event.target.closest?.('.skill-add-trigger,.skill-add-cancel');
+  const skillButton=event.target.closest?.('.skill-add-trigger,.skill-add-cancel,.skill-remove-btn');
   if(skillButton){
     if(skillButton.disabled)return;
-    if(skillButton.matches('.skill-add-trigger'))openInstructionSkillEditor(skillButton);
+    if(skillButton.matches('.skill-remove-btn'))void removeSkillFromInstruction(skillButton);
+    else if(skillButton.matches('.skill-add-trigger'))openInstructionSkillEditor(skillButton);
     else closeInstructionSkillEditor(skillButton.closest('.skill-add-form'));
     return;
   }

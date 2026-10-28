@@ -75,6 +75,9 @@ await w.addInstructionLast();await instructionReadback(()=>instructionRows().len
 let instructionFirst=instructionRows()[0].dataset.instructionId;
 assert.equal(d.querySelector('.instruction-card-actions').querySelectorAll('button').length,5);
 assert.equal(d.querySelector('.phase-order-controls'),null);
+assert.equal(skillPlacement(),true);
+function skillPlacement(){const list=d.querySelector('.instruction-skill-labels');return list.lastElementChild.classList.contains('skill-add-item')&&!!list.querySelector('.skill-add-trigger.base-badge-button');}
+
 // Skill edits patch only confirmed chips; they do not replace the editor or its draft.
 const skillCard=instructionRows()[0].querySelector('.timeline-card');
 const skillInput=skillCard.querySelector('.skill-candidate'),skillForm=skillCard.querySelector('.skill-add-form');
@@ -91,7 +94,7 @@ skillFailure=false;const pendingDescription=skillCard.querySelector('.timeline-n
 pendingDescription.value='Несохранённое описание рядом с навыками';pendingDescription.dispatchEvent(new w.Event('input',{bubbles:true}));
 const beforeSkillWrites=skillWrites;await Promise.all([w.addSkillToInstruction(skillInput),w.addSkillToInstruction(skillInput)]);
 assert.equal(skillWrites-beforeSkillWrites,1,'one in-flight write per instruction');
-assert.deepEqual(skillNames(),[skillName]);assert.equal(skillCard.isConnected,true);
+assert.deepEqual(skillNames(),[skillName]);assert.equal(skillCard.isConnected,true);assert.equal(skillPlacement(),true);
 const chipRemove=skillCard.querySelector('.skill-remove-btn');
 assert.ok(chipRemove.closest('.base-badge'),'remove belongs to the same visible pill');
 assert.ok(chipRemove.querySelector('svg[aria-hidden="true"]'));

@@ -93,6 +93,10 @@
 <span class="base-badge{% if class_name %} {{ class_name }}{% endif %}" data-tone="{{ tone }}" data-appearance="{{ appearance }}">{% if appearance == 'dot' %}<span class="base-badge-dot" aria-hidden="true"></span>{% endif %}{% if caller is defined %}{{ caller() }}{% elif label is not none %}{{ label }}{% endif %}</span>
 {%- endmacro %}
 
+{% macro badge_button(label, tone='neutral', appearance='badge', id=none, type='button', disabled=false, class_name='', aria_label=none, title=none, aria_controls=none, value=none) -%}
+<button type="{{ type }}" class="base-badge base-badge-button{% if class_name %} {{ class_name }}{% endif %}" data-tone="{{ tone }}" data-appearance="{{ appearance }}"{% if id %} id="{{ id }}"{% endif %}{% if disabled %} disabled{% endif %}{% if aria_label %} aria-label="{{ aria_label }}"{% endif %}{% if title %} title="{{ title }}"{% endif %}{% if aria_controls %} aria-controls="{{ aria_controls }}"{% endif %}{% if value is not none %} value="{{ value }}"{% endif %}>{{ label }}</button>
+{%- endmacro %}
+
 {% macro progress(value, max=100, variant='default', label=none, value_text=none, class_name='') -%}
 {# Reject non-finite values without Jinja's constant-folded infinity literals. #}
 {% set known = value is number and value is not boolean and max is number and max is not boolean and max > 0 and value - value == 0 and max - max == 0 -%}

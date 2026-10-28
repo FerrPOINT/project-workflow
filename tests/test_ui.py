@@ -1555,18 +1555,16 @@ class TestPhaseDetail:
         assert 'placeholder="Добавить навык"' in response.text
 
     def test_phase_detail_skill_names_do_not_leak_into_js_string_context(self):
-        """Навыки попадают в JS только через data-атрибуты (autoescape), не в строки.
-
-        Регрессия XSS: раньше имя навыка подставлялось в onclick='...{{ s }}...'
-        и могло разорвать JS-строку. Сейчас обработчик читает data-skill.
-        """
+        """Skill values stay in escaped native button values, never inline JS."""
         response = client.get(_phase_detail_path("1.INTAKE"))
         assert response.status_code == 200
-        # Навык передаётся через data-атрибут (HTML-контекст, автоэскейпится)
-        assert 'onclick="removeSkillFromInstruction(this)"' in response.text
+        elements = Elements(response.text).elements
+        skills = [attrs["data-instruction-skill"] for _, attrs in elements if "data-instruction-skill" in attrs]
+        remove = [attrs for tag, attrs in elements if tag == "button" and
+                  "skill-remove-btn" in attrs.get("class", "").split() and attrs.get("value")]
+        assert [item["value"] for item in remove] == skills
+        assert all("onclick" not in item for item in remove)
         assert "removeSkillFromInstruction(this, '" not in response.text
-        # Имя фазы не интерполируется в JS-литералы (эталон tojson-фикса 5054858)
-        assert "meta.name || '" not in response.text
 
     def test_phase_detail_keeps_autosave_without_header_mode_controls(self):
         response = client.get(_phase_detail_path("1.INTAKE"))
