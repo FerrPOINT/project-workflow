@@ -196,3 +196,10 @@ Dashboard metrics используют штатный Base macro metric со с�
 принадлежат Base. Подсчёт, verdict → tone и внешняя dashboard-grid остаются
 Workflow. Новый SSR API требует соответствующего UI pin и штатного export;
 SDK/skills pins не изменять вслед за UI. Source-проверка не означает установку.
+
+## Проверка Git-гигиены
+
+Перед коммитом: `python3 -B scripts/check_repository_hygiene.py --index`.
+Перед публикацией проверять точный кандидат через `--ref <commit>`. Установка
+hooks и допустимые артефакты: [правила](docs/REPOSITORY_HYGIENE.md).
+Копии проверки принадлежат Base; SDK/UI pins не меняются.
