@@ -40,8 +40,14 @@ class CatalogChecks(unittest.TestCase):
                 self.assertEqual(len(uow.workflows.list_by_profession(binding["namespace_id"])), 2)
             for table in (m.Task, m.TaskRuntimeAssignment, m.TaskStepHistoryEntry):
                 self.assertEqual(uow.session.scalar(select(func.count()).select_from(table)), 0)
-        with SAUnitOfWork(self.engine) as uow, self.assertRaisesRegex(ValueError, "overwrite"):
-            register(uow, self.content, self.digest)
+        with SAUnitOfWork(self.engine) as uow:
+            self.assertEqual(register(uow, self.content, self.digest), result)
+            self.assertEqual(len(uow.workflows.list()), 14)
+        changed = catalog()
+        changed["workflows"][0]["modes"][0]["phases"][0]["checks"].append("Changed criterion")
+        content = json.dumps(changed).encode()
+        with SAUnitOfWork(self.engine) as uow, self.assertRaises(ValueError):
+            register(uow, content, hashlib.sha256(content).hexdigest())
 
     def test_wrong_digest_and_late_invalid_mode_leave_no_custom_catalog(self):
         invalid = catalog()

@@ -9,7 +9,12 @@ from pathlib import Path
 
 
 def register(uow, content: bytes, expected_sha256: str) -> dict:
-    from project_workflow.infrastructure.db.managed_catalog import ManagedMode, _persist_mode
+    from project_workflow.infrastructure.db.managed_catalog import (
+        ManagedMode,
+        _ArchivedWorkflowDefinition,
+        _assert_existing_workflow,
+        _persist_mode,
+    )
     from project_workflow.infrastructure.db.single_task_catalog import observe_installation
 
     if hashlib.sha256(content).hexdigest() != expected_sha256:
@@ -23,21 +28,36 @@ def register(uow, content: bytes, expected_sha256: str) -> dict:
     definitions = catalog["workflows"]
     if [definition["role_key"] for definition in definitions] != list(professions):
         raise ValueError("Exactly seven installed professions required")
-    existing = {workflow.key for workflow in uow.workflows.list()}
+    existing = {workflow.key: workflow for workflow in uow.workflows.list()}
+    present = [definition["key"] in existing for definition in definitions]
+    if any(present) and not all(present):
+        raise ValueError("Partial sandbox catalog requires operator review")
     for definition in definitions:
-        if definition["key"] != "file-sandbox-v1:" + definition["role_key"] or definition["key"] in existing:
-            raise ValueError("Refusing to overwrite a workflow or reuse a previous sandbox")
+        if definition["key"] != "file-sandbox-v1:" + definition["role_key"]:
+            raise ValueError("Explicit sandbox workflow identity required")
         for mode in definition["modes"]:
             ManagedMode.model_validate(mode)
+        if definition["key"] in existing:
+            workflow = existing[definition["key"]]
+            if (workflow.name != definition["name"] or workflow.description != "Ручная файловая CLI-приёмка"
+                    or not uow.workflows.belongs_to_profession(workflow.id, professions[definition["role_key"]])):
+                raise ValueError("Existing sandbox identity or profession differs")
+            _assert_existing_workflow(uow, workflow, _ArchivedWorkflowDefinition(
+                key=definition["key"], name=definition["name"], description=workflow.description,
+                role_key=definition["role_key"],
+                modes=[ManagedMode.model_validate(mode) for mode in definition["modes"]]))
     bindings = []
     for definition in definitions:
         role = definition["role_key"]
-        workflow = uow.workflows.create({"key": definition["key"], "name": definition["name"],
-                                         "description": "Ручная файловая CLI-приёмка", "create_default_mode": False})
-        uow.workflows.assign_profession(workflow, professions[role])
-        for mode in definition["modes"]:
-            _persist_mode(uow, workflow_id=workflow, role_key=role,
-                          mode=ManagedMode.model_validate(mode), catalog_version=1)
+        if all(present):
+            workflow = existing[definition["key"]].id
+        else:
+            workflow = uow.workflows.create({"key": definition["key"], "name": definition["name"],
+                "description": "Ручная файловая CLI-приёмка", "create_default_mode": False})
+            uow.workflows.assign_profession(workflow, professions[role])
+            for mode in definition["modes"]:
+                _persist_mode(uow, workflow_id=workflow, role_key=role,
+                              mode=ManagedMode.model_validate(mode), catalog_version=1)
         bindings.append({"role_key": role, "namespace_id": professions[role], "workflow_id": workflow,
                          "workflow_key": definition["key"], "modes": uow.workflows.list_modes(workflow)})
     # The managed instructions and profession bindings must remain valid.
