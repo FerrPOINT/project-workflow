@@ -278,3 +278,7 @@ wrapping-ряду сразу после последнего навыка, вк�
 ### Additional browser origin
 
 An operator-managed HTTPS alias may be listed explicitly in `AUTH_BROWSER_ORIGINS` (JSON array). The default is empty; the canonical AUTH_PUBLIC_ORIGIN remains accepted. Each entry must be an exact HTTP(S) origin with no wildcard, userinfo, path, query or fragment. Cookie writes require an exact Origin match; absent/foreign/scheme-or-port-changed origins remain forbidden. This setting does not change OIDC issuer, registered redirects, PAT scopes or roles. A proxy must preserve the browser's Origin header.
+
+### Выравнивание текста фазы
+
+Inline Input/Textarea используют общий Base appearance без горизонтального inset: текст инструкции совпадает с левым краем её содержимого. Строки проверок и подтверждений центрируют текст, действия и декоративные SVG 16×16 по вертикали; одинаковая геометрия сохраняется для одной и нескольких строк, admin и read-only. Обычные поля формы сохраняют штатные отступы.

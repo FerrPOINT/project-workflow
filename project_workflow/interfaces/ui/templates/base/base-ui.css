@@ -1772,6 +1772,8 @@ body > .base-loading-state {
   }
   .base-input[data-appearance="inline"],
   .base-textarea[data-appearance="inline"] {
+    padding-inline: 0;
+    border-inline-width: 0;
     background: transparent;
     border-color: transparent;
     box-shadow: none;
