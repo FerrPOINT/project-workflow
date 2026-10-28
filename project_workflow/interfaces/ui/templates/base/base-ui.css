@@ -2998,17 +2998,33 @@ body {
 .base-branding-preview .base-card {
   margin: 12px;
 }
+/* Preview composition stays compact without changing the demonstrated control tokens. */
+.base-branding-samples,
+.base-branding-fields {
+  display: grid;
+  min-width: 0;
+  gap: var(--base-control-padding-inline);
+}
+.base-branding-fields {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  align-items: start;
+}
+.base-branding-fields > * {
+  min-width: 0;
+}
+.base-branding-options {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--base-control-padding-inline);
+}
 .base-branding-identity {
   display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
   overflow-wrap: anywhere;
-}
-.base-branding-identity svg {
-  width: 20px;
-  height: 20px;
-  flex: none;
 }
 .base-branding-navigation {
   display: flex;

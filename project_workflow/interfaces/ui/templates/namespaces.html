@@ -400,7 +400,7 @@ function createNamespace(){
       if(d.ok){
         showToast('Профессия создан','success');
         window.PdlcPlatformNavigation.saved(document.getElementById('namespaceForm'));
-        window.PdlcPlatformNavigation.navigate(namespaceScopedPath('{{ ui_base_path() }}/namespaces', d.namespace_id));
+        page.navigateAfterWrite(namespaceScopedPath('{{ ui_base_path() }}/namespaces', d.namespace_id));
       } else {
         showToast(d.error || 'Ошибка','error');
       }
@@ -425,7 +425,7 @@ function submitNamespace(){
   button.disabled = true;
   button.textContent = namespaceFormMode === 'create' ? 'Создание…' : 'Сохранение…';
   var operation = namespaceFormMode === 'create' ? createNamespace() : saveNamespace();
-  Promise.resolve(operation).finally(function(){ button.disabled = false; setNamespaceFormMode(namespaceFormMode); });
+  return Promise.resolve(operation).finally(function(){ button.disabled = false; setNamespaceFormMode(namespaceFormMode); });
 }
 document.getElementById('namespaceThemeIcon').addEventListener('change', updateNamespaceThemePreview);
 updateNamespaceThemePreview();
@@ -441,7 +441,7 @@ if(selectedNamespaceId == null){
   rememberNamespaceSelection(selectedNamespaceId, 'replace');
 }
 syncNav();
-window.addEventListener('popstate', restoreNamespaceLocation);
+page.on(window,'popstate', restoreNamespaceLocation);
 document.getElementById('namespaceName').addEventListener('input', updateNamespaceThemePreview);
 document.getElementById('namespaceCliCommand').addEventListener('input', updateNamespaceThemePreview);
 {% else %}
@@ -453,3 +453,34 @@ function selectNamespace(id){
 }
 {% endif %}
 {% endblock %}
+
+{% block page_exports %}
+applyNamespaceIdentity:typeof applyNamespaceIdentity==='function'?applyNamespaceIdentity:undefined,
+cancelCreateNamespace:typeof cancelCreateNamespace==='function'?cancelCreateNamespace:undefined,
+createNamespace:typeof createNamespace==='function'?createNamespace:undefined,
+currentPayload:typeof currentPayload==='function'?currentPayload:undefined,
+deleteNamespace:typeof deleteNamespace==='function'?deleteNamespace:undefined,
+fillNamespaceForm:typeof fillNamespaceForm==='function'?fillNamespaceForm:undefined,
+namespaceById:typeof namespaceById==='function'?namespaceById:undefined,
+namespaceContextLabel:typeof namespaceContextLabel==='function'?namespaceContextLabel:undefined,
+namespaceIconSvg:typeof namespaceIconSvg==='function'?namespaceIconSvg:undefined,
+namespaceIdFromUrl:typeof namespaceIdFromUrl==='function'?namespaceIdFromUrl:undefined,
+namespaceScopedPath:typeof namespaceScopedPath==='function'?namespaceScopedPath:undefined,
+reloadNamespaces:typeof reloadNamespaces==='function'?reloadNamespaces:undefined,
+rememberNamespaceSelection:typeof rememberNamespaceSelection==='function'?rememberNamespaceSelection:undefined,
+renderNamespaceIconChoice:typeof renderNamespaceIconChoice==='function'?renderNamespaceIconChoice:undefined,
+renderNamespaceNav:typeof renderNamespaceNav==='function'?renderNamespaceNav:undefined,
+renderNamespacePagePicker:typeof renderNamespacePagePicker==='function'?renderNamespacePagePicker:undefined,
+renderNamespaceSelector:typeof renderNamespaceSelector==='function'?renderNamespaceSelector:undefined,
+restoreNamespaceLocation:typeof restoreNamespaceLocation==='function'?restoreNamespaceLocation:undefined,
+saveNamespace:typeof saveNamespace==='function'?saveNamespace:undefined,
+selectNamespace:typeof selectNamespace==='function'?selectNamespace:undefined,
+setNamespaceFormMode:typeof setNamespaceFormMode==='function'?setNamespaceFormMode:undefined,
+startCreateNamespace:typeof startCreateNamespace==='function'?startCreateNamespace:undefined,
+submitNamespace:typeof submitNamespace==='function'?submitNamespace:undefined,
+syncNamespaceUrl:typeof syncNamespaceUrl==='function'?syncNamespaceUrl:undefined,
+syncNav:typeof syncNav==='function'?syncNav:undefined,
+updateNamespaceHeaderLinks:typeof updateNamespaceHeaderLinks==='function'?updateNamespaceHeaderLinks:undefined,
+updateNamespaceThemePreview:typeof updateNamespaceThemePreview==='function'?updateNamespaceThemePreview:undefined,
+{% endblock %}
+{% block page_handles_history %}true{% endblock %}

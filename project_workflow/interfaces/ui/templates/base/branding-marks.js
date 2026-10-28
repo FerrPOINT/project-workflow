@@ -1,4 +1,4 @@
-import { contrast } from "./branding-colors.js";
+import { isHex } from "./branding-colors.js";
 import { brandingIcons } from "./branding-icons.js";
 export function effectiveMark(document, theme) {
   return (
@@ -34,8 +34,8 @@ export async function brandingFavicon(brand, theme) {
   canvas.width = canvas.height = 64;
   const ctx = canvas.getContext("2d");
   if (!ctx) return null;
-  const safe = contrast(mark.foreground, mark.background) >= 4.5;
-  const foreground = safe ? mark.foreground : "#ffffff";
+  const validColors = isHex(mark.foreground) && isHex(mark.background);
+  const foreground = validColors ? mark.foreground : "#ffffff";
   const radius =
     mark.shape === "circle"
       ? 32
@@ -45,7 +45,7 @@ export async function brandingFavicon(brand, theme) {
   ctx.beginPath();
   ctx.roundRect(0, 0, 64, 64, radius);
   ctx.clip();
-  ctx.fillStyle = safe ? mark.background : "#2563eb";
+  ctx.fillStyle = validColors ? mark.background : "#2563eb";
   ctx.fillRect(0, 0, 64, 64);
   const asset =
     brand.design.favicon.mode === "image"

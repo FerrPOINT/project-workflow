@@ -62,3 +62,17 @@ data/workflow.db
 data/workflow.db-*
 tmp/
 .env
+
+# Disposable artifacts: enforced by scripts/check_repository_hygiene.py
+node_modules/
+.pnpm-store/
+.local/
+.worktree/
+.worktrees/
+worktree/
+worktrees/
+target/
+target-cache*/
+target-stage/
+target-stable/
+*.tsbuildinfo

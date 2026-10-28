@@ -74,8 +74,8 @@ async function brandingFavicon(brand, theme) {
   canvas.width = canvas.height = 64;
   const ctx = canvas.getContext("2d");
   if (!ctx) return null;
-  const safe = contrast(mark.foreground, mark.background) >= 4.5;
-  const foreground = safe ? mark.foreground : "#ffffff";
+  const validColors = isHex(mark.foreground) && isHex(mark.background);
+  const foreground = validColors ? mark.foreground : "#ffffff";
   const radius =
     mark.shape === "circle"
       ? 32
@@ -85,7 +85,7 @@ async function brandingFavicon(brand, theme) {
   ctx.beginPath();
   ctx.roundRect(0, 0, 64, 64, radius);
   ctx.clip();
-  ctx.fillStyle = safe ? mark.background : "#2563eb";
+  ctx.fillStyle = validColors ? mark.background : "#2563eb";
   ctx.fillRect(0, 0, 64, 64);
   const asset =
     brand.design.favicon.mode === "image"
@@ -405,7 +405,7 @@ function validMark(mark, branding) {
     !["letters", "icon", "image"].includes(mark.kind) ||
     ![1, 2, 4].includes(mark.count) ||
     typeof mark.letters !== "string" ||
-    mark.letters.length > 128 ||
+    new TextEncoder().encode(mark.letters).length > 128 ||
     !iconIds.includes(mark.icon) ||
     !hex(mark.foreground) ||
     !hex(mark.background) ||
@@ -415,7 +415,6 @@ function validMark(mark, branding) {
   )
     return false;
   if (mark.kind === "image") return !!mark.image;
-  if (contrast(mark.foreground, mark.background) < 4.5) return false;
   if (mark.kind !== "letters") return true;
   const letters = Array.from(
     new Intl.Segmenter("ru", { granularity: "grapheme" }).segment(mark.letters),

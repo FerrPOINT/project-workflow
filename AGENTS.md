@@ -186,7 +186,9 @@ SSR-каркас и page-frame/page-wide/page-readable/page-split принадл
 Заголовок страницы использует base-page-title, раздел — section_header с прежним
 heading_id. Native home link использует button(href=..., variant=ghost, size=icon),
 ссылки действий — text_link, подтверждённая пустота — state. URL и namespace
-остаются у Workflow; не добавлять локальный skin или обработчик навигации.
+остаются у Workflow. Не добавлять локальный skin или второй leave/history runtime.
+Для частичной навигации использовать общий app_main и lifecycle Base; продукт
+владеет загрузкой своего HTML и очисткой страничных обработчиков (docs/ui-shell.md).
 
 ## Единое пространство PDLC
 
@@ -277,3 +279,10 @@ ResourceListDescription technical для подписи без поверхно�
 оформление: текущий ID, aria-current, ref/tabIndex и действия остаются у продукта.
 SSR: inline_code и resource_list_row из штатного экспорта Base.
 Каноническое руководство — Base docs/platform/DESIGN_SYSTEM.md и pdlc-ui.
+
+## Проверка Git-гигиены
+
+Перед коммитом: `python3 -B scripts/check_repository_hygiene.py --index`.
+Перед публикацией проверять точный кандидат через `--ref <commit>`. Установка
+hooks и допустимые артефакты: [правила](docs/REPOSITORY_HYGIENE.md).
+Копии проверки принадлежат Base; SDK/UI pins не меняются.

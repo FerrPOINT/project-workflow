@@ -326,16 +326,18 @@ function initializePhaseOutline() {
         ), sections[0]);
     if (activeSection) setActivePhaseSection(activeSection.id);
   }, {rootMargin: '-84px 0px -58% 0px', threshold: [0, .1, .5]});
+  page.cleanup(()=>observer.disconnect());
   sections.forEach((section) => observer.observe(section));
   const requestedSection = window.location.hash.slice(1);
   if (phaseSectionIds.includes(requestedSection)) {
-    requestAnimationFrame(() => jumpToPhaseSection(requestedSection, 'replace'));
+    const frame=requestAnimationFrame(() => jumpToPhaseSection(requestedSection, 'replace'));
+    page.cleanup(()=>cancelAnimationFrame(frame));
   }
-  window.addEventListener('popstate', restorePhaseSectionFromLocation);
-  window.addEventListener('wheel', releasePhaseSectionNavigationLock, {passive: true});
-  window.addEventListener('touchstart', releasePhaseSectionNavigationLock, {passive: true});
-  window.addEventListener('pointerdown', releasePhaseSectionNavigationLock, {passive: true});
-  window.addEventListener('keydown', releasePhaseSectionNavigationLock);
+  page.on(window,'popstate', restorePhaseSectionFromLocation);
+  page.on(window,'wheel', releasePhaseSectionNavigationLock, {passive: true});
+  page.on(window,'touchstart', releasePhaseSectionNavigationLock, {passive: true});
+  page.on(window,'pointerdown', releasePhaseSectionNavigationLock, {passive: true});
+  page.on(window,'keydown', releasePhaseSectionNavigationLock);
 }
 
 function escapeHtml(value) {
@@ -909,7 +911,7 @@ async function reconcilePhaseSave() {
   } catch (_error) { showToast('Не удалось проверить сохранение. Черновик сохранён.', 'error'); }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+page.ready(() => {
   phaseDraft = window.PdlcPlatformNavigation.createDraftTracker();
   phaseSignature = currentPhaseSignature();
   confirmedPhase = {name: document.querySelector('.wiki-header [data-field="name"]').value, description: document.querySelector('.wiki-header [data-field="description"]').value,
@@ -920,13 +922,13 @@ document.addEventListener('DOMContentLoaded', () => {
   renderInstructionTimeline(getInstructionItems());
   updateInstructionControls();
 });
-document.addEventListener('input', (event) => {
+page.on(document,'input', (event) => {
   if (event.target.matches('.timeline-name-input')) instructionDraft(event.target).edit();
   else if (event.target.closest('.wiki-header, #checks-list, #evidence-list')) notePhaseEdit();
 });
 window.discardWorkflowDraft = () => { savingStopped = true; if (_saveTimer) clearTimeout(_saveTimer); _saveTimer = null; };
 {% else %}
-document.addEventListener('DOMContentLoaded',()=>{
+page.ready(()=>{
   const select=document.getElementById('phaseSectionSelect');
   select?.addEventListener('change',()=>{
     document.getElementById(select.value)?.scrollIntoView({block:'start'});
@@ -934,3 +936,48 @@ document.addEventListener('DOMContentLoaded',()=>{
 });
 {% endif %}
 {% endblock %}
+
+{% block page_exports %}
+addCheck:typeof addCheck==='function'?addCheck:undefined,
+addEvidence:typeof addEvidence==='function'?addEvidence:undefined,
+addInstructionAfter:typeof addInstructionAfter==='function'?addInstructionAfter:undefined,
+addInstructionLast:typeof addInstructionLast==='function'?addInstructionLast:undefined,
+addSkillToInstruction:typeof addSkillToInstruction==='function'?addSkillToInstruction:undefined,
+appendTextItem:typeof appendTextItem==='function'?appendTextItem:undefined,
+currentPhaseSignature:typeof currentPhaseSignature==='function'?currentPhaseSignature:undefined,
+deleteInstruction:typeof deleteInstruction==='function'?deleteInstruction:undefined,
+deleteItem:typeof deleteItem==='function'?deleteItem:undefined,
+escapeHtml:typeof escapeHtml==='function'?escapeHtml:undefined,
+getInstructionItems:typeof getInstructionItems==='function'?getInstructionItems:undefined,
+initializePhaseOutline:typeof initializePhaseOutline==='function'?initializePhaseOutline:undefined,
+instructionDraft:typeof instructionDraft==='function'?instructionDraft:undefined,
+jumpToPhaseSection:typeof jumpToPhaseSection==='function'?jumpToPhaseSection:undefined,
+moveInstruction:typeof moveInstruction==='function'?moveInstruction:undefined,
+normalizeSkillNames:typeof normalizeSkillNames==='function'?normalizeSkillNames:undefined,
+notePhaseEdit:typeof notePhaseEdit==='function'?notePhaseEdit:undefined,
+persistInstructionOrder:typeof persistInstructionOrder==='function'?persistInstructionOrder:undefined,
+persistPhase:typeof persistPhase==='function'?persistPhase:undefined,
+phaseApiUrl:typeof phaseApiUrl==='function'?phaseApiUrl:undefined,
+phaseMatches:typeof phaseMatches==='function'?phaseMatches:undefined,
+reconcilePhaseSave:typeof reconcilePhaseSave==='function'?reconcilePhaseSave:undefined,
+releasePhaseSectionNavigationLock:typeof releasePhaseSectionNavigationLock==='function'?releasePhaseSectionNavigationLock:undefined,
+removeSkillFromInstruction:typeof removeSkillFromInstruction==='function'?removeSkillFromInstruction:undefined,
+renderInstructionTimeline:typeof renderInstructionTimeline==='function'?renderInstructionTimeline:undefined,
+requestPhaseDetail:typeof requestPhaseDetail==='function'?requestPhaseDetail:undefined,
+restorePhaseSectionFromLocation:typeof restorePhaseSectionFromLocation==='function'?restorePhaseSectionFromLocation:undefined,
+saveEditorChanges:typeof saveEditorChanges==='function'?saveEditorChanges:undefined,
+saveInstructionDescription:typeof saveInstructionDescription==='function'?saveInstructionDescription:undefined,
+saveNewTextItem:typeof saveNewTextItem==='function'?saveNewTextItem:undefined,
+savePhase:typeof savePhase==='function'?savePhase:undefined,
+scheduleSave:typeof scheduleSave==='function'?scheduleSave:undefined,
+setActivePhaseSection:typeof setActivePhaseSection==='function'?setActivePhaseSection:undefined,
+setPhaseMode:typeof setPhaseMode==='function'?setPhaseMode:undefined,
+syncPhaseSectionUrl:typeof syncPhaseSectionUrl==='function'?syncPhaseSectionUrl:undefined,
+syncTextItemList:typeof syncTextItemList==='function'?syncTextItemList:undefined,
+toggleInstructionType:typeof toggleInstructionType==='function'?toggleInstructionType:undefined,
+togglePhaseMode:typeof togglePhaseMode==='function'?togglePhaseMode:undefined,
+updateInstructionControls:typeof updateInstructionControls==='function'?updateInstructionControls:undefined,
+updatePhaseSaveStatus:typeof updatePhaseSaveStatus==='function'?updatePhaseSaveStatus:undefined,
+{% endblock %}
+{% block page_handles_history %}true{% endblock %}
+{% block page_busy %}typeof mutationPending!=='undefined'&&(mutationPending>0||!!phaseDraft?.pending||[...instructionDrafts.values()].some(draft=>draft.pending)){% endblock %}

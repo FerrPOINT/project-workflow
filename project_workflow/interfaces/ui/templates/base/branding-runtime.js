@@ -176,7 +176,7 @@ function validMark(mark, branding) {
     !["letters", "icon", "image"].includes(mark.kind) ||
     ![1, 2, 4].includes(mark.count) ||
     typeof mark.letters !== "string" ||
-    mark.letters.length > 128 ||
+    new TextEncoder().encode(mark.letters).length > 128 ||
     !iconIds.includes(mark.icon) ||
     !hex(mark.foreground) ||
     !hex(mark.background) ||
@@ -186,7 +186,6 @@ function validMark(mark, branding) {
   )
     return false;
   if (mark.kind === "image") return !!mark.image;
-  if (contrast(mark.foreground, mark.background) < 4.5) return false;
   if (mark.kind !== "letters") return true;
   const letters = Array.from(
     new Intl.Segmenter("ru", { granularity: "grapheme" }).segment(mark.letters),

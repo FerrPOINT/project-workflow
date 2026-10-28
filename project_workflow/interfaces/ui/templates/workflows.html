@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends "workflow-fragment.html" if workflow_fragment else "base.html" %}
 {% set phase_scope_suffix = ('&project_scope=all' if selected_namespace else '?project_scope=all') if request is defined and request.query_params.get('project_scope') == 'all' else '' %}
 {% set mode_scope_suffix = '&project_scope=all' if request is defined and request.query_params.get('project_scope') == 'all' else '' %}
 
@@ -30,7 +30,7 @@
   .workflow-crud.is-empty .workflow-picker{display:none}
 }
 #workflowPhases[hidden]{display:none}
-.mode-navigation{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0;margin-bottom:16px}
+.mode-navigation{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0}
 .mode-tabs{min-width:0}
 .mode-picker{display:none;width:100%}
 .mode-picker select{width:100%}
@@ -111,7 +111,12 @@
 {% block content %}
 {% set empty_workflow_nav %}{{ base_ui.state('empty', 'Воркфлоу пока нет.') }}{% endset %}
 
-<div class="workflow-crud {% if workflows|length == 0 %}is-empty{% endif %}" id="workflowCrud">
+<div class="workflow-crud {% if workflows|length == 0 %}is-empty{% endif %}" id="workflowCrud" aria-busy="false">
+<script type="application/json" id="workflowEditorState">{{ {"workflows": workflows, "selected_workflow_id": selected_workflow.id if selected_workflow else none, "can_administer": can_administer}|tojson }}</script>
+<div id="workflowReadbackError" role="alert" hidden>
+  Изменение могло сохраниться. Обновите состояние перед следующей операцией.
+  <button type="button" class="btn btn-secondary" onclick="retryWorkflowReadback()">Обновить состояние</button>
+</div>
   <div class="workflow-picker" id="workflowPicker">
     {{ base_ui.label_control("workflowSelect", "Воркфлоу") }}
     {% call base_ui.select_control(id="workflowSelect", attributes={"onchange": "selectWorkflow(Number(this.value))"}) %}
@@ -155,7 +160,7 @@
       {% call base_ui.prose(compact=true) %}<p id="workflowDeleteHint" hidden>Воркфлоу по умолчанию нельзя удалить.</p>{% endcall %}
     {% endcall %}
 {% endif %}
-<section id="workflowPhases" aria-label="Фазы процесса"{% if not selected_workflow %} hidden{% endif %}>
+<section id="workflowPhases" class="base-page-stack" aria-label="Фазы процесса"{% if not selected_workflow %} hidden{% endif %}>
 {% set phase_view_actions %}
       {% if phase_count > 1 %}
       {% call base_ui.action_group(align='between', class_name='phase-view-controls') %}
@@ -173,7 +178,7 @@
 {% endset %}
 {{ base_ui.section_header('Фазы процесса', heading_id='workflowPhasesTitle', actions=phase_view_actions) }}
     {% if selected_workflow and modes | length > 1 %}
-    <div class="mode-navigation" data-testid="workflow-mode-navigation">
+    <nav data-workflow-local-navigation class="mode-navigation" aria-label="Режимы воркфлоу" data-testid="workflow-mode-navigation">
       <div class="mode-tabs" data-testid="workflow-mode-tabs">
         {% call base_ui.section_navigation(label='Режимы воркфлоу') %}
         {% for mode in modes %}
@@ -222,13 +227,14 @@
 {% endblock %}
 
 {% block extra_script %}
+{% include "workflow-navigation.js" %}
 function selectMode(modeId){
   const parsed=Number(modeId);
   if(!Number.isInteger(parsed)||parsed<=0){showToast('Не удалось определить режим воркфлоу','error');return;}
   const url=new URL(window.location.href);
   url.pathname='{{ ui_base_path() }}/workflows';
   url.searchParams.set('mode_id',String(parsed));
-  window.PdlcPlatformNavigation.navigate(url.pathname+url.search);
+  void loadWorkflowEditor(url.pathname+url.search,{keepForm:true});
 }
 
 function setPhaseView(view,persist=true){
@@ -261,8 +267,8 @@ function jumpToPhase(select){
   item.querySelector('.timeline-card')?.focus({preventScroll:true});
 }
 
-document.addEventListener('DOMContentLoaded',()=>{
-  document.getElementById('phaseView')?.addEventListener('change',event=>{
+page.ready(()=>{
+  page.on(document,'change',event=>{
     const input=event.target;
     if(input instanceof HTMLInputElement&&input.name==='phase-view'&&input.checked)setPhaseView(input.value);
   });
@@ -276,12 +282,13 @@ document.addEventListener('DOMContentLoaded',()=>{
 const professionId = {{ selected_namespace.id if selected_namespace else "null" }};
 const workflowStore = {{ workflows | tojson }};
 let selectedWorkflowId = {{ selected_workflow.id if selected_workflow else 'null' }};
-const initialWorkflowId = selectedWorkflowId;
+let initialWorkflowId = selectedWorkflowId;
 const defaultWorkflowId = {{ default_workflow_id if default_workflow_id else 'null' }};
 let previousWorkflowId = selectedWorkflowId;
 let workflowFormMode = selectedWorkflowId == null ? 'create' : 'edit';
 let workflowEditorVisible = selectedWorkflowId == null;
 let workflowWritePending = false;
+window.hasUnsavedWorkflowChanges=()=>workflowWritePending||phaseWritePending||workflowNeedsReadback;
 
 function workflowApiUrl(workflowId){
   var url = new URL('{{ ui_base_path() }}/api/workflows' + (workflowId == null ? '' : '/' + workflowId), window.location.origin);
@@ -347,14 +354,14 @@ function setWorkflowEditorVisible(visible){
   });
 }
 function startEditWorkflow(){
-  if(workflowWritePending)return;
+  if(workflowWritePending||phaseWritePending||workflowNeedsReadback||workflowReadController)return;
   if(selectedWorkflowId == null)return;
   if(!workflowEditorVisible){ fillWorkflowForm(workflowById(selectedWorkflowId)); }
   setWorkflowEditorVisible(true);
   document.getElementById('workflowName').focus();
 }
 function cancelWorkflowForm(){
-  if(workflowWritePending)return;
+  if(workflowWritePending||phaseWritePending||workflowNeedsReadback||workflowReadController)return;
   workflowEditorVisible = false;
   if(workflowFormMode === 'create'){ cancelCreateWorkflow(); }
   else{ fillWorkflowForm(workflowById(selectedWorkflowId)); setWorkflowFormMode('edit'); }
@@ -379,7 +386,7 @@ function setWorkflowFormMode(mode){
   setWorkflowEditorVisible(workflowEditorVisible);
 }
 function startCreateWorkflow(){
-  if(workflowWritePending)return;
+  if(workflowWritePending||phaseWritePending||workflowNeedsReadback||workflowReadController)return;
   if(selectedWorkflowId != null){
     previousWorkflowId = selectedWorkflowId;
   }
@@ -390,7 +397,7 @@ function startCreateWorkflow(){
   document.getElementById('workflowName').focus();
 }
 function cancelCreateWorkflow(){
-  if(workflowWritePending)return;
+  if(workflowWritePending||phaseWritePending||workflowNeedsReadback||workflowReadController)return;
   if(workflowStore.length === 0){
     startCreateWorkflow();
     return;
@@ -401,22 +408,19 @@ function cancelCreateWorkflow(){
   }
   selectWorkflow(fallbackId);
 }
-function selectWorkflow(id, options){
-  if(workflowWritePending)return;
-  if(!workflowById(id))return;
-  // Mode and phases are server-owned: changing workflow reloads the whole editor.
-  if(id !== initialWorkflowId){
-    window.PdlcPlatformNavigation.navigate(workflowSelectionUrl(id));
-    return;
+function workflowFormDirty(){
+  const form=document.getElementById('workflowForm');
+  if(!form||form.hidden)return false;
+  const original=workflowFormMode==='create'?null:workflowById(selectedWorkflowId);
+  return document.getElementById('workflowName').value!==(original?.name||'')||document.getElementById('workflowDescription').value!==(original?.description||'');
+}
+function selectWorkflow(id,options={}){
+  if(workflowWritePending||!workflowById(id))return;
+  if(id===initialWorkflowId&&!workflowReadController){
+    if(workflowFormMode==='edit')return;
+    selectedWorkflowId=id;fillWorkflowForm(workflowById(id));setWorkflowFormMode('edit');syncWorkflowNav();return;
   }
-  selectedWorkflowId = id;
-  previousWorkflowId = id;
-  fillWorkflowForm(workflowById(id));
-  setWorkflowFormMode('edit');
-  syncWorkflowNav();
-  if(!options || options.updateUrl !== false){
-    syncWorkflowUrl(id, options && options.replaceUrl ? 'replace' : 'push');
-  }
+  return loadWorkflowEditor(workflowSelectionUrl(id),{history:options.replaceUrl?'replace':'push'});
 }
 function renderWorkflowNav(){
   var nav = document.getElementById('workflowNav');
@@ -447,37 +451,7 @@ function renderWorkflowNav(){
   });
 }
 function reloadWorkflows(nextId){
-  return fetch(workflowApiUrl(null))
-    .then(function(r){return r.json()})
-    .then(function(d){
-      if(!d.ok){showToast(d.error || 'Ошибка загрузки воркфлоу','error');return false;}
-      workflowStore.length = 0;
-      d.workflows.forEach(function(workflow){ workflowStore.push(workflow); });
-      if(workflowStore.length === 0){
-        selectedWorkflowId = null;
-        previousWorkflowId = null;
-        fillWorkflowForm(null);
-        setWorkflowFormMode('create');
-        renderWorkflowNav();
-        syncWorkflowNav();
-        syncWorkflowUrl(null, 'replace');
-        return;
-      }
-      selectedWorkflowId = nextId || selectedWorkflowId || previousWorkflowId || workflowStore[0].id;
-      if(!workflowById(selectedWorkflowId)){ selectedWorkflowId = workflowStore[0].id; }
-      if(selectedWorkflowId !== initialWorkflowId){
-        window.PdlcPlatformNavigation.navigate(workflowSelectionUrl(selectedWorkflowId));
-        return;
-      }
-      previousWorkflowId = selectedWorkflowId;
-      renderWorkflowNav();
-      fillWorkflowForm(workflowById(selectedWorkflowId));
-      setWorkflowFormMode('edit');
-      syncWorkflowNav();
-      syncWorkflowUrl(selectedWorkflowId, 'replace');
-      return true;
-    })
-    .catch(showRequestError);
+  return refreshAfterWorkflowWrite(workflowSelectionUrl(nextId),{history:'replace'});
 }
 function saveWorkflow(){
   if(selectedWorkflowId == null){ showToast('Воркфлоу не выбран','error'); return; }
@@ -495,7 +469,7 @@ function createWorkflow(){
       if(d.ok){
         showToast('Воркфлоу создан','success');
         window.PdlcPlatformNavigation.saved(document.getElementById('workflowForm'));
-        window.PdlcPlatformNavigation.navigate(workflowSelectionUrl(d.workflow_id));
+        return refreshAfterWorkflowWrite(workflowSelectionUrl(d.workflow_id));
       } else {
         showToast(d.error || 'Ошибка','error');
       }
@@ -503,7 +477,7 @@ function createWorkflow(){
     .catch(showRequestError);
 }
 async function deleteWorkflow(){
-  if(workflowWritePending)return;
+  if(workflowWritePending||phaseWritePending||workflowNeedsReadback||workflowReadController)return;
   if(selectedWorkflowId == null){ showToast('Воркфлоу не выбран','error'); return; }
   var workflow = workflowById(selectedWorkflowId);
   var title = workflow ? 'Удалить воркфлоу «' + workflow.name + '»?' : 'Удалить воркфлоу?';
@@ -511,7 +485,7 @@ async function deleteWorkflow(){
     ? '«' + workflow.name + '» будет удалён. Фазы этого воркфлоу тоже будут удалены.'
     : 'Воркфлоу будет удалён.';
   if(!await window.PdlcBaseUI.requestConfirmation({eyebrow:'Удаление воркфлоу',title:title,message:message,confirmLabel:'Удалить'})) return;
-  if(workflowWritePending)return;
+  if(workflowWritePending||phaseWritePending||workflowNeedsReadback||workflowReadController)return;
   setWorkflowWritePending(true);
   var workflowId = selectedWorkflowId;
   var button = document.getElementById('deleteWorkflowButton');
@@ -522,7 +496,7 @@ async function deleteWorkflow(){
     .then(function(d){
       if(d.ok){
         showToast('Воркфлоу удалён','success');
-        return reloadWorkflows(null);
+        return refreshAfterWorkflowWrite(workflowSelectionUrl(null),{history:'replace'});
       } else {
         showToast(d.error || 'Ошибка','error');
       }
@@ -539,7 +513,7 @@ function setWorkflowWritePending(pending){
   setWorkflowFormMode(workflowFormMode);
 }
 function submitWorkflow(){
-  if(workflowWritePending)return;
+  if(workflowWritePending||phaseWritePending)return;
   var nameInput = document.getElementById('workflowName');
   if(!nameInput.value.trim()){
     showToast('Введите название воркфлоу','error');
@@ -551,7 +525,7 @@ function submitWorkflow(){
   setWorkflowWritePending(true);
   button.textContent = workflowFormMode === 'create' ? 'Создание…' : 'Сохранение…';
   var operation = workflowFormMode === 'create' ? createWorkflow() : saveWorkflow();
-  Promise.resolve(operation).finally(function(){ setWorkflowWritePending(false); });
+  return Promise.resolve(operation).finally(function(){ setWorkflowWritePending(false); });
 }
 renderWorkflowNav();
 if(selectedWorkflowId == null){
@@ -561,61 +535,64 @@ if(selectedWorkflowId == null){
   setWorkflowFormMode('edit');
 }
 syncWorkflowNav();
-window.addEventListener('popstate', function(){
-  var workflowId = workflowIdFromUrl();
-  if(workflowId == null)return;
-  selectWorkflow(workflowId, {updateUrl:false});
-});
+
 
 function getPhaseTimelineItems(){return Array.from(document.querySelectorAll('#phasesTimeline .timeline-item'));}
 
 async function addPhaseAfter(button){
+  if(phaseWritePending||workflowWritePending||workflowNeedsReadback||workflowReadController)return;
   const workflowId=document.getElementById('phasesTimeline')?.dataset.workflowId;
   const modeId=document.getElementById('phasesTimeline')?.dataset.modeId;
   const currentOrder=parseInt(button.dataset.afterOrder||'0',10);
   if(!workflowId||!modeId||currentOrder<0){showToast('Не удалось определить позицию фазы','error');return;}
-  button.disabled=true;
+  if(phaseWritePending||workflowWritePending||workflowNeedsReadback||workflowReadController)return;
+  setPhaseWritePending(true);
   try{
     const resp=await fetch('{{ ui_base_path() }}/api/phases',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({workflow_id:parseInt(workflowId,10),mode_id:parseInt(modeId,10),phase_order:currentOrder+1})});
     const data=await resp.json().catch(()=>({}));
-    if(!resp.ok||!data.ok){showToast(data.error||'Не удалось добавить фазу','error');return;}
-    window.PdlcPlatformNavigation.reload();
-  }catch(_error){showRequestError();
-  }finally{button.disabled=false;}
+    if(!resp.ok||!data.ok){if(resp.status>=500)requireWorkflowReadback();showToast(data.error||'Не удалось добавить фазу','error');return;}
+    await refreshWorkflowPhases();
+  }catch(_error){requireWorkflowReadback();showRequestError();
+  }finally{setPhaseWritePending(false);}
 }
 
 async function deletePhase(button){
+  if(phaseWritePending||workflowWritePending||workflowNeedsReadback||workflowReadController)return;
   const item=button.closest('.timeline-item');
   const items=getPhaseTimelineItems();
   if(!item)return;
   if(items.length<=1){showToast('Нельзя удалить единственную фазу воркфлоу','error');return;}
   const phaseName=item.querySelector('.timeline-name')?.textContent.trim()||'эту фазу';
   if(!await window.PdlcBaseUI.requestConfirmation({eyebrow:'Удаление фазы',title:'Удалить фазу «'+phaseName+'»?',message:'Фаза «'+phaseName+'» и её настройки будут удалены.',confirmLabel:'Удалить'}))return;
-  button.disabled=true;
+  if(phaseWritePending||workflowWritePending||workflowNeedsReadback||workflowReadController)return;
+  setPhaseWritePending(true);
   try{
     const resp=await fetch('{{ ui_base_path() }}/api/phases/'+item.dataset.phaseId,{method:'DELETE'});
     const data=await resp.json().catch(()=>({}));
-    if(!resp.ok||!data.ok){showToast(data.error||'Не удалось удалить фазу','error');return;}
-    window.PdlcPlatformNavigation.reload();
-  }catch(_error){showRequestError();
-  }finally{button.disabled=false;}
+    if(!resp.ok||!data.ok){if(resp.status>=500)requireWorkflowReadback();showToast(data.error||'Не удалось удалить фазу','error');return;}
+    await refreshWorkflowPhases();
+  }catch(_error){requireWorkflowReadback();showRequestError();
+  }finally{setPhaseWritePending(false);}
 }
 
 async function togglePhaseType(button){
+  if(phaseWritePending||workflowWritePending||workflowNeedsReadback||workflowReadController)return;
   const item=button.closest('.timeline-item');
   if(!item)return;
   const nextType=(item.dataset.executionType||'sync')==='sync'?'parallel':'sync';
-  button.disabled=true;
+  if(phaseWritePending||workflowWritePending||workflowNeedsReadback||workflowReadController)return;
+  setPhaseWritePending(true);
   try{
     const resp=await fetch('{{ ui_base_path() }}/api/phases/'+item.dataset.phaseId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({execution_type:nextType})});
     const data=await resp.json().catch(()=>({}));
-    if(!resp.ok||!data.ok){showToast(data.error||'Не удалось сменить режим','error');return;}
-    window.PdlcPlatformNavigation.reload();
-  }catch(_error){showRequestError();
-  }finally{button.disabled=false;}
+    if(!resp.ok||!data.ok){if(resp.status>=500)requireWorkflowReadback();showToast(data.error||'Не удалось сменить режим','error');return;}
+    await refreshWorkflowPhases();
+  }catch(_error){requireWorkflowReadback();showRequestError();
+  }finally{setPhaseWritePending(false);}
 }
 
 async function movePhase(button,direction){
+  if(phaseWritePending||workflowWritePending||workflowNeedsReadback||workflowReadController)return;
   const item=button.closest('.timeline-item');
   const items=getPhaseTimelineItems();
   const currentIndex=items.indexOf(item);
@@ -624,26 +601,17 @@ async function movePhase(button,direction){
   const reordered=[...items];
   const moved=reordered.splice(currentIndex,1)[0];
   reordered.splice(targetIndex,0,moved);
-  button.disabled=true;
+  if(phaseWritePending||workflowWritePending||workflowNeedsReadback||workflowReadController)return;
+  setPhaseWritePending(true);
   try{
     const orders=reordered.map((phase,index)=>({phase_id:Number(phase.dataset.phaseId),phase_order:index+1}));
     const resp=await fetch('{{ ui_base_path() }}/api/phases/order',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({orders})});
-    if(!resp.ok){showToast('Не удалось сохранить порядок фаз','error');return;}
-    window.PdlcPlatformNavigation.reload();
-  }catch(_error){showRequestError();
-  }finally{button.disabled=false;}
+    if(!resp.ok){if(resp.status>=500)requireWorkflowReadback();showToast('Не удалось сохранить порядок фаз','error');return;}
+    await refreshWorkflowPhases();
+  }catch(_error){requireWorkflowReadback();showRequestError();
+  }finally{setPhaseWritePending(false);}
 }
 
-document.addEventListener('DOMContentLoaded',()=>{
-  const items=getPhaseTimelineItems();
-  items.forEach((item,index)=>{
-    const up=item.querySelector('.move-up-btn');
-    const down=item.querySelector('.move-down-btn');
-    if(up)up.disabled=index===0;
-    if(down)down.disabled=index===items.length-1;
-  });
-
-});
 
 {% else %}
 function selectWorkflow(id){
@@ -651,8 +619,53 @@ function selectWorkflow(id){
   const url=new URL(window.location.href);
   url.searchParams.set('workflow_id',String(id));
   url.searchParams.delete('mode_id');
-  window.PdlcPlatformNavigation.navigate(url.pathname+url.search);
+  return loadWorkflowEditor(url.pathname+url.search);
 }
 
 {% endif %}
+page.ready(()=>initializeWorkflowPhases());
 {% endblock %}
+
+{% block page_exports %}
+addPhaseAfter:typeof addPhaseAfter==='function'?addPhaseAfter:undefined,
+cancelCreateWorkflow:typeof cancelCreateWorkflow==='function'?cancelCreateWorkflow:undefined,
+cancelWorkflowForm:typeof cancelWorkflowForm==='function'?cancelWorkflowForm:undefined,
+createWorkflow:typeof createWorkflow==='function'?createWorkflow:undefined,
+currentWorkflowPayload:typeof currentWorkflowPayload==='function'?currentWorkflowPayload:undefined,
+deletePhase:typeof deletePhase==='function'?deletePhase:undefined,
+deleteWorkflow:typeof deleteWorkflow==='function'?deleteWorkflow:undefined,
+fillWorkflowForm:typeof fillWorkflowForm==='function'?fillWorkflowForm:undefined,
+getPhaseTimelineItems:typeof getPhaseTimelineItems==='function'?getPhaseTimelineItems:undefined,
+initializeWorkflowPhases:typeof initializeWorkflowPhases==='function'?initializeWorkflowPhases:undefined,
+jumpToPhase:typeof jumpToPhase==='function'?jumpToPhase:undefined,
+loadWorkflowEditor:typeof loadWorkflowEditor==='function'?loadWorkflowEditor:undefined,
+movePhase:typeof movePhase==='function'?movePhase:undefined,
+refreshAfterWorkflowWrite:typeof refreshAfterWorkflowWrite==='function'?refreshAfterWorkflowWrite:undefined,
+refreshWorkflowPhases:typeof refreshWorkflowPhases==='function'?refreshWorkflowPhases:undefined,
+reloadWorkflows:typeof reloadWorkflows==='function'?reloadWorkflows:undefined,
+renderWorkflowNav:typeof renderWorkflowNav==='function'?renderWorkflowNav:undefined,
+requireWorkflowReadback:typeof requireWorkflowReadback==='function'?requireWorkflowReadback:undefined,
+retireWorkflowEditor:typeof retireWorkflowEditor==='function'?retireWorkflowEditor:undefined,
+retryWorkflowReadback:typeof retryWorkflowReadback==='function'?retryWorkflowReadback:undefined,
+saveWorkflow:typeof saveWorkflow==='function'?saveWorkflow:undefined,
+selectMode:typeof selectMode==='function'?selectMode:undefined,
+selectWorkflow:typeof selectWorkflow==='function'?selectWorkflow:undefined,
+setPhaseView:typeof setPhaseView==='function'?setPhaseView:undefined,
+setPhaseWritePending:typeof setPhaseWritePending==='function'?setPhaseWritePending:undefined,
+setWorkflowEditorVisible:typeof setWorkflowEditorVisible==='function'?setWorkflowEditorVisible:undefined,
+setWorkflowFormMode:typeof setWorkflowFormMode==='function'?setWorkflowFormMode:undefined,
+setWorkflowWritePending:typeof setWorkflowWritePending==='function'?setWorkflowWritePending:undefined,
+startCreateWorkflow:typeof startCreateWorkflow==='function'?startCreateWorkflow:undefined,
+startEditWorkflow:typeof startEditWorkflow==='function'?startEditWorkflow:undefined,
+submitWorkflow:typeof submitWorkflow==='function'?submitWorkflow:undefined,
+syncWorkflowNav:typeof syncWorkflowNav==='function'?syncWorkflowNav:undefined,
+syncWorkflowUrl:typeof syncWorkflowUrl==='function'?syncWorkflowUrl:undefined,
+togglePhaseType:typeof togglePhaseType==='function'?togglePhaseType:undefined,
+workflowApiUrl:typeof workflowApiUrl==='function'?workflowApiUrl:undefined,
+workflowById:typeof workflowById==='function'?workflowById:undefined,
+workflowFormDirty:typeof workflowFormDirty==='function'?workflowFormDirty:undefined,
+workflowIdFromUrl:typeof workflowIdFromUrl==='function'?workflowIdFromUrl:undefined,
+workflowSelectionUrl:typeof workflowSelectionUrl==='function'?workflowSelectionUrl:undefined,
+{% endblock %}
+{% block page_handles_history %}true{% endblock %}
+{% block page_busy %}typeof workflowWritePending!=='undefined'&&(workflowWritePending||phaseWritePending){% endblock %}

@@ -302,7 +302,23 @@ async function updateSkills(input) {
   window.PdlcPlatformNavigation.reload();
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+page.ready(() => {
   updateMoveButtons();
 });
+{% endblock %}
+
+{% block page_exports %}
+addInstruction:typeof addInstruction==='function'?addInstruction:undefined,
+deleteInstruction:typeof deleteInstruction==='function'?deleteInstruction:undefined,
+getRows:typeof getRows==='function'?getRows:undefined,
+instructionApiUrl:typeof instructionApiUrl==='function'?instructionApiUrl:undefined,
+moveInstruction:typeof moveInstruction==='function'?moveInstruction:undefined,
+persistOrder:typeof persistOrder==='function'?persistOrder:undefined,
+renumberRows:typeof renumberRows==='function'?renumberRows:undefined,
+requestInstruction:typeof requestInstruction==='function'?requestInstruction:undefined,
+toggleType:typeof toggleType==='function'?toggleType:undefined,
+updateInstruction:typeof updateInstruction==='function'?updateInstruction:undefined,
+updateMoveButtons:typeof updateMoveButtons==='function'?updateMoveButtons:undefined,
+updateSkills:typeof updateSkills==='function'?updateSkills:undefined,
+updateTimeline:typeof updateTimeline==='function'?updateTimeline:undefined,
 {% endblock %}

@@ -5,6 +5,29 @@
 {% set active_namespace_id = active_namespace.id if active_namespace else none %}
 {% set sidebar_scope_suffix = '?project_scope=all' if request is defined and request.query_params.get('project_scope') == 'all' else '' %}
 {% set access_window = project_access_window(request if request is defined else none) %}
+{% set layout_mode %}{% block page_layout %}wide{% endblock %}{% endset %}
+{% set shell_context %}{% if namespaces is defined and namespaces %}{{ profession_selector('namespaceSelector', namespaces, active_namespace) }}{% endif %}{% endset %}
+{% macro page_content() %}
+  {% if workflow_page_fragment %}<style data-workflow-page-style>{{ self.extra_style() }}</style>{% endif %}
+  <script type="application/json" data-workflow-page>{{ {'schema_version':1, 'page':page|default(''), 'title':self.title()|striptags|trim, 'context_html':shell_context|trim, 'access_revision':access_window.scope_revision, 'access_enforced':access_window.enforced, 'can_administer':can_administer}|tojson }}</script>
+  {% set page_heading_markup %}{% block page_heading %}<h1 class="base-page-title">{% block header_title %}{% endblock %}</h1>{% endblock %}{% endset %}
+  {% set page_actions_markup %}{% block header_actions %}{% endblock %}{% endset %}
+  {{ base_ui.page_header(heading=page_heading_markup, actions=page_actions_markup) }}
+  {% block content %}{% endblock %}
+  <script data-workflow-controller>
+  window.WorkflowApplication.mount(function(page){
+    const fetch=page.fetch,showToast=page.notify,showRequestError=()=>showToast('Не удалось связаться с сервером','error');
+    {% block extra_script %}{% endblock %}
+    page.expose({
+    {% block page_exports %}{% endblock %}});
+    page.handlesHistory={% block page_handles_history %}false{% endblock %};
+    page.busy=()=>{% block page_busy %}false{% endblock %};
+  });
+  </script>
+{% endmacro %}
+{% if workflow_page_fragment %}
+{% call base_ui.app_main('Project Workflow', layout_mode|trim) %}{{ page_content() }}{% endcall %}
+{% else %}
 <!DOCTYPE html>
 <html lang="ru" data-pdlc-access-pending data-theme="dark" data-theme-storage-key="workflow-theme">
 <head>
@@ -13,6 +36,8 @@
 <script>document.documentElement.dataset.platformOrigin={{ platform_origin|default('')|tojson }};{% include 'base/platform-navigation.js' %}</script>
 <script>{% include 'profession-navigation.js' %}</script>
 <title data-base-brand-title="Workflow Engine">{% block title %}Workflow Engine{% endblock %}</title>
+<script src="{{ ui_base_path() }}/ui-assets/htmx-2.0.11.min.js" integrity="sha384-2OatzQy1H+Zd/IIrjr1TcuDGqLXeHhbooAyJY1KdQMKnr4LZ22k31GBLdYKHmVjg" defer></script>
+<script>{% include "application-navigation.js" %}</script>
 <script>{% include "base/theme-preference.js" %}
 document.documentElement.dataset.theme=window.PdlcThemePreference.read("workflow-theme");</script>
 <style>
@@ -64,8 +89,8 @@ html[data-pdlc-access-pending] body{visibility:hidden}
 
 .platform-header-context .namespace-switcher{min-width:0;width:min(280px,100%)}
 
-{% block extra_style %}{% endblock %}
 </style>
+<style data-workflow-page-style>{% block extra_style %}{% endblock %}</style>
 {% set base_styles %}{% include "base/base-ui.css" %}{% endset %}
 {# The local prefix is validated; Markup.replace must not HTML-escape the CSS URL fragment. #}
 <style>{{ base_styles|replace('url("./fonts/', ('url("' ~ ui_base_path() ~ '/base-assets/fonts/')|safe)|safe }}</style>
@@ -80,26 +105,26 @@ window.addEventListener('pagehide',function(event){if(!event.persisted)window.Wo
 <template id="namespace-choice-mark-template">{{ namespace_mark(size='sm') }}</template>
 
 {% set sidebar_navigation %}
-  <nav class="sidebar-nav" aria-label="Основная навигация">
-    <a class="sidebar-link {% if page == 'namespace' %}active{% endif %}" href="{{ ui_base_path() }}/namespaces{{ sidebar_scope_suffix }}" aria-label="Профессии" title="Профессии" {% if page == 'namespace' %}aria-current="page"{% endif %}>
+  <nav class="sidebar-nav base-shell-navigation" aria-label="Основная навигация">
+    <a class="sidebar-link {% if page == 'namespace' %}active{% endif %}" href="{{ ui_base_path() }}/namespaces{{ sidebar_scope_suffix }}" data-workflow-route="namespace" aria-label="Профессии" title="Профессии" {% if page == 'namespace' %}aria-current="page"{% endif %}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h18"/><path d="M5 7V5a2 2 0 0 1 2-2h3"/><path d="M19 7v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7"/><path d="M9 12h6"/><path d="M9 16h4"/></svg>
       <span class="sidebar-label">Профессии</span>
     </a>
     <div class="sidebar-section">ОБЗОР</div>
-    <a class="sidebar-link {% if page == 'dashboard' %}active{% endif %}" href="{{ ui_base_path() }}/{{ sidebar_scope_suffix }}" aria-label="Дашборд" title="Дашборд" {% if page == 'dashboard' %}aria-current="page"{% endif %}>
+    <a class="sidebar-link {% if page == 'dashboard' %}active{% endif %}" href="{{ ui_base_path() }}/{{ sidebar_scope_suffix }}" data-workflow-route="dashboard" aria-label="Дашборд" title="Дашборд" {% if page == 'dashboard' %}aria-current="page"{% endif %}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
       <span class="sidebar-label">Дашборд</span>
     </a>
-    <a class="sidebar-link {% if page in ['workflows', 'phases'] %}active{% endif %}" href="{{ ui_base_path() }}/workflows{{ sidebar_scope_suffix }}" aria-label="Процессы" title="Процессы" {% if page in ['workflows', 'phases'] %}aria-current="page"{% endif %}>
+    <a class="sidebar-link {% if page in ['workflows', 'phases'] %}active{% endif %}" href="{{ ui_base_path() }}/workflows{{ sidebar_scope_suffix }}" data-workflow-route="workflows" aria-label="Процессы" title="Процессы" {% if page in ['workflows', 'phases'] %}aria-current="page"{% endif %}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><path d="M7 10v4"/><path d="M17 10v4"/></svg>
       <span class="sidebar-label">Процессы</span>
     </a>
-    <a class="sidebar-link {% if page == 'tasks' %}active{% endif %}" href="{{ ui_base_path() }}/tasks{{ sidebar_scope_suffix }}" aria-label="Выполнения задач" title="Выполнения задач" {% if page == 'tasks' %}aria-current="page"{% endif %}>
+    <a class="sidebar-link {% if page == 'tasks' %}active{% endif %}" href="{{ ui_base_path() }}/tasks{{ sidebar_scope_suffix }}" data-workflow-route="tasks" aria-label="Выполнения задач" title="Выполнения задач" {% if page == 'tasks' %}aria-current="page"{% endif %}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
       <span class="sidebar-label">Выполнения задач</span>
     </a>
     <div class="sidebar-section">УПРАВЛЕНИЕ</div>
-    <a class="sidebar-link {% if page == 'settings' %}active{% endif %}" href="{{ ui_base_path() }}/settings{{ sidebar_scope_suffix }}" aria-label="Команды CLI" title="Команды CLI" {% if page == 'settings' %}aria-current="page"{% endif %}>
+    <a class="sidebar-link {% if page == 'settings' %}active{% endif %}" href="{{ ui_base_path() }}/settings{{ sidebar_scope_suffix }}" aria-label="Команды CLI" title="Команды CLI" data-workflow-route="settings" {% if page == 'settings' %}aria-current="page"{% endif %}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><path d="m4 7 6 5-6 5M12 19h8"/></svg>
       <span class="sidebar-label">Команды CLI</span>
     </a>
@@ -117,20 +142,12 @@ window.addEventListener('pagehide',function(event){if(!event.persisted)window.Wo
   {% endfor %}
 {% endcall %}
 {% endset %}
-{% set shell_context %}
-{% if namespaces is defined and namespaces %}
-{{ profession_selector('namespaceSelector', namespaces, active_namespace) }}
-{% endif %}
-{% endset %}
-{% set layout_mode %}{% block page_layout %}wide{% endblock %}{% endset %}
 {% call base_ui.app_shell('Project Workflow', sidebar_navigation, leading=shell_leading,
     services=shell_services, context=shell_context|trim, actions=base_ui.account(), layout=layout_mode|trim) %}
-      {% set page_heading_markup %}{% block page_heading %}<h1 class="base-page-title">{% block header_title %}{% endblock %}</h1>{% endblock %}{% endset %}
-      {% set page_actions_markup %}{% block header_actions %}{% endblock %}{% endset %}
-      {{ base_ui.page_header(heading=page_heading_markup, actions=page_actions_markup) }}
-      {% block content %}{% endblock %}
+      {{ page_content() }}
 {% endcall %}
 
+<div id="workflowNavigationStatus" role="status" hidden>Загрузка раздела…</div>
 {{ base_ui.toaster() }}
 {{ base_ui.confirmation_dialog() }}
 
@@ -192,7 +209,6 @@ function pluralizeRu(n, one, few, many){
   if(n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20)){ return n + ' ' + few; }
   return n + ' ' + many;
 }
-{% block extra_script %}{% endblock %}
 </script>
 <script>{% include "base/base-ui.js" %}</script>
 <script type="module">
@@ -208,15 +224,15 @@ document.querySelectorAll('button[data-base-copy-target]').forEach(function(butt
 <script type="module">
 {% include "base/choice-runtime.js" %}
 window.PdlcChoice = {initChoice, refreshChoice, destroyChoice};
-document.querySelectorAll('select[data-base-choice]').forEach(function(control){
-  try { initChoice(control, control.hasAttribute('data-namespace-selector') ? {renderOption: renderNamespaceChoice} : control.id === 'namespaceThemeIcon' ? {appearance: 'icons', renderOption: renderNamespaceIconChoice} : {}); }
+document.querySelectorAll('[data-base-responsive-context] select[data-base-choice]').forEach(function(control){
+  try { initChoice(control, control.hasAttribute('data-namespace-selector') ? {renderOption: renderNamespaceChoice} : {}); }
   catch(error) { console.error('Base choice initialization failed', error); }
 });
 refreshNamespaceSelectors();
 {% include "base/draft-state.js" %}
 {% include "base/platform-bridge.js" %}
 {% include "base/platform-ssr.js" %}
-installServerProduct({connectPlatformProduct, platformNavigate, platformReload, transportNamespaceLocation, createDraftTracker}, {
+const serverProduct = installServerProduct({connectPlatformProduct, platformNavigate, platformReload, transportNamespaceLocation, createDraftTracker}, {
   admission: {
     initial: {{ access_window|tojson }},
     load: async signal => {
@@ -238,9 +254,12 @@ installServerProduct({connectPlatformProduct, platformNavigate, platformReload, 
   confirmLeave: () => window.PdlcBaseUI.requestConfirmation(unsavedChangesConfirmation),
   cancelLeave: () => { const dialog=document.getElementById('confirmDialog'); if(dialog && !dialog.hidden) document.getElementById('confirmDialogCancel').click(); }
 });
+window.WorkflowApplication.start(serverProduct);
 </script>
 <script data-project-navigation-context>
 document.addEventListener('DOMContentLoaded', window.WorkflowNavigation.preserveProjectContext);
 </script>
 </body>
 </html>
+
+{% endif %}
