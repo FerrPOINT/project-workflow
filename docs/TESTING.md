@@ -1,5 +1,7 @@
 # Тестовые уровни
 
+Подготовка без тестов и HTML из готовых данных: [дополнительные команды](quality-auxiliary.md).
+
 Обязательная общая политика: [Base TESTING](https://github.com/FerrPOINT/services-base/blob/ad724088e9a63b1e353fb5b28e4308e9ae6f45ae/docs/TESTING.md).
 Выбор компонентов и native commands: `.quality-gate.json`.
 

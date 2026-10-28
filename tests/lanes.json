@@ -8,6 +8,7 @@
     "test_fixture_imports.py",
     "test_phase_graph.py",
     "test_phase_grouping.py",
+    "test_quality_auxiliary.py",
     "test_quality_runner.py",
     "test_supervisor_format_result.py",
     "test_supervisor_models.py",

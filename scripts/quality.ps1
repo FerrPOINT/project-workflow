@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('test', 'test-verbose', 'test-integration', 'coverage', 'lint', 'quality', 'warnings', 'compose-ready', 'unit', 'integration', 'slow', 'release')]
+    [ValidateSet('test', 'test-verbose', 'test-integration', 'coverage', 'lint', 'quality', 'warnings', 'compose-ready', 'unit', 'integration', 'slow', 'release', 'coverage-html', 'install-dev')]
     [string]$Target = 'quality'
 )
 $ErrorActionPreference = 'Stop'

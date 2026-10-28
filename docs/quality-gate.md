@@ -1,5 +1,7 @@
 # Quality Gate
 
+Подготовка без тестов и HTML из готовых данных: [дополнительные команды](quality-auxiliary.md).
+
 Обязательная политика уровней: [TESTING](TESTING.md).
 Автоматический ci.yml выполняет `make quality`: unit + ruff/mypy, без БД.
 Ручной release.yml выполняет `make release`: один полный non-PostgreSQL pytest
