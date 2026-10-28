@@ -450,14 +450,6 @@ function validExpandedDesign(design, branding) {
     const colors = design.colors[mode];
     if (!record(colors) || !hex(colors.primary) || !hex(colors.accent))
       return false;
-    if (
-      [themes[mode].background, themes[mode].surface].some(
-        (background) =>
-          contrast(colors.primary, background) < 3 ||
-          contrast(colors.accent, background) < 4.5,
-      )
-    )
-      return false;
   }
   for (const [key, max] of Object.entries({
     control: 12,
@@ -719,6 +711,12 @@ function createBrandingRuntime(options) {
   function paint() {
     if (!active) return;
     const tokens = resolveBrandingTokens(branding, root.dataset.theme);
+    // A removed optional setting must not survive in the owned inline style.
+    for (const [name, old] of previous) {
+      if (Object.hasOwn(tokens, name)) continue;
+      if (old.value) root.style.setProperty(name, old.value, old.priority);
+      else root.style.removeProperty(name);
+    }
     for (const [name, value] of Object.entries(tokens)) {
       if (!previous.has(name))
         previous.set(name, {
@@ -755,6 +753,19 @@ function createBrandingRuntime(options) {
   let identitySequence = 0;
   function identity() {
     if (!active) return;
+    for (const link of root.querySelectorAll("[data-base-brand-link]")) {
+      const value =
+        link.getAttribute("data-base-brand-link") === "support"
+          ? branding.support_url
+          : branding.design?.documentation_url;
+      if (value && validBrandUrl(value)) {
+        link.setAttribute("href", value);
+        link.removeAttribute("hidden");
+      } else {
+        link.removeAttribute("href");
+        link.setAttribute("hidden", "");
+      }
+    }
     for (const title of root.querySelectorAll("[data-base-brand-title]"))
       title.textContent =
         (title.getAttribute("data-base-brand-title") || "PDLC") +
@@ -822,6 +833,14 @@ function createBrandingRuntime(options) {
   }
   root.ownerDocument.addEventListener("DOMContentLoaded", identity);
   function publish() {
+    if (root === root.ownerDocument.documentElement) {
+      const preference = win.PdlcThemePreference;
+      preference?.setPlatformDefault?.(branding.design?.initial_theme ?? null);
+      if (preference)
+        root.dataset.theme = preference.read(
+          root.dataset.themeStorageKey || "theme",
+        );
+    }
     paint();
     identity();
     onChange({ branding, revision, source });
@@ -905,6 +924,8 @@ function createBrandingRuntime(options) {
       active = false;
       sequence++;
       controller.abort();
+      if (root === root.ownerDocument.documentElement)
+        win.PdlcThemePreference?.setPlatformDefault?.(null);
       observer.disconnect();
       for (const [mark, original] of originalMarks) {
         mark.replaceChildren(...original.nodes);

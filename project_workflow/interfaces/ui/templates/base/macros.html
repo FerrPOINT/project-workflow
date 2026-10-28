@@ -70,7 +70,7 @@
 {%- endmacro %}
 
 {% macro account(logout='/logout') -%}
-<details class="base-ssr-account"><summary aria-label="Аккаунт" title="Аккаунт"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 22v-2a8 8 0 0 1 16 0v2"/></svg></summary><div class="base-ssr-account-menu"><fieldset class="base-ssr-theme"><legend>Тема</legend>{% for value, label in [('light', 'Светлая'), ('dark', 'Тёмная'), ('gray', 'Серая')] %}<label>{{ radio_control('base-account-theme-' ~ value, 'platform-theme', value, label=label, theme_option=true) }} {{ label }}</label>{% endfor %}</fieldset>{{ button('Выйти', href=logout, variant='link') }}</div></details>
+<details class="base-ssr-account"><summary aria-label="Аккаунт" title="Аккаунт"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 22v-2a8 8 0 0 1 16 0v2"/></svg></summary><div class="base-ssr-account-menu"><fieldset class="base-ssr-theme"><legend>Тема</legend>{% for value, label in [('light', 'Светлая'), ('dark', 'Тёмная'), ('gray', 'Серая')] %}<label>{{ radio_control('base-account-theme-' ~ value, 'platform-theme', value, label=label, theme_option=true) }} {{ label }}</label>{% endfor %}</fieldset><a class="base-control base-button" data-variant="link" data-base-brand-link="support" hidden target="_blank" rel="noopener noreferrer">Поддержка</a><a class="base-control base-button" data-variant="link" data-base-brand-link="documentation" hidden target="_blank" rel="noopener noreferrer">Документация</a>{{ button('Выйти', href=logout, variant='link') }}</div></details>
 {%- endmacro %}
 
 {% macro navigation_drawer(title) -%}
@@ -138,6 +138,11 @@
 
 {% macro inline_code(value=none, class_name='', attributes=none) -%}
 <code class="base-inline-code{% if class_name %} {{ class_name }}{% endif %}"{{ _native_attributes(attributes, ['class']) }}>{% if caller is defined %}{{ caller() }}{% elif value is not none %}{{ value }}{% endif %}</code>
+
+{%- endmacro %}
+
+{% macro badge_button(label, tone='neutral', appearance='badge', id=none, type='button', disabled=false, class_name='', aria_label=none, title=none, aria_controls=none, value=none) -%}
+<button type="{{ type }}" class="base-badge base-badge-button{% if class_name %} {{ class_name }}{% endif %}" data-tone="{{ tone }}" data-appearance="{{ appearance }}"{% if id %} id="{{ id }}"{% endif %}{% if disabled %} disabled{% endif %}{% if aria_label %} aria-label="{{ aria_label }}"{% endif %}{% if title %} title="{{ title }}"{% endif %}{% if aria_controls %} aria-controls="{{ aria_controls }}"{% endif %}{% if value is not none %} value="{{ value }}"{% endif %}>{{ label }}</button>
 {%- endmacro %}
 
 {% macro progress(value, max=100, variant='default', label=none, value_text=none, class_name='') -%}
@@ -361,4 +366,9 @@
 
 {% macro timeline_content(class_name='') -%}
 <div class="base-timeline-content{% if class_name %} {{ class_name }}{% endif %}">{{ caller() }}</div>
+
+{%- endmacro %}
+
+{% macro badge_input(value='', tone='neutral', appearance='badge', class_name='', aria_label=none, placeholder=none, size=8, hidden=false, disabled=false) -%}
+<input type="text" class="base-badge base-badge-input{% if class_name %} {{ class_name }}{% endif %}" data-tone="{{ tone }}" data-appearance="{{ appearance }}" value="{{ value }}" size="{{ size }}" autocomplete="off"{% if aria_label %} aria-label="{{ aria_label }}"{% endif %}{% if placeholder %} placeholder="{{ placeholder }}"{% endif %}{% if hidden %} hidden{% endif %}{% if disabled %} disabled{% endif %}>
 {%- endmacro %}
