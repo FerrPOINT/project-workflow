@@ -90,37 +90,13 @@
 {% endif %}
 {% endset %}
 {{ base_ui.page_header(heading=phase_heading, actions=phase_back) }}
-{% if rollback_target_phase %}
-    <dl>{{ base_ui.description_item('Откат:', rollback_target_phase.name ~ ' · ' ~ rollback_target_phase.code, layout='inline') }}</dl>
-{% endif %}
-    <div class="execution-row">
-{% if can_administer %}
-      <button type="button" class="base-control base-button execution-toggle" data-variant="outline" aria-label="Параллельное выполнение фазы" data-mode="{{ phase.execution_type or 'sync' }}" aria-pressed="{{ 'true' if phase.execution_type == 'parallel' else 'false' }}" onclick="togglePhaseMode(this)">
-        {% if phase.execution_type == 'parallel' %}
-        <span data-execution-label>⚡ параллельно</span>
-        {% else %}
-        <span data-execution-label>⏱ последовательно</span>
-        {% endif %}
-      </button>
-      <div id="parallelPartnerRow" {% if phase.execution_type != 'parallel' %}hidden{% endif %}>
-        {% call base_ui.field('parallelPartnerSelect', 'Связать с:') %}
-        <select data-base-choice id="parallelPartnerSelect" onchange="scheduleSave()">
-          <option value="">— изолированная фаза —</option>
-          {% for candidate in parallel_candidates %}
-          <option value="{{ candidate.id }}" {% if phase.parallel_with_phase_id == candidate.id %}selected{% endif %}>{{ candidate.name }} · {{ candidate.code }}</option>
-          {% endfor %}
-        </select>
-        {% endcall %}
-      </div>{% else %}
-      {{ base_ui.badge('параллельно' if phase.execution_type == 'parallel' else 'последовательно', 'info' if phase.execution_type == 'parallel' else 'neutral') }}
-{% endif %}
-    </div>
+
   </div>
 
   <!-- Instructions — managed like phases list with inline edit, reorder, add, delete -->
 {% if can_administer %}
-  <div class="base-page-actions">
-    <button type="button" class="btn btn-secondary" id="phaseSaveEditor" onclick="saveEditorChanges()">Сохранить правки</button>
+  <div class="base-page-actions" id="phaseSaveRecovery" hidden>
+    <button type="button" class="btn btn-secondary" id="phaseSaveEditor" hidden onclick="saveEditorChanges()">Повторить сохранение</button>
     <button type="button" class="btn btn-secondary" id="phaseSaveReadback" hidden onclick="reconcilePhaseSave()">Проверить сохранение</button>
   </div>
 {% endif %}

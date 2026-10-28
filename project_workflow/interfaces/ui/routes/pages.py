@@ -531,46 +531,9 @@ def phase_detail(request: Request, phase_id: PositivePathId) -> HTMLResponse:
         )
     if not _workflow_matches_selected_namespace(phase.get("workflow_id"), context):
         return _phase_not_in_selected_namespace_page(request, context)
-    workflow_phases = _app_state.phase_service().list_phases(
-        phase.get("workflow_id"), mode_id=phase.get("mode_id")
-    )
-    current_index = next(
-        (index for index, item in enumerate(workflow_phases) if item.get("id") == phase.get("id")),
-        None,
-    )
-    parallel_candidates = []
-    rollback_target_phase = next(
-        (
-            item
-            for item in workflow_phases
-            if item.get("id") == phase.get("rollback_target_phase_id")
-        ),
-        None,
-    )
-    if current_index is not None:
-        left = current_index - 1
-        right = current_index + 1
-        while left >= 0 and workflow_phases[left].get("execution_type") == "parallel":
-            left -= 1
-        while right < len(workflow_phases) and workflow_phases[right].get("execution_type") == "parallel":
-            right += 1
-        parallel_candidates = [
-            item
-            for index, item in enumerate(workflow_phases)
-            if left < index < right
-            and index != current_index
-            and item.get("execution_type") == "parallel"
-        ]
     for instruction in phase.get("instructions", []):
         instruction["skills"] = PhaseService.normalize_skills(instruction.get("skills"))
-    context.update(
-        {
-            "phase": phase,
-            "workflow_phases": workflow_phases,
-            "parallel_candidates": parallel_candidates,
-            "rollback_target_phase": rollback_target_phase,
-        }
-    )
+    context["phase"] = phase
     return _template_response(
         request=request,
         name="phase_detail.html",

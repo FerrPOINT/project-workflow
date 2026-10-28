@@ -147,18 +147,29 @@ console.log(JSON.stringify({writes,dirty:dirty()}));
     assert result == {"writes": 0, "dirty": True}
 
 
-def test_phase_mode_failure_keeps_the_chosen_value_as_a_draft():
-    template = controller_source("phase_detail", True)[0].decode()
-    start = template.index("async function togglePhaseMode(el)")
-    end = template.index("/* ---------- Instructions list", start)
-    result = subprocess.run(
-        ["node", "--input-type=module", "-"], input="\n".join([
-            "let edits=0,mode='sync';const setPhaseMode=(el,next)=>{mode=next;el.dataset.mode=next};",
-            "const notePhaseEdit=()=>{edits++};const savePhase=async()=>false;",
-            template[start:end],
-            "const el={dataset:{mode:'sync'},setAttribute:()=>{},removeAttribute:()=>{}};",
-            "await togglePhaseMode(el);console.log(JSON.stringify({mode,edits,pending:el.dataset.saving??null}));",
-        ]), text=True, encoding="utf-8", capture_output=True, timeout=10,
-    )
-    assert result.returncode == 0, result.stderr
-    assert json.loads(result.stdout) == {"mode": "parallel", "edits": 1, "pending": None}
+def test_header_save_does_not_write_execution_graph_fields():
+    result = run_editor("""
+let submitted;globalThis.fetch=async(u,o)=>{
+ submitted=JSON.parse(o.body);return {ok:true,json:async()=>({ok:true,ids:{checks:[],evidence:[]}})};
+};
+confirmedPhase={name:'Original',description:'',execution_type:'parallel',parallel_with_phase_id:42,
+ checks:[],evidence:[]};
+edit('Renamed');await savePhase();
+console.log(JSON.stringify({fields:Object.keys(submitted).sort(),name:submitted.name,dirty:dirty()}));
+""")
+    assert result == {"fields": ["checks", "description", "evidence", "name"],
+                      "name": "Renamed", "dirty": False}
+
+
+def test_recovery_actions_only_appear_for_an_unfinished_save():
+    result = run_editor("""
+const save={hidden:true,setAttribute(){}},readback={hidden:true},recovery={hidden:true};
+document.getElementById=id=>({phaseSaveEditor:save,phaseSaveReadback:readback,phaseSaveRecovery:recovery}[id]??null);
+updatePhaseSaveStatus();const clean=recovery.hidden;
+edit('Renamed');let ticket=phaseDraft.beginSave();updatePhaseSaveStatus();const pending=recovery.hidden;
+phaseDraft.finishSave(ticket,'failed');updatePhaseSaveStatus();const failed={hidden:recovery.hidden,retry:!save.hidden};
+ticket=phaseDraft.beginSave();phaseDraft.finishSave(ticket,'saved');updatePhaseSaveStatus();
+console.log(JSON.stringify({clean,pending,failed,saved:recovery.hidden}));
+""")
+    assert result == {"clean": True, "pending": True,
+                      "failed": {"hidden": False, "retry": True}, "saved": True}

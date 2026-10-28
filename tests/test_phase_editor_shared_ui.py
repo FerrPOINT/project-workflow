@@ -48,7 +48,12 @@ def test_phase_editor_uses_shared_presentation_with_native_list_and_role_semanti
     back = next(attrs for tag, attrs in elements if tag == "a" and
                 attrs.get("href") == "/workflow/phases?workflow_id=3&mode_id=9&profession_id=7")
     assert "base-button" in back["class"].split()
-    assert "Rollback &lt;safe&gt;" in html
+    assert "Rollback &lt;safe&gt;" not in html
+    assert 'id="parallelPartnerSelect"' not in html
+    assert 'onclick="togglePhaseMode(this)"' not in html
+    if admin:
+        retry = next(attrs for _, attrs in elements if attrs.get("id") == "phaseSaveEditor")
+        assert "hidden" in retry
     for source in [".wiki-header h1{", ".catalog-card{", ".check-list>li{", ".evidence-list>li{",
                    ".wiki-section-title{", ".empty-state{"]:
         assert source not in html

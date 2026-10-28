@@ -1299,15 +1299,15 @@ class TestPhaseDetail:
         assert "move-up-btn" in response.text
         assert "move-down-btn" in response.text
 
-    def test_phase_detail_names_inline_fields_and_exposes_keyboard_mode_toggle(self):
+    def test_phase_detail_names_inline_fields_without_header_mode_controls(self):
         response = client.get(_phase_detail_path("1.INTAKE"))
 
         assert response.status_code == 200
         assert 'aria-label="Название фазы"' in response.text
         assert 'aria-label="Описание фазы"' in response.text
         assert 'id="agentSelect"' not in response.text
-        assert '<button type="button" class="base-control base-button execution-toggle"' in response.text
-        assert 'aria-pressed="false"' in response.text
+        assert 'onclick="togglePhaseMode(this)"' not in response.text
+        assert 'id="parallelPartnerSelect"' not in response.text
         assert 'aria-label="Описание инструкции ' in response.text
         assert 'aria-label="Добавить навык к инструкции ' in response.text
         assert 'aria-label="Описание проверки ' in response.text
@@ -1568,17 +1568,15 @@ class TestPhaseDetail:
         # Имя фазы не интерполируется в JS-литералы (эталон tojson-фикса 5054858)
         assert "meta.name || '" not in response.text
 
-    def test_phase_detail_serializes_phase_mode_toggles(self):
+    def test_phase_detail_keeps_autosave_without_header_mode_controls(self):
         response = client.get(_phase_detail_path("1.INTAKE"))
-
         assert response.status_code == 200
-        assert "async function togglePhaseMode(el)" in response.text
-        assert "if (el.dataset.saving === 'true') return;" in response.text
-        assert "await savePhase();" in response.text
-        assert "el.setAttribute('aria-busy', 'true');" in response.text
-        assert "notePhaseEdit();" in response.text
-        assert "partnerSelect.value = previousPartner;" not in response.text
-        assert "return true;" in response.text
+        assert 'onclick="togglePhaseMode(this)"' not in response.text
+        assert "async function togglePhaseMode(el)" not in response.text
+        assert 'onblur="scheduleSave()"' in response.text
+        from project_workflow.interfaces.ui.controller_assets import controller_source
+
+        assert "let _phaseSaveQueue = Promise.resolve(true);" in controller_source("phase_detail", True)[0].decode()
 
     def test_phase_detail_serializes_all_phase_aggregate_saves(self):
         response = client.get(_phase_detail_path("1.INTAKE"))

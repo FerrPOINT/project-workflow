@@ -26,7 +26,7 @@ function instructionDraft(input) {
 
 function currentPhaseSignature() {
   const fields = [...document.querySelectorAll('.wiki-header [data-field], #checks-list [data-field], #evidence-list [data-field]')].map(input => input.value);
-  return JSON.stringify([fields, document.querySelector('.execution-toggle')?.dataset.mode, document.getElementById('parallelPartnerSelect')?.value]);
+  return JSON.stringify(fields);
 }
 function notePhaseEdit() {
   const current = currentPhaseSignature();
@@ -36,7 +36,9 @@ function updatePhaseSaveStatus() {
   const button = document.getElementById('phaseSaveReadback');
   if (button) button.hidden = !unknownPhaseSave && !unknownInstructionSaves.size && !mutationNeedsReadback && !mutationRequiresReload;
   const save = document.getElementById('phaseSaveEditor');
-  if (save) { save.disabled = mutationPending > 0 || !!phaseDraft?.pending || [...instructionDrafts.values()].some(draft => draft.pending); save.setAttribute('aria-busy', String(save.disabled)); }
+  if (save) { save.hidden = ![phaseDraft, ...instructionDrafts.values()].some(draft => draft?.dirty && !draft.pending && !draft.uncertain); save.disabled = mutationPending > 0 || !!phaseDraft?.pending || [...instructionDrafts.values()].some(draft => draft.pending); save.setAttribute('aria-busy', String(save.disabled)); }
+  const recovery = document.getElementById('phaseSaveRecovery');
+  if (recovery) recovery.hidden = !!button?.hidden && !!save?.hidden;
   updateInstructionControls();
 }
 const selectedNamespaceId = config.professionId;
@@ -152,40 +154,6 @@ function phaseApiUrl(path) {
     url.searchParams.set('namespace_id', String(selectedNamespaceId));
   }
   return url.pathname + url.search;
-}
-
-/* ---------- Phase header ---------- */
-function setPhaseMode(el, mode) {
-  const b = el.querySelector('[data-execution-label]');
-  el.dataset.mode = mode;
-  el.setAttribute('aria-pressed', String(mode === 'parallel'));
-  if (mode === 'parallel') {
-    b.textContent = '⚡ параллельно';
-  } else {
-    b.textContent = '⏱ последовательно';
-  }
-  const partnerRow = document.getElementById('parallelPartnerRow');
-  if (partnerRow) partnerRow.hidden = mode !== 'parallel';
-  if (mode !== 'parallel') {
-    const partnerSelect = document.getElementById('parallelPartnerSelect');
-    if (partnerSelect) { partnerSelect.value = ''; window.PdlcChoice?.refreshChoice(partnerSelect); }
-  }
-}
-
-async function togglePhaseMode(el) {
-  if (el.dataset.saving === 'true') return;
-  const previousMode = el.dataset.mode || 'sync';
-  const nextMode = previousMode === 'sync' ? 'parallel' : 'sync';
-  setPhaseMode(el, nextMode);
-  notePhaseEdit();
-  el.dataset.saving = 'true';
-  el.setAttribute('aria-busy', 'true');
-  try {
-    await savePhase();
-  } finally {
-    delete el.dataset.saving;
-    el.removeAttribute('aria-busy');
-  }
 }
 
 /* ---------- Instructions list (like phases) ---------- */
@@ -572,12 +540,6 @@ async function persistPhase() {
     description: meta.description || '',
     checks: [],
     evidence: [],
-    execution_type: document.querySelector('.execution-toggle')?.dataset.mode || 'sync',
-    parallel_with_phase_id: (document.querySelector('.execution-toggle')?.dataset.mode || 'sync') === 'parallel'
-      ? (document.getElementById('parallelPartnerSelect')?.value
-        ? Number(document.getElementById('parallelPartnerSelect').value)
-        : null)
-      : null,
   };
 
   const submittedRows = {checks: [], evidence: []};
@@ -648,7 +610,6 @@ async function saveEditorChanges() {
 
 function phaseMatches(actual, expected) {
   return actual.name === expected.name && (actual.description || '') === (expected.description || '')
-    && (actual.execution_type || 'sync') === expected.execution_type && (actual.parallel_with_phase_id ?? null) === expected.parallel_with_phase_id
     && ['checks', 'evidence'].every(field => actual[field].length === expected[field].length
       && expected[field].every((row, index) => actual[field][index].description === row.description && (row.id == null || Number(actual[field][index].id) === Number(row.id))));
 }
@@ -699,7 +660,6 @@ page.ready(() => {
   phaseDraft = window.PdlcPlatformNavigation.createDraftTracker();
   phaseSignature = currentPhaseSignature();
   confirmedPhase = {name: document.querySelector('.wiki-header [data-field="name"]').value, description: document.querySelector('.wiki-header [data-field="description"]').value,
-    execution_type: document.querySelector('.execution-toggle')?.dataset.mode || 'sync', parallel_with_phase_id: Number(document.getElementById('parallelPartnerSelect')?.value) || null,
     checks: [...document.querySelectorAll('#checks-list [data-field]')].map(input => ({id: Number(input.closest('li').dataset.id) || null, description: input.value.trim()})),
     evidence: [...document.querySelectorAll('#evidence-list [data-field]')].map(input => ({id: Number(input.closest('li').dataset.id) || null, description: input.value.trim()}))};
   initializePhaseOutline();
@@ -763,11 +723,9 @@ saveNewTextItem:typeof saveNewTextItem==='function'?saveNewTextItem:undefined,
 savePhase:typeof savePhase==='function'?savePhase:undefined,
 scheduleSave:typeof scheduleSave==='function'?scheduleSave:undefined,
 setActivePhaseSection:typeof setActivePhaseSection==='function'?setActivePhaseSection:undefined,
-setPhaseMode:typeof setPhaseMode==='function'?setPhaseMode:undefined,
 syncPhaseSectionUrl:typeof syncPhaseSectionUrl==='function'?syncPhaseSectionUrl:undefined,
 syncTextItemList:typeof syncTextItemList==='function'?syncTextItemList:undefined,
 toggleInstructionType:typeof toggleInstructionType==='function'?toggleInstructionType:undefined,
-togglePhaseMode:typeof togglePhaseMode==='function'?togglePhaseMode:undefined,
 updateInstructionControls:typeof updateInstructionControls==='function'?updateInstructionControls:undefined,
 updatePhaseSaveStatus:typeof updatePhaseSaveStatus==='function'?updatePhaseSaveStatus:undefined,
 });

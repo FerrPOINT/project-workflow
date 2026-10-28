@@ -385,23 +385,31 @@ def test_namespaces_page_exposes_description_editor():
     assert "description: document.getElementById('namespaceDescription').value.trim()" in response.text
 
 
-def test_phase_detail_exposes_explicit_parallel_partner_editor():
-    phase = next(
-        phase for phase in _app_state.phase_service().list_phases() if phase["code"] == "7.PLAN_GATE"
-    )
+def test_phase_detail_header_does_not_repeat_execution_graph_controls():
+    phase = next(phase for phase in _app_state.phase_service().list_phases()
+                 if phase["code"] == "7.PLAN_GATE")
     response = client.get(f"/phase/{phase['id']}")
     assert response.status_code == 200
-    assert 'id="parallelPartnerSelect"' in response.text
-    assert "— изолированная фаза —" in response.text
-    test_plan = next(
-        item for item in _app_state.phase_service().list_phases() if item["code"] == "6.TEST_PLAN"
-    )
-    review = next(
-        item for item in _app_state.phase_service().list_phases() if item["code"] == "10.REVIEW"
-    )
-    assert f'value="{test_plan["id"]}"' in response.text
-    assert f'value="{review["id"]}"' not in response.text
-    assert "partnerSelect.value = '';" in response.text
+    assert 'id="parallelPartnerSelect"' not in response.text
+    assert 'onclick="togglePhaseMode(this)"' not in response.text
+    assert 'aria-label="Название фазы"' in response.text
+    assert 'aria-label="Описание фазы"' in response.text
+
+
+def test_phase_copy_update_preserves_parallel_links():
+    _, phases = _workflow_with_phases(2)
+    service = _app_state.phase_service()
+    service.update_phase(phases[0]["id"], {"execution_type": "parallel"})
+    service.update_phase(phases[1]["id"], {"execution_type": "parallel",
+                                         "parallel_with_phase_id": phases[0]["id"]})
+    before = service.get_phase(phases[1]["id"])
+    response = client.put(f"/api/phases/{phases[1]['id']}",
+                          json={"name": "Переименованная фаза", "description": "Новое описание"})
+    assert response.status_code == 200
+    after = service.get_phase(phases[1]["id"])
+    assert after["name"] == "Переименованная фаза"
+    for field in ["execution_type", "parallel_with_phase_id", "rollback_target_phase_id"]:
+        assert after[field] == before[field]
 
 
 @pytest.mark.parametrize("raw_skills", ["{broken", ""])
