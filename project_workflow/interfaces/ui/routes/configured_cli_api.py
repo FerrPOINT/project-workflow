@@ -11,6 +11,7 @@ from project_workflow.domain.configured_cli import (
     ConfiguredTerminalReadback,
 )
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
+from project_workflow.infrastructure import base_auth
 from project_workflow.infrastructure.db.single_task_catalog import runtime_catalog_read
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.infrastructure.namespace_auth import NamespaceAuthError
@@ -36,7 +37,7 @@ def assign(command: ConfiguredAssignment, authorization: str | None):
     from .runtime_api import _authorized_assignment_role
 
     try:
-        if _authorized_assignment_role(authorization) != command.role_key:
+        if _authorized_assignment_role(authorization, write=True) != command.role_key:
             raise NamespaceAuthError(403)
         with SAUnitOfWork() as uow, runtime_catalog_read(uow):
             return {"ok": True, "exit_code": 0, "result": configured_cli.enroll(uow, command)}
@@ -55,15 +56,15 @@ def step(command: ConfiguredStep, authorization: str | None):
 def history(task: str, namespace_id: int | None, authorization: str | None, *, n: int,
             execution_ref: str | None, operation_key: str | None, assignment_operation_key: str | None = None,
             projection: str | None = None, before_history_id: int | None = None):
-    from .runtime_api import _authorized_assignment_role
-
     try:
         if type(namespace_id) is not int or namespace_id <= 0:
             raise ValueError("Explicit namespace required")
-        trusted = _authorized_assignment_role(authorization)
+        principal = configured_cli._principal(authorization, write=False)
+        trusted = base_auth.registered_subjects().get(principal.subject)
         with SAUnitOfWork() as uow, runtime_catalog_read(uow):
             return configured_cli.history(uow, task, namespace_id, authorization, n=n,
                 execution_ref=execution_ref, operation_key=operation_key, trusted=trusted,
+                principal=principal,
                 assignment_operation_key=assignment_operation_key, projection=projection,
                 before_history_id=before_history_id)
     except _REQUEST_ERRORS as exc:

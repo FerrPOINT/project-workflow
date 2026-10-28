@@ -51,7 +51,7 @@ def test_retired_runtime_token_cannot_advertise_a_second_protocol(configured, mo
     monkeypatch.setenv("PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON", json.dumps({assignment["role_key"]: "r" * 40}))
     config.get_settings.cache_clear()
     response = client.get("/internal/runtime/capabilities", headers={"Authorization": "Bearer " + "r" * 40})
-    assert response.status_code == 403
+    assert response.status_code == 401
 
 
 def test_openapi_exposes_only_common_execution_commands(configured):

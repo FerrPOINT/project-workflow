@@ -99,10 +99,15 @@ def test_validator_rejects_full_managed_content_drift(empty_uow, drift_kind: str
 def _install_runtime_credentials(monkeypatch, tmp_path: Path) -> tuple[str, str]:
     runtime_token = "r" * 48
     catalog_token = "c" * 48
-    monkeypatch.setenv(
-        "PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON",
-        json.dumps({"developer": runtime_token}),
-    )
+    from project_workflow.infrastructure import namespace_auth
+
+    runtime_token = "sdlc_pat_" + runtime_token
+    subject = "99999999-9999-4999-8999-999999999999"
+    monkeypatch.setenv("PROJECT_WORKFLOW_BASE_READER_SUBJECTS_JSON", json.dumps({subject: "developer"}))
+    def introspect(authorization, *, require_service_account=False):
+        assert require_service_account and authorization == "Bearer " + runtime_token
+        return namespace_auth.NamespacePrincipal("https://auth.test", subject), ["project-workflow:read"]
+    monkeypatch.setattr(namespace_auth, "introspect", introspect)
     monkeypatch.setenv("PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN", catalog_token)
     config.get_settings.cache_clear()
     _install_manifest(monkeypatch, tmp_path, _valid_manifest())

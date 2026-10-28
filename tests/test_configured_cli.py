@@ -17,7 +17,8 @@ from project_workflow.infrastructure.db.single_task_catalog import ensure_single
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.ui.app import create_app
 
-WRITER = {"Authorization": "Bearer " + "w" * 40}
+WRITER = {"Authorization": "Bearer sdlc_pat_test-configured-controller"}
+CONTROLLER = "99999999-9999-4999-8999-999999999999"
 MACHINE = {"Authorization": "Bearer sdlc_pat_test-configured-agent"}
 SUBJECT, AGENT, OWNER, TRACKER_TASK = (str(uuid4()) for _ in range(4))
 
@@ -26,7 +27,7 @@ SUBJECT, AGENT, OWNER, TRACKER_TASK = (str(uuid4()) for _ in range(4))
 def configured(monkeypatch, request):
     role, mode = getattr(request, "param", ("project_manager", "draft"))
     monkeypatch.setattr(config, "CATALOG_VARIANT", "single-task-v1")
-    monkeypatch.setenv("PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON", json.dumps({role: "w" * 40}))
+    monkeypatch.setenv("PROJECT_WORKFLOW_BASE_READER_SUBJECTS_JSON", json.dumps({CONTROLLER: role}))
     monkeypatch.setenv("PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON", "")
     config.get_settings.cache_clear()
     with SAUnitOfWork() as uow:
@@ -35,9 +36,10 @@ def configured(monkeypatch, request):
 
     def introspect(authorization, *, require_service_account=False):
         assert require_service_account
-        if authorization != MACHINE["Authorization"]:
+        if authorization not in (MACHINE["Authorization"], WRITER["Authorization"]):
             raise namespace_auth.NamespaceAuthError(403)
-        return namespace_auth.NamespacePrincipal("https://auth.test", SUBJECT), [
+        return namespace_auth.NamespacePrincipal(
+            "https://auth.test", CONTROLLER if authorization == WRITER["Authorization"] else SUBJECT), [
             "project-workflow:read",
             "project-workflow:write",
         ]
@@ -921,15 +923,16 @@ def complete(configured, supervisor_llm, monkeypatch):
     return selector, result
 
 
-def test_terminal_endpoint_reads_saved_receipt_not_live_authority(configured, supervisor_llm, monkeypatch):
+def test_terminal_endpoint_authenticates_reader_but_reads_saved_business_receipt(
+    configured, supervisor_llm, monkeypatch,
+):
     selector, saved = complete(configured, supervisor_llm, monkeypatch)
 
     def forbidden(*args, **kwargs):
-        raise AssertionError("Historical terminal readback cannot require fresh native/Auth/Tracker authority")
+        raise AssertionError("Historical terminal readback cannot depend on current native/Tracker state")
 
     monkeypatch.setattr(configured_cli, "confirmation", forbidden)
     monkeypatch.setattr(configured_cli_tracker, "assignment", forbidden)
-    monkeypatch.setattr(namespace_auth, "introspect", forbidden)
     client, _ = configured
     for _ in range(2):
         response = client.post("/internal/runtime/terminal-receipt/readback", headers=WRITER, json=selector)

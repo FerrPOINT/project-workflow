@@ -5,7 +5,7 @@ import json
 import pytest
 
 from project_workflow import config
-from tests.test_configured_cli import MACHINE, WRITER, enroll, step
+from tests.test_configured_cli import CONTROLLER, MACHINE, WRITER, enroll, step
 from tests.test_configured_cli import configured as configured
 
 CATALOG = {"Authorization": "Bearer " + "c" * 40}
@@ -61,14 +61,15 @@ def test_catalog_observation_outage_is_unavailable_without_consuming_an_assignme
 def test_server_history_credential_cannot_cross_profession_even_with_an_existing_task(configured, monkeypatch):
     client, assignment = configured
     enroll(configured)
-    monkeypatch.setenv("PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON", json.dumps({
-        "developer": "w" * 40, "project_manager": "p" * 40}))
+    monkeypatch.setenv("PROJECT_WORKFLOW_BASE_READER_SUBJECTS_JSON", json.dumps({CONTROLLER: "project_manager"}))
     config.get_settings.cache_clear()
     query = {"interaction_protocol": "configured-cli-v1", "task": assignment["task"],
              "namespace_id": assignment["namespace_id"]}
     response = client.get("/internal/runtime/history", params=query,
-                          headers={"Authorization": "Bearer " + "p" * 40})
+                          headers=WRITER)
     assert response.status_code == 403
+    monkeypatch.setenv("PROJECT_WORKFLOW_BASE_READER_SUBJECTS_JSON", json.dumps({CONTROLLER: "developer"}))
+    config.get_settings.cache_clear()
     assert client.get("/internal/runtime/history", params=query, headers=WRITER).status_code == 200
 
 
@@ -92,33 +93,27 @@ def test_catalog_and_assignment_credentials_have_separate_capabilities(configure
     assert step(configured).json()["result"]["version"] == cursor["version"]
 
 
-@pytest.mark.parametrize("raw", ["{", "[]", '{"project_manager":true}',
-    json.dumps({"project_manager": "short"}),
-    json.dumps({"project_manager": "w" * 40, "developer": "w" * 40}),
-    json.dumps({"project_manager": "w" * 40, "invalid role": "z" * 40}),
+@pytest.mark.parametrize("raw", ["{", "[]", '{"not-a-uuid":"project_manager"}',
+    json.dumps({CONTROLLER: "invalid role"}),
+    '{"' + CONTROLLER + '":"project_manager","' + CONTROLLER + '":"developer"}',
 ])
-def test_invalid_role_token_configuration_refuses_admission_without_consuming_key(configured, monkeypatch, raw):
+def test_invalid_subject_registration_refuses_admission_without_consuming_key(configured, monkeypatch, raw):
     client, assignment = configured
-    monkeypatch.setenv("PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON", raw)
+    monkeypatch.setenv("PROJECT_WORKFLOW_BASE_READER_SUBJECTS_JSON", raw)
     config.get_settings.cache_clear()
     assert client.get("/internal/runtime/capabilities", headers=WRITER).status_code == 503
     assert client.post("/internal/runtime/assign", headers=WRITER, json=assignment).status_code == 503
-    monkeypatch.setenv("PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON", json.dumps({"project_manager": "w" * 40}))
+    monkeypatch.setenv("PROJECT_WORKFLOW_BASE_READER_SUBJECTS_JSON", json.dumps({CONTROLLER: "project_manager"}))
     config.get_settings.cache_clear()
     assert enroll(configured)["version"] == 1
 
 
-@pytest.mark.parametrize("collision", ["catalog", "retired-runtime"])
-def test_shared_secret_between_credential_classes_is_not_an_authority(configured, monkeypatch, collision):
+@pytest.mark.parametrize("setting", ["PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON", "PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON"])
+def test_retired_opaque_role_tokens_cannot_authorize_execution(configured, monkeypatch, setting):
     client, assignment = configured
-    if collision == "catalog":
-        monkeypatch.setenv("PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN", "w" * 40)
-    else:
-        monkeypatch.setenv("PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON", json.dumps({"developer": "w" * 40}))
+    monkeypatch.setenv(setting, json.dumps({"project_manager": "w" * 40}))
     config.get_settings.cache_clear()
-    assert client.post("/internal/runtime/assign", headers=WRITER, json=assignment).status_code == 503
-    assert client.get("/internal/runtime/catalog", headers=WRITER).status_code == 503
-    monkeypatch.setenv("PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN", "")
-    monkeypatch.setenv("PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON", "")
-    config.get_settings.cache_clear()
+    old = {"Authorization": "Bearer " + "w" * 40}
+    assert client.get("/internal/runtime/capabilities", headers=old).status_code == 401
+    assert client.post("/internal/runtime/assign", headers=old, json=assignment).status_code == 403
     assert enroll(configured)["version"] == 1

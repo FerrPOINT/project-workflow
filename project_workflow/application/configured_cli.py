@@ -433,12 +433,13 @@ def confirmation(payload: dict[str, Any]) -> dict[str, Any]:
 
 def history(uow: SAUnitOfWork, task: str, namespace_id: int, authorization: str | None, *,
             n: int, execution_ref: str | None, operation_key: str | None, trusted: str | None,
+            principal: namespace_auth.NamespacePrincipal | None = None,
             assignment_operation_key: str | None = None, projection: str | None = None,
             before_history_id: int | None = None) -> dict[str, Any]:
     if (type(n) is not int or not 1 <= n <= 200 or before_history_id is not None
             and (type(before_history_id) is not int or not 1 <= before_history_id <= 2**63 - 1)):
         raise ValueError("Invalid bounded history cursor")
-    principal = None if trusted else _principal(authorization, write=False)
+    principal = None if trusted else principal or _principal(authorization, write=False)
     stored = _stored_row(uow, task, namespace_id)
     if stored[2].get("interaction_protocol") != PROTOCOL:
         if trusted is None or trusted != stored[1].role_key:

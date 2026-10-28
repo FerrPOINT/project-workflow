@@ -101,7 +101,12 @@ def test_compose_and_env_example_forward_runtime_settings() -> None:
     assert (
         "PLATFORM_SERVICES_URL: ${PLATFORM_SERVICES_URL:-http://host.docker.internal:7771/api/v1/runtime/services}"
     ) in compose
-    assert "PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON: ${PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON:-}" in compose
+    for key in ("PROJECT_WORKFLOW_BASE_READER_SUBJECTS_JSON", "PROJECT_WORKFLOW_CONFIGURED_TRACKER_URL",
+                "PROJECT_WORKFLOW_CONFIGURED_TRACKER_READ_TOKEN"):
+        assert f"{key}: ${{{key}:-}}" in compose
+        assert f"{key}=" in env_example
+    for retired in ("PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON", "PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON"):
+        assert retired not in compose and retired not in env_example
     assert "AUTH_ISSUER: ${AUTH_ISSUER:-}" in compose
     assert "AUTH_INTERNAL_BASE_URL: ${AUTH_INTERNAL_BASE_URL:-}" in compose
     assert (
@@ -112,7 +117,6 @@ def test_compose_and_env_example_forward_runtime_settings() -> None:
     assert "AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}" in compose
     assert "PLATFORM_SERVICES_URL=http://localhost:7771/api/v1/runtime/services" in env_example
     assert "\nPLATFORM_SERVICES_URL=" not in env_example
-    assert "PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON=" in env_example
     assert "AUTH_ISSUER=" in env_example
     assert "AUTH_INTERNAL_BASE_URL=" in env_example
     assert "PROJECT_WORKFLOW_NAMESPACE_PROVISIONER_SUBJECT=" in env_example

@@ -158,7 +158,7 @@ def test_existing_router_authorizes_readback_and_rejects_drift(database, monkeyp
     with TestClient(create_app()) as client:
         path = "/internal/runtime/profiles/single-task-v1/installation"
         assert client.get(path).status_code == 401
-        assert client.get(path, headers={"Authorization": "Bearer " + "a" * 32}).status_code == 403
+        assert client.get(path, headers={"Authorization": "Bearer " + "a" * 32}).status_code == 401
         headers = {"Authorization": "Bearer " + "c" * 32}
         response = client.get(path, headers=headers)
         assert response.status_code == 200, response.text
@@ -193,7 +193,7 @@ def test_runtime_catalog_reads_installed_single_task_with_legacy_selector(monkey
         path = "/internal/runtime/catalog"
         assert client.get(path).status_code == 401
         for token in ("a" * 32, "b" * 32):
-            assert client.get(path, headers={"Authorization": "Bearer " + token}).status_code == 403
+            assert client.get(path, headers={"Authorization": "Bearer " + token}).status_code == 401
         response = client.get(path, headers={"Authorization": "Bearer " + "c" * 32})
     assert response.status_code == 200, response.text
     payload = response.json()

@@ -51,18 +51,18 @@ Web UI управляет профессиями, их воркфлоу и фа�
 инструкцией запуска `configured-cli-v1`; актуальные адреса, credentials, назначения
 и команды описаны в [действующем контракте](docs/configured-cli-v1.md).
 
-Для изолированных контейнеров исполнителей сохранён private runtime bridge `/internal/runtime/step` и `/internal/runtime/history`: это отдельный service-to-service контракт с role tokens, не пользовательский UI API. Он включается только при `PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON` и должен быть доступен лишь во внутренней сети или на host loopback.
-Каждый изменяющий `runtime/step` привязан к immutable assignment/run и owner-issued
-`step_operation_key`: точный повтор возвращает атомарно сохранённый ответ, а повтор
-ключа с другим payload или после смены assignment отклоняется. Human CLI при этом
-по-прежнему содержит только `step` и `history` и не принимает runtime routing fields.
+Агент использует Central Auth service-account PAT и текущее назначение Tracker.
+Fleet передаёт назначение через `POST /internal/runtime/assign`; его служебный PAT
+требует `project-workflow:write` и зарегистрированного subject профессии в
+`PROJECT_WORKFLOW_BASE_READER_SUBJECTS_JSON`. История и terminal readback требуют
+`project-workflow:read`; отозванный или человеческий PAT не разрешает эти операции.
+Старые непрозрачные карты role tokens больше не участвуют в исполнении.
 
-Fleet Control читает каталог через `GET /internal/runtime/catalog` с отдельным
-`PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN` (не менее 32 символов). Этот токен
-не разрешает `step` и `history` и не меняет `PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON`.
-Доступ определяется типом credential, а не текстом role key: runtime credential
-с role key `fleet-control` остаётся runtime credential и не получает каталог.
-Маршрут должен оставаться во внутренней сети или на host loopback.
+Fleet Control читает каталог через `GET /internal/runtime/catalog` отдельным
+зарегистрированным read-only PAT с ролью `catalog`. Исторический
+`PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN` допускает только чтение каталога,
+не назначение, шаг, историю или terminal readback. Эти маршруты остаются во
+внутренней сети или на host loopback.
 
 Отдельная opt-in single-task семья описана в [установке](docs/single-task-installation.md).
 Её текущая редакция прошла [PostgreSQL side-by-side проверку](docs/current-family-postgres-20261016.md);

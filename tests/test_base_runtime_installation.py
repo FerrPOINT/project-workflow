@@ -71,9 +71,8 @@ def test_selector_uses_configured_default_and_explicit_retained_variants(monkeyp
 def test_base_execution_credentials_are_rejected(monkeypatch):
     from project_workflow.interfaces.ui.routes import runtime_api
     monkeypatch.setattr(runtime_api.config, "CATALOG_VARIANT", "base")
-    monkeypatch.setattr(runtime_api, "_token_configuration", lambda: ({"developer": "a" * 32}, {}, ""))
-    with pytest.raises(RuntimeError, match="not enabled"):
-        runtime_api._authorized_service_credential("Bearer " + "a" * 32)
-    monkeypatch.setattr(runtime_api, "_token_configuration", lambda: ({}, {}, "b" * 32))
+    assert runtime_api._authorized_service_credential("Bearer " + "a" * 32) is None
+    monkeypatch.setenv("PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN", "b" * 32)
+    runtime_api.config.get_settings.cache_clear()
     credential = runtime_api._authorized_service_credential("Bearer " + "b" * 32)
     assert credential is not None and credential.kind == "catalog"

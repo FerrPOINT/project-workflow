@@ -7,6 +7,7 @@ from sqlalchemy import func, select
 
 from project_workflow import build_provenance, config
 from project_workflow.domain.single_task_profile import CATALOG_SHA256, MANIFEST_SHA256
+from project_workflow.infrastructure import namespace_auth
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db import session as db_session
 from project_workflow.infrastructure.db.single_task_catalog import ensure_single_task_catalog
@@ -15,20 +16,27 @@ from project_workflow.interfaces.ui.app import create_app
 
 REVISION = "d9ebcff84068406ba4b09ae037dac53b5b6296ba"
 ROLES = ["project_manager", "analyst", "architect", "developer", "reviewer", "tester", "devops"]
-ASSIGNMENT, RUNTIME, CATALOG = "assignment-" + "x" * 40, "runtime-" + "y" * 40, "catalog-" + "z" * 40
+ASSIGNMENT, RUNTIME, CATALOG = "sdlc_pat_controller-" + "x" * 40, "runtime-" + "y" * 40, "catalog-" + "z" * 40
+CONTROLLER = "99999999-9999-4999-8999-999999999999"
 
 
 def headers(token):
     return {"Authorization": "Bearer " + token}
 
 
-def configure(monkeypatch, role="developer", *, assignment=None, runtime=None, catalog=CATALOG):
-    monkeypatch.setenv("PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON", json.dumps(
-        {role: ASSIGNMENT} if assignment is None else assignment))
-    monkeypatch.setenv("PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON", json.dumps(
-        {role: RUNTIME} if runtime is None else runtime))
+def configure(monkeypatch, role="developer", *, subjects=None, catalog=CATALOG):
+    monkeypatch.setenv("PROJECT_WORKFLOW_BASE_READER_SUBJECTS_JSON", json.dumps(
+        {CONTROLLER: role} if subjects is None else subjects))
     monkeypatch.setenv("PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN", catalog)
     config.get_settings.cache_clear()
+
+    def introspect(authorization, *, require_service_account=False):
+        assert require_service_account
+        if authorization != headers(ASSIGNMENT)["Authorization"]:
+            raise namespace_auth.NamespaceAuthError(401)
+        return namespace_auth.NamespacePrincipal("https://auth.test", CONTROLLER), [
+            "project-workflow:read", "project-workflow:write"]
+    monkeypatch.setattr(namespace_auth, "introspect", introspect)
 
 
 def manifest():
@@ -67,7 +75,7 @@ def test_current_capabilities_are_role_scoped_in_both_catalog_images(discovery, 
     assert ASSIGNMENT not in response.text
 
 
-@pytest.mark.parametrize("token,status", [("", 401), ("wrong", 401), (RUNTIME, 403), (CATALOG, 403)])
+@pytest.mark.parametrize("token,status", [("", 401), ("wrong", 401), (RUNTIME, 401), (CATALOG, 403)])
 def test_only_the_configured_role_reader_can_discover_execution(discovery, token, status):
     client, _ = discovery
     response = client.get("/internal/runtime/capabilities", headers=headers(token))
@@ -75,22 +83,13 @@ def test_only_the_configured_role_reader_can_discover_execution(discovery, token
     assert "capabilities" not in response.json()
 
 
-@pytest.mark.parametrize("collision", ["cross_role", "cross_kind", "catalog_assignment", "catalog_runtime"])
-def test_credential_collisions_are_fail_closed(discovery, monkeypatch, collision):
+@pytest.mark.parametrize("subjects", [{CONTROLLER: "unknown"}, {"not-a-uuid": "developer"}, {}])
+def test_invalid_registration_cannot_discover_execution(discovery, monkeypatch, subjects):
     client, _ = discovery
-    shared = "s" * 40
-    if collision == "cross_role":
-        configure(monkeypatch, assignment={"developer": shared, "tester": shared})
-    elif collision == "cross_kind":
-        configure(monkeypatch, assignment={"developer": shared}, runtime={"developer": shared})
-    elif collision == "catalog_assignment":
-        configure(monkeypatch, assignment={"developer": shared}, catalog=shared)
-    else:
-        configure(monkeypatch, runtime={"developer": shared}, catalog=shared)
-    for route in ["capabilities", "catalog"]:
-        response = client.get("/internal/runtime/" + route, headers=headers(shared))
-        assert response.status_code == 503
-        assert shared not in response.text
+    configure(monkeypatch, subjects=subjects)
+    response = client.get("/internal/runtime/capabilities", headers=headers(ASSIGNMENT))
+    assert response.status_code == 503
+    assert ASSIGNMENT not in response.text
 
 
 @pytest.mark.parametrize("invalid", [None, {}, {**manifest(), "source_revision": "unknown"},

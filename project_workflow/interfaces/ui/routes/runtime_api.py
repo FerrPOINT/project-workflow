@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hmac
-import json
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -26,9 +25,10 @@ from project_workflow.domain.configured_cli import (
 from project_workflow.domain.runtime_assignment import (
     MANAGED_ROLE_MODE_SCOPES,
     MANAGED_WORKFLOW_KEYS,
-    normalize_role_key,
 )
+from project_workflow.infrastructure import base_auth, namespace_auth
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
+from project_workflow.infrastructure.platform_namespace import is_personal_token
 
 _CATALOG_ROLE = "fleet-control"
 
@@ -37,6 +37,7 @@ _CATALOG_ROLE = "fleet-control"
 class _ServiceCredential:
     role_key: str
     kind: str
+    can_assign: bool = False
 
 
 
@@ -44,79 +45,44 @@ def _error(message: str, status: int) -> JSONResponse:
     return JSONResponse({"ok": False, "error": message}, status_code=status)
 
 
-def _configured_tokens(setting_name: str) -> dict[str, str]:
-    raw = str(getattr(config.get_settings(), setting_name)).strip()
-    if not raw:
-        return {}
-    try:
-        value = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        raise RuntimeError("Некорректная конфигурация runtime tokens") from exc
-    if not isinstance(value, dict):
-        raise RuntimeError("Некорректная конфигурация runtime tokens")
-    result: dict[str, str] = {}
-    for role, token in value.items():
-        try:
-            normalized_role = normalize_role_key(role)
-        except ValueError as exc:
-            raise RuntimeError("Некорректная конфигурация runtime tokens") from exc
-        if not isinstance(token, str) or len(token) < 32 or normalized_role in result:
-            raise RuntimeError("Некорректная конфигурация runtime tokens")
-        result[normalized_role] = token
-    if len(result.values()) != len(set(result.values())):
-        raise RuntimeError("Runtime tokens должны быть уникальными")
-    return result
-
-
-def _token_configuration() -> tuple[dict[str, str], dict[str, str], str]:
-    runtime_tokens = _configured_tokens("PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON")
-    assignment_tokens = _configured_tokens("PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON")
-    catalog_token = config.get_settings().PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN.strip()
-    if catalog_token and len(catalog_token) < 32:
-        raise RuntimeError("Некорректная конфигурация Fleet catalog token")
-    runtime_values = set(runtime_tokens.values())
-    assignment_values = set(assignment_tokens.values())
-    if runtime_values & assignment_values:
-        raise RuntimeError("Assignment tokens должны отличаться от runtime и catalog tokens")
-    if catalog_token and catalog_token in runtime_values | assignment_values:
-        raise RuntimeError("Service tokens разных ролей должны быть уникальными")
-    return runtime_tokens, assignment_tokens, catalog_token
-
-
-def _authorized_assignment_role(authorization: str | None) -> str | None:
-    credential = _authorized_service_credential(authorization, single_task=True)
+def _authorized_assignment_role(authorization: str | None, *, write: bool = False) -> str | None:
+    credential = _authorized_service_credential(authorization, write=write)
     if credential is None or credential.kind != "assignment":
         return None
     return credential.role_key
 
 
 def _authorized_service_credential(
-    authorization: str | None,
-    *, single_task: bool = False,
+    authorization: str | None, *, write: bool = False,
 ) -> _ServiceCredential | None:
-    """Match all configured service credentials without value-based early exits."""
-    prefix = "Bearer "
-    if not authorization or not authorization.startswith(prefix):
+    """Central Auth owns service identity/revocation; deployment owns its role.
+
+    The catalog-only legacy secret cannot authorize any execution operation.
+    Retired opaque role-token maps are deliberately not consulted.
+    """
+    if not authorization or not authorization.startswith("Bearer "):
         return None
-    supplied = authorization[len(prefix) :]
-    runtime_tokens, assignment_tokens, catalog_token = _token_configuration()
-    matches: list[_ServiceCredential] = []
-    for role, expected in runtime_tokens.items():
-        if hmac.compare_digest(supplied, expected):
-            matches.append(_ServiceCredential(role_key=role, kind="runtime"))
-    for role, expected in assignment_tokens.items():
-        if hmac.compare_digest(supplied, expected):
-            matches.append(_ServiceCredential(role_key=role, kind="assignment"))
-    if catalog_token and hmac.compare_digest(supplied, catalog_token):
-        matches.append(_ServiceCredential(role_key=_CATALOG_ROLE, kind="catalog"))
-    if len(matches) > 1:
-        # _token_configuration normally catches this. Keep the auth boundary
-        # fail-closed if configuration changes between validation and matching.
-        raise RuntimeError("Service token configuration collision")
-    credential = matches[0] if matches else None
-    if credential is not None and credential.kind != "catalog" and config.CATALOG_VARIANT == "base" and not single_task:
-        raise RuntimeError("Base assigned execution is not enabled; catalog credentials only")
-    return credential
+    supplied = authorization[7:]
+    if is_personal_token(supplied):
+        principal, scopes = namespace_auth.introspect(authorization, require_service_account=True)
+        if (len(scopes) != len(set(scopes))
+                or not set(scopes) <= {"project-workflow:read", "project-workflow:write"}
+                or f"project-workflow:{'write' if write else 'read'}" not in scopes):
+            raise namespace_auth.NamespaceAuthError(403)
+        role = base_auth.registered_subjects().get(principal.subject)
+        if role is None:
+            return None
+        if role == "catalog":
+            if write or scopes != ["project-workflow:read"]:
+                raise namespace_auth.NamespaceAuthError(403)
+            return _ServiceCredential(role_key=_CATALOG_ROLE, kind="catalog")
+        return _ServiceCredential(role_key=role, kind="assignment", can_assign="project-workflow:write" in scopes)
+    catalog = config.get_settings().PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN.strip()
+    if catalog and (len(catalog) < 32 or is_personal_token(catalog)):
+        raise RuntimeError("Catalog-only credential configuration unavailable")
+    if catalog and hmac.compare_digest(supplied, catalog):
+        return _ServiceCredential(role_key=_CATALOG_ROLE, kind="catalog")
+    return None
 
 
 def runtime_capabilities(
@@ -124,7 +90,9 @@ def runtime_capabilities(
 ) -> dict[str, Any] | JSONResponse:
     """Return authenticated runtime contract and immutable build provenance."""
     try:
-        credential = _authorized_service_credential(authorization, single_task=True)
+        credential = _authorized_service_credential(authorization)
+    except namespace_auth.NamespaceAuthError as exc:
+        return _error("Runtime service authorization refused", exc.status)
     except RuntimeError:
         return _error("Runtime capability configuration unavailable", 503)
     if credential is None:
@@ -182,7 +150,7 @@ def runtime_capabilities(
         "role_key": credential.role_key,
         "credential_kind": credential.kind,
         "interaction_protocol": "configured-cli-v1",
-        "capabilities": ["assign", "history", "terminal-readback"],
+        "capabilities": (["assign"] if credential.can_assign else []) + ["history", "terminal-readback"],
         "readiness": {"service": "ready", "schema": "ready", "catalog": "ready"},
         "source_provenance": provenance.to_dict() if provenance is not None else {},
         "instruction_profile": installation.instruction_profile,
@@ -197,7 +165,7 @@ def _single_task_observation(authorization: str | None) -> Any:
     from project_workflow.infrastructure.db.single_task_catalog import observe_installation
 
     try:
-        credential = _authorized_service_credential(authorization, single_task=True)
+        credential = _authorized_service_credential(authorization)
         if credential is None:
             return _error("Invalid catalog credential", 401)
         if credential.kind != "catalog":
@@ -205,6 +173,8 @@ def _single_task_observation(authorization: str | None) -> Any:
         with SAUnitOfWork() as uow:
             result = observe_installation(uow)
         return SingleTaskInstallationResponse(installation=result)
+    except namespace_auth.NamespaceAuthError as exc:
+        return _error("Catalog service authorization refused", exc.status)
     except ValueError:
         return _error("Single-task installation missing or divergent", 409)
     except (RuntimeError, OSError, SQLAlchemyError):
@@ -244,6 +214,8 @@ def runtime_catalog(
     """Expose only the namespace/workflow directory to Fleet Control."""
     try:
         credential = _authorized_service_credential(authorization)
+    except namespace_auth.NamespaceAuthError as exc:
+        return _error("Catalog service authorization refused", exc.status)
     except RuntimeError as exc:
         return _error(str(exc), 503)
     if credential is None:
