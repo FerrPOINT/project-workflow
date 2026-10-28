@@ -26,7 +26,6 @@ function setPhaseView(view,persist=true){
   document.querySelectorAll('#phaseView input[name="phase-view"]').forEach(input=>{
     input.checked=input.value===view;
   });
-  document.querySelectorAll('.phase-card-actions[open]').forEach(menu=>{menu.open=false;});
   if(persist){try{localStorage.setItem('phase-view-mode',view);}catch(_error){}}
 }
 
@@ -52,6 +51,16 @@ page.ready(()=>{
 });
 
 {% if can_administer %}
+// The toolbar is outside the card link: actions never trigger phase navigation.
+page.on(document,'click',event=>{
+  const button=event.target.closest?.('.phase-card-actions button');
+  if(!button||button.disabled)return;
+  if(button.matches('.phase-add-btn'))void addPhaseAfter(button);
+  else if(button.matches('.move-up-btn'))void movePhase(button,-1);
+  else if(button.matches('.move-down-btn'))void movePhase(button,1);
+  else if(button.matches('.execution-toggle'))void togglePhaseType(button);
+  else if(button.matches('.phase-delete-btn'))void deletePhase(button);
+});
 const professionId = config.professionId;
 const workflowStore = config.workflows;
 let selectedWorkflowId = config.selectedId;
@@ -316,12 +325,20 @@ async function addPhaseAfter(button){
   if(phaseWritePending||workflowWritePending||workflowNeedsReadback||workflowReadController)return;
   const workflowId=document.getElementById('phasesTimeline')?.dataset.workflowId;
   const modeId=document.getElementById('phasesTimeline')?.dataset.modeId;
-  const currentOrder=parseInt(button.dataset.afterOrder||'0',10);
+  const item=button.closest('.timeline-item');
+  const currentOrder=parseInt(item?.dataset.phaseOrder??button.dataset.afterOrder??'0',10);
   if(!workflowId||!modeId||currentOrder<0){showToast('Не удалось определить позицию фазы','error');return;}
   if(phaseWritePending||workflowWritePending||workflowNeedsReadback||workflowReadController)return;
   setPhaseWritePending(true);
   try{
-    const resp=await fetch('' + config.basePath + '/api/phases',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({workflow_id:parseInt(workflowId,10),mode_id:parseInt(modeId,10),phase_order:currentOrder+1})});
+    const payload={workflow_id:parseInt(workflowId,10),mode_id:parseInt(modeId,10),phase_order:currentOrder+1};
+    // A card insertion inside an existing parallel group must not split its
+    // explicit edges or change the group's confirmed rollback target.
+    if(item?.dataset.executionType==='parallel'){
+      payload.execution_type='parallel';payload.parallel_with_phase_id=Number(item.dataset.phaseId);
+      payload.rollback_target_phase_id=item.dataset.rollbackTargetPhaseId?Number(item.dataset.rollbackTargetPhaseId):null;
+    }
+    const resp=await fetch('' + config.basePath + '/api/phases',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     const data=await resp.json().catch(()=>({}));
     if(!resp.ok||!data.ok){if(resp.status>=500)requireWorkflowReadback();showToast(data.error||'Не удалось добавить фазу','error');return;}
     await refreshWorkflowPhases();

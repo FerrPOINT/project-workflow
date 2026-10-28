@@ -765,7 +765,7 @@ class SharedShellTemplateTests(TestCase):
         self.assertNotIn(".status-badge{", html)
         self.assertNotIn(".bar-fill{", html)
 
-    def test_phase_actions_use_base_disclosure_and_preserve_owner_callbacks(self):
+    def test_phase_actions_use_inline_base_buttons_and_preserve_card_links(self):
         phases = [
             dict(id=i, phase_num=i, name="Phase <" + str(i) + ">", description="Описание", execution_type="sync")
             for i in range(1, 9)
@@ -795,35 +795,23 @@ class SharedShellTemplateTests(TestCase):
                 self.assertTrue({"base-card", "base-card-content"} <= set(picker["class"].split()))
                 self.assertEqual(picker["data-interactive"], "true")
                 self.assertEqual(picker["aria-pressed"], "true")
-                menus = [
-                    attrs
-                    for tag, attrs in elements
-                    if tag == "details" and "phase-card-actions" in attrs.get("class", "").split()
-                ]
-                self.assertEqual(len(menus), count)
-                self.assertTrue(all("data-base-menu" in menu for menu in menus))
-                self.assertTrue(all(menu["data-base-menu-group"] == "phase-actions" for menu in menus))
-                self.assertEqual(
-                    [menu["id"] for menu in menus], ["phase-actions-" + str(i) for i in range(1, count + 1)]
-                )
-                items = [
-                    attrs
-                    for tag, attrs in elements
-                    if tag == "button" and "base-menu-item" in attrs.get("class", "").split()
-                ]
-                self.assertEqual(len(items), 4 * count)
-                deletes = [item for item in items if item.get("onclick") == "deletePhase(this)"]
-                self.assertEqual(len(deletes), count)
+                groups = [attrs for tag, attrs in elements
+                          if tag == "div" and "phase-card-actions" in attrs.get("class", "").split()]
+                self.assertEqual(len(groups), count)
+                self.assertTrue(all(item["role"] == "group" for item in groups))
+                self.assertFalse(any(tag == "details" and "phase-card-actions" in attrs.get("class", "")
+                                     for tag, attrs in elements))
+                classes = ("phase-add-btn", "move-up-btn", "move-down-btn", "execution-toggle", "phase-delete-btn")
+                items = [attrs for tag, attrs in elements if tag == "button" and
+                         any(name in attrs.get("class", "").split() for name in classes)]
+                self.assertEqual(len(items), 5 * count)
+                self.assertTrue(all("base-button" in item["class"].split() for item in items))
+                self.assertTrue(all(item.get("aria-label") and item.get("title") for item in items))
+                self.assertTrue(all(item["data-size"] == "icon" for item in items))
+                deletes = [item for item in items if "phase-delete-btn" in item["class"].split()]
                 self.assertTrue(all(("disabled" in item) == (count == 1) for item in deletes))
-                self.assertTrue(all(item["data-tone"] == "danger" for item in deletes))
-                insertions = [
-                    attrs
-                    for tag, attrs in elements
-                    if tag == "button" and attrs.get("onclick") == "addPhaseAfter(this)"
-                ]
-                self.assertEqual(len(insertions), count)
-                self.assertTrue(all(item["data-size"] == "icon" for item in insertions))
-                self.assertEqual([int(item["data-after-order"]) for item in insertions], list(range(1, count + 1)))
+                self.assertTrue(all(item["data-variant"] == "destructive-outline" for item in deletes))
+                self.assertNotIn('class="timeline-connector"', html)
                 self.assertIn("Действия фазы Phase &lt;1&gt;", html)
                 self.assertNotIn(".phase-actions-menu{", html)
                 self.assertNotIn(".phase-move-btn{", html)

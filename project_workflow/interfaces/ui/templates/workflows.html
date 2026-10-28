@@ -37,43 +37,36 @@
 .mode-picker select{width:100%}
 .phase-view-controls{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}
 .phase-jump-select{flex:0 1 240px;min-width:180px;max-width:100%}
-.timeline{display:flex;flex-direction:column;align-items:stretch;max-width:none;gap:0}
+.timeline{display:flex;flex-direction:column;align-items:stretch;max-width:none;gap:12px}
 .timeline-block,.timeline-item{width:100%}
 .phase-card-shell{position:relative;display:grid;min-height:112px}
-.timeline-card .timeline-name{padding-right:48px}
-.phase-card-actions{position:absolute;right:12px;top:12px;z-index:2}
-.phase-card-actions[open]{z-index:20}
+.phase-card-shell:has(.phase-card-actions) > .timeline-card{padding-bottom:64px}
+.phase-card-actions{position:absolute;right:12px;bottom:12px;display:flex;align-items:center;gap:6px;max-width:calc(100% - 24px);z-index:2}
+.phase-card-actions svg{width:16px;height:16px;flex-shrink:0}
 .execution-row{margin-top:10px;min-height:0}
 .timeline-parallel-header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
 .timeline-parallel-count{font-size:var(--base-font-label);color:var(--text-dim)}
 .timeline-group-transition{margin:12px 0 0;padding-top:10px;border-top:1px solid var(--border);color:var(--text-secondary);font-size:var(--base-font-label);line-height:var(--base-line-body)}
 .timeline-parallel-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:10px}
-.timeline-connector{height:52px;display:flex;align-items:center;justify-content:center;position:relative}
-.timeline-connector::before,.timeline-connector::after{content:'';position:absolute;left:50%;width:1px;transform:translateX(-50%);background:var(--border-strong)}
-.timeline-connector::before{top:0;bottom:calc(50% + 21px)}
-.timeline-connector::after{top:calc(50% + 21px);bottom:0}
-.phase-add-btn{position:relative;z-index:1}
-.timeline.is-compact{border-top:1px solid var(--border)}
+.timeline.is-compact{gap:0;border-top:1px solid var(--border)}
 .timeline.is-compact .timeline-block{border-bottom:1px solid var(--border)}
-.timeline.is-compact .phase-card-shell{min-height:0}
-.timeline.is-compact .timeline-card{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-inline-end:104px}
+.timeline.is-compact .phase-card-shell{min-height:64px}
+.timeline.is-compact .timeline-card{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-inline-end:12px;padding-bottom:12px}
+.timeline.is-compact .phase-card-shell:has(.phase-card-actions) > .timeline-card{padding-inline-end:256px;padding-bottom:12px}
 .timeline.is-compact .timeline-card .timeline-name{padding-right:0;overflow-wrap:anywhere}
 .timeline.is-compact .phase-card-copy{flex:1 1 auto;min-width:0}
 .timeline.is-compact .timeline-desc{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.timeline.is-compact .execution-row{flex:0 1 auto;width:auto;max-width:45%;min-width:0;margin:0;flex-wrap:wrap;justify-content:flex-end}
-.timeline.is-compact .phase-card-actions{top:auto;bottom:8px}
+.timeline.is-compact .execution-row{flex:0 0 auto;width:auto;max-width:none;min-width:0;margin:0;flex-wrap:wrap;justify-content:flex-end}
+.timeline.is-compact .phase-card-actions{top:50%;bottom:auto;transform:translateY(-50%)}
 .timeline.is-compact .timeline-parallel-header{margin:0}
 .timeline.is-compact .timeline-parallel-grid{display:block}
 .timeline.is-compact .timeline-group-transition{margin:0;padding:8px 12px}
 .timeline.is-compact .timeline-parallel-grid .timeline-item:not(:last-child){border-bottom:1px solid var(--border)}
-.timeline.is-compact .timeline-connector{height:0}
-.timeline.is-compact .timeline-connector::before,.timeline.is-compact .timeline-connector::after{display:none}
-.timeline.is-compact .timeline-connector .phase-add-btn{position:absolute;right:58px;bottom:8px}
-@media(max-width:760px){.mode-tabs{display:none}.mode-picker{display:block}.phase-view-controls{width:100%;justify-content:space-between}.phase-jump-select{flex:1 1 100%}.timeline-parallel-grid{grid-template-columns:1fr}.phase-card-shell{min-height:0}.timeline.is-compact .timeline-card{display:block}.timeline.is-compact .timeline-desc{display:none}.timeline.is-compact .execution-row{width:auto;max-width:none;margin-top:4px;justify-content:flex-start}}
+@media(max-width:760px){.mode-tabs{display:none}.mode-picker{display:block}.phase-view-controls{width:100%;justify-content:space-between}.phase-jump-select{flex:1 1 100%}.timeline-parallel-grid{grid-template-columns:1fr}.phase-card-shell{min-height:0}.timeline.is-compact .timeline-card{display:block}.timeline.is-compact .phase-card-shell:has(.phase-card-actions) > .timeline-card{padding-inline-end:12px;padding-bottom:64px}.timeline.is-compact .phase-card-actions{top:auto;bottom:12px;transform:none}.timeline.is-compact .timeline-desc{display:none}.timeline.is-compact .execution-row{width:auto;max-width:none;margin-top:4px;justify-content:flex-start}}
 {% endblock %}
 
 {% macro phase_card(p) -%}
-<div class="timeline-item" id="phase-{{ p.id }}" data-phase-id="{{ p.id }}" data-phase-order="{{ p.phase_num }}" data-execution-type="{{ p.execution_type }}">
+<div class="timeline-item" id="phase-{{ p.id }}" data-phase-id="{{ p.id }}" data-phase-order="{{ p.phase_num }}" data-execution-type="{{ p.execution_type }}" data-rollback-target-phase-id="{{ p.rollback_target_phase_id|default('') or '' }}">
   <div class="phase-card-shell">
     {% set compact = phase_count >= 8 %}
     {% set render_panel = base_ui.resource_list_row if compact else base_ui.card %}
@@ -89,12 +82,18 @@
       </div>
     {% endcall %}
 {% if can_administer %}
-    {% call base_ui.action_menu('Действия фазы ' ~ p.name, id='phase-actions-' ~ p.id, class_name='phase-card-actions', group='phase-actions') %}
-        <button type="button" class="base-control base-menu-item move-up-btn" onclick="movePhase(this,-1)" aria-label="Поднять фазу {{ p.name }} выше">Поднять выше</button>
-        <button type="button" class="base-control base-menu-item move-down-btn" onclick="movePhase(this,1)" aria-label="Опустить фазу {{ p.name }} ниже">Опустить ниже</button>
-        <button type="button" class="base-control base-menu-item execution-toggle" onclick="togglePhaseType(this)" aria-label="Изменить режим выполнения фазы {{ p.name }}">{{ 'Параллельно' if p.execution_type == 'parallel' else 'Последовательно' }}</button>
-        <button type="button" class="base-control base-menu-item phase-delete-btn" data-tone="danger" onclick="deletePhase(this)" aria-label="Удалить фазу {{ p.name }}"{% if phase_count <= 1 %} disabled{% endif %}>Удалить</button>
-    {% endcall %}
+    <div class="phase-card-actions" role="group" aria-label="Действия фазы {{ p.name }}">
+      {% set icon %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>{% endset %}
+      {{ base_ui.button(icon, size='icon', variant='outline', class_name='phase-add-btn', aria_label='Добавить фазу после «' ~ p.name ~ '»', title='Добавить фазу после этой', disabled=false) }}
+      {% set icon %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 12 6-6 6 6M12 6v12"/></svg>{% endset %}
+      {{ base_ui.button(icon, size='icon', variant='ghost', class_name='move-up-btn', aria_label='Поднять фазу «' ~ p.name ~ '»', title='Поднять выше', disabled=p.phase_num == 1) }}
+      {% set icon %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 12 6 6 6-6M12 6v12"/></svg>{% endset %}
+      {{ base_ui.button(icon, size='icon', variant='ghost', class_name='move-down-btn', aria_label='Опустить фазу «' ~ p.name ~ '»', title='Опустить ниже', disabled=p.phase_num == phase_count) }}
+      {% set icon %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v4M12 7H6v10M12 7h6v10M3 14l3 3 3-3M15 14l3 3 3-3"/></svg>{% endset %}
+      {{ base_ui.button(icon, size='icon', variant='outline', class_name='execution-toggle', aria_label='Изменить режим выполнения фазы «' ~ p.name ~ '»', title=('Выполнять последовательно' if p.execution_type == 'parallel' else 'Выполнять параллельно'), disabled=false, aria_pressed=p.execution_type == 'parallel') }}
+      {% set icon %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6"/></svg>{% endset %}
+      {{ base_ui.button(icon, size='icon', variant='destructive-outline', class_name='phase-delete-btn', aria_label='Удалить фазу «' ~ p.name ~ '»', title='Удалить фазу', disabled=phase_count <= 1) }}
+    </div>
 {% endif %}
   </div>
 </div>
@@ -214,14 +213,10 @@
           {% if not loop.last %}<p class="timeline-group-transition">Следующий этап — после завершения всех фаз группы.</p>{% endif %}
         </section>
         {% else %}<section class="timeline-block">{{ phase_card(block.phases[0]) }}</section>{% endif %}
-{% if can_administer %}
-        <div class="timeline-connector">
-          <button type="button" class="base-control base-button base-icon-control phase-add-btn" data-variant="outline" data-size="icon" data-after-order="{{ block.phases[-1].phase_num }}" onclick="addPhaseAfter(this)" title="Добавить фазу после блока" aria-label="Добавить фазу после блока">+</button>
-        </div>
-{% endif %}
+
       {% else %}
         <div data-testid="workflow-mode-empty">{{ base_ui.state('empty', 'В этом режиме фаз пока нет.') }}</div>
-        {% if can_administer and selected_workflow_id %}<div class="timeline-connector"><button type="button" class="base-control base-button base-icon-control phase-add-btn" data-variant="outline" data-size="icon" data-after-order="0" onclick="addPhaseAfter(this)" aria-label="Добавить первую фазу">+</button></div>{% endif %}
+        {% if can_administer and selected_workflow_id %}<div class="panel-actions"><button type="button" class="base-control base-button base-icon-control phase-add-btn" data-variant="outline" data-size="icon" data-after-order="0" onclick="addPhaseAfter(this)" aria-label="Добавить первую фазу">+</button></div>{% endif %}
       {% endfor %}
     </div>
 

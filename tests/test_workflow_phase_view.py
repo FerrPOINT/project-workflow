@@ -40,15 +40,14 @@ const timelineClasses=new Set(['is-compact']);
 const timeline={classList:toggles(timelineClasses),querySelectorAll:()=>[card]};
 const radios=['compact','timeline'].map(value=>({value,checked:value==='compact'}));
 const legacyButtons=radios.map(r=>({dataset:{phaseView:r.value},setAttribute(){}}));
-const menus=[{open:true}];let writes=[];
+let writes=[];
 const document={getElementById:id=>id==='phasesTimeline'?timeline:null,
- querySelectorAll:selector=>selector.includes('phase-card-actions')?menus:
- selector==='[data-phase-view]'?legacyButtons:radios};
+ querySelectorAll:selector=>selector==='[data-phase-view]'?legacyButtons:radios};
 const localStorage={setItem:(key,value)=>writes.push([key,value])};
 SOURCE
 setPhaseView(view,false);
 const restored={classes:[...classes].sort(),compact:timelineClasses.has('is-compact'),
- radios:radios.map(r=>r.checked),menusClosed:menus.every(m=>!m.open),writes:[...writes]};
+ radios:radios.map(r=>r.checked),writes:[...writes]};
 setPhaseView(view);
 setPhaseView('invalid');
 console.log(JSON.stringify({restored,writes}));
@@ -60,7 +59,7 @@ console.log(JSON.stringify({restored,writes}));
         "restored": {
             "classes": ["base-resource-list-row"] if view == "compact" else ["base-card", "base-card-content"],
             "compact": view == "compact", "radios": [view == "compact", view == "timeline"],
-            "menusClosed": True, "writes": [],
+            "writes": [],
         },
         "writes": [["phase-view-mode", view]],
     }
@@ -85,7 +84,7 @@ def test_editor_uses_the_shared_segmented_radio_group_and_preserves_permissions(
     assert controller_source("workflows", admin)[0].decode().count("function selectMode(") == 1
     assert controller_source("workflows", admin)[0].decode().count("function jumpToPhase(") == 1
     assert ('id="workflowForm"' in html) == admin
-    assert ('onclick="addPhaseAfter(this)"' in html) == admin
+    assert ('class="phase-card-actions"' in html) == admin
     headings = {attrs.get("id"): attrs for tag, attrs in elements if tag == "h2"}
     for heading_id in ["workflowSummaryName", "workflowPhasesTitle"]:
         assert "base-section-title" in headings[heading_id]["class"].split()

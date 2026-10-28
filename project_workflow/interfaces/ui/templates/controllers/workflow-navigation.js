@@ -16,6 +16,7 @@ function initializeWorkflowPhases(root=document){
     const up=item.querySelector('.move-up-btn'),down=item.querySelector('.move-down-btn');
     if(up)up.disabled=index===0;
     if(down)down.disabled=index===items.length-1;
+    const remove=item.querySelector('.phase-delete-btn');if(remove)remove.disabled=items.length<=1;
   });
   try{const view=localStorage.getItem('phase-view-mode');if(view)setPhaseView(view,false);}catch{}
   window.WorkflowNavigation?.preserveProjectContext();

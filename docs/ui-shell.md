@@ -210,3 +210,20 @@ The manual gate deliberately holds the data response unresolved and checks the
 new URL, selection, heading and loading state before releasing it. It also checks
 failure/retry, cancelled departure, stale reads, history and admission retirement.
 The child workflow editor keeps its independent form-preserving/late-edit guard.
+
+
+## Phase card actions
+
+The phase list and diagram expose five native Base icon buttons on each admin
+card: insert after this phase, move up/down, toggle execution type and delete.
+The action group is a sibling of the existing card link, never a nested control.
+Each button has a stable accessible name and tooltip; the execution toggle uses
+aria-pressed and the existing owner callback. The empty list retains its initial
+add action. There are no insertion controls between populated cards.
+
+Insertion uses the card phase_order, including a card inside a parallel group;
+inside a parallel group the new phase inherits parallel execution, an explicit
+link to the selected phase and the same rollback target. Owner graph validation
+still defines grouping; existing edges are not split by a new sync barrier. View changes do not mutate phases.
+Deleting the sole phase and moving beyond list boundaries remain disabled;
+confirmation, serialized writes and uncertain-write readback remain unchanged.
