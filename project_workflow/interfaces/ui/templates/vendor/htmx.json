@@ -1,0 +1,8 @@
+{
+  "package": "htmx.org",
+  "version": "2.0.11",
+  "license": "0BSD",
+  "upstream": "https://github.com/bigskysoftware/htmx",
+  "tarball_integrity": "sha512-Thx/WtpeOQqSrqBCw/A1cwGJGg4UrVa3+sW0GmrM3p4gJgO89ecH4qtbnyzDDWFvBTqjnIMCgELTNt636dtamA==",
+  "runtime_sha256": "d6fdc75f204e6bdefa99b69bf1e6d4ac69b8a364f77929f45c13476b4000f717"
+}

@@ -117,12 +117,18 @@ def _template_response(
     context: dict[str, Any],
     status_code: int = 200,
 ) -> HTMLResponse:
+    page_fragment=request.headers.get("x-workflow-view")=="page-v1"
+    context["workflow_page_fragment"]=page_fragment
     response = templates.TemplateResponse(
         request=request,
         name=name,
         status_code=status_code,
         context=context,
     )
+    if page_fragment:
+        response.headers["X-Workflow-View"]="page-v1"
+    response.headers["Cache-Control"]="private, no-store"
+    response.headers["Vary"]="X-Workflow-View"
     selected_namespace = context.get("selected_namespace")
     selected_id = selected_namespace.get("id") if isinstance(selected_namespace, dict) else None
     embedded = bool(get_settings().UI_PLATFORM_ORIGIN) and request.headers.get("sec-fetch-dest") == "iframe"
@@ -674,11 +680,16 @@ def workflows_page(request: Request) -> Response:
             "default_workflow_id": default_workflow_id,
         }
     )
-    return _template_response(
-        request=request,
-        name="workflows.html",
-        context=context,
-    )
+    # The full page and incremental editor share context, policy and Jinja macros.
+    # Errors/redirects above never carry the fragment marker and cannot replace the editor.
+    fragment = request.headers.get("x-workflow-view") == "editor-v1"
+    context["workflow_fragment"] = fragment
+    response = _template_response(request=request, name="workflows.html", context=context)
+    response.headers["Cache-Control"] = "private, no-store"
+    response.headers["Vary"] = "X-Workflow-View"
+    if fragment:
+        response.headers["X-Workflow-View"] = "editor-v1"
+    return response
 
 
 def task_detail_page(

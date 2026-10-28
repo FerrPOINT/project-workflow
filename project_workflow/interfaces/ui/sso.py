@@ -34,7 +34,7 @@ from project_workflow.interfaces.ui.templates import templates
 _CLIENT_ID = "project-workflow"
 _SESSION_COOKIE = "workflow_sso"
 _TRANSACTION_COOKIE = "workflow_oidc_state"
-_PUBLIC_PATHS = frozenset({"/health", "/login", "/sso/callback", "/logout"})
+_PUBLIC_PATHS = frozenset({"/health", "/login", "/sso/callback", "/logout", "/ui-assets/htmx-2.0.11.min.js"})
 
 
 def _cipher(settings: Settings) -> Fernet:

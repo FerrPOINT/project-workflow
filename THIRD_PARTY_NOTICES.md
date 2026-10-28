@@ -10,3 +10,9 @@ otherwise.
 
 Before distributing any artifact, keep required third-party copyright notices,
 license texts, and attribution files with the artifact.
+
+## htmx 2.0.11
+
+Workflow serves the unmodified htmx runtime locally for work-area HTML swaps.
+The vendored runtime, upstream 0BSD license and verified npm provenance are in
+`project_workflow/interfaces/ui/templates/vendor/`. No external CDN is required.

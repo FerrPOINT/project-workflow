@@ -56,6 +56,11 @@
 <dialog id="base-mobile-navigation" class="base-shell-drawer" data-base-drawer aria-labelledby="base-drawer-title"><div class="base-shell-drawer-title"><h2 id="base-drawer-title">{{ title }}</h2><button type="button" class="base-control base-icon-control base-drawer-close" data-base-drawer-close aria-label="Закрыть навигацию" title="Закрыть навигацию">&times;</button></div><div class="base-shell-navigation-scroll">{{ caller() }}</div></dialog>
 {%- endmacro %}
 
+{% macro app_main(title, layout='wide') -%}
+{% set content = caller() %}
+<main class="main" tabindex="-1" aria-label="{{ title }}" data-base-dialog-background>{% call frame(layout) %}<div class="base-page-stack">{{ content }}</div>{% endcall %}</main>
+{%- endmacro %}
+
 {% macro app_shell(title, navigation, leading=none, services=none, context=none, actions=none, layout='wide') -%}
 {% set page_content = caller() %}
 <div class="base-ssr-app">
@@ -64,10 +69,10 @@
 <header class="platform-header" data-base-dialog-background data-platform-header>
   <div class="platform-header-leading" data-platform-header-slot="leading"><button type="button" class="base-control base-icon-control base-shell-drawer-trigger" data-base-drawer-trigger aria-label="Открыть навигацию" title="Открыть навигацию" aria-controls="base-mobile-navigation" aria-expanded="false">&#9776;</button>{{ leading or '' }}</div>
   {% if services %}<div class="platform-header-services" data-platform-header-slot="services">{{ services }}</div>{% endif %}
-  {% if context %}<div class="platform-header-context" data-platform-header-slot="context" data-base-context-home><div data-base-responsive-context>{{ context }}</div></div>{% endif %}
+  {% if context is not none %}<div class="platform-header-context" data-platform-header-slot="context" data-base-context-home><div data-base-responsive-context>{{ context }}</div></div>{% endif %}
   {% if actions %}<div class="platform-header-actions" data-platform-header-slot="actions">{{ actions }}</div>{% endif %}
 </header>
-<main class="main" tabindex="-1" aria-label="{{ title }}" data-base-dialog-background>{% call frame(layout) %}<div class="base-page-stack">{{ page_content }}</div>{% endcall %}</main>
+{% call app_main(title, layout) %}{{ page_content }}{% endcall %}
 </div>
 {%- endmacro %}
 
