@@ -1,5 +1,7 @@
 # Уровни проверок Workflow
 
+Подготовка без тестов и HTML из готовых данных: [дополнительные команды](quality-auxiliary.md).
+
 Общий стандарт: [Base BUILD_PERFORMANCE](https://github.com/FerrPOINT/services-base/blob/7e113c5e7eb6af0d4a3b55fc0e9f40e8f84392b8/docs/BUILD_PERFORMANCE.md)
 и [Base TESTING](https://github.com/FerrPOINT/services-base/blob/7e113c5e7eb6af0d4a3b55fc0e9f40e8f84392b8/docs/TESTING.md).
 Продуктовые команды и выбор компонентов принадлежат `.quality-gate.json`.

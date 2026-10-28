@@ -1,5 +1,7 @@
 # Quality Gate
 
+Подготовка без тестов и HTML из готовых данных: [дополнительные команды](quality-auxiliary.md).
+
 Обязательная политика уровней и обычные команды: [TESTING](TESTING.md).
 `python scripts/quality.py quality` выполняет reviewed unit + Ruff/mypy/diff.
 Make, PowerShell и CI используют один runner, Python 3.11.15 и frozen uv.lock.
