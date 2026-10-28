@@ -37,8 +37,10 @@
 .mode-tabs{display:flex;align-items:center;gap:6px;min-width:0;overflow-x:auto;padding:2px;scrollbar-width:thin}
 .mode-picker{display:none;width:100%}
 .mode-picker select{width:100%}
-.phase-view-controls{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}
-.phase-jump-select{flex:0 1 240px;min-width:180px;max-width:100%}
+.workflow-phase-toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;min-width:0}
+.workflow-phase-toolbar #workflowSummary{flex:1 1 180px;min-width:0}
+.phase-view-controls{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap;min-width:0;max-width:100%}
+.phase-jump-select{flex:0 1 auto;width:220px;min-width:160px;max-width:100%}
 .timeline-block,.timeline-item{width:100%}
 .phase-card-shell{min-width:0}
 .phase-card-link{display:block;min-width:0}
@@ -59,7 +61,7 @@
 .timeline.is-compact .timeline-parallel-grid{display:block}
 .timeline.is-compact .timeline-group-transition{margin:0;padding:8px 12px}
 .timeline.is-compact .timeline-parallel-grid .timeline-item:not(:last-child){border-bottom:1px solid var(--border)}
-@media(max-width:760px){.mode-tabs{display:none}.mode-picker{display:block}.phase-view-controls{width:100%;justify-content:space-between}.phase-jump-select{flex:1 1 100%}.timeline-parallel-grid{grid-template-columns:1fr}.timeline.is-compact .phase-card-link{flex-basis:100%}.timeline.is-compact .timeline-desc{display:none}.timeline.is-compact .phase-card-footer{width:100%}}
+@media(max-width:760px){.mode-tabs{display:none}.mode-picker{display:block}.phase-view-controls{width:100%;justify-content:space-between}.phase-jump-select{flex:1 1 180px}.timeline-parallel-grid{grid-template-columns:1fr}.timeline.is-compact .phase-card-link{flex-basis:100%}.timeline.is-compact .timeline-desc{display:none}.timeline.is-compact .phase-card-footer{width:100%}}
 {% endblock %}
 
 {% macro phase_card(p) -%}
@@ -123,10 +125,6 @@
   <template id="workflowNavEmptyTemplate">{{ empty_workflow_nav }}</template>
 {% endif %}
   <section class="workflow-panel">
-    <div id="workflowSummary"{% if not selected_workflow %} hidden{% endif %}>
-      {% set workflow_description %}<p id="workflowSummaryDescription"{% if not selected_workflow or not selected_workflow.description %} hidden{% endif %}>{{ selected_workflow.description if selected_workflow else '' }}</p>{% endset %}
-      {{ base_ui.section_header(selected_workflow.name if selected_workflow else '', heading_id='workflowSummaryName', context=workflow_description) }}
-    </div>
 {% if can_administer %}
     <form id="workflowForm" data-platform-draft class="base-card base-card-content form-stack" aria-labelledby="workflowFormMode"{% if selected_workflow %} hidden{% endif %} onsubmit="event.preventDefault(); submitWorkflow();">
       <div class="base-card-title" id="workflowFormMode">Редактирование воркфлоу</div>
@@ -145,7 +143,13 @@
     </form>
 {% endif %}
 <section id="workflowPhases" class="base-page-stack" aria-label="Фазы процесса"{% if not selected_workflow %} hidden{% endif %}>
-{% set phase_view_actions %}
+<div class="workflow-phase-toolbar" data-testid="workflow-phase-toolbar">
+    <div id="workflowSummary"{% if not selected_workflow %} hidden{% endif %}>
+      {% set workflow_description %}<p id="workflowSummaryDescription"{% if not selected_workflow or not selected_workflow.description %} hidden{% endif %}>{{ selected_workflow.description if selected_workflow else '' }}</p>{% endset %}
+      {% set workflow_title %}<span id="workflowSummaryName">{{ selected_workflow.name if selected_workflow else '' }}</span>{% endset %}
+      {{ base_ui.section_header(workflow_title, heading_id='workflowPhasesTitle', context=workflow_description) }}
+    </div>
+
       {% if phase_count > 1 %}
       <div class="phase-view-controls">
         {{ base_ui.radio_group('phaseView', 'phase-view', 'Отображение фаз',
@@ -159,8 +163,7 @@
         {% endif %}
       </div>
       {% endif %}
-{% endset %}
-{{ base_ui.section_header('Фазы процесса', heading_id='workflowPhasesTitle', actions=phase_view_actions) }}
+</div>
     {% if selected_workflow and modes | length > 1 %}
     <nav data-workflow-local-navigation class="mode-navigation" aria-label="Режимы воркфлоу" data-testid="workflow-mode-navigation">
       <div class="mode-tabs" data-testid="workflow-mode-tabs">

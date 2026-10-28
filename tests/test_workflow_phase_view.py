@@ -86,8 +86,10 @@ def test_editor_uses_the_shared_segmented_radio_group_and_preserves_permissions(
     assert ('id="workflowForm"' in html) == admin
     assert any('phase-card-actions' in attrs.get('class', '').split() for _, attrs in elements) == admin
     headings = {attrs.get("id"): attrs for tag, attrs in elements if tag == "h2"}
-    for heading_id in ["workflowSummaryName", "workflowPhasesTitle"]:
-        assert "base-section-title" in headings[heading_id]["class"].split()
+    assert "base-section-title" in headings["workflowPhasesTitle"]["class"].split()
+    assert any(tag == "span" and attrs.get("id") == "workflowSummaryName" for tag, attrs in elements)
+    assert any(attrs.get("data-testid") == "workflow-phase-toolbar" for _, attrs in elements)
+    assert "Фазы процесса</h2>" not in html
     nav_item = re.search(r'<button[^>]*data-workflow-id="3"[^>]*>([\s\S]*?)</button>', html)
     assert nav_item is not None
     assert 'class="base-card-title" data-workflow-name' in nav_item.group(1)
