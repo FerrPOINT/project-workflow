@@ -266,6 +266,15 @@ export function normalizeBranding(payload) {
   if (value.design != null) {
     if (typeof value.design !== "object") return null;
     const expanded = Object.hasOwn(value.design, "marks");
+    // Match Admin's two v1 shapes: partial expanded settings must not bypass
+    // validation and then override a confirmed palette, theme or geometry.
+    if (
+      !expanded &&
+      ["favicon", "colors", "radii", "documentation_url", "initial_theme"].some(
+        (key) => value.design[key] != null,
+      )
+    )
+      return null;
     for (const [key, allowed] of Object.entries(brandingPresets)) {
       const choice =
         key !== "version" && value.design[key] === undefined
@@ -460,7 +469,9 @@ export function createBrandingRuntime(options) {
       !input ||
       typeof input !== "object" ||
       !Number.isInteger(input.revision) ||
-      input.revision < 0
+      input.revision < 0 ||
+      // Cache, HTTP refresh and direct publication share one monotonic boundary.
+      (revision !== null && input.revision < revision)
     )
       return null;
     const normalized = normalizeBranding(input.branding);
@@ -673,7 +684,7 @@ export function createBrandingRuntime(options) {
     applyPublished(payload, validator) {
       if (!active || !configUrl) return false;
       const doc = documentValue(payload);
-      if (!doc || (revision !== null && doc.revision < revision)) return false;
+      if (!doc) return false;
       sequence++;
       branding = doc.branding;
       revision = doc.revision;
