@@ -115,9 +115,35 @@ PytestUnraisableExceptionWarning as errors, using Coverage 7.15.4 `sysmon`.
 PostgreSQL uses seeded disposable fixtures, explicit fake external authorities,
 the qualified pinned PostgreSQL image, and Base cleanup journal v2. No runtime
 database copies, real credentials, installs, live model calls or Hermes executions
-are used. At the source integration commit, the final non-PG gate is still running;
-there is no final coverage PASS claim yet. The broader legacy PostgreSQL suite and
-Compose/image/deployment gates were not run in this source-only consolidation.
+are used. At source integration commit `3174df07bb2007da807b12bd4c5461850a960bc9`,
+the final non-PG gate was still running. That source commit was published by an
+ordinary fast-forward to canonical PR152 before the gate finished.
+
+The same running gate then completed without a restart:
+
+- 3158 selected items across all 166 files, 116 integration items deselected.
+- 3157 passed, 1 skipped, 73 subtests passed; zero failures/errors.
+- The single skip is the existing Git executable-mode case on NTFS, which cannot
+  represent executable bits. It is not a private-source or live acceptance case.
+- Combined line coverage: 11346/12069, approximately 94.01%; unchanged 94% gate PASS.
+- ResourceWarning and PytestUnraisableExceptionWarning were errors in all four shards.
+- Source fingerprint before/after:
+  `d25e99d581af8a3696aa4f9bffd660dafa51f1a8b382c908af56dbca51b53723`.
+- Evidence: `.local/consolidation-20261029/full-sharded-final/`, including per-shard
+  commands/logs/JUnit, combined coverage XML and `result.json`. The runner completed,
+  external scratch was cleaned, and no runner/pytest process remains.
+
+Published product source trees at `3174df0`:
+
+- `project_workflow`: `d0f55b90cf543e4642f5ed46a334d4f7ea722ace`.
+- `project_workflow/interfaces/ui`: `c02056fcf080ecdfa128ad8d9d1442a66ac0c6af`.
+- Protocol `configured-cli-v1`, domain-contract blob:
+  `2f08bc71126c1436b342281d0f02dd24c4194d9f`.
+- Base UI pin: `2cbd859746393bc867c3cd90cb906a54aa20218e`.
+
+The broader legacy PostgreSQL suite and Compose/image/deployment gates were not
+run in this source-only consolidation. The subsequent qualification commit changes
+only this report; the published backend/UI/protocol/CLI source trees remain unchanged.
 
 Other professions' live acceptance is not a source-merge requirement added by
 this consolidation and remains NOT RUN. The changed evaluator instructions need
