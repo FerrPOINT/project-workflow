@@ -16,6 +16,7 @@ TARGETS = (
     "test", "test-verbose", "test-integration", "coverage", "lint", "quality", "warnings",
     "compose-ready", "unit", "integration", "slow", "release", "coverage-html", "install-dev",
 )
+BATCH_TARGETS = ("test", "unit", "test-verbose", "lint", "quality", "warnings", "install-dev")
 
 
 def runtime_prefix(target: str) -> tuple[list[str], bool]:
@@ -147,16 +148,32 @@ def commands(target: str, *, scoped: bool = False, prepared: bool = False,
     return choices[target]
 
 
+def operation_commands(targets: tuple[str, ...], *, scoped: bool = False,
+                       prepared: bool = False, html_report: bool = False) -> list[list[str]]:
+    """Keep requested order/modes, sharing only byte-identical commands."""
+    selected: list[list[str]] = []
+    for target in dict.fromkeys(targets):
+        for command in commands(target, scoped=scoped, prepared=prepared, html_report=html_report):
+            if command not in selected:
+                selected.append(command)
+    return selected
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--prepared", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--html-report", action="store_true", help="Add HTML to explicit coverage or release")
+    parser.add_argument("--also", action="append", choices=BATCH_TARGETS, default=[],
+                        help="Add a fast target to the same operation (before target; no scoped pytest args)")
     parser.add_argument("target", choices=TARGETS, default="quality", nargs="?")
     parser.add_argument("pytest_args", nargs=argparse.REMAINDER)
     args = parser.parse_args()
     if args.html_report and args.target not in ("coverage", "release"):
         parser.error("HTML report option requires coverage or release")
     extra = args.pytest_args[1:] if args.pytest_args[:1] == ["--"] else args.pytest_args
+    if args.also and (args.target not in BATCH_TARGETS or extra):
+        parser.error("Combined fast targets require an unscoped fast primary target")
+    targets = (args.target, *args.also)
     if extra and args.target not in ("test", "unit", "integration", "slow"):
         parser.error("Scoped pytest arguments require a single test lane")
     root = Path(__file__).resolve().parents[1]
@@ -180,17 +197,21 @@ def main() -> int:
                 verify_constraint_versions(root)
             except (OSError, ValueError, KeyError, TypeError) as error:
                 parser.error(str(error))
-    if not args.prepared and args.target != "compose-ready" and (canonical or args.target == "install-dev"):
+    if not args.prepared and args.target != "compose-ready" and (canonical or "install-dev" in targets):
         # uv prepares one frozen project environment. Every tool
         # then runs inside that operation with the prepared interpreter.
         child = prefix + ["python", str(Path(__file__).resolve()), "--prepared"]
         if args.html_report:
             child.append("--html-report")
+        for target in args.also:
+            child += ["--also", target]
         child.append(args.target)
         if extra:
             child += ["--", *extra]
         return subprocess.run(child, cwd=root, env=environment, check=False).returncode
-    for command in commands(args.target, scoped=bool(extra), prepared=args.prepared, html_report=args.html_report):
+    for command in operation_commands(
+        targets, scoped=bool(extra), prepared=args.prepared, html_report=args.html_report
+    ):
         if args.target in ("test", "unit", "integration", "slow"):
             command = [*command, *extra]
         result = subprocess.run(command, cwd=root, env=environment, check=False)
