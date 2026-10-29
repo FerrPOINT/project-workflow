@@ -3,15 +3,19 @@
 ## Закреплённый UI и границы поставки
 
 Текущий общий UI определяется [`.base-ui-revision`](../.base-ui-revision).
-Source producer: `d7c1d8c3bd92cf888abf1546243fa31878c80269`, пакет 0.3.26,
-reference `0027de894be13a69a735145a83366fd1d4cc72fba2d360994520b6cd6dcb0d20`.
+Source producer: `2de0f72b2c28f3d0930808a1c58a941f9c6be31e`, пакет 0.3.26,
+reference `0bb6a3074c8188354c79a5b4bdea9654d3c31a60a6b1eec3033c20ebc0f1488f`.
 Он объединяет Base #384 и expiry #386; #381 повторно не включается.
 SDK и skills pins независимы. SSR assets обновляются штатным Base exporter;
 сгенерированные стили, macros и fingerprints вручную не исправляются.
 Source commit и проверенный export не подтверждают установку или live-приёмку:
 это отдельно фиксирует отчёт выбранного окружения.
 
-Producer исправляет P1 React JWT clock-skew, не добавляя wire fields/grants.
+Финальный producer 2de0f72b сохраняет owner-clock fix d7c1d8c3 и bounded
+fetch/body wait. Его SSR export/check также PASS; 24 assets byte-identical.
+Ни Python, ни template/browser inputs не изменились; новый полный прогон не заявляется.
+
+Первый checkpoint d7c1d8c3 исправляет P1 React JWT clock-skew, не добавляя wire fields/grants.
 Штатный SSR export и --check из этого exact producer PASS; все 24 assets остались
 побайтово прежними. Поэтому Python source и прежние template/browser inputs не
 менялись: нижние scoped результаты переиспользованы, не запускались повторно.
