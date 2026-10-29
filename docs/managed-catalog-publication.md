@@ -4,6 +4,27 @@ This is a separate, next-release source package based on master `620f45cd`.
 The accepted PM catalog works without it. It does not change the installed
 cohort, Fleet assignments/configuration, Hermes, credentials or agent messages.
 
+## Current Source Gate
+
+On source23797fbf (production tree156956017cceb3afe3d37f2f53195d12cdf9619d,
+tests tree3b99c068045ae3380876b5957fb77bfa30101fd5), the complete non-PG
+warnings-as-errors/coverage gate passes: **3186 passed, 73 subtests passed,
+4 skipped, 132 deselected; coverage94.04%**, required94%, 1474.45 seconds.
+Skips are three explicit private Base-source opt-ins and the NTFS executable-mode
+test; they are not passes. Integration exclusions remain a different boundary.
+
+The mandatory project PostgreSQL target also passes **74 tests**, 204.51 seconds,
+on PostgreSQL17.6, in addition to the16 targeted publication PG cases below.
+Fresh disposable ComposeHelper v2, 512MiB/0.5CPU, owned database/network/volume,
+30GiB preflight and finally cleanup; no runtime data was copied. Retained local
+evidence is `.local/publication-full-coverage.{log,xml}` and
+`.local/publication160-abf7e8c16b/{result.json,pytest.log,junit.xml,compose/journal.json}`.
+
+This supersedes the earlier partial full-gate status below. Remaining gates are
+image/Compose qualification of this publication source, editor/client adoption,
+orchestrator-specific deployment and installed/live text publication. The accepted
+PM release uses its existing620f45cd image and does not wait for this package.
+
 ## Boundary
 
 The existing `workflow_modes.catalog_version` and
@@ -167,11 +188,11 @@ and tests subtree `3b99c068045ae3380876b5957fb77bfa30101fd5`:
   Finally cleanup journal is `cleaned`; a subsequent exact-project container,
   network and volume query returned zero resources. Local retained evidence:
   `.local/publication160-41f4135c49/{result.json,pytest.log,junit.xml,compose/journal.json}`.
-- The full non-PG/coverage attempt was stopped after finding the route Mock-key
+- The earlier full non-PG/coverage attempt was stopped after finding the route Mock-key
   regression. The guard now requires a real string, and all selected affected
   API cases pass. That partial attempt is **not** a full PASS or a coverage
-  measurement. Full non-PG/94% coverage, packaging and installation
-  gates remain open for this next-release Draft.
+  measurement. The Current Source Gate above closes the later complete non-PG/
+  coverage and mandatory project PG runs; packaging and installation remain open.
 
 These are source tests with controlled Auth/Tracker/advisor peers and synthetic
 SQLite history. They do not attest installed CLI capabilities or live role work.
