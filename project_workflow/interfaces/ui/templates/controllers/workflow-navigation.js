@@ -6,7 +6,7 @@ let workflowReadbackRequest = null;
 let workflowHistoryPosition = history.state?.workflowPosition ?? 0;
 let workflowReadRevision = 0;
 let workflowCommittedUrl = location.pathname + location.search + location.hash;
-const workflowInitialRole = {{ can_administer|tojson }};
+const workflowInitialRole = config.canAdminister;
 function initializeWorkflowPhases(root=document){
   window.PdlcBaseUI.initMenus?.(root);
   root.querySelectorAll('select[data-base-choice]').forEach(control=>window.PdlcChoice?.initChoice(control));
@@ -16,6 +16,7 @@ function initializeWorkflowPhases(root=document){
     const up=item.querySelector('.move-up-btn'),down=item.querySelector('.move-down-btn');
     if(up)up.disabled=index===0;
     if(down)down.disabled=index===items.length-1;
+    const remove=item.querySelector('.phase-delete-btn');if(remove)remove.disabled=items.length<=1;
   });
   try{const view=localStorage.getItem('phase-view-mode');if(view)setPhaseView(view,false);}catch{}
   window.WorkflowNavigation?.preserveProjectContext();
@@ -29,7 +30,7 @@ function retireWorkflowEditor(){
 }
 async function loadWorkflowEditor(value,options={}){
   const url=new URL(value,location.href);
-  if(url.origin!==location.origin||url.pathname!=='{{ ui_base_path() }}/workflows')return false;
+  if(url.origin!==location.origin||![config.basePath+'/workflows',config.basePath+'/phases'].includes(url.pathname))return false;
   if(workflowNeedsReadback&&!options.afterWrite){showToast('Сначала обновите состояние сохранённого изменения','error');return false;}
   if(phaseWritePending&&!options.afterWrite)return false;
 {% if can_administer %}

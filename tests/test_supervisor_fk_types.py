@@ -62,8 +62,8 @@ class TestRecordTransitionTypes:
         assert call2[0][1] == 99
         assert call2[0][2] == "entered"
 
-    def test_record_transition_rollback_target_resolved_to_int(self):
-        """Rollback target code must be resolved to int id."""
+    def test_retired_transition_does_not_write_foreign_keys(self):
+        """A removed verdict cannot write task IDs or events."""
         engine = SupervisorEngine("RUN-1")
         ph = Phase(id=42, code="1", name="T", rollback_target_phase_code="0")
         ph_prev = Phase(id=7, code="0", name="Prev")
@@ -81,12 +81,10 @@ class TestRecordTransitionTypes:
         }
         engine.db = MagicMock()
         with patch.object(engine.db.tasks, "record_phase_event") as mock_event:
-            engine._record_transition(ph, "rollback", None, "0", 55)
-
-        call2 = mock_event.call_args_list[1]
-        assert isinstance(call2[0][1], int), f"rollback_phase_id must be int, got {type(call2[0][1])}"
-        assert call2[0][1] == 7
-        assert call2[0][2] == "entered"
+            with pytest.raises(ValueError, match="вердикт"):
+                engine._record_transition(ph, "rollback", None, "0", 55)
+        mock_event.assert_not_called()
+        engine.db.tasks.update_if_state.assert_not_called()
 
     def test_evaluate_llm_uses_int_phase_id(self):
         """record_step must receive int phase_id."""

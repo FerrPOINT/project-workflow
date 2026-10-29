@@ -1,0 +1,38 @@
+{% import "base/macros.html" as base_ui %}
+
+{% macro actions(kind, label, parallel=false, first=false, last=false, delete_disabled=false) -%}
+{% set subject = 'фазы' if kind == 'phase' else 'инструкции' %}
+{% set object = 'фазу' if kind == 'phase' else 'инструкцию' %}
+<div class="workflow-card-actions {{ 'phase-card-actions' if kind == 'phase' else 'instruction-card-actions' }}" role="group" aria-label="Действия {{ subject }} «{{ label }}»">
+  {% set icon %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>{% endset %}
+  {{ base_ui.button(icon, size='icon', variant='outline', class_name='phase-add-btn', aria_label='Добавить после ' ~ subject ~ ' «' ~ label ~ '»', title='Добавить после этой ' ~ subject) }}
+  {% set icon %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 12 6-6 6 6M12 6v12"/></svg>{% endset %}
+  {{ base_ui.button(icon, size='icon', variant='ghost', class_name='move-up-btn', aria_label='Поднять ' ~ object ~ ' «' ~ label ~ '»', title='Поднять выше', disabled=first) }}
+  {% set icon %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 12 6 6 6-6M12 6v12"/></svg>{% endset %}
+  {{ base_ui.button(icon, size='icon', variant='ghost', class_name='move-down-btn', aria_label='Опустить ' ~ object ~ ' «' ~ label ~ '»', title='Опустить ниже', disabled=last) }}
+  {% set icon %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v4M12 7H6v10M12 7h6v10M3 14l3 3 3-3M15 14l3 3 3-3"/></svg>{% endset %}
+  {{ base_ui.button(icon, size='icon', variant='outline', class_name='execution-toggle' ~ (' instruction-execution-toggle' if kind == 'instruction' else ''), aria_label='Параллельное выполнение ' ~ subject ~ ' «' ~ label ~ '»', title='Выполнять последовательно' if parallel else 'Выполнять параллельно', aria_pressed=parallel) }}
+  {% set icon %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6"/></svg>{% endset %}
+  {{ base_ui.button(icon, size='icon', variant='destructive-outline', class_name='phase-delete-btn', aria_label='Удалить ' ~ object ~ ' «' ~ label ~ '»', title='Удалить ' ~ object, disabled=delete_disabled) }}
+</div>
+{%- endmacro %}
+
+{% macro parallel_group(label) -%}
+{% set group_content = caller() %}
+{% call base_ui.card(padded=true, class_name='timeline-block timeline-parallel-group workflow-parallel-group', label=label) %}{{ group_content }}{% endcall %}
+{%- endmacro %}
+
+{% macro skill_chip(skill, step_num, administrative=false) -%}
+<span class="instruction-skill-chip" role="listitem">
+  {% call base_ui.badge(tone='info') %}
+    <span class="instruction-skill-name"{% if skill %} data-instruction-skill="{{ skill }}"{% endif %}>{% if administrative %}{{ base_ui.badge_button(skill, tone='info', appearance='inline', class_name='skill-rename-btn', value=skill, aria_label='Переименовать навык ' ~ skill ~ ' в инструкции ' ~ step_num, title='Переименовать навык') }}{% else %}{{ skill }}{% endif %}</span>
+{% if administrative %}
+    {{ base_ui.badge_input(skill, tone='info', appearance='inline', class_name='skill-rename-input', aria_label='Новое название навыка ' ~ skill ~ ' в инструкции ' ~ step_num, size=skill|length + 1, hidden=true) }}
+{% endif %}
+{% if administrative %}
+    {% set remove_icon %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>{% endset %}
+    {{ base_ui.badge_button(remove_icon, tone='info', appearance='inline', class_name='skill-remove-btn', value=skill, aria_label='Убрать навык ' ~ skill ~ ' из инструкции ' ~ step_num, title='Убрать навык ' ~ skill) }}
+{% endif %}
+  {% endcall %}
+</span>
+{%- endmacro %}

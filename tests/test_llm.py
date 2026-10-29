@@ -567,8 +567,8 @@ class TestOpenAICompatibleClientOverrides:
 class TestEvaluatorV8PromptContract:
     """The live provider receives explicit contradiction and chronology rules."""
 
-    def test_prompt_version_is_v8(self):
-        assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v8"
+    def test_prompt_version_invalidates_the_old_backtracking_policy(self):
+        assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v8-no-backtracking"
 
     def test_contradictory_current_facts_prohibit_pass(self):
         prompt = PromptBuilder.SYSTEM_PROMPT
@@ -576,16 +576,16 @@ class TestEvaluatorV8PromptContract:
         assert "Mutually exclusive CURRENT facts" in prompt
         assert "prohibit PASS" in prompt
         assert "return PARTIAL" in prompt
-        assert "return ROLLBACK" in prompt
-        assert "earlier-phase artifact" in prompt
-        assert "affected required item IDs in missing" in prompt
+        assert "return BLOCKED" in prompt
+        assert "outside the current phase" in prompt
+        assert "explain the required work" in prompt
 
-    def test_build_user_prompt_exposes_rollback_target(self):
+    def test_build_user_prompt_does_not_expose_retired_target(self):
         phase = FakePhase(rollback_target_phase_code="8.IMPLEMENT")
 
         prompt = PromptBuilder.build_user_prompt("RUN-1", phase, "reviewed")
 
-        assert "ROLLBACK TARGET: 8.IMPLEMENT" in prompt
+        assert "ROLLBACK TARGET:" not in prompt
 
     def test_chronological_state_change_requires_timestamped_action_evidence(self):
         prompt = PromptBuilder.SYSTEM_PROMPT

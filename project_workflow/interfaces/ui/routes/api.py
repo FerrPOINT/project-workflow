@@ -167,8 +167,6 @@ def api_phases(
                 "phase_num": phase.get("phase_num", phase.get("phase_order", 0)),
                 "phase_order": phase.get("phase_order", 0),
                 "execution_type": phase.get("execution_type", "sync"),
-                "parallel_with_phase_id": phase.get("parallel_with_phase_id"),
-                "rollback_target_phase_id": phase.get("rollback_target_phase_id"),
             }
         )
     result: dict[str, Any] = {"ok": True, "phases": rows}
@@ -232,8 +230,6 @@ def api_phase_create(payload: PhaseCreate) -> dict[str, Any] | JSONResponse:
         "mode_id": payload.mode_id,
         "phase_order": payload.phase_order,
         "execution_type": payload.execution_type,
-        "parallel_with_phase_id": payload.parallel_with_phase_id,
-        "rollback_target_phase_id": payload.rollback_target_phase_id,
     }
     if payload.code:
         data["code"] = payload.code
@@ -264,8 +260,6 @@ def api_phase_update(
     scalar_fields = {
         "name",
         "description",
-        "parallel_with_phase_id",
-        "rollback_target_phase_id",
         "execution_type",
     }
     selected_fields = scalar_fields.intersection(payload.model_fields_set)

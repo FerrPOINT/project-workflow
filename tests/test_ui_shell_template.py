@@ -8,6 +8,7 @@ from unittest import TestCase
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
+from project_workflow.interfaces.ui.controller_assets import controller_source
 from project_workflow.interfaces.ui.templates import env as product_template_environment
 
 
@@ -63,7 +64,7 @@ class SharedShellTemplateTests(TestCase):
                 self.assertIn("Owner &lt;title&gt;", html)
                 self.assertIn("Owner &lt;message&gt;", html)
                 self.assertIn("← К фазам &lt;73&gt;", html)
-                self.assertNotIn("base-state-retry-icon", html.split("<body", 1)[1])
+                self.assertNotIn("base-state-retry-icon", re.search(r"<main .*?</main>", html, re.S).group())
 
     def test_workflow_unknown_write_readback_uses_shared_button_without_changing_owner_action(self):
         for can_administer in [True, False]:
@@ -492,8 +493,9 @@ class SharedShellTemplateTests(TestCase):
                 self.assertNotIn("empty-note", html)
                 self.assertNotIn("nav.appendChild(empty)", html)
                 if admin:
-                    self.assertIn("setNamespaceFormMode('create');", html)
-                    self.assertIn("document.getElementById('namespaceName').focus();", html)
+                    code = controller_source("namespaces", True)[0].decode()
+                    self.assertIn("setNamespaceFormMode('create');", code)
+                    self.assertIn("document.getElementById('namespaceName').focus();", code)
 
     def test_namespace_form_preserves_names_patterns_help_and_values_with_base_fields(self):
         html = self.render_shell(
@@ -822,7 +824,7 @@ class SharedShellTemplateTests(TestCase):
         self.assertNotIn(".status-badge{", html)
         self.assertNotIn(".bar-fill{", html)
 
-    def test_phase_actions_use_base_disclosure_and_preserve_owner_callbacks(self):
+    def test_phase_actions_use_inline_base_buttons_and_preserve_card_links(self):
         phases = [
             dict(id=i, phase_num=i, name="Phase <" + str(i) + ">", description="Описание", execution_type="sync")
             for i in range(1, 9)
@@ -856,36 +858,24 @@ class SharedShellTemplateTests(TestCase):
                                      for _, attrs in elements), count)
                 self.assertEqual(sum("base-resource-description" in attrs.get("class", "").split()
                                      for _, attrs in elements), count)
-                menus = [
-                    attrs
-                    for tag, attrs in elements
-                    if tag == "details" and "phase-card-actions" in attrs.get("class", "").split()
-                ]
-                self.assertEqual(len(menus), count)
-                self.assertTrue(all("data-base-menu" in menu for menu in menus))
-                self.assertTrue(all(menu["data-base-menu-group"] == "phase-actions" for menu in menus))
-                self.assertEqual(
-                    [menu["id"] for menu in menus], ["phase-actions-" + str(i) for i in range(1, count + 1)]
-                )
-                items = [
-                    attrs
-                    for tag, attrs in elements
-                    if tag == "button" and "base-menu-item" in attrs.get("class", "").split()
-                ]
-                self.assertEqual(len(items), 4 * count)
-                deletes = [item for item in items if item.get("onclick") == "deletePhase(this)"]
-                self.assertEqual(len(deletes), count)
+                groups = [attrs for tag, attrs in elements
+                          if tag == "div" and "phase-card-actions" in attrs.get("class", "").split()]
+                self.assertEqual(len(groups), count)
+                self.assertTrue(all(item["role"] == "group" for item in groups))
+                self.assertFalse(any(tag == "details" and "phase-card-actions" in attrs.get("class", "")
+                                     for tag, attrs in elements))
+                classes = ("phase-add-btn", "move-up-btn", "move-down-btn", "execution-toggle", "phase-delete-btn")
+                items = [attrs for tag, attrs in elements if tag == "button" and
+                         any(name in attrs.get("class", "").split() for name in classes)]
+                self.assertEqual(len(items), 5 * count)
+                self.assertTrue(all("base-button" in item["class"].split() for item in items))
+                self.assertTrue(all(item.get("aria-label") and item.get("title") for item in items))
+                self.assertTrue(all(item["data-size"] == "icon" for item in items))
+                deletes = [item for item in items if "phase-delete-btn" in item["class"].split()]
                 self.assertTrue(all(("disabled" in item) == (count == 1) for item in deletes))
-                self.assertTrue(all(item["data-tone"] == "danger" for item in deletes))
-                insertions = [
-                    attrs
-                    for tag, attrs in elements
-                    if tag == "button" and attrs.get("onclick") == "addPhaseAfter(this)"
-                ]
-                self.assertEqual(len(insertions), count)
-                self.assertTrue(all(item["data-size"] == "icon" for item in insertions))
-                self.assertEqual([int(item["data-after-order"]) for item in insertions], list(range(1, count + 1)))
-                self.assertIn("Действия фазы Phase &lt;1&gt;", html)
+                self.assertTrue(all(item["data-variant"] == "destructive-outline" for item in deletes))
+                self.assertNotIn('class="timeline-connector"', html)
+                self.assertIn("Действия фазы «Phase &lt;1&gt;»", html)
                 self.assertNotIn(".phase-actions-menu{", html)
                 self.assertNotIn(".phase-move-btn{", html)
                 self.assertNotIn("const confirmationDialog=", html)
@@ -898,9 +888,20 @@ class SharedShellTemplateTests(TestCase):
                 )
                 for panel in panels:
                     classes = set(panel["class"].split())
-                    self.assertEqual("base-card" in classes, count < 8)
-                    self.assertEqual("base-resource-list-row" in classes, count >= 8)
-                    self.assertEqual(panel["data-interactive"], "true")
+                    self.assertIn("base-resource-list-row" if count >= 8 else "base-card", classes)
+                    if count >= 8:
+                        self.assertEqual(panel["data-interactive"], "true")
+                    else:
+                        self.assertIn("base-card-content", classes)
+                shells = [attrs for _, attrs in elements
+                          if "phase-card-shell" in attrs.get("class", "").split()]
+                self.assertEqual(len(shells), count)
+                for shell in shells:
+                    self.assertNotIn("base-card", shell["class"].split())
+                    self.assertNotIn("base-resource-list-row", shell["class"].split())
+                links = re.findall(r'<a[^>]+class="[^"]*timeline-card[^>]*>(.*?)</a>', html, re.S)
+                self.assertTrue(links)
+                self.assertTrue(all("<button" not in link for link in links))
 
     def test_editor_uses_base_controls_and_exact_skill_values_for_sync_and_parallel_instructions(self):
         for parallel in [False, True]:
@@ -909,16 +910,26 @@ class SharedShellTemplateTests(TestCase):
                 elements = Elements(html).elements
                 skills = [attrs["data-instruction-skill"] for _, attrs in elements if "data-instruction-skill" in attrs]
                 self.assertEqual(skills, ["tool×safe", '<script> "quoted"'])
-                remove = [attrs for tag, attrs in elements if tag == "button" and "data-skill" in attrs]
-                self.assertEqual([button["data-skill"] for button in remove], skills)
+                remove = [attrs for tag, attrs in elements if tag == "button" and
+                          "skill-remove-btn" in attrs.get("class", "").split() and attrs.get("value")]
+                self.assertEqual([button["value"] for button in remove], skills)
+                rename = [attrs for tag, attrs in elements if tag == "button" and
+                          "skill-rename-btn" in attrs.get("class", "").split() and attrs.get("value")]
+                self.assertEqual([button["value"] for button in rename], skills)
+                editors = [attrs for tag, attrs in elements if tag == "input" and
+                           "skill-rename-input" in attrs.get("class", "").split() and attrs.get("value")]
+                self.assertEqual([editor["value"] for editor in editors], skills)
+                self.assertTrue(all("hidden" in editor and "base-badge-input" in editor["class"].split()
+                                    for editor in editors))
                 for button in remove:
-                    self.assertTrue({"base-control", "base-button"} <= set(button["class"].split()))
-                    self.assertEqual(button["data-size"], "icon")
-                    self.assertEqual(button["onclick"], "removeSkillFromInstruction(this)")
+                    self.assertTrue({"base-badge", "base-badge-button"} <= set(button["class"].split()))
+                    self.assertEqual(button["data-appearance"], "inline")
+                    self.assertEqual(button["type"], "button")
+                    self.assertNotIn("onclick", button)
                 toggles = [
                     attrs
                     for tag, attrs in elements
-                    if tag == "button" and attrs.get("onclick") == "toggleInstructionType(this)"
+                    if tag == "button" and "instruction-execution-toggle" in attrs.get("class", "").split()
                 ]
                 self.assertEqual(
                     [button["aria-pressed"] for button in toggles], ["false", "true" if parallel else "false"]
@@ -936,8 +947,9 @@ class SharedShellTemplateTests(TestCase):
                 ]
                 self.assertEqual(len(actions), 4)
                 self.assertTrue(all("base-button" in button["class"].split() for button in actions))
-                self.assertIn("item.dataset.instructionSkill", html)
-                self.assertNotIn("b.textContent.replace('×'", html)
+                code = controller_source("phase_detail", True)[0].decode()
+                self.assertIn("item.dataset.instructionSkill", code)
+                self.assertNotIn("b.textContent.replace('×'", code)
                 self.assertNotIn(".skill-remove-btn{", html)
                 self.assertNotIn(".badge-sync", html)
 
@@ -1108,7 +1120,7 @@ class SharedShellTemplateTests(TestCase):
             self.assertNotIn("resizeInstructionTextarea", html)
             self.assertIn("destroyTextareaAutosize", html)
             self.assertIn("data-original-description=", html)
-        phase = self.render_instruction_editor()
+        phase = controller_source("phase_detail", True)[0].decode()
         self.assertIn("window.PdlcTextarea.initTextareaAutosize(li.querySelector('textarea'));", phase)
         self.assertIn("window.PdlcTextarea.refreshTextareaAutosize(input);", phase)
         self.assertIn("instructionDraft(event.target).edit();", phase)
@@ -1153,10 +1165,11 @@ class SharedShellTemplateTests(TestCase):
         self.assertTrue(all("aria-current" not in link for link in links[1:]))
         self.assertNotIn(".phase-outline-link", html)
         self.assertNotIn(".phase-outline-list", html)
-        self.assertIn("link.hash.slice(1)", html)
-        self.assertIn("phaseSectionNavigationLock = sectionId;", html)
-        self.assertIn("window.PdlcPlatformNavigation.syncRoute(nextUrl, method === 'replaceState');", html)
-        self.assertIn("page.on(window,'popstate', restorePhaseSectionFromLocation);", html)
+        code = controller_source("phase_detail", True)[0].decode()
+        self.assertIn("link.hash.slice(1)", code)
+        self.assertIn("phaseSectionNavigationLock = sectionId;", code)
+        self.assertIn("window.PdlcPlatformNavigation.syncRoute(nextUrl, method === 'replaceState');", code)
+        self.assertIn("page.on(window,'popstate', restorePhaseSectionFromLocation);", code)
 
     def test_section_navigation_macros_keep_native_links_and_escape_labels(self):
         templates = Path(__file__).parents[1] / "project_workflow/interfaces/ui/templates"

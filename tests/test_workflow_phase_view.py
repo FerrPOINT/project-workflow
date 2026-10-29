@@ -6,6 +6,7 @@ import subprocess
 
 import pytest
 
+from project_workflow.interfaces.ui.controller_assets import controller_source
 from tests import test_ui_shell_template as shell
 
 pytestmark = pytest.mark.ui
@@ -68,16 +69,16 @@ def test_phase_dividers_follow_the_initial_view_without_changing_native_phase_li
     links = [attrs for tag, attrs in elements if tag == "a" and "timeline-card" in attrs.get("class", "").split()]
     assert [attrs["href"] for attrs in links] == [f"/workflow/phase/{i}" for i in range(1, count + 1)]
     assert all(attrs["data-interactive"] == "true" for attrs in links)
-    assert sum(tag == "details" and "phase-card-actions" in attrs.get("class", "").split()
+    assert sum(tag == "div" and attrs.get("role") == "group" and "phase-card-actions" in attrs.get("class", "").split()
                for tag, attrs in elements) == (count if admin else 0)
 
 
 @pytest.mark.parametrize("admin", [False, True])
 @pytest.mark.parametrize("view", ["compact", "timeline"])
 def test_phase_view_changes_base_skin_for_each_role_without_writing_during_restore(admin, view):
-    html = render_editor(admin)
-    start = html.index("function setPhaseView(")
-    source = html[start:html.index("function jumpToPhase(", start)]
+    code = controller_source("workflows", admin)[0].decode()
+    start = code.index("function setPhaseView(")
+    source = code[start:code.index("function jumpToPhase(", start)]
     script = """
 const view=VIEW;
 const classes=new Set(['base-resource-list-row']);
@@ -89,16 +90,15 @@ const timeline={dataset:{dividers:'start'},classList:toggles(timelineClasses),
  querySelectorAll:selector=>selector==='a.timeline-card'?[card]:sections};
 const radios=['compact','timeline'].map(value=>({value,checked:value==='compact'}));
 const legacyButtons=radios.map(r=>({dataset:{phaseView:r.value},setAttribute(){}}));
-const menus=[{open:true}];let writes=[];
+let writes=[];
 const document={getElementById:id=>id==='phasesTimeline'?timeline:null,
- querySelectorAll:selector=>selector.includes('phase-card-actions')?menus:
- selector==='[data-phase-view]'?legacyButtons:radios};
+ querySelectorAll:selector=>selector==='[data-phase-view]'?legacyButtons:radios};
 const localStorage={setItem:(key,value)=>writes.push([key,value])};
 SOURCE
 setPhaseView(view,false);
 const restored={classes:[...classes].sort(),compact:timelineClasses.has('is-compact'),
  dividers:{root:timeline.dataset.dividers,sections:sections.map(section=>section.dataset.dividers)},
- radios:radios.map(r=>r.checked),menusClosed:menus.every(m=>!m.open),writes:[...writes]};
+ radios:radios.map(r=>r.checked),writes:[...writes]};
 setPhaseView(view);
 setPhaseView('invalid');
 console.log(JSON.stringify({restored,writes}));
@@ -112,7 +112,7 @@ console.log(JSON.stringify({restored,writes}));
             "compact": view == "compact", "radios": [view == "compact", view == "timeline"],
             "dividers": {"root": "start" if view == "compact" else "none",
                          "sections": ["end" if view == "compact" else "none"] * 2},
-            "menusClosed": True, "writes": [],
+            "writes": [],
         },
         "writes": [["phase-view-mode", view]],
     }
@@ -133,14 +133,16 @@ def test_editor_uses_the_shared_segmented_radio_group_and_preserves_permissions(
         assert groups[0]["data-appearance"] == "segmented"
         assert [item["value"] for item in radios] == ["compact", "timeline"]
         assert [item["value"] for item in radios if "checked" in item] == ["compact" if count >= 8 else "timeline"]
-    assert html.count("function setPhaseView(") == 1
-    assert html.count("function selectMode(") == 1
-    assert html.count("function jumpToPhase(") == 1
+    assert controller_source("workflows", admin)[0].decode().count("function setPhaseView(") == 1
+    assert controller_source("workflows", admin)[0].decode().count("function selectMode(") == 1
+    assert controller_source("workflows", admin)[0].decode().count("function jumpToPhase(") == 1
     assert ('id="workflowForm"' in html) == admin
-    assert ('onclick="addPhaseAfter(this)"' in html) == admin
+    assert any('phase-card-actions' in attrs.get('class', '').split() for _, attrs in elements) == admin
     headings = {attrs.get("id"): attrs for tag, attrs in elements if tag == "h2"}
-    for heading_id in ["workflowSummaryName", "workflowPhasesTitle"]:
-        assert "base-section-title" in headings[heading_id]["class"].split()
+    assert "base-section-title" in headings["workflowPhasesTitle"]["class"].split()
+    assert any(tag == "span" and attrs.get("id") == "workflowSummaryName" for tag, attrs in elements)
+    assert any(attrs.get("data-testid") == "workflow-phase-toolbar" for _, attrs in elements)
+    assert "Фазы процесса</h2>" not in html
     nav_item = re.search(r'<button[^>]*data-workflow-id="3"[^>]*>([\s\S]*?)</button>', html)
     assert nav_item is not None
     assert 'class="base-card-title" data-workflow-name' in nav_item.group(1)
@@ -156,10 +158,10 @@ def test_editor_uses_the_shared_segmented_radio_group_and_preserves_permissions(
 @pytest.mark.parametrize("admin", [False, True])
 @pytest.mark.parametrize("storage", ["compact", "timeline", "invalid", "unavailable"])
 def test_phase_view_restores_without_a_write_and_changes_only_on_a_checked_selection(admin, storage):
-    html = render_editor(admin)
-    start = html.index("function setPhaseView(")
-    end = html.index("const professionId =", start) if admin else html.index("function selectWorkflow(", start)
-    source = html[start:end]
+    code = controller_source("workflows", admin)[0].decode()
+    start = code.index("function setPhaseView(")
+    end = code.index("const professionId =", start) if admin else code.index("function selectWorkflow(", start)
+    source = code[start:end]
     script = """
 const storage=STORAGE;const writes=[],ready=[];
 const page={ready:callback=>ready.push(callback),on:(target,type,callback)=>target.addEventListener(type,callback)};
@@ -201,8 +203,7 @@ console.log(JSON.stringify({restored,ignored,selected:radios.filter(r=>r.checked
 
 @pytest.mark.parametrize("admin", [False, True])
 def test_editor_script_is_valid_after_role_specific_rendering(admin):
-    scripts = re.findall(r"<script[^>]*>([\s\S]*?)</script>", render_editor(admin))
-    owner_script = next(script for script in scripts if "function setPhaseView(" in script)
+    owner_script = controller_source("workflows", admin)[0].decode()
     result = subprocess.run(["node", "--check", "-"], input=owner_script, text=True,
                             encoding="utf-8", capture_output=True, timeout=10)
     assert result.returncode == 0, result.stderr

@@ -28,7 +28,7 @@ w.fetch=async(value,options)=>{
  }
  return fetch(new URL(value,w.location.href),options);
 };
-const controller=Array.from(d.scripts).find(script=>script.textContent.includes('async function loadWorkflowEditor('));
+const controller=d.querySelector('script[data-workflow-controller]');
 assert.ok(controller);
 const pageReady=[];
 w.WorkflowApplication={mount(factory){factory({
@@ -38,6 +38,10 @@ w.WorkflowApplication={mount(factory){factory({
  expose:functions=>Object.assign(w,functions),
 });}};
 w.eval([...d.scripts].find(script=>script.textContent.includes('function pluralizeRu(')).textContent);
+w.WorkflowPageControllers=Object.create(null);
+for(const asset of d.querySelectorAll('script[src*="/ui-assets/controllers/"]')){
+ const response=await fetch(new URL(asset.src,base));assert.equal(response.status,200);w.eval(await response.text());
+}
 w.eval(controller.textContent);pageReady.forEach(callback=>callback());
 d.dispatchEvent(new w.Event('DOMContentLoaded'));
 const state=()=>JSON.parse(d.querySelector('#workflowEditorState').textContent);
@@ -66,12 +70,45 @@ await new Promise(resolve=>setImmediate(resolve));d.querySelector('#workflowName
 assert.equal(d.querySelector('#workflowName').value,'Правка во время запроса');w.cancelWorkflowForm();
 // The four real owner mutations refresh the phase block without remounting the shell.
 const count=()=>d.querySelectorAll('#phasesTimeline .timeline-item').length;
-const initial=count();await w.addPhaseAfter(d.querySelector('.phase-add-btn'));assert.equal(count(),initial+1);
+const legacyUrl=new URL(w.location.href);legacyUrl.pathname='/workflow/phases';
+assert.equal(await w.loadWorkflowEditor(legacyUrl.href,{keepForm:true}),true);
+assert.equal(w.location.pathname,'/workflow/phases');
+const initial=count();const first=d.querySelector('.timeline-item');
+const firstOrder=Number(first.dataset.phaseOrder),nextId=d.querySelectorAll('.timeline-item')[1].dataset.phaseId;
+assert.equal(first.querySelectorAll('.phase-card-actions button').length,5);
+assert.equal(first.querySelector('a button'),null,'toolbar must not be nested inside the phase link');
+first.querySelector('.phase-add-btn').click();
+for(let attempt=0;attempt<100&&count()===initial;attempt++)await new Promise(resolve=>setTimeout(resolve,10));
+assert.equal(count(),initial+1);
+const afterInsert=[...d.querySelectorAll('.timeline-item')];assert.equal(Number(afterInsert[1].dataset.phaseOrder),firstOrder+1);assert.equal(afterInsert[2].dataset.phaseId,nextId);
+
 let phase=d.querySelector('.timeline-item');const phaseId=phase.dataset.phaseId;
-await w.togglePhaseType(phase.querySelector('button'));assert.equal(d.querySelector(`#phase-${phaseId}`).dataset.executionType,'parallel');
-phase=d.querySelector(`#phase-${phaseId}`);await w.movePhase(phase.querySelector('button'),1);
+await w.togglePhaseType(phase.querySelector('.execution-toggle'));assert.equal(d.querySelector(`#phase-${phaseId}`).dataset.executionType,'parallel');
+phase=d.querySelector(`#phase-${phaseId}`);await w.movePhase(phase.querySelector('.move-down-btn'),1);
 assert.notEqual(d.querySelector('.timeline-item').dataset.phaseId,phaseId);
-await w.deletePhase(d.querySelector(`#phase-${phaseId} button`));assert.equal(count(),initial);
+await w.deletePhase(d.querySelector(`#phase-${phaseId} .phase-delete-btn`));assert.equal(count(),initial);
+// Inserting inside explicit parallel edges preserves the group and owner links.
+let parallelItems=[...d.querySelectorAll('.timeline-item')];const parallelFirst=parallelItems[0].dataset.phaseId,parallelSecond=parallelItems[1].dataset.phaseId;
+await w.togglePhaseType(parallelItems[0].querySelector('.execution-toggle'));
+// Modes alone form the group; removed hidden settings fail closed at authoring.
+await w.togglePhaseType(d.querySelector(`#phase-${parallelSecond} .execution-toggle`));
+assert.ok(d.querySelector(`#phase-${parallelFirst}`).closest('.timeline-parallel-group'));
+assert.equal(d.querySelector(`#phase-${parallelSecond}`).closest('.timeline-parallel-group'),d.querySelector(`#phase-${parallelFirst}`).closest('.timeline-parallel-group'));
+for(const field of ['parallel_with_phase_id','rollback_target_phase_id']){
+ const response=await w.fetch('/workflow/api/phases/'+parallelSecond,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({[field]:Number(parallelFirst)})});assert.equal(response.status,422);
+}
+await w.togglePhaseType(d.querySelector(`#phase-${parallelFirst} .execution-toggle`));
+assert.equal(d.querySelector(`#phase-${parallelSecond}`).closest('.timeline-parallel-group'),null);
+await w.togglePhaseType(d.querySelector(`#phase-${parallelFirst} .execution-toggle`));
+assert.ok(d.querySelector(`#phase-${parallelFirst}`).closest('.timeline-parallel-group'));
+const parallelBefore=[...d.querySelectorAll('.timeline-item')].map(n=>n.dataset.phaseId);
+d.querySelector(`#phase-${parallelFirst} .phase-add-btn`).click();
+for(let attempt=0;attempt<100&&count()===parallelBefore.length;attempt++)await new Promise(resolve=>setTimeout(resolve,10));
+assert.equal(count(),parallelBefore.length+1);
+const inserted=[...d.querySelectorAll('.timeline-item')].find(n=>!parallelBefore.includes(n.dataset.phaseId));
+assert.equal(inserted.dataset.executionType,'parallel');assert.equal(inserted.dataset.phaseOrder,'2');
+assert.equal(inserted.closest('.timeline-parallel-group'),d.querySelector(`#phase-${parallelFirst}`).closest('.timeline-parallel-group'));
+await w.deletePhase(inserted.querySelector('.phase-delete-btn'));assert.equal(count(),parallelBefore.length);
 const beforeUncertain=count();networkFailure=true;
 await w.addPhaseAfter(d.querySelector('.phase-add-btn'));
 assert.equal(d.querySelector('#workflowReadbackError').hidden,false);

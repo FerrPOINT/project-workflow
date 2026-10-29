@@ -166,8 +166,11 @@ history, request authorization or forms: the existing Base bridge owns routes,
 the owner still checks every request, and write endpoints remain unchanged.
 htmx history/storage caching is disabled. Session/access changes retire the
 protected document; login/logout and other applications retain their explicit
-navigation boundary. Failed/aborted reads preserve the old page and URL; dirty
-input needs confirmation, including edits made during a request. Pending writes
+navigation boundary. Before fetching, confirmed navigation commits the target URL, sidebar, heading
+and a Base loading work area. Previous page data and controller callbacks are
+disposed at that boundary. A failed read keeps the target route with Base error
+and an explicit read retry; superseded responses cannot change a newer route.
+Dirty cancellation preserves the original form and URL. Pending writes
 block a departure; acknowledged writes can request a work-area readback.
 
 Run `scripts/check_workflow_application.mjs` with the same `--tooling-from` and
@@ -175,3 +178,154 @@ Run `scripts/check_workflow_application.mjs` with the same `--tooling-from` and
 creation, failed/stale reads and access retirement. Both manual integration gates
 are separate from default build/check. IAB acceptance must traverse every sidebar
 section on the final installed artifact; editor-only proof is insufficient.
+
+
+## Fast navigation and immutable controllers
+
+Ordinary page reads still use the same protected owner route and private,
+no-store HTML. Fragments do not read the service catalog for a header they do not
+replace. Authorization, view data, identity and original admission deadlines are
+checked as before; protected HTML is not put in browser history or a shared cache.
+
+Request-independent controller templates live in `templates/controllers/`.
+The existing Jinja engine produces a fixed user/admin code variant, addressed by
+SHA256. Only code and public icon constants enter these immutable responses.
+Private page configuration is an inert JSON block in the owner HTML. The four
+controllers load once with deferred scripts before initial page mounting; later
+page reads carry only a small bootstrap and data. No new build tool or dependency
+is required. The existing scoped mount/dispose contract remains authoritative.
+
+An already-open inline-controller shell upgrades once by document navigation.
+A shell-code fingerprint or asset-set change also upgrades the document after current authorization is
+confirmed. Ordinary navigation on a compatible shell remains partial. A failed
+asset load shows an error and does not enter an automatic reload loop.
+
+Pending reads render inert templates composed with the public Base `app_main`,
+`page_header` and `state` macros. Route descriptors supply only generic headings
+and layouts; names and records arrive from the owner. No toast, old-page overlay,
+HTML history cache, background polling or second router is used. Loading and
+error states remove outgoing data. After a successful read, owner metadata and
+page controllers replace the loading area, keeping the persistent shell intact.
+The manual gate deliberately holds the data response unresolved and checks the
+new URL, selection, heading and loading state before releasing it. It also checks
+failure/retry, cancelled departure, stale reads, history and admission retirement.
+The child workflow editor keeps its independent form-preserving/late-edit guard.
+
+
+## Phase and instruction card actions
+
+`workflow-cards.html` renders the same five public Base icon buttons for phase
+and instruction cards: add after, move up, move down, parallel mode and delete.
+The icon, variant, order, size and tooltip contract have one source. Products
+supply labels, permission and disabled state. Phase cards keep the toolbar outside
+the native link; instruction cards contain it after editable content and skills.
+The sole phase cannot be deleted; an instruction list may become empty.
+
+Parallel frames use the same Base Card composition and the same product class.
+Orange is an explicit domain presentation requirement, retained across themes;
+Base's warning palette is not used because it becomes yellow in the gray theme.
+The shared CSS sets only this semantic border color and toolbar geometry; Base
+still owns control states, card geometry and typography. Dynamic instruction
+regrouping clones the rendered frame template, retaining the same classes and
+color after reorder. Sequential records are not shown as a parallel group.
+
+Adding inside a parallel group preserves its execution context. Phase insertion
+keeps the inserted phase in the same contiguous parallel run.
+Instruction toolbar actions remain disabled until mutation/order acknowledgement;
+uncertain writes are not repeated automatically. Pending writes and drafts still
+block navigation. Default build/check does not run the manual DOM/API fixtures.
+
+### Плотность карточек
+
+Режим исполнения и общие действия располагаются в нижней строке карточки.
+На узком экране строка переносится без наложений; размеры кнопок остаются Base.
+Ссылка фазы и панель действий — соседние элементы внутри общей карточки,
+без кнопок внутри ссылки. Оранжевая рамка относится ко всей параллельной группе.
+Навыки инструкции имеют видимый лейбл над строкой, связанный с группой через
+aria-labelledby. Удаление внутри плашки использует компактный Base BadgeButton appearance=inline
+(цель24px), а «+» — BadgeButton appearance=badge. «+» находится в том же
+wrapping-ряду сразу после последнего навыка, включая динамическое обновление.
+Обе рамочные плашки26px, обычные Button40/44px не уменьшаются.
+Кнопка «+» открывает Base BadgeInput в геометрии плашки26px; отдельных кнопок
+сохранения/отмены нет. Enter добавляет, Escape отменяет. Клик по названию
+открывает inline BadgeInput24px внутри той же Badge. Enter или blur сохраняет
+переименование, Escape отменяет; пустое имя отменяет правку, дубль отклоняется.
+Крестик удаляет навык и не сохраняет черновик переименования. В пустом наборе
+остаётся «+». Обычные формы сохраняют стандартные размеры Input40/44px.
+Добавление/переименование/удаление обновляют только подтверждённые сервером
+плашки без перезагрузки. Ошибка сохраняет текст; записи одной инструкции
+сериализованы существующим pending guard. Навык остаётся свободным именем.
+
+### Шапка фазы
+
+Верхний блок содержит только название, описание и ссылку «Назад к фазам».
+Название/описание сохраняются после blur через существующую очередь и draft guard.
+Режим исполнения задаётся на карточке списка; шапка сохраняет только текст.
+Кнопки повторного сохранения/readback скрыты в обычном состоянии и появляются
+только при незавершённом сохранении. Инструкции сохраняют собственные действия.
+
+### Ширина редактора фазы
+
+Редактор занимает всю ширину штатного Base PageFrame. Его grid — flex-child
+с явным width:100%; auto margins и дополнительные max-width не используются:
+они сжимают редактор по содержимому и оставляют пустые поля. Оглавление слева
+занимает176px, gap24px, контент — minmax(0,1fr), без собственного max-width.
+На узком экране оглавление заменяется существующим выбором раздела. Проверять
+совпадение краёв редактора/контента с PageFrame и отсутствие overflow, а не
+только наличие wide/detail класса. Сам PageFrame и общие gutters принадлежат Base.
+
+### Additional browser origin
+
+An operator-managed HTTPS alias may be listed explicitly in `AUTH_BROWSER_ORIGINS` (JSON array). The default is empty; the canonical AUTH_PUBLIC_ORIGIN remains accepted. Each entry must be an exact HTTP(S) origin with no wildcard, userinfo, path, query or fragment. Cookie writes require an exact Origin match; absent/foreign/scheme-or-port-changed origins remain forbidden. This setting does not change OIDC issuer, registered redirects, PAT scopes or roles. A proxy must preserve the browser's Origin header.
+
+### Типографика подписей
+
+«Навыки» использует общий Base Label с --base-font-label:12px standard/14px large.
+Текст инструкции использует --base-font-body:14/16px. Размеры определяет branding,
+а не локальная таблица Workflow; навыки остаются связанными с лейблом через aria-labelledby.
+
+### Выравнивание текста фазы
+
+Inline Input/Textarea используют общий Base appearance без горизонтального inset: текст инструкции совпадает с левым краем её содержимого. Строки проверок и подтверждений центрируют текст, действия и декоративные SVG 16×16 по вертикали; одинаковая геометрия сохраняется для одной и нескольких строк, admin и read-only. Обычные поля формы сохраняют штатные отступы.
+
+### Интервалы карточек
+
+Списки фаз и инструкций используют одну раскладку из workflow-cards.css:12px между
+обычными блоками,10px внутри параллельных групп. Между карточками нет стрелок или
+служебных spacer-узлов ни при SSR, ни после добавления, перестановки или изменения
+параллельности. Компактный список фаз сохраняет свою плотную табличную раскладку.
+Оранжевая рамка и смысл параллельной группы остаются прежними.
+
+### Переключение параллельности фаз
+
+Кнопка меняет только execution_type. Все соседние parallel-фазы входят в одну
+группу до первой sync-фазы. Рамка берётся из подтверждённого readback с тем же
+правилом, что Supervisor; старые скрытые связи не влияют на неё. /workflows и
+/phases поддерживают editor-v1, проверки роли/контекста и private/no-store.
+Сохранение не заменяет оболочку или черновик формы. Устаревший возврат заданий
+удалён; [актуальный контракт](phase-execution.md).
+
+
+### Панель над фазами
+
+Название выбранного процесса, переключатель вида и переход к фазе составляют одну
+адаптивную панель. Не добавлять второй видимый заголовок «Фазы процесса» и пустой
+ряд действий. Общие SectionHeader/RadioGroup/Select остаются Base-компонентами;
+их внешняя компоновка принадлежит Workflow. На узком экране разрешён естественный
+перенос, длинные название/описание не должны перекрывать действия.
+
+
+### Интеграция общего UI с внешними контроллерами
+
+Immutable controllers получают приватные данные только через owner HTML config.
+Namespace/instruction renderers клонируют штатные inert Base macro templates;
+перенос JS в отдельный asset не возвращает локальные skins. Общая плотность
+фаз применяется к самой focusable ссылке; соседний shell сохраняет только
+предметную компоновку, без второго padding. Действия фаз/инструкций используют
+workflow-cards.html, новые inline groups и прежние Base buttons. Изменение
+вида сохраняет общие dividers и не делает запись при восстановлении.
+
+Source integration:82 shell/namespace/view tests +39 subtests,9 grouping/card
+contracts и3 immutable-controller/private-fragment checks. Это локальные
+проверки; полный PostgreSQL/coverage gate и authenticated IAB нового комплекта
+не объявляются закрытыми. UI pin обновляется отдельным шагом после Base-кандидата.

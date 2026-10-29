@@ -159,7 +159,7 @@ def test_supervisor_evaluate_pass_updates_db_state_and_persists_run(
     assert runs[0].evaluation_snapshot["contract_snapshot"]["phase_code"] == "sup.intake"
 
 
-def test_supervisor_rolls_back_gate_phase_when_report_is_blocked(tmp_path: Path, monkeypatch, supervisor_llm) -> None:
+def test_supervisor_rejects_retired_verdict_without_backtracking(tmp_path: Path, monkeypatch, supervisor_llm) -> None:
     uow = _patch_runtime(monkeypatch, tmp_path)
     _bootstrap_supervisor_workflow(uow)
 
@@ -182,18 +182,19 @@ def test_supervisor_rolls_back_gate_phase_when_report_is_blocked(tmp_path: Path,
     supervisor_llm("ROLLBACK")
     result = engine.evaluate("Blocked by dependency mismatch. blocker remains and the gate cannot pass.")
 
-    assert result["verdict"] == "ROLLBACK"
-    assert result["rollback_phase_code"] == "sup.intake"
-    assert result["next_phase_code"] == "sup.intake"
+    assert result["verdict"] == "BLOCKED"
+    assert result["rollback_phase_code"] is None
+    assert result["next_phase_code"] is None
 
     task = uow.tasks.get_by_key("SUP-3")
     assert task is not None
-    assert task.current_phase_code == "sup.intake"
+    assert task.current_phase_code == "sup.review"
 
     events = uow.list_phase_events(task.id)
-    assert [event["event_type"] for event in events[-2:]] == ["rolled_back", "entered"]
+    assert [event["event_type"] for event in events[-2:]] == ["entered", "blocked"]
 
     runs = uow.step_history.list(task_key="SUP-3")
-    assert runs[0].verdict == "rollback"
-    assert runs[0].supervisor_response["rollback_phase_code"] == "sup.intake"
-    assert all(event["step_history_id"] == runs[0].id for event in events[-2:])
+    assert runs[0].verdict == "blocked"
+    assert runs[0].supervisor_response["rollback_phase_code"] is None
+    assert events[-1]["step_history_id"] == runs[0].id
+    assert not any(event["event_type"] == "rolled_back" for event in events)

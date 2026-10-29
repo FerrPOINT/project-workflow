@@ -24,6 +24,7 @@ from .context import SupervisorContextBuilder
 from .contracts import PhaseContractBuilder
 from .models import Phase
 from .prompt import build_phase_prompt
+from .types import VERDICT_LABELS
 
 
 class PromptCache:
@@ -378,12 +379,8 @@ class SupervisorEngine:
         if recent:
             latest = recent[0]
             verdict = str(latest.get("verdict") or "").upper()
-            destination = (
-                latest.get("rollback_phase_code")
-                if verdict == "ROLLBACK"
-                else latest.get("phase_code")
-            )
-            if verdict in {"PARTIAL", "BLOCKED", "ROLLBACK"} and destination == phase.code:
+            destination = latest.get("phase_code")
+            if verdict in {"PARTIAL", "BLOCKED"} and destination == phase.code:
                 result["evaluation_feedback"] = latest
         return result
 
@@ -450,29 +447,19 @@ class SupervisorEngine:
     def _resolve_transition(
         self, phase: Phase, verdict: str, group: list[Phase]
     ) -> tuple[str | None, str | None, str | None]:
-        """Return (next_phase_code, next_phase_name, rollback_phase_code)."""
-        is_parallel = len(group) > 1
-        if is_parallel:
-            next_phase_code, next_phase_name = self._get_next_phase_after_group(group)
-            rollback_targets = {member.rollback_target_phase_code for member in group}
-            if len(rollback_targets) != 1:
-                raise ValueError(
-                    "Связанные параллельные фазы имеют разные цели отката"
-                )
-            rollback_phase_code = rollback_targets.pop() if verdict == "rollback" else None
-            if verdict != "pass":
-                next_phase_code = None
-                next_phase_name = None
-        else:
-            next_phase_code, next_phase_name = self._get_next_phase(phase.code)
-            rollback_phase_code = (
-                phase.rollback_target_phase_code if verdict == "rollback" else None
-            )
-
-        if verdict == "pass" and next_phase_code:
-            next_phase_obj = self.phase_map.get(next_phase_code)
-            next_phase_name = next_phase_obj.name if next_phase_obj else next_phase_name
-        return next_phase_code, next_phase_name, rollback_phase_code
+        """Advance on PASS; all other supported verdicts remain on this phase."""
+        if verdict not in VERDICT_LABELS:
+            raise ValueError(f"Неподдерживаемый вердикт: {verdict}")
+        if verdict != "pass":
+            return None, None, None
+        next_phase_code, next_phase_name = (
+            self._get_next_phase_after_group(group) if len(group) > 1
+            else self._get_next_phase(phase.code)
+        )
+        if next_phase_code:
+            target = self.phase_map.get(next_phase_code)
+            next_phase_name = target.name if target else next_phase_name
+        return next_phase_code, next_phase_name, None
 
     def _record_evaluation(
         self,

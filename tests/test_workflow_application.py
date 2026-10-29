@@ -43,7 +43,10 @@ def test_phase_and_instruction_views_use_work_area_protocol():
     response = client.get(phase, headers={"X-Workflow-View": "page-v1"})
     assert response.status_code == 200
     assert response.headers["X-Workflow-View"] == "page-v1"
-    assert "page.cleanup(()=>observer.disconnect())" in response.text
+    from project_workflow.interfaces.ui.controller_assets import page_controller_assets
+    asset = next(url for url in page_controller_assets(True) if url.endswith("/phase_detail.js"))
+    assert "page.cleanup(()=>observer.disconnect())" in client.get(asset).text
+    assert "page.cleanup(()=>observer.disconnect())" not in response.text
     assert "<!DOCTYPE html>" not in response.text
 
 
@@ -57,3 +60,73 @@ def test_library_is_exact_local_asset_and_unknown_assets_are_not_exposed():
     from project_workflow.interfaces.ui.sso import _PUBLIC_PATHS
     assert "/ui-assets/htmx-2.0.11.min.js" in _PUBLIC_PATHS
     assert "/api/workflows" not in _PUBLIC_PATHS
+
+
+@pytest.mark.parametrize("view", ["page-v1", "editor-v1"])
+def test_fragment_does_not_read_unused_header_catalog(monkeypatch, view):
+    from project_workflow.interfaces.ui.routes import pages
+    def unavailable(*args, **kwargs):
+        raise AssertionError("Header catalog must not block the fragment")
+    monkeypatch.setattr(pages, "load_service_catalog", unavailable)
+    response = client.get(editor_url(), headers={"X-Workflow-View": view})
+    assert response.status_code == 200
+    assert response.headers["X-Workflow-View"] == view
+    assert response.headers["Cache-Control"] == "private, no-store"
+
+
+def test_full_document_still_loads_header_catalog(monkeypatch):
+    from project_workflow.interfaces.ui.platform_services import ServiceCatalog
+    from project_workflow.interfaces.ui.routes import pages
+    calls = []
+    def catalog(*args, **kwargs):
+        calls.append(True)
+        return ServiceCatalog([], "runtime")
+    monkeypatch.setattr(pages, "load_service_catalog", catalog)
+    assert client.get("/").status_code == 200
+    assert calls == [True]
+
+
+@pytest.mark.parametrize("administration", [False, True])
+def test_controller_assets_are_immutable_unpersonalized_and_versioned(administration):
+    from hashlib import sha256
+
+    from project_workflow.interfaces.ui.controller_assets import page_controller_assets
+    urls = page_controller_assets(administration)
+    assert len(urls) == 4
+    for url in urls:
+        response = client.get(url)
+        assert response.status_code == 200
+        assert sha256(response.content).hexdigest() in url
+        assert response.headers["Cache-Control"] == "public, max-age=31536000, immutable"
+        assert "function(page, config)" in response.text
+        assert "{{" not in response.text and "{%" not in response.text
+        assert client.get(url.replace(url.split("/")[-2], "wrong-hash")).status_code == 404
+    assert client.get("/ui-assets/controllers/admin/wrong/../../sso.py").status_code == 404
+    assert client.get("/ui-assets/controllers/admin/wrong/unknown.js").status_code == 404
+
+
+def test_fragments_include_private_data_but_not_repeated_controller_code():
+    url = editor_url()
+    response = client.get(url, headers={"X-Workflow-View": "page-v1"})
+    data = json.loads(re.search(r"data-workflow-view-data>(.*?)</script>", response.text, re.S).group(1))
+    assert isinstance(data["workflows"], list)
+    assert "async function loadWorkflowEditor" not in response.text
+    assert "function selectWorkflow" not in response.text
+    full = client.get(url)
+    assert len(re.findall(r'<script src="/ui-assets/controllers/[^"]+" defer>', full.text)) == 4
+    assert 'data-base-toaster' in full.text
+
+
+@pytest.mark.parametrize("admin", [False, True])
+def test_route_states_use_base_frames_and_shell_identity(admin):
+    from project_workflow.interfaces.ui.controller_assets import page_controller_assets, page_controller_identity
+    response = client.get("/settings")
+    identity = page_controller_identity(admin)
+    assert identity[:-1] == page_controller_assets(admin)
+    assert re.fullmatch(r"shell-sha256:[0-9a-f]{64}", identity[-1])
+    assert len(re.findall(r'<template data-workflow-read-template="', response.text)) == 6
+    assert 'data-page-state="loading"' in response.text
+    assert 'data-page-state="error"' in response.text
+    for mode in ("wide", "reading", "detail-with-aside"):
+        assert f'data-workflow-read-template="loading-{mode}"' in response.text
+        assert f'data-workflow-read-template="error-{mode}"' in response.text

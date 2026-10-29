@@ -12,9 +12,7 @@ def _build_parallel_phase_blocks(phases: list[dict[str, Any]]) -> list[dict[str,
     normalized = [dict(phase) for phase in phases]
     groups = group_parallel_phases(
         normalized,
-        id_of=lambda phase: int(phase["id"]),
         execution_type_of=lambda phase: str(phase.get("execution_type", "sync")),
-        parallel_with_phase_id_of=lambda phase: phase.get("parallel_with_phase_id"),
     )
     blocks: list[dict[str, Any]] = []
     for index, group in enumerate(groups):

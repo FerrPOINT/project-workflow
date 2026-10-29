@@ -79,9 +79,9 @@ const document={createElement:tag=>new Node(tag),createElementNS:(_ns,tag)=>new 
 
 
 def test_hydrated_namespace_cards_show_names_without_an_extra_cli_command():
-    template = (Path(__file__).parents[1] / "project_workflow/interfaces/ui/templates/namespaces.html").read_text(
-        encoding="utf-8"
-    )
+    template = (
+        Path(__file__).parents[1] / "project_workflow/interfaces/ui/templates/controllers/namespaces.js"
+    ).read_text(encoding="utf-8")
     render = template[
         template.index("function renderNamespaceNav()") : template.index("function renderNamespacePagePicker()")
     ]
@@ -116,9 +116,9 @@ const pluralizeRu=()=> '0 задач';const selectNamespace=()=>{};
 
 
 def test_card_template_clones_keep_distinct_ids_one_callback_and_independent_marks():
-    template = (Path(__file__).parents[1] / "project_workflow/interfaces/ui/templates/namespaces.html").read_text(
-        encoding="utf-8"
-    )
+    template = (
+        Path(__file__).parents[1] / "project_workflow/interfaces/ui/templates/controllers/namespaces.js"
+    ).read_text(encoding="utf-8")
     renderer = template[
         template.index("function renderNamespaceNav()") : template.index("function renderNamespacePagePicker()")
     ]
@@ -197,10 +197,11 @@ const rows=[{label:'Первая профессия',dataset:{color:'#ffffff',ic
 
 def test_dynamic_marks_and_counts_preserve_identity_and_do_not_mutate_templates_or_records():
     root = Path(__file__).parents[1] / "project_workflow/interfaces/ui/templates"
-    page = (root / "namespaces.html").read_text(encoding="utf-8")
+    page = (root / "controllers/namespaces.js").read_text(encoding="utf-8")
     base = (root / "base.html").read_text(encoding="utf-8")
     render = page[page.index("function renderNamespaceNav()") : page.index("function renderNamespacePagePicker()")]
-    pluralize = base[base.index("function pluralizeRu(") : base.index("{% block extra_script %}")]
+    start = base.index("function pluralizeRu(")
+    pluralize = base[start : base.index("\n}\n", start) + 3]
     script = template_dom() + """
 const namespaceStore=[
  {id:17,name:'Same <name>',cli_command:'first',theme_icon:'workflow',theme_color:'#ffffff',task_count:1},
@@ -251,7 +252,7 @@ console.log(JSON.stringify({rows,selected,empty:nav.children.length}));
 
 
 def test_visual_icon_picker_keeps_glyphs_and_accessible_names_with_independent_clones():
-    page = (Path(__file__).parents[1] / "project_workflow/interfaces/ui/templates/namespaces.html").read_text(
+    page = (Path(__file__).parents[1] / "project_workflow/interfaces/ui/templates/controllers/namespaces.js").read_text(
         encoding="utf-8"
     )
     render = page[page.index("function renderNamespaceIconChoice(") : page.index("function currentPayload(")]

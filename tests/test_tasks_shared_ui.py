@@ -24,7 +24,7 @@ def task(**changes):
 
 def render_tasks(records):
     return env.get_template("tasks.html").render(
-        page="tasks", tasks=records, ui_base_path=lambda: "/workflow",
+        page="tasks", can_administer=False, tasks=records, ui_base_path=lambda: "/workflow",
         namespace_cookie_name="workflow_namespace_id", namespace_cookie_secure=False,
     )
 
