@@ -361,3 +361,17 @@ phase/instructions на 375/1920/2560. Проверены реальный compu
 пройденными этим запуском. Это автоматизированный project test с собственным
 TestClient, не authenticated IAB или установленный стенд. UI pin и installed
 runtime этим изменением не обновляются.
+
+
+## Source-кандидат UI0.3.27: радиусы контейнеров
+
+Точный producer указан в [.base-ui-revision](../.base-ui-revision):
+65e9b6e8814a7db0f7cb8fcec76a8869fb24c6f6. Штатный export обновил только
+base-ui.css и fingerprint.json; fonts/JS/macros и backend не изменены.
+Card, Disclosure, framed resource list и notifications используют card-radius,
+вложенные controls сохраняют control. Никакого product skin не добавлено.
+
+SSR fingerprint matches;43 template cases и39 subtests PASS. Native readback
+кнопка Base сохранена. Этот source gate не закрывает её authenticated live
+unknown-result/readback сценарий, всю browser matrix или установленный runtime.
+Private evidence: ui027-card-radius-20261029/gate. SDK/skills pins сохранены.

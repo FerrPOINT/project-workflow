@@ -532,7 +532,7 @@
 }
 .base-resource-list[data-variant="bordered"] {
   border: 1px solid var(--color-border);
-  border-radius: var(--base-radius);
+  border-radius: var(--base-radius-card);
   background: var(--color-surface);
 }
 .base-resource-list:empty {
@@ -2980,7 +2980,7 @@ body {
 .base-disclosure {
   min-width: 0;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--base-radius-card);
   background: var(--color-surface);
   font-size: var(--base-font-body);
   line-height: var(--base-line-body);
@@ -3076,7 +3076,7 @@ body {
   min-width: 0;
   overflow: hidden;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--base-radius-card);
   background: var(--color-background);
   color: var(--color-text-primary);
 }
@@ -3139,7 +3139,7 @@ body {
 }
 .base-toaster,
 .base-toaster[data-sonner-toaster][data-sonner-theme] {
-  --border-radius: var(--radius-lg);
+  --border-radius: var(--base-radius-card);
   font-family: var(--base-font-sans);
   --normal-bg: var(--color-surface);
   --normal-text: var(--color-text-primary);
@@ -3156,7 +3156,7 @@ body {
 ) {
   background: var(--color-surface);
   border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-lg);
+  border-radius: var(--base-radius-card);
   color: var(--color-text-primary);
   padding: var(--base-control-padding-inline);
   gap: 8px;
