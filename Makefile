@@ -3,7 +3,9 @@
 WORKFLOW_QUALITY_UV ?= uv run --python 3.11.15 --frozen --all-extras
 UV ?= $(WORKFLOW_QUALITY_UV)
 
-.PHONY: test unit integration slow release test-verbose test-integration coverage coverage-html lint lint-fix quality warnings compose-ready clean install-dev
+.PHONY: test unit integration slow release test-verbose test-integration coverage coverage-html lint lint-fix quality warnings compose-ready clean install-dev .workflow-quality
+
+FAST_QUALITY_GOALS = $(or $(filter test unit test-verbose lint quality warnings install-dev,$(MAKECMDGOALS)),test)
 
 # One report owner per Make invocation, including -j and reversed goal order.
 COVERAGE_OWNER = $(or $(firstword $(filter release coverage coverage-html,$(MAKECMDGOALS))),$@)
@@ -12,7 +14,13 @@ COVERAGE_OPTIONS = $(if $(and $(filter release coverage,$(MAKECMDGOALS)),$(filte
 
 # --- testing ---------------------------------------------------------------
 
-test unit test-verbose integration slow test-integration lint quality warnings compose-ready install-dev:
+test unit test-verbose lint quality warnings install-dev: .workflow-quality
+
+# A shared prerequisite runs once even for overlapping goals and make -j.
+.workflow-quality:
+	WORKFLOW_QUALITY_UV="$(WORKFLOW_QUALITY_UV)" python scripts/quality.py $(foreach goal,$(wordlist 2,$(words $(FAST_QUALITY_GOALS)),$(FAST_QUALITY_GOALS)),--also $(goal)) $(firstword $(FAST_QUALITY_GOALS))
+
+integration slow test-integration compose-ready:
 	WORKFLOW_QUALITY_UV="$(WORKFLOW_QUALITY_UV)" python scripts/quality.py $@
 
 release coverage coverage-html:

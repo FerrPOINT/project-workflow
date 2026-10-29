@@ -2,6 +2,15 @@
 
 Подготовка без тестов и HTML из готовых данных: [дополнительные команды](quality-auxiliary.md).
 
+Совместимые быстрые Make-цели используют одну quality operation: например,
+`make unit quality` сохраняет unit, Ruff, mypy и diff check без повторной
+одинаковой unit-команды. Прямой эквивалент: `python scripts/quality.py --also quality unit`.
+Опции `--also` ставятся перед основной целью; scoped pytest arguments с ними
+не совмещаются. Разные verbose/warnings-команды сохраняются отдельно.
+Integration/slow/release/coverage остаются отдельными ручными маршрутами.
+Для canonical uv environment готовится один раз внутри этой операции;
+пользовательский `WORKFLOW_QUALITY_UV` сохраняет собственную семантику.
+
 Обязательная политика уровней и обычные команды: [TESTING](TESTING.md).
 `python scripts/quality.py quality` выполняет reviewed unit + Ruff/mypy/diff.
 Make, PowerShell и CI используют один runner, Python 3.11.15 и frozen uv.lock.
