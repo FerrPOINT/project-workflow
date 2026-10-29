@@ -38,6 +38,7 @@ _RUNTIME_READ = "single_task_runtime_catalog_read"
 _CATALOG_TABLES = frozenset({
     "workflows", "workflow_modes", "profession_workflows", "projects", "phases",
     "phase_instructions", "phase_checks", "phase_evidence_requirements",
+    "workflow_catalog_publications",
 })
 
 
@@ -167,7 +168,7 @@ def _observe_profile(uow: SAUnitOfWork, catalog: dict, manifest: dict) -> Single
     for definition in catalog["workflows"]:
         role = definition["role_key"]
         workflow = installed_workflows.get(definition["key"])
-        if (workflow is None or workflow.id is None or workflow.active_catalog_version != 1
+        if (workflow is None or workflow.id is None or workflow.active_catalog_version < 1
             or workflow.name != config.MANAGED_NAMESPACE_WORKFLOW_NAME
             or workflow.description != definition["description"]):
             raise ValueError("Single-task installed workflow missing or divergent")
@@ -175,7 +176,15 @@ def _observe_profile(uow: SAUnitOfWork, catalog: dict, manifest: dict) -> Single
             key=definition["key"], name=definition["name"], description=definition["description"], role_key=role,
             modes=[ManagedMode.model_validate(mode) for mode in definition["modes"]],
         )
-        _assert_existing_workflow(uow, workflow, expected)
+        _assert_existing_workflow(uow, workflow, expected, catalog_version=1)
+        if workflow.active_catalog_version > 1:
+            # Baseline provenance is immutable. Text publications have their own
+            # receipts; never stamp mutable editor rows with the sealed v1 hash.
+            if manifest_sha256 != MANIFEST_SHA256:
+                raise ValueError("Retained native catalogs cannot publish configured revisions")
+            from project_workflow.application.catalog_publication import read_revision
+
+            read_revision(uow, workflow, workflow.active_catalog_version, selected=True)
         namespace = definition["namespace"]
         project = uow.projects.get_by_cli_command(namespace["cli_command"])
         identity = uow.projects.get_persisted_identity(project.id) if project and project.id else None
@@ -190,7 +199,9 @@ def _observe_profile(uow: SAUnitOfWork, catalog: dict, manifest: dict) -> Single
             or memberships.get(workflow.id) != 1):
             raise ValueError("Single-task installed namespace missing or divergent")
         modes = []
-        for mode, source_mode in zip(uow.workflows.list_modes(workflow.id), definition["modes"], strict=True):
+        for mode, source_mode in zip(
+            uow.workflows.list_modes(workflow.id, catalog_version=1), definition["modes"], strict=True,
+        ):
             if mode.id is None or mode.catalog_version != 1 or mode.name != source_mode["name"]:
                 raise ValueError("Single-task installed mode identity mismatch")
             modes.append({"mode_id": str(mode.id), "key": mode.key, "execution_scopes": mode.execution_scopes,

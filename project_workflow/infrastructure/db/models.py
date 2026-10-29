@@ -224,6 +224,32 @@ class WorkflowMode(Base):
     phases: Mapped[list[Phase]] = relationship("Phase", back_populates="mode", overlaps="phases,workflow,mode")
 
 
+class WorkflowCatalogPublication(Base):
+    """Publication receipts. Content is append-only; the workflow selects new work."""
+
+    __tablename__ = "workflow_catalog_publications"
+
+    workflow_id: Mapped[int] = mapped_column(ForeignKey("workflows.id"), primary_key=True)
+    catalog_version: Mapped[int] = mapped_column(primary_key=True)
+    parent_version: Mapped[int] = mapped_column(nullable=False)
+    operation_key: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
+    request_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    published_by_subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    published_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint("catalog_version > parent_version AND parent_version > 0", name="ck_catalog_publication_order"),
+        CheckConstraint(
+            "(published_by_subject IS NULL AND published_at IS NULL) OR "
+            "(published_by_subject IS NOT NULL AND length(trim(published_by_subject)) > 0 "
+            "AND published_at IS NOT NULL)",
+            name="ck_catalog_publication_author",
+        ),
+    )
+
+
 class Phase(Base):
     __tablename__ = "phases"
 
