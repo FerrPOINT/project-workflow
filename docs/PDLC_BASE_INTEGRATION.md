@@ -3,15 +3,22 @@
 ## Закреплённый UI и границы поставки
 
 Текущий общий UI определяется [`.base-ui-revision`](../.base-ui-revision).
-Source producer: `cdfac2bbcf61f82ff126df529d5759d425e872ea`, пакет 0.3.25,
-reference `dee0677b0616c0caf8d5df8276cd43c1e7bbc1dfa7d9b6ac3776c57fb7ae1b7d`.
+Source producer: `d7c1d8c3bd92cf888abf1546243fa31878c80269`, пакет 0.3.26,
+reference `0027de894be13a69a735145a83366fd1d4cc72fba2d360994520b6cd6dcb0d20`.
 Он объединяет Base #384 и expiry #386; #381 повторно не включается.
 SDK и skills pins независимы. SSR assets обновляются штатным Base exporter;
 сгенерированные стили, macros и fingerprints вручную не исправляются.
 Source commit и проверенный export не подтверждают установку или live-приёмку:
 это отдельно фиксирует отчёт выбранного окружения.
 
-Source qualification этого cohort: штатный SSR export/check и package snapshot
+Producer исправляет P1 React JWT clock-skew, не добавляя wire fields/grants.
+Штатный SSR export и --check из этого exact producer PASS; все 24 assets остались
+побайтово прежними. Поэтому Python source и прежние template/browser inputs не
+менялись: нижние scoped результаты переиспользованы, не запускались повторно.
+Независимое review через Main требуется до ready/merge; stand и PM03 pin не
+затронуты. Остальная theme/browser matrix остаётся follow-up.
+
+Предыдущая source qualification 0.3.25: штатный SSR export/check и package snapshot
 PASS; 81 scoped tests и 39 subtests PASS, включая 11 native browser cases.
 Это изолированные TestClient/SQLite fixtures, без установленного API или live
 агентов. Exporter нормализует текстовые font assets до LF, бинарные WOFF2
