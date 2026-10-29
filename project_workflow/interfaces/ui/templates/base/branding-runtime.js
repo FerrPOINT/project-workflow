@@ -1,3 +1,4 @@
+import { validMonogram } from "./branding-marks.js";
 import { isHex as hex, contrast, foreground } from "./branding-colors.js";
 import { brandingFavicon, paintBrandingMark } from "./branding-marks.js";
 import { DEFAULT_PLATFORM_NAME } from "./platform-title.js";
@@ -187,17 +188,7 @@ function validMark(mark, branding) {
     return false;
   if (mark.kind === "image") return !!mark.image;
   if (mark.kind !== "letters") return true;
-  const letters = Array.from(
-    new Intl.Segmenter("ru", { granularity: "grapheme" }).segment(mark.letters),
-    (part) => part.segment,
-  );
-  return (
-    letters.length === mark.count &&
-    letters.every(
-      (letter) =>
-        !/[\s\p{Cc}]/u.test(letter) && !/^[\p{M}\p{C}]+$/u.test(letter),
-    )
-  );
+  return validMonogram(mark);
 }
 function validExpandedDesign(design, branding) {
   if (

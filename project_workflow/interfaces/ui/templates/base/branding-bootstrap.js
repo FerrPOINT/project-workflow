@@ -40,28 +40,51 @@ const brandingIcons = {
   "flask": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"64\" height=\"64\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-flask-conical\" aria-hidden=\"true\"><path d=\"M14 2v6a2 2 0 0 0 .245.96l5.51 10.08A2 2 0 0 1 18 22H6a2 2 0 0 1-1.755-2.96l5.51-10.08A2 2 0 0 0 10 8V2\"></path><path d=\"M6.453 15h11.094\"></path><path d=\"M8.5 2h7\"></path></svg>"
 };
 
+/** @template T @param { {design:{marks:{common:T,light:T|null,dark:T|null} }} } document @param {string} theme @returns {T} */
 function effectiveMark(document, theme) {
   return (
     document.design.marks[theme === "light" ? "light" : "dark"] ??
     document.design.marks.common
   );
 }
-function markLetters(document, mark) {
+/** @param {string} value @returns {string[]} */
+function graphemes(value) {
   return Array.from(
-    new Intl.Segmenter("ru", { granularity: "grapheme" }).segment(
-      mark.kind === "letters"
-        ? mark.letters
-        : (document.product_short_name || "PDLC").toUpperCase().padEnd(4, "P"),
-    ),
+    new Intl.Segmenter("ru", { granularity: "grapheme" }).segment(value),
     (part) => part.segment,
   );
 }
+/** @param { {letters:string,count:number} } mark @returns {boolean} */
+function validMonogram(mark) {
+  const letters = graphemes(mark.letters);
+  return (
+    new TextEncoder().encode(mark.letters).length <= 128 &&
+    letters.length === mark.count &&
+    letters.every(
+      (letter) =>
+        !/[\s\p{Cc}]/u.test(letter) && !/^[\p{M}\p{C}]+$/u.test(letter),
+    )
+  );
+}
+/** @param { {product_short_name:string} } document @param { {kind:string,letters:string,count:number} } mark @returns {string[]} */
+function markLetters(document, mark) {
+  return graphemes(
+    mark.kind === "letters" && validMonogram(mark)
+      ? mark.letters
+      : (document.product_short_name || DEFAULT_PLATFORM_NAME)
+          .toUpperCase()
+          .padEnd(4, DEFAULT_PLATFORM_NAME[0]),
+  );
+}
+/** @param { {count:number} } mark @param {boolean} compact @param {boolean} failed @returns {number} */
 function markCount(mark, compact, failed) {
   return failed || (compact && mark.count === 4) ? 1 : mark.count;
 }
+/** @param {number} count @param {number} size @returns {number} */
 function markFontSize(count, size) {
   return size * (count === 4 ? 0.36 : count === 2 ? 0.38 : 0.56);
 }
+/** @param {number} index @param {number} size */
 function fourLetterOffset(index, size) {
   return {
     x: size * 0.04 * (index % 2 === 0 ? 1 : -1),
@@ -137,7 +160,7 @@ async function brandingFavicon(brand, theme) {
   }
   const count = markCount(mark, brand.design.favicon.mode !== "logo", failed);
   ctx.fillStyle = foreground;
-  ctx.font = `700 ${brand.design.favicon.mode === "logo" ? markFontSize(count, 64) : count === 2 ? 24 : 36}px sans-serif`;
+  ctx.font = `700 ${markFontSize(count, 64)}px sans-serif`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   const letters = markLetters(brand, mark).slice(0, count);
@@ -172,12 +195,13 @@ function paintBrandingMark(element, branding, theme) {
   element.style.overflow = "hidden";
   element.setAttribute("role", "img");
   element.setAttribute("aria-label", "Знак платформы");
-  const letters = () => {
+  const letters = (failed = false) => {
+    const count = markCount(mark, false, failed);
     const grid = doc.createElement("span");
-    grid.style.fontSize = markFontSize(mark.count, size) + "px";
+    grid.style.fontSize = markFontSize(count, size) + "px";
     grid.style.fontWeight = "700";
     grid.style.lineHeight = "1";
-    if (mark.count === 4) {
+    if (count === 4) {
       Object.assign(grid.style, {
         display: "grid",
         width: "100%",
@@ -202,9 +226,7 @@ function paintBrandingMark(element, branding, theme) {
           grid.appendChild(cell);
         });
     } else
-      grid.textContent = markLetters(branding, mark)
-        .slice(0, mark.count)
-        .join("");
+      grid.textContent = markLetters(branding, mark).slice(0, count).join("");
     element.replaceChildren(grid);
   };
   if (mark.kind === "image" && mark.image) {
@@ -215,7 +237,7 @@ function paintBrandingMark(element, branding, theme) {
       height: "100%",
       objectFit: mark.fit,
     });
-    image.onerror = letters;
+    image.onerror = () => letters(true);
     image.src = mark.image.url;
     element.replaceChildren(image);
   } else if (mark.kind === "icon") {
@@ -416,17 +438,7 @@ function validMark(mark, branding) {
     return false;
   if (mark.kind === "image") return !!mark.image;
   if (mark.kind !== "letters") return true;
-  const letters = Array.from(
-    new Intl.Segmenter("ru", { granularity: "grapheme" }).segment(mark.letters),
-    (part) => part.segment,
-  );
-  return (
-    letters.length === mark.count &&
-    letters.every(
-      (letter) =>
-        !/[\s\p{Cc}]/u.test(letter) && !/^[\p{M}\p{C}]+$/u.test(letter),
-    )
-  );
+  return validMonogram(mark);
 }
 function validExpandedDesign(design, branding) {
   if (

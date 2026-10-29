@@ -2,16 +2,16 @@
   "schemaVersion": 1,
   "package": "@pdlc/ui",
   "files": {
-    "base-ui.css": "33959d6763a8c6c158db7382a1c9ce19369d0174b608060060af4164b874f52d",
+    "base-ui.css": "46cfcfb19bf877652fda8202f34509cd71ba728e91c091b991971b54dd163079",
     "base-ui.js": "bd9819cd3c2f7c6683a39564e69dc71f4b9d45de352c9eccf33af94742b3c120",
     "theme-preference.js": "4aee12717396de28489da47013bcce9024c1d1b0d664d75c73f7c121720492ea",
     "macros.html": "5c62c28467ab50a9fe78bcbd21eb0df00e00bc9c85cdbe2d69e739406659852e",
     "branding-colors.js": "6865a4bda39f15b2953f132d29344ae86ce6866b806851ef7e6a658b7ca7b8d3",
     "branding-icons.js": "4f89a6e968986759e6637958679092c3abba896c7bb1c4e6b9009633e31f7600",
-    "branding-marks.js": "adb7951b76d1e7983b38b4e5f03a16465090bd8285b7c26ceb7209dd8a548b41",
-    "branding-runtime.js": "27ea808f5bff9a06e594539dd7a03a9380dd821435628e43ee93bfd065bb280f",
+    "branding-marks.js": "7141dd6110d5eea21d0124d7ceea34fcc73958363f4769e3d7b8cfe6d1ed347a",
+    "branding-runtime.js": "33afa5a712323d43e33490d7e9a16e3452e5eb83956fb9f1beb2f6e3a48bb2fd",
     "platform-title.js": "6a2d28f5d911b2b0c7b9fddae41cc5a0ea76642998b28b928ee3fe00ef6e9d75",
-    "branding-bootstrap.js": "2ace2356062fe5fc36bcb3271db2ac443a214be70fcf21d707d4ca2d78f6c652",
+    "branding-bootstrap.js": "3185b268f48db8b317476d33374acb92010119bdde29e87a38f792d100b17550",
     "choice-runtime.js": "7628d897af815e9b995852237bfe12a24554c980876cf774b18bbce41e800dcf",
     "clipboard-runtime.js": "49b12c768d10fe18acb5a8db86f6857be8842c6c041aa05ae877b9f175defbad",
     "textarea-runtime.js": "78a2c8a4871c2a7a262afea815ed33ec5076a1c5422e2da489bd98c023aa6efd",
@@ -19,12 +19,12 @@
     "platform-bridge.js": "273e09ddd02c45c3b91540d64cfa5e0b36512e1a39bf7bb3e620b99feefd2ad2",
     "platform-ssr.js": "627bff1d15cf7b0cf952976023d74a06d91959dbc53311202abe1b21f7c5e077",
     "platform-navigation.js": "dda0b4476d1985b69af81a5aeeb2a1583eea3345f777435ac8c37eaa336d6298",
-    "fonts/inter-LICENSE.txt": "05f6002bf3f86f0040a2b0cec4d103346ba12f6659817838196f76a218d55724",
+    "fonts/inter-LICENSE.txt": "3b0a5fca3d17942cde889069889dedbbbd075e9b599968c82a95f4d944e9b345",
     "fonts/inter-cyrillic-wght-normal.woff2": "71d5ee93cc1e9f1d520a3a8b66456de18c7879d8df09d57fcd2eaff75fef0075",
     "fonts/inter-latin-wght-normal.woff2": "3100e775e8616cd2611beecfa23a4263d7037586789b43f035236a2e6fbd4c62",
-    "fonts/noto-sans-LICENSE.txt": "3fd9e5b7fba33ef659e56f6958c3af1430712a68182a8aa236f0f83ca44c7fe8",
+    "fonts/noto-sans-LICENSE.txt": "54ec7b5a35310ad66f9f3091426f7028484cbf9ae1ab5da30122ee412a3009e1",
     "fonts/noto-sans-cyrillic-wght-normal.woff2": "6ab64433de6077ca5ad31b05420450ce986a616a4ea47b6ad16f3217055dafc3",
     "fonts/noto-sans-latin-wght-normal.woff2": "51ca196f49a33e79e7870ff88ebd2829a3f627a51e7d690986618f0e7ad2b52d",
-    "fonts/sources.json": "ecadba1004bec8aed28bfc2595b4d4d623b41c55ee4c0980cea6b09420bdfa48"
+    "fonts/sources.json": "4a82ab55d946b0a1097d2f28316ea1944d54ca33e51fe4199c16ca6c360dd5b4"
   }
 }

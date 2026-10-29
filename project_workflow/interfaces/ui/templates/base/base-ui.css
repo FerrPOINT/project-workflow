@@ -3375,7 +3375,8 @@ body {
   height: var(--shell-control-min);
   padding: 0;
 }
-.base-button:focus-visible {
+.base-button:focus-visible,
+.base-button:has(> input[type="file"]:focus-visible) {
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;
 }

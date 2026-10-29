@@ -3,10 +3,21 @@
 ## Закреплённый UI и границы поставки
 
 Текущий общий UI определяется [`.base-ui-revision`](../.base-ui-revision).
+Source producer: `cdfac2bbcf61f82ff126df529d5759d425e872ea`, пакет 0.3.25,
+reference `dee0677b0616c0caf8d5df8276cd43c1e7bbc1dfa7d9b6ac3776c57fb7ae1b7d`.
+Он объединяет Base #384 и expiry #386; #381 повторно не включается.
 SDK и skills pins независимы. SSR assets обновляются штатным Base exporter;
 сгенерированные стили, macros и fingerprints вручную не исправляются.
 Source commit и проверенный export не подтверждают установку или live-приёмку:
 это отдельно фиксирует отчёт выбранного окружения.
+
+Source qualification этого cohort: штатный SSR export/check и package snapshot
+PASS; 81 scoped tests и 39 subtests PASS, включая 11 native browser cases.
+Это изолированные TestClient/SQLite fixtures, без установленного API или live
+агентов. Exporter нормализует текстовые font assets до LF, бинарные WOFF2
+не меняет; все 24 экспортированных assets согласованы с fingerprint.
+SDK/skills pins и Python source неизменны. PostgreSQL/coverage и authenticated
+приёмка не повторялись для этой UI-поставки и не объявляются пройденными.
 
 Ключи задач используют resource_list_title/description technical/tone. Общая choice label и mobile header geometry принадлежат Base; backing control, данные профессий, маршруты и события сохраняются Workflow.
 
