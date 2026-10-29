@@ -390,3 +390,138 @@ def test_independent_checks_precede_artifact_in_standalone_plan(tmp_path, monkey
     assert [gate["id"] for gate in candidate["gates"]] == [
         "source:unit", "docs:static", "bundle:build",
     ]
+
+
+class QualityBatchTest(unittest.TestCase):
+    def test_overlapping_fast_targets_execute_each_identical_command_once(self):
+        from scripts import quality
+
+        selected = quality.operation_commands(("unit", "test", "quality", "lint", "install-dev"), prepared=True)
+        self.assertEqual(len(selected), 4)
+        self.assertEqual(sum("pytest" in command for command in selected), 1)
+        self.assertEqual([command[2] for command in selected[:-1]], ["pytest", "ruff", "mypy"])
+        self.assertEqual(selected[-1], ["git", "diff", "--check"])
+        self.assertFalse(any("--cov=project_workflow" in command or "postgres" in command for command in selected))
+
+    def test_different_pytest_modes_and_requested_order_are_preserved(self):
+        from scripts import quality
+
+        selected = quality.operation_commands(("lint", "quality", "unit"), prepared=True)
+        self.assertEqual([command[2] for command in selected[:-1]], ["ruff", "mypy", "pytest"])
+        modes = quality.operation_commands(("unit", "warnings", "test-verbose"), prepared=True)
+        self.assertEqual(len(modes), 3)
+        self.assertIn("-v", modes[-1])
+        self.assertIn("error::ResourceWarning", modes[1])
+
+    def test_batch_bootstrap_is_one_frozen_operation(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        from scripts import quality
+
+        with patch.dict(quality.os.environ, {"WORKFLOW_QUALITY_UV": quality.UV}), \
+                patch.object(quality.sys, "argv", ["quality.py", "--also", "quality", "--also", "lint", "unit"]), \
+                patch.object(quality.subprocess, "run", return_value=SimpleNamespace(returncode=0)) as run:
+            self.assertEqual(quality.main(), 0)
+        run.assert_called_once()
+        command = run.call_args.args[0]
+        self.assertEqual(command[:len(quality.UV.split())], quality.UV.split())
+        self.assertEqual(command[-6:], ["--prepared", "--also", "quality", "--also", "lint", "unit"])
+
+    def test_prepared_batch_stops_on_first_failed_check(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        from scripts import quality
+
+        with patch.object(quality.sys, "argv", ["quality.py", "--prepared", "--also", "quality", "unit"]), \
+                patch.object(quality.sys, "version_info", (3, 11, 15)), \
+                patch.object(quality.subprocess, "run", return_value=SimpleNamespace(returncode=17)) as run:
+            self.assertEqual(quality.main(), 17)
+        run.assert_called_once()
+        self.assertIn("pytest", run.call_args.args[0])
+
+    def test_prepared_batch_dispatches_the_requested_union_without_uv(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        from scripts import quality
+
+        with patch.object(quality.sys, "argv", ["quality.py", "--prepared", "--also", "quality", "unit"]), \
+                patch.object(quality.sys, "version_info", (3, 11, 15)), \
+                patch.object(quality.subprocess, "run", return_value=SimpleNamespace(returncode=0)) as run:
+            self.assertEqual(quality.main(), 0)
+        self.assertEqual([call.args[0] for call in run.call_args_list],
+                         quality.operation_commands(("unit", "quality"), prepared=True))
+        self.assertEqual(run.call_count, 4)
+
+    def test_secondary_install_dev_preserves_custom_bootstrap(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        from scripts import quality
+
+        with patch.dict(quality.os.environ, {"WORKFLOW_QUALITY_UV": "custom-uv --frozen"}), \
+                patch.object(quality.sys, "argv", ["quality.py", "--also", "install-dev", "unit"]), \
+                patch.object(quality.subprocess, "run", return_value=SimpleNamespace(returncode=0)) as run:
+            self.assertEqual(quality.main(), 0)
+        run.assert_called_once()
+        self.assertEqual(run.call_args.args[0][:2], ["custom-uv", "--frozen"])
+        self.assertIn("--prepared", run.call_args.args[0])
+
+    def test_batch_does_not_accept_manual_targets_or_scoped_pytest_arguments(self):
+        from contextlib import redirect_stderr
+        from io import StringIO
+        from unittest.mock import patch
+
+        from scripts import quality
+
+        for arguments in (["--also", "release", "unit"], ["--also", "unit", "integration"],
+                          ["--also", "lint", "unit", "--", "tests/test_domain_entities.py"]):
+            with self.subTest(arguments=arguments), redirect_stderr(StringIO()), \
+                    patch.object(quality.sys, "argv", ["quality.py", *arguments]), \
+                    patch.object(quality.subprocess, "run") as run, self.assertRaises(SystemExit) as error:
+                quality.main()
+            self.assertEqual(error.exception.code, 2)
+            run.assert_not_called()
+
+    def test_make_routes_overlapping_goals_once_without_preparing_or_testing_an_app(self):
+        import os
+        import shutil
+        import subprocess
+        import tempfile
+        from pathlib import Path
+
+        make = shutil.which("make")
+        if os.name != "posix" or make is None:
+            self.skipTest("POSIX GNU Make is required for the inert Make routing fixture")
+        version = subprocess.run([make, "--version"], capture_output=True, text=True, check=True, timeout=10)
+        if "GNU Make" not in version.stdout:
+            self.skipTest("This routing fixture requires GNU Make")
+        source = Path(__file__).resolve().parents[1] / "Makefile"
+        cases = (
+            ([], ["scripts/quality.py test"]),
+            (["unit", "quality"], ["scripts/quality.py --also quality unit"]),
+            (["quality", "unit", "lint"], ["scripts/quality.py --also unit --also lint quality"]),
+            (["unit", "test"], ["scripts/quality.py --also test unit"]),
+            (["integration"], ["scripts/quality.py integration"]),
+            (["coverage", "coverage-html"], ["scripts/quality.py --html-report coverage"]),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            binary = root / "bin"
+            binary.mkdir()
+            python = binary / "python"
+            python.write_text('#!/bin/sh\nprintf "%s\\n" "$*" >> "$WORKFLOW_MAKE_TEST_LOG"\n', encoding="utf-8")
+            python.chmod(0o700)
+            log = root / "calls"
+            environment = {**os.environ, "PATH": str(binary) + os.pathsep + os.environ.get("PATH", ""),
+                           "WORKFLOW_MAKE_TEST_LOG": str(log), "WORKFLOW_QUALITY_UV": "fixture-uv",
+                           "MAKEFLAGS": "", "MFLAGS": "", "GNUMAKEFLAGS": "", "MAKEFILES": "", "MAKEOVERRIDES": ""}
+            for goals, expected in cases:
+                with self.subTest(goals=goals):
+                    log.write_text("", encoding="utf-8")
+                    result = subprocess.run([make, "-j2", "-f", str(source), *goals], cwd=root,
+                                            env=environment, capture_output=True, text=True, timeout=10)
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertEqual(log.read_text(encoding="utf-8").splitlines(), expected)
