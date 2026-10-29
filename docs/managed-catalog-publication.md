@@ -180,3 +180,57 @@ Actionable remaining boundaries, not PM blockers:
   sealed artifacts, actual terminal delivery, Rework or deployment acceptance.
   Those remain exact-cohort synthetic/integration/live gates, not a reason to
   hold the accepted PM catalog or the present UI157 work.
+
+### E: Explicit Downstream Start
+
+Post-publication read-only review of Tracker main `b54f9e6c` found **no current
+operation that explicitly starts downstream configured delivery from a completed
+PM Backlog/Ready task**. This is a missing producer, not permission to mutate a
+stage or manually assign each role:
+
+- `backend/api/src/routes/sdlc.rs:151` registers only
+  `GET /api/v1/issues/{id}/sdlc/analysis-intent`; `task-tracker sdlc intent` is
+  also GET-only. The repository returns 404 outside Analysis; it never creates
+  an intent on read (`backend/infra/src/sdlc.rs:1065`).
+- The existing writer is `POST /api/v1/issues/{id}/sdlc/lifecycle`, with commands
+  Reconcile, EnsureQueued, Reserve, Heartbeat, BindRun and Complete. There is no
+  explicit start/activation command. EnsureQueued/Reserve reject configured
+  Draft/Backlog (`backend/infra/src/sdlc_lifecycle.rs:1107`).
+- `TASKTRACKER_SDLC__SINGLE_TASK_PROJECT_IDS` is a project allowlist, not an
+  activation operation. `backend/infra/src/sdlc_candidates.rs:23` excludes
+  configured tasks before pagination even in an enabled project.
+- `backend/infra/src/sdlc.rs:79` explicitly labels `seed_analysis_fixture`
+  `cfg(test)`: it imports a synthetic initial technical snapshot under an owned
+  DB, briefly disables/restores the initial canonical trigger, and is **not** a
+  production PM-to-Analyst transition. These tests cannot prove automatic E.
+- Current SQL (`configured_critical_lifecycle.sql:380`) already allows technical
+  progression only through the exact existing lifecycle transaction permit and
+  retained PM completion. It does not authorize initial Analyst as a PM publish
+  side effect. Existing trigger/result/owner guards must remain.
+
+Minimal separate **Tracker producer feature**, not implemented here:
+
+1. One explicit authorized start operation for the opted-in test project/task,
+   with original-key readback and exact CAS on current Backlog/Ready, owner,
+   requirements revision/hash/confirmation, retained PM completion and routing/
+   source generation. Deny an unapproved project, stale consent/current state,
+   active conflicting execution and legacy/native history conversion.
+2. In one existing owner transaction, create/retain the real Analysis intent and
+   initial canonical queued lifecycle/operation evidence under the existing
+   permits and outbox. Exact replay returns the same receipt; a changed body
+   conflicts. PM completion itself must still create zero intents.
+3. Integrate discovery/admission for **explicitly started** configured tasks with
+   the existing scheduler and typed terminal/proposal path. Do not simply remove
+   the global configured exclusion or add a Fleet planner. Existing automatic
+   Complete-to-next-role/Rework handling, not human per-role advance, owns the
+   rest of the cycle.
+4. Prove no-start means no intent/candidate, one authorized start means one
+   intent/queue receipt, concurrent/replayed/stale/foreign-owner cases are fenced,
+   and the existing auto flow reaches later roles/Rework without manual advance.
+   Synthetic fixtures are source evidence only; actual E remains a separate
+   exact-cohort live acceptance.
+
+Any Tracker command/DTO or forward migration needed for that producer requires
+its own reviewed package and migration-slot registration; published SQL must
+not be rewritten. This report makes no Tracker source changes and blocks neither
+the accepted PM cohort on `620f45cd` nor Workflow publication source delivery.
