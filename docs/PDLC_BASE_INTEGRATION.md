@@ -3,13 +3,16 @@
 ## Закреплённый UI и границы поставки
 
 Текущий общий UI определяется [`.base-ui-revision`](../.base-ui-revision).
-Source producer: `2de0f72b2c28f3d0930808a1c58a941f9c6be31e`, пакет 0.3.26,
-reference `0bb6a3074c8188354c79a5b4bdea9654d3c31a60a6b1eec3033c20ebc0f1488f`.
-Он объединяет Base #384 и expiry #386; #381 повторно не включается.
-SDK и skills pins независимы. SSR assets обновляются штатным Base exporter;
-сгенерированные стили, macros и fingerprints вручную не исправляются.
-Source commit и проверенный export не подтверждают установку или live-приёмку:
-это отдельно фиксирует отчёт выбранного окружения.
+Source producer: `7ad53fbee14c9c8df38d5aa17acd553288ef19d9`, пакет0.3.28,
+reference `2a78538e33c78db0d713ff81d4f4ff0c143a0783ea831c2b44238894ac36efe3`.
+Общий Toaster учитывает существующий dock offset; native SSR использует тот же
+контракт. SDK/skills pins и продуктовые обработчики не меняются. CSS/JS/fonts
+получаются штатным exporter Base. Fresh --check подтвердил совпадение assets
+с producer; повторный export при одинаковых bytes не выполнялся. Native/browser
+evidence и authenticated Workflow проверяются отдельно. Source pin не подтверждает установку или authenticated
+Workflow unknown-result/readback. Полная field/app матрица остаётся открытой.
+
+## Предыдущие source-квалификации
 
 Финальный producer 2de0f72b сохраняет owner-clock fix d7c1d8c3 и bounded
 fetch/body wait. Его SSR export/check также PASS; 24 assets byte-identical.
