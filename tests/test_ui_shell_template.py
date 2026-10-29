@@ -65,6 +65,26 @@ class SharedShellTemplateTests(TestCase):
                 self.assertIn("← К фазам &lt;73&gt;", html)
                 self.assertNotIn("base-state-retry-icon", html.split("<body", 1)[1])
 
+    def test_workflow_unknown_write_readback_uses_shared_button_without_changing_owner_action(self):
+        for can_administer in [True, False]:
+            with self.subTest(can_administer=can_administer):
+                html = self.render_shell(
+                    [], template="workflows.html", workflows=[],
+                    selected_workflow=None, selected_namespace=None,
+                    phases=[], phase_blocks=[], modes=[], phase_count=0,
+                    can_administer=can_administer,
+                )
+                elements = Elements(html).elements
+                retry = [attrs for tag, attrs in elements
+                         if tag == "button" and attrs.get("onclick") == "retryWorkflowReadback()"]
+                self.assertEqual(len(retry), 1)
+                self.assertEqual(retry[0]["type"], "button")
+                self.assertIn("base-control", retry[0].get("class", "").split())
+                self.assertIn("base-button", retry[0].get("class", "").split())
+                error = next(attrs for _, attrs in elements if attrs.get("id") == "workflowReadbackError")
+                self.assertEqual(error["role"], "alert")
+                self.assertIn("hidden", error)
+
     def test_dashboard_metrics_reuse_base_instead_of_a_product_skin(self):
         source = (Path(__file__).parents[1] / "project_workflow/interfaces/ui/templates/dashboard.html").read_text(
             encoding="utf-8"

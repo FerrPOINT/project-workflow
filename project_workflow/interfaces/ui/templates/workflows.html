@@ -115,7 +115,7 @@
 <script type="application/json" id="workflowEditorState">{{ {"workflows": workflows, "selected_workflow_id": selected_workflow.id if selected_workflow else none, "can_administer": can_administer}|tojson }}</script>
 <div id="workflowReadbackError" role="alert" hidden>
   Изменение могло сохраниться. Обновите состояние перед следующей операцией.
-  <button type="button" class="btn btn-secondary" onclick="retryWorkflowReadback()">Обновить состояние</button>
+  {{ base_ui.button("Обновить состояние", attributes={"onclick": "retryWorkflowReadback()"}) }}
 </div>
   <div class="workflow-picker" id="workflowPicker">
     {{ base_ui.label_control("workflowSelect", "Воркфлоу") }}

@@ -266,3 +266,7 @@ OIDC display остановлен и удалён, новый демонстра
 UI 0.3.19 принят по точному Base SHA `ceb4508ac110bac6860353b648df41afc340471f`; reference `29be12ac599f7433bf6fe0403bac0d24d232fe4df496c1b5b5dd348b632d9085`. SDK/skills pins сохранены. Source adoption не обновляет установленный runtime.
 
 Base владеет расчётом читаемой интерфейсной палитры, document-local начальной темой и изолированным preview. Исходные HEX сохраняются, цвета фирменного знака не подменяются. Ссылки поддержки и документации отображаются общим AccountMenu. Общие исправления выполняются у владельца Base.
+
+## Остаточный readback control — 2026-10-29
+
+Кнопка «Обновить состояние» в workflowReadbackError переведена с native `btn btn-secondary` на штатный `base_ui.button`. Текст, type=button, hidden alert и вызов retryWorkflowReadback сохранены; логика неизвестного результата записи не менялась. Это исправление оформления общего контрола, без нового API, pin или изменения runtime. Проверены RED на прежней разметке для administrative/readonly context, затем 43 template tests / 39 subtests и общий source primitive guard PASS. Browser-проверка именно readback-состояния Workflow остаётся открыта; установленный runtime не обновлялся.
