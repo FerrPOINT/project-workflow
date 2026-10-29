@@ -23,7 +23,7 @@ def write(path: Path, value: object) -> None:
         output.write("\n")
 
 
-def prepare(root: Path) -> None:
+def prepare(root: Path, *, direct: bool = False) -> None:
     root.mkdir(exist_ok=False)
     (root / "calls").mkdir()
     for index, pair in enumerate(CASES):
@@ -32,7 +32,7 @@ def prepare(root: Path) -> None:
         for name, text in fixture(index).items():
             with (folder / name).open("x", encoding="utf-8", newline="\n") as output:
                 output.write(text)
-    write(root / "workflows.json", catalog())
+    write(root / "workflows.json", catalog(direct=direct))
     digest = hashlib.sha256((root / "workflows.json").read_bytes()).hexdigest()
     write(root / "manifest.json", {"schema": "workflow-cli-file-sandbox/v1", "run_id": str(uuid.uuid4()),
                                     "catalog_sha256": digest,
@@ -127,7 +127,7 @@ def verify_operation_readbacks(writes: list[dict], calls: list[dict], records: l
             raise ValueError(f"Actual CLI operation readback is missing or differs for {case}: {key}")
 
 
-def finish(root: Path) -> None:
+def finish(root: Path, *, selected_case: str | None = None) -> None:
     from oracle import check_calculator
 
     manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
@@ -140,8 +140,13 @@ def finish(root: Path) -> None:
     calls.sort(key=lambda call: call["started_at"])
     results = []
     executions = set()
+    case_names = [case_id(*pair) for pair in CASES]
+    if selected_case is not None and selected_case not in case_names:
+        raise ValueError("Unknown test case")
     for index, pair in enumerate(CASES):
         name = case_id(*pair)
+        if selected_case is not None and name != selected_case:
+            continue
         own = [call for call in calls if call["case"] == name]
         if not own:
             raise ValueError(f"CLI was not invoked for {name}")
@@ -183,7 +188,11 @@ def finish(root: Path) -> None:
             raise ValueError(f"Files fail independent checks for {name}: {failures}")
         results.append({"case": name, "task": history["task"], "namespace_id": history["namespace_id"],
                         "status": "PASS", "evaluations": len(records)})
-    write(root / "result.json", {"schema": "workflow-cli-file-proof/v1", "status": "PASS", "cases": results})
+    write(root / (f"result-{selected_case}.json" if selected_case else "result.json"), {
+        "schema": "workflow-cli-file-proof/v1", "status": "PASS", "cases": results,
+        "scope": "single-case" if selected_case else "all-eight-modes",
+        "not_run": [name for name in case_names if name != selected_case] if selected_case else [],
+    })
 
 
 def main() -> int:
@@ -200,15 +209,17 @@ def main() -> int:
     parser.add_argument("--requirements-sha256")
     parser.add_argument("--before-history-id", type=int)
     parser.add_argument("--incomplete-probe", action="store_true")
+    parser.add_argument("--direct", action="store_true",
+                        help="Prepare file-only contracts; business prerequisites stay outside the trial")
     args = parser.parse_args()
     root = args.root.resolve()
     if args.action == "prepare":
-        prepare(root)
+        prepare(root, direct=args.direct)
         print("Prepared files only; register test workflows/tasks through the normal PDLC1 APIs. NOT RUN.")
         return 0
     if args.action == "finish":
-        finish(root)
-        print("CLI history and independent file checks: PASS for all eight modes")
+        finish(root, selected_case=args.case)
+        print("CLI history and independent file checks: PASS for " + (args.case or "all eight modes"))
         return 0
     if not args.case or not args.task:
         parser.error("step/history require the test case and an actually assigned task key")

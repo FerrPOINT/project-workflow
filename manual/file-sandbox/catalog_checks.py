@@ -60,6 +60,36 @@ class CatalogChecks(unittest.TestCase):
                 self.assertEqual(len(uow.workflows.list()), 7)
                 self.assertEqual(observe_installation(uow), self.installed)
 
+    def test_direct_catalog_is_separate_and_keeps_the_file_criteria(self):
+        original = catalog()
+        direct = catalog(direct=True)
+        for old, new in zip(original["workflows"], direct["workflows"], strict=True):
+            self.assertNotEqual(old["key"], new["key"])
+            for old_mode, new_mode in zip(old["modes"], new["modes"], strict=True):
+                for old_phase, new_phase in zip(old_mode["phases"], new_mode["phases"], strict=True):
+                    self.assertEqual(old_phase["checks"], new_phase["checks"])
+                    self.assertEqual(old_phase["evidence"], new_phase["evidence"])
+                    self.assertNotIn("подтверждение конкретной редакции", new_phase["instructions"][0]["description"])
+        content = json.dumps(direct).encode()
+        digest = hashlib.sha256(content).hexdigest()
+        with SAUnitOfWork(self.engine) as uow:
+            old_bindings = register(uow, self.content, self.digest)
+            direct_bindings = register(uow, content, digest)
+            uow.commit()
+            self.assertEqual(register(uow, self.content, self.digest), old_bindings)
+            self.assertEqual(register(uow, content, digest), direct_bindings)
+            self.assertEqual(observe_installation(uow), self.installed)
+            self.assertEqual(len(uow.workflows.list()), 21)
+            for table in (m.Task, m.TaskRuntimeAssignment, m.TaskStepHistoryEntry):
+                self.assertEqual(uow.session.scalar(select(func.count()).select_from(table)), 0)
+
+    def test_mixed_catalog_names_are_refused(self):
+        mixed = catalog(direct=True)
+        mixed["workflows"][0] = catalog()["workflows"][0]
+        content = json.dumps(mixed).encode()
+        with SAUnitOfWork(self.engine) as uow, self.assertRaises(ValueError):
+            register(uow, content, hashlib.sha256(content).hexdigest())
+
 
 if __name__ == "__main__":
     unittest.main()

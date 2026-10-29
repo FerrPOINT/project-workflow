@@ -26,6 +26,10 @@ def register(uow, content: bytes, expected_sha256: str) -> dict:
     installed = observe_installation(uow)
     professions = {binding.role_key: int(binding.namespace_id) for binding in installed.bindings}
     definitions = catalog["workflows"]
+    prefixes = {definition["key"].split(":", 1)[0] for definition in definitions}
+    if len(prefixes) != 1 or not prefixes <= {"file-sandbox-v1", "file-sandbox-direct-v1"}:
+        raise ValueError("One explicit sandbox catalog identity required")
+    prefix = next(iter(prefixes))
     if [definition["role_key"] for definition in definitions] != list(professions):
         raise ValueError("Exactly seven installed professions required")
     existing = {workflow.key: workflow for workflow in uow.workflows.list()}
@@ -33,7 +37,7 @@ def register(uow, content: bytes, expected_sha256: str) -> dict:
     if any(present) and not all(present):
         raise ValueError("Partial sandbox catalog requires operator review")
     for definition in definitions:
-        if definition["key"] != "file-sandbox-v1:" + definition["role_key"]:
+        if definition["key"] != prefix + ":" + definition["role_key"]:
             raise ValueError("Explicit sandbox workflow identity required")
         for mode in definition["modes"]:
             ManagedMode.model_validate(mode)

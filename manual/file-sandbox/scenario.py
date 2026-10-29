@@ -40,7 +40,7 @@ def total_for(index: int) -> int:
     return 2 * (100 + index) + 3 * (50 + index) + 4 * (25 + index)
 
 
-def phases(index: int) -> list[dict]:
+def phases(index: int, *, include_business_flow: bool = True) -> list[dict]:
     role, mode = CASES[index]
     label = case_id(role, mode)
     rules = (
@@ -51,7 +51,7 @@ def phases(index: int) -> list[dict]:
         "Не редактируй файлы проверяющего модуля и не подменяй его результаты. "
     )
     before_final = ""
-    if role == "project_manager":
+    if role == "project_manager" and include_business_flow:
         before_final = (
             " Перед финальным отчётом прочитай текущий контекст задачи и все страницы обсуждения через "
             "task-tracker CLI. Опубликуй редакцию требований к этому файловому заданию штатной командой "
@@ -126,7 +126,7 @@ def phases(index: int) -> list[dict]:
     ]
 
 
-def catalog() -> dict:
+def catalog(*, direct: bool = False) -> dict:
     workflows = []
     for role in dict(CASES):
         modes = []
@@ -140,11 +140,12 @@ def catalog() -> dict:
                         "execution_scopes": [
                             "business" if role in {"project_manager", "analyst", "architect"} else "delivery"
                         ],
-                        "phases": phases(index),
+                        "phases": phases(index, include_business_flow=not direct),
                     }
                 )
         workflows.append(
-            {"key": f"file-sandbox-v1:{role}", "role_key": role, "name": f"Песочница: {role}", "modes": modes}
+            {"key": f"{'file-sandbox-direct-v1' if direct else 'file-sandbox-v1'}:{role}",
+             "role_key": role, "name": f"{'Прямой CLI' if direct else 'Песочница'}: {role}", "modes": modes}
         )
     return {"schema": "workflow-file-sandbox/v1", "test_only": True, "workflows": workflows}
 
