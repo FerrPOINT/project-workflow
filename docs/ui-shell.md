@@ -343,3 +343,21 @@ Scoped результат: 81 template/controller/effective-read/pending-save te
 Данные phase/profession проверяются в owner HTML config, синтаксис и поведение —
 в фактическом вынесенном controller. Ruff изменённых тестов прошёл. Это не
 замена полному PostgreSQL/coverage и IAB gate итогового комплекта.
+
+Динамические effective instructions клонируют inert SSR template, созданный
+штатными section_header(level=3) и prose(preserve_line_breaks=true) Base.
+Ранее controller собирал похожие classes сам: h3 терял data-level и получал
+неверный размер, а base-prose ставился на сам список вместо общего контейнера.
+Теперь заголовки, переносы и интервалы принадлежат macro; Workflow сохраняет
+данные, ol/ul, parallel/skills и textContent без исполнения полученного HTML.
+Показ readonly не создаёт controls и не меняет admission.
+
+На этом diff прошли 15 адресных effective/template/controller tests и Ruff;
+11 native browser cases были исключены из первого промежуточного запуска.
+Затем через общий execution slot исполнены 6 configured readonly cases:
+phase/instructions на 375/1920/2560. Проверены реальный computed размер h3,
+общий prose-контейнер, 1/3 списков, отсутствие edit controls, записей и overflow;
+все 6 screenshots просмотрены. Оставшиеся 5 browser cases не объявляются
+пройденными этим запуском. Это автоматизированный project test с собственным
+TestClient, не authenticated IAB или установленный стенд. UI pin и installed
+runtime этим изменением не обновляются.

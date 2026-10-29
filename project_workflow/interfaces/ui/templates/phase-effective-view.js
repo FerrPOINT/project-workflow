@@ -12,18 +12,13 @@ page.ready(async () => {
       sections.push(['checks', 'Проверки', 'description'], ['evidence', 'Подтверждения', 'item']);
     }
     for (const [key, title, field] of sections) {
-      const section = document.createElement('section');
-      section.className = 'base-page-stack';
-      const heading = document.createElement('h3');
-      heading.className = 'base-section-title';
+      const section = document.getElementById('phaseEffectiveSectionTemplate').content.firstElementChild.cloneNode(true);
+      const heading = section.querySelector('[data-effective-section-title]');
       heading.textContent = title;
       const list = document.createElement(key === 'instructions' ? 'ol' : 'ul');
-      list.className = 'base-prose';
       for (const item of phase[key] || []) {
         const row = document.createElement('li');
         const text = document.createElement('p');
-        text.style.whiteSpace = 'pre-wrap';
-        text.style.overflowWrap = 'anywhere';
         text.textContent = item[field];
         row.appendChild(text);
         if (key === 'instructions' && item.execution_type === 'parallel') {
@@ -38,7 +33,7 @@ page.ready(async () => {
         }
         list.appendChild(row);
       }
-      section.append(heading, list);
+      section.querySelector('[data-effective-section-list]').appendChild(list);
       target.appendChild(section);
     }
   }
