@@ -5,10 +5,12 @@ import re
 from fastapi.testclient import TestClient
 
 from project_workflow.interfaces.ui import app
+from tests._ui_source_helpers import page_source
 
 
 def workflow_ids(html):
-    return {item["id"] for item in json.loads(re.search(r"const workflowStore = (.*);", html).group(1))}
+    data = json.loads(re.search(r"data-workflow-view-data>(.*?)</script>", html, re.S).group(1))
+    return {item["id"] for item in data["workflows"]}
 
 
 def test_profession_collection_excludes_neighbors_on_load_reload_and_save():
@@ -31,9 +33,10 @@ def test_profession_collection_excludes_neighbors_on_load_reload_and_save():
             assert len(own) == 2 and workflow in own
             rows = client.get(f"/api/workflows?namespace_id={profession}").json()["workflows"]
             assert all(row["namespace_count"] == 1 for row in rows)
-            html = client.get(f"/workflows?namespace_id={profession}&workflow_id={workflow}").text
+            response = client.get(f"/workflows?namespace_id={profession}&workflow_id={workflow}")
+            html = response.text
             assert workflow_ids(html) == own
-            assert "namespace_id', String(professionId)" in html
+            assert "namespace_id', String(professionId)" in page_source(client, response)
             assert 'id="newWorkflowButton"' in html
             saved = client.put(f"/api/workflows/{workflow}?namespace_id={profession}", json={"description": "Saved"})
             assert saved.status_code == 200

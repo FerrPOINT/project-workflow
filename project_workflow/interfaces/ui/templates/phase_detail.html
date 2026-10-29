@@ -1,28 +1,37 @@
 {% extends "base.html" %}
+{% import "workflow-cards.html" as workflow_cards %}
 {% block page_layout %}detail-with-aside{% endblock %}
 
 {% block title %}{{ phase.name }} — Workflow Engine{% endblock %}
 {% block header_title %}Детали фазы{% endblock %}
 
 {% block extra_style %}
+{% include "workflow-cards.css" %}
 /* ── Structured phase editor ───────────────────────────────────────── */
-.phase-editor-layout{display:grid;grid-template-columns:220px minmax(0,1fr);gap:32px;align-items:start;max-width:1280px;margin:0 auto}
-.phase-outline{position:sticky;top:calc(var(--shell-header-height) + 16px);max-height:calc(100dvh - var(--shell-header-height) - 32px);overflow:auto;border-right:1px solid var(--border);padding:8px 20px 8px 0}
+.phase-editor-layout{display:grid;grid-template-columns:176px minmax(0,1fr);gap:24px;align-items:start;width:100%;min-width:0}
+.phase-outline{position:sticky;top:calc(var(--shell-header-height) + 16px);max-height:calc(100dvh - var(--shell-header-height) - 32px);overflow:auto;border-right:1px solid var(--border);padding:8px 12px 8px 0;min-width:0}
 .phase-outline-title{margin:0 0 10px}
-.phase-editor-main{min-width:0;max-width:980px}
+.phase-editor-main{min-width:0}
 .phase-section-picker{display:none;margin-bottom:16px}
 .phase-editor-section{scroll-margin-top:calc(var(--shell-header-height) + 24px)}
 .wiki-page{max-width:none;margin:0;padding:0}
-@media(max-width:960px){.phase-editor-layout{display:block;max-width:920px}.phase-outline{display:none}.phase-section-picker{display:block}.phase-editor-main{max-width:none}}
+@media(max-width:960px){.phase-editor-layout{display:block}.phase-outline{display:none}.phase-section-picker{display:block}}
 
-.phase-text-row{display:flex;align-items:flex-start;gap:12px}
+.phase-text-row{display:flex;align-items:center;gap:12px}
 .phase-text-content{flex:1;min-width:0}
-.phase-text-icon{flex-shrink:0}
+.phase-text-icon{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
 .phase-add-action{align-self:flex-start}
 
-.timeline-badges input.skill-candidate{width:180px}
 .wiki-page .timeline-row{grid-template-columns:minmax(0,1fr);gap:8px}
-.wiki-page .phase-order-controls{width:100%;flex-direction:row;flex-wrap:nowrap;justify-content:flex-start;gap:4px;padding-top:0}
+.instruction-card-footer{margin-top:8px}
+.instruction-skills-field{display:grid;gap:4px;margin-top:8px;min-width:0}
+.instruction-skills{display:flex;align-items:flex-start;flex-wrap:wrap;gap:8px;min-width:0}
+.instruction-skill-labels{display:flex;align-items:center;flex-wrap:wrap;gap:6px;flex:1 1 100%;min-width:0}
+.instruction-skill-chip{display:inline-flex;align-items:center;gap:0;min-width:0;max-width:100%}
+.instruction-skill-chip > .base-badge{min-width:0}
+.skill-add-item{display:inline-flex;flex:none;min-width:0;max-width:100%}
+.skill-add-form{display:inline-flex;align-items:center;max-width:100%;min-width:0}
+.skill-add-form[hidden],.skill-add-trigger[hidden]{display:none}
 
 {% endblock %}
 
@@ -32,7 +41,7 @@
 {% set delete_label = ('Удалить новую проверку' if checking else 'Удалить новое подтверждение') if fresh else ('Удалить проверку ' if checking else 'Удалить подтверждение ') ~ ordinal %}
 <li{% if item.id is not none %} data-id="{{ item.id }}"{% endif %}>
 {% call base_ui.resource_list_row(class_name='phase-text-row') %}
-  <span class="phase-text-icon" aria-hidden="true">{{ '○' if checking else '📄' }}</span>
+  <span class="phase-text-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false" aria-hidden="true">{% if checking %}<circle cx="12" cy="12" r="8"/>{% else %}<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M8 13h8M8 17h6"/>{% endif %}</svg></span>
 {% if can_administer %}
   <textarea data-base-autosize class="inline-input phase-text-content base-control base-textarea" rows="1" data-field="description" aria-label="{{ field_label }}" onblur="{{ 'saveNewTextItem(this)' if fresh else 'scheduleSave()' }}" data-appearance="inline">{{ item.description }}</textarea>
   <button type="button" class="base-control base-button base-icon-control item-delete" data-variant="destructive-outline" data-size="icon" aria-label="{{ delete_label }}" onclick="deleteItem(this)">×</button>
@@ -85,37 +94,13 @@
 {% endif %}
 {% endset %}
 {{ base_ui.page_header(heading=phase_heading, actions=phase_back) }}
-{% if rollback_target_phase %}
-    <dl>{{ base_ui.description_item('Откат:', rollback_target_phase.name ~ ' · ' ~ rollback_target_phase.code, layout='inline') }}</dl>
-{% endif %}
-    <div class="execution-row">
-{% if can_administer %}
-      <button type="button" class="base-control base-button execution-toggle" data-variant="outline" aria-label="Параллельное выполнение фазы" data-mode="{{ phase.execution_type or 'sync' }}" aria-pressed="{{ 'true' if phase.execution_type == 'parallel' else 'false' }}" onclick="togglePhaseMode(this)">
-        {% if phase.execution_type == 'parallel' %}
-        <span data-execution-label>⚡ параллельно</span>
-        {% else %}
-        <span data-execution-label>⏱ последовательно</span>
-        {% endif %}
-      </button>
-      <div id="parallelPartnerRow" {% if phase.execution_type != 'parallel' %}hidden{% endif %}>
-        {% call base_ui.field('parallelPartnerSelect', 'Связать с:') %}
-        <select data-base-choice id="parallelPartnerSelect" onchange="scheduleSave()">
-          <option value="">— изолированная фаза —</option>
-          {% for candidate in parallel_candidates %}
-          <option value="{{ candidate.id }}" {% if phase.parallel_with_phase_id == candidate.id %}selected{% endif %}>{{ candidate.name }} · {{ candidate.code }}</option>
-          {% endfor %}
-        </select>
-        {% endcall %}
-      </div>{% else %}
-      {{ base_ui.badge('параллельно' if phase.execution_type == 'parallel' else 'последовательно', 'info' if phase.execution_type == 'parallel' else 'neutral') }}
-{% endif %}
-    </div>
+
   </div>
 
   <!-- Instructions — managed like phases list with inline edit, reorder, add, delete -->
 {% if can_administer %}
-  <div class="base-page-actions">
-    <button type="button" class="btn btn-secondary" id="phaseSaveEditor" onclick="saveEditorChanges()">Сохранить правки</button>
+  <div class="base-page-actions" id="phaseSaveRecovery" hidden>
+    <button type="button" class="btn btn-secondary" id="phaseSaveEditor" hidden onclick="saveEditorChanges()">Повторить сохранение</button>
     <button type="button" class="btn btn-secondary" id="phaseSaveReadback" hidden onclick="reconcilePhaseSave()">Проверить сохранение</button>
   </div>
 {% endif %}
@@ -124,37 +109,31 @@
 
     {% macro instruction_body(i, instruction_count) %}
     <div class="timeline-row" >
-{% if can_administer %}
-      <div class="phase-order-controls">
-        <button type="button" class="base-control base-button base-icon-control phase-move-btn move-up-btn" data-variant="secondary" data-size="icon" onclick="moveInstruction(this, -1)" aria-label="Поднять инструкцию {{ i.step_num }} выше">↑</button>
-        <button type="button" class="base-control base-button base-icon-control phase-add-btn" data-variant="outline" data-size="icon" onclick="addInstructionAfter(this)" aria-label="Добавить инструкцию после {{ i.step_num }}">+</button>
-        <button type="button" class="base-control base-button base-icon-control phase-move-btn move-down-btn" data-variant="secondary" data-size="icon" onclick="moveInstruction(this, 1)" aria-label="Опустить инструкцию {{ i.step_num }} ниже">↓</button>
-        <button type="button" class="base-control base-button base-icon-control phase-delete-btn" data-variant="destructive-outline" data-size="icon" onclick="deleteInstruction(this)" aria-label="Удалить инструкцию {{ i.step_num }}">×</button>
-      </div>
-{% endif %}
       <div class="timeline-card base-card base-card-content" data-instruction-id="{{ i.id }}" data-step-num="{{ i.step_num }}" data-type="{{ i.execution_type }}">
 {% if can_administer %}
         <textarea data-base-autosize class="timeline-name-input base-control base-textarea" rows="1" data-field="description" data-original-description="{{ i.description }}" aria-label="Описание инструкции {{ i.step_num }}" onblur="saveInstructionDescription(this)" data-appearance="inline">{{ i.description }}</textarea>
-        <div class="execution-row">
-          <button type="button" class="base-control base-button" data-variant="outline" aria-pressed="{{ 'true' if i.execution_type == 'parallel' else 'false' }}" onclick="toggleInstructionType(this)" aria-label="Параллельное выполнение инструкции {{ i.step_num }}">
-            {% if i.execution_type == 'parallel' %}⚡ параллельно{% else %}⏱ последовательно{% endif %}
-          </button>
-        </div>
 {% else %}
         {% call base_ui.prose() %}<p>{{ i.description }}</p>{% endcall %}
-        {{ base_ui.badge('параллельно' if i.execution_type == 'parallel' else 'последовательно', 'info' if i.execution_type == 'parallel' else 'neutral') }}
 {% endif %}
-        <div class="timeline-badges">
-          {% for s in i.skills or [] %}
-          {% call base_ui.badge(tone='info') %}
-            <span data-instruction-skill="{{ s }}">{{ s }}</span>
+        <div class="instruction-skills-field">
+          <div class="base-label" id="instruction-skills-label-{{ i.id }}">Навыки</div>
+        <div class="instruction-skills" role="group" aria-labelledby="instruction-skills-label-{{ i.id }}">
+          <div class="instruction-skill-labels" role="list" aria-label="Навыки инструкции {{ i.step_num }}">
+            {% for s in i.skills or [] %}{{ workflow_cards.skill_chip(s, i.step_num, can_administer) }}{% endfor %}
 {% if can_administer %}
-            <button type="button" class="base-control base-button base-icon-control skill-remove-btn" data-variant="ghost" data-size="icon" data-skill="{{ s }}" onclick="removeSkillFromInstruction(this)" aria-label="Убрать навык {{ s }} из инструкции {{ i.step_num }}">×</button>
+            <span class="skill-add-item" role="listitem">{{ base_ui.badge_button('+', tone='info', class_name='skill-add-trigger', aria_label='Добавить навык к инструкции ' ~ i.step_num, aria_controls='instruction-skill-form-' ~ i.id, title='Добавить навык') }}
+          <form method="post" class="skill-add-form" id="instruction-skill-form-{{ i.id }}" hidden aria-label="Добавление навыка к инструкции {{ i.step_num }}">
+            {{ base_ui.badge_input(tone='info', class_name='skill-candidate', placeholder='Навык', aria_label='Название нового навыка к инструкции ' ~ i.step_num, size=6) }}
+          </form>
+            </span>
 {% endif %}
-          {% endcall %}
-          {% endfor %}
+          </div>
+        </div>
+        </div>
+        <div class="workflow-card-footer instruction-card-footer">
+          {{ base_ui.badge('параллельно' if i.execution_type == 'parallel' else 'последовательно', 'info' if i.execution_type == 'parallel' else 'neutral') }}
 {% if can_administer %}
-          <input class="skill-candidate base-control base-input" type="text" placeholder="Добавить навык" aria-label="Добавить навык к инструкции {{ i.step_num }}" onchange="addSkillToInstruction(this)">
+          {{ workflow_cards.actions('instruction', i.step_num, parallel=i.execution_type == 'parallel', first=i.step_num == 1, last=i.step_num == instruction_count) }}
 {% endif %}
         </div>
       </div>
@@ -165,25 +144,22 @@
       {% set runs = phase.instructions|group_instructions %}
       {% for run in runs %}
         {% if run|length > 1 %}
-          <div class="timeline-block timeline-parallel-group base-card base-card-content">
-            {{ base_ui.badge('⚡ параллельно', 'info', class_name='timeline-parallel-label') }}
+          {% call workflow_cards.parallel_group('Параллельная группа инструкций') %}
+            {{ base_ui.badge('Параллельная группа', 'info', class_name='timeline-parallel-label') }}
             {% for i in run %}
               <div class="timeline-item" data-instruction-id="{{ i.id }}" data-step-num="{{ i.step_num }}" data-type="{{ i.execution_type }}">
                 {{ instruction_body(i, phase.instructions|length) }}
-                <div class="timeline-arrow"{% if loop.last %} hidden{% endif %}>↓</div>
               </div>
             {% endfor %}
-          </div>
+          {% endcall %}
         {% else %}
           {% set i = run[0] %}
           <div class="timeline-block">
             <div class="timeline-item" data-instruction-id="{{ i.id }}" data-step-num="{{ i.step_num }}" data-type="{{ i.execution_type }}">
               {{ instruction_body(i, phase.instructions|length) }}
-              <div class="timeline-arrow" hidden>↓</div>
             </div>
           </div>
         {% endif %}
-        <div class="timeline-arrow timeline-arrow-block"{% if loop.last %} hidden{% endif %}>↓</div>
       {% else %}
         <div class="empty-state">{{ base_ui.state('empty', 'Нет инструкций') }}</div>
       {% endfor %}
@@ -212,7 +188,8 @@
   {% endfor %}
 {% if can_administer %}
   <template id="instructions-empty-template"><div class="empty-state">{{ base_ui.state('empty', 'Нет инструкций') }}</div></template>
-  <template id="instruction-parallel-label-template">{{ base_ui.badge('⚡ параллельно', 'info', class_name='timeline-parallel-label') }}</template>
+  <template id="instruction-skill-chip-template">{{ workflow_cards.skill_chip('', 0, true) }}</template>
+  <template id="instruction-parallel-group-template">{% call workflow_cards.parallel_group('Параллельная группа инструкций') %}{{ base_ui.badge('Параллельная группа', 'info', class_name='timeline-parallel-label') }}{% endcall %}</template>
 {% endif %}
 
     </div>
@@ -221,763 +198,5 @@
 </div>
 {% endblock %}
 
-{% block extra_script %}
-{% if can_administer %}
-const phaseId = {{ phase.id }};
-let phaseDraft = null;
-let phaseSignature = '';
-let confirmedPhase = null;
-let unknownPhaseSave = null;
-let mutationPending = 0;
-let mutationNeedsReadback = false;
-let mutationRequiresReload = false;
-let savingStopped = false;
-const instructionDrafts = new Map();
-const unknownInstructionSaves = new Map();
-window.hasUnsavedWorkflowChanges = () => mutationPending > 0 || mutationNeedsReadback || [...document.querySelectorAll('.skill-candidate')].some(input => input.value.trim()) || !!phaseDraft?.dirty || [...instructionDrafts.values()].some(draft => draft.dirty);
-
-function instructionDraft(input) {
-  const id = input.closest('.timeline-card').dataset.instructionId;
-  if (!instructionDrafts.has(id)) instructionDrafts.set(id, window.PdlcPlatformNavigation.createDraftTracker());
-  return instructionDrafts.get(id);
-}
-
-function currentPhaseSignature() {
-  const fields = [...document.querySelectorAll('.wiki-header [data-field], #checks-list [data-field], #evidence-list [data-field]')].map(input => input.value);
-  return JSON.stringify([fields, document.querySelector('.execution-toggle')?.dataset.mode, document.getElementById('parallelPartnerSelect')?.value]);
-}
-function notePhaseEdit() {
-  const current = currentPhaseSignature();
-  if (phaseDraft && current !== phaseSignature) { savingStopped = false; phaseDraft.edit(); phaseSignature = current; }
-}
-function updatePhaseSaveStatus() {
-  const button = document.getElementById('phaseSaveReadback');
-  if (button) button.hidden = !unknownPhaseSave && !unknownInstructionSaves.size && !mutationNeedsReadback && !mutationRequiresReload;
-  const save = document.getElementById('phaseSaveEditor');
-  if (save) { save.disabled = mutationPending > 0 || !!phaseDraft?.pending || [...instructionDrafts.values()].some(draft => draft.pending); save.setAttribute('aria-busy', String(save.disabled)); }
-}
-const selectedNamespaceId = {{ selected_namespace.id if selected_namespace else 'null' }};
-const phaseSectionIds = ['phase-overview', 'phase-instructions', 'phase-checks', 'phase-evidence'];
-let phaseSectionNavigationLock = null;
-
-function setActivePhaseSection(sectionId) {
-  if (!phaseSectionIds.includes(sectionId)) return;
-  document.querySelectorAll('.phase-outline .base-section-navigation-item').forEach((link) => {
-    if (link.hash.slice(1) === sectionId) link.setAttribute('aria-current', 'location');
-    else link.removeAttribute('aria-current');
-  });
-  const select = document.getElementById('phaseSectionSelect');
-  if (select && select.value !== sectionId) { select.value = sectionId; window.PdlcChoice?.refreshChoice(select); }
-}
-
-function syncPhaseSectionUrl(sectionId, historyMode) {
-  if (historyMode === 'none') return;
-  const url = new URL(window.location.href);
-  url.hash = sectionId;
-  const nextUrl = url.pathname + url.search + url.hash;
-  const currentUrl = window.location.pathname + window.location.search + window.location.hash;
-  if (nextUrl === currentUrl) return;
-  const method = historyMode === 'replace' ? 'replaceState' : 'pushState';
-  window.PdlcPlatformNavigation.syncRoute(nextUrl, method === 'replaceState');
-}
-
-function jumpToPhaseSection(sectionId, historyMode = 'push') {
-  if (!phaseSectionIds.includes(sectionId)) return;
-  const section = document.getElementById(sectionId);
-  if (!section) return;
-  phaseSectionNavigationLock = sectionId;
-  section.scrollIntoView({behavior: 'auto', block: 'start'});
-  setActivePhaseSection(sectionId);
-  syncPhaseSectionUrl(sectionId, historyMode);
-}
-
-function releasePhaseSectionNavigationLock() {
-  phaseSectionNavigationLock = null;
-}
-
-function restorePhaseSectionFromLocation() {
-  const requestedSection = window.location.hash.slice(1);
-  const sectionId = phaseSectionIds.includes(requestedSection)
-    ? requestedSection
-    : 'phase-overview';
-  jumpToPhaseSection(sectionId, 'none');
-}
-
-function initializePhaseOutline() {
-  document.querySelectorAll('.phase-outline .base-section-navigation-item').forEach((link) => {
-    link.addEventListener('click', (event) => {
-      event.preventDefault();
-      jumpToPhaseSection(link.hash.slice(1));
-    });
-  });
-  document.getElementById('phaseSectionSelect')?.addEventListener('change', (event) => {
-    jumpToPhaseSection(event.target.value);
-  });
-  const sections = phaseSectionIds.map((id) => document.getElementById(id)).filter(Boolean);
-  const observer = new IntersectionObserver(() => {
-    if (phaseSectionNavigationLock) {
-      setActivePhaseSection(phaseSectionNavigationLock);
-      return;
-    }
-    const anchor = 96;
-    const atPageEnd = window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2;
-    const activeSection = atPageEnd
-      ? sections[sections.length - 1]
-      : sections.reduce((current, section) => (
-          section.getBoundingClientRect().top <= anchor ? section : current
-        ), sections[0]);
-    if (activeSection) setActivePhaseSection(activeSection.id);
-  }, {rootMargin: '-84px 0px -58% 0px', threshold: [0, .1, .5]});
-  page.cleanup(()=>observer.disconnect());
-  sections.forEach((section) => observer.observe(section));
-  const requestedSection = window.location.hash.slice(1);
-  if (phaseSectionIds.includes(requestedSection)) {
-    const frame=requestAnimationFrame(() => jumpToPhaseSection(requestedSection, 'replace'));
-    page.cleanup(()=>cancelAnimationFrame(frame));
-  }
-  page.on(window,'popstate', restorePhaseSectionFromLocation);
-  page.on(window,'wheel', releasePhaseSectionNavigationLock, {passive: true});
-  page.on(window,'touchstart', releasePhaseSectionNavigationLock, {passive: true});
-  page.on(window,'pointerdown', releasePhaseSectionNavigationLock, {passive: true});
-  page.on(window,'keydown', releasePhaseSectionNavigationLock);
-}
-
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
-}
-
-function normalizeSkillNames(raw = []) {
-  const seen = new Set();
-  const normalized = [];
-  for (const item of raw || []) {
-    const name = String(item || '').trim();
-    if (!name || seen.has(name)) continue;
-    seen.add(name);
-    normalized.push(name);
-  }
-  return normalized;
-}
-
-function phaseApiUrl(path) {
-  const url = new URL(path, window.location.origin);
-  if (selectedNamespaceId !== null) {
-    url.searchParams.set('namespace_id', String(selectedNamespaceId));
-  }
-  return url.pathname + url.search;
-}
-
-/* ---------- Phase header ---------- */
-function setPhaseMode(el, mode) {
-  const b = el.querySelector('[data-execution-label]');
-  el.dataset.mode = mode;
-  el.setAttribute('aria-pressed', String(mode === 'parallel'));
-  if (mode === 'parallel') {
-    b.textContent = '⚡ параллельно';
-  } else {
-    b.textContent = '⏱ последовательно';
-  }
-  const partnerRow = document.getElementById('parallelPartnerRow');
-  if (partnerRow) partnerRow.hidden = mode !== 'parallel';
-  if (mode !== 'parallel') {
-    const partnerSelect = document.getElementById('parallelPartnerSelect');
-    if (partnerSelect) { partnerSelect.value = ''; window.PdlcChoice?.refreshChoice(partnerSelect); }
-  }
-}
-
-async function togglePhaseMode(el) {
-  if (el.dataset.saving === 'true') return;
-  const previousMode = el.dataset.mode || 'sync';
-  const nextMode = previousMode === 'sync' ? 'parallel' : 'sync';
-  setPhaseMode(el, nextMode);
-  notePhaseEdit();
-  el.dataset.saving = 'true';
-  el.setAttribute('aria-busy', 'true');
-  try {
-    await savePhase();
-  } finally {
-    delete el.dataset.saving;
-    el.removeAttribute('aria-busy');
-  }
-}
-
-/* ---------- Instructions list (like phases) ---------- */
-function getInstructionItems() {
-  return Array.from(document.querySelectorAll('#instructionsTimeline .timeline-item'));
-}
-
-function renderInstructionTimeline(items) {
-  const timeline = document.getElementById('instructionsTimeline');
-  if (!timeline) return;
-  if (items.length === 0) {
-    timeline.replaceChildren(document.getElementById('instructions-empty-template').content.cloneNode(true));
-    return;
-  }
-  timeline.innerHTML = '';
-  let idx = 0;
-  while (idx < items.length) {
-    const group = [items[idx]];
-    idx++;
-    while (idx < items.length && (items[idx].dataset.type || 'sync') === 'parallel') {
-      group.push(items[idx]);
-      idx++;
-    }
-    const isParallelGroup = group.length > 1;
-    const block = document.createElement('div');
-    block.className = 'timeline-block' + (isParallelGroup ? ' timeline-parallel-group base-card base-card-content' : '');
-    if (isParallelGroup) {
-      block.appendChild(document.getElementById('instruction-parallel-label-template').content.cloneNode(true));
-    }
-    group.forEach((item, groupIndex) => {
-      const innerArrow = item.querySelector('.timeline-arrow');
-      if (innerArrow) innerArrow.hidden = !(isParallelGroup && groupIndex < group.length - 1);
-      block.appendChild(item);
-    });
-    timeline.appendChild(block);
-    const blockArrow = document.createElement('div');
-    blockArrow.className = 'timeline-arrow timeline-arrow-block';
-    blockArrow.textContent = '↓';
-    blockArrow.hidden = idx >= items.length;
-    timeline.appendChild(blockArrow);
-  }
-  timeline.querySelectorAll('textarea[data-base-autosize]').forEach(field => window.PdlcTextarea?.initTextareaAutosize(field));
-}
-
-let instructionOrderSaving = false;
-
-function updateInstructionControls() {
-  const items = getInstructionItems();
-  items.forEach((item, idx) => {
-    const up = item.querySelector('.move-up-btn');
-    const down = item.querySelector('.move-down-btn');
-    if (up) up.disabled = instructionOrderSaving || idx === 0;
-    if (down) down.disabled = instructionOrderSaving || idx === items.length - 1;
-  });
-}
-
-async function persistInstructionOrder() {
-  const ids = getInstructionItems().map((item) => parseInt(item.dataset.instructionId, 10));
-  try {
-    const result = await requestPhaseDetail(phaseApiUrl(`{{ ui_base_path() }}/api/phases/${phaseId}/instructions/reorder`), {
-      method: 'PUT',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({instruction_ids: ids}),
-    });
-    if (!result || !result.resp.ok || !result.data.ok) {
-      showToast('Не удалось сохранить порядок инструкций', 'error');
-      return false;
-    }
-    showToast('Порядок инструкций сохранён', 'success');
-    return true;
-  } catch (_error) {
-    showToast('Не удалось сохранить порядок инструкций', 'error');
-    return false;
-  }
-}
-
-async function moveInstruction(button, direction) {
-  if (instructionOrderSaving) return;
-  const item = button.closest('.timeline-item');
-  if (!item) return;
-  const items = getInstructionItems();
-  const currentIndex = items.indexOf(item);
-  const targetIndex = currentIndex + direction;
-  if (currentIndex < 0 || targetIndex < 0 || targetIndex >= items.length) return;
-  const reordered = [...items];
-  const [moved] = reordered.splice(currentIndex, 1);
-  reordered.splice(targetIndex, 0, moved);
-  instructionOrderSaving = true;
-  try {
-    renderInstructionTimeline(reordered);
-    updateInstructionControls();
-    if (!await persistInstructionOrder()) {
-      renderInstructionTimeline(items);
-    }
-  } finally {
-    instructionOrderSaving = false;
-    updateInstructionControls();
-  }
-}
-
-async function requestPhaseDetail(url, options, trackedDraft = false) {
-  if (mutationNeedsReadback || mutationRequiresReload) { showToast('Сначала проверьте результат изменения и обновите страницу', 'error'); return null; }
-  mutationPending++;
-  updatePhaseSaveStatus();
-  try {
-    const resp = await fetch(url, options);
-    const data = await resp.json().catch(() => ({}));
-    if (!trackedDraft && (resp.status >= 500 || (resp.ok && typeof data.ok !== 'boolean'))) { mutationNeedsReadback = true; mutationRequiresReload = true; }
-    return {resp, data};
-  } catch (_error) {
-    if (!trackedDraft) { mutationNeedsReadback = true; mutationRequiresReload = true; }
-    showRequestError();
-    return null;
-  } finally {
-    mutationPending--;
-    updatePhaseSaveStatus();
-    window.PdlcPlatformNavigation.refreshDrafts?.();
-  }
-}
-
-async function addInstructionAfter(button) {
-  const item = button.closest('.timeline-item');
-  if (!item) return;
-  const stepNum = getInstructionItems().indexOf(item) + 2;
-  button.disabled = true;
-  try {
-    const result = await requestPhaseDetail(phaseApiUrl('{{ ui_base_path() }}/api/instructions'), {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({phase_id: phaseId, description: 'Новая инструкция', step_num: stepNum}),
-    });
-    if (!result) return;
-    const {resp, data} = result;
-    if (!resp.ok || !data.ok) {
-      showToast(data.error || 'Не удалось добавить инструкцию', 'error');
-      return;
-    }
-    window.PdlcPlatformNavigation.reload();
-  } finally {
-    button.disabled = false;
-  }
-}
-
-async function addInstructionLast() {
-  const timeline = document.getElementById('instructionsTimeline');
-  const items = getInstructionItems();
-  const stepNum = items.length > 0 ? items.length + 1 : 1;
-  const btn = timeline?.nextElementSibling;
-  if (btn) btn.disabled = true;
-  try {
-    const result = await requestPhaseDetail(phaseApiUrl('{{ ui_base_path() }}/api/instructions'), {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({phase_id: phaseId, description: 'Новая инструкция', step_num: stepNum}),
-    });
-    if (!result) return;
-    const {resp, data} = result;
-    if (!resp.ok || !data.ok) {
-      showToast(data.error || 'Не удалось добавить инструкцию', 'error');
-      return;
-    }
-    window.PdlcPlatformNavigation.reload();
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-}
-
-async function deleteInstruction(button) {
-  const item = button.closest('.timeline-item');
-  if (!item) return;
-  if (!await window.PdlcBaseUI.requestConfirmation({eyebrow:'Удаление инструкции',title:'Удалить инструкцию?',message:'Инструкция будет удалена без возможности восстановления.',confirmLabel:'Удалить'})) return;
-  button.disabled = true;
-  try {
-    const id = item.dataset.instructionId;
-    const result = await requestPhaseDetail(phaseApiUrl('{{ ui_base_path() }}/api/instructions/' + id), {method: 'DELETE'});
-    if (!result) return;
-    const {resp, data} = result;
-    if (!resp.ok || !data.ok) {
-      showToast(data.error || 'Не удалось удалить инструкцию', 'error');
-      return;
-    }
-    window.PdlcPlatformNavigation.reload();
-  } finally {
-    button.disabled = false;
-  }
-}
-
-async function toggleInstructionType(badge) {
-  const card = badge.closest('.timeline-card');
-  const id = card.dataset.instructionId;
-  const isSync = (card.dataset.type || 'sync') === 'sync';
-  const nextType = isSync ? 'parallel' : 'sync';
-  badge.disabled = true;
-  try {
-    const result = await requestPhaseDetail(phaseApiUrl('{{ ui_base_path() }}/api/instructions/' + id), {
-      method: 'PUT',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({execution_type: nextType}),
-    });
-    if (!result) return;
-    const {resp} = result;
-    if (!resp.ok) {
-      showToast('Не удалось сменить режим', 'error');
-      return;
-    }
-    window.PdlcPlatformNavigation.reload();
-  } finally {
-    badge.disabled = false;
-  }
-}
-
-async function saveInstructionDescription(input) {
-  const card = input.closest('.timeline-card');
-  const id = card.dataset.instructionId;
-  const description = input.value.trim();
-  if (!description) {
-    window.PdlcTextarea.refreshTextareaAutosize(input);
-    showToast('Описание инструкции обязательно', 'error');
-    return;
-  }
-  const draft = window.PdlcPlatformNavigation.createDraftTracker ? instructionDraft(input) : null;
-  if (draft?.uncertain) { showToast('Проверьте состояние инструкции перед повтором сохранения', 'error'); return; }
-  const ticket = draft?.beginSave();
-  let outcome = 'unknown';
-  input.disabled = true;
-  try {
-    const result = await requestPhaseDetail(phaseApiUrl('{{ ui_base_path() }}/api/instructions/' + id), {
-      method: 'PUT',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({description: description}),
-    }, true);
-    if (!result) {
-      return;
-    }
-    const {resp, data} = result;
-    if (!resp.ok || !data.ok) {
-      if (resp.status < 500) outcome = 'failed';
-      showToast(data.error || 'Не удалось сохранить описание', 'error');
-      return;
-    }
-    outcome = 'saved';
-    const savedDescription = data.instruction?.description || description;
-    input.value = savedDescription;
-    input.dataset.originalDescription = savedDescription;
-  } finally {
-    if (ticket) {
-      draft.finishSave(ticket, outcome);
-      if (outcome === 'unknown') unknownInstructionSaves.set(id, {ticket, draft, input, description, previous: input.dataset.originalDescription});
-      updatePhaseSaveStatus();
-    }
-    input.disabled = false;
-    window.PdlcTextarea.refreshTextareaAutosize(input);
-  }
-}
-
-async function addSkillToInstruction(input) {
-  const card = input.closest('.timeline-card');
-  const id = card.dataset.instructionId;
-  const skill = String(input.value || '').trim();
-  if (!skill) return;
-  const existing = Array.from(card.querySelectorAll('[data-instruction-skill]'), (item) => item.dataset.instructionSkill);
-  const skills = normalizeSkillNames([...existing, skill]);
-  input.disabled = true;
-  try {
-    const result = await requestPhaseDetail(phaseApiUrl('{{ ui_base_path() }}/api/instructions/' + id), {
-      method: 'PUT',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({skills: skills}),
-    });
-    if (!result) return;
-    const {resp} = result;
-    if (!resp.ok) {
-      showToast('Не удалось добавить навык', 'error');
-      return;
-    }
-    window.PdlcPlatformNavigation.reload();
-  } finally {
-    input.disabled = false;
-  }
-}
-
-async function removeSkillFromInstruction(button) {
-  const card = button.closest('.timeline-card');
-  const id = card.dataset.instructionId;
-  const skillName = button.dataset.skill;
-  const existing = Array.from(card.querySelectorAll('[data-instruction-skill]'), (item) => item.dataset.instructionSkill);
-  const skills = normalizeSkillNames(existing.filter((s) => s !== skillName));
-  const result = await requestPhaseDetail(phaseApiUrl('{{ ui_base_path() }}/api/instructions/' + id), {
-    method: 'PUT',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({skills: skills}),
-  });
-  if (!result) return;
-  const {resp} = result;
-  if (!resp.ok) {
-    showToast('Не удалось убрать навык', 'error');
-    return;
-  }
-  window.PdlcPlatformNavigation.reload();
-}
-
-/* ---------- Checks & Evidence ---------- */
-function syncTextItemList(list) {
-  const count = list.closest('.wiki-section')?.querySelector('.count');
-  const itemCount = list.querySelectorAll('li:not(.empty-state)').length;
-  if (count) count.textContent = String(itemCount);
-  if (itemCount === 0 && !list.querySelector('.empty-state')) {
-    const empty = document.createElement('li');
-    empty.className = 'empty-state';
-    empty.appendChild(document.getElementById(list.id + '-empty-template').content.cloneNode(true));
-    list.appendChild(empty);
-  }
-}
-
-async function saveNewTextItem(input) {
-  if (!input.value.trim()) {
-    await deleteItem(input);
-    return;
-  }
-  scheduleSave();
-}
-
-async function deleteItem(btn) {
-  const li = btn.closest('li');
-  const list = li?.closest('ul');
-  if (!li || !list) return;
-  const nextSibling = li.nextSibling;
-  li.querySelectorAll('textarea[data-base-autosize]').forEach(window.PdlcTextarea.destroyTextareaAutosize);
-  li.remove();
-  syncTextItemList(list);
-  if (!await savePhase()) {
-    const empty = list.querySelector('.empty-state');
-    if (empty) empty.remove();
-    if (nextSibling && nextSibling.parentNode === list) list.insertBefore(li, nextSibling);
-    else list.appendChild(li);
-    li.querySelectorAll('textarea[data-base-autosize]').forEach(window.PdlcTextarea.initTextareaAutosize);
-    syncTextItemList(list);
-  }
-}
-
-function appendTextItem(listId) {
-  const list = document.getElementById(listId);
-  const empty = list.querySelector('.empty-state');
-  if (empty) empty.remove();
-  const li = document.getElementById(listId + '-item-template').content.firstElementChild.cloneNode(true);
-  list.appendChild(li);
-  syncTextItemList(list);
-  window.PdlcTextarea.initTextareaAutosize(li.querySelector('textarea'));
-  li.querySelector('textarea')?.focus();
-}
-
-function addCheck() { appendTextItem('checks-list'); }
-function addEvidence() { appendTextItem('evidence-list'); }
-
-/* ---------- Debounced phase meta save ---------- */
-let _saveTimer = null;
-let _phaseSaveQueue = Promise.resolve(true);
-function scheduleSave() {
-  if (savingStopped) return;
-  notePhaseEdit();
-  if (_saveTimer) clearTimeout(_saveTimer);
-  _saveTimer = setTimeout(() => { _saveTimer = null; void savePhase(); }, 400);
-}
-
-function savePhase() {
-  notePhaseEdit();
-  if (phaseDraft?.uncertain) { showToast('Сначала проверьте результат предыдущего сохранения', 'error'); return Promise.resolve(false); }
-  const queued = _phaseSaveQueue.then(() => savingStopped ? false : persistPhase());
-  _phaseSaveQueue = queued.catch(() => false);
-  return queued;
-}
-
-async function persistPhase() {
-  if (phaseDraft?.uncertain) return false;
-  const header = document.querySelector('.wiki-header');
-  const meta = {};
-  header.querySelectorAll('[data-field]').forEach((inp) => {
-    meta[inp.dataset.field] = inp.value;
-  });
-
-  const data = {
-    name: meta.name,
-    description: meta.description || '',
-    checks: [],
-    evidence: [],
-    execution_type: document.querySelector('.execution-toggle')?.dataset.mode || 'sync',
-    parallel_with_phase_id: (document.querySelector('.execution-toggle')?.dataset.mode || 'sync') === 'parallel'
-      ? (document.getElementById('parallelPartnerSelect')?.value
-        ? Number(document.getElementById('parallelPartnerSelect').value)
-        : null)
-      : null,
-  };
-
-  const submittedRows = {checks: [], evidence: []};
-  for (const field of ['checks', 'evidence']) {
-    for (const li of document.querySelectorAll('#' + field + '-list li:not(.empty-state)')) {
-      const description = li.querySelector('[data-field="description"]')?.value.trim();
-      if (!description) {
-        if (li.dataset.id) {
-          showToast('Заполните описание или удалите строку кнопкой ×', 'error');
-          return false;
-        }
-        continue;
-      }
-      data[field].push({id: li.dataset.id ? Number(li.dataset.id) : null, description});
-      submittedRows[field].push(li);
-    }
-  }
-
-  const ticket = phaseDraft?.beginSave();
-  updatePhaseSaveStatus();
-  let outcome = 'unknown';
-  try {
-    const resp = await fetch(phaseApiUrl('{{ ui_base_path() }}/api/phases/' + phaseId), {
-      method: 'PUT',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(data),
-    });
-    if (!resp.ok) { if (resp.status < 500) outcome = 'failed'; showToast('Ошибка сохранения', 'error'); return false; }
-    const result = await resp.json();
-    if (!result.ok) { outcome = 'failed'; showToast(result.error || 'Ошибка сохранения', 'error'); return false; }
-    for (const field of ['checks', 'evidence']) {
-      const ids = result.ids?.[field];
-      if (!Array.isArray(ids) || ids.length !== submittedRows[field].length) {
-        showToast('Не удалось подтвердить сохранённые строки', 'error');
-        return false;
-      }
-    }
-    for (const field of ['checks', 'evidence']) {
-      result.ids[field].forEach((id, i) => {
-        submittedRows[field][i].setAttribute('data-id', String(id));
-      });
-    }
-    outcome = 'saved';
-    confirmedPhase = {...data};
-    for (const field of ['checks', 'evidence']) confirmedPhase[field] = data[field].map((row, index) => ({...row, id: result.ids[field][index]}));
-    showToast('Сохранено', 'success');
-    return true;
-  } catch (_error) {
-    showToast('Результат сохранения неизвестен. Проверьте состояние перед повтором.', 'error');
-    return false;
-  } finally {
-    if (ticket) {
-      phaseDraft.finishSave(ticket, outcome);
-      if (outcome === 'unknown') unknownPhaseSave = {ticket, payload: data, rows: submittedRows};
-      updatePhaseSaveStatus();
-    }
-  }
-}
-
-async function saveEditorChanges() {
-  savingStopped = false;
-  await savePhase();
-  for (const input of document.querySelectorAll('.timeline-name-input')) {
-    const draft = instructionDraft(input);
-    if (draft.dirty && !draft.pending && !draft.uncertain) await saveInstructionDescription(input);
-  }
-}
-
-function phaseMatches(actual, expected) {
-  return actual.name === expected.name && (actual.description || '') === (expected.description || '')
-    && (actual.execution_type || 'sync') === expected.execution_type && (actual.parallel_with_phase_id ?? null) === expected.parallel_with_phase_id
-    && ['checks', 'evidence'].every(field => actual[field].length === expected[field].length
-      && expected[field].every((row, index) => actual[field][index].description === row.description && (row.id == null || Number(actual[field][index].id) === Number(row.id))));
-}
-async function reconcilePhaseSave() {
-  const unknown = unknownPhaseSave;
-  if (!unknown && !unknownInstructionSaves.size && !mutationNeedsReadback && !mutationRequiresReload) return;
-  try {
-    const response = await fetch(phaseApiUrl('{{ ui_base_path() }}/api/phases/' + phaseId));
-    if (!response.ok) throw new Error('Readback unavailable');
-    const result = await response.json();
-    if (!result.ok) throw new Error('Readback failed');
-    for (const [id, saved] of unknownInstructionSaves) {
-      const instruction = result.phase.instructions?.find(item => String(item.id) === id);
-      if (!instruction || (instruction.description !== saved.description && instruction.description !== saved.previous)) continue;
-      const matches = instruction.description === saved.description;
-      saved.draft.reconcile(saved.ticket, matches);
-      saved.input.dataset.originalDescription = instruction.description;
-      unknownInstructionSaves.delete(id);
-    }
-    updatePhaseSaveStatus();
-    if (!unknown && !unknownInstructionSaves.size && (mutationNeedsReadback || mutationRequiresReload)) {
-      mutationNeedsReadback = false;
-      // Readback precedes a fresh server view. No uncertain mutation is replayed.
-      window.PdlcPlatformNavigation.reload();
-      return;
-    }
-    if (!unknown) {
-      showToast(unknownInstructionSaves.size ? 'Состояние инструкции отличается. Черновик сохранён.' : 'Состояние инструкций проверено. Несохранённые правки можно отправить повторно.', unknownInstructionSaves.size ? 'error' : 'success');
-      return;
-    }
-    const matches = phaseMatches(result.phase, unknown.payload);
-    if (!matches && (!confirmedPhase || !phaseMatches(result.phase, confirmedPhase))) {
-      showToast('Серверное состояние отличается. Черновик сохранён; проверьте изменения перед повтором.', 'error');
-      return;
-    }
-    if (matches) {
-      for (const field of ['checks', 'evidence']) result.phase[field].forEach((row, index) => unknown.rows[field][index].setAttribute('data-id', String(row.id)));
-    }
-    phaseDraft.reconcile(unknown.ticket, matches);
-    confirmedPhase = result.phase;
-    unknownPhaseSave = null;
-    updatePhaseSaveStatus();
-    showToast(matches ? 'Сохранение подтверждено' : 'Изменения не записаны. Черновик сохранён; повторите сохранение.', matches ? 'success' : 'error');
-  } catch (_error) { showToast('Не удалось проверить сохранение. Черновик сохранён.', 'error'); }
-}
-
-page.ready(() => {
-  phaseDraft = window.PdlcPlatformNavigation.createDraftTracker();
-  phaseSignature = currentPhaseSignature();
-  confirmedPhase = {name: document.querySelector('.wiki-header [data-field="name"]').value, description: document.querySelector('.wiki-header [data-field="description"]').value,
-    execution_type: document.querySelector('.execution-toggle')?.dataset.mode || 'sync', parallel_with_phase_id: Number(document.getElementById('parallelPartnerSelect')?.value) || null,
-    checks: [...document.querySelectorAll('#checks-list [data-field]')].map(input => ({id: Number(input.closest('li').dataset.id) || null, description: input.value.trim()})),
-    evidence: [...document.querySelectorAll('#evidence-list [data-field]')].map(input => ({id: Number(input.closest('li').dataset.id) || null, description: input.value.trim()}))};
-  initializePhaseOutline();
-  renderInstructionTimeline(getInstructionItems());
-  updateInstructionControls();
-});
-page.on(document,'input', (event) => {
-  if (event.target.matches('.timeline-name-input')) instructionDraft(event.target).edit();
-  else if (event.target.closest('.wiki-header, #checks-list, #evidence-list')) notePhaseEdit();
-});
-window.discardWorkflowDraft = () => { savingStopped = true; if (_saveTimer) clearTimeout(_saveTimer); _saveTimer = null; };
-{% else %}
-page.ready(()=>{
-  const select=document.getElementById('phaseSectionSelect');
-  select?.addEventListener('change',()=>{
-    document.getElementById(select.value)?.scrollIntoView({block:'start'});
-  });
-});
-{% endif %}
-{% endblock %}
-
-{% block page_exports %}
-addCheck:typeof addCheck==='function'?addCheck:undefined,
-addEvidence:typeof addEvidence==='function'?addEvidence:undefined,
-addInstructionAfter:typeof addInstructionAfter==='function'?addInstructionAfter:undefined,
-addInstructionLast:typeof addInstructionLast==='function'?addInstructionLast:undefined,
-addSkillToInstruction:typeof addSkillToInstruction==='function'?addSkillToInstruction:undefined,
-appendTextItem:typeof appendTextItem==='function'?appendTextItem:undefined,
-currentPhaseSignature:typeof currentPhaseSignature==='function'?currentPhaseSignature:undefined,
-deleteInstruction:typeof deleteInstruction==='function'?deleteInstruction:undefined,
-deleteItem:typeof deleteItem==='function'?deleteItem:undefined,
-escapeHtml:typeof escapeHtml==='function'?escapeHtml:undefined,
-getInstructionItems:typeof getInstructionItems==='function'?getInstructionItems:undefined,
-initializePhaseOutline:typeof initializePhaseOutline==='function'?initializePhaseOutline:undefined,
-instructionDraft:typeof instructionDraft==='function'?instructionDraft:undefined,
-jumpToPhaseSection:typeof jumpToPhaseSection==='function'?jumpToPhaseSection:undefined,
-moveInstruction:typeof moveInstruction==='function'?moveInstruction:undefined,
-normalizeSkillNames:typeof normalizeSkillNames==='function'?normalizeSkillNames:undefined,
-notePhaseEdit:typeof notePhaseEdit==='function'?notePhaseEdit:undefined,
-persistInstructionOrder:typeof persistInstructionOrder==='function'?persistInstructionOrder:undefined,
-persistPhase:typeof persistPhase==='function'?persistPhase:undefined,
-phaseApiUrl:typeof phaseApiUrl==='function'?phaseApiUrl:undefined,
-phaseMatches:typeof phaseMatches==='function'?phaseMatches:undefined,
-reconcilePhaseSave:typeof reconcilePhaseSave==='function'?reconcilePhaseSave:undefined,
-releasePhaseSectionNavigationLock:typeof releasePhaseSectionNavigationLock==='function'?releasePhaseSectionNavigationLock:undefined,
-removeSkillFromInstruction:typeof removeSkillFromInstruction==='function'?removeSkillFromInstruction:undefined,
-renderInstructionTimeline:typeof renderInstructionTimeline==='function'?renderInstructionTimeline:undefined,
-requestPhaseDetail:typeof requestPhaseDetail==='function'?requestPhaseDetail:undefined,
-restorePhaseSectionFromLocation:typeof restorePhaseSectionFromLocation==='function'?restorePhaseSectionFromLocation:undefined,
-saveEditorChanges:typeof saveEditorChanges==='function'?saveEditorChanges:undefined,
-saveInstructionDescription:typeof saveInstructionDescription==='function'?saveInstructionDescription:undefined,
-saveNewTextItem:typeof saveNewTextItem==='function'?saveNewTextItem:undefined,
-savePhase:typeof savePhase==='function'?savePhase:undefined,
-scheduleSave:typeof scheduleSave==='function'?scheduleSave:undefined,
-setActivePhaseSection:typeof setActivePhaseSection==='function'?setActivePhaseSection:undefined,
-setPhaseMode:typeof setPhaseMode==='function'?setPhaseMode:undefined,
-syncPhaseSectionUrl:typeof syncPhaseSectionUrl==='function'?syncPhaseSectionUrl:undefined,
-syncTextItemList:typeof syncTextItemList==='function'?syncTextItemList:undefined,
-toggleInstructionType:typeof toggleInstructionType==='function'?toggleInstructionType:undefined,
-togglePhaseMode:typeof togglePhaseMode==='function'?togglePhaseMode:undefined,
-updateInstructionControls:typeof updateInstructionControls==='function'?updateInstructionControls:undefined,
-updatePhaseSaveStatus:typeof updatePhaseSaveStatus==='function'?updatePhaseSaveStatus:undefined,
-{% endblock %}
-{% block page_handles_history %}true{% endblock %}
-{% block page_busy %}typeof mutationPending!=='undefined'&&(mutationPending>0||!!phaseDraft?.pending||[...instructionDrafts.values()].some(draft=>draft.pending)){% endblock %}
+{% block controller_name %}phase_detail{% endblock %}
+{% block controller_data %}{{ {'basePath':ui_base_path(), 'canAdminister':can_administer, 'phaseId':phase.id, 'professionId':selected_namespace.id if selected_namespace else none} | tojson }}{% endblock %}

@@ -51,7 +51,6 @@ def _format_parallel_contract(contract: dict[str, Any], group_details: list[dict
         f"- Описание: {contract.get('description') or '-'}\n",
         "- Тип выполнения: параллельно\n",
         f"- Фазы в группе: {', '.join(group_names)}\n",
-        f"- Цель отката: {contract.get('rollback_target_phase_code') or '-'}\n\n",
         "Параллельные фазы (выполняются одновременно, отчёт — одним сообщением):\n",
     ]
     for detail in group_details:
@@ -61,16 +60,7 @@ def _format_parallel_contract(contract: dict[str, Any], group_details: list[dict
         agent_line = f"Агент: {agent}"
         if hermes_profile:
             agent_line += f" | профиль запуска: {hermes_profile}"
-        partner_code = detail.get("parallel_with_phase_code") or "-"
-        partner = next(
-            (
-                d.get("phase_name") or d.get("phase_code") or partner_code
-                for d in group_details
-                if d.get("phase_code") == partner_code
-            ),
-            partner_code,
-        )
-        parts.append(f"\n[{name}] (параллельно с {partner})\n")
+        parts.append(f"\n[{name}]\n")
         parts.append(f"  {agent_line}\n")
         desc = detail.get("description") or "-"
         parts.append(f"  Описание: {desc}\n")
@@ -104,8 +94,6 @@ def _format_contract(contract: dict[str, Any], human_only: bool = False) -> str:
             [
                 f"- Описание: {contract.get('description') or '-'}\n",
                 f"- Тип выполнения: {execution_type}\n",
-                f"- Параллельно с: {contract.get('parallel_with_phase_code') or '-'}\n",
-                f"- Цель отката: {contract.get('rollback_target_phase_code') or '-'}\n",
             ]
         )
     parts.extend(

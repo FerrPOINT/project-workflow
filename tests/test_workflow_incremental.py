@@ -25,10 +25,11 @@ def editor_url(mode="initial"):
 
 @pytest.mark.parametrize("mode", ["initial", "rework"])
 @pytest.mark.parametrize("admin", [False, True])
-def test_fragment_reuses_scoped_rendering_and_permissions(monkeypatch, mode, admin):
+@pytest.mark.parametrize("path", ["/workflows", "/phases"])
+def test_fragment_reuses_scoped_rendering_and_permissions(monkeypatch, mode, admin, path):
     from project_workflow.interfaces.ui.routes import pages
     monkeypatch.setattr(pages, "can_administer", lambda request: admin)
-    url = editor_url(mode)
+    url = editor_url(mode).replace("/workflows?", path + "?", 1)
     full = client.get(url)
     fragment = client.get(url, headers={"X-Workflow-View": "editor-v1"})
     assert full.status_code == fragment.status_code == 200
@@ -45,7 +46,10 @@ def test_fragment_reuses_scoped_rendering_and_permissions(monkeypatch, mode, adm
         assert f'{mode.title()} phase' in body
         assert f'{("rework" if mode == "initial" else "initial").title()} phase' not in body
         assert ('id="workflowForm"' in body) is admin
-        assert ('onclick="addPhaseAfter(this)"' in body) is admin
+        actions = [attrs for tag, attrs in Elements(body).elements if tag == "button"
+                   and "phase-add-btn" in attrs.get("class", "").split()]
+        assert bool(actions) is admin
+        assert all(button.get("aria-label") for button in actions)
     scripts = [attrs for tag, attrs in Elements(fragment.text).elements if tag == "script"]
     assert scripts == [{"type": "application/json", "id": "workflowEditorState"}]
 

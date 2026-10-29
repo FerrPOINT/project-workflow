@@ -53,7 +53,7 @@ class TestSupervisor:
         assert "Test" in prompt
 
     def test_get_phase_prompt_parallel(self):
-        """Parallel phases produce a single merged prompt with per-phase agents and partner."""
+        """Parallel phases produce a single merged prompt with all members."""
         ph_a = Phase(
             id=100,
             code="parallel-a",
@@ -92,7 +92,7 @@ class TestSupervisor:
         prompt = engine.get_phase_prompt("parallel-a")
         assert "ПАРАЛЛЕЛЬНАЯ ГРУППА ФАЗ" in prompt
         assert "Parallel A, Parallel B" in prompt
-        assert "параллельно с" in prompt
+        assert "параллельно с" not in prompt
         assert "Выполняются одновременно" in prompt
         assert "Отчёт по этой группе присылается ОДНИМ сообщением" in prompt
 

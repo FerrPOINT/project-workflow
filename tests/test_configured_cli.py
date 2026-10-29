@@ -594,8 +594,12 @@ def test_saved_answer_allows_draft_update_and_preparation_without_final_consent(
         raise RuntimeError("Controlled missing owner confirmation")
 
     monkeypatch.setattr(configured_cli, "confirmation", absent)
+    initial = step(configured).json()["result"]
+    assert initial["phase_code"] == "PM-DRAFT-01"
     first = step(configured, report="Actual first phase evidence", operation_key="first", expected_version=1)
     assert first.status_code == 200, first.text
+    assert first.json()["result"]["execution_ref"] == initial["execution_ref"]
+    assert configured_cli.PM_CONTINUATION in first.json()["result"]["instructions"]
     preparation = step(configured).json()["result"]
     assert preparation["phase_code"] == "PM-DRAFT-02"
     text = preparation["instructions"]
@@ -604,6 +608,12 @@ def test_saved_answer_allows_draft_update_and_preparation_without_final_consent(
     assert "'Not confirmation of the final revision' does not prohibit updating the Draft" in text
     assert "Report only this completed preparation phase" in text
     assert "Do not invent unresolved business choices" in text
+    for instructions in (initial["instructions"], text):
+        assert "After an accepted report, continue with the returned next phase in this SAME execution" in instructions
+        assert (
+            "Wait only for genuinely missing input or owner confirmation required by the current phase" in instructions
+        )
+        assert "then stop at the returned next phase" not in instructions
 
     # Controlled phase report, not a claim that this test published a real Tracker revision.
     response = step(

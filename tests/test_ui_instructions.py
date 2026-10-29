@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 pytestmark = [pytest.mark.ui]
 
 from project_workflow.interfaces.ui import app
+from tests._ui_source_helpers import page_source
 
 client = TestClient(app)
 
@@ -24,8 +25,8 @@ def _seed_phase_id() -> int:
 class TestInstructionsApi:
     def test_reorder_templates_move_rows_and_restore_dom_on_failure(self):
         phase_id = _seed_phase_id()
-        dedicated = client.get(f"/instructions?phase_id={phase_id}").text
-        detail = client.get(f"/phase/{phase_id}").text
+        dedicated = page_source(client, client.get(f"/instructions?phase_id={phase_id}"))
+        detail = page_source(client, client.get(f"/phase/{phase_id}"))
 
         assert "layout.replaceChildren(...reordered)" in dedicated
         assert "layout.replaceChildren(...rows)" in dedicated

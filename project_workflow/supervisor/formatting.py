@@ -12,7 +12,7 @@ def format_result(result: dict) -> str:
     BLOCKED дополнительно показывает причину блокировки.
     PASS: показываем контракт следующей фазы со статусом pending (·).
     Не-PASS: показываем только недоделанные пункты текущей фазы.
-    Для parallel групп перечисляем все фазы с агентами и параллельными партнёрами.
+    Для parallel групп перечисляем все фазы и их исполнителей.
     """
     verdict = str(result.get("verdict", "UNKNOWN")).upper()
     covered = result.get("covered", []) or []
@@ -58,11 +58,7 @@ def format_result(result: dict) -> str:
         for reason in reasons or ["Проверка отчёта заблокирована."]:
             lines.append(f"  · {reason}")
 
-    if verdict == "ROLLBACK":
-        target = result.get("rollback_phase_code") or result.get("next_phase_code")
-        if target:
-            instructions.insert(0, f"Вернись к шагу: {target}")
-    elif verdict == "DELEGATE":
+    if verdict == "DELEGATE":
         message = str(result.get("message") or "").strip()
         instructions.insert(0, message or "Передай выполнение настроенному агенту.")
 
@@ -113,17 +109,8 @@ def _flatten_parallel_contract(
         name = detail.get("phase_name") or detail.get("phase_code") or "-"
         agent = detail.get("delegate_agent") or "не задан"
         profile = detail.get("hermes_profile")
-        partner_code = detail.get("parallel_with_phase_code") or "-"
-        partner = next(
-            (
-                d.get("phase_name") or d.get("phase_code") or partner_code
-                for d in group_details
-                if d.get("phase_code") == partner_code
-            ),
-            partner_code,
-        )
         instructions.append(
-            f"{name} — параллельно с {partner}, агент: {agent}"
+            f"{name} — агент: {agent}"
             + (f" | профиль запуска: {profile}" if profile else "")
         )
         for item in detail.get("instructions", []) or []:

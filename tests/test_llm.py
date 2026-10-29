@@ -564,11 +564,11 @@ class TestOpenAICompatibleClientOverrides:
         assert client.timeout == 300
 
 
-class TestEvaluatorV9PromptContract:
+class TestEvaluatorV10PromptContract:
     """The live provider receives explicit contradiction and chronology rules."""
 
-    def test_prompt_version_is_v9(self):
-        assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v9"
+    def test_prompt_version_invalidates_the_old_backtracking_policy(self):
+        assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v10"
 
     def test_contradictory_current_facts_prohibit_pass(self):
         prompt = PromptBuilder.SYSTEM_PROMPT
@@ -576,16 +576,37 @@ class TestEvaluatorV9PromptContract:
         assert "Mutually exclusive CURRENT facts" in prompt
         assert "prohibit PASS" in prompt
         assert "return PARTIAL" in prompt
-        assert "return ROLLBACK" in prompt
-        assert "earlier-phase artifact" in prompt
-        assert "affected required item IDs in missing" in prompt
+        assert "return BLOCKED" in prompt
+        assert "outside the current phase" in prompt
+        assert "explain the required work" in prompt
 
-    def test_build_user_prompt_exposes_rollback_target(self):
+    def test_build_user_prompt_does_not_expose_retired_target(self):
         phase = FakePhase(rollback_target_phase_code="8.IMPLEMENT")
 
         prompt = PromptBuilder.build_user_prompt("RUN-1", phase, "reviewed")
 
-        assert "ROLLBACK TARGET: 8.IMPLEMENT" in prompt
+        assert "ROLLBACK TARGET:" not in prompt
+        assert "ALLOWED VERDICTS: PASS, PARTIAL, BLOCKED" in prompt
+        assert "ROLLBACK" not in prompt
+        assert "verdict = ROLLBACK" not in PromptBuilder.SYSTEM_PROMPT
+
+    def test_evidence_placement_is_defined_by_the_contract(self):
+        prompt = PromptBuilder.SYSTEM_PROMPT
+        assert "worker report does not have to be copied into SUMMARY.md" in prompt
+        assert "unless the contract explicitly requires it there" in prompt
+
+    def test_equivalent_encoding_flag_does_not_change_the_required_tests(self):
+        prompt = PromptBuilder.SYSTEM_PROMPT
+        assert "unless exact invocation is itself an explicit contract obligation" in prompt
+        assert "python -B -X utf8 -m unittest -v test_calculator.py" in prompt
+        assert "Still require actual execution and its result" in prompt
+        assert "not equivalent success" in prompt
+
+    def test_coverage_requires_the_whole_evidence_item_and_a_consistent_message(self):
+        prompt = PromptBuilder.SYSTEM_PROMPT
+        assert "ENTIRE item is supported by actual evidence" in prompt
+        assert "any required part is absent" in prompt
+        assert "never describe evidence as absent while marking its required item covered" in prompt
 
     def test_chronological_state_change_requires_timestamped_action_evidence(self):
         prompt = PromptBuilder.SYSTEM_PROMPT

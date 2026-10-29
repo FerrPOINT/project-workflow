@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from project_workflow.domain.project_theme import PROJECT_THEME_ICONS
+from project_workflow.interfaces.ui.controller_assets import controller_source
 from project_workflow.interfaces.ui.schemas import NamespaceUpdate
 from project_workflow.interfaces.ui.templates import PROJECT_ICON_PATHS, templates
 
@@ -69,6 +70,9 @@ def test_theme_controls_show_all_icons_and_select_current_value(icon):
     )
     parsed = ThemeInputs()
     parsed.feed(html)
+    source, digest = controller_source("namespaces", True)
+    script = source.decode()
+    assert f"/ui-assets/controllers/admin/{digest}/namespaces.js" in html
     assert "style" not in parsed.root_attrs
     assert parsed.brand_attrs
     assert "style" not in parsed.brand_attrs
@@ -81,14 +85,14 @@ def test_theme_controls_show_all_icons_and_select_current_value(icon):
     assert [option["value"] for option in parsed.icon_options if "selected" in option] == [icon or "folder"]
     assert 'for="namespaceThemeIcon">Иконка</label>' in html
     assert 'data-base-choice class="base-control" id="namespaceThemeIcon"' in html
-    assert "renderNamespaceIconChoice:typeof renderNamespaceIconChoice==='function'" in html
-    assert "name.className = 'base-visually-hidden'" in html
-    assert "visual.appendChild(document.createTextNode(option.label))" not in html
+    assert "renderNamespaceIconChoice:typeof renderNamespaceIconChoice==='function'" in script
+    assert "name.className = 'base-visually-hidden'" in script
+    assert "visual.appendChild(document.createTextNode(option.label))" not in script
     assert 'namespaceIconSelect' not in html
     assert 'id="namespaceThemeControls"' in html
     assert 'id="namespaceThemePreview"' not in html
     assert "<path d=" in html
-    assert "option.dataset.color = color || defaultNamespaceThemeColor" in html
+    assert "option.dataset.color = color || defaultNamespaceThemeColor" in script
 
 
 def test_header_logo_is_constant_and_each_profession_option_has_its_own_identity():

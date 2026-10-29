@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import importlib.util
 import io
 import json
 from pathlib import Path
@@ -155,6 +156,20 @@ def snapshot(folder: Path) -> dict[str, dict[str, str]]:
         raise ValueError("Case must be its own directory, not a link")
     result = {}
     for path in sorted(folder.iterdir()):
+        if path.name == "__pycache__" and path.is_dir() and not path.is_symlink():
+            for cached in sorted(path.iterdir()):
+                try:
+                    source = Path(importlib.util.source_from_cache(str(cached)))
+                except ValueError:
+                    raise ValueError(f"Unexpected Python cache entry: {cached.name}") from None
+                if (cached.is_symlink() or not cached.is_file() or cached.stat().st_size > 32_000
+                        or source.is_symlink() or not source.is_file()):
+                    raise ValueError(f"Unexpected Python cache entry: {cached.name}")
+                # Preserve binary cache evidence; never decode it as source or execute it.
+                result[cached.relative_to(folder).as_posix()] = {
+                    "sha256": hashlib.sha256(cached.read_bytes()).hexdigest(), "kind": "python-bytecode",
+                }
+            continue
         if path.is_symlink() or not path.is_file() or path.stat().st_size > 32_000:
             raise ValueError(f"Unexpected directory, link or oversized file: {path.name}")
         content = path.read_bytes()

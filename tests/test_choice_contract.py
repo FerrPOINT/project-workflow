@@ -12,7 +12,8 @@ def test_all_active_choices_use_base_adapter_and_keep_native_fallback():
             controls.append((source.name, control))
             assert "data-base-choice" in control, (source.name, control)
             assert " hidden" not in control, "Fallback is hidden only after successful initialization"
-    assert len(controls) == 7
+    assert len(controls) == 6
+    assert not any("rollback" in control for _, control in controls)
     bootstrap = (TEMPLATES / "base.html").read_text(encoding="utf-8")
     assert 'include "base/choice-runtime.js"' in bootstrap
     assert "initChoice(control" in bootstrap

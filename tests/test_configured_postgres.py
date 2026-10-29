@@ -33,6 +33,43 @@ def configured(pg_url, monkeypatch, request):
     yield from protocol.configured.__wrapped__(monkeypatch, request)
 
 
+@pytest.mark.parametrize("configured", [("developer", "initial")], indirect=True)
+@pytest.mark.parametrize("prompt_version", ["supervisor-evaluator-v9", "supervisor-evaluator-v8-no-backtracking"])
+def test_seeded_terminal_history_survives_prompt_upgrade(configured, supervisor_llm, monkeypatch, prompt_version):
+    from tests.test_frozen_evaluation import test_prompt_upgrade_keeps_frozen_terminal_readback_and_replay
+
+    test_prompt_upgrade_keeps_frozen_terminal_readback_and_replay(
+        configured, supervisor_llm, monkeypatch, prompt_version,
+    )
+
+
+def test_seeded_summary_retains_rollback_without_changing_full_history(configured):
+    from tests.test_runtime_history_summary import (
+        history,
+        test_summary_whitelists_saved_values_without_changing_full_history,
+    )
+
+    test_summary_whitelists_saved_values_without_changing_full_history(history.__wrapped__(configured))
+
+
+def test_seeded_native_history_stays_read_only_without_the_old_image(pg_url, monkeypatch):
+    from tests._retained_pm_history import retained_pm
+    from tests.test_retained_pm_readers import test_saved_pm_history_survives_foreign_or_unavailable_current_image
+
+    engine = get_engine(pg_url)
+    assert engine.dialect.name == "postgresql"
+    ensure_migrated(engine)
+    state = app_state._AppState(database_url=pg_url)
+    for module in (app_state, ui_state, ui_package):
+        monkeypatch.setattr(module, "_app_state", state)
+    config.get_settings.cache_clear()
+    historical = retained_pm(monkeypatch)
+    try:
+        test_saved_pm_history_survives_foreign_or_unavailable_current_image(next(historical), monkeypatch)
+    finally:
+        historical.close()
+
+
 @pytest.mark.parametrize("configured", [
     ("project_manager", "draft"), ("analyst", "analysis"), ("architect", "decomposition"),
     ("developer", "initial"), ("developer", "rework"), ("reviewer", "delivery"),

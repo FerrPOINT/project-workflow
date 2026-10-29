@@ -29,6 +29,13 @@ from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.supervisor.evidence import validate_frozen_evaluation
 from project_workflow.supervisor.types import VERDICT_LABELS
 
+PM_CONTINUATION = (
+    "After an accepted report, continue with the returned next phase in this SAME execution; "
+    "do not stop merely because the phase changed. "
+    "Wait only for genuinely missing input or owner confirmation required by the current phase. "
+    "Never complete the PM Workflow or create another assignment/cycle merely to wait for consent."
+)
+
 
 def _catalog(uow: SAUnitOfWork, namespace_id: int, *, workflow_key: str | None = None,
              workflow_id: int | None = None, mode_key: str | None = None,
@@ -353,6 +360,8 @@ def step(uow: SAUnitOfWork, command: ConfiguredStep, authorization: str | None) 
         raise ConflictError("Requirements evidence is only accepted for the final PM report")
     if command.report is None:
         instructions = engine.format_current_phase_instructions()
+        if payload["request"]["role_key"] == "project_manager" and task.status != "done":
+            instructions += "\n\n" + PM_CONTINUATION
         result = {**cursor(uow, task, payload), "instructions": instructions,
                   "phase_contract": engine.get_phase_contract(), "complete": task.status == "done"}
         if final_pm and task.status != "done":
@@ -400,6 +409,8 @@ def finish_history(uow: SAUnitOfWork, fence: ConfiguredCliFence, history_id: int
     result.update(cursor(uow, task, fence.enrollment))
     result["version"] = fence.version + 1
     result["complete"] = task.status == "done"
+    if task.status != "done" and fence.enrollment["request"]["role_key"] == "project_manager":
+        result["instructions"] = [*result["instructions"], PM_CONTINUATION]
     if task.status == "done":
         if result.get("verdict") != "PASS" or result.get("missing") or result.get("blockers"):
             raise ConflictError("Terminal configured report is not a complete PASS")
@@ -626,7 +637,7 @@ def history_summary(
             raise ConflictError("Stored history summary response is invalid")
         status = entry.supervisor_response.get("status")
         retryable = entry.supervisor_response.get("retryable")
-        if (entry.id is None or entry.id <= 0 or phase is None or entry.verdict not in VERDICT_LABELS
+        if (entry.id is None or entry.id <= 0 or phase is None or entry.verdict not in (*VERDICT_LABELS, "rollback")
             or (status is not None and status not in ("active", "blocked", "done"))
             or (retryable is not None and type(retryable) is not bool)
             or (entry.next_phase_id is not None and next_phase is None)

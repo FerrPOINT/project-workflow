@@ -7,7 +7,7 @@ from ..domain.exceptions import ConcurrentTransitionError
 from ..domain.runtime_assignment import RuntimeStepFence
 from .models import Phase
 
-_VERDICTS = {"pass", "partial", "blocked", "rollback", "delegate"}
+_VERDICTS = {"pass", "partial", "blocked", "delegate"}
 
 
 def _validate_verdict(verdict: str) -> None:
@@ -128,17 +128,6 @@ def record_transition(
             runtime_fence,
         )
         db.tasks.record_phase_event(task_id, phase_id, "blocked", step_history_id)
-    elif verdict == "rollback":
-        rollback_phase = phase_map.get(rollback_phase_code) if rollback_phase_code else None
-        rollback_phase_id = _phase_id(rollback_phase, role="Цель отката")
-        _update_task(
-            db,
-            task_state,
-            {"current_phase_id": rollback_phase_id, "status": "active"},
-            runtime_fence,
-        )
-        db.tasks.record_phase_event(task_id, phase_id, "rolled_back", step_history_id)
-        db.tasks.record_phase_event(task_id, rollback_phase_id, "entered", step_history_id)
     else:
         _update_task(
             db,
@@ -203,18 +192,6 @@ def record_parallel_transition(
         )
         for phase_id in group_phase_ids:
             db.tasks.record_phase_event(task_id, phase_id, "blocked", step_history_id)
-    elif verdict == "rollback":
-        rollback_phase = phase_map.get(rollback_phase_code) if rollback_phase_code else None
-        rollback_phase_id = _phase_id(rollback_phase, role="Цель отката")
-        _update_task(
-            db,
-            task_state,
-            {"current_phase_id": rollback_phase_id, "status": "active"},
-            runtime_fence,
-        )
-        for phase_id in group_phase_ids:
-            db.tasks.record_phase_event(task_id, phase_id, "rolled_back", step_history_id)
-        db.tasks.record_phase_event(task_id, rollback_phase_id, "entered", step_history_id)
     else:
         _update_task(
             db,

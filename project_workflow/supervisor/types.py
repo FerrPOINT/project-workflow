@@ -25,8 +25,6 @@ class PhaseContract:
     execution_type: str = "sync"
     delegate_agent: str | None = None
     hermes_profile: str | None = None
-    parallel_with_phase_code: str | None = None
-    rollback_target_phase_code: str | None = None
     group_phases: list[str] | None = None  # set for parallel blocks
     group_details: list[dict[str, Any]] = field(default_factory=list)  # per-phase details for parallel groups
 
@@ -44,8 +42,6 @@ class PhaseContract:
             "execution_type": self.execution_type,
             "delegate_agent": self.delegate_agent,
             "hermes_profile": self.hermes_profile,
-            "parallel_with_phase_code": self.parallel_with_phase_code,
-            "rollback_target_phase_code": self.rollback_target_phase_code,
             "group_phases": self.group_phases,
             "group_details": self.group_details,
         }
@@ -55,6 +51,5 @@ VERDICT_LABELS: dict[str, str] = {
     "pass": "PASS",
     "partial": "PARTIAL",
     "blocked": "BLOCKED",
-    "rollback": "ROLLBACK",
     "delegate": "DELEGATE",
 }

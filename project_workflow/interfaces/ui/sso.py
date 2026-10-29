@@ -97,6 +97,7 @@ class _SsoMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         if path in _PUBLIC_PATHS or path.startswith((
             "/internal/runtime/", "/api/pm/namespace-ownership/", "/api/internal/v1/user-deletions/",
+            "/ui-assets/controllers/",
         )):
             return await call_next(request)
         canonical_hostname = urlparse(settings.AUTH_PUBLIC_ORIGIN).hostname
@@ -111,7 +112,8 @@ class _SsoMiddleware(BaseHTTPMiddleware):
         if not token:
             return _auth_error(request, 401, "Требуется вход через Central Auth")
         if cookie and not bearer and request.method not in {"GET", "HEAD", "OPTIONS"}:
-            if request.headers.get("origin") != settings.AUTH_PUBLIC_ORIGIN.rstrip("/"):
+            allowed_origins = {settings.AUTH_PUBLIC_ORIGIN.rstrip("/"), *settings.AUTH_BROWSER_ORIGINS}
+            if request.headers.get("origin") not in allowed_origins:
                 return _auth_error(request, 403, "Неверный источник запроса")
 
         original_started = time.monotonic()

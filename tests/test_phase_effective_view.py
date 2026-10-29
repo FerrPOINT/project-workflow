@@ -1,6 +1,8 @@
 """Configured phase views use runtime text without editing the stored catalog."""
 
+import json
 import os
+import subprocess
 from copy import deepcopy
 from dataclasses import asdict
 from urllib.parse import parse_qs, urlsplit
@@ -14,9 +16,63 @@ from project_workflow.infrastructure.db import schema, single_task_catalog
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.ui import sso
 from project_workflow.interfaces.ui.app import create_app
+from project_workflow.interfaces.ui.controller_assets import controller_source
 from project_workflow.interfaces.ui.routes import pages
 
 pytestmark = pytest.mark.ui
+
+
+@pytest.mark.parametrize("controller", ["phase_detail", "instructions"])
+def test_effective_read_runs_on_each_controller_mount_without_a_document_event(controller):
+    source = controller_source(controller, False)[0].decode()
+    program = r"""
+const assert = require('node:assert/strict');
+const input = JSON.parse(process.argv[1]);
+(async () => {
+  for (const mode of ['legacy', 'configured', 'unavailable', 'missing-scope']) {
+    const ready = [], reads = [];
+    const element = () => ({hidden:true, inert:true, dataset:{}, children:[],
+      append(...children){this.children.push(...children)},
+      appendChild(child){this.children.push(child)},
+      querySelectorAll(){return []}, remove(){this.removed=true},
+      setAttribute(key,value){this[key]=value}, style:{}});
+    const view = element(), editor = element(), status = element(), content = element();
+    view.dataset = {namespaceId:mode==='missing-scope'?'':'1',
+      apiUrl:'/api/phases/7?namespace_id=1', instructionsOnly:String(input.controller==='instructions')};
+    const nodes = {phaseEffectiveView:view, phaseStoredEditor:editor, phaseViewStatus:status,
+      phaseEffectiveContent:content, phaseEffectiveTitle:element(), phaseEffectiveDescription:element(),
+      phaseEffectiveSections:element()};
+    globalThis.document = {getElementById:id=>nodes[id]||null, createElement:element};
+    globalThis.window = {location:{origin:'http://workflow.test'}, WorkflowPageControllers:{}};
+    const page = {alive:true, ready:fn=>ready.push(fn), expose(){}, notify(){},
+      fetch:async url=>{reads.push(url); return {ok:mode!=='unavailable', json:async()=>({
+        ok:mode!=='unavailable', ...(mode==='configured'?{effective_view:{
+          interaction_protocol:'configured-cli-v1', read_only:true,
+          phase:{name:'Effective phase', description:'Exact scope', instructions:[{step:'Actual instruction'}]}
+        }}:{})
+      })}}};
+    eval(input.source);
+    window.WorkflowPageControllers[input.controller](page, {phaseId:7, professionId:1, basePath:''});
+    assert.ok(ready.length, 'The effective read must be registered on every mount');
+    await ready[0]();
+    assert.deepEqual(reads, mode==='missing-scope'?[]:['/api/phases/7?namespace_id=1']);
+    if (mode==='legacy') {
+      assert.equal(editor.hidden, false); assert.equal(editor.inert, false); assert.equal(view.hidden, true);
+    } else if (mode==='configured') {
+      assert.equal(editor.removed, true); assert.equal(content.hidden, false);
+      assert.equal(nodes.phaseEffectiveTitle.textContent, 'Effective phase');
+      assert.ok(nodes.phaseEffectiveSections.children.length);
+    } else {
+      assert.equal(editor.hidden, true); assert.equal(editor.inert, true); assert.equal(status.role, 'alert');
+    }
+  }
+})().catch(error=>{console.error(error);process.exitCode=1});
+"""
+    result = subprocess.run(
+        ["node", "-e", program, json.dumps({"source": source, "controller": controller})],
+        capture_output=True, text=True, encoding="utf-8", check=False, timeout=20,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 @pytest.fixture

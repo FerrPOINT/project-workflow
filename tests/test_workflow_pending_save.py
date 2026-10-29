@@ -2,18 +2,18 @@
 
 import json
 import subprocess
-from pathlib import Path
 
 import pytest
 
+from project_workflow.interfaces.ui.controller_assets import controller_source
+
 pytestmark = pytest.mark.ui
-TEMPLATE = Path(__file__).parents[1] / "project_workflow/interfaces/ui/templates/workflows.html"
 
 
 @pytest.mark.parametrize("mode", ["edit", "create"])
 @pytest.mark.parametrize("outcome", ["saved", "failed", "network"])
 def test_pending_workflow_write_locks_fields_identity_and_duplicate_submit(mode, outcome):
-    template = TEMPLATE.read_text(encoding="utf-8")
+    template = controller_source("workflows", True)[0].decode()
 
     def between(start, end):
         return template[template.index(start):template.index(end)]

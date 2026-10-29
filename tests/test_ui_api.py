@@ -121,10 +121,15 @@ class TestIndex:
         resp = client.get(f"/phase/{phase_id}?namespace_id={namespace['id']}")
 
         assert resp.status_code == 200
-        assert f"const selectedNamespaceId = {namespace['id']};" in resp.text
-        assert "function phaseApiUrl(path)" in resp.text
-        assert "url.searchParams.set('namespace_id', String(selectedNamespaceId));" in resp.text
-        assert "fetch(phaseApiUrl('/api/phases/' + phaseId)" in resp.text
+        asset_url = next(attrs["src"] for tag, attrs in Elements(resp.text).elements
+                         if tag == "script" and attrs.get("src", "").endswith("/phase_detail.js"))
+        script = client.get(asset_url)
+        assert script.status_code == 200
+        body = script.text
+        assert f'"professionId": {namespace["id"]}' in resp.text
+        assert "function phaseApiUrl(path)" in body
+        assert "url.searchParams.set('namespace_id', String(selectedNamespaceId));" in body
+        assert "fetch(phaseApiUrl('' + config.basePath + '/api/phases/' + phaseId)" in body
 
     def test_phase_detail_page_scopes_instruction_api_to_selected_namespace(self, client):
         namespace = next(item for item in client.get("/api/namespaces").json()["namespaces"])
@@ -133,9 +138,14 @@ class TestIndex:
         resp = client.get(f"/phase/{phase_id}?namespace_id={namespace['id']}")
 
         assert resp.status_code == 200
-        assert "requestPhaseDetail(phaseApiUrl(`/api/phases/${phaseId}/instructions/reorder`)" in resp.text
-        assert "requestPhaseDetail(phaseApiUrl('/api/instructions')" in resp.text
-        assert "requestPhaseDetail(phaseApiUrl('/api/instructions/' + id)" in resp.text
+        asset_url = next(attrs["src"] for tag, attrs in Elements(resp.text).elements
+                         if tag == "script" and attrs.get("src", "").endswith("/phase_detail.js"))
+        script = client.get(asset_url)
+        assert script.status_code == 200
+        body = script.text
+        assert "requestPhaseDetail(phaseApiUrl(`${config.basePath}/api/phases/${phaseId}/instructions/reorder`)" in body
+        assert "requestPhaseDetail(phaseApiUrl('' + config.basePath + '/api/instructions')" in body
+        assert "requestPhaseDetail(phaseApiUrl('' + config.basePath + '/api/instructions/' + id)" in body
 
     def test_instructions_page_scopes_instruction_api_to_selected_namespace(self, client):
         namespace = next(item for item in client.get("/api/namespaces").json()["namespaces"])
@@ -144,11 +154,18 @@ class TestIndex:
         resp = client.get(f"/instructions?phase_id={phase_id}&namespace_id={namespace['id']}")
 
         assert resp.status_code == 200
-        assert f"const selectedNamespaceId = {namespace['id']};" in resp.text
-        assert "function instructionApiUrl(path)" in resp.text
-        assert "fetch(instructionApiUrl('/api/phases/' + PHASE_ID + '/instructions/reorder')" in resp.text
-        assert "requestInstruction(instructionApiUrl('/api/instructions/' + id)" in resp.text
-        assert "requestInstruction(instructionApiUrl('/api/instructions')" in resp.text
+        asset_url = next(attrs["src"] for tag, attrs in Elements(resp.text).elements
+                         if tag == "script" and attrs.get("src", "").endswith("/instructions.js"))
+        script = client.get(asset_url)
+        assert script.status_code == 200
+        body = script.text
+        assert f'"professionId": {namespace["id"]}' in resp.text
+        assert "function instructionApiUrl(path)" in body
+        assert (
+            "fetch(instructionApiUrl('' + config.basePath + '/api/phases/' + PHASE_ID + '/instructions/reorder')"
+        ) in body
+        assert "requestInstruction(instructionApiUrl('' + config.basePath + '/api/instructions/' + id)" in body
+        assert "requestInstruction(instructionApiUrl('' + config.basePath + '/api/instructions')" in body
 
     def test_settings_page(self, client):
         resp = client.get("/settings")
@@ -1422,7 +1439,7 @@ class TestApiPhaseUpdate:
         assert phase["name"] == "Renamed phase"
         assert phase["execution_type"] == "parallel"
 
-    def test_sync_to_parallel_stays_isolated_without_explicit_partner(self, client):
+    def test_sync_to_parallel_joins_the_contiguous_run(self, client):
         from project_workflow.interfaces.ui.helpers import _build_parallel_phase_blocks
 
         phase_id = _phase_id(client, "7.PLAN_GATE")
@@ -1433,9 +1450,9 @@ class TestApiPhaseUpdate:
         phases = client.get("/api/phases").json()["phases"]
         updated = next(phase for phase in phases if phase["code"] == "7.PLAN_GATE")
         assert updated["execution_type"] == "parallel"
-        assert updated["parallel_with_phase_id"] is None
+        assert "parallel_with_phase_id" not in updated
         groups = [[phase["code"] for phase in block["phases"]] for block in _build_parallel_phase_blocks(phases)]
-        assert ["7.PLAN_GATE"] in groups
+        assert ["5.RESEARCH", "5.PREFLIGHT", "6.SOLUTION", "6.TEST_PLAN", "7.PLAN_GATE"] in groups
 
     def test_parallel_round_trip_does_not_restore_removed_links(self, client):
         phase_id = _phase_id(client, "5.RESEARCH")
@@ -1445,35 +1462,23 @@ class TestApiPhaseUpdate:
 
         phases = client.get("/api/phases").json()["phases"]
         updated = next(phase for phase in phases if phase["code"] == "5.RESEARCH")
-        assert updated["parallel_with_phase_id"] is None
+        assert "parallel_with_phase_id" not in updated
         partner = next(phase for phase in phases if phase["code"] == "5.PREFLIGHT")
-        assert partner["parallel_with_phase_id"] is None
+        assert "parallel_with_phase_id" not in partner
 
-    def test_explicit_null_clears_parallel_component(self, client):
+    def test_retired_partner_null_is_rejected_without_changing_phase(self, client):
         phase_id = _phase_id(client, "5.RESEARCH")
+        before = client.get(f"/api/phases/{phase_id}").json()["phase"]
+        response = client.put(f"/api/phases/{phase_id}", json={"parallel_with_phase_id":None})
+        assert response.status_code == 422
+        assert client.get(f"/api/phases/{phase_id}").json()["phase"] == before
 
-        response = client.put(f"/api/phases/{phase_id}", json={"parallel_with_phase_id": None})
-
-        assert response.status_code == 200
-        phases = client.get("/api/phases").json()["phases"]
-        updated = next(phase for phase in phases if phase["code"] == "5.RESEARCH")
-        assert updated["parallel_with_phase_id"] is None
-
-    def test_explicit_contiguous_parallel_partner_is_saved(self, client):
+    def test_retired_partner_write_is_rejected_without_changing_phase(self, client):
         phase_id = _phase_id(client, "7.PLAN_GATE")
-
-        response = client.put(
-            f"/api/phases/{phase_id}",
-            json={
-                "execution_type": "parallel",
-                "parallel_with_phase_id": _phase_id(client, "6.TEST_PLAN"),
-            },
-        )
-
-        assert response.status_code == 200
-        phases = client.get("/api/phases").json()["phases"]
-        updated = next(phase for phase in phases if phase["code"] == "7.PLAN_GATE")
-        assert updated["parallel_with_phase_id"] == _phase_id(client, "6.TEST_PLAN")
+        before = client.get(f"/api/phases/{phase_id}").json()["phase"]
+        response = client.put(f"/api/phases/{phase_id}", json={"execution_type":"parallel", "parallel_with_phase_id":1})
+        assert response.status_code == 422
+        assert client.get(f"/api/phases/{phase_id}").json()["phase"] == before
 
     @pytest.mark.parametrize(
         ("field", "target_code"),
@@ -1493,7 +1498,7 @@ class TestApiPhaseUpdate:
 
         response = client.put(f"/api/phases/{phase_id}", json=payload)
 
-        assert response.status_code == 409
+        assert response.status_code == 422
         after = client.get(f"/api/phases/{phase_id}").json()["phase"]
         for field in (
             "execution_type",
@@ -1561,7 +1566,7 @@ class TestPageRoutes:
 
 
 @pytest.mark.parametrize("rename", [False, True])
-def test_reconfigure_two_pairs_as_one_four_phase_group(client, rename):
+def test_contiguous_four_phase_group_needs_no_hidden_configuration(client, rename):
     from project_workflow.interfaces.ui.helpers import _build_parallel_phase_blocks
     from project_workflow.supervisor.contracts import PhaseContractBuilder
     from project_workflow.supervisor.models import Phase
@@ -1574,26 +1579,12 @@ def test_reconfigure_two_pairs_as_one_four_phase_group(client, rename):
     def update(code, payload):
         return client.put(f"/api/phases/{ids[code]}", json=payload)
 
-    # Linking the pairs without aligning rollback targets must be atomic failure.
+    # Retired writes fail atomically; mode flags alone define the group.
     response = update("6.SOLUTION", {"parallel_with_phase_id": ids["5.PREFLIGHT"]})
-    assert response.status_code == 409
+    assert response.status_code == 422
     assert client.get("/api/phases").json()["phases"] == original
-
-    # Detach the second pair, then join each member with the common rollback.
-    updates = [
-        ("6.TEST_PLAN", {"parallel_with_phase_id": None}),
-        ("6.SOLUTION", {"parallel_with_phase_id": None}),
-        ("6.SOLUTION", {
-            "parallel_with_phase_id": ids["5.PREFLIGHT"],
-            "rollback_target_phase_id": ids["4.START"],
-        }),
-        ("6.TEST_PLAN", {
-            "parallel_with_phase_id": ids["6.SOLUTION"],
-            "rollback_target_phase_id": ids["4.START"],
-        }),
-    ]
-    for code, payload in updates:
-        assert update(code, payload).status_code == 200
+    for code in codes:
+        assert update(code, {"execution_type": "parallel"}).status_code == 200
     if rename:
         for index, code in enumerate(codes):
             assert update(code, {"name": f"Independent activity {index}"}).status_code == 200
@@ -1614,8 +1605,8 @@ def test_reconfigure_two_pairs_as_one_four_phase_group(client, rename):
     runtime_phases = [
         Phase(
             id=p["id"], code=p["code"], name=p["name"], execution_type=p["execution_type"],
-            parallel_with_phase_code=phase_codes.get(p["parallel_with_phase_id"]),
-            rollback_target_phase_code=phase_codes.get(p["rollback_target_phase_id"]),
+            parallel_with_phase_code=phase_codes.get(p.get("parallel_with_phase_id")),
+            rollback_target_phase_code=phase_codes.get(p.get("rollback_target_phase_id")),
         ) for p in phases
     ]
     builder = PhaseContractBuilder(runtime_phases)
@@ -1637,7 +1628,8 @@ def test_error_back_link_stays_under_public_prefix(client, monkeypatch, prefix):
         response = client.get("/phase/2147483647")
         assert response.status_code == 404
         headings = re.findall(r"<h1\b[^>]*>(.*?)</h1>", response.text, re.DOTALL)
-        assert headings == ["Фаза не найдена"]
+        assert [heading for heading in headings if heading.strip()] == ["Фаза не найдена"]
+        assert sum(tag == "h1" for tag, _ in Elements(response.text).elements) == 1
         elements = Elements(response.text).elements
         assert sum('base-page-header' in attrs.get('class', '').split() for _, attrs in elements) == 1
         links = [attrs for tag, attrs in elements if tag == 'a'

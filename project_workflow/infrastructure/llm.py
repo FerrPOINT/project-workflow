@@ -112,7 +112,7 @@ class OpenAICompatibleClient:
 class PromptBuilder:
     """Build prompts from phase contracts + task context."""
 
-    PROMPT_VERSION = "supervisor-evaluator-v9"
+    PROMPT_VERSION = "supervisor-evaluator-v10"
 
     SYSTEM_PROMPT = (
         "You are a strict workflow supervisor. "
@@ -129,15 +129,12 @@ class PromptBuilder:
         "7. verdict = PARTIAL — some items are missing, but the CURRENT phase worker can "
         "complete them without changing an artifact produced by an earlier phase → stay on phase.\n"
         "8. verdict = BLOCKED — real blocker → stay on phase.\n"
-        "9. verdict = ROLLBACK — missing phase obligations require changing an earlier-phase artifact "
-        "AND a rollback target is configured. Never invent a target. When required work cannot be "
-        "completed and no target is configured, report the concrete blocker instead.\n"
         "10. verdict = DELEGATE — only when the phase has a configured delegate.\n"
         "11. Mutually exclusive CURRENT facts about the same artifact or state prohibit PASS "
         "unless the report gives an explicit chronology backed by action evidence.\n"
         "12. If such a contradiction is repairable inside the current phase, return PARTIAL. "
-        "If repair requires changing an earlier-phase artifact and a rollback target is configured, "
-        "return ROLLBACK. Put affected required item IDs in missing and keep blockers empty. "
+        "If repair requires work outside the current phase, "
+        "return BLOCKED and explain the required work. "
         "A real external blocker still returns BLOCKED.\n"
         "13. A sequence such as 'first open, then merged' is valid only when timestamps and action "
         "evidence make the state change explicit.\n"
@@ -145,13 +142,25 @@ class PromptBuilder:
         "15. Evaluate performance of THIS phase: phase completion is not candidate approval or a Tracker "
         "stage transition. An independent review/test can finish with a documented rework outcome when "
         "the phase contract permits it. Pre-existing defects it correctly reports are not regressions "
-        "introduced by that worker, and do not by themselves require a Workflow ROLLBACK. "
+        "introduced by that worker. "
         "Never use a business outcome to excuse missing phase obligations, missing evidence or "
         "contradictory claims of acceptance. Check every required item as usual.\n"
+        "16. Use only the stated phase obligations. Respect where content is required: evidence in the "
+        "worker report does not have to be copied into SUMMARY.md or another artifact unless the "
+        "contract explicitly requires it there. Do not invent extra artifact content or placement.\n"
+        "17. Evaluate commands by their required behavior unless exact invocation is itself an explicit "
+        "contract obligation. For example, python -B -X utf8 -m unittest -v test_calculator.py preserves "
+        "the requested unittest invocation: -X utf8 selects encoding, not different tests. Still require "
+        "actual execution and its result; changed test selection, failed tests or missing output are "
+        "not equivalent success.\n"
+        "18. covered means the ENTIRE item is supported by actual evidence, not merely that a report "
+        "exists or mentions the item. An item requiring commands, contents and results is missing when "
+        "any required part is absent. Keep message, missing, covered and blockers consistent: never "
+        "describe evidence as absent while marking its required item covered.\n"
         "The Supervisor never chooses the next phase.\n\n"
         "Output STRICT JSON with these keys:\n"
         "{\n"
-        '  "verdict": "PASS" | "PARTIAL" | "BLOCKED" | "ROLLBACK" | "DELEGATE",\n'
+        '  "verdict": "PASS" | "PARTIAL" | "BLOCKED" | "DELEGATE",\n'
         '  "covered": ["required item ID"],\n'
         '  "missing": ["required item ID"],\n'
         '  "blockers": ["specific blocker description"],\n'
@@ -169,14 +178,11 @@ class PromptBuilder:
         evaluation_items: list[tuple[str, str]] | None = None,
     ) -> str:
         allowed = ["PASS", "PARTIAL", "BLOCKED"]
-        if getattr(phase, "rollback_target_phase_code", None):
-            allowed.append("ROLLBACK")
         if getattr(phase, "delegate", None) is not None:
             allowed.append("DELEGATE")
         lines: list[str] = [
             f"TASK: {task_key}",
             f"CURRENT PHASE: {phase.code} — {phase.name}",
-            f"ROLLBACK TARGET: {getattr(phase, 'rollback_target_phase_code', None) or 'not configured'}",
             f"ALLOWED VERDICTS: {', '.join(allowed)}",
             "",
             "PHASE CONTRACT:",
@@ -237,7 +243,7 @@ class _LlmResponse(BaseModel):
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
-    verdict: Literal["PASS", "PARTIAL", "BLOCKED", "ROLLBACK", "DELEGATE"]
+    verdict: Literal["PASS", "PARTIAL", "BLOCKED", "DELEGATE"]
     covered: list[str]
     missing: list[str]
     blockers: list[str]
@@ -291,7 +297,7 @@ class ResponseParser:
                 raise ValueError("PARTIAL requires missing items and no blockers")
             if response.verdict == "BLOCKED" and not response.blockers:
                 raise ValueError("BLOCKED requires a blocker reason")
-            if response.verdict in {"ROLLBACK", "DELEGATE"}:
+            if response.verdict == "DELEGATE":
                 if response.blockers:
                     raise ValueError(f"{response.verdict} must not contain blockers")
                 if required and not missing:
@@ -303,7 +309,7 @@ class ResponseParser:
                 raise ValueError("PARTIAL requires missing items and no blockers")
             if response.verdict == "BLOCKED" and not response.blockers:
                 raise ValueError("BLOCKED requires a blocker reason")
-            if response.verdict in {"ROLLBACK", "DELEGATE"} and response.blockers:
+            if response.verdict == "DELEGATE" and response.blockers:
                 raise ValueError(f"{response.verdict} must not contain blockers")
 
         return LlmVerdict(

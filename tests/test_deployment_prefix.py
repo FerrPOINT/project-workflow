@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from jinja2 import Template
 
 from project_workflow.config import Settings, get_settings
+from project_workflow.interfaces.ui.controller_assets import controller_source
 from project_workflow.interfaces.ui.sso import install_sso
 
 
@@ -87,13 +88,12 @@ def test_switch_profession_from_phase_discards_phase_scope_and_keeps_project(pre
 
 @pytest.mark.parametrize("prefix", ["", "/workflow"])
 def test_instruction_reorder_uses_one_public_prefix_and_preserves_order(prefix):
-    template = (Path(__file__).resolve().parents[1] /
-                "project_workflow/interfaces/ui/templates/instructions.html").read_text(encoding="utf-8")
+    template = controller_source("instructions", True)[0].decode()
     api_url = template[template.index("function instructionApiUrl("):template.index("\nfunction getRows(")]
     persist = template[
         template.index("async function persistOrder("):template.index("\nasync function moveInstruction(")
     ]
-    script = Template(api_url + "\n" + persist).render(ui_base_path=lambda: prefix)
+    script = "const config={basePath:" + json.dumps(prefix) + "};\n" + api_url + "\n" + persist
     scenario = (
         "let request;const PHASE_ID=77;const selectedNamespaceId=2;"
         "const window={location:{origin:'https://workflow.example.test'}};"

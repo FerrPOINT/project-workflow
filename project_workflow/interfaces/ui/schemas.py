@@ -365,8 +365,6 @@ class PhaseCreate(StrictRequest):
     description: str = Field(default="")
     execution_type: Literal["sync", "parallel"] = Field(default="sync")
     code: str | None = Field(default=None)
-    parallel_with_phase_id: int | None = Field(default=None, gt=0, strict=True)
-    rollback_target_phase_id: int | None = Field(default=None, gt=0, strict=True)
 
     @field_validator("name")
     @classmethod
@@ -423,8 +421,6 @@ class PhaseUpdate(StrictUpdateRequest):
 
     name: str | None = Field(default=None)
     description: str | None = Field(default=None)
-    parallel_with_phase_id: int | None = Field(default=None, gt=0, strict=True)
-    rollback_target_phase_id: int | None = Field(default=None, gt=0, strict=True)
     execution_type: Literal["sync", "parallel"] | None = Field(default=None)
     instructions: list[PhaseInstructionItem] | None = Field(default=None)
     checks: list[PhaseTextItem] | None = Field(default=None)

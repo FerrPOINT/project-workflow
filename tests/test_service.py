@@ -208,37 +208,25 @@ class TestUpdatePhase:
             [phase.code for phase in group]
             for group in group_parallel_phases(
                 phases,
-                id_of=lambda phase: int(phase.id),
                 execution_type_of=lambda phase: phase.execution_type,
-                parallel_with_phase_id_of=lambda phase: phase.parallel_with_phase_id,
             )
         ]
 
-    def test_sync_phase_becomes_explicitly_isolated_parallel(self, svc, fresh_db):
+    def test_sync_phase_joins_the_contiguous_parallel_run(self, svc, fresh_db):
         phase = phase_by_code(fresh_db, "7.PLAN_GATE")
 
         svc.update_phase_detail(phase.id, {"execution_type": "parallel"})
 
         updated = phase_by_code(fresh_db, "7.PLAN_GATE")
         assert updated.parallel_with_phase_id is None
-        assert ["7.PLAN_GATE"] in self._groups(fresh_db)
+        assert ["5.RESEARCH", "5.PREFLIGHT", "6.SOLUTION", "6.TEST_PLAN", "7.PLAN_GATE"] in self._groups(fresh_db)
 
-    def test_explicit_partner_joins_contiguous_parallel_component(self, svc, fresh_db):
+    def test_retired_partner_write_is_rejected(self, svc, fresh_db):
         phase = phase_by_code(fresh_db, "7.PLAN_GATE")
-
-        svc.update_phase_detail(
-            phase.id,
-            {
-                "execution_type": "parallel",
-                "parallel_with_phase_id": phase_by_code(fresh_db, "6.TEST_PLAN").id,
-            },
-        )
-
-        assert (
-            phase_by_code(fresh_db, "7.PLAN_GATE").parallel_with_phase_id
-            == phase_by_code(fresh_db, "6.TEST_PLAN").id
-        )
-        assert ["6.SOLUTION", "6.TEST_PLAN", "7.PLAN_GATE"] in self._groups(fresh_db)
+        before = phase.execution_type
+        with pytest.raises(ValueError, match="Устаревшие"):
+            svc.update_phase_detail(phase.id, {"execution_type":"parallel", "parallel_with_phase_id":1})
+        assert phase_by_code(fresh_db, "7.PLAN_GATE").execution_type == before
 
     def test_parallel_to_sync_clears_outgoing_and_incoming_links(self, svc, fresh_db):
         phase = phase_by_code(fresh_db, "6.SOLUTION")

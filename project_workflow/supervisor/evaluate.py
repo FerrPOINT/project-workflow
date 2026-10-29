@@ -51,8 +51,6 @@ def _contract_fingerprint_state(
                 "name": item.name,
                 "description": item.description,
                 "execution_type": item.execution_type,
-                "parallel_with_phase_code": item.parallel_with_phase_code,
-                "rollback_target_phase_code": item.rollback_target_phase_code,
                 "delegate": {
                     "agent": item.delegate.agent,
                     "hermes_profile": item.delegate.hermes_profile,
@@ -167,16 +165,15 @@ def _replay(
     result["replayed"] = True
     task = engine.db.tasks.get_by_id(task_id)
     verdict = str(response.get("verdict") or "").lower()
+    if verdict not in VERDICT_LABELS:
+        return None
     evaluated_phase = str(response.get("phase_code") or "")
     next_phase_code = str(response.get("next_phase_code") or "") or None
-    rollback_phase_code = str(response.get("rollback_phase_code") or "") or None
     expected_phase = evaluated_phase
     expected_status = "active"
     if verdict == "pass":
         expected_phase = next_phase_code or evaluated_phase
         expected_status = "active" if next_phase_code else "done"
-    elif verdict == "rollback":
-        expected_phase = rollback_phase_code or evaluated_phase
     elif verdict == "blocked":
         expected_status = "blocked"
 
@@ -198,7 +195,7 @@ def _replay(
             phase,
             verdict,
             next_phase_code,
-            rollback_phase_code,
+            None,
             int(run_id),
         )
     except ConcurrentTransitionError:
@@ -251,8 +248,6 @@ def _evaluate_strict_response(
                 temperature=0.1,
             )
             llm = ResponseParser.parse(raw, required_item_ids=item_ids)
-            if llm.verdict == "ROLLBACK" and not phase.rollback_target_phase_code:
-                raise ValueError("Для текущей фазы не настроена цель отката")
             if llm.verdict == "DELEGATE" and phase.delegate is None:
                 raise ValueError("Для текущей фазы не настроено делегирование")
             return raw, llm
@@ -300,7 +295,6 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
             checks=[item for member in group for item in member.checks],
             evidence=[item for member in group for item in member.evidence],
             execution_type="parallel",
-            rollback_target_phase_code=phase.rollback_target_phase_code,
         )
 
     task_id = int(engine.task["id"])
@@ -322,7 +316,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
     try:
         transition_routes = {
             verdict: engine._resolve_transition(phase, verdict, group)
-            for verdict in ("pass", "rollback", "delegate")
+            for verdict in ("pass", "delegate")
         }
     except ValueError as exc:
         catalog_error = exc
@@ -411,7 +405,6 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
             checks=[item for member in group for item in member.checks],
             evidence=[item for member in group for item in member.evidence],
             execution_type="parallel",
-            rollback_target_phase_code=phase.rollback_target_phase_code,
         )
     evaluation_items = (
         builder.build_parallel_evaluation_items(group) if len(group) > 1 else builder.build_evaluation_items(phase)
@@ -425,7 +418,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
     try:
         transition_routes = {
             verdict: engine._resolve_transition(phase, verdict, group)
-            for verdict in ("pass", "rollback", "delegate")
+            for verdict in ("pass", "delegate")
         }
     except ValueError as exc:
         technical_error = True
@@ -510,9 +503,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         "missing": missing,
         "blockers": blockers,
         "current_phase_code": phase.code,
-        "next_phase_code": (
-            rollback_phase_code if verdict_key == "rollback" else next_phase_code
-        ),
+        "next_phase_code": next_phase_code,
         "next_phase_name": next_phase_name,
         "rollback_phase_code": rollback_phase_code,
         "message": llm.message,
@@ -532,9 +523,6 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         result["next_phase_contract"] = next_phase_contract.to_dict()
 
     next_phase_obj = engine.phase_map.get(next_phase_code) if next_phase_code else None
-    rollback_phase_obj = (
-        engine.phase_map.get(rollback_phase_code) if rollback_phase_code else None
-    )
     raw_evaluator = llm.raw if technical_error else (raw if raw is not None else llm.raw)
     run_data: dict[str, Any] = {
         "task_id": task_id,
@@ -547,7 +535,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         "missing_item_ids": missing_ids,
         "blocker_messages": blockers,
         "next_phase_id": next_phase_obj.id if next_phase_obj else None,
-        "rollback_phase_id": rollback_phase_obj.id if rollback_phase_obj else None,
+        "rollback_phase_id": None,
         "replay_fingerprint": None if technical_error else fingerprint,
         "evaluation_snapshot": {
             "phase_code": phase.code,

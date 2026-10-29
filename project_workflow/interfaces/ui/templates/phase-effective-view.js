@@ -1,6 +1,7 @@
 /* Raw editors stay inert until the server has resolved the instruction scope. */
-document.addEventListener('DOMContentLoaded', async () => {
+page.ready(async () => {
   const view = document.getElementById('phaseEffectiveView');
+  if (!view) return;
   const editor = document.getElementById('phaseStoredEditor');
   const status = document.getElementById('phaseViewStatus');
   const instructionsOnly = view.dataset.instructionsOnly === 'true';
@@ -70,6 +71,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('phaseEffectiveContent').hidden = false;
     status.hidden = true;
   } catch (_) {
+    if (!page.alive) return;
     status.textContent = 'Не удалось проверить инструкции. Обновите страницу.';
     status.setAttribute('role', 'alert');
   }

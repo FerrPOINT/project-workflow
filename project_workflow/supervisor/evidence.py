@@ -49,7 +49,9 @@ def validate_frozen_evaluation(
     if (
         fingerprints != [fingerprint, fingerprint] or step.get("replay_fingerprint") != report_fingerprint
         or state["prompt_version"] != evaluation.get("prompt_version")
-        or state["prompt_version"] != PromptBuilder.PROMPT_VERSION
+        or state["prompt_version"] not in (
+            "supervisor-evaluator-v9", "supervisor-evaluator-v8-no-backtracking", PromptBuilder.PROMPT_VERSION,
+        )
         or state["contract"] != {key: value for key, value in contract.items() if key != "evaluation_items"}
         or state["evaluation_items"] != items
         or parsed.verdict != "PASS" or parsed.covered != covered

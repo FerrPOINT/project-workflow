@@ -21,14 +21,18 @@ def check_calculator(folder: Path) -> list[str]:
             if isinstance(node, ast.Name) and node.id.startswith("__"):
                 return ["calculator.py contains forbidden interpreter access"]
             if isinstance(node, ast.Call) and (
-                not isinstance(node.func, ast.Name) or node.func.id not in {"sum", "int", "len", "range"}
+                not isinstance(node.func, ast.Name)
+                or node.func.id not in {"sum", "int", "len", "range", "type", "ValueError"}
             ):
                 return ["calculator.py calls outside its pure arithmetic contract"]
+            if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "type"
+                    and (len(node.args) != 1 or node.keywords)):
+                return ["calculator.py may use type only for input validation"]
         # Restricted builtins plus a separate, time-bounded process. This is a
         # contract check, not a claim that Python AST validation is an OS sandbox.
         worker = """import json,sys
 source=open(sys.argv[1],encoding='utf-8').read()
-scope={'__builtins__':{'sum':sum,'int':int,'len':len,'range':range}}
+scope={'__builtins__':{'sum':sum,'int':int,'len':len,'range':range,'type':type,'ValueError':ValueError}}
 exec(compile(source,sys.argv[1],'exec'),scope)
 for rows in ([],[{'qty':2,'price_cents':101}],[{'qty':0,'price_cents':99}],
  [{'qty':3,'price_cents':7},{'qty':4,'price_cents':11}],

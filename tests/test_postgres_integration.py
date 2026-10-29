@@ -166,9 +166,15 @@ def test_pm_ownership_concurrent_provision_replay_and_db_immutability(pm_postgre
         barrier.wait(timeout=10)
         with SAUnitOfWork() as uow:
             try:
-                return NamespaceOwnershipService(uow).provision(namespace_id, request.model_copy(update={
-                    "tracker_project_ref": project_ref,
-                }), principal)
+                return NamespaceOwnershipService(uow).provision(
+                    namespace_id,
+                    request.model_copy(
+                        update={
+                            "tracker_project_ref": project_ref,
+                        }
+                    ),
+                    principal,
+                )
             except ConflictError:
                 return "conflict"
 
@@ -1436,9 +1442,7 @@ class TestPostgresUoW:
             uow = SAUnitOfWork(pg_url)
             barrier.wait()
             try:
-                TaskService(uow).create_task(
-                    {"project_id": project["id"], "task_key": "RACE-1", "title": "Race"}
-                )
+                TaskService(uow).create_task({"project_id": project["id"], "task_key": "RACE-1", "title": "Race"})
                 return "created"
             except ConflictError:
                 uow.rollback()
@@ -2268,3 +2272,54 @@ def test_postgres_health_neighbor_namespace_and_same_revision_dml_do_not_repeat_
             connection.execute(text('CREATE TABLE "Health_Neighbor".extra(id integer)'))
         assert client.get("/health").status_code == 200
         assert deep.call_count == 1
+
+
+@pytest.mark.integration
+def test_retired_phase_edges_do_not_block_deletion_and_rollback_is_atomic(pg_url):
+    from uuid import uuid4
+
+    engine = get_engine(pg_url)
+    ensure_migrated(engine)
+    with SAUnitOfWork(engine) as uow:
+        workflow_id = WorkflowService(uow).create_workflow({"name": "Deletion " + uuid4().hex})["id"]
+        service = PhaseServiceApp(uow)
+        first = service.list_phases(workflow_id)[0]
+        second = service.create_phase({"workflow_id": workflow_id, "name": "Second", "phase_order": 2})
+        third = service.create_phase({"workflow_id": workflow_id, "name": "Third", "phase_order": 3})
+        uow.phases.update(
+            second["id"], {"parallel_with_phase_id": first["id"], "rollback_target_phase_id": third["id"]}
+        )
+        uow.phases.update(third["id"], {"rollback_target_phase_id": first["id"]})
+        uow.commit()
+        with patch.object(uow, "commit", side_effect=RuntimeError("commit failure")):
+            with pytest.raises(RuntimeError, match="commit failure"):
+                service.delete_phase(first["id"])
+        assert service.get_phase(first["id"]) is not None
+        assert service.get_phase(second["id"])["parallel_with_phase_id"] == first["id"]
+        assert service.get_phase(third["id"])["rollback_target_phase_id"] == first["id"]
+        service.delete_phase(first["id"])
+        assert service.get_phase(first["id"]) is None
+        assert service.get_phase(second["id"])["parallel_with_phase_id"] is None
+        assert service.get_phase(second["id"])["rollback_target_phase_id"] == third["id"]
+        assert service.get_phase(third["id"])["rollback_target_phase_id"] is None
+        assert [phase["phase_order"] for phase in service.list_phases(workflow_id)] == [1, 2]
+        project = ProjectService(uow).create_project(
+            {
+                "workflow_id": workflow_id,
+                "code": "delete-" + uuid4().hex,
+                "name": "Delete guard",
+                "key_prefixes": ["DELETE"],
+            }
+        )
+        task = TaskService(uow).create_task(
+            {"project_id": project["id"], "task_key": "DELETE-1", "current_phase_id": second["id"]}
+        )
+        with pytest.raises(ConflictError, match="текущая задача"):
+            service.delete_phase(second["id"])
+        uow.tasks.update(task["id"], {"current_phase_id": third["id"]})
+        uow.tasks.record_phase_event(task["id"], second["id"], "completed")
+        uow.commit()
+        with pytest.raises(ConflictError, match="история задачи"):
+            service.delete_phase(second["id"])
+        assert service.get_phase(second["id"]) is not None
+        assert service.get_phase(second["id"])["rollback_target_phase_id"] == third["id"]

@@ -6,6 +6,7 @@ import os
 import re
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -47,6 +48,7 @@ class Settings(BaseSettings):
     AUTH_APPLICATION_ACCESS_REQUIRED: bool = False
     AUTH_INTERNAL_BASE_URL: str = ""
     AUTH_PUBLIC_ORIGIN: str = "http://localhost:8812"
+    AUTH_BROWSER_ORIGINS: list[str] = Field(default_factory=list)
     AUTH_SESSION_SECRET: str = ""
     AUTH_COOKIE_SECURE: bool = False
     PROJECT_WORKFLOW_NAMESPACE_PROVISIONER_SUBJECT: str = ""
@@ -61,6 +63,22 @@ class Settings(BaseSettings):
     # Read-only Tracker authority for configured PM completion, never supplied by the agent.
     PROJECT_WORKFLOW_CONFIGURED_TRACKER_URL: str = ""
     PROJECT_WORKFLOW_CONFIGURED_TRACKER_READ_TOKEN: str = ""
+
+    @field_validator("AUTH_BROWSER_ORIGINS")
+    @classmethod
+    def _validate_browser_origins(cls, values: list[str]) -> list[str]:
+        result = []
+        for value in values:
+            url = urlsplit(value)
+            if (url.scheme not in {"http", "https"} or not url.hostname or "*" in url.hostname
+                    or url.username is not None or url.password is not None
+                    or url.path not in {"", "/"} or url.query or url.fragment):
+                raise ValueError("AUTH_BROWSER_ORIGINS requires exact HTTP(S) origins")
+            _ = url.port
+            origin = url.scheme + "://" + url.netloc.lower()
+            if origin not in result:
+                result.append(origin)
+        return result
 
     @field_validator("DATABASE_URL", mode="before")
     @classmethod

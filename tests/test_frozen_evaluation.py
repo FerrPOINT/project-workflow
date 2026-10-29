@@ -11,6 +11,7 @@ from project_workflow.domain.exceptions import ConflictError
 from project_workflow.domain.runtime_assignment import payload_sha256
 from project_workflow.infrastructure.db import models
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
+from project_workflow.infrastructure.llm import PromptBuilder
 from project_workflow.supervisor.evaluate import _fingerprint_contract_state, _report_fingerprint
 from project_workflow.supervisor.evidence import validate_frozen_evaluation
 from tests.test_configured_cli import WRITER, enroll
@@ -65,6 +66,35 @@ def test_actual_supervisor_freezes_full_existing_fingerprint_inputs(accepted):
     }
     assert validate(step, evaluation) == step["covered_item_ids"]
     assert step["replay_fingerprint"] == operation_fingerprint()
+
+
+@pytest.mark.parametrize("prompt_version", ["supervisor-evaluator-v9", "supervisor-evaluator-v8-no-backtracking"])
+def test_prompt_upgrade_keeps_frozen_terminal_readback_and_replay(
+    configured, supervisor_llm, monkeypatch, prompt_version,
+):
+    with monkeypatch.context() as previous:
+        previous.setattr(PromptBuilder, "PROMPT_VERSION", prompt_version)
+        command, selector, result, record = accepted.__wrapped__(configured, supervisor_llm)
+    before = copy.deepcopy(record["evaluation_snapshot"])
+    assert before["prompt_version"] == prompt_version != PromptBuilder.PROMPT_VERSION
+    assert validate(record, before) == record["covered_item_ids"]
+    response = configured[0].post(READBACK, headers=WRITER, json=selector)
+    assert response.status_code == 200, response.text
+    assert submit(configured, **command).json()["result"] == result
+    assert submit(configured).status_code == 200
+    with SAUnitOfWork() as uow:
+        after = uow.step_history.get_by_id(record["id"]).to_dict()["evaluation_snapshot"]
+    assert after == before
+
+
+def test_unknown_prompt_version_is_not_trusted_even_with_consistent_hashes(accepted):
+    record = copy.deepcopy(accepted[3])
+    evaluation = record["evaluation_snapshot"]
+    evaluation["prompt_version"] = evaluation["contract_fingerprint_state"]["prompt_version"] = "unknown-evaluator"
+    fingerprint = _fingerprint_contract_state(evaluation["contract_fingerprint_state"])
+    evaluation.update(contract_fingerprint=fingerprint, evaluated_contract_fingerprint=fingerprint)
+    with pytest.raises(ConflictError, match="proof mismatch"):
+        validate(record, evaluation)
 
 
 @pytest.mark.parametrize("value", [None, "", "bad", "a" * 63, "A" * 64, 42, "0" * 64])

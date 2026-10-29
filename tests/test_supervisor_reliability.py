@@ -376,7 +376,7 @@ def test_same_report_replays_after_noop_phase_aggregate_save(supervisor_llm):
     assert chat.call_count == 1
 
 
-def test_inconsistent_parallel_rollback_targets_fail_closed_without_provider_call():
+def test_legacy_parallel_targets_do_not_block_evaluation(supervisor_llm):
     engine = SupervisorEngine("RUN-918")
     solution = phase_by_code(engine.db, "6.SOLUTION")
     test_plan = phase_by_code(engine.db, "6.TEST_PLAN")
@@ -393,18 +393,16 @@ def test_inconsistent_parallel_rollback_targets_fail_closed_without_provider_cal
     engine.db.commit()
     engine._reload_evaluation_state()
 
-    with patch.object(OpenAICompatibleClient, "chat") as chat:
-        result = engine.evaluate("Отчёт не должен уйти провайдеру")
+    supervisor_llm("PARTIAL")
+    result = engine.evaluate("Отчёт параллельной группы")
 
     latest_run = engine.db.list_step_history(task_key="RUN-918", limit=1)[0]
     events = engine.db.list_phase_events(int(engine.task["id"]))
-    assert chat.call_count == 0
-    assert result["verdict"] == "BLOCKED"
-    assert result["retryable"] is True
+    assert result["verdict"] == "PARTIAL"
     assert result["current_phase_code"] == "6.SOLUTION"
-    assert latest_run["replay_fingerprint"] is None
-    assert latest_run["verdict"] == "blocked"
-    assert events[-1]["event_type"] == "blocked"
+    assert latest_run["replay_fingerprint"] is not None
+    assert latest_run["verdict"] == "partial"
+    assert not any(event["event_type"] == "rolled_back" for event in events)
 
 
 @pytest.mark.parametrize(
@@ -654,6 +652,6 @@ def test_audit_snapshot_contains_contract_and_provider_metadata(supervisor_llm):
     snapshot = run.evaluation_snapshot
     assert snapshot["model"]
     assert snapshot["endpoint_mode"] == "openai-compatible"
-    assert snapshot["prompt_version"] == "supervisor-evaluator-v9"
+    assert snapshot["prompt_version"] == "supervisor-evaluator-v10"
     assert snapshot["contract_snapshot"]["evaluation_items"]
     assert snapshot["raw_evaluator"]["verdict"] == "PARTIAL"

@@ -76,11 +76,11 @@ def test_unconfigured_routing_still_fails_closed_instead_of_becoming_pass(verdic
     assert client.chat.call_count == 3
 
 
-def test_legacy_configured_rollback_and_delegate_are_still_offered():
+def test_configured_delegate_remains_available_without_reviving_retained_rollback():
     phase = Phase(code="qa", rollback_target_phase_code="implementation", delegate=PhaseDelegate(agent="qa"))
     prompt = PromptBuilder.build_user_prompt("QA-1", phase, "Cannot finish checks")
-    assert "ALLOWED VERDICTS: PASS, PARTIAL, BLOCKED, ROLLBACK, DELEGATE" in prompt
-    assert "ROLLBACK TARGET: implementation" in prompt
+    assert "ALLOWED VERDICTS: PASS, PARTIAL, BLOCKED, DELEGATE" in prompt
+    assert "ROLLBACK" not in prompt
 
 
 def test_missing_review_work_is_not_excused_by_a_business_rework_verdict():

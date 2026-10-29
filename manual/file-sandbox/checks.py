@@ -3,11 +3,13 @@
 import csv
 import io
 import json
+import py_compile
 import tempfile
 import unittest
 from pathlib import Path
 
-from run import check_calculator, prepare, validate_manifest, validate_phases
+from oracle import check_calculator
+from run import prepare, validate_manifest, validate_phases
 from scenario import CASES, case_id, catalog, fixture, phases, snapshot, total_for, verify
 
 
@@ -106,6 +108,56 @@ class SandboxChecks(unittest.TestCase):
             self.assertEqual(verify(folder, 0, initial=True), [])
             (folder / "calculator.py").write_text("changed prematurely", encoding="utf-8")
             self.assertTrue(verify(folder, 0, initial=True))
+
+    def test_pure_input_validation_does_not_fail_the_arithmetic_oracle(self):
+        with tempfile.TemporaryDirectory() as directory:
+            folder = self.seed(Path(directory), 0)
+            implementation = (
+                "def total(rows):\n"
+                "    result = 0\n"
+                "    for row in rows:\n"
+                "        qty, price = row['qty'], row['price_cents']\n"
+                "        if type(qty) is not int or type(price) is not int or qty < 0 or price < 0:\n"
+                "            raise ValueError('Expected nonnegative integers')\n"
+                "        result += qty * price\n"
+                "    return result\n"
+            )
+            self.finish(folder, 0, implementation)
+            self.assertEqual(check_calculator(folder), [])
+            (folder / "calculator.py").write_text(
+                implementation.replace("qty * price", "price"), encoding="utf-8"
+            )
+            self.assertTrue(check_calculator(folder))
+
+    def test_python_cache_is_recorded_without_hiding_it_or_failing_valid_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            folder = self.seed(Path(directory), 0)
+            self.finish(folder, 0, 'def total(rows):\n    return sum(r["qty"] * r["price_cents"] for r in rows)\n')
+            cache = Path(py_compile.compile(str(folder / "calculator.py"), doraise=True))
+            files = snapshot(folder)
+            key = cache.relative_to(folder).as_posix()
+            self.assertIn(key, files)
+            self.assertEqual(files[key]["kind"], "python-bytecode")
+            self.assertEqual(len(files[key]["sha256"]), 64)
+            self.assertEqual(verify(folder, 0), [])
+            self.assertEqual(check_calculator(folder), [])
+            (folder / "__pycache__" / "unexpected.txt").write_text("Not Python bytecode")
+            with self.assertRaises(ValueError):
+                snapshot(folder)
+
+    def test_oracle_still_rejects_side_effects_and_interpreter_access(self):
+        implementations = [
+            "def total(rows):\n    import os\n    return 0\n",
+            "def total(rows):\n    return open('settings.json').read()\n",
+            "def total(rows):\n    return __import__('os')\n",
+            "def total(rows):\n    return rows.clear()\n",
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            folder = self.seed(Path(directory), 0)
+            for implementation in implementations:
+                with self.subTest(implementation=implementation):
+                    (folder / "calculator.py").write_text(implementation, encoding="utf-8")
+                    self.assertTrue(check_calculator(folder))
 
     def test_snapshot_refuses_nested_or_oversized_files(self):
         with tempfile.TemporaryDirectory() as directory:
