@@ -20,10 +20,19 @@ Fresh disposable ComposeHelper v2, 512MiB/0.5CPU, owned database/network/volume,
 evidence is `.local/publication-full-coverage.{log,xml}` and
 `.local/publication160-abf7e8c16b/{result.json,pytest.log,junit.xml,compose/journal.json}`.
 
-This supersedes the earlier partial full-gate status below. Remaining gates are
-image/Compose qualification of this publication source, editor/client adoption,
-orchestrator-specific deployment and installed/live text publication. The accepted
-PM release uses its existing620f45cd image and does not wait for this package.
+Actual normal Build `ec7b4199433f4a10b3ed55fc3b0b6817` now packages source
+`9ce5d5d95776a425bfacb26eb74cafdbebd902d7` with the same production/tests trees.
+Image `sha256:4df018d8d4795ea76050329e796d4482618c00f487b36ea2074a222fed371414`
+passes the real fresh-database Compose readiness check: migration head
+`0023_catalog_publication_author`, database/schema/catalog health and all six
+catalog operations in the HTTP OpenAPI (45 paths). The owned v2 project is
+cleaned; no stand, credentials or publication was changed. Original Build
+receipt SHA256 `4be46559212efda0e62e20e9ddefe10fb68e1f2b1ac051e9a4cb02c0b77a326b`;
+readiness result SHA256 `2ece3b3108ea9b250c5ebd6ff7e73b5e7c69b00ab8d3f4f3e8c670fa0a1db8da`.
+
+This supersedes the earlier partial full-gate status below. Editor/client
+adoption, orchestrator-specific deployment and installed/live text publication
+remain open. The PM package on620f45cd does not wait for this API-only feature.
 
 ## Boundary
 
