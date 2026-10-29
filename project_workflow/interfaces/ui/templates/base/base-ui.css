@@ -3221,7 +3221,7 @@ body {
   position: fixed;
   z-index: 40;
   inset-inline-end: var(--shell-page-gutter);
-  bottom: var(--shell-page-gutter);
+  bottom: calc(var(--shell-page-gutter) + var(--base-fixed-actions-offset, 0px));
   width: min(356px, calc(100% - 2 * var(--shell-page-gutter)));
   pointer-events: none;
 }
