@@ -128,11 +128,14 @@ def _effective_phase_view(phase: dict[str, Any], namespace_id: int | None) -> di
     binding = next((item for item in installation.bindings
                     if item.role_key == "project_manager" and int(item.namespace_id) == namespace_id
                     and int(item.workflow_id) == phase["workflow_id"]), None)
-    mode = next((item for item in binding.modes if item.key == "draft"), None) if binding else None
-    if mode is None or phase["id"] not in [int(value) for value in mode.phase_ids]:
+    mode = uow.workflows.get_mode(phase["mode_id"], workflow.id) if binding else None
+    if mode is None or mode.key != "draft":
         raise ValueError("Configured PM phase is outside the installed namespace/mode")
+    from project_workflow.application.catalog_publication import read_revision
+
+    read_revision(uow, workflow, mode.catalog_version)
     projected = load_phases_from_db(
-        uow, workflow_id=phase["workflow_id"], mode_id=int(mode.mode_id),
+        uow, workflow_id=phase["workflow_id"], mode_id=mode.id,
         profession_settings=_app_state.project_service().get_project(namespace_id),
     )
     effective = next((item for item in projected if item.id == phase["id"]), None)
@@ -144,9 +147,11 @@ def _effective_phase_view(phase: dict[str, Any], namespace_id: int | None) -> di
 
 def _pm_workflow_write_error(workflow_id: int) -> JSONResponse | None:
     workflow = _app_state.get_uow().workflows.get_by_id(workflow_id)
-    if workflow is not None and workflow.key == "single-task-v1:project_manager":
+    if workflow is not None and isinstance(workflow.key, str) and workflow.key.startswith("single-task-v1:"):
         # Refuse even if the catalog already drifted; a raw save is not a publisher.
-        return _error("Configured PM catalog is historical/read-only", 409)
+        message = ("Configured PM catalog is historical/read-only" if workflow.key == "single-task-v1:project_manager"
+                   else "Configured catalog is historical/read-only; use explicit revision publication")
+        return _error(message, 409)
     return None
 
 

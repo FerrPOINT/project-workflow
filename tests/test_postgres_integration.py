@@ -256,7 +256,7 @@ def test_pm_ownership_catalog_lock_order_and_incomplete_schema(pg_url, winner):
     assert not schema_is_ready(engine)
     with pytest.raises(DatabaseRecreateRequired):
         ensure_migrated(engine)
-    assert database_revisions(engine) == {"0021_profession_task_workflows"}
+    assert database_revisions(engine) == {"0023_catalog_publication_author"}
 
 
 @pytest.mark.integration
@@ -487,7 +487,7 @@ class TestPostgresInitialMigration:
             version = conn.execute(
                 text("SELECT version_num FROM project_workflow.alembic_version")
             ).scalar_one()
-        assert version == migration_head() == "0021_profession_task_workflows"
+        assert version == migration_head() == "0023_catalog_publication_author"
         assert schema_is_ready(engine) is True
 
     def test_managed_bootstrap_serializes_with_public_catalog_creation(self, pg_url):

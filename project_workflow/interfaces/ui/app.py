@@ -328,6 +328,20 @@ def create_app() -> FastAPI:
 
     # Configuration writes declare their administration dependency at registration.
     admin_access = [Depends(require_administrator)]
+    from .routes import catalog_publication_api
+
+    app.get("/api/workflows/{workflow_id}/catalog", dependencies=admin_access)(catalog_publication_api.active)
+    app.post("/api/workflows/{workflow_id}/catalog/drafts", dependencies=admin_access)(catalog_publication_api.save)
+    app.get("/api/workflows/{workflow_id}/catalog/drafts", dependencies=admin_access)(catalog_publication_api.pending)
+    app.get("/api/workflows/{workflow_id}/catalog/drafts/{version}", dependencies=admin_access)(
+        catalog_publication_api.draft,
+    )
+    app.post("/api/workflows/{workflow_id}/catalog/drafts/{version}/publication", dependencies=admin_access)(
+        catalog_publication_api.publish,
+    )
+    app.get("/api/workflows/{workflow_id}/catalog/publications/operations/{operation_key}", dependencies=admin_access)(
+        catalog_publication_api.operation,
+    )
     from .routes.identity_deletion_api import handle as identity_deletion_handle
     app.post("/api/internal/v1/user-deletions/{operation_id}/{action}")(identity_deletion_handle)
 

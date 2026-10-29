@@ -66,6 +66,9 @@ def _catalog(uow: SAUnitOfWork, namespace_id: int, *, workflow_key: str | None =
         if not any(int(b.namespace_id) == namespace_id and int(b.workflow_id) == workflow.id
                    for b in installed.bindings):
             raise ConflictError("Installed profession/workflow required")
+        from project_workflow.application.catalog_publication import read_revision
+
+        read_revision(uow, workflow, workflow.active_catalog_version, selected=True)
     return project, workflow, mode
 
 
@@ -111,6 +114,12 @@ def _configured_row(uow: SAUnitOfWork, task: str, namespace_id: int,
             or assignment.payload_sha256 is not None or assignment.hermes_run_ref is not None
             or assignment.bind_operation_key is not None):
         raise ConflictError("Configured assignment custody changed")
+    if workflow.key.startswith("single-task-v1:"):
+        from project_workflow.application.catalog_publication import read_revision
+
+        # A saved assignment keeps its original mode/phase snapshot even after
+        # publication. Validate that revision, never substitute the active mode.
+        read_revision(uow, workflow, mode.catalog_version)
     return current, assignment, payload
 
 
@@ -207,6 +216,12 @@ def enroll(uow: SAUnitOfWork, request: ConfiguredAssignment) -> dict[str, Any]:
             current, _, old = _configured_row(uow, request.task, request.namespace_id, stored)
             accepted = old["request"]
             current_version = version(uow, current.id, old)
+            if current.status != "done" and workflow.key.startswith("single-task-v1:"):
+                pinned = uow.workflows.get_mode(current.mode_id, workflow.id)
+                if pinned is not None and pinned.key == request.mode_key:
+                    # Recovery of an unfinished cycle retains its published
+                    # snapshot; publication only selects new tasks/cycles.
+                    mode = pinned
         if (request.expected_version != current_version
                 or not legacy and request.assignment_version <= accepted["assignment_version"]
                 or request.assignment_ref == accepted["assignment_ref"]
