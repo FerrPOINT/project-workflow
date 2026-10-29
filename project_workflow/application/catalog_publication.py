@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import func, select
@@ -88,8 +89,17 @@ def read_revision(uow: SAUnitOfWork, workflow: Any, version: int, *, selected: b
         if payload_sha256(modes) != receipt.content_sha256:
             raise ConflictError("Publication receipt hash mismatch")
     _validate_rows(uow, workflow, version, modes)
-    return {"workflow_id": workflow.id, "catalog_version": version,
-            "content_sha256": payload_sha256(modes), "modes": modes}
+    result = {"workflow_id": workflow.id, "catalog_version": version,
+              "content_sha256": payload_sha256(modes), "modes": modes}
+    if version > 1:
+        assert receipt is not None
+        published_at = receipt.published_at
+        if published_at is not None:
+            # SQLite drops tzinfo; persisted values are always server UTC.
+            published_at = published_at.replace(tzinfo=timezone.utc) if published_at.tzinfo is None else published_at
+        result.update(published_by_subject=receipt.published_by_subject,
+                      published_at=published_at.astimezone(timezone.utc).isoformat() if published_at else None)
+    return result
 
 
 def _locked(uow: SAUnitOfWork, workflow_id: int) -> Any:
@@ -126,12 +136,45 @@ def _cas(uow: SAUnitOfWork, workflow: Any, version: int, digest: str) -> None:
         raise ConflictError("Active instruction revision changed; reload before saving/publishing")
 
 
+def _draft_result(workflow: Any, version: int, modes: list[dict]) -> dict:
+    return {"workflow_id": workflow.id, "catalog_version": version, "content_sha256": payload_sha256(modes),
+            "modes": modes, "published": False, "active_catalog_version": workflow.active_catalog_version}
+
+
+def read_draft(uow: SAUnitOfWork, workflow_id: int, version: int) -> dict:
+    workflow = _locked(uow, workflow_id)
+    modes = _draft_modes(uow, workflow_id, version)
+    if not modes:
+        raise NotFoundError("Saved instruction draft not found")
+    _validate_rows(uow, workflow, version, modes)
+    if version == 1 or uow.session.get(m.WorkflowCatalogPublication, (workflow_id, version)) is not None:
+        return {**read_revision(uow, workflow, version), "published": True,
+                "active_catalog_version": workflow.active_catalog_version}
+    return _draft_result(workflow, version, modes)
+
+
+def read_pending_draft(uow: SAUnitOfWork, workflow_id: int) -> dict | None:
+    workflow = _locked(uow, workflow_id)
+    version = uow.session.scalar(select(func.max(m.WorkflowMode.catalog_version)).where(
+        m.WorkflowMode.workflow_id == workflow_id, m.WorkflowMode.catalog_version > workflow.active_catalog_version))
+    return read_draft(uow, workflow_id, version) if version is not None else None
+
+
 def save_draft(uow: SAUnitOfWork, workflow_id: int, command: CatalogDraft) -> dict:
     workflow = _locked(uow, workflow_id)
     _cas(uow, workflow, command.expected_version, command.expected_sha256)
     modes = _normalize(command.modes)
     if _structure(modes) != _structure(_normalize(_definition(workflow.key)["modes"])):
         raise ConflictError("Only text may change; role, scopes, skills and phase structure are frozen")
+    # Reconcile an unknown save result under the same catalog lock. Drafts use
+    # existing version rows, not a second journal or a client-supplied identity.
+    pending = uow.session.scalars(select(m.WorkflowMode.catalog_version).where(
+        m.WorkflowMode.workflow_id == workflow_id, m.WorkflowMode.catalog_version > workflow.active_catalog_version,
+    ).distinct().order_by(m.WorkflowMode.catalog_version.desc())).all()
+    for version in pending:
+        if _draft_modes(uow, workflow_id, version) == modes:
+            _validate_rows(uow, workflow, version, modes)
+            return _draft_result(workflow, version, modes)
     latest = uow.session.scalar(select(func.max(m.WorkflowMode.catalog_version)).where(
         m.WorkflowMode.workflow_id == workflow_id))
     assert latest is not None
@@ -141,8 +184,7 @@ def save_draft(uow: SAUnitOfWork, workflow_id: int, command: CatalogDraft) -> di
                       mode=ManagedMode.model_validate(mode), catalog_version=version)
     _validate_rows(uow, workflow, version, modes)
     uow.commit()
-    return {"workflow_id": workflow_id, "catalog_version": version, "content_sha256": payload_sha256(modes),
-            "published": False, "active_catalog_version": workflow.active_catalog_version}
+    return _draft_result(workflow, version, modes)
 
 
 def _draft_modes(uow: SAUnitOfWork, workflow_id: int, version: int) -> list[dict]:
@@ -164,7 +206,10 @@ def _draft_modes(uow: SAUnitOfWork, workflow_id: int, version: int) -> list[dict
     return _normalize(modes)
 
 
-def publish(uow: SAUnitOfWork, workflow_id: int, draft_version: int, command: CatalogPublish) -> dict:
+def publish(uow: SAUnitOfWork, workflow_id: int, draft_version: int, command: CatalogPublish, *,
+            publisher_subject: str) -> dict:
+    if not isinstance(publisher_subject, str) or not publisher_subject.strip() or len(publisher_subject) > 255:
+        raise ValueError("Verified publication subject required")
     workflow = _locked(uow, workflow_id)
     read_revision(uow, workflow, workflow.active_catalog_version, selected=True)
     request_hash = payload_sha256({"workflow_id": workflow_id, "draft_version": draft_version,
@@ -187,7 +232,7 @@ def publish(uow: SAUnitOfWork, workflow_id: int, draft_version: int, command: Ca
     uow.session.add(m.WorkflowCatalogPublication(
         workflow_id=workflow_id, catalog_version=draft_version, parent_version=workflow.active_catalog_version,
         operation_key=command.operation_key, request_sha256=request_hash, content_sha256=digest,
-        content=canonical_json(modes)))
+        content=canonical_json(modes), published_by_subject=publisher_subject, published_at=datetime.now(timezone.utc)))
     uow.session.flush()
     uow.workflows.update(workflow_id, {"active_catalog_version": draft_version})
     result = read_revision(uow, uow.workflows.get_by_id(workflow_id), draft_version)

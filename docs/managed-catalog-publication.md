@@ -21,7 +21,9 @@ phase description, instruction descriptions and existing check/evidence text.
 Blank required text and extra/structural fields fail closed. This is an
 administrator operation, not a capability granted to an assigned agent.
 
-Every saved draft appends rows; saving a correction creates another version.
+Every distinct pending draft appends rows; saving a correction creates another
+version. Under the existing catalog lock, an identical pending snapshot reuses
+its saved version instead of appending duplicates. Active-base CAS still applies.
 An unpublished draft can never execute. Publication changes only the active
 version pointer and inserts one receipt; old modes, phase IDs, tasks,
 assignments, reports and terminal receipts are not updated. Existing executions
@@ -39,7 +41,7 @@ native families remain read-only and cannot use publication to become configured
 
 ## JSON API
 
-All four routes use the existing `require_administrator` dependency, current
+All six routes use the existing `require_administrator` dependency, current
 human application admission and DB commit guards. They are not machine-agent
 runtime endpoints. Responses are `Cache-Control: no-store`.
 
@@ -49,9 +51,19 @@ runtime endpoints. Responses are `Cache-Control: no-store`.
 2. `POST /api/workflows/{workflow_id}/catalog/drafts`
    accepts `{expected_version,expected_sha256,modes}`. Start with the GET
    snapshot and change only the permitted text. Returns
-   `{ok:true,revision:{workflow_id,catalog_version,content_sha256,published:false,active_catalog_version}}`.
-   Saving does not move the active pointer or create an execution.
-3. `POST /api/workflows/{workflow_id}/catalog/drafts/{version}/publication`
+   `{ok:true,revision:{workflow_id,catalog_version,content_sha256,modes,published:false,active_catalog_version}}`.
+   Saving does not move the active pointer or create an execution. Identical
+   pending content returns the same version, even after another distinct save;
+   a changed active base still requires reload rather than bypassing CAS.
+3. `GET /api/workflows/{workflow_id}/catalog/drafts`
+   returns the highest pending version in the same full snapshot shape, or
+   `{ok:true,revision:null}` if none remains. This recovers a saved draft after
+   reload or a lost save response, without requiring local editor JSON.
+4. `GET /api/workflows/{workflow_id}/catalog/drafts/{version}`
+   returns the exact saved snapshot/content/hash and current active version.
+   Unknown versions return `404`. If already published, `published:true` and
+   retained publication metadata are returned instead; this read never activates.
+5. `POST /api/workflows/{workflow_id}/catalog/drafts/{version}/publication`
    accepts the following exact body, using values returned by the preceding
    reads/save, not guessed versions or hashes:
 
@@ -68,7 +80,13 @@ runtime endpoints. Responses are `Cache-Control: no-store`.
    expected active version/hash, draft hash and structural validation are
    checked in the same transaction. Exact operation replay returns the original
    revision even after later publications; changed payload/key reuse conflicts.
-4. `GET /api/workflows/{workflow_id}/catalog/publications/operations/{operation_key}`
+   New publications also return `published_by_subject` and `published_at` (UTC).
+   The subject comes only from the already verified central human identity;
+   the server records the time. Body author/time fields are rejected, headers
+   cannot override them, and standalone administration without verified identity
+   cannot publish (`401`). Replay retains the original author/time, including
+   when another currently authorized administrator reads/replays the operation.
+6. `GET /api/workflows/{workflow_id}/catalog/publications/operations/{operation_key}`
    reads that original published revision without effects. After an unknown
    publish outcome, read this exact key first; never invent another key.
 
@@ -77,13 +95,30 @@ is `409`; malformed outer commands are `422`; denied administration is `403`.
 Normal editor save routes remain read-only for configured catalog rows. UI157
 does not acquire publication controls in this package; integrating its editor
 with these explicit JSON operations is separate work, not an implicit save hook.
+This API-only package does **not** constitute accepted text editing in the UI.
+
+### Editor Handoff
+
+After Zeno UI's main package: read active snapshot; save text against its exact
+version/hash; recover pending or exact saved version on reload; preview the
+server-returned content; explicitly publish that saved version/hash against a
+fresh active base with one stable operation key. Resolve an unknown publication
+outcome by operation readback. Never silently rebase stale edits or publish on
+save. A highest pending version is discovery, not proof that it is the current
+editor's own save; compare content or use the retained exact version.
+
+Backend contract is ready for that handoff; UI agreement/integration is pending.
+No Zeno thread/agent identity was available to address the requested coordination;
+the main UI work is not blocked or altered by this package.
 
 ## Integration Registration
 
-- Migration: `0022_catalog_publication` after
-  `0021_profession_task_workflows`; one linear Workflow head. It only creates
-  `workflow_catalog_publications`, no seed rewrite/backfill. Startup accepts
-  `0021` as an upgrade predecessor. Published history prevents downgrade.
+- Migrations: `0021_profession_task_workflows` -> `0022_catalog_publication`
+  -> `0023_catalog_publication_author`; one linear Workflow head. Migration 22
+  creates receipts; forward migration 23 adds author/time without changing 22.
+  Existing pre-audit receipts keep null author/time, never an invented identity.
+  New application publications always record both. Startup accepts 21 and 22 as
+  upgrade predecessors. Published history/authorship prevents destructive downgrade.
 - Integrator order for the **next** release: reconcile the migration slot
   against then-current master; qualify synthetic PostgreSQL/upgrade and API
   gates; install the Workflow server/API package; only then expose publication
@@ -98,10 +133,10 @@ with these explicit JSON operations is separate work, not an implicit save hook.
 
 ## Source Verification
 
-On the final production subtree `d97c3db96663b63185d34054c4cdb90cd25dc4a0`
-and tests subtree `bfcbbef72605ed7641dd9797ffcc83f6a81f11d9`:
+Current production subtree `156956017cceb3afe3d37f2f53195d12cdf9619d`
+and tests subtree `3b99c068045ae3380876b5957fb77bfa30101fd5`:
 
-- **344 passed, 11 deselected**, 292.45 seconds, with ResourceWarning and
+- **482 passed, 20 deselected**, 337.93 seconds, with ResourceWarning and
   PytestUnraisableExceptionWarning treated as errors. Selected files:
   `test_catalog_publication`, `test_api_gaps`, `test_runtime_catalog_read_scope`,
   `test_configured_cli`, `test_initial_migration`,
@@ -109,13 +144,17 @@ and tests subtree `bfcbbef72605ed7641dd9797ffcc83f6a81f11d9`:
   `test_configured_catalog_migration`, `test_retained_pm_migrations`,
   `test_phase_effective_view`, `test_managed_catalog_editing`,
   `test_single_task_instructions`, `test_single_task_artifact_instructions`,
-  `test_single_task_source_context_instructions` (all under `tests/`, `.py`).
+  `test_single_task_source_context_instructions`, `test_identity_deletion`,
+  `test_session_and_templates`, `test_sso` (all under `tests/`, `.py`).
   Flags: `-q --timeout=60 -x -k 'not browser'` plus the two warning filters.
-  The 11 exclusions are browser cases, not executed acceptance.
-- Ruff: `All checks passed!`; mypy: no issues in 164 source files;
+  Of those 20 exclusions, nine SSO-origin unit cases were then run separately:
+  **9 passed, 32 deselected**, 6.20 seconds, using
+  `tests/test_sso.py -k browser_origin` with the same timeout/warning filters.
+  The remaining 11 are browser cases; no browser acceptance is claimed.
+- Ruff: `All checks passed!`; mypy: no issues in 165 source files;
   `git diff --check` and indexed repository hygiene: PASS.
 - The existing isolated `.venv` matches all 53 exact `constraints.txt` pins.
-- Twelve tests in `tests/test_catalog_publication_postgres.py` collect with
+- Sixteen current tests in `tests/test_catalog_publication_postgres.py` collect with
   `-m integration`; **not executed**. They require only disposable synthetic PG
   fixtures, never a copy of runtime data.
 - The full non-PG/coverage attempt was stopped after finding the route Mock-key
@@ -126,6 +165,17 @@ and tests subtree `bfcbbef72605ed7641dd9797ffcc83f6a81f11d9`:
 
 These are source tests with controlled Auth/Tracker/advisor peers and synthetic
 SQLite history. They do not attest installed CLI capabilities or live role work.
+
+The audit/draft-readback follow-up separately proves with synthetic SQLite:
+exact v2 operation replay after v3 does not roll the pointer back; normal startup
+and engine restart retain v2 while the old assignment remains pinned; real SSO
+admission supplies the author and rejects demotion/spoofing; upgrade from a
+pre-audit receipt preserves history; reload reads full persisted draft content;
+repeated identical saves do not add versions. The focused publication file has
+**32 passed**, warnings-as-errors, also included in the 482-test selection.
+The historical 344-test result is superseded for these selected paths, not
+reused as qualification of changed source. PG concurrency/restart/dedup checks
+are authored/collected only, not executed.
 
 ## Read-Only Tracker Contract Review
 

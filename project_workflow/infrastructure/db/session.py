@@ -454,6 +454,7 @@ def ensure_migrated(engine: Engine | Connection | None = None) -> None:
         "0019_pm_terminal_resume_retry",
         "0020_configured_cli_catalog",
         "0021_profession_task_workflows",
+        "0022_catalog_publication",
     }
     incompatible_revision = bool(revisions) and not revisions.issubset(compatible_upgrade_revisions)
     _validate_legacy_archives(target)

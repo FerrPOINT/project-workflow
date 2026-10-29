@@ -332,6 +332,10 @@ def create_app() -> FastAPI:
 
     app.get("/api/workflows/{workflow_id}/catalog", dependencies=admin_access)(catalog_publication_api.active)
     app.post("/api/workflows/{workflow_id}/catalog/drafts", dependencies=admin_access)(catalog_publication_api.save)
+    app.get("/api/workflows/{workflow_id}/catalog/drafts", dependencies=admin_access)(catalog_publication_api.pending)
+    app.get("/api/workflows/{workflow_id}/catalog/drafts/{version}", dependencies=admin_access)(
+        catalog_publication_api.draft,
+    )
     app.post("/api/workflows/{workflow_id}/catalog/drafts/{version}/publication", dependencies=admin_access)(
         catalog_publication_api.publish,
     )

@@ -268,7 +268,7 @@ class TestSessionHelpers:
 
         monkeypatch.chdir(tmp_path)
 
-        assert migration_head() == "0022_catalog_publication"
+        assert migration_head() == "0023_catalog_publication_author"
 
     @pytest.mark.parametrize("use_connection", [False, True])
     @pytest.mark.parametrize("partial_archive", [False, True])
