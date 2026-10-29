@@ -550,6 +550,30 @@
 .base-resource-list > * + * {
   border-block-start: 1px solid var(--color-border);
 }
+.base-resource-list-header {
+  box-sizing: border-box;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding-inline: var(
+    --resource-row-padding-inline,
+    var(--base-control-padding-inline)
+  );
+  padding-block: var(
+    --resource-row-padding-block,
+    var(--base-control-padding-block)
+  );
+  background: var(--color-surface-raised);
+  color: var(--color-text-secondary);
+  font-family: var(--base-font-sans);
+  font-size: var(--base-font-label);
+  line-height: var(--base-line-body);
+  font-weight: 600;
+}
+.base-resource-list[data-variant="bordered"]
+  > .base-resource-list-header:first-child {
+  border-start-start-radius: inherit;
+  border-start-end-radius: inherit;
+}
 .base-resource-list-row {
   overflow-wrap: anywhere;
   box-sizing: border-box;
@@ -3113,7 +3137,10 @@ body {
   background: var(--color-selection);
   color: var(--color-selection-foreground);
 }
-.base-toaster {
+.base-toaster,
+.base-toaster[data-sonner-toaster][data-sonner-theme] {
+  --border-radius: var(--radius-lg);
+  font-family: var(--base-font-sans);
   --normal-bg: var(--color-surface);
   --normal-text: var(--color-text-primary);
   --normal-border: var(--color-border-strong);
@@ -3140,6 +3167,55 @@ body {
   box-shadow: 0 4px 12px rgb(0 0 0 / 15%);
   max-height: min(80dvh, calc(100dvh - 2 * var(--shell-page-gutter)));
   overflow-y: auto;
+}
+.base-toaster [data-sonner-toast][data-styled="true"] [data-description] {
+  color: var(--color-text-secondary);
+}
+.base-toaster
+  [data-sonner-toast][data-styled="true"]
+  :is([data-button], [data-close-button]) {
+  min-height: var(--shell-control-min);
+  min-width: var(--shell-control-min);
+  height: auto;
+  border-radius: var(--base-radius);
+  font-family: var(--base-font-sans);
+  font-size: var(--base-font-body);
+  line-height: var(--base-line-body);
+}
+.base-toaster [data-sonner-toast][data-styled="true"] [data-button] {
+  padding: var(--base-control-padding-block) var(--base-control-padding-inline);
+  background: var(--color-accent);
+  color: var(--color-accent-foreground);
+}
+.base-toaster[data-sonner-toaster][data-sonner-theme] [data-sonner-toast][data-styled="true"] [data-cancel],
+.base-toaster[data-sonner-toaster]
+  [data-sonner-toast][data-styled="true"]
+  [data-close-button]:hover {
+  color: var(--color-text-primary);
+  background: var(--color-surface-raised);
+  border-color: var(--color-border-strong);
+}
+.base-toaster [data-sonner-toast]:focus-visible,
+.base-toaster [data-sonner-toast][data-styled="true"] button:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+.base-toaster [data-type="error"] [data-icon] {
+  color: var(--color-danger);
+}
+.base-toaster [data-type="success"] [data-icon] {
+  color: var(--color-success);
+}
+.base-toaster [data-type="warning"] [data-icon] {
+  color: var(--color-warning);
+}
+@media (max-width: 767px) {
+  .base-toaster
+    [data-sonner-toast][data-styled="true"]
+    :is([data-button], [data-close-button]) {
+    min-height: var(--shell-control-mobile-min);
+    min-width: var(--shell-control-mobile-min);
+  }
 }
 .base-native-toaster {
   position: fixed;
