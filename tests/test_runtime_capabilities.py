@@ -1,552 +1,166 @@
-from __future__ import annotations
-
+"""Current capability discovery: one execution protocol, truthful immutable inputs."""
 import json
-from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import func, select
 
 from project_workflow import build_provenance, config
+from project_workflow.domain.single_task_profile import CATALOG_SHA256, MANIFEST_SHA256
+from project_workflow.infrastructure import namespace_auth
+from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db import session as db_session
-from project_workflow.infrastructure.db.managed_catalog import ensure_managed_catalog
+from project_workflow.infrastructure.db.single_task_catalog import ensure_single_task_catalog
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.ui.app import create_app
-from project_workflow.interfaces.ui.routes import runtime_api
-from tests.test_runtime_assignment_contract import TEST_RUNTIME_COMPATIBILITY
 
 REVISION = "d9ebcff84068406ba4b09ae037dac53b5b6296ba"
-ARCHIVE_SHA256 = "a" * 64
-BUNDLE_SHA256 = "b" * 64
+ROLES = ["project_manager", "analyst", "architect", "developer", "reviewer", "tester", "devops"]
+ASSIGNMENT, RUNTIME, CATALOG = "sdlc_pat_controller-" + "x" * 40, "runtime-" + "y" * 40, "catalog-" + "z" * 40
+CONTROLLER = "99999999-9999-4999-8999-999999999999"
 
 
-@pytest.mark.parametrize("configured", [False, True])
-@pytest.mark.parametrize("kind", ["assignment", "runtime"])
-def test_pm_continuation_capabilities_require_truthful_configuration(monkeypatch, tmp_path, configured, kind):
-    token = _token("pm-" + kind)
-    _configure_tokens(
-        monkeypatch,
-        runtime={"project_manager": token} if kind == "runtime" else {},
-        assignment={"project_manager": token} if kind == "assignment" else {},
-    )
-    _install_manifest(monkeypatch, tmp_path, _valid_manifest())
-    monkeypatch.setenv("PROJECT_WORKFLOW_PM_READBACK_URL", "http://fleet.test/runs" if configured else "")
-    monkeypatch.setenv("PROJECT_WORKFLOW_PM_READBACK_TOKEN", "p" * 40)
-    monkeypatch.setenv("PROJECT_WORKFLOW_PM_SCOPE_SECRET", "s" * 40)
-    config.get_settings.cache_clear()
-    with TestClient(create_app()) as client:
-        response = client.get("/internal/runtime/capabilities", headers={"Authorization": f"Bearer {token}"})
-    assert response.status_code == 200
-    if configured:
-        metadata = response.json()["pm_continuation"]
-        assert metadata["dispatch_owner"] == "fleet"
-        assert metadata["terminal_proof"] == "configured-runtime-readback"
-        assert metadata["commands"] == (
-            ["assign", "bind", "resume", "rebind", "readback"] if kind == "assignment" else ["checkpoint", "readback"]
-        )
-    else:
-        assert "pm_continuation" not in response.json()
+def headers(token):
+    return {"Authorization": "Bearer " + token}
 
 
-@pytest.fixture(autouse=True)
-def _ready_schema(monkeypatch):
-    monkeypatch.setattr(db_session, "schema_is_ready", lambda _engine: True)
-
-
-@pytest.fixture(autouse=True)
-def _managed_catalog():
-    with SAUnitOfWork() as uow:
-        ensure_managed_catalog(uow)
-
-
-def _token(name: str) -> str:
-    return (f"{name}-" + "x" * 64)[:48]
-
-
-def _configure_tokens(
-    monkeypatch,
-    *,
-    runtime: dict[str, str] | None = None,
-    assignment: dict[str, str] | None = None,
-    catalog: str = "",
-) -> None:
-    monkeypatch.setenv("PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON", json.dumps(runtime or {}))
-    monkeypatch.setenv(
-        "PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON", json.dumps(assignment or {})
-    )
+def configure(monkeypatch, role="developer", *, subjects=None, catalog=CATALOG):
+    monkeypatch.setenv("PROJECT_WORKFLOW_BASE_READER_SUBJECTS_JSON", json.dumps(
+        {CONTROLLER: role} if subjects is None else subjects))
     monkeypatch.setenv("PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN", catalog)
     config.get_settings.cache_clear()
 
+    def introspect(authorization, *, require_service_account=False):
+        assert require_service_account
+        if authorization != headers(ASSIGNMENT)["Authorization"]:
+            raise namespace_auth.NamespaceAuthError(401)
+        return namespace_auth.NamespacePrincipal("https://auth.test", CONTROLLER), [
+            "project-workflow:read", "project-workflow:write"]
+    monkeypatch.setattr(namespace_auth, "introspect", introspect)
 
-def _install_manifest(monkeypatch, tmp_path: Path, value: object | None = None) -> Path:
+
+def manifest():
+    return {"schema_version": 1, "source_revision": REVISION,
+            "source_archive_sha256": "a" * 64, "runtime_bundle_sha256": "b" * 64}
+
+
+@pytest.fixture
+def discovery(monkeypatch, tmp_path):
+    monkeypatch.setattr(db_session, "schema_is_ready", lambda _engine: True)
+    path = tmp_path / "runtime-build-manifest.json"
+    path.write_text(json.dumps(manifest()), encoding="utf-8")
+    monkeypatch.setattr(build_provenance, "DEFAULT_BUILD_MANIFEST_PATH", path)
+    configure(monkeypatch)
+    with SAUnitOfWork() as uow:
+        ensure_single_task_catalog(uow)
+    with TestClient(create_app()) as client:
+        yield client, path
+
+
+@pytest.mark.parametrize("role", ROLES)
+@pytest.mark.parametrize("variant", ["base", "single-task-v1"])
+def test_current_capabilities_are_role_scoped_in_both_catalog_images(discovery, monkeypatch, role, variant):
+    client, _ = discovery
+    configure(monkeypatch, role)
+    monkeypatch.setattr(config, "CATALOG_VARIANT", variant)
+    response = client.get("/internal/runtime/capabilities", headers=headers(ASSIGNMENT))
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "ok": True, "role_key": role, "credential_kind": "assignment",
+        "interaction_protocol": "configured-cli-v1", "capabilities": ["assign", "history", "terminal-readback"],
+        "readiness": {"service": "ready", "schema": "ready", "catalog": "ready"},
+        "source_provenance": manifest(), "instruction_profile": "single-task-v1",
+        "instruction_manifest_sha256": MANIFEST_SHA256, "workflow_catalog_sha256": CATALOG_SHA256,
+    }
+    assert ASSIGNMENT not in response.text
+
+
+@pytest.mark.parametrize("token,status", [("", 401), ("wrong", 401), (RUNTIME, 401), (CATALOG, 403)])
+def test_only_the_configured_role_reader_can_discover_execution(discovery, token, status):
+    client, _ = discovery
+    response = client.get("/internal/runtime/capabilities", headers=headers(token))
+    assert response.status_code == status
+    assert "capabilities" not in response.json()
+
+
+@pytest.mark.parametrize("subjects", [{CONTROLLER: "unknown"}, {"not-a-uuid": "developer"}, {}])
+def test_invalid_registration_cannot_discover_execution(discovery, monkeypatch, subjects):
+    client, _ = discovery
+    configure(monkeypatch, subjects=subjects)
+    response = client.get("/internal/runtime/capabilities", headers=headers(ASSIGNMENT))
+    assert response.status_code == 503
+    assert ASSIGNMENT not in response.text
+
+
+@pytest.mark.parametrize("invalid", [None, {}, {**manifest(), "source_revision": "unknown"},
+                                     {**manifest(), "runtime_bundle_sha256": "A" * 64},
+                                     {**manifest(), "extra": "not-allowed"}])
+def test_invalid_build_provenance_never_advertises_ready(discovery, invalid):
+    client, path = discovery
+    if invalid is None:
+        path.unlink()
+    else:
+        path.write_text(json.dumps(invalid), encoding="utf-8")
+    response = client.get("/internal/runtime/capabilities", headers=headers(ASSIGNMENT))
+    assert response.status_code == 503
+    assert response.json()["readiness"] == {"service": "not_ready", "schema": "ready", "catalog": "ready"}
+    assert "source_provenance" not in response.json()
+
+
+@pytest.mark.parametrize("failure", ["schema", "exception", "drift"])
+def test_unready_schema_or_drifted_catalog_is_not_masked(discovery, monkeypatch, failure):
+    client, _ = discovery
+    if failure == "drift":
+        with SAUnitOfWork() as uow:
+            installation = ensure_single_task_catalog(uow)
+            phase = int(installation.bindings[0].modes[0].phase_ids[0])
+            instruction = uow.phase_instructions.list(phase)[0]
+            uow.phase_instructions.update(instruction["id"], {"description": "drift"})
+            uow.commit()
+    elif failure == "schema":
+        monkeypatch.setattr(db_session, "schema_is_ready", lambda _: False)
+    else:
+        def broken(_):
+            raise RuntimeError("private-connection-detail")
+        monkeypatch.setattr(db_session, "schema_is_ready", broken)
+    response = client.get("/internal/runtime/capabilities", headers=headers(ASSIGNMENT))
+    assert response.status_code == 503
+    assert response.json()["readiness"]["catalog"] == "not_ready"
+    assert "capabilities" not in response.json()
+    assert "private-connection-detail" not in response.text
+
+
+def test_observation_does_not_mutate_catalog_or_tasks(discovery):
+    client, _ = discovery
+    def snapshot():
+        with SAUnitOfWork() as uow:
+            return (uow.session.scalar(select(func.count()).select_from(m.Task)),
+                    list(uow.session.execute(m.Workflow.__table__.select().order_by(m.Workflow.id)).all()))
+    before = snapshot()
+    assert client.get("/internal/runtime/capabilities", headers=headers(ASSIGNMENT)).status_code == 200
+    assert snapshot() == before
+
+
+# Shared artifact fixtures for retained catalog/history tests. These never admit
+# the retired native execution protocol through the current API.
+def _valid_manifest():
+    return manifest()
+
+
+def _valid_compatibility():
+    return {"catalogVersion": 2, "catalogRevision": REVISION, "catalogSha256": "b" * 64,
+            "skillsRevision": "c" * 40, "skillsManifestSha256": "d" * 64,
+            "capabilityRevision": "hermes-sdlc-runtime/v2", "capabilitySha256": "e" * 64}
+
+
+def _install_manifest(monkeypatch, tmp_path, value=None):
     path = tmp_path / "runtime-build-manifest.json"
     if value is not None:
         path.write_text(json.dumps(value), encoding="utf-8")
     monkeypatch.setattr(build_provenance, "DEFAULT_BUILD_MANIFEST_PATH", path)
-    descriptor_path = tmp_path / "runtime-compatibility.json"
-    descriptor_path.write_text(json.dumps(_valid_compatibility()), encoding="utf-8")
+    descriptor = tmp_path / "runtime-compatibility.json"
+    descriptor.write_text(json.dumps(_valid_compatibility()), encoding="utf-8")
     reader = build_provenance.runtime_compatibility_descriptor
-    def packaged_reader(**kwargs):
-        return reader(descriptor_path, **kwargs)
-    monkeypatch.setattr(runtime_api, "runtime_compatibility_descriptor", packaged_reader)
-    monkeypatch.setattr(build_provenance, "runtime_compatibility_descriptor", packaged_reader)
+    monkeypatch.setattr(build_provenance, "runtime_compatibility_descriptor",
+                        lambda **kwargs: reader(descriptor, **kwargs))
     return path
-
-
-def _valid_compatibility() -> dict:
-    return {**TEST_RUNTIME_COMPATIBILITY, "catalogRevision": REVISION}
-
-
-def _valid_manifest() -> dict[str, str | int]:
-    return {
-        "schema_version": 1,
-        "source_revision": REVISION,
-        "source_archive_sha256": ARCHIVE_SHA256,
-        "runtime_bundle_sha256": BUNDLE_SHA256,
-    }
-
-
-@pytest.mark.parametrize("variant", ["legacy", "base", "single-task-v1"])
-@pytest.mark.parametrize(
-    "role", ["project_manager", "analyst", "architect", "developer", "reviewer", "tester", "devops"],
-)
-@pytest.mark.parametrize("kind", ["assignment", "runtime"])
-def test_installed_single_task_capabilities_keep_truthful_base_image_descriptor(
-    monkeypatch, tmp_path, variant, role, kind,
-):
-    from project_workflow.infrastructure.db.single_task_catalog import ensure_single_task_catalog
-
-    with SAUnitOfWork() as uow:
-        default_before = uow.workflows.get_default().id
-        ensure_single_task_catalog(uow)
-    monkeypatch.setattr(config, "CATALOG_VARIANT", variant)
-    if variant == "single-task-v1":
-        monkeypatch.setattr(config, "MANAGED_CATALOG_PATH", Path(
-            "project_workflow/references/single_task_catalog_v1.json",
-        ))
-    token = _token(role + kind)
-    _configure_tokens(monkeypatch, **{kind: {role: token}})
-    manifest = _install_manifest(monkeypatch, tmp_path, _valid_manifest())
-    descriptor = {**_valid_compatibility(), "catalogVersion": 4,
-                  "capabilityRevision": "base-workflow-controlplane/v1"}
-    (manifest.parent / "runtime-compatibility.json").write_text(json.dumps(descriptor), encoding="utf-8")
-    with TestClient(create_app()) as client:
-        response = client.get(
-            "/internal/runtime/capabilities", params={"instruction_profile": "single-task-v1"},
-            headers={"Authorization": "Bearer " + token},
-        )
-    assert response.status_code == 200, response.text
-    assert response.json()["runtimeCompatibility"] == descriptor
-    assert response.json()["role_key"] == role
-    assert response.json()["credential_kind"] == kind
-    expected = ["assign", "bind"] if kind == "assignment" else ["step", "history"]
-    assert response.json()["capabilities"] == expected
-    assert token not in response.text
-    with SAUnitOfWork() as uow:
-        assert uow.workflows.get_default().id == default_before
-
-
-@pytest.mark.parametrize("missing", [True, False])
-def test_base_single_task_capabilities_refuse_missing_or_drifted_installation(monkeypatch, tmp_path, missing):
-    from project_workflow.infrastructure.db.single_task_catalog import ensure_single_task_catalog
-
-    if not missing:
-        with SAUnitOfWork() as uow:
-            installed = ensure_single_task_catalog(uow)
-            phase = int(installed.bindings[0].modes[0].phase_ids[0])
-            instruction = uow.phase_instructions.list(phase)[0]
-            uow.phase_instructions.update(instruction["id"], {"description": "drift"})
-    monkeypatch.setattr(config, "CATALOG_VARIANT", "base")
-    token = _token("developer-runtime")
-    _configure_tokens(monkeypatch, runtime={"developer": token})
-    _install_manifest(monkeypatch, tmp_path, _valid_manifest())
-    with TestClient(create_app()) as client:
-        response = client.get(
-            "/internal/runtime/capabilities", params={"instruction_profile": "single-task-v1"},
-            headers={"Authorization": "Bearer " + token},
-        )
-    assert response.status_code == 503
-    assert response.json()["readiness"]["catalog"] == "not_ready"
-    assert token not in response.text
-
-
-@pytest.mark.parametrize("profile_state", ["missing", "partial", "drifted"])
-def test_unhealthy_profile_does_not_block_healthy_legacy_capabilities(monkeypatch, tmp_path, profile_state):
-    from project_workflow.infrastructure.db import models as m
-    from project_workflow.infrastructure.db.single_task_catalog import ensure_single_task_catalog
-
-    with SAUnitOfWork() as uow:
-        default_before = uow.workflows.get_default().id
-        if profile_state != "missing":
-            installed = ensure_single_task_catalog(uow)
-            binding = next(item for item in installed.bindings if item.role_key == "developer")
-            if profile_state == "partial":
-                row = uow.session.get(m.Workflow, int(binding.workflow_id))
-                assert row is not None
-                row.key = "partial-profile-developer"
-            else:
-                phase = int(binding.modes[0].phase_ids[0])
-                instruction = uow.phase_instructions.list(phase)[0]
-                uow.phase_instructions.update(instruction["id"], {"description": "drift"})
-    token = _token("developer-assignment")
-    _configure_tokens(monkeypatch, assignment={"developer": token})
-    _install_manifest(monkeypatch, tmp_path, _valid_manifest())
-    headers = {"Authorization": "Bearer " + token}
-    with TestClient(create_app()) as client:
-        legacy = client.get("/internal/runtime/capabilities", headers=headers)
-        profile = client.get(
-            "/internal/runtime/capabilities", params={"instruction_profile": "single-task-v1"}, headers=headers,
-        )
-    assert legacy.status_code == 200, legacy.text
-    assert legacy.json()["capabilities"] == ["assign", "bind", "rebind"]
-    assert profile.status_code == 503
-    assert profile.json()["readiness"]["catalog"] == "not_ready"
-    with SAUnitOfWork() as uow:
-        assert uow.workflows.get_default().id == default_before
-
-
-def test_healthy_profile_does_not_mask_legacy_catalog_drift(monkeypatch, tmp_path):
-    from project_workflow.infrastructure.db.single_task_catalog import ensure_single_task_catalog
-
-    with SAUnitOfWork() as uow:
-        ensure_single_task_catalog(uow)
-        legacy = next(item for item in uow.workflows.list() if item.key == "hermes-sdlc:developer")
-        uow.workflows.update(legacy.id, {"active_catalog_version": 99})
-    token = _token("developer-assignment")
-    _configure_tokens(monkeypatch, assignment={"developer": token})
-    _install_manifest(monkeypatch, tmp_path, _valid_manifest())
-    headers = {"Authorization": "Bearer " + token}
-    with TestClient(create_app()) as client:
-        legacy_caps = client.get("/internal/runtime/capabilities", headers=headers)
-        profile_caps = client.get(
-            "/internal/runtime/capabilities", params={"instruction_profile": "single-task-v1"}, headers=headers,
-        )
-    assert legacy_caps.status_code == 503
-    assert legacy_caps.json()["readiness"]["catalog"] == "not_ready"
-    assert profile_caps.status_code == 200, profile_caps.text
-    assert profile_caps.json()["capabilities"] == ["assign", "bind"]
-    assert profile_caps.json()["runtimeCompatibility"] == _valid_compatibility()
-
-
-@pytest.mark.parametrize("instruction_profile", ["unknown", "legacy", "", "single-task-v2"])
-def test_capabilities_reject_unknown_profile_query(monkeypatch, tmp_path, instruction_profile):
-    token = _token("developer-runtime")
-    _configure_tokens(monkeypatch, runtime={"developer": token})
-    _install_manifest(monkeypatch, tmp_path, _valid_manifest())
-    with TestClient(create_app()) as client:
-        response = client.get(
-            "/internal/runtime/capabilities", params={"instruction_profile": instruction_profile},
-            headers={"Authorization": "Bearer " + token},
-        )
-    assert response.status_code == 422
-    assert "runtimeCompatibility" not in response.json()
-    assert token not in response.text
-
-
-def test_base_catalog_auth_matches_before_ordinary_execution_restriction(monkeypatch, tmp_path):
-    from project_workflow.infrastructure.db.single_task_catalog import ensure_single_task_catalog
-
-    with SAUnitOfWork() as uow:
-        ensure_single_task_catalog(uow)
-    monkeypatch.setattr(config, "CATALOG_VARIANT", "base")
-    runtime, assignment, catalog = (_token(kind) for kind in ("runtime", "assignment", "catalog"))
-    _configure_tokens(
-        monkeypatch, runtime={"developer": runtime}, assignment={"developer": assignment}, catalog=catalog,
-    )
-    _install_manifest(monkeypatch, tmp_path, _valid_manifest())
-    with TestClient(create_app()) as client:
-        catalog_read = client.get("/internal/runtime/catalog", headers={"Authorization": "Bearer " + catalog})
-        profile_read = client.get(
-            "/internal/runtime/profiles/single-task-v1/installation", headers={"Authorization": "Bearer " + catalog},
-        )
-        assert catalog_read.status_code == profile_read.status_code == 200
-        for params in ({}, {"instruction_profile": "single-task-v1"}):
-            assert client.get(
-                "/internal/runtime/capabilities", params=params, headers={"Authorization": "Bearer " + catalog},
-            ).status_code == 403
-            assert client.get(
-                "/internal/runtime/capabilities", params=params, headers={"Authorization": "Bearer " + _token("wrong")},
-            ).status_code == 401
-        for token in (runtime, assignment):
-            denied = client.get("/internal/runtime/capabilities", headers={"Authorization": "Bearer " + token})
-            assert denied.status_code == 503
-
-
-@pytest.mark.parametrize("kind", ["runtime", "assignment"])
-def test_base_catalog_token_collision_remains_fail_closed(monkeypatch, kind):
-    token = _token("shared")
-    monkeypatch.setattr(config, "CATALOG_VARIANT", "base")
-    _configure_tokens(monkeypatch, catalog=token, **{kind: {"developer": token}})
-    with TestClient(create_app()) as client:
-        for path, params in [
-            ("/internal/runtime/catalog", {}),
-            ("/internal/runtime/capabilities", {}),
-            ("/internal/runtime/capabilities", {"instruction_profile": "single-task-v1"}),
-        ]:
-            response = client.get(path, params=params, headers={"Authorization": "Bearer " + token})
-            assert response.status_code == 503
-            assert token not in response.text
-
-
-@pytest.mark.parametrize(
-    "role",
-    [
-        "project_manager",
-        "analyst",
-        "architect",
-        "developer",
-        "reviewer",
-        "tester",
-        "devops",
-    ],
-)
-@pytest.mark.parametrize(
-    ("credential_kind", "capabilities"),
-    [("assignment", ["assign", "bind", "rebind"]), ("runtime", ["step", "history"])],
-)
-def test_runtime_capabilities_are_exact_and_role_scoped(
-    monkeypatch, tmp_path: Path, role: str, credential_kind: str, capabilities: list[str]
-):
-    credential = _token(f"{role}-{credential_kind}")
-    _configure_tokens(
-        monkeypatch,
-        runtime={role: credential} if credential_kind == "runtime" else {},
-        assignment={role: credential} if credential_kind == "assignment" else {},
-    )
-    _install_manifest(monkeypatch, tmp_path, _valid_manifest())
-
-    with TestClient(create_app()) as client:
-        response = client.get(
-            "/internal/runtime/capabilities",
-            headers={"Authorization": f"Bearer {credential}"},
-        )
-
-    assert response.status_code == 200
-    assert response.json() == {
-        "ok": True,
-        "role_key": role,
-        "credential_kind": credential_kind,
-        "capabilities": capabilities,
-        "readiness": {"service": "ready", "schema": "ready", "catalog": "ready"},
-        "source_provenance": _valid_manifest(),
-        "runtimeCompatibility": _valid_compatibility(),
-    }
-
-
-def test_runtime_capabilities_reject_missing_wrong_and_catalog_credentials(
-    monkeypatch, tmp_path: Path
-):
-    runtime_token = _token("developer-runtime")
-    catalog_token = _token("fleet-catalog")
-    _configure_tokens(
-        monkeypatch,
-        runtime={"developer": runtime_token},
-        catalog=catalog_token,
-    )
-    _install_manifest(monkeypatch, tmp_path, _valid_manifest())
-
-    with TestClient(create_app()) as client:
-        missing = client.get("/internal/runtime/capabilities")
-        wrong = client.get(
-            "/internal/runtime/capabilities",
-            headers={"Authorization": f"Bearer {_token('wrong')}"},
-        )
-        catalog = client.get(
-            "/internal/runtime/capabilities",
-            headers={"Authorization": f"Bearer {catalog_token}"},
-        )
-
-    assert missing.status_code == 401
-    assert wrong.status_code == 401
-    assert catalog.status_code == 403
-    for response in (missing, wrong, catalog):
-        assert "namespace" not in response.text.lower()
-        assert "task" not in response.text.lower()
-        assert runtime_token not in response.text
-        assert catalog_token not in response.text
-
-
-def test_runtime_role_text_cannot_change_the_credential_capability_matrix(
-    monkeypatch, tmp_path: Path
-):
-    runtime_token = _token("fleet-control-runtime")
-    control_token = _token("fleet-control-catalog")
-    _configure_tokens(
-        monkeypatch,
-        runtime={"fleet-control": runtime_token},
-        catalog=control_token,
-    )
-    _install_manifest(monkeypatch, tmp_path, _valid_manifest())
-
-    with TestClient(create_app()) as client:
-        runtime = client.get(
-            "/internal/runtime/capabilities",
-            headers={"Authorization": f"Bearer {runtime_token}"},
-        )
-        control = client.get(
-            "/internal/runtime/capabilities",
-            headers={"Authorization": f"Bearer {control_token}"},
-        )
-
-    assert runtime.status_code == 200
-    assert runtime.json()["credential_kind"] == "runtime"
-    assert runtime.json()["role_key"] == "fleet-control"
-    assert runtime.json()["capabilities"] == ["step", "history"]
-    assert control.status_code == 403
-
-
-def test_runtime_capabilities_fail_closed_on_cross_kind_token_collision(
-    monkeypatch, tmp_path: Path
-):
-    shared = _token("shared")
-    _configure_tokens(
-        monkeypatch,
-        runtime={"developer": shared},
-        assignment={"analyst": shared},
-    )
-    _install_manifest(monkeypatch, tmp_path, _valid_manifest())
-
-    with TestClient(create_app()) as client:
-        response = client.get(
-            "/internal/runtime/capabilities",
-            headers={"Authorization": f"Bearer {shared}"},
-        )
-
-    assert response.status_code == 503
-    assert response.json() == {
-        "ok": False,
-        "error": "Runtime capability configuration unavailable",
-    }
-
-
-def test_runtime_capabilities_fail_closed_on_cross_role_token_collision(
-    monkeypatch, tmp_path: Path
-):
-    shared = _token("shared-runtime")
-    _configure_tokens(
-        monkeypatch,
-        runtime={"developer": shared, "tester": shared},
-    )
-    _install_manifest(monkeypatch, tmp_path, _valid_manifest())
-
-    with TestClient(create_app()) as client:
-        response = client.get(
-            "/internal/runtime/capabilities",
-            headers={"Authorization": f"Bearer {shared}"},
-        )
-
-    assert response.status_code == 503
-    assert response.json() == {
-        "ok": False,
-        "error": "Runtime capability configuration unavailable",
-    }
-
-
-@pytest.mark.parametrize(
-    "manifest",
-    [
-        None,
-        {},
-        {**_valid_manifest(), "source_revision": "unknown"},
-        {**_valid_manifest(), "runtime_bundle_sha256": "A" * 64},
-        {**_valid_manifest(), "extra": "not-allowed"},
-    ],
-)
-def test_runtime_capabilities_require_valid_immutable_provenance(
-    monkeypatch, tmp_path: Path, manifest: object | None
-):
-    runtime_token = _token("developer-runtime")
-    _configure_tokens(monkeypatch, runtime={"developer": runtime_token})
-    _install_manifest(monkeypatch, tmp_path, manifest)
-
-    with TestClient(create_app()) as client:
-        response = client.get(
-            "/internal/runtime/capabilities",
-            headers={"Authorization": f"Bearer {runtime_token}"},
-        )
-
-    assert response.status_code == 503
-    assert response.json() == {
-        "ok": False,
-        "error": "Runtime capabilities временно недоступны",
-        "error_code": "runtime-capabilities-not-ready",
-        "readiness": {
-            "service": "not_ready",
-            "schema": "ready",
-            "catalog": "ready",
-        },
-    }
-
-
-def test_runtime_capabilities_validate_catalog_without_mutating_data(
-    monkeypatch, tmp_path: Path
-):
-    assignment_token = _token("analyst-assignment")
-    _configure_tokens(monkeypatch, assignment={"analyst": assignment_token})
-    _install_manifest(monkeypatch, tmp_path, _valid_manifest())
-
-    with TestClient(create_app()) as client:
-        response = client.get(
-            "/internal/runtime/capabilities",
-            headers={"Authorization": f"Bearer {assignment_token}"},
-        )
-
-    assert response.status_code == 200
-    assert response.json()["readiness"]["catalog"] == "ready"
-
-
-def test_runtime_capabilities_report_schema_not_ready_without_details(
-    monkeypatch, tmp_path: Path
-):
-    runtime_token = _token("developer-runtime")
-    _configure_tokens(monkeypatch, runtime={"developer": runtime_token})
-    _install_manifest(monkeypatch, tmp_path, _valid_manifest())
-
-    with patch(
-        "project_workflow.infrastructure.db.session.schema_is_ready", return_value=False
-    ), TestClient(create_app()) as client:
-        response = client.get(
-            "/internal/runtime/capabilities",
-            headers={"Authorization": f"Bearer {runtime_token}"},
-        )
-
-    assert response.status_code == 503
-    assert response.json()["readiness"] == {
-        "service": "not_ready",
-        "schema": "not_ready",
-        "catalog": "not_ready",
-    }
-
-
-def test_runtime_capabilities_fail_closed_on_schema_probe_exception(monkeypatch, tmp_path):
-    credential = _token("developer-runtime")
-    _configure_tokens(monkeypatch, runtime={"developer": credential})
-    _install_manifest(monkeypatch, tmp_path, _valid_manifest())
-
-    def unavailable(_engine):
-        raise RuntimeError("private-connection-detail")
-
-    with TestClient(create_app()) as client:
-        monkeypatch.setattr(db_session, "schema_is_ready", unavailable)
-        response = client.get("/internal/runtime/capabilities", headers={"Authorization": f"Bearer {credential}"})
-    assert response.status_code == 503
-    assert response.json()["readiness"] == {"service": "not_ready", "schema": "not_ready", "catalog": "not_ready"}
-    assert "private-connection-detail" not in response.text
-    assert credential not in response.text
-
-
-@pytest.mark.parametrize("descriptor", [None, {}, {**_valid_compatibility(), "catalogRevision": "f" * 40}])
-def test_runtime_capabilities_require_packaged_matching_compatibility(monkeypatch, tmp_path, descriptor):
-    credential = _token("developer-runtime")
-    _configure_tokens(monkeypatch, runtime={"developer": credential})
-    _install_manifest(monkeypatch, tmp_path, _valid_manifest())
-    descriptor_path = tmp_path / "runtime-compatibility.json"
-    if descriptor is None:
-        descriptor_path.unlink()
-    else:
-        descriptor_path.write_text(json.dumps(descriptor), encoding="utf-8")
-    with TestClient(create_app()) as client:
-        response = client.get("/internal/runtime/capabilities", headers={"Authorization": f"Bearer {credential}"})
-    assert response.status_code == 503
-    assert response.json()["readiness"] == {"service": "not_ready", "schema": "ready", "catalog": "ready"}
-    assert "runtimeCompatibility" not in response.json()

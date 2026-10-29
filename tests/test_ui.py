@@ -201,6 +201,8 @@ def setup_db(isolate_ui_runtime_state, request):
     """Populate DB with seed.json + sample task before UI tests."""
     from project_workflow.infrastructure.db.schema import ensure_phase_catalog
 
+    client.cookies.clear()
+    request.addfinalizer(client.cookies.clear)
     uow = ui_app_state.get_db()
     request.addfinalizer(uow.close)
     if not uow.phases.list():
@@ -2842,7 +2844,7 @@ class TestWorkflowsPage:
         assert "CRUD workflow" not in response.text
         assert "именованные workflow-контейнеры" not in response.text
 
-    def test_workflows_create_redirect_omits_namespace_until_bound(self):
+    def test_workflows_create_refresh_preserves_the_current_profession_context(self):
         uow = ui_app_state.get_db()
         try:
             namespace_id = _as_dict(uow.projects.get_by_code("UITEST"))["id"]
@@ -3003,7 +3005,7 @@ class TestSettingsPage:
         assert "--n" in response.text
         assert ">--repo<" not in response.text
         assert ">--skip<" not in response.text
-        assert "по умолчанию: все" in response.text
+        assert "не больше 200" in response.text
         assert "default:" not in response.text
         assert re.search(r'<h2\b[^>]*class="base-section-title"[^>]*>step</h2>', response.text)
         assert 'id="cliUsage1"' in response.text
@@ -3073,15 +3075,16 @@ class TestSettingsPage:
         history_options = {option["flags"]: option for option in history["options"]}
 
         assert set(step_options) == {
-            "--task", "--report", "--operation-key", "--runtime-request", "--execution-token-file",
+            "--task", "--report", "--operation-key", "--expected-version",
+            "--requirements-revision", "--requirements-sha256",
         }
-        assert set(history_options) == {"--task", "--n"}
+        assert set(history_options) == {"--task", "--n", "--operation-key", "--execution-ref", "--before-history-id"}
         assert "default" not in step_options["--task"]
         assert "default" not in step_options["--report"]
-        for flag in ("--operation-key", "--runtime-request", "--execution-token-file"):
+        for flag in ("--operation-key", "--expected-version", "--requirements-revision", "--requirements-sha256"):
             assert "default" not in step_options[flag]
         assert "default" not in history_options["--n"]
-        assert "по умолчанию: все" in history_options["--n"]["help"]
+        assert "не больше 200" in history_options["--n"]["help"]
 
     def test_settings_helper_ignores_click_unset_default_sentinel(self):
         @click.command(name="temp-unset-default")
@@ -3103,17 +3106,18 @@ class TestSettingsPage:
 
 class TestUiNetworkFailures:
     @pytest.mark.parametrize(
-        ("path", "minimum_handlers"),
-        [("/namespaces", 4), ("/workflows", 4)],
+        ("path", "actions"),
+        [("/namespaces", ["saveNamespace", "createNamespace", "deleteNamespace", "reloadNamespaces"]),
+         ("/workflows", ["saveWorkflow", "createWorkflow", "deleteWorkflow"])],
     )
-    def test_crud_reports_network_errors(self, path, minimum_handlers):
+    def test_crud_reports_network_errors(self, path, actions):
         response = client.get(path)
 
         assert response.status_code == 200
         handler = "catch(error){showRequestError(error)}" if path == "/agents" else ".catch(showRequestError)"
         source = _page_source(client, response)
         async_handlers = re.findall(r"catch\([^)]*\)\{[^}]*showRequestError\(", source)
-        assert source.count(handler) + len(async_handlers) >= minimum_handlers
+        assert source.count(handler) + len(async_handlers) >= len(actions)
         assert "Не удалось связаться с сервером" in _page_source(client, response)
 
     def test_task_deletion_is_absent_from_ui_and_routes(self):

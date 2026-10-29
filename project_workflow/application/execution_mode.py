@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.domain.repositories import UnitOfWork
 from project_workflow.domain.runtime_assignment import MANAGED_WORKFLOW_KEYS
+from project_workflow.domain.single_task_profile import is_single_task_key
 
 
 @dataclass(frozen=True)
@@ -27,7 +28,7 @@ def resolve_execution_selection(
     workflow = uow.workflows.get_by_id(workflow_id)
     if workflow is None:
         raise NotFoundError(f"Воркфлоу {workflow_id} не найден")
-    if mode_key is None and workflow.key in MANAGED_WORKFLOW_KEYS:
+    if mode_key is None and (workflow.key in MANAGED_WORKFLOW_KEYS or is_single_task_key(workflow.key)):
         raise ConflictError("Managed Hermes workflow требует backend-assigned mode_key")
     selected_key = mode_key or "default"
     mode = uow.workflows.get_mode_by_key(workflow_id, selected_key)

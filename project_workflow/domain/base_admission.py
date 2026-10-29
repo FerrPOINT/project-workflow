@@ -29,23 +29,3 @@ class BaseAdmission(BaseModel):
     skills_manifest_sha256: Sha256
     role_instruction_sha256: Sha256
     physical_skills: list[str] = Field(min_length=1, max_length=14)
-
-
-class BaseTerminalReadback(BaseModel):
-    """Exact owner operation lookup; no model-authored success payload."""
-
-    model_config = ConfigDict(extra="forbid", strict=True)
-
-    task: ExactRef
-    step_operation_key: Annotated[str, StringConstraints(strict=True, min_length=1, max_length=128)]
-    assignment_revision: int = Field(gt=0)
-    assignment_ref: ExactRef
-    binding_ref: ExactRef
-    hermes_run_ref: ExactRef
-    mode_key: ExactRef
-    cycle_number: int = Field(ge=0)
-    attempt_number: int = Field(gt=0)
-    base_config_ref: ExactRef
-    base_config_sha256: Sha256
-    receipt_sha256: Sha256 | None = None
-    session_run_id: str | None = Field(default=None, min_length=36, max_length=36)

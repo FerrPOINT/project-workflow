@@ -73,7 +73,8 @@ def test_compose_forwards_configurable_evaluator_and_runtime_configuration_to_ap
     assert (
         "PLATFORM_SERVICES_URL: ${PLATFORM_SERVICES_URL:-http://host.docker.internal:7771/api/v1/runtime/services}"
     ) in compose
-    assert "PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON: ${PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON:-}" in compose
+    assert "PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON" not in compose
+    assert "PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON" not in compose
 
 
 def test_compose_publishes_database_and_api_on_loopback_only():

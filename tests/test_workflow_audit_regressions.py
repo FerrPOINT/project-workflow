@@ -15,13 +15,23 @@ from tests.test_managed_catalog_hardening import (
 pytestmark = pytest.mark.unit
 
 
+def _current_runtime_with_retained_catalog(monkeypatch, tmp_path):
+    from project_workflow import config
+    from project_workflow.infrastructure.db.single_task_catalog import ensure_single_task_catalog
+
+    _bootstrap_global_managed_catalog()
+    with SAUnitOfWork() as uow:
+        ensure_single_task_catalog(uow)
+    monkeypatch.setattr(config, "CATALOG_VARIANT", "single-task-v1")
+    return _install_runtime_credentials(monkeypatch, tmp_path)
+
+
 @pytest.mark.parametrize("edit", [
     "theme", "other_workflow", "namespace_caption", "workflow_caption", "mode_caption",
     "other_role_instruction",
 ])
 def test_unrelated_editor_changes_do_not_disable_runtime_discovery(monkeypatch, tmp_path, edit):
-    _bootstrap_global_managed_catalog()
-    runtime_token, catalog_token = _install_runtime_credentials(monkeypatch, tmp_path)
+    runtime_token, catalog_token = _current_runtime_with_retained_catalog(monkeypatch, tmp_path)
     monkeypatch.setattr("project_workflow.infrastructure.db.session.schema_is_ready", lambda _engine: True)
 
     with TestClient(create_app()) as client:
@@ -105,9 +115,8 @@ def test_blocked_catalog_read_does_not_block_other_http_requests(monkeypatch, pa
 
 
 @pytest.mark.parametrize("edit", ["order", "parallel", "new_phase"])
-def test_valid_phase_graph_edits_do_not_disable_role_runtime(monkeypatch, tmp_path, edit):
-    _bootstrap_global_managed_catalog()
-    runtime_token, _ = _install_runtime_credentials(monkeypatch, tmp_path)
+def test_retained_phase_graph_edits_do_not_disable_current_runtime(monkeypatch, tmp_path, edit):
+    runtime_token, _ = _current_runtime_with_retained_catalog(monkeypatch, tmp_path)
     monkeypatch.setattr("project_workflow.infrastructure.db.session.schema_is_ready", lambda _engine: True)
     with SAUnitOfWork() as uow:
         namespace = uow.projects.get_by_cli_command("workflow-developer")

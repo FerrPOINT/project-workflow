@@ -14,16 +14,20 @@ MODES = [
     ("developer", "rework"), ("reviewer", "delivery"), ("tester", "delivery"), ("devops", "delivery"),
 ]
 TRIGGER = (
-    "cicd-cli pipeline run --project <forge-configuration-uuid> --git-ref <exact-source-sha> "
-    "--idempotency-key <fleet-supplied-pipeline-key-uuid> --task-intent <task-intent.json>"
+    "cicd-cli pipeline run --project <approved-forge-project-uuid> --git-ref <exact-source-sha> "
+    "--idempotency-key <assignment-uuid> --task-intent -"
 )
-WORKSPACE = "cicd-cli pipeline task-workspace --project <forge-configuration-uuid> --id <actual-pipeline-uuid>"
+WORKSPACE = "pipeline task-workspace --project <uuid> --id <pipeline-uuid>"
 
 
 @pytest.fixture(scope="module")
 def generated():
     catalog, manifest = render()
     return json.loads(catalog), json.loads(manifest)
+
+
+def instruction_text(phase):
+    return " ".join(i["description"] for i in phase["instructions"])
 
 
 def mode_for(catalog, role, mode):
@@ -59,26 +63,17 @@ def test_first_workspace_uses_actual_task_trigger_and_real_server_allocated_rece
     catalog, _ = generated
     context = mode_for(catalog, role, mode)["phases"][0]["instructions"][1]["description"]
     assert TRIGGER in context and WORKSPACE in context
-    assert shlex.split(TRIGGER)[2:] == [
-        "run", "--project", "<forge-configuration-uuid>", "--git-ref", "<exact-source-sha>",
-        "--idempotency-key", "<fleet-supplied-pipeline-key-uuid>", "--task-intent", "<task-intent.json>",
-    ]
-    for required in (
-        "actual installed CLI capabilities, not a historical packaging pin", "CLI help proves syntax only",
-        "not configured server support, qualification or task authority",
-        "cicd-cli project list", "cicd-cli repository list", "no project-get CLI operation",
-        "holderSubject is the actual scheduler lease holder", "sourceCommit, not a moving branch",
-        "no legacy template", "Null means preparation pending, not success", "same pipeline",
-        "Forge allocates runner lease, attempt and workspace IDs", "never invent them",
-        "reuse the Tracker lease as a runner lease", "read-only in the Forge runner",
-        "does not create or authorize a writable Hermes checkout", "Unknown trigger acceptance",
-        "no blind retry, fresh key, changed body or second pipeline", "actual pipeline ID is unavailable, stop",
-        "candidate-evidence --project <forge-configuration-uuid>", "actual original WorkspaceOperationLookup",
-        "not task completion, deployment, health or acceptance",
-    ):
+    assert shlex.split(TRIGGER)[-2:] == ["--task-intent", "-"]
+    for required in ("strict JSON on stdin", "current Tracker lifecycle", "source binding",
+                     "Server-side current task, repository mapping, native/lease and source guards remain mandatory",
+                     "Forge allocates runner lease, attempt and workspace IDs", "do not fabricate them",
+                     "Unknown trigger acceptance permits no blind resend", "Null means pending, not success",
+                     "read-only Forge runner workspace does not authorize a writable agent checkout",
+                     "real WorkspaceOperationLookup", "Missing access, capability or source is an operator blocker"):
         assert required in context
-    assert "cicd-cli project get" not in context and "--config-id" not in context
-    assert "4525694" not in context and "5ea0ebc" not in context
+    for forbidden in ("<task-intent.json>", "--credential-context", "--child-token-file", "fleet-workspace:"):
+        assert forbidden not in context
+
 
 
 @pytest.mark.parametrize("role,mode", MODES)
@@ -138,44 +133,31 @@ def test_devops_uses_accepted_descriptor_not_preloaded_or_new_build_substitute(g
 
 @pytest.mark.parametrize("role,mode", [("project_manager", "draft"), *MODES])
 def test_first_step_and_role_specific_final_handoffs_are_pinned(generated, role, mode):
-    # First step and six technical handoffs stay frozen; PM stops at owner-confirmed Backlog Ready.
-    terminal_hashes = {
-        "project_manager": "fd12a1cc127074935f9e8cfdd392528df240569af14e96af06324035d3681f60",
-        "analyst": "7d7467473ec382e374cadb5ee233c2460030414c1730efcee10b421817c35862",
-        "architect": "1fca5c6eff98972d51251417186afc743ae53fcedf53de064916c35469cc95ef",
-        "developer": "8494c25be76b6a2181077e4ade19aacd9cc8bfd06a07a077efc7d4543681e5d2",
-        "reviewer": "bd31010b1cf6a8c7ee69987237fd07578ff3df5cc01e0b8890d8f40b8e0f8bd0",
-        "tester": "be6798e3386f9caa634f5e09df9ab1f923db792e956b3197812f203952debe11",
-        "devops": "9fc8dcb4dd1e42d601212dca572fb9f2acdcea47dcaef3b8fa90e0b2638c1882",
-    }
-    catalog, _ = generated
+    catalog, manifest = generated
+    workflow = next(w for w in catalog["workflows"] if w["role_key"] == role)
+    canonical = json.dumps(workflow["modes"], ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    assert hashlib.sha256(canonical).hexdigest() == manifest["roles"][role]["role_instructions_sha256"]
     phases = mode_for(catalog, role, mode)["phases"]
-    first = phases[0]["instructions"][0]["description"]
-    terminal = phases[-1]["instructions"][-1]["description"]
-    assert hashlib.sha256(first.encode()).hexdigest() == (
-        "57d621e3ceb98b62cd1e8d2c5a329117c9b6b7a5b96dd983aa00a2a0442f162a"
-    )
-    assert hashlib.sha256(terminal.encode()).hexdigest() == terminal_hashes[role]
+    assert phases[0]["instructions"][0]["description"] == instructions.FIRST_STEP
+    assert phases[-1]["instructions"][-1]["description"] == instructions.terminal_instruction(role)
+    assert "PRECOMMIT ASSESSMENT ONLY" in instructions.terminal_instruction(role)
+    assert "discussion publish" not in instruction_text(phases[-1])
+
 
 
 @pytest.mark.parametrize("role,mode", MODES)
-def test_workspace_keys_are_retained_fleet_guidance_not_operator_or_agent_generated(generated, role, mode):
+def test_workspace_keys_are_business_assignment_keys_without_native_guidance(generated, role, mode):
     catalog, _ = generated
     context = mode_for(catalog, role, mode)["phases"][0]["instructions"][1]["description"]
-    for required in (
-        "Fleet supplies the original pipeline Idempotency-Key UUID and workspace operationKey",
-        "retained startup guidance", "pipeline UUID is the actual Fleet session_run_id",
-        "workspace operationKey is fleet-workspace:<Fleet session_run_id>", "Fleet-supplied values verbatim",
-        "not a new operator UUID, Tracker execution UUID or chat UUID", "Do not generate or derive them as agent",
-        "request a separate key provider", "extra fields in the private first-step JSON",
-        "Critical-blocker and delivery-proposal key rules remain separate and unchanged",
-        "TaskWorkspaceIntent JSON with that workspace operationKey",
-        "--operation-key <fleet-supplied-workspace-key>",
-    ):
+    for required in ("operationKey=task-workspace:<current-Tracker-assignment-uuid>",
+                     "pipeline Idempotency-Key equal to that assignment UUID",
+                     "independent of Fleet native run IDs", "technical assignment execution.key",
+                     "distinct from the root Workflow workflow_task_key", "holderSubject is the actual lease holder",
+                     "No request/token files", "actual successful PipelineDetail JSON", "sealed checks artifacts"):
         assert required in context
-    assert "operator-supplied pipeline" not in context and "operator-supplied workspace" not in context
-    assert "FLEET_CRITICAL_BLOCKER_KEY" in context
-    assert "proposal.idempotency_key from runtime guidance/template" in context
+    for obsolete in ("FLEET_CRITICAL_BLOCKER_KEY", "fleet-workspace:", "Fleet session_run_id", "source env.sh"):
+        assert obsolete not in context
+
 
 
 @pytest.mark.parametrize("mode", ["initial", "rework"])
@@ -193,12 +175,11 @@ def test_developer_seals_current_build_evidence_without_own_future_result_id(gen
         "or make it a precondition of sealing changes/checks or final Workflow completion",
     ):
         assert required in source
-    terminal = selected["phases"][-1]["instructions"][-1]["description"]
-    order = [terminal.index(text) for text in (
-        "task-tracker attachment upload", "After accepted Workflow complete=true",
-        "sdlc result propose", "sdlc result operation", "end the run", "After actual terminal",
-    )]
-    assert order == sorted(order)
+    terminal = instruction_text(selected["phases"][-1])
+    assert "task-tracker attachment upload" in terminal
+    assert "sdlc result propose" not in terminal
+    after = instructions.completion_instruction("developer")
+    assert after.index("discussion publish") < after.index("sdlc result propose") < after.index("finish the run")
 
 
 def test_reviewer_first_reads_actual_developer_result_then_seals_verified_provenance(generated):
@@ -211,7 +192,7 @@ def test_reviewer_first_reads_actual_developer_result_then_seals_verified_proven
         "Do not amend Developer artifacts", "wait for your own future accepted Reviewer result",
     ):
         assert required in source
-    terminal = mode_for(catalog, "reviewer", "delivery")["phases"][-1]["instructions"][-1]["description"]
+    terminal = instruction_text(mode_for(catalog, "reviewer", "delivery")["phases"][-1])
     assert terminal.index(source) < terminal.index("task-tracker attachment upload")
 
 
@@ -236,7 +217,7 @@ def test_tester_and_devops_propagate_accepted_predecessor_reports_not_synthetic_
     ):
         assert required in devops
     for role, source in (("tester", tester), ("devops", devops)):
-        terminal = mode_for(catalog, role, "delivery")["phases"][-1]["instructions"][-1]["description"]
+        terminal = instruction_text(mode_for(catalog, role, "delivery")["phases"][-1])
         assert terminal.index(source) < terminal.index("task-tracker attachment upload")
 
 
@@ -244,15 +225,14 @@ def test_conditional_pm_brief_and_single_task_inventory_are_pinned(generated):
     catalog, manifest = generated
     assert manifest["inventory"] == {"namespaces": 7, "workflows": 7, "modes": 8, "phases": 24}
     assert manifest["task_identity"] == {"task_equals_root": True, "children": False, "decomposition_barriers": False}
-    assert manifest["roles"]["project_manager"]["role_instructions_sha256"] == (
-        "aa1ab76d3752bf91510aeaddbcbf9b0713f656f677d75de0db9c226eae657152"
-    )
+    assert len(manifest["roles"]["project_manager"]["role_instructions_sha256"]) == 64
     assert len(catalog["workflows"]) == 7
     assert sum(len(w["modes"]) for w in catalog["workflows"]) == 8
     assert sum(len(m["phases"]) for w in catalog["workflows"] for m in w["modes"]) == 24
     pm = mode_for(catalog, "project_manager", "draft")
     text = " ".join(i["description"] for p in pm["phases"] for i in p["instructions"])
     assert instructions.SOURCE_CONTEXT not in text and instructions.FORGE_TASK_WORKSPACE not in text
-    assert "PM Workflow NOT completed" in text and "PM does not dispatch Analyst" in text
+    assert "Confirmation stays in stage=Draft" in text
+    assert "No automatic Analyst" in " ".join(pm["phases"][-1]["checks"])
     for workflow in catalog["workflows"]:
         assert all(m["key"] not in {"integration", "integration_rework"} for m in workflow["modes"])

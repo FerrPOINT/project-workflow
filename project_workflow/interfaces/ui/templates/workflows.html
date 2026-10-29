@@ -1,5 +1,6 @@
 {% import "workflow-cards.html" as workflow_cards %}
 {% extends "workflow-fragment.html" if workflow_fragment else "base.html" %}
+{% set pm_catalog_read_only = selected_workflow and selected_workflow.key == 'single-task-v1:project_manager' %}
 {% set phase_scope_suffix = ('&project_scope=all' if selected_namespace else '?project_scope=all') if request is defined and request.query_params.get('project_scope') == 'all' else '' %}
 {% set mode_scope_suffix = '&project_scope=all' if request is defined and request.query_params.get('project_scope') == 'all' else '' %}
 
@@ -7,7 +8,7 @@
 {% block header_title %}Воркфлоу{% endblock %}
 {% block header_actions %}
 {% if can_administer %}
-  <button type="button" class="btn btn-secondary workflow-header-action" id="editWorkflowButton" data-workflow-edit aria-controls="workflowForm" aria-expanded="false"{% if not selected_workflow %} disabled{% endif %} onclick="startEditWorkflow()">Редактировать воркфлоу</button>
+  <button type="button" class="btn btn-secondary workflow-header-action" id="editWorkflowButton" data-workflow-edit aria-controls="workflowForm" aria-expanded="false"{% if not selected_workflow %} disabled{% endif %}{% if pm_catalog_read_only %} hidden{% endif %} onclick="startEditWorkflow()">Редактировать воркфлоу</button>
   <button type="button" class="btn btn-primary workflow-header-action" id="newWorkflowButton" onclick="startCreateWorkflow()">+ Новый воркфлоу</button>
 {% endif %}
 {% endblock %}
@@ -77,7 +78,7 @@
     {% endcall %}
     <div class="workflow-card-footer phase-card-footer">
       {{ base_ui.badge('параллельно' if p.execution_type == 'parallel' else 'последовательно', 'info' if p.execution_type == 'parallel' else 'neutral') }}
-{% if can_administer %}
+{% if can_administer and not pm_catalog_read_only %}
       {{ workflow_cards.actions('phase', p.name, parallel=p.execution_type == 'parallel', first=p.phase_num == 1, last=p.phase_num == phase_count, delete_disabled=phase_count <= 1) }}
 {% endif %}
     </div>
@@ -137,7 +138,7 @@
       <div class="panel-actions">
         <button class="btn btn-primary" type="submit" id="workflowSubmitButton">Сохранить</button>
         <button class="btn btn-secondary" type="button" id="cancelCreateWorkflowButton" onclick="cancelWorkflowForm()" style="display:none">Отмена</button>
-        <button class="btn btn-secondary workflow-delete" type="button" id="deleteWorkflowButton" onclick="deleteWorkflow()">Удалить</button>
+        <button class="btn btn-secondary workflow-delete" type="button" id="deleteWorkflowButton"{% if pm_catalog_read_only %} hidden{% endif %} onclick="deleteWorkflow()">Удалить</button>
       </div>
       {% call base_ui.prose(compact=true) %}<p id="workflowDeleteHint" hidden>Воркфлоу по умолчанию нельзя удалить.</p>{% endcall %}
     </form>
@@ -203,7 +204,7 @@
 
       {% else %}
         <div data-testid="workflow-mode-empty">{{ base_ui.state('empty', 'В этом режиме фаз пока нет.') }}</div>
-        {% if can_administer and selected_workflow_id %}<div class="panel-actions"><button type="button" class="base-control base-button base-icon-control phase-add-btn" data-variant="outline" data-size="icon" data-after-order="0" onclick="addPhaseAfter(this)" aria-label="Добавить первую фазу">+</button></div>{% endif %}
+        {% if can_administer and selected_workflow_id and not pm_catalog_read_only %}<div class="panel-actions"><button type="button" class="base-control base-button base-icon-control phase-add-btn" data-variant="outline" data-size="icon" data-after-order="0" onclick="addPhaseAfter(this)" aria-label="Добавить первую фазу">+</button></div>{% endif %}
       {% endfor %}
     </div>
 

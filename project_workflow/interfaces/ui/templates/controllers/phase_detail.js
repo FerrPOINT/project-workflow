@@ -2,6 +2,7 @@
 (function(){
 window.WorkflowPageControllers["phase_detail"] = function(page, config){
 const fetch=page.fetch,showToast=page.notify,showRequestError=()=>showToast("Не удалось связаться с сервером","error");
+{% include "phase-effective-view.js" %}
 
 {% if can_administer %}
 const phaseId = config.phaseId;

@@ -6,6 +6,53 @@
 
 ## [Unreleased]
 
+### Added
+
+- Страницы фаз PM показывают один набор инструкций установленного каталога.
+  `effective_view` сохраняет raw-поля API без подмены инструкций при исполнении.
+  Запись в sealed PM каталог отклоняется; обычные workflow сохраняют редактор.
+  Подтверждение владельца относится к третьей фазе. Проверка исходников, UI,
+  установка кандидата и живая приёмка учитываются отдельно.
+
+- Configured PM preparation in retained652a now asks questions/offers alternatives
+  only for actual gaps or meaningful choices. Eight focused content checks cover
+  all supported families, real judge prompts and appended security constraints;
+  Ruff/diff checks pass. Catalog bytes and legacy execution remain unchanged.
+  This source correction is not installed live acceptance. The generic editor
+  still requires compatible sealed-catalog publication/adoption before arbitrary
+  text edits can be consumed by configured execution; that gap is not bypassed.
+- Configured PM final judging is precommit-only: valid full saved requirements,
+  resolved feedback/questions and exact actual owner consent in Draft. The
+  worker retains its full terminal-receipt/Tracker completion commands, but the
+  judge cannot require those future effects before its verdict. Known retained
+  terminal/check/evidence variants are projected without changing the legacy
+  catalog or custom security constraints. No forced PASS or new authority.
+  All35 configured tests and independent review pass on210db1; normal
+  Workflow-only installation preserves all nine history tables. The SAME real
+  PM11/FLEETQA-8 then produced PASS/complete=true/version14/history13 and an
+  authoritative terminal receipt. PM submitted Tracker completion through CLI;
+  Backlog/Ready, one completion and zero downstream assignments/intents were
+  verified, including original-key replay. This is assisted existing-task live
+  acceptance, not fresh autonomous or full release qualification.
+
+- Configured PM preparation instructions distinguish the independently generated
+  Workflow execution_ref from Tracker assignment.execution_id, and Workflow
+  cursor versions from Tracker assignment versions. Match task/assignment/agent
+  identities by authority; do not rebind or invent IDs to make unrelated IDs
+  equal. Eight focused source tests pass, including evaluator prompt coverage.
+  The instruction corrections are installed with210db1. In the existing
+  live PM chat, an explicit explanation allowed the agent to submit a corrected
+  report and advance PM-DRAFT-01 to PM-DRAFT-02; that assisted check is not full
+  autonomous PM or Backlog acceptance.
+
+- Opt-in configured-cli-v1 for new PM tasks: existing trusted assignment and
+  direct step/history endpoints with a dedicated per-agent Auth PAT, current
+  Tracker assignment validation, version/key replay and actual owner-confirmed
+  terminal receipts. No temporary CLI files, native/Fleet callback or human-route
+  machine admission. Legacy records and applied schemas/catalogs are unchanged.
+  Host qualification is scoped; PostgreSQL, packaged/integrated and live gates
+  remain open. See docs/configured-cli-v1.md for wire and deployment dependencies.
+
 - Обновлён штатный SSR export Base: страницы ошибок больше не показывают лишний заголовок None. HTTP-регрессия проверяет единственный правильный h1 и возврат к списку как в корне, так и под UI_BASE_PATH.
 
 - Навигация и редактор учитывают UI_BASE_PATH: смена профессии со страницы фазы сбрасывает прежние workflow/mode и сохраняет проектный контекст; порядок инструкций сохраняется без повторного префикса, а возврат со страницы ошибки остаётся внутри приложения.
@@ -38,6 +85,31 @@
 
 
 ### Changed
+- Configured PM first-step reports explicitly include the already observed CLI
+  stdout fields and Tracker task/input references. CLI JSON is flattened; do not
+  invent HTTP ok/result wrappers or a future report verdict as evidence. Existing
+  verifier/check lists remain unchanged. Fifty-one focused tests and Ruff pass;
+  the current instruction update is installed; full live acceptance is separate.
+- Actual retained0015-copy migration-only qualification passes on `6c98e83`:
+  two existing `ensure_migrated()` calls preserve old data/catalog/PM history,
+  add only four identity tables and reach0019; outer cleanup is verified.
+  Full retry host module39 plus11 adjacent cases pass with scoped Ruff/mypy.
+  `init_db()` seeding failures remain retained; image/install, full gates,
+  authenticated PM HTTP and live owner-confirmed Backlog/Ready remain open.
+- PM terminal resume retry preserves the single trusted observation's null or
+  exact inherited source checkpoint marker without treating it as own progress.
+  The populated0018 upgrade plus six affected PostgreSQL cases pass on `6c98e83`
+  (7/7, cleanup verified); foreign markers and genuine rebound targets remain
+  rejected. Full gates, Fleet transactional recovery and live PM acceptance
+  remain open; the earlier PG7 keeps its historical scope.
+- The normal migration entrypoint accepts0018 as the predecessor of0019.
+  Seven actual PostgreSQL retry/migration/concurrency tests pass, including
+  retained receipts, rollback refusal and observed row-lock waits. These
+  source checks do not claim an installed or live PM business result.
+- Documented the opt-in PM terminal resume retry V1 command, distinct receipt,
+  scoped readback and additive migration 0019. Source/SQLite and reported Fleet
+  golden verification are separated from open PostgreSQL/deployment/live gates;
+  retained operation history is never deleted to permit downgrade.
 - PM Draft assignments accept the actual Tracker reservation and input snapshot
   without inventing future queue/workspace refs. Additive migration 0009 preserves
   existing assignment history; bind keeps the original agent and generic steps,

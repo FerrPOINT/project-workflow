@@ -15,12 +15,12 @@ from project_workflow.domain.project_admission import (
 )
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.session import get_session
-from tests.test_pm_execution import PROJECT_REF, prepare_pm
+from tests._retained_pm_history import PROJECT_REF, retained_pm
 
 
 @pytest.fixture
 def pm(monkeypatch):
-    yield from prepare_pm(monkeypatch)
+    yield from retained_pm(monkeypatch)
 
 
 def scope(projects=(), *, writable=None, role="member", seconds=30):
@@ -36,10 +36,6 @@ def scope(projects=(), *, writable=None, role="member", seconds=30):
 
 
 def test_exact_project_binding_filters_direct_rows_counts_and_related_history(pm):
-    client, _, binding, _, _ = pm
-    result = client.post("/internal/runtime/v1/pm/bind", headers={"Authorization": "Bearer " + "a" * 40},
-                         json=binding)
-    assert result.status_code == 200, result.text
     with get_session() as session:
         owned = session.scalar(select(m.PMExecution))
         assert owned is not None
@@ -118,10 +114,6 @@ def test_http_sso_uses_current_project_proof_without_promotion_or_cache_fallback
     from project_workflow.interfaces.ui.app import create_app
     from tests.test_sso import _app
 
-    native, _, binding, _, _ = pm
-    result = native.post("/internal/runtime/v1/pm/bind",
-                         headers={"Authorization": "Bearer " + "a" * 40}, json=binding)
-    assert result.status_code == 200
     _, settings = _app(monkeypatch, AUTH_APPLICATION_ACCESS_REQUIRED=application_policy)
     monkeypatch.setenv("PROJECT_WORKFLOW_SPACES__ENABLED", "true")
     monkeypatch.setenv("PROJECT_WORKFLOW_SPACES__TRACKER_URL", "http://tracker.test")
@@ -281,10 +273,6 @@ def test_display_window_policy_off_is_explicit_and_missing_proof_fails_closed(mo
     ("member", True, False), ("operator", False, False), ("operator", True, True),
 ])
 def test_task_commit_requires_native_role_and_current_writable_owner(pm, role, writable, allowed):
-    client, _, binding, _, _ = pm
-    result = client.post("/internal/runtime/v1/pm/bind", headers={"Authorization": "Bearer " + "a" * 40},
-                         json=binding)
-    assert result.status_code == 200, result.text
     with get_session() as session:
         task = session.scalar(select(m.Task).where(m.Task.task_key == "PM-1"))
         task_id, before = task.id, task.description
@@ -308,10 +296,6 @@ def test_task_commit_requires_native_role_and_current_writable_owner(pm, role, w
 
 
 def test_operator_cannot_forge_native_execution_evidence(pm):
-    client, _, binding, _, _ = pm
-    result = client.post("/internal/runtime/v1/pm/bind", headers={"Authorization": "Bearer " + "a" * 40},
-                         json=binding)
-    assert result.status_code == 200, result.text
     token = human_scope.set(scope((PROJECT_REF,), role="operator"))
     try:
         with get_session() as session:

@@ -8,7 +8,7 @@
 {% set shell_context %}{% if namespaces is defined and namespaces %}{{ profession_selector('namespaceSelector', namespaces, active_namespace) }}{% endif %}{% endset %}
 {% macro page_content() %}
   {% if workflow_page_fragment %}<style data-workflow-page-style>{{ self.extra_style() }}</style>{% endif %}
-  <script type="application/json" data-workflow-page>{{ {'schema_version':1, 'page':page|default(''), 'title':self.title()|striptags|trim, 'context_html':shell_context|trim, 'access_revision':access_window.scope_revision, 'access_enforced':access_window.enforced, 'can_administer':can_administer, 'controller_assets':page_controller_identity(can_administer)}|tojson }}</script>
+  <script type="application/json" data-workflow-page>{{ {'schema_version':1, 'page':page|default(''), 'title':self.title()|striptags|trim, 'context_html':shell_context|trim, 'access_revision':access_window.scope_revision, 'access_enforced':access_window.enforced, 'can_administer':can_administer|default(false), 'controller_assets':page_controller_identity(can_administer|default(false))}|tojson }}</script>
   {% set page_heading_markup %}{% block page_heading %}<h1 class="base-page-title">{% block header_title %}{% endblock %}</h1>{% endblock %}{% endset %}
   {% set page_actions_markup %}{% block header_actions %}{% endblock %}{% endset %}
   {{ base_ui.page_header(heading=page_heading_markup, actions=page_actions_markup) }}
@@ -41,7 +41,7 @@
 <title data-base-brand-title="Workflow Engine">{% block title %}Workflow Engine{% endblock %}</title>
 <script src="{{ ui_base_path() }}/ui-assets/htmx-2.0.11.min.js" integrity="sha384-2OatzQy1H+Zd/IIrjr1TcuDGqLXeHhbooAyJY1KdQMKnr4LZ22k31GBLdYKHmVjg" defer></script>
 <script>{% include "application-navigation.js" %}</script>
-{% for asset in page_controller_assets(can_administer) %}<script src="{{ ui_base_path() }}{{ asset }}" defer></script>{% endfor %}
+{% for asset in page_controller_assets(can_administer|default(false)) %}<script src="{{ ui_base_path() }}{{ asset }}" defer></script>{% endfor %}
 <script>{% include "base/theme-preference.js" %}
 document.documentElement.dataset.theme=window.PdlcThemePreference.read("workflow-theme");</script>
 <style>

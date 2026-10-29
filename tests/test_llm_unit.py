@@ -92,7 +92,7 @@ class TestEvaluateLlmReportVerdicts:
             phase, "blocked", None, None, 42, commit=False
         )
 
-    def test_rollback_uses_rollback_target(self):
+    def test_retired_rollback_is_rejected_even_with_a_saved_target(self):
         engine = _make_engine()
         engine._resolve_transition.return_value = (None, None, "0")
         phase = Phase(code="1", name="One", instructions=[], checks=[], evidence=[], rollback_target_phase_code="0")
@@ -110,9 +110,10 @@ class TestEvaluateLlmReportVerdicts:
             },
         ):
             result = evaluate_llm_report("r", phase, engine)
-        assert result["verdict"] == "ROLLBACK"
-        assert result["rollback_phase_code"] == "0"
-        assert result["next_phase_code"] == "0"
+        assert result["verdict"] == "BLOCKED"
+        assert result["retryable"] is True
+        assert result["rollback_phase_code"] is None
+        assert result["next_phase_code"] is None
 
     def test_delegate_records_transition(self):
         engine = _make_engine()

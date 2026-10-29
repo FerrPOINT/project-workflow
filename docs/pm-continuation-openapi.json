@@ -1409,9 +1409,13 @@
                 "$ref": "#/components/schemas/PMOperationResult"
               },
               {
+                "$ref": "#/components/schemas/PMResumeRetryOperationResult"
+              },
+              {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Operation"
           },
           "resume_delivered": {
             "title": "Resume Delivered",
@@ -1696,6 +1700,155 @@
           "input_receipt"
         ],
         "title": "PMResumeInput",
+        "type": "object"
+      },
+      "PMResumeRetryOperationResult": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "resume_retry",
+            "title": "Kind",
+            "type": "string"
+          },
+          "operation_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Operation Key",
+            "type": "string"
+          },
+          "request_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Request Sha256",
+            "type": "string"
+          },
+          "result": {
+            "$ref": "#/components/schemas/PMResumeRetryResult"
+          }
+        },
+        "required": [
+          "operation_key",
+          "kind",
+          "request_sha256",
+          "result"
+        ],
+        "title": "PMResumeRetryOperationResult",
+        "type": "object"
+      },
+      "PMResumeRetryResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "const": true,
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "result": {
+            "$ref": "#/components/schemas/PMResumeRetryResult"
+          }
+        },
+        "required": [
+          "ok",
+          "result"
+        ],
+        "title": "PMResumeRetryResponse",
+        "type": "object"
+      },
+      "PMResumeRetryResult": {
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": 1,
+            "title": "Contract Version",
+            "type": "integer"
+          },
+          "failed_terminal": {
+            "$ref": "#/components/schemas/RuntimeObservation"
+          },
+          "input": {
+            "$ref": "#/components/schemas/PMTypedInput"
+          },
+          "input_receipt": {
+            "$ref": "#/components/schemas/PMInputReceipt"
+          },
+          "operation_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Operation Key",
+            "type": "string"
+          },
+          "pending": {
+            "$ref": "#/components/schemas/PMExecutionSnapshot"
+          },
+          "prior_resume_operation_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Prior Resume Operation Key",
+            "type": "string"
+          },
+          "request_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Request Sha256",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/PMResumeRetrySource"
+          }
+        },
+        "required": [
+          "contract_version",
+          "operation_key",
+          "request_sha256",
+          "prior_resume_operation_key",
+          "input",
+          "input_receipt",
+          "source",
+          "failed_terminal",
+          "pending"
+        ],
+        "title": "PMResumeRetryResult",
+        "type": "object"
+      },
+      "PMResumeRetrySource": {
+        "additionalProperties": false,
+        "properties": {
+          "binding_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Binding Ref",
+            "type": "string"
+          },
+          "checkpoint_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Checkpoint Ref",
+            "type": "string"
+          },
+          "fence": {
+            "maximum": 9.223372036854776e+18,
+            "minimum": 1.0,
+            "title": "Fence",
+            "type": "integer"
+          },
+          "hermes_run_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Hermes Run Ref",
+            "type": "string"
+          },
+          "session_run_id": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Session Run Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_run_id",
+          "binding_ref",
+          "hermes_run_ref",
+          "fence",
+          "checkpoint_ref"
+        ],
+        "title": "PMResumeRetrySource",
         "type": "object"
       },
       "PMReviewAdmissionContext": {
@@ -3913,6 +4066,207 @@
         "title": "SingleTaskPMResume",
         "type": "object"
       },
+      "SingleTaskPMResumeRetry": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_ref": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Agent Ref",
+            "type": "string"
+          },
+          "assignment_operation_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Assignment Operation Key",
+            "type": "string"
+          },
+          "assignment_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Assignment Ref",
+            "type": "string"
+          },
+          "assignment_revision": {
+            "maximum": 9.223372036854776e+18,
+            "minimum": 1.0,
+            "title": "Assignment Revision",
+            "type": "integer"
+          },
+          "binding_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Binding Ref",
+            "type": "string"
+          },
+          "checkpoint_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Checkpoint Ref",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": 1,
+            "title": "Contract Version",
+            "type": "integer"
+          },
+          "execution_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Execution Ref",
+            "type": "string"
+          },
+          "expected_fence": {
+            "maximum": 9.223372036854776e+18,
+            "minimum": 1.0,
+            "title": "Expected Fence",
+            "type": "integer"
+          },
+          "expected_version": {
+            "maximum": 9.223372036854776e+18,
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "failed_binding_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Failed Binding Ref",
+            "type": "string"
+          },
+          "failed_hermes_run_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Failed Hermes Run Ref",
+            "type": "string"
+          },
+          "failed_session_run_id": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Failed Session Run Id",
+            "type": "string"
+          },
+          "hermes_run_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Hermes Run Ref",
+            "type": "string"
+          },
+          "input": {
+            "$ref": "#/components/schemas/PMTypedInput"
+          },
+          "input_receipt": {
+            "$ref": "#/components/schemas/PMInputReceipt"
+          },
+          "instruction_manifest_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Instruction Manifest Sha256",
+            "type": "string"
+          },
+          "instruction_profile": {
+            "const": "single-task-v1",
+            "title": "Instruction Profile",
+            "type": "string"
+          },
+          "new_binding_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "New Binding Ref",
+            "type": "string"
+          },
+          "new_session_run_id": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "New Session Run Id",
+            "type": "string"
+          },
+          "operation_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Operation Key",
+            "type": "string"
+          },
+          "prior_resume_operation_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Prior Resume Operation Key",
+            "type": "string"
+          },
+          "root_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Root Ref",
+            "type": "string"
+          },
+          "session_run_id": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Session Run Id",
+            "type": "string"
+          },
+          "task": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Task",
+            "type": "string"
+          },
+          "task_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Task Ref",
+            "type": "string"
+          },
+          "tracker_instance_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Tracker Instance Ref",
+            "type": "string"
+          },
+          "tracker_project_ref": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Tracker Project Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instruction_profile",
+          "instruction_manifest_sha256",
+          "task",
+          "execution_ref",
+          "tracker_instance_ref",
+          "tracker_project_ref",
+          "task_ref",
+          "root_ref",
+          "agent_ref",
+          "assignment_operation_key",
+          "assignment_ref",
+          "assignment_revision",
+          "operation_key",
+          "expected_version",
+          "expected_fence",
+          "binding_ref",
+          "hermes_run_ref",
+          "session_run_id",
+          "contract_version",
+          "checkpoint_ref",
+          "prior_resume_operation_key",
+          "input",
+          "input_receipt",
+          "failed_session_run_id",
+          "failed_hermes_run_ref",
+          "failed_binding_ref",
+          "new_session_run_id",
+          "new_binding_ref"
+        ],
+        "title": "SingleTaskPMResumeRetry",
+        "type": "object"
+      },
       "SingleTaskPMReviewAssignmentRequest": {
         "additionalProperties": false,
         "properties": {
@@ -5895,6 +6249,62 @@
           }
         },
         "summary": "Resume"
+      }
+    },
+    "/internal/runtime/v1/pm/resume-retry": {
+      "post": {
+        "operationId": "resume_retry_internal_runtime_v1_pm_resume_retry_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SingleTaskPMResumeRetry"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PMResumeRetryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resume Retry"
       }
     }
   }

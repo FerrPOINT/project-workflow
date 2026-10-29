@@ -16,6 +16,11 @@ from tests._db_helpers import prepare_sqlite_uow
 @pytest.fixture(autouse=True)
 def isolate_ui_runtime_state(tmp_path, monkeypatch):
     """Keep tests away from the user's real runtime DB/settings and mutable seed file."""
+    # Most existing fixtures explicitly exercise retained/editor catalogs.
+    # Current configured API tests install their sealed family separately.
+    monkeypatch.setattr(config, "CATALOG_VARIANT", "legacy")
+    monkeypatch.setattr(config, "MANAGED_CATALOG_PATH",
+                        Path(__file__).resolve().parents[1] / "project_workflow/references/hermes_sdlc_catalog_v1.json")
     created_uows: list[SAUnitOfWork] = []
     original_uow_init = SAUnitOfWork.__init__
 

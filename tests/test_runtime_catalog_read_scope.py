@@ -2,7 +2,7 @@
 from unittest.mock import Mock, patch
 
 import pytest
-from sqlalchemy import event, false, select, text, update
+from sqlalchemy import delete, event, false, select, text, update
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.engine import Engine
 from starlette.testclient import TestClient
@@ -10,9 +10,9 @@ from starlette.testclient import TestClient
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db import single_task_catalog as catalog
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
-from tests import test_single_task_profile_compatibility as retained
 from tests.test_catalog_batched_reads import installed as installed
-from tests.test_single_task_profile_compatibility import retained_bridge as retained_bridge
+from tests.test_configured_cli import WRITER, enroll, step
+from tests.test_configured_cli import configured as configured
 
 
 def test_runtime_scope_validates_all_roles_once_and_returns_independent_values(installed):
@@ -139,8 +139,8 @@ def test_nested_scope_error_removes_observation_and_unscoped_reads_stay_fresh(in
         assert refresh.call_count == 3
 
 
-def test_retained_retry_terminal_path_bounds_full_validations_per_runtime_uow(
-    retained_bridge, monkeypatch, supervisor_llm,
+def test_configured_step_bounds_full_validations_per_runtime_uow(
+    configured, monkeypatch, supervisor_llm,
 ):
     original, validate = TestClient.request, catalog._observe_profile
     validations = []
@@ -167,16 +167,41 @@ def test_retained_retry_terminal_path_bounds_full_validations_per_runtime_uow(
 
     monkeypatch.setattr(catalog, "_observe_profile", observed)
     monkeypatch.setattr(TestClient, "request", request)
-    # Exercise original assertions, canonical identities and retained final receipt.
     event.listen(Engine, "before_cursor_execute", sql)
     try:
-        retained.test_retained_retry_keeps_original_family_through_confirmation_and_terminal(
-            retained_bridge, monkeypatch, supervisor_llm, "unbound",
-        )
+        cursor = enroll(configured)
+        supervisor_llm("PASS")
+        response = step(configured, report="Actual phase work", operation_key="catalog-scoped-report",
+                        expected_version=cursor["version"])
+        assert response.status_code == 200, response.text
+        client, assignment = configured
+        history = client.get("/internal/runtime/history", headers=WRITER, params={
+            "task": assignment["task"], "namespace_id": assignment["namespace_id"],
+            "interaction_protocol": "configured-cli-v1", "projection": "fleet-summary-v1", "n": 1,
+        })
+        assert history.status_code == 200, history.text
+        assert len(history.json()["result"]["records"]) == 1
+        saved_records = history.json()["result"]["records"]
+        with SAUnitOfWork() as uow:
+            workflow = next(w for w in uow.workflows.list_by_profession(assignment["namespace_id"])
+                            if w.key == assignment["workflow_key"])
+            uow.session.execute(delete(m.ProfessionWorkflow).where(
+                m.ProfessionWorkflow.profession_id == assignment["namespace_id"],
+                m.ProfessionWorkflow.workflow_id == workflow.id,
+            ))
+        assert step(configured).status_code == 409
+        history = client.get("/internal/runtime/history", headers=WRITER, params={
+            "task": assignment["task"], "namespace_id": assignment["namespace_id"],
+            "interaction_protocol": "configured-cli-v1", "projection": "fleet-summary-v1", "n": 1,
+        })
+        assert history.status_code == 200, history.text
+        assert history.json()["result"]["records"] == saved_records
     finally:
         event.remove(Engine, "before_cursor_execute", sql)
     steps = [count for route, count, _queries in counts if route == "step"]
-    assert steps and max(steps) <= 8  # includes real intermediate Supervisor commits
+    assert steps and max(steps) <= 8
     assert all(queries <= 800 for route, _count, queries in counts if route == "step")
-    assert counts[-1][:2] == ("readback", 1)
+    # Saved history is independent of current collection/sealed catalog admission.
+    assert all(count == 0 for route, count, _queries in counts if route == "history")
+    assert counts[-1][:2] == ("history", 0)
     assert counts[-1][2] <= 200

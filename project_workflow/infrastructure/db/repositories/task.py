@@ -162,39 +162,9 @@ class SATaskRepository(TaskRepository):
             ).scalar_one_or_none()
         return _row_to_runtime_assignment(row) if row else None
 
-    def task_has_pm_execution(self, task_id: int) -> bool:
-        return bool(self._session.scalar(select(
-            select(m.PMExecution.execution_ref).where(m.PMExecution.task_id == task_id).exists()
-        )))
 
-    def assignment_has_pm_execution(self, task_id: int, assignment_id: int) -> bool:
-        return bool(self._session.scalar(select(
-            select(m.PMExecution.execution_ref).where(
-                m.PMExecution.task_id == task_id,
-                m.PMExecution.assignment_id == assignment_id,
-            ).exists()
-        )))
 
-    def task_has_pm_draft_assignment(self, task_id: int) -> bool:
-        return bool(self._session.scalar(select(
-            select(m.TaskRuntimeAssignment.id).where(
-                m.TaskRuntimeAssignment.task_id == task_id,
-                m.TaskRuntimeAssignment.role_key == "project_manager",
-                m.TaskRuntimeAssignment.stage_key == "draft",
-                m.TaskRuntimeAssignment.queue_item_ref.is_(None),
-            ).exists()
-        )))
 
-    def get_assignment_by_bind_operation_key(
-        self, bind_operation_key: str
-    ) -> TaskRuntimeAssignment | None:
-        with self._session.no_autoflush:
-            row = self._session.execute(
-                select(m.TaskRuntimeAssignment)
-                .options(joinedload(m.TaskRuntimeAssignment.mode))
-                .where(m.TaskRuntimeAssignment.bind_operation_key == bind_operation_key)
-            ).scalar_one_or_none()
-        return _row_to_runtime_assignment(row) if row else None
 
     def create_assignment(self, data: dict[str, Any]) -> int:
         item = m.TaskRuntimeAssignment(
@@ -236,57 +206,6 @@ class SATaskRepository(TaskRepository):
         self._session.flush()
         return int(item.id)
 
-    def finalize_assignment_binding(
-        self,
-        assignment_id: int,
-        *,
-        expected_task_id: int,
-        expected_assignment_revision: int,
-        expected_role_key: str,
-        expected_mode_id: int,
-        expected_cycle_number: int,
-        expected_attempt_number: int,
-        expected_assignment_ref: str,
-        expected_binding_ref: str | None,
-        expected_hermes_run_ref: str | None,
-        binding_ref: str,
-        hermes_run_ref: str,
-        bind_operation_key: str,
-        bind_request_sha256: str,
-        concrete_agent_ref: str | None,
-        single_task_binding: dict[str, Any] | None = None,
-    ) -> bool:
-        result = self._session.execute(
-            update(m.TaskRuntimeAssignment)
-            .where(
-                m.TaskRuntimeAssignment.id == assignment_id,
-                m.TaskRuntimeAssignment.task_id == expected_task_id,
-                m.TaskRuntimeAssignment.assignment_revision == expected_assignment_revision,
-                m.TaskRuntimeAssignment.role_key == expected_role_key,
-                m.TaskRuntimeAssignment.mode_id == expected_mode_id,
-                m.TaskRuntimeAssignment.cycle_number == expected_cycle_number,
-                m.TaskRuntimeAssignment.attempt_number == expected_attempt_number,
-                m.TaskRuntimeAssignment.assignment_ref == expected_assignment_ref,
-                m.TaskRuntimeAssignment.binding_ref.is_(expected_binding_ref)
-                if expected_binding_ref is None
-                else m.TaskRuntimeAssignment.binding_ref == expected_binding_ref,
-                m.TaskRuntimeAssignment.hermes_run_ref.is_(expected_hermes_run_ref)
-                if expected_hermes_run_ref is None
-                else m.TaskRuntimeAssignment.hermes_run_ref == expected_hermes_run_ref,
-                m.TaskRuntimeAssignment.bind_operation_key.is_(None),
-                m.TaskRuntimeAssignment.bind_request_sha256.is_(None),
-                m.TaskRuntimeAssignment.concrete_agent_ref.is_(None),
-            )
-            .values(
-                binding_ref=binding_ref,
-                hermes_run_ref=hermes_run_ref,
-                bind_operation_key=bind_operation_key,
-                bind_request_sha256=bind_request_sha256,
-                concrete_agent_ref=concrete_agent_ref,
-                single_task_binding_json=canonical_json(single_task_binding) if single_task_binding else None,
-            )
-        )
-        return getattr(result, "rowcount", 0) == 1
 
     def list_assignments(self, task_id: int) -> Sequence[TaskRuntimeAssignment]:
         with self._session.no_autoflush:

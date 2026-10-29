@@ -220,20 +220,8 @@ class TaskRepository(ABC):
     @abstractmethod
     def lock(self, task_id: int) -> Task | None: ...
 
-    @abstractmethod
-    def task_has_pm_execution(self, task_id: int) -> bool:
-        """Check any immutable PM enrollment while the caller holds the task lock."""
-        ...
 
-    @abstractmethod
-    def task_has_pm_draft_assignment(self, task_id: int) -> bool:
-        """Whether immutable initial PM reservation history prevents generic replacement."""
-        ...
 
-    @abstractmethod
-    def assignment_has_pm_execution(self, task_id: int, assignment_id: int) -> bool:
-        """Check immutable PM enrollment while the caller holds the task lock."""
-        ...
 
     @abstractmethod
     def create(self, data: dict[str, Any]) -> int: ...
@@ -244,35 +232,10 @@ class TaskRepository(ABC):
     @abstractmethod
     def get_assignment_by_operation_key(self, operation_key: str) -> TaskRuntimeAssignment | None: ...
 
-    @abstractmethod
-    def get_assignment_by_bind_operation_key(
-        self, bind_operation_key: str
-    ) -> TaskRuntimeAssignment | None: ...
 
     @abstractmethod
     def create_assignment(self, data: dict[str, Any]) -> int: ...
 
-    @abstractmethod
-    def finalize_assignment_binding(
-        self,
-        assignment_id: int,
-        *,
-        expected_task_id: int,
-        expected_assignment_revision: int,
-        expected_role_key: str,
-        expected_mode_id: int,
-        expected_cycle_number: int,
-        expected_attempt_number: int,
-        expected_assignment_ref: str,
-        expected_binding_ref: str | None,
-        expected_hermes_run_ref: str | None,
-        binding_ref: str,
-        hermes_run_ref: str,
-        bind_operation_key: str,
-        bind_request_sha256: str,
-        concrete_agent_ref: str | None,
-        single_task_binding: dict[str, Any] | None = None,
-    ) -> bool: ...
 
     @abstractmethod
     def list_assignments(self, task_id: int) -> Sequence[TaskRuntimeAssignment]: ...

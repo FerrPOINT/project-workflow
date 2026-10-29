@@ -41,7 +41,9 @@ def _root(value: str) -> str:
     return value.rstrip("/")
 
 
-def introspect(authorization: str | None) -> tuple[NamespacePrincipal, list[str]]:
+def introspect(
+    authorization: str | None, *, require_service_account: bool = False,
+) -> tuple[NamespacePrincipal, list[str]]:
     """Resolve a fresh principal only; callers must enforce registered subjects/scopes."""
     settings = config.get_settings()
     try:
@@ -78,7 +80,7 @@ def introspect(authorization: str | None) -> tuple[NamespacePrincipal, list[str]
         if not isinstance(value, dict) or not required_fields <= set(value) <= required_fields | optional_fields:
             raise ValueError("Invalid introspection")
         # Additive Auth role metadata never lets a human use a registered machine path.
-        if "role" in value and value["role"] != "service_account":
+        if (("role" in value or require_service_account) and value.get("role") != "service_account"):
             raise NamespaceAuthError(403)
         subject = canonical_uuid(value["sub"]) if isinstance(value["sub"], str) else ""
         scopes = value["scopes"]

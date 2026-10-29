@@ -2,18 +2,18 @@
 
 import json
 import subprocess
-from pathlib import Path
 
 import pytest
 
+from project_workflow.interfaces.ui.controller_assets import controller_source
+
 pytestmark = pytest.mark.ui
-TEMPLATE = Path(__file__).parents[1] / "project_workflow/interfaces/ui/templates/workflows.html"
 
 
 @pytest.mark.parametrize("mode", ["edit", "create"])
 @pytest.mark.parametrize("outcome", ["saved", "failed", "network"])
 def test_pending_workflow_write_locks_fields_identity_and_duplicate_submit(mode, outcome):
-    template = TEMPLATE.read_text(encoding="utf-8")
+    template = controller_source("workflows", True)[0].decode()
 
     def between(start, end):
         return template[template.index(start):template.index(end)]
@@ -28,6 +28,7 @@ def test_pending_workflow_write_locks_fields_identity_and_duplicate_submit(mode,
     script = """
 const mode=MODE,outcome=OUTCOME;
 let selectedWorkflowId=mode==='edit'?1:null,workflowFormMode=mode,workflowWritePending=false;
+let phaseWritePending=false,workflowNeedsReadback=false,workflowReadController=null;
 let workflowEditorVisible=true;
 const field=(value,kind='input')=>({value,disabled:false,setAttribute(){},
  matches:selector=>kind==='select'&&selector==='select[data-base-choice]'});
@@ -43,6 +44,8 @@ const showToast=()=>{},showRequestError=()=>{},setWorkflowFormMode=()=>{};
 const currentWorkflowId=selectedWorkflowId;
 const workflowApiUrl=id=>'/api/workflows'+(id==null?'':'/'+id);
 let writes=0,ack;const reloadWorkflows=async()=>true,setWorkflowEditorVisible=()=>{};
+const workflowSelectionUrl=id=>'/workflows?workflow_id='+id;
+const refreshAfterWorkflowWrite=async()=>true;
 const fetch=()=>{writes++;return new Promise((resolve,reject)=>{ack=()=>{
  if(outcome==='network')reject(new Error('offline'));
  else resolve({json:async()=>({ok:outcome==='saved',workflow_id:2})});

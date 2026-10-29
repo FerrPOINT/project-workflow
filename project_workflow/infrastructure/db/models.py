@@ -107,7 +107,8 @@ class PMOperation(Base):
     result_json: Mapped[str] = mapped_column(Text)
     __table_args__ = (
         Index("ix_pm_operations_execution_kind", "execution_ref", "kind"),
-        CheckConstraint("kind IN ('bind', 'checkpoint', 'resume', 'rebind')", name="ck_pm_operation_kind"),
+        CheckConstraint("kind IN ('bind', 'checkpoint', 'resume', 'rebind', 'resume_retry')",
+                        name="ck_pm_operation_kind"),
         CheckConstraint("length(request_sha256) = 64", name="ck_pm_operation_hash"),
     )
 
@@ -365,7 +366,9 @@ class Task(Base):
     __tablename__ = "tasks"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    project_id: Mapped[int] = mapped_column(nullable=False)
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", name="fk_tasks_project", ondelete="RESTRICT"), nullable=False
+    )
     workflow_id: Mapped[int] = mapped_column(ForeignKey("workflows.id", ondelete="RESTRICT"), nullable=False)
     mode_id: Mapped[int] = mapped_column(nullable=False)
     cycle_number: Mapped[int] = mapped_column(nullable=False, server_default="0")
@@ -385,12 +388,6 @@ class Task(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
     __table_args__ = (
-        ForeignKeyConstraint(
-            ["project_id", "workflow_id"],
-            ["projects.id", "projects.workflow_id"],
-            name="fk_tasks_project_workflow",
-            ondelete="RESTRICT",
-        ),
         ForeignKeyConstraint(
             ["current_phase_id", "mode_id", "workflow_id"],
             ["phases.id", "phases.mode_id", "phases.workflow_id"],
@@ -479,12 +476,6 @@ class TaskRuntimeAssignment(Base):
             ["task_id", "project_id", "workflow_id"],
             ["tasks.id", "tasks.project_id", "tasks.workflow_id"],
             name="fk_task_runtime_assignments_task_project_workflow",
-            ondelete="RESTRICT",
-        ),
-        ForeignKeyConstraint(
-            ["project_id", "workflow_id"],
-            ["projects.id", "projects.workflow_id"],
-            name="fk_task_runtime_assignments_project_workflow",
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(

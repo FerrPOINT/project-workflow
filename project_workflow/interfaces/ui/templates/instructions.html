@@ -25,6 +25,9 @@
 {% endblock %}
 
 {% block content %}
+{% set effective_instructions_only = true %}
+{% include '_phase_effective_view.html' %}
+<div id="phaseStoredEditor" hidden inert>
 <div class="instructions-layout" id="instructionsLayout">
   {% for group in instruction_groups %}
     {% set is_parallel_group = group | length > 1 %}
@@ -69,6 +72,7 @@
   </div>
 </div>
 
+</div>
 {% endblock %}
 
 {% block controller_name %}instructions{% endblock %}

@@ -1,3 +1,8 @@
+> Historical design. The unconsumed Base terminal readback and admission executor
+> were removed during the configured CLI migration. Current completion reads use
+> `/internal/runtime/terminal-receipt/readback`; saved history and source observations
+> remain available. Commands and execution claims below describe the retired design.
+
 # B-SDLC-03: First Source Admission Slice
 
 Status: source implementation, not installed or deployed. This is the opt-in

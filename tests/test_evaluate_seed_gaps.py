@@ -97,18 +97,21 @@ class TestEvaluateGaps:
         assert result["blockers"] == ["blocked"]
 
     @patch("project_workflow.supervisor.evaluate.OpenAICompatibleClient")
-    @patch("project_workflow.supervisor.evaluate.ResponseParser")
-    def test_evaluate_rollback(self, mock_parser, mock_client):
-        mock_parser.parse.return_value = MockLlmResponse(verdict="ROLLBACK")
-        mock_client.return_value.chat.return_value = {}
+    def test_evaluate_rejects_retired_rollback_with_a_saved_target(self, mock_client):
+        mock_client.return_value.chat.return_value = {
+            "verdict": "ROLLBACK", "covered": [], "missing": [], "blockers": [],
+            "message": "rollback", "confidence": 0.8,
+        }
         engine = self._engine()
         ph = _phase(rollback_target_phase_code="0")
         rollback_phase = _phase(id=2, code="0", name="Previous")
         self._set_phases(engine, ph, rollback_phase)
         engine._resolve_transition.return_value = (None, None, "0")
         result = evaluate_llm_report("rollback", ph, engine)
-        assert result["verdict"] == "ROLLBACK"
-        assert result["rollback_phase_code"] == "0"
+        assert result["verdict"] == "BLOCKED"
+        assert result["retryable"] is True
+        assert result["rollback_phase_code"] is None
+        assert result["next_phase_code"] is None
 
     @patch("project_workflow.supervisor.evaluate.OpenAICompatibleClient")
     @patch("project_workflow.supervisor.evaluate.ResponseParser")
@@ -151,10 +154,11 @@ class TestEvaluateGaps:
 
     @pytest.mark.parametrize("verdict", ["ROLLBACK", "DELEGATE"])
     @patch("project_workflow.supervisor.evaluate.OpenAICompatibleClient")
-    @patch("project_workflow.supervisor.evaluate.ResponseParser")
-    def test_provider_cannot_invent_rollback_or_delegate_policy(self, mock_parser, mock_client, verdict):
-        mock_parser.parse.return_value = MockLlmResponse(verdict=verdict)
-        mock_client.return_value.chat.return_value = {}
+    def test_provider_cannot_invent_rollback_or_delegate_policy(self, mock_client, verdict):
+        mock_client.return_value.chat.return_value = {
+            "verdict": verdict, "covered": [], "missing": [], "blockers": [],
+            "message": "unsupported transition", "confidence": 0.8,
+        }
         engine = self._engine()
         phase = _phase()
         self._set_phases(engine, phase)

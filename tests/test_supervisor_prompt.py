@@ -68,6 +68,26 @@ def test_prompt_for_current_phase():
     assert "p1 — N" in result
 
 
+def test_evaluation_prompt_keeps_recent_rework_and_bounds_older_context():
+    phase = _phase("p1")
+    context = _ctx()
+    context["phase_history"] = [{"phase_name": f"phase-{i}", "event_type": "completed"} for i in range(7)]
+    context["recent_verdicts"] = [{
+        "phase_name": "Review", "verdict": "REWORK",
+        "missing": ["retry evidence", "exact revision", "test result", "truncated-fourth"],
+        "blockers": ["incorrect total"],
+    }, {"phase_code": "Testing", "verdict": "PASS"}, {}, {"phase_name": "excluded-old-verdict"}]
+    result = build_phase_prompt("SDLC-1", {"p1": phase}, [], "p1", context)
+    assert "- Review: REWORK" in result
+    assert "retry evidence, exact revision, test result" in result
+    assert "блокеры: incorrect total" in result
+    assert "- Testing: PASS" in result
+    assert "- -: -" in result
+    assert "phase-2: completed" in result and "phase-6: completed" in result
+    assert "phase-0: completed" not in result and "phase-1: completed" not in result
+    assert "truncated-fourth" not in result and "excluded-old-verdict" not in result
+
+
 def test_prompt_rejects_incomplete_context():
     phase = _phase("p1")
     with pytest.raises(ValueError, match="CLI-исполнителя"):

@@ -184,7 +184,7 @@ def _observe_profile(uow: SAUnitOfWork, catalog: dict, manifest: dict) -> Single
             or not _namespace_has_identity(
                 identity, workflow_id=workflow.id, code=legacy_code_from_cli_command(namespace["cli_command"]),
                 name=namespace["name"], description=definition["description"], cli_command=namespace["cli_command"],
-                key_prefixes=[], theme_icon=icon, theme_color=color,
+                key_prefixes=[], theme_icon=icon, theme_color=color, check_theme=False,
             ) or project is None or project.id is None
             or not uow.workflows.belongs_to_profession(workflow.id, project.id)
             or memberships.get(workflow.id) != 1):

@@ -106,7 +106,8 @@ def test_task_detail_renders_group_markers_and_chronological_supervisor_dialog()
     assert html.index("first-report") < html.index("second-report")
     assert "Циклы проверки" in html
     assert "История проверок" in html
-    assert "Результат проверки" in html
+    assert "Запрос к advisor" in html
+    assert "Ответ advisor" in html
     assert "Следующий этап" in html
     assert "Supervisor" not in html
 

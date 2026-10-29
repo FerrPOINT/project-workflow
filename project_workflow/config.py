@@ -55,18 +55,14 @@ class Settings(BaseSettings):
     PROJECT_WORKFLOW_IDENTITY_DELETION_COORDINATOR_SUBJECTS: str = ""
     PROJECT_WORKFLOW_IDENTITY_LEGACY_ISSUER: str = ""
 
-    # Private role-token map for isolated agent containers, not the browser UI.
-    # Shape: {"analyst":"<token>", ...}. Empty keeps the bridge fail-closed.
-    PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON: str = ""
-    PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON: str = ""
     PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN: str = ""
-    PROJECT_WORKFLOW_PM_READBACK_URL: str = ""
-    PROJECT_WORKFLOW_PM_READBACK_TOKEN: str = ""
-    PROJECT_WORKFLOW_PM_SCOPE_SECRET: str = ""
     PROJECT_WORKFLOW_BASE_SKILLS_ROOT: str = ""
-    # Deployment-registered Base reader subject UUID -> canonical role or "catalog".
+    # Deployment-registered service subject UUID -> canonical role or "catalog".
     # A PAT scope/email or legacy shared token alone never registers a machine.
     PROJECT_WORKFLOW_BASE_READER_SUBJECTS_JSON: str = ""
+    # Read-only Tracker authority for configured PM completion, never supplied by the agent.
+    PROJECT_WORKFLOW_CONFIGURED_TRACKER_URL: str = ""
+    PROJECT_WORKFLOW_CONFIGURED_TRACKER_READ_TOKEN: str = ""
 
     @field_validator("AUTH_BROWSER_ORIGINS")
     @classmethod
@@ -109,7 +105,7 @@ def get_settings() -> Settings:
 # Bootstrap-only constants.  The managed Hermes catalog is the only source used
 # by application startup.  The legacy single-workflow seed is retained solely
 # for explicit unmanaged compatibility/tests and is never an automatic fallback.
-CATALOG_VARIANT = os.environ.get("PROJECT_WORKFLOW_CATALOG_VARIANT", "legacy")
+CATALOG_VARIANT = os.environ.get("PROJECT_WORKFLOW_CATALOG_VARIANT", "single-task-v1")
 if CATALOG_VARIANT not in {"legacy", "base", "single-task-v1"}:
     raise ValueError("Unknown managed catalog variant")
 MANAGED_CATALOG_PATH = (

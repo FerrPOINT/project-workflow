@@ -1,6 +1,5 @@
 """Exercise generator output directly; main owns regenerated catalog/manifest pins."""
 
-import hashlib
 import json
 
 import pytest
@@ -18,7 +17,7 @@ UPLOAD = (
 )
 LIST = "task-tracker attachment list --issue <task-uuid>"
 DOWNLOAD = "task-tracker attachment download <attachment-uuid> --out <private-artifact-path>"
-PROPOSE = "task-tracker sdlc result propose --task <task-uuid> --from-file <proposal.json>"
+PROPOSE = "sdlc result propose --task <task-uuid> --from-file -"
 OPERATION = "task-tracker sdlc result operation --task <task-uuid> --key <original-key>"
 
 
@@ -38,112 +37,96 @@ def phase_text(phase):
 
 
 @pytest.mark.parametrize("role,mode", TECHNICAL_MODES)
-def test_context_authorizes_only_sealed_assignment_artifacts_under_delivery_grant(generated, role, mode):
+def test_configured_artifacts_keep_current_authority_and_original_provenance(generated, role, mode):
     catalog, _ = generated
     selected = mode_for(catalog, role, mode)
     context = selected["phases"][0]["instructions"][1]["description"]
     assert context == instructions.context_instruction(role)
     for required in (
-        "sdlc context --task <task-uuid>", "sdlc requirements --task <task-uuid>", LIST, DOWNLOAD, UPLOAD,
-        "only sealed assignment artifacts", "supplied current delivery grant", "Ordinary comments remain unauthorized",
-        "do not borrow owner/scheduler credentials", "ordinary human token", "task=root", "artifact.binding",
+        LIST, DOWNLOAD, UPLOAD, "current configured assignment", "project rights",
+        "Ordinary comments carry discussion", "do not replace sealed artifacts",
+        "Do not borrow owner/scheduler credentials", "human token", "task=root", "artifact.binding",
         "actual producer/predecessor", "Running/InProgress", "live lease",
-        "lease holder is the scheduler, not the agent",
-        "does not authorize clarifications/questions",
+        "lease holder is the scheduler, not the agent", "Do not renew it as scheduler",
     ):
         assert required in context
-    assert "are not authorized by the inspected PM or delivery task grants" not in context
-    assert "task-tracker comment" not in context and "sdlc questions --task" not in context
     assert selected["phases"][0]["instructions"][0]["description"] == instructions.FIRST_STEP
-    assert "before any Tracker read" in instructions.FIRST_STEP
+    assert "server-issued workflow_task_key" in instructions.FIRST_STEP
+    assert "before any Tracker read" not in instructions.FIRST_STEP  # Context discovers the actual key.
 
 
 @pytest.mark.parametrize("role,mode", TECHNICAL_MODES)
-def test_role_artifacts_precede_final_workflow_report_and_existing_typed_proposal(generated, role, mode):
+def test_evidence_precedes_report_and_business_effects_follow_acceptance(generated, role, mode):
     catalog, _ = generated
-    terminal = mode_for(catalog, role, mode)["phases"][-1]["instructions"][-1]["description"]
-    assert terminal == instructions.terminal_instruction(role)
+    final = phase_text(mode_for(catalog, role, mode)["phases"][-1])
+    after = instructions.completion_instruction(role)
     for required in (
-        "BEFORE the FINAL Workflow phase report", instructions.RESULTS[role], instructions.TARGETS[role],
+        "BEFORE the FINAL Workflow phase report", instructions.RESULTS[role],
         "actual server-returned artifact.receipt {reference,sha256}", "reference=tracker-attachment:<UUID>",
         "{assignment_id,execution_id,role}", "raw downloaded bytes", "verify raw SHA256 and size",
         "CLI download success alone is not an ArtifactReceipt", "including Developer rework",
         "Workflow terminal receipt and role artifact contents are separate evidence",
-        "fence, workflow_receipt, result, idempotency_key", "real accepted Workflow receipt reference/hash",
-        "A proposal receipt DOES NOT transition", "do not wait or poll for stage transition",
-        "Fleet/operator reads", "task-tracker sdlc lifecycle --task <task-uuid>",
+        "PRECOMMIT ASSESSMENT ONLY", "own future terminal receipt",
     ):
-        assert required in terminal
-    ordered = (
-        UPLOAD, "Read the saved metadata back", f"Prepare {instructions.RESULTS[role]}",
-        "After accepted Workflow complete=true", PROPOSE, OPERATION, "end the run", "After actual terminal",
-    )
-    positions = [terminal.index(text) for text in ordered]
-    assert positions == sorted(positions)
-    assert "verdict approved|rework" in instructions.terminal_instruction("reviewer")
-    assert "verdict passed|rework" in instructions.terminal_instruction("tester")
-    assert "Wire role is devops" in terminal and "maps it to dev_ops" in terminal
+        assert required in final
+    assert final.index(UPLOAD) < final.index("Read the saved metadata back")
+    assert instructions.TARGETS[role] in after
+    assert after.index("AFTER accepted Workflow complete=true") < after.index("discussion publish")
+    assert after.index("discussion publish") < after.index(PROPOSE) < after.index("finish the run")
+    assert "Fleet verifies real terminal before Tracker Complete" in after
+    assert "a proposal is not a transition" in after and "sibling of terminal_receipt" in after
+    for command in (PROPOSE, "discussion publish", "pm completion submit"):
+        assert command not in final
+    if role in {"reviewer", "tester"}:
+        assert "business rework verdict" in instructions.terminal_instruction(role)
 
 
 @pytest.mark.parametrize("role,mode", TECHNICAL_MODES)
-def test_missing_or_unknown_effects_never_broaden_authority_or_invent_proposal_key(generated, role, mode):
+def test_uncertain_effects_keep_original_keys_bytes_and_assignment(generated, role, mode):
     catalog, _ = generated
-    terminal = mode_for(catalog, role, mode)["phases"][-1]["instructions"][-1]["description"]
+    final = phase_text(mode_for(catalog, role, mode)["phases"][-1])
+    after = instructions.completion_instruction(role)
     for required in (
-        "exact supplied proposal.idempotency_key from runtime guidance/template", "do not generate or derive a key",
-        "missing supplied key is a blocker", "original-key below means that supplied proposal.idempotency_key",
-        "Unknown submission acceptance requires operation readback", "exact same key/body", OPERATION,
         "exact uploaded bytes, filename and MIME", "Unknown upload acceptance", "authorized metadata/byte readback",
-        "filename, MIME, size and raw SHA", "download its returned UUID",
-        "without another upload", "no matching saved entry exists", "still-current grant",
-        "never overwrite sealed bytes, delete evidence, change identity/fence",
-        "404/403", "stale binding", "checksum mismatch", "unavailable readback", "leave the phase unfinished",
-        "do not fake Workflow/business completion", "Forge URL/job ID or Workflow terminal hash",
-        "generic Task patch", "no new artifact envelope or producer protocol",
+        "filename, MIME, size and raw SHA", "download its returned UUID", "without another upload",
+        "no matching saved entry exists", "still-current assignment and project rights",
+        "never overwrite sealed bytes, delete evidence", "change identity/fence", "404/403", "stale binding",
+        "checksum mismatch", "unavailable readback", "leave the phase unfinished",
+        "do not fake Workflow/business completion",
+        "Forge URL/job ID or Workflow terminal hash",
     ):
-        assert required in terminal
-    assert terminal.index("missing supplied key is a blocker") < terminal.index("After accepted Workflow complete=true")
-    assert "fleet-delivery-proposal:" not in terminal  # Launcher supplies the value; agents never derive it.
-    assert "attachment operation" not in terminal and "attachment delete" not in terminal
+        assert required in final
+    for required in (
+        "idempotency_key=delivery-result:<assignment_id>", "JSON on stdin", "fence from fresh lifecycle",
+        "Unknown acceptance requires original-key readback", "operation --task <task-uuid> --key <same-key>",
+        "Editing or deleting this comment blocks a new handoff", "Never borrow scheduler credentials",
+    ):
+        assert required in after
+    for forbidden in ("attachment operation", "attachment delete", "FLEET_DELIVERY_PROPOSAL_KEY",
+                      "--runtime-request", "--execution-token-file", ".fleet-cli"):
+        assert forbidden not in final + after
 
 
-def test_pm_authority_and_exact_confirmation_precede_backlog_ready_handoff(generated):
-    # A private scope regression checksum, not a public catalog/manifest/profile pin.
-    terminal = instructions.terminal_instruction("project_manager")
-    current = (
-        "Installed instructions alone do not authorize live routing; use only the actually authorized API/policy. "
-    )
-    historical = "API/policy integration remains pending parent; installed instructions do not authorize live routing. "
-    assert terminal.count(current) == 1
-    pm_text = [
-        instructions.context_instruction("project_manager"), terminal.replace(current, historical),
-        instructions.FIRST_STEP, instructions.PM_PHASE_REPORT, instructions.PM_CONFIRMATION_INSTRUCTIONS,
-    ]
-    assert hashlib.sha256(json.dumps(pm_text, ensure_ascii=True).encode()).hexdigest() == (
-        "78c5242a1451c621ec820ba0e9152ef66670de8a9a082a36c781913ecc1755c9"
-    )
+def test_pm_selected_review_and_exact_owner_consent_precede_handoff(generated):
     catalog, _ = generated
     phases = mode_for(catalog, "project_manager", "draft")["phases"]
     text = " ".join(phase_text(phase) for phase in phases)
-    for required in (
-        "Ordinary comments/attachments are not authorized", "brainstorming partner", "small iterations",
-        "alternatives with tradeoffs", "one useful question", "No long mandatory questionnaire", "preselection",
-        "requirements review all remain inside draft", "requirements_revision=null", "requirements_sha256=null",
-        "same execution/assignment/cycle", "PM Workflow NOT completed", "FULL server-saved requirements document",
-        "input_kind answer|feedback|confirmation", "Any document change invalidates earlier consent",
-        "PM does not dispatch Analyst", "Backlog / Ready only", "do not request an Analysis intent",
-    ):
-        assert required in text
-    assert "then Analysis / Ready" not in text and "Analyst reserve remains blocked" not in text
     assert text.count(instructions.PM_CRITICAL_REVIEW) == 1
     ordinary = text.replace(instructions.PM_CRITICAL_REVIEW, "")
-    assert "task-tracker attachment" not in ordinary and "proposal.idempotency_key" not in text
-    for forbidden in (
-        "task-tracker attachment list", "task-tracker attachment upload", "task-tracker attachment delete",
-    ):
+    for forbidden in (LIST, UPLOAD, "task-tracker attachment delete"):
         assert forbidden not in text
-    final = phases[-1]["instructions"][-1]["description"]
-    assert final.index("confirmation receipt readback succeeds") < final.index("--report <report-text>")
+    assert "task-tracker attachment download" not in ordinary
+    for required in ("NEW human owner confirmation", "critical_review.blocker_id",
+                     "original technical assignment/execution/role", "No native checkpoint",
+                     "Backlog / Ready atomically"):
+        assert required in text
+    final = phase_text(phases[-1])
+    assert "human owner's confirmation" in final and "exact task/revision/hash/owner in Draft" in final
+    assert "future final comment" in final and "--report - --requirements-revision" in final
+    after = instructions.completion_instruction("project_manager")
+    assert after.index("discussion publish") < after.index("pm completion submit")
+    assert "server-to-server" in after and "Stop at Backlog / Ready" in after
+    assert "do not create Analysis intent" in after and "native/lease fields" in after
 
 
 def test_generator_keeps_single_task_inventory_architecture_rework_and_devops_boundaries(generated):
@@ -164,4 +147,5 @@ def test_generator_keeps_single_task_inventory_architecture_rework_and_devops_bo
     assert "always returns to Review / Ready" in rework and "fresh Testing run" in rework
     devops = instructions.terminal_instruction("devops")
     assert "deployment and verification ArtifactReceipts" in devops
-    assert "health and acceptance, not only build success" in devops
+    checks = " ".join(mode_for(catalog, "devops", "delivery")["phases"][-1]["checks"]).lower()
+    assert "health" in checks and "acceptance" in checks
