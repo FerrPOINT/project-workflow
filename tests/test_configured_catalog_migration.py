@@ -60,7 +60,7 @@ def test_populated_catalog_upgrade_preserves_task_phase_and_report_history(tmp_p
                 assert connection.execute(sa.text(f"SELECT * FROM {name}")).mappings().all() == rows
             assert connection.execute(sa.text("SELECT id,code,mode_id FROM phases ORDER BY id")).all() == phases
             assert (
-                "0021_profession_task_workflows"
+                "0022_catalog_publication"
                 == connection.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
             )
     finally:
