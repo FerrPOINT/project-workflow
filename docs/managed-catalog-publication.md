@@ -127,7 +127,7 @@ the main UI work is not blocked or altered by this package.
 - No schema-version change to the existing single-task binding DTO: its IDs
   describe sealed baseline v1. Consumers that need the selected text revision
   must use the new catalog API, not reinterpret that baseline hash/version.
-- Source tests are not installation or live acceptance. PostgreSQL lock tests,
+- Source tests are not installation or live acceptance. Full PostgreSQL integration,
   full project gate, packaging and Docker/Kubernetes qualification remain separate
   gates until actually executed on the exact candidate. No runtime DB copies.
 
@@ -154,13 +154,23 @@ and tests subtree `3b99c068045ae3380876b5957fb77bfa30101fd5`:
 - Ruff: `All checks passed!`; mypy: no issues in 165 source files;
   `git diff --check` and indexed repository hygiene: PASS.
 - The existing isolated `.venv` matches all 53 exact `constraints.txt` pins.
-- Sixteen current tests in `tests/test_catalog_publication_postgres.py` collect with
-  `-m integration`; **not executed**. They require only disposable synthetic PG
-  fixtures, never a copy of runtime data.
+- **16 PostgreSQL passed**, 102.32 seconds, PostgreSQL 17.6, on commit
+  `4c00021f202b809f0e8d22cb66326cfbfaa8454c` with the source/test trees above.
+  Command: `pytest -q -m integration tests/test_catalog_publication_postgres.py
+  --timeout=120 -x`, with both warning filters above. These exercise all eight
+  modes, retained terminal history/recovery, v2 replay after v3, restart, persisted
+  draft readback and real concurrent save dedup/publication CAS.
+  Fresh synthetic DBs only, never runtime data or copies. ComposeHelper v2 project
+  `sdlc-qa-publication160-41f4135c49`, 512 MiB limit, 0.5 CPU, own network/volume,
+  random loopback port; host free disk exceeded 30 GiB. Cached immutable image:
+  `sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94`.
+  Finally cleanup journal is `cleaned`; a subsequent exact-project container,
+  network and volume query returned zero resources. Local retained evidence:
+  `.local/publication160-41f4135c49/{result.json,pytest.log,junit.xml,compose/journal.json}`.
 - The full non-PG/coverage attempt was stopped after finding the route Mock-key
   regression. The guard now requires a real string, and all selected affected
   API cases pass. That partial attempt is **not** a full PASS or a coverage
-  measurement. Full non-PG/94% coverage, actual PG/locking and installation
+  measurement. Full non-PG/94% coverage, packaging and installation
   gates remain open for this next-release Draft.
 
 These are source tests with controlled Auth/Tracker/advisor peers and synthetic
@@ -175,7 +185,8 @@ repeated identical saves do not add versions. The focused publication file has
 **32 passed**, warnings-as-errors, also included in the 482-test selection.
 The historical 344-test result is superseded for these selected paths, not
 reused as qualification of changed source. PG concurrency/restart/dedup checks
-are authored/collected only, not executed.
+are included in the actual 16-case PostgreSQL result above. This bounded PG gate
+does not replace the full project PostgreSQL integration suite or live acceptance.
 
 ## Read-Only Tracker Contract Review
 
