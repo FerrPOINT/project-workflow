@@ -1,9 +1,14 @@
 # PM CLI draft content v1
 
-Опциональный [content patch](../project_workflow/references/pm_cli_draft_mode_v1.json)
+Историческое предложение, которое не было установлено. Старые file-token команды
+и ограничения CLI ниже не действуют. Текущий путь описан в
+[едином CLI/API](configured-cli-v1.md); устаревший JSON и его неиспользуемый
+генератор удалены из поставки.
+
+Опциональный [архивный content patch](https://github.com/FerrPOINT/project-workflow/blob/a3ccb03150172edbc25e54c77a5d430bbaaebf70/project_workflow/references/pm_cli_draft_mode_v1.json)
 для PM **catalog v2**, mode `draft`, scope `business`. Это не catalog v3,
 не loader и не готовое тело PUT: числовые DB IDs в пакете отсутствуют.
-Пакет не установлен; default catalog, bootstrap, pins и history не меняются.
+Пакет не был установлен; эти сведения сохранены только для истории решения.
 
 | Существующий phase code | Содержание |
 | --- | --- |

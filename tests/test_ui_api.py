@@ -396,8 +396,8 @@ class TestApiPhases:
         assert usages["step"] == f"{command} step"
         assert usages["history"] == f"{command} history"
         serialized = repr(resp.json()["commands"])
-        assert f"{command} step --task RUN-42" in serialized
-        assert f"{command} history --task RUN-42" in serialized
+        assert f"{command} --json step --task SDLC-42" in serialized
+        assert f"{command} --json history --task SDLC-42" in serialized
         assert "project-workflow step" not in serialized
         assert "project-workflow history" not in serialized
 

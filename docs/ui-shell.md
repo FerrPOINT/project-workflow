@@ -329,3 +329,17 @@ Source integration:82 shell/namespace/view tests +39 subtests,9 grouping/card
 contracts и3 immutable-controller/private-fragment checks. Это локальные
 проверки; полный PostgreSQL/coverage gate и authenticated IAB нового комплекта
 не объявляются закрытыми. UI pin обновляется отдельным шагом после Base-кандидата.
+
+При согласовании с master 620f45cd сохранён readonly действующего каталога:
+кнопки редактирования/удаления и добавление фазы не обходят предметный запрет,
+но локальный workflow остаётся редактируемым. Общие кнопки и навигация остаются
+Base. Вокруг навигации режимов используется обычная product layout-область;
+доступный nav и его оформление создаёт section_navigation, без второго nav и
+несогласованного закрывающего тега. В инструкциях сохранён effective read перед
+разблокировкой старого редактора, а inert templates общих частей не копируются.
+
+Scoped результат: 81 template/controller/effective-read/pending-save tests,
+11 browser cases намеренно не запускались в этом промежуточном проходе.
+Данные phase/profession проверяются в owner HTML config, синтаксис и поведение —
+в фактическом вынесенном controller. Ruff изменённых тестов прошёл. Это не
+замена полному PostgreSQL/coverage и IAB gate итогового комплекта.

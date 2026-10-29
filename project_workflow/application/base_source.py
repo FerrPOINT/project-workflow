@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Any
 
 from project_workflow import config
-from project_workflow.application.base_admission import CANDIDATE_PATH
 from project_workflow.domain.base_admission import BASE_SKILLS_REVISION
 from project_workflow.domain.base_catalog import (
     BASE_CATALOG_ARTIFACTS,
@@ -18,6 +17,7 @@ from project_workflow.domain.runtime_assignment import payload_sha256
 from project_workflow.infrastructure.base_package import GitPackage, digest, load_pinned_package
 from project_workflow.infrastructure.db.managed_catalog import ManagedCatalog, export_runtime_catalog
 
+CANDIDATE_PATH = Path(__file__).resolve().parents[1] / "references/base_sdlc_catalog_v1.json"
 CANDIDATE_REVISION = BASE_CATALOG_REVISIONS[3]
 CANDIDATE_BLOB = BASE_CATALOG_BLOBS[3]
 
@@ -100,10 +100,9 @@ def source_capability(source: dict[str, Any], *, role_key: str, credential_kind:
         "implementation_build_attested": False,
         "candidate_revision": source["workflowCatalogRevision"], "skills_revision": source["skillsCatalogRevision"],
         "implemented_source": [
-            "pinned-source-validation", "registered-reader-auth", "accepted-step-receipt-derivation",
+            "pinned-source-validation", "registered-reader-auth",
         ],
-        "endpoints": {"catalog": "/internal/runtime/base/source-catalog",
-                      "terminal_readback": "/internal/runtime/base/terminal-receipt/readback"},
+        "endpoints": {"catalog": "/internal/runtime/base/source-catalog"},
         "terminal_proof": "blocked-until-trusted-owner-binding-and-evidence",
         "unavailable": ["generic-base-checkpoint-ack", "fleet-frozen-assignment-config-binding",
                         "tracker-non-pm-execution-binding", "forge-trusted-evidence-lookup",

@@ -26,6 +26,9 @@
 {% block content %}
 <template id="instruction-parallel-label-template">{{ base_ui.badge('⚡ параллельно', 'info', class_name='parallel-label') }}</template>
 <template id="instruction-parallel-group-template">{% call base_ui.card(padded=true, class_name='instruction-block parallel-group') %}{% endcall %}</template>
+{% set effective_instructions_only = true %}
+{% include '_phase_effective_view.html' %}
+<div id="phaseStoredEditor" hidden inert>
 <div class="instructions-layout" id="instructionsLayout">
   {% for group in instruction_groups %}
     {% set is_parallel_group = group | length > 1 %}
@@ -75,6 +78,7 @@
   </div>
 {% endcall %}
 
+</div>
 {% endblock %}
 
 {% block controller_name %}instructions{% endblock %}

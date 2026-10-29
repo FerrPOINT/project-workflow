@@ -1,5 +1,6 @@
 {% import "workflow-cards.html" as workflow_cards %}
 {% extends "workflow-fragment.html" if workflow_fragment else "base.html" %}
+{% set pm_catalog_read_only = selected_workflow and selected_workflow.key == 'single-task-v1:project_manager' %}
 {% set phase_scope_suffix = ('&project_scope=all' if selected_namespace else '?project_scope=all') if request is defined and request.query_params.get('project_scope') == 'all' else '' %}
 {% set mode_scope_suffix = '&project_scope=all' if request is defined and request.query_params.get('project_scope') == 'all' else '' %}
 
@@ -7,7 +8,7 @@
 {% block header_title %}Воркфлоу{% endblock %}
 {% block header_actions %}
 {% if can_administer %}
-  {% call base_ui.button(class_name="workflow-header-action", id="editWorkflowButton", type="button", aria_controls="workflowForm", disabled=not selected_workflow, attributes={"data-workflow-edit": true, "aria-expanded": "false", "onclick": "startEditWorkflow()"}) %}Редактировать воркфлоу{% endcall %}
+  {% call base_ui.button(class_name="workflow-header-action", id="editWorkflowButton", type="button", aria_controls="workflowForm", disabled=not selected_workflow, attributes={"data-workflow-edit": true, "aria-expanded": "false", "hidden": pm_catalog_read_only|default(false), "onclick": "startEditWorkflow()"}) %}Редактировать воркфлоу{% endcall %}
   {% call base_ui.button(variant="primary", class_name="workflow-header-action", id="newWorkflowButton", type="button", attributes={"onclick": "startCreateWorkflow()"}) %}+ Новый воркфлоу{% endcall %}
 {% endif %}
 {% endblock %}
@@ -87,7 +88,7 @@
     {% endcall %}
     <div class="workflow-card-footer phase-card-footer">
       {{ base_ui.badge('параллельно' if p.execution_type == 'parallel' else 'последовательно', 'info' if p.execution_type == 'parallel' else 'neutral') }}
-{% if can_administer %}
+{% if can_administer and not pm_catalog_read_only %}
       {{ workflow_cards.actions('phase', p.name, parallel=p.execution_type == 'parallel', first=p.phase_num == 1, last=p.phase_num == phase_count, delete_disabled=phase_count <= 1) }}
 {% endif %}
     </div>
@@ -147,7 +148,7 @@
       {% call base_ui.action_group(align='start', class_name='panel-actions') %}
         {% call base_ui.button(variant="primary", id="workflowSubmitButton", type="submit") %}Сохранить{% endcall %}
         {% call base_ui.button(id="cancelCreateWorkflowButton", type="button", attributes={"onclick": "cancelWorkflowForm()", "style": "display:none"}) %}Отмена{% endcall %}
-        {% call base_ui.button(class_name="workflow-delete", id="deleteWorkflowButton", type="button", attributes={"onclick": "deleteWorkflow()"}) %}Удалить{% endcall %}
+        {% call base_ui.button(class_name="workflow-delete", id="deleteWorkflowButton", type="button", attributes={"hidden": pm_catalog_read_only|default(false), "onclick": "deleteWorkflow()"}) %}Удалить{% endcall %}
       {% endcall %}
       {% call base_ui.prose(compact=true) %}<p id="workflowDeleteHint" hidden>Воркфлоу по умолчанию нельзя удалить.</p>{% endcall %}
     {% endcall %}
@@ -175,7 +176,7 @@
       {% endif %}
 </div>
     {% if selected_workflow and modes | length > 1 %}
-    <nav data-workflow-local-navigation class="mode-navigation" aria-label="Режимы воркфлоу" data-testid="workflow-mode-navigation">
+    <div data-workflow-local-navigation class="mode-navigation" data-testid="workflow-mode-navigation">
       <div class="mode-tabs" data-testid="workflow-mode-tabs">
         {% call base_ui.section_navigation(label='Режимы воркфлоу') %}
         {% for mode in modes %}
@@ -208,7 +209,7 @@
         {% else %}{% call base_ui.content_section(tag='section', dividers='end' if phase_count >= 8 else 'none', inset='none', class_name='timeline-block', attributes={'data-phase-divider':'end'}) %}{{ phase_card(block.phases[0]) }}{% endcall %}{% endif %}
       {% else %}
         <div data-testid="workflow-mode-empty">{{ base_ui.state('empty', 'В этом режиме фаз пока нет.') }}</div>
-        {% if can_administer and selected_workflow_id %}<div class="timeline-connector">{% call base_ui.button(variant="outline", size="icon", class_name="phase-add-btn", type="button", aria_label="Добавить первую фазу", attributes={"data-after-order": "0", "onclick": "addPhaseAfter(this)"}) %}+{% endcall %}</div>{% endif %}
+        {% if can_administer and selected_workflow_id and not pm_catalog_read_only %}<div class="timeline-connector">{% call base_ui.button(variant="outline", size="icon", class_name="phase-add-btn", type="button", aria_label="Добавить первую фазу", attributes={"data-after-order": "0", "onclick": "addPhaseAfter(this)"}) %}+{% endcall %}</div>{% endif %}
       {% endfor %}
     {% endcall %}
 

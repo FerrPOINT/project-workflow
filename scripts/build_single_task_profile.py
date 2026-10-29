@@ -1,82 +1,105 @@
-"""Build the installable Workflow-only profile, without activating live routing."""
+"""Build the canonical Workflow profile from its attested instruction source."""
+
+from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+from pathlib import Path
 
-from project_workflow.infrastructure.single_task_delivery_instructions import (
-    CRITICAL_BUSINESS_REVIEW,
-    FIRST_STEP,
-    PM_CONFIRMATION_CHECKS,
-    PM_CONFIRMATION_EVIDENCE,
-    PM_CONFIRMATION_INSTRUCTIONS,
-    PM_CRITICAL_REVIEW,
-    PM_DRAFT_CHECKS,
-    PM_DRAFT_EVIDENCE,
-    PM_DRAFT_INSTRUCTIONS,
-    PM_PHASE_REPORT,
-    PM_PUBLISH_INSTRUCTION,
-    context_instruction,
-    terminal_instruction,
-)
-from scripts.prepare_single_task_profile_proposal import ROOT, digest, encoded
-from scripts.prepare_single_task_profile_proposal import render as render_proposal
+from project_workflow.infrastructure.single_task_catalog import load_single_task_professions
 
+ROOT = Path(__file__).resolve().parents[1]
+SOURCE_COMMIT = "SELF"
+SOURCE_PATH = "project_workflow/infrastructure/single_task_catalog.py"
+SOURCE_SHA256 = "e11f970ba34111aee13ed81f2d7f73da619f2b7cb0a75f3023ee7b2271ded90a"
+DONOR_PATH = "project_workflow/references/base_sdlc_catalog_cli_v4.json"
+DONOR_SHA256 = "d6d18f98b55f14210a3f0e12404074705495d535aa8ba29ae449624b845668c9"
 CATALOG_PATH = "project_workflow/references/single_task_catalog_v1.json"
 MANIFEST_PATH = "project_workflow/references/single_task_manifest_v1.json"
 OVERLAY_PATH = "project_workflow/infrastructure/single_task_delivery_instructions.py"
 
 
+def digest(content: bytes) -> str:
+    return hashlib.sha256(content).hexdigest()
+
+
+def encoded(value: object, *, canonical: bool = False) -> bytes:
+    if canonical:
+        return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return (json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode("utf-8")
+
+
 def render() -> tuple[bytes, bytes]:
-    catalog_bytes, manifest_bytes = render_proposal()
-    catalog, manifest = json.loads(catalog_bytes), json.loads(manifest_bytes)
+    for path, expected in ((SOURCE_PATH, SOURCE_SHA256), (DONOR_PATH, DONOR_SHA256)):
+        if digest((ROOT / path).read_bytes().replace(b"\r\n", b"\n")) != expected:
+            raise ValueError(f"Instruction input differs from declared source commit: {path}")
+    source = {
+        "repository": "https://github.com/FerrPOINT/project-workflow.git",
+        "commit": SOURCE_COMMIT,
+        "commit_meaning": "exact commit containing this catalog; source bytes are checked by sha256",
+        "path": SOURCE_PATH,
+        "sha256": SOURCE_SHA256,
+        "identity_donor": {"path": DONOR_PATH, "sha256": DONOR_SHA256},
+    }
+    workflows = []
+    roles = {}
+    for original in load_single_task_professions():
+        role = original["role_key"]
+        suffix = role.replace("_", "-")
+        namespace = {
+            "name": f"single-task-{suffix}",
+            "cli_command": f"workflow-single-task-{suffix}",
+            "launch_profile": f"single-task-v1-{suffix}",
+        }
+        workflow = {
+            "key": f"single-task-v1:{role}",
+            "name": original["name"],
+            "description": original["description"],
+            "workflow_order": original["workflow_order"],
+            "role_key": role,
+            "namespace": namespace,
+            "skill_names": original["skill_allowlist"],
+            "modes": original["modes"],
+        }
+        workflows.append(workflow)
+        roles[role] = {
+            "workflow_key": workflow["key"],
+            "namespace_name": namespace["name"],
+            "namespace_cli_command": namespace["cli_command"],
+            "profile": namespace["launch_profile"],
+            "fleet_role": "dev_ops" if role == "devops" else role,
+            "modes": {mode["key"]: mode["execution_scopes"] for mode in workflow["modes"]},
+            "role_instructions_sha256": digest(encoded(workflow["modes"], canonical=True)),
+        }
+    catalog = {
+        "schema": "single-task-sdlc/workflow-catalog/v1",
+        "instruction_profile": "single-task-v1",
+        "catalog_version": 1,
+        "instruction_source": source,
+        "workflows": workflows,
+    }
     overlay = {"path": OVERLAY_PATH, "sha256": digest((ROOT / OVERLAY_PATH).read_bytes().replace(b"\r\n", b"\n"))}
-    catalog["instruction_overlay"] = manifest["instruction_overlay"] = overlay
-    for workflow in catalog["workflows"]:
-        role = workflow["role_key"]
-        for mode in workflow["modes"]:
-            mode["phases"][0]["instructions"][0]["description"] = FIRST_STEP
-            mode["phases"][0]["instructions"][1]["description"] = context_instruction(role)
-            mode["phases"][-1]["instructions"][-1]["description"] = terminal_instruction(role)
-            if role == "project_manager":
-                mode["phases"][0]["instructions"].insert(-1, {
-                    "description": PM_CRITICAL_REVIEW,
-                    "skills": ["project-workflow-executor", "tracker-operator"],
-                })
-                for phase in mode["phases"][:2]:
-                    phase["instructions"][-1]["description"] = PM_PHASE_REPORT
-                draft = mode["phases"][1]
-                for instruction, text in zip(draft["instructions"][:3], PM_DRAFT_INSTRUCTIONS, strict=True):
-                    instruction["description"] = text
-                draft.update(checks=list(PM_DRAFT_CHECKS), evidence=list(PM_DRAFT_EVIDENCE))
-                mode["phases"][1]["instructions"][3]["description"] = PM_PUBLISH_INSTRUCTION
-                mode["phases"][1]["instructions"][4]["description"] = (
-                    "Prepare the FULL saved requirements document and its exact revision/content_hash for "
-                    "owner review in phase 3. Include scope, acceptance criteria, choices/tradeoffs and open "
-                    "issues. This preparation is not consent and does not complete the PM execution."
-                )
-                phase = mode["phases"][-1]
-                phase.update(
-                    name="Owner confirmation before final Workflow report",
-                    description="single-task-v1: project_manager/draft; confirmation within the same execution.",
-                    instructions=[
-                        {"description": text, "skills": ["project-workflow-executor", "tracker-operator"]}
-                        for text in [*PM_CONFIRMATION_INSTRUCTIONS, terminal_instruction(role)]
-                    ],
-                    checks=list(PM_CONFIRMATION_CHECKS), evidence=list(PM_CONFIRMATION_EVIDENCE),
-                )
-            else:
-                mode["phases"][1]["instructions"][-2]["description"] = CRITICAL_BUSINESS_REVIEW
-            if role == "analyst":
-                mode["phases"][1]["instructions"][2]["description"] = (
-                    "Produce the analysis report and requirement/criterion/verification coverage matrix for this "
-                    "task=root. Freeze architecture input references without creating more tasks. Prepare "
-                    "result.role=analyst with a real analysis ArtifactReceipt for the existing delivery proposal; "
-                    "do not borrow scheduler credentials or use scheduler Analysis submit as the agent producer."
-                )
-        manifest["roles"][role]["role_instructions_sha256"] = digest(encoded(workflow["modes"], canonical=True))
+    catalog["instruction_overlay"] = overlay
     catalog_bytes = encoded(catalog)
-    manifest["proposal"] = False
-    manifest["workflow_catalog"].update(artifact=CATALOG_PATH, sha256=digest(catalog_bytes))
+    manifest = {
+        "schema": "single-task-sdlc/profile-manifest/v1",
+        "proposal": False,
+        "instruction_overlay": overlay,
+        "instruction_profile": "single-task-v1",
+        "profile_version": 1,
+        "instruction_source": source,
+        "workflow_catalog": {
+            "version": 1,
+            "artifact": CATALOG_PATH,
+            "sha256": digest(catalog_bytes),
+            "hash_encoding": "utf-8-lf-no-bom-with-final-newline",
+        },
+        "role_hash_encoding": "utf-8-json-sort-keys-compact-no-final-newline",
+        "inventory": {"namespaces": 7, "workflows": 7, "modes": 8, "phases": 24},
+        "task_identity": {"task_equals_root": True, "children": False, "decomposition_barriers": False},
+        "roles": roles,
+    }
     return catalog_bytes, encoded(manifest)
 
 

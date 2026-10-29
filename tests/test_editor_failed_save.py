@@ -2,21 +2,21 @@
 
 import json
 import subprocess
-from pathlib import Path
 
 import pytest
+
+from project_workflow.interfaces.ui.controller_assets import controller_source
 
 pytestmark = pytest.mark.ui
 
 
 def test_reorder_waits_for_original_ack_before_another_move():
-    template = (Path(__file__).parents[1] / "project_workflow/interfaces/ui/templates/phase_detail.html").read_text(
-        encoding="utf-8",
-    )
+    template = controller_source("phase_detail", True)[0].decode()
     start = template.index("async function moveInstruction(")
     end = template.index("async function requestPhaseDetail(", start)
     declaration = next((line for line in template.splitlines() if line.startswith("let instructionOrderSaving")), "")
     script = "\n".join([
+        "const config={basePath:''};",
         declaration,
         "let items=[1,2,3].map(id=>({id}));const original=[...items];let saves=0,ack;",
         "const getInstructionItems=()=>items;const renderInstructionTimeline=value=>{items=value;};",
@@ -42,14 +42,15 @@ def test_reorder_waits_for_original_ack_before_another_move():
 
 
 @pytest.mark.parametrize("position", [0, 1, 2])
-def test_add_instruction_uses_visible_position_after_reorder(position):
-    template = (Path(__file__).parents[1] / "project_workflow/interfaces/ui/templates/phase_detail.html").read_text(
-        encoding="utf-8",
-    )
+@pytest.mark.parametrize("parallel", [False, True])
+def test_add_instruction_uses_visible_position_after_reorder(position, parallel):
+    template = controller_source("phase_detail", True)[0].decode()
     start = template.index("async function addInstructionAfter(")
     end = template.index("async function addInstructionLast(", start)
     script = "\n".join([
-        "const items=[3,1,2].map(n=>({dataset:{stepNum:String(n)}}));let payload;",
+        "const config={basePath:''};",
+        "const parallel=" + json.dumps(parallel) + ";",
+        "const items=[3,1,2].map(n=>({dataset:{stepNum:String(n)},closest:()=>parallel?{}:null}));let payload;",
         f"const button={{disabled:false,closest:()=>items[{position}]}};",
         "const getInstructionItems=()=>items;const phaseId=7;const phaseApiUrl=u=>u;",
         "const requestPhaseDetail=async(u,o)=>{payload=JSON.parse(o.body);return {resp:{ok:true},data:{ok:true}};};",
@@ -63,6 +64,7 @@ def test_add_instruction_uses_visible_position_after_reorder(position):
     )
     result = json.loads(completed.stdout)
     assert result["step_num"] == position + 2
+    assert result["execution_type"] == ("parallel" if parallel else "sync")
     assert result["reloads"] == 1
     assert result["disabled"] is False
 
@@ -73,12 +75,12 @@ def test_add_instruction_uses_visible_position_after_reorder(position):
     ("instructions", "updateInstruction", "toggleType"),
 ])
 def test_instruction_save_failure_retains_entered_text(result, page, fn, next_fn):
-    path = Path(__file__).parents[1] / "project_workflow/interfaces/ui/templates" / f"{page}.html"
-    template = path.read_text(encoding="utf-8")
+    template = controller_source(page, True)[0].decode()
     start = template.index(f"async function {fn}(")
     end = template.index(f"async function {next_fn}(", start)
     source = template[start:end]
     script = "\n".join([
+        "const config={basePath:''};",
         "const messages=[];let resizes=0;const window={PdlcPlatformNavigation:{},",
         "PdlcTextarea:{refreshTextareaAutosize(element){"
         "if(element!==input)throw new Error('Wrong textarea');resizes++;}}};",
@@ -104,12 +106,11 @@ def test_instruction_save_failure_retains_entered_text(result, page, fn, next_fn
 @pytest.mark.parametrize("change", ["blank_draft", "removed_row", "empty_existing"])
 @pytest.mark.parametrize("field", ["checks", "evidence"])
 def test_phase_save_keeps_response_ids_attached_to_submitted_rows(change, field):
-    template = (Path(__file__).parents[1] / "project_workflow/interfaces/ui/templates/phase_detail.html").read_text(
-        encoding="utf-8",
-    )
+    template = controller_source("phase_detail", True)[0].decode()
     start = template.index("async function persistPhase()")
-    end = template.index("document.addEventListener('DOMContentLoaded'", start)
+    end = template.index("page.ready(", start)
     script = "\n".join([
+        "const config={basePath:''};",
         "const messages=[];let payload=null;const phaseDraft=null;let confirmedPhase=null;"
         "const updatePhaseSaveStatus=()=>{};",
         "const row=(text,id)=>({dataset:id?{id:String(id)}:{},classList:{contains:()=>false},",

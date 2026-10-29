@@ -1,0 +1,16 @@
+<div id="phaseEffectiveView" class="base-page-stack"
+     data-namespace-id="{{ selected_namespace.id if selected_namespace else '' }}"
+     data-api-url="{{ ui_base_path() }}/api/phases/{{ phase.id }}{% if effective_instructions_only %}/instructions{% endif %}{% if selected_namespace %}?namespace_id={{ selected_namespace.id }}{% endif %}"
+     data-instructions-only="{{ 'true' if effective_instructions_only else 'false' }}">
+  <p id="phaseViewStatus" role="status">Проверка инструкций…</p>
+  <div id="phaseEffectiveContent" class="base-page-stack" hidden>
+    {% if not effective_instructions_only %}
+      {% set phases_url %}{{ ui_base_path() }}/phases?workflow_id={{ phase.workflow_id }}{% if phase.mode_id %}&mode_id={{ phase.mode_id }}{% endif %}{% if selected_namespace %}&profession_id={{ selected_namespace.id }}{% endif %}{% endset %}
+      {{ base_ui.button('← Назад к фазам', href=phases_url, variant='secondary') }}
+    {% endif %}
+    {{ base_ui.badge('Действующие инструкции · configured-cli-v1 · только чтение', 'info') }}
+    <h2 id="phaseEffectiveTitle" class="base-page-title"></h2>
+    {% call base_ui.prose() %}<p id="phaseEffectiveDescription"></p>{% endcall %}
+    <div id="phaseEffectiveSections" class="base-page-stack"></div>
+  </div>
+</div>

@@ -1,10 +1,12 @@
 """Base supplies section paint; Workflow retains editable instruction identities."""
 
+import json
 import re
 import subprocess
 
 import pytest
 
+from project_workflow.interfaces.ui.controller_assets import controller_source
 from tests import test_ui_shell_template as shell
 
 pytestmark = pytest.mark.ui
@@ -50,9 +52,11 @@ def test_instruction_sections_keep_fields_handlers_and_owner_data(populated, nam
     assert "base-input" in new_field["class"].split()
     assert any(tag == "button" and attrs.get("onclick") == "addInstruction()" for tag, attrs in elements)
     assert ('data-page-state="empty"' in html) is not populated
-    owner = next(script for script in re.findall(r"<script[^>]*>([\s\S]*?)</script>", html)
-                 if "const PHASE_ID =" in script)
-    assert f"const selectedNamespaceId = {namespace_id if namespace_id is not None else 'null'};" in owner
+    data = json.loads(re.search(r"<script[^>]*data-workflow-view-data[^>]*>([\s\S]*?)</script>", html)[1])
+    assert data["phaseId"] == 41 and data["professionId"] == namespace_id
+    owner = controller_source("instructions", True)[0].decode()
+    assert "const PHASE_ID = config.phaseId;" in owner
+    assert "const selectedNamespaceId = config.professionId;" in owner
     checked = subprocess.run(["node", "--check", "-"], input=owner, text=True,
                              encoding="utf-8", capture_output=True, timeout=10)
     assert checked.returncode == 0, checked.stderr

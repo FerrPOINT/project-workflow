@@ -2,6 +2,7 @@
 
 import json
 import shlex
+from uuid import uuid4
 
 import pytest
 from click.testing import CliRunner
@@ -14,6 +15,7 @@ from project_workflow.infrastructure.single_task_catalog import (
     PROFILE_KEY,
     load_single_task_professions,
 )
+from project_workflow.infrastructure.single_task_delivery_instructions import completion_instruction
 from project_workflow.interfaces.cli import ui
 from project_workflow.interfaces.cli.core import cli
 
@@ -49,7 +51,7 @@ def test_opt_in_has_seven_professions_eight_modes_and_24_executable_phases(profe
             assert executable.parallel_with_phase_code is executable.rollback_target_phase_code is None
             assert executable.delegate is None  # No Hermes modification or agent dispatch.
             assert all(set(i.skills) <= set(workflow["skill_allowlist"]) for i in executable.instructions)
-            assert any("--report <report-text>" in i.step for i in executable.instructions)
+            assert any("--report -" in i.step for i in executable.instructions)
             codes.append(executable.code)
     assert len(codes) == len(set(codes)) == 24
 
@@ -76,76 +78,71 @@ def test_identity_donor_and_legacy_modes_are_preserved_and_not_aliased(professio
 
 
 def test_every_first_operation_is_an_existing_cli_step_before_role_work(professions, monkeypatch):
-    monkeypatch.setenv("SDLC_API_TOKEN", "synthetic-test-token")
+    monkeypatch.setenv("PROJECT_WORKFLOW_API_TOKEN", "sdlc_pat_test-configured")
+    monkeypatch.setenv("PROJECT_WORKFLOW_URL", "https://workflow.test")
+    monkeypatch.setenv("FLEET_AGENT_ID", str(uuid4()))
     monkeypatch.setenv("PROJECT_WORKFLOW_NAMESPACE_ID", "17")
     calls = []
 
-    def request(method, path, **kwargs):
-        calls.append((method, path, kwargs))
-        return {"ok": True, "exit_code": 0, "result": {"task_key": "RUN-17", "complete": False}}
+    def request(method, route, task, **kwargs):
+        calls.append((method, route, task, kwargs))
+        return {"ok": True, "exit_code": 0, "result": {"complete": False}}
 
-    def no_database(*_args, **_kwargs):
-        raise AssertionError("CLI unexpectedly opened local DB")
-
-    monkeypatch.setattr(ui, "_platform_request", request)
-    monkeypatch.setattr(ui, "SAUnitOfWork", no_database)
+    monkeypatch.setattr(ui.configured, "request", request)
     for _, mode in modes(professions):
         first = mode["phases"][0]["instructions"][0]["description"]
-        command = first.split("terminal -> ", 1)[1].split(" without --report", 1)[0]
-        args = shlex.split(command.replace("<workflow-task-key>", "RUN-17"))[1:]
-        result = CliRunner().invoke(cli, args)
+        command = "project-workflow --json step --task <workflow-task-key>"
+        assert command in first
+        result = CliRunner().invoke(cli, shlex.split(command.replace("<workflow-task-key>", "RUN-17"))[1:])
         assert result.exit_code == 0, result.output
         assert json.loads(result.output)["complete"] is False
-    assert calls == [("POST", "api/cli/step", {"body": {
-        "task": "RUN-17", "report": None, "namespace_id": 17,
-    }})] * 8
+    assert len(calls) == 8
+    assert all(call[:3] == ("POST", "step", "RUN-17") for call in calls)
+    assert all(call[3]["body"]["namespace_id"] == 17 and call[3]["body"]["report"] is None for call in calls)
+
 
 
 def test_report_command_uses_the_same_existing_step_and_namespace(professions, monkeypatch):
-    monkeypatch.setenv("SDLC_API_TOKEN", "synthetic-test-token")
+    monkeypatch.setenv("PROJECT_WORKFLOW_API_TOKEN", "sdlc_pat_test-configured")
+    monkeypatch.setenv("PROJECT_WORKFLOW_URL", "https://workflow.test")
+    monkeypatch.setenv("FLEET_AGENT_ID", str(uuid4()))
     monkeypatch.setenv("PROJECT_WORKFLOW_NAMESPACE_ID", "17")
     calls = []
 
-    def request(method, path, **kwargs):
-        calls.append((method, path, kwargs))
+    def request(method, route, task, **kwargs):
+        calls.append((method, route, task, kwargs))
         return {"ok": True, "exit_code": 0, "result": {"complete": True}}
 
-    monkeypatch.setattr(ui, "_platform_request", request)
+    monkeypatch.setattr(ui.configured, "request", request)
     for _, mode in modes(professions):
-        report_instruction = mode["phases"][-1]["instructions"][0]["description"]
-        command = report_instruction.split("terminal -> ", 1)[1].split(" in the same", 1)[0]
-        args = shlex.split(command.replace("<workflow-task-key>", "RUN-17").replace(
-            "<report-text>", "'actual evidence for this candidate'",
-        ))[1:]
-        result = CliRunner().invoke(cli, args)
+        text = " ".join(i["description"] for i in mode["phases"][-1]["instructions"])
+        assert "--report -" in text and "--operation-key" in text and "--expected-version" in text
+        result = CliRunner().invoke(cli,["--json","step","--task","RUN-17","--report","-",
+            "--operation-key","original-report","--expected-version","3"], input="actual evidence")
         assert result.exit_code == 0, result.output
-        assert json.loads(result.output)["complete"] is True
-    assert calls == [("POST", "api/cli/step", {"body": {
-        "task": "RUN-17", "report": "actual evidence for this candidate", "namespace_id": 17,
-    }})] * 8
+    assert len(calls) == 8
+    assert all(call[:3] == ("POST","step","RUN-17") for call in calls)
+    for call in calls:
+        body = call[3]["body"]
+        assert body["namespace_id"] == 17 and body["report"] == "actual evidence"
+        assert body["operation_key"] == "original-report" and body["expected_version"] == 3
 
 
-@pytest.mark.parametrize("role,expected", [
-    ("project_manager", ("Backlog / Ready", "Analysis / Ready", "no owner confirm")),
-    ("analyst", ("Architecture / Ready", "analysis result submit", "analysis result operation", "scheduler identity")),
-    ("architect", ("Development / Ready", "no guarded terminal producer")),
-    ("developer", ("Review / Ready", "no guarded terminal producer")),
-    ("reviewer", ("Testing / Ready", "Rework / Ready", "needs_rework", "frozen findings")),
-    ("tester", ("Deployment / Ready", "Rework / Ready", "needs_rework", "frozen findings")),
-    ("devops", ("Deployment / Completed", "no guarded terminal producer")),
-])
-def test_handoff_names_stage_status_supported_receipt_or_explicit_dependency(professions, role, expected):
+
+@pytest.mark.parametrize("role,target", [
+    ("project_manager","Backlog / Ready"),("analyst","Architecture / Ready"),
+    ("architect","Development / Ready"),("developer","Review / Ready"),
+    ("reviewer","Testing / Ready"),("tester","Deployment / Ready"),("devops","Deployment / Completed")])
+def test_handoff_is_after_phase_acceptance_and_uses_the_real_owner_contract(professions, role, target):
+    after = completion_instruction(role)
+    assert target in after
+    assert "original-key" in after and "discussion publish" in after
     for mode in professions[role]["modes"]:
-        final = mode["phases"][-1]
-        terminal = final["instructions"][-1]["description"]
-        for required in (*expected, "complete=true", "next stage AND status", "real Tracker operation receipt",
-                         "original operation key", "Generic Task patch", "handoff", "task-uuid"):
-            assert required in terminal
-        assert terminal.index("complete=true") < terminal.index("next stage AND status")
-        # A receipt produced after evaluation must never be a prerequisite of that evaluation.
-        submission_criteria = " ".join(final["checks"] + final["evidence"])
-        for future in ("complete=true", "confirmation receipt", "transition receipt", "owner confirmed"):
-            assert future not in submission_criteria
+        current = " ".join(i["description"] for i in mode["phases"][-1]["instructions"])
+        assert "PRECOMMIT ASSESSMENT ONLY" in current
+        for future_command in ("sdlc result propose", "discussion publish", "pm completion submit"):
+            assert future_command not in current
+
 
 
 def test_pm_partners_in_draft_and_keeps_exact_confirmation_separate(professions):
@@ -154,7 +151,7 @@ def test_pm_partners_in_draft_and_keeps_exact_confirmation_separate(professions)
     for required in ("brainstorming partner", "small iterations", "alternatives with tradeoffs", "contradictions",
                      "one useful question", "free-form", "No long mandatory questionnaire", "preselection",
                      "requirements review all remain inside draft", "exact revision/hash", "invalidates",
-                     "must never confirm as the owner", "not substitutes for that receipt"):
+                     "Never confirm as owner", "Confirmation stays in stage=Draft"):
         assert required in text
 
 

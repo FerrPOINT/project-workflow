@@ -28,7 +28,6 @@ from project_workflow.infrastructure.db.managed_catalog import (
 from project_workflow.infrastructure.db.session import ensure_schema
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.infrastructure.db.uow_bootstrap import bootstrap_default_project
-from tests.test_runtime_assignment_contract import TEST_RUNTIME_COMPATIBILITY
 
 pytestmark = [pytest.mark.unit]
 
@@ -302,155 +301,10 @@ def test_managed_workflow_requires_explicit_assigned_mode(empty_uow):
     assert selection.cycle_number == 4
 
 
-def _project_manager_request(namespace_id: int, attempt_number: int = 18) -> dict:
-    return {
-        "runtime_compatibility": dict(TEST_RUNTIME_COMPATIBILITY),
-        "project_id": namespace_id,
-        "task_key": "PM-1",
-        "mode_key": "draft",
-        "role_key": "project_manager",
-        "workflow_key": "hermes-sdlc:project_manager",
-        "execution_scope": "business",
-        "stage_key": "draft",
-        "cycle_number": 0,
-        "attempt_number": attempt_number,
-        "operation_key": "assign:pm-1:draft:0",
-        "business_task_ref": "business-task:PM-1@1",
-        "root_task_ref": "business-task:PM-1@1",
-        "work_item_ref": "business-task:PM-1@1",
-        "work_item_revision": 1,
-        "queue_item_ref": "queue-item:PM-1:draft:0",
-        "task_workspace_ref": "task-workspace:PM-1",
-        "workspace_revision": 1,
-        "tech_execution_workspace_ref": None,
-        "tech_execution_attempt_ref": None,
-        "decomposition_revision_ref": "decomposition:PM-1@0",
-        "stage_revision": "stage:PM-1:draft@1",
-        "assignment_ref": "assignment:PM-1@1",
-        "workspace_generation": 0,
-        "lease_generation": 0,
-        "exact_input_refs": [
-            {
-                "kind": "business_task",
-                "ref": "business-task:PM-1",
-                "revision": "1",
-                "hash": "a" * 64,
-            }
-        ],
-        "expected_revision": 0,
-        "expected_status": "missing",
-    }
 
 
-@pytest.mark.parametrize("attempt_number", [1, 18])
-@pytest.mark.parametrize("preexisting_task", [False, True])
-def test_project_manager_assignment_uses_canonical_identity_and_slotless_business_scope(
-    empty_uow, attempt_number, preexisting_task
-):
-    ensure_managed_catalog(empty_uow)
-    namespace = empty_uow.projects.get_by_cli_command("workflow-project_manager")
-    assert namespace is not None and namespace.id is not None
-    request = _project_manager_request(namespace.id, attempt_number)
-
-    if preexisting_task:
-        workflow = empty_uow.workflows.get_by_id(namespace.workflow_id)
-        assert workflow is not None and workflow.id is not None
-        mode = empty_uow.workflows.get_mode_by_key(workflow.id, "draft")
-        assert mode is not None and mode.id is not None
-        phase = list(empty_uow.phases.list(workflow.id, mode_id=mode.id))[0]
-        empty_uow.tasks.create(
-            {
-                "project_id": namespace.id,
-                "workflow_id": workflow.id,
-                "mode_id": mode.id,
-                "cycle_number": 0,
-                "task_key": "PM-1",
-                "title": "PM-1",
-                "current_phase_id": phase.id,
-                "status": "active",
-            }
-        )
-        empty_uow.commit()
-        request["expected_status"] = "active"
-
-    with pytest.raises(ConflictError):
-        TaskService(empty_uow).assign_runtime_task(**{**request, "expected_revision": 1})
-
-    assigned = TaskService(empty_uow).assign_runtime_task(**request)
-
-    assert assigned["role_key"] == "project_manager"
-    assert assigned["attempt_number"] == attempt_number
-    assert assigned["mode_key"] == "draft"
-    assert assigned["execution_scope"] == "business"
-    assert assigned["tech_execution_workspace_ref"] is None
-    assert assigned["tech_execution_attempt_ref"] is None
-    assert TaskService(empty_uow).assign_runtime_task(**request) == assigned
-    assert len(empty_uow.tasks.list_assignments(assigned["id"])) == 1
-    with pytest.raises(ConflictError, match="другого runtime assignment"):
-        TaskService(empty_uow).assign_runtime_task(**{**request, "attempt_number": attempt_number + 1})
 
 
-@pytest.mark.parametrize(
-    "override",
-    [
-        {"runtime_compatibility": None},
-        {"runtime_compatibility": {}},
-        {"runtime_compatibility": {**TEST_RUNTIME_COMPATIBILITY, "catalogVersion": 1}},
-        {"operation_key": " "},
-        {"operation_key": "x" * 129},
-        {"mode_key": " "},
-        {"mode_key": "x" * 129},
-        {"mode_key": "unknown-mode"},
-        {"workflow_key": "hermes-sdlc:analyst"},
-        {"role_key": "project-manager"},
-        {"project_id": 999},
-        {"task_key": "invalid"},
-        {"cycle_number": -1},
-        {"cycle_number": True},
-        {"cycle_number": 1},
-        {"expected_revision": -1},
-        {"expected_revision": True},
-        {"expected_status": "active"},
-        {"attempt_number": 0},
-        {"attempt_number": True},
-        {"attempt_number": 1.5},
-        {"work_item_revision": -1},
-        {"work_item_revision": 1 << 63},
-        {"work_item_revision": True},
-        {"workspace_revision": 0},
-        {"workspace_revision": True},
-        {"workspace_generation": -1},
-        {"workspace_generation": True},
-        {"lease_generation": -1},
-        {"lease_generation": True},
-        {"business_task_ref": " "},
-        {"stage_revision": "x" * 129},
-        {"assignment_ref": "x" * 513},
-        {"exact_input_refs": {}},
-        {"exact_input_refs": [{"kind": "task", "ref": "task-1"}] * 129},
-        {"exact_input_refs": ["task-1"]},
-        {"exact_input_refs": [{"kind": "task", "ref": "task-1", "unknown": "field"}]},
-        {"exact_input_refs": [{"kind": "task", "ref": "task-1", "revision": " "}]},
-        {"exact_input_refs": [{"kind": "task", "ref": "task-1", "hash": " "}]},
-        {"exact_input_refs": [{"kind": "task", "ref": "task-1"}] * 2},
-    ],
-)
-def test_invalid_owner_assignment_leaves_no_task_or_ledger_and_allows_valid_recovery(empty_uow, override):
-    ensure_managed_catalog(empty_uow)
-    empty_uow.commit()
-    namespace = empty_uow.projects.get_by_cli_command("workflow-project_manager")
-    assert namespace is not None and namespace.id is not None
-    request = _project_manager_request(namespace.id)
-
-    with pytest.raises((ConflictError, ValueError, NotFoundError)):
-        TaskService(empty_uow).assign_runtime_task(**{**request, **override})
-
-    assert empty_uow.tasks.get_by_key("PM-1", project_id=namespace.id) is None
-    assert empty_uow.tasks.get_assignment_by_operation_key(request["operation_key"]) is None
-    accepted = TaskService(empty_uow).assign_runtime_task(**request)
-    assert accepted["assignment_revision"] == 1
-    assert accepted["attempt_number"] == 18
-    assert TaskService(empty_uow).assign_runtime_task(**request) == accepted
 
 
 def test_legacy_unmanaged_workflow_keeps_default_mode_compatibility(empty_uow):
@@ -491,34 +345,6 @@ def test_legacy_task_creation_rejects_invalid_catalog_identity_and_recovers(empt
     assert created["assignment_operation_key"] is None
 
 
-@pytest.mark.parametrize(
-    "status,override",
-    [
-        ("active", {"expected_mode_key": "analysis"}),
-        ("active", {"expected_cycle_number": 1}),
-        ("active", {"cycle_number": 1}),
-        ("done", {}),
-        ("done", {"cycle_number": 2}),
-        ("done", {"cycle_number": 1, "attempt_number": 2}),
-    ],
-)
-def test_owner_adoption_rejects_stale_prior_state_and_unsupported_retry(empty_uow, status, override):
-    ensure_managed_catalog(empty_uow)
-    namespace = empty_uow.projects.get_by_cli_command("workflow-project_manager")
-    assert namespace is not None and namespace.id is not None
-    mode = empty_uow.workflows.get_mode_by_key(namespace.workflow_id, "draft")
-    phase = list(empty_uow.phases.list(namespace.workflow_id, mode_id=mode.id))[0]
-    task_id = empty_uow.tasks.create(
-        {"project_id": namespace.id, "workflow_id": namespace.workflow_id, "mode_id": mode.id,
-         "task_key": "PM-1", "current_phase_id": phase.id, "status": status}
-    )
-    empty_uow.commit()
-    before = empty_uow.tasks.get_by_id(task_id).to_dict()
-    request = {**_project_manager_request(namespace.id), "expected_status": status, **override}
-    with pytest.raises(ConflictError):
-        TaskService(empty_uow).assign_runtime_task(**request)
-    assert empty_uow.tasks.get_by_id(task_id).to_dict() == before
-    assert empty_uow.tasks.list_assignments(task_id) == []
 
 
 def test_project_manager_is_the_only_accepted_underscore_role_key():

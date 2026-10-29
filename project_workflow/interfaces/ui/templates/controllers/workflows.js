@@ -82,6 +82,7 @@ function workflowApiUrl(workflowId){
   return url.pathname + url.search;
 }
 function workflowById(id){ return workflowStore.find(function(workflow){ return workflow.id === id; }); }
+function historicalPmSelected(){ return workflowById(selectedWorkflowId)?.key === 'single-task-v1:project_manager'; }
 function workflowSelectionUrl(workflowId){
   var url = new URL(window.location.href);
   url.pathname = '' + config.basePath + '/workflows';
@@ -130,17 +131,21 @@ function fillWorkflowForm(workflow){
   description.hidden = !description.textContent;
 }
 function setWorkflowEditorVisible(visible){
-  workflowEditorVisible = visible;
   var creating = workflowFormMode === 'create';
+  var historical = !creating && historicalPmSelected();
+  visible = visible && !historical;
+  workflowEditorVisible = visible;
   document.getElementById('workflowForm').hidden = !visible && !creating;
   document.getElementById('workflowSummary').hidden = visible || creating || selectedWorkflowId == null;
   document.querySelectorAll('[data-workflow-edit]').forEach(function(button){
-    button.disabled = workflowWritePending || creating || selectedWorkflowId == null;
+    button.hidden = historical;
+    button.disabled = workflowWritePending || creating || selectedWorkflowId == null || historical;
     button.setAttribute('aria-expanded', String(visible && !creating));
   });
 }
 function startEditWorkflow(){
   if(workflowWritePending||phaseWritePending||workflowNeedsReadback||workflowReadController)return;
+  if(historicalPmSelected())return;
   if(selectedWorkflowId == null)return;
   if(!workflowEditorVisible){ fillWorkflowForm(workflowById(selectedWorkflowId)); }
   setWorkflowEditorVisible(true);
@@ -162,6 +167,7 @@ function setWorkflowFormMode(mode){
   var workflow = workflowById(selectedWorkflowId);
   var protectedDefault = !createMode && Boolean(workflow && workflow.is_default);
   var deleteButton = document.getElementById('deleteWorkflowButton');
+  deleteButton.hidden = !createMode && historicalPmSelected();
   document.getElementById('workflowFormMode').textContent = createMode ? 'Новый воркфлоу' : 'Редактирование воркфлоу';
   document.getElementById('workflowSubmitButton').textContent = createMode ? 'Создать воркфлоу' : 'Сохранить';
   deleteButton.textContent = 'Удалить';

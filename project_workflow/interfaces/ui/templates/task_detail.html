@@ -147,7 +147,7 @@
       {{ base_ui.timeline_marker(tone=verdict_tones.get(run.verdict, 'neutral')) }}
       {% set activity_summary %}
           <span class="activity-header">
-            <strong>Цикл {{ loop.index }}</strong>
+            <strong>Проверка {{ loop.index }}</strong>
             {{ base_ui.badge(run.phase_code, tone='muted') }}
             {% if run.phase_name and run.phase_name != run.phase_code %}<strong>{{ run.phase_name }}</strong>{% endif %}
             {{ base_ui.badge(run.verdict_label, tone=verdict_tones.get(run.verdict, 'neutral')) }}
@@ -157,10 +157,26 @@
       {% call base_ui.disclosure(activity_summary, open=loop.last, appearance='row', class_name='base-timeline-content activity-details') %}
         <div class="activity-content base-page-stack">
 
-        {% if run.worker_report %}<section class="base-page-stack">{{ base_ui.section_header('Отчёт исполнителя', level=3) }}{% call base_ui.prose() %}<p class="report-text">{{ run.worker_report }}</p>{% endcall %}</section>{% endif %}
+        <section class="base-page-stack" aria-labelledby="check-request-{{ loop.index }}">
+          {{ base_ui.section_header('Запрос к advisor', heading_id='check-request-' ~ loop.index, level=3, context='Агент → Advisor · Отчёт о выполнении') }}
+          {% call base_ui.card(surface='raised') %}{% call base_ui.card_content(class_name='base-page-stack') %}
+            {% if run.worker_report %}
+              {% if run.worker_report | length > 600 %}
+                {% call base_ui.prose(preserve_line_breaks=true) %}<p>{{ run.worker_report.split('\n\n', 1)[0] | truncate(600) }}</p>{% endcall %}
+                {% call base_ui.disclosure('Полный отчёт и приложенные данные', id='check-request-full-' ~ loop.index) %}
+                  {% call base_ui.prose(preserve_line_breaks=true) %}<p class="report-text">{{ run.worker_report }}</p>{% endcall %}
+                {% endcall %}
+              {% else %}
+                {% call base_ui.prose(preserve_line_breaks=true) %}<p class="report-text">{{ run.worker_report }}</p>{% endcall %}
+              {% endif %}
+            {% else %}
+              {% call base_ui.prose() %}<p>Текст отчёта в этой записи не сохранён.</p>{% endcall %}
+            {% endif %}
+          {% endcall %}{% endcall %}
+        </section>
 
-        <section class="base-page-stack">
-          {{ base_ui.section_header('Результат проверки', level=3) }}
+        <section class="base-page-stack" aria-labelledby="check-response-{{ loop.index }}">
+          {{ base_ui.section_header('Ответ advisor', heading_id='check-response-' ~ loop.index, level=3, context='Advisor → Агент · Оценка отчёта') }}
           {% set result_body %}
             <div class="base-page-stack">
               {% call base_ui.prose() %}<p>{{ run.contract.message or run.verdict_label }}</p>{% endcall %}

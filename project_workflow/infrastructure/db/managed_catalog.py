@@ -479,8 +479,9 @@ def _namespace_has_identity(
     key_prefixes: list[str],
     theme_icon: str = DEFAULT_PROJECT_ICON,
     theme_color: str = DEFAULT_PROJECT_COLOR,
+    check_theme: bool = True,
 ) -> bool:
-    """Compare every persisted namespace identity field in canonical form."""
+    """Compare technical identity; callers may exclude editor-owned icon/color."""
 
     if identity is None:
         return False
@@ -496,8 +497,8 @@ def _namespace_has_identity(
         and identity.get("code") == code
         and identity.get("name") == name
         and identity.get("description") == description
-        and identity.get("theme_icon") == expected_icon
-        and identity.get("theme_color") == expected_color
+        and (not check_theme or (identity.get("theme_icon") == expected_icon
+                                 and identity.get("theme_color") == expected_color))
         and identity.get("cli_command") == cli_command
         and actual_prefixes == expected_prefixes
     )

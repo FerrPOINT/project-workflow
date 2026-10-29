@@ -1,13 +1,33 @@
 """Tracker producer instructions; publication does not complete a stage."""
 
 FIRST_STEP = (
-    "Your first working operation is terminal -> project-workflow --json step --task <workflow-task-key> "
-    "--operation-key <original-key> --runtime-request <private-request-json> "
-    "--execution-token-file <private-token-file> without --report. Use only the supplied namespace, "
-    "assignment/run fence and report=null request. Verify the admitted returned Workflow step before any "
-    "Tracker read, dialogue, file edit or CI/CD action. Tracker task UUID equals root UUID; the Workflow key "
-    "is its local session mapping. An installed profile is not execution admission: pending API registration "
-    "or authorization is a blocker. Never downgrade to human CLI/local DB mode or modify native Hermes."
+    "If only the Tracker task UUID is known, read task-tracker sdlc context --task <task-uuid> and take "
+    "its server-issued workflow_task_key (SDLC-N); never guess the key or create another task. Read this "
+    "task's current Workflow instructions using project-workflow --json step --task <workflow-task-key>. "
+    "Use the permanently configured namespace and agent credential. Missing configuration or denied "
+    "access is a blocker; never use a human token or local database fallback. No native binding or "
+    "temporary files are required. Before reporting this phase, include an 'Actual first Workflow step "
+    "response' block in the report evidence: copy the actual scalar fields from the successful no-report "
+    "command's parsed stdout JSON: interaction_protocol, task, namespace_id, concrete_agent_ref, "
+    "assignment_ref, execution_ref, business_task_ref, phase_code, version and status. The CLI prints "
+    "these fields at top level, not inside an HTTP response envelope. Record the terminal command's exit "
+    "status separately when available; it is not a Workflow JSON field. Compare these with the "
+    "server-issued Workflow key and assigned task/namespace/agent; include the Tracker task/root UUID, "
+    "stage/status and actual input references from the authorized Tracker reads. Validate identity fields"
+    " by their own authority: Tracker context.assignment.assignment_id equals Workflow assignment_ref; "
+    "Tracker context.assignment.agent_id equals Workflow concrete_agent_ref; Tracker context.task_id and "
+    "root_task_id equal Workflow business_task_ref; Tracker workflow_task_key equals Workflow task. "
+    "Tracker context.assignment.execution_id is the retained tracker_execution_id, NOT Workflow "
+    "execution_ref. Workflow execution_ref is independently generated at enrollment; these two execution "
+    "IDs are intentionally separate and are not required to be equal. Record both with their authority "
+    "names; compare execution_ref only with the same Workflow enrollment/history, never with Tracker "
+    "execution_id. A difference between these two IDs alone is not a blocker and does not authorize "
+    "rebind, replacement IDs or another execution. Assignment version and Workflow cursor version are "
+    "also separate counters; validate each against its own authority. Actual task/assignment/agent "
+    "mismatches remain blockers. State an absent requirements revision as absent, not as invented "
+    "evidence. The evidence is this already returned instruction read, not a future PASS verdict from the"
+    " report being submitted. Never invent response values or substitute instruction text for the actual "
+    "response; failed or mismatched reads remain blockers. Omit credentials from the report."
 )
 
 RESULTS = {
@@ -36,78 +56,50 @@ TARGETS = {
     "devops": "Deployment / Completed",
 }
 
-CRITICAL_BODY_COMMAND = (
-    '(umask 077; set -C; jq -e --arg key "${FLEET_CRITICAL_BLOCKER_KEY:?Fleet critical proposal key unavailable}" '
-    "'.idempotency_key = $key' critical-body.json > critical-blocker.json)"
-)
-
 CRITICAL_BUSINESS_REVIEW = (
-    "Decide routine technical details autonomously within approved requirements. Review/Test defects use normal "
-    "rework; infrastructure failures go to the operator, and tool approval is a separate permission decision. "
-    "ONLY a requirements_contradiction or missing_business_decision that prevents safe progress requires PM "
-    "business review. After the first Workflow step, check installed task-tracker sdlc critical-blocker --help "
-    "for submit/read/operation; missing CLI, denied authority or unavailable producer is an explicit blocker, "
-    "not permission for ordinary comments, a generic issue transition or borrowed credentials. "
-    "For that critical branch, publish and read back your own sealed assignment evidence using the authorized "
-    "attachment commands. Prepare the actual SubmitCriticalBlocker JSON: fence, requirement_revision, "
-    "content_hash, kind, question, rationale, options, recommendation, evidence, idempotency_key. Use the supplied "
-    "current DeliveryFence and requirements revision/hash; evidence contains verified artifact.receipt and "
-    "artifact.binding for this own assignment/execution/role, never a Workflow terminal receipt or invented ID. "
-    "Keep question <=4096 bytes, rationale <=8192 bytes, at most 8 options and 1..16 sealed evidence entries. "
-    "Any recommendation must reference an actual option_id. Use the supplied original critical operation key "
-    "from FLEET_CRITICAL_BLOCKER_KEY after sourcing the supplied env.sh in this same foreground shell. "
-    "Fleet supplies exactly fleet-critical-blocker:<Fleet session_run_id>, NOT the Tracker execution UUID "
-    "or normal result proposal key. Never construct a missing value or choose another key. Require installed "
-    "jq before preparing JSON; missing jq/export is a concrete dependency, not permission for raw shell JSON "
-    "interpolation or protocol fallback. The key is nonempty, <=128 UTF-8 bytes, neither '.' nor '..', "
-    "with no whitespace, control characters, slash or backslash. Pass the raw key; CLI escapes it, "
-    "so do not pre-encode it. "
-    "Missing supplied key/fence/evidence is a blocker; never fabricate it. Before the FIRST submit only, "
-    "prepare the real typed fields in private critical-body.json, then set the key safely using jq --arg: "
-    + CRITICAL_BODY_COMMAND + ". Require command exit 0 and the actual valid JSON body; do not print env, "
-    "tokens or private payloads. The command creates a private new file without overwriting an existing body. "
-    "Freeze that key and exact body. Never regenerate or overwrite the original body after uncertain POST. "
-    "Run task-tracker sdlc critical-blocker submit --task <task-uuid> --from-file <critical-blocker.json>. "
-    "Reconcile with task-tracker sdlc critical-blocker operation --task <task-uuid> "
-    '--key "$FLEET_CRITICAL_BLOCKER_KEY" '
-    "in the same original run context; "
-    "read current detail with task-tracker sdlc critical-blocker read --task <task-uuid> --blocker <blocker-uuid> "
-    "only under still-authorized access. Verify the actual task/root/project/owner, assignment/execution/agent, "
-    "role/fence, requirements revision/hash, original proposal/key and blocker_id/blocker_sha256. "
-    "Unknown POST acceptance requires original-key operation readback, never a fresh key or blind resend. "
-    "A successful held receipt is NOT stage completion, PM return, capacity release or Workflow completion. "
-    "Leave the phase unfinished, report the actual held receipt or unresolved uncertainty and end the run; "
-    "do not poll while keeping it alive, send a normal final Workflow report or propose a role result for this "
-    "blocked branch. Return-to-PM is scheduler-only after actual native terminal readback; never run "
-    "return-to-pm/return-operation as the agent or invent terminal proof. Full PM return/reconfirmation "
-    "requires separately integrated and qualified producer/consumer support, not this instruction text. "
+    'Decide routine technical details within approved requirements; Review/Test defects use normal rework. '
+    'Only requirements_contradiction or missing_business_decision that prevents safe progress requires PM '
+    'business review. Read the current task-tracker sdlc context and lifecycle. Publish and read back sealed '
+    'evidence for this actual assignment/execution/role using the authorized attachment commands. Submit the '
+    'strict SubmitCriticalBlocker body with fence, current requirement_revision/content_hash, kind, question, '
+    'rationale, options, recommendation, evidence and idempotency_key using task-tracker sdlc critical-blocker '
+    'submit --task <task-uuid> --from-file -. Pass JSON on stdin. Its stable key is '
+    'fleet-critical-blocker:<current-Tracker-assignment-uuid>, taken from the verified context assignment_id, '
+    'never from a native run or another role result. Keep question <=4096 bytes, rationale <=8192 bytes, at '
+    'most 8 options and 1..16 sealed evidence entries. A recommendation references an actual option_id. '
+    'Missing current fence/evidence/access is a blocker; do not borrow an identity or fabricate proof. Read '
+    'the original operation using task-tracker sdlc critical-blocker operation --task <task-uuid> --key '
+    '<exact-original-key>. Verify task/root/project/owner, assignment/execution/agent, role, requirements '
+    'revision/hash and blocker ID/hash. Unknown acceptance requires original-key readback; retain the same '
+    'exact body/key, without a blind resend or a new key. A held receipt is not a completed stage, PM return '
+    'or Workflow completion. Leave the phase unfinished, report the held receipt or unresolved uncertainty and '
+    'finish the native run. Fleet and Tracker own actual termination, release and guarded return; the agent '
+    'never calls scheduler commands or invents terminal proof. Missing producer capability is an operator '
+    'dependency, not permission for a generic status change. '
 )
 
 PM_CRITICAL_REVIEW = (
-    "Ordinary PM brainstorming and owner feedback stay within the current execution/assignment/cycle, "
-    "including pre-document null/null checkpoints. A later critical business review is different: proceed "
-    "only when the trusted coordinator supplies a NEW PM execution/assignment for this SAME task=root and "
-    "the same single-task PM workflow. Preserve the previous completed execution/history; never reopen it "
-    "or create an assignment yourself. Require an authorized critical-review input identifying the actual "
-    "blocker and sealed source evidence, current requirements and original technical contradiction/decision. "
-    "After the first Workflow step, use installed authorized task-tracker sdlc critical-blocker read "
-    "--task <task-uuid> --blocker <supplied-selected-blocker-uuid>. The current own-task PM grant with "
-    "task-tracker:read permits only the selected blocker under the saved current PM review, fresh owner/project "
-    "ACL and live PM lease. Verify task/root/project/owner, selected blocker ID/hash and current PM "
-    "assignment/execution. Download only sealed evidence referenced by that selected blocker using "
-    "task-tracker attachment download <referenced-attachment-uuid> --out <private-evidence-path>; verify raw "
-    "SHA256 and the original technical assignment/execution/role binding, not a guessed PM evidence binding. "
-    "This grants no general attachment list/upload/delete or unrelated blocker access. Do not substitute the "
-    "initial Draft input for the selected critical-review receipt. Missing trusted input/read capability, "
-    "installed CLI, denied access or unavailable producer is a concrete delivery dependency, not proof of "
-    "availability on an older accepted stand. Do not call delivery/scheduler-only commands or borrow "
-    "scheduler/parent credentials. Discuss the real "
-    "business decision with the owner in small iterations; do not send routine technical choices to the owner. "
-    "Publish any changed requirements through the existing revision command in this new assigned execution. "
-    "Present the FULL saved latest revision/hash and obtain a NEW exact owner confirmation; old consent and "
-    "a technical held receipt cannot resolve this review. Use the existing typed checkpoint/feedback/answer/"
-    "confirmation path, then the normal guarded final PM Workflow report only after actual receipt readback. "
-    "This instruction does not prove installed PM-return allocation or reconfirmation support."
+    "Ordinary brainstorming and owner feedback continue under the current business assignment across "
+    "messages. Read fresh task-tracker sdlc context --task <task-uuid>. If critical_review is absent, "
+    "this is ordinary PM preparation; do not invent a blocker. If present, its blocker_id, blocker_sha256, "
+    "blocker_version and requirements identify the server-selected business review. Require the current "
+    "PM assignment for this SAME task=root; never allocate an assignment or reopen a completed one yourself. "
+    "Read task-tracker sdlc critical-blocker read --task <task-uuid> --blocker <critical_review.blocker_id>. "
+    "Match task/root/project/owner, current assignment/execution and the selected blocker ID/version/hash. "
+    "Use your permanently configured service identity and current project rights. Read only the sealed "
+    "evidence referenced by that blocker with task-tracker attachment download <referenced-attachment-uuid> "
+    "--out <private-evidence-path>; verify raw SHA256 and the original technical assignment/execution/role. "
+    "An old technical artifact keeps its original producer binding. This does not grant general attachment "
+    "list/upload/delete or unrelated blocker access. Never borrow scheduler credentials or replace this "
+    "review with the initial Draft input. Discuss the actual business contradiction or decision with the "
+    "owner; routine technical decisions stay with technical roles. Publish the changed FULL requirements "
+    "in the current assignment, then present the saved exact revision/hash and obtain a NEW human owner "
+    "confirmation. Old consent and a held technical receipt cannot resolve the review. Use the same "
+    "revision/question/answer/confirmation commands and final Workflow report as ordinary PM. No native "
+    "checkpoint, bind, token file or execution lease is required. After the final report is accepted, "
+    "follow its ordinary comment and PM completion instructions. Tracker resolves the blocker and saves "
+    "Backlog / Ready atomically; PM does not dispatch Analyst. Missing access or inconsistent readback "
+    "is an explicit blocker, not permission to invent proof."
 )
 
 SOURCE_CONTEXT = (
@@ -128,44 +120,33 @@ SOURCE_CONTEXT = (
 )
 
 FORGE_TASK_WORKSPACE = (
-    "For a required Forge task workspace, first verify installed cicd-cli pipeline run --help exposes "
-    "--task-intent and cicd-cli pipeline task-workspace --help exists. Check the actual installed CLI "
-    "capabilities, not a historical packaging pin. CLI help proves syntax only, not configured server "
-    "support, qualification or task authority. A missing feature, 403/404 or unavailable configured "
-    "producer blocks this operation for the operator; do not fall back to an ordinary unbound pipeline. "
-    "Read authorized project/repository metadata with existing cicd-cli project list and cicd-cli repository "
-    "list, matching the supplied exact IDs and approved coordinates, never choosing by name alone. There is "
-    "no project-get CLI operation. Fleet supplies the original pipeline Idempotency-Key UUID and workspace "
-    "operationKey in the retained startup guidance: pipeline UUID is the actual Fleet session_run_id, and "
-    "workspace operationKey is fleet-workspace:<Fleet session_run_id>. Use those Fleet-supplied values "
-    "verbatim, not a new operator UUID, Tracker execution UUID or chat UUID. Do not generate or derive them "
-    "as agent, request a separate key provider, or assume they are extra fields in the private first-step JSON. "
-    "Critical-blocker and delivery-proposal key rules remain separate and unchanged; never substitute one "
-    "of those keys. Prepare the existing strict TaskWorkspaceIntent JSON with that workspace operationKey, "
-    "actual Tracker binding/routing snapshot, repositoryId, sourceCommit, role, "
-    "agentId, trackerLeaseId, holderSubject and expectedLeaseVersion. holderSubject is the actual scheduler "
-    "lease holder from lifecycle readback, not this agent. Verify full source SHA before the first write. "
-    "Run cicd-cli pipeline run --project <forge-configuration-uuid> --git-ref <exact-source-sha> "
-    "--idempotency-key <fleet-supplied-pipeline-key-uuid> --task-intent <task-intent.json>. "
-    "The git-ref must equal sourceCommit, not a moving branch; preserve the exact original key, intent bytes "
-    "and command arguments. The server requires the linked hosted repository, live matching Tracker custody "
-    "and repository pipeline config; no legacy template or default-success substitute. Use the actual "
-    "returned pipeline ID with cicd-cli pipeline task-workspace --project <forge-configuration-uuid> "
-    "--id <actual-pipeline-uuid>. Null means preparation pending, not success; read back the same pipeline "
-    "within the current authorized run and lease, never trigger another pipeline to obtain a receipt. "
-    "Validate the returned original workspace operation receipt, request/hash, task/root, assignment, "
-    "execution, repository/source SHA and real runner lease/attempt/generation. Forge allocates runner "
-    "lease, attempt and workspace IDs; never invent them, reuse the Tracker lease as a runner lease, or "
-    "manufacture a WorkspaceOperationRequest for first preparation. This preparation is read-only in the "
-    "Forge runner and does not create or authorize a writable Hermes checkout. Developer needs the separately "
-    "approved working checkout and branch. Unknown trigger acceptance permits no blind retry, fresh key, "
-    "changed body or second pipeline. If the actual pipeline ID is unavailable, stop with the retained "
-    "original inputs for authorized reconciliation; do not guess a pipeline or claim readback succeeded. "
-    "For candidate evidence use existing cicd-cli workspace candidate-evidence --project <forge-configuration-uuid> "
-    "--operation-key <fleet-supplied-workspace-key> --from-file <lookup.json>, using the actual original "
-    "WorkspaceOperationLookup from the saved receipt. Inspect actual candidate/artifact IDs and SHA; "
-    "physical_source_observed or a blocked workspace receipt is not task completion, deployment, health or "
-    "acceptance. No new queue, controller, MCP, children or automatic dispatch is introduced. "
+    'Use permanently configured Forge access. Verify installed cicd-cli pipeline run --help exposes '
+    '--task-intent and pipeline task-workspace exists; CLI help does not prove server support or authority. '
+    'Read the current Tracker lifecycle, source binding and authorized Forge project/repository metadata. Use '
+    'the exact approved configuration UUID, repository UUID, source SHA and branch; never infer a mapping from '
+    'a display name. Prepare the existing TaskWorkspaceIntent from that actual assignment/routing/lease. Use '
+    'operationKey=task-workspace:<current-Tracker-assignment-uuid> and pipeline Idempotency-Key equal to that '
+    'assignment UUID. These are stable business keys, independent of Fleet native run IDs. The intent '
+    'binding.workflowTaskRef is the technical assignment execution.key from lifecycle, distinct from the root '
+    'Workflow workflow_task_key. holderSubject is the actual lease holder, not the agent. Forge allocates '
+    'runner lease, attempt and workspace IDs; do not fabricate them or substitute the Tracker lease. Run '
+    'cicd-cli pipeline run --project <approved-forge-project-uuid> --git-ref <exact-source-sha> '
+    '--idempotency-key <assignment-uuid> --task-intent - with the strict JSON on stdin. No request/token '
+    'files, credential-context or per-message shell environment are needed. Server-side current task, '
+    'repository mapping, native/lease and source guards remain mandatory. Unknown trigger acceptance permits '
+    'no blind resend, fresh key or replacement body; use the original readback or retain the unresolved '
+    'operation for authorized reconciliation. Read the actual returned pipeline ID through pipeline show --id '
+    'and pipeline task-workspace --project <uuid> --id <pipeline-uuid>. Require successful repository CI for '
+    'the exact candidate commit and the real original task-workspace receipt. Null means pending, not success. '
+    'A read-only Forge runner workspace does not authorize a writable agent checkout. Developer uses its '
+    'preconfigured authorized checkout and candidate branch, performs the real commit and push, and starts '
+    'this task pipeline only for the final candidate. Include the actual successful PipelineDetail JSON from '
+    'pipeline show as one of the sealed checks artifacts; other check artifacts may contain test logs. Fleet '
+    'independently reads the approved repository/branch, original pipeline and task workspace before '
+    'completion. For candidate evidence, use the existing workspace candidate-evidence command with the '
+    'original operation key and real WorkspaceOperationLookup on stdin. Missing access, capability or source '
+    'is an operator blocker; never substitute an ordinary unbound pipeline, default-success template, guessed '
+    'receipt or different credential. '
 )
 
 FORGE_IMAGE_BUILD = (
@@ -196,15 +177,18 @@ FORGE_IMAGE_BUILD = (
 )
 
 ROLE_IMAGE_BUILD = {
-    "developer": FORGE_IMAGE_BUILD + (
+    "developer": FORGE_IMAGE_BUILD
+    + (
         "In Developer initial AND rework, author the real application Dockerfile and typed build recipe "
         "only in the approved writable checkout/branch, then freeze their actual candidate commit SHA. "
-        "Use the supplied original task pipeline key for that frozen candidate; do not spend it on a "
+        "Use the current assignment UUID as the original task pipeline key for that frozen candidate; "
+        "do not spend it on a "
         "preliminary base-SHA build and later change the original intent/body to another commit. Retain "
         "the server-produced descriptor artifact ID/raw SHA, exact pipeline/job/attempt and original "
         "workspace receipt in sealed changes/checks. Build success is not Review, Testing or deployment. "
     ),
-    "devops": FORGE_IMAGE_BUILD + (
+    "devops": FORGE_IMAGE_BUILD
+    + (
         "DevOps consumes the actual descriptor from the accepted Developer candidate's original pipeline "
         "and verifies it against the accepted Developer result/SHA propagated through Review and Testing. "
         "Do not edit the accepted candidate, replace its descriptor with an independently preloaded image, "
@@ -275,90 +259,90 @@ ROLE_SOURCE_EVIDENCE = {
 }
 
 SEALED_ARTIFACTS = (
-    "For the six technical roles, only sealed assignment artifacts are authorized on the narrow attachment "
-    "routes under the supplied current delivery grant. Ordinary comments remain unauthorized; do not borrow "
-    "owner/scheduler credentials, use an ordinary human token or broaden permissions. Read permitted own "
-    "artifacts and accepted predecessor references using task-tracker attachment list --issue <task-uuid> "
-    "and task-tracker attachment download <attachment-uuid> --out <private-artifact-path>. Match issue_id to "
-    "task=root and the exact supplied reference/hash; match expected assignment_id, execution_id and role "
-    "from artifact.binding to the actual producer/predecessor, not a guessed current assignment for old evidence. "
-    "Verify SHA256 of the raw downloaded bytes; CLI download success alone is not an ArtifactReceipt. "
-    "After role work and BEFORE the FINAL Workflow phase report, publish the actual structured JSON role "
+    "Use sealed assignment artifacts for technical evidence under the current configured assignment "
+    "and project rights. Ordinary comments carry discussion and the final handoff; they do not replace "
+    "sealed artifacts. Do not borrow owner/scheduler credentials, use a human token or broaden "
+    "permissions. Read permitted own artifacts and accepted predecessor references using task-tracker"
+    " attachment list --issue <task-uuid> and task-tracker attachment download <attachment-uuid> "
+    "--out <private-artifact-path>. Match issue_id to task=root and the exact supplied "
+    "reference/hash; match expected assignment_id, execution_id and role from artifact.binding to the"
+    " actual producer/predecessor, not a guessed current assignment for old evidence. Verify SHA256 "
+    "of the raw downloaded bytes; CLI download success alone is not an ArtifactReceipt. After role "
+    "work and BEFORE the FINAL Workflow phase report, publish the actual structured JSON role "
     "reports/checks/deployment evidence through task-tracker attachment upload --issue <task-uuid> "
     "--file <role-artifact.json> --content-type application/json. Use only the current supplied "
-    "assignment/execution/agent/fence and run context. Tracker enforces exact routing, Running/InProgress "
-    "and a live lease; the lease holder is the scheduler, not the agent. Do not renew it as scheduler or set "
-    "status yourself. Preserve the exact uploaded bytes, filename and MIME for replay. "
-    "Use the actual server-returned artifact.receipt {reference,sha256}, with "
+    "assignment/execution/agent/fence and run context. Tracker enforces exact routing, "
+    "Running/InProgress and a live lease; the lease holder is the scheduler, not the agent. Do not "
+    "renew it as scheduler or set status yourself. Preserve the exact uploaded bytes, filename and "
+    "MIME for replay. Use the actual server-returned artifact.receipt {reference,sha256}, with "
     "reference=tracker-attachment:<UUID> and SHA256 of raw bytes, and artifact.binding "
-    "{assignment_id,execution_id,role}. Read the saved metadata back with attachment list, download by the "
-    "actual attachment UUID and verify raw SHA256 and size against that receipt. New role outputs must match "
-    "this current task/assignment/execution/role, including Developer rework. Never fabricate an attachment "
-    "UUID, reference, SHA or a receipt from a local path, comment, Forge URL/job ID or Workflow terminal hash. "
-    "Workflow terminal receipt and role artifact contents are separate evidence. Unknown upload acceptance "
-    "requires authorized metadata/byte readback: locate the actual saved entry by exact current binding, "
-    "filename, MIME, size and raw SHA; if found, download its returned UUID and retain the verified receipt "
-    "without another upload. If no matching saved entry exists, only an exact-file replay with the original "
-    "filename/MIME under the still-current grant is permitted; never overwrite sealed bytes, delete evidence, "
-    "change identity/fence or declare success from uncertainty. "
-    "404/403, missing artifact capability, stale binding, checksum mismatch or unavailable readback is a "
-    "concrete blocker: leave the phase unfinished, report it and do not fake Workflow/business completion. "
+    "{assignment_id,execution_id,role}. Read the saved metadata back with attachment list, download "
+    "by the actual attachment UUID and verify raw SHA256 and size against that receipt. New role "
+    "outputs must match this current task/assignment/execution/role, including Developer rework. "
+    "Never fabricate an attachment UUID, reference, SHA or a receipt from a local path, comment, "
+    "Forge URL/job ID or Workflow terminal hash. Workflow terminal receipt and role artifact contents"
+    " are separate evidence. Unknown upload acceptance requires authorized metadata/byte readback: "
+    "locate the actual saved entry by exact current binding, filename, MIME, size and raw SHA; if "
+    "found, download its returned UUID and retain the verified receipt without another upload. If no "
+    "matching saved entry exists, only an exact-file replay with the original filename/MIME under the"
+    " still-current assignment and project rights is permitted; never overwrite sealed bytes, delete "
+    "evidence, change identity/fence or declare success from uncertainty. 404/403, missing artifact "
+    "capability, stale binding, checksum mismatch or unavailable readback is a concrete blocker: "
+    "leave the phase unfinished, report it and do not fake Workflow/business completion. "
 )
 
 
 def artifact_instruction(role: str) -> str:
-    return ROLE_SOURCE_EVIDENCE[role] + SEALED_ARTIFACTS + (
-        f"Prepare {RESULTS[role]} using only those verified actual artifact.receipt values. "
-        "Require the exact supplied proposal.idempotency_key from runtime guidance/template before the FINAL "
-        "Workflow report; do not generate or derive a key, even from a known session/run UUID. A missing "
-        "supplied key is a blocker, not permission to invent one. Include artifact references/hashes, provenance "
-        "and role evidence in the final Workflow phase report, then use the actual accepted Workflow receipt "
-        "for the delivery proposal; no new artifact envelope or producer protocol is introduced. "
+    return (
+        ROLE_SOURCE_EVIDENCE[role]
+        + SEALED_ARTIFACTS
+        + (
+            ("Prepare ")
+            + f"{RESULTS[role]}"
+            + (
+                " from verified artifact receipts. Include actual role evidence in the final phase "
+                "report. The final report does not require its own future terminal receipt, future "
+                "ordinary comment or future Tracker transition. "
+            )
+        )
     )
 
 
 def context_instruction(role: str) -> str:
     common = (
-        "After the Workflow step, read task-tracker sdlc context --task <task-uuid> and "
-        "task-tracker sdlc requirements --task <task-uuid> with the supplied own-task grant. Verify task=root, "
-        "assigned role/mode, stage/status, exact input revision/hash and predecessor evidence. Read supplied "
-        "immutable source/evidence references only through authorized access. "
+        "Read the ticket and ALL participants comments with task-tracker sdlc discussion read --task "
+        "<task-uuid>; follow next_after with the same snapshot until next_after is null. Start a fresh "
+        "complete scan before the final comment. Read requirements, current assignment, previous typed "
+        "results and authorized attachments. Missing required access is a blocker. "
     )
     if role == "project_manager":
         return common + (
-            "Ordinary comments/attachments are not authorized by the inspected PM or delivery task grants; "
-            "do not borrow owner/scheduler credentials or call their ordinary endpoints. Parent must supply "
-            "required source snapshots or an explicitly authorized read capability; missing required "
-            "input/access is a blocker, not permission to invent sources or broaden authority. "
-            "Also read task-tracker sdlc input --task <task-uuid> and task-tracker sdlc questions "
-            "--task <task-uuid> under the PM grant. An absent requirements revision is normal during "
-            "pre-document brainstorming; do not publish a placeholder merely to obtain a revision."
+            "Read task-tracker sdlc input and questions for this task. An absent requirements "
+            "revision is normal before the first real document."
         )
-    context = common + SOURCE_CONTEXT + FORGE_TASK_WORKSPACE + ROLE_IMAGE_BUILD.get(role, "")
-    return context + artifact_instruction(role) + (
-        "Read task-tracker sdlc lifecycle --task <task-uuid>; if the supplied input has previous_result_id, "
-        "read task-tracker sdlc result read --task <task-uuid> --result <previous-result-uuid> and verify "
-        "the exact accepted predecessor result and artifact references before work. Do not infer acceptance "
-        "from a current lifecycle result=null after Reserve. "
-        "The delivery task grant does not authorize clarifications/questions; use supplied immutable "
-        "requirements and predecessor evidence, and route material business contradictions back to PM. "
-        "Use only the critical business review branch for such contradictions, not routine questions. "
-        "Missing required source/input/access is a blocker; request an authorized snapshot from parent, "
-        "never invent sources or broaden authority. "
-    ) + CRITICAL_BUSINESS_REVIEW
+    return common + SOURCE_CONTEXT + FORGE_TASK_WORKSPACE + ROLE_IMAGE_BUILD.get(role, "") + artifact_instruction(role)
 
 
 PM_PHASE_REPORT = (
-    "During pre-document brainstorming the current phase may stay unfinished while the trusted Fleet "
-    "adapter checkpoints with requirements_revision=null and requirements_sha256=null. Only "
-    "input_kind=feedback may resume that checkpoint, using actual PmFeedbackReceipt.message_id and its "
-    "input_receipt reference/sha256 after old run terminal readback; no placeholder document or fake "
-    "question/answer is needed. Keep the same execution/assignment/cycle. "
-    "Report only this completed preparation phase via terminal -> project-workflow --json step "
-    "--task <workflow-task-key> --report <report-text> with the supplied --operation-key, --runtime-request "
-    "and --execution-token-file. body.report must equal --report; retain exact key/body for uncertain-effect "
-    "readback. Stop at the returned next phase: owner confirmation belongs to phase 3 in this SAME execution. "
-    "Do not complete the PM Workflow or create another assignment/cycle to wait for consent."
+    "Apply saved answers and relevant feedback to the Draft; publish the next FULL requirements "
+    "revision without asking for separate permission to save the draft. 'Not confirmation of the "
+    "final revision' does not prohibit updating the Draft. Do not invent unresolved business choices."
+    " Report only this completed preparation phase. "
+) + (
+    "Complete only the present preparation phase using the normal report operation and current "
+    "version. Submit only actual completed phase work with project-workflow --json step --task "
+    "<workflow-task-key> --operation-key <stable-key> --expected-version <last-returned-version> "
+    "--report -. Supply report text on stdin. Before submission, check EVERY required_check against "
+    "actual evidence and include the required_evidence: reference saved alternatives/tradeoffs when "
+    "they exist, actual blockers and the no-additional-tasks check; do not invent alternatives, "
+    "checks or evidence. Inspect the returned verdict, missing, blockers, phase and version. A known "
+    "PARTIAL is not phase acceptance: do the missing work or correct its report in the SAME "
+    "execution, using the returned version and a NEW operation key ONLY for a new corrected report "
+    "body. Do not request owner consent or claim preparation complete while preparation remains "
+    "PARTIAL. After an unknown response retain exactly that key, version and report; read back "
+    "history for the operation. Provider/transport failure or unknown acceptance is NOT a known "
+    "PARTIAL and does not permit automatic resubmission. Do not select a replacement key merely "
+    "because acceptance is unknown. Follow the returned current phase."
 )
 PM_DRAFT_INSTRUCTIONS = [
     "Be a full brainstorming partner, not a mandatory questionnaire. Clarify ONLY when the initial input "
@@ -394,115 +378,149 @@ PM_PUBLISH_INSTRUCTION = (
     "When clarification is needed, brainstorm in small free-form iterations before a document exists; "
     "never create a placeholder revision "
     "or question solely for checkpointing. When the agreed draft is ready, publish the real requirements "
-    "using task-tracker sdlc revision publish --task <task-uuid> --from-file <revision.json>. Formal "
+    "using task-tracker sdlc revision publish --task <task-uuid> --from-file -. Formal "
     "clarification is conditional on an actual unresolved gap and requires an existing requirements revision: "
     "only then publish a focused question using "
-    "task-tracker sdlc question publish --task <task-uuid> --from-file <question.json>. Use actual strict "
+    "task-tracker sdlc question publish --task <task-uuid> --from-file -. Pass JSON on stdin. Use actual strict "
     "MachineFence, revision/version and idempotency fields from the supplied context; never invent IDs. "
     "Read questions/requirements back and match the actual server revision/content_hash. Reconcile "
     "uncertain publication through those supported reads before retry with the exact original key/body."
 )
 PM_CONFIRMATION_INSTRUCTIONS = [
-    "Present the FULL server-saved requirements document to the human owner, including exact revision and "
-    "content_hash, scope/non-goals, acceptance criteria, choices/tradeoffs and unresolved contradictions. "
-    "Request explicit confirmation of this exact revision/hash; a summary alone, silence, preselection "
-    "or a yes to a clarification question is not consent. PM never confirms as the owner.",
-    "Checkpoint while awaiting actual owner confirmation with phase 3 unfinished and PM Workflow NOT "
-    "completed. Waiting is separate from Tracker stage/status. Keep the same execution/assignment/cycle; "
-    "never resume a completed execution or multiply PM assignment cycles to work around ordering. "
-    "Use the existing profile checkpoint/resume through the trusted Fleet adapter with typed input_kind "
-    "answer|feedback|confirmation and unified input {input_kind,input_id} plus input_receipt {reference,sha256}. "
-    "The adapter validates actual Tracker input and old run terminal readback before resume; the agent "
-    "does not choose the observed owner/lease or call scheduler resume itself. Missing authorized adapter "
-    "capability is a blocker; leave the phase unfinished and do not invent CLI commands.",
-    "Handle feedback by revising and publishing the document within the SAME execution, then present the "
-    "FULL new saved revision/content_hash and checkpoint again. Any document change invalidates earlier "
-    "consent. input_id is actual Answer.id, PmFeedbackReceipt.message_id or Confirmation.id according to "
-    "input_kind; only answer carries a real clarification reference/version pair. Free feedback and "
-    "input_kind=confirmation must not fabricate an answer ID, question or clarification request. Answer "
-    "and confirmation require an existing exact requirements revision/hash; only feedback can use the "
-    "pre-document null/null pair. Confirmation input must reference the existing real owner confirmation "
-    "receipt, not a conversational assertion. "
-    "Unresolved feedback keeps phase 3 unfinished; no final Workflow report is permitted yet.",
-    "AFTER actual owner confirmation, read its real receipt using task-tracker sdlc confirmation read "
-    "--task <task-uuid> --revision <confirmed-revision>. --revision is required. Match task UUID, exact latest "
-    "revision/content_hash, owner_subject and confirmation ID against the saved document and actual owner "
-    "confirmation. The inspected CLI uses direct GET requirements/{revision}/confirmation under the own-task "
-    "PM grant and checks the actual receipt ID/task/revision/content_hash/owner_subject/created_at and "
-    "stage=Backlog. This historical confirmation receipt is not current lifecycle completion. Missing "
-    "capability, denied access or a stale/mismatched receipt leaves phase 3 unfinished. Do not borrow "
-    "scheduler/owner credentials or require PM to read an Analysis intent.",
+    (
+        "Present the FULL latest saved requirements document with exact revision/content_hash and request"
+        " explicit human owner confirmation. Never confirm as owner."
+    ),
+    (
+        "Wait for missing human input or final owner consent in the same conversation with this phase "
+        "unfinished. An already saved answer or feedback may be applied to the Draft without final owner "
+        "consent. Feedback is not confirmation. Revise and republish the whole document when needed; only"
+        " explicit owner consent to the latest revision/hash permits PM completion. No checkpoint, native"
+        " readback or Fleet rebind is required by this protocol."
+    ),
+    (
+        "Handle feedback by revising and publishing the document within the SAME execution, then present "
+        "the FULL new saved revision/content_hash. Apply saved answers and relevant feedback without "
+        "asking for separate permission to save the draft; publishing a Draft revision is NOT owner "
+        "confirmation or PM completion. Any document change invalidates earlier consent. Free feedback "
+        "and confirmation must not fabricate an answer ID, question or clarification request. Only actual"
+        " unresolved gaps require clarification. Confirmation must be the real owner's saved receipt for "
+        "the latest exact revision/hash, not a conversational assertion. Unresolved feedback keeps phase "
+        "3 unfinished; no final Workflow report is permitted yet. No native checkpoint or rebind is "
+        "required."
+    ),
+    (
+        "After owner confirmation read task-tracker sdlc confirmation read --task <task-uuid> --revision "
+        "<revision>. Match exact latest revision/hash, owner and task. Confirmation stays in stage=Draft;"
+        " it is not a Workflow or Tracker completion."
+    ),
 ]
 PM_CONFIRMATION_CHECKS = [
-    "The FULL latest server-saved requirements document and exact revision/content_hash were presented to the owner.",
-    "Actual owner confirmation has a real authorized readback receipt matching task, latest revision/hash and owner.",
-    "Any feedback that occurred was resolved within the same execution; no stale consent, fake answer IDs "
-    "or extra PM cycles were used. Clarification questions are not a prerequisite for confirmation.",
-    "Direct PM confirmation readback dependencies and any authorized typed checkpoint/resume actually used "
-    "are satisfied; no blockers remain.",
-    "PM finalizes only after exact owner confirmation; the allowed result is Backlog / Ready. "
-    "No Analysis intent or Analyst pickup is required for this PM handoff.",
+    "The full latest saved requirements document and exact revision/hash were presented to owner.",
+    "An actual owner confirmation matches that latest task/revision/hash and owner.",
+    "Actual feedback is resolved; no stale consent or invented questions.",
+    "No unresolved business blockers. Waiting for owner input leaves this phase unfinished.",
+    (
+        "Workflow completes in confirmed Draft; only subsequent Tracker completion publishes Backlog / "
+        "Ready. No automatic Analyst."
+    ),
 ]
 PM_CONFIRMATION_EVIDENCE = [
-    "FULL saved requirements document, exact revision/content_hash and owner presentation reference.",
-    "Actual owner confirmation receipt ID/reference and readback matching task/revision/hash/owner_subject.",
-    "Same-execution typed checkpoint/input references and feedback-to-revision history only when they occurred; "
-    "no fabricated answers or mandatory clarification history for a complete brief.",
+    "Full saved document, exact revision/hash and owner presentation.",
+    (
+        "Actual owner confirmation receipt; current report does not require its own future terminal "
+        "receipt, comment or status transition."
+    ),
 ]
+
+
+def completion_instruction(role: str) -> str:
+    comment = (
+        "AFTER accepted Workflow complete=true, publish an ordinary final Tracker comment with "
+        "task-tracker sdlc discussion publish --task <task-uuid> --from-file - and JSON on stdin: "
+        "fence={assignment_id,execution_id,agent_id,assignment_version} from fresh context.assignment, "
+        "body and a stable idempotency_key. Include result, checks, evidence, limitations and intended "
+        "handoff. Read discussion operation --task <task-uuid> --key <same-key> and verify receipt. "
+        "Editing or deleting this comment blocks a new handoff. "
+    )
+    if role == "project_manager":
+        return comment + "Use the committed terminal_receipt. " + PM_COMPLETION_INSTRUCTION
+    return (
+        (
+            "The final report has committed. Use the returned workflow_receipt {reference,sha256}, "
+            "which is a sibling of terminal_receipt in this response. "
+        )
+        + comment
+        + (
+            (
+                "Prepare the existing SubmitDeliveryProposal with fence from fresh lifecycle, "
+                "workflow_receipt=the returned workflow_receipt, result="
+            )
+            + f"{RESULTS[role]}"
+            + (
+                ", idempotency_key=delivery-result:<assignment_id>. Send JSON on stdin using task-tracker "
+                "sdlc result propose --task <task-uuid> --from-file -. Read task-tracker sdlc result "
+                "operation --task <task-uuid> --key <same-key>. Unknown acceptance requires original-key "
+                "readback. Return the real proposal result and finish the run. Fleet verifies real terminal "
+                "before Tracker Complete; a proposal is not a transition. Tracker chooses "
+            )
+            + f"{TARGETS[role]}"
+            + (
+                ". Repaired candidates repeat Review and Testing; honor the server Rework limit. Never borrow"
+                " scheduler credentials, choose a new stage or manufacture evidence."
+            )
+        )
+    )
+
+
+PM_COMPLETION_INSTRUCTION = (
+    "Submit task-tracker sdlc pm completion submit --task <task-uuid> --from-file - with JSON on stdin. "
+    "Use ONLY these fields: interaction_protocol='configured-cli-v1'; "
+    "fence={assignment_id,execution_id,agent_id,assignment_version} from fresh Tracker "
+    "context.assignment, matched exactly to the Workflow terminal receipt; "
+    "requirement_revision=terminal_receipt.requirements_revision; "
+    "content_hash=terminal_receipt.requirements_sha256; namespace_id=terminal_receipt.namespace_id; "
+    "workflow_execution_ref=terminal_receipt.execution_ref; "
+    "workflow_operation_key=terminal_receipt.operation_key; "
+    "workflow_result_version=terminal_receipt.result_version; "
+    "idempotency_key=<one-stable-completion-key>. requirement_revision is singular in this Tracker "
+    "request. Match fence.assignment_id to terminal_receipt.assignment_ref, fence.execution_id to "
+    "terminal_receipt.tracker_execution_id (NOT Workflow execution_ref), fence.agent_id to "
+    "terminal_receipt.concrete_agent_ref and fence.assignment_version to "
+    "terminal_receipt.assignment_version. Do not paste a fabricated receipt or add native/lease fields. "
+    "Tracker reads the terminal receipt server-to-server and performs atomic Draft -> Backlog / Ready. "
+    "Read the exact operation using task-tracker sdlc pm completion operation --task <task-uuid> --key "
+    "<same-completion-key>, then task-tracker sdlc pm completion read --task <task-uuid> and task-tracker"
+    " sdlc context --task <task-uuid>. Verify the operation.result, completion read.current and fresh "
+    "context agree on the same task/root and revision/hash, with stage=Backlog and status=Ready after "
+    "completion. After unknown POST acceptance use original-key readback, never a new key or blind "
+    "resubmit. Do not require Backlog before Workflow completion. A pasted receipt alone is not "
+    "authority. Business completion requires a valid saved document, resolved questions and actual owner "
+    "consent, not an external verifier checklist. Configured CLI readiness is a separate runtime check. "
+    "Stop at Backlog / Ready; do not create Analysis intent, dispatch Analyst or confirm requirements as "
+    "the owner."
+)
 
 
 def terminal_instruction(role: str) -> str:
+    common = (
+        "PRECOMMIT ASSESSMENT ONLY: finish the current phase work and report actual inputs, outputs, checks, "
+        "evidence and unresolved blockers. The report cannot contain its own future terminal receipt, "
+        "future final comment or future Tracker transition. These are subsequent actions after acceptance. "
+        "Missing, stale, mismatched or fabricated current work/evidence must not pass. "
+    )
     if role == "project_manager":
-        return (
-            "ONLY AFTER the preceding exact owner confirmation receipt readback succeeds and all feedback "
-            "is resolved, reconcile task-tracker sdlc confirmation read --task <task-uuid> "
-            "--revision <confirmed-revision>, then submit the FINAL phase report via terminal -> "
-            "project-workflow --json step "
-            "--task <workflow-task-key> --report <report-text> with the supplied --operation-key, --runtime-request "
-            "and --execution-token-file. body.report must equal --report. Include actual saved document and "
-            "confirmation receipt refs, revision/content_hash, owner_subject and check/evidence coverage; "
-            "never invent authority fields. Reconcile uncertain effects using the exact original key/body "
-            "before retry. Verify accepted Workflow complete=true, then finalize the PM run. The allowed next "
-            "stage AND status are Backlog / Ready only. Stop at Backlog / Ready; do not request an Analysis "
-            "intent, wait for Analyst pickup or treat either as a PM completion prerequisite. "
-            "PM does not dispatch Analyst or create another PM cycle. "
-            "Installed instructions alone do not authorize live routing; use only the actually authorized API/policy. "
-            "Generic patch/issue transition/board move are forbidden substitutes."
+        return common + (
+            "The FULL latest saved requirements document, resolved feedback and blocking questions, and "
+            "the actual human owner's confirmation must match the exact task/revision/hash/owner in Draft. "
+            "Do not claim Backlog before completion or require an external verifier checklist or Analyst. "
+            "Submit project-workflow --json step --task <workflow-task-key> --operation-key <stable-key> "
+            "--expected-version <current-version> --report - --requirements-revision <confirmed-revision> "
+            "--requirements-sha256 <confirmed-content-hash>. Supply the actual report on stdin and use "
+            "only the saved owner's exact confirmation. "
         )
-    return (
-        "This is the normal result branch ONLY when no critical business hold or unresolved blocker remains. "
-        "The critical branch ends with its actual held receipt and unfinished Workflow, not a delivery proposal. "
-    ) + artifact_instruction(role) + (
-        f"After accepted Workflow complete=true, the allowed next stage AND status are {TARGETS[role]} "
-        "on this same task=root. While the assigned run is still alive, prepare the actual existing "
-        "SubmitDeliveryProposal JSON with exactly fence, workflow_receipt, result, idempotency_key. "
-        "Set proposal.idempotency_key to the exact supplied value from runtime guidance/template; "
-        "original-key below means that supplied proposal.idempotency_key, never an agent-generated key. "
-        f"Use {RESULTS[role]}. ArtifactReceipt has reference and sha256. "
-        "Use the supplied DeliveryFence assignment_id/execution_id/fencing_token/lease_id/expected_lease_version "
-        "and real accepted Workflow receipt reference/hash; never invent evidence or authority fields. "
-        "If complete=true supplies no usable immutable Workflow receipt, report that dependency and do not submit. "
-        "Run task-tracker sdlc result propose --task <task-uuid> --from-file <proposal.json> using the authorized "
-        "producer, then task-tracker sdlc result operation --task <task-uuid> --key <original-key>. Match the "
-        "actual proposal receipt to this task/assignment/execution/result/evidence and original operation. "
-        "Unknown submission acceptance requires operation readback before any retry with exact same key/body. "
-        "A proposal receipt DOES NOT transition the stage or prove stage completion. Return its actual "
-        "proposal_id/output_sha256, original operation key and outcome in the final agent report and end the run; "
-        "do not wait or poll for stage transition while "
-        "keeping the run alive. After actual terminal, Fleet verifies the proposal and invokes schedulerComplete; "
-        "Fleet/operator reads the resulting stage/status through the registered Tracker lifecycle readback. "
-        "using task-tracker sdlc lifecycle --task <task-uuid>. Verify the actual returned stage/status and "
-        "accepted result identity; a saved proposal or held receipt is not that transition. Reviewer/Tester "
-        "rework includes frozen actionable findings; repaired candidates repeat Review and Testing. "
-        "Tracker permits at most three Rework cycles. If actual readback reports rework_limit_reached, retain "
-        "its current Review or Testing stage, Ready status and Terminal runtime; do not substitute Rework. "
-        "Escalate the actual limit outcome to the operator. Escalation is not human business consent and "
-        "does not authorize automatic resume. Never start a fourth Rework cycle, reset the cycle, "
-        "force a transition or claim Completed. "
-        "Workflow assessment passed/needs_rework is report language; serialize only the role-specific verdict "
-        "values listed above, never needs_rework in a proposal verdict. "
-        "Wire role is devops; only the Fleet boundary explicitly maps it to dev_ops. "
-        "Use only the actually installed and authorized producer: 404/403 or absent capability is a blocker, "
-        "not permission to fabricate a receipt, manually schedulerComplete, generic Task patch, "
-        "issue transition or board move."
+    return common + (
+        f"Prepare {RESULTS[role]} from verified saved role artifacts and the exact assigned candidate. "
+        "Reviewer/Tester may complete verification with a business rework verdict and real findings; "
+        "do not pass a defective candidate to obtain acceptance of a correct verification report. "
     )

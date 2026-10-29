@@ -12,8 +12,9 @@ from tests import test_ui_shell_template as shell
 pytestmark = pytest.mark.ui
 
 
-def render_editor(admin, count=8, *, parallel=False):
-    workflow = dict(id=3, name="Delivery <3>", description="", phase_count=count, namespace_count=0)
+def render_editor(admin, count=8, *, parallel=False, readonly=False):
+    workflow = dict(id=3, name="Delivery <3>", description="", phase_count=count, namespace_count=0,
+                    key="single-task-v1:project_manager" if readonly else "local")
     phases = [dict(id=i, phase_num=i, name=f"Phase {i}", description="", execution_type="sync")
               for i in range(1, count + 1)]
     blocks = ([dict(kind="parallel", phases=phases[:2])] if parallel else []) + [
@@ -46,6 +47,19 @@ def test_editor_header_actions_keep_native_semantics_and_product_handlers(admin)
     assert buttons["workflowSubmitButton"]["type"] == "submit"
     assert buttons["cancelCreateWorkflowButton"]["style"] == "display:none"
     assert buttons["cancelCreateWorkflowButton"]["onclick"] == "cancelWorkflowForm()"
+
+
+@pytest.mark.parametrize("readonly", [False, True])
+def test_base_actions_preserve_sealed_catalog_readonly_and_local_workflow_editing(readonly):
+    elements = shell.Elements(render_editor(True, count=0, readonly=readonly)).elements
+    buttons = {attrs.get("id"): attrs for tag, attrs in elements if tag == "button"}
+    for name in ("editWorkflowButton", "deleteWorkflowButton"):
+        assert ("hidden" in buttons[name]) is readonly
+        assert "base-button" in buttons[name]["class"].split()
+    assert "hidden" not in buttons["newWorkflowButton"]
+    additions = [attrs for tag, attrs in elements if tag == "button"
+                 and attrs.get("aria-label") == "Добавить первую фазу"]
+    assert len(additions) == (0 if readonly else 1)
 
 
 @pytest.mark.parametrize("admin", [False, True])

@@ -1,6 +1,7 @@
 """Collection navigation stays available for every nonempty collection."""
 import pytest
 
+from project_workflow.interfaces.ui.controller_assets import controller_source
 from project_workflow.interfaces.ui.templates import templates
 
 
@@ -24,11 +25,15 @@ def test_list_visibility_depends_on_empty_collection_only(name, count, can_admin
         namespace_cookie_name="workflow_namespace_id", namespace_cookie_secure=False,
         can_administer=can_administer,
     )
+    controller = "workflows" if name in {"workflows.html", "phases.html"} else "namespaces"
+    source, digest = controller_source(controller, can_administer)
+    assert f"/{digest}/{controller}.js" in html
+    script = source.decode()
     if name in {"workflows.html", "phases.html"}:
         assert ('class="workflow-crud is-empty"' in html) is (count == 0)
         assert '.workflow-crud.is-empty .workflow-nav{display:none}' in html
-        assert ("classList.toggle('is-empty', workflowStore.length === 0)" in html) == can_administer
+        assert ("classList.toggle('is-empty', workflowStore.length === 0)" in script) == can_administer
     elif name == "namespaces.html":
         assert ('class="namespace-crud is-empty"' in html) is (count == 0)
-        assert ("classList.toggle('is-empty', namespaceStore.length === 0)" in html) == can_administer
+        assert ("classList.toggle('is-empty', namespaceStore.length === 0)" in script) == can_administer
     assert "is-single" not in html

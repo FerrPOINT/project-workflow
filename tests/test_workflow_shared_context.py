@@ -5,6 +5,7 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
+from project_workflow.interfaces.ui.controller_assets import controller_source
 from tests import test_ui_shell_template as shell_helpers
 
 
@@ -91,8 +92,9 @@ def test_parallel_guidance_keeps_barrier_text_and_quiet_common_presentation():
     assert "Следующий этап — после завершения всех фаз группы." in html
     assert html.count('data-phase-id="') == 3
     assert "Phase &lt;1&gt;" in html and "Owner &lt;description&gt;" in html
-    assert "function setPhaseView(view,persist=true)" in html
-    assert "localStorage.setItem('phase-view-mode',view)" in html
+    owner = controller_source("workflows", True)[0].decode()
+    assert "function setPhaseView(view,persist=true)" in owner
+    assert "localStorage.setItem('phase-view-mode',view)" in owner
 
 
 @pytest.mark.parametrize("create", [False, True])

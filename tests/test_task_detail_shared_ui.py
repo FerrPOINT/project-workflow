@@ -46,6 +46,73 @@ class Text(HTMLParser):
         self.parts.append(data)
 
 
+class Conversation(HTMLParser):
+    def __init__(self, html):
+        super().__init__()
+        self.disclosures = []
+        self.sections = []
+        self.text = []
+        self.feed(html)
+
+    def handle_starttag(self, tag, attrs):
+        attributes = dict(attrs)
+        if tag == "details":
+            self.disclosures.append(attributes.get("id"))
+        if tag == "section":
+            self.sections.append(attributes.get("aria-labelledby"))
+
+    def handle_endtag(self, tag):
+        if tag == "details":
+            self.disclosures.pop()
+        if tag == "section":
+            self.sections.pop()
+
+    def handle_data(self, data):
+        self.text.append((data, tuple(self.sections), tuple(self.disclosures)))
+
+
+def test_long_request_keeps_full_escaped_report_collapsed_and_answer_separate():
+    report = 'Agent introduction\n\n{"file": "<script>untrusted</script>", "data": "' + "x" * 900 + '"}'
+    html = render_detail(step_history=[{
+        "phase_code": "P-1", "verdict": "partial", "verdict_label": "Частично принято",
+        "worker_report": report,
+        "contract": {"message": "Advisor-only answer", "covered": [], "missing": [], "blockers": []},
+        "next_contract": None,
+    }])
+    conversation = Conversation(html)
+    preview = [text for text, sections, details in conversation.text
+               if "check-request-1" in sections and "check-request-full-1" not in details]
+    assert "Agent introduction" in preview
+    assert not any("untrusted" in text for text in preview)
+    full = [text for text, _, details in conversation.text if "check-request-full-1" in details]
+    assert report in full
+    answer = [(sections, details) for text, sections, details in conversation.text
+              if text == "Advisor-only answer"]
+    assert len(answer) == 1
+    assert "check-response-1" in answer[0][0]
+    assert "check-request-full-1" not in answer[0][1]
+    disclosure = next(attrs for tag, attrs in Elements(html).elements
+                      if tag == "details" and attrs.get("id") == "check-request-full-1")
+    assert "open" not in disclosure
+    assert "base-disclosure" in disclosure["class"].split()
+    assert "Агент → Advisor" in html and "Advisor → Агент" in html
+    assert html.index("Запрос к advisor") < html.index("Ответ advisor")
+    assert "<script>untrusted</script>" not in html
+
+
+@pytest.mark.parametrize("report", [None, ""])
+def test_old_history_without_report_does_not_present_the_answer_as_a_request(report):
+    html = render_detail(step_history=[{
+        "phase_code": "P-1", "verdict": "pass", "worker_report": report,
+        "contract": {"message": "Saved answer", "covered": [], "missing": [], "blockers": []},
+    }])
+    conversation = Conversation(html)
+    assert any(text == "Текст отчёта в этой записи не сохранён." and "check-request-1" in sections
+               for text, sections, _ in conversation.text)
+    assert any(text == "Saved answer" and "check-response-1" in sections
+               for text, sections, _ in conversation.text)
+
+
 @pytest.mark.parametrize("status,label,tone", [
     ("done", "Завершена", "success"),
     ("blocked", "Заблокирована", "danger"),

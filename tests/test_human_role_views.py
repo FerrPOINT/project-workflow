@@ -68,7 +68,10 @@ def test_rendered_configuration_controls_follow_current_central_role(monkeypatch
     if view == "workflows":
         assert elements.has_id("workflowForm") == administrative
         assert elements.has_id("newWorkflowButton") == administrative
-        assert elements.invokes("addPhaseAfter(") == administrative
+        assert any(
+            tag == "button" and "phase-add-btn" in attrs.get("class", "").split()
+            for tag, attrs in elements.items
+        ) == administrative
         assert elements.has_id("phasesTimeline")
         assert elements.invokes("selectWorkflow(")
     elif view == "namespaces":

@@ -267,14 +267,17 @@ def test_seed_rejects_noncontiguous_order_duplicate_codes_and_descriptions(tmp_p
         ),
     ],
 )
-def test_seed_rejects_invalid_execution_graph(tmp_path, catalog, message):
+def test_seed_retains_legacy_links_without_interpreting_them(tmp_path, catalog, message):
     if message.startswith("rollback_target"):
         catalog[1]["rollback_target_phase_code"] = "C"
         catalog[2].pop("rollback_target_phase_code")
-    path = tmp_path / "invalid-graph.json"
+    path = tmp_path / "legacy-links.json"
     path.write_text(json.dumps(catalog), encoding="utf-8")
-    with pytest.raises(ValueError, match=message):
-        _load_seed(path)
+    phases = _load_seed(path)
+    assert len(phases) == len(catalog)
+    for phase, saved in zip(phases, catalog, strict=True):
+        assert phase.parallel_with_phase_code == saved.get("parallel_with_phase_code")
+        assert phase.rollback_target_phase_code == saved.get("rollback_target_phase_code")
 
 
 def test_seed_accepts_isolated_parallel_phase(tmp_path):

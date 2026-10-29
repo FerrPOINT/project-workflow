@@ -1,32 +1,28 @@
-"""Installed binding integrity on the existing bridge, without remote runtime probes."""
+"""Read-only integrity of retained native bindings and receipt context hashes."""
 
-import hashlib
-import hmac
-import json
 from typing import Any
 
 from sqlalchemy import select
 
-from project_workflow import config
 from project_workflow.domain.exceptions import ConflictError
 from project_workflow.domain.runtime_assignment import payload_sha256
 from project_workflow.domain.single_task_runtime import SingleTaskContext
 from project_workflow.infrastructure.db import models as m
-from project_workflow.infrastructure.db.single_task_catalog import observe_installation
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
 
-def installed_context(uow: Any, project_id: int, context: dict[str, Any]) -> dict[str, Any]:
-    parsed = SingleTaskContext.model_validate(context).model_dump(mode="json")
-    binding = next((b for b in observe_installation(uow).bindings if int(b.namespace_id) == project_id), None)
-    if binding is None or binding.instruction_manifest_sha256 != parsed["instruction_manifest_sha256"]:
-        raise ConflictError("Single-task installed manifest/namespace mismatch")
-    return parsed
+def retained_context(context: dict[str, Any]) -> dict[str, Any]:
+    """Decode a known saved profile without requiring it to equal the new image.
+
+    Current execution uses ConfiguredCliFence. These old bindings are only
+    consumed by retained receipt readers, which validate their stored hashes.
+    """
+    return SingleTaskContext.model_validate(context).model_dump(mode="json")
 
 
 def current_binding(uow: SAUnitOfWork, record: dict[str, Any]) -> dict[str, Any]:
     payload = record.get("payload", {})
-    context = installed_context(uow, record["project_id"], payload.get("single_task_context", {}))
+    context = retained_context(payload.get("single_task_context", {}))
     binding = record.get("single_task_binding")
     if not isinstance(binding, dict) or record.get("payload_sha256") != payload_sha256(payload):
         raise ConflictError("Single-task immutable assignment/binding integrity mismatch")
@@ -65,41 +61,3 @@ def current_binding(uow: SAUnitOfWork, record: dict[str, Any]) -> dict[str, Any]
 
 def context_hash(uow: SAUnitOfWork, record: dict[str, Any]) -> str:
     return payload_sha256(current_binding(uow, record))
-
-
-def execution_token(context_sha256: str) -> str:
-    settings = config.get_settings()
-    secret = settings.PROJECT_WORKFLOW_PM_SCOPE_SECRET
-    shared = {settings.PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN, settings.PROJECT_WORKFLOW_PM_READBACK_TOKEN}
-    for raw in (settings.PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON, settings.PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON):
-        shared.update(json.loads(raw or "{}").values())
-    if len(secret) < 32 or secret in shared:
-        raise ConflictError("Existing bridge execution scope secret unavailable")
-    return hmac.new(secret.encode(), ("single-task-v1:" + context_sha256).encode(), hashlib.sha256).hexdigest()
-
-
-def authorize(
-    uow: SAUnitOfWork, record: dict[str, Any], *, token: str | None, session_run_id: str | None,
-    instruction_profile: str | None, instruction_manifest_sha256: str | None, declared_hash: str | None = None,
-) -> str:
-    binding = current_binding(uow, record)
-    request = binding["request"]
-    run = binding.get("pm_run", request)
-    digest = payload_sha256(binding)
-    if (instruction_profile != "single-task-v1"
-        or instruction_manifest_sha256 != binding["context"]["instruction_manifest_sha256"]
-        or session_run_id != run["session_run_id"] or declared_hash is not None and declared_hash != digest):
-        raise ConflictError("Single-task current profile/session/integrity fence mismatch")
-    # Enrolled PM uses the same PM scoped token and run ledger as legacy PM.
-    expected = execution_token(digest)
-    if "pm_run" in binding:
-        from project_workflow.application.pm_execution import PMExecutionService
-
-        execution = uow.session.scalar(select(m.PMExecution).where(m.PMExecution.assignment_id == record["id"]))
-        if execution is None:
-            raise ConflictError("Single-task PM execution missing")
-        expected = PMExecutionService.scoped_token(PMExecutionService(uow).snapshot(execution),
-                                                 config.get_settings().PROJECT_WORKFLOW_PM_SCOPE_SECRET)
-    if not isinstance(token, str) or not hmac.compare_digest(token.encode(), expected.encode()):
-        raise PermissionError("Current execution/run scoped credential required")
-    return digest
