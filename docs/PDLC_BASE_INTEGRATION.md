@@ -1,6 +1,24 @@
 # PDLC и интеграция с Base
 
-## Закреплённый UI и границы поставки
+## Закреплённый кандидат UI0.3.32
+
+Producer `6f3c557698a8224c5a19e56bdc37b199ba076694`, reference
+`3d36261c8fa88dcb116b0efbd03596237702f265aa479bbb5758bc2a5d4ba701`.
+Штатный SSR export включает общий Textarea runtime с пересчётом autoSize при
+настоящем изменении размера текста браузера. Проверка immutable source checkout
+и точного SSR distribution прошла. Обработчики, FormData и dirty tracking
+остаются у Workflow; SDK/skills pins сохранены. Это source-кандидат: native
+browser повтор Textarea прошёл; authenticated unknown-result/readback ещё открыт.
+
+## Предшествующий UI0.3.29
+
+Текущий producer `b26cb497e4bdf797875301d5a2aa58f156cdd571`, reference `81c68bc7c8b473216b02de86731a786fe2ee5b8b0354aa70949aa514e6bffcc4`.
+Base исправляет MIME favicon и cleanup; штатный SSR export обновлён. Служебные
+страницы используют тот же runtime без обращения к namespace/UoW; ошибки
+конфигурации сохраняют sanitized503 со встроенными defaults. Product API остаётся
+закрытым SSO. Полный Workflow gate и authenticated readback фиксируются отдельно.
+
+## Предшествующий UI0.3.28 и границы поставки
 
 Текущий общий UI определяется [`.base-ui-revision`](../.base-ui-revision).
 Source producer: `7ad53fbee14c9c8df38d5aa17acd553288ef19d9`, пакет0.3.28,
@@ -11,6 +29,26 @@ reference `2a78538e33c78db0d713ff81d4f4ff0c143a0783ea831c2b44238894ac36efe3`.
 с producer; повторный export при одинаковых bytes не выполнялся. Native/browser
 evidence и authenticated Workflow проверяются отдельно. Source pin не подтверждает установку или authenticated
 Workflow unknown-result/readback. Полная field/app матрица остаётся открытой.
+
+## Служебные страницы и публичное оформление
+
+Обычные страницы, SSO entry и sanitized database503 используют один
+`branding_head.html`: штатные CSS/fonts, общий reader Base, источник только из
+конфигурации и сохранённая theme preference. Страница503 рендерится без namespace
+context и запросов к отказавшей БД; фиксированные Arial/цвета удалены.
+
+Configured public `/api/platform/branding` и `/base-assets/fonts/` не требуют
+продуктовой сессии или UnitOfWork. Bridge сохраняет timeout2s, предел64KiB,
+проверку JSON content type, отсутствие redirects и пересылки credentials;
+query-параметр не выбирает upstream. Login/callback/logout также не создают
+ненужную продуктовую транзакцию. Остальные product API сохраняют SSO/admission.
+
+Focused regression подтверждает public document/fonts при отказе create_uow,
+401 для anonymous phase read/write и соседнего private path. Реальный bootstrap
+на callback исполняется NodeVM с недоступным reader: host получает исходный
+error/login-required, private code не отражается, route/ready не отправляются.
+Type check и scoped lint PASS. Полные SSO/template/native и authenticated
+unknown-result/readback остаются отдельным открытым gate этого изменения.
 
 ## Предыдущие source-квалификации
 

@@ -35,6 +35,18 @@ python ../services-base/scripts/export_python_namespace.py --out project_workflo
 источники. Web runtime не обязан устанавливать HTTP SDK ради классификации PAT
 или чтения env. В CI checkout SDK использует read-only deploy key `SERVICES_BASE_DEPLOY_KEY`.
 
+Полный unit/PG набор также проверяет configured CLI с optional HTTP transport
+`pdlc-cli-core`. Его нужно подготовить отдельно: namespace export сам по себе не
+устанавливает transport. Для нового контракта требуются `max_response_bytes`,
+`trust_env` и структурированный `ApiError`; проверенный source начинается с Base
+`64c960464205edae6d85d5f297c1ae6b99ae0371`. Старый transport без этих параметров
+не подходит. Не меняйте `.base-revision` или UI/skills pins ради тестового окружения.
+Фиксируйте точный source HTTP SDK отдельно в evidence. При `uv run --isolated`
+передавайте `--with /absolute/qualified-base/base-modules/python/cli-core`;
+пакет из другого venv не наследуется. Для уже подготовленного Python environment
+допустим явный PYTHONPATH к этому exact source. Это подготовка тестов, не установка
+SDK в web runtime и не приёмка CLI установленной платформы.
+
 ```bash
 uv run --isolated --with-requirements constraints.txt --all-extras pytest -q --timeout=60
 uv run --isolated --with-requirements constraints.txt --all-extras pytest -q -m integration --timeout=120
@@ -68,6 +80,15 @@ JavaScript передаётся в Node через stdin с явным `encoding
 этого файла и4 skips. Причина13 отказов подтверждена отдельным traceback и
 устранена только в четырёх тестовых subprocess-вызовах. Ruff и mypy137 исходных
 файлов проходят.
+
+Configured CLI/HTTP/PostgreSQL E2E также явно запускает дочерний Python с
+`-X utf8`, поскольку subprocess читает и передаёт UTF-8. Настройка родительского
+интерпретатора не наследуется как флаг дочернего. Без этого Windows cp1251
+формирует JSON, не соответствующий указанному reader encoding; это ошибка
+подготовки test transport, а не PostgreSQL. Два адресных сценария проверяют
+сохранение кириллических отчётов, replay без дубликатов и отсутствие workflow
+файлов. При повторе исходные failures сохраняются отдельно; неизменные130
+integration cases не запускаются повторно.
 
 После исправления полный non-PG gate source
 `50ae18efebb5f8ffc56c682ce90b1bc5bdb13a41` прошёл:2910 passed,5 skipped,
