@@ -351,8 +351,11 @@ class TestSupervisorEngineEvaluateLLM:
     @pytest.mark.parametrize("report", [
         "Required Workflow command readback is absent; no result is available.",
         "Actual Workflow readback has namespace_id=3; the assigned namespace_id is 2.",
+        "Presentation contains only a summary; the required full saved document is absent.",
+        "The full saved document was presented, but no saved owner confirmation is available.",
+        "Presented document is revision 2/hash b; saved owner confirmation is for revision 1/hash a.",
     ])
-    def test_negative_readback_verdict_is_not_promoted_to_pass(self, engine, supervisor_llm, report):
+    def test_negative_evidence_verdict_is_not_promoted_to_pass(self, engine, supervisor_llm, report):
         supervisor_llm("PARTIAL")
         fixture_chat = OpenAICompatibleClient.chat
         original_phase = engine.current_phase_code
@@ -634,6 +637,56 @@ class TestEvaluatorV11PromptContract:
         assert "does not excuse absent required readbacks, failed commands, mismatched identities" in prompt
         assert "or contradictory results" in prompt
         assert "Use only the stated phase obligations" in prompt
+
+    def test_reported_full_presentation_and_matching_owner_consent_reach_the_evaluator(self):
+        instruction = (
+            "Present the FULL latest saved requirements document with exact revision/content_hash "
+            "and request explicit human owner confirmation. Never confirm as owner."
+        )
+        check = "The full latest saved requirements document and exact revision/hash were presented to owner."
+        evidence = "Full saved document, exact revision/hash and actual owner confirmation receipt."
+        phase = FakePhase(code="PM-DRAFT-03", instructions=[FakeInstruction(instruction)])
+        document = {
+            "goal": "A personal browser task list",
+            "scope": ["Add, complete and delete tasks"],
+            "exclusions": ["Accounts and server synchronization"],
+            "scenarios": ["Add a task and reload the browser"],
+            "acceptance_criteria": ["The saved task survives reload"],
+            "constraints": ["One user; browser-local storage"],
+            "dependencies": [],
+            "assumptions": ["Browser storage is available"],
+            "checklist": ["verify-reload"],
+            "prerequisites": ["browser-available"],
+        }
+        saved_document = json.dumps(document, sort_keys=True, indent=2)
+        digest = "a" * 64
+        report = (
+            f"# FULL saved document\nTask=synthetic-task; revision=1; content_hash={digest}\n"
+            f"{saved_document}\n"
+            "# Actual presentation\nIn the prior assistant message in this conversation, I displayed "
+            "this entire saved document with revision 1 and its exact content_hash to the owner. "
+            "The owner reviewed that full document before confirming it.\n"
+            f"# Saved authorized owner confirmation\nTask=synthetic-task; revision=1; content_hash={digest}; "
+            "owner_subject=synthetic-owner; confirmation_id=synthetic-consent; stage=Draft."
+        )
+        prompt = PromptBuilder.build_user_prompt(
+            "SDLC-13", phase, report,
+            evaluation_items=[("PM-DRAFT-03:check:217", check), ("PM-DRAFT-03:evidence:1", evidence)],
+        )
+
+        assert instruction in prompt
+        assert check in prompt
+        assert evidence in prompt
+        assert f'WORKER REPORT:\n"""{report}"""' in prompt
+        assert saved_document in prompt
+        system = PromptBuilder.SYSTEM_PROMPT
+        assert "when the contract does not require an independent presentation receipt or transcript" in system
+        assert "FULL saved document, matching saved confirmation from the authorized owner" in system
+        assert "concrete account of the actual presentation can be sufficient evidence" in system
+        assert "Do not demand an extra attestation or the earlier message itself" in system
+        assert "An intention to present is not a completed presentation" in system
+        assert "A summary cannot replace required FULL content" in system
+        assert "absent or mismatched owner confirmation remains missing evidence" in system
 
     def test_contradictory_current_facts_prohibit_pass(self):
         prompt = PromptBuilder.SYSTEM_PROMPT
