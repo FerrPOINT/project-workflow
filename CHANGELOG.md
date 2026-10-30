@@ -85,6 +85,19 @@
 
 
 ### Changed
+- 2026-10-30: evaluator `supervisor-evaluator-v11` respects phase-defined
+  evidence sufficiency for actual command readbacks and reported user-facing
+  presentation. No extra execution/presentation attestation is required unless
+  the phase contract requires it; full content, actual presentation and exact
+  saved owner consent remain mandatory. Reports use ordinary text/Markdown stdin.
+  Source `861e08c` passes 113 scoped mocked-provider/SQLite tests. Its exact image
+  passes isolated startup/migrations/health/OpenAPI QA and was installed by normal
+  Workflow-only Apply. The SAME assisted PM13 task/execution then reached final
+  Workflow PASS/history70/cursor23 and independently verified Tracker Backlog/Ready,
+  without Analyst/Analysis records for that task. Earlier failures remain history.
+  This is not fresh unassisted, all-role, full-gate or Kubernetes acceptance;
+  exact identities, image and local evidence are in
+  [the configured CLI record](docs/configured-cli-v1.md#scoped-pm13-evidence-2026-10-30).
 - Configured PM first-step reports explicitly include the already observed CLI
   stdout fields and Tracker task/input references. CLI JSON is flattened; do not
   invent HTTP ok/result wrappers or a future report verdict as evidence. Existing

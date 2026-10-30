@@ -112,10 +112,25 @@ Tracker assignment version и Workflow cursor version — разные счёт�
 
 ## Принятие отчёта и бизнес-завершение
 
+`--report -` читает обычный TEXT/Markdown из stdin; `--json` задаёт формат вывода,
+а не JSON envelope отчёта. JSON на stdin у отдельных команд Tracker остаётся
+их собственным mutation-контрактом. Отчёт содержит фактические результаты и
+evidence текущей фазы, а не инструкции вместо выполненной работы.
+
 Контракт фазы содержит текущую работу и уже существующие evidence. Он не требует
 собственного будущего receipt, ещё не опубликованного комментария или будущего
 перехода статуса. Reviewer/Tester могут полностью выполнить проверку и вернуть
 бизнес-результат rework; это не означает принятие дефектного кандидата.
+
+Evaluator `supervisor-evaluator-v11` сохраняет строгий LLM verdict, но учитывает
+достаточность evidence, явно заданную контрактом. Если фактические скопированные
+readbacks и сверка identity достаточны, отдельная attestation запуска команды
+не требуется. Если контракт не требует независимого presentation receipt или
+transcript, полный сохранённый документ, matching saved confirmation настоящего
+владельца и конкретное описание фактического показа могут быть достаточны.
+Намерение показать документ не равно показу; summary не заменяет FULL content.
+Отсутствующий или несовпадающий consent, ошибочные команды, identity mismatch
+и противоречия остаются недостаточными evidence. Нет auto-PASS или обхода LLM.
 
 У финального PM отчёта обязательны `--requirements-revision` и
 `--requirements-sha256`. Tracker должен подтвердить последнюю полную редакцию,
@@ -167,6 +182,60 @@ rows и migration ledger. Предыдущие manifest/catalog сохраняю
 Обычный unit/static gate не запускает живой Hermes. Ручной all-role/Rework прогон
 PDLC1, PostgreSQL на заполненной и новой БД, упакованные CLI, происхождение
 установленного образа и rollback остаются обязательными отдельными проверками.
+
+## Scoped PM13 Evidence 2026-10-30
+
+Это отдельные уровни доказательств, не один общий gate. Product/test source
+зафиксирован на `861e08c028985ff4cf717cabf9be98d0c60a42d0`; последующее
+документирование не меняет его, pins или установленный образ.
+
+- Source: `python -B -m pytest -q tests/test_llm.py tests/test_supervisor_reliability.py --timeout=60 -x`
+  дал **113 passed in 21.04s**. Это mocked evaluator и synthetic SQLite fixtures,
+  не реальный LLM/PG. Ruff, scoped mypy `llm.py`, diff/hygiene прошли;
+  все 53 dependency pins совпали. Полный suite/coverage/PG заново не выполнялись.
+- Exact image:
+  `sha256:5f25de5fc2d9f960a70a4d18bb35d1f8e531e7b07e57c181d3f143cbfe3f45c7`.
+  Отдельная QA на свежей БД прошла startup/migrations до
+  `0023_catalog_publication_author`, health database/schema/catalog и HTTP OpenAPI
+  (45 paths, 6 catalog operations); cleanup `cleaned`. Этот QA result сам
+  фиксирует `installed=false`, `live_publication_accepted=false`: это не live proof.
+- Установка подтверждена отдельно: normal Workflow-only Apply
+  `b32727db1be04068a2ae1fb10232fdb7`, journal phase `complete`.
+  Fleet/Hermes для этого evaluator fix не пересобирались.
+- Реальный LLM/CLI: SAME synthetic PM13 / `SDLC-13`, Tracker task
+  `01a18d7d-0d40-7452-8030-659cbe8b00cb`, Workflow execution
+  `29cc7a4f-adf0-46bd-ab5a-337c24c43973`, namespace/workflow `2`,
+  published catalog v3 / mode `22`. После установки v11 final history `70`
+  вернул `PASS`, `complete=true`, cursor `23`, status `done`; старые PARTIAL
+  и предыдущие попытки сохранены, не переименованы в успешные.
+- Tracker CLI завершил PM в Backlog/Ready. Независимый read-only PG snapshot
+  только этой task подтвердил revision `1`, `exact_owner_confirmation=true`,
+  одинаковый requirements/confirmation hash
+  `edceaf25fe74411c9ba2f6cad148c3d7eee5f8723c9d28827498d58e1e26f8c1`
+  и `analyst_assignments=0`, `analysis_intents=0`, `analysis_lifecycle_rows=0`.
+
+Это **assisted core-path acceptance** существовавшего task/execution: оператор
+помогал с evidence/presentation, владелец реально прочитал полный документ
+и сохранил точное подтверждение. Это не fresh unassisted acceptance и не
+доказательство, что одной смены prompt достаточно для всех модельных ответов.
+QA11/12 не объявляются успешными. Семь ролей/Rework, все release gates,
+Kubernetes, rollback и другие задачи этим результатом не квалифицированы.
+
+Локальные evidence интегратора находятся под
+`C:/git/azhukov/sdlc/.local/single-task-sdlc-20261013/phased-agent-release-20261029/`:
+
+- `evidence/workflow161-73b4f1bba1/result.json` (QA only), raw SHA256
+  `0d06c78b35bc1c4853856925b10185a7e775294804bf39729cc89bc6096206f8`;
+- `pm-runtime-recovery-20261030/synthetic-pm-v3-workflow-history.json`
+  (same execution, final history70);
+- `pm-runtime-recovery-20261030/synthetic-pm-v3-tracker-verify.json`
+  (independent task-scoped PG readback), raw SHA256
+  `093d667d92ceaf6929f5024ea316efd8361d35196be28a4facbc03a1b9258c71`.
+
+Apply journal хранится отдельно под
+`services-base/deploy/.local/workspace-updates/b32727db1be04068a2ae1fb10232fdb7/journal.json`
+основного workspace. Секреты, runtime DB и raw transcripts не публикуются
+в репозитории; исходные evidence не редактируются ради документации.
 
 ## Фактические инструкции в UI
 
