@@ -348,6 +348,27 @@ class TestSupervisorEngineEvaluateLLM:
         assert result["verdict"] == "BLOCKED"
         assert result["blockers"] == ["No access"]
 
+    @pytest.mark.parametrize("report", [
+        "Required Workflow command readback is absent; no result is available.",
+        "Actual Workflow readback has namespace_id=3; the assigned namespace_id is 2.",
+    ])
+    def test_negative_readback_verdict_is_not_promoted_to_pass(self, engine, supervisor_llm, report):
+        supervisor_llm("PARTIAL")
+        fixture_chat = OpenAICompatibleClient.chat
+        original_phase = engine.current_phase_code
+        with patch("project_workflow.supervisor.evaluate.OpenAICompatibleClient.chat") as chat:
+            chat.side_effect = fixture_chat
+            result = engine.evaluate(report)
+
+        chat.assert_called_once()
+        assert chat.call_args.kwargs["system"] == PromptBuilder.SYSTEM_PROMPT
+        assert report in chat.call_args.kwargs["user"]
+        assert result["verdict"] == "PARTIAL"
+        assert result["missing"]
+        assert result["next_phase_code"] is None
+        assert engine.current_phase_code == original_phase
+        assert engine.db.tasks.get_by_id(engine.task["id"]).to_dict()["status"] != "done"
+
     def test_evaluate_llm_fails_closed_on_provider_failure(self, engine):
         with patch(
             "project_workflow.supervisor.evaluate.OpenAICompatibleClient.chat",
@@ -564,11 +585,55 @@ class TestOpenAICompatibleClientOverrides:
         assert client.timeout == 300
 
 
-class TestEvaluatorV10PromptContract:
+class TestEvaluatorV11PromptContract:
     """The live provider receives explicit contradiction and chronology rules."""
 
-    def test_prompt_version_invalidates_the_old_backtracking_policy(self):
-        assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v10"
+    def test_prompt_version_invalidates_the_old_evidence_policy(self):
+        assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v11"
+
+    def test_phase_actual_readback_sufficiency_reaches_the_evaluator(self):
+        instruction = (
+            "Copy the actual top-level stdout fields and compare task/assignment/agent identities. "
+            "The saved actual response plus these identity checks and task/context/input readbacks "
+            "are sufficient; do not demand additional proof that a genuine stdout is genuine."
+        )
+        evidence = "Actual first Workflow step response and task/input references."
+        phase = FakePhase(code="PM-DRAFT-01", instructions=[FakeInstruction(instruction)])
+        report = (
+            "Actual first Workflow step response (copied stdout): interaction_protocol=configured-cli-v1; "
+            "task=SDLC-13; namespace_id=2; phase_code=PM-DRAFT-01; version=1; status=active; "
+            "concrete_agent_ref=00000000-0000-4000-8000-000000000001; "
+            "assignment_ref=00000000-0000-4000-8000-000000000002; "
+            "execution_ref=00000000-0000-4000-8000-000000000003; "
+            "business_task_ref=00000000-0000-4000-8000-000000000004.\n"
+            "Tracker context readback: task_id=root_task_id=00000000-0000-4000-8000-000000000004; "
+            "assignment.assignment_id=00000000-0000-4000-8000-000000000002; "
+            "assignment.agent_id=00000000-0000-4000-8000-000000000001; workflow_task_key=SDLC-13; "
+            "stage=Draft; status=Ready. These identities match the Workflow readback.\n"
+            "Input readback: same task/root; snapshot_ref=00000000-0000-4000-8000-000000000005; "
+            "title=Synthetic brief; description=One browser task list.\n"
+            "Discussion readback: comments=[]; snapshot=null; next_after=null."
+        )
+        prompt = PromptBuilder.build_user_prompt(
+            "SDLC-13", phase, report,
+            evaluation_items=[("PM-DRAFT-01:evidence:143", evidence)],
+        )
+
+        assert instruction in prompt
+        assert evidence in prompt
+        assert f'WORKER REPORT:\n"""{report}"""' in prompt
+        assert 'ID: "PM-DRAFT-01:evidence:143"' in prompt
+        system = PromptBuilder.SYSTEM_PROMPT
+        assert "The phase contract defines the required evidence format and sufficiency" in system
+        assert "When it accepts copied command readbacks and identity comparisons as sufficient" in system
+        assert "do not require an additional command transcript, execution attestation" in system
+        assert "unless the contract explicitly requires it" in system
+
+    def test_readback_sufficiency_does_not_excuse_missing_or_mismatched_evidence(self):
+        prompt = PromptBuilder.SYSTEM_PROMPT
+        assert "does not excuse absent required readbacks, failed commands, mismatched identities" in prompt
+        assert "or contradictory results" in prompt
+        assert "Use only the stated phase obligations" in prompt
 
     def test_contradictory_current_facts_prohibit_pass(self):
         prompt = PromptBuilder.SYSTEM_PROMPT
