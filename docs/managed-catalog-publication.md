@@ -127,6 +127,51 @@ does not acquire publication controls in this package; integrating its editor
 with these explicit JSON operations is separate work, not an implicit save hook.
 This API-only package does **not** constitute accepted text editing in the UI.
 
+### Portable Accepted PM Configuration
+
+[pm-instructions-20261030.json](evidence/pm-instructions-20261030.json) exports
+the accepted PM text as operator configuration, not a new sealed default or an
+agent bootstrap/input file. It contains only `workflow_key`, `role_key`, `modes`
+and the canonical normalized-modes hash
+`2cf8ae3d1d7c3f1592eed6329942d7cdaafe0fa98d38a6264e7be4e36b19c382`.
+Stand-specific workflow/mode IDs, catalog version, publisher identity and time
+are intentionally absent. This preserves the text used in the assisted PM13
+acceptance [record](configured-cli-v1.md#scoped-pm13-evidence-2026-10-30), not a
+claim of fresh unassisted acceptance on another machine.
+
+On a compatible fresh installation with the sealed single-task family and
+publication API installed, use the existing verified human administrator access:
+
+1. Discover workflows with `GET /api/workflows`; if filtering by profession,
+   discover its actual ID through `GET /api/namespaces`, then use
+   `GET /api/workflows?namespace_id=<actual-namespace-id>`. Select the actual
+   workflow whose `key` equals export `workflow_key`; retain its real ID `W`.
+   Do not transplant the source stand's numeric IDs or catalog version.
+2. `GET /api/workflows/W/catalog`. Retain returned `revision.catalog_version`
+   and `revision.content_sha256` as the actual base CAS. If its normalized modes
+   and hash already match the export, readback is sufficient; no append is needed.
+3. `POST /api/workflows/W/catalog/drafts` with only
+   `{expected_version: <actual-base-version>, expected_sha256: <actual-base-hash>, modes: <export.modes>}`.
+   Do not POST the export envelope. Retain returned `revision.catalog_version`
+   as draft `D` and `revision.content_sha256` as its hash. Read saved draft
+   `/catalog/drafts/D` and require content/hash equal to the export before publish.
+4. `POST /api/workflows/W/catalog/drafts/D/publication` with
+   `{expected_version: <same-base-version>, expected_sha256: <same-base-hash>, draft_sha256: <returned-draft-hash>, operation_key: <stable-deployment-key>}`.
+   Use one stable key for this exact deployment operation, not a new key per retry.
+   After unknown acceptance, read `/catalog/publications/operations/<same-key>`;
+   do not blindly resend or rewrite the original body/CAS/key. For an unknown
+   draft-save result, read pending/exact drafts and compare complete content/hash;
+   the highest pending draft alone is not proof that it belongs to this import.
+5. Read the publication operation and current catalog; require the selected
+   content/hash to match the export. A stale CAS or mismatch stops the import
+   for review; never automatically overwrite a concurrent publication.
+
+These are deployment-time configuration operations through the existing API,
+not per-message files, a new tool, SQL writes or changes to sealed v1 sources.
+Only new tasks/new cycles select the new text. Existing unfinished executions,
+their assigned modes, reports and receipts remain immutable; this import does
+not adopt or restart them. Normal access/assignment/owner guards are unchanged.
+
 ### Editor Handoff
 
 After Zeno UI's main package: read active snapshot; save text against its exact

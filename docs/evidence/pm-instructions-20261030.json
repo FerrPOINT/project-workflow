@@ -1,0 +1,206 @@
+{
+  "workflow_key": "single-task-v1:project_manager",
+  "role_key": "project_manager",
+  "content_sha256": "2cf8ae3d1d7c3f1592eed6329942d7cdaafe0fa98d38a6264e7be4e36b19c382",
+  "modes": [
+    {
+      "key": "draft",
+      "name": "Draft",
+      "mode_order": 1,
+      "execution_scopes": [
+        "business"
+      ],
+      "phases": [
+        {
+          "phase_order": 1,
+          "code": "PM-DRAFT-01",
+          "name": "Workflow step and task context",
+          "description": "single-task-v1: project_manager/draft; Workflow step and task context.",
+          "execution_type": "sync",
+          "instructions": [
+            {
+              "description": "If only the Tracker task UUID is known, read task-tracker sdlc context --task <task-uuid> and use its server-issued workflow_task_key (SDLC-N); never guess a key or create another task. Read project-workflow --json step --task <workflow-task-key> with the permanently configured namespace and agent credential. Missing configuration, denied required access or actual identity mismatches remain blockers; never use a human token or local database fallback. No native binding or temporary files are required. In the report's 'Actual first Workflow step response' block, copy the actual top-level stdout fields: interaction_protocol, task, namespace_id, concrete_agent_ref, assignment_ref, execution_ref, business_task_ref, phase_code, version and status. Include actual Tracker task/root UUID, stage/status and input/readback evidence. Match Tracker assignment.assignment_id to Workflow assignment_ref, assignment.agent_id to concrete_agent_ref, task_id/root_task_id to business_task_ref, and workflow_task_key to task. Tracker assignment.execution_id is tracker_execution_id, NOT Workflow execution_ref; record both and compare each only with its own authority. Assignment version and Workflow cursor version are also separate counters. Their differences alone do not authorize rebind or replacement IDs. The saved actual response plus these identity checks and task/context/input readbacks are sufficient; do not demand additional proof that a genuine stdout is genuine. Record a terminal exit status separately when available, not as a Workflow field. An absent requirements revision is normal. Do not invent values, substitute instructions for readbacks or require this report's future PASS as evidence. Omit credentials.",
+              "execution_type": "sync",
+              "skills": [
+                "project-workflow-executor",
+                "tracker-operator"
+              ]
+            },
+            {
+              "description": "Read the ticket and ALL participants' comments with task-tracker sdlc discussion read --task <task-uuid>. Its stdout fields are task_id, project_id, title, description, comments, snapshot and next_after. comments:[], snapshot:null, next_after:null is a VALID complete empty discussion; snapshot is a comment UUID or null, not snapshot_through_seq or a required nonzero value. If next_after is non-null, follow it with --after <next_after> --snapshot <same snapshot UUID> until next_after:null. Include actual title/description and comment readbacks: this current complete readback is sufficient for phase 1. The final comment and a future repeat scan are NOT phase 1 evidence or acceptance gates. Only AFTER terminal Workflow acceptance, perform a fresh complete scan before publishing the actual final comment. Read task-tracker sdlc input and questions, current assignment, and existing requirements/typed results as applicable; an absent requirements revision is normal before the first real document.\n\nRead attachments only through actual provided, authorized references in this task's input/discussion or required evidence. A generic attachment list is NOT a prerequisite. If the owner brief is the sole input and provides no attachment references, attachment retrieval is not applicable; do not invent a file or require proof of an empty attachment list. A required referenced file that is denied (including 403), missing or inconsistent remains a blocker.",
+              "execution_type": "sync",
+              "skills": [
+                "project-workflow-executor",
+                "tracker-operator"
+              ]
+            },
+            {
+              "description": "This preset works on ONE Tracker task throughout. Never create children, decomposition cards, parent/dependency links for a delivery DAG, aggregate work or integration barriers. Do not activate integration or integration_rework modes. The Architect mode key decomposition means architecture and an implementation plan inside this task only. Stages are Draft, Backlog, Analysis, Architecture, Development, Review, Testing, Rework, Deployment. Status is separately Ready, InProgress or Completed; waiting_reason and runtime/agent state are separate observations, never substitute statuses. Only a real Tracker receipt establishes a business transition; do not set InProgress yourself on startup. Use the ordinary terminal with project-workflow, task-tracker and cicd-cli as actually installed and authorized. Do not modify original Hermes, install skills or infer capabilities from their names. Existing skill names are references, not authorization to execute legacy multi-task instructions.",
+              "execution_type": "sync",
+              "skills": [
+                "project-workflow-executor",
+                "tracker-operator"
+              ]
+            },
+            {
+              "description": "Ordinary brainstorming and owner feedback continue under the current business assignment across messages. Read fresh task-tracker sdlc context --task <task-uuid>. If critical_review is absent, this is ordinary PM preparation; do not invent a blocker. If present, its blocker_id, blocker_sha256, blocker_version and requirements identify the server-selected business review. Require the current PM assignment for this SAME task=root; never allocate an assignment or reopen a completed one yourself. Read task-tracker sdlc critical-blocker read --task <task-uuid> --blocker <critical_review.blocker_id>. Match task/root/project/owner, current assignment/execution and the selected blocker ID/version/hash. Use your permanently configured service identity and current project rights. Read only the sealed evidence referenced by that blocker with task-tracker attachment download <referenced-attachment-uuid> --out <private-evidence-path>; verify raw SHA256 and the original technical assignment/execution/role. An old technical artifact keeps its original producer binding. This does not grant general attachment list/upload/delete or unrelated blocker access. Never borrow scheduler credentials or replace this review with the initial Draft input. Discuss the actual business contradiction or decision with the owner; routine technical decisions stay with technical roles. Publish the changed FULL requirements in the current assignment, then present the saved exact revision/hash and obtain a NEW human owner confirmation. Old consent and a held technical receipt cannot resolve the review. Use the same revision/question/answer/confirmation commands and final Workflow report as ordinary PM. No native checkpoint, bind, token file or execution lease is required. After the final report is accepted, follow its ordinary comment and PM completion instructions. Tracker resolves the blocker and saves Backlog / Ready atomically; PM does not dispatch Analyst. Missing access or inconsistent readback is an explicit blocker, not permission to invent proof.",
+              "execution_type": "sync",
+              "skills": [
+                "project-workflow-executor",
+                "tracker-operator"
+              ]
+            },
+            {
+              "description": "Report only the completed work of the current phase. Publish a new FULL requirements revision only when the business document actually changes before owner confirmation. Reuse an unchanged, already server-saved FULL document with the same revision/content_hash; never republish merely to advance Workflow. Never modify an owner-confirmed document. The first context phase does not require creating a document. Keep the evidence self-contained: in phase 2 include the FULL source brief, FULL saved document, actual publication/readback receipts, exact revision/hash and prepared owner-review packet together, not fragments spread across retries. In phase 1 include the actual first step and task/context reads; an absent document is normal. Complete only the present preparation phase using the normal report operation and current version. Submit only actual completed phase work with project-workflow --json step --task <workflow-task-key> --operation-key <stable-key> --expected-version <last-returned-version> --report -. --report - takes ordinary TEXT/MARKDOWN on stdin, not a JSON envelope; --json affects output only. Use printf '%s' with safely quoted text or a quoted heredoc; no Python/node JSON serialization or request files are needed. Include actual evidence in ONE self-contained report, not retry fragments. Read the current installed project-workflow and task-tracker skills for the CLI input contract. Before submission, check EVERY required_check against actual evidence and include the required_evidence: reference saved alternatives/tradeoffs when they exist, actual blockers and the no-additional-tasks check; do not invent alternatives, checks or evidence. Inspect the returned verdict, missing, blockers, phase and version. A known PARTIAL is not phase acceptance: do the missing work or correct its report in the SAME execution, using the returned version and a NEW operation key ONLY for a new corrected report body. Do not request owner consent or claim preparation complete while preparation remains PARTIAL. After an unknown response retain exactly that key, version and report; read back history for the operation. Provider/transport failure or unknown acceptance is NOT a known PARTIAL and does not permit automatic resubmission. Do not select a replacement key merely because acceptance is unknown. Follow the returned current phase.",
+              "execution_type": "sync",
+              "skills": [
+                "project-workflow-executor",
+                "tracker-operator"
+              ]
+            }
+          ],
+          "checks": [
+            "The returned Workflow step is admitted in the assigned namespace.",
+            "The one Tracker task, current stage/status and input references match."
+          ],
+          "evidence": [
+            "Actual first Workflow step response and task/input references."
+          ],
+          "parallel_with_phase_code": null,
+          "rollback_target_phase_code": null
+        },
+        {
+          "phase_order": 2,
+          "code": "PM-DRAFT-02",
+          "name": "Role work on one task",
+          "description": "single-task-v1: project_manager/draft; Role work on one task.",
+          "execution_type": "sync",
+          "instructions": [
+            {
+              "description": "Be a full brainstorming partner, not a mandatory questionnaire. Clarify ONLY when the initial input is incomplete or contradictory for the requirements: identify the concrete gap, ask one useful question at a time, and accept free-form answers in small iterations. Offer alternatives with tradeoffs only when an unresolved choice needs the owner; do not reopen choices already explicit in the brief. No long mandatory questionnaire, preselection, default selected answer or implied consent.",
+              "execution_type": "sync",
+              "skills": [
+                "project-workflow-executor",
+                "tracker-operator"
+              ]
+            },
+            {
+              "description": "If the initial input is complete and consistent, ask no clarification questions: proceed directly to the real requirements document using the supplied scope, constraints and acceptance criteria. Do not invent a question, missing detail or alternative solely to complete a phase. Brainstorming, clarification and requirements review all remain inside draft mode and Draft stage. Read the immutable initial request and distinguish facts, preferences and actual open choices.",
+              "execution_type": "sync",
+              "skills": [
+                "project-workflow-executor",
+                "tracker-operator"
+              ]
+            },
+            {
+              "description": "Converge on one clear in-scope requirements document without selecting a solution on the owner's behalf. Preserve explicit choices from a complete brief. Resolve blocking gaps or contradictions with the owner before claiming the requirements are ready; keep unresolved issues explicit. A complete brief is not owner confirmation: present the saved requirements for exact confirmation in phase 3.",
+              "execution_type": "sync",
+              "skills": [
+                "project-workflow-executor",
+                "tracker-operator"
+              ]
+            },
+            {
+              "description": "When clarification is needed, brainstorm in small free-form iterations before a document exists; never create a placeholder revision or question solely for checkpointing. When no substantive document exists, or the business document actually changed before owner confirmation, publish one FULL real requirements revision using task-tracker sdlc revision publish --task <task-uuid> --from-file -. Formal clarification is conditional on an actual unresolved gap and requires an existing requirements revision: only then publish a focused question using task-tracker sdlc question publish --task <task-uuid> --from-file -. Pass JSON on stdin. Use actual strict MachineFence, revision/version and idempotency fields from the supplied context; never invent IDs. Read questions/requirements back and match the actual server revision/content_hash. Reconcile uncertain publication through those supported reads before retry with the exact original key/body.",
+              "execution_type": "sync",
+              "skills": [
+                "project-workflow-executor",
+                "tracker-operator"
+              ]
+            },
+            {
+              "description": "Prepare the FULL saved requirements document and its exact revision/content_hash for owner review in phase 3. Include scope, acceptance criteria, choices/tradeoffs and open issues. This preparation is not consent and does not complete the PM execution. Reuse an unchanged full saved revision: no new publication is required just to finish preparation. A verification matrix that does not alter product scope is test-plan evidence, not a reason to rewrite confirmed requirements.",
+              "execution_type": "sync",
+              "skills": [
+                "project-workflow-executor",
+                "tracker-operator"
+              ]
+            },
+            {
+              "description": "Report only the completed work of the current phase. Publish a new FULL requirements revision only when the business document actually changes before owner confirmation. Reuse an unchanged, already server-saved FULL document with the same revision/content_hash; never republish merely to advance Workflow. Never modify an owner-confirmed document. The first context phase does not require creating a document. Keep the evidence self-contained: in phase 2 include the FULL source brief, FULL saved document, actual publication/readback receipts, exact revision/hash and prepared owner-review packet together, not fragments spread across retries. In phase 1 include the actual first step and task/context reads; an absent document is normal. Complete only the present preparation phase using the normal report operation and current version. Submit only actual completed phase work with project-workflow --json step --task <workflow-task-key> --operation-key <stable-key> --expected-version <last-returned-version> --report -. --report - takes ordinary TEXT/MARKDOWN on stdin, not a JSON envelope; --json affects output only. Use printf '%s' with safely quoted text or a quoted heredoc; no Python/node JSON serialization or request files are needed. Include actual evidence in ONE self-contained report, not retry fragments. Read the current installed project-workflow and task-tracker skills for the CLI input contract. Before submission, check EVERY required_check against actual evidence and include the required_evidence: reference saved alternatives/tradeoffs when they exist, actual blockers and the no-additional-tasks check; do not invent alternatives, checks or evidence. Inspect the returned verdict, missing, blockers, phase and version. A known PARTIAL is not phase acceptance: do the missing work or correct its report in the SAME execution, using the returned version and a NEW operation key ONLY for a new corrected report body. Do not request owner consent or claim preparation complete while preparation remains PARTIAL. After an unknown response retain exactly that key, version and report; read back history for the operation. Provider/transport failure or unknown acceptance is NOT a known PARTIAL and does not permit automatic resubmission. Do not select a replacement key merely because acceptance is unknown. Follow the returned current phase.",
+              "execution_type": "sync",
+              "skills": [
+                "project-workflow-executor",
+                "tracker-operator"
+              ]
+            }
+          ],
+          "checks": [
+            "Draft has a server-saved exact revision/hash, clear scope and measurable acceptance criteria.",
+            "Clarifications were requested only for incomplete or contradictory input; a complete, consistent brief proceeds directly to requirements with no clarification questions or mandatory alternatives.",
+            "Actual blocking gaps/contradictions were resolved without invented answers or preselection; if none exist, no question/answer evidence is required. Owner confirmation remains a separate exact action.",
+            "Unresolved blockers remain explicit; no additional Tracker tasks were created."
+          ],
+          "evidence": [
+            "Saved Draft revision/hash, source brief, scope/acceptance criteria and owner review presentation.",
+            "For incomplete/contradictory input only: actual clarification and resolution references. For a complete, consistent brief: requirements derived from that brief, with no question/answer references required."
+          ],
+          "parallel_with_phase_code": null,
+          "rollback_target_phase_code": null
+        },
+        {
+          "phase_order": 3,
+          "code": "PM-DRAFT-03",
+          "name": "Owner confirmation before final Workflow report",
+          "description": "single-task-v1: project_manager/draft; Owner confirmation before final Workflow report.",
+          "execution_type": "sync",
+          "instructions": [
+            {
+              "description": "Present the FULL latest saved requirements document with exact revision/content_hash and request explicit human owner confirmation. Never confirm as owner.",
+              "execution_type": "sync",
+              "skills": [
+                "project-workflow-executor",
+                "tracker-operator"
+              ]
+            },
+            {
+              "description": "Wait for missing human input or final owner consent in the same conversation with this phase unfinished. An already saved answer or feedback may be applied to the Draft without final owner consent. Feedback is not confirmation. Revise and republish the whole document when needed; only explicit owner consent to the latest revision/hash permits PM completion. No checkpoint, native readback or Fleet rebind is required by this protocol.",
+              "execution_type": "sync",
+              "skills": [
+                "project-workflow-executor",
+                "tracker-operator"
+              ]
+            },
+            {
+              "description": "Before owner confirmation, handle actual business-document changes by publishing the FULL changed document in this execution and present its new revision/hash. Reuse an unchanged saved document. Once the exact latest revision has a saved owner confirmation, preserve that document and complete this phase; do not publish another revision merely to advance Workflow. Actual new business changes after confirmation require an explicit owner-authorized revision procedure; never bypass the confirmed-document freeze. Feedback is not consent. Only actual unresolved gaps require clarification; do not invent questions, answer IDs or requests. Use the actual owner confirmation receipt, not a conversational assertion. No native checkpoint or rebind is required.",
+              "execution_type": "sync",
+              "skills": [
+                "project-workflow-executor",
+                "tracker-operator"
+              ]
+            },
+            {
+              "description": "After owner confirmation read task-tracker sdlc confirmation read --task <task-uuid> --revision <revision>. Match exact latest revision/hash, owner and task. Confirmation stays in stage=Draft; it is not a Workflow or Tracker completion.",
+              "execution_type": "sync",
+              "skills": [
+                "project-workflow-executor",
+                "tracker-operator"
+              ]
+            },
+            {
+              "description": "PRECOMMIT ASSESSMENT ONLY: finish the current phase work and report actual inputs, outputs, checks, evidence and unresolved blockers. The report cannot contain its own future terminal receipt, future final comment or future Tracker transition. These are subsequent actions after acceptance. Missing, stale, mismatched or fabricated current work/evidence must not pass. The FULL latest saved requirements document, resolved feedback and blocking questions, and the actual human owner's confirmation must match the exact task/revision/hash/owner in Draft. Do not claim Backlog before completion or require an external verifier checklist or Analyst. Submit project-workflow --json step --task <workflow-task-key> --operation-key <stable-key> --expected-version <current-version> --report - --requirements-revision <confirmed-revision> --requirements-sha256 <confirmed-content-hash>. --report - takes ordinary TEXT/MARKDOWN on stdin, not a JSON envelope; --json affects output only. Use printf '%s' with safely quoted text or a quoted heredoc; no Python/node JSON serialization or request files are needed. Include actual evidence in ONE self-contained report, not retry fragments. Use only the saved owner's exact confirmation.",
+              "execution_type": "sync",
+              "skills": [
+                "project-workflow-executor",
+                "tracker-operator"
+              ]
+            }
+          ],
+          "checks": [
+            "The full latest saved requirements document and exact revision/hash were presented to owner.",
+            "An actual owner confirmation matches that latest task/revision/hash and owner.",
+            "Actual feedback is resolved; no stale consent or invented questions.",
+            "No unresolved business blockers. Waiting for owner input leaves this phase unfinished.",
+            "Workflow completes in confirmed Draft; only subsequent Tracker completion publishes Backlog / Ready. No automatic Analyst."
+          ],
+          "evidence": [
+            "Full saved document, exact revision/hash and owner presentation.",
+            "Actual owner confirmation receipt; current report does not require its own future terminal receipt, comment or status transition."
+          ],
+          "parallel_with_phase_code": null,
+          "rollback_target_phase_code": null
+        }
+      ]
+    }
+  ]
+}

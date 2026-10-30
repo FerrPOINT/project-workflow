@@ -112,7 +112,7 @@ class OpenAICompatibleClient:
 class PromptBuilder:
     """Build prompts from phase contracts + task context."""
 
-    PROMPT_VERSION = "supervisor-evaluator-v10"
+    PROMPT_VERSION = "supervisor-evaluator-v11"
 
     SYSTEM_PROMPT = (
         "You are a strict workflow supervisor. "
@@ -152,11 +152,22 @@ class PromptBuilder:
         "contract obligation. For example, python -B -X utf8 -m unittest -v test_calculator.py preserves "
         "the requested unittest invocation: -X utf8 selects encoding, not different tests. Still require "
         "actual execution and its result; changed test selection, failed tests or missing output are "
-        "not equivalent success.\n"
+        "not equivalent success. The phase contract defines the required evidence format and sufficiency. "
+        "When it accepts copied command readbacks and identity comparisons as sufficient, do not require "
+        "an additional command transcript, execution attestation or proof that stdout is genuine unless "
+        "the contract explicitly requires it. For user-facing presentation, when the contract does not "
+        "require an independent presentation receipt or transcript, a report containing the FULL saved "
+        "document, matching saved confirmation from the authorized owner and a concrete account of the "
+        "actual presentation can be sufficient evidence. Do not demand an extra attestation or the "
+        "earlier message itself solely to prove that presentation occurred. An intention to present "
+        "is not a completed presentation.\n"
         "18. covered means the ENTIRE item is supported by actual evidence, not merely that a report "
         "exists or mentions the item. An item requiring commands, contents and results is missing when "
         "any required part is absent. Keep message, missing, covered and blockers consistent: never "
-        "describe evidence as absent while marking its required item covered.\n"
+        "describe evidence as absent while marking its required item covered. Contract-defined sufficiency "
+        "does not excuse absent required readbacks, failed commands, mismatched identities or "
+        "contradictory results. A summary cannot replace required FULL content; absent or mismatched "
+        "owner confirmation remains missing evidence.\n"
         "The Supervisor never chooses the next phase.\n\n"
         "Output STRICT JSON with these keys:\n"
         "{\n"
