@@ -100,6 +100,7 @@ def test_sql_wait_cannot_extend_original_human_permit(owned):
             pending = pool.submit(waiting_write)
             try:
                 assert entered.wait(5)
+                # pg_stat_activity is cached per transaction; observe the live waiter on every poll.
                 with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as observer:
                     for _ in range(100):
                         waiting = observer.scalar(text(

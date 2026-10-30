@@ -20,7 +20,7 @@ function Invoke-Test {
 }
 
 function Invoke-TestIntegration {
-    Invoke-Checked ($Uv + @("pytest", "-q", "-m", "integration", "tests/test_postgres_integration.py", "--timeout=120"))
+    Invoke-Checked ($Uv + @("pytest", "-q", "-m", "integration", "--timeout=120"))
 }
 
 function Invoke-Coverage {

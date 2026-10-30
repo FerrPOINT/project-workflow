@@ -18,8 +18,13 @@ function setPhaseView(view,persist=true){
   const timeline=document.getElementById('phasesTimeline');
   if(!timeline||!['compact','timeline'].includes(view))return;
   timeline.classList.toggle('is-compact',view==='compact');
-  timeline.querySelectorAll('.phase-card-shell').forEach(card=>{
+  timeline.dataset.dividers=view==='compact'?'start':'none';
+  timeline.querySelectorAll('[data-phase-divider]').forEach(section=>{
+    section.dataset.dividers=view==='compact'?section.dataset.phaseDivider:'none';
+  });
+  timeline.querySelectorAll('a.timeline-card').forEach(card=>{
     card.classList.toggle('base-card',view==='timeline');
+    card.classList.toggle('base-card-content',view==='timeline');
     card.classList.toggle('base-resource-list-row',view==='compact');
   });
   document.querySelectorAll('#phaseView input[name="phase-view"]').forEach(input=>{

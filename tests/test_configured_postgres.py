@@ -226,7 +226,7 @@ def test_cli_process_http_and_postgres_keep_one_report_and_no_workflow_files(
 
     def cli(*arguments, report=None):
         completed = subprocess.run(
-            [sys.executable, "-m", "project_workflow.interfaces.cli", "--json", *arguments],
+            [sys.executable, "-X", "utf8", "-m", "project_workflow.interfaces.cli", "--json", *arguments],
             input=report, cwd=Path(__file__).resolve().parents[1], env=environment,
             capture_output=True, text=True, encoding="utf-8", timeout=30, check=False,
         )
@@ -240,8 +240,8 @@ def test_cli_process_http_and_postgres_keep_one_report_and_no_workflow_files(
                      "--expected-version", str(version)]
         if configured[1]["role_key"] == "project_manager" and version == 3:
             arguments += ["--requirements-revision", "7", "--requirements-sha256", "a" * 64]
-        accepted = cli(*arguments, report=f"Actual subprocess report {version}")
-        assert cli(*arguments, report=f"Actual subprocess report {version}") == accepted
+        accepted = cli(*arguments, report=f"Отчёт subprocess №{version}")
+        assert cli(*arguments, report=f"Отчёт subprocess №{version}") == accepted
     assert accepted["complete"] is True
     assert accepted["execution_ref"] == initial["execution_ref"]
     records = cli("history", *base)["records"]
@@ -249,4 +249,7 @@ def test_cli_process_http_and_postgres_keep_one_report_and_no_workflow_files(
     assert set(tmp_path.rglob("*")) == before
     with SAUnitOfWork() as uow:
         assert uow.session.scalar(select(func.count()).select_from(m.TaskStepHistoryEntry)) == 3
+        assert list(uow.session.scalars(
+            select(m.TaskStepHistoryEntry.worker_report).order_by(m.TaskStepHistoryEntry.id)
+        )) == [f"Отчёт subprocess №{version}" for version in (1, 2, 3)]
         assert uow.session.scalar(select(func.count()).select_from(m.PMRun)) == 0

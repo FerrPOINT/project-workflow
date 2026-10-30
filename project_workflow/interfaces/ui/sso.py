@@ -34,7 +34,11 @@ from project_workflow.interfaces.ui.templates import templates
 _CLIENT_ID = "project-workflow"
 _SESSION_COOKIE = "workflow_sso"
 _TRANSACTION_COOKIE = "workflow_oidc_state"
-_PUBLIC_PATHS = frozenset({"/health", "/login", "/sso/callback", "/logout", "/ui-assets/htmx-2.0.11.min.js"})
+
+# The branding bridge reads only its configured public source; callers cannot select an upstream.
+_PUBLIC_PATHS = frozenset({
+    "/health", "/login", "/sso/callback", "/logout", "/ui-assets/htmx-2.0.11.min.js", "/api/platform/branding",
+})
 
 
 def _cipher(settings: Settings) -> Fernet:
@@ -98,6 +102,7 @@ class _SsoMiddleware(BaseHTTPMiddleware):
         if path in _PUBLIC_PATHS or path.startswith((
             "/internal/runtime/", "/api/pm/namespace-ownership/", "/api/internal/v1/user-deletions/",
             "/ui-assets/controllers/",
+            "/base-assets/fonts/",
         )):
             return await call_next(request)
         canonical_hostname = urlparse(settings.AUTH_PUBLIC_ORIGIN).hostname

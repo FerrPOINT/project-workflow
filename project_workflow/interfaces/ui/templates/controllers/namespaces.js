@@ -49,11 +49,10 @@ function updateNamespaceThemePreview(){
 }
 function renderNamespaceIconChoice(option){
   var visual = document.createElement('span');
-  visual.innerHTML = namespaceIconSvg(option.value);
-  var svg = visual.querySelector('svg');
-  svg.setAttribute('width', '20');
-  svg.setAttribute('height', '20');
-  svg.style.color = document.getElementById('namespaceThemeColor').value || defaultNamespaceThemeColor;
+  var mark = document.getElementById('namespace-choice-mark-template').content.firstElementChild.cloneNode(true);
+  mark.querySelector('path').setAttribute('d', namespaceIconPaths[option.value] || namespaceIconPaths[defaultNamespaceThemeIcon]);
+  mark.style.setProperty('--base-icon-mark-color', document.getElementById('namespaceThemeColor').value || defaultNamespaceThemeColor);
+  visual.appendChild(mark);
   var name = document.createElement('span');
   name.className = 'base-visually-hidden';
   name.textContent = option.label;
@@ -224,42 +223,22 @@ function renderNamespaceNav(){
   var nav = document.getElementById('namespaceNav');
   nav.replaceChildren();
   namespaceStore.forEach(function(namespace){
-    var button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'namespace-nav-item base-card base-card-content';
-    button.dataset.interactive = 'true';
+    var button = document.getElementById('namespace-card-template').content.firstElementChild.cloneNode(true);
     button.dataset.namespaceId = String(namespace.id);
     button.setAttribute('aria-controls', 'namespaceForm');
     button.setAttribute('aria-pressed', 'false');
-    button.style.setProperty('--namespace-color', namespace.theme_color || defaultNamespaceThemeColor);
     button.onclick = function(){ selectNamespace(namespace.id); };
 
-    var mark = document.createElement('span');
-    mark.className = 'namespace-mark';
-    mark.setAttribute('aria-hidden', 'true');
-    mark.innerHTML = namespaceIconSvg(namespace.theme_icon);
+    var mark = button.firstElementChild;
+    mark.style.setProperty('--base-icon-mark-color', namespace.theme_color || defaultNamespaceThemeColor);
+    mark.querySelector('path').setAttribute('d', namespaceIconPaths[namespace.theme_icon || defaultNamespaceThemeIcon] || namespaceIconPaths[defaultNamespaceThemeIcon]);
 
-    var body = document.createElement('span');
-    body.className = 'namespace-card-body';
-
-    var name = document.createElement('span');
-    name.className = 'namespace-name base-card-title';
+    var name = button.querySelector('.namespace-name');
     name.textContent = namespace.name;
 
-    var meta = document.createElement('span');
-    meta.className = 'namespace-meta';
-
-    var tasks = document.createElement('span');
-    tasks.className = 'base-badge';
-    tasks.dataset.tone = 'muted';
-    tasks.dataset.appearance = 'inline';
+    var tasks = button.querySelector('.namespace-meta').firstElementChild;
     tasks.textContent = pluralizeRu(namespace.task_count, 'задача', 'задачи', 'задач');
 
-    meta.appendChild(tasks);
-    body.appendChild(name);
-    body.appendChild(meta);
-    button.appendChild(mark);
-    button.appendChild(body);
     nav.appendChild(button);
   });
 }

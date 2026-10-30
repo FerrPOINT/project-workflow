@@ -1,0 +1,8 @@
+{% set base_styles %}{% include "base/base-ui.css" %}{% endset %}
+{% set base_path = branding_base_path if branding_base_path is defined else ui_base_path() %}
+{# The local prefix is validated; Markup.replace must not HTML-escape the CSS URL fragment. #}
+<style>{{ base_styles|replace('url("./fonts/', ('url("' ~ base_path ~ '/base-assets/fonts/')|safe)|safe }}</style>
+<script>{% include "base/branding-bootstrap.js" %}
+window.WorkflowBranding=window.PdlcBranding.createBrandingRuntime({root:document.documentElement,configUrl:{{ (branding_config_url if branding_config_url is defined else platform_branding_url())|tojson }}});
+window.addEventListener('pagehide',function(event){if(!event.persisted)window.WorkflowBranding.dispose();});
+</script>

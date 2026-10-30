@@ -313,3 +313,65 @@ Inline Input/Textarea используют общий Base appearance без г�
 ряд действий. Общие SectionHeader/RadioGroup/Select остаются Base-компонентами;
 их внешняя компоновка принадлежит Workflow. На узком экране разрешён естественный
 перенос, длинные название/описание не должны перекрывать действия.
+
+
+### Интеграция общего UI с внешними контроллерами
+
+Immutable controllers получают приватные данные только через owner HTML config.
+Namespace/instruction renderers клонируют штатные inert Base macro templates;
+перенос JS в отдельный asset не возвращает локальные skins. Общая плотность
+фаз применяется к самой focusable ссылке; соседний shell сохраняет только
+предметную компоновку, без второго padding. Действия фаз/инструкций используют
+workflow-cards.html, новые inline groups и прежние Base buttons. Изменение
+вида сохраняет общие dividers и не делает запись при восстановлении.
+
+Source integration:82 shell/namespace/view tests +39 subtests,9 grouping/card
+contracts и3 immutable-controller/private-fragment checks. Это локальные
+проверки; полный PostgreSQL/coverage gate и authenticated IAB нового комплекта
+не объявляются закрытыми. UI pin обновляется отдельным шагом после Base-кандидата.
+
+При согласовании с master 620f45cd сохранён readonly действующего каталога:
+кнопки редактирования/удаления и добавление фазы не обходят предметный запрет,
+но локальный workflow остаётся редактируемым. Общие кнопки и навигация остаются
+Base. Вокруг навигации режимов используется обычная product layout-область;
+доступный nav и его оформление создаёт section_navigation, без второго nav и
+несогласованного закрывающего тега. В инструкциях сохранён effective read перед
+разблокировкой старого редактора, а inert templates общих частей не копируются.
+
+Scoped результат: 81 template/controller/effective-read/pending-save tests,
+11 browser cases намеренно не запускались в этом промежуточном проходе.
+Данные phase/profession проверяются в owner HTML config, синтаксис и поведение —
+в фактическом вынесенном controller. Ruff изменённых тестов прошёл. Это не
+замена полному PostgreSQL/coverage и IAB gate итогового комплекта.
+
+Динамические effective instructions клонируют inert SSR template, созданный
+штатными section_header(level=3) и prose(preserve_line_breaks=true) Base.
+Ранее controller собирал похожие classes сам: h3 терял data-level и получал
+неверный размер, а base-prose ставился на сам список вместо общего контейнера.
+Теперь заголовки, переносы и интервалы принадлежат macro; Workflow сохраняет
+данные, ol/ul, parallel/skills и textContent без исполнения полученного HTML.
+Показ readonly не создаёт controls и не меняет admission.
+
+На этом diff прошли 15 адресных effective/template/controller tests и Ruff;
+11 native browser cases были исключены из первого промежуточного запуска.
+Затем через общий execution slot исполнены 6 configured readonly cases:
+phase/instructions на 375/1920/2560. Проверены реальный computed размер h3,
+общий prose-контейнер, 1/3 списков, отсутствие edit controls, записей и overflow;
+все 6 screenshots просмотрены. Оставшиеся 5 browser cases не объявляются
+пройденными этим запуском. Это автоматизированный project test с собственным
+TestClient, не authenticated IAB или установленный стенд. UI pin и installed
+runtime этим изменением не обновляются.
+
+
+## Source-кандидат UI0.3.27: радиусы контейнеров
+
+Точный producer указан в [.base-ui-revision](../.base-ui-revision):
+65e9b6e8814a7db0f7cb8fcec76a8869fb24c6f6. Штатный export обновил только
+base-ui.css и fingerprint.json; fonts/JS/macros и backend не изменены.
+Card, Disclosure, framed resource list и notifications используют card-radius,
+вложенные controls сохраняют control. Никакого product skin не добавлено.
+
+SSR fingerprint matches;43 template cases и39 subtests PASS. Native readback
+кнопка Base сохранена. Этот source gate не закрывает её authenticated live
+unknown-result/readback сценарий, всю browser matrix или установленный runtime.
+Private evidence: ui027-card-radius-20261029/gate. SDK/skills pins сохранены.

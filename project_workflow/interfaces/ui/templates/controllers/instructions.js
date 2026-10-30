@@ -48,14 +48,12 @@ function updateTimeline() {
   });
   groups.forEach(group => {
     const isParallelGroup = group.length > 1;
-    const block = document.createElement('div');
-    block.className = 'instruction-block' + (isParallelGroup ? ' parallel-group base-card base-card-content' : '');
+    const block = isParallelGroup
+      ? document.getElementById('instruction-parallel-group-template').content.firstElementChild.cloneNode(true)
+      : document.createElement('div');
+    if (!isParallelGroup) block.className = 'instruction-block';
     if (isParallelGroup) {
-      const label = document.createElement('span');
-      label.className = 'base-badge parallel-label';
-      label.dataset.tone = 'info';
-      label.dataset.appearance = 'badge';
-      label.textContent = '⚡ параллельно';
+      const label = document.getElementById('instruction-parallel-label-template').content.firstElementChild.cloneNode(true);
       block.appendChild(label);
     }
     group.forEach(row => block.appendChild(row));

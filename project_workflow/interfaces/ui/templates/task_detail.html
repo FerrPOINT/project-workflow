@@ -17,29 +17,10 @@
 .detail-jump-links{width:max-content}
 .detail-section{margin-top:30px;scroll-margin-top:76px}
 #task-summary,#phase-history-title,#check-history-title{scroll-margin-top:76px}
-.phase-history{display:flex;flex-direction:column}
-.phase-history-step{display:grid;grid-template-columns:40px minmax(0,1fr);column-gap:14px;align-items:stretch;min-width:0}
-.phase-rail{position:relative;min-height:100%;display:flex;justify-content:center;align-items:center}
-.phase-rail::before,.phase-rail::after{content:"";position:absolute;left:50%;width:2px;transform:translateX(-50%);background:var(--border-strong)}
-.phase-rail::before{top:0;bottom:50%}.phase-rail::after{top:50%;bottom:0}
-.phase-history-step.first .phase-rail::before,.phase-history-step.last .phase-rail::after{display:none}
-.phase-node{position:relative;z-index:1;border-radius:50%;background:var(--text-dim);border:2px solid var(--bg);box-shadow:0 0 0 1px var(--border-strong);flex:none}
-.phase-node.serial{width:12px;height:12px}.phase-node.parallel{width:24px;height:24px}
-.phase-node.done{background:var(--green)}.phase-node.current{background:var(--accent);box-shadow:0 0 0 4px var(--accent-soft)}
-.phase-step-content{padding:0 0 14px;min-width:0}
 .phase-top,.assignment-head,.activity-header{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
 .phase-name{overflow-wrap:anywhere}
-.phase-sequence-label{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .phase-status{margin-left:auto}
 .parallel-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-.check-activity{display:flex;flex-direction:column}
-.activity-event{display:grid;grid-template-columns:30px minmax(0,1fr);column-gap:12px;align-items:stretch;min-width:0}
-.activity-rail{position:relative;grid-column:1;grid-row:1;display:flex;justify-content:center;padding-top:4px}
-.activity-rail::after{content:"";position:absolute;top:16px;bottom:0;left:50%;width:1px;background:var(--border-strong)}
-.activity-event:last-child .activity-rail::after{display:none}
-.activity-node{position:relative;z-index:1;width:11px;height:11px;border-radius:50%;margin-top:1px;background:var(--text-dim);box-shadow:0 0 0 4px var(--bg)}
-.activity-node.pass{background:var(--green)}.activity-node.partial{background:var(--yellow)}.activity-node.blocked{background:var(--red)}.activity-node.rollback{background:var(--orange)}.activity-node.delegate{background:var(--accent)}
-.activity-details{grid-column:2;min-width:0}
 .activity-time{margin-left:auto}
 .report-text{white-space:pre-wrap}
 .contract-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
@@ -49,8 +30,7 @@
 @media(max-width:480px){
   .detail-meta{display:grid;gap:7px}.detail-jump-nav{position:sticky;top:var(--shell-header-height);z-index:4;margin:0 -4px 16px;padding:8px 4px;background:var(--bg)}
   #task-summary,#phase-history-title,#check-history-title,.detail-section{scroll-margin-top:123px}
-  .phase-history-step{grid-template-columns:30px minmax(0,1fr);column-gap:8px}
-  .phase-status{width:100%;margin-left:0}.activity-event{grid-template-columns:20px minmax(0,1fr);column-gap:7px}.activity-time{width:100%;margin-left:0}
+  .phase-status{width:100%;margin-left:0}.activity-time{width:100%;margin-left:0}
 }
 @media(max-width:350px){ #task-summary,#phase-history-title,#check-history-title,.detail-section{scroll-margin-top:171px}}
 {% endblock %}
@@ -125,11 +105,11 @@
 
 <section class="detail-section" aria-labelledby="phase-history-title">
   {{ base_ui.section_header('История фаз', heading_id='phase-history-title') }}
-  <div class="phase-history">
+  {% call base_ui.timeline(tag='div', appearance='steps', class_name='phase-history') %}
     {% for block in phase_history_blocks %}
-    <div class="phase-history-step {% if loop.first %}first{% endif %} {% if loop.last %}last{% endif %}" data-phase-group="{{ block.kind }}">
-      <div class="phase-rail"><span class="phase-node {{ 'parallel' if block.kind == 'parallel' else 'serial' }} {{ block.status }}" aria-hidden="true"></span></div>
-      <div class="phase-step-content">
+    {% call base_ui.timeline_item(tag='div', class_name='phase-history-step ' ~ ('first' if loop.first else '') ~ ' ' ~ ('last' if loop.last else ''), attributes={'data-phase-group':block.kind}) %}
+      {{ base_ui.timeline_marker(tone='success' if block.status == 'done' else 'info' if block.status == 'current' else 'neutral', size='large' if block.kind == 'parallel' else 'small', current=block.status == 'current') }}
+      {% call base_ui.timeline_content(class_name='phase-step-content') %}
         {% if block.kind == 'parallel' %}
         {% call base_ui.card(surface='raised') %}{% call base_ui.card_content(class_name='base-page-stack') %}
           {{ base_ui.badge('Параллельная группа · ' ~ (block.phases | length) ~ ' фазы', tone='warning') }}
@@ -137,7 +117,7 @@
             {% for ph in block.phases %}
             <article>
               {% call base_ui.card(highlighted=ph.status == 'current') %}{% call base_ui.card_content(class_name='base-page-stack') %}
-              <div class="phase-top">{% call base_ui.badge(appearance='counter', class_name='phase-sequence') %}<span class="phase-sequence-label">Фаза </span>{{ ph.sequence_number }}{% endcall %}<strong class="phase-name">{{ ph.phase_name }}</strong><span class="phase-status">{{ base_ui.badge('Завершена' if ph.status == 'done' else ('Текущая' if ph.status == 'current' else 'Ожидает'), tone='success' if ph.status == 'done' else ('info' if ph.status == 'current' else 'muted')) }}</span></div>
+              <div class="phase-top">{% call base_ui.badge(appearance='counter', class_name='phase-sequence') %}<span class="phase-sequence-label base-visually-hidden">Фаза </span>{{ ph.sequence_number }}{% endcall %}<strong class="phase-name">{{ ph.phase_name }}</strong><span class="phase-status">{{ base_ui.badge('Завершена' if ph.status == 'done' else ('Текущая' if ph.status == 'current' else 'Ожидает'), tone='success' if ph.status == 'done' else ('info' if ph.status == 'current' else 'muted')) }}</span></div>
               {% if ph.phase_description %}{% call base_ui.prose() %}<p>{{ ph.phase_description }}</p>{% endcall %}{% endif %}
             {% endcall %}{% endcall %}
             </article>
@@ -148,23 +128,23 @@
           {% set ph = block.phases[0] %}
           <article>
               {% call base_ui.card(highlighted=ph.status == 'current') %}{% call base_ui.card_content(class_name='base-page-stack') %}
-            <div class="phase-top">{% call base_ui.badge(appearance='counter', class_name='phase-sequence') %}<span class="phase-sequence-label">Фаза </span>{{ ph.sequence_number }}{% endcall %}<strong class="phase-name">{{ ph.phase_name }}</strong><span class="phase-status">{{ base_ui.badge('Завершена' if ph.status == 'done' else ('Текущая' if ph.status == 'current' else 'Ожидает'), tone='success' if ph.status == 'done' else ('info' if ph.status == 'current' else 'muted')) }}</span></div>
+            <div class="phase-top">{% call base_ui.badge(appearance='counter', class_name='phase-sequence') %}<span class="phase-sequence-label base-visually-hidden">Фаза </span>{{ ph.sequence_number }}{% endcall %}<strong class="phase-name">{{ ph.phase_name }}</strong><span class="phase-status">{{ base_ui.badge('Завершена' if ph.status == 'done' else ('Текущая' if ph.status == 'current' else 'Ожидает'), tone='success' if ph.status == 'done' else ('info' if ph.status == 'current' else 'muted')) }}</span></div>
             {% if ph.phase_description %}{% call base_ui.prose() %}<p>{{ ph.phase_description }}</p>{% endcall %}{% endif %}
           {% endcall %}{% endcall %}
             </article>
         {% endif %}
-      </div>
-    </div>
+      {% endcall %}
+    {% endcall %}
     {% else %}{{ base_ui.state('empty', 'История фаз пока пуста.') }}{% endfor %}
-  </div>
+  {% endcall %}
 </section>
 
 <section class="detail-section" aria-labelledby="check-history-title">
   {{ base_ui.section_header('История проверок', heading_id='check-history-title') }}
-  <div class="check-activity">
+  {% call base_ui.timeline(tag='div', appearance='activity', class_name='check-activity') %}
     {% for run in step_history %}
-    <div class="activity-event" data-check-run="{{ loop.index }}">
-      <div class="activity-rail"><span class="activity-node {{ run.verdict }}" aria-hidden="true"></span></div>
+    {% call base_ui.timeline_item(tag='div', class_name='activity-event', attributes={'data-check-run':loop.index}) %}
+      {{ base_ui.timeline_marker(tone=verdict_tones.get(run.verdict, 'neutral')) }}
       {% set activity_summary %}
           <span class="activity-header">
             <strong>Проверка {{ loop.index }}</strong>
@@ -174,7 +154,7 @@
             <time class="activity-time">{{ run.created_at[:16] if run.created_at else '—' }}</time>
           </span>
       {% endset %}
-      {% call base_ui.disclosure(activity_summary, open=loop.last, appearance='row', class_name='activity-details') %}
+      {% call base_ui.disclosure(activity_summary, open=loop.last, appearance='row', class_name='base-timeline-content activity-details') %}
         <div class="activity-content base-page-stack">
 
         <section class="base-page-stack" aria-labelledby="check-request-{{ loop.index }}">
@@ -221,8 +201,8 @@
         {% endif %}
       </div>
       {% endcall %}
-    </div>
+    {% endcall %}
     {% else %}{{ base_ui.state('empty', 'Проверок пока нет.') }}{% endfor %}
-  </div>
+  {% endcall %}
 </section>
 {% endblock %}

@@ -1,3 +1,5 @@
+import { validMonogram } from "./branding-marks.js";
+import { brandingFontFamily } from "./branding-fonts.js";
 import { isHex as hex, contrast, foreground } from "./branding-colors.js";
 import { brandingFavicon, paintBrandingMark } from "./branding-marks.js";
 import { DEFAULT_PLATFORM_NAME } from "./platform-title.js";
@@ -79,6 +81,7 @@ const themes = {
     "destructive-foreground": "#ffffff",
   },
 };
+const selectionTint = 0.14;
 const channels = (color) =>
   [1, 3, 5].map((i) => parseInt(color.slice(i, i + 2), 16));
 const mix = (a, b, amount) =>
@@ -90,13 +93,21 @@ const mix = (a, b, amount) =>
         .padStart(2, "0"),
     )
     .join("");
-/** The smallest deterministic sRGB adjustment meeting the role's contrast floor. */
-function readable(seed, backgrounds, ratio) {
-  if (backgrounds.every((bg) => contrast(seed, bg) >= ratio)) return seed;
+/**
+ * The first sampled sRGB adjustment meeting the role's contrast floor.
+ * @param {string | null} [selectionBase] Also check the tint derived from this candidate.
+ */
+function readable(seed, backgrounds, ratio, selectionBase = null) {
+  const fits = (candidate) =>
+    backgrounds.every((bg) => contrast(candidate, bg) >= ratio) &&
+    (selectionBase === null ||
+      contrast(candidate, mix(selectionBase, candidate, selectionTint)) >=
+        ratio);
+  if (fits(seed)) return seed;
   const target = foreground(backgrounds[0]);
   for (let step = 1; step <= 100; step++) {
     const value = mix(seed, target, step / 100);
-    if (backgrounds.every((bg) => contrast(value, bg) >= ratio)) return value;
+    if (fits(value)) return value;
   }
   return target;
 }
@@ -167,7 +178,7 @@ function validMark(mark, branding) {
     !["letters", "icon", "image"].includes(mark.kind) ||
     ![1, 2, 4].includes(mark.count) ||
     typeof mark.letters !== "string" ||
-    mark.letters.length > 128 ||
+    new TextEncoder().encode(mark.letters).length > 128 ||
     !iconIds.includes(mark.icon) ||
     !hex(mark.foreground) ||
     !hex(mark.background) ||
@@ -177,19 +188,8 @@ function validMark(mark, branding) {
   )
     return false;
   if (mark.kind === "image") return !!mark.image;
-  if (contrast(mark.foreground, mark.background) < 4.5) return false;
   if (mark.kind !== "letters") return true;
-  const letters = Array.from(
-    new Intl.Segmenter("ru", { granularity: "grapheme" }).segment(mark.letters),
-    (part) => part.segment,
-  );
-  return (
-    letters.length === mark.count &&
-    letters.every(
-      (letter) =>
-        !/[\s\p{Cc}]/u.test(letter) && !/^[\p{M}\p{C}]+$/u.test(letter),
-    )
-  );
+  return validMonogram(mark);
 }
 function validExpandedDesign(design, branding) {
   if (
@@ -212,14 +212,6 @@ function validExpandedDesign(design, branding) {
   for (const mode of ["dark", "gray", "light"]) {
     const colors = design.colors[mode];
     if (!record(colors) || !hex(colors.primary) || !hex(colors.accent))
-      return false;
-    if (
-      [themes[mode].background, themes[mode].surface].some(
-        (background) =>
-          contrast(colors.primary, background) < 3 ||
-          contrast(colors.accent, background) < 4.5,
-      )
-    )
       return false;
   }
   for (const [key, max] of Object.entries({
@@ -266,6 +258,15 @@ export function normalizeBranding(payload) {
   if (value.design != null) {
     if (typeof value.design !== "object") return null;
     const expanded = Object.hasOwn(value.design, "marks");
+    // Match Admin's two v1 shapes: partial expanded settings must not bypass
+    // validation and then override a confirmed palette, theme or geometry.
+    if (
+      !expanded &&
+      ["favicon", "colors", "radii", "documentation_url", "initial_theme"].some(
+        (key) => value.design[key] != null,
+      )
+    )
+      return null;
     for (const [key, allowed] of Object.entries(brandingPresets)) {
       const choice =
         key !== "version" && value.design[key] === undefined
@@ -302,12 +303,17 @@ export function resolveBrandingTokens(branding, theme = "dark") {
   if (value.surface_color)
     for (const key of ["background", "surface", "surface-raised"])
       colors[key] = mix(colors[key], value.surface_color, 0.08);
-  // A brand changes surfaces slightly; essential text/status roles retain their contrast.
-  const backgrounds = [
+  const baseBackgrounds = [
     colors.background,
     colors.surface,
     colors["surface-raised"],
   ];
+  // A resolved palette can become an editor snapshot. Its selected surface must
+  // depend on the resolved accent so resolving that snapshot is idempotent.
+  const highlight = readable(accent, baseBackgrounds, 4.5, colors.surface);
+  const selectionSurface = mix(colors.surface, highlight, selectionTint);
+  // Semantic descendants also render on selected rows and resource choices.
+  const backgrounds = [...baseBackgrounds, selectionSurface];
   for (const key of [
     "text-primary",
     "text-secondary",
@@ -319,7 +325,6 @@ export function resolveBrandingTokens(branding, theme = "dark") {
     colors[key] = readable(colors[key], backgrounds, 4.5);
   colors["border-strong"] = readable(colors["border-strong"], backgrounds, 3);
   const action = readable(primary, backgrounds, 4.5);
-  const highlight = readable(accent, backgrounds, 4.5);
   const design = value.design ?? defaultDesign;
   const large = design.type_scale === "large";
   const radius =
@@ -345,10 +350,10 @@ export function resolveBrandingTokens(branding, theme = "dark") {
       mix(action, mode === "light" ? "#000000" : "#ffffff", 0.12),
     ),
     "--color-highlight": highlight,
-    "--color-selection": mix(colors.surface, accent, 0.14),
+    "--color-selection": selectionSurface,
     "--color-selection-foreground": readable(
       colors["text-primary"],
-      [mix(colors.surface, accent, 0.14)],
+      [selectionSurface],
       4.5,
     ),
     "--color-focus": readable(action, backgrounds, 3),
@@ -361,16 +366,12 @@ export function resolveBrandingTokens(branding, theme = "dark") {
     "--color-destructive": colors.danger,
     "--color-popover": colors.surface,
     "--color-popover-foreground": colors["text-primary"],
-    "--base-font-sans": {
-      system:
-        'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-      inter: '"PDLC Inter", system-ui, sans-serif',
-      "noto-sans": '"PDLC Noto Sans", system-ui, sans-serif',
-    }[design.font_preset],
-    "--base-font-body": large ? "16px" : "14px",
-    "--base-font-label": large ? "14px" : "12px",
-    "--base-font-page-title": large ? "28px" : "24px",
-    "--base-line-body": large ? "24px" : "20px",
+    "--base-font-sans": brandingFontFamily(design.font_preset),
+    // Preserve the 16px-root defaults while respecting the browser's text preference.
+    "--base-font-body": large ? "1rem" : "0.875rem",
+    "--base-font-label": large ? "0.875rem" : "0.75rem",
+    "--base-font-page-title": large ? "1.75rem" : "1.5rem",
+    "--base-line-body": large ? "1.5rem" : "1.25rem",
     "--base-radius": radius + "px",
     "--radius-sm": Math.max(0, radius - 2) + "px",
     "--radius-md": radius + "px",
@@ -456,7 +457,9 @@ export function createBrandingRuntime(options) {
       !input ||
       typeof input !== "object" ||
       !Number.isInteger(input.revision) ||
-      input.revision < 0
+      input.revision < 0 ||
+      // Cache, HTTP refresh and direct publication share one monotonic boundary.
+      (revision !== null && input.revision < revision)
     )
       return null;
     const normalized = normalizeBranding(input.branding);
@@ -478,6 +481,12 @@ export function createBrandingRuntime(options) {
   function paint() {
     if (!active) return;
     const tokens = resolveBrandingTokens(branding, root.dataset.theme);
+    // A removed optional setting must not survive in the owned inline style.
+    for (const [name, old] of previous) {
+      if (Object.hasOwn(tokens, name)) continue;
+      if (old.value) root.style.setProperty(name, old.value, old.priority);
+      else root.style.removeProperty(name);
+    }
     for (const [name, value] of Object.entries(tokens)) {
       if (!previous.has(name))
         previous.set(name, {
@@ -488,6 +497,7 @@ export function createBrandingRuntime(options) {
     }
   }
   let generatedIcon = null;
+  /** @type {Map<Element, {href:string, type:string|null}>} */
   const originalIcons =
     root === root.ownerDocument.documentElement
       ? new Map(
@@ -495,7 +505,13 @@ export function createBrandingRuntime(options) {
             ...root.ownerDocument.querySelectorAll(
               'link[rel="icon"],link[rel="shortcut icon"]',
             ),
-          ].map((link) => [link, link.getAttribute("href") ?? ""]),
+          ].map((link) => [
+            link,
+            {
+              href: link.getAttribute("href") ?? "",
+              type: link.getAttribute("type"),
+            },
+          ]),
         )
       : new Map();
   const safeImage = (value) => {
@@ -514,6 +530,19 @@ export function createBrandingRuntime(options) {
   let identitySequence = 0;
   function identity() {
     if (!active) return;
+    for (const link of root.querySelectorAll("[data-base-brand-link]")) {
+      const value =
+        link.getAttribute("data-base-brand-link") === "support"
+          ? branding.support_url
+          : branding.design?.documentation_url;
+      if (value && validBrandUrl(value)) {
+        link.setAttribute("href", value);
+        link.removeAttribute("hidden");
+      } else {
+        link.removeAttribute("href");
+        link.setAttribute("hidden", "");
+      }
+    }
     for (const title of root.querySelectorAll("[data-base-brand-title]"))
       title.textContent =
         (title.getAttribute("data-base-brand-title") || "PDLC") +
@@ -565,22 +594,39 @@ export function createBrandingRuntime(options) {
         generatedIcon = root.ownerDocument.createElement("link");
         generatedIcon.rel = "icon";
         root.ownerDocument.head.appendChild(generatedIcon);
-        originalIcons.set(generatedIcon, "");
+        originalIcons.set(generatedIcon, { href: "", type: null });
       }
       void brandingFavicon(branding, root.dataset.theme)
         .then((url) => {
           if (active && identityRequest === identitySequence && url)
-            for (const [link] of originalIcons) link.setAttribute("href", url);
+            for (const [link] of originalIcons) {
+              link.setAttribute("href", url);
+              link.setAttribute("type", "image/png");
+            }
         })
         .catch(() => {
           /* Retain the confirmed icon when canvas is unavailable. */
         });
-    } else
-      for (const [link, original] of originalIcons)
-        link.setAttribute("href", safeImage(branding.favicon_url) ?? original);
+    } else {
+      const external = safeImage(branding.favicon_url);
+      for (const [link, original] of originalIcons) {
+        link.setAttribute("href", external ?? original.href);
+        // A legacy URL has no declared MIME. Its response supplies the type.
+        if (external || original.type === null) link.removeAttribute("type");
+        else link.setAttribute("type", original.type);
+      }
+    }
   }
   root.ownerDocument.addEventListener("DOMContentLoaded", identity);
   function publish() {
+    if (root === root.ownerDocument.documentElement) {
+      const preference = win.PdlcThemePreference;
+      preference?.setPlatformDefault?.(branding.design?.initial_theme ?? null);
+      if (preference)
+        root.dataset.theme = preference.read(
+          root.dataset.themeStorageKey || "theme",
+        );
+    }
     paint();
     identity();
     onChange({ branding, revision, source });
@@ -642,7 +688,7 @@ export function createBrandingRuntime(options) {
     applyPublished(payload, validator) {
       if (!active || !configUrl) return false;
       const doc = documentValue(payload);
-      if (!doc || (revision !== null && doc.revision < revision)) return false;
+      if (!doc) return false;
       sequence++;
       branding = doc.branding;
       revision = doc.revision;
@@ -664,6 +710,8 @@ export function createBrandingRuntime(options) {
       active = false;
       sequence++;
       controller.abort();
+      if (root === root.ownerDocument.documentElement)
+        win.PdlcThemePreference?.setPlatformDefault?.(null);
       observer.disconnect();
       for (const [mark, original] of originalMarks) {
         mark.replaceChildren(...original.nodes);
@@ -676,8 +724,11 @@ export function createBrandingRuntime(options) {
           else mark.setAttribute(name, value);
       }
       root.ownerDocument.removeEventListener("DOMContentLoaded", identity);
-      for (const [link, original] of originalIcons)
-        link.setAttribute("href", original);
+      for (const [link, original] of originalIcons) {
+        link.setAttribute("href", original.href);
+        if (original.type === null) link.removeAttribute("type");
+        else link.setAttribute("type", original.type);
+      }
       generatedIcon?.remove();
       if (timer !== null) win.clearInterval(timer);
       root.ownerDocument.removeEventListener("visibilitychange", visible);

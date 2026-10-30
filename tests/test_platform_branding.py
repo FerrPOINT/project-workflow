@@ -10,6 +10,57 @@ from starlette.requests import Request
 from project_workflow.interfaces.ui import platform_branding as bridge
 
 
+def test_public_branding_and_fonts_do_not_require_product_identity_or_database(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from project_workflow.config import Settings
+    from project_workflow.infrastructure.db.session import DatabaseUnavailable
+    from project_workflow.interfaces.ui import sso
+    from project_workflow.interfaces.ui.app import create_app
+
+    settings = Settings(
+        DATABASE_URL="postgresql+psycopg://unused@localhost/unused",
+        AUTH_ISSUER="http://auth.test",
+        AUTH_INTERNAL_BASE_URL="http://auth.test",
+        AUTH_PUBLIC_ORIGIN="http://testserver",
+        AUTH_SESSION_SECRET="test-only-secret-with-at-least-thirty-two-bytes",
+    )
+    monkeypatch.setenv("AUTH_ISSUER", settings.AUTH_ISSUER)
+    monkeypatch.setattr(sso, "get_settings", lambda: settings)
+    calls = []
+
+    def upstream(req):
+        calls.append(req)
+        return httpx.Response(200, json={"revision": 2})
+
+    factory = httpx.AsyncClient
+    with (
+        patch.object(bridge, "branding_url", return_value="http://configured.test/brand"),
+        patch.object(
+            bridge.httpx, "AsyncClient", side_effect=lambda **kw: factory(transport=httpx.MockTransport(upstream), **kw)
+        ),
+        patch("project_workflow.application.state._AppState.create_uow", side_effect=DatabaseUnavailable()) as uow,
+    ):
+        with TestClient(create_app(), follow_redirects=False) as client:
+            document = client.get("/api/platform/branding?url=http://untrusted.test/")
+            font = client.get("/base-assets/fonts/inter-cyrillic-wght-normal.woff2")
+            assert document.status_code == 200
+            assert document.json() == {"revision": 2}
+            assert font.status_code == 200 and font.content.startswith(b"wOF2")
+            assert client.get("/api/phases").status_code == 401
+            assert client.put("/api/phases/1", json={"name": "Unauthorized"}).status_code == 401
+            assert client.get("/api/platform/branding/private").status_code == 401
+            assert client.get("/login?next=/namespaces").status_code == 303
+            callback = client.get("/sso/callback?code=private-code&state=bad")
+            assert callback.status_code == 401 and "private-code" not in callback.text
+            assert "createBrandingRuntime" in callback.text
+            assert client.get("/logout").status_code == 303
+        uow.assert_not_called()
+    assert len(calls) == 1
+    assert str(calls[0].url) == "http://configured.test/brand"
+    assert "authorization" not in calls[0].headers and "cookie" not in calls[0].headers
+
+
 def request(etag=None):
     return Request(
         {

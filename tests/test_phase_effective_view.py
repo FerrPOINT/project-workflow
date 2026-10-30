@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import subprocess
 from copy import deepcopy
 from dataclasses import asdict
@@ -18,6 +19,7 @@ from project_workflow.interfaces.ui import sso
 from project_workflow.interfaces.ui.app import create_app
 from project_workflow.interfaces.ui.controller_assets import controller_source
 from project_workflow.interfaces.ui.routes import pages
+from tests import test_ui_shell_template as shell
 
 pytestmark = pytest.mark.ui
 
@@ -30,8 +32,8 @@ const assert = require('node:assert/strict');
 const input = JSON.parse(process.argv[1]);
 (async () => {
   for (const mode of ['legacy', 'configured', 'unavailable', 'missing-scope']) {
-    const ready = [], reads = [];
-    const element = () => ({hidden:true, inert:true, dataset:{}, children:[],
+    const ready = [], reads = [], clones = [];
+    const element = (tagName) => ({tagName, hidden:true, inert:true, dataset:{}, children:[],
       append(...children){this.children.push(...children)},
       appendChild(child){this.children.push(child)},
       querySelectorAll(){return []}, remove(){this.removed=true},
@@ -42,13 +44,24 @@ const input = JSON.parse(process.argv[1]);
     const nodes = {phaseEffectiveView:view, phaseStoredEditor:editor, phaseViewStatus:status,
       phaseEffectiveContent:content, phaseEffectiveTitle:element(), phaseEffectiveDescription:element(),
       phaseEffectiveSections:element()};
+    nodes.phaseEffectiveSectionTemplate = {content:{firstElementChild:{cloneNode(deep){
+      assert.equal(deep, true);
+      const section = element('section'), heading = element('span'), list = element('div');
+      section.querySelector = selector => selector==='[data-effective-section-title]' ? heading
+        : selector==='[data-effective-section-list]' ? list : null;
+      clones.push({section, heading, list});
+      return section;
+    }}}};
     globalThis.document = {getElementById:id=>nodes[id]||null, createElement:element};
     globalThis.window = {location:{origin:'http://workflow.test'}, WorkflowPageControllers:{}};
     const page = {alive:true, ready:fn=>ready.push(fn), expose(){}, notify(){},
       fetch:async url=>{reads.push(url); return {ok:mode!=='unavailable', json:async()=>({
         ok:mode!=='unavailable', ...(mode==='configured'?{effective_view:{
           interaction_protocol:'configured-cli-v1', read_only:true,
-          phase:{name:'Effective phase', description:'Exact scope', instructions:[{step:'Actual instruction'}]}
+          phase:{name:'Effective phase', description:'Exact scope',
+            instructions:[{step:'Actual <instruction>\nNext line',
+              execution_type:'parallel',skills:['rust','safe <skill>']}],
+            checks:[{description:'Actual <check>'}],evidence:[{item:'Actual <evidence>'}]}
         }}:{})
       })}}};
     eval(input.source);
@@ -61,7 +74,19 @@ const input = JSON.parse(process.argv[1]);
     } else if (mode==='configured') {
       assert.equal(editor.removed, true); assert.equal(content.hidden, false);
       assert.equal(nodes.phaseEffectiveTitle.textContent, 'Effective phase');
-      assert.ok(nodes.phaseEffectiveSections.children.length);
+      assert.equal(clones.length, input.controller==='instructions'?1:3);
+      assert.deepEqual(clones.map(clone=>clone.heading.textContent), input.controller==='instructions'
+        ? ['Инструкции'] : ['Инструкции','Проверки','Подтверждения']);
+      assert.deepEqual(nodes.phaseEffectiveSections.children, clones.map(clone=>clone.section));
+      assert.equal(clones[0].list.children[0].tagName,'ol');
+      assert.deepEqual(clones[0].list.children[0].children[0].children.map(child=>child.textContent),
+        ['Actual <instruction>\nNext line','Параллельно','rust, safe <skill>']);
+      if (clones.length===3) {
+        assert.equal(clones[1].list.children[0].tagName,'ul');
+        assert.equal(clones[2].list.children[0].tagName,'ul');
+        assert.equal(clones[1].list.children[0].children[0].children[0].textContent,'Actual <check>');
+        assert.equal(clones[2].list.children[0].children[0].children[0].textContent,'Actual <evidence>');
+      }
     } else {
       assert.equal(editor.hidden, true); assert.equal(editor.inert, true); assert.equal(status.role, 'alert');
     }
@@ -73,6 +98,23 @@ const input = JSON.parse(process.argv[1]);
         capture_output=True, text=True, encoding="utf-8", check=False, timeout=20,
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_effective_sections_clone_public_ssr_heading_and_prose_without_edit_controls():
+    html = shell.SharedShellTemplateTests().render_shell(
+        [], template="instructions.html", phase={"id": 41, "name": "Phase"},
+        instruction_groups=[], selected_namespace={"id": 7},
+    )
+    fragment = re.search(r'<template id="phaseEffectiveSectionTemplate">([\s\S]*?)</template>', html)[1]
+    elements = shell.Elements(fragment).elements
+    heading = next(attrs for tag, attrs in elements if tag == "h3")
+    assert "base-section-title" in heading["class"].split()
+    assert heading["data-level"] == "3"
+    prose = next(attrs for _, attrs in elements if "base-prose" in attrs.get("class", "").split())
+    assert prose["data-preserve-line-breaks"] == "true"
+    assert any("data-effective-section-title" in attrs for _, attrs in elements)
+    assert any("data-effective-section-list" in attrs for _, attrs in elements)
+    assert not any(tag in {"button", "input", "textarea", "select"} for tag, _ in elements)
 
 
 @pytest.fixture
@@ -318,6 +360,15 @@ def test_configured_browser_read_only_history_and_no_writes(catalog, tmp_path, v
         api_url = page.locator("#phaseEffectiveView").get_attribute("data-api-url")
         assert parse_qs(urlsplit(api_url).query)["namespace_id"] == [binding.namespace_id]
         page.locator("#phaseEffectiveContent").wait_for(state="visible")
+        headings = page.locator("#phaseEffectiveSections h3")
+        assert headings.count() == (1 if instructions_only else 3)
+        assert all(item["level"] == "3" and item["font"] == item["body"] for item in headings.evaluate_all(
+            "nodes => nodes.map(node => ({level:node.dataset.level,font:getComputedStyle(node).fontSize,"
+            "body:getComputedStyle(node).getPropertyValue('--base-font-body').trim()}))"
+        ))
+        lists = page.locator('#phaseEffectiveSections .base-prose[data-preserve-line-breaks="true"] ol, '
+                             '#phaseEffectiveSections .base-prose[data-preserve-line-breaks="true"] ul')
+        assert lists.count() == (1 if instructions_only else 3)
         assert page.locator("#phaseStoredEditor").count() == 0
         assert page.locator("main textarea, main input, main [onclick]").count() == 0
         for instruction in effective["effective_view"]["phase"]["instructions"]:

@@ -43,8 +43,8 @@
 {% call base_ui.resource_list_row(class_name='phase-text-row') %}
   <span class="phase-text-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false" aria-hidden="true">{% if checking %}<circle cx="12" cy="12" r="8"/>{% else %}<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M8 13h8M8 17h6"/>{% endif %}</svg></span>
 {% if can_administer %}
-  <textarea data-base-autosize class="inline-input phase-text-content base-control base-textarea" rows="1" data-field="description" aria-label="{{ field_label }}" onblur="{{ 'saveNewTextItem(this)' if fresh else 'scheduleSave()' }}" data-appearance="inline">{{ item.description }}</textarea>
-  <button type="button" class="base-control base-button base-icon-control item-delete" data-variant="destructive-outline" data-size="icon" aria-label="{{ delete_label }}" onclick="deleteItem(this)">×</button>
+  {{ base_ui.textarea_control(class_name="inline-input phase-text-content", rows="1", aria_label=(field_label), appearance="inline", autosize=true, value=(item.description), attributes={"data-field": "description", "onblur": ('saveNewTextItem(this)' if fresh else 'scheduleSave()')}) }}
+  {% call base_ui.button(variant="destructive-outline", size="icon", class_name="item-delete", type="button", aria_label=(delete_label), attributes={"onclick": "deleteItem(this)"}) %}×{% endcall %}
 {% else %}
   <div class="phase-text-content">{% call base_ui.prose() %}{{ item.description }}{% endcall %}</div>
 {% endif %}
@@ -68,13 +68,13 @@
 
   <div class="phase-editor-main">
     <div class="phase-section-picker">
-      <label class="base-visually-hidden" for="phaseSectionSelect">Раздел редактора</label>
-      <select data-base-choice id="phaseSectionSelect">
+      {{ base_ui.label_control("phaseSectionSelect", "Раздел редактора", visually_hidden=true) }}
+      {% call base_ui.select_control(id="phaseSectionSelect") %}
         <option value="phase-overview">Основное</option>
         <option value="phase-instructions">Инструкции ({{ phase.instructions|length }})</option>
         <option value="phase-checks">Проверки ({{ phase.checks|length }})</option>
         <option value="phase-evidence">Подтверждения ({{ phase.evidence|length }})</option>
-      </select>
+      {% endcall %}
     </div>
 
     <div class="wiki-page base-page-stack">
@@ -85,8 +85,8 @@
 {% set phase_heading %}
 {% if can_administer %}
     <div class="base-page-stack">
-      <input type="text" class="inline-input base-control base-input" value="{{ phase.name }}" data-field="name" aria-label="Название фазы" onblur="scheduleSave()" data-appearance="inline" data-variant="heading">
-      <textarea data-base-autosize class="inline-input wiki-subtitle base-control base-textarea" rows="1" data-field="description" aria-label="Описание фазы" onblur="scheduleSave()" data-appearance="inline">{{ phase.description or '' }}</textarea>
+      {{ base_ui.input_control(class_name="inline-input", type="text", value=(phase.name), aria_label="Название фазы", appearance="inline", variant="heading", attributes={"data-field": "name", "onblur": "scheduleSave()"}) }}
+      {{ base_ui.textarea_control(class_name="inline-input wiki-subtitle", rows="1", aria_label="Описание фазы", appearance="inline", autosize=true, value=(phase.description or ''), attributes={"data-field": "description", "onblur": "scheduleSave()"}) }}
     </div>
 {% else %}
     <h2 class="base-page-title">{{ phase.name }}</h2>
@@ -99,9 +99,11 @@
 
   <!-- Instructions — managed like phases list with inline edit, reorder, add, delete -->
 {% if can_administer %}
-  <div class="base-page-actions" id="phaseSaveRecovery" hidden>
-    <button type="button" class="btn btn-secondary" id="phaseSaveEditor" hidden onclick="saveEditorChanges()">Повторить сохранение</button>
-    <button type="button" class="btn btn-secondary" id="phaseSaveReadback" hidden onclick="reconcilePhaseSave()">Проверить сохранение</button>
+  <div id="phaseSaveRecovery" hidden>
+  {% call base_ui.action_group(align='start') %}
+    {{ base_ui.button('Повторить сохранение', id='phaseSaveEditor', attributes={'hidden':true,'onclick':'saveEditorChanges()'}) }}
+    {{ base_ui.button('Проверить сохранение', id='phaseSaveReadback', attributes={'hidden':true,'onclick':'reconcilePhaseSave()'}) }}
+  {% endcall %}
   </div>
 {% endif %}
   <div class="wiki-section phase-editor-section base-page-stack" id="phase-instructions" data-phase-section tabindex="-1">
@@ -109,9 +111,9 @@
 
     {% macro instruction_body(i, instruction_count) %}
     <div class="timeline-row" >
-      <div class="timeline-card base-card base-card-content" data-instruction-id="{{ i.id }}" data-step-num="{{ i.step_num }}" data-type="{{ i.execution_type }}">
+      {% call base_ui.card(padded=true, class_name='timeline-card', attributes={'data-instruction-id':i.id, 'data-step-num':i.step_num, 'data-type':i.execution_type}) %}
 {% if can_administer %}
-        <textarea data-base-autosize class="timeline-name-input base-control base-textarea" rows="1" data-field="description" data-original-description="{{ i.description }}" aria-label="Описание инструкции {{ i.step_num }}" onblur="saveInstructionDescription(this)" data-appearance="inline">{{ i.description }}</textarea>
+        {{ base_ui.textarea_control(class_name="timeline-name-input", rows="1", aria_label="Описание инструкции " ~ (i.step_num), appearance="inline", autosize=true, value=(i.description), attributes={"data-field": "description", "data-original-description": (i.description), "onblur": "saveInstructionDescription(this)"}) }}
 {% else %}
         {% call base_ui.prose() %}<p>{{ i.description }}</p>{% endcall %}
 {% endif %}
@@ -136,7 +138,7 @@
           {{ workflow_cards.actions('instruction', i.step_num, parallel=i.execution_type == 'parallel', first=i.step_num == 1, last=i.step_num == instruction_count) }}
 {% endif %}
         </div>
-      </div>
+      {% endcall %}
     </div>
     {% endmacro %}
 
@@ -165,24 +167,24 @@
       {% endfor %}
     </div>
 {% if can_administer %}
-    <button type="button" class="base-control base-button phase-add-action" data-variant="outline" onclick="addInstructionLast()">+ Добавить шаг</button>
+    {% call base_ui.button(variant="outline", class_name="phase-add-action", type="button", attributes={"onclick": "addInstructionLast()"}) %}+ Добавить шаг{% endcall %}
 {% endif %}
   </div>
 
   {% for kind, label, empty_message in [('checks', 'Проверки', 'Нет проверок'), ('evidence', 'Подтверждения', 'Нет подтверждений')] %}
   <div class="wiki-section phase-editor-section base-page-stack" id="phase-{{ kind }}" data-phase-section tabindex="-1">
     {{ base_ui.section_header(label, heading_id=kind ~ '-title', actions=base_ui.badge(phase[kind]|length, class_name='count')) }}
-    <ul class="base-resource-list" data-variant="plain" data-density="normal" id="{{ kind }}-list">
+    {% call base_ui.resource_list(tag='ul', id=kind ~ '-list') %}
       {% for item in phase[kind] %}
         {{ phase_text_item(item, kind, loop.index) }}
       {% else %}
         <li class="empty-state">{{ base_ui.state('empty', empty_message) }}</li>
       {% endfor %}
-    </ul>
+    {% endcall %}
 {% if can_administer %}
     <template id="{{ kind }}-list-item-template">{{ phase_text_item({'id':none, 'description':''}, kind, fresh=true) }}</template>
     <template id="{{ kind }}-list-empty-template">{{ base_ui.state('empty', empty_message) }}</template>
-    <button type="button" class="base-control base-button phase-add-action" data-variant="outline" onclick="{{ 'addCheck()' if kind == 'checks' else 'addEvidence()' }}">{{ '+ Добавить проверку' if kind == 'checks' else '+ Добавить подтверждение' }}</button>
+    {% call base_ui.button(variant="outline", class_name="phase-add-action", type="button", attributes={"onclick": ('addCheck()' if kind == 'checks' else 'addEvidence()')}) %}{{ '+ Добавить проверку' if kind == 'checks' else '+ Добавить подтверждение' }}{% endcall %}
 {% endif %}
   </div>
   {% endfor %}

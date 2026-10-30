@@ -1,13 +1,34 @@
+{% macro _native_attributes(attributes=none, owned=[]) -%}
+{% set provided = namespace(values={}) -%}
+{% for name, value in (attributes or {}).items() if value is not none and (value is not sameas false or (name|lower).startswith('aria-')) -%}
+{% set key = name|lower -%}
+{% if key not in owned -%}{% set serialized = ('true' if value else 'false') if key.startswith('aria-') and value is boolean else ('' if value is sameas true else value) -%}{% set provided.values = dict(provided.values, **{key: serialized}) -%}{% endif -%}
+{% endfor -%}
+{{ provided.values|xmlattr }}
+{%- endmacro %}
+
+{% macro action_group(align='end', separated=false, stack_on_mobile=false, class_name='', id=none, orientation='horizontal') -%}
+{% set placement = align if align in ['start', 'end', 'between'] else 'end' -%}
+<div class="base-action-group{% if class_name %} {{ class_name }}{% endif %}" data-align="{{ placement }}"{% if orientation == 'vertical' %} data-orientation="vertical"{% endif %}{% if separated %} data-separated="true"{% endif %}{% if stack_on_mobile %} data-mobile-stack="true"{% endif %}{% if id %} id="{{ id }}"{% endif %}>{{ caller() }}</div>
+{%- endmacro %}
+
 {% macro page_header(title=none, context=none, actions=none, heading=none, leading=none) -%}
 {% set has_leading = leading is defined and leading is not none and leading is not sameas false and leading != '' -%}
 {% if heading or title is not none or context or actions -%}
-<div class="base-page-header"><div>{% if has_leading %}<div class="base-page-heading">{{ leading }}{% endif %}{% if heading %}{{ heading }}{% elif title is not none %}<h1 class="base-page-title">{{ title }}</h1>{% endif %}{% if has_leading %}</div>{% endif %}{% if context %}<p>{{ context }}</p>{% endif %}</div>{% if actions %}<div class="base-page-actions">{{ actions }}</div>{% endif %}</div>
+<div class="base-page-header"><div>{% if has_leading %}<div class="base-page-heading">{{ leading }}{% endif %}{% if heading %}{{ heading }}{% elif title is not none %}<h1 class="base-page-title">{{ title }}</h1>{% endif %}{% if has_leading %}</div>{% endif %}{% if context %}<p>{{ context }}</p>{% endif %}</div>{% if actions %}<div class="base-action-group base-page-actions" data-align="start">{{ actions }}</div>{% endif %}</div>
 {%- endif %}
 {%- endmacro %}
 
-{% macro section_header(title, heading_id=none, level=2, context=none, actions=none, class_name='') -%}
+{% macro section_header(title, heading_id=none, level=2, context=none, actions=none, class_name='', separated=false) -%}
 {% set heading_level = level|int if level in [2, 3, 4, 5, 6] else 2 -%}
-<div class="base-section-header{% if class_name %} {{ class_name }}{% endif %}"><div class="base-section-heading"><h{{ heading_level }} class="base-section-title" data-level="{{ heading_level }}"{% if heading_id %} id="{{ heading_id }}"{% endif %}>{{ title }}</h{{ heading_level }}>{% if context is defined and context is not none and context is not sameas false and context != '' %}<div class="base-section-context">{{ context }}</div>{% endif %}</div>{% if actions is defined and actions is not none and actions is not sameas false and actions != '' %}<div class="base-page-actions">{{ actions }}</div>{% endif %}</div>
+<div class="base-section-header{% if class_name %} {{ class_name }}{% endif %}"{% if separated %} data-separated="true"{% endif %}><div class="base-section-heading"><h{{ heading_level }} class="base-section-title" data-level="{{ heading_level }}"{% if heading_id %} id="{{ heading_id }}"{% endif %}>{{ title }}</h{{ heading_level }}>{% if context is defined and context is not none and context is not sameas false and context != '' %}<div class="base-section-context">{{ context }}</div>{% endif %}</div>{% if actions is defined and actions is not none and actions is not sameas false and actions != '' %}<div class="base-action-group base-page-actions" data-align="start">{{ actions }}</div>{% endif %}</div>
+{%- endmacro %}
+
+{% macro content_section(tag='section', dividers='start', inset='auto', density='default', class_name='', attributes=none) -%}
+{% set element = tag if tag in ['section', 'div', 'article', 'aside', 'form', 'header', 'footer'] else 'section' -%}
+{% set edges = dividers if dividers in ['start', 'end', 'both', 'none'] else 'start' -%}
+{% set spacing = (inset if inset in ['start', 'end', 'both', 'none'] else edges) -%}
+<{{ element }} class="base-content-section{% if class_name %} {{ class_name }}{% endif %}" data-dividers="{{ edges }}" data-inset="{{ spacing }}" data-density="{{ density if density in ['default', 'compact'] else 'default' }}"{{ _native_attributes(attributes, ['class', 'data-dividers', 'data-inset', 'data-density']) }}>{{ caller() }}</{{ element }}>
 {%- endmacro %}
 
 {% macro code_block(value, id=none, label='Код', labelled_by=none, described_by=none, wrap=true, class_name='') -%}
@@ -49,7 +70,7 @@
 {%- endmacro %}
 
 {% macro account(logout='/logout') -%}
-<details class="base-ssr-account"><summary aria-label="Аккаунт" title="Аккаунт"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 22v-2a8 8 0 0 1 16 0v2"/></svg></summary><div class="base-ssr-account-menu"><fieldset class="base-ssr-theme"><legend>Тема</legend>{% for value, label in [('light', 'Светлая'), ('dark', 'Тёмная'), ('gray', 'Серая')] %}<label>{{ radio_control('base-account-theme-' ~ value, 'platform-theme', value, label=label, theme_option=true) }} {{ label }}</label>{% endfor %}</fieldset>{{ button('Выйти', href=logout, variant='link') }}</div></details>
+<details class="base-ssr-account"><summary aria-label="Аккаунт" title="Аккаунт"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 22v-2a8 8 0 0 1 16 0v2"/></svg></summary><div class="base-ssr-account-menu"><fieldset class="base-ssr-theme"><legend>Тема</legend>{% for value, label in [('light', 'Светлая'), ('dark', 'Тёмная'), ('gray', 'Серая')] %}<label>{{ radio_control('base-account-theme-' ~ value, 'platform-theme', value, label=label, theme_option=true) }} {{ label }}</label>{% endfor %}</fieldset><a class="base-control base-button" data-variant="link" data-base-brand-link="support" hidden target="_blank" rel="noopener noreferrer">Поддержка</a><a class="base-control base-button" data-variant="link" data-base-brand-link="documentation" hidden target="_blank" rel="noopener noreferrer">Документация</a>{{ button('Выйти', href=logout, variant='link') }}</div></details>
 {%- endmacro %}
 
 {% macro navigation_drawer(title) -%}
@@ -76,21 +97,48 @@
 </div>
 {%- endmacro %}
 
-{% macro resource_list(id=none, label=none, variant='plain', density='normal', class_name='') -%}
-<div class="base-resource-list{% if class_name %} {{ class_name }}{% endif %}" data-variant="{{ variant }}" data-density="{{ density }}"{% if id %} id="{{ id }}"{% endif %}{% if label %} aria-label="{{ label }}"{% endif %}>{{ caller() }}</div>
+{% macro resource_list(id=none, label=none, variant='plain', density='normal', class_name='', tag='div', attributes=none) -%}
+{% set element = tag if tag in ['div', 'ul', 'ol'] else 'div' -%}
+<{{ element }} class="base-resource-list{% if class_name %} {{ class_name }}{% endif %}" data-variant="{{ variant }}" data-density="{{ density }}"{% if id %} id="{{ id }}"{% endif %}{% if label %} aria-label="{{ label }}"{% endif %}{{ _native_attributes(attributes, ['class','id','aria-label','data-variant','data-density']) }}>{{ caller() }}</{{ element }}>
 {%- endmacro %}
 
-{% macro resource_list_row(href=none, id=none, label=none, class_name='') -%}
+{% macro resource_list_row(href=none, id=none, label=none, class_name='', attributes=none, highlighted=false) -%}
 {% set tag = 'a' if href else 'div' -%}
-<{{ tag }} class="base-resource-list-row{% if class_name %} {{ class_name }}{% endif %}"{% if id %} id="{{ id }}"{% endif %}{% if href %} href="{{ href }}" data-interactive="true"{% endif %}{% if label %} aria-label="{{ label }}"{% endif %}>{{ caller() }}</{{ tag }}>
+<{{ tag }} class="base-resource-list-row{% if class_name %} {{ class_name }}{% endif %}"{% if id %} id="{{ id }}"{% endif %}{% if href %} href="{{ href }}" data-interactive="true"{% endif %}{% if highlighted %} data-highlighted="true"{% endif %}{% if label %} aria-label="{{ label }}"{% endif %}{{ _native_attributes(attributes, ['class','id','href','data-interactive','data-highlighted','aria-label']) }}>{{ caller() }}</{{ tag }}>
+{%- endmacro %}
+
+{% macro resource_list_title(label, heading_level=none, id=none, technical=false, tone='default') -%}
+{% set level = heading_level|string -%}
+{% set tag = 'h' ~ level if level in ['2', '3', '4', '5', '6'] else 'span' -%}
+<{{ tag }} class="base-resource-title"{% if technical %} data-technical="true"{% endif %}{% if tone in ['inherit', 'accent'] %} data-tone="{{ tone }}"{% endif %}{% if id %} id="{{ id }}"{% endif %}>{{ label }}</{{ tag }}>
+{%- endmacro %}
+
+{% macro resource_list_description(label=none, id=none, tag='span', class_name='', hidden=false, technical=false, tone='default') -%}
+{% set element = tag if tag in ['span', 'p', 'div'] else 'span' -%}
+<{{ element }} class="base-resource-description{% if class_name %} {{ class_name }}{% endif %}"{% if technical %} data-technical="true"{% endif %}{% if tone in ['inherit', 'accent'] %} data-tone="{{ tone }}"{% endif %}{% if id %} id="{{ id }}"{% endif %}{% if hidden %} hidden{% endif %}>{% if caller is defined %}{{ caller() }}{% elif label is not none %}{{ label }}{% endif %}</{{ element }}>
 {%- endmacro %}
 
 {% macro action_menu(label, id=none, class_name='', group=none) -%}
 <details class="base-action-menu{% if class_name %} {{ class_name }}{% endif %}" data-base-menu{% if group %} data-base-menu-group="{{ group }}"{% endif %}{% if id %} id="{{ id }}"{% endif %}><summary class="base-control base-button base-icon-control" data-variant="secondary" data-size="icon" aria-label="{{ label }}" title="{{ label }}"{% if id %} aria-controls="{{ id }}-panel"{% endif %}><span aria-hidden="true">&#8943;</span></summary><div class="base-menu" data-base-menu-content{% if id %} id="{{ id }}-panel"{% endif %}>{{ caller() }}</div></details>
 {%- endmacro %}
 
+
+{% macro action_menu_item(label=none, disabled=false, tone='default', class_name='', attributes=none) -%}
+<button type="button" class="base-control base-menu-item{% if class_name %} {{ class_name }}{% endif %}"{% if tone == 'danger' %} data-tone="danger"{% endif %}{% if disabled %} disabled{% endif %}{{ _native_attributes(attributes, ['class','type','disabled','data-tone']) }}>{% if caller is defined %}{{ caller() }}{% elif label is not none %}{{ label }}{% endif %}</button>
+{%- endmacro %}
+
+{% macro icon_mark(color=none, label=none, size='md', class_name='') -%}
+{% set valid_color = color is string and color|length == 7 and color[0] == '#' and color[1:]|reject('in', '0123456789abcdefABCDEF')|list|length == 0 -%}
+<span class="base-icon-mark{% if class_name %} {{ class_name }}{% endif %}" data-size="{{ size if size in ['sm', 'md'] else 'md' }}"{% if label %} role="img" aria-label="{{ label }}"{% else %} aria-hidden="true"{% endif %} style="--base-icon-mark-color:{{ color if valid_color else 'var(--color-accent)' }}">{% if caller is defined %}{{ caller() }}{% endif %}</span>
+{%- endmacro %}
+
 {% macro badge(label=none, tone='neutral', appearance='badge', class_name='') -%}
 <span class="base-badge{% if class_name %} {{ class_name }}{% endif %}" data-tone="{{ tone }}" data-appearance="{{ appearance }}">{% if appearance == 'dot' %}<span class="base-badge-dot" aria-hidden="true"></span>{% endif %}{% if caller is defined %}{{ caller() }}{% elif label is not none %}{{ label }}{% endif %}</span>
+{%- endmacro %}
+
+{% macro inline_code(value=none, class_name='', attributes=none) -%}
+<code class="base-inline-code{% if class_name %} {{ class_name }}{% endif %}"{{ _native_attributes(attributes, ['class']) }}>{% if caller is defined %}{{ caller() }}{% elif value is not none %}{{ value }}{% endif %}</code>
+
 {%- endmacro %}
 
 {% macro badge_button(label, tone='neutral', appearance='badge', id=none, type='button', disabled=false, class_name='', aria_label=none, title=none, aria_controls=none, value=none) -%}
@@ -104,18 +152,30 @@
 <div class="base-progress{% if class_name %} {{ class_name }}{% endif %}" role="progressbar" aria-valuemin="0"{% if known %} aria-valuemax="{{ max }}" aria-valuenow="{{ current }}"{% else %} data-unknown="true"{% endif %} data-variant="{{ variant }}"{% if label %} aria-label="{{ label }}"{% endif %}{% if value_text %} aria-valuetext="{{ value_text }}"{% endif %}><div class="base-progress-fill" style="width:{{ (current / max * 100) if known else 0 }}%"></div></div>
 {%- endmacro %}
 
-{% macro card(class_name='', id=none, href=none, label=none, surface='default', highlighted=false) -%}
-{% set tag = 'a' if href else 'div' -%}
-<{{ tag }} class="base-card{% if class_name %} {{ class_name }}{% endif %}" data-surface="{{ surface if surface in ['default', 'raised'] else 'default' }}"{% if highlighted %} data-highlighted="true"{% endif %}{% if id %} id="{{ id }}"{% endif %}{% if href %} href="{{ href }}" data-interactive="true"{% endif %}{% if label %} aria-label="{{ label }}"{% endif %}>{{ caller() }}</{{ tag }}>
+{% macro data_bar(segments, max=100, label=none, class_name='', attributes=none) -%}
+{% set scale = max is number and max is not boolean and max > 0 and max - max == 0 -%}
+{% set state = namespace(known=scale) -%}
+{% for item in segments -%}{% if item.value is not number or item.value is boolean or item.value - item.value != 0 -%}{% set state.known = false -%}{% endif -%}{% endfor -%}
+<div class="base-data-bar{% if class_name %} {{ class_name }}{% endif %}"{% if label %} role="img" aria-label="{{ label }}"{% else %} aria-hidden="true"{% endif %}{% if not state.known %} data-unknown="true"{% endif %}{{ _native_attributes(attributes, ['class','role','aria-label','aria-hidden','data-unknown']) }}>{% for item in segments -%}{% set valid = scale and item.value is number and item.value is not boolean and item.value - item.value == 0 -%}{% set portion = ([0, ([100, item.value / max * 100]|min)]|max) if valid else 0 -%}<span class="base-data-bar-segment" data-tone="{{ item.tone if item.tone in ['accent','success','danger','warning','muted','info'] else 'accent' }}" style="width:{{ portion }}%"></span>{% endfor %}</div>
+{%- endmacro %}
+
+{% macro card(class_name='', id=none, href=none, label=none, surface='default', highlighted=false, tag='div', padded=false, density='default', type='button', attributes=none) -%}
+{% set tag = 'a' if href else (tag if tag in ['div', 'section', 'article', 'form', 'button'] else 'div') -%}
+<{{ tag }} class="base-card{% if padded %} base-card-content{% endif %}{% if class_name %} {{ class_name }}{% endif %}" data-surface="{{ surface if surface in ['default', 'raised'] else 'default' }}"{% if padded %} data-density="{{ density if density in ['default', 'compact'] else 'default' }}"{% endif %}{% if highlighted %} data-highlighted="true"{% endif %}{% if id %} id="{{ id }}"{% endif %}{% if href %} href="{{ href }}"{% endif %}{% if href or tag == 'button' %} data-interactive="true"{% endif %}{% if tag == 'button' %} type="{{ type }}"{% endif %}{% if label %} aria-label="{{ label }}"{% endif %}{{ _native_attributes(attributes, ['class','id','href','type','aria-label','data-surface','data-density','data-highlighted','data-interactive']) }}>{{ caller() }}</{{ tag }}>
 {%- endmacro %}
 
 {% macro card_header(class_name='', density='default') -%}
 <div class="base-card-header{% if class_name %} {{ class_name }}{% endif %}" data-density="{{ density if density in ['default', 'compact'] else 'default' }}">{{ caller() }}</div>
 {%- endmacro %}
 
-{% macro card_title(title, level=3, id=none) -%}
+{% macro card_title(title, level=3, id=none, tag=none, class_name='', attributes=none) -%}
 {% set heading = level if level in [1, 2, 3, 4, 5, 6] else 3 -%}
-<h{{ heading }} class="base-card-title"{% if id %} id="{{ id }}"{% endif %}>{{ title }}</h{{ heading }}>
+{% set element = tag if tag in ['span', 'div'] else 'h' ~ heading -%}
+<{{ element }} class="base-card-title{% if class_name %} {{ class_name }}{% endif %}"{% if id %} id="{{ id }}"{% endif %}{{ _native_attributes(attributes, ['class','id']) }}>{{ title }}</{{ element }}>
+{%- endmacro %}
+
+{% macro card_description(text, tone='default', id=none) -%}
+<p class="base-card-description" data-tone="{{ tone if tone in ['default', 'muted'] else 'default' }}"{% if id %} id="{{ id }}"{% endif %}>{{ text }}</p>
 {%- endmacro %}
 
 {% macro card_content(class_name='', density='default') -%}
@@ -123,7 +183,7 @@
 {%- endmacro %}
 
 {% macro metric(label, value=none, description=none, icon=none, appearance='card', tone='default', read_state='ready', message=none, retry_url=none, id=none) -%}
-{% set presentation = appearance if appearance in ['card', 'inline'] else 'card' -%}
+{% set presentation = appearance if appearance in ['card', 'inline', 'compact'] else 'card' -%}
 {% set semantic_tone = tone if tone in ['default', 'info', 'success', 'warning', 'danger'] else 'default' -%}
 {% set view_state = read_state if read_state in ['ready', 'loading', 'empty', 'not-found', 'permission-denied', 'error', 'partial-error'] else 'error' -%}
 {% set shows_data = view_state in ['ready', 'partial-error'] -%}
@@ -143,25 +203,25 @@
 </section>
 {%- endmacro %}
 
-{% macro notice(message, tone='neutral', appearance='panel', role=none, id=none, title=none) -%}
-<div class="base-notice" data-tone="{{ tone }}" data-appearance="{{ appearance }}"{% if role %} role="{{ role }}"{% endif %}{% if id %} id="{{ id }}"{% endif %}><span class="base-notice-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">{% if tone == 'warning' %}<path d="M10.3 3.9 1.8 18.1a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/>{% else %}<circle cx="12" cy="12" r="10"/>{% endif %}{% if tone == 'success' %}<path d="m9 12 2 2 4-4"/>{% elif tone in ['warning','danger'] %}<path d="M12 8v4m0 4h.01"/>{% else %}<path d="M12 12v4m0-8h.01"/>{% endif %}</svg></span><div class="base-notice-body">{% if title %}<div class="base-notice-title">{{ title }}</div>{% endif %}<div>{{ message }}</div></div></div>
+{% macro notice(message, tone='neutral', appearance='panel', role=none, id=none, title=none, separated=false) -%}
+<div class="base-notice" data-tone="{{ tone }}" data-appearance="{{ appearance }}"{% if separated and appearance == 'inline' %} data-separated="true"{% endif %}{% if role %} role="{{ role }}"{% endif %}{% if id %} id="{{ id }}"{% endif %}><span class="base-notice-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">{% if tone == 'warning' %}<path d="M10.3 3.9 1.8 18.1a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/>{% else %}<circle cx="12" cy="12" r="10"/>{% endif %}{% if tone == 'success' %}<path d="m9 12 2 2 4-4"/>{% elif tone in ['warning','danger'] %}<path d="M12 8v4m0 4h.01"/>{% else %}<path d="M12 12v4m0-8h.01"/>{% endif %}</svg></span><div class="base-notice-body">{% if title %}<div class="base-notice-title">{{ title }}</div>{% endif %}<div>{{ message }}</div></div></div>
 {%- endmacro %}
 
-{% macro label_control(id, text, required=false) -%}
-<label class="base-label" for="{{ id }}">{{ text }}{% if required %}<span aria-hidden="true"> *</span>{% endif %}</label>
+{% macro label_control(id, text, required=false, visually_hidden=false) -%}
+<label class="{{ 'base-visually-hidden' if visually_hidden else 'base-label' }}" for="{{ id }}">{{ text }}{% if required %}<span aria-hidden="true"> *</span>{% endif %}</label>
 {%- endmacro %}
 
 {% macro field(id, label, hint=none, error=none, required=false) -%}
 <div class="base-form-field">{{ label_control(id, label, required) }}{{ caller() }}{% if hint %}<p id="{{ id }}-hint">{{ hint }}</p>{% endif %}{% if error %}{{ notice(error, 'danger', 'inline', role='alert', id=id ~ '-error') }}{% endif %}</div>
 {%- endmacro %}
 
-{% macro fieldset(legend=none, id=none, disabled=false, legend_visually_hidden=false, class_name='', name=none, form=none, labelled_by=none) -%}
-<fieldset class="base-fieldset{% if class_name %} {{ class_name }}{% endif %}"{% if id %} id="{{ id }}"{% endif %}{% if name %} name="{{ name }}"{% endif %}{% if form %} form="{{ form }}"{% endif %}{% if labelled_by %} aria-labelledby="{{ labelled_by }}"{% endif %}{% if disabled %} disabled{% endif %}>{% if legend is not none and legend is not sameas false %}<legend class="base-fieldset-legend"{% if legend_visually_hidden %} data-visually-hidden="true"{% endif %}>{{ legend }}</legend>{% endif %}{{ caller() }}</fieldset>
+{% macro fieldset(legend=none, id=none, disabled=false, legend_visually_hidden=false, class_name='', name=none, form=none, labelled_by=none, separated=false) -%}
+<fieldset class="base-fieldset{% if class_name %} {{ class_name }}{% endif %}"{% if separated %} data-separated="true"{% endif %}{% if id %} id="{{ id }}"{% endif %}{% if name %} name="{{ name }}"{% endif %}{% if form %} form="{{ form }}"{% endif %}{% if labelled_by %} aria-labelledby="{{ labelled_by }}"{% endif %}{% if disabled %} disabled{% endif %}>{% if legend is not none and legend is not sameas false %}<legend class="base-fieldset-legend"{% if legend_visually_hidden %} data-visually-hidden="true"{% endif %}>{{ legend }}</legend>{% endif %}{{ caller() }}</fieldset>
 {%- endmacro %}
 
-{% macro input_control(id, name, value='', type='text', required=false, hint=none, error=none, disabled=false, min=none, max=none, step=none, autocomplete=none, placeholder=none, minlength=none, maxlength=none, pattern=none, described_by=none, class_name='', appearance='default', variant='default', aria_label=none, form=none, read_only=false) -%}
-{% set descriptions = [(id ~ '-hint') if hint else none, (id ~ '-error') if error else none, described_by] | select | join(' ') -%}
-<input class="base-control base-input{% if class_name %} {{ class_name }}{% endif %}" data-appearance="{{ appearance }}" data-variant="{{ variant }}" id="{{ id }}" name="{{ name }}"{% if form %} form="{{ form }}"{% endif %}{% if read_only %} readonly{% endif %} type="{{ type }}" value="{{ value }}"{% if required %} required{% endif %}{% if disabled %} disabled{% endif %}{% if error %} aria-invalid="true"{% endif %}{% if descriptions %} aria-describedby="{{ descriptions }}"{% endif %}{% if aria_label %} aria-label="{{ aria_label }}"{% endif %}{% if min is not none %} min="{{ min }}"{% endif %}{% if max is not none %} max="{{ max }}"{% endif %}{% if step is not none %} step="{{ step }}"{% endif %}{% if autocomplete %} autocomplete="{{ autocomplete }}"{% endif %}{% if placeholder is not none %} placeholder="{{ placeholder }}"{% endif %}{% if minlength is not none %} minlength="{{ minlength }}"{% endif %}{% if maxlength is not none %} maxlength="{{ maxlength }}"{% endif %}{% if pattern is not none %} pattern="{{ pattern }}"{% endif %}>
+{% macro input_control(id=none, name=none, value='', type='text', required=false, hint=none, error=none, disabled=false, min=none, max=none, step=none, autocomplete=none, placeholder=none, minlength=none, maxlength=none, pattern=none, described_by=none, class_name='', appearance='default', variant='default', aria_label=none, form=none, read_only=false, attributes=none) -%}
+{% set descriptions = [(id ~ '-hint') if id is not none and hint else none, (id ~ '-error') if id is not none and error else none, described_by] | select | join(' ') -%}
+<input class="base-control base-input{% if class_name %} {{ class_name }}{% endif %}" data-appearance="{{ appearance }}" data-variant="{{ variant }}"{% if id is not none %} id="{{ id }}"{% endif %}{% if name is not none %} name="{{ name }}"{% endif %}{% if form %} form="{{ form }}"{% endif %}{% if read_only %} readonly{% endif %} type="{{ type }}" value="{{ value }}"{% if required %} required{% endif %}{% if disabled %} disabled{% endif %}{% if error %} aria-invalid="true"{% endif %}{% if descriptions %} aria-describedby="{{ descriptions }}"{% endif %}{% if aria_label %} aria-label="{{ aria_label }}"{% endif %}{% if min is not none %} min="{{ min }}"{% endif %}{% if max is not none %} max="{{ max }}"{% endif %}{% if step is not none %} step="{{ step }}"{% endif %}{% if autocomplete %} autocomplete="{{ autocomplete }}"{% endif %}{% if placeholder is not none %} placeholder="{{ placeholder }}"{% endif %}{% if minlength is not none %} minlength="{{ minlength }}"{% endif %}{% if maxlength is not none %} maxlength="{{ maxlength }}"{% endif %}{% if pattern is not none %} pattern="{{ pattern }}"{% endif %}{{ _native_attributes(attributes, ['class','id','name','form','readonly','type','value','required','disabled','aria-invalid','aria-describedby','aria-label','min','max','step','autocomplete','placeholder','minlength','maxlength','pattern','data-appearance','data-variant']) }}>
 {%- endmacro %}
 
 {% macro input_with_action(id, name, value='', type='text', action_label=none, action_id=none, pressed=none, disabled=false, action_disabled=false, required=false, hint=none, error=none, autocomplete=none, placeholder=none, described_by=none, aria_label=none, class_name='', form=none, read_only=false) -%}
@@ -172,12 +232,13 @@
 <span class="base-search-input"><svg class="base-search-input-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>{{ input_control(id, name, value=value, type='search', required=required, hint=hint, error=error, disabled=disabled, autocomplete=autocomplete, placeholder=placeholder, maxlength=maxlength, described_by=described_by, aria_label=aria_label, class_name=class_name) }}</span>
 {%- endmacro %}
 
-{% macro select_control(id, name, required=false, hint=none, error=none, disabled=false, multiple=false) -%}
-<select{% if multiple %} multiple{% endif %} data-base-choice class="base-control" id="{{ id }}" name="{{ name }}"{% if required %} required{% endif %}{% if disabled %} disabled{% endif %}{% if error %} aria-invalid="true"{% endif %}{% if hint or error %} aria-describedby="{% if hint %}{{ id }}-hint{% endif %}{% if hint and error %} {% endif %}{% if error %}{{ id }}-error{% endif %}"{% endif %}>{{ caller() }}</select>
+{% macro select_control(id=none, name=none, required=false, hint=none, error=none, disabled=false, multiple=false, aria_label=none, described_by=none, form=none, class_name='', attributes=none) -%}
+{% set descriptions = [(id ~ '-hint') if id is not none and hint else none, (id ~ '-error') if id is not none and error else none, described_by] | select | join(' ') -%}
+<select{% if multiple %} multiple{% endif %} data-base-choice class="base-control{% if class_name %} {{ class_name }}{% endif %}"{% if id is not none %} id="{{ id }}"{% endif %}{% if name is not none %} name="{{ name }}"{% endif %}{% if form %} form="{{ form }}"{% endif %}{% if required %} required{% endif %}{% if disabled %} disabled{% endif %}{% if aria_label %} aria-label="{{ aria_label }}"{% endif %}{% if error %} aria-invalid="true"{% endif %}{% if descriptions %} aria-describedby="{{ descriptions }}"{% endif %}{{ _native_attributes(attributes, ['class','id','name','form','required','disabled','multiple','data-base-choice','aria-label','aria-invalid','aria-describedby']) }}>{{ caller() }}</select>
 {%- endmacro %}
 
-{% macro textarea_control(id, name, value='', required=false, hint=none, error=none, disabled=false, rows=4, class_name='', appearance='default', aria_label=none, autosize=false) -%}
-<textarea class="base-control base-textarea{% if class_name %} {{ class_name }}{% endif %}" data-appearance="{{ appearance }}"{% if autosize %} data-base-autosize{% endif %} id="{{ id }}" name="{{ name }}" rows="{{ rows }}"{% if required %} required{% endif %}{% if disabled %} disabled{% endif %}{% if aria_label %} aria-label="{{ aria_label }}"{% endif %}{% if error %} aria-invalid="true"{% endif %}{% if hint or error %} aria-describedby="{% if hint %}{{ id }}-hint{% endif %}{% if hint and error %} {% endif %}{% if error %}{{ id }}-error{% endif %}"{% endif %}>{{ value }}</textarea>
+{% macro textarea_control(id=none, name=none, value='', required=false, hint=none, error=none, disabled=false, rows=4, class_name='', appearance='default', aria_label=none, autosize=false, attributes=none) -%}
+<textarea class="base-control base-textarea{% if class_name %} {{ class_name }}{% endif %}" data-appearance="{{ appearance }}"{% if autosize %} data-base-autosize{% endif %}{% if id is not none %} id="{{ id }}"{% endif %}{% if name is not none %} name="{{ name }}"{% endif %} rows="{{ rows }}"{% if required %} required{% endif %}{% if disabled %} disabled{% endif %}{% if aria_label %} aria-label="{{ aria_label }}"{% endif %}{% if error %} aria-invalid="true"{% endif %}{% if id is not none and (hint or error) %} aria-describedby="{% if hint %}{{ id }}-hint{% endif %}{% if hint and error %} {% endif %}{% if error %}{{ id }}-error{% endif %}"{% endif %}{{ _native_attributes(attributes, ['class','id','name','rows','required','disabled','aria-label','aria-invalid','aria-describedby','data-appearance','data-base-autosize']) }}>{{ value }}</textarea>
 {%- endmacro %}
 
 {% macro resource_list_button(label=none, pressed=none, disabled=false, id=none, class_name='') -%}
@@ -188,20 +249,21 @@
 <div class="base-table-scroll{% if container_class %} {{ container_class }}{% endif %}"><table class="base-table{% if class_name %} {{ class_name }}{% endif %}"{% if id %} id="{{ id }}"{% endif %}{% if label %} aria-label="{{ label }}"{% endif %}>{{ caller() }}</table></div>
 {%- endmacro %}
 
-{% macro button(label, id=none, type='button', variant='secondary', disabled=false, pending=false, size='default', aria_label=none, class_name='', title=none, aria_pressed=none, aria_controls=none, href=none) -%}
+{% macro button(label=none, id=none, type='button', variant='secondary', disabled=false, pending=false, size='default', aria_label=none, class_name='', title=none, aria_pressed=none, aria_controls=none, href=none, attributes=none) -%}
 {% set public_variant = {'primary': 'default', 'danger': 'destructive'}.get(variant, variant) -%}
 {% set is_link = href is not none -%}
 {% set tag = 'a' if is_link else 'button' -%}
-<{{ tag }} class="base-control base-button base-button-{{ variant }}{% if size == 'icon' %} base-icon-control{% endif %}{% if class_name %} {{ class_name }}{% endif %}" data-variant="{{ public_variant }}" data-size="{{ size }}"{% if is_link %}{% if disabled or pending %} role="link" aria-disabled="true" tabindex="-1"{% else %} href="{{ href }}"{% endif %}{% else %} type="{{ type }}"{% if disabled or pending %} disabled{% endif %}{% endif %}{% if id %} id="{{ id }}"{% endif %}{% if pending %} aria-busy="true"{% endif %}{% if aria_label %} aria-label="{{ aria_label }}"{% endif %}{% if title %} title="{{ title }}"{% endif %}{% if not is_link and aria_pressed is not none %} aria-pressed="{{ 'true' if aria_pressed else 'false' }}"{% endif %}{% if aria_controls %} aria-controls="{{ aria_controls }}"{% endif %}>{{ label }}</{{ tag }}>
+{% set owned = ['class', 'type', 'href', 'disabled', 'id', 'data-variant', 'data-size', 'aria-busy', 'aria-disabled', 'aria-label', 'title', 'aria-pressed', 'aria-controls'] + (['role', 'tabindex'] if is_link and (disabled or pending) else []) -%}
+<{{ tag }} class="base-control base-button base-button-{{ variant }}{% if size == 'icon' %} base-icon-control{% endif %}{% if class_name %} {{ class_name }}{% endif %}" data-variant="{{ public_variant }}" data-size="{{ size }}"{% if is_link %}{% if disabled or pending %} role="link" aria-disabled="true" tabindex="-1"{% else %} href="{{ href }}"{% endif %}{% else %} type="{{ type }}"{% if disabled or pending %} disabled{% endif %}{% endif %}{% if id %} id="{{ id }}"{% endif %}{% if pending %} aria-busy="true"{% endif %}{% if aria_label %} aria-label="{{ aria_label }}"{% endif %}{% if title %} title="{{ title }}"{% endif %}{% if not is_link and aria_pressed is not none %} aria-pressed="{{ 'true' if aria_pressed else 'false' }}"{% endif %}{% if aria_controls %} aria-controls="{{ aria_controls }}"{% endif %}{{ _native_attributes(attributes, owned) }}>{% if caller is defined %}{{ caller() }}{% elif label is not none %}{{ label }}{% endif %}</{{ tag }}>
 {%- endmacro %}
 
 {% macro loader(size='md') -%}
 <span class="base-pending-status" aria-hidden="true">…</span>
 {%- endmacro %}
 
-{% macro disclosure(summary, id=none, open=false, appearance='panel', class_name='') -%}
+{% macro disclosure(summary, id=none, open=false, appearance='panel', class_name='', tone='default', size='default') -%}
 {% set presentation = appearance if appearance in ['panel', 'row'] else 'panel' -%}
-<details class="base-disclosure{% if class_name %} {{ class_name }}{% endif %}" data-appearance="{{ presentation }}"{% if id %} id="{{ id }}"{% endif %}{% if open %} open{% endif %}>
+<details class="base-disclosure{% if class_name %} {{ class_name }}{% endif %}" data-appearance="{{ presentation }}"{% if tone in ['muted', 'danger'] %} data-tone="{{ tone }}"{% endif %}{% if size == 'sm' %} data-size="sm"{% endif %}{% if id %} id="{{ id }}"{% endif %}{% if open %} open{% endif %}>
 <summary{% if presentation == 'row' %} class="base-resource-list-row" data-interactive="true"{% endif %}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg><span>{{ summary }}</span></summary>
 <div class="base-disclosure-content">{{ caller() }}</div>
 </details>
@@ -221,8 +283,8 @@
 <nav class="base-section-navigation{% if class_name %} {{ class_name }}{% endif %}" data-orientation="{{ orientation }}"{% if labelled_by %} aria-labelledby="{{ labelled_by }}"{% else %} aria-label="{{ label }}"{% endif %}>{{ caller() }}</nav>
 {%- endmacro %}
 
-{% macro section_navigation_item(href, label=none, active=false, current='page', class_name='') -%}
-<a class="base-section-navigation-item base-control{% if class_name %} {{ class_name }}{% endif %}" href="{{ href }}"{% if active %} aria-current="{{ current }}"{% endif %}>{% if caller is defined %}{{ caller() }}{% elif label is not none %}{{ label }}{% endif %}</a>
+{% macro section_navigation_item(href, label=none, active=false, current='page', class_name='', attributes=none) -%}
+<a class="base-section-navigation-item base-control{% if class_name %} {{ class_name }}{% endif %}" href="{{ href }}"{% if active %} aria-current="{{ current }}"{% endif %}{{ _native_attributes(attributes, ['class','href','aria-current']) }}>{% if caller is defined %}{{ caller() }}{% elif label is not none %}{{ label }}{% endif %}</a>
 {%- endmacro %}
 
 {% macro nav(items, current_path) -%}
@@ -248,15 +310,15 @@
 
 {%- endmacro %}
 
-{% macro checkbox_control(id, name, label, checked=false, required=false, disabled=false, value='on', switch=false) -%}
-<label class="base-check-field" for="{{ id }}"><input class="base-check-input" type="checkbox" id="{{ id }}" name="{{ name }}" value="{{ value }}"{% if checked %} checked{% endif %}{% if required %} required{% endif %}{% if disabled %} disabled{% endif %}{% if switch %} role="switch"{% endif %}><span aria-hidden="true" class="{{ 'base-switch-indicator' if switch else 'base-check-indicator' }}"></span><span>{{ label }}</span></label>
+{% macro checkbox_control(id, name, label, checked=false, required=false, disabled=false, value='on', switch=false, appearance='default', form=none, label_tone='default') -%}
+<label class="base-check-field"{% if label_tone in ['secondary', 'danger'] %} data-label-tone="{{ label_tone }}"{% endif %} data-appearance="{{ 'card' if appearance == 'card' else 'default' }}" for="{{ id }}"><input class="base-check-input" type="checkbox" id="{{ id }}" name="{{ name }}" value="{{ value }}"{% if form %} form="{{ form }}"{% endif %}{% if checked %} checked{% endif %}{% if required %} required{% endif %}{% if disabled %} disabled{% endif %}{% if switch %} role="switch"{% endif %}><span aria-hidden="true" class="{{ 'base-switch-indicator' if switch else 'base-check-indicator' }}"></span><span class="base-check-label">{% if caller is defined %}{{ caller() }}{% else %}{{ label }}{% endif %}</span></label>
 {%- endmacro %}
 {% macro radio_group(id, name, label, options, value='', required=false, disabled=false, appearance='default') -%}
 <div role="radiogroup" aria-label="{{ label }}" id="{{ id }}" class="base-radio-group" data-appearance="{{ 'segmented' if appearance == 'segmented' else 'default' }}">{% for option in options %}<label class="base-check-field"><input class="base-check-input" type="radio" name="{{ name }}" value="{{ option.value }}"{% if option.value == value %} checked{% endif %}{% if required %} required{% endif %}{% if disabled or option.disabled|default(false) %} disabled{% endif %}><span aria-hidden="true" class="base-radio-indicator"></span><span>{{ option.label }}</span></label>{% endfor %}</div>
 {%- endmacro %}
 
-{% macro radio_control(id, name, value, label=none, checked=false, disabled=false, onchange=none, theme_option=false) -%}
-<span class="base-check-field"><input class="base-check-input" type="radio"{% if theme_option %} data-base-theme-option{% endif %} id="{{ id }}" name="{{ name }}" value="{{ value }}"{% if label %} aria-label="{{ label }}"{% endif %}{% if checked %} checked{% endif %}{% if disabled %} disabled{% endif %}{% if onchange %} onchange="{{ onchange }}"{% endif %}><span class="base-radio-indicator" aria-hidden="true"></span></span>
+{% macro radio_control(id, name, value, label=none, checked=false, disabled=false, onchange=none, theme_option=false, appearance='default', form=none, required=false, label_tone='default') -%}
+{% set card = appearance == 'card' %}<{{ 'label' if card else 'span' }} class="base-check-field"{% if label_tone in ['secondary', 'danger'] %} data-label-tone="{{ label_tone }}"{% endif %} data-appearance="{{ 'card' if card else 'default' }}"{% if card %} for="{{ id }}"{% endif %}><input class="base-check-input" type="radio"{% if theme_option %} data-base-theme-option{% endif %} id="{{ id }}" name="{{ name }}" value="{{ value }}"{% if form %} form="{{ form }}"{% endif %}{% if label and not card %} aria-label="{{ label }}"{% endif %}{% if required %} required{% endif %}{% if checked %} checked{% endif %}{% if disabled %} disabled{% endif %}{% if onchange %} onchange="{{ onchange }}"{% endif %}><span class="base-radio-indicator" aria-hidden="true"></span>{% if card %}<span class="base-check-label">{% if caller is defined %}{{ caller() }}{% else %}{{ label or '' }}{% endif %}</span>{% endif %}</{{ 'label' if card else 'span' }}>
 {%- endmacro %}
 
 {% macro platform_mark(with_name=false) -%}
@@ -285,6 +347,26 @@
 
 {% macro service_switcher_item(key, label, href=none, current=false, health='unknown') -%}
 <a class="base-ssr-service-item" data-platform-service="{{ key }}"{% if href %} href="{{ href }}"{% else %} aria-disabled="true" tabindex="-1" title="Адрес сервиса недоступен: дождитесь восстановления каталога своего стенда"{% endif %}{% if current %} aria-current="page"{% endif %}><span class="base-ssr-service-health" data-health="{{ health if health in ['healthy', 'unreachable'] else 'unknown' }}" role="img" aria-label="{{ 'Работает' if health == 'healthy' else 'Недоступен' if health == 'unreachable' else 'Состояние неизвестно' }}"></span><span>{{ label }}</span>{% if current %}<span class="base-ssr-service-current">Текущий</span>{% endif %}</a>
+{%- endmacro %}
+
+
+{% macro timeline(appearance='activity', tag='ol', label=none, class_name='') -%}
+{% set element = tag if tag in ['ol', 'ul', 'div'] else 'ol' -%}
+<{{ element }} class="base-timeline{% if class_name %} {{ class_name }}{% endif %}" data-appearance="{{ appearance if appearance in ['activity', 'steps'] else 'activity' }}"{% if label %} aria-label="{{ label }}"{% endif %}>{{ caller() }}</{{ element }}>
+{%- endmacro %}
+
+{% macro timeline_item(tag='li', class_name='', attributes=none) -%}
+{% set element = tag if tag in ['li', 'div', 'article'] else 'li' -%}
+<{{ element }} class="base-timeline-item{% if class_name %} {{ class_name }}{% endif %}"{{ _native_attributes(attributes, ['class']) }}>{{ caller() }}</{{ element }}>
+{%- endmacro %}
+
+{% macro timeline_marker(tone='neutral', size='small', current=false, class_name='') -%}
+<div class="base-timeline-marker{% if class_name %} {{ class_name }}{% endif %}" aria-hidden="true" data-tone="{{ tone if tone in ['neutral', 'success', 'warning', 'danger', 'info'] else 'neutral' }}" data-size="{{ size if size in ['small', 'large'] else 'small' }}"{% if current %} data-current="true"{% endif %}><span></span></div>
+{%- endmacro %}
+
+{% macro timeline_content(class_name='') -%}
+<div class="base-timeline-content{% if class_name %} {{ class_name }}{% endif %}">{{ caller() }}</div>
+
 {%- endmacro %}
 
 {% macro badge_input(value='', tone='neutral', appearance='badge', class_name='', aria_label=none, placeholder=none, size=8, hidden=false, disabled=false) -%}
