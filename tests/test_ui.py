@@ -404,7 +404,10 @@ class TestIndexPage:
         assert 'data-task-key="PREVIEW-9"' not in response.text
         namespace_rows = re.findall(r'<a\b[^>]*data-namespace-id="(\d+)"[^>]*>', response.text)
         assert namespace_rows == [str(number) for number in range(1, 7)]
-        assert 'dashboard-row base-resource-list-row' in response.text
+        rows = [attrs for tag, attrs in Elements(response.text).elements
+                if tag == "a" and "dashboard-row" in attrs.get("class", "").split()]
+        assert len(rows) == 14
+        assert all("base-resource-list-row" in row["class"].split() for row in rows)
         assert "Показано 8 из 12" in response.text
         assert "Показано 6 из 8" in response.text
         assert 'class="base-text-link" href="/tasks' in response.text
@@ -933,13 +936,18 @@ class TestPhasesPage:
         assert f'id="phase-{phase["id"]}"' in _page_source(client, response)
         assert "function jumpToPhase(select)" in _page_source(client, response)
         assert "focus({preventScroll:true})" in _page_source(client, response)
-        assert 'data-base-choice id="phaseJump"' in _page_source(client, response)
+        jump = next(attrs for tag, attrs in Elements(_page_source(client, response)).elements
+                    if tag == "select" and attrs.get("id") == "phaseJump")
+        assert "data-base-choice" in jump and "base-control" in jump["class"].split()
+        assert jump["onchange"] == "jumpToPhase(this)"
 
     def test_long_phase_list_defaults_to_compact_with_switchable_timeline(self):
         response = client.get("/phases")
 
         assert response.status_code == 200
-        assert 'class="timeline is-compact" id="phasesTimeline"' in _page_source(client, response)
+        timeline = next(attrs for _, attrs in Elements(_page_source(client, response)).elements
+                        if attrs.get("id") == "phasesTimeline")
+        assert {"base-content-section", "timeline", "is-compact"} <= set(timeline["class"].split())
         radios = [
             attrs
             for tag, attrs in Elements(_page_source(client, response)).elements
@@ -975,7 +983,11 @@ class TestPhasesPage:
         response = client.get("/phases")
         elements = Elements(response.text).elements
         assert any("phase-card-footer" in attrs.get("class", "").split() for _, attrs in elements)
-        assert any("phase-card-link" in attrs.get("class", "").split() for _, attrs in elements)
+        links = [attrs for tag, attrs in elements
+                 if tag == "a" and "timeline-card" in attrs.get("class", "").split()]
+        assert len(links) == len(client.get("/api/phases").json()["phases"])
+        assert all("base-resource-list-row" in attrs["class"].split() for attrs in links)
+        assert all(re.fullmatch(r"/phase/\d+(?:\?.*)?", attrs["href"]) for attrs in links)
         assert ".timeline-card .timeline-name{padding-right:48px}" not in response.text
         assert "position:absolute" not in re.search(r"\.workflow-card-actions\{([^}]+)", response.text).group(1)
 
@@ -1306,13 +1318,13 @@ class TestPhaseDetail:
         response = client.get(_phase_detail_path("1.INTAKE"))
 
         assert response.status_code == 200
-        assert (
-            '<textarea data-base-autosize class="inline-input wiki-subtitle base-control base-textarea"'
-            in _page_source(client, response)
-        )
-        assert '<textarea data-base-autosize class="timeline-name-input base-control base-textarea"' in _page_source(
-            client, response
-        )
+        fields = [attrs for tag, attrs in Elements(_page_source(client, response)).elements if tag == "textarea"]
+        for class_name in ("wiki-subtitle", "timeline-name-input"):
+            fields_for_role = [field for field in fields if class_name in field.get("class", "").split()]
+            assert fields_for_role
+            assert all({"base-control", "base-textarea"} <= set(field["class"].split())
+                       and "data-base-autosize" in field and field["data-appearance"] == "inline"
+                       and field["rows"] == "1" for field in fields_for_role)
         row_fields = [
             attrs
             for tag, attrs in Elements(_page_source(client, response)).elements
@@ -2247,7 +2259,16 @@ class TestTaskDetail:
         template = (TEMPLATES_DIR / "task_detail.html").read_text(encoding="utf-8")
 
         assert "base_ui.disclosure(activity_summary, open=loop.last, appearance='row'" in template
-        assert 'class="base-timeline-item activity-event" data-check-run=' in template
+        assert ("base_ui.timeline_item(tag='div', class_name='activity-event', "
+                "attributes={'data-check-run':loop.index})") in template
+        from jinja2 import Environment, FileSystemLoader
+
+        macros = Environment(loader=FileSystemLoader(TEMPLATES_DIR)).get_template("base/macros.html").module
+        rendered = macros.timeline_item(tag="div", class_name="activity-event",
+                                        attributes={"data-check-run": "3"}, caller=lambda: "Recorded check")
+        item = next(attrs for tag, attrs in Elements(rendered).elements if tag == "div")
+        assert {"base-timeline-item", "activity-event"} <= set(item["class"].split())
+        assert item["data-check-run"] == "3" and "Recorded check" in rendered
         assert '<span class="activity-header">' in template
         assert ".activity-event-summary{" not in template
 
@@ -3016,7 +3037,9 @@ class TestSettingsPage:
         assert "Команды CLI" in response.text
         assert response.text.count('<h1 class="base-page-title">Команды CLI</h1>') == 1
         assert 'cli-mobile-title' not in response.text
-        assert 'class="sidebar-cli-icon" aria-hidden="true">&gt;_</span>' in response.text
+        cli_link = next(attrs for tag, attrs in Elements(response.text).elements
+                        if tag == "a" and attrs.get("aria-label") == "Команды CLI")
+        assert cli_link["href"] == "/settings" and cli_link["aria-current"] == "page"
         assert re.search(r"workflow-[a-z0-9_-]+ step", response.text)
         assert re.search(r"workflow-[a-z0-9_-]+ history", response.text)
         assert "project-workflow step" not in response.text
@@ -3214,10 +3237,20 @@ class TestUiNetworkFailures:
         assert "instructions-mobile" not in _page_source(client, response)
         assert "instructions-context" not in _page_source(client, response)
         assert "Добавляй, удаляй и меняй порядок инструкций" not in _page_source(client, response)
-        assert 'class="instruction-text base-control base-textarea" rows="1"' in _page_source(client, response)
+        fields = [attrs for tag, attrs in Elements(_page_source(client, response)).elements
+                  if tag == "textarea" and "instruction-text" in attrs.get("class", "").split()]
+        assert fields
+        assert all({"base-control", "base-textarea"} <= set(field["class"].split())
+                   and field["rows"] == "1" and field["data-appearance"] == "inline"
+                   and "data-base-autosize" in field for field in fields)
         assert 'aria-label="Описание инструкции 1"' in _page_source(client, response)
-        assert 'class="base-control base-button type-badge" data-variant="outline"' in _page_source(client, response)
-        assert 'aria-pressed="false" onclick="toggleType(this)"' in _page_source(client, response)
+        type_buttons = [attrs for tag, attrs in Elements(_page_source(client, response)).elements
+                        if tag == "button" and "type-badge" in attrs.get("class", "").split()]
+        assert type_buttons
+        assert all({"base-control", "base-button"} <= set(button["class"].split())
+                   and button["data-variant"] == "outline" and button["onclick"] == "toggleType(this)"
+                   and button["aria-pressed"] in {"true", "false"} for button in type_buttons)
+        assert any(button["aria-pressed"] == "false" for button in type_buttons)
         assert 'aria-label="Новая инструкция"' in _page_source(client, response)
         assert 'base-icon-control order-btn move-up"' in _page_source(client, response)
         assert 'data-variant="destructive-outline" data-size="icon"' in _page_source(client, response)
