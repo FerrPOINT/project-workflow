@@ -94,13 +94,7 @@ html[data-pdlc-access-pending] body{visibility:hidden}
 
 </style>
 <style data-workflow-page-style>{% block extra_style %}{% endblock %}</style>
-{% set base_styles %}{% include "base/base-ui.css" %}{% endset %}
-{# The local prefix is validated; Markup.replace must not HTML-escape the CSS URL fragment. #}
-<style>{{ base_styles|replace('url("./fonts/', ('url("' ~ ui_base_path() ~ '/base-assets/fonts/')|safe)|safe }}</style>
-<script>{% include "base/branding-bootstrap.js" %}
-window.WorkflowBranding=window.PdlcBranding.createBrandingRuntime({root:document.documentElement,configUrl:{{ platform_branding_url()|tojson }}});
-window.addEventListener('pagehide',function(event){if(!event.persisted)window.WorkflowBranding.dispose();});
-</script>
+{% include 'branding_head.html' %}
 
 </head>
 <body class="base-ssr-shell">

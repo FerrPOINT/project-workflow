@@ -123,6 +123,11 @@ def test_unmigrated_database_requests_return_sanitized_readiness_errors(tmp_path
     }
     assert page_response.status_code == 503
     assert "База данных не готова" in page_response.text
+    assert 'class="base-resource-state base-error-state"' in page_response.text
+    assert 'data-base-brand-title="База данных не готова — Project Workflow"' in page_response.text
+    assert "PdlcThemePreference.read('workflow-theme')" in page_response.text
+    assert "createBrandingRuntime" in page_response.text
+    assert "font-family:Arial" not in page_response.text
     for leaked in ("SELECT", "sqlite", "OperationalError", "Traceback", "empty.db"):
         assert leaked not in api_response.text
         assert leaked not in page_response.text
@@ -150,7 +155,11 @@ def test_uow_creation_database_errors_return_sanitized_readiness_errors():
         assert leaked not in page_response.text
 
 
-def test_uow_creation_database_unavailable_returns_sanitized_readiness_errors():
+@pytest.mark.parametrize("prefix", ["", "/workflow"])
+def test_uow_creation_database_unavailable_returns_sanitized_readiness_errors(monkeypatch, prefix):
+    monkeypatch.setenv("UI_BASE_PATH", prefix)
+    monkeypatch.setenv("PLATFORM_BRANDING_URL", "https://configured.example.test/branding")
+    config.get_settings.cache_clear()
     app = create_app()
     client = TestClient(app, raise_server_exceptions=False)
 
@@ -162,6 +171,8 @@ def test_uow_creation_database_unavailable_returns_sanitized_readiness_errors():
     assert api_response.json()["error_code"] == "database-not-ready"
     assert page_response.status_code == 503
     assert "База данных не готова" in page_response.text
+    assert f'root:document.documentElement,configUrl:"{prefix}/api/platform/branding"' in page_response.text
+    assert f'url("{prefix}/base-assets/fonts/' in page_response.text
     assert "DATABASE_URL" not in api_response.text
     assert "DATABASE_URL" not in page_response.text
 
@@ -190,6 +201,8 @@ def test_uow_creation_config_validation_returns_sanitized_readiness_errors(monke
     }
     assert page_response.status_code == 503
     assert "База данных не готова" in page_response.text
+    assert "root:document.documentElement,configUrl:null" in page_response.text
+    assert 'url("/base-assets/fonts/' in page_response.text
     for leaked in ("DATABASE_URL", "ValidationError", "Traceback", "Переменная DATABASE_URL обязательна"):
         assert leaked not in api_response.text
         assert leaked not in page_response.text

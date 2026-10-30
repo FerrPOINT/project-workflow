@@ -1,0 +1,10 @@
+{% import 'base/macros.html' as base_ui %}
+<!doctype html><html lang="ru" data-theme="dark">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-base-brand-title="{{ title }} — Project Workflow">{{ title }} — Project Workflow</title>
+<script>{% include 'base/theme-preference.js' %};document.documentElement.dataset.theme=window.PdlcThemePreference.read('workflow-theme');</script>
+{% include 'branding_head.html' %}</head>
+<body class="base-auth-page"><main class="base-auth-screen"><section class="base-auth-panel" aria-label="{{ title }}">
+{{ base_ui.page_header(title=title) }}
+{{ base_ui.state('error', message, retry_url=request.url.path, retry_label='Обновить страницу') }}
+</section></main></body></html>

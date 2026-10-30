@@ -111,7 +111,9 @@ class SharedShellTemplateTests(TestCase):
         html = self.render_shell([])
         elements = Elements(html).elements
         self.assertEqual(sum("page-frame" in attrs.get("class", "").split() for _, attrs in elements), 1)
-        self.assertIn('{% include "base/base-ui.css" %}', source)
+        self.assertIn("{% include 'branding_head.html' %}", source)
+        self.assertIn(".base-button", html)
+        self.assertIn("window.WorkflowBranding=window.PdlcBranding.createBrandingRuntime", html)
 
     def test_home_link_and_page_title_use_the_shared_controls_with_native_semantics(self):
         html = self.render_shell([])
