@@ -40,6 +40,19 @@ const brandingIcons = {
   "flask": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"64\" height=\"64\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-flask-conical\" aria-hidden=\"true\"><path d=\"M14 2v6a2 2 0 0 0 .245.96l5.51 10.08A2 2 0 0 1 18 22H6a2 2 0 0 1-1.755-2.96l5.51-10.08A2 2 0 0 0 10 8V2\"></path><path d=\"M6.453 15h11.094\"></path><path d=\"M8.5 2h7\"></path></svg>"
 };
 
+/** The document owns the font, including marks rendered outside its token scope.
+ * @param {'system'|'inter'|'noto-sans'} [preset]
+ * @returns {string}
+ */
+function brandingFontFamily(preset = "system") {
+  return {
+    system:
+      'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    inter: '"PDLC Inter", system-ui, sans-serif',
+    "noto-sans": '"PDLC Noto Sans", system-ui, sans-serif',
+  }[preset];
+}
+
 /** @template T @param { {design:{marks:{common:T,light:T|null,dark:T|null} }} } document @param {string} theme @returns {T} */
 function effectiveMark(document, theme) {
   return (
@@ -159,11 +172,21 @@ async function brandingFavicon(brand, theme) {
     } else failed = true;
   }
   const count = markCount(mark, brand.design.favicon.mode !== "logo", failed);
+  const letters = markLetters(brand, mark).slice(0, count);
+  const font = `700 ${markFontSize(count, 64)}px ${brandingFontFamily(brand.design.font_preset)}`;
+  // Canvas does not trigger a later repaint when a bundled font finishes loading.
+  // Wait only for this document's family and actual glyphs; page rendering stays async.
+  if (brand.design.font_preset !== "system" && document.fonts?.load) {
+    try {
+      await document.fonts.load(font, letters.join(""));
+    } catch {
+      // A failed font resource retains the same CSS fallback as the visible mark.
+    }
+  }
   ctx.fillStyle = foreground;
-  ctx.font = `700 ${markFontSize(count, 64)}px sans-serif`;
+  ctx.font = font;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  const letters = markLetters(brand, mark).slice(0, count);
   if (count === 4) {
     letters.forEach((letter, index) => {
       const offset = fourLetterOffset(index, 64);
@@ -184,6 +207,7 @@ function paintBrandingMark(element, branding, theme) {
   const size = element.getBoundingClientRect().width || 40;
   element.style.background = mark.background;
   element.style.color = mark.foreground;
+  element.style.fontFamily = brandingFontFamily(branding.design.font_preset);
   element.style.borderRadius =
     mark.shape === "circle"
       ? "50%"
@@ -615,16 +639,12 @@ function resolveBrandingTokens(branding, theme = "dark") {
     "--color-destructive": colors.danger,
     "--color-popover": colors.surface,
     "--color-popover-foreground": colors["text-primary"],
-    "--base-font-sans": {
-      system:
-        'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-      inter: '"PDLC Inter", system-ui, sans-serif',
-      "noto-sans": '"PDLC Noto Sans", system-ui, sans-serif',
-    }[design.font_preset],
-    "--base-font-body": large ? "16px" : "14px",
-    "--base-font-label": large ? "14px" : "12px",
-    "--base-font-page-title": large ? "28px" : "24px",
-    "--base-line-body": large ? "24px" : "20px",
+    "--base-font-sans": brandingFontFamily(design.font_preset),
+    // Preserve the 16px-root defaults while respecting the browser's text preference.
+    "--base-font-body": large ? "1rem" : "0.875rem",
+    "--base-font-label": large ? "0.875rem" : "0.75rem",
+    "--base-font-page-title": large ? "1.75rem" : "1.5rem",
+    "--base-line-body": large ? "1.5rem" : "1.25rem",
     "--base-radius": radius + "px",
     "--radius-sm": Math.max(0, radius - 2) + "px",
     "--radius-md": radius + "px",
@@ -750,6 +770,7 @@ function createBrandingRuntime(options) {
     }
   }
   let generatedIcon = null;
+  /** @type {Map<Element, {href:string, type:string|null}>} */
   const originalIcons =
     root === root.ownerDocument.documentElement
       ? new Map(
@@ -757,7 +778,13 @@ function createBrandingRuntime(options) {
             ...root.ownerDocument.querySelectorAll(
               'link[rel="icon"],link[rel="shortcut icon"]',
             ),
-          ].map((link) => [link, link.getAttribute("href") ?? ""]),
+          ].map((link) => [
+            link,
+            {
+              href: link.getAttribute("href") ?? "",
+              type: link.getAttribute("type"),
+            },
+          ]),
         )
       : new Map();
   const safeImage = (value) => {
@@ -840,19 +867,28 @@ function createBrandingRuntime(options) {
         generatedIcon = root.ownerDocument.createElement("link");
         generatedIcon.rel = "icon";
         root.ownerDocument.head.appendChild(generatedIcon);
-        originalIcons.set(generatedIcon, "");
+        originalIcons.set(generatedIcon, { href: "", type: null });
       }
       void brandingFavicon(branding, root.dataset.theme)
         .then((url) => {
           if (active && identityRequest === identitySequence && url)
-            for (const [link] of originalIcons) link.setAttribute("href", url);
+            for (const [link] of originalIcons) {
+              link.setAttribute("href", url);
+              link.setAttribute("type", "image/png");
+            }
         })
         .catch(() => {
           /* Retain the confirmed icon when canvas is unavailable. */
         });
-    } else
-      for (const [link, original] of originalIcons)
-        link.setAttribute("href", safeImage(branding.favicon_url) ?? original);
+    } else {
+      const external = safeImage(branding.favicon_url);
+      for (const [link, original] of originalIcons) {
+        link.setAttribute("href", external ?? original.href);
+        // A legacy URL has no declared MIME. Its response supplies the type.
+        if (external || original.type === null) link.removeAttribute("type");
+        else link.setAttribute("type", original.type);
+      }
+    }
   }
   root.ownerDocument.addEventListener("DOMContentLoaded", identity);
   function publish() {
@@ -961,8 +997,11 @@ function createBrandingRuntime(options) {
           else mark.setAttribute(name, value);
       }
       root.ownerDocument.removeEventListener("DOMContentLoaded", identity);
-      for (const [link, original] of originalIcons)
-        link.setAttribute("href", original);
+      for (const [link, original] of originalIcons) {
+        link.setAttribute("href", original.href);
+        if (original.type === null) link.removeAttribute("type");
+        else link.setAttribute("type", original.type);
+      }
       generatedIcon?.remove();
       if (timer !== null) win.clearInterval(timer);
       root.ownerDocument.removeEventListener("visibilitychange", visible);

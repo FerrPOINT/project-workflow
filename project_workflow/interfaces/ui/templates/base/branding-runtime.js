@@ -1,4 +1,5 @@
 import { validMonogram } from "./branding-marks.js";
+import { brandingFontFamily } from "./branding-fonts.js";
 import { isHex as hex, contrast, foreground } from "./branding-colors.js";
 import { brandingFavicon, paintBrandingMark } from "./branding-marks.js";
 import { DEFAULT_PLATFORM_NAME } from "./platform-title.js";
@@ -365,16 +366,12 @@ export function resolveBrandingTokens(branding, theme = "dark") {
     "--color-destructive": colors.danger,
     "--color-popover": colors.surface,
     "--color-popover-foreground": colors["text-primary"],
-    "--base-font-sans": {
-      system:
-        'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-      inter: '"PDLC Inter", system-ui, sans-serif',
-      "noto-sans": '"PDLC Noto Sans", system-ui, sans-serif',
-    }[design.font_preset],
-    "--base-font-body": large ? "16px" : "14px",
-    "--base-font-label": large ? "14px" : "12px",
-    "--base-font-page-title": large ? "28px" : "24px",
-    "--base-line-body": large ? "24px" : "20px",
+    "--base-font-sans": brandingFontFamily(design.font_preset),
+    // Preserve the 16px-root defaults while respecting the browser's text preference.
+    "--base-font-body": large ? "1rem" : "0.875rem",
+    "--base-font-label": large ? "0.875rem" : "0.75rem",
+    "--base-font-page-title": large ? "1.75rem" : "1.5rem",
+    "--base-line-body": large ? "1.5rem" : "1.25rem",
     "--base-radius": radius + "px",
     "--radius-sm": Math.max(0, radius - 2) + "px",
     "--radius-md": radius + "px",
@@ -500,6 +497,7 @@ export function createBrandingRuntime(options) {
     }
   }
   let generatedIcon = null;
+  /** @type {Map<Element, {href:string, type:string|null}>} */
   const originalIcons =
     root === root.ownerDocument.documentElement
       ? new Map(
@@ -507,7 +505,13 @@ export function createBrandingRuntime(options) {
             ...root.ownerDocument.querySelectorAll(
               'link[rel="icon"],link[rel="shortcut icon"]',
             ),
-          ].map((link) => [link, link.getAttribute("href") ?? ""]),
+          ].map((link) => [
+            link,
+            {
+              href: link.getAttribute("href") ?? "",
+              type: link.getAttribute("type"),
+            },
+          ]),
         )
       : new Map();
   const safeImage = (value) => {
@@ -590,19 +594,28 @@ export function createBrandingRuntime(options) {
         generatedIcon = root.ownerDocument.createElement("link");
         generatedIcon.rel = "icon";
         root.ownerDocument.head.appendChild(generatedIcon);
-        originalIcons.set(generatedIcon, "");
+        originalIcons.set(generatedIcon, { href: "", type: null });
       }
       void brandingFavicon(branding, root.dataset.theme)
         .then((url) => {
           if (active && identityRequest === identitySequence && url)
-            for (const [link] of originalIcons) link.setAttribute("href", url);
+            for (const [link] of originalIcons) {
+              link.setAttribute("href", url);
+              link.setAttribute("type", "image/png");
+            }
         })
         .catch(() => {
           /* Retain the confirmed icon when canvas is unavailable. */
         });
-    } else
-      for (const [link, original] of originalIcons)
-        link.setAttribute("href", safeImage(branding.favicon_url) ?? original);
+    } else {
+      const external = safeImage(branding.favicon_url);
+      for (const [link, original] of originalIcons) {
+        link.setAttribute("href", external ?? original.href);
+        // A legacy URL has no declared MIME. Its response supplies the type.
+        if (external || original.type === null) link.removeAttribute("type");
+        else link.setAttribute("type", original.type);
+      }
+    }
   }
   root.ownerDocument.addEventListener("DOMContentLoaded", identity);
   function publish() {
@@ -711,8 +724,11 @@ export function createBrandingRuntime(options) {
           else mark.setAttribute(name, value);
       }
       root.ownerDocument.removeEventListener("DOMContentLoaded", identity);
-      for (const [link, original] of originalIcons)
-        link.setAttribute("href", original);
+      for (const [link, original] of originalIcons) {
+        link.setAttribute("href", original.href);
+        if (original.type === null) link.removeAttribute("type");
+        else link.setAttribute("type", original.type);
+      }
       generatedIcon?.remove();
       if (timer !== null) win.clearInterval(timer);
       root.ownerDocument.removeEventListener("visibilitychange", visible);

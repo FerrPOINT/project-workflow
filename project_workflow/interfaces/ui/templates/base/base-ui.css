@@ -72,10 +72,10 @@
   --color-popover: #18181b;
   --color-popover-foreground: #fafafa;
   --base-font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --base-font-body: 14px;
-  --base-font-label: 12px;
-  --base-font-page-title: 24px;
-  --base-line-body: 20px;
+  --base-font-body: 0.875rem;
+  --base-font-label: 0.75rem;
+  --base-font-page-title: 1.5rem;
+  --base-line-body: 1.25rem;
   --base-radius: 6px;
   --radius-sm: 4px;
   --radius-md: 6px;
@@ -127,10 +127,10 @@
   --color-popover: #18181b;
   --color-popover-foreground: #fafafa;
   --base-font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --base-font-body: 14px;
-  --base-font-label: 12px;
-  --base-font-page-title: 24px;
-  --base-line-body: 20px;
+  --base-font-body: 0.875rem;
+  --base-font-label: 0.75rem;
+  --base-font-page-title: 1.5rem;
+  --base-line-body: 1.25rem;
   --base-radius: 6px;
   --radius-sm: 4px;
   --radius-md: 6px;
@@ -182,10 +182,10 @@
   --color-popover: #2a2a2f;
   --color-popover-foreground: #f4f4f5;
   --base-font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --base-font-body: 14px;
-  --base-font-label: 12px;
-  --base-font-page-title: 24px;
-  --base-line-body: 20px;
+  --base-font-body: 0.875rem;
+  --base-font-label: 0.75rem;
+  --base-font-page-title: 1.5rem;
+  --base-line-body: 1.25rem;
   --base-radius: 6px;
   --radius-sm: 4px;
   --radius-md: 6px;
@@ -237,10 +237,10 @@
   --color-popover: #ffffff;
   --color-popover-foreground: #18181b;
   --base-font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --base-font-body: 14px;
-  --base-font-label: 12px;
-  --base-font-page-title: 24px;
-  --base-line-body: 20px;
+  --base-font-body: 0.875rem;
+  --base-font-label: 0.75rem;
+  --base-font-page-title: 1.5rem;
+  --base-line-body: 1.25rem;
   --base-radius: 6px;
   --radius-sm: 4px;
   --radius-md: 6px;
@@ -269,18 +269,18 @@
 :root {
   --font-sans: var(--base-font-sans);
   --font-mono: var(--base-font-mono);
-  --text-base: calc(var(--base-font-body) + 2px);
-  --text-base--line-height: calc(var(--base-line-body) + 4px);
-  --text-lg: calc(var(--base-font-body) + 4px);
-  --text-lg--line-height: calc(var(--base-line-body) + 4px);
-  --text-xl: calc(var(--base-font-body) + 6px);
-  --text-xl--line-height: calc(var(--base-line-body) + 8px);
+  --text-base: calc(var(--base-font-body) + 0.125rem);
+  --text-base--line-height: calc(var(--base-line-body) + 0.25rem);
+  --text-lg: calc(var(--base-font-body) + 0.25rem);
+  --text-lg--line-height: calc(var(--base-line-body) + 0.25rem);
+  --text-xl: calc(var(--base-font-body) + 0.375rem);
+  --text-xl--line-height: calc(var(--base-line-body) + 0.5rem);
   --text-sm: var(--base-font-body);
   --text-sm--line-height: var(--base-line-body);
   --text-xs: var(--base-font-label);
-  --text-xs--line-height: calc(var(--base-line-body) - 4px);
+  --text-xs--line-height: calc(var(--base-line-body) - 0.25rem);
   --text-2xl: var(--base-font-page-title);
-  --text-2xl--line-height: calc(var(--base-line-body) + 12px);
+  --text-2xl--line-height: calc(var(--base-line-body) + 0.75rem);
   --color-danger-foreground: var(--color-destructive-foreground);
   --color-danger-strong: var(--color-danger);
   /* Compatibility aliases for one release. */
@@ -383,7 +383,7 @@
   .base-resource-description {
     color: var(--color-text-secondary);
     font-size: var(--base-font-label);
-    line-height: calc(var(--base-line-body) - 4px);
+    line-height: calc(var(--base-line-body) - 0.25rem);
   }
   .base-resource-title[data-technical="true"],
   .base-resource-description[data-technical="true"] {
@@ -1096,7 +1096,7 @@ dialog.base-shell-drawer::backdrop {
   gap: 8px;
   margin: 0;
   color: var(--color-text-primary);
-  font-size: calc(var(--base-font-body) + 2px);
+  font-size: calc(var(--base-font-body) + 0.125rem);
   font-weight: 600;
   line-height: 1.4;
   overflow-wrap: anywhere;
@@ -1121,7 +1121,7 @@ dialog.base-shell-drawer::backdrop {
   padding: 0;
   color: var(--color-text-primary);
   font-family: var(--base-font-sans);
-  font-size: calc(var(--base-font-body) + 2px);
+  font-size: calc(var(--base-font-body) + 0.125rem);
   line-height: var(--base-line-body);
   font-weight: 600;
   overflow-wrap: anywhere;
@@ -1604,7 +1604,7 @@ dialog.base-shell-drawer::backdrop {
   max-width: 24rem;
   color: var(--color-text-secondary);
   font-size: var(--base-font-label);
-  line-height: calc(var(--base-line-body) - 4px);
+  line-height: calc(var(--base-line-body) - 0.25rem);
 }
 .base-empty-heading {
   margin: 0;
@@ -1624,9 +1624,9 @@ dialog.base-shell-drawer::backdrop {
 }
 .base-state-title {
   margin: 0;
-  font-size: calc(var(--base-font-body) + 4px);
+  font-size: calc(var(--base-font-body) + 0.25rem);
   font-weight: 600;
-  line-height: calc(var(--base-line-body) + 4px);
+  line-height: calc(var(--base-line-body) + 0.25rem);
 }
 .base-terminal-icon {
   display: block;
@@ -1793,7 +1793,7 @@ body > .base-loading-state:not([data-scope="local"]) {
   border-radius: var(--radius-md);
   background: var(--color-surface);
   color: var(--color-text-primary);
-  font-size: 14px;
+  font-size: var(--base-font-body);
   text-align: start;
   cursor: pointer;
 }
@@ -1890,7 +1890,7 @@ body > .base-loading-state:not([data-scope="local"]) {
   background: var(--color-surface);
   color: var(--color-text-primary);
   font: inherit;
-  font-size: var(--base-font-body, 14px);
+  font-size: var(--base-font-body, 0.875rem);
   text-align: left;
   cursor: pointer;
 }
@@ -2057,7 +2057,7 @@ body > .base-loading-state:not([data-scope="local"]) {
   display: block;
   margin-top: 4px;
   color: var(--color-danger);
-  font-size: var(--base-font-body, 14px);
+  font-size: var(--base-font-body, 0.875rem);
 }
 .base-choice-error[hidden] {
   display: none;
@@ -2665,7 +2665,7 @@ body {
 }
 .base-table td[data-text-size="sm"] {
   font-size: var(--base-font-label);
-  line-height: calc(var(--base-line-body) - 4px);
+  line-height: calc(var(--base-line-body) - 0.25rem);
 }
 .base-card-header,
 .base-card-content,
@@ -2768,7 +2768,7 @@ body {
 }
 .base-metric[data-appearance="compact"] .base-metric-label {
   font-size: var(--base-font-label);
-  line-height: calc(var(--base-line-body) - 4px);
+  line-height: calc(var(--base-line-body) - 0.25rem);
 }
 .base-metric[data-appearance="compact"] .base-metric-value {
   font-size: var(--base-font-body);
@@ -3669,10 +3669,10 @@ label.base-card[data-interactive="true"]:has(input:disabled) {
   font-size: var(--base-font-page-title);
 }
 .base-prose :where(h2) {
-  font-size: calc(var(--base-font-body) + 6px);
+  font-size: calc(var(--base-font-body) + 0.375rem);
 }
 .base-prose :where(h3) {
-  font-size: calc(var(--base-font-body) + 2px);
+  font-size: calc(var(--base-font-body) + 0.125rem);
 }
 .base-prose :where(ul, ol) {
   padding-inline-start: 1.5em;
@@ -3751,7 +3751,7 @@ label.base-card[data-interactive="true"]:has(input:disabled) {
   font-size: var(--base-font-label);
 }
 .base-prose[data-compact="true"] :where(h1) {
-  font-size: calc(var(--base-font-body) + 2px);
+  font-size: calc(var(--base-font-body) + 0.125rem);
 }
 .base-prose[data-compact="true"] :where(h2, h3) {
   font-size: var(--base-font-body);

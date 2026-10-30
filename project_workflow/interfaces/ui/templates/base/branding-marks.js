@@ -1,4 +1,5 @@
 import { isHex } from "./branding-colors.js";
+import { brandingFontFamily } from "./branding-fonts.js";
 import { brandingIcons } from "./branding-icons.js";
 import { DEFAULT_PLATFORM_NAME } from "./platform-title.js";
 /** @template T @param { {design:{marks:{common:T,light:T|null,dark:T|null} }} } document @param {string} theme @returns {T} */
@@ -120,11 +121,21 @@ export async function brandingFavicon(brand, theme) {
     } else failed = true;
   }
   const count = markCount(mark, brand.design.favicon.mode !== "logo", failed);
+  const letters = markLetters(brand, mark).slice(0, count);
+  const font = `700 ${markFontSize(count, 64)}px ${brandingFontFamily(brand.design.font_preset)}`;
+  // Canvas does not trigger a later repaint when a bundled font finishes loading.
+  // Wait only for this document's family and actual glyphs; page rendering stays async.
+  if (brand.design.font_preset !== "system" && document.fonts?.load) {
+    try {
+      await document.fonts.load(font, letters.join(""));
+    } catch {
+      // A failed font resource retains the same CSS fallback as the visible mark.
+    }
+  }
   ctx.fillStyle = foreground;
-  ctx.font = `700 ${markFontSize(count, 64)}px sans-serif`;
+  ctx.font = font;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  const letters = markLetters(brand, mark).slice(0, count);
   if (count === 4) {
     letters.forEach((letter, index) => {
       const offset = fourLetterOffset(index, 64);
@@ -145,6 +156,7 @@ export function paintBrandingMark(element, branding, theme) {
   const size = element.getBoundingClientRect().width || 40;
   element.style.background = mark.background;
   element.style.color = mark.foreground;
+  element.style.fontFamily = brandingFontFamily(branding.design.font_preset);
   element.style.borderRadius =
     mark.shape === "circle"
       ? "50%"
