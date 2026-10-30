@@ -1,6 +1,8 @@
 {
   "schema": "workflow-test-lanes/v1",
   "unit": [
+    "test_dependency_inputs.py",
+    "test_dependency_locks.py",
     "test_domain_entities.py",
     "test_fixture_imports.py",
     "test_phase_graph.py",

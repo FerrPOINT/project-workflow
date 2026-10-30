@@ -63,3 +63,30 @@ Source/unit PASS не означает, что release, Compose, browser или 
 использует manifest текущего checkout. Python и navigation unit runners пока выполняют
 свежие тесты: сам факт наличия frozen environment не сертифицирует test receipt.
 Перенос selector или runner не разрешает смену SDK/UI/skills/operator pins.
+
+## Runtime Docker inputs
+
+`Dockerfile` использует существующее разделение Workflow PDLC1: runtime
+dependencies и build tools готовятся по отдельным reviewed wheel closures,
+приложение собирается в wheel с `--no-build-isolation --no-deps`. Для текущего
+CPython 3.11 / Bookworm / amd64 выбраны 37 runtime и 6 build wheels с hashes;
+версии остаются в прежнем `constraints.txt`. Прочая архитектура сохраняет
+полные constraints и прежние native build prerequisites, без заявления
+квалифицированного wheel cache. Новый graph требует обновления reviewed contract.
+
+Source/revision/catalog inputs не входят в dependency install stages. Перед
+application wheel обязательна прежняя manifest verification; compatibility
+проверяется после установки того же wheel. Финальный runtime получает
+установленное окружение без pip/setuptools/wheel, migrations и прежние manifests.
+Общий pip download cache и host RUN slot сохраняются; это не общий writable venv.
+
+Быстрая проверка этой границы без сборки приложения:
+
+```bash
+python scripts/quality.py unit -- tests/test_dependency_inputs.py tests/test_dependency_locks.py
+```
+
+Эти два файла входят в reviewed unit lane; прежние slow provenance/Compose/live
+проверки остаются ручными. Source/unit PASS не подтверждает actual Docker layer
+reuse, Linux wheel/runtime correctness или сокращение CPU/RAM/time. Они проверяются
+на согласованной финальной вехе; промежуточная сборка для этого не запускается.

@@ -202,6 +202,10 @@ def test_changed_components_select_only_their_real_runner():
         (["scripts/quality.py"], ["backend:unit"]),
         (["tests/test_quality_preparation.py"], ["backend:unit"]),
         (["uv.lock"], ["backend:unit"]),
+        (["Dockerfile"], ["backend:unit"]),
+        (["dependency-wheels.json"], ["backend:unit"]),
+        (["scripts/dependency_inputs.py"], ["backend:unit"]),
+        (["tests/test_dependency_locks.py"], ["backend:unit"]),
         (["scripts/test_profession_navigation.mjs"], ["frontend:navigation"]),
     ]
     for changed, expected in cases:
