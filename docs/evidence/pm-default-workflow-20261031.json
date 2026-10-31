@@ -1,7 +1,7 @@
 {
   "workflow_key": "single-task-v1:project_manager",
   "role_key": "project_manager",
-  "content_sha256": "0434499f6baa99ff71e3e92cc6b46d7262c98f30bd4edcd3f72f503c432e3da3",
+  "content_sha256": "bd0e6d6e10b8a8b0ab2942e99dab82d0f3a2651ddd5566956910ba3896fd6878",
   "modes": [
     {
       "key": "draft",
@@ -109,7 +109,7 @@
               ]
             },
             {
-              "description": "Prepare one owner-review packet containing the FULL source brief, FULL latest server-saved requirements, scope and measurable acceptance criteria, actual choices/tradeoffs where relevant, resolved feedback and any remaining issues, publication/readback receipts and exact revision/content_hash. For phase 2, owner review presentation means this prepared packet IN THE REPORT, not an earlier owner-facing message, an independent presentation receipt or owner consent. No verbatim prior conversation message is required. A test matrix alone is not a business-document change. Reuse an unchanged saved revision; never modify an owner-confirmed document merely to satisfy preparation evidence.",
+              "description": "Prepare one owner-review packet containing the FULL source brief, FULL latest server-saved requirements, scope and measurable acceptance criteria, actual choices/tradeoffs where relevant, resolved feedback and any remaining issues, actual publication/readback data identifying the same exact revision/content_hash. Include the FULL saved document once; those actual returned data and the matching document/revision/hash suffice without duplicate full raw CLI JSON or independent stdout attestation. Missing, failed or mismatched readbacks remain gaps. For phase 2, owner review presentation means this prepared packet IN THE REPORT, not an earlier owner-facing message, an independent presentation receipt or owner consent. No verbatim prior conversation message is required. A test matrix alone is not a business-document change. Reuse an unchanged saved revision; never modify an owner-confirmed document merely to satisfy preparation evidence.",
               "execution_type": "sync",
               "skills": [
                 "project-workflow-executor",
@@ -117,7 +117,7 @@
               ]
             },
             {
-              "description": "Report this phase only when its preparation work is complete, not after every message or answer. Put the FULL source brief, FULL saved document, actual publication/readback receipts and exact revision/hash together in ONE self-contained report. Include the always-applicable input-resolution evidence: an explicit complete/consistent-input conclusion with a concise source-to-requirements mapping using those documents, OR the actual gap, real clarification/owner answer or applied feedback and its resolution. Both paths document how the input led to the saved requirements; no separate mapping artifact or invented question references are required. Every corrected report retains the full packet, not only the latest correction. Actual phase 3 presentation and owner consent are not preparation evidence. Submission/readback protocol is bookkeeping, not phase work or evidence: submit project-workflow --json step --task <workflow-task-key> --operation-key <stable-key> --expected-version <last-returned-version> --report - with ordinary TEXT/MARKDOWN stdin via safely quoted printf '%s' or a quoted heredoc. Only AFTER the response returns, inspect verdict/missing/blockers and returned phase/version. The report being evaluated cannot include its own future verdict or receipt. Known PARTIAL is not PASS: correct its actual gap in the same execution, with a new key only for a changed report; unknown acceptance requires original-key history readback, never blind resend. Request owner confirmation ONLY after phase 2 PASS.",
+              "description": "Report this phase only when its preparation work is complete, not after every message or answer. Put the FULL source brief, ONE copy of the FULL saved document, and actual publication/readback data with the same exact revision/hash in ONE self-contained report. Those actual returned data and matching document/revision/hash suffice; duplicate complete raw CLI JSON or independent stdout attestation is not required. Missing, failed or mismatched readbacks remain gaps. Include the always-applicable input-resolution evidence: an explicit complete/consistent-input conclusion with a concise source-to-requirements mapping using those documents, OR the actual gap, real clarification/owner answer or applied feedback and its resolution. Both paths document how the input led to the saved requirements; no separate mapping artifact or invented question references are required. Every corrected report retains the full packet, not only the latest correction. Actual phase 3 presentation and owner consent are not preparation evidence. Submission/readback protocol is bookkeeping, not phase work or evidence: submit project-workflow --json step --task <workflow-task-key> --operation-key <stable-key> --expected-version <last-returned-version> --report - with ordinary TEXT/MARKDOWN stdin via safely quoted printf '%s' or a quoted heredoc. Only AFTER the response returns, inspect verdict/missing/blockers and returned phase/version. The report being evaluated cannot include its own future verdict or receipt. Known PARTIAL is not PASS: correct its actual gap in the same execution, with a new key only for a changed report; unknown acceptance requires original-key history readback, never blind resend. Request owner confirmation ONLY after phase 2 PASS.",
               "execution_type": "sync",
               "skills": [
                 "project-workflow-executor",
@@ -132,7 +132,7 @@
             "Remaining issues are explicit, agreed owner choices are preserved and no additional Tracker tasks were created."
           ],
           "evidence": [
-            "FULL source brief and FULL server-saved requirements, exact revision/content_hash, publication/readback receipts, scope, business rules, acceptance criteria and prepared owner-review packet IN THIS REPORT. Actual prior presentation, a verbatim conversation message and owner consent are not phase 2 evidence.",
+            "FULL source brief, ONE copy of the FULL server-saved requirements, actual publication/readback data identifying the same exact revision/content_hash, scope, business rules, acceptance criteria and prepared owner-review packet IN THIS REPORT. Those actual data and matching document/revision/hash suffice; duplicate complete raw CLI JSON or independent stdout attestation is not required. Actual prior presentation, a verbatim conversation message and owner consent are not phase 2 evidence.",
             "Input resolution, shown through ONE of two evidence paths: for complete, consistent input, an explicit conclusion that no clarification was needed and a concise source-to-requirements mapping using the FULL brief and saved document already included in the packet; no question/answer references are needed. For incomplete or contradictory input, the actual gap, real clarification question/owner answer or applied feedback, and its resolution in the saved requirements. This item always applies through one of these paths."
           ],
           "parallel_with_phase_code": null,
@@ -191,7 +191,7 @@
             "An actual saved human owner confirmation matches the latest task/revision/hash and authorized owner.",
             "Actual feedback is resolved; changed documents were fully republished and presented before consent, while an unchanged confirmed document remains frozen without stale consent or invented questions.",
             "No unresolved business blockers; waiting for human input or consent leaves this phase unfinished without repetitive reports.",
-            "The task is still in Draft; the latest saved requirements revision/content_hash has an actual matching confirmation from its authorized human owner. No postterminal final comment, Tracker completion or Analyst dispatch has been performed for this handoff. The current report is assessed from these present facts without its own future terminal receipt, verdict or Backlog transition."
+            "The final report conclusion agrees with the FULL saved document, resolved feedback and matching owner confirmation already included. Assess this PM result without implementation, deployment or subsequent status-transition evidence."
           ],
           "evidence": [
             "FULL latest saved document, exact revision/content_hash and concrete account of its actual full owner-facing presentation; no verbatim earlier message or independent presentation attestation is required.",
