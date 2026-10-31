@@ -95,7 +95,7 @@ def test_pm_default_export_is_portable_text_only_and_preserves_all_structure(pm_
     accepted = catalog_publication._normalize(_accepted_v3()["modes"])
     assert modes == pm_default["modes"]
     assert payload_sha256(modes) == pm_default["content_sha256"]
-    assert pm_default["content_sha256"] == "959176219912798901fe25cabb6cc011119bac736028a01d8f4119ff7cc031d4"
+    assert pm_default["content_sha256"] == "0434499f6baa99ff71e3e92cc6b46d7262c98f30bd4edcd3f72f503c432e3da3"
     assert catalog_publication._structure(modes) == catalog_publication._structure(accepted)
     assert modes != accepted
     phases = modes[0]["phases"]
@@ -156,13 +156,30 @@ def test_pm_default_phase_contract_separates_preparation_from_presentation_and_c
     assert "FULL" in preparation_text and "revision" in preparation_text and "hash" in preparation_text
     assert "Request owner confirmation ONLY after phase 2 PASS" in preparation_text
     assert "Known PARTIAL is not PASS" in preparation_text
+    preparation_check = preparation["checks"][2]
+    assert "No owner consent is claimed or requested as part of this preparation packet" in preparation_check
+    assert "actual owner-facing presentation and consent are not prerequisites" in preparation_check
+    assert "PASS" not in preparation_check
     final_text = "\n".join(item["description"] for item in final["instructions"])
     assert "After phase 2 PASS, present the FULL latest server-saved requirements document" in final_text
+    assert "application's separate confirmation control for that displayed revision/hash" in final_text
+    assert "Do not ask the owner to type a confirmation phrase in ordinary chat" in final_text
+    assert "a chat message is not the separate confirmation action or its saved receipt" in final_text
     assert "task-tracker sdlc confirmation read" in final_text
     assert "Do not require this report's future terminal receipt, final comment or Backlog transition" in final_text
     assert "ONLY AFTER accepted Workflow complete=true" in final_text
-    assert "Backlog / Ready requires subsequent actual Tracker readback" in "\n".join(final["checks"])
-    assert "no automatic Analyst dispatch" in "\n".join(final["checks"])
+    assert "Do not dispatch Analyst or claim Backlog before the actual Tracker readback" in final_text
+    final_check = final["checks"][4]
+    for requirement in (
+        "The task is still in Draft",
+        "latest saved requirements revision/content_hash has an actual matching confirmation",
+        "from its authorized human owner",
+        "No postterminal final comment, Tracker completion or Analyst dispatch has been performed",
+        "present facts without its own future terminal receipt, verdict or Backlog transition",
+    ):
+        assert requirement in final_check
+    precommit_contract = "\n".join([*final["checks"], *final["evidence"]])
+    assert "pm completion submit" not in precommit_contract and "complete=true" not in precommit_contract
 
 
 def test_pm_default_preparation_evidence_declares_two_always_applicable_paths(pm_default):
