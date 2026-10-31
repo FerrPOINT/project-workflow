@@ -299,12 +299,22 @@
     "Courier New", monospace;
   --shell-sidebar-expanded: 264px;
   --shell-sidebar-compact: 72px;
-  --shell-header-height: 60px;
   --shell-platform-mark-size: 40px;
   --shell-page-gutter: clamp(16px, 2vw, 32px);
   --shell-page-block-gap: 20px;
   --shell-readable-width: 760px;
   --shell-aside-width: 320px;
+}
+
+/* Re-resolve derived dimensions in draft scopes; inherited computed variables
+   would otherwise retain the outer density and text size. */
+:root,
+[data-base-branding-scope] {
+  --shell-header-row-height: max(
+    52px,
+    calc(var(--base-line-body) + var(--base-control-padding-block) * 2 + 10px)
+  );
+  --shell-header-height: max(60px, var(--shell-header-row-height));
 }
 
 /* Share action affordances with native controls and Radix primitives. Keeping
@@ -1479,6 +1489,9 @@ dialog.base-shell-drawer::backdrop {
   gap: 8px;
 }
 
+.platform-header-leading {
+  flex-shrink: 0;
+}
 .platform-header-context {
   flex: 1;
   justify-content: flex-end;
@@ -1676,13 +1689,24 @@ body > .base-loading-state:not([data-scope="local"]) {
   box-sizing: border-box;
 }
 
+/* Product identity takes precedence over a redundant grid glyph on narrow headers. */
+@media (max-width: 767px) {
+  .platform-header [data-platform-header-slot="services"] .base-button {
+    padding-inline: calc(var(--base-control-padding-block) / 2);
+  }
+  .platform-header-services .service-switcher-icon {
+    display: none;
+  }
+}
+
 /* Namespace keeps its context row inside the existing Base header. */
 @media (max-width: 767px) {
   .platform-header:has([data-namespace-picker]) .platform-header-leading > a {
     display: none;
   }
-  :root:has(.platform-header-context [data-namespace-picker]) {
-    --shell-header-height: 104px;
+  :root:has(.platform-header-context [data-namespace-picker]),
+  [data-base-branding-scope]:has(.platform-header-context [data-namespace-picker]) {
+    --shell-header-height: calc(var(--shell-header-row-height) * 2);
   }
   .platform-header:has(.platform-header-context [data-namespace-picker]) {
     flex-wrap: wrap;
@@ -1691,12 +1715,12 @@ body > .base-loading-state:not([data-scope="local"]) {
   }
   .platform-header:has(.platform-header-context [data-namespace-picker])
     > :not(.platform-header-context) {
-    height: 51px;
+    height: calc(var(--shell-header-row-height) - 1px);
   }
   .platform-header-context:has([data-namespace-picker]) {
     order: 4;
     flex: 0 0 100%;
-    height: 52px;
+    height: var(--shell-header-row-height);
     padding-bottom: 8px;
   }
   .platform-header-context [data-namespace-picker] select {
