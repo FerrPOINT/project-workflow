@@ -95,7 +95,7 @@ def test_pm_default_export_is_portable_text_only_and_preserves_all_structure(pm_
     accepted = catalog_publication._normalize(_accepted_v3()["modes"])
     assert modes == pm_default["modes"]
     assert payload_sha256(modes) == pm_default["content_sha256"]
-    assert pm_default["content_sha256"] == "0434499f6baa99ff71e3e92cc6b46d7262c98f30bd4edcd3f72f503c432e3da3"
+    assert pm_default["content_sha256"] == "bd0e6d6e10b8a8b0ab2942e99dab82d0f3a2651ddd5566956910ba3896fd6878"
     assert catalog_publication._structure(modes) == catalog_publication._structure(accepted)
     assert modes != accepted
     phases = modes[0]["phases"]
@@ -156,6 +156,18 @@ def test_pm_default_phase_contract_separates_preparation_from_presentation_and_c
     assert "FULL" in preparation_text and "revision" in preparation_text and "hash" in preparation_text
     assert "Request owner confirmation ONLY after phase 2 PASS" in preparation_text
     assert "Known PARTIAL is not PASS" in preparation_text
+    packet, reporting = (item["description"] for item in preparation["instructions"][-2:])
+    assert "Include the FULL saved document once" in packet
+    assert "ONE copy of the FULL saved document" in reporting
+    assert "ONE copy of the FULL server-saved requirements" in preparation["evidence"][0]
+    for text in (packet, reporting, preparation["evidence"][0]):
+        assert "actual publication/readback data" in text
+        assert "matching document/revision/hash suffice" in text
+    assert "without duplicate full raw CLI JSON or independent stdout attestation" in packet
+    for text in (reporting, preparation["evidence"][0]):
+        assert "duplicate complete raw CLI JSON or independent stdout attestation is not required" in text
+    for text in (packet, reporting):
+        assert "Missing, failed or mismatched readbacks remain gaps" in text
     preparation_check = preparation["checks"][2]
     assert "No owner consent is claimed or requested as part of this preparation packet" in preparation_check
     assert "actual owner-facing presentation and consent are not prerequisites" in preparation_check
@@ -171,13 +183,12 @@ def test_pm_default_phase_contract_separates_preparation_from_presentation_and_c
     assert "Do not dispatch Analyst or claim Backlog before the actual Tracker readback" in final_text
     final_check = final["checks"][4]
     for requirement in (
-        "The task is still in Draft",
-        "latest saved requirements revision/content_hash has an actual matching confirmation",
-        "from its authorized human owner",
-        "No postterminal final comment, Tracker completion or Analyst dispatch has been performed",
-        "present facts without its own future terminal receipt, verdict or Backlog transition",
+        "The final report conclusion agrees with the FULL saved document",
+        "resolved feedback and matching owner confirmation already included",
+        "Assess this PM result without implementation, deployment or subsequent status-transition evidence",
     ):
         assert requirement in final_check
+    assert "postterminal" not in final_check and "has been performed" not in final_check
     precommit_contract = "\n".join([*final["checks"], *final["evidence"]])
     assert "pm completion submit" not in precommit_contract and "complete=true" not in precommit_contract
 
