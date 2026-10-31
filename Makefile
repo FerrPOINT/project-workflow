@@ -1,49 +1,35 @@
 # project-workflow — Makefile
 
-UV ?= uv run --isolated --with-requirements constraints.txt --all-extras
-PYTEST ?= $(UV) pytest
+WORKFLOW_QUALITY_UV ?= uv run --python 3.11.15 --frozen --all-extras
+UV ?= $(WORKFLOW_QUALITY_UV)
 
-.PHONY: test test-verbose test-integration coverage coverage-html lint lint-fix quality warnings compose-ready clean install-dev
+.PHONY: test unit integration slow release test-verbose test-integration coverage coverage-html lint lint-fix quality warnings compose-ready clean install-dev .workflow-quality
+
+FAST_QUALITY_GOALS = $(or $(filter test unit test-verbose lint quality warnings install-dev,$(MAKECMDGOALS)),test)
+
+# One report owner per Make invocation, including -j and reversed goal order.
+COVERAGE_OWNER = $(or $(firstword $(filter release coverage coverage-html,$(MAKECMDGOALS))),$@)
+COVERAGE_TARGET = $(if $(filter release,$(MAKECMDGOALS)),release,$(if $(filter coverage,$(MAKECMDGOALS)),coverage,coverage-html))
+COVERAGE_OPTIONS = $(if $(and $(filter release coverage,$(MAKECMDGOALS)),$(filter coverage-html,$(MAKECMDGOALS))),--html-report,)
 
 # --- testing ---------------------------------------------------------------
 
-test:
-	$(PYTEST) -q --timeout=60
+test unit test-verbose lint quality warnings install-dev: .workflow-quality
 
-test-verbose:
-	$(PYTEST) -v --timeout=60
+# A shared prerequisite runs once even for overlapping goals and make -j.
+.workflow-quality:
+	WORKFLOW_QUALITY_UV="$(WORKFLOW_QUALITY_UV)" python scripts/quality.py $(foreach goal,$(wordlist 2,$(words $(FAST_QUALITY_GOALS)),$(FAST_QUALITY_GOALS)),--also $(goal)) $(firstword $(FAST_QUALITY_GOALS))
 
-test-integration:
-	$(PYTEST) -q -m integration tests/test_postgres_integration.py --timeout=120
+integration slow test-integration compose-ready:
+	WORKFLOW_QUALITY_UV="$(WORKFLOW_QUALITY_UV)" python scripts/quality.py $@
 
-coverage:
-	$(PYTEST) --cov=project_workflow --cov-report=term --timeout=60
-
-coverage-html:
-	$(PYTEST) --cov=project_workflow --cov-report=html --timeout=60
-
-warnings:
-	$(PYTEST) -q --timeout=60 -W error::ResourceWarning -W error::pytest.PytestUnraisableExceptionWarning
-
-# --- lint ------------------------------------------------------------------
-
-lint:
-	$(UV) ruff check .
-	$(UV) mypy project_workflow scripts
+release coverage coverage-html:
+	@if [ "$@" = "$(COVERAGE_OWNER)" ]; then \
+		WORKFLOW_QUALITY_UV="$(WORKFLOW_QUALITY_UV)" python scripts/quality.py $(COVERAGE_OPTIONS) $(COVERAGE_TARGET); \
+	fi
 
 lint-fix:
 	$(UV) ruff check --fix .
-
-quality: repository-hygiene test test-integration coverage lint
-
-compose-ready:
-	docker compose up --build -d --wait
-	curl --fail http://127.0.0.1:8812/health
-
-# --- dev setup -------------------------------------------------------------
-
-install-dev:
-	pip install -e ".[dev,ui]"
 
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true

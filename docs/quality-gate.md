@@ -1,24 +1,34 @@
 # Quality Gate
 
-Этот файл фиксирует обязательный локальный quality gate для `project-workflow`.
-GitHub Actions в `.github/workflows/ci.yml` сохранён как опциональное зеркало:
-job `quality` запускает тесты и статический анализ с PostgreSQL 16, а
-`compose-smoke` собирает стек и проверяет `/health`. Для локального выпуска
-результаты оплачиваемых hosted jobs не требуются; `[skip ci]` предотвращает
-их запуск на push/PR. Перед commit и merge проверки ниже выполняются локально.
+Подготовка без тестов и HTML из готовых данных: [дополнительные команды](quality-auxiliary.md).
 
-Общий лимит hosted job `quality` — 35 минут: он покрывает последовательные
-unit/UI и PostgreSQL наборы со статическими проверками. Индивидуальные таймауты
-тестов остаются 60/120 секунд, два multi-process E2E — 240 секунд; локальный
-порог coverage остаётся 94%.
+Совместимые быстрые Make-цели используют одну quality operation: например,
+`make unit quality` сохраняет unit, Ruff, mypy и diff check без повторной
+одинаковой unit-команды. Прямой эквивалент: `python scripts/quality.py --also quality unit`.
+Опции `--also` ставятся перед основной целью; scoped pytest arguments с ними
+не совмещаются. Разные verbose/warnings-команды сохраняются отдельно.
+Integration/slow/release/coverage остаются отдельными ручными маршрутами.
+Для canonical uv environment готовится один раз внутри этой операции;
+пользовательский `WORKFLOW_QUALITY_UV` сохраняет собственную семантику.
 
-CI измеряет существующий line coverage через `sysmon` в закреплённом Coverage
-7.15.4 на Python 3.12+. Эта настройка относится только к шагу coverage; branch
-coverage, plugins и dynamic contexts в текущей конфигурации не включены.
-Source/omit, порог 94%, состав тестов и их индивидуальные таймауты сохраняются.
-Режим описан в [Coverage configuration](https://coverage.readthedocs.io/en/7.15.4/config.html#run-core).
-Первый полный прогон с обычным tracer дошёл до 69% за 35 минут и был отменён
-лимитом job; он не считается успешным измерением покрытия.
+Обязательная политика уровней и обычные команды: [TESTING](TESTING.md).
+`python scripts/quality.py quality` выполняет repository hygiene + reviewed unit + Ruff/mypy/diff.
+Make, PowerShell и CI используют один runner, Python 3.11.15 и frozen uv.lock.
+В пределах операции environment готовится один раз. Совместимость lock и
+constraints проверяется до подготовки; прогретые dependencies сохраняются.
+
+Ниже — каталог ручных release/diagnostic проверок, а не обязательный полный
+прогон после каждой правки. Release выполняет один полный non-PostgreSQL pytest
+с coverage >=94%, XML и строгими warnings, затем PostgreSQL отдельно.
+Timeout 60/120 секунд и multi-process E2E timeout 240 секунд сохраняются.
+Automatic CI выбирает affected backend/frontend; docs-only не готовит uv.
+PostgreSQL и Compose находятся в ручном release.yml. Browser/live acceptance
+сохраняются как отдельные проверки по порученному окружению.
+
+Историческая диагностика прежнего CI: полный ordinary-tracer прогон был отменён
+по лимиту35минут на69%; это не успешное измерение coverage. Старый Python3.12+
+sysmon pilot не переносится на нынешний frozen Python3.11 и не доказывает его
+скорость. Новые Source/unit результаты не заменяют сохранённые manual proofs.
 
 ## Базовый gate
 
@@ -36,11 +46,7 @@ python ../services-base/scripts/export_python_namespace.py --out project_workflo
 или чтения env. В CI checkout SDK использует read-only deploy key `SERVICES_BASE_DEPLOY_KEY`.
 
 ```bash
-uv run --isolated --with-requirements constraints.txt --all-extras pytest -q --timeout=60
-uv run --isolated --with-requirements constraints.txt --all-extras pytest -q -m integration tests/test_postgres_integration.py --timeout=120
-uv run --isolated --with-requirements constraints.txt --all-extras pytest --cov=project_workflow --cov-report=term --timeout=60
-uv run --isolated --with-requirements constraints.txt --all-extras ruff check .
-uv run --isolated --with-requirements constraints.txt --all-extras mypy project_workflow scripts
+python scripts/quality.py release
 git diff --check
 ```
 
@@ -52,8 +58,8 @@ git diff --check
 - coverage остаётся не ниже текущего локального baseline `94%`;
 - `ruff`, `mypy` и `git diff --check` не находят ошибок.
 
-На Unix-like окружении тот же набор доступен через `make quality`; на Windows
-без `make` используйте `pwsh -File scripts/quality.ps1 quality`. Дополнительные
+На Unix-like окружении тот же набор доступен через `make release`; на Windows
+без `make` используйте `pwsh -File scripts/quality.ps1 release`. Дополнительные
 цели `warnings` и `compose-ready` есть и в `Makefile`, и в PowerShell helper.
 
 ### Windows И UTF-8 В Тестовых Subprocess
@@ -79,11 +85,12 @@ JavaScript передаётся в Node через stdin с явным `encoding
 
 ## ResourceWarning Gate
 
-После изменений в тестовой инфраструктуре, SQLAlchemy layer, UI request
-lifecycle или CLI session lifecycle дополнительно запускать:
+Ручной release уже включает строгие warnings внутри единственного coverage
+прогона. После его успеха отдельный полный pytest не нужен. Для диагностики
+reviewed unit используется:
 
 ```bash
-uv run --isolated --with-requirements constraints.txt --all-extras pytest -q --timeout=60 -W error::ResourceWarning -W error::pytest.PytestUnraisableExceptionWarning
+python scripts/quality.py warnings
 ```
 
 Этот прогон должен проходить без SQLite connection warnings, включая
@@ -130,7 +137,8 @@ SDLC/deployment приёмкой. Production dependencies, catalog и manifest �
 
 ## Compose Readiness
 
-Для проверки локального runtime:
+Отдельная ручная проверка выбранной isolated installation; не запускать
+legacy Compose поверх установленных PDLC групп. Для локального runtime:
 
 ```bash
 docker compose up --build -d --wait

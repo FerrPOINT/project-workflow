@@ -658,7 +658,7 @@ def test_compatible_image_delivers_descriptor_to_docker(compatible_sources):
     assert f"SOURCE_REVISION={descriptor['catalogRevision']}" in command
     dockerfile = (Path(__file__).resolve().parents[1] / "Dockerfile").read_text()
     assert "verify-compatibility --root /app" in dockerfile
-    assert "COPY --from=builder /app/runtime-compatibility.json /app/runtime-compatibility.json" in dockerfile
+    assert "COPY --from=runtime-inputs /app/runtime-compatibility.json /app/runtime-compatibility.json" in dockerfile
 
 
 @pytest.mark.parametrize("explicit", [False, True])

@@ -21,62 +21,30 @@
 
 3. Merge и deploy запрещены без явной команды пользователя.
 
-## Обязательные проверки
+## Проверки и производительность
 
-Канонический локальный gate и expected output описаны в
-`docs/quality-gate.md`; цели `Makefile` и `scripts/quality.ps1` повторяют эти
-команды через `uv`, `constraints.txt` и текущий marker contract.
+Перед build/test читать [TESTING](docs/TESTING.md) и стандарт Base по ссылкам
+в нём. Команды принадлежат `scripts/quality.py`; Make, PowerShell и CI
+делегируют ему. Во время разработки — scoped unit/static, без runtime rebuild.
+`python scripts/quality.py unit` собирает только reviewed files из
+`tests/lanes.json`; unit не готовит SQLite/UI isolation fixture.
+`python scripts/quality.py quality` сохраняет repository hygiene и добавляет
+Ruff/mypy и diff check. Release также сохраняет repository hygiene.
+Не повторять install при неизменных frozen inputs и совместимом окружении.
 
-После любого изменения SQLAlchemy-слоя, application services, состояния UI или
-Supervisor Engine перед commit выполнить следующие проверки:
+Integration/slow/coverage/PostgreSQL/Compose/live — отдельная ручная веха.
+`python scripts/quality.py release` выполняет один полный non-PostgreSQL pytest
+с coverage >=94% и PostgreSQL отдельно. Полный контракт и expected output:
+[quality gate](docs/quality-gate.md). Не ослаблять security/data/compatibility
+проверки ради скорости; SDK/UI/skills pins независимы.
 
-1. **Tests**
-   ```bash
-   pytest -q --timeout=60
-   ```
-   Ожидается 0 падений и 0 ошибок. PostgreSQL integration tests здесь намеренно
-   исключены и запускаются отдельно.
-
-2. **PostgreSQL integration**
-   ```bash
-   pytest -q -m integration tests/test_postgres_integration.py --timeout=120
-   ```
-   Ожидается 0 падений и 0 ошибок. Набор включает реальный путь CLI subprocess →
-   PostgreSQL → тестовый OpenAI-compatible HTTP endpoint. Два multi-process E2E
-   теста имеют собственный timeout 240 секунд.
-
-3. **Coverage**
-   ```bash
-   pytest --cov=project_workflow --cov-report=term --timeout=60
-   ```
-   Ожидается общее покрытие не ниже текущего локального baseline 94%.
-
-4. **Lint**
-   ```bash
-   ruff check .
-   ```
-   Ожидается `All checks passed!`.
-
-5. **Type check**
-   ```bash
-   mypy project_workflow scripts
-   ```
-   Ожидается `Success: no issues found`.
-
-6. **Readiness локального Compose**
-   ```bash
-   docker compose up --build -d --wait
-   curl --fail http://127.0.0.1:8812/health
-   ```
-   Ожидается HTTP `200` и `database=ok`, `schema=ok`.
-
-7. **Браузерная проверка** для изменений UI
-   - Открыть `http://127.0.0.1:8812/` и `http://127.0.0.1:8812/phases`.
-   - Сохранить скриншот.
+Для UI сохраняются browser verification и screenshot по порученному окружению;
+source/unit проверки не означают, что runtime/production принят. Merge и deploy
+остаются отдельным поручением.
 
 ## Примечания
 
-- Для стандартного полного набора использовать `pytest -q --timeout=60`.
+- Полный набор запускается вручную через `python scripts/quality.py release`.
   `--forked` не требуется; при нём отчёт coverage некорректен.
 - `DATABASE_URL` обязателен в runtime. SQLite используется только в изолированных тестах.
 - `project-workflow` хранит имена skills. Действующий legacy-каталог сохраняет

@@ -1,0 +1,224 @@
+{
+  "schema": "base-quality-product/v1",
+  "product": "project-workflow",
+  "components": {
+    "docs": [
+      "docs/**",
+      "*.md",
+      "LICENSE"
+    ],
+    "backend": [
+      "project_workflow/*.py",
+      "project_workflow/application/**",
+      "project_workflow/domain/**",
+      "project_workflow/infrastructure/**",
+      "project_workflow/interfaces/cli/**",
+      "project_workflow/interfaces/ui/*.py",
+      "project_workflow/references/**",
+      "project_workflow/supervisor/**",
+      "scripts/*.py",
+      "scripts/default-image-producer.json",
+      "scripts/vendor/base-controlled-git-archive.json",
+      "scripts/vendor/base_controlled_git_archive.py",
+      "scripts/quality.ps1",
+      "tests/*.py",
+      "tests/**/*.py",
+      "tests/lanes.json",
+      "pyproject.toml",
+      "constraints.txt",
+      "producer-environment.json",
+      "uv.lock",
+      "dependency-wheels.json",
+      "Dockerfile",
+      ".dockerignore",
+      "Makefile",
+      ".github/**",
+      "openapi/**"
+    ],
+    "frontend": [
+      "project_workflow/interfaces/ui/templates/**",
+      "project_workflow/ui/**",
+      "scripts/test_profession_navigation.mjs",
+      "tests/node/**",
+      ".github/**",
+      "openapi/**"
+    ]
+  },
+  "gates": [
+    {
+      "id": "docs:readme",
+      "component": "docs",
+      "profiles": [
+        "fast",
+        "integrated",
+        "release"
+      ],
+      "argv": [
+        "{python}",
+        "-B",
+        "scripts/verify_readme.py"
+      ],
+      "cwd": ".",
+      "inputs": [
+        "**"
+      ],
+      "cacheable": true,
+      "test_tier": "static"
+    },
+    {
+      "id": "docs:contracts",
+      "component": "docs",
+      "profiles": [
+        "integration"
+      ],
+      "argv": [
+        "{python}",
+        "scripts/quality.py",
+        "integration",
+        "--",
+        "tests/test_docs_quality.py"
+      ],
+      "cwd": ".",
+      "inputs": [
+        "**"
+      ],
+      "cacheable": false,
+      "test_tier": "integration"
+    },
+    {
+      "id": "backend:quality",
+      "component": "backend",
+      "profiles": [
+        "release",
+        "integrated"
+      ],
+      "argv": [
+        "{python}",
+        "scripts/quality.py",
+        "release"
+      ],
+      "cwd": ".",
+      "inputs": [
+        "**"
+      ],
+      "cacheable": false,
+      "platforms": [
+        "linux"
+      ],
+      "requires_env": [
+        "PGHOST",
+        "PGPORT",
+        "PGUSER",
+        "PGDATABASE"
+      ],
+      "external_state": true,
+      "test_tier": "integration"
+    },
+    {
+      "id": "frontend:navigation",
+      "component": "frontend",
+      "profiles": [
+        "fast",
+        "integrated",
+        "release",
+        "unit",
+        "build"
+      ],
+      "argv": [
+        "node",
+        "scripts/test_profession_navigation.mjs"
+      ],
+      "cwd": ".",
+      "inputs": [
+        "scripts/test_profession_navigation.mjs",
+        "project_workflow/interfaces/ui/templates/profession-navigation.js",
+        "project_workflow/interfaces/ui/templates/base/platform-navigation.js",
+        "project_workflow/interfaces/ui/templates/namespaces.html"
+      ],
+      "cacheable": false,
+      "test_tier": "unit",
+      "tools": [
+        {
+          "argv": [
+            "node",
+            "--version"
+          ],
+          "pattern": "^v22\\.20\\.0\\s*$"
+        }
+      ],
+      "execution_slot": "none"
+    },
+    {
+      "id": "backend:unit",
+      "component": "backend",
+      "profiles": [
+        "fast",
+        "unit",
+        "build"
+      ],
+      "argv": [
+        "{python}",
+        "scripts/quality.py",
+        "unit"
+      ],
+      "cwd": ".",
+      "inputs": [
+        "**"
+      ],
+      "cacheable": false,
+      "test_tier": "unit"
+    },
+    {
+      "id": "backend:integration",
+      "component": "backend",
+      "profiles": [
+        "integration"
+      ],
+      "argv": [
+        "{python}",
+        "scripts/quality.py",
+        "integration"
+      ],
+      "cwd": ".",
+      "inputs": [
+        "**"
+      ],
+      "cacheable": false,
+      "test_tier": "integration",
+      "external_state": true
+    },
+    {
+      "id": "backend:slow",
+      "component": "backend",
+      "profiles": [
+        "slow"
+      ],
+      "argv": [
+        "{python}",
+        "scripts/quality.py",
+        "slow"
+      ],
+      "cwd": ".",
+      "inputs": [
+        "**"
+      ],
+      "cacheable": false,
+      "test_tier": "slow",
+      "external_state": true
+    }
+  ],
+  "additional_acceptance": "Existing product CI/CONTRIBUTING: MSRV/features, ignored DB, OpenAPI/packed consumer/themes, security and live acceptance remain separate mandatory gates where applicable.",
+  "test_policy": {
+    "automatic": [
+      "unit",
+      "static",
+      "artifact"
+    ],
+    "manual_release": [
+      "integration",
+      "slow",
+      "live"
+    ],
+    "release_required": true
+  }
+}

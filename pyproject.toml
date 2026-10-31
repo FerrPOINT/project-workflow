@@ -26,6 +26,8 @@ dev = [
     "pytest>=8.0",
     "pytest-cov>=4.0",
     "pytest-timeout>=2.3,<3.0",
+    "pytest-xdist==3.8.0",
+    "execnet==2.1.1",
     "httpx2>=2.0,<3.0",
     "ruff>=0.3",
     "mypy>=1.7",
@@ -75,13 +77,14 @@ markers = [
     "ui: UI and API tests using TestClient",
     "supervisor: supervisor/supervisor logic",
     "cli: CLI command tests",
-    "integration: tests requiring a local PostgreSQL instance",
+    "integration: DB, HTTP, CLI and other boundary tests (manual)",
+    "postgres: disposable PostgreSQL boundary tests (manual)",
     "slow: tests that take more than 10 seconds",
 ]
 filterwarnings = [
     "ignore:The default datetime adapter is deprecated as of Python 3.12.*:DeprecationWarning:sqlalchemy.engine.default",
 ]
-addopts = "-m 'not integration'"
+addopts = "-m 'unit and not integration and not slow'"
 
 [tool.coverage.report]
 fail_under = 94

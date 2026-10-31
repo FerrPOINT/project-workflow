@@ -1,0 +1,25 @@
+{
+  "schema": "workflow-test-lanes/v1",
+  "unit": [
+    "test_quality_current_checkout.py",
+    "test_dependency_inputs.py",
+    "test_dependency_locks.py",
+    "test_domain_entities.py",
+    "test_fixture_imports.py",
+    "test_phase_graph.py",
+    "test_phase_grouping.py",
+    "test_quality_auxiliary.py",
+    "test_quality_preparation.py",
+    "test_supervisor_format_result.py",
+    "test_supervisor_models.py",
+    "test_supervisor_prompt.py",
+    "test_supervisor_text_and_status.py",
+    "test_task_validator.py"
+  ],
+  "slow": [
+    "test_build_provenance.py",
+    "test_ui_smoke_data.py"
+  ],
+  "default": "integration",
+  "postgres": "test_postgres_integration.py"
+}

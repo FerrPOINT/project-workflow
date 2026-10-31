@@ -12,3 +12,6 @@ project_workflow/interfaces/ui/templates/base/*.js text eol=lf
 project_workflow/interfaces/ui/templates/base/*.json text eol=lf
 project_workflow/interfaces/ui/templates/base/fonts/*-LICENSE.txt text eol=lf
 project_workflow/interfaces/ui/templates/base/fonts/sources.json text eol=lf
+
+# Canonical bytes for the independent Base quality selector.
+scripts/vendor/base_quality_selection.py text eol=lf
