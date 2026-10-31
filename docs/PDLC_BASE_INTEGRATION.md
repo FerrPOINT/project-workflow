@@ -8,7 +8,15 @@ Producer `6f3c557698a8224c5a19e56bdc37b199ba076694`, reference
 настоящем изменении размера текста браузера. Проверка immutable source checkout
 и точного SSR distribution прошла. Обработчики, FormData и dirty tracking
 остаются у Workflow; SDK/skills pins сохранены. Это source-кандидат: native
-browser повтор Textarea прошёл; authenticated unknown-result/readback ещё открыт.
+browser повтор Textarea прошёл. Authenticated unknown-result/readback подтверждён
+на source `91a0b9dd` в собственной локальной QA-базе: настоящий OIDC/PKCE,
+принятый сервером PUT200 с последующим разрывом ответа, сохранённый ввод и один
+явный GET перед повторной записью. Автоматического повторного PUT нет; readback
+снял неопределённость. Исходное значение восстановлено и перечитано из сервера.
+Опубликованный документ Admin также применён к обычной SSR-форме: Noto Sans16px,
+комфортные контролы50px, радиус12px, цвет действия и Unicode-знак. Это локальная
+source-проверка, не приёмка установленной платформы. Сводный протокол публикуется
+в [Base PR384](https://github.com/FerrPOINT/services-base/pull/384).
 
 ## Предшествующий UI0.3.29
 
