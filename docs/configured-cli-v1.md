@@ -237,6 +237,35 @@ Apply journal хранится отдельно под
 основного workspace. Секреты, runtime DB и raw transcripts не публикуются
 в репозитории; исходные evidence не редактируются ради документации.
 
+## Локальный gate PR #161, 2026-10-31
+
+На head `7c771c9736a5147752f41c39626275d380e096eb` product/test trees
+совпадают с source861 и результатом read-only merge с текущим `master`.
+Полный non-PG прогон: **3183 passed, 73 subtests passed, 15 skipped,
+132 deselected**; неокруглённое line coverage **94.03807209396517%** при пороге
+94%. Skips: 11 требуют Playwright, 3 — opt-in private package, 1 — Git executable
+bit, который NTFS не представляет. UI этим evaluator diff не изменяется.
+Ruff проходит; mypy проверил 165 source files. Все 53 dependency pins сохранены.
+
+На отдельном PostgreSQL 17.6 полный integration-прогон дал **131 passed,
+1 skipped**. Последний тест request clock отдельно прошёл с явным URL собственной
+пустой `request_clock_fixture`: **1 passed**. Оба временных Compose-проекта,
+их сети, volumes и scratch очищены; постоянный runtime совпал до/после проверок.
+
+Для CLI отдельно установлен Base `pdlc-cli-core` из
+`64c960464205edae6d85d5f297c1ae6b99ae0371`; его tree совпадает с Base main.
+SDK pin не изменён. Первый full run без этого optional transport завершился
+14 отказами и coverage 93.9166%; те же отказы воспроизведены на `master`.
+Пакет из старого SDK pin также не поддерживает новый configured API. После
+установки нужного CLI-пакета проходят все 26 transport tests и полный gate выше.
+Прежние отказы сохранены, порог и assertions не ослаблялись.
+
+Общий Docker grouping audit не зелёный: 26 прежних нарушений process name/manifest
+и 2 недоступных runner endpoints. У QA-контейнера этого PR нарушений нет.
+Установка, новая live model acceptance, семь ролей/Rework, Kubernetes и rollback
+этим локальным gate не квалифицированы; прежняя assisted PM13 evidence сохраняет
+свои границы. Последующее документирование не меняет product/tests или pins.
+
 ## Фактические инструкции в UI
 
 `GET /api/phases/{id}` и `/instructions` при явном `namespace_id` возвращают
