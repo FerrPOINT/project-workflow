@@ -26,10 +26,13 @@ including the empty clock fixture. Exact-image fresh migration0023/health/OpenAP
 smoke passes; disposable image-QA/PG resources and scratch are cleaned. Worker
 119 tests and four frozen-proof cases overlap the targeted gate, not extra totals.
 
-Business acceptance remains pending: SDLC-18 resumes the SAME task, saved req1/hash
-and actual owner receipt after the v11 history106 failure and acknowledged native
-cancellation. No Tracker Backlog / Ready is claimed. Sparse SDLC-19 has a first
-useful question and no requirements. Mocked gates and historical assisted PM13
+Business acceptance remains unaccepted: after the v11 history106 failure,
+acknowledged native cancellation and same-task continuation under v12, SDLC-18
+history115 still required nonexistent Tracker completion-operation readbacks to
+prove absence of postterminal effects. No Tracker Backlog / Ready is claimed.
+Sparse SDLC-19 has a first useful question and no requirements. Both catalog7
+cases/history remain preserved; planned NEW full/sparse QA20/21 will assess the
+next text publication, not rewrite these outcomes. Mocked gates and historical assisted PM13
 are not acceptance of the new full/sparse cases or all roles/Kubernetes/rollback.
 Exact image, container and receipts: [installed v12 checkpoint](configured-cli-v1.md#installed-v12-checkpoint-2026-10-31).
 
@@ -161,8 +164,8 @@ This API-only package does **not** constitute accepted text editing in the UI.
 ### PM Default Contract Revision: 31 October 2026
 
 [pm-default-workflow-20261031.json](evidence/pm-default-workflow-20261031.json)
-is the new portable PM text, canonical modes hash
-`0434499f6baa99ff71e3e92cc6b46d7262c98f30bd4edcd3f72f503c432e3da3`.
+is the next portable PM text candidate, normalized canonical modes hash
+`bd0e6d6e10b8a8b0ab2942e99dab82d0f3a2651ddd5566956910ba3896fd6878`.
 It keeps the same three phases, instruction/check/evidence counts, scopes and
 skills. Only text changes. Context is phase01; phase02 prepares the FULL saved
 requirements and review packet without future presentation or consent; phase03
@@ -170,8 +173,17 @@ presents the document, obtains exact owner confirmation and reports current work
 before the existing postterminal Tracker completion/readback. No report per
 ordinary message or confirmation request before accepted preparation is required.
 
-The integrator published this content through the existing API as catalog7 on the
-checked stand. Exact operation readback and active content/hash match; the old
+The preceding content/hash0434499 was published through the existing API as
+catalog7 on the checked stand and remains active. The tracked candidate is NOT
+published; publication8 and NEW full/sparse QA20/21 are planned for integrator
+review. Its final check assesses the affirmative business conclusion, not proof
+that postterminal effects are absent. Phase02 accepts actual publication/readback
+data identifying the same revision/hash with the FULL saved document once; it
+does not require duplicate complete raw CLI JSON or independent stdout attestation.
+Actual document, presentation, owner guards and postterminal completion/readback
+instructions are unchanged. No code/image rebuild is needed for this text.
+
+At the catalog7 checkpoint, exact operation readback and active content/hash matched; the old
 SDLC-15 execution/history remain byte-equivalent in the actual CLI readback.
 The same PM runtime was restored after an observed exited container; snapshots
 21==20 and original Hermes/CLI/model are unchanged. Publication itself required
@@ -182,14 +194,15 @@ the next revision bounded context comparisons to real fields of their own source
 Catalog5 then passed preparation but needed repeated reports because conditional
 clarification evidence was treated as missing on a complete brief. Its final
 phase also exposed a circular check: the report had to prove its own future
-Workflow completion. Catalog7 incorporates two explicit input-resolution paths
-and current-state precommit checks. The final check requires confirmed latest
-requirements in Draft, not its own future terminal receipt/verdict/Backlog.
+Workflow completion. Catalog7 incorporated two explicit input-resolution paths
+and a current-state precommit check; the latter's negative absence condition
+then caused history115. The tracked candidate replaces only that final check
+with a conclusion supported by the existing FULL document/feedback/owner evidence.
 The owner uses the separate application confirmation control, not a chat phrase.
 Earlier failures/PARTIAL reports remain history, not retroactive passes. No
 evaluator or application code was changed for these texts.
 
-On the combined source, 18 targeted tests pass (22.14 seconds): portable hash and
+On the preceding catalog7 source/snapshot, 18 targeted tests passed (22.14 seconds): portable hash and
 structure, actual API publication and old-execution isolation, source-specific
 context fields, both preparation evidence paths, PARTIAL correction in the same
 execution, final consent guards and terminal completion instructions. Auth,
@@ -197,8 +210,9 @@ Tracker and LLM verdicts in these SQLite/TestClient tests are explicit synthetic
 peers, not live acceptance. Independent text review found no remaining circular
 prerequisite in those scoped fixtures. Actual v11 SDLC-18 history106 nevertheless
 demanded its own future submission result. Installed v12 addresses that shared
-prompt rule without republishing catalog7. The same SDLC-18 is being continued;
-full/sparse business scenarios remain unaccepted until actual Backlog / Ready readback.
+prompt rule without republishing catalog7. Continued SDLC-18 nevertheless reached
+PARTIAL115 on the negative absence check. Catalog7 QA18/19 remain unaccepted;
+the next text candidate requires NEW full/sparse acceptance, not reuse of mocked results.
 
 Import uses the same discovery/CAS/draft/publication procedure below. Do not copy
 this stand's catalog version into another installation or edit the sealed v1

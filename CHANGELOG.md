@@ -8,6 +8,19 @@
 
 ### Added
 
+- PM default text follow-up prepared for planned publication8, not published:
+  final check5 now assesses the affirmative business conclusion against the FULL
+  saved document, resolved feedback and included matching owner confirmation.
+  Actual SDLC-18 v12 history115 otherwise demanded readbacks of nonexistent
+  postterminal operations to prove their absence. Phase02 now explicitly accepts
+  actual publication/readback data with the same revision/hash and ONE FULL
+  document, without duplicate raw CLI JSON or stdout attestation. Remaining
+  document/presentation/owner checks and postterminal Workflow -> Tracker commands
+  are unchanged. Candidate normalized hash
+  `bd0e6d6e10b8a8b0ab2942e99dab82d0f3a2651ddd5566956910ba3896fd6878`;
+  code/image unchanged. Catalog7/hash0434499 and old QA18/19 remain preserved,
+  unaccepted; planned NEW full/sparse QA20/21 will assess the next publication.
+
 - Evaluator v12 distinguishes the CURRENT report's submission protocol from
   precommit work. Real SDLC-18 report106 demanded proof of sending that same
   report and reading its future result despite coherent catalog7 checks. The
@@ -24,10 +37,10 @@
   image `39d33eebd591a97404c6e351087c5dd695d72a1e191d7540928bae21fc910ba1`,
   actual container reads v12; health/database/schema/catalog OK, Fleet unchanged.
   Catalog7/hash0434499 and old SDLC-15 CLI history/version6 are unchanged.
-  SDLC-18 resumes the SAME task/requirements1/owner receipt after the v11
-  report106 circularity and acknowledged native cancellation; Tracker Backlog
-  is NOT accepted at this checkpoint. Sparse SDLC-19 produced its first useful
-  question, not requirements or completion. These are separate installation,
+  SDLC-18 resumed the SAME task/requirements1/owner receipt after the v11
+  report106 circularity and acknowledged native cancellation; v12 history115
+  remains PARTIAL, not Tracker Backlog acceptance. Sparse SDLC-19 produced its
+  first useful question, not requirements or completion. These are separate installation,
   local qualification and live boundaries, not model acceptance from mocks or
   historical PM13. See [the v12 checkpoint](docs/configured-cli-v1.md#installed-v12-checkpoint-2026-10-31).
 
@@ -38,17 +51,19 @@
   phase03 requires actual presentation and exact saved owner consent before
   postterminal Tracker completion. No report per ordinary reply or premature
   consent request. Counts/scopes/skills and sealed legacy artifacts are unchanged.
-  Canonical hash0434499f is published as catalog7 on the checked stand through
-  the existing API; old SDLC-15 CLI history remains unchanged. No application
+  The preceding snapshot hash0434499f is published as catalog7 on the checked stand
+  through the existing API; the current tracked candidate is described above.
+  Old SDLC-15 CLI history remains unchanged. No application
   rebuild, Hermes change, endpoint or migration.18 targeted API/SQLite/CLI-format
-  regressions on the combined final text pass using explicit synthetic
+  regressions on that preceding catalog7 snapshot pass using explicit synthetic
   Auth/Tracker/LLM fixtures; real PM full/sparse acceptance remains separate.
   Catalog4 exposed a nonexistent Workflow project_id requirement;
   catalog5 passed preparation after repeated conditional-evidence verdicts.
   Final text bounds source-specific comparisons and gives input-resolution
   evidence two explicit applicable paths. Its final phase exposed a future
-  completion prerequisite; the final check now assesses confirmed requirements
-  in current Draft, leaving actual completion after accepted Workflow. Owner
+  completion prerequisite; catalog7's current-Draft/absence check then exposed
+  the history115 negative-proof demand, corrected in the new candidate above.
+  Actual completion remains after accepted Workflow. Owner
   confirmation uses the separate application control, not a chat phrase.
   No forced PASS or engine change; earlier test/report history remains unchanged.
 

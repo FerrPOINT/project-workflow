@@ -19,6 +19,16 @@ OK. Fleet backend не изменён. Catalog7/hash
 `0434499f6baa99ff71e3e92cc6b46d7262c98f30bd4edcd3f72f503c432e3da3`
 остаётся active; старый SDLC-15 CLI history byte-equivalent, version6.
 
+Tracked PM artifact теперь содержит отдельный, НЕ опубликованный text candidate,
+normalized hash `bd0e6d6e10b8a8b0ab2942e99dab82d0f3a2651ddd5566956910ba3896fd6878`.
+Final check5 оценивает business conclusion по уже включённым FULL документу,
+resolved feedback и matching owner confirmation, без доказательства отсутствия
+postterminal effects. Phase02 достаточно actual publication/readback data с той
+же revision/hash и одной FULL копии документа: полные raw CLI JSON дубли и stdout
+attestation не требуются. Checks1-4, actual presentation, owner/identity guards и
+инструкция реального Workflow -> Tracker completion/readback сохранены.
+Publication8 и NEW full/sparse QA20/21 только запланированы; код/образ не меняются.
+
 v12 исключает только собственный submission/read-verdict/terminal-receipt отчёта
 из precommit evidence. Business commands/results, required external readbacks,
 FULL content, exact owner confirmation и fingerprint/coverage guards сохраняются;
@@ -50,8 +60,11 @@ Live checkpoint: SDLC-18 сохраняет ту же task/execution, req1/hash
 `0a36da8cb4e9e2c6493427dc1fb37e3000f8f0af9c1e63076de3865169aed52d`
 и actual owner receipt. v11 final history106 ошибочно требовал собственный будущий
 submission result; normal Stop подтверждён native cancelled. После установки v12
-запущено обычное продолжение; **Tracker Backlog / Ready пока НЕ принят**.
-Sparse SDLC-19 дал первый полезный вопрос, requirements ещё нет. Это не модельная
+обычное продолжение дошло до history115 PARTIAL: final check требовал readbacks
+ещё не существующих completion operations как negative absence proof.
+**Tracker Backlog / Ready НЕ принят**. Sparse SDLC-19 дал первый полезный вопрос,
+requirements ещё нет. QA18/19 сохраняются на catalog7 без переписывания истории;
+следующая приёмка будет NEW QA20/21 после отдельной публикации. Это не модельная
 приёмка по mocked tests или historical assisted PM13. Full/sparse business results,
 семь ролей/Rework, Kubernetes, rollback и остальные release gates отдельно открыты.
 
