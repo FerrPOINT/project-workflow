@@ -95,13 +95,49 @@ def test_pm_default_export_is_portable_text_only_and_preserves_all_structure(pm_
     accepted = catalog_publication._normalize(_accepted_v3()["modes"])
     assert modes == pm_default["modes"]
     assert payload_sha256(modes) == pm_default["content_sha256"]
-    assert pm_default["content_sha256"] == "79c7fde121d5a2e581890ac1fd145834adbbfea6f332006d309f2ca2abc66f94"
+    assert pm_default["content_sha256"] == "429fca5d4b391001e9e7b3d9f554df35d2ba72553813679abaf1e48cd1dc2d9b"
     assert catalog_publication._structure(modes) == catalog_publication._structure(accepted)
     assert modes != accepted
     phases = modes[0]["phases"]
     assert [len(phase["instructions"]) for phase in phases] == [5, 6, 5]
     assert [len(phase["checks"]) for phase in phases] == [2, 4, 5]
     assert [len(phase["evidence"]) for phase in phases] == [1, 2, 2]
+
+
+def test_pm_default_first_phase_keeps_project_and_snapshot_comparisons_source_specific(
+    configured, pm_default, monkeypatch,
+):
+    client, assignment = configured
+    _publish(client, active(client, _workflow_id(assignment)), pm_default["modes"])
+    enrollment = enroll(configured)
+    readback = _cli_read(configured, monkeypatch)
+    phase = pm_default["modes"][0]["phases"][0]
+    assert readback["phase_code"] == phase["code"] == "PM-DRAFT-01"
+    assert readback["execution_ref"] == enrollment["execution_ref"] != assignment["tracker_execution_id"]
+    assert "project_id" not in readback
+    assert type(readback["namespace_id"]) is int and readback["namespace_id"] == assignment["namespace_id"]
+    assert readback["task"] == assignment["task"]
+    assert readback["assignment_ref"] == assignment["assignment_ref"]
+    assert readback["concrete_agent_ref"] == assignment["concrete_agent_ref"]
+    assert readback["business_task_ref"] == assignment["tracker_task_id"]
+    assert readback["phase_contract"]["required_checks"] == phase["checks"]
+    assert readback["phase_contract"]["required_evidence"] == phase["evidence"]
+    instructions = readback["instructions"]
+    for requirement in (
+        "Tracker context.project_id = input response.project_id and discussion.project_id",
+        "Workflow first-step schema has no project_id",
+        "context.task_id/root_task_id = input response task_id/root_task_id",
+        "context.task_id = discussion.task_id",
+        "assignment.assignment_id/agent_id/execution_id/version",
+        "input.snapshot_ref and discussion.snapshot are separate concepts, not equality pairs",
+        "neither requires a counterpart field in Tracker context",
+        "comments:[], snapshot:null, next_after:null is a valid complete empty discussion",
+        "Required access failures or actual identity mismatches remain blockers",
+    ):
+        assert requirement in instructions
+    assert "Tracker project_id compares only with Tracker input/discussion.project_id, never Workflow namespace_id" in (
+        "\n".join(phase["evidence"])
+    )
 
 
 def test_pm_default_phase_contract_separates_preparation_from_presentation_and_consent(pm_default):
