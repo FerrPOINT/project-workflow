@@ -206,6 +206,23 @@ def test_pm_default_preparation_cursor_never_requires_confirmation_before_final_
     current = _cli_read(configured, monkeypatch)
     if verdict == "PARTIAL":
         assert current["phase_code"] == "PM-DRAFT-02" and body["missing"]
+        assert current["version"] == body["version"]
+        supervisor_llm("PASS")  # Corrected synthetic evidence exercises the same execution cursor.
+        corrected = step(
+            configured, report="Synthetic corrected FULL saved Draft, exact receipt and complete owner-review packet",
+            operation_key="prepare-packet-corrected", expected_version=body["version"],
+        )
+        assert corrected.status_code == 200, corrected.text
+        corrected_body = corrected.json()["result"]
+        assert corrected_body["verdict"] == "PASS" and corrected_body["complete"] is False
+        assert "terminal_receipt" not in corrected_body and "completion_instructions" not in corrected_body
+        advanced = _cli_read(configured, monkeypatch)
+        assert advanced["phase_code"] == "PM-DRAFT-03"
+        assert advanced["version"] == corrected_body["version"] == body["version"] + 1
+        assert advanced["execution_ref"] == corrected_body["execution_ref"] == enrollment["execution_ref"]
+        confirmation.assert_not_called()
+        with SAUnitOfWork() as uow:
+            assert uow.session.scalar(select(func.count()).select_from(m.WorkflowCatalogPublication)) == 1
     else:
         assert current["phase_code"] == "PM-DRAFT-03"
         refusal = step(configured, report="Synthetic final report with no owner consent",
