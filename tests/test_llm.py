@@ -1,6 +1,7 @@
 """Tests for OpenAI-compatible evaluation and response parsing."""
 
 import json
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -588,11 +589,71 @@ class TestOpenAICompatibleClientOverrides:
         assert client.timeout == 300
 
 
-class TestEvaluatorV11PromptContract:
+class TestEvaluatorV12PromptContract:
     """The live provider receives explicit contradiction and chronology rules."""
 
     def test_prompt_version_invalidates_the_old_evidence_policy(self):
-        assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v11"
+        assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v12"
+
+    def test_report_106_submission_circularity_reaches_provider_with_explicit_protocol_boundary(self):
+        """Reproduce the saved PARTIAL reason, not a real model's semantic acceptance."""
+        from project_workflow.infrastructure.db.managed_catalog import ManagedMode
+        from project_workflow.infrastructure.db.schema import _phase_item_to_supervisor
+        from project_workflow.supervisor.contracts import PhaseContractBuilder
+        from project_workflow.supervisor.evaluate import _evaluate_strict_response
+
+        export = json.loads((Path(__file__).resolve().parents[1]
+                             / "docs/evidence/pm-default-workflow-20261031.json").read_text(encoding="utf-8"))
+        phase = _phase_item_to_supervisor(ManagedMode.model_validate(export["modes"][0]).phases[-1])
+        items = PhaseContractBuilder([phase]).build_evaluation_items(phase)
+        ids = [item_id for item_id, _ in items]
+        report = (
+            "Synthetic report106-shaped packet: FULL saved document, exact revision/hash, concrete "
+            "full presentation account and matching authorized owner confirmation readback. "
+            "Current task remains Draft; no postterminal operations were performed."
+        )
+        prompt = PromptBuilder.build_user_prompt("SYNTHETIC-PM", phase, report, evaluation_items=items)
+        assert len(items) == 7 and prompt.count('  ID: "') == len(items)
+        assert all(item.step in prompt for item in phase.instructions)
+        assert "send ONE self-contained final report using project-workflow --json step" in prompt
+        assert "Inspect the result" in prompt
+        assert "without its own future terminal receipt, verdict or Backlog transition" in prompt
+        assert f'WORKER REPORT:\n"""{report}"""' in prompt
+        missing = [ids[0], ids[4]]
+        raw = {
+            "verdict": "PARTIAL", "covered": [item_id for item_id in ids if item_id not in missing],
+            "missing": missing, "blockers": [], "confidence": 0.99,
+            "message": "The report lacks proof of sending this final report through project-workflow "
+                       "and reading its result.",
+        }
+        client = OpenAICompatibleClient(api_key="", base_url="https://provider.example/v1")
+        with patch("project_workflow.infrastructure.llm.requests.post") as post:
+            post.return_value.json.return_value = {"choices": [{"message": {"content": json.dumps(raw)}}]}
+            returned_raw, parsed = _evaluate_strict_response(client, user=prompt, item_ids=ids, phase=phase)
+
+        post.assert_called_once()
+        payload = post.call_args.kwargs["json"]
+        assert payload["messages"] == [
+            {"role": "system", "content": PromptBuilder.SYSTEM_PROMPT}, {"role": "user", "content": prompt},
+        ]
+        assert payload["response_format"] == {"type": "json_object"}
+        assert returned_raw == parsed.raw == raw
+        assert parsed.verdict == "PARTIAL" and parsed.missing == missing
+
+    def test_protocol_boundary_preserves_required_business_work_and_evidence(self):
+        system = PromptBuilder.SYSTEM_PROMPT
+        for rule in (
+            "The report currently being evaluated has already been submitted to this supervisor",
+            "readback are submission protocol, not work or evidence that can precede this verdict",
+            "Evaluate the stated checks and evidence from present facts",
+            "instructions must not add this circular prerequisite",
+            "This exception applies only to the current report's own submission protocol",
+            "Still require the phase's actual business commands/results, required external readbacks, FULL content",
+            "and matching saved owner confirmation; never infer PASS merely because a report exists",
+            "A summary cannot replace required FULL content",
+            "absent or mismatched owner confirmation remains missing evidence",
+        ):
+            assert rule in system
 
     def test_phase_actual_readback_sufficiency_reaches_the_evaluator(self):
         instruction = (
