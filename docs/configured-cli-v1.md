@@ -19,16 +19,19 @@ OK. Fleet backend не изменён. Catalog7/hash
 `0434499f6baa99ff71e3e92cc6b46d7262c98f30bd4edcd3f72f503c432e3da3`
 оставался active во время Apply; старый SDLC-15 CLI history byte-equivalent, version6.
 
-Tracked PM artifact отдельно опубликован штатным API как catalog8,
-normalized hash `bd0e6d6e10b8a8b0ab2942e99dab82d0f3a2651ddd5566956910ba3896fd6878`.
-Final check5 оценивает business conclusion по уже включённым FULL документу,
-resolved feedback и matching owner confirmation, без доказательства отсутствия
-postterminal effects. Phase02 достаточно actual publication/readback data с той
+Tracked PM artifact опубликован штатным API как catalog9, normalized hash
+`a85f4a78d79aa28efd5e577db24b5eb7a204cccff54b8ad6352a3ee9b37f4209`.
+Фаза3 называется Owner-confirmed requirements, без legacy "before final Workflow
+report". Check5 проверяет конкретные разделы спецификации, а не принятие текущего
+отчёта. Catalog8/hashbd0e6d6e и SDLC-20 сохраняются: требования1 и exact owner
+consent существуют, но PARTIAL120-125 повторно требовали будущего принятия отчёта.
+Его последний run штатно остановлен, Fleet terminal cancelled подтверждён.
+Phase02 достаточно actual publication/readback data с той
 же revision/hash и одной FULL копии документа: полные raw CLI JSON дубли и stdout
 attestation не требуются. Checks1-4, actual presentation, owner/identity guards и
 инструкция реального Workflow -> Tracker completion/readback сохранены.
-Publication operation readback и active hash совпадают.18 scoped регрессий нового
-текста проходят с synthetic peers; начата NEW full-brief QA, sparse и реальные
+Publication operation readback и active hash совпадают. Семь scoped регрессий9
+проходят с synthetic peers; начата NEW full-brief QA, sparse и реальные
 Backlog/Ready результаты ещё не приняты. Код/образ при публикации не менялись.
 
 v12 исключает только собственный submission/read-verdict/terminal-receipt отчёта
@@ -66,7 +69,7 @@ submission result; normal Stop подтверждён native cancelled. Посл
 ещё не существующих completion operations как negative absence proof.
 **Tracker Backlog / Ready НЕ принят**. Sparse SDLC-19 дал первый полезный вопрос,
 requirements ещё нет. QA18/19 сохраняются на catalog7 без переписывания истории;
-следующая приёмка выполняется на NEW задачах после отдельной публикации8. Это не модельная
+следующая приёмка выполняется на NEW задачах после отдельной публикации9. Это не модельная
 приёмка по mocked tests или historical assisted PM13. Full/sparse business results,
 семь ролей/Rework, Kubernetes, rollback и остальные release gates отдельно открыты.
 

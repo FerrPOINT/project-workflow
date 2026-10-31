@@ -8,6 +8,18 @@
 
 ### Added
 
+- Catalog9 text-only correction follows retained SDLC-20 reports120-125:
+  the final phase is named "Owner-confirmed requirements", not "before final
+  Workflow report"; check5 assesses concrete specification sections, not whether
+  the current report's conclusion has already been accepted. Report125 repeated
+  that circular requirement despite including FULL requirements and exact owner
+  confirmation. Checks1-4, presentation/consent evidence and actual postterminal
+  Tracker completion are unchanged. Published hash
+  `a85f4a78d79aa28efd5e577db24b5eb7a204cccff54b8ad6352a3ee9b37f4209`;
+  seven focused tests and Ruff pass. No product/image rebuild. SDLC-20 remains
+  frozen on8, with requirements/consent and PARTIAL history intact; fresh live
+  acceptance of9 is still open, not inferred from synthetic tests.
+
 - PM default text follow-up published through the existing API as catalog8:
   final check5 now assesses the affirmative business conclusion against the FULL
   saved document, resolved feedback and included matching owner confirmation.

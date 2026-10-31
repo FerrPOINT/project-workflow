@@ -1,5 +1,18 @@
 # Managed Instruction Publication
 
+## Current Text Publication - 31 October 2026
+
+Catalog9/hash`a85f4a78d79aa28efd5e577db24b5eb7a204cccff54b8ad6352a3ee9b37f4209`
+is published through the existing API. The final phase now names its business
+result, "Owner-confirmed requirements"; check5 assesses specification sections,
+not the acceptance of the report currently under evaluation. Other checks,
+FULL document/presentation/owner evidence and postterminal completion commands
+are unchanged. Seven focused publication/CLI tests and Ruff pass; no new image.
+Retained catalog8 SDLC-20 has actual requirements1 and matching owner consent,
+but reports120-125 remain PARTIAL, including renewed circular submission demands.
+Normal Stop is acknowledged and Fleet reads cancelled; no replacement execution
+or repaired verdict is substituted. New catalog9 live acceptance remains open.
+
 ## Current Installed Verifier - 31 October 2026
 
 Catalog7 is published without rebuilding applications. Its real SDLC-18 test
@@ -31,8 +44,8 @@ acknowledged native cancellation and same-task continuation under v12, SDLC-18
 history115 still required nonexistent Tracker completion-operation readbacks to
 prove absence of postterminal effects. No Tracker Backlog / Ready is claimed.
 Sparse SDLC-19 has a first useful question and no requirements. Both catalog7
-cases/history remain preserved; planned NEW full/sparse QA20/21 will assess the
-next text publication, not rewrite these outcomes. Mocked gates and historical assisted PM13
+cases/history remain preserved; subsequent catalog8 SDLC-20 and catalog9 trials
+assess new publications, not rewrite these outcomes. Mocked gates and historical assisted PM13
 are not acceptance of the new full/sparse cases or all roles/Kubernetes/rollback.
 Exact image, container and receipts: [installed v12 checkpoint](configured-cli-v1.md#installed-v12-checkpoint-2026-10-31).
 

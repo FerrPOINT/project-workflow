@@ -1,7 +1,7 @@
 {
   "workflow_key": "single-task-v1:project_manager",
   "role_key": "project_manager",
-  "content_sha256": "bd0e6d6e10b8a8b0ab2942e99dab82d0f3a2651ddd5566956910ba3896fd6878",
+  "content_sha256": "a85f4a78d79aa28efd5e577db24b5eb7a204cccff54b8ad6352a3ee9b37f4209",
   "modes": [
     {
       "key": "draft",
@@ -141,8 +141,8 @@
         {
           "phase_order": 3,
           "code": "PM-DRAFT-03",
-          "name": "Owner confirmation before final Workflow report",
-          "description": "single-task-v1: project_manager/draft; Owner confirmation before final Workflow report.",
+          "name": "Owner-confirmed requirements",
+          "description": "single-task-v1: project_manager/draft; Owner-confirmed requirements.",
           "execution_type": "sync",
           "instructions": [
             {
@@ -191,7 +191,7 @@
             "An actual saved human owner confirmation matches the latest task/revision/hash and authorized owner.",
             "Actual feedback is resolved; changed documents were fully republished and presented before consent, while an unchanged confirmed document remains frozen without stale consent or invented questions.",
             "No unresolved business blockers; waiting for human input or consent leaves this phase unfinished without repetitive reports.",
-            "The final report conclusion agrees with the FULL saved document, resolved feedback and matching owner confirmation already included. Assess this PM result without implementation, deployment or subsequent status-transition evidence."
+            "The owner-confirmed specification includes a goal, in-scope and excluded behavior, scenarios, constraints, assumptions and measurable acceptance criteria."
           ],
           "evidence": [
             "FULL latest saved document, exact revision/content_hash and concrete account of its actual full owner-facing presentation; no verbatim earlier message or independent presentation attestation is required.",

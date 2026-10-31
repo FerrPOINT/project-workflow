@@ -95,7 +95,7 @@ def test_pm_default_export_is_portable_text_only_and_preserves_all_structure(pm_
     accepted = catalog_publication._normalize(_accepted_v3()["modes"])
     assert modes == pm_default["modes"]
     assert payload_sha256(modes) == pm_default["content_sha256"]
-    assert pm_default["content_sha256"] == "bd0e6d6e10b8a8b0ab2942e99dab82d0f3a2651ddd5566956910ba3896fd6878"
+    assert pm_default["content_sha256"] == "a85f4a78d79aa28efd5e577db24b5eb7a204cccff54b8ad6352a3ee9b37f4209"
     assert catalog_publication._structure(modes) == catalog_publication._structure(accepted)
     assert modes != accepted
     phases = modes[0]["phases"]
@@ -182,14 +182,17 @@ def test_pm_default_phase_contract_separates_preparation_from_presentation_and_c
     assert "ONLY AFTER accepted Workflow complete=true" in final_text
     assert "Do not dispatch Analyst or claim Backlog before the actual Tracker readback" in final_text
     final_check = final["checks"][4]
+    assert final["name"] == "Owner-confirmed requirements"
+    assert "before final Workflow report" not in final["description"]
     for requirement in (
-        "The final report conclusion agrees with the FULL saved document",
-        "resolved feedback and matching owner confirmation already included",
-        "Assess this PM result without implementation, deployment or subsequent status-transition evidence",
+        "The owner-confirmed specification includes a goal",
+        "in-scope and excluded behavior, scenarios, constraints, assumptions",
+        "measurable acceptance criteria",
     ):
         assert requirement in final_check
     assert "postterminal" not in final_check and "has been performed" not in final_check
     precommit_contract = "\n".join([*final["checks"], *final["evidence"]])
+    assert "final report" not in "\n".join(final["checks"]).lower()
     assert "pm completion submit" not in precommit_contract and "complete=true" not in precommit_contract
 
 
