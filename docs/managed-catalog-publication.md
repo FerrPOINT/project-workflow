@@ -1,6 +1,6 @@
 # Managed Instruction Publication
 
-## Current Verifier Correction - 31 October 2026
+## Current Installed Verifier - 31 October 2026
 
 Catalog7 is published without rebuilding applications. Its real SDLC-18 test
 saved/presented requirements, obtained exact owner consent and corrected several
@@ -12,18 +12,37 @@ Evaluator v12 now excludes only that self-referential submission/readback from
 precommit work. True business commands/results, FULL content, external readbacks
 and owner consent remain required; negative verdicts are not promoted to PASS.
 Frozen v11 receipts remain explicitly accepted under unchanged fingerprint and
-coverage validation. Focused tests and independent review pass. Image, complete
-qualification and actual same-task completion remain pending; the installed
-verifier is still v11 until the separate normal Workflow-only update succeeds.
+coverage validation. Source `fb983944` is now installed by COMPLETE normal
+Workflow-only Apply `82089f04ed294324a5d4b820a71a4884`; actual container
+`22a64cc5...` reads v12, health/database/schema/catalog are OK and Fleet is unchanged.
+Catalog7/hash0434499 remains active; old SDLC-15 CLI history is byte-equivalent
+at version6. No catalog publication or Hermes change accompanied this update.
 
-The earlier package/qualification checkpoints below retain their own source and
-scope; they are not a full gate for this new verifier source.
+Local qualification on that exact source is complete: 159 targeted tests,
+Ruff/mypy165, full non-PG **3193 passed, 73 subtests passed, 15 skipped,
+132 deselected; coverage94.02997164844066%** at required94%, and **132 PostgreSQL
+tests passed with zero skips/failures/errors** using both dedicated databases,
+including the empty clock fixture. Exact-image fresh migration0023/health/OpenAPI
+smoke passes; disposable image-QA/PG resources and scratch are cleaned. Worker
+119 tests and four frozen-proof cases overlap the targeted gate, not extra totals.
 
-This is a separate, next-release source package based on master `620f45cd`.
-The accepted PM catalog works without it. It does not change the installed
-cohort, Fleet assignments/configuration, Hermes, credentials or agent messages.
+Business acceptance remains pending: SDLC-18 resumes the SAME task, saved req1/hash
+and actual owner receipt after the v11 history106 failure and acknowledged native
+cancellation. No Tracker Backlog / Ready is claimed. Sparse SDLC-19 has a first
+useful question and no requirements. Mocked gates and historical assisted PM13
+are not acceptance of the new full/sparse cases or all roles/Kubernetes/rollback.
+Exact image, container and receipts: [installed v12 checkpoint](configured-cli-v1.md#installed-v12-checkpoint-2026-10-31).
+
+The earlier publication-package checkpoints below retain their own source and
+scope; the current v12 local gate and installation are recorded above.
+
+The original publication package was prepared separately from master `620f45cd`.
+That historical source-only boundary is not the current installed status. Its
+publication API is now installed; editor adoption remains a separate gate.
 
 ## Current Source Gate
+
+Historical publication-source qualification; current v12 results are above.
 
 On source23797fbf (production tree156956017cceb3afe3d37f2f53195d12cdf9619d,
 tests tree3b99c068045ae3380876b5957fb77bfa30101fd5), the complete non-PG
@@ -39,10 +58,10 @@ Fresh disposable ComposeHelper v2, 512MiB/0.5CPU, owned database/network/volume,
 evidence is `.local/publication-full-coverage.{log,xml}` and
 `.local/publication160-abf7e8c16b/{result.json,pytest.log,junit.xml,compose/journal.json}`.
 
-This supersedes the earlier partial full-gate status below. Remaining gates are
-image/Compose qualification of this publication source, editor/client adoption,
-orchestrator-specific deployment and installed/live text publication. The accepted
-PM release uses its existing620f45cd image and does not wait for this package.
+This superseded that source's earlier partial full-gate status below. Its
+then-remaining image/install/publication steps are historical; current installation
+and local v12 qualification are above. Editor/client adoption, orchestrator-specific
+deployment and full/sparse live business acceptance remain separate boundaries.
 
 ## Boundary
 
@@ -176,8 +195,10 @@ context fields, both preparation evidence paths, PARTIAL correction in the same
 execution, final consent guards and terminal completion instructions. Auth,
 Tracker and LLM verdicts in these SQLite/TestClient tests are explicit synthetic
 peers, not live acceptance. Independent text review found no remaining circular
-prerequisite. New full-brief QA SDLC-18 is executing catalog7; the two live
-business scenarios remain unaccepted until actual Backlog / Ready readback.
+prerequisite in those scoped fixtures. Actual v11 SDLC-18 history106 nevertheless
+demanded its own future submission result. Installed v12 addresses that shared
+prompt rule without republishing catalog7. The same SDLC-18 is being continued;
+full/sparse business scenarios remain unaccepted until actual Backlog / Ready readback.
 
 Import uses the same discovery/CAS/draft/publication procedure below. Do not copy
 this stand's catalog version into another installation or edit the sealed v1
@@ -251,11 +272,11 @@ the main UI work is not blocked or altered by this package.
   Existing pre-audit receipts keep null author/time, never an invented identity.
   New application publications always record both. Startup accepts 21 and 22 as
   upgrade predecessors. Published history/authorship prevents destructive downgrade.
-- Integrator order for the **next** release: reconcile the migration slot
+- Historical publication-package rollout order: reconcile the migration slot
   against then-current master; qualify synthetic PostgreSQL/upgrade and API
   gates; install the Workflow server/API package; only then expose publication
   in an editor/client. No Tracker DTO/migration or Fleet/Hermes dependency is
-  introduced. Current installed `620f45cd` PM acceptance continues independently.
+  introduced. That checkpoint used `620f45cd`; current v12 installation is above.
 - No schema-version change to the existing single-task binding DTO: its IDs
   describe sealed baseline v1. Consumers that need the selected text revision
   must use the new catalog API, not reinterpret that baseline hash/version.
@@ -265,7 +286,7 @@ the main UI work is not blocked or altered by this package.
 
 ## Source Verification
 
-Current production subtree `156956017cceb3afe3d37f2f53195d12cdf9619d`
+Historical publication-source production subtree `156956017cceb3afe3d37f2f53195d12cdf9619d`
 and tests subtree `3b99c068045ae3380876b5957fb77bfa30101fd5`:
 
 - **482 passed, 20 deselected**, 337.93 seconds, with ResourceWarning and

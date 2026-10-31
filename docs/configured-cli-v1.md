@@ -8,6 +8,53 @@ Workflow хранит фазу, оценку отчёта и историю. Tra
 требованиями, комментариями и атомарными переходами. Fleet проверяет реальный
 terminal процесса. Native run ID не является идентичностью задачи Workflow.
 
+## Installed v12 Checkpoint 2026-10-31
+
+Source `fb983944b1b3a393ff1b8946f66c674e03f2abb2` установлен normal Workflow-only
+Apply **COMPLETE** `82089f04ed294324a5d4b820a71a4884`. Image
+`sha256:39d33eebd591a97404c6e351087c5dd695d72a1e191d7540928bae21fc910ba1`,
+container `22a64cc52c4e9a6a155379941c62185a697ea12d1354427c5fc006b9bd8fa5ee`;
+actual readback показывает `supervisor-evaluator-v12`, health/database/schema/catalog
+OK. Fleet backend не изменён. Catalog7/hash
+`0434499f6baa99ff71e3e92cc6b46d7262c98f30bd4edcd3f72f503c432e3da3`
+остаётся active; старый SDLC-15 CLI history byte-equivalent, version6.
+
+v12 исключает только собственный submission/read-verdict/terminal-receipt отчёта
+из precommit evidence. Business commands/results, required external readbacks,
+FULL content, exact owner confirmation и fingerprint/coverage guards сохраняются;
+исторические v11 terminal receipts читаются без переоценки. Auto-PASS нет.
+
+Фактическая локальная квалификация source `fb983944`:
+
+- Targeted main: **159 passed**. Worker119 и четыре frozen-proof случая
+  перекрываются с этим набором; их нельзя прибавлять к159. Ruff all и mypy
+  **165 source files PASS**.
+- Full non-PG: **3193 passed, 73 subtests passed, 15 skipped, 132 deselected**;
+  line coverage **94.02997164844066%** при пороге94%. JUnit `tests=3281`
+  включает73 subtests и15 skips, это не3281 passed. Skips:11 Playwright,
+  3 explicit private-package opt-ins,1 NTFS executable-mode; не выполненные gates.
+- Dedicated PostgreSQL: **132 passed, 0 skipped/failures/errors**. Обе собственные
+  БД, включая отдельную пустую clock fixture, использованы; cleanup и scratch
+  cleanup true. Все53 pins сохранены, source head unchanged в обоих receipts.
+- Exact-image smoke: fresh `0023_catalog_publication_author`, health/DB/schema/catalog
+  OK,45 HTTP OpenAPI paths/6 catalog operations, PASS и cleanup `cleaned`.
+  Этот QA receipt отдельно фиксирует `installed=false` и не заменяет Apply receipt.
+
+Локальные receipts под evidence root интегратора, указанным ниже:
+`evidence/workflow161-v12-bb3522b670/result.json`,
+`pm-runtime-recovery-20261030/workflow-precommit-install.json`,
+`pm-runtime-recovery-20261030/verifier-v12-qualification-20261031/{pg,full}.json`
+и `full.log`. Данные runtime/credentials и raw business transcripts не публикуются.
+
+Live checkpoint: SDLC-18 сохраняет ту же task/execution, req1/hash
+`0a36da8cb4e9e2c6493427dc1fb37e3000f8f0af9c1e63076de3865169aed52d`
+и actual owner receipt. v11 final history106 ошибочно требовал собственный будущий
+submission result; normal Stop подтверждён native cancelled. После установки v12
+запущено обычное продолжение; **Tracker Backlog / Ready пока НЕ принят**.
+Sparse SDLC-19 дал первый полезный вопрос, requirements ещё нет. Это не модельная
+приёмка по mocked tests или historical assisted PM13. Full/sparse business results,
+семь ролей/Rework, Kubernetes, rollback и остальные release gates отдельно открыты.
+
 ## Настройка агента
 
 Владелец конфигурации заранее задаёт `PROJECT_WORKFLOW_URL`,
@@ -122,7 +169,7 @@ evidence текущей фазы, а не инструкции вместо вы
 перехода статуса. Reviewer/Tester могут полностью выполнить проверку и вернуть
 бизнес-результат rework; это не означает принятие дефектного кандидата.
 
-Evaluator `supervisor-evaluator-v11` сохраняет строгий LLM verdict, но учитывает
+Evaluator `supervisor-evaluator-v12` сохраняет строгий LLM verdict, но учитывает
 достаточность evidence, явно заданную контрактом. Если фактические скопированные
 readbacks и сверка identity достаточны, отдельная attestation запуска команды
 не требуется. Если контракт не требует независимого presentation receipt или
@@ -131,6 +178,9 @@ transcript, полный сохранённый документ, matching saved
 Намерение показать документ не равно показу; summary не заменяет FULL content.
 Отсутствующий или несовпадающий consent, ошибочные команды, identity mismatch
 и противоречия остаются недостаточными evidence. Нет auto-PASS или обхода LLM.
+Собственный submission и чтение будущего verdict/receipt текущего отчёта являются
+report protocol, а не работой/evidence до этого verdict. Это не освобождает от
+бизнес-команд или внешних readbacks, уже требуемых контрактом текущей фазы.
 
 У финального PM отчёта обязательны `--requirements-revision` и
 `--requirements-sha256`. Tracker должен подтвердить последнюю полную редакцию,
@@ -185,7 +235,8 @@ PDLC1, PostgreSQL на заполненной и новой БД, упакова
 
 ## Scoped PM13 Evidence 2026-10-30
 
-Это отдельные уровни доказательств, не один общий gate. Product/test source
+Исторический checkpoint: это отдельные уровни доказательств, не один общий gate.
+Текущий v12 checkpoint приведён выше. Product/test source этого результата
 зафиксирован на `861e08c028985ff4cf717cabf9be98d0c60a42d0`; последующее
 документирование не меняет его, pins или установленный образ.
 
@@ -238,6 +289,9 @@ Apply journal хранится отдельно под
 в репозитории; исходные evidence не редактируются ради документации.
 
 ## Локальный gate PR #161, 2026-10-31
+
+Исторический source861/7c gate, не результат нового v12 source `fb983944`.
+Актуальная полная квалификация v12 приведена выше; старые результаты сохранены.
 
 На head `7c771c9736a5147752f41c39626275d380e096eb` product/test trees
 совпадают с source861 и результатом read-only merge с текущим `master`.

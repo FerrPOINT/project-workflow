@@ -15,8 +15,21 @@
   commands/results, external readbacks, FULL content and owner consent remain
   required. No automatic PASS, new API or Hermes change. Historical v11 terminal
   proof remains explicitly trusted with the same fingerprint/coverage guards.
-  Focused source tests and independent review pass; new image/full qualification
-  and live completion remain pending, not claimed from mocked verdicts.
+  Source `fb983944` passes 159 targeted tests, Ruff and mypy (165 source files).
+  Full non-PG qualification: 3193 passed, 73 subtests passed, 15 skipped,
+  132 deselected; coverage94.02997164844066% at required94%. Dedicated PostgreSQL
+  qualification: 132 passed, no skips/failures/errors; owned QA resources cleaned.
+  Exact-image fresh migrations/health/OpenAPI smoke passes and is cleaned.
+  Normal Workflow-only Apply `82089f04ed294324a5d4b820a71a4884` is COMPLETE:
+  image `39d33eebd591a97404c6e351087c5dd695d72a1e191d7540928bae21fc910ba1`,
+  actual container reads v12; health/database/schema/catalog OK, Fleet unchanged.
+  Catalog7/hash0434499 and old SDLC-15 CLI history/version6 are unchanged.
+  SDLC-18 resumes the SAME task/requirements1/owner receipt after the v11
+  report106 circularity and acknowledged native cancellation; Tracker Backlog
+  is NOT accepted at this checkpoint. Sparse SDLC-19 produced its first useful
+  question, not requirements or completion. These are separate installation,
+  local qualification and live boundaries, not model acceptance from mocks or
+  historical PM13. See [the v12 checkpoint](docs/configured-cli-v1.md#installed-v12-checkpoint-2026-10-31).
 
 - Portable default PM text revision in
   `docs/evidence/pm-default-workflow-20261031.json`: three existing phases with
@@ -38,6 +51,9 @@
   in current Draft, leaving actual completion after accepted Workflow. Owner
   confirmation uses the separate application control, not a chat phrase.
   No forced PASS or engine change; earlier test/report history remains unchanged.
+
+Historical implementation checkpoints below retain their original source/scope;
+their then-pending gates are not the current v12 installation status above.
 
 - Страницы фаз PM показывают один набор инструкций установленного каталога.
   `effective_view` сохраняет raw-поля API без подмены инструкций при исполнении.
