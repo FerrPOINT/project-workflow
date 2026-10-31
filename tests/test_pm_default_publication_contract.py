@@ -6,7 +6,6 @@ The separately owned portable export must be integrated before these tests run.
 """
 
 import json
-import re
 from pathlib import Path
 from unittest.mock import Mock
 from uuid import uuid4
@@ -95,7 +94,7 @@ def test_pm_default_export_is_portable_text_only_and_preserves_all_structure(pm_
     accepted = catalog_publication._normalize(_accepted_v3()["modes"])
     assert modes == pm_default["modes"]
     assert payload_sha256(modes) == pm_default["content_sha256"]
-    assert pm_default["content_sha256"] == "a85f4a78d79aa28efd5e577db24b5eb7a204cccff54b8ad6352a3ee9b37f4209"
+    assert pm_default["content_sha256"] == "ae220f915d33987f1ed9b13e39d9a4c3a82ea5d8db133638a6a06f384ae249ef"
     assert catalog_publication._structure(modes) == catalog_publication._structure(accepted)
     assert modes != accepted
     phases = modes[0]["phases"]
@@ -104,7 +103,7 @@ def test_pm_default_export_is_portable_text_only_and_preserves_all_structure(pm_
     assert [len(phase["evidence"]) for phase in phases] == [1, 2, 2]
 
 
-def test_pm_default_first_phase_keeps_project_and_snapshot_comparisons_source_specific(
+def test_pm_default_first_phase_reads_real_context_without_llm_identity_recertification(
     configured, pm_default, monkeypatch,
 ):
     client, assignment = configured
@@ -124,20 +123,18 @@ def test_pm_default_first_phase_keeps_project_and_snapshot_comparisons_source_sp
     assert readback["phase_contract"]["required_evidence"] == phase["evidence"]
     instructions = readback["instructions"]
     for requirement in (
-        "Tracker context.project_id = input response.project_id and discussion.project_id",
-        "Workflow first-step schema has no project_id",
-        "context.task_id/root_task_id = input response task_id/root_task_id",
-        "context.task_id = discussion.task_id",
-        "assignment.assignment_id/agent_id/execution_id/version",
-        "input.snapshot_ref and discussion.snapshot are separate concepts, not equality pairs",
-        "neither requires a counterpart field in Tracker context",
-        "comments:[], snapshot:null, next_after:null is a valid complete empty discussion",
-        "Required access failures or actual identity mismatches remain blockers",
+        "task-tracker sdlc context",
+        "task-tracker sdlc discussion read",
+        "project-workflow --json step",
+        "Servers enforce identity, assignment, namespace and access",
+        "Do not ask the owner to re-certify these technical settings",
+        "A real access failure or wrong task is a technical blocker",
+        "never borrow another identity or use a local database fallback",
+        "an empty discussion or absent first requirements revision is normal",
     ):
         assert requirement in instructions
-    assert "Tracker project_id compares only with Tracker input/discussion.project_id, never Workflow namespace_id" in (
-        "\n".join(phase["evidence"])
-    )
+    assert "independent configuration attestation is not required" in phase["evidence"][0]
+    assert "input.snapshot_ref/title/description/sha256" not in instructions
 
 
 def test_pm_default_phase_contract_separates_preparation_from_presentation_and_consent(pm_default):
@@ -149,44 +146,37 @@ def test_pm_default_phase_contract_separates_preparation_from_presentation_and_c
     assert "task-tracker sdlc context" in first_text
     assert "project-workflow --json step" in first_text
     preparation_evidence = "\n".join(preparation["evidence"])
-    assert re.search(r"prepared owner[- ]review packet", preparation_evidence, re.IGNORECASE)
-    assert "owner review presentation" not in preparation_evidence.lower()
+    assert "FULL saved requirements document" in preparation_evidence
     assert preparation["evidence"] != _accepted_v3()["modes"][0]["phases"][1]["evidence"]
     preparation_text = "\n".join(item["description"] for item in preparation["instructions"])
     assert "FULL" in preparation_text and "revision" in preparation_text and "hash" in preparation_text
-    assert "Request owner confirmation ONLY after phase 2 PASS" in preparation_text
-    assert "Known PARTIAL is not PASS" in preparation_text
-    packet, reporting = (item["description"] for item in preparation["instructions"][-2:])
-    assert "Include the FULL saved document once" in packet
-    assert "ONE copy of the FULL saved document" in reporting
-    assert "ONE copy of the FULL server-saved requirements" in preparation["evidence"][0]
-    for text in (packet, reporting, preparation["evidence"][0]):
-        assert "actual publication/readback data" in text
-        assert "matching document/revision/hash suffice" in text
-    assert "without duplicate full raw CLI JSON or independent stdout attestation" in packet
-    for text in (reporting, preparation["evidence"][0]):
-        assert "duplicate complete raw CLI JSON or independent stdout attestation is not required" in text
-    for text in (packet, reporting):
-        assert "Missing, failed or mismatched readbacks remain gaps" in text
-    preparation_check = preparation["checks"][2]
-    assert "No owner consent is claimed or requested as part of this preparation packet" in preparation_check
-    assert "actual owner-facing presentation and consent are not prerequisites" in preparation_check
-    assert "PASS" not in preparation_check
+    assert "Request owner confirmation only after phase 2 PASS" in preparation_text
+    assert "task-tracker sdlc revision publish" in preparation_text
+    assert "PM may publish its own draft; only the owner may confirm it" in preparation_text
+    assert "one FULL copy of saved requirements" in preparation_text
+    assert "A corrected report retains this packet" in preparation_text
+    assert "unknown acceptance uses original-key history" in preparation_text
+    assert "actual publication/readback data" in preparation["evidence"][0]
+    assert "independent stdout attestation is not required" in preparation["evidence"][0]
+    assert "Actual presentation and owner confirmation are not prerequisites" in preparation["checks"][3]
     final_text = "\n".join(item["description"] for item in final["instructions"])
-    assert "After phase 2 PASS, present the FULL latest server-saved requirements document" in final_text
-    assert "application's separate confirmation control for that displayed revision/hash" in final_text
-    assert "Do not ask the owner to type a confirmation phrase in ordinary chat" in final_text
-    assert "a chat message is not the separate confirmation action or its saved receipt" in final_text
+    assert "After phase 2 PASS, show the FULL latest saved document" in final_text
+    assert "application's separate confirmation action" in final_text
+    assert "a chat message such as 'agreed' is not the saved confirmation receipt" in final_text
     assert "task-tracker sdlc confirmation read" in final_text
-    assert "Do not require this report's future terminal receipt, final comment or Backlog transition" in final_text
-    assert "ONLY AFTER accepted Workflow complete=true" in final_text
-    assert "Do not dispatch Analyst or claim Backlog before the actual Tracker readback" in final_text
+    assert "Never confirm for the owner" in final_text
+    assert "existing explicit owner-authorized revision procedure and new consent" in final_text
+    assert "This report cannot contain its own future verdict or terminal receipt" in final_text
+    assert "ONLY AFTER Workflow returns complete=true" in final_text
+    assert "task-tracker sdlc pm completion submit" in final_text
+    assert "stage=Backlog and status=Ready" in final_text
+    assert "Do not dispatch Analyst or claim that transition before readback" in final_text
     final_check = final["checks"][4]
     assert final["name"] == "Owner-confirmed requirements"
     assert "before final Workflow report" not in final["description"]
     for requirement in (
-        "The owner-confirmed specification includes a goal",
-        "in-scope and excluded behavior, scenarios, constraints, assumptions",
+        "The confirmed specification contains goal, scope/exclusions",
+        "scenarios, constraints, assumptions",
         "measurable acceptance criteria",
     ):
         assert requirement in final_check
@@ -199,27 +189,21 @@ def test_pm_default_phase_contract_separates_preparation_from_presentation_and_c
 def test_pm_default_preparation_evidence_declares_two_always_applicable_paths(pm_default):
     preparation = pm_default["modes"][0]["phases"][1]
     input_resolution = preparation["evidence"][1]
-    assert "Input resolution, shown through ONE of two evidence paths" in input_resolution
     for requirement in (
-        "for complete, consistent input, an explicit conclusion that no clarification was needed",
-        "concise source-to-requirements mapping using the FULL brief and saved document already included in the packet",
-        "no question/answer references are needed",
-        "For incomplete or contradictory input, the actual gap, "
-        "real clarification question/owner answer or applied feedback",
-        "its resolution in the saved requirements",
-        "This item always applies through one of these paths",
+        "For incomplete input: the actual gap, owner answer or feedback, and its resolution",
+        "For complete input: why the supplied information suffices without clarification",
+        "Neither path requires invented questions",
     ):
         assert requirement in input_resolution
     assert "N/A" not in input_resolution and not input_resolution.startswith("Only for")
     reporting = preparation["instructions"][-1]["description"]
     for requirement in (
-        "always-applicable input-resolution evidence",
-        "no separate mapping artifact or invented question references are required",
-        "Every corrected report retains the full packet, not only the latest correction",
-        "Actual phase 3 presentation and owner consent are not preparation evidence",
-        "Submission/readback protocol is bookkeeping, not phase work or evidence",
-        "Only AFTER the response returns, inspect verdict/missing/blockers and returned phase/version",
-        "The report being evaluated cannot include its own future verdict or receipt",
+        "how real gaps were resolved",
+        "For complete input, state that no clarification was needed",
+        "A corrected report retains this packet",
+        "Inspect verdict/missing/blockers and returned phase/version before continuing",
+        "unknown acceptance uses original-key history",
+        "Request owner confirmation only after phase 2 PASS",
     ):
         assert requirement in reporting
 

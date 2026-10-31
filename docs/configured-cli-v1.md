@@ -19,7 +19,16 @@ OK. Fleet backend не изменён. Catalog7/hash
 `0434499f6baa99ff71e3e92cc6b46d7262c98f30bd4edcd3f72f503c432e3da3`
 оставался active во время Apply; старый SDLC-15 CLI history byte-equivalent, version6.
 
-Tracked PM artifact опубликован штатным API как catalog9, normalized hash
+Tracked PM artifact опубликован штатным API как catalog10, normalized hash
+`ae220f915d33987f1ed9b13e39d9a4c3a82ea5d8db133638a6a06f384ae249ef`.
+Три фазы сокращены до контекста, подготовки требований и отдельного owner consent.
+Техническую identity/namespace/access проверяет сервер; PM не пересказывает все
+API-поля и не просит владельца повторно заверять настройки. Counts/scopes/skills
+не изменены, инструкции14632 ->5868 символов. Семь scoped tests/Ruff pass; новый
+код или образ не требуются. Свежая full/sparse бизнес-приёмка пока открыта.
+SDLC-21 на9 сохранил PARTIAL128 с лишним namespace attestation, без подмены фактов.
+
+Предыдущая редакция9, normalized hash
 `a85f4a78d79aa28efd5e577db24b5eb7a204cccff54b8ad6352a3ee9b37f4209`.
 Фаза3 называется Owner-confirmed requirements, без legacy "before final Workflow
 report". Check5 проверяет конкретные разделы спецификации, а не принятие текущего

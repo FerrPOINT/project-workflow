@@ -2,6 +2,17 @@
 
 ## Current Text Publication - 31 October 2026
 
+Catalog10/hash`ae220f915d33987f1ed9b13e39d9a4c3a82ea5d8db133638a6a06f384ae249ef`
+is active. Three phases now focus on context, saved requirements and exact owner
+confirmation; all counts/scopes/skills remain unchanged. Identity/namespace/access
+stay server-enforced, not another model attestation. Text length14632 ->5868
+instruction characters. Seven scoped tests/Ruff pass; no product/image rebuild.
+Actual full/sparse Backlog/Ready remains open. SDLC-21 on9 stays frozen with its
+PARTIAL128 demand for an extra configured-namespace attestation; no fabricated
+configuration evidence or PM completion was submitted on its behalf.
+
+### Earlier Catalog9
+
 Catalog9/hash`a85f4a78d79aa28efd5e577db24b5eb7a204cccff54b8ad6352a3ee9b37f4209`
 is published through the existing API. The final phase now names its business
 result, "Owner-confirmed requirements"; check5 assesses specification sections,
@@ -11,7 +22,7 @@ are unchanged. Seven focused publication/CLI tests and Ruff pass; no new image.
 Retained catalog8 SDLC-20 has actual requirements1 and matching owner consent,
 but reports120-125 remain PARTIAL, including renewed circular submission demands.
 Normal Stop is acknowledged and Fleet reads cancelled; no replacement execution
-or repaired verdict is substituted. New catalog9 live acceptance remains open.
+or repaired verdict is substituted. Catalog9 did not complete live acceptance.
 
 ## Current Installed Verifier - 31 October 2026
 

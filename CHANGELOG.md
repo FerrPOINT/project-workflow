@@ -8,6 +8,17 @@
 
 ### Added
 
+- Catalog10 simplifies the three PM phases after SDLC-21 PARTIAL128 demanded
+  an extra namespace attestation although the CLI environment already held2.
+  Servers still enforce identity/assignment/access; the PM reports actual task,
+  request and decisions, not another certification of every technical field.
+  Instructions shrink from14632 to5868 characters with identical5/6/5 instruction,
+  2/4/5 check,1/2/2 evidence counts, scopes and skills. Requirements completeness,
+  exact owner consent and postterminal Tracker completion remain explicit.
+  Published hash `ae220f915d33987f1ed9b13e39d9a4c3a82ea5d8db133638a6a06f384ae249ef`;
+  seven focused tests and Ruff pass. No code/image rebuild; prior executions stay
+  frozen. Fresh full/sparse actual Backlog/Ready acceptance is underway, not claimed.
+
 - Catalog9 text-only correction follows retained SDLC-20 reports120-125:
   the final phase is named "Owner-confirmed requirements", not "before final
   Workflow report"; check5 assesses concrete specification sections, not whether
