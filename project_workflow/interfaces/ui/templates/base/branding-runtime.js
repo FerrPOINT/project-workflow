@@ -2,7 +2,7 @@ import { validMonogram } from "./branding-marks.js";
 import { brandingFontFamily } from "./branding-fonts.js";
 import { isHex as hex, contrast, foreground } from "./branding-colors.js";
 import { brandingFavicon, paintBrandingMark } from "./branding-marks.js";
-import { DEFAULT_PLATFORM_NAME } from "./platform-title.js";
+import { DEFAULT_PLATFORM_NAME, platformTitle } from "./platform-title.js";
 
 /** @typedef { {version: 1, font_preset: 'system'|'inter'|'noto-sans', type_scale: 'standard'|'large', density: 'compact'|'standard'|'comfortable', radius: 'square'|'standard'|'rounded', colors?: Record<string,{primary:string,accent:string}>, radii?: Record<'control'|'menu'|'dialog'|'card'|'mark',number>, marks?: Record<string,any>, favicon?: any, documentation_url?: string, initial_theme?: 'dark'|'gray'|'light'} } BrandingDesign */
 /** @typedef { {product_name: string, product_short_name: string, logo_url: string|null, favicon_url: string|null, support_url: string|null, primary_color: string, accent_color: string, surface_color: string|null, design?: BrandingDesign|null} } Branding */
@@ -528,6 +528,14 @@ export function createBrandingRuntime(options) {
   };
   const originalMarks = new Map();
   let identitySequence = 0;
+  function titles() {
+    if (!active) return;
+    for (const title of root.querySelectorAll("[data-base-brand-title]"))
+      title.textContent = platformTitle(
+        title.getAttribute("data-base-brand-title") || DEFAULT_PLATFORM_NAME,
+        branding,
+      );
+  }
   function identity() {
     if (!active) return;
     for (const link of root.querySelectorAll("[data-base-brand-link]")) {
@@ -543,11 +551,7 @@ export function createBrandingRuntime(options) {
         link.setAttribute("hidden", "");
       }
     }
-    for (const title of root.querySelectorAll("[data-base-brand-title]"))
-      title.textContent =
-        (title.getAttribute("data-base-brand-title") || "PDLC") +
-        " — " +
-        branding.product_short_name;
+    titles();
     for (const element of root.querySelectorAll("[data-base-brand-name]"))
       element.textContent = branding.product_name;
     for (const element of root.querySelectorAll("[data-base-brand-initials]"))
@@ -632,11 +636,25 @@ export function createBrandingRuntime(options) {
     onChange({ branding, revision, source });
   }
   publish();
-  const observer = new win.MutationObserver(() => {
-    paint();
-    identity();
+  const observer = new win.MutationObserver((records) => {
+    if (
+      records.some(
+        (record) => record.target === root && record.attributeName === "data-theme",
+      )
+    ) {
+      paint();
+      identity();
+    } else if (
+      records.some((record) => record.attributeName === "data-base-brand-title")
+    ) {
+      titles();
+    }
   });
-  observer.observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+  observer.observe(root, {
+    attributes: true,
+    subtree: true,
+    attributeFilter: ["data-theme", "data-base-brand-title"],
+  });
   async function refresh() {
     if (!active || !configUrl) return;
     const request = ++sequence;

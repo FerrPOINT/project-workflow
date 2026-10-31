@@ -801,6 +801,14 @@ function createBrandingRuntime(options) {
   };
   const originalMarks = new Map();
   let identitySequence = 0;
+  function titles() {
+    if (!active) return;
+    for (const title of root.querySelectorAll("[data-base-brand-title]"))
+      title.textContent = platformTitle(
+        title.getAttribute("data-base-brand-title") || DEFAULT_PLATFORM_NAME,
+        branding,
+      );
+  }
   function identity() {
     if (!active) return;
     for (const link of root.querySelectorAll("[data-base-brand-link]")) {
@@ -816,11 +824,7 @@ function createBrandingRuntime(options) {
         link.setAttribute("hidden", "");
       }
     }
-    for (const title of root.querySelectorAll("[data-base-brand-title]"))
-      title.textContent =
-        (title.getAttribute("data-base-brand-title") || "PDLC") +
-        " — " +
-        branding.product_short_name;
+    titles();
     for (const element of root.querySelectorAll("[data-base-brand-name]"))
       element.textContent = branding.product_name;
     for (const element of root.querySelectorAll("[data-base-brand-initials]"))
@@ -905,11 +909,25 @@ function createBrandingRuntime(options) {
     onChange({ branding, revision, source });
   }
   publish();
-  const observer = new win.MutationObserver(() => {
-    paint();
-    identity();
+  const observer = new win.MutationObserver((records) => {
+    if (
+      records.some(
+        (record) => record.target === root && record.attributeName === "data-theme",
+      )
+    ) {
+      paint();
+      identity();
+    } else if (
+      records.some((record) => record.attributeName === "data-base-brand-title")
+    ) {
+      titles();
+    }
   });
-  observer.observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+  observer.observe(root, {
+    attributes: true,
+    subtree: true,
+    attributeFilter: ["data-theme", "data-base-brand-title"],
+  });
   async function refresh() {
     if (!active || !configUrl) return;
     const request = ++sequence;
