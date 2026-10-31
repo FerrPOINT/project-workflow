@@ -8,7 +8,7 @@
 
 ### Added
 
-- PM default text follow-up prepared for planned publication8, not published:
+- PM default text follow-up published through the existing API as catalog8:
   final check5 now assesses the affirmative business conclusion against the FULL
   saved document, resolved feedback and included matching owner confirmation.
   Actual SDLC-18 v12 history115 otherwise demanded readbacks of nonexistent
@@ -18,8 +18,10 @@
   document/presentation/owner checks and postterminal Workflow -> Tracker commands
   are unchanged. Candidate normalized hash
   `bd0e6d6e10b8a8b0ab2942e99dab82d0f3a2651ddd5566956910ba3896fd6878`;
-  code/image unchanged. Catalog7/hash0434499 and old QA18/19 remain preserved,
-  unaccepted; planned NEW full/sparse QA20/21 will assess the next publication.
+  code/image unchanged.18 final-text scoped regressions pass with synthetic
+  authorities/verdicts. Catalog7/hash0434499 and old QA18/19 remain preserved,
+  unaccepted; NEW full-brief QA is running on catalog8. Sparse and actual
+  Backlog/Ready acceptance remain open.
 
 - Evaluator v12 distinguishes the CURRENT report's submission protocol from
   precommit work. Real SDLC-18 report106 demanded proof of sending that same

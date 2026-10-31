@@ -15,7 +15,7 @@ Frozen v11 receipts remain explicitly accepted under unchanged fingerprint and
 coverage validation. Source `fb983944` is now installed by COMPLETE normal
 Workflow-only Apply `82089f04ed294324a5d4b820a71a4884`; actual container
 `22a64cc5...` reads v12, health/database/schema/catalog are OK and Fleet is unchanged.
-Catalog7/hash0434499 remains active; old SDLC-15 CLI history is byte-equivalent
+Catalog7/hash0434499 remained active at that update; old SDLC-15 CLI history is byte-equivalent
 at version6. No catalog publication or Hermes change accompanied this update.
 
 Local qualification on that exact source is complete: 159 targeted tests,
@@ -164,7 +164,7 @@ This API-only package does **not** constitute accepted text editing in the UI.
 ### PM Default Contract Revision: 31 October 2026
 
 [pm-default-workflow-20261031.json](evidence/pm-default-workflow-20261031.json)
-is the next portable PM text candidate, normalized canonical modes hash
+is the published portable PM text, normalized canonical modes hash
 `bd0e6d6e10b8a8b0ab2942e99dab82d0f3a2651ddd5566956910ba3896fd6878`.
 It keeps the same three phases, instruction/check/evidence counts, scopes and
 skills. Only text changes. Context is phase01; phase02 prepares the FULL saved
@@ -174,9 +174,10 @@ before the existing postterminal Tracker completion/readback. No report per
 ordinary message or confirmation request before accepted preparation is required.
 
 The preceding content/hash0434499 was published through the existing API as
-catalog7 on the checked stand and remains active. The tracked candidate is NOT
-published; publication8 and NEW full/sparse QA20/21 are planned for integrator
-review. Its final check assesses the affirmative business conclusion, not proof
+catalog7 on the checked stand. The current artifact is now published as catalog8
+through the existing API, with exact operation/active-content readback. NEW
+full-brief QA is running; sparse and actual Backlog/Ready acceptance remain open.
+Its final check assesses the affirmative business conclusion, not proof
 that postterminal effects are absent. Phase02 accepts actual publication/readback
 data identifying the same revision/hash with the FULL saved document once; it
 does not require duplicate complete raw CLI JSON or independent stdout attestation.
@@ -212,7 +213,12 @@ prerequisite in those scoped fixtures. Actual v11 SDLC-18 history106 nevertheles
 demanded its own future submission result. Installed v12 addresses that shared
 prompt rule without republishing catalog7. Continued SDLC-18 nevertheless reached
 PARTIAL115 on the negative absence check. Catalog7 QA18/19 remain unaccepted;
-the next text candidate requires NEW full/sparse acceptance, not reuse of mocked results.
+catalog8 requires NEW full/sparse acceptance, not reuse of mocked results.
+
+Final-text regression package passes18 scoped tests (33.61 seconds) with unchanged
+application code and explicit synthetic peers. Full sourcefb98394 qualification
+above is reused for unchanged product code; the changed text/input is covered by
+these targeted tests and the separate ongoing live acceptance.
 
 Import uses the same discovery/CAS/draft/publication procedure below. Do not copy
 this stand's catalog version into another installation or edit the sealed v1
