@@ -112,7 +112,7 @@ class OpenAICompatibleClient:
 class PromptBuilder:
     """Build prompts from phase contracts + task context."""
 
-    PROMPT_VERSION = "supervisor-evaluator-v11"
+    PROMPT_VERSION = "supervisor-evaluator-v12"
 
     SYSTEM_PROMPT = (
         "You are a strict workflow supervisor. "
@@ -168,6 +168,15 @@ class PromptBuilder:
         "does not excuse absent required readbacks, failed commands, mismatched identities or "
         "contradictory results. A summary cannot replace required FULL content; absent or mismatched "
         "owner confirmation remains missing evidence.\n"
+        "19. The report currently being evaluated has already been submitted to this supervisor. "
+        "Sending this report and inspecting its own future verdict, terminal receipt or operation "
+        "readback are submission protocol, not work or evidence that can precede this verdict. "
+        "Do not mark a required item missing for lack of that future submission result, even when "
+        "an instruction tells the worker how to submit and inspect it. Evaluate the stated checks "
+        "and evidence from present facts; instructions must not add this circular prerequisite. "
+        "This exception applies only to the current report's own submission protocol. Still require "
+        "the phase's actual business commands/results, required external readbacks, FULL content "
+        "and matching saved owner confirmation; never infer PASS merely because a report exists.\n"
         "The Supervisor never chooses the next phase.\n\n"
         "Output STRICT JSON with these keys:\n"
         "{\n"

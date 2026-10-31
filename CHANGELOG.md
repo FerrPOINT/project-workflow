@@ -8,6 +8,16 @@
 
 ### Added
 
+- Evaluator v12 distinguishes the CURRENT report's submission protocol from
+  precommit work. Real SDLC-18 report106 demanded proof of sending that same
+  report and reading its future result despite coherent catalog7 checks. The
+  shared prompt now excludes only that circular prerequisite; actual business
+  commands/results, external readbacks, FULL content and owner consent remain
+  required. No automatic PASS, new API or Hermes change. Historical v11 terminal
+  proof remains explicitly trusted with the same fingerprint/coverage guards.
+  Focused source tests and independent review pass; new image/full qualification
+  and live completion remain pending, not claimed from mocked verdicts.
+
 - Portable default PM text revision in
   `docs/evidence/pm-default-workflow-20261031.json`: three existing phases with
   coherent preparation/presentation/consent requirements. Phase02 evidence is

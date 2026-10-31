@@ -1,5 +1,24 @@
 # Managed Instruction Publication
 
+## Current Verifier Correction - 31 October 2026
+
+Catalog7 is published without rebuilding applications. Its real SDLC-18 test
+saved/presented requirements, obtained exact owner consent and corrected several
+reports in the same execution. Final history106 still required the CURRENT
+report's own submission result. This is a reproduced shared-prompt contradiction,
+not a reason to republish/rebind the frozen catalog or execute completion for PM.
+
+Evaluator v12 now excludes only that self-referential submission/readback from
+precommit work. True business commands/results, FULL content, external readbacks
+and owner consent remain required; negative verdicts are not promoted to PASS.
+Frozen v11 receipts remain explicitly accepted under unchanged fingerprint and
+coverage validation. Focused tests and independent review pass. Image, complete
+qualification and actual same-task completion remain pending; the installed
+verifier is still v11 until the separate normal Workflow-only update succeeds.
+
+The earlier package/qualification checkpoints below retain their own source and
+scope; they are not a full gate for this new verifier source.
+
 This is a separate, next-release source package based on master `620f45cd`.
 The accepted PM catalog works without it. It does not change the installed
 cohort, Fleet assignments/configuration, Hermes, credentials or agent messages.
