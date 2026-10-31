@@ -1,7 +1,7 @@
 {
   "workflow_key": "single-task-v1:project_manager",
   "role_key": "project_manager",
-  "content_sha256": "959176219912798901fe25cabb6cc011119bac736028a01d8f4119ff7cc031d4",
+  "content_sha256": "0434499f6baa99ff71e3e92cc6b46d7262c98f30bd4edcd3f72f503c432e3da3",
   "modes": [
     {
       "key": "draft",
@@ -128,7 +128,7 @@
           "checks": [
             "A FULL real requirements document is server-saved with exact revision/content_hash, clear agreed scope, sufficient business rules and measurable acceptance criteria.",
             "Clarifications addressed only actual incomplete or contradictory input, with ordinary small iterations and no invented gaps, mandatory alternatives or questions for a complete brief.",
-            "Actual blocking business gaps and feedback are resolved without invented answers or preselection; preparation does not require actual owner-facing presentation or consent. The exact owner confirmation request waits for phase 2 PASS.",
+            "Actual blocking business gaps and feedback are resolved without invented answers or preselection. No owner consent is claimed or requested as part of this preparation packet; actual owner-facing presentation and consent are not prerequisites for assessing the prepared packet.",
             "Remaining issues are explicit, agreed owner choices are preserved and no additional Tracker tasks were created."
           ],
           "evidence": [
@@ -146,7 +146,7 @@
           "execution_type": "sync",
           "instructions": [
             {
-              "description": "After phase 2 PASS, present the FULL latest server-saved requirements document to the owner in the same conversation, with its exact revision/content_hash, then request explicit human owner confirmation of that document. A summary, link, prepared report or hash alone is not full presentation. Never confirm as the owner or treat preparation as actual presentation. Do not repeat the confirmation request if a valid saved confirmation already matches the fully presented latest document.",
+              "description": "After phase 2 PASS, present the FULL latest server-saved requirements document to the owner in the same conversation, with its exact revision/content_hash, then ask the owner to use the application's separate confirmation control for that displayed revision/hash. Do not ask the owner to type a confirmation phrase in ordinary chat: a chat message is not the separate confirmation action or its saved receipt. A summary, link, prepared report or hash alone is not full presentation. Never confirm as the owner or treat preparation as actual presentation. Do not repeat the confirmation request if a valid saved confirmation already matches the fully presented latest document.",
               "execution_type": "sync",
               "skills": [
                 "project-workflow-executor",
@@ -191,7 +191,7 @@
             "An actual saved human owner confirmation matches the latest task/revision/hash and authorized owner.",
             "Actual feedback is resolved; changed documents were fully republished and presented before consent, while an unchanged confirmed document remains frozen without stale consent or invented questions.",
             "No unresolved business blockers; waiting for human input or consent leaves this phase unfinished without repetitive reports.",
-            "Workflow finishes in confirmed Draft before the existing postterminal comment/Tracker completion operations. Backlog / Ready requires subsequent actual Tracker readback; no automatic Analyst dispatch."
+            "The task is still in Draft; the latest saved requirements revision/content_hash has an actual matching confirmation from its authorized human owner. No postterminal final comment, Tracker completion or Analyst dispatch has been performed for this handoff. The current report is assessed from these present facts without its own future terminal receipt, verdict or Backlog transition."
           ],
           "evidence": [
             "FULL latest saved document, exact revision/content_hash and concrete account of its actual full owner-facing presentation; no verbatim earlier message or independent presentation attestation is required.",
