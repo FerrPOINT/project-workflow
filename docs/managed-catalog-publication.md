@@ -118,7 +118,54 @@ does not acquire publication controls in this package; integrating its editor
 with these explicit JSON operations is separate work, not an implicit save hook.
 This API-only package does **not** constitute accepted text editing in the UI.
 
-### Portable Accepted PM Configuration
+## Portable PM Configurations
+
+### PM Default Contract Revision: 31 October 2026
+
+[pm-default-workflow-20261031.json](evidence/pm-default-workflow-20261031.json)
+is the new portable PM text, canonical modes hash
+`0434499f6baa99ff71e3e92cc6b46d7262c98f30bd4edcd3f72f503c432e3da3`.
+It keeps the same three phases, instruction/check/evidence counts, scopes and
+skills. Only text changes. Context is phase01; phase02 prepares the FULL saved
+requirements and review packet without future presentation or consent; phase03
+presents the document, obtains exact owner confirmation and reports current work
+before the existing postterminal Tracker completion/readback. No report per
+ordinary message or confirmation request before accepted preparation is required.
+
+The integrator published this content through the existing API as catalog7 on the
+checked stand. Exact operation readback and active content/hash match; the old
+SDLC-15 execution/history remain byte-equivalent in the actual CLI readback.
+The same PM runtime was restored after an observed exited container; snapshots
+21==20 and original Hermes/CLI/model are unchanged. Publication itself required
+no application rebuild or runtime action. Source validation and live PM business
+acceptance are separate; full-brief and sparse-input acceptance are in progress.
+Catalog4's full-brief test exposed an invented Workflow project_id requirement;
+the next revision bounded context comparisons to real fields of their own sources.
+Catalog5 then passed preparation but needed repeated reports because conditional
+clarification evidence was treated as missing on a complete brief. Its final
+phase also exposed a circular check: the report had to prove its own future
+Workflow completion. Catalog7 incorporates two explicit input-resolution paths
+and current-state precommit checks. The final check requires confirmed latest
+requirements in Draft, not its own future terminal receipt/verdict/Backlog.
+The owner uses the separate application confirmation control, not a chat phrase.
+Earlier failures/PARTIAL reports remain history, not retroactive passes. No
+evaluator or application code was changed for these texts.
+
+On the combined source, 18 targeted tests pass (22.14 seconds): portable hash and
+structure, actual API publication and old-execution isolation, source-specific
+context fields, both preparation evidence paths, PARTIAL correction in the same
+execution, final consent guards and terminal completion instructions. Auth,
+Tracker and LLM verdicts in these SQLite/TestClient tests are explicit synthetic
+peers, not live acceptance. Independent text review found no remaining circular
+prerequisite. New full-brief QA SDLC-18 is executing catalog7; the two live
+business scenarios remain unaccepted until actual Backlog / Ready readback.
+
+Import uses the same discovery/CAS/draft/publication procedure below. Do not copy
+this stand's catalog version into another installation or edit the sealed v1
+artifacts. The earlier export below remains the historical accepted PM13 text,
+not evidence that the new default has already completed both live scenarios.
+
+### Historical Accepted PM Configuration: 30 October 2026
 
 [pm-instructions-20261030.json](evidence/pm-instructions-20261030.json) exports
 the accepted PM text as operator configuration, not a new sealed default or an

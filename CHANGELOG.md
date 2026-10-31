@@ -8,6 +8,27 @@
 
 ### Added
 
+- Portable default PM text revision in
+  `docs/evidence/pm-default-workflow-20261031.json`: three existing phases with
+  coherent preparation/presentation/consent requirements. Phase02 evidence is
+  the full saved document and prepared review packet, not future presentation;
+  phase03 requires actual presentation and exact saved owner consent before
+  postterminal Tracker completion. No report per ordinary reply or premature
+  consent request. Counts/scopes/skills and sealed legacy artifacts are unchanged.
+  Canonical hash0434499f is published as catalog7 on the checked stand through
+  the existing API; old SDLC-15 CLI history remains unchanged. No application
+  rebuild, Hermes change, endpoint or migration.18 targeted API/SQLite/CLI-format
+  regressions on the combined final text pass using explicit synthetic
+  Auth/Tracker/LLM fixtures; real PM full/sparse acceptance remains separate.
+  Catalog4 exposed a nonexistent Workflow project_id requirement;
+  catalog5 passed preparation after repeated conditional-evidence verdicts.
+  Final text bounds source-specific comparisons and gives input-resolution
+  evidence two explicit applicable paths. Its final phase exposed a future
+  completion prerequisite; the final check now assesses confirmed requirements
+  in current Draft, leaving actual completion after accepted Workflow. Owner
+  confirmation uses the separate application control, not a chat phrase.
+  No forced PASS or engine change; earlier test/report history remains unchanged.
+
 - Страницы фаз PM показывают один набор инструкций установленного каталога.
   `effective_view` сохраняет raw-поля API без подмены инструкций при исполнении.
   Запись в sealed PM каталог отклоняется; обычные workflow сохраняют редактор.
