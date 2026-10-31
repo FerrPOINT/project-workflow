@@ -17,7 +17,13 @@
   exact owner consent and postterminal Tracker completion remain explicit.
   Published hash `ae220f915d33987f1ed9b13e39d9a4c3a82ea5d8db133638a6a06f384ae249ef`;
   seven focused tests and Ruff pass. No code/image rebuild; prior executions stay
-  frozen. Fresh full/sparse actual Backlog/Ready acceptance is underway, not claimed.
+  frozen. Full-brief SDLC-22 now reaches real Backlog/Ready: context130,
+  preparation131 and terminal135 PASS, exact owner receipt853d9814/req1/hash898f7e7e.
+  Independent read-only PG verifies owner/hash and zero Analyst/Analysis. PM
+  self-corrected final PARTIAL132-134 without technical hints or document changes;
+  that overhead is not claimed eliminated. Sparse SDLC-23 remains underway.
+  Fleet's completed-task initial POST replay returns409; its separate worker
+  owns that regression. This is not complete release acceptance.
 
 - Catalog9 text-only correction follows retained SDLC-20 reports120-125:
   the final phase is named "Owner-confirmed requirements", not "before final

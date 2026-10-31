@@ -25,7 +25,13 @@ Tracked PM artifact опубликован штатным API как catalog10, 
 Техническую identity/namespace/access проверяет сервер; PM не пересказывает все
 API-поля и не просит владельца повторно заверять настройки. Counts/scopes/skills
 не изменены, инструкции14632 ->5868 символов. Семь scoped tests/Ruff pass; новый
-код или образ не требуются. Свежая full/sparse бизнес-приёмка пока открыта.
+код или образ не требуются. Full-brief SDLC-22 завершена PM самостоятельно:
+context130/preparation131/terminal135 PASS, req1/hash898f7e7e, separate owner
+receipt853d9814, actual Backlog/Ready. Независимый read-only PG подтверждает
+owner/hash и ноль Analyst/Analysis. Final PARTIAL132-134 исправлены самим PM,
+без технических подсказок; эта задержка не выдана за устранённую нестабильность.
+Sparse SDLC-23 в работе. Fleet initial POST replay после completion даёт409,
+это отдельная исправляемая регрессия, не повод объявлять полный релиз готовым.
 SDLC-21 на9 сохранил PARTIAL128 с лишним namespace attestation, без подмены фактов.
 
 Предыдущая редакция9, normalized hash
