@@ -1,7 +1,7 @@
 {
   "workflow_key": "single-task-v1:project_manager",
   "role_key": "project_manager",
-  "content_sha256": "429fca5d4b391001e9e7b3d9f554df35d2ba72553813679abaf1e48cd1dc2d9b",
+  "content_sha256": "959176219912798901fe25cabb6cc011119bac736028a01d8f4119ff7cc031d4",
   "modes": [
     {
       "key": "draft",
@@ -117,7 +117,7 @@
               ]
             },
             {
-              "description": "Report this phase only when its preparation work is complete, not after every message or answer. Put the FULL source brief, FULL saved document and actual receipts/exact revision/hash together in ONE self-contained report, not fragments spread across retries. Submit project-workflow --json step --task <workflow-task-key> --operation-key <stable-key> --expected-version <last-returned-version> --report - with ordinary TEXT/MARKDOWN stdin via safely quoted printf '%s' or a quoted heredoc. No JSON envelope, Python/node wrapper, request file, actual phase 3 presentation or consent is required. Inspect actual verdict/missing/blockers and returned phase/version; known PARTIAL is not PASS. Correct its actual gap in the same execution, with a new key only for a changed report; unknown acceptance requires original-key history readback, never blind resend. Request owner confirmation ONLY after phase 2 PASS, not while preparation remains PARTIAL.",
+              "description": "Report this phase only when its preparation work is complete, not after every message or answer. Put the FULL source brief, FULL saved document, actual publication/readback receipts and exact revision/hash together in ONE self-contained report. Include the always-applicable input-resolution evidence: an explicit complete/consistent-input conclusion with a concise source-to-requirements mapping using those documents, OR the actual gap, real clarification/owner answer or applied feedback and its resolution. Both paths document how the input led to the saved requirements; no separate mapping artifact or invented question references are required. Every corrected report retains the full packet, not only the latest correction. Actual phase 3 presentation and owner consent are not preparation evidence. Submission/readback protocol is bookkeeping, not phase work or evidence: submit project-workflow --json step --task <workflow-task-key> --operation-key <stable-key> --expected-version <last-returned-version> --report - with ordinary TEXT/MARKDOWN stdin via safely quoted printf '%s' or a quoted heredoc. Only AFTER the response returns, inspect verdict/missing/blockers and returned phase/version. The report being evaluated cannot include its own future verdict or receipt. Known PARTIAL is not PASS: correct its actual gap in the same execution, with a new key only for a changed report; unknown acceptance requires original-key history readback, never blind resend. Request owner confirmation ONLY after phase 2 PASS.",
               "execution_type": "sync",
               "skills": [
                 "project-workflow-executor",
@@ -133,7 +133,7 @@
           ],
           "evidence": [
             "FULL source brief and FULL server-saved requirements, exact revision/content_hash, publication/readback receipts, scope, business rules, acceptance criteria and prepared owner-review packet IN THIS REPORT. Actual prior presentation, a verbatim conversation message and owner consent are not phase 2 evidence.",
-            "Only for actual incomplete/contradictory input: real clarification/resolution and applied feedback references. For a complete consistent brief, requirements derived from that brief suffice without fabricated questions, answers or alternatives."
+            "Input resolution, shown through ONE of two evidence paths: for complete, consistent input, an explicit conclusion that no clarification was needed and a concise source-to-requirements mapping using the FULL brief and saved document already included in the packet; no question/answer references are needed. For incomplete or contradictory input, the actual gap, real clarification question/owner answer or applied feedback, and its resolution in the saved requirements. This item always applies through one of these paths."
           ],
           "parallel_with_phase_code": null,
           "rollback_target_phase_code": null
