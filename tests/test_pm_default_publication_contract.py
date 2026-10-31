@@ -95,7 +95,7 @@ def test_pm_default_export_is_portable_text_only_and_preserves_all_structure(pm_
     accepted = catalog_publication._normalize(_accepted_v3()["modes"])
     assert modes == pm_default["modes"]
     assert payload_sha256(modes) == pm_default["content_sha256"]
-    assert pm_default["content_sha256"] == "429fca5d4b391001e9e7b3d9f554df35d2ba72553813679abaf1e48cd1dc2d9b"
+    assert pm_default["content_sha256"] == "959176219912798901fe25cabb6cc011119bac736028a01d8f4119ff7cc031d4"
     assert catalog_publication._structure(modes) == catalog_publication._structure(accepted)
     assert modes != accepted
     phases = modes[0]["phases"]
@@ -155,7 +155,7 @@ def test_pm_default_phase_contract_separates_preparation_from_presentation_and_c
     preparation_text = "\n".join(item["description"] for item in preparation["instructions"])
     assert "FULL" in preparation_text and "revision" in preparation_text and "hash" in preparation_text
     assert "Request owner confirmation ONLY after phase 2 PASS" in preparation_text
-    assert "preparation remains PARTIAL" in preparation_text
+    assert "Known PARTIAL is not PASS" in preparation_text
     final_text = "\n".join(item["description"] for item in final["instructions"])
     assert "After phase 2 PASS, present the FULL latest server-saved requirements document" in final_text
     assert "task-tracker sdlc confirmation read" in final_text
@@ -163,6 +163,34 @@ def test_pm_default_phase_contract_separates_preparation_from_presentation_and_c
     assert "ONLY AFTER accepted Workflow complete=true" in final_text
     assert "Backlog / Ready requires subsequent actual Tracker readback" in "\n".join(final["checks"])
     assert "no automatic Analyst dispatch" in "\n".join(final["checks"])
+
+
+def test_pm_default_preparation_evidence_declares_two_always_applicable_paths(pm_default):
+    preparation = pm_default["modes"][0]["phases"][1]
+    input_resolution = preparation["evidence"][1]
+    assert "Input resolution, shown through ONE of two evidence paths" in input_resolution
+    for requirement in (
+        "for complete, consistent input, an explicit conclusion that no clarification was needed",
+        "concise source-to-requirements mapping using the FULL brief and saved document already included in the packet",
+        "no question/answer references are needed",
+        "For incomplete or contradictory input, the actual gap, "
+        "real clarification question/owner answer or applied feedback",
+        "its resolution in the saved requirements",
+        "This item always applies through one of these paths",
+    ):
+        assert requirement in input_resolution
+    assert "N/A" not in input_resolution and not input_resolution.startswith("Only for")
+    reporting = preparation["instructions"][-1]["description"]
+    for requirement in (
+        "always-applicable input-resolution evidence",
+        "no separate mapping artifact or invented question references are required",
+        "Every corrected report retains the full packet, not only the latest correction",
+        "Actual phase 3 presentation and owner consent are not preparation evidence",
+        "Submission/readback protocol is bookkeeping, not phase work or evidence",
+        "Only AFTER the response returns, inspect verdict/missing/blockers and returned phase/version",
+        "The report being evaluated cannot include its own future verdict or receipt",
+    ):
+        assert requirement in reporting
 
 
 def test_pm_default_publication_changes_checks_evidence_and_new_cli_but_not_old_execution(
