@@ -15,12 +15,25 @@
   Existing redaction now recognizes these names as well as native PAT prefixes;
   operation keys, content hashes and fencing tokens remain unchanged.
   112 targeted diagnostics/API/LLM tests PASS, including exact v12 policy AST.
-- Installed baseline is still1a8a9ee/image ed53633db317. Security changes are
-  source-only until the next qualified Workflow-only installation. No PM,
-  Hermes, Fleet, credentials or catalog activation is included.
-- Next: qualify this diagnostic/security-only SHA, retain both new baseline
-  QA outcomes and analyze the remaining contradiction case without rerunning
-  unchanged builds or accepting an experimental verdict policy.
+- Diagnostic/security93c14f8/image bdfb02159989 is installed through normal
+  Workflow-only Applydaced4eb. Health/schema/catalog pass; PM23, original Hermes,
+  Fleet, credentials and catalog10 are unchanged. History171 reads identically
+  before/after installation.
+- Final93c14f8:3319 tests and73 subtests PASS,15 explicit skips,
+  coverage94.08269961977186%;132 real PostgreSQL tests PASS. Owned scratch and
+  Compose resources cleaned. Exact-image fresh-DB smoke and independent review pass.
+- Sparse baseline SDLC-25 asks useful questions, saves requirements1 and2 after
+  ordinary feedback, presents the document and reads exact owner confirmation.
+  Stale revision1 returns409; initial replay preserves all5 runs and bindings.
+  It remains Draft/InProgress after unsupported phase2 PARTIAL170/171.
+  Corrected-report409 is proven same-key/different-report-and-version rejection,
+  not a reason to weaken idempotency. CLI currently exposes only a generic409.
+- Two separately bounded text trials are not accepted: context instruction5-only
+  gives5/6 positive PASS and6/6 correct negative PARTIAL (11/12 exact); preparation
+  evidence clarification gives0/6 positive PASS,6/6 negative PARTIAL but4/12 exact
+  item classifications. All outcomes retained; no publication, rebind or retry to PASS.
+- Next: resolve the demonstrated semantic grading gap before further PM acceptance.
+  No more unchanged builds or broad replay are required for the recorded failures.
 
 ## Diagnostics-Only Baseline — 2026-11-01
 
