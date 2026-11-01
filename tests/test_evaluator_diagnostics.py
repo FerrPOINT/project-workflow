@@ -128,10 +128,12 @@ def test_reason_and_exact_quote_are_inspectable_not_an_automatic_verdict(quote, 
     raw = {"verdict": "PARTIAL", "covered": [], "missing": ["1"], "blockers": [],
            "message": "Check the missing evidence", "confidence": 0.5,
            "item_explanations": [{"id": "1", "reason": "Document evidence is incomplete", "quote": quote}]}
-    parsed = ResponseParser.parse(raw, required_item_ids=["1"])
     diagnostic = history_diagnostic("FULL document", {"raw_evaluator": raw,
         "contract_snapshot": {"evaluation_items": [{"id": "1", "text": "FULL document required"}]}})
-    assert parsed.verdict == "PARTIAL"
+    # Optional annotations may exist in historical traces, but baseline v12 does
+    # not admit new wire fields merely because diagnostics can display them.
+    with pytest.raises(ValidationError):
+        ResponseParser.parse(raw, required_item_ids=["1"])
     assert diagnostic["criteria"][0]["reason"] == "Document evidence is incomplete"
     assert diagnostic["criteria"][0]["quote_status"] == expected
 
@@ -143,17 +145,23 @@ def test_reason_and_exact_quote_are_inspectable_not_an_automatic_verdict(quote, 
 def test_invalid_annotations_are_flagged_without_changing_business_decision(explanations):
     raw = {"verdict": "PARTIAL", "covered": [], "missing": ["1"], "blockers": [],
            "message": "Missing", "confidence": 0.5, "item_explanations": explanations}
-    assert ResponseParser.parse(raw, required_item_ids=["1"]).verdict == "PARTIAL"
+    with pytest.raises(ValidationError):
+        ResponseParser.parse(raw, required_item_ids=["1"])
     diagnostic = history_diagnostic("report", {"raw_evaluator": raw,
         "contract_snapshot": {"evaluation_items": [{"id": "1", "text": "actual criterion"}]}})
     assert diagnostic["invalid_annotations"] == 1
     assert len(diagnostic["criteria"]) == 1
 
 
-def test_prompt_requests_short_evidence_based_explanations_not_hidden_thinking():
-    assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v16"
-    assert "one brief conclusion per required item" in PromptBuilder.SYSTEM_PROMPT
-    assert "not internal reasoning" in PromptBuilder.SYSTEM_PROMPT
+def test_diagnostics_preserve_baseline_prompt_without_requesting_new_explanations():
+    assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v12"
+    assert "item_explanations" not in PromptBuilder.SYSTEM_PROMPT
+    assert set(ResponseParser.parse({
+        "verdict": "PARTIAL", "covered": [], "missing": ["1"], "blockers": [],
+        "message": "Missing evidence", "confidence": 0.5,
+    }, required_item_ids=["1"]).raw) == {
+        "verdict", "covered", "missing", "blockers", "message", "confidence",
+    }
 
 
 def test_captured_criteria_do_not_reintroduce_secret_from_frozen_contract():

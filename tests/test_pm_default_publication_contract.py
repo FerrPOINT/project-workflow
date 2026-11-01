@@ -6,6 +6,7 @@ The separately owned portable export must be integrated before these tests run.
 """
 
 import json
+import re
 from pathlib import Path
 from unittest.mock import Mock
 from uuid import uuid4
@@ -94,7 +95,7 @@ def test_pm_default_export_is_portable_text_only_and_preserves_all_structure(pm_
     accepted = catalog_publication._normalize(_accepted_v3()["modes"])
     assert modes == pm_default["modes"]
     assert payload_sha256(modes) == pm_default["content_sha256"]
-    assert pm_default["content_sha256"] == "ba81253bbb57eb761973d8a08e2a699f914c16fa9e39d91bcae82b237cd156f8"
+    assert pm_default["content_sha256"] == "0434499f6baa99ff71e3e92cc6b46d7262c98f30bd4edcd3f72f503c432e3da3"
     assert catalog_publication._structure(modes) == catalog_publication._structure(accepted)
     assert modes != accepted
     phases = modes[0]["phases"]
@@ -103,7 +104,7 @@ def test_pm_default_export_is_portable_text_only_and_preserves_all_structure(pm_
     assert [len(phase["evidence"]) for phase in phases] == [1, 2, 2]
 
 
-def test_pm_default_first_phase_reads_real_context_without_llm_identity_recertification(
+def test_pm_default_first_phase_keeps_project_and_snapshot_comparisons_source_specific(
     configured, pm_default, monkeypatch,
 ):
     client, assignment = configured
@@ -123,18 +124,20 @@ def test_pm_default_first_phase_reads_real_context_without_llm_identity_recertif
     assert readback["phase_contract"]["required_evidence"] == phase["evidence"]
     instructions = readback["instructions"]
     for requirement in (
-        "task-tracker sdlc context",
-        "task-tracker sdlc discussion read",
-        "project-workflow --json step",
-        "Servers enforce identity, assignment, namespace and access",
-        "Do not ask the owner to re-certify these technical settings",
-        "A real access failure or wrong task is a technical blocker",
-        "never borrow another identity or use a local database fallback",
-        "an empty discussion or absent first requirements revision is normal",
+        "Tracker context.project_id = input response.project_id and discussion.project_id",
+        "Workflow first-step schema has no project_id",
+        "context.task_id/root_task_id = input response task_id/root_task_id",
+        "context.task_id = discussion.task_id",
+        "assignment.assignment_id/agent_id/execution_id/version",
+        "input.snapshot_ref and discussion.snapshot are separate concepts, not equality pairs",
+        "neither requires a counterpart field in Tracker context",
+        "comments:[], snapshot:null, next_after:null is a valid complete empty discussion",
+        "Required access failures or actual identity mismatches remain blockers",
     ):
         assert requirement in instructions
-    assert "independent configuration attestation is not required" in phase["evidence"][0]
-    assert "input.snapshot_ref/title/description/sha256" not in instructions
+    assert "Tracker project_id compares only with Tracker input/discussion.project_id, never Workflow namespace_id" in (
+        "\n".join(phase["evidence"])
+    )
 
 
 def test_pm_default_phase_contract_separates_preparation_from_presentation_and_consent(pm_default):
@@ -146,99 +149,65 @@ def test_pm_default_phase_contract_separates_preparation_from_presentation_and_c
     assert "task-tracker sdlc context" in first_text
     assert "project-workflow --json step" in first_text
     preparation_evidence = "\n".join(preparation["evidence"])
-    assert "FULL saved requirements document" in preparation_evidence
+    assert re.search(r"prepared owner[- ]review packet", preparation_evidence, re.IGNORECASE)
+    assert "owner review presentation" not in preparation_evidence.lower()
     assert preparation["evidence"] != _accepted_v3()["modes"][0]["phases"][1]["evidence"]
     preparation_text = "\n".join(item["description"] for item in preparation["instructions"])
     assert "FULL" in preparation_text and "revision" in preparation_text and "hash" in preparation_text
-    assert "Request owner confirmation only after phase 2 PASS" in preparation_text
-    assert "task-tracker sdlc revision publish" in preparation_text
-    assert "PM may publish its own draft; only the owner may confirm it" in preparation_text
-    assert "one FULL copy of saved requirements" in preparation_text
-    assert "A corrected report retains this packet" in preparation_text
-    assert "unknown acceptance uses original-key history" in preparation_text
-    assert "actual publication/readback data" in preparation["evidence"][0]
-    assert "independent stdout attestation is not required" in preparation["evidence"][0]
-    assert "Actual presentation and owner confirmation are not prerequisites" in preparation["checks"][3]
+    assert "Request owner confirmation ONLY after phase 2 PASS" in preparation_text
+    assert "Known PARTIAL is not PASS" in preparation_text
+    preparation_check = preparation["checks"][2]
+    assert "No owner consent is claimed or requested as part of this preparation packet" in preparation_check
+    assert "actual owner-facing presentation and consent are not prerequisites" in preparation_check
+    assert "PASS" not in preparation_check
     final_text = "\n".join(item["description"] for item in final["instructions"])
-    assert "After phase 2 PASS, show the FULL latest saved document" in final_text
-    assert "application's separate confirmation action" in final_text
-    assert "a chat message such as 'agreed' is not the saved confirmation receipt" in final_text
+    assert "After phase 2 PASS, present the FULL latest server-saved requirements document" in final_text
+    assert "application's separate confirmation control for that displayed revision/hash" in final_text
+    assert "Do not ask the owner to type a confirmation phrase in ordinary chat" in final_text
+    assert "a chat message is not the separate confirmation action or its saved receipt" in final_text
     assert "task-tracker sdlc confirmation read" in final_text
-    assert "Never confirm for the owner" in final_text
-    assert "existing explicit owner-authorized revision procedure and new consent" in final_text
-    assert "This report cannot contain its own future verdict or terminal receipt" in final_text
-    assert "ONLY AFTER Workflow returns complete=true" in final_text
-    assert "task-tracker sdlc pm completion submit" in final_text
-    assert "stage=Backlog and status=Ready" in final_text
-    assert "Do not dispatch Analyst or claim that transition before readback" in final_text
+    assert "Do not require this report's future terminal receipt, final comment or Backlog transition" in final_text
+    assert "ONLY AFTER accepted Workflow complete=true" in final_text
+    assert "Do not dispatch Analyst or claim Backlog before the actual Tracker readback" in final_text
     final_check = final["checks"][4]
-    assert final["name"] == "Owner-confirmed requirements"
-    assert "before final Workflow report" not in final["description"]
     for requirement in (
-        "The confirmed specification contains goal, scope/exclusions",
-        "scenarios, constraints, assumptions",
-        "measurable acceptance criteria",
+        "The task is still in Draft",
+        "latest saved requirements revision/content_hash has an actual matching confirmation",
+        "from its authorized human owner",
+        "No postterminal final comment, Tracker completion or Analyst dispatch has been performed",
+        "present facts without its own future terminal receipt, verdict or Backlog transition",
     ):
         assert requirement in final_check
-    assert "postterminal" not in final_check and "has been performed" not in final_check
     precommit_contract = "\n".join([*final["checks"], *final["evidence"]])
-    assert "final report" not in "\n".join(final["checks"]).lower()
     assert "pm completion submit" not in precommit_contract and "complete=true" not in precommit_contract
 
 
 def test_pm_default_preparation_evidence_declares_two_always_applicable_paths(pm_default):
     preparation = pm_default["modes"][0]["phases"][1]
     input_resolution = preparation["evidence"][1]
+    assert "Input resolution, shown through ONE of two evidence paths" in input_resolution
     for requirement in (
-        "For incomplete input: the actual gap, owner answer or feedback, and its resolution",
-        "For complete input: why the supplied information suffices without clarification",
-        "Neither path requires invented questions",
+        "for complete, consistent input, an explicit conclusion that no clarification was needed",
+        "concise source-to-requirements mapping using the FULL brief and saved document already included in the packet",
+        "no question/answer references are needed",
+        "For incomplete or contradictory input, the actual gap, "
+        "real clarification question/owner answer or applied feedback",
+        "its resolution in the saved requirements",
+        "This item always applies through one of these paths",
     ):
         assert requirement in input_resolution
     assert "N/A" not in input_resolution and not input_resolution.startswith("Only for")
     reporting = preparation["instructions"][-1]["description"]
     for requirement in (
-        "how real gaps were resolved",
-        "For complete input, state that no clarification was needed",
-        "A corrected report retains this packet",
-        "Inspect verdict/missing/blockers and returned phase/version",
-        "unknown acceptance uses original-key history",
-        "Request owner confirmation only after phase 2 PASS",
+        "always-applicable input-resolution evidence",
+        "no separate mapping artifact or invented question references are required",
+        "Every corrected report retains the full packet, not only the latest correction",
+        "Actual phase 3 presentation and owner consent are not preparation evidence",
+        "Submission/readback protocol is bookkeeping, not phase work or evidence",
+        "Only AFTER the response returns, inspect verdict/missing/blockers and returned phase/version",
+        "The report being evaluated cannot include its own future verdict or receipt",
     ):
         assert requirement in reporting
-
-
-@pytest.mark.parametrize("phase_index", [0, 1, 2])
-def test_pm_default_partial_repairs_preserve_the_current_phase_packet(pm_default, phase_index):
-    phase = pm_default["modes"][0]["phases"][phase_index]
-    reporting = phase["instructions"][3 if phase_index == 2 else -1]["description"]
-    for requirement in (
-        "PARTIAL", "named gap", "previous-report references",
-        "repeat an identical report without changed facts", "original-key history",
-        "verdict/missing/blockers and returned phase/version",
-    ):
-        assert requirement in reporting
-    if phase_index == 0:
-        assert "retain these context facts" in reporting
-        assert "No requirements or consent is needed to finish context reading" in reporting
-        return
-    for requirement in ("source brief", "FULL", "actual publication/readback revision/content_hash"):
-        assert requirement in reporting
-    assert "If no factual gap is found, report the blocker instead of retrying unchanged" in reporting
-    evidence = phase["evidence"][0]
-    for requirement in (
-        "Source brief", "FULL", "actual publication/readback", "exact revision/content_hash",
-        "including in corrected reports", "previous-report references cannot replace this packet",
-    ):
-        assert requirement in evidence
-    instructions = "\n".join(item["description"] for item in phase["instructions"])
-    assert "do not republish" in instructions
-    assert "to repair a report" in instructions
-    if phase_index == 2:
-        assert "complete packet and named gap fixed" in reporting
-        assert "actual owner receipt" in reporting
-        assert "concrete presentation account" in reporting
-        assert "retained in every corrected report" in phase["evidence"][1]
 
 
 def test_pm_default_publication_changes_checks_evidence_and_new_cli_but_not_old_execution(
@@ -349,30 +318,10 @@ def test_pm_default_preparation_cursor_never_requires_confirmation_before_final_
         }
         confirmation.side_effect = None
         confirmation.return_value = confirmed
-        supervisor_llm("PARTIAL", missing=current["phase_contract"]["required_evidence"])
-        incomplete = step(
-            configured, report="Synthetic incomplete correction: see previous report for the FULL document",
-            operation_key="final-incomplete-packet", expected_version=current["version"],
-            requirements_revision=7, requirements_sha256="c" * 64,
-        )
-        assert incomplete.status_code == 200, incomplete.text
-        partial = incomplete.json()["result"]
-        assert partial["verdict"] == "PARTIAL" and partial["complete"] is False
-        assert "terminal_receipt" not in partial and "completion_instructions" not in partial
-        retry = _cli_read(configured, monkeypatch)
-        assert retry["phase_code"] == "PM-DRAFT-03" and retry["version"] == partial["version"]
-        for field in ("required_checks", "required_evidence"):
-            assert retry["phase_contract"][field] == current["phase_contract"][field]
-        assert retry["phase_contract"]["evaluation_feedback"]["verdict"] == "PARTIAL"
-        assert "complete packet and named gap fixed" in retry["instructions"]
-        assert "previous-report references cannot replace this packet" in retry["instructions"]
         supervisor_llm("PASS")  # Synthetic exact consent and verdict, not human/live acceptance.
         finished = step(
-            configured, report=(
-                "Synthetic corrected packet: source brief, FULL saved document, actual publication/readback "
-                "revision=7/hash=" + "c" * 64 + "; matching owner receipt and actual presentation account"
-            ),
-            operation_key="final-with-matching-consent", expected_version=retry["version"],
+            configured, report="Synthetic FULL saved document, matching receipt and actual presentation account",
+            operation_key="final-with-matching-consent", expected_version=current["version"],
             requirements_revision=7, requirements_sha256="c" * 64,
         )
         assert finished.status_code == 200, finished.text

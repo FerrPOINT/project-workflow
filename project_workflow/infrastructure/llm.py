@@ -185,23 +185,21 @@ class OpenAICompatibleClient:
 class PromptBuilder:
     """Build prompts from phase contracts + task context."""
 
-    PROMPT_VERSION = "supervisor-evaluator-v16"
+    PROMPT_VERSION = "supervisor-evaluator-v12"
 
     SYSTEM_PROMPT = (
         "You are a strict workflow supervisor. "
         "Evaluate the worker's report against the phase contract below.\n\n"
         "Rules:\n"
-        "1. The evaluation contract's required checks and evidence are the complete acceptance criteria. "
-        "Analyze the worker report against EACH required item individually. Do not skip checks.\n"
-        "2. Worker procedure is context for interpreting those items, not additional acceptance criteria. "
-        "Do not turn procedure into extra required actions, events, receipts or proof.\n"
+        "1. Read the phase contract (instructions, checks, evidence).\n"
+        "2. Analyze the worker report against EACH contract item individually. Do not skip checks.\n"
         "3. Return every required item ID exactly once in either covered or missing. "
         "Copy the ID value exactly: do not add brackets, quotes, prefixes, or suffixes.\n"
         "4. Identify real BLOCKERS with ROOT CAUSE — explain WHY it prevents progress. "
         "Words like 'ошибка'/'error'/'bug' alone are NOT blockers without root cause.\n"
         "5. Verify the worker did NOT break existing functionality, remove working code, or leave orphaned artifacts.\n"
         "6. verdict = PASS    — all items done, no blockers, no regressions → advance.\n"
-        "7. verdict = PARTIAL — missing is nonempty and blockers is empty; the CURRENT phase worker can "
+        "7. verdict = PARTIAL — some items are missing, but the CURRENT phase worker can "
         "complete them without changing an artifact produced by an earlier phase → stay on phase.\n"
         "8. verdict = BLOCKED — real blocker → stay on phase.\n"
         "10. verdict = DELEGATE — only when the phase has a configured delegate.\n"
@@ -252,12 +250,6 @@ class PromptBuilder:
         "This exception applies only to the current report's own submission protocol. Still require "
         "the phase's actual business commands/results, required external readbacks, FULL content "
         "and matching saved owner confirmation; never infer PASS merely because a report exists.\n"
-        "20. For diagnosis, provide item_explanations: one brief conclusion per required item, with its "
-        "exact id, a reason tied only to that criterion, and quote: an exact short excerpt from the "
-        "WORKER REPORT, or null when no supporting excerpt exists. Explain what specific evidence "
-        "is missing, not a new requirement. These are concise review conclusions, not internal "
-        "reasoning or a step-by-step thought process. Explanations do not replace coverage, evidence "
-        "or owner confirmation. Never invent quotes or claim external verification not performed.\n"
         "The Supervisor never chooses the next phase.\n\n"
         "Output STRICT JSON with these keys:\n"
         "{\n"
@@ -266,9 +258,7 @@ class PromptBuilder:
         '  "missing": ["required item ID"],\n'
         '  "blockers": ["specific blocker description"],\n'
         '  "message": "Human-readable summary in Russian",\n'
-        '  "confidence": 0.0-1.0,\n'
-        '  "item_explanations": [{"id": "required item ID", "reason": "brief conclusion", '
-        '"quote": null}]\n'
+        '  "confidence": 0.0-1.0\n'
         "}\n"
     )
 
@@ -288,14 +278,13 @@ class PromptBuilder:
             f"CURRENT PHASE: {phase.code} — {phase.name}",
             f"ALLOWED VERDICTS: {', '.join(allowed)}",
             "",
+            "PHASE CONTRACT:",
         ]
-        if evaluation_items is None and phase.instructions:
-            lines.append("WORKER PROCEDURE (context only; not additional acceptance criteria):")
+        if phase.instructions:
+            lines.append("Instructions:")
             for inst in phase.instructions:
                 desc = getattr(inst, "step", "") or getattr(inst, "description", "")
                 lines.append(f"  • {desc}")
-            lines.extend(["END WORKER PROCEDURE", ""])
-        lines.append("EVALUATION CONTRACT (only the required checks and evidence below define coverage):")
         if evaluation_items is not None:
             lines.append("Required checks and evidence (copy only each quoted ID value into JSON):")
             for item_id, description in evaluation_items:
@@ -306,8 +295,6 @@ class PromptBuilder:
                     "Before returning JSON, verify that covered and missing are disjoint, "
                     "contain no duplicates, and together contain every required ID above exactly once.",
                     f"The sum len(covered) + len(missing) MUST equal {len(evaluation_items)}.",
-                    "Verify verdict consistency with that classification: PASS requires missing=[] and blockers=[]; "
-                    "PARTIAL requires nonempty missing and blockers=[]; BLOCKED requires nonempty blockers.",
                 ]
             )
         else:
@@ -355,8 +342,6 @@ class _LlmResponse(BaseModel):
     blockers: list[str]
     message: str = Field(min_length=1)
     confidence: float = Field(ge=0.0, le=1.0, allow_inf_nan=False)
-    # Historical replies remain valid. Missing diagnostics never manufacture a verdict.
-    item_explanations: Any = None
 
     @field_validator("covered", "missing", "blockers")
     @classmethod

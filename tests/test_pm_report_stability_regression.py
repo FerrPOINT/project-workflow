@@ -243,7 +243,8 @@ def test_actual_evaluator_receives_full_report_and_exact_pm_obligations(pm_phase
     actual_items = [line.strip() for line in delivered.splitlines() if line.strip().startswith('ID: "')]
     assert actual_items == [f'ID: "{key}" \u2014 {value}' for key, value in items]
     assert "WORKER PROCEDURE" not in delivered
-    assert all(instruction.step not in delivered for instruction in phase.instructions)
+    # Baseline v12 includes worker instructions; diagnostics must not remove them.
+    assert all(instruction.step in delivered for instruction in phase.instructions)
     # Full packet loss must remain visible to the real evaluator (regression 153).
     if case["id"] == "153":
         assert json.dumps(DOCUMENT, ensure_ascii=False, sort_keys=True) not in delivered

@@ -542,10 +542,10 @@ def test_first_phase_response_evidence_reaches_verifier_without_forcing_pass(
     assert response.status_code == 200, response.text
     result = response.json()["result"]
     assert prompts and any(report in prompt and required in prompt for prompt in prompts)
-    instructions = observed["result"]["instructions"]
-    assert "two execution IDs are intentionally separate and are not required to be equal" in instructions
-    assert "Actual task/assignment/agent mismatches remain blockers" in instructions
-    assert all("WORKER PROCEDURE" not in prompt for prompt in prompts)
+    assert all(
+        "two execution IDs are intentionally separate and are not required to be equal" in prompt for prompt in prompts
+    )
+    assert all("Actual task/assignment/agent mismatches remain blockers" in prompt for prompt in prompts)
     assert result["verdict"] == "PARTIAL" and required in result["missing"]
     assert result["phase_code"] == "PM-DRAFT-01" and result["version"] == 2
     assert result["complete"] is False and "terminal_receipt" not in result
@@ -1188,7 +1188,6 @@ def test_final_judge_assesses_precommit_facts_not_future_receipts(configured, su
     monkeypatch.setattr(configured_cli, "confirmation", lambda _: dict(confirmed))
     observed = step(configured).json()["result"]
     checks = observed["phase_contract"]["required_checks"]
-    assert "PRECOMMIT ASSESSMENT ONLY" in json.dumps(observed["phase_contract"])
     reports = {
         "valid": "FULL saved document, exact owner receipt and resolved feedback; current task remains Draft.",
         "missing-document": "Owner receipt is available, but the FULL saved requirements document is missing.",
@@ -1201,9 +1200,7 @@ def test_final_judge_assesses_precommit_facts_not_future_receipts(configured, su
     def chat(*args, **kwargs):
         prompt = kwargs["user"]
         prompts.append(prompt)
-        assert "WORKER PROCEDURE" not in prompt
-        assert "phase completion is not candidate approval or a Tracker" in kwargs["system"]
-        assert "current report's own submission protocol" in kwargs["system"]
+        assert "PRECOMMIT ASSESSMENT ONLY" in prompt
         assert "pm completion submit" not in prompt and "discussion publish" not in prompt
         assert reports[evidence] in prompt
         with SAUnitOfWork() as uow:

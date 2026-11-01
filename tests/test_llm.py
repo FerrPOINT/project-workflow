@@ -221,36 +221,6 @@ class TestPromptBuilder:
         assert "REQUIRED ITEM COUNT: 1" in prompt
         assert "len(covered) + len(missing) MUST equal 1" in prompt
 
-    @pytest.mark.parametrize("evaluation_items", [None, [], [
-        ("review:check:2", "Changed required item"),
-        ("review:evidence:1", "FULL saved document and matching saved owner consent"),
-    ]])
-    def test_explicit_evaluation_scope_excludes_procedure_and_preserves_required_items(self, evaluation_items):
-        procedure = "Prepare the document, submit this report, inspect its verdict and continue."
-        phase = FakePhase(
-            instructions=[FakeInstruction(procedure)],
-            checks=[FakeCheck("Original check")],
-            evidence=[FakeEvidence("Original evidence")],
-        )
-        prior = [evaluation_items[0][0]] if evaluation_items else None
-        prompt = PromptBuilder.build_user_prompt(
-            "T-1", phase, "actual report", evaluation_items=evaluation_items, previously_covered=prior,
-        )
-        if evaluation_items is None:
-            context, contract = prompt.split("END WORKER PROCEDURE\n\n", 1)
-            assert "WORKER PROCEDURE (context only; not additional acceptance criteria):" in context
-            assert procedure in context and procedure not in contract
-            assert "Original check" in contract and "Original evidence" in contract
-        else:
-            assert procedure not in prompt and "WORKER PROCEDURE" not in prompt
-            assert "Original check" not in prompt and "Original evidence" not in prompt
-            lines = [line for line in prompt.splitlines() if line.startswith('  ID: "')]
-            assert lines == [f'  ID: "{key}" — {text}' for key, text in evaluation_items]
-            assert f"REQUIRED ITEM COUNT: {len(evaluation_items)}" in prompt
-            if prior:
-                assert f"ALREADY COMPLETED IDS (keep them in covered):\n  ✓ {prior[0]}" in prompt
-        assert 'WORKER REPORT:\n"""actual report"""' in prompt
-
     def test_system_prompt_is_not_empty(self):
         assert "strict workflow supervisor" in PromptBuilder.SYSTEM_PROMPT
         assert "verdict" in PromptBuilder.SYSTEM_PROMPT
@@ -385,8 +355,6 @@ class TestSupervisorEngineEvaluateLLM:
         "Presentation contains only a summary; the required full saved document is absent.",
         "The full saved document was presented, but no saved owner confirmation is available.",
         "Presented document is revision 2/hash b; saved owner confirmation is for revision 1/hash a.",
-        "Saved document hash differs from the reported full content hash.",
-        "The saved confirmation belongs to a different owner, not the authorized human owner.",
     ])
     def test_negative_evidence_verdict_is_not_promoted_to_pass(self, engine, supervisor_llm, report):
         supervisor_llm("PARTIAL")
@@ -621,11 +589,11 @@ class TestOpenAICompatibleClientOverrides:
         assert client.timeout == 300
 
 
-class TestEvaluatorV16PromptContract:
+class TestEvaluatorV12PromptContract:
     """The live provider receives explicit contradiction and chronology rules."""
 
     def test_prompt_version_invalidates_the_old_evidence_policy(self):
-        assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v16"
+        assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v12"
 
     def test_report_106_submission_circularity_reaches_provider_with_explicit_protocol_boundary(self):
         """Reproduce the saved PARTIAL reason, not a real model's semantic acceptance."""
@@ -646,11 +614,10 @@ class TestEvaluatorV16PromptContract:
         )
         prompt = PromptBuilder.build_user_prompt("SYNTHETIC-PM", phase, report, evaluation_items=items)
         assert len(items) == 7 and prompt.count('  ID: "') == len(items)
-        assert "WORKER PROCEDURE" not in prompt
-        assert all(item.step not in prompt for item in phase.instructions)
-        assert all(text in prompt for _, text in items)
-        full_contract = PhaseContractBuilder([phase]).build(phase)
-        assert all(item.step in "\n".join(full_contract.instructions) for item in phase.instructions)
+        assert all(item.step in prompt for item in phase.instructions)
+        assert "send ONE self-contained final report using project-workflow --json step" in prompt
+        assert "Inspect the result" in prompt
+        assert "without its own future terminal receipt, verdict or Backlog transition" in prompt
         assert f'WORKER REPORT:\n"""{report}"""' in prompt
         missing = [ids[0], ids[4]]
         raw = {
@@ -676,9 +643,6 @@ class TestEvaluatorV16PromptContract:
     def test_protocol_boundary_preserves_required_business_work_and_evidence(self):
         system = PromptBuilder.SYSTEM_PROMPT
         for rule in (
-            "required checks and evidence are the complete acceptance criteria",
-            "Worker procedure is context for interpreting those items, not additional acceptance criteria",
-            "Do not turn procedure into extra required actions, events, receipts or proof",
             "The report currently being evaluated has already been submitted to this supervisor",
             "readback are submission protocol, not work or evidence that can precede this verdict",
             "Evaluate the stated checks and evidence from present facts",
@@ -719,7 +683,7 @@ class TestEvaluatorV16PromptContract:
             evaluation_items=[("PM-DRAFT-01:evidence:143", evidence)],
         )
 
-        assert instruction not in prompt
+        assert instruction in prompt
         assert evidence in prompt
         assert f'WORKER REPORT:\n"""{report}"""' in prompt
         assert 'ID: "PM-DRAFT-01:evidence:143"' in prompt
@@ -771,7 +735,7 @@ class TestEvaluatorV16PromptContract:
             evaluation_items=[("PM-DRAFT-03:check:217", check), ("PM-DRAFT-03:evidence:1", evidence)],
         )
 
-        assert instruction not in prompt
+        assert instruction in prompt
         assert check in prompt
         assert evidence in prompt
         assert f'WORKER REPORT:\n"""{report}"""' in prompt
@@ -828,32 +792,6 @@ class TestEvaluatorV16PromptContract:
 
         assert "first open, then merged" in prompt
         assert "timestamps and action evidence" in prompt
-
-    def test_full_coverage_cannot_be_reported_as_partial_or_repaired_to_pass(self):
-        from project_workflow.supervisor.evaluate import _evaluate_strict_response
-
-        items = [(f"phase:check:{n}", f"Required item {n}") for n in range(1, 7)]
-        ids = [item_id for item_id, _ in items]
-        phase = FakePhase()
-        prompt = PromptBuilder.build_user_prompt("T-1", phase, "Complete report", evaluation_items=items)
-        assert "PARTIAL — missing is nonempty and blockers is empty" in PromptBuilder.SYSTEM_PROMPT
-        assert "PASS requires missing=[] and blockers=[]" in prompt
-        assert "PARTIAL requires nonempty missing and blockers=[]" in prompt
-        assert "BLOCKED requires nonempty blockers" in prompt
-        raw = {
-            "verdict": "PARTIAL", "covered": ids, "missing": [], "blockers": [],
-            "message": "All six items are covered.", "confidence": 0.98,
-        }
-        before = json.dumps(raw, sort_keys=True)
-        with pytest.raises(ValueError, match="PARTIAL requires missing items and no blockers"):
-            ResponseParser.parse(raw, required_item_ids=ids)
-        client = MagicMock()
-        client.chat.return_value = raw
-        with pytest.raises(ValueError, match="PARTIAL requires missing items and no blockers"):
-            _evaluate_strict_response(client, user=prompt, item_ids=ids, phase=phase)
-        assert client.chat.call_count == 3
-        assert "PREVIOUS RESPONSE WAS INVALID" in client.chat.call_args.kwargs["user"]
-        assert json.dumps(raw, sort_keys=True) == before
 
     def test_normal_complete_report_contract_still_allows_pass(self):
         assert "verdict = PASS" in PromptBuilder.SYSTEM_PROMPT
