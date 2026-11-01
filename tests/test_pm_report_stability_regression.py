@@ -3,6 +3,9 @@
 History-derived replay expectations are in REPLAY_CASES. Reports are wholly
 synthetic; the history numbers identify regressions, not saved private inputs.
 Use the published pm-default-workflow contract, not the retained CLI preset.
+WORKFLOW_TASK_KEY is the technical Workflow cursor; BUSINESS_TASK_ID identifies
+the Tracker document and owner receipt for that same assignment. They are not
+interchangeable task namespaces when setting the replay's outer TASK context.
 
 Integrator gate: after combining evaluator/catalog changes, send each report
 through the actual configured evaluator with its phase's build_evaluation_items
@@ -43,9 +46,13 @@ from project_workflow.supervisor.evidence import validate_frozen_evaluation
 pytestmark = pytest.mark.unit
 ROOT = Path(__file__).resolve().parents[1]
 FROZEN = ROOT / "tests/fixtures/pm_stability_frozen_v12.json"
+WORKFLOW_TASK_KEY = "PM-FIXTURE"
+BUSINESS_TASK_ID = "synthetic-task"
 
 BRIEF = (
-    "A library needs a shared manual loan-request register for two librarians. "
+    f"Task identity: Workflow technical task_key={WORKFLOW_TASK_KEY}; "
+    f"Tracker business task_id={BUSINESS_TASK_ID}, bound to that same current assignment.\n"
+    "Source brief and owner decisions: a library needs a shared manual loan-request register for two librarians. "
     "The owner clarified: requests arrive at the counter or by email; only these "
     "two librarians sign in, with equal rights and no individual assignee. "
     "Borrower, item, channel and note are required; registration time is automatic. "
@@ -76,17 +83,19 @@ DOCUMENT = {
 }
 DOCUMENT_HASH = payload_sha256(DOCUMENT)
 SAVED = (
-    f"FULL saved document: revision=3; content_hash={DOCUMENT_HASH}\n"
+    f"FULL saved document: task_id={BUSINESS_TASK_ID}; revision=3; content_hash={DOCUMENT_HASH}\n"
     + json.dumps(DOCUMENT, ensure_ascii=False, sort_keys=True)
 )
 PUBLICATION = (
-    "task-tracker sdlc revision publish saved revision=3 for synthetic-task. "
-    "task-tracker sdlc requirements read back the identical FULL document, "
-    f"revision=3 and content_hash={DOCUMENT_HASH}."
+    f"Actual publication result: task-tracker sdlc revision publish --task {BUSINESS_TASK_ID} "
+    f"--from-file - saved task_id={BUSINESS_TASK_ID}, revision=3, content_hash={DOCUMENT_HASH}. "
+    f"Actual requirements readback: task-tracker sdlc requirements --task {BUSINESS_TASK_ID} "
+    f"returned task_id={BUSINESS_TASK_ID}, revision=3, content_hash={DOCUMENT_HASH} "
+    "and the identical FULL document above."
 )
 CONSENT = (
     "Actual task-tracker sdlc confirmation read result: id=synthetic-confirmation; "
-    f"task_id=synthetic-task; revision=3; content_hash={DOCUMENT_HASH}; "
+    f"task_id={BUSINESS_TASK_ID}; revision=3; content_hash={DOCUMENT_HASH}; "
     "owner_subject=synthetic-authorized-owner; stage=Draft. "
     "No changes after consent, unresolved feedback or business questions."
 )
@@ -103,7 +112,8 @@ REPLAY_CASES = (
     {
         "id": "136", "phase": "PM-DRAFT-01", "expected_verdict": "PASS",
         "report": (
-            "Tracker task synthetic-task; assigned PM synthetic-pm. I read the assigned "
+            f"Workflow technical task_key={WORKFLOW_TASK_KEY}; Tracker business task_id={BUSINESS_TASK_ID}; "
+            "same current assignment, assigned PM synthetic-pm. I read the assigned "
             "task: the library wants a small register so loan requests are not lost. "
             "Discussion is empty, next_after=null; no owner decisions exist. Users, "
             "channels and essential handling needs remain to be clarified in preparation."
@@ -114,7 +124,8 @@ REPLAY_CASES = (
         "id": "140", "phase": "PM-DRAFT-01", "expected_verdict": "PASS",
         "report": (
             "I used existing assignment synthetic-assignment and PM synthetic-pm for "
-            "synthetic-task. Tracker context returned workflow_task_key=PM-FIXTURE; "
+            f"Tracker business task_id={BUSINESS_TASK_ID}. Tracker context returned "
+            f"workflow_task_key={WORKFLOW_TASK_KEY}, the technical Workflow cursor for this assignment; "
             "project-workflow --json step returned PM-DRAFT-01, version=1. "
             "Discussion read returned no comments, next_after=null. The source asks "
             "for a small loan-request register. In this chat the owner added that "
@@ -149,18 +160,18 @@ REPLAY_CASES = (
     },
     {
         "id": "160", "phase": "PM-DRAFT-03", "expected_verdict": "PASS",
-        "report": f"{BRIEF}\n{SAVED}\n{PRESENTATION}\n{CONSENT}",
+        "report": f"{BRIEF}\n{SAVED}\n{PUBLICATION}\n{PRESENTATION}\n{CONSENT}",
         "expectation": "No independent presentation attestation or copy of the earlier chat message is required.",
     },
     {
         "id": "162", "phase": "PM-DRAFT-03", "expected_verdict": "PASS",
-        "report": f"{BRIEF}\n{SAVED}\n{PRESENTATION}\n"
+        "report": f"{BRIEF}\n{SAVED}\n{PUBLICATION}\n{PRESENTATION}\n"
         f"In this chat I have also shown the same full document with revision=3/hash={DOCUMENT_HASH}.\n{CONSENT}",
         "expectation": "Presentation account and matching saved receipt suffice without a second witness.",
     },
     {
         "id": "163", "phase": "PM-DRAFT-03", "expected_verdict": "PASS",
-        "report": f"{BRIEF}\n{SAVED}\n{PRESENTATION}\n"
+        "report": f"{BRIEF}\n{SAVED}\n{PUBLICATION}\n{PRESENTATION}\n"
         "That earlier message began 'Here is the complete saved specification for review', "
         f"and ended 'Revision 3; checksum {DOCUMENT_HASH}'.\n{CONSENT}",
         "expectation": "Keep the positive presentation case accepted; no future completion receipt is needed.",
@@ -174,7 +185,7 @@ REPLAY_CASES = (
     },
     {
         "id": "future-presentation", "phase": "PM-DRAFT-03", "expected_verdict": "PARTIAL",
-        "report": f"{BRIEF}\n{SAVED}\n{CONSENT}\n"
+        "report": f"{BRIEF}\n{SAVED}\n{PUBLICATION}\n{CONSENT}\n"
         "The owner confirmed in the application, but I have not shown the document "
         "in chat yet. I will present it after this report is accepted.",
         "required_missing": ("check:1", "evidence:1"),
@@ -182,7 +193,7 @@ REPLAY_CASES = (
     },
     {
         "id": "no-saved-consent", "phase": "PM-DRAFT-03", "expected_verdict": "PARTIAL",
-        "report": f"{BRIEF}\n{SAVED}\n{PRESENTATION}\n"
+        "report": f"{BRIEF}\n{SAVED}\n{PUBLICATION}\n{PRESENTATION}\n"
         "Correction: the owner only replied 'agreed' in chat; confirmation read "
         "returned no saved receipt. I have not confirmed for the owner.",
         "required_missing": ("check:2", "evidence:2"),
@@ -190,7 +201,7 @@ REPLAY_CASES = (
     },
     {
         "id": "mismatched-consent", "phase": "PM-DRAFT-03", "expected_verdict": "PARTIAL",
-        "report": f"{BRIEF}\n{SAVED}\n{PRESENTATION}\n"
+        "report": f"{BRIEF}\n{SAVED}\n{PUBLICATION}\n{PRESENTATION}\n"
         "Correction: confirmation read actually returned revision=2 and content_hash="
         + "0" * 64 + "; it does not match the latest saved revision 3. Fresh consent is pending.",
         "required_missing": ("check:2", "evidence:2"),
@@ -221,7 +232,7 @@ def frozen_step():
 def test_actual_evaluator_receives_full_report_and_exact_pm_obligations(pm_phases, case):
     phase = pm_phases[case["phase"]]
     items = PhaseContractBuilder(list(pm_phases.values())).build_evaluation_items(phase)
-    prompt = PromptBuilder.build_user_prompt("PM-FIXTURE", phase, case["report"], evaluation_items=items)
+    prompt = PromptBuilder.build_user_prompt(WORKFLOW_TASK_KEY, phase, case["report"], evaluation_items=items)
     client = Mock()
     client.chat.side_effect = TimeoutError("Stop before any provider call; no quality verdict supplied")
     with pytest.raises(TimeoutError):
@@ -248,7 +259,7 @@ def test_correction_carries_real_obligations_even_when_previous_coverage_is_pres
     case = next(case for case in REPLAY_CASES if case["id"] == "153")
     previously = [key for key, _ in items if not key.endswith("check:4")]
     prompt = PromptBuilder.build_user_prompt(
-        "PM-FIXTURE", phase, case["report"], evaluation_items=items, previously_covered=previously,
+        WORKFLOW_TASK_KEY, phase, case["report"], evaluation_items=items, previously_covered=previously,
     )
     prior_block = prompt.split("ALREADY COMPLETED IDS (keep them in covered):\n", 1)[1].split("\n\n", 1)[0]
     assert prior_block.splitlines() == [f"  \u2713 {key}" for key in previously]
