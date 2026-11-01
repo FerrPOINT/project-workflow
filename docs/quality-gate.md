@@ -35,6 +35,42 @@ python ../services-base/scripts/export_python_namespace.py --out project_workflo
 источники. Web runtime не обязан устанавливать HTTP SDK ради классификации PAT
 или чтения env. В CI checkout SDK использует read-only deploy key `SERVICES_BASE_DEPLOY_KEY`.
 
+Для тестов configured CLI нужен отдельный квалифицированный Base producer
+`278be4a2eb0b3ce49dac2cd14ea7e2871f2ffe1d` (`workflow-cli-base-source`).
+SDK checkout по `.base-revision` остаётся независимым: его старый `ApiClient`
+не поддерживает `max_response_bytes`. Глобально установленный `pdlc_cli_core`
+не является воспроизводимой зависимостью isolated uv-окружения.
+Подготовить второй checkout один раз, не переключая SDK:
+
+```bash
+git clone --no-checkout --depth 1 https://github.com/FerrPOINT/services-base.git ../workflow-cli-base
+git -C ../workflow-cli-base fetch --depth 1 origin 278be4a2eb0b3ce49dac2cd14ea7e2871f2ffe1d
+git -C ../workflow-cli-base checkout --detach 278be4a2eb0b3ce49dac2cd14ea7e2871f2ffe1d
+export WORKFLOW_CLI_BASE="$(cd ../workflow-cli-base && pwd)"
+test "$(git -C "$WORKFLOW_CLI_BASE" rev-parse HEAD)" = 278be4a2eb0b3ce49dac2cd14ea7e2871f2ffe1d
+test -z "$(git -C "$WORKFLOW_CLI_BASE" status --porcelain --untracked-files=all)"
+export PYTHONPATH="$WORKFLOW_CLI_BASE/base-modules/python/cli-core${PYTHONPATH:+:$PYTHONPATH}"
+```
+
+После этих проверок выполнять команды ниже или `make quality` в той же shell.
+В PowerShell `scripts/quality.ps1` сам проверяет SHA/чистоту и добавляет core в
+`PYTHONPATH` перед test/integration/coverage/warnings; по умолчанию использует
+sibling `../workflow-cli-base`. Другой готовый exact checkout задаётся через
+`WORKFLOW_CLI_BASE` или `-CliBase`:
+
+```powershell
+pwsh -File scripts/quality.ps1 quality -CliBase C:/sources/workflow-cli-base
+```
+
+CI получает тот же CLI producer вторым checkout и передаёт его `cli-core` через
+job `PYTHONPATH` всем isolated uv-процессам, включая integration/subprocess tests.
+`.base-revision`, `.base-ui-revision`, продуктовые зависимости и runtime не меняются.
+Целевая проверка настройки без полного gate:
+
+```bash
+uv run --isolated --with-requirements constraints.txt --all-extras pytest -q tests/test_configured_cli_transport.py --timeout=60
+```
+
 ```bash
 uv run --isolated --with-requirements constraints.txt --all-extras pytest -q --timeout=60
 uv run --isolated --with-requirements constraints.txt --all-extras pytest -q -m integration tests/test_postgres_integration.py --timeout=120

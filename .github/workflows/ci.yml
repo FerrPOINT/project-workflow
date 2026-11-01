@@ -39,6 +39,7 @@ jobs:
       PGUSER: project_workflow
       PGPASSWORD: project_workflow
       PGDATABASE: project_workflow
+      PYTHONPATH: ${{ github.workspace }}/workflow-cli-base/base-modules/python/cli-core
     steps:
       - uses: actions/checkout@v4
         with:
@@ -52,6 +53,14 @@ jobs:
           repository: FerrPOINT/services-base
           path: services-base
           ref: ${{ steps.base-sdk.outputs.sha }}
+          ssh-key: ${{ secrets.SERVICES_BASE_DEPLOY_KEY }}
+          persist-credentials: false
+      - name: Check out qualified shared CLI source independently of the SDK
+        uses: actions/checkout@v4
+        with:
+          repository: FerrPOINT/services-base
+          path: workflow-cli-base
+          ref: 278be4a2eb0b3ce49dac2cd14ea7e2871f2ffe1d
           ssh-key: ${{ secrets.SERVICES_BASE_DEPLOY_KEY }}
           persist-credentials: false
       - name: Verify generated dependency-free namespace contract
