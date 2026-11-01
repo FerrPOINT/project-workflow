@@ -112,7 +112,7 @@ class OpenAICompatibleClient:
 class PromptBuilder:
     """Build prompts from phase contracts + task context."""
 
-    PROMPT_VERSION = "supervisor-evaluator-v14"
+    PROMPT_VERSION = "supervisor-evaluator-v15"
 
     SYSTEM_PROMPT = (
         "You are a strict workflow supervisor. "
@@ -208,7 +208,7 @@ class PromptBuilder:
             f"ALLOWED VERDICTS: {', '.join(allowed)}",
             "",
         ]
-        if phase.instructions:
+        if evaluation_items is None and phase.instructions:
             lines.append("WORKER PROCEDURE (context only; not additional acceptance criteria):")
             for inst in phase.instructions:
                 desc = getattr(inst, "step", "") or getattr(inst, "description", "")

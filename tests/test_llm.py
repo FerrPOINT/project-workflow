@@ -221,27 +221,35 @@ class TestPromptBuilder:
         assert "REQUIRED ITEM COUNT: 1" in prompt
         assert "len(covered) + len(missing) MUST equal 1" in prompt
 
-    @pytest.mark.parametrize("evaluation_items", [None, [], [("review:check:2", "Changed required item")]])
-    def test_procedure_is_context_and_explicit_evaluation_scope_is_preserved(self, evaluation_items):
+    @pytest.mark.parametrize("evaluation_items", [None, [], [
+        ("review:check:2", "Changed required item"),
+        ("review:evidence:1", "FULL saved document and matching saved owner consent"),
+    ]])
+    def test_explicit_evaluation_scope_excludes_procedure_and_preserves_required_items(self, evaluation_items):
         procedure = "Prepare the document, submit this report, inspect its verdict and continue."
         phase = FakePhase(
             instructions=[FakeInstruction(procedure)],
             checks=[FakeCheck("Original check")],
             evidence=[FakeEvidence("Original evidence")],
         )
-        prompt = PromptBuilder.build_user_prompt("T-1", phase, "actual report", evaluation_items=evaluation_items)
-        context, contract = prompt.split("END WORKER PROCEDURE\n\n", 1)
-        assert "WORKER PROCEDURE (context only; not additional acceptance criteria):" in context
-        assert procedure in context and procedure not in contract
-        assert contract.startswith("EVALUATION CONTRACT (only the required checks and evidence below define coverage):")
+        prior = [evaluation_items[0][0]] if evaluation_items else None
+        prompt = PromptBuilder.build_user_prompt(
+            "T-1", phase, "actual report", evaluation_items=evaluation_items, previously_covered=prior,
+        )
         if evaluation_items is None:
+            context, contract = prompt.split("END WORKER PROCEDURE\n\n", 1)
+            assert "WORKER PROCEDURE (context only; not additional acceptance criteria):" in context
+            assert procedure in context and procedure not in contract
             assert "Original check" in contract and "Original evidence" in contract
         else:
-            assert "Original check" not in contract and "Original evidence" not in contract
-            assert prompt.count('  ID: "') == len(evaluation_items)
-            assert f"REQUIRED ITEM COUNT: {len(evaluation_items)}" in contract
-            for item_id, description in evaluation_items:
-                assert f'ID: "{item_id}" — {description}' in contract
+            assert procedure not in prompt and "WORKER PROCEDURE" not in prompt
+            assert "Original check" not in prompt and "Original evidence" not in prompt
+            lines = [line for line in prompt.splitlines() if line.startswith('  ID: "')]
+            assert lines == [f'  ID: "{key}" — {text}' for key, text in evaluation_items]
+            assert f"REQUIRED ITEM COUNT: {len(evaluation_items)}" in prompt
+            if prior:
+                assert f"ALREADY COMPLETED IDS (keep them in covered):\n  ✓ {prior[0]}" in prompt
+        assert 'WORKER REPORT:\n"""actual report"""' in prompt
 
     def test_system_prompt_is_not_empty(self):
         assert "strict workflow supervisor" in PromptBuilder.SYSTEM_PROMPT
@@ -613,11 +621,11 @@ class TestOpenAICompatibleClientOverrides:
         assert client.timeout == 300
 
 
-class TestEvaluatorV14PromptContract:
+class TestEvaluatorV15PromptContract:
     """The live provider receives explicit contradiction and chronology rules."""
 
     def test_prompt_version_invalidates_the_old_evidence_policy(self):
-        assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v14"
+        assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v15"
 
     def test_report_106_submission_circularity_reaches_provider_with_explicit_protocol_boundary(self):
         """Reproduce the saved PARTIAL reason, not a real model's semantic acceptance."""
@@ -638,13 +646,11 @@ class TestEvaluatorV14PromptContract:
         )
         prompt = PromptBuilder.build_user_prompt("SYNTHETIC-PM", phase, report, evaluation_items=items)
         assert len(items) == 7 and prompt.count('  ID: "') == len(items)
-        procedure, contract = prompt.split("END WORKER PROCEDURE\n\n", 1)
-        assert all(item.step in procedure and item.step not in contract for item in phase.instructions)
-        assert "submit ONE self-contained report" in procedure
-        assert "Use project-workflow --json step" in procedure
-        assert "This report cannot contain its own future verdict or terminal receipt" in procedure
-        assert "ONLY AFTER Workflow returns complete=true" in procedure
-        assert all(text in contract for _, text in items)
+        assert "WORKER PROCEDURE" not in prompt
+        assert all(item.step not in prompt for item in phase.instructions)
+        assert all(text in prompt for _, text in items)
+        full_contract = PhaseContractBuilder([phase]).build(phase)
+        assert all(item.step in "\n".join(full_contract.instructions) for item in phase.instructions)
         assert f'WORKER REPORT:\n"""{report}"""' in prompt
         missing = [ids[0], ids[4]]
         raw = {
@@ -713,7 +719,7 @@ class TestEvaluatorV14PromptContract:
             evaluation_items=[("PM-DRAFT-01:evidence:143", evidence)],
         )
 
-        assert instruction in prompt
+        assert instruction not in prompt
         assert evidence in prompt
         assert f'WORKER REPORT:\n"""{report}"""' in prompt
         assert 'ID: "PM-DRAFT-01:evidence:143"' in prompt
@@ -765,7 +771,7 @@ class TestEvaluatorV14PromptContract:
             evaluation_items=[("PM-DRAFT-03:check:217", check), ("PM-DRAFT-03:evidence:1", evidence)],
         )
 
-        assert instruction in prompt
+        assert instruction not in prompt
         assert check in prompt
         assert evidence in prompt
         assert f'WORKER REPORT:\n"""{report}"""' in prompt
