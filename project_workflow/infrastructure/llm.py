@@ -112,7 +112,7 @@ class OpenAICompatibleClient:
 class PromptBuilder:
     """Build prompts from phase contracts + task context."""
 
-    PROMPT_VERSION = "supervisor-evaluator-v13"
+    PROMPT_VERSION = "supervisor-evaluator-v14"
 
     SYSTEM_PROMPT = (
         "You are a strict workflow supervisor. "
@@ -128,7 +128,7 @@ class PromptBuilder:
         "Words like 'ошибка'/'error'/'bug' alone are NOT blockers without root cause.\n"
         "5. Verify the worker did NOT break existing functionality, remove working code, or leave orphaned artifacts.\n"
         "6. verdict = PASS    — all items done, no blockers, no regressions → advance.\n"
-        "7. verdict = PARTIAL — some items are missing, but the CURRENT phase worker can "
+        "7. verdict = PARTIAL — missing is nonempty and blockers is empty; the CURRENT phase worker can "
         "complete them without changing an artifact produced by an earlier phase → stay on phase.\n"
         "8. verdict = BLOCKED — real blocker → stay on phase.\n"
         "10. verdict = DELEGATE — only when the phase has a configured delegate.\n"
@@ -225,6 +225,8 @@ class PromptBuilder:
                     "Before returning JSON, verify that covered and missing are disjoint, "
                     "contain no duplicates, and together contain every required ID above exactly once.",
                     f"The sum len(covered) + len(missing) MUST equal {len(evaluation_items)}.",
+                    "Verify verdict consistency with that classification: PASS requires missing=[] and blockers=[]; "
+                    "PARTIAL requires nonempty missing and blockers=[]; BLOCKED requires nonempty blockers.",
                 ]
             )
         else:

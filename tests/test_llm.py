@@ -613,11 +613,11 @@ class TestOpenAICompatibleClientOverrides:
         assert client.timeout == 300
 
 
-class TestEvaluatorV13PromptContract:
+class TestEvaluatorV14PromptContract:
     """The live provider receives explicit contradiction and chronology rules."""
 
     def test_prompt_version_invalidates_the_old_evidence_policy(self):
-        assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v13"
+        assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v14"
 
     def test_report_106_submission_circularity_reaches_provider_with_explicit_protocol_boundary(self):
         """Reproduce the saved PARTIAL reason, not a real model's semantic acceptance."""
@@ -822,6 +822,32 @@ class TestEvaluatorV13PromptContract:
 
         assert "first open, then merged" in prompt
         assert "timestamps and action evidence" in prompt
+
+    def test_full_coverage_cannot_be_reported_as_partial_or_repaired_to_pass(self):
+        from project_workflow.supervisor.evaluate import _evaluate_strict_response
+
+        items = [(f"phase:check:{n}", f"Required item {n}") for n in range(1, 7)]
+        ids = [item_id for item_id, _ in items]
+        phase = FakePhase()
+        prompt = PromptBuilder.build_user_prompt("T-1", phase, "Complete report", evaluation_items=items)
+        assert "PARTIAL — missing is nonempty and blockers is empty" in PromptBuilder.SYSTEM_PROMPT
+        assert "PASS requires missing=[] and blockers=[]" in prompt
+        assert "PARTIAL requires nonempty missing and blockers=[]" in prompt
+        assert "BLOCKED requires nonempty blockers" in prompt
+        raw = {
+            "verdict": "PARTIAL", "covered": ids, "missing": [], "blockers": [],
+            "message": "All six items are covered.", "confidence": 0.98,
+        }
+        before = json.dumps(raw, sort_keys=True)
+        with pytest.raises(ValueError, match="PARTIAL requires missing items and no blockers"):
+            ResponseParser.parse(raw, required_item_ids=ids)
+        client = MagicMock()
+        client.chat.return_value = raw
+        with pytest.raises(ValueError, match="PARTIAL requires missing items and no blockers"):
+            _evaluate_strict_response(client, user=prompt, item_ids=ids, phase=phase)
+        assert client.chat.call_count == 3
+        assert "PREVIOUS RESPONSE WAS INVALID" in client.chat.call_args.kwargs["user"]
+        assert json.dumps(raw, sort_keys=True) == before
 
     def test_normal_complete_report_contract_still_allows_pass(self):
         assert "verdict = PASS" in PromptBuilder.SYSTEM_PROMPT
