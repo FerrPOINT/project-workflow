@@ -242,10 +242,8 @@ def test_actual_evaluator_receives_full_report_and_exact_pm_obligations(pm_phase
     assert delivered.split('WORKER REPORT:\n"""', 1)[1].rsplit('"""', 1)[0] == case["report"]
     actual_items = [line.strip() for line in delivered.splitlines() if line.strip().startswith('ID: "')]
     assert actual_items == [f'ID: "{key}" \u2014 {value}' for key, value in items]
-    instructions = delivered.split(
-        "WORKER PROCEDURE (context only; not additional acceptance criteria):\n", 1,
-    )[1].split("END WORKER PROCEDURE", 1)[0]
-    assert instructions.splitlines() == [f"  \u2022 {instruction.step}" for instruction in phase.instructions]
+    assert "WORKER PROCEDURE" not in delivered
+    assert all(instruction.step not in delivered for instruction in phase.instructions)
     # Full packet loss must remain visible to the real evaluator (regression 153).
     if case["id"] == "153":
         assert json.dumps(DOCUMENT, ensure_ascii=False, sort_keys=True) not in delivered
