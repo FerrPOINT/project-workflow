@@ -1,5 +1,27 @@
 # Changelog
 
+## Diagnostics Release Boundary — 2026-11-01
+
+- Release retains v12 prompts, parser, model parameters, retries and catalog10.
+  The v17 procedure omission and v18 output-order candidates are not accepted
+  for installation. Their branches and all experiment outcomes are retained.
+- Captured SDLC-24 reports164/167: control PARTIAL6/6; procedure omission
+  PASS6/6. The result confirms a narrow input-framing effect, not model reasoning.
+- Correct original-shape47-case replay (three fixed calls per case): exact item
+  matches control35/141, v17 91/141, v18 98/141. Negative133 remains falsely
+  accepted: control1/3, v17 2/3, v18 1/3. Neither candidate meets acceptance.
+  The masked-hash corpus is not semantic quality evidence.
+- Four synthetic tests reproduce unmasked configured environment credentials.
+  Existing redaction now recognizes these names as well as native PAT prefixes;
+  operation keys, content hashes and fencing tokens remain unchanged.
+  112 targeted diagnostics/API/LLM tests PASS, including exact v12 policy AST.
+- Installed baseline is still1a8a9ee/image ed53633db317. Security changes are
+  source-only until the next qualified Workflow-only installation. No PM,
+  Hermes, Fleet, credentials or catalog activation is included.
+- Next: qualify this diagnostic/security-only SHA, retain both new baseline
+  QA outcomes and analyze the remaining contradiction case without rerunning
+  unchanged builds or accepting an experimental verdict policy.
+
 ## Diagnostics-Only Baseline — 2026-11-01
 
 - Причина: совмещённый кандидат изменял оценку до сбора исходной диагностики;
@@ -41,7 +63,10 @@
 
 ## [Unreleased]
 
-### Evaluator Diagnostics - 1 November 2026
+### Historical Uninstalled v16 Experiment - 1 November 2026
+
+This section records the earlier combined candidate, not the current release.
+Its changed response schema and policy were removed before diagnostic installation.
 
 - Cause: a saved aggregate message/coverage list cannot distinguish every
   provider/format failure or explain which exact prompt was used. Six v15
