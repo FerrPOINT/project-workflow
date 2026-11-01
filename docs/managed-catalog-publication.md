@@ -13,6 +13,9 @@ republishing unchanged requirements or repeating identical reports.
 Source3a85115/v13 passes3220 tests+73subtests,132 real PG tests, coverage
 94.03093868956022%, Ruff and mypy165files. The final v15 candidate7940c47 passes
 132 PG tests but fails the first-step execution-ID context test in its full gate.
+The stale procedure-placement assertion is now corrected with both targeted
+cases passing; CLI identity semantics and non-forced PARTIAL remain tested.
+A passing final full gate is not inferred from that focused correction.
 Real-model replay also retains six independently identified unsupported refusals;
 genuinely incomplete historical reports remain PARTIAL. Medium reasoning is not
 a demonstrated fix. No automatic PASS or hidden history re-evaluation is used.

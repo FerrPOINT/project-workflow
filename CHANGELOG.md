@@ -24,6 +24,9 @@
   no verdict is repaired into PASS and Hermes is unchanged.
 - Candidate7940c47 passes132 real PG tests but its full gate stops at the existing
   first-step execution-ID context regression; this is not a passing full gate.
+  The stale placement assertion is corrected with both targeted cases passing:
+  identity semantics remain in CLI instructions; report delivery and PARTIAL
+  behavior are still asserted. A final full run is not claimed.
   v15 remains uninstalled. Whether PM should retain model report grading or use
   authoritative Tracker facts is a separate pending product decision.
 - Isolated CLI checks now use the qualified CLI Base278be4a2 through an explicit
