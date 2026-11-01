@@ -221,6 +221,21 @@ class TestPromptBuilder:
         assert "REQUIRED ITEM COUNT: 1" in prompt
         assert "len(covered) + len(missing) MUST equal 1" in prompt
 
+    @pytest.mark.parametrize("items", [None, [], [("check:1", "Read actual task"), ("evidence:1", "Exact receipt")]])
+    def test_explicit_checks_do_not_promote_worker_procedure_to_judge_obligations(self, items):
+        instruction = "Submit this report and inspect its own future verdict."
+        phase = FakePhase(instructions=[FakeInstruction(instruction)])
+        report = "The worker report can quote Instructions: without being rewritten."
+        prompt = PromptBuilder.build_user_prompt(
+            "T-1", phase, report, evaluation_items=items, previously_covered=["prior:1"],
+        )
+        context, actual_report = prompt.split('WORKER REPORT:\n"""', 1)
+        assert (instruction in context) is (items is None)
+        assert actual_report == report + '"""\n\nEvaluate this report and return strict JSON.'
+        assert "prior:1" in context
+        for item_id, text in items or []:
+            assert f'ID: "{item_id}" — {text}' in context
+
     def test_system_prompt_is_not_empty(self):
         assert "strict workflow supervisor" in PromptBuilder.SYSTEM_PROMPT
         assert "verdict" in PromptBuilder.SYSTEM_PROMPT
@@ -589,11 +604,11 @@ class TestOpenAICompatibleClientOverrides:
         assert client.timeout == 300
 
 
-class TestEvaluatorV12PromptContract:
+class TestEvaluatorV17PromptContract:
     """The live provider receives explicit contradiction and chronology rules."""
 
     def test_prompt_version_invalidates_the_old_evidence_policy(self):
-        assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v12"
+        assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v17"
 
     def test_report_106_submission_circularity_reaches_provider_with_explicit_protocol_boundary(self):
         """Reproduce the saved PARTIAL reason, not a real model's semantic acceptance."""
@@ -614,9 +629,9 @@ class TestEvaluatorV12PromptContract:
         )
         prompt = PromptBuilder.build_user_prompt("SYNTHETIC-PM", phase, report, evaluation_items=items)
         assert len(items) == 7 and prompt.count('  ID: "') == len(items)
-        assert all(item.step in prompt for item in phase.instructions)
-        assert "send ONE self-contained final report using project-workflow --json step" in prompt
-        assert "Inspect the result" in prompt
+        assert all(item.step not in prompt for item in phase.instructions)
+        assert "send ONE self-contained final report using project-workflow --json step" not in prompt
+        assert "Inspect the result" not in prompt
         assert "without its own future terminal receipt, verdict or Backlog transition" in prompt
         assert f'WORKER REPORT:\n"""{report}"""' in prompt
         missing = [ids[0], ids[4]]
@@ -683,7 +698,8 @@ class TestEvaluatorV12PromptContract:
             evaluation_items=[("PM-DRAFT-01:evidence:143", evidence)],
         )
 
-        assert instruction in prompt
+        assert instruction not in prompt
+        assert phase.instructions[0].step == instruction
         assert evidence in prompt
         assert f'WORKER REPORT:\n"""{report}"""' in prompt
         assert 'ID: "PM-DRAFT-01:evidence:143"' in prompt
@@ -735,7 +751,8 @@ class TestEvaluatorV12PromptContract:
             evaluation_items=[("PM-DRAFT-03:check:217", check), ("PM-DRAFT-03:evidence:1", evidence)],
         )
 
-        assert instruction in prompt
+        assert instruction not in prompt
+        assert phase.instructions[0].step == instruction
         assert check in prompt
         assert evidence in prompt
         assert f'WORKER REPORT:\n"""{report}"""' in prompt

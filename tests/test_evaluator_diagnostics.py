@@ -193,8 +193,8 @@ def test_invalid_annotations_are_flagged_without_changing_business_decision(expl
     assert len(diagnostic["criteria"]) == 1
 
 
-def test_diagnostics_preserve_baseline_prompt_without_requesting_new_explanations():
-    assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v12"
+def test_diagnostics_do_not_expand_the_six_field_evaluator_response():
+    assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v17"
     assert "item_explanations" not in PromptBuilder.SYSTEM_PROMPT
     assert set(ResponseParser.parse({
         "verdict": "PARTIAL", "covered": [], "missing": ["1"], "blockers": [],
