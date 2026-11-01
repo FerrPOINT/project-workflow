@@ -94,7 +94,7 @@ def test_pm_default_export_is_portable_text_only_and_preserves_all_structure(pm_
     accepted = catalog_publication._normalize(_accepted_v3()["modes"])
     assert modes == pm_default["modes"]
     assert payload_sha256(modes) == pm_default["content_sha256"]
-    assert pm_default["content_sha256"] == "ae220f915d33987f1ed9b13e39d9a4c3a82ea5d8db133638a6a06f384ae249ef"
+    assert pm_default["content_sha256"] == "ba81253bbb57eb761973d8a08e2a699f914c16fa9e39d91bcae82b237cd156f8"
     assert catalog_publication._structure(modes) == catalog_publication._structure(accepted)
     assert modes != accepted
     phases = modes[0]["phases"]
@@ -201,11 +201,44 @@ def test_pm_default_preparation_evidence_declares_two_always_applicable_paths(pm
         "how real gaps were resolved",
         "For complete input, state that no clarification was needed",
         "A corrected report retains this packet",
-        "Inspect verdict/missing/blockers and returned phase/version before continuing",
+        "Inspect verdict/missing/blockers and returned phase/version",
         "unknown acceptance uses original-key history",
         "Request owner confirmation only after phase 2 PASS",
     ):
         assert requirement in reporting
+
+
+@pytest.mark.parametrize("phase_index", [0, 1, 2])
+def test_pm_default_partial_repairs_preserve_the_current_phase_packet(pm_default, phase_index):
+    phase = pm_default["modes"][0]["phases"][phase_index]
+    reporting = phase["instructions"][3 if phase_index == 2 else -1]["description"]
+    for requirement in (
+        "PARTIAL", "named gap", "previous-report references",
+        "repeat an identical report without changed facts", "original-key history",
+        "verdict/missing/blockers and returned phase/version",
+    ):
+        assert requirement in reporting
+    if phase_index == 0:
+        assert "retain these context facts" in reporting
+        assert "No requirements or consent is needed to finish context reading" in reporting
+        return
+    for requirement in ("source brief", "FULL", "actual publication/readback revision/content_hash"):
+        assert requirement in reporting
+    assert "If no factual gap is found, report the blocker instead of retrying unchanged" in reporting
+    evidence = phase["evidence"][0]
+    for requirement in (
+        "Source brief", "FULL", "actual publication/readback", "exact revision/content_hash",
+        "including in corrected reports", "previous-report references cannot replace this packet",
+    ):
+        assert requirement in evidence
+    instructions = "\n".join(item["description"] for item in phase["instructions"])
+    assert "do not republish" in instructions
+    assert "to repair a report" in instructions
+    if phase_index == 2:
+        assert "complete packet and named gap fixed" in reporting
+        assert "actual owner receipt" in reporting
+        assert "concrete presentation account" in reporting
+        assert "retained in every corrected report" in phase["evidence"][1]
 
 
 def test_pm_default_publication_changes_checks_evidence_and_new_cli_but_not_old_execution(
@@ -316,10 +349,30 @@ def test_pm_default_preparation_cursor_never_requires_confirmation_before_final_
         }
         confirmation.side_effect = None
         confirmation.return_value = confirmed
+        supervisor_llm("PARTIAL", missing=current["phase_contract"]["required_evidence"])
+        incomplete = step(
+            configured, report="Synthetic incomplete correction: see previous report for the FULL document",
+            operation_key="final-incomplete-packet", expected_version=current["version"],
+            requirements_revision=7, requirements_sha256="c" * 64,
+        )
+        assert incomplete.status_code == 200, incomplete.text
+        partial = incomplete.json()["result"]
+        assert partial["verdict"] == "PARTIAL" and partial["complete"] is False
+        assert "terminal_receipt" not in partial and "completion_instructions" not in partial
+        retry = _cli_read(configured, monkeypatch)
+        assert retry["phase_code"] == "PM-DRAFT-03" and retry["version"] == partial["version"]
+        for field in ("required_checks", "required_evidence"):
+            assert retry["phase_contract"][field] == current["phase_contract"][field]
+        assert retry["phase_contract"]["evaluation_feedback"]["verdict"] == "PARTIAL"
+        assert "complete packet and named gap fixed" in retry["instructions"]
+        assert "previous-report references cannot replace this packet" in retry["instructions"]
         supervisor_llm("PASS")  # Synthetic exact consent and verdict, not human/live acceptance.
         finished = step(
-            configured, report="Synthetic FULL saved document, matching receipt and actual presentation account",
-            operation_key="final-with-matching-consent", expected_version=current["version"],
+            configured, report=(
+                "Synthetic corrected packet: source brief, FULL saved document, actual publication/readback "
+                "revision=7/hash=" + "c" * 64 + "; matching owner receipt and actual presentation account"
+            ),
+            operation_key="final-with-matching-consent", expected_version=retry["version"],
             requirements_revision=7, requirements_sha256="c" * 64,
         )
         assert finished.status_code == 200, finished.text
