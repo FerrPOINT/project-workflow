@@ -19,7 +19,7 @@ OK. Fleet backend не изменён. Catalog7/hash
 `0434499f6baa99ff71e3e92cc6b46d7262c98f30bd4edcd3f72f503c432e3da3`
 оставался active во время Apply; старый SDLC-15 CLI history byte-equivalent, version6.
 
-Tracked PM artifact опубликован штатным API как catalog10, normalized hash
+Ранее опубликованный PM artifact принят штатным API как catalog10, normalized hash
 `ae220f915d33987f1ed9b13e39d9a4c3a82ea5d8db133638a6a06f384ae249ef`.
 Три фазы сокращены до контекста, подготовки требований и отдельного owner consent.
 Техническую identity/namespace/access проверяет сервер; PM не пересказывает все
@@ -30,8 +30,14 @@ context130/preparation131/terminal135 PASS, req1/hash898f7e7e, separate owner
 receipt853d9814, actual Backlog/Ready. Независимый read-only PG подтверждает
 owner/hash и ноль Analyst/Analysis. Final PARTIAL132-134 исправлены самим PM,
 без технических подсказок; эта задержка не выдана за устранённую нестабильность.
-Sparse SDLC-23 в работе. Fleet initial POST replay после completion даёт409,
-это отдельная исправляемая регрессия, не повод объявлять полный релиз готовым.
+Sparse SDLC-23 завершена в Backlog/Ready: revision3, отдельное точное owner
+confirmation, terminal PASS163; независимый PG подтверждает owner/hash и ноль
+Analyst/Analysis. Лишние PARTIAL5/12/8 сохраняются как открытый дефект качества.
+Fleet initial POST replay после completion даёт409 на прежней установке;
+исправление проверено в исходниках, но ещё не принято на стенде.
+Текущий artifact в репозитории имеет hashba81253 и пока не опубликован;
+кандидат evaluator v15 также не установлен. Новые результаты и открытые gates:
+[публикация и приёмка](managed-catalog-publication.md).
 SDLC-21 на9 сохранил PARTIAL128 с лишним namespace attestation, без подмены фактов.
 
 Предыдущая редакция9, normalized hash

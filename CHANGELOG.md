@@ -6,6 +6,30 @@
 
 ## [Unreleased]
 
+### PM Stability Follow-Up - 1 November 2026
+
+- Installed v12/catalog10 independently completes both SDLC-22 and SDLC-23 in
+  Backlog/Ready. Sparse requirements3, exact owner receipt and zero Analyst/Analysis
+  are verified read-only; the previous5/12/8 PARTIAL counts remain a quality gap.
+- Source3a85115/v13 separates worker procedure from checks/evidence and preserves
+  frozen v12. Full3220 tests plus73 subtests,15 explicit platform/opt-in skips,
+  coverage94.03093868956022%,132 real PostgreSQL tests and53 dependency pins pass.
+- Current candidate v15 omits procedure from explicit evaluation prompts while
+  retaining every required item, full contract fingerprints and historical
+  versions. Corrected PM reports retain the FULL packet; unchanged requirements
+  are not republished. Artifact hashba81253 is not yet published to the stand.
+- Real-model replay is NOT accepted: independent review identifies six unsupported
+  refusals, plus genuinely incomplete old reports. Medium reasoning did not
+  eliminate those refusals. Parser consistency/owner/hash guards remain strict;
+  no verdict is repaired into PASS and Hermes is unchanged.
+- Candidate7940c47 passes132 real PG tests but its full gate stops at the existing
+  first-step execution-ID context regression; this is not a passing full gate.
+  v15 remains uninstalled. Whether PM should retain model report grading or use
+  authoritative Tracker facts is a separate pending product decision.
+- Isolated CLI checks now use the qualified CLI Base278be4a2 through an explicit
+  clean checkout/PYTHONPATH, independently of namespace SDK/UI pins. All26
+  transport tests pass; CI/local setup is reproducible without a global package.
+
 ### Added
 
 - Catalog10 simplifies the three PM phases after SDLC-21 PARTIAL128 demanded
@@ -21,9 +45,12 @@
   preparation131 and terminal135 PASS, exact owner receipt853d9814/req1/hash898f7e7e.
   Independent read-only PG verifies owner/hash and zero Analyst/Analysis. PM
   self-corrected final PARTIAL132-134 without technical hints or document changes;
-  that overhead is not claimed eliminated. Sparse SDLC-23 remains underway.
+  that overhead is not claimed eliminated. Sparse SDLC-23 also reaches actual
+  Backlog/Ready with revision3, exact owner consent and terminal PASS163;
+  independent PG confirms owner/hash and zero Analyst/Analysis.
   Fleet's completed-task initial POST replay returns409; its separate worker
-  owns that regression. This is not complete release acceptance.
+  delivered the fix with five passing Linux regressions. Installation and live
+  original-key replay remain open. This is not complete release acceptance.
 
 - Catalog9 text-only correction follows retained SDLC-20 reports120-125:
   the final phase is named "Owner-confirmed requirements", not "before final

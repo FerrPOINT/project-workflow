@@ -2,6 +2,26 @@
 
 ## Current Text Publication - 31 October 2026
 
+### Release Follow-Up - 1 November 2026
+
+The repository artifact now has normalized hash
+`ba81253bbb57eb761973d8a08e2a699f914c16fa9e39d91bcae82b237cd156f8`;
+it is a candidate, NOT the active catalog10 below. It keeps FULL context/documents,
+publication/readback data and exact owner consent in corrected reports, without
+republishing unchanged requirements or repeating identical reports.
+
+Source3a85115/v13 passes3220 tests+73subtests,132 real PG tests, coverage
+94.03093868956022%, Ruff and mypy165files. The final v15 candidate7940c47 passes
+132 PG tests but fails the first-step execution-ID context test in its full gate.
+Real-model replay also retains six independently identified unsupported refusals;
+genuinely incomplete historical reports remain PARTIAL. Medium reasoning is not
+a demonstrated fix. No automatic PASS or hidden history re-evaluation is used.
+
+The installed verifier remains v12. v15 and the new artifact are not activated;
+PM report-grading policy is pending a product decision. Original Hermes, the
+working model, old chats and immutable receipts are unchanged. Tests/builds are
+not evidence of publication, installation or new live PM acceptance.
+
 Catalog10/hash`ae220f915d33987f1ed9b13e39d9a4c3a82ea5d8db133638a6a06f384ae249ef`
 is active. Three phases now focus on context, saved requirements and exact owner
 confirmation; all counts/scopes/skills remain unchanged. Identity/namespace/access
@@ -11,8 +31,10 @@ Full-brief SDLC-22 reaches actual Backlog/Ready with exact req1/hash898f7e7e,
 separate owner receipt853d9814 and terminal PASS135. Independent read-only PG
 verifies the same owner/hash and zero Analyst/Analysis. PM self-corrected final
 PARTIAL132-134 without technical hints; remaining verdict overhead is explicit.
-Sparse SDLC-23 is underway. Completed-task initial POST replay returns409 in
-Fleet and has a separate source-only worker; overall release remains open.
+Sparse SDLC-23 also reaches actual Backlog/Ready: revision3, separate exact owner
+consent and terminal PASS163. Independent PG confirms owner/hash/no Analyst.
+The5/12/8 PARTIAL counts remain a quality gap. Fleet's completed-task initial POST
+replay fix is source-qualified, not yet installed/live-qualified; release is open.
 SDLC-21 on9 stays frozen with its
 PARTIAL128 demand for an extra configured-namespace attestation; no fabricated
 configuration evidence or PM completion was submitted on its behalf.
