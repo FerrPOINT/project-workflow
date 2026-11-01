@@ -1,0 +1,206 @@
+{
+  "workflow_key": "single-task-v1:project_manager",
+  "role_key": "project_manager",
+  "content_sha256": "1cff573408449aad5406cb13adb499782bf82984ed7d0cb3d9118c523d248807",
+  "modes": [
+    {
+      "key": "draft",
+      "name": "Draft",
+      "mode_order": 1,
+      "execution_scopes": [
+        "business"
+      ],
+      "phases": [
+        {
+          "phase_order": 1,
+          "code": "PM-DRAFT-01",
+          "name": "Task context",
+          "description": "Read the assigned task and understand the owner's request.",
+          "execution_type": "sync",
+          "instructions": [
+            {
+              "description": "Read task-tracker sdlc context --task <task-uuid>. Use its actual workflow_task_key with project-workflow --json step --task <workflow-task-key>. Keep the supplied assignment and execution; do not create another task.",
+              "execution_type": "sync",
+              "skills": [
+                "project-workflow-executor",
+                "tracker-operator"
+              ]
+            },
+            {
+              "description": "Read the task input and task-tracker sdlc discussion read --task <task-uuid>. Follow returned pagination until next_after is null. Read actual referenced attachments when needed; an empty discussion or absent first requirements revision is normal.",
+              "execution_type": "sync",
+              "skills": [
+                "project-workflow-executor",
+                "tracker-operator"
+              ]
+            },
+            {
+              "description": "Understand the requested problem, intended user, scope and known constraints. Carry forward actual owner decisions. Do not invent requirements, references or answers. Work on this one task without child tasks or integration modes.",
+              "execution_type": "sync",
+              "skills": [
+                "project-workflow-executor",
+                "tracker-operator"
+              ]
+            },
+            {
+              "description": "Use the preconfigured CLI credentials and APIs. Servers enforce identity, assignment, namespace and access. Do not ask the owner to re-certify these technical settings or repeat every API field in the report. A real access failure or wrong task is a technical blocker; never borrow another identity or use a local database fallback. If context contains critical_review, read its referenced critical-blocker and discuss the actual business contradiction; do not reopen assignments yourself.",
+              "execution_type": "sync",
+              "skills": [
+                "project-workflow-executor",
+                "tracker-operator"
+              ]
+            },
+            {
+              "description": "Report once the context is read: identify the actual task and assigned PM, summarize the source request and existing decisions. Send text on stdin to project-workflow --json step --task <workflow-task-key> --operation-key <stable-key> --expected-version <returned-version> --report -. Read the result. Correct a real PARTIAL in this execution; check original-key history before repeating an unknown command. No requirements or consent is needed to finish context reading.",
+              "execution_type": "sync",
+              "skills": [
+                "project-workflow-executor",
+                "tracker-operator"
+              ]
+            }
+          ],
+          "checks": [
+            "The assigned task, source request and existing owner decisions have been read and understood.",
+            "The PM works on that task with the existing assignment; actual access failures or a wrong task are not hidden."
+          ],
+          "evidence": [
+            "Actual task ID and assigned PM from Tracker, source request and existing decisions obtained by the stated reads. A concise report of these facts is sufficient; a complete technical JSON dump or independent configuration attestation is not required."
+          ],
+          "parallel_with_phase_code": null,
+          "rollback_target_phase_code": null
+        },
+        {
+          "phase_order": 2,
+          "code": "PM-DRAFT-02",
+          "name": "Requirements preparation",
+          "description": "Discuss real gaps and save a complete requirements document.",
+          "execution_type": "sync",
+          "instructions": [
+            {
+              "description": "Help the owner develop the idea in ordinary language. Ask only material missing information, in small iterations; propose useful alternatives and explain their consequences. A complete, consistent brief needs no artificial questions or mandatory questionnaire.",
+              "execution_type": "sync",
+              "skills": [
+                "project-workflow-executor",
+                "tracker-operator"
+              ]
+            },
+            {
+              "description": "Prepare one specification: goal, scope and exclusions, scenarios, constraints, assumptions and measurable acceptance criteria. Define material domain rules such as statuses and required fields. Mark proposals and assumptions clearly; a recommendation is not an owner choice.",
+              "execution_type": "sync",
+              "skills": [
+                "project-workflow-executor",
+                "tracker-operator"
+              ]
+            },
+            {
+              "description": "Save the FULL document with task-tracker sdlc revision publish --task <task-uuid> --from-file -, JSON on stdin using the returned CLI contract and current MachineFence. Read requirements back and retain the exact revision/content_hash. PM may publish its own draft; only the owner may confirm it. No separate permission is needed merely to save requirements.",
+              "execution_type": "sync",
+              "skills": [
+                "project-workflow-executor",
+                "tracker-operator"
+              ]
+            },
+            {
+              "description": "Use ordinary discussion until a real document exists. Publish a structured clarification only for an actual unresolved gap when a revision exists. Save actual answers and feedback; never publish a placeholder or invented question. Reuse an unchanged saved revision. Read original operation state before retrying unknown publication.",
+              "execution_type": "sync",
+              "skills": [
+                "project-workflow-executor",
+                "tracker-operator"
+              ]
+            },
+            {
+              "description": "Resolve blocking business questions before declaring preparation complete. Prepare the full saved document for owner review. Actual presentation and separate owner confirmation belong to phase 3, not to this preparation check.",
+              "execution_type": "sync",
+              "skills": [
+                "project-workflow-executor",
+                "tracker-operator"
+              ]
+            },
+            {
+              "description": "Report completed preparation, not each conversational turn. Include the source brief, one FULL copy of saved requirements, actual publication/readback revision/content_hash and how real gaps were resolved. For complete input, state that no clarification was needed. Submit with the existing step --report - command using text stdin and the returned version. Inspect verdict/missing/blockers and returned phase/version before continuing. A corrected or otherwise changed report is a NEW operation: retain this packet, use a NEW operation key and the current returned version. If an operation outcome is unknown, read original-key history first; an exact retry must keep the SAME operation key, expected version and report bytes. Never reuse an operation key with a changed report or version. Request owner confirmation only after phase 2 PASS.",
+              "execution_type": "sync",
+              "skills": [
+                "project-workflow-executor",
+                "tracker-operator"
+              ]
+            }
+          ],
+          "checks": [
+            "A FULL requirements document is saved with an exact revision/content_hash and agrees with the source request and actual owner decisions.",
+            "The document defines scope, material domain rules and measurable acceptance criteria.",
+            "Blocking business gaps are resolved without invented answers; a complete brief has no artificial clarification questions.",
+            "The document is prepared for review. Actual presentation and owner confirmation are not prerequisites for this preparation phase."
+          ],
+          "evidence": [
+            "Source brief, one FULL saved requirements document and actual publication/readback data identifying its exact revision/content_hash. Duplicate raw CLI output or independent stdout attestation is not required.",
+            "For incomplete input: the actual gap, owner answer or feedback, and its resolution. For complete input: why the supplied information suffices without clarification. Neither path requires invented questions."
+          ],
+          "parallel_with_phase_code": null,
+          "rollback_target_phase_code": null
+        },
+        {
+          "phase_order": 3,
+          "code": "PM-DRAFT-03",
+          "name": "Owner-confirmed requirements",
+          "description": "Present the saved specification and obtain exact owner confirmation.",
+          "execution_type": "sync",
+          "instructions": [
+            {
+              "description": "After phase 2 PASS, show the FULL latest saved document with exact revision/content_hash in this chat. Ask the owner to use the application's separate confirmation action. A summary, link or a chat message such as 'agreed' is not the saved confirmation receipt.",
+              "execution_type": "sync",
+              "skills": [
+                "project-workflow-executor",
+                "tracker-operator"
+              ]
+            },
+            {
+              "description": "Discuss actual owner remarks in the same chat. Before consent, save changed content as a FULL new revision, read it back and present it again. Do not change an unchanged document for reporting. Wait without repetitive reports while an answer or consent is missing.",
+              "execution_type": "sync",
+              "skills": [
+                "project-workflow-executor",
+                "tracker-operator"
+              ]
+            },
+            {
+              "description": "Read task-tracker sdlc confirmation read --task <task-uuid> --revision <revision>. Verify it matches the latest saved document's task/revision/content_hash and authorized human owner. Never confirm for the owner. Preserve confirmed content; actual subsequent business changes require the existing explicit owner-authorized revision procedure and new consent.",
+              "execution_type": "sync",
+              "skills": [
+                "project-workflow-executor",
+                "tracker-operator"
+              ]
+            },
+            {
+              "description": "When presentation, resolved feedback and exact owner consent are complete, submit ONE self-contained report: FULL saved document, exact revision/hash, actual owner receipt and a concrete account of presentation. No verbatim earlier message or separate presentation attestation is required. Use project-workflow --json step --task <workflow-task-key> --operation-key <stable-key> --expected-version <returned-version> --report - --requirements-revision <confirmed-revision> --requirements-sha256 <confirmed-hash>. Use text stdin with real newlines, preferably a quoted heredoc. This report cannot contain its own future verdict or terminal receipt. Correct an actual PARTIAL; read original-key history after an unknown result.",
+              "execution_type": "sync",
+              "skills": [
+                "project-workflow-executor",
+                "tracker-operator"
+              ]
+            },
+            {
+              "description": "ONLY AFTER Workflow returns complete=true, follow its appended completion_instructions: read fresh discussion, publish the ordinary final comment and read its operation, then task-tracker sdlc pm completion submit --task <task-uuid> --from-file - using the returned terminal_receipt and current fence. Read the completion operation with the same key, pm completion read and fresh sdlc context. Verify the same task/revision/hash with stage=Backlog and status=Ready. Do not dispatch Analyst or claim that transition before readback; unknown acceptance requires original-key readback.",
+              "execution_type": "sync",
+              "skills": [
+                "project-workflow-executor",
+                "tracker-operator"
+              ]
+            }
+          ],
+          "checks": [
+            "The FULL latest saved document and its exact revision/content_hash were actually presented to the owner after preparation PASS.",
+            "An actual saved human owner confirmation matches that task/revision/hash and authorized owner.",
+            "Actual feedback is resolved; changed content has fresh consent, while unchanged confirmed content is preserved.",
+            "There are no unresolved business questions; a missing answer or consent is not claimed complete.",
+            "The confirmed specification contains goal, scope/exclusions, scenarios, constraints, assumptions and measurable acceptance criteria."
+          ],
+          "evidence": [
+            "FULL latest saved document, exact revision/content_hash and a concrete account of its actual full presentation. No verbatim earlier message or independent presentation attestation is required.",
+            "Actual matching owner confirmation receipt and resolved feedback. Future Workflow acceptance, final comment and Tracker transition are not preconditions for evaluating these business facts."
+          ],
+          "parallel_with_phase_code": null,
+          "rollback_target_phase_code": null
+        }
+      ]
+    }
+  ]
+}
