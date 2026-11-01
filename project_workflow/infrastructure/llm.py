@@ -160,7 +160,10 @@ class OpenAICompatibleClient:
             resp.raise_for_status()
             diagnostics["outcome"] = "invalid_json"
             data = resp.json()
-            self._capture_response_diagnostics(data)
+            try:
+                self._capture_response_diagnostics(data)
+            except Exception as exc:
+                diagnostics["metadata_error"] = type(exc).__name__
             content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
             if isinstance(content, str):
                 self.last_response_content = content

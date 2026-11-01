@@ -15,7 +15,7 @@ from project_workflow.infrastructure.llm import LlmConfigurationError
 
 _TEXT_LIMIT = 64_000
 _BUDGET_BYTES = 750_000
-_WIRE_FIELDS = ("verdict", "covered", "missing", "blockers", "message", "confidence", "item_explanations")
+_WIRE_FIELDS = ("verdict", "covered", "missing", "blockers", "message", "confidence")
 _CREDENTIAL = re.compile(
     r"(?i)(\b(?:api[-_]?key|access[-_]?token|refresh[-_]?token|password|authorization)"
     r"[\"']?\s*[:=]\s*)"
@@ -141,7 +141,6 @@ def _error(exc: Exception | None) -> dict[str, Any] | None:
             ("DELEGATE", "invalid_delegation"),
             ("Supervisor response must be a JSON object", "not_an_object"),
             ("Empty content from LLM", "empty_content"),
-            ("item_explanations must refer", "invalid_explanation_ids"),
             ("Для текущей фазы не настроено делегирование", "delegation_not_configured"),
         ):
             if str(exc).startswith(prefix):
@@ -165,20 +164,14 @@ def capture_attempt(client: Any, *, number: int, prompt: str, raw: dict[str, Any
     provider = getattr(client, "last_call_diagnostics", None)
     content = getattr(client, "last_response_content", None)
     response = {key: raw[key] for key in _WIRE_FIELDS if key in raw} if isinstance(raw, dict) else None
-    invalid_annotations = 0
     omissions = {}
     if response is not None:
-        ids = [value for key in ("covered", "missing")
-               for value in (response[key] if isinstance(response.get(key), list) else [])]
-        explanations, invalid_annotations = _annotations(response.get("item_explanations"), ids)
-        if "item_explanations" in response:
-            response["item_explanations"] = explanations
         omissions = {key: len(value) - 200 for key, value in response.items()
                      if isinstance(value, list) and len(value) > 200}
     result = {"number": number, "prompt": text_snapshot(prompt, secrets),
               "provider": _safe(provider, secrets) if isinstance(provider, dict) else None,
               "response": _safe(response, secrets), "error": _error(error),
-              "invalid_annotations": invalid_annotations, "omitted_response_counts": omissions}
+              "omitted_response_counts": omissions}
     if isinstance(content, str):
         # Unknown/invalid output and provider reasoning are not copied to the ledger.
         result["response_content"] = {"sha256": hashlib.sha256(content.encode()).hexdigest(),
@@ -204,7 +197,7 @@ def evaluation_diagnostic(*, system: str, user: str, report: str, prompt_version
             "decision": _safe({key: decision[key] for key in _WIRE_FIELDS if key in decision}, secrets)
             if decision is not None else None,
             "attempts": attempts, "outcome": "technical_failure" if technical_error else "model_decision",
-            "explanation_source": "model_message_and_optional_item_explanations",
+            "explanation_source": "model_message_only",
             "limitation": "Model explanations are claims, not proof; missing rationale is reported as unavailable."})
 
 
