@@ -141,6 +141,20 @@ def test_platform_pat_is_redacted_without_knowing_the_literal_credential(prefix)
     assert value["redacted"] is True
 
 
+@pytest.mark.parametrize("name", [
+    "API_SERVER_KEY", "DB_PASSWORD", "PROJECT_WORKFLOW_API_TOKEN", "FLEET_CONTROL_RUNTIME__TOKEN_SECRET",
+])
+def test_configured_environment_credential_names_are_masked(name):
+    value = text_snapshot(name + "=opaque-configured-credential")
+    assert "opaque-configured-credential" not in value["text"]
+    assert value["redacted"]
+
+
+def test_nonsecret_operation_and_requirement_identifiers_are_retained():
+    text = "operation_key=replay-123 content_hash=" + "a" * 64 + " fencing_token=7"
+    assert text_snapshot(text)["text"] == text
+
+
 def test_legacy_snapshot_is_not_misrepresented_as_captured():
     original = {"prompt_version": "supervisor-evaluator-v12", "raw_evaluator": {
         "verdict": "PARTIAL", "covered": [], "missing": ["1"], "message": "Missing document"},
@@ -194,7 +208,7 @@ def test_invalid_annotations_are_flagged_without_changing_business_decision(expl
 
 
 def test_diagnostics_do_not_expand_the_six_field_evaluator_response():
-    assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v17"
+    assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v18"
     assert "item_explanations" not in PromptBuilder.SYSTEM_PROMPT
     assert set(ResponseParser.parse({
         "verdict": "PARTIAL", "covered": [], "missing": ["1"], "blockers": [],

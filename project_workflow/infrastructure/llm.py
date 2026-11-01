@@ -188,7 +188,7 @@ class OpenAICompatibleClient:
 class PromptBuilder:
     """Build prompts from phase contracts + task context."""
 
-    PROMPT_VERSION = "supervisor-evaluator-v17"
+    PROMPT_VERSION = "supervisor-evaluator-v18"
 
     SYSTEM_PROMPT = (
         "You are a strict workflow supervisor. "
@@ -256,12 +256,12 @@ class PromptBuilder:
         "The Supervisor never chooses the next phase.\n\n"
         "Output STRICT JSON with these keys:\n"
         "{\n"
-        '  "verdict": "PASS" | "PARTIAL" | "BLOCKED" | "DELEGATE",\n'
         '  "covered": ["required item ID"],\n'
         '  "missing": ["required item ID"],\n'
         '  "blockers": ["specific blocker description"],\n'
         '  "message": "Human-readable summary in Russian",\n'
-        '  "confidence": 0.0-1.0\n'
+        '  "confidence": 0.0-1.0,\n'
+        '  "verdict": "PASS" | "PARTIAL" | "BLOCKED" | "DELEGATE"\n'
         "}\n"
     )
 

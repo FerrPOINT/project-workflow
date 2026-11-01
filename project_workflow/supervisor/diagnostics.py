@@ -17,7 +17,8 @@ _TEXT_LIMIT = 64_000
 _BUDGET_BYTES = 750_000
 _WIRE_FIELDS = ("verdict", "covered", "missing", "blockers", "message", "confidence")
 _CREDENTIAL = re.compile(
-    r"(?i)(\b(?:api[-_]?key|access[-_]?token|refresh[-_]?token|password|authorization)"
+    r"(?i)((?<![A-Za-z0-9])(?:api[-_]?(?:server[-_])?key|api[-_]?token|access[-_]?token|"
+    r"refresh[-_]?token|password|authorization|secret)"
     r"[\"']?\s*[:=]\s*)"
     r'''("(?:\\.|[^"\\])*(?:"|$)|'(?:\\.|[^'\\])*(?:'|$)|(?:(?:Basic|Bearer)\s+)?[^\s"',;}]+)'''
 )
