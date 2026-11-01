@@ -133,6 +133,14 @@ def test_validation_errors_do_not_echo_input_or_exception_messages():
     assert attempt["error"]["fields"] == [{"location": ["confidence"], "type": "float_parsing"}]
 
 
+@pytest.mark.parametrize("prefix", ["sdlc_pat_", "pdlc_pat_"])
+def test_platform_pat_is_redacted_without_knowing_the_literal_credential(prefix):
+    token = prefix + "0123456789abcdef" * 4
+    value = text_snapshot("PROJECT_WORKFLOW_API_TOKEN=" + token)
+    assert token not in value["text"]
+    assert value["redacted"] is True
+
+
 def test_legacy_snapshot_is_not_misrepresented_as_captured():
     original = {"prompt_version": "supervisor-evaluator-v12", "raw_evaluator": {
         "verdict": "PARTIAL", "covered": [], "missing": ["1"], "message": "Missing document"},

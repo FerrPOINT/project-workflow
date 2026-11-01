@@ -29,6 +29,7 @@ def _redact(text: str, secrets: tuple[str, ...] = ()) -> str:
             text = text.replace(secret, "[REDACTED]")
     text = re.sub(r"(?i)\bBearer\s+[^\s\"'<>,;]+", "Bearer [REDACTED]", text)
     text = re.sub(r"\bsk-[A-Za-z0-9_-]{8,}", "[REDACTED]", text)
+    text = re.sub(r"\b(?:sdlc|pdlc)_pat_[A-Za-z0-9_-]+", "[REDACTED]", text)
     text = re.sub(r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+", "[REDACTED]", text)
     text = re.sub(r"(https?://)[^/@\s]+:[^/@\s]+@", r"\1[REDACTED]@", text)
     def credential(match: re.Match[str]) -> str:
