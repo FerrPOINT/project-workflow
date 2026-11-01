@@ -3078,7 +3078,12 @@ class TestSettingsPage:
             "--task", "--report", "--operation-key", "--expected-version",
             "--requirements-revision", "--requirements-sha256",
         }
-        assert set(history_options) == {"--task", "--n", "--operation-key", "--execution-ref", "--before-history-id"}
+        assert set(history_options) == {
+            "--task", "--n", "--operation-key", "--execution-ref", "--before-history-id", "--diagnostics",
+        }
+        assert history_options["--diagnostics"]["required"] is False
+        assert "default" not in history_options["--diagnostics"]
+        assert "одной оценки" in history_options["--diagnostics"]["help"]
         assert "default" not in step_options["--task"]
         assert "default" not in step_options["--report"]
         for flag in ("--operation-key", "--expected-version", "--requirements-revision", "--requirements-sha256"):

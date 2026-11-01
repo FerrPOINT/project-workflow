@@ -6,6 +6,40 @@
 
 ## [Unreleased]
 
+### Evaluator Diagnostics - 1 November 2026
+
+- Cause: a saved aggregate message/coverage list cannot distinguish every
+  provider/format failure or explain which exact prompt was used. Six v15
+  refusals are unsupported; other incomplete PM reports are genuine PARTIAL.
+- Added bounded, redacted per-attempt evidence to existing evaluation snapshots
+  and an opt-in authorized CLI history projection. No new service, migration,
+  automatic verdict repair, Hermes change or additional model call.
+- Evaluator v16 requests concise item-level explanations and report quotes.
+  Invalid annotations are flagged without changing verdict acceptance; v15 and
+  older frozen receipts remain readable. Captured-text quote comparison is not
+  independent verification of evidence. Capture failures cannot block a valid
+  evaluation; an explicit byte budget bounds persisted/exported diagnostics.
+- Source checks and installed/live acceptance are separate. This candidate is
+  not installed; diagnostic instrumentation alone does not prove that semantic
+  false refusals are eliminated. Next: use the captured counterexamples to
+  qualify a bounded grading correction before new PM acceptance.
+- Three one-shot real-model fixture checks demonstrate useful item reasons and
+  matching report quotes, not stable grading:136/163 are false refusals;153 is
+  legitimately PARTIAL but falsely covers two criteria. No Workflow writes or
+  repeat-until-PASS calls. HTTP200/stop and untruncated inputs rule out a transport
+  or capture truncation explanation for these specific failures.
+- The first full diagnostic gate stops at an obsolete precommit-label placement
+  assertion after631 passes. It now checks the worker contract and actual system
+  policy separately, retaining real PASS/PARTIAL and no-future-receipt assertions;
+  all71 configured-CLI tests pass.132 real PG tests pass with owned QA cleanup.
+- Full source19f018b4 runs every non-PG case:3312 pass,73 subtests pass,15
+  explicit skips,132 integration deselections, coverage94.08269961977186%.
+  Its sole failure is the old Settings CLI-option allowlist. Adding the new
+  optional flag and checking its help/default fixes that test;96 focused
+  Settings/diagnostic cases pass afterward. Product/API source is byte-identical
+  to19f018b4 and the PG-qualified fcb40db0. The failed full receipt is retained,
+  not relabelled as one all-green invocation. Ruff, mypy166 and OpenAPI parity pass.
+
 ### PM Stability Follow-Up - 1 November 2026
 
 - Installed v12/catalog10 independently completes both SDLC-22 and SDLC-23 in
@@ -14,7 +48,7 @@
 - Source3a85115/v13 separates worker procedure from checks/evidence and preserves
   frozen v12. Full3220 tests plus73 subtests,15 explicit platform/opt-in skips,
   coverage94.03093868956022%,132 real PostgreSQL tests and53 dependency pins pass.
-- Current candidate v15 omits procedure from explicit evaluation prompts while
+- Previous candidate v15 omits procedure from explicit evaluation prompts while
   retaining every required item, full contract fingerprints and historical
   versions. Corrected PM reports retain the FULL packet; unchanged requirements
   are not republished. Artifact hashba81253 is not yet published to the stand.

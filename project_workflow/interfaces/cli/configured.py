@@ -84,12 +84,15 @@ def step(task: str, report: str | None, operation_key: str | None, expected_vers
 
 
 def history(task: str, n: int | None, operation_key: str | None, execution_ref: str | None,
-            before_history_id: int | None = None) -> dict:
+            before_history_id: int | None = None, *, diagnostics: bool = False) -> dict:
     _, _, _, namespace = environment()
+    if diagnostics and (n is not None and n != 1 or operation_key is not None or execution_ref is not None):
+        raise ValueError("Diagnostics requires n=1 and cannot select an operation or execution")
     if before_history_id is not None and (before_history_id <= 0 or operation_key is not None):
         raise ValueError("A history page cursor cannot select an operation")
     return request("GET", "history", task, params={"interaction_protocol": PROTOCOL, "task": task,
-        "namespace_id": namespace, "n": min(n or 200, 200),
+        "namespace_id": namespace, "n": min(n or (1 if diagnostics else 200), 200),
+        **({"projection": "evaluator-diagnostics-v1"} if diagnostics else {}),
         **({"operation_key": operation_key} if operation_key else {}),
         **({"before_history_id": before_history_id} if before_history_id is not None else {}),
         **({"execution_ref": execution_ref} if execution_ref else {})})

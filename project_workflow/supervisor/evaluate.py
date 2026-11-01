@@ -19,6 +19,7 @@ from ..infrastructure.llm import (
     ResponseParser,
 )
 from .checks import normalize_text
+from .diagnostics import capture_attempt, evaluation_diagnostic
 from .models import Phase
 from .types import VERDICT_LABELS
 
@@ -236,11 +237,15 @@ def _evaluate_strict_response(
     user: str,
     item_ids: list[str],
     phase: Phase,
+    attempts: list[dict[str, Any]] | None = None,
 ) -> tuple[dict[str, Any], LlmVerdict]:
     """Retry only malformed evaluator output and never relax the wire contract."""
     prompt = user
     last_error: Exception | None = None
     for attempt_number in range(1, _MAX_EVALUATOR_RESPONSE_ATTEMPTS + 1):
+        raw: dict[str, Any] | None = None
+        error: Exception | None = None
+        submitted_prompt = prompt
         try:
             raw = client.chat(
                 system=PromptBuilder.SYSTEM_PROMPT,
@@ -252,6 +257,7 @@ def _evaluate_strict_response(
                 raise ValueError("Для текущей фазы не настроено делегирование")
             return raw, llm
         except (TypeError, ValueError, KeyError, IndexError, AttributeError) as exc:
+            error = exc
             last_error = exc
             if attempt_number == _MAX_EVALUATOR_RESPONSE_ATTEMPTS:
                 raise
@@ -261,6 +267,16 @@ def _evaluate_strict_response(
                 "the exact JSON schema and classifies every required item ID exactly once. "
                 "Return only one bare JSON object without Markdown or commentary."
             )
+        except (requests.RequestException, OSError) as exc:
+            error = exc
+            raise
+        finally:
+            if attempts is not None:
+                try:
+                    attempts.append(capture_attempt(client, number=attempt_number, prompt=submitted_prompt,
+                                                    raw=raw, error=error))
+                except Exception as diagnostic_error:
+                    attempts.append({"number": attempt_number, "capture_error": type(diagnostic_error).__name__})
     assert last_error is not None
     raise last_error
 
@@ -349,6 +365,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         previously_covered=sorted(previously_ids) or None,
         evaluation_items=evaluation_items,
     )
+    evaluated_items = list(evaluation_items)
 
     # Do not keep a database transaction or workflow row lock open across the provider call.
     engine.db.commit()
@@ -356,6 +373,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
     client: OpenAICompatibleClient | None = None
     raw: dict[str, Any] | None = None
     technical_error = False
+    attempts: list[dict[str, Any]] = []
     try:
         if catalog_error is not None:
             raise catalog_error
@@ -365,6 +383,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
             user=user,
             item_ids=item_ids,
             phase=phase,
+            attempts=attempts,
         )
     except (
         requests.RequestException,
@@ -524,6 +543,15 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
 
     next_phase_obj = engine.phase_map.get(next_phase_code) if next_phase_code else None
     raw_evaluator = llm.raw if technical_error else (raw if raw is not None else llm.raw)
+    try:
+        diagnostic = evaluation_diagnostic(
+            system=PromptBuilder.SYSTEM_PROMPT, user=user, report=report,
+            prompt_version=PromptBuilder.PROMPT_VERSION, items=evaluated_items,
+            attempts=attempts, client=client, technical_error=technical_error, decision=raw_evaluator,
+        )
+    except Exception as diagnostic_error:
+        diagnostic = {"schema": "evaluator-diagnostics-v1", "availability": "capture_failed",
+                      "error_type": type(diagnostic_error).__name__}
     run_data: dict[str, Any] = {
         "task_id": task_id,
         "mode_id": int(engine.task.get("mode_id") or 0),
@@ -552,6 +580,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
             },
             "covered_item_ids": covered_ids,
             "raw_evaluator": raw_evaluator,
+            "diagnostics": diagnostic,
         },
         "supervisor_response": result,
     }

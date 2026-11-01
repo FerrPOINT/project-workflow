@@ -60,7 +60,8 @@ def history(task: str, namespace_id: int | None, authorization: str | None, *, n
         if type(namespace_id) is not int or namespace_id <= 0:
             raise ValueError("Explicit namespace required")
         principal = configured_cli._principal(authorization, write=False)
-        trusted = base_auth.registered_subjects().get(principal.subject)
+        trusted = (None if projection == "evaluator-diagnostics-v1"
+                   else base_auth.registered_subjects().get(principal.subject))
         with SAUnitOfWork() as uow, runtime_catalog_read(uow):
             return configured_cli.history(uow, task, namespace_id, authorization, n=n,
                 execution_ref=execution_ref, operation_key=operation_key, trusted=trusted,

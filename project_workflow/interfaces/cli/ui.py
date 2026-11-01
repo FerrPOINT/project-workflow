@@ -55,9 +55,10 @@ def step_cmd(ctx: click.Context, task: str, report: str | None, operation_key: s
 @click.option("--execution-ref", default=None, help="Идентификатор исполнения из ответа Workflow")
 @click.option("--before-history-id", type=click.IntRange(min=1, max=2**63 - 1), default=None,
               help="Следующая страница: значение next_before из предыдущего ответа")
+@click.option("--diagnostics", is_flag=True, help="Диагностика одной оценки за страницу")
 @click.pass_context
 def history_cmd(ctx: click.Context, task: str, n: int | None, operation_key: str | None,
-                execution_ref: str | None, before_history_id: int | None) -> None:
+                execution_ref: str | None, before_history_id: int | None, diagnostics: bool = False) -> None:
     """Прочитать сохранённую историю и результат операции.
 
     История: project-workflow --json history --task SDLC-42 --n 20
@@ -66,7 +67,8 @@ def history_cmd(ctx: click.Context, task: str, n: int | None, operation_key: str
     --operation-key phase-1-v1
     """
     try:
-        response = configured.history(task, n, operation_key, execution_ref, before_history_id)
+        response = configured.history(task, n, operation_key, execution_ref, before_history_id,
+                                      **({"diagnostics": True} if diagnostics else {}))
     except ValueError:
         response = configured.failure("configuration-or-input-invalid")
     _output(ctx, response)

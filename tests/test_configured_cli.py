@@ -1188,6 +1188,7 @@ def test_final_judge_assesses_precommit_facts_not_future_receipts(configured, su
     monkeypatch.setattr(configured_cli, "confirmation", lambda _: dict(confirmed))
     observed = step(configured).json()["result"]
     checks = observed["phase_contract"]["required_checks"]
+    assert "PRECOMMIT ASSESSMENT ONLY" in json.dumps(observed["phase_contract"])
     reports = {
         "valid": "FULL saved document, exact owner receipt and resolved feedback; current task remains Draft.",
         "missing-document": "Owner receipt is available, but the FULL saved requirements document is missing.",
@@ -1200,7 +1201,9 @@ def test_final_judge_assesses_precommit_facts_not_future_receipts(configured, su
     def chat(*args, **kwargs):
         prompt = kwargs["user"]
         prompts.append(prompt)
-        assert "PRECOMMIT ASSESSMENT ONLY" in prompt
+        assert "WORKER PROCEDURE" not in prompt
+        assert "phase completion is not candidate approval or a Tracker" in kwargs["system"]
+        assert "current report's own submission protocol" in kwargs["system"]
         assert "pm completion submit" not in prompt and "discussion publish" not in prompt
         assert reports[evidence] in prompt
         with SAUnitOfWork() as uow:

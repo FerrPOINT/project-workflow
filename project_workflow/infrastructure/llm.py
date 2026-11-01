@@ -10,7 +10,10 @@ ResponseParser — validates and normalises LLM JSON responses
 from __future__ import annotations
 
 import json
+import re
+from collections.abc import Mapping
 from dataclasses import dataclass
+from time import perf_counter
 from typing import Any, Literal
 from urllib.parse import urlsplit
 
@@ -60,45 +63,115 @@ class OpenAICompatibleClient:
         self.reasoning_effort = (
             settings.OPENAI_REASONING_EFFORT if reasoning_effort is None else reasoning_effort
         ).strip()
+        self.last_call_diagnostics: dict[str, Any] = {}
+        self.last_response_content: str | None = None
+
+    @staticmethod
+    def _diagnostic_text(value: Any) -> str | None:
+        if isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,127}", value):
+            return value
+        return None
+
+    @staticmethod
+    def _diagnostic_number(value: Any) -> int | float | None:
+        if type(value) in (int, float) and -(2**63) < value < 2**63:
+            return value
+        return None
+
+    def _capture_response_diagnostics(self, data: Any) -> None:
+        if not isinstance(data, dict):
+            return
+        self.last_call_diagnostics["returned_model"] = self._diagnostic_text(data.get("model"))
+        choices = data.get("choices")
+        if isinstance(choices, list) and choices and isinstance(choices[0], dict):
+            self.last_call_diagnostics["finish_reason"] = self._diagnostic_text(choices[0].get("finish_reason"))
+        usage = data.get("usage")
+        if isinstance(usage, dict):
+            saved = self.last_call_diagnostics["usage"]
+            for key in ("prompt_tokens", "completion_tokens", "total_tokens", "reasoning_tokens"):
+                value = self._diagnostic_number(usage.get(key))
+                if value is not None and value >= 0:
+                    saved[key] = value
+            details = usage.get("completion_tokens_details")
+            if isinstance(details, dict):
+                value = self._diagnostic_number(details.get("reasoning_tokens"))
+                if value is not None and value >= 0:
+                    saved["reasoning_tokens"] = value
 
     def chat(self, system: str, user: str, temperature: float = 0.1) -> dict[str, Any]:
         """Send chat request, return parsed JSON content."""
-        if urlsplit(self.base_url).hostname == "openrouter.ai" and not self.api_key:
-            raise LlmConfigurationError("Для OpenRouter требуется OPENAI_API_KEY")
-
-        headers = {
-            "Content-Type": "application/json",
+        self.last_response_content = None
+        diagnostics = self.last_call_diagnostics = {
+            "model": self._diagnostic_text(self.model),
+            "timeout": self._diagnostic_number(self.timeout),
+            "max_tokens": self._diagnostic_number(self.max_tokens),
+            "reasoning_effort": self._diagnostic_text(self.reasoning_effort),
+            "temperature": self._diagnostic_number(temperature),
+            "latency_ms": 0.0,
+            "http_status": None,
+            "returned_model": None,
+            "finish_reason": None,
+            "usage": {},
+            "request_id": None,
+            "outcome": "transport",
         }
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
+        started = perf_counter()
+        try:
+            if urlsplit(self.base_url).hostname == "openrouter.ai" and not self.api_key:
+                diagnostics["outcome"] = "configuration"
+                raise LlmConfigurationError("Для OpenRouter требуется OPENAI_API_KEY")
 
-        payload: dict[str, Any] = {
-            "model": self.model,
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
-            "temperature": temperature,
-            "response_format": {"type": "json_object"},
-            # Reasoning-capable OpenAI-compatible models may spend part of this
-            # budget before emitting the small JSON verdict.
-            "max_tokens": self.max_tokens,
-        }
-        if self.reasoning_effort:
-            payload["reasoning_effort"] = self.reasoning_effort
+            headers = {
+                "Content-Type": "application/json",
+            }
+            if self.api_key:
+                headers["Authorization"] = f"Bearer {self.api_key}"
 
-        resp = requests.post(
-            f"{self.base_url}/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=self.timeout,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-        if not content.strip():
-            raise ValueError("Empty content from LLM")
-        return self._extract_json(content)
+            payload: dict[str, Any] = {
+                "model": self.model,
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+                "temperature": temperature,
+                "response_format": {"type": "json_object"},
+                # Reasoning-capable OpenAI-compatible models may spend part of this
+                # budget before emitting the small JSON verdict.
+                "max_tokens": self.max_tokens,
+            }
+            if self.reasoning_effort:
+                payload["reasoning_effort"] = self.reasoning_effort
+
+            resp = requests.post(
+                f"{self.base_url}/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=self.timeout,
+            )
+            status = getattr(resp, "status_code", None)
+            if type(status) is int and 100 <= status <= 599:
+                diagnostics["http_status"] = status
+            response_headers = getattr(resp, "headers", None)
+            if isinstance(response_headers, Mapping):
+                request_id = response_headers.get("x-request-id")
+                if isinstance(request_id, str) and re.fullmatch(r"[A-Za-z0-9._-]{1,128}", request_id):
+                    diagnostics["request_id"] = request_id
+            diagnostics["outcome"] = "http"
+            resp.raise_for_status()
+            diagnostics["outcome"] = "invalid_json"
+            data = resp.json()
+            self._capture_response_diagnostics(data)
+            content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+            if isinstance(content, str):
+                self.last_response_content = content
+            if not content.strip():
+                diagnostics["outcome"] = "empty"
+                raise ValueError("Empty content from LLM")
+            result = self._extract_json(content)
+            diagnostics["outcome"] = "success"
+            return result
+        finally:
+            diagnostics["latency_ms"] = max(0.0, round((perf_counter() - started) * 1000, 3))
 
     @staticmethod
     def _extract_json(text: str) -> dict[str, Any]:
@@ -112,7 +185,7 @@ class OpenAICompatibleClient:
 class PromptBuilder:
     """Build prompts from phase contracts + task context."""
 
-    PROMPT_VERSION = "supervisor-evaluator-v15"
+    PROMPT_VERSION = "supervisor-evaluator-v16"
 
     SYSTEM_PROMPT = (
         "You are a strict workflow supervisor. "
@@ -179,6 +252,12 @@ class PromptBuilder:
         "This exception applies only to the current report's own submission protocol. Still require "
         "the phase's actual business commands/results, required external readbacks, FULL content "
         "and matching saved owner confirmation; never infer PASS merely because a report exists.\n"
+        "20. For diagnosis, provide item_explanations: one brief conclusion per required item, with its "
+        "exact id, a reason tied only to that criterion, and quote: an exact short excerpt from the "
+        "WORKER REPORT, or null when no supporting excerpt exists. Explain what specific evidence "
+        "is missing, not a new requirement. These are concise review conclusions, not internal "
+        "reasoning or a step-by-step thought process. Explanations do not replace coverage, evidence "
+        "or owner confirmation. Never invent quotes or claim external verification not performed.\n"
         "The Supervisor never chooses the next phase.\n\n"
         "Output STRICT JSON with these keys:\n"
         "{\n"
@@ -187,7 +266,9 @@ class PromptBuilder:
         '  "missing": ["required item ID"],\n'
         '  "blockers": ["specific blocker description"],\n'
         '  "message": "Human-readable summary in Russian",\n'
-        '  "confidence": 0.0-1.0\n'
+        '  "confidence": 0.0-1.0,\n'
+        '  "item_explanations": [{"id": "required item ID", "reason": "brief conclusion", '
+        '"quote": null}]\n'
         "}\n"
     )
 
@@ -274,6 +355,8 @@ class _LlmResponse(BaseModel):
     blockers: list[str]
     message: str = Field(min_length=1)
     confidence: float = Field(ge=0.0, le=1.0, allow_inf_nan=False)
+    # Historical replies remain valid. Missing diagnostics never manufacture a verdict.
+    item_explanations: Any = None
 
     @field_validator("covered", "missing", "blockers")
     @classmethod
