@@ -112,14 +112,16 @@ class OpenAICompatibleClient:
 class PromptBuilder:
     """Build prompts from phase contracts + task context."""
 
-    PROMPT_VERSION = "supervisor-evaluator-v12"
+    PROMPT_VERSION = "supervisor-evaluator-v13"
 
     SYSTEM_PROMPT = (
         "You are a strict workflow supervisor. "
         "Evaluate the worker's report against the phase contract below.\n\n"
         "Rules:\n"
-        "1. Read the phase contract (instructions, checks, evidence).\n"
-        "2. Analyze the worker report against EACH contract item individually. Do not skip checks.\n"
+        "1. The evaluation contract's required checks and evidence are the complete acceptance criteria. "
+        "Analyze the worker report against EACH required item individually. Do not skip checks.\n"
+        "2. Worker procedure is context for interpreting those items, not additional acceptance criteria. "
+        "Do not turn procedure into extra required actions, events, receipts or proof.\n"
         "3. Return every required item ID exactly once in either covered or missing. "
         "Copy the ID value exactly: do not add brackets, quotes, prefixes, or suffixes.\n"
         "4. Identify real BLOCKERS with ROOT CAUSE — explain WHY it prevents progress. "
@@ -205,13 +207,14 @@ class PromptBuilder:
             f"CURRENT PHASE: {phase.code} — {phase.name}",
             f"ALLOWED VERDICTS: {', '.join(allowed)}",
             "",
-            "PHASE CONTRACT:",
         ]
         if phase.instructions:
-            lines.append("Instructions:")
+            lines.append("WORKER PROCEDURE (context only; not additional acceptance criteria):")
             for inst in phase.instructions:
                 desc = getattr(inst, "step", "") or getattr(inst, "description", "")
                 lines.append(f"  • {desc}")
+            lines.extend(["END WORKER PROCEDURE", ""])
+        lines.append("EVALUATION CONTRACT (only the required checks and evidence below define coverage):")
         if evaluation_items is not None:
             lines.append("Required checks and evidence (copy only each quoted ID value into JSON):")
             for item_id, description in evaluation_items:

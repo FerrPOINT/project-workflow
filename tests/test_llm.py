@@ -221,6 +221,28 @@ class TestPromptBuilder:
         assert "REQUIRED ITEM COUNT: 1" in prompt
         assert "len(covered) + len(missing) MUST equal 1" in prompt
 
+    @pytest.mark.parametrize("evaluation_items", [None, [], [("review:check:2", "Changed required item")]])
+    def test_procedure_is_context_and_explicit_evaluation_scope_is_preserved(self, evaluation_items):
+        procedure = "Prepare the document, submit this report, inspect its verdict and continue."
+        phase = FakePhase(
+            instructions=[FakeInstruction(procedure)],
+            checks=[FakeCheck("Original check")],
+            evidence=[FakeEvidence("Original evidence")],
+        )
+        prompt = PromptBuilder.build_user_prompt("T-1", phase, "actual report", evaluation_items=evaluation_items)
+        context, contract = prompt.split("END WORKER PROCEDURE\n\n", 1)
+        assert "WORKER PROCEDURE (context only; not additional acceptance criteria):" in context
+        assert procedure in context and procedure not in contract
+        assert contract.startswith("EVALUATION CONTRACT (only the required checks and evidence below define coverage):")
+        if evaluation_items is None:
+            assert "Original check" in contract and "Original evidence" in contract
+        else:
+            assert "Original check" not in contract and "Original evidence" not in contract
+            assert prompt.count('  ID: "') == len(evaluation_items)
+            assert f"REQUIRED ITEM COUNT: {len(evaluation_items)}" in contract
+            for item_id, description in evaluation_items:
+                assert f'ID: "{item_id}" — {description}' in contract
+
     def test_system_prompt_is_not_empty(self):
         assert "strict workflow supervisor" in PromptBuilder.SYSTEM_PROMPT
         assert "verdict" in PromptBuilder.SYSTEM_PROMPT
@@ -355,6 +377,8 @@ class TestSupervisorEngineEvaluateLLM:
         "Presentation contains only a summary; the required full saved document is absent.",
         "The full saved document was presented, but no saved owner confirmation is available.",
         "Presented document is revision 2/hash b; saved owner confirmation is for revision 1/hash a.",
+        "Saved document hash differs from the reported full content hash.",
+        "The saved confirmation belongs to a different owner, not the authorized human owner.",
     ])
     def test_negative_evidence_verdict_is_not_promoted_to_pass(self, engine, supervisor_llm, report):
         supervisor_llm("PARTIAL")
@@ -589,11 +613,11 @@ class TestOpenAICompatibleClientOverrides:
         assert client.timeout == 300
 
 
-class TestEvaluatorV12PromptContract:
+class TestEvaluatorV13PromptContract:
     """The live provider receives explicit contradiction and chronology rules."""
 
     def test_prompt_version_invalidates_the_old_evidence_policy(self):
-        assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v12"
+        assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v13"
 
     def test_report_106_submission_circularity_reaches_provider_with_explicit_protocol_boundary(self):
         """Reproduce the saved PARTIAL reason, not a real model's semantic acceptance."""
@@ -614,10 +638,13 @@ class TestEvaluatorV12PromptContract:
         )
         prompt = PromptBuilder.build_user_prompt("SYNTHETIC-PM", phase, report, evaluation_items=items)
         assert len(items) == 7 and prompt.count('  ID: "') == len(items)
-        assert all(item.step in prompt for item in phase.instructions)
-        assert "send ONE self-contained final report using project-workflow --json step" in prompt
-        assert "Inspect the result" in prompt
-        assert "without its own future terminal receipt, verdict or Backlog transition" in prompt
+        procedure, contract = prompt.split("END WORKER PROCEDURE\n\n", 1)
+        assert all(item.step in procedure and item.step not in contract for item in phase.instructions)
+        assert "submit ONE self-contained report" in procedure
+        assert "Use project-workflow --json step" in procedure
+        assert "This report cannot contain its own future verdict or terminal receipt" in procedure
+        assert "ONLY AFTER Workflow returns complete=true" in procedure
+        assert all(text in contract for _, text in items)
         assert f'WORKER REPORT:\n"""{report}"""' in prompt
         missing = [ids[0], ids[4]]
         raw = {
@@ -643,6 +670,9 @@ class TestEvaluatorV12PromptContract:
     def test_protocol_boundary_preserves_required_business_work_and_evidence(self):
         system = PromptBuilder.SYSTEM_PROMPT
         for rule in (
+            "required checks and evidence are the complete acceptance criteria",
+            "Worker procedure is context for interpreting those items, not additional acceptance criteria",
+            "Do not turn procedure into extra required actions, events, receipts or proof",
             "The report currently being evaluated has already been submitted to this supervisor",
             "readback are submission protocol, not work or evidence that can precede this verdict",
             "Evaluate the stated checks and evidence from present facts",
