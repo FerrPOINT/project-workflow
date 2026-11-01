@@ -1,22 +1,5 @@
 # Changelog
 
-## Explicit-Checklist Framing Candidate — 2026-11-01
-
-- Причина подтверждена на SDLC-24: процедура отправки отчёта становится
-  несуществующим условием его приёмки, несмотря на действующее правило v12.
-- Минимальный input delta: при явном evaluation_items не передавать judge
-  phase.instructions. Worker получает прежние инструкции; fallback без явного
-  checklist, system prompt, parser, модель и параметры сохранены.
-- Новая policy version17; frozen v12 receipts принимаются без переоценки и
-  переписывания. Owner/hash/access/fencing проверки не ослабляются.
-- Доказательство узкого эффекта: captured164/167, три interleaved пары на случай,
-  control PARTIAL6/6, variant PASS6/6. Широкий masked-fixture прогон не является
-  quality gate: placeholder вместо точного hash меняет требуемое evidence.
-- Проверки: 246 целевых и 93 API/history теста PASS (наборы пересекаются),
-  Ruff/mypy166 PASS; исправленные private-
-  original controls проверяются отдельно. Кандидат не установлен и PM live
-  не объявлен завершённым. PAT redaction фиксируется тем же следующим пакетом.
-
 ## Diagnostics-Only Baseline — 2026-11-01
 
 - Причина: совмещённый кандидат изменял оценку до сбора исходной диагностики;

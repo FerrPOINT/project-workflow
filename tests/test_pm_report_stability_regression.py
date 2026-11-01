@@ -2,7 +2,7 @@
 
 History-derived replay expectations are in REPLAY_CASES. Reports are wholly
 synthetic; the history numbers identify regressions, not saved private inputs.
-Use the historical source artifact, not the live catalog or retained CLI preset.
+Use the published pm-default-workflow contract, not the retained CLI preset.
 WORKFLOW_TASK_KEY is the technical Workflow cursor; BUSINESS_TASK_ID identifies
 the Tracker document and owner receipt for that same assignment. They are not
 interchangeable task namespaces when setting the replay's outer TASK context.
@@ -243,7 +243,8 @@ def test_actual_evaluator_receives_full_report_and_exact_pm_obligations(pm_phase
     actual_items = [line.strip() for line in delivered.splitlines() if line.strip().startswith('ID: "')]
     assert actual_items == [f'ID: "{key}" \u2014 {value}' for key, value in items]
     assert "WORKER PROCEDURE" not in delivered
-    assert all(instruction.step not in delivered for instruction in phase.instructions)
+    # Baseline v12 includes worker instructions; diagnostics must not remove them.
+    assert all(instruction.step in delivered for instruction in phase.instructions)
     # Full packet loss must remain visible to the real evaluator (regression 153).
     if case["id"] == "153":
         assert json.dumps(DOCUMENT, ensure_ascii=False, sort_keys=True) not in delivered
