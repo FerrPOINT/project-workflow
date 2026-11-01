@@ -1,0 +1,60 @@
+{
+  "task_id": 901,
+  "worker_report": "Synthetic saved parser proof only. FULL document: goal=register library requests; scope=manual entry by two librarians; exclusions=integrations; scenarios=create and update; constraints=equal access; assumptions=none; acceptance=both see persisted updates. Revision=3, hash=synthetic-document-digest. Presented after preparation PASS; authorized owner receipt matches this unchanged document.",
+  "covered_item_ids": ["PM-DRAFT-03:check:1", "PM-DRAFT-03:evidence:1"],
+  "replay_fingerprint": "0b2d155a990c4b62154cc91fdcdc8f681e89a02832d6d304d3b918d0b1275d85",
+  "evaluation_snapshot": {
+    "prompt_version": "supervisor-evaluator-v12",
+    "contract_fingerprint": "94d0ba29cbd53898d23d05ae9bbef27c60fa23ca2b48907b74d92669e21ef48e",
+    "evaluated_contract_fingerprint": "94d0ba29cbd53898d23d05ae9bbef27c60fa23ca2b48907b74d92669e21ef48e",
+    "covered_item_ids": ["PM-DRAFT-03:check:1", "PM-DRAFT-03:evidence:1"],
+    "contract_snapshot": {
+      "phase_code": "PM-DRAFT-03", "phase_name": "Synthetic owner review",
+      "workflow_revision": "synthetic-revision", "actor": "hermes",
+      "description": "Synthetic historical contract; no live requirements or identities.",
+      "instructions": ["Present the saved document and read the matching owner confirmation."],
+      "required_checks": ["Saved document was presented and has matching human owner consent."],
+      "required_evidence": ["FULL document, presentation account and matching saved confirmation."],
+      "skills": [], "execution_type": "sync", "delegate_agent": null, "hermes_profile": null,
+      "group_phases": null, "group_details": [],
+      "evaluation_items": [
+        {"id": "PM-DRAFT-03:check:1", "text": "Saved document was presented and has matching human owner consent."},
+        {"id": "PM-DRAFT-03:evidence:1", "text": "FULL document, presentation account and matching saved confirmation."}
+      ]
+    },
+    "contract_fingerprint_state": {
+      "prompt_version": "supervisor-evaluator-v12",
+      "contract": {
+        "phase_code": "PM-DRAFT-03", "phase_name": "Synthetic owner review",
+        "workflow_revision": "synthetic-revision", "actor": "hermes",
+        "description": "Synthetic historical contract; no live requirements or identities.",
+        "instructions": ["Present the saved document and read the matching owner confirmation."],
+        "required_checks": ["Saved document was presented and has matching human owner consent."],
+        "required_evidence": ["FULL document, presentation account and matching saved confirmation."],
+        "skills": [], "execution_type": "sync", "delegate_agent": null, "hermes_profile": null,
+        "group_phases": null, "group_details": []
+      },
+      "evaluation_items": [
+        {"id": "PM-DRAFT-03:check:1", "text": "Saved document was presented and has matching human owner consent."},
+        {"id": "PM-DRAFT-03:evidence:1", "text": "FULL document, presentation account and matching saved confirmation."}
+      ],
+      "previously_covered_ids": [], "delegation_allowed": false, "group": ["PM-DRAFT-03"],
+      "transition_routes": {"pass": [null, null, null], "delegate": [null, null, null]},
+      "phase_graph": [{
+        "id": 903, "code": "PM-DRAFT-03", "name": "Synthetic owner review",
+        "description": "Synthetic historical contract; no live requirements or identities.",
+        "execution_type": "sync", "delegate": null,
+        "instructions": [{"id": 1, "step_num": 1,
+          "step": "Present the saved document and read the matching owner confirmation.",
+          "execution_type": "sync", "skills": []}],
+        "checks": [{"id": 1, "description": "Saved document was presented and has matching human owner consent."}],
+        "evidence": [{"id": 1, "item": "FULL document, presentation account and matching saved confirmation."}]
+      }]
+    },
+    "raw_evaluator": {
+      "verdict": "PASS", "covered": ["PM-DRAFT-03:check:1", "PM-DRAFT-03:evidence:1"],
+      "missing": [], "blockers": [], "message": "Synthetic saved parser input; not model-quality evidence.",
+      "confidence": 1.0
+    }
+  }
+}
