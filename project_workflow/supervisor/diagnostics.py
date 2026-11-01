@@ -18,7 +18,8 @@ _BUDGET_BYTES = 750_000
 _WIRE_FIELDS = ("verdict", "covered", "missing", "blockers", "message", "confidence", "item_explanations")
 _CREDENTIAL = re.compile(
     r"(?i)(\b(?:api[-_]?key|access[-_]?token|refresh[-_]?token|password|authorization)"
-    r"[\"']?\s*[:=]\s*[\"']?)([^\s\"',;}]+)"
+    r"[\"']?\s*[:=]\s*)"
+    r'''("(?:\\.|[^"\\])*(?:"|$)|'(?:\\.|[^'\\])*(?:'|$)|(?:(?:Basic|Bearer)\s+)?[^\s"',;}]+)'''
 )
 
 
@@ -30,7 +31,12 @@ def _redact(text: str, secrets: tuple[str, ...] = ()) -> str:
     text = re.sub(r"\bsk-[A-Za-z0-9_-]{8,}", "[REDACTED]", text)
     text = re.sub(r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+", "[REDACTED]", text)
     text = re.sub(r"(https?://)[^/@\s]+:[^/@\s]+@", r"\1[REDACTED]@", text)
-    return _CREDENTIAL.sub(r"\1[REDACTED]", text)
+    def credential(match: re.Match[str]) -> str:
+        value = match.group(2)
+        quote = value[0] if value[0] in "\"'" else ""
+        return match.group(1) + quote + "[REDACTED]" + quote
+
+    return _CREDENTIAL.sub(credential, text)
 
 
 def text_snapshot(text: str, secrets: tuple[str, ...] = ()) -> dict[str, Any]:
