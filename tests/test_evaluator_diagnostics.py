@@ -89,6 +89,38 @@ def test_secret_redaction_and_unknown_response_fields():
     assert len(diagnostic["response_content"]["sha256"]) == 64
 
 
+@pytest.mark.parametrize(("text", "secret"), [
+    ('{"password": "correct horse battery staple"}', "horse battery staple"),
+    ("api_key='first second third'", "second third"),
+    ('password="first \\"middle\\" final"', "final"),
+    ('password="unterminated secret value', "secret value"),
+    ("access_token='unterminated secret value", "secret value"),
+    ("Authorization: Basic dXNlcjpwYXNz", "dXNlcjpwYXNz"),
+    ('{"Authorization": "Basic dXNlcjpwYXNz"}', "dXNlcjpwYXNz"),
+    ("Authorization: Bearer ordinary-token", "ordinary-token"),
+])
+def test_complete_credentials_are_redacted_in_saved_and_projected_diagnostics(text, secret):
+    raw = {"verdict": "PARTIAL", "covered": [], "missing": ["1"], "blockers": [],
+           "message": text, "confidence": 0.5}
+    captured = evaluation_diagnostic(system=text, user=text, report=text, prompt_version="v16",
+        items=[("1", text)], attempts=[capture_attempt(SimpleNamespace(), number=1, prompt=text,
+            raw=raw, error=None)], client=None, technical_error=False, decision=raw)
+    projected = history_diagnostic(text, {"diagnostics": captured, "raw_evaluator": raw})
+    for result in (captured, projected):
+        assert secret not in json.dumps(result)
+        assert "[REDACTED]" in json.dumps(result)
+    assert projected["decision"]["verdict"] == "PARTIAL"
+
+
+def test_redaction_preserves_neighboring_evidence_and_original_text_identity():
+    text = '{"password": "two secret words", "evidence": "document saved"}'
+    snapshot = text_snapshot(text)
+    assert snapshot["text"] == '{"password": "[REDACTED]", "evidence": "document saved"}'
+    assert snapshot["characters"] == len(text)
+    assert snapshot["sha256"] != text_snapshot(snapshot["text"])["sha256"]
+    assert snapshot["redacted"] is True
+
+
 def test_validation_errors_do_not_echo_input_or_exception_messages():
     class Schema(BaseModel):
         confidence: float
