@@ -63,7 +63,7 @@
             "The report concerns that task and states any actual access failure or unavailable required source instead of inventing facts."
           ],
           "evidence": [
-            "A concise account of the actual task, source request, relevant discussion and existing owner decisions, including any real missing input."
+            "A concise description of the read request and any existing discussion or owner decisions relevant to it."
           ],
           "parallel_with_phase_code": null,
           "rollback_target_phase_code": null
@@ -84,7 +84,7 @@
               ]
             },
             {
-              "description": "Prepare one specification: goal, scope and exclusions, scenarios, constraints, assumptions and measurable acceptance criteria. Define material domain rules such as statuses and required fields. Preserve owner choices and clearly distinguish proposals and assumptions from owner decisions.",
+              "description": "Prepare one specification: goal, scope and exclusions, scenarios, constraints, any material assumptions and acceptance criteria that can be checked objectively as pass or fail. Numeric thresholds are needed only when the business requirement calls for them. Define material domain rules such as statuses and required fields. Preserve owner choices and clearly distinguish proposals and assumptions from owner decisions.",
               "execution_type": "sync",
               "skills": [
                 "project-workflow-executor",
@@ -116,7 +116,7 @@
               ]
             },
             {
-              "description": "Report completed preparation using the existing step submission procedure. Include a readable summary of the source request and actual owner decisions, one FULL copy of saved requirements, and the actual gaps, answers or feedback and their resolution. Source messages need not be copied verbatim or independently authenticated; the FULL document must be complete, not a summary or section inventory. For complete input, explain why no clarification was needed. Each correction retains this full business packet. Do not substitute earlier-report references, or wait for this report's own future PASS, presentation or consent to describe completed preparation.",
+              "description": "Report completed preparation using the existing step submission procedure. Include a readable summary of the source request and the material choices provided in it or the discussion, one FULL copy of saved requirements, and how any material clarification or feedback was resolved. Source messages need not be copied verbatim or independently authenticated; the FULL document must be complete, not a summary or section inventory. Each correction retains this full business packet. Do not substitute earlier-report references, or wait for this report's own future PASS, presentation or consent to describe completed preparation.",
               "execution_type": "sync",
               "skills": [
                 "project-workflow-executor",
@@ -126,13 +126,13 @@
           ],
           "checks": [
             "The requirements agree with the user request and decisions described in this report.",
-            "Scope, material domain rules and measurable acceptance criteria are specified unambiguously, without incompatible current rules.",
+            "Scope, material domain rules and objectively testable acceptance criteria are specified unambiguously, without incompatible current rules.",
             "The supplied owner input resolves the material decisions needed to prepare requirements; pending choices and assumptions are identified rather than invented as owner answers.",
             "The current report includes the entire saved requirements document, not a summary, inventory of sections or reference to an earlier report."
           ],
           "evidence": [
             "A readable summary of the user request and agreed decisions, together with one FULL saved requirements document in this report.",
-            "For incomplete input: the actual gap, owner answer or feedback, and its resolution. For complete input: why the supplied information suffices without clarification. Neither path requires invented questions."
+            "The report includes the material choices provided in the request or discussion and how any material clarification or feedback was resolved."
           ],
           "parallel_with_phase_code": null,
           "rollback_target_phase_code": null
@@ -186,14 +186,14 @@
             }
           ],
           "checks": [
-            "The owner was actually shown the FULL current requirements document after preparation was accepted, not merely a summary, link or future intention.",
+            "The report describes a completed presentation of the FULL current specification after preparation, not merely a future intention or a summary.",
             "The report accurately describes the owner's decisions and completed approval of the business requirements; PM proposals or ordinary discussion are not substituted for that approval.",
             "Actual feedback is resolved; changed content has fresh owner approval, while unchanged confirmed content is preserved.",
             "There are no unresolved business questions, and no missing answer or pending owner decision is claimed complete.",
-            "The FULL document defines goal, scope and exclusions, scenarios, constraints, assumptions and measurable acceptance criteria."
+            "The FULL document specifies goal, scope and exclusions, scenarios, constraints, any material assumptions and acceptance criteria that can be checked objectively as pass or fail."
           ],
           "evidence": [
-            "One FULL current saved requirements document and a concrete account of its completed full presentation to the owner.",
+            "A complete copy of the saved requirements and a description of presenting their contents to the owner.",
             "Actual owner decisions and approval, with feedback and its resolution where applicable."
           ],
           "parallel_with_phase_code": null,

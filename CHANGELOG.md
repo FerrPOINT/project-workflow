@@ -15,20 +15,29 @@
   Existing phases, counts, CLI commands, six response fields and history remain.
 - Code verification:3445 passed,15 skips,132 PG deselected,75 subtests;
   coverage94.118578% on frozen tree18b12d5. Subsequent changes affect only the
-  catalog artifact/tests;17 targeted publication/actual-CLI checks pass. Runtime
+  catalog artifact/tests;20 targeted publication/actual-CLI checks pass. The final
+  combined prompt/catalog regression run has41 PASS; targeted Ruff also passes. Runtime
   Python is byte-identical. PostgreSQL132 pass,0 skips on final staged treedccd136;
   dedicated clock DB supplied, v2-owned container/network/volume cleaned.
   Ruff and mypy166 pass. Skips:11 missing Playwright,1 NTFS executable-mode
   limitation,3 private-package opt-ins; none is counted as verified. No image
   build, installation or live acceptance.
-- Model evidence:24 new first-attempt calls across three distinct trials,
-  21 valid/3 strict-response errors,0 valid false PASS/1 valid false PARTIAL.
-  Do not pool these different inputs/settings as a quality score. The coherent
-  final catalog is NOT model-qualified; total537 subsequent calls are retained.
-- Next: use the unchanged native strict-response helper, not a single raw call
-  as the sole product gate. Keep its existing maximum3 format attempts, record
-  every HTTP call, never retry a valid PARTIAL. Frozen8 cases x3 evaluations,
-  total cap48 HTTP calls including recovery. Install/live/merge remain open.
+- Model evidence: the existing native format-recovery path was checked without
+  adding retries. Current nine cases,27 evaluations: none produced13 exact/6
+  positive non-PASS in31 HTTP; medium produced18 exact/4 positive non-PASS in28
+  HTTP. Both had0 negative PASS. Medium had1 malformed response, recovered once,
+  no terminal errors or unknown outcomes. Neither meets the frozen acceptance.
+  The medium experiment changed only the existing request parameter, not the
+  installed configuration. A separate longer-system variant was rejected.
+- Independent review found that search matching is genuinely unspecified in
+  case170: its three medium refusals are not established model errors. Frozen
+  scores stay unchanged; the materiality boundary needs clarification before
+  another experiment. Do not tune toward an unexamined positive golden.
+- All654 subsequent HTTP calls are retained separately from the original48;
+  different inputs/settings are not pooled as a quality score. No further
+  wording/parameter sweep, build or installation is justified by these results.
+  Next: settle the concrete business-readiness criteria, not add model context.
+  Catalog publication, installation, two live scenarios and merge remain open.
 
 ## Advisor Responsibility Boundary: Business Report Only - 2026-11-02
 

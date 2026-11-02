@@ -4,6 +4,7 @@ import json
 import re
 from copy import deepcopy
 from pathlib import Path
+from unittest.mock import Mock
 from uuid import uuid4
 
 import pytest
@@ -13,11 +14,13 @@ from project_workflow.domain.catalog_publication import CatalogDraft
 from project_workflow.domain.runtime_assignment import payload_sha256
 from project_workflow.infrastructure.db.single_task_catalog import load_profile
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
+from project_workflow.infrastructure.llm import OpenAICompatibleClient
 from tests.test_catalog_publication import active, publication
 from tests.test_catalog_publication import verified_catalog_administrator as verified_catalog_administrator
 from tests.test_configured_cli import MACHINE, enroll, step
 from tests.test_configured_cli import configured as configured
 from tests.test_pm_default_publication_contract import _cli_read, _publish, _save, _workflow_id
+from tests.test_pm_verified_confirmation_context import tracker_confirmation
 
 pytestmark = pytest.mark.unit
 
@@ -135,6 +138,15 @@ def test_worker_uses_existing_reads_and_preserves_authorization(business):
         assert rule in text
 
 
+def test_context_evidence_accepts_existing_discussion_without_an_absence_attestation(business):
+    phase = business["modes"][0]["phases"][0]
+    assert phase["evidence"] == [
+        "A concise description of the read request and any existing discussion or owner decisions relevant to it.",
+    ]
+    assert "An empty discussion or absent first requirements document is normal" in _instructions(phase)
+    assert "have been read and understood" in phase["checks"][0]
+
+
 def test_preparation_keeps_full_packet_and_is_not_future_presentation_or_consent(business):
     phase = business["modes"][0]["phases"][1]
     instructions = _instructions(phase)
@@ -148,9 +160,15 @@ def test_preparation_keeps_full_packet_and_is_not_future_presentation_or_consent
                  "Reuse unchanged saved requirements", "after phase 2 PASS",
                  "Each correction retains this full business packet", "earlier-report references"):
         assert rule in instructions
-    assert "readable summary of the source request and actual owner decisions" in instructions
+    assert "readable summary of the source request and the material choices provided in it or the discussion" in (
+        instructions
+    )
     assert "Source messages need not be copied verbatim or independently authenticated" in instructions
     assert "the FULL document must be complete, not a summary or section inventory" in instructions
+    assert "how any material clarification or feedback was resolved" in instructions
+    assert "feedback with its resolution in the document" not in instructions
+    assert "explain why no clarification was needed" not in instructions
+    assert "no artificial questions or mandatory questionnaire" in instructions
     assert "this report's own future PASS, presentation or consent" in instructions
 
 
@@ -158,7 +176,7 @@ def test_preparation_items_separate_agreement_consistency_owner_input_and_full_d
     phase = business["modes"][0]["phases"][1]
     assert phase["checks"] == [
         "The requirements agree with the user request and decisions described in this report.",
-        "Scope, material domain rules and measurable acceptance criteria are specified unambiguously, "
+        "Scope, material domain rules and objectively testable acceptance criteria are specified unambiguously, "
         "without incompatible current rules.",
         "The supplied owner input resolves the material decisions needed to prepare requirements; "
         "pending choices and assumptions are identified rather than invented as owner answers.",
@@ -168,10 +186,23 @@ def test_preparation_items_separate_agreement_consistency_owner_input_and_full_d
     assert phase["evidence"] == [
         "A readable summary of the user request and agreed decisions, together with one FULL saved "
         "requirements document in this report.",
-        "For incomplete input: the actual gap, owner answer or feedback, and its resolution. "
-        "For complete input: why the supplied information suffices without clarification. "
-        "Neither path requires invented questions.",
+        "The report includes the material choices provided in the request or discussion and how any material "
+        "clarification or feedback was resolved.",
     ]
+
+
+def test_acceptance_is_objectively_testable_not_a_blanket_numeric_requirement(business):
+    preparation, final = business["modes"][0]["phases"][1:]
+    assert "measurable" not in json.dumps(business).lower()
+    assert "objectively testable acceptance criteria" in preparation["checks"][1]
+    assert "Numeric thresholds are needed only when the business requirement calls for them" in (
+        _instructions(preparation)
+    )
+    assert final["checks"][4] == (
+        "The FULL document specifies goal, scope and exclusions, scenarios, constraints, any material assumptions "
+        "and acceptance criteria that can be checked objectively as pass or fail."
+    )
+    assert "any material assumptions" in _instructions(preparation)
 
 
 def test_final_keeps_real_owner_confirmation_args_and_business_review(business):
@@ -190,11 +221,16 @@ def test_final_keeps_real_owner_confirmation_args_and_business_review(business):
         "Readiness does not require this report's future Workflow PASS, final comment or Backlog transition",
     ):
         assert rule in instructions
-    assert "FULL current requirements document" in phase["checks"][0]
+    assert phase["checks"][0] == (
+        "The report describes a completed presentation of the FULL current specification after preparation, "
+        "not merely a future intention or a summary."
+    )
     assert "PM proposals or ordinary discussion are not substituted" in phase["checks"][1]
     assert "changed content has fresh owner approval" in phase["checks"][2]
     assert "no missing answer or pending owner decision is claimed complete" in phase["checks"][3]
-    assert "assumptions and measurable acceptance criteria" in phase["checks"][4]
+    assert phase["evidence"][0] == (
+        "A complete copy of the saved requirements and a description of presenting their contents to the owner."
+    )
 
 
 def test_completion_remains_after_acceptance_and_requires_actual_backlog_ready_readback(business):
@@ -297,3 +333,34 @@ def test_business_publication_preserves_historical_catalog_execution_history_and
     assert current["phase_contract"]["required_checks"] == business["modes"][0]["phases"][0]["checks"]
     assert current["phase_contract"]["required_evidence"] == business["modes"][0]["phases"][0]["evidence"]
     assert _cli_read(configured, monkeypatch) == old_view
+
+
+def test_pending_owner_question_remains_partial_despite_valid_saved_consent(
+    business, configured, supervisor_llm, monkeypatch,
+):
+    """Controlled PARTIAL proves no promotion to completion, not model recognition of the gap."""
+    client, assignment = configured
+    _publish(client, active(client, _workflow_id(assignment)), business["modes"])
+    enrollment = enroll(configured)
+    supervisor_llm("PASS")
+    for version in (1, 2):
+        assert step(configured, report=f"Synthetic completed phase {version}",
+                    operation_key=f"prior-{version}", expected_version=version).status_code == 200
+    assert enrollment["version"] == 1
+    _, _, reader = tracker_confirmation(configured, monkeypatch)
+    final = business["modes"][0]["phases"][2]
+    supervisor_llm("PARTIAL", covered=[*final["checks"][:3], final["checks"][4], *final["evidence"]],
+                   missing=[final["checks"][3]])
+    provider = Mock(side_effect=OpenAICompatibleClient.chat)
+    monkeypatch.setattr(OpenAICompatibleClient, "chat", provider)
+    response = step(configured, report="Synthetic FULL packet; a new material owner choice remains pending.",
+                    operation_key="pending-owner-choice", expected_version=3,
+                    requirements_revision=7, requirements_sha256="a" * 64)
+    assert response.status_code == 200
+    result = response.json()["result"]
+    provider.assert_called_once()
+    assert reader.call_count == 2
+    assert result["verdict"] == "PARTIAL" and result["complete"] is False
+    assert result["missing"] == [final["checks"][3]]
+    assert result["next_phase_code"] is None and "terminal_receipt" not in result
+    assert _cli_read(configured, monkeypatch)["phase_code"] == "PM-DRAFT-03"
