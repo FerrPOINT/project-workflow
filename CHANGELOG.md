@@ -8,9 +8,9 @@
 - Actual selected system/version are recorded in diagnostics and fingerprints;
   frozen new-policy receipts replay without provider calls. Prior frozen versions
   retain validation. No public API, schema, dependency or Hermes change.
-- Prompt package:20 focused tests PASS. Combined targeted run:266 PASS initially;
-  three new fixture mistakes and five obsolete procedure-in-judge expectations
-  corrected, all eight rechecked PASS. Ruff PASS. Full release gates remain open.
+- Final targeted suite on product3d84a60:341 PASS, including prompt, configured
+  CLI/authority, frozen receipts, coverage and diagnostic regressions. Ruff and
+  mypy166 source files PASS. Full release gates remain open.
 - Separate coverage change: PM-DRAFT-02/03 use only current report coverage before
   and after provider calls, including fingerprint and technical-error fallback.
   Phase01/general history reader are unchanged.13 policy/coverage tests PASS,
@@ -18,8 +18,22 @@
 - Before any model calls, golden133 C4 is explicitly revised to missing, consistent
   with the receipt-mismatch control: both reports claim exact consent despite a
   contradictory hash. Historical goldens/results remain unchanged.
-- Fixed eight-case model comparison and live acceptance are next. Runtime93c14f8,
-  PM23 and catalog10 remain unchanged; no model calls yet. Full gates remain open.
+- Completed fixed comparison on source3d84a60:48/48 client requests,24 per arm,
+  all HTTP200/stop, no format errors or false PASS on the tested negatives.
+  Candidate exact12/24 versus baseline8/24, but170/171 remain false PARTIAL6/6;
+  candidate has22 item-label disagreements against predeclared v2. Not accepted.
+- Input audit: system5297->2000 characters; worker procedure removed, reports
+  unchanged. Context164 changes from PARTIAL3/3 to PASS3/3. Remaining phase2 refusals
+  demand extra readback/provenance despite item-defined sufficiency. No parser,
+  transport or truncation cause was found. Global commands/readbacks wording is
+  one next hypothesis, not an established internal model cause or accepted fix.
+- Harness limitations retained: historical133/153/163 use ordinal reconstruction;
+  derived absent-context also omits delegation relative to captured164. No response
+  used DELEGATE; missing harness allowlist validation had no observed effect.
+  Scores do not establish production quality. No relabelling after responses.
+- Do not install or merge this policy: mandatory model gate failed. Full release
+  gates, new image, live tasks and browser acceptance are deliberately not claimed.
+  Runtime93c14f8, PM23, credentials and catalog10 remain unchanged. No stand changes.
 
 ## Advisor Chain Diagnosis - 2026-11-02
 

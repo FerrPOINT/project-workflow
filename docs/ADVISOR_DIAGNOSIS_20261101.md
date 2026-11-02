@@ -2,13 +2,16 @@
 
 ## Кандидат PM v1 после диагностики, 2026-11-02
 
+**Модельная приёмка не пройдена; кандидат3d84a60 не устанавливать и не мержить.**
+Завершены48/48 заранее заданных клиентских запросов; новая live-приёмка не начата.
+
 Реализовано и проверено отдельно, **не установлено**: короткий judge prompt только
 для проверенной configured PM роли; worker procedure не передаётся, шесть полей
 ответа сохранены. Фактическая версия `supervisor-evaluator-pm-v1` записывается в
 diagnostics/fingerprints; generic v12 и старые frozen receipts сохраняются.
 PM-DRAFT-02/03 не наследуют covered, включая повторную проверку после HTTP и
 technical-error fallback. Phase01 и общий history reader не менялись.
-Целевые policy/coverage проверки:13 PASS; отдельные prompt tests:20 PASS.
+Итоговый целевой набор на продукте3d84a60:341 PASS; Ruff и mypy166 файлов PASS.
 Моки доказывают механику, не качество модели. Runtime93c14f8/PM23/catalog10 прежние.
 
 Перед новыми вызовами независимо зафиксирована разметка следующего сравнения:
@@ -35,7 +38,64 @@ Baseline/candidate сравниваются попарно, по три вызо
 реконструкция с ordinal IDs и пустой историей, не production replay.
 Защищённый runner: `Q/advisor_pm_policy_20261102.py`, выход
 `Q/advisor-pm-policy-v1-20261102/`. До первого вызова сохраняются все inputs/goldens;
-неизвестный исход не выполняется повторно. На момент этого коммита вызовов ещё нет.
+неизвестный исход не выполняется повторно. Разметка v2 и все inputs зафиксированы
+до первого вызова; после просмотра ответов не менялись.
+
+### Результат фиксированного сравнения
+
+| Случай | v12: verdict в трёх вызовах | PM v1: verdict в трёх вызовах | Exact items: v12 / PM |
+| --- | --- | --- | --- |
+| 164 | PARTIAL ×3 | PASS ×3 | 0/3 / 3/3 |
+| 170 | PARTIAL ×3 | PARTIAL ×3 | 0/3 / 0/3 |
+| 171 | PASS, PARTIAL, PARTIAL | PARTIAL ×3 | 1/3 / 0/3 |
+| 163 | PASS ×3 | PASS ×3 | 3/3 / 3/3 |
+| 133 | PARTIAL ×3 | PARTIAL ×3 | 0/3 / 0/3 |
+| 153 | PARTIAL ×3 | PARTIAL ×3 | 1/3 / 3/3 |
+| Нет контекста (с оговоркой ниже) | PARTIAL ×3 | PARTIAL ×3 | 3/3 / 3/3 |
+| Не совпадает receipt hash | PARTIAL ×3 | PARTIAL ×3 | 0/3 / 0/3 |
+
+Суммарно: v12 exact8/24, ложных PARTIAL8/12 положительных,24 расхождения items;
+PM v1 exact12/24, ложных PARTIAL6/12 положительных,22 расхождения items (из135).
+Оба варианта отвергли12/12 отрицательных отчётов; false PASS и format errors здесь0.
+Все48 ответов HTTP200/finish=stop. Это ограниченный combined-policy first-attempt
+bench, не production error rate, не проверка upstream retries и не live PM [11].
+
+### Дополнительный анализ после проверки
+
+| Наблюдение | Проверяемое основание | Вывод и граница |
+| --- | --- | --- |
+| Контекст164 проходит3/3 вместо0/3 | Из judge удалена процедура; полный report1313 символов сохранён | Устранено круговое требование на выбранном случае, не доказана общая надёжность |
+| 170 остаётся PARTIAL3/3 | Report5454 символа содержит FULL, source/ответы, ключ публикации, фактическую команду requirements read, revision/hash. Ответы требуют полный raw publication/readback, хотя E179 не требует дубликат CLI output | Семантическая оценка достаточности evidence; не потеря документа сборщиком. Внутренний механизм модели неизвестен |
+| 171 остаётся PARTIAL3/3 | Report6394 символа сохранён. Один ответ требует дополнительный brief/answer mapping; два — новое подтверждение FULL/readback. Документ и hashes согласованы | Отказ добавляет условия. Дословной короткой исходной фразы в171 самом нет, но есть подробное изложение решений владельца; нельзя объявлять это потерей в runner или требовать дословную цитату без контракта |
+| 133 и receipt control: verdict верный, covered/missing неверны | Модель замечает несовпадающий hash, но часть относящихся к нему критериев помечает covered | Ошибка отдельных критериев не скрывается правильным PARTIAL. Свободное объяснение не доказывает семантическую согласованность |
+| Прежний механизм coverage исправлен детерминированно | Настоящие SQLite ledgers в unit-тестах: phase02/03, новый report/revision/hash, semantic/transport/format failure, выбранные prompt/version/fingerprint | Это квалификация механики с synthetic authorities, не самостоятельная модельная приёмка |
+
+Фактический system сокращён **5297 -> 2000** символов; суммарные system+user:
+164 **9345 -> 4355**,170 **14409 -> 9044**,171 **15532 -> 9984**.
+FULL, существенные ответы и критерии не удалены. Объём уменьшился; на164 круговой
+отказ в candidate не воспроизвёлся. Вклад одного только объёма отдельно не измерен,
+а ложные отказы170/171 сохранились.
+
+Read-only review runner выявил две оговорки. Синтетический absent-context использует
+delegate=None, тогда как исходный captured164 разрешает DELEGATE: это не производный
+случай с единственным изменением report. В обоих сравниваемых arms настройка одинакова,
+но control нельзя выдавать за exact captured replay. Кроме того, runner проверял
+JSON/IDs, но не отдельный запрет DELEGATE для фазы без delegate. Ни один ответ не
+содержит DELEGATE, поэтому наблюдаемые170/171 этим не объясняются. Продуктовая проверка
+allowlist не изменена. Старые inputs/runner/results не исправляются задним числом.
+
+**Одна следующая гипотеза:** в коротком system заменить глобальное перечисление
+`actual commands/readbacks` единым правилом: формат и достаточность доказательств
+определяет конкретный checks/evidence. Обязательные FULL, identity/hash, результаты,
+receipt и реальные противоречия сохранить. Условие `wherever the stated items require
+them` уже ограничивает прежнюю фразу, поэтому её причинное влияние не доказано;
+не объявлять такую замену проверенным исправлением и не дописывать исключения под170/171.
+В текущем этапе эта гипотеза **не реализована и не испытана**: лимит48 исчерпан.
+
+Решение: сохранить опубликованную реализацию как непринятый Draft, установленный v12
+не менять. Полный release gate, образ, установка, два новых чата и browser acceptance
+не запускались после отказа обязательного модельного gate. Итоговый выпуск и мерж
+остаются незавершёнными, а не заменяются ростом exact score.
 
 ## Актуальный результат, 2026-11-02
 
@@ -267,3 +327,4 @@ chain-of-thought. Ни влияние порядка полей, ни «ранн
 8. `Q/advisor-chain-diagnosis-20261102/baseline.json`; read-only collector `advisor_chain_baseline_20261102.py`. Route response сохранён только whitelist-полями и SHA256, без credentials. Внутри установленного контейнера дополнительно прочитаны безопасные поля `get_settings()`; private operator transcript не публикуется.
 9. `Q/advisor-chain-diagnosis-20261102/offline-checks.json`; `advisor_chain_offline_checks_20261102.py`. Git blob LLM-source `faa0379bae3d002783b128bff9b9d80e05d9e0a9`; db_connections/model_calls/business_commands=0. Это диагностические проверки, не live CLI acceptance.
 10. `Q/pm-default-diagnostics-v12-20261101/sparse/summary-readback.json`: source `/messages/0`, ответы `/messages/30` и `/messages/40`, позднее замечание `/messages/54`, confirmation notice `/messages/62`, документы `/requirements/revisions/0` и `/requirements/revisions/1`. Исторические133/153/163: `Q/pm-default-simple-20261031/{full,sparse}/workflow-history.json`, соответственно `/records/2`, `/records/10`, `/records/0`; сравнивались оригинальные `worker_report` и `result.required_checks/required_evidence`, не только объяснение модели.
+11. `Q/advisor-pm-policy-v1-20261102/prepared-inputs.json`, SHA256 `39d422dc37780a489cdefce7d539dbe057d339405fba384f66d3c6dd20dd1ec2`; `checkpoint.json`, SHA256 `4780d70985d020f2e39a6267debe422c3edbd7a969f8b094454ecfdbc530fac6`. Source `3d84a60` и runner hash зафиксированы в manifest. Candidate170: slots3/19/35;171: slots5/21/37. Все48 slots complete, неизвестных повторных вызовов нет. `targeted-junit.xml`:341 PASS на том же продукте; полный gate не запускался. Полные inputs и sanitizer outputs остаются в защищённом evidence, без публикации credentials.
