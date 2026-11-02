@@ -114,11 +114,16 @@ def test_report_boundary_and_recovery_are_defined_once_for_all_phases(business):
         "Credentials stay in the preconfigured environment, never in reports",
         "--operation-key <stable-key> --expected-version <returned-version> --report -",
         "complete current-phase packet, not a reference to an earlier report",
-        "Never repeat an identical report",
+        "For a valid PARTIAL, use a new key only for changed facts; never resend its unchanged report",
         "retain the exact key/version/body",
         "project-workflow --json history --task <workflow-task-key> --operation-key <original-key>",
+        "After resolving a known technical BLOCKED with retryable=true",
+        "the same business report may be submitted with a fresh operation key and freshly read current version",
+        "Do not retry automatically",
     ):
         assert requirement in text
+    assert "Never repeat an identical report." not in text
+    assert text.index("After unknown acceptance") < text.index("After resolving a known technical BLOCKED")
     assert sum(_instructions(p).count("For every phase, report only business content") for p in phases) == 1
 
 
