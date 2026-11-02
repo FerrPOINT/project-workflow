@@ -83,11 +83,23 @@ def test_sql_wait_cannot_extend_original_human_permit(owned):
         try:
             with get_session() as session:
                 connection = session.connection()  # installs the original permit for the SQL guard
+                assert connection.scalar(text(
+                    "SELECT nullif(current_setting('pdlc.workflow_human', true), '')::jsonb ->> 'deadline'"
+                )), "The SQL guard must receive the original admission"
+                assert connection.scalar(text(
+                    "SELECT count(*) FROM pg_trigger WHERE tgrelid='tasks'::regclass "
+                    "AND tgname IN ('workflow_human_write', 'workflow_human_commit') AND tgenabled='O'"
+                )) == 2, "Both database admission guards must be active"
                 entered.set()
                 with pytest.raises(DBAPIError) as rejected:
-                    connection.execute(text(
+                    changed = connection.execute(text(
                         "UPDATE tasks SET title='late row wait' WHERE id=:id /* original-proof-row-wait */"
                     ), {"id": task_id})
+                    assert changed.rowcount == 1
+                    assert connection.scalar(text(
+                        "SELECT extract(epoch FROM clock_timestamp()) >= "
+                        "(nullif(current_setting('pdlc.workflow_human', true), '')::jsonb ->> 'deadline')::double precision"
+                    )), "The original database permit must expire before commit"
                     connection.commit()
                 assert rejected.value.orig.sqlstate == "42501"
                 session.rollback()
