@@ -22,8 +22,9 @@
 - Next: inspect exact reference lengths, occurrences and line escaping without
   model calls. Do not repeat another strictness rewording or install a failed
   policy; establish one discriminating input/comparison experiment first.
-- Read-only reference audit completed: normal newlines in all reports, no literal
-  escaped-newline loss.133 has64/50-character values sharing32 initial characters;
+- Read-only reference audit completed: seven reports have normal newlines; the
+  absent-context control is intentionally single-line. None has literal escaped
+  newlines.133 has64/50-character values sharing32 initial characters;
   they are different and not prefix abbreviations. The mismatching receipt control
   differs at its first character. These facts do not prove a model-internal cause.
   Next question: can a lossless explicit representation of opaque-value equality
