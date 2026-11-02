@@ -1,5 +1,38 @@
 # Changelog
 
+## Goal Iterations: Reject Unsafe Framings - 2026-11-02
+
+- Cause: preserved inputs contain the FULL documents and identity/readback facts,
+  but advisor still demands extra provenance; other replies overlook contradictory
+  hashes or cover a compound criterion after checking only part of it.
+- Completed141 bounded offline calls after the original48 comparison. Trials:
+  sufficiency24, preparation contract9, role wording24, example order24,
+  readback representation12, criterion-only24, clause/identity validation24.
+  All responses and prior goldens are
+  retained; no format errors. None meets the full positive/negative item-wise gate.
+- Criterion-only936-character system accepts all12 positive replies, but falsely
+  accepts contradictory133 twice; exact15/24,21 wrong item labels. It is rejected,
+  not installed. A full readback JSON also fails to remove extra proof demands;
+  do not add a reporting burden or another provenance layer to PM.
+- Final bounded candidate: same eight reports and goldens,24 calls, a general
+  clause/content/exact-identity rule and explicit existing verdict boundaries.
+  Exact17/24, false PASS3, false PARTIAL1,21 wrong item labels. It is rejected too:
+  requesting character-for-character comparison does not reliably perform it.
+  This whole-system trial does not isolate causality of one sentence.
+- Next: inspect exact reference lengths, occurrences and line escaping without
+  model calls. Do not repeat another strictness rewording or install a failed
+  policy; establish one discriminating input/comparison experiment first.
+- Read-only reference audit completed: normal newlines in all reports, no literal
+  escaped-newline loss.133 has64/50-character values sharing32 initial characters;
+  they are different and not prefix abbreviations. The mismatching receipt control
+  differs at its first character. These facts do not prove a model-internal cause.
+  Next question: can a lossless explicit representation of opaque-value equality
+  remove this comparison error without changing facts or criteria? No new model
+  calls or product normalization are yet accepted for that hypothesis.
+- Product3d84a60, runtime93c14f8, catalog10, PM23, Hermes/model/credentials remain
+  unchanged. No new image, installation or live PM acceptance is claimed.
+  Details and immutable input hashes: docs/ADVISOR_DIAGNOSIS_20261101.md.
+
 ## Goal Iteration: Evidence Sufficiency - 2026-11-02
 
 - Hypothesis: global commands/readbacks wording may override the individual
