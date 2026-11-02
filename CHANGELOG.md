@@ -1,5 +1,19 @@
 # Changelog
 
+## Configured PM Policy Candidate - 2026-11-02
+
+- Implemented, not installed: verified configured PM enrollment selects the short
+  `supervisor-evaluator-pm-v1` prompt. Worker procedure stays in the CLI, not judge
+  input. Other roles and generic calls retain v12 and the existing six-field wire.
+- Actual selected system/version are recorded in diagnostics and fingerprints;
+  frozen new-policy receipts replay without provider calls. Prior frozen versions
+  retain validation. No public API, schema, dependency or Hermes change.
+- Prompt package:20 focused tests PASS. Combined targeted run:266 PASS initially;
+  three new fixture mistakes and five obsolete procedure-in-judge expectations
+  corrected, all eight rechecked PASS. Ruff PASS. Full release gates remain open.
+- Coverage isolation, fixed eight-case model comparison and live acceptance are
+  next. Runtime93c14f8, PM23 and catalog10 remain unchanged; no model calls yet.
+
 ## Advisor Chain Diagnosis - 2026-11-02
 
 - Problem: circular refusals and false covered items were conflated with runtime,

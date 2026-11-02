@@ -35,10 +35,11 @@ def _contract_fingerprint_state(
     evaluation_items: list[tuple[str, str]],
     previously_covered_ids: set[str],
     transition_routes: dict[str, tuple[str | None, str | None, str | None]],
+    prompt_version: str = PromptBuilder.PROMPT_VERSION,
 ) -> dict[str, Any]:
     contract_data = contract.to_dict()
     return {
-        "prompt_version": PromptBuilder.PROMPT_VERSION,
+        "prompt_version": prompt_version,
         "contract": contract_data,
         "evaluation_items": [{"id": item_id, "text": text} for item_id, text in evaluation_items],
         "previously_covered_ids": sorted(previously_covered_ids),
@@ -89,10 +90,12 @@ def _contract_fingerprint(
     *, builder: Any, phase: Phase, group: list[Phase], contract: Any,
     evaluation_items: list[tuple[str, str]], previously_covered_ids: set[str],
     transition_routes: dict[str, tuple[str | None, str | None, str | None]],
+    prompt_version: str = PromptBuilder.PROMPT_VERSION,
 ) -> str:
     return _fingerprint_contract_state(_contract_fingerprint_state(
         builder=builder, phase=phase, group=group, contract=contract, evaluation_items=evaluation_items,
         previously_covered_ids=previously_covered_ids, transition_routes=transition_routes,
+        prompt_version=prompt_version,
     ))
 
 
@@ -238,6 +241,7 @@ def _evaluate_strict_response(
     item_ids: list[str],
     phase: Phase,
     attempts: list[dict[str, Any]] | None = None,
+    system: str = PromptBuilder.SYSTEM_PROMPT,
 ) -> tuple[dict[str, Any], LlmVerdict]:
     """Retry only malformed evaluator output and never relax the wire contract."""
     prompt = user
@@ -248,7 +252,7 @@ def _evaluate_strict_response(
         submitted_prompt = prompt
         try:
             raw = client.chat(
-                system=PromptBuilder.SYSTEM_PROMPT,
+                system=system,
                 user=prompt,
                 temperature=0.1,
             )
@@ -323,6 +327,10 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
     )
     item_ids = [item_id for item_id, _ in evaluation_items]
     item_text = dict(evaluation_items)
+    configured = engine.runtime_fence if isinstance(engine.runtime_fence, ConfiguredCliFence) else None
+    pm_evaluation = configured is not None and configured.enrollment["request"]["role_key"] == "project_manager"
+    system = PromptBuilder.PM_SYSTEM_PROMPT if pm_evaluation else PromptBuilder.SYSTEM_PROMPT
+    prompt_version = PromptBuilder.PM_PROMPT_VERSION if pm_evaluation else PromptBuilder.PROMPT_VERSION
     previously = engine._get_previously_covered(phase.code)
     previously_ids = {
         item_id for item_id, text in evaluation_items if item_id in previously or normalize_text(text) in previously
@@ -345,9 +353,9 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         evaluation_items=evaluation_items,
         previously_covered_ids=previously_ids,
         transition_routes=transition_routes,
+        prompt_version=prompt_version,
     )
     fingerprint = _report_fingerprint(task_id, report, initial_contract_fingerprint)
-    configured = engine.runtime_fence if isinstance(engine.runtime_fence, ConfiguredCliFence) else None
     if configured is not None:
         fingerprint = configured.operation_fingerprint
     replayed = _replay(engine, task_id, phase_id, fingerprint)
@@ -364,6 +372,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         report,
         previously_covered=sorted(previously_ids) or None,
         evaluation_items=evaluation_items,
+        pm_evaluation=pm_evaluation,
     )
     evaluated_items = list(evaluation_items)
 
@@ -384,6 +393,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
             item_ids=item_ids,
             phase=phase,
             attempts=attempts,
+            system=system,
         )
     except (
         requests.RequestException,
@@ -451,6 +461,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         evaluation_items=evaluation_items,
         previously_covered_ids=previously_ids,
         transition_routes=transition_routes,
+        prompt_version=prompt_version,
     )
     current_contract_fingerprint = _fingerprint_contract_state(current_contract_state)
     current_snapshot_fingerprint = _contract_fingerprint(
@@ -461,6 +472,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         evaluation_items=evaluation_items,
         previously_covered_ids=initial_previously_ids,
         transition_routes=transition_routes,
+        prompt_version=prompt_version,
     )
     if current_snapshot_fingerprint == initial_contract_fingerprint:
         # Another identical evaluation may have committed while this provider
@@ -545,8 +557,8 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
     raw_evaluator = llm.raw if technical_error else (raw if raw is not None else llm.raw)
     try:
         diagnostic = evaluation_diagnostic(
-            system=PromptBuilder.SYSTEM_PROMPT, user=user, report=report,
-            prompt_version=PromptBuilder.PROMPT_VERSION, items=evaluated_items,
+            system=system, user=user, report=report,
+            prompt_version=prompt_version, items=evaluated_items,
             attempts=attempts, client=client, technical_error=technical_error, decision=raw_evaluator,
         )
     except Exception as diagnostic_error:
@@ -570,7 +582,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
             "phase_name": evaluation_phase.name,
             "model": client.model if client is not None else None,
             "endpoint_mode": "openai-compatible",
-            "prompt_version": PromptBuilder.PROMPT_VERSION,
+            "prompt_version": prompt_version,
             "contract_fingerprint": current_contract_fingerprint,
             "evaluated_contract_fingerprint": initial_contract_fingerprint,
             "contract_fingerprint_state": current_contract_state,
