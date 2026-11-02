@@ -1,5 +1,19 @@
 # Changelog
 
+## Advisor Payload Recheck - 2026-11-02
+
+- Read-only inspection of26 saved actual HTTP prompts found no hex hashes,
+  UUIDs, credentials, bootstrap or log blocks; diagnostics are stored separately.
+  This describes the candidate fixtures, not the installed v12 or arbitrary reports.
+- Confirmed phase02 FULL-presence duplication (C4/E1) and overlapping owner-input
+  criteria (C1/C3/E2). One raw answer acknowledges FULL but marks C4 missing;
+  the parser did not introduce that contradiction. Duplicate criteria are not
+  established as the sole cause of all model errors.
+- Six model-output fields are distinct from the enriched server/CLI response;
+  confidence is not used for acceptance. No new filter, response schema, model
+  calls, build or stand mutation. Compact criteria remain unqualified; live
+  acceptance and release remain open.
+
 ## PM Advisor: Separate Content, Review And Blockers - 2026-11-02
 
 - Cause: PM-v3 allowed ordinary pending owner input to be both PARTIAL and
