@@ -1,5 +1,21 @@
 # Changelog
 
+## Advisor: Compact Rubric Experiment - 2026-11-02
+
+- Tested prospective criteria only, not a production/publication change. Same
+  eight reports/goldens, v4 system, model and medium settings; three rounds each.
+- Consolidation alone:24 HTTP/24 evaluations,13 exact,0 false PASS,5 false PARTIAL.
+  Raw answers read 'available answers' as required choices and confused supplied
+  evidence with readiness. The variant is rejected, not installed.
+- Evidence-only clarification:24 HTTP/24 evaluations,22 exact,0 false PASS/PARTIAL.
+  All9 positives pass and all15 negatives are rejected. Two extra evidence flags
+  remain: an unsupported original-request demand, and an ambiguous demand for
+  explicit approval status. Frozen labels and all answers remain unchanged.
+- Both runs terminal;48 cumulative HTTP,0 malformed/recovery/error/unknown.
+  Subsequent ledger796. No cardinality-validator change, parser relaxation,
+  configuration activation, build, installation or live acceptance. Passing
+  verdicts do not erase incorrect item feedback; qualification remains open.
+
 ## Advisor Payload Recheck - 2026-11-02
 
 - Read-only inspection of26 saved actual HTTP prompts found no hex hashes,
