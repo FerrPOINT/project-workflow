@@ -1,5 +1,23 @@
 # Changelog
 
+## Advisor Responsibility Boundary: Business Report Only - 2026-11-02
+
+- Confirmed: PM system, catalog checks/evidence and raw reports still ask the
+  advisor to compare machine identities. Removing values alone would leave
+  impossible criteria and recreate missing-evidence refusals.
+- Removed the uncommitted display experiment, decoder and PM-only effort setting.
+  No table/alias replacement or generic hash/UUID stripper is accepted. Preserved
+  all private evidence: latest24+30 calls bring the subsequent total to513;
+  neither display variant qualifies the newly requested metadata-free boundary.
+- The experimental full unit/coverage run was interrupted, not passed. No new
+  model calls, catalog publication, build or stand mutation in this recheck.
+- Next minimal fix: align PM prompt and catalog instructions/checks/evidence on
+  semantic phase readiness. Reports retain FULL business content, not CLI/receipt
+  dumps. Exact assignment/owner/revision/consent checks stay in server code.
+  Keep the existing six-field response/parser and frozen history. No new layers.
+- Not yet installed or live accepted. See the current boundary section of
+  docs/ADVISOR_DIAGNOSIS_20261101.md; earlier sections remain historical evidence.
+
 ## Actual PM Source Qualification: Rejected - 2026-11-02
 
 - Cause: private SYS1095 trials did not qualify source PM-v2/SYS2000. Independent
