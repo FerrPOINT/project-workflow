@@ -33,11 +33,23 @@
 - Consolidation is not a text-only change: catalog publication preserves counts
   and requires evidence. Structural catalog work is deferred, not added as a PM
   release prerequisite. No validator, baseline or parser is relaxed.
-- Next: qualify remaining complete/incomplete cases with the measured compatible
-  existing effort=medium configuration; no new setting or model/key change.
-  Installation would explicitly activate that setting between runs, not around
-  messages. The medium result is narrow, not full PM qualification. Draft, final
-  gates and two live Backlog / Ready scenarios remain open.
+- Remaining cases:15 evaluations/17 HTTP, all verdicts correct,13 exact item
+  partitions. Complete170/171 pass3/3 each; missing FULL and content contradiction
+  are rejected3/3 each. The residual defect is extra missing flags on a rejected
+  contradictory report, not an inability to run Hermes or save requirements.
+- A three-item phase02 wording revision and a private comparison-direction
+  sentence failed full item qualification:12/15 and13/15 exact respectively.
+  Neither is retained: the rubric revision was reverted, private v5 never entered
+  product code. All old reports, goldens and raw responses remain preserved.
+- This stage ended at48 HTTP/45 evaluations;0 false PASS or false PARTIAL,
+  3 contract-invalid responses recovered,0 terminal/unknown outcomes. Different inputs
+  are not pooled as a general accuracy score. Subsequent HTTP ledger total748.
+- Integrated current master UI pin; pinned Base/namespace checks PASS, restored
+  catalog target tests20 PASS. No image build, config activation or installation.
+- The earlier plan froze criterion counts. A user decision is requested before
+  permitting compact criteria through the existing publication validator. No
+  structural change, parser relaxation or further calls are applied meanwhile.
+  Full final gates and two live Backlog / Ready scenarios remain open.
 
 ## PM Advisor: Semantic Input Candidate - 2026-11-02
 
