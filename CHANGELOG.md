@@ -1,5 +1,26 @@
 # Changelog
 
+## Goal Iteration: Reasoning Parameter Is Not A Complete Fix - 2026-11-02
+
+- Preserved source requests send reasoning_effort=none. Tested exactly this
+  request parameter against low, on unchanged original product PMv1 system and
+  all eight reports/items/goldens. Model/endpoint/credentials and live config
+  remain unchanged. Predeclared48 calls, alternating paired order, no retries.
+- All48 responses are valid HTTP200/stop. none: exact12/24, false PASS1,
+  false PARTIAL6,21 wrong items. low: exact10/24, false PASS0, false PARTIAL5,
+ 23 wrong items. Neither arm passes; low is not activated.
+- API usage reports nonzero reasoning tokens in5/24 low replies versus0/24 none.
+  This does not establish a particular upstream backend or single internal cause.
+  The short936 system combined with low has not been tested; do not transfer
+  results across prompts or claim none alone causes the failures.
+- Harness review found a crash/resume window after an error-slot checkpoint.
+  This run had no errors, interruption or resume. Preserve the frozen runner;
+  future reuse must atomically persist abort and reject an error state.
+- Current post-comparison total:189 bounded calls,0 accepted candidates,0 stand
+  changes. Both live PM acceptance scenarios and release remain open. Next:
+  preregister the missing short-prompt/effort comparison, changing only effort
+  on one fixed short prompt. No new rules, reports or criteria in that comparison.
+
 ## Goal Iterations: Reject Unsafe Framings - 2026-11-02
 
 - Cause: preserved inputs contain the FULL documents and identity/readback facts,
