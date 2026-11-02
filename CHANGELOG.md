@@ -1,5 +1,12 @@
 # Changelog
 
+## Advisor Documentation Boundary - 2026-11-03
+
+- Corrected the diagnostics guide's stale PM-v2 lead: the current source is
+  PM-v4 without the abandoned server-confirmation context block. Kept v2 as
+  historical, not an activation instruction. Installed generic v12 and the
+  unaccepted source candidate remain explicitly distinct; no runtime change.
+
 ## Advisor: Compact Rubric Experiment - 2026-11-02
 
 - Tested prospective criteria only, not a production/publication change. Same
