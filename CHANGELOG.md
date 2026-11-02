@@ -1,5 +1,25 @@
 # Changelog
 
+## Actual PM Source Qualification: Rejected - 2026-11-02
+
+- Cause: private SYS1095 trials did not qualify source PM-v2/SYS2000. Independent
+  review also found that published10 evidence requires correct identities, not
+  presence-only fields. Do not rewrite the catalog to force one missing item.
+- Changed QA input, not production: actual source builder/system and unchanged
+  catalog10/raw reports,8 cases/3 rounds. Captured164/170/171 IDs/delegate and
+  complete generic requests are reproduced before applying the PM policy;
+  phase03 remains explicitly reconstructed, not an exact historical HTTP capture.
+- Prospective C4 for133/receipt-negative is covered because the source now supplies
+  genuine latest owner consent. Identity contradictions still require PARTIAL;
+  old goldens/results are preserved. Both independent reviewers agree.
+- Result:24 valid,14 exact,1 false PASS133,5 false PARTIAL170/171,21 item
+  disagreements,0 format errors. Candidate rejected; no catalog/source change,
+  build, installation or live acceptance. Total459 post-comparison calls retained.
+- 59 targeted source tests PASS. Do not repeat the tested sufficiency-only wording:
+  it already failed, and v12 had that rule but still rejected these reports.
+  Next fix must address evidence interpretation and opaque identity comparison
+  without bypassing negative checks or adding a prose parser/another verifier.
+
 ## Advisor Causal And Context Recheck - 2026-11-02
 
 - Current finding: removing worker procedure and stale PM coverage fixes input
