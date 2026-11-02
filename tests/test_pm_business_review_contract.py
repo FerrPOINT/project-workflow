@@ -184,8 +184,7 @@ def test_preparation_items_separate_agreement_consistency_owner_input_and_full_d
         "inventory of sections or reference to an earlier report.",
     ]
     assert phase["evidence"] == [
-        "A readable summary of the user request and agreed decisions, together with one FULL saved "
-        "requirements document in this report.",
+        "A readable summary of the user request.",
         "A readable account of the owner's decisions and any unanswered material questions.",
     ]
 
@@ -200,6 +199,52 @@ def test_preparation_evidence_records_input_and_gaps_not_document_readiness(busi
     assert "no such choice left unanswered or replaced by a PM assumption" in phase["checks"][2]
     assert "consisten" not in evidence.lower()
     assert "how any material clarification or feedback was resolved" in _instructions(phase)
+
+
+def test_preparation_source_without_full_document_remains_partial(
+    business, configured, supervisor_llm, monkeypatch,
+):
+    """Controlled output tests runtime/CLI mechanics, not model quality or the deduplication hypothesis."""
+    client, assignment = configured
+    _publish(client, active(client, _workflow_id(assignment)), business["modes"])
+    enrollment = enroll(configured)
+    supervisor_llm("PASS")
+    context = step(configured, report="Synthetic completed reading of the request and discussion.",
+                   operation_key="source-only-context", expected_version=enrollment["version"])
+    assert context.status_code == 200
+    view = _cli_read(configured, monkeypatch)
+    assert view["phase_code"] == "PM-DRAFT-02"
+    phase = business["modes"][0]["phases"][1]
+    assert phase["evidence"][0] == "A readable summary of the user request."
+    assert "entire saved requirements document" in phase["checks"][3]
+    covered = [phase["checks"][2], *phase["evidence"]]
+    missing = [phase["checks"][0], phase["checks"][1], phase["checks"][3]]
+    supervisor_llm("PARTIAL", covered=covered, missing=missing)
+    provider = Mock(side_effect=OpenAICompatibleClient.chat)
+    monkeypatch.setattr(OpenAICompatibleClient, "chat", provider)
+    response = step(
+        configured,
+        report=(
+            "Owner request: a shared persistent task list for two staff members. Current owner decisions: "
+            "separate accounts with equal access; manual creation; a nonempty trimmed name and description; "
+            "an assignee chosen from those two staff is mandatory. Both staff see all tasks after refresh "
+            "or later sign-in. Editing, deletion, statuses and integrations are excluded. "
+            "All material choices have owner answers; no unanswered questions or PM assumptions remain. "
+            "The FULL saved requirements document is not included in this report. "
+            "Document preparation is not claimed complete."
+        ),
+        operation_key="source-only-preparation", expected_version=view["version"],
+    )
+    assert response.status_code == 200
+    provider.assert_called_once()
+    result = response.json()["result"]
+    assert result["verdict"] == "PARTIAL" and result["complete"] is False
+    assert set(result["covered"]) == set(covered)
+    assert set(result["missing"]) == set(missing)
+    assert result["next_phase_code"] is None and "terminal_receipt" not in result
+    current = _cli_read(configured, monkeypatch)
+    assert current["phase_code"] == "PM-DRAFT-02" and current["complete"] is False
+    assert "terminal_receipt" not in current
 
 
 def test_preparation_pending_owner_input_with_present_evidence_remains_partial(

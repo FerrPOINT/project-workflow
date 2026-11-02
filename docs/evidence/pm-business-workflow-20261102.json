@@ -131,7 +131,7 @@
             "The current report includes the entire saved requirements document, not a summary, inventory of sections or reference to an earlier report."
           ],
           "evidence": [
-            "A readable summary of the user request and agreed decisions, together with one FULL saved requirements document in this report.",
+            "A readable summary of the user request.",
             "A readable account of the owner's decisions and any unanswered material questions."
           ],
           "parallel_with_phase_code": null,
