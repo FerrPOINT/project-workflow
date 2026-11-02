@@ -1,5 +1,29 @@
 # Changelog
 
+## Advisor Chain Diagnosis - 2026-11-02
+
+- Problem: circular refusals and false covered items were conflated with runtime,
+  prompt and model hypotheses. Read-only architecture/context/QA review is complete;
+  the detailed result is in `docs/ADVISOR_DIAGNOSIS_20261101.md`.
+- Proven: worker procedure enters the judge alongside result criteria; captured
+  164/167 require their own future ACK. Historical coverage is not revision/hash
+  bound and later missing does not retract covered. This is an input contradiction,
+  not a demonstrated cause of the initial refusals with empty prior coverage.
+- Check: exact prompt reconstruction and parsing for164/167/170/171; in-memory
+  history-reader and parser boundary checks, no database/model/business calls.
+  Report170/171 retains owner decisions and FULL documents;153 genuinely lacks
+  the current FULL packet.133 has contradictory hashes;163 is a valid historical PASS.
+- QA correction: evidence179 in negative B was ambiguously labelled; old goldens
+  remain untouched. The prior4/12 exact score is not an unqualified quality metric.
+  Positive0/6 PASS and negative6/6 PARTIAL observations remain valid.
+- Runtime93c14f8/v12, catalog10 and PM23 are unchanged. Current route discovery
+  lists three app-test entries for chatgpt/gpt-6-luna, not historical per-call proof
+  or an established cause. New inference calls0/48; builds/installs/publications0.
+- Next package: configured PM judge input without worker procedure; independently
+  test current-report-only coverage for PM-DRAFT-02/03. Version the contract,
+  preserve other roles/legacy/frozen v12 and exact owner guards. Not implemented;
+  no semantic guarantee or new PM Backlog / Ready acceptance is claimed.
+
 ## Diagnostics Release Boundary — 2026-11-01
 
 - Release retains v12 prompts, parser, model parameters, retries and catalog10.
