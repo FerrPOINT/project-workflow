@@ -1,5 +1,25 @@
 # Единый CLI/API Workflow
 
+## Analyst Research: coordinated instruction revision
+
+The single-task Analyst still has three phases: research approved PM input and
+internal/public sources; analyze rules/scenarios/acceptance; produce one analysis.md
+and use the existing accepted-report/comment/proposal sequence. It does not conduct
+a second PM interview or request owner consent for the analysis. Missing mandatory
+facts or material contradictions use the existing critical business review.
+
+The Analyst allowlist additionally permits wiki-operator and forge-operator from
+the reviewed Base package. The identity donor and its historical catalog are not
+rewritten. Text publication uses the existing managed catalog revision/activation
+flow between runs, with old revisions retained. Other professions keep their modes
+and allowlists. PM instructions verify the immutable Backlog/Ready completion while
+allowing fresh Tracker context to show the automatically queued Analysis.
+
+This source revision requires coordinated Tracker/Fleet/Base qualification; it is
+not an activation or live acceptance record.
+
+## Общий контракт
+
 Source-контракт для семи профессий и восьми режимов. Установка, полный gate и
 живая приёмка подтверждаются отдельно. До переключения должны быть удалены
 оставшиеся старые исполняющие маршруты и завершены прежние активные попытки.

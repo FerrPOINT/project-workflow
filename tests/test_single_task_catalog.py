@@ -62,8 +62,12 @@ def test_identity_donor_and_legacy_modes_are_preserved_and_not_aliased(professio
     ManagedCatalog.model_validate(donor)
     for original in donor["workflows"]:
         current = professions[original["role_key"]]
-        for field in ("key", "workflow_order", "hermes_namespace", "hermes_profile", "skill_allowlist"):
+        for field in ("key", "workflow_order", "hermes_namespace", "hermes_profile"):
             assert current[field] == original[field]
+        expected_skills = set(original["skill_allowlist"])
+        if original["role_key"] == "analyst":
+            expected_skills |= {"wiki-operator", "forge-operator"}
+        assert set(current["skill_allowlist"]) == expected_skills
         original_modes = {m["key"]: m for m in original["modes"]}
         for mode in current["modes"]:
             assert [p["code"] for p in mode["phases"]] == [p["code"] for p in original_modes[mode["key"]]["phases"]]

@@ -98,7 +98,8 @@ PM_CRITICAL_REVIEW = (
     "revision/question/answer/confirmation commands and final Workflow report as ordinary PM. No native "
     "checkpoint, bind, token file or execution lease is required. After the final report is accepted, "
     "follow its ordinary comment and PM completion instructions. Tracker resolves the blocker and saves "
-    "Backlog / Ready atomically; PM does not dispatch Analyst. Missing access or inconsistent readback "
+    "the new approved revision and Analysis / Ready atomically; the system dispatches Analyst. "
+    "Missing access or inconsistent readback "
     "is an explicit blocker, not permission to invent proof."
 )
 
@@ -202,7 +203,8 @@ ROLE_IMAGE_BUILD = {
 
 ROLE_SOURCE_EVIDENCE = {
     "analyst": (
-        "In the sealed analysis artifact retain the verified approved source coordinates and immutable "
+        "In the single sealed analysis.md artifact retain the source register, initial specification "
+        "and verified approved source coordinates and immutable "
         "requirements/source snapshot references, distinguishing observed facts from missing inputs. "
     ),
     "architect": (
@@ -488,16 +490,19 @@ PM_COMPLETION_INSTRUCTION = (
     "terminal_receipt.tracker_execution_id (NOT Workflow execution_ref), fence.agent_id to "
     "terminal_receipt.concrete_agent_ref and fence.assignment_version to "
     "terminal_receipt.assignment_version. Do not paste a fabricated receipt or add native/lease fields. "
-    "Tracker reads the terminal receipt server-to-server and performs atomic Draft -> Backlog / Ready. "
+    "Tracker reads the terminal receipt server-to-server, completes PM and queues Analysis atomically "
+    "in enabled projects. "
     "Read the exact operation using task-tracker sdlc pm completion operation --task <task-uuid> --key "
-    "<same-completion-key>, then task-tracker sdlc pm completion read --task <task-uuid> and task-tracker"
-    " sdlc context --task <task-uuid>. Verify the operation.result, completion read.current and fresh "
-    "context agree on the same task/root and revision/hash, with stage=Backlog and status=Ready after "
+    "<same-completion-key>, then task-tracker sdlc pm completion read --task <task-uuid>. Verify "
+    "operation.result and completion read.current match the submitted task/root and approved revision/hash. "
+    "The immutable PM receipt records Backlog / Ready; current human/server context can already show "
+    "system-queued Analysis. The completed PM need not read the next profession's current context after "
     "completion. After unknown POST acceptance use original-key readback, never a new key or blind "
     "resubmit. Do not require Backlog before Workflow completion. A pasted receipt alone is not "
     "authority. Business completion requires a valid saved document, resolved questions and actual owner "
     "consent, not an external verifier checklist. Configured CLI readiness is a separate runtime check. "
-    "Stop at Backlog / Ready; do not create Analysis intent, dispatch Analyst or confirm requirements as "
+    "Finish after verifying the saved PM receipt; the system owns Analysis intent and dispatch. "
+    "Do not confirm requirements as "
     "the owner."
 )
 
