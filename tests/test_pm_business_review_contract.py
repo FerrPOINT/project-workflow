@@ -178,8 +178,8 @@ def test_preparation_items_separate_agreement_consistency_owner_input_and_full_d
         "The requirements agree with the user request and decisions described in this report.",
         "Scope, material domain rules and objectively testable acceptance criteria are specified unambiguously, "
         "without incompatible current rules.",
-        "The supplied owner input resolves the material decisions needed to prepare requirements; "
-        "pending choices and assumptions are identified rather than invented as owner answers.",
+        "The source account contains the owner's current decision for every material business choice needed "
+        "for the requirements, with no such choice left unanswered or replaced by a PM assumption.",
         "The current report includes the entire saved requirements document, not a summary, "
         "inventory of sections or reference to an earlier report.",
     ]
@@ -196,7 +196,8 @@ def test_preparation_evidence_records_input_and_gaps_not_document_readiness(busi
     assert evidence == "A readable account of the owner's decisions and any unanswered material questions."
     assert "agree with the user request and decisions" in phase["checks"][0]
     assert "without incompatible current rules" in phase["checks"][1]
-    assert "owner input resolves the material decisions" in phase["checks"][2]
+    assert "owner's current decision for every material business choice" in phase["checks"][2]
+    assert "no such choice left unanswered or replaced by a PM assumption" in phase["checks"][2]
     assert "consisten" not in evidence.lower()
     assert "how any material clarification or feedback was resolved" in _instructions(phase)
 

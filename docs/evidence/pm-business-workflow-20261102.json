@@ -127,7 +127,7 @@
           "checks": [
             "The requirements agree with the user request and decisions described in this report.",
             "Scope, material domain rules and objectively testable acceptance criteria are specified unambiguously, without incompatible current rules.",
-            "The supplied owner input resolves the material decisions needed to prepare requirements; pending choices and assumptions are identified rather than invented as owner answers.",
+            "The source account contains the owner's current decision for every material business choice needed for the requirements, with no such choice left unanswered or replaced by a PM assumption.",
             "The current report includes the entire saved requirements document, not a summary, inventory of sections or reference to an earlier report."
           ],
           "evidence": [
