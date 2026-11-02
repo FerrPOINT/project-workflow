@@ -374,10 +374,6 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         previously_covered=sorted(previously_ids) or None,
         evaluation_items=evaluation_items,
         pm_evaluation=pm_evaluation,
-        verified_confirmation_revision=(
-            configured.confirmation["revision"]
-            if pm_evaluation and configured is not None and configured.confirmation is not None else None
-        ),
     )
     evaluated_items = list(evaluation_items)
 

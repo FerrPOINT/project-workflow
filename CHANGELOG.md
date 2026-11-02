@@ -1,5 +1,35 @@
 # Changelog
 
+## PM Advisor: Semantic Input Candidate - 2026-11-02
+
+- Cause: the PM contract mixed business review with identity/receipt attestation.
+  Phase02 also mixed current FULL-content checks with future procedure, while
+  some source wording was interpreted as requiring original owner messages.
+- Implemented candidate PM-v3: system1390; only phase, allowed verdicts,
+  criteria and current report. Removed TASK/count-formula/revision-context blocks.
+  No hash table, aliases, decoder, generic text stripper or new effort setting.
+  Exact assignment/owner/requirements/consent guards remain server-side.
+- Added the reproducible business-only catalog proposal. Phase02 now separates
+  reported-request agreement, unambiguous rules, resolved owner input and current
+  FULL presence. A readable source summary is sufficient; the document stays FULL.
+  Existing phases, counts, CLI commands, six response fields and history remain.
+- Code verification:3445 passed,15 skips,132 PG deselected,75 subtests;
+  coverage94.118578% on frozen tree18b12d5. Subsequent changes affect only the
+  catalog artifact/tests;17 targeted publication/actual-CLI checks pass. Runtime
+  Python is byte-identical. PostgreSQL132 pass,0 skips on final staged treedccd136;
+  dedicated clock DB supplied, v2-owned container/network/volume cleaned.
+  Ruff and mypy166 pass. Skips:11 missing Playwright,1 NTFS executable-mode
+  limitation,3 private-package opt-ins; none is counted as verified. No image
+  build, installation or live acceptance.
+- Model evidence:24 new first-attempt calls across three distinct trials,
+  21 valid/3 strict-response errors,0 valid false PASS/1 valid false PARTIAL.
+  Do not pool these different inputs/settings as a quality score. The coherent
+  final catalog is NOT model-qualified; total537 subsequent calls are retained.
+- Next: use the unchanged native strict-response helper, not a single raw call
+  as the sole product gate. Keep its existing maximum3 format attempts, record
+  every HTTP call, never retry a valid PARTIAL. Frozen8 cases x3 evaluations,
+  total cap48 HTTP calls including recovery. Install/live/merge remain open.
+
 ## Advisor Responsibility Boundary: Business Report Only - 2026-11-02
 
 - Confirmed: PM system, catalog checks/evidence and raw reports still ask the

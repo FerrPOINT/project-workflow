@@ -190,29 +190,21 @@ class PromptBuilder:
 
     PROMPT_VERSION = "supervisor-evaluator-v12"
 
-    PM_PROMPT_VERSION = "supervisor-evaluator-pm-v2"
+    PM_PROMPT_VERSION = "supervisor-evaluator-pm-v3"
     PM_SYSTEM_PROMPT = (
-        "You are the PM phase advisor. Judge only the stated required checks and evidence "
-        "against current supplied facts. Worker procedure is not an additional criterion.\n"
-        "Compare the source brief and reported actual owner answers with the saved document; "
-        "do not demand independent owner-source attestation. Do not invent owner answers. "
-        "Require FULL content, exact artifact identity/revision/content_hash, actual commands/readbacks "
-        "and matching saved owner confirmation wherever the stated items require them. "
-        "A summary or intention cannot replace required completed work or FULL content.\n"
-        "The current report's own submission and future verdict/ACK are not prerequisites. "
-        "This does not waive required business results or external readbacks. "
-        "Real missing facts and contradictory current identities/hashes/results remain deficiencies; "
-        "accept a state change only with explicit chronology and action evidence.\n"
-        "Classify every required ID exactly once in covered or missing, copying IDs exactly. "
-        "The lists must be disjoint and duplicate-free. covered requires the entire item to be supported; "
-        "a report's existence alone never establishes coverage.\n"
-        "PASS requires all items covered and no blockers. PARTIAL requires missing items repairable "
-        "within this phase and no blockers. BLOCKED requires a specific root cause preventing progress, "
-        "including a real external blocker or repair requiring work outside this phase. "
-        "DELEGATE is permitted only when listed in ALLOWED VERDICTS, with missing work and no blockers.\n"
-        "Keep message, covered, missing and blockers consistent. Explain the specific missing facts "
-        "or blocker root cause in message; confidence is not evidence or authority. "
-        "Never choose the next phase. Return one bare JSON object, no extra fields or commentary:\n"
+        "Assess whether this PM phase is ready. Evaluate only its listed criteria against the current report. "
+        "Compare the actual request and owner decisions with the FULL requirements when required. "
+        "Reject missing content, unresolved business questions and contradictory current business rules; "
+        "distinguish an earlier decision explicitly changed later. Do not invent owner decisions.\n"
+        "Identity, access and saved owner consent are enforced by the server, not certified by you. "
+        "Do not require technical dumps, independent authorship attestation, future actions or this report's "
+        "own acceptance. A summary or a reference to an earlier report is not FULL content.\n"
+        "Classify each listed ID exactly once in covered or missing, without duplicates or overlap. "
+        "covered requires the entire criterion. PASS: all covered, no blockers. "
+        "PARTIAL: specific missing work repairable in this phase, no blockers. "
+        "BLOCKED: a concrete cause prevents progress. DELEGATE: only if allowed, missing work, no blockers. "
+        "Keep all fields consistent. Explain the specific deficiency or result in Russian. "
+        "Never choose a next phase. Return one JSON object with only these fields:\n"
         "{\n"
         '  "verdict": "PASS" | "PARTIAL" | "BLOCKED" | "DELEGATE",\n'
         '  "covered": ["required item ID"],\n'
@@ -307,17 +299,23 @@ class PromptBuilder:
         evaluation_items: list[tuple[str, str]] | None = None,
         *,
         pm_evaluation: bool = False,
-        verified_confirmation_revision: int | None = None,
     ) -> str:
         if pm_evaluation and evaluation_items is None:
             raise ValueError("PM evaluation requires explicit evaluation_items")
-        if verified_confirmation_revision is not None and (
-            not pm_evaluation or type(verified_confirmation_revision) is not int or verified_confirmation_revision <= 0
-        ):
-            raise ValueError("Verified owner confirmation requires PM evaluation and a positive revision")
         allowed = ["PASS", "PARTIAL", "BLOCKED"]
         if getattr(phase, "delegate", None) is not None:
             allowed.append("DELEGATE")
+        if pm_evaluation:
+            pm_lines = [
+                f"CURRENT PHASE: {phase.code} — {phase.name}",
+                f"ALLOWED VERDICTS: {', '.join(allowed)}",
+                "REQUIRED CRITERIA:",
+                *[f'  ID: "{item_id}" — {description}' for item_id, description in evaluation_items or []],
+            ]
+            if previously_covered:
+                pm_lines.append("ALREADY COMPLETED IDS: " + ", ".join(previously_covered))
+            pm_lines.extend(["", "WORKER REPORT:", f'"""{report}"""'])
+            return "\n".join(pm_lines)
         lines: list[str] = [
             f"TASK: {task_key}",
             f"CURRENT PHASE: {phase.code} — {phase.name}",
@@ -363,17 +361,6 @@ class PromptBuilder:
             )
             for item in previously_covered:
                 lines.append(f"  ✓ {item}")
-
-        if verified_confirmation_revision is not None:
-            lines.extend([
-                "",
-                "SERVER-VERIFIED OWNER CONFIRMATION:",
-                "Before this evaluation Workflow read Tracker and verified a saved human-owner confirmation "
-                f"for this task's latest requirements revision {verified_confirmation_revision}. "
-                "This is a server-verified fact, not a worker assertion. "
-                "Do not require another proof of this confirmation's existence or author. "
-                "Still assess every stated item, required content and presentation, and contradictions in the report.",
-            ])
 
         lines.extend(
             [

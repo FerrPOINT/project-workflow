@@ -49,44 +49,47 @@ def test_generic_output_matches_baseline_bytes(delegate, explicit, digest):
 
 def test_pm_system_is_short_and_has_the_same_six_field_schema():
     prompt = PromptBuilder.PM_SYSTEM_PROMPT
-    assert PromptBuilder.PM_PROMPT_VERSION == "supervisor-evaluator-pm-v2"
+    assert PromptBuilder.PM_PROMPT_VERSION == "supervisor-evaluator-pm-v3"
     assert len(prompt) < len(PromptBuilder.SYSTEM_PROMPT) / 2
     assert re.findall(r'^\s*"([a-z_]+)":', prompt, re.MULTILINE) == [
         "verdict", "covered", "missing", "blockers", "message", "confidence",
     ]
     for rule in (
-        "only the stated required checks and evidence",
-        "do not demand independent owner-source attestation",
-        "Do not invent owner answers",
-        "FULL content, exact artifact identity/revision/content_hash",
-        "matching saved owner confirmation",
-        "future verdict/ACK are not prerequisites",
-        "contradictory current identities/hashes/results",
-        "explicit chronology and action evidence",
-        "PASS requires all items covered and no blockers",
-        "BLOCKED requires a specific root cause",
-        "DELEGATE is permitted only when listed in ALLOWED VERDICTS",
-        "confidence is not evidence or authority",
+        "only its listed criteria",
+        "FULL requirements",
+        "Do not invent owner decisions",
+        "Identity, access and saved owner consent are enforced by the server",
+        "Do not require technical dumps, independent authorship attestation",
+        "unresolved business questions and contradictory current business rules",
+        "a reference to an earlier report is not FULL content",
+        "Classify each listed ID exactly once",
+        "PASS: all covered, no blockers",
+        "BLOCKED: a concrete cause prevents progress",
+        "DELEGATE: only if allowed",
     ):
         assert rule in prompt
+    assert "hash" not in prompt.lower()
+    assert "revision" not in prompt.lower()
+    assert "receipt" not in prompt.lower()
 
 
 @pytest.mark.parametrize("delegate", [False, True])
-def test_pm_omits_only_worker_instructions_and_preserves_packet(delegate):
-    report = 'Owner answers\nFULL saved document: {"scope": ["all facts"]}\nrevision=2\ncontent_hash=' + "a" * 64
+def test_pm_contains_only_phase_criteria_and_complete_business_report(delegate):
+    report = 'Owner answers\nFULL saved document: {"scope": ["all facts"], "title_limit": 200}'
     phase = _phase(delegate)
-    args = ("CASE-1", phase, report, ["check:1"], ITEMS)
+    semantic_items = [("check:1", "Saved FULL document"), ("evidence:1", "Owner decisions and their resolution")]
+    args = ("CASE-1", phase, report, ["check:1"], semantic_items)
     generic = PromptBuilder.build_user_prompt(*args)
     pm = PromptBuilder.build_user_prompt(*args, pm_evaluation=True)
     instruction_block = "Instructions:\n  \u2022 Read owner answers\n  \u2022 Submit and inspect result\n"
     assert generic.count(instruction_block) == 1
-    assert pm == generic.replace(instruction_block, "", 1)
     assert len(pm) < len(generic)
-    assert report in pm
-    for item_id, description in ITEMS:
+    assert pm.endswith('WORKER REPORT:\n"""' + report + '"""')
+    for item_id, description in semantic_items:
         assert f'ID: "{item_id}" \u2014 {description}' in pm
-    assert "REQUIRED ITEM COUNT: 2" in pm
-    assert "ALREADY COMPLETED IDS (keep them in covered):\n  \u2713 check:1" in pm
+    assert "ALREADY COMPLETED IDS: check:1" in pm
+    for unwanted in ("TASK:", "Instructions:", "CASE-1", "hash", "revision", "receipt", "PM_REF", "SUM", "MUST equal"):
+        assert unwanted not in pm
     allowed = "ALLOWED VERDICTS: PASS, PARTIAL, BLOCKED" + (", DELEGATE" if delegate else "")
     assert allowed in pm.splitlines()
 
@@ -95,7 +98,7 @@ def test_pm_requires_explicit_items_without_legacy_fallback():
     with pytest.raises(ValueError, match="requires explicit evaluation_items"):
         PromptBuilder.build_user_prompt("CASE-1", _phase(), "report", pm_evaluation=True)
     prompt = PromptBuilder.build_user_prompt("CASE-1", _phase(), "report", evaluation_items=[], pm_evaluation=True)
-    assert "REQUIRED ITEM COUNT: 0" in prompt
+    assert "REQUIRED CRITERIA:" in prompt
     assert "Saved FULL document" not in prompt
     assert "Instructions:" not in prompt
 
@@ -105,12 +108,11 @@ def test_pm_option_is_keyword_only():
         PromptBuilder.build_user_prompt("CASE-1", _phase(), "report", None, ITEMS, True)
 
 
-@pytest.mark.parametrize("revision,pm", [(True, True), (0, True), (-1, True), ("3", True), (3, False)])
-def test_verified_confirmation_does_not_accept_untyped_or_generic_context(revision, pm):
-    with pytest.raises(ValueError, match="Verified owner confirmation"):
+def test_builder_no_longer_accepts_machine_confirmation_context():
+    with pytest.raises(TypeError, match="verified_confirmation_revision"):
         PromptBuilder.build_user_prompt(
             "CASE-1", _phase(), "report", evaluation_items=ITEMS,
-            pm_evaluation=pm, verified_confirmation_revision=revision,
+            pm_evaluation=True, verified_confirmation_revision=3,
         )
 
 
