@@ -190,7 +190,7 @@ class PromptBuilder:
 
     PROMPT_VERSION = "supervisor-evaluator-v12"
 
-    PM_PROMPT_VERSION = "supervisor-evaluator-pm-v1"
+    PM_PROMPT_VERSION = "supervisor-evaluator-pm-v2"
     PM_SYSTEM_PROMPT = (
         "You are the PM phase advisor. Judge only the stated required checks and evidence "
         "against current supplied facts. Worker procedure is not an additional criterion.\n"
@@ -307,9 +307,14 @@ class PromptBuilder:
         evaluation_items: list[tuple[str, str]] | None = None,
         *,
         pm_evaluation: bool = False,
+        verified_confirmation_revision: int | None = None,
     ) -> str:
         if pm_evaluation and evaluation_items is None:
             raise ValueError("PM evaluation requires explicit evaluation_items")
+        if verified_confirmation_revision is not None and (
+            not pm_evaluation or type(verified_confirmation_revision) is not int or verified_confirmation_revision <= 0
+        ):
+            raise ValueError("Verified owner confirmation requires PM evaluation and a positive revision")
         allowed = ["PASS", "PARTIAL", "BLOCKED"]
         if getattr(phase, "delegate", None) is not None:
             allowed.append("DELEGATE")
@@ -358,6 +363,17 @@ class PromptBuilder:
             )
             for item in previously_covered:
                 lines.append(f"  ✓ {item}")
+
+        if verified_confirmation_revision is not None:
+            lines.extend([
+                "",
+                "SERVER-VERIFIED OWNER CONFIRMATION:",
+                "Before this evaluation Workflow read Tracker and verified a saved human-owner confirmation "
+                f"for this task's latest requirements revision {verified_confirmation_revision}. "
+                "This is a server-verified fact, not a worker assertion. "
+                "Do not require another proof of this confirmation's existence or author. "
+                "Still assess every stated item, required content and presentation, and contradictions in the report.",
+            ])
 
         lines.extend(
             [

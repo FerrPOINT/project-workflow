@@ -49,7 +49,7 @@ def test_generic_output_matches_baseline_bytes(delegate, explicit, digest):
 
 def test_pm_system_is_short_and_has_the_same_six_field_schema():
     prompt = PromptBuilder.PM_SYSTEM_PROMPT
-    assert PromptBuilder.PM_PROMPT_VERSION == "supervisor-evaluator-pm-v1"
+    assert PromptBuilder.PM_PROMPT_VERSION == "supervisor-evaluator-pm-v2"
     assert len(prompt) < len(PromptBuilder.SYSTEM_PROMPT) / 2
     assert re.findall(r'^\s*"([a-z_]+)":', prompt, re.MULTILINE) == [
         "verdict", "covered", "missing", "blockers", "message", "confidence",
@@ -103,6 +103,15 @@ def test_pm_requires_explicit_items_without_legacy_fallback():
 def test_pm_option_is_keyword_only():
     with pytest.raises(TypeError):
         PromptBuilder.build_user_prompt("CASE-1", _phase(), "report", None, ITEMS, True)
+
+
+@pytest.mark.parametrize("revision,pm", [(True, True), (0, True), (-1, True), ("3", True), (3, False)])
+def test_verified_confirmation_does_not_accept_untyped_or_generic_context(revision, pm):
+    with pytest.raises(ValueError, match="Verified owner confirmation"):
+        PromptBuilder.build_user_prompt(
+            "CASE-1", _phase(), "report", evaluation_items=ITEMS,
+            pm_evaluation=pm, verified_confirmation_revision=revision,
+        )
 
 
 @pytest.mark.parametrize("verdict", ["PASS", "PARTIAL", "BLOCKED", "DELEGATE"])

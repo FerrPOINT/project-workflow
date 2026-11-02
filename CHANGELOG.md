@@ -1,5 +1,23 @@
 # Changelog
 
+## PM Context Candidate: Use Existing Server Evidence - 2026-11-02
+
+- Cause: final configured PM already verifies actual Tracker owner confirmation,
+  but the advisor previously received only the worker's account of it. The last
+  one-C1 correction still had a false163 refusal demanding the actual receipt.
+- Implemented, NOT installed/accepted: PM policy v2 forwards only the already
+  verified requirements revision as an explicit server fact. No new API, read,
+  credential, response field or authority; content/presentation/report conflicts
+  and all existing server checks remain required. Other roles/preparation unchanged.
+- Old PM-v1 frozen proof remains readable/replayable. No provider call on replay.
+- Targeted checks:120 existing +16 new PASS on the pinned interpreter; Ruff all
+  and mypy166 files PASS. Controlled providers prove wiring/guards, not model quality.
+- Last presentation-only experiment:18 valid, exact16,1 false PARTIAL and1
+  negative-item ambiguity; no false PASS. Total399 post-comparison calls retained.
+- Next: freeze a comparison adding only the actual server-confirmation fact to
+  preserved cases. Qualification, installation and two live PM tasks remain open.
+  Default PM system2000, generic v12, Hermes/model/credentials/stand unchanged.
+
 ## Goal Iteration: Separate Authority From Report Consistency - 2026-11-02
 
 - Verified cause: server reads the actual latest requirements/owner confirmation,
