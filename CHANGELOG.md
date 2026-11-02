@@ -1,5 +1,20 @@
 # Changelog
 
+## Advisor: Actual Wire Payload Recheck - 2026-11-03
+
+- Inspected 25 saved HTTP prompts of candidate 3ad48803, including native format
+  repairs: no 32–64-character hex values or UUIDs. Diagnostic hashes and expected
+  labels are not model input. This does not describe arbitrary reports or deployed v12.
+- All 24 returned objects contain only the existing six fields. Three omit C4;
+  native format repair recovered them. Removing FULL duplication from E1 did not
+  eliminate these omissions; their sole cause is not established.
+- 21 completed evaluations match the prospective labels. A subsequent ReadTimeout
+  leaves qualification incomplete, with two unrun slots and unknown upstream outcome.
+  No new inference, installation, configuration activation or live acceptance.
+- Added actual HTTP-payload regressions for all three catalog phases: only system
+  and user messages, one report and each criterion once, no worker instructions,
+  credentials or diagnostic metadata. 25 prompt tests and Ruff PASS.
+
 ## PM: Source Evidence Versus Readiness - 2026-11-03
 
 - PM-DRAFT-02 E2 now asks for an account of owner decisions and unanswered

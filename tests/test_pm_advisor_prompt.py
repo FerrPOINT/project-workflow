@@ -1,12 +1,15 @@
 """Opt-in PM prompts preserve the generic evaluator and strict response contract."""
 
+import json
 import re
 from hashlib import sha256
+from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 
-from project_workflow.infrastructure.llm import PromptBuilder, ResponseParser
+from project_workflow.infrastructure.llm import OpenAICompatibleClient, PromptBuilder, ResponseParser
 
 pytestmark = pytest.mark.unit
 
@@ -115,6 +118,57 @@ def test_pm_requires_explicit_items_without_legacy_fallback():
     assert "REQUIRED CRITERIA:" in prompt
     assert "Saved FULL document" not in prompt
     assert "Instructions:" not in prompt
+
+
+@pytest.mark.parametrize("phase_index", range(3))
+def test_business_catalog_http_request_contains_only_the_current_evaluation(monkeypatch, phase_index):
+    catalog = json.loads((
+        Path(__file__).resolve().parents[1] / "docs/evidence/pm-business-workflow-20261102.json"
+    ).read_text(encoding="utf-8"))
+    definition = catalog["modes"][0]["phases"][phase_index]
+    phase = SimpleNamespace(**definition, delegate=None)
+    items = [
+        (f"{phase.code}:{kind}:{index}", text)
+        for field, kind in (("checks", "check"), ("evidence", "evidence"))
+        for index, text in enumerate(definition[field], 1)
+    ]
+    report = "Current owner request and decisions. Complete current business document."
+    prompt = PromptBuilder.build_user_prompt(
+        "private-task-identifier", phase, report, evaluation_items=items, pm_evaluation=True,
+    )
+    response = {
+        "verdict": "PASS", "covered": [item_id for item_id, _ in items], "missing": [],
+        "blockers": [], "message": "All listed facts are present", "confidence": 0.9,
+    }
+    post = Mock(return_value=Mock(
+        status_code=200, headers={},
+        json=Mock(return_value={"choices": [{"message": {"content": json.dumps(response)}}]}),
+    ))
+    monkeypatch.setattr("project_workflow.infrastructure.llm.requests.post", post)
+    client = OpenAICompatibleClient(
+        base_url="https://model.invalid/v1", model="test-model", api_key="test-only-key",
+        timeout=10, max_tokens=1000, reasoning_effort="none",
+    )
+    actual = client.chat(PromptBuilder.PM_SYSTEM_PROMPT, prompt)
+    payload = post.call_args.kwargs["json"]
+    assert set(payload) == {
+        "model", "messages", "temperature", "response_format", "max_tokens", "reasoning_effort",
+    }
+    assert payload["messages"] == [
+        {"role": "system", "content": PromptBuilder.PM_SYSTEM_PROMPT},
+        {"role": "user", "content": prompt},
+    ]
+    assert prompt.count(report) == 1
+    assert all(prompt.count(f'ID: "{item_id}"') == 1 for item_id, _ in items)
+    for instruction in definition["instructions"]:
+        assert instruction["description"] not in prompt
+    wire_context = json.dumps(payload["messages"])
+    for unwanted in (
+        "private-task-identifier", "test-only-key", "fingerprint", "sha256", "receipt",
+        "previously_covered", "source_tree", "native_attempts", "task-tracker", "project-workflow",
+    ):
+        assert unwanted not in wire_context
+    assert ResponseParser.parse(actual, required_item_ids=[item_id for item_id, _ in items]).raw == response
 
 
 def test_pm_option_is_keyword_only():
