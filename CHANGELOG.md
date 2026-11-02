@@ -1,5 +1,22 @@
 # Changelog
 
+## Goal Iteration: Separate Authority From Report Consistency - 2026-11-02
+
+- Verified cause: server reads the actual latest requirements/owner confirmation,
+  compares final CLI revision/hash and rechecks before commit. It does NOT parse
+  arbitrary hashes copied inside report prose. Removing every consistency check
+  would preserve consent authority, not rejection of contradictory reports.
+- Prospective explicit-current-document criteria:30 valid calls, plain exact11/15,
+  display10/15; plain has1 false PASS. Rejected, no catalog publication.
+- Same plain inputs with only requested effort=medium:15 valid, exact12/15,
+ 2 false PASS. All15 report reasoning tokens, but quality still fails. No activation
+  or higher-effort sweep. Total327 post-comparison calls; all responses retained.
+- Next: reduce overlapping criterion responsibilities without losing whole-phase
+  conditions. Atomic-v1 six-case/36-call plan is prepared, NOT executed or accepted.
+  Historical v2 labels/results remain unchanged. No new build/install or stand change.
+- Installed93c14f8/PM23/catalog10 remain unchanged. Two new autonomous live PM
+  acceptance scenarios and release gates remain open.
+
 ## Goal Iteration: Reference Comparison Versus Criterion Meaning - 2026-11-02
 
 - Shared short1095 system, none/low:42 of48 planned calls,41 valid. First
