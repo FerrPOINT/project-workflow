@@ -1,5 +1,32 @@
 # Changelog
 
+## Advisor: Qualified Results And Remaining Live Acceptance - 2026-11-03
+
+- Final wire inspection found omitted C4 classifications, not injected hashes or
+  extra response fields. Strict validation and existing format repair remain intact.
+  Removed readiness/self-verdict claims from future PM reporting instructions;
+  business facts and the FULL document remain required.
+- A separate predeclared factual-report control accepted all three samples in three
+  HTTP calls, without format or transport errors (cap five). Parent remains failed/
+  incomplete after 21 exact results and a timeout; its unknown upstream outcome is
+  not reclassified. Including 15 unchanged phase01/03 results gives 39 exact final
+  results across distinct evidence sets, not one 39/39 run. Subsequent ledger:894.
+- Clarified existing recovery: unknown acceptance uses original-operation readback;
+  valid PARTIAL needs changed facts, while a known retryable technical failure can
+  be resubmitted after recovery with a fresh key/current version. No automatic retry.
+- Full native PM-v4 suite:3455 passed,75 subtests,15 skips, coverage94.118578%.
+  Latest affected suites:78 passed; Ruff and mypy166 pass. Unchanged full-suite
+  results are reused, not claimed as a fresh run of the later tests-only changes.
+- PostgreSQL:128 preceding cases passed; the corrected admission block passed5/5,
+  covering the failed case and all three previously unrun cases. The test now
+  reaches the SQL guard and waits for its original database deadline as well as
+  the host deadline. SQLSTATE42501, real row-lock wait and unchanged data remain
+  mandatory. No application/migration change; all owned QA resources cleaned.
+- Limited QA installation can test these final results with the existing native
+  protocol. The stricter historical zero-invalid-raw/zero-transport criterion is
+  not met and is not silently waived for release. Installation, two autonomous PM
+  scenarios and merge remain unaccepted; high settings are still QA-only.
+
 ## Advisor: Actual Wire Payload Recheck - 2026-11-03
 
 - Inspected 25 saved HTTP prompts of candidate 3ad48803, including native format
