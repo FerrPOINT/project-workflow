@@ -10,9 +10,17 @@
   display10/15; plain has1 false PASS. Rejected, no catalog publication.
 - Same plain inputs with only requested effort=medium:15 valid, exact12/15,
  2 false PASS. All15 report reasoning tokens, but quality still fails. No activation
-  or higher-effort sweep. Total327 post-comparison calls; all responses retained.
-- Next: reduce overlapping criterion responsibilities without losing whole-phase
-  conditions. Atomic-v1 six-case/36-call plan is prepared, NOT executed or accepted.
+  or higher-effort sweep.
+- Atomic-v1:36 valid calls; plain exact11/18 with2 false PASS, display exact10/18
+  with0 false PASS/PARTIAL but10 item disagreements. Not accepted or published.
+- Evidence-presence scope clarification, same six reports and unchanged prospective
+  goldens:18 valid display calls, exact14; all9 negatives rejected, but1 positive
+  falsely rejected for an invented separate presentation record. Rejected too.
+- Total381 post-comparison calls; all responses retained, no technical retries.
+ 29 targeted server authority/terminal checks and14 documentation tests PASS.
+- Next: remove the introduced independent-presentation-record burden, not add an
+  artifact or bypass judging. Review negative item ambiguities separately. No
+  further calls are scheduled in this iteration; no unqualified text is activated.
   Historical v2 labels/results remain unchanged. No new build/install or stand change.
 - Installed93c14f8/PM23/catalog10 remain unchanged. Two new autonomous live PM
   acceptance scenarios and release gates remain open.
