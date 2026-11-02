@@ -109,6 +109,7 @@ def test_report_boundary_and_recovery_are_defined_once_for_all_phases(business):
     text = _instructions(phases[0])
     for requirement in (
         "For every phase, report only business content",
+        "Report facts, not your own verdict or readiness claims.",
         "Omit hashes, UUIDs, receipts, raw CLI output and other machine metadata",
         "keep required machine values in CLI arguments and protected operation records",
         "Credentials stay in the preconfigured environment, never in reports",
