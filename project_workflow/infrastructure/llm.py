@@ -190,6 +190,39 @@ class PromptBuilder:
 
     PROMPT_VERSION = "supervisor-evaluator-v12"
 
+    PM_PROMPT_VERSION = "supervisor-evaluator-pm-v1"
+    PM_SYSTEM_PROMPT = (
+        "You are the PM phase advisor. Judge only the stated required checks and evidence "
+        "against current supplied facts. Worker procedure is not an additional criterion.\n"
+        "Compare the source brief and reported actual owner answers with the saved document; "
+        "do not demand independent owner-source attestation. Do not invent owner answers. "
+        "Require FULL content, exact artifact identity/revision/content_hash, actual commands/readbacks "
+        "and matching saved owner confirmation wherever the stated items require them. "
+        "A summary or intention cannot replace required completed work or FULL content.\n"
+        "The current report's own submission and future verdict/ACK are not prerequisites. "
+        "This does not waive required business results or external readbacks. "
+        "Real missing facts and contradictory current identities/hashes/results remain deficiencies; "
+        "accept a state change only with explicit chronology and action evidence.\n"
+        "Classify every required ID exactly once in covered or missing, copying IDs exactly. "
+        "The lists must be disjoint and duplicate-free. covered requires the entire item to be supported; "
+        "a report's existence alone never establishes coverage.\n"
+        "PASS requires all items covered and no blockers. PARTIAL requires missing items repairable "
+        "within this phase and no blockers. BLOCKED requires a specific root cause preventing progress, "
+        "including a real external blocker or repair requiring work outside this phase. "
+        "DELEGATE is permitted only when listed in ALLOWED VERDICTS, with missing work and no blockers.\n"
+        "Keep message, covered, missing and blockers consistent. Explain the specific missing facts "
+        "or blocker root cause in message; confidence is not evidence or authority. "
+        "Never choose the next phase. Return one bare JSON object, no extra fields or commentary:\n"
+        "{\n"
+        '  "verdict": "PASS" | "PARTIAL" | "BLOCKED" | "DELEGATE",\n'
+        '  "covered": ["required item ID"],\n'
+        '  "missing": ["required item ID"],\n'
+        '  "blockers": ["specific blocker description"],\n'
+        '  "message": "Human-readable summary in Russian",\n'
+        '  "confidence": 0.0-1.0\n'
+        "}\n"
+    )
+
     SYSTEM_PROMPT = (
         "You are a strict workflow supervisor. "
         "Evaluate the worker's report against the phase contract below.\n\n"
@@ -272,7 +305,11 @@ class PromptBuilder:
         report: str,
         previously_covered: list[str] | None = None,
         evaluation_items: list[tuple[str, str]] | None = None,
+        *,
+        pm_evaluation: bool = False,
     ) -> str:
+        if pm_evaluation and evaluation_items is None:
+            raise ValueError("PM evaluation requires explicit evaluation_items")
         allowed = ["PASS", "PARTIAL", "BLOCKED"]
         if getattr(phase, "delegate", None) is not None:
             allowed.append("DELEGATE")
@@ -283,7 +320,7 @@ class PromptBuilder:
             "",
             "PHASE CONTRACT:",
         ]
-        if phase.instructions:
+        if not pm_evaluation and phase.instructions:
             lines.append("Instructions:")
             for inst in phase.instructions:
                 desc = getattr(inst, "step", "") or getattr(inst, "description", "")
