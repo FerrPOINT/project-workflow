@@ -2,6 +2,13 @@
      data-namespace-id="{{ selected_namespace.id if selected_namespace else '' }}"
      data-api-url="{{ ui_base_path() }}/api/phases/{{ phase.id }}{% if effective_instructions_only %}/instructions{% endif %}{% if selected_namespace %}?namespace_id={{ selected_namespace.id }}{% endif %}"
      data-instructions-only="{{ 'true' if effective_instructions_only else 'false' }}">
+  <template id="phaseEffectiveSectionTemplate">
+    <section class="base-page-stack">
+      {% set effective_section_title %}<span data-effective-section-title></span>{% endset %}
+      {{ base_ui.section_header(effective_section_title, level=3) }}
+      {% call base_ui.prose(preserve_line_breaks=true) %}<div data-effective-section-list></div>{% endcall %}
+    </section>
+  </template>
   <p id="phaseViewStatus" role="status">Проверка инструкций…</p>
   <div id="phaseEffectiveContent" class="base-page-stack" hidden>
     {% if not effective_instructions_only %}

@@ -252,8 +252,9 @@ async function requestPhaseDetail(url, options, trackedDraft = false) {
   updatePhaseSaveStatus();
   try {
     const resp = await fetch(url, options);
-    const data = await resp.json().catch(() => ({}));
-    if (!trackedDraft && (resp.status >= 500 || (resp.ok && typeof data.ok !== 'boolean'))) { mutationNeedsReadback = true; mutationRequiresReload = true; }
+    const data = await resp.json();
+    if (!data || typeof data.ok !== 'boolean') throw new Error('Invalid mutation response');
+    if (!trackedDraft && resp.status >= 500) { mutationNeedsReadback = true; mutationRequiresReload = true; }
     return {resp, data};
   } catch (_error) {
     if (!trackedDraft) { mutationNeedsReadback = true; mutationRequiresReload = true; }
@@ -676,7 +677,7 @@ async function persistPhase() {
 
 async function saveEditorChanges() {
   savingStopped = false;
-  await savePhase();
+  if (phaseDraft?.dirty && !phaseDraft.pending && !phaseDraft.uncertain) await savePhase();
   for (const input of document.querySelectorAll('.timeline-name-input')) {
     const draft = instructionDraft(input);
     if (draft.dirty && !draft.pending && !draft.uncertain) await saveInstructionDescription(input);

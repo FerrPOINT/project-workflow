@@ -1,0 +1,20 @@
+{% import "base/macros.html" as base_ui %}
+{% from "namespace_mark.html" import namespace_mark %}
+
+{# The namespace vocabulary and callbacks are product-owned; all skins are Base. #}
+{% macro namespace_card(namespace=none, selected=false) -%}
+{% call base_ui.card(tag='button', padded=true, class_name='namespace-nav-item', attributes={
+  'data-namespace-id': namespace.id if namespace else '',
+  'aria-controls': 'namespaceForm',
+  'aria-pressed': true if selected else false,
+  'onclick': 'selectNamespace(' ~ namespace.id ~ ')' if namespace else none
+}) %}
+  {{ namespace_mark(namespace.theme_icon if namespace else none, namespace.theme_color if namespace else none) }}
+  <span class="namespace-card-body">
+    {{ base_ui.card_title(namespace.name if namespace else '', tag='span', class_name='namespace-name') }}
+    <span class="namespace-meta">
+      {{ base_ui.badge(namespace.task_count | pluralize('задача,задачи,задач') if namespace else '', 'muted', 'inline') }}
+    </span>
+  </span>
+{% endcall %}
+{%- endmacro %}

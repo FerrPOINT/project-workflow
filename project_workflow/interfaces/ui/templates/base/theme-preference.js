@@ -11,6 +11,7 @@
   const eventNames = ["sdlc-ui-theme-change", "pdlc-ui-theme-change"];
   const valid = (value) => ["dark", "gray", "light"].includes(value);
   let sessionTheme;
+  let platformDefault = null;
   let notificationVersion = 0;
   let emitting = false;
 
@@ -29,7 +30,7 @@
     }
   }
 
-  function read(legacyKey = "theme", fallback = "dark") {
+  function read(legacyKey = "theme", fallback = platformDefault ?? "dark") {
     if (valid(sessionTheme)) return sessionTheme;
     const preference = shared();
     if (preference) return preference;
@@ -40,6 +41,14 @@
       /* Keep theme controls usable without storage. */
     }
     return valid(fallback) ? fallback : "dark";
+  }
+
+  function setPlatformDefault(value) {
+    const next = valid(value) ? value : null;
+    if (platformDefault === next) return;
+    platformDefault = next;
+    // Use the existing notification channel without persisting or replacing a choice.
+    window.dispatchEvent(new Event("pdlc-ui-theme-change"));
   }
 
   function set(value, legacyKey = "theme") {
@@ -110,6 +119,7 @@
   window.PdlcThemePreference = window.SdlcThemePreference = {
     read,
     set,
+    setPlatformDefault,
     subscribe,
   };
 })();

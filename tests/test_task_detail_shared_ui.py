@@ -148,6 +148,13 @@ def test_verdict_badges_and_result_panels_preserve_labels_reports_and_lists(verd
                  "First line\n&lt;script&gt;owner report&lt;/script&gt;"]:
         assert text in html
     assert 'data-preserve-line-breaks="true"' in html
+    markers = [attrs for _, attrs in Elements(html).elements
+               if "base-timeline-marker" in attrs.get("class", "").split()]
+    assert len(markers) == 1
+    assert markers[0]["data-tone"] == tone
+    assert markers[0]["aria-hidden"] == "true"
+    assert "data-current" not in markers[0]
+
 
 
 @pytest.mark.parametrize("done,total,current,variant", [
@@ -199,9 +206,15 @@ def test_phase_surfaces_use_base_and_keep_phase_sequence_and_status(status, labe
         "phases": [{"sequence_number": 73, "phase_code": "P-73", "phase_name": "Owner <phase>",
                     "phase_description": "Owner <description>", "status": status}],
     }])
-    assert f'phase-node serial {status}' in html
+    markers = [attrs for _, attrs in Elements(html).elements
+               if "base-timeline-marker" in attrs.get("class", "").split()]
+    assert len(markers) == 1
+    assert markers[0]["data-tone"] == {"done": "success", "current": "info"}.get(status, "neutral")
+    assert markers[0]["data-size"] == "small"
+    assert (markers[0].get("data-current") == "true") is highlighted
+    assert markers[0]["aria-hidden"] == "true"
     assert f'data-tone="{tone}" data-appearance="badge">{label}</span>' in html
-    assert 'data-appearance="counter"><span class="phase-sequence-label">Фаза </span>73' in html
+    assert 'data-appearance="counter"><span class="phase-sequence-label base-visually-hidden">Фаза </span>73' in html
     assert "Owner &lt;phase&gt;" in html
     assert "Owner &lt;description&gt;" in html
     highlighted_cards = [attrs for _, attrs in Elements(html).elements

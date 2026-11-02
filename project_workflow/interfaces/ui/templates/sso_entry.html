@@ -2,7 +2,7 @@
 <!doctype html><html lang="ru" data-theme="dark"{% if login_required %} data-platform-login-required{% endif %}>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{{ "Нет доступа" if access_denied else "Вход в платформу" }}</title>
 <script>{% include 'base/theme-preference.js' %};document.documentElement.dataset.theme=window.PdlcThemePreference.read('workflow-theme');</script>
-<style>{% include 'base/base-ui.css' %}</style></head>
+{% include 'branding_head.html' %}</head>
 <body class="base-auth-page">
 {{ base_ui.platform_login('Нет доступа' if access_denied else 'Вход в платформу', message=message, message_kind='info' if login_required else 'error', login_url=none if access_denied else login_url) }}
 <script type="module">

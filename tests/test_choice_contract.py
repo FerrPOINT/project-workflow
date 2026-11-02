@@ -2,18 +2,40 @@
 import re
 from pathlib import Path
 
+from jinja2 import nodes
+
+from project_workflow.interfaces.ui.templates import templates
+
 TEMPLATES = Path(__file__).resolve().parents[1] / "project_workflow/interfaces/ui/templates"
 
 
 def test_all_active_choices_use_base_adapter_and_keep_native_fallback():
-    controls = []
+    calls = {}
     for source in TEMPLATES.glob("*.html"):
-        for control in re.findall(r"<select\b([^>]*)>", source.read_text(encoding="utf-8")):
-            controls.append((source.name, control))
-            assert "data-base-choice" in control, (source.name, control)
-            assert " hidden" not in control, "Fallback is hidden only after successful initialization"
-    assert len(controls) == 6
-    assert not any("rollback" in control for _, control in controls)
+        text = source.read_text(encoding="utf-8")
+        assert not re.search(r"<select\b", text), f"{source.name}: use the public Base macro"
+        count = sum(
+            isinstance(call.node, nodes.Getattr) and call.node.attr == "select_control"
+            and isinstance(call.node.node, nodes.Name) and call.node.node.name == "base_ui"
+            for call in templates.env.parse(text).find_all(nodes.Call)
+        )
+        if count:
+            calls[source.name] = count
+    assert calls == {"namespaces.html": 2, "phase_detail.html": 1, "profession_selector.html": 1,
+                     "workflows.html": 3}
+
+    # Check the actual product composition and pinned Base renderer, not the retired raw markup.
+    selector = templates.get_template("profession_selector.html").module.profession_selector
+    html = str(selector("choice-proof", [{"id": 73, "name": "Вариант <73>",
+                                         "theme_icon": "rocket", "theme_color": "#2563eb"}], None))
+    controls = re.findall(r"<select\b([^>]*)>", html)
+    assert len(controls) == 1
+    assert "data-base-choice" in controls[0]
+    assert " hidden" not in controls[0], "Fallback is hidden only after successful initialization"
+    assert 'id="choice-proof"' in controls[0]
+    assert 'onchange="switchNamespace(this.value)"' in controls[0]
+    assert 'value="73"' in html and "Вариант &lt;73&gt;" in html
+    assert "rollback" not in html
     bootstrap = (TEMPLATES / "base.html").read_text(encoding="utf-8")
     assert 'include "base/choice-runtime.js"' in bootstrap
     assert "initChoice(control" in bootstrap

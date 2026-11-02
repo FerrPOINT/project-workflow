@@ -2,6 +2,47 @@
 /** @type {WeakMap<HTMLTextAreaElement, TextareaAutosizeController>} */
 const controls = new WeakMap();
 
+/** @type {WeakMap<Document, {marker: HTMLSpanElement, observer: ResizeObserver, listeners: Set<()=>void>}>} */
+const rootFontMetrics = new WeakMap();
+
+/**
+ * Browser text preferences can change rem metrics without resizing the field.
+ * Share one non-interactive rem box per document instead of polling styles.
+ * @param {Document} doc
+ * @param {()=>void} listener
+ * @returns {()=>void}
+ */
+function subscribeRootFontMetrics(doc, listener) {
+  const win = doc.defaultView;
+  if (!win?.ResizeObserver || !doc.body) return () => {};
+  let metrics = rootFontMetrics.get(doc);
+  if (!metrics) {
+    const marker = doc.createElement("span");
+    marker.setAttribute("aria-hidden", "true");
+    marker.setAttribute("data-base-font-metrics", "");
+    marker.style.cssText =
+      "position:fixed;inset:0 auto auto 0;inline-size:1rem;block-size:1rem;margin:0;padding:0;border:0;visibility:hidden;pointer-events:none;contain:strict";
+    /** @type {Set<()=>void>} */
+    const listeners = new Set();
+    const observer = new win.ResizeObserver(() => {
+      for (const notify of listeners) notify();
+    });
+    doc.body.append(marker);
+    observer.observe(marker);
+    metrics = { marker, observer, listeners };
+    rootFontMetrics.set(doc, metrics);
+  }
+  const current = metrics;
+  current.listeners.add(listener);
+  return () => {
+    if (!current.listeners.delete(listener)) return;
+    if (current.listeners.size) return;
+    current.observer.disconnect();
+    current.marker.remove();
+    rootFontMetrics.delete(doc);
+  };
+}
+
 /**
  * Shared, opt-in measurement for React and native pages. It never changes the
  * value, selection, focus or form events. Refresh after an imperative value or
@@ -145,6 +186,7 @@ export function initTextareaAutosize(field) {
           }
         });
   resize?.observe(field);
+  const unsubscribeRootFont = subscribeRootFontMetrics(doc, fontChanged);
   let form = field.form;
   const fonts = doc.fonts;
   const pagehide = (event) => {
@@ -163,6 +205,7 @@ export function initTextareaAutosize(field) {
       if (frame !== undefined) win.cancelAnimationFrame(frame);
       attributes.disconnect();
       resize?.disconnect();
+      unsubscribeRootFont();
       field.removeEventListener("input", schedule);
       form?.removeEventListener("reset", schedule);
       fonts?.removeEventListener("loadingdone", fontChanged);

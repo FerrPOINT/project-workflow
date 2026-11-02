@@ -16,9 +16,12 @@ from project_workflow.interfaces.ui import sso
 
 @pytest.mark.parametrize("result", ["error", "login-required"])
 def test_callback_entry_reports_result_before_any_product_route(monkeypatch, result):
+    from project_workflow.interfaces.ui import platform_branding
+
     node = shutil.which("node")
     if not node:
         pytest.skip("Node is required for the executable bridge regression")
+    monkeypatch.setattr(platform_branding, "branding_url", lambda: "http://configured.test/brand")
     app, _ = _app(monkeypatch, UI_PLATFORM_ORIGIN="http://portal.test")
     with TestClient(app, follow_redirects=False) as client:
         if result == "login-required":
@@ -75,6 +78,8 @@ def test_broken_login_state_never_reflects_code_in_redirect(monkeypatch):
         assert response.status_code == 401
         assert "private-code" not in response.text
         assert "location" not in response.headers
+        assert "createBrandingRuntime" in response.text
+        assert "/base-assets/fonts/inter-cyrillic-wght-normal.woff2" in response.text
 
 
 def test_central_outage_rejects_existing_session(monkeypatch):

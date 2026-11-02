@@ -19,6 +19,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.staticfiles import StaticFiles
 
 from ... import __version__
+from ...config import get_settings
 from ...infrastructure.db.session import DatabaseUnavailable, get_engine, reset_engine
 from .platform_branding import platform_branding
 from .routes import (
@@ -29,6 +30,7 @@ from .routes import (
     runtime_api,
 )
 from .sso import install_sso, require_administrator
+from .templates import templates
 
 logger = logging.getLogger(__name__)
 
@@ -70,17 +72,21 @@ def _database_not_ready_response(request: Request) -> JSONResponse | HTMLRespons
             },
             status_code=503,
         )
-    return HTMLResponse(
-        (
-            '<!doctype html><html lang="ru"><head><meta charset="utf-8">'
-            f"<title>{_DATABASE_NOT_READY_ERROR}</title>"
-            "<style>body{margin:0;font-family:Arial,sans-serif;background:#101114;color:#f5f7fb}"
-            "main{max-width:640px;margin:12vh auto;padding:32px}"
-            "p{color:#aeb4c0;line-height:1.6}</style></head><body><main>"
-            f"<h1>{_DATABASE_NOT_READY_ERROR}</h1>"
-            "<p>Проверьте подключение и примените миграции, затем обновите страницу.</p>"
-            "</main></body></html>"
-        ),
+    # A readiness page cannot load the product namespace context from the failing database.
+    context: dict[str, object] = {
+        "title": _DATABASE_NOT_READY_ERROR,
+        "message": "Проверьте подключение и примените миграции, затем обновите страницу.",
+    }
+    try:
+        get_settings()
+    except ValidationError:
+        # Invalid application settings must not break the error page itself.
+        # Keep embedded Base defaults without deriving URLs from unvalidated config.
+        context.update(branding_base_path="", branding_config_url=None)
+    return templates.TemplateResponse(
+        request=request,
+        name="service_unavailable.html",
+        context=context,
         status_code=503,
     )
 
@@ -91,11 +97,13 @@ class _UoWMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         from ...application.state import _app_state, _uow_ctx
 
+        # Public presentation and central SSO do not own a product database transaction.
         if request.url.path in {
             "/health", "/internal/runtime/capabilities",
+            "/login", "/sso/callback", "/logout", "/api/platform/branding",
             "/internal/runtime/base/source-catalog", "/internal/runtime/base/source-capabilities",
         } or request.url.path.startswith((
-            "/internal/runtime/base/namespace-bindings/", "/api/internal/v1/user-deletions/",
+            "/internal/runtime/base/namespace-bindings/", "/api/internal/v1/user-deletions/", "/base-assets/fonts/",
         )):
             return await call_next(request)
         try:

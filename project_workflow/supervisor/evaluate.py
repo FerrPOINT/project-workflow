@@ -35,11 +35,11 @@ def _contract_fingerprint_state(
     evaluation_items: list[tuple[str, str]],
     previously_covered_ids: set[str],
     transition_routes: dict[str, tuple[str | None, str | None, str | None]],
-    prompt_version: str = PromptBuilder.PROMPT_VERSION,
+    prompt_version: str | None = None,
 ) -> dict[str, Any]:
     contract_data = contract.to_dict()
     return {
-        "prompt_version": prompt_version,
+        "prompt_version": PromptBuilder.PROMPT_VERSION if prompt_version is None else prompt_version,
         "contract": contract_data,
         "evaluation_items": [{"id": item_id, "text": text} for item_id, text in evaluation_items],
         "previously_covered_ids": sorted(previously_covered_ids),
@@ -90,7 +90,7 @@ def _contract_fingerprint(
     *, builder: Any, phase: Phase, group: list[Phase], contract: Any,
     evaluation_items: list[tuple[str, str]], previously_covered_ids: set[str],
     transition_routes: dict[str, tuple[str | None, str | None, str | None]],
-    prompt_version: str = PromptBuilder.PROMPT_VERSION,
+    prompt_version: str | None = None,
 ) -> str:
     return _fingerprint_contract_state(_contract_fingerprint_state(
         builder=builder, phase=phase, group=group, contract=contract, evaluation_items=evaluation_items,

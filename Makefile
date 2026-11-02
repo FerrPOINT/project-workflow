@@ -14,7 +14,7 @@ test-verbose:
 	$(PYTEST) -v --timeout=60
 
 test-integration:
-	$(PYTEST) -q -m integration tests/test_postgres_integration.py --timeout=120
+	$(PYTEST) -q -m integration --timeout=120
 
 coverage:
 	$(PYTEST) --cov=project_workflow --cov-report=term --timeout=60

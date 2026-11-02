@@ -1,5 +1,6 @@
 {% import "base/macros.html" as base_ui %}
 {% from "profession_selector.html" import profession_selector %}
+{% from "namespace_mark.html" import namespace_mark %}
 {% set active_namespace = theme_namespace if theme_namespace is defined else none %}
 {% set active_namespace_id = active_namespace.id if active_namespace else none %}
 {% set sidebar_scope_suffix = '?project_scope=all' if request is defined and request.query_params.get('project_scope') == 'all' else '' %}
@@ -49,22 +50,15 @@ html[data-pdlc-access-pending] body{visibility:hidden}
 
 /* ── Sidebar (desktop fixed) ────────────────────────────────────────── */
 
-.sidebar-cli-icon{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;flex:0 0 20px;font:700 14px/1 'JetBrains Mono',monospace}
 
 /* ── Main ──────────────────────────────────────────────────────────── */
 
 .namespace-switcher{position:relative;min-width:0}
 
-.namespace-selector-mark{display:inline-flex;align-items:center;justify-content:center;flex:0 0 28px;width:28px;height:28px;border-radius:6px;background:color-mix(in srgb,var(--namespace-color,var(--accent)) 14%,transparent);color:var(--namespace-color,var(--accent));border:1px solid color-mix(in srgb,var(--namespace-color,var(--accent)) 45%,transparent)}
-.namespace-selector-mark[hidden]{display:none}
-.namespace-selector-mark svg{width:17px;height:17px}
-.namespace-selector-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
-.namespace-picker-label{margin-bottom:8px;color:var(--text-muted);font-size:var(--base-font-label);font-weight:600;text-transform:uppercase}
 
 
 
 /* ── Editable rows ─────────────────────────────────────────────────── */
-.row-actions{display:flex;gap:6px;justify-content:flex-end}
 
 
 /* ── Timeline (shared by phases list and phase detail instructions) ─── */
@@ -75,10 +69,9 @@ html[data-pdlc-access-pending] body{visibility:hidden}
 .timeline-card{width:100%;display:block;position:relative}
 .timeline-parallel-group{width:100%;display:flex;flex-direction:column;gap:10px}
 .timeline-parallel-label{align-self:flex-start}
-.timeline-name{font-size:var(--base-font-body);font-weight:500;color:var(--text);line-height:var(--base-line-body)}
 .timeline-badges{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;align-items:center}
 .execution-row{display:flex;gap:6px;margin-top:10px;align-items:center;min-height:32px;width:100%}
-.timeline-desc{font-size:var(--base-font-label);color:var(--text-muted);margin-top:4px}
+.timeline-desc{margin-top:4px}
 @media (max-width: 720px){.timeline-row{grid-template-columns:1fr}.phase-order-controls{flex-direction:row;flex-wrap:wrap;justify-content:flex-start;padding-top:0;gap:6px}}
 
 /* ── Responsive breakpoints ──────────────────────────────────────── */
@@ -98,20 +91,15 @@ html[data-pdlc-access-pending] body{visibility:hidden}
 .page-actions:empty,.page-header:has(.page-actions:empty):has(h1:empty){display:none}
 
 .platform-header-context .namespace-switcher{min-width:0;width:min(280px,100%)}
-.platform-header-context{justify-content:flex-end}
-@media(max-width:767px){.platform-header .platform-header-context{display:none}.platform-header-leading{flex-shrink:0}}
 
 </style>
 <style data-workflow-page-style>{% block extra_style %}{% endblock %}</style>
-{% set base_styles %}{% include "base/base-ui.css" %}{% endset %}
-<style>{{ base_styles|replace('url("./fonts/', 'url("' ~ ui_base_path() ~ '/base-assets/fonts/')|safe }}</style>
-<script>{% include "base/branding-bootstrap.js" %}
-window.WorkflowBranding=window.PdlcBranding.createBrandingRuntime({root:document.documentElement,configUrl:{{ platform_branding_url()|tojson }}});
-window.addEventListener('pagehide',function(event){if(!event.persisted)window.WorkflowBranding.dispose();});
-</script>
+{% include 'branding_head.html' %}
 
 </head>
 <body class="base-ssr-shell">
+
+<template id="namespace-choice-mark-template">{{ namespace_mark(size='sm') }}</template>
 
 {% set sidebar_navigation %}
   <nav class="sidebar-nav base-shell-navigation" aria-label="Основная навигация">
@@ -133,8 +121,8 @@ window.addEventListener('pagehide',function(event){if(!event.persisted)window.Wo
       <span class="sidebar-label">Выполнения задач</span>
     </a>
     <div class="sidebar-section">УПРАВЛЕНИЕ</div>
-    <a class="sidebar-link {% if page == 'settings' %}active{% endif %}" href="{{ ui_base_path() }}/settings{{ sidebar_scope_suffix }}" data-workflow-route="settings" aria-label="Команды CLI" title="Команды CLI" {% if page == 'settings' %}aria-current="page"{% endif %}>
-      <span class="sidebar-cli-icon" aria-hidden="true">&gt;_</span>
+    <a class="sidebar-link {% if page == 'settings' %}active{% endif %}" href="{{ ui_base_path() }}/settings{{ sidebar_scope_suffix }}" aria-label="Команды CLI" title="Команды CLI" data-workflow-route="settings" {% if page == 'settings' %}aria-current="page"{% endif %}>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><path d="m4 7 6 5-6 5M12 19h8"/></svg>
       <span class="sidebar-label">Команды CLI</span>
     </a>
   </nav>
@@ -169,20 +157,13 @@ function showToast(msg, type){
 function showRequestError(){
   showToast('Не удалось связаться с сервером','error');
 }
-function renderNamespaceChoice(option, mode){
+function renderNamespaceChoice(option){
   var paths = {{ project_icon_paths | tojson }};
   var label = document.createElement('span');
-  var icon = document.createElement('span');
-  icon.className = 'namespace-selector-mark';
-  icon.style.setProperty('--namespace-color', option.dataset.color);
-  icon.setAttribute('aria-hidden', 'true');
-  var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('fill', 'none');
-  svg.setAttribute('stroke', 'currentColor'); svg.setAttribute('stroke-width', '2');
-  var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  path.setAttribute('d', paths[option.dataset.icon] || paths.folder);
-  svg.append(path); icon.append(svg);
-  var name = document.createElement('span'); name.className = 'namespace-selector-name'; name.textContent = option.label; if(mode === 'option') name.style.whiteSpace = 'normal';
+  var icon = document.getElementById('namespace-choice-mark-template').content.firstElementChild.cloneNode(true);
+  if (option.dataset.color) icon.style.setProperty('--base-icon-mark-color', option.dataset.color);
+  icon.querySelector('path').setAttribute('d', paths[option.dataset.icon] || paths.folder);
+  var name = document.createElement('span'); name.className = 'base-choice-label'; name.textContent = option.label;
   label.append(icon, name); return label;
 }
 let confirmedProfessionId = {{ (active_namespace_id|string if active_namespace_id is not none else '')|tojson }};

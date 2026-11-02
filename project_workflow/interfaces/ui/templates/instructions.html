@@ -11,66 +11,72 @@
 {% block extra_style %}
 .instructions-layout{display:flex;flex-direction:column;gap:8px;max-width:900px;margin:0 auto;width:100%}
 .instruction-block{width:100%}
-.instruction-row{display:grid;grid-template-columns:var(--shell-control-min) minmax(0,1fr) var(--shell-control-min);gap:10px;padding:10px 0;border-bottom:1px solid var(--border);align-items:start}
+.instruction-row{display:grid;grid-template-columns:var(--shell-control-min) minmax(0,1fr) var(--shell-control-min);gap:10px;align-items:start}
 .instruction-body{display:flex;flex-direction:column;gap:8px;min-width:0}
 .execution-row{display:flex;align-items:center;gap:6px;min-height:28px}
-.skills-cell{font-size:var(--base-font-label);color:var(--text-muted);display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.skills-cell{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .instruction-desc textarea{display:block;min-height:40px;box-sizing:border-box;overflow-wrap:anywhere}
-.skills-cell{font-size:var(--base-font-label);color:var(--text-muted)}
 .parallel-label{margin-bottom:8px}
-.add-panel{max-width:900px;margin:10px auto 0;padding-top:12px;border-top:1px solid var(--border)}
+.add-panel{max-width:900px;margin:10px auto 0}
 .add-row{display:flex;gap:10px;align-items:center}
 .order-controls{display:flex;flex-direction:column;align-items:center;gap:4px}
 @media(max-width:480px){.instruction-row{grid-template-columns:minmax(0,1fr) var(--shell-control-mobile-min);gap:6px}.instruction-row .step-num{display:none}.instruction-row .order-controls{grid-column:1;grid-row:1;flex-direction:row;justify-content:flex-start}.instruction-row .instruction-body{grid-column:1/-1;grid-row:2}.instruction-row .row-actions{grid-column:2;grid-row:1}}
 {% endblock %}
 
 {% block content %}
+<template id="instruction-parallel-label-template">{{ base_ui.badge('⚡ параллельно', 'info', class_name='parallel-label') }}</template>
+<template id="instruction-parallel-group-template">{% call base_ui.card(padded=true, class_name='instruction-block parallel-group') %}{% endcall %}</template>
 {% set effective_instructions_only = true %}
 {% include '_phase_effective_view.html' %}
 <div id="phaseStoredEditor" hidden inert>
 <div class="instructions-layout" id="instructionsLayout">
   {% for group in instruction_groups %}
     {% set is_parallel_group = group | length > 1 %}
-    <div class="instruction-block {% if is_parallel_group %}parallel-group base-card base-card-content{% endif %}" data-block-index="{{ loop.index0 }}">
+    {% set group_body %}
       {% if is_parallel_group %}{{ base_ui.badge('⚡ параллельно', 'info', class_name='parallel-label') }}{% endif %}
       {% for instruction in group %}
-      <div class="instruction-row" data-instruction-id="{{ instruction.id }}" data-step-num="{{ instruction.step_num }}">
+      {% call base_ui.content_section(tag='div', dividers='end', inset='both', density='compact', class_name='instruction-row', attributes={'data-instruction-id':instruction.id, 'data-step-num':instruction.step_num}) %}
         <div class="order-controls">
-          <button type="button" class="base-control base-button base-icon-control order-btn move-up" data-variant="secondary" data-size="icon" onclick="moveInstruction(this, -1)" aria-label="Поднять инструкцию {{ instruction.step_num }} выше">↑</button>
+          {% call base_ui.button(size="icon", class_name="order-btn move-up", type="button", aria_label="Поднять инструкцию " ~ (instruction.step_num) ~ " выше", attributes={"onclick": "moveInstruction(this, -1)"}) %}↑{% endcall %}
           {{ base_ui.badge(instruction.step_num, appearance='counter', class_name='step-num') }}
-          <button type="button" class="base-control base-button base-icon-control order-btn move-down" data-variant="secondary" data-size="icon" onclick="moveInstruction(this, 1)" aria-label="Опустить инструкцию {{ instruction.step_num }} ниже">↓</button>
+          {% call base_ui.button(size="icon", class_name="order-btn move-down", type="button", aria_label="Опустить инструкцию " ~ (instruction.step_num) ~ " ниже", attributes={"onclick": "moveInstruction(this, 1)"}) %}↓{% endcall %}
         </div>
         <div class="instruction-body">
           <div class="instruction-desc">
-            <textarea data-base-autosize class="instruction-text base-control base-textarea" rows="1" data-original-description="{{ instruction.description }}" aria-label="Описание инструкции {{ instruction.step_num }}" onchange="updateInstruction(this)" data-appearance="inline">{{ instruction.description }}</textarea>
+            {{ base_ui.textarea_control(class_name="instruction-text", rows="1", aria_label="Описание инструкции " ~ (instruction.step_num), appearance="inline", autosize=true, value=(instruction.description), attributes={"data-original-description": (instruction.description), "onchange": "updateInstruction(this)"}) }}
           </div>
           <div class="execution-row">
-            <button type="button" class="base-control base-button type-badge" data-variant="outline" aria-label="Параллельное выполнение инструкции {{ instruction.step_num }}" data-execution-type="{{ instruction.execution_type }}" aria-pressed="{{ 'true' if instruction.execution_type == 'parallel' else 'false' }}" onclick="toggleType(this)">{{ 'параллельно' if instruction.execution_type == 'parallel' else 'последовательно' }}</button>
+            {% call base_ui.button(variant="outline", class_name="type-badge", type="button", aria_label="Параллельное выполнение инструкции " ~ (instruction.step_num), aria_pressed=((('true' if instruction.execution_type == 'parallel' else 'false')) == 'true'), attributes={"data-execution-type": (instruction.execution_type), "onclick": "toggleType(this)"}) %}{{ 'параллельно' if instruction.execution_type == 'parallel' else 'последовательно' }}{% endcall %}
           </div>
           <div class="skills-cell">
             {% for skill in instruction.skills %}
             {{ base_ui.badge(skill, 'info') }}
             {% endfor %}
-            <input class="skills-input base-control base-input" type="text" value="{{ instruction.skills | join(', ') }}" placeholder="Навыки через запятую" aria-label="Навыки инструкции {{ instruction.step_num }}" onchange="updateSkills(this)">
+            {{ base_ui.input_control(class_name="skills-input", type="text", value=(instruction.skills | join(', ')), placeholder="Навыки через запятую", aria_label="Навыки инструкции " ~ (instruction.step_num), attributes={"onchange": "updateSkills(this)"}) }}
           </div>
         </div>
-        <div class="row-actions">
-          <button type="button" class="base-control base-button base-icon-control icon-btn" data-variant="destructive-outline" data-size="icon" onclick="deleteInstruction(this)" aria-label="Удалить инструкцию {{ instruction.step_num }}" title="Удалить инструкцию">×</button>
-        </div>
-      </div>
+        {% call base_ui.action_group(class_name='row-actions') %}
+          {% call base_ui.button(variant="destructive-outline", size="icon", class_name="icon-btn", type="button", aria_label="Удалить инструкцию " ~ (instruction.step_num), title="Удалить инструкцию", attributes={"onclick": "deleteInstruction(this)"}) %}×{% endcall %}
+        {% endcall %}
+      {% endcall %}
       {% endfor %}
-    </div>
+    {% endset %}
+    {% if is_parallel_group %}
+    {% call base_ui.card(padded=true, class_name='instruction-block parallel-group', attributes={'data-block-index':loop.index0}) %}{{ group_body }}{% endcall %}
+    {% else %}
+    <div class="instruction-block" data-block-index="{{ loop.index0 }}">{{ group_body }}</div>
+    {% endif %}
   {% else %}
     {{ base_ui.state('empty', 'Инструкций пока нет.') }}
   {% endfor %}
 </div>
 
-<div class="add-panel">
+{% call base_ui.content_section(tag='div', density='compact', class_name='add-panel') %}
   <div class="add-row">
-    <input type="text" id="newInstructionText" placeholder="Новая инструкция…" aria-label="Новая инструкция" style="flex:1" class="base-control base-input">
-    <button type="button" class="btn btn-primary" onclick="addInstruction()">Добавить</button>
+    {{ base_ui.input_control(id="newInstructionText", type="text", placeholder="Новая инструкция…", aria_label="Новая инструкция", attributes={"style": "flex:1"}) }}
+    {% call base_ui.button(variant="primary", type="button", attributes={"onclick": "addInstruction()"}) %}Добавить{% endcall %}
   </div>
-</div>
+{% endcall %}
 
 </div>
 {% endblock %}

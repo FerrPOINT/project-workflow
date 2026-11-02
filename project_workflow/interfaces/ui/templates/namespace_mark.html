@@ -1,0 +1,8 @@
+{% import "base/macros.html" as base_ui %}
+
+{# Workflow owns the icon vocabulary; Base owns the identity mark around it. #}
+{% macro namespace_mark(icon=none, color=none, size='md') -%}
+{% call base_ui.icon_mark(color=color, size=size) %}
+<svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ project_icon_path(icon) }}"></path></svg>
+{% endcall %}
+{%- endmacro %}
