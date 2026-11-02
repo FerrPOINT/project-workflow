@@ -11,8 +11,15 @@
 - Prompt package:20 focused tests PASS. Combined targeted run:266 PASS initially;
   three new fixture mistakes and five obsolete procedure-in-judge expectations
   corrected, all eight rechecked PASS. Ruff PASS. Full release gates remain open.
-- Coverage isolation, fixed eight-case model comparison and live acceptance are
-  next. Runtime93c14f8, PM23 and catalog10 remain unchanged; no model calls yet.
+- Separate coverage change: PM-DRAFT-02/03 use only current report coverage before
+  and after provider calls, including fingerprint and technical-error fallback.
+  Phase01/general history reader are unchanged.13 policy/coverage tests PASS,
+  including three-attempt format failure. Independent review has no blockers.
+- Before any model calls, golden133 C4 is explicitly revised to missing, consistent
+  with the receipt-mismatch control: both reports claim exact consent despite a
+  contradictory hash. Historical goldens/results remain unchanged.
+- Fixed eight-case model comparison and live acceptance are next. Runtime93c14f8,
+  PM23 and catalog10 remain unchanged; no model calls yet. Full gates remain open.
 
 ## Advisor Chain Diagnosis - 2026-11-02
 

@@ -331,7 +331,8 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
     pm_evaluation = configured is not None and configured.enrollment["request"]["role_key"] == "project_manager"
     system = PromptBuilder.PM_SYSTEM_PROMPT if pm_evaluation else PromptBuilder.SYSTEM_PROMPT
     prompt_version = PromptBuilder.PM_PROMPT_VERSION if pm_evaluation else PromptBuilder.PROMPT_VERSION
-    previously = engine._get_previously_covered(phase.code)
+    current_report_only = pm_evaluation and phase.code in ("PM-DRAFT-02", "PM-DRAFT-03")
+    previously = set() if current_report_only else engine._get_previously_covered(phase.code)
     previously_ids = {
         item_id for item_id, text in evaluation_items if item_id in previously or normalize_text(text) in previously
     }
@@ -440,7 +441,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
     )
     item_ids = [item_id for item_id, _ in evaluation_items]
     item_text = dict(evaluation_items)
-    previously = engine._get_previously_covered(phase.code)
+    previously = set() if current_report_only else engine._get_previously_covered(phase.code)
     previously_ids = {
         item_id for item_id, text in evaluation_items if item_id in previously or normalize_text(text) in previously
     }
