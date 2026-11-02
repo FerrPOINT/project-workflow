@@ -1,5 +1,28 @@
 # Changelog
 
+## Advisor Causal And Context Recheck - 2026-11-02
+
+- Current finding: removing worker procedure and stale PM coverage fixes input
+  defects; forwarding existing verified consent fixes missing server context.
+  These changes do not establish model quality. Further wording experiments
+  partly compensated overlapping evidence/identity obligations instead of
+  resolving their contract. No new model calls, builds or installation in this audit.
+- Four captured installed-v12 requests contain only system/user, not full chat
+  history, SOUL, skills, logs or diagnostic snapshots. None is truncated;
+  each has one successful response identical to the saved server decision.
+  Worker procedure contributes1693/2068 unnecessary characters to these inputs.
+- Keep installed v12, source PM-v2/SYS2000 and private SYS1095/display experiments
+  distinct. HEXREF legends are private experiments, not product input formatting.
+  Source PM-v2 model qualification and two live PM acceptances remain open.
+- Retained server-fact trial:18 valid,16 exact,1 false PARTIAL,2 item disagreements.
+  Subsequent confirmation-fields trial:18 valid, all18 verdicts agree,9 item
+  disagreements. Some concern ambiguous overlapping obligations, not established
+  model errors. Neither trial qualifies the actual source SYS2000. Total435
+  post-comparison calls retained; no unrun/unknown slots counted as results.
+- Next: settle the existing criteria's responsibility boundaries before another
+  experiment. Preserve server consent/version checks and report contradictions;
+  do not add aliases, exceptions, automatic PASS or a second verifier.
+
 ## PM Context Candidate: Use Existing Server Evidence - 2026-11-02
 
 - Cause: final configured PM already verifies actual Tracker owner confirmation,
@@ -10,7 +33,7 @@
   credential, response field or authority; content/presentation/report conflicts
   and all existing server checks remain required. Other roles/preparation unchanged.
 - Old PM-v1 frozen proof remains readable/replayable. No provider call on replay.
-- Targeted checks:120 existing +16 new PASS on the pinned interpreter; Ruff all
+- Targeted checks:136 PASS on the pinned interpreter; Ruff all
   and mypy166 files PASS. Controlled providers prove wiring/guards, not model quality.
 - Last presentation-only experiment:18 valid, exact16,1 false PARTIAL and1
   negative-item ambiguity; no false PASS. Total399 post-comparison calls retained.
