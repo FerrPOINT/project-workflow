@@ -1,0 +1,89 @@
+{
+  "head": "ef0548b2fd705735a2a5fefd3d2c4155ae94033c",
+  "status": "PASS for instruction recovery scope",
+  "image": "sha256:f123128a618def330b38a2af9fde02d7196b07f8b604f4b20123ff25c0001737",
+  "api_mocks": false,
+  "production_data": false,
+  "real_auth_sso": true,
+  "successful_instruction_puts": 3,
+  "truncated_successful_responses": 1,
+  "phase_puts": 0,
+  "readback_precedes_retry": true,
+  "newer_draft_preserved_and_reloaded": true,
+  "full_phase_restored": true,
+  "phase_keys_compared": 16,
+  "nested_arrays_equal": true,
+  "null_description_preserved": true,
+  "console_capture": [],
+  "full_field_app_cohort_accepted": false,
+  "events_sha256": "3f314868259acc8ecb6c69b7253dd31e43a20dd15a37398fe298cf522c297906",
+  "qa_project": "sdlc-qa-browser-platform-4332f10b83ea",
+  "scope": "Own authenticated instruction save/readback and protection of unedited phase fields; not the whole branding cohort",
+  "qualification": {
+    "full_non_pg": {
+      "snapshot": "21c67f078cc6fff0948cc9d0238830f99524b28d",
+      "passed": 3233,
+      "skipped": 15,
+      "subtests_passed": 75,
+      "coverage_percent": 94.05186385737439,
+      "scope": "Before the final JS-only retry guard; Python production inputs unchanged"
+    },
+    "affected_ui": {
+      "snapshot": "ef0548b2fd705735a2a5fefd3d2c4155ae94033c",
+      "passed": 1030,
+      "skipped": 11,
+      "subtests_passed": 39,
+      "scope": "Fresh after final guard; includes UI-marked tests and controller consumers"
+    },
+    "focused": {
+      "passed": 34,
+      "second_fix_red_before": 6,
+      "second_fix_pass_before": 2
+    },
+    "postgres": {
+      "executed_pass": 132,
+      "main_pass": 131,
+      "clock_fixture_pass": 1,
+      "scope": "Retained: backend/Python/SQL/pins unchanged by final JS guard",
+      "both_projects_cleaned": true,
+      "main_global_runtime_snapshot_unchanged": false,
+      "clock_global_runtime_snapshot_unchanged": true
+    },
+    "ruff": "PASS on final code/tests",
+    "mypy": "165 source files PASS, retained unchanged inputs"
+  },
+  "baseline_json_sha256": "518aa1f4bc1d176addaa1c6365e9d51083c16b5358cd74bbe1a5b915355ba1c4",
+  "restored_json_sha256": "518aa1f4bc1d176addaa1c6365e9d51083c16b5358cd74bbe1a5b915355ba1c4",
+  "screenshot": {
+    "path": "instruction-recovery-20261031.png",
+    "sha256": "388979343d755b1974bb40e607932c0d042d807fb507ade4242006d77aef644f",
+    "scope": "New local draft retained after server readback, explicit retry available"
+  },
+  "cleanup": {
+    "status": "UNCONFIRMED",
+    "journal_version": 2,
+    "last_phase": "execution-started",
+    "project": "sdlc-qa-browser-platform-4332f10b83ea",
+    "reason": "Interactive helper handle lost and desktop-linux Docker API unavailable before normal cleanup",
+    "resources": "State unknown; no cleanup or restart claimed",
+    "remaining_action": "Reconcile exact owned resources with journal guards when the original daemon is available"
+  },
+  "remaining_gates": [
+    "Full field/app branding matrix",
+    "Title binding across internal navigation",
+    "Comparable production bundle/network measurements",
+    "Final owned QA cleanup",
+    "Base Auth server/live-page qualification belongs to Base"
+  ],
+  "runtime_bundle_sha256": "69f07b89be9e4e83dd9ccbbf4a7e12a9828dfca3edb89574f6a161cecd6b0847",
+  "runtime_tree": "35e7ebd530b94ce7b43d4ab60078fa28ef073095",
+  "scripts_tree": "c952ba4186327edeabc796354cb64ed485fd6312",
+  "publication_validation": {
+    "base": "1f5d03cb5ad901ec737657950bc7a4c02e67fcbf",
+    "prior_documentation_preserved": true,
+    "runtime_scripts_tests_pins_equal_tested_snapshot": true,
+    "focused_passed": 34,
+    "dependency_pins_verified": 53,
+    "test_scratch_cleaned": true
+  }
+}

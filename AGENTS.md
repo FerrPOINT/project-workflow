@@ -39,11 +39,14 @@ Supervisor Engine перед commit выполнить следующие про
 
 2. **PostgreSQL integration**
    ```bash
-   pytest -q -m integration tests/test_postgres_integration.py --timeout=120
+   pytest -q -m integration --timeout=120
    ```
    Ожидается 0 падений и 0 ошибок. Набор включает реальный путь CLI subprocess →
    PostgreSQL → тестовый OpenAI-compatible HTTP endpoint. Два multi-process E2E
    теста имеют собственный timeout 240 секунд.
+   Маркер охватывает также admission/COMMIT regressions. Для application-clock
+   case нужна отдельная пустая QA-база `request_clock_fixture` через
+   `WORKFLOW_APPLICATION_CLOCK_TEST_URL`; без неё skip не подтверждает этот gate.
 
 3. **Coverage**
    ```bash
@@ -146,6 +149,11 @@ Auth и Tracker выбранной установки. Агент получае
 
 ## Общие поля выбора Base
 
+AutocompleteInput в React Base предназначен для свободной строки с подсказками; он не является
+SSR select_control. У текущего SSR-контракта нет этого аналога: не подменять произвольный ввод
+закрытым списком и не копировать локальный popup. При новой потребности сначала расширить Base
+вместе с примером и штатным экспортом.
+
 Сначала искать общий UI в Base: search → show → example. Общие исправления
 вносить в Base; продукт передаёт данные, права, преобразования и сохранение.
 Для закрытого списка с одним значением — Select; для нескольких — MultiSelect.
@@ -168,7 +176,12 @@ UI/SDK/skills pins независимы; установка и production — о
 Общий контракт добавлять в Base вместе с metadata и примером, затем явно
 обновлять UI pin потребителя. Локальная копия не заменяет эту интеграцию.
 
-Перед изменением SSR UI читать [маршрут разработки со справочником Base](https://github.com/FerrPOINT/services-base/blob/ae2b41291eee5af752daff89f760fba5aff41783/base-modules/ui/reference/guides/agent.md),
+Перед изменением SSR UI читать [маршрут разработки со справочником Base](https://github.com/FerrPOINT/services-base/blob/f7998b33d87e9ade59bbd6907a8145a70b0b8c00/base-modules/ui/reference/guides/agent.md),
+
+Для компоновки и ревью web UI применять [рабочий маршрут Base](https://github.com/FerrPOINT/services-base/blob/f7998b33d87e9ade59bbd6907a8145a70b0b8c00/docs/platform/DESIGN_SYSTEM.md#рабочий-маршрут-изменения-ui):
+задача → контракт → группы полей → применимые состояния → доказательство.
+Source guard, unit и browser-приёмка различаются; ссылка на правила не обновляет UI/SDK/skills pins.
+
 включая раздел для Workflow без Node frontend. Прочитать `.base-ui-revision`;
 подготовить отдельный checkout этого SHA без переключения соседней рабочей ветки.
 Запуск из него: `node base-modules/ui/tools/ui-reference/cli.mjs check`, затем
@@ -179,17 +192,20 @@ React-пример не подменяет серверный контракт. 
 новые возможности Base не считать принятыми без отдельного изменения UI pin.
 
 Button, Input, Textarea, Checkbox, RadioGroup/Radio, Switch, меню, Card, Table, Disclosure,
-Dialog и Toaster/toast использовать из публичного @pdlc/ui. Общий дефект
+Dialog, ActionGroup и Toaster/toast использовать из публичного @pdlc/ui. Общий дефект
 исправлять в Base; продукт сохраняет данные, права и сохранение. Прямой Sonner,
 копии примитивов и продуктовые определения общих tokens не добавлять.
 Брендинг применяется общим runtime; draft preview изолируется BrandingScope.
+Строки явных действий используют ActionGroup (SSR — action_group): перенос и gap
+принадлежат Base, внешние margin/width/grid — экрану. Выбор значения использует
+RadioGroup/Select; контекст ресурса не превращается в фиктивную строку действий.
 Канонический контракт — Base docs/platform/DESIGN_SYSTEM.md и docs/BRANDING.md.
 UI/SDK/skills pins независимы; source-изменения не означают установку.
 
 SSR-каркас и page-frame/page-wide/page-readable/page-split принадлежат CSS Base.
 Не дублировать их геометрию в base.html и не возвращать retired local styles
-старой шапки/вкладок/переключателей. Таймлайн, статус исполнения и предметная
-компоновка сохраняют собственный контракт. Проверять реальные macros/assets,
+старой шапки/вкладок/переключателей. Порядок этапов, статус исполнения и предметная
+компоновка сохраняют собственный контракт; оформление history rails принадлежит Base. Проверять реальные macros/assets,
 а не наличие прежнего CSS-текста в шаблоне продукта.
 Заголовок страницы использует base-page-title, раздел — section_header с прежним
 heading_id. Native home link использует button(href=..., variant=ghost, size=icon),
@@ -220,6 +236,80 @@ Dashboard metrics используют штатный Base macro metric со с�
 принадлежат Base. Подсчёт, verdict → tone и внешняя dashboard-grid остаются
 Workflow. Новый SSR API требует соответствующего UI pin и штатного export;
 SDK/skills pins не изменять вслед за UI. Source-проверка не означает установку.
+
+## Подписи и карточки вариантов выбора
+
+После проверки API в принятом UI pin используйте label или children Checkbox/Radio
+для обычной подписи, appearance="card" — для варианта с рамкой и описанием.
+Не копируйте label с border/rounded/padding и не оборачивайте такой выбор в
+Card asChild. Base владеет hit target, focus, checked/disabled и нативной формой;
+продукт — данными, правами и обработчиком. Внешняя grid/flex-компоновка допустима.
+SSR использует checkbox_control/radio_control с appearance='card'; отдельный
+click-handler или повторное input/change для оформления не нужен.
+Контракт и пример: Base docs/platform/CHOICE_CONTROLS.md, pdlc-ui example Checkbox --case cards.
+
+Знак профессии использует IconMark / SSR icon_mark Base. Передавайте свой SVG
+и нормализованный theme_color; размеры, фон, рамка и радиусы не копировать.
+Для динамического рендеринга клонируйте inert template, созданный штатным
+macro Base; не собирайте заново class/size/ARIA примитива в продуктовых JS.
+Предметный SVG, цвет, подпись и badge count задаются после независимого clone.
+Выбор иконки также использует IconMark: цвет тонирует подложку, не текст SVG.
+Каталог значков, ID, сохранение и выбор workflow остаются у продукта.
+
+
+Видимый выбор файла использует `Input type="file"` Base: кнопка выбора,
+focus и disabled следуют теме и branding. Native файловый диалог остаётся у ОС;
+чтение, проверка содержимого/размера и отправка — у продукта. Скрытый технический
+file input за Button допустим; видимый raw input не добавлять. Для обновления
+оформления сверять UI pin; CLI/Telegram без web UI не получают новых зависимостей.
+
+Подписи web-полей оформлять публичным Label; подпись/подсказку/ошибку одного
+поля — FormField Base. Продукт сохраняет текст, htmlFor/id, required, данные
+и обработчики; не копировать типографику подписи и фон/рамку/радиусы/padding
+Input/Textarea. Внешняя компоновка, высота Textarea и моноширинный код допустимы.
+SSR использует field/label_control штатного экспорта принятого UI pin.
+
+Названия и описания строк ресурсов используют resource_list_title и
+resource_list_description Base. Внешние контейнеры, flex/grid, отступы и классы
+для product handlers сохраняются; локальные font-size/weight/color не копировать.
+Составную подпись передавать через Jinja capture при включённом autoescape,
+без safe для пользовательских строк. Значения и построение URL остаются Workflow.
+
+## Общая история событий
+
+История событий и этапов использует Timeline/TimelineItem/TimelineMarker/TimelineContent
+из Base, SSR — штатные timeline macros/classes. Порядок, статус → tone, данные,
+параллельные группы и действия остаются у продукта. Маркеры декоративные;
+состояние должно быть видно текстом. Не копировать rail/node CSS и не заменять
+историю percentage Progress. Сначала проверить наличие контракта в принятом UI pin.
+
+
+Обычные SSR actions рендерятся штатным button Base с label либо caller.
+После проверки UI pin attributes передаёт owner handlers/data/hidden/form;
+Base сохраняет приоритет type/id/variant/size и disabled/pending/ARIA.
+Не копировать base-control/base-button или btn в product markup. Card и формы
+используют card(tag=..., padded=true); пункты action_menu — action_menu_item.
+Input/Textarea — штатные macros с attributes и optional id/name, без фиктивных
+FormData keys. Один product template используется для initial/hydrated карточек.
+Новые параметры требуют штатного SSR export; runtime этим не обновляется.
+
+
+Все backing select создаёт select_control Base, включая profession_selector;
+не возвращать raw select с data-base-choice. Названия/IDs/options, icon data и
+input/change handlers сохраняются Workflow. Dynamic options требуют refreshChoice.
+Для resource_list/row, timeline/item/content и section_navigation_item применять
+штатные macros с owner attributes. Нативный ul/li/div и прежние IDs сохранять;
+card_title(tag='div') и label_control сохраняют подписи формы без product skin.
+
+## Общий inline-код и выделение записи
+
+После проверки UI pin используйте InlineCode для оформленного одиночного кода,
+Prose для prepared текста, CodeBlock для многострочного блока и
+ResourceListDescription technical для подписи без поверхности. Не копируйте
+фон/padding/radius native code. ResourceListRow highlighted задаёт только
+оформление: текущий ID, aria-current, ref/tabIndex и действия остаются у продукта.
+SSR: inline_code и resource_list_row из штатного экспорта Base.
+Каноническое руководство — Base docs/platform/DESIGN_SYSTEM.md и pdlc-ui.
 
 
 ## Карточки фаз и инструкций

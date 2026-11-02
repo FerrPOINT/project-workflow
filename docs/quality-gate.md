@@ -35,9 +35,21 @@ python ../services-base/scripts/export_python_namespace.py --out project_workflo
 источники. Web runtime не обязан устанавливать HTTP SDK ради классификации PAT
 или чтения env. В CI checkout SDK использует read-only deploy key `SERVICES_BASE_DEPLOY_KEY`.
 
+Полный unit/PG набор также проверяет configured CLI с optional HTTP transport
+`pdlc-cli-core`. Его нужно подготовить отдельно: namespace export сам по себе не
+устанавливает transport. Для нового контракта требуются `max_response_bytes`,
+`trust_env` и структурированный `ApiError`; проверенный source начинается с Base
+`64c960464205edae6d85d5f297c1ae6b99ae0371`. Старый transport без этих параметров
+не подходит. Не меняйте `.base-revision` или UI/skills pins ради тестового окружения.
+Фиксируйте точный source HTTP SDK отдельно в evidence. При `uv run --isolated`
+передавайте `--with /absolute/qualified-base/base-modules/python/cli-core`;
+пакет из другого venv не наследуется. Для уже подготовленного Python environment
+допустим явный PYTHONPATH к этому exact source. Это подготовка тестов, не установка
+SDK в web runtime и не приёмка CLI установленной платформы.
+
 ```bash
 uv run --isolated --with-requirements constraints.txt --all-extras pytest -q --timeout=60
-uv run --isolated --with-requirements constraints.txt --all-extras pytest -q -m integration tests/test_postgres_integration.py --timeout=120
+uv run --isolated --with-requirements constraints.txt --all-extras pytest -q -m integration --timeout=120
 uv run --isolated --with-requirements constraints.txt --all-extras pytest --cov=project_workflow --cov-report=term --timeout=60
 uv run --isolated --with-requirements constraints.txt --all-extras ruff check .
 uv run --isolated --with-requirements constraints.txt --all-extras mypy project_workflow scripts
@@ -69,6 +81,15 @@ JavaScript передаётся в Node через stdin с явным `encoding
 устранена только в четырёх тестовых subprocess-вызовах. Ruff и mypy137 исходных
 файлов проходят.
 
+Configured CLI/HTTP/PostgreSQL E2E также явно запускает дочерний Python с
+`-X utf8`, поскольку subprocess читает и передаёт UTF-8. Настройка родительского
+интерпретатора не наследуется как флаг дочернего. Без этого Windows cp1251
+формирует JSON, не соответствующий указанному reader encoding; это ошибка
+подготовки test transport, а не PostgreSQL. Два адресных сценария проверяют
+сохранение кириллических отчётов, replay без дубликатов и отсутствие workflow
+файлов. При повторе исходные failures сохраняются отдельно; неизменные130
+integration cases не запускаются повторно.
+
 После исправления полный non-PG gate source
 `50ae18efebb5f8ffc56c682ce90b1bc5bdb13a41` прошёл:2910 passed,5 skipped,
 95 deselected,60 subtests passed,0 failures; coverage94.17% при baseline94%.
@@ -76,6 +97,62 @@ JavaScript передаётся в Node через stdin с явным `encoding
 выполненными.95 deselected являются отдельным PostgreSQL integration gate,
 а не пропущенной частью успешного non-PG результата. Исторический отказab3
 не удаляется; текущий non-PG PASS не заменяет PostgreSQL/image/live-приёмку.
+
+### Квалификация общего UI — 24 октября 2026
+
+Следующий полный non-PG прогон для переноса общего UI прошёл без отказов тестов:
+3315 passed, 5 skipped, 120 PostgreSQL deselected, 97 subtests passed. Он включал
+ResourceWarning и PytestUnraisableExceptionWarning как ошибки. Отдельный
+Pydantic UnsupportedFieldAttributeWarning сохранён в отчёте; это не ResourceWarning.
+
+Первичный raw line coverage составил 93.99660912453761%. При precision=0
+pytest-cov завершился с кодом 0, хотя текстовый отчёт сообщил недостаточное
+покрытие. Такой результат не считается прохождением порога. Теперь precision=4,
+а fail_under=94 не изменён: результат ниже порога больше не округляется в PASS.
+
+Добавлены четыре проверки реальной границы human display window: остаток меньше
+1 ms отклоняется, достаточное малое окно сохраняется, при включённой и выключенной
+application policy. Ещё три проверки используют действующий coverage predicate
+и подтверждают отказ непосредственно ниже 94%. На неизменных 136 application
+Python-файлах к копии полного coverage dataset добавлен только этот набор из
+семи PASS. Итог — 12199 из 12976 statements, raw coverage 94.01202219482121%.
+Первичный dataset сохранён отдельно; полный набор повторно не выполнялся.
+
+Это 3322 уникальных non-PG cases и отдельный coverage proof; пять skips не
+засчитываются как выполненные проверки. PostgreSQL 120, authenticated UI,
+image/runtime и hosted CI этим результатом не подтверждены. UI producer
+`2e13224836dda29ae863db407866ee2e6ae8bb42` экспортирует те же SSR bytes, что
+предыдущий `15182d57`; штатная проверка fingerprints прошла. Новая browser-only
+функция скачивания Blob не меняет Python/runtime и не требует повтора non-PG.
+
+### Дополнение: полный PostgreSQL-срез того же кандидата
+
+Реальный PostgreSQL 16.15 из существующего образа
+`sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea`
+подтвердил 114 cases основного модуля за 380.95 s. Пять дополнительных
+admission/clock cases прошли сразу; один выявил дефект observer в тесте row wait.
+Тест читал `pg_stat_activity` в одной транзакции и сохранял первый снимок,
+так что настоящий waiter мог остаться невидимым. Только observer переведён в
+AUTOCOMMIT согласно [модели статистики PostgreSQL 16](https://www.postgresql.org/docs/16/monitoring-stats.html#MONITORING-STATS-VIEWS).
+Срок proof 0.6 s, ожидание истечения, требование реальной блокировки, SQLSTATE
+42501 и проверка сохранности исходных данных не изменены.
+
+Адресный повтор row-wait и соседнего deferred-COMMIT дал 2 PASS. Совокупный
+результат — 120 уникальных integration cases, без skips; повтор соседа не
+прибавляется к числу уникальных tests. Application Python не менялся, поэтому
+исходные 114 не запускались повторно. Отказ первого observer сохранён отдельно.
+
+Существующие Make, PowerShell и CI manual entrypoints теперь выбирают marker
+`integration`, включая три модуля. Проверен actual PowerShell launcher на границе
+native uv process: выбор всех integration и передача exit 0/9. Изменённый
+документационный regression case прошёл; Ruff прошёл. Hosted CI не запускался.
+
+Каждый прогон использовал собственный временный PostgreSQL на loopback,
+512 MiB memory/memory+swap, 1 CPU и pids128; native launcher ограничен двумя
+CPU affinity bits. OOM не было, контейнеры удалены. Это лимиты и isolated source
+proof, а не потребление установленного приложения. Общие БД, runtime, credentials,
+dev и production не использовались. Authenticated browser-проверка UI кандидата
+остаётся открытой; успешная интеграция не заменяет визуальную приёмку.
 
 ## ResourceWarning Gate
 
@@ -105,7 +182,19 @@ PGPASSWORD=project_workflow
 PGDATABASE=project_workflow
 ```
 
-Набор `tests/test_postgres_integration.py` проверяет реальный путь CLI
+Ручные `test-integration` и CI workflow_dispatch выбирают все tests с маркером
+`integration`, без ограничения одним файлом. Срез кандидата содержит 114 cases
+основного PostgreSQL-модуля, пять project-admission cases и один application-clock
+case. Последние шесть не должны выпадать из gate при выборе старого файла.
+
+Application-clock case требует явный `WORKFLOW_APPLICATION_CLOCK_TEST_URL` к
+отдельной пустой QA-базе с точным именем `request_clock_fixture`; обычная
+runtime-БД отклоняется. В CI эту базу создаёт manual step внутри свежего
+PostgreSQL service. Для локального запуска её готовит владелец изолированного
+QA-окружения; не создавать её автоматически в общей установленной БД.
+Без URL тест явно пропускается, и такой skip не подтверждает COMMIT-clock gate.
+
+Основной модуль `tests/test_postgres_integration.py` проверяет реальный путь CLI
 subprocess -> PostgreSQL -> тестовый OpenAI-compatible HTTP endpoint ->
 Supervisor -> PostgreSQL. Это deterministic runtime integration, а не полный
 business E2E с настоящим исполнителем.

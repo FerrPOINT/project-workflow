@@ -1,27 +1,52 @@
-import { contrast } from "./branding-colors.js";
+import { isHex } from "./branding-colors.js";
+import { brandingFontFamily } from "./branding-fonts.js";
 import { brandingIcons } from "./branding-icons.js";
+import { DEFAULT_PLATFORM_NAME } from "./platform-title.js";
+/** @template T @param { {design:{marks:{common:T,light:T|null,dark:T|null} }} } document @param {string} theme @returns {T} */
 export function effectiveMark(document, theme) {
   return (
     document.design.marks[theme === "light" ? "light" : "dark"] ??
     document.design.marks.common
   );
 }
-export function markLetters(document, mark) {
+/** @param {string} value @returns {string[]} */
+export function graphemes(value) {
   return Array.from(
-    new Intl.Segmenter("ru", { granularity: "grapheme" }).segment(
-      mark.kind === "letters"
-        ? mark.letters
-        : (document.product_short_name || "PDLC").toUpperCase().padEnd(4, "P"),
-    ),
+    new Intl.Segmenter("ru", { granularity: "grapheme" }).segment(value),
     (part) => part.segment,
   );
 }
+/** @param { {letters:string,count:number} } mark @returns {boolean} */
+export function validMonogram(mark) {
+  const letters = graphemes(mark.letters);
+  return (
+    new TextEncoder().encode(mark.letters).length <= 128 &&
+    letters.length === mark.count &&
+    letters.every(
+      (letter) =>
+        !/[\s\p{Cc}]/u.test(letter) && !/^[\p{M}\p{C}]+$/u.test(letter),
+    )
+  );
+}
+/** @param { {product_short_name:string} } document @param { {kind:string,letters:string,count:number} } mark @returns {string[]} */
+export function markLetters(document, mark) {
+  return graphemes(
+    mark.kind === "letters" && validMonogram(mark)
+      ? mark.letters
+      : (document.product_short_name || DEFAULT_PLATFORM_NAME)
+          .toUpperCase()
+          .padEnd(4, DEFAULT_PLATFORM_NAME[0]),
+  );
+}
+/** @param { {count:number} } mark @param {boolean} compact @param {boolean} failed @returns {number} */
 export function markCount(mark, compact, failed) {
   return failed || (compact && mark.count === 4) ? 1 : mark.count;
 }
+/** @param {number} count @param {number} size @returns {number} */
 export function markFontSize(count, size) {
   return size * (count === 4 ? 0.36 : count === 2 ? 0.38 : 0.56);
 }
+/** @param {number} index @param {number} size */
 export function fourLetterOffset(index, size) {
   return {
     x: size * 0.04 * (index % 2 === 0 ? 1 : -1),
@@ -34,8 +59,8 @@ export async function brandingFavicon(brand, theme) {
   canvas.width = canvas.height = 64;
   const ctx = canvas.getContext("2d");
   if (!ctx) return null;
-  const safe = contrast(mark.foreground, mark.background) >= 4.5;
-  const foreground = safe ? mark.foreground : "#ffffff";
+  const validColors = isHex(mark.foreground) && isHex(mark.background);
+  const foreground = validColors ? mark.foreground : "#ffffff";
   const radius =
     mark.shape === "circle"
       ? 32
@@ -45,7 +70,7 @@ export async function brandingFavicon(brand, theme) {
   ctx.beginPath();
   ctx.roundRect(0, 0, 64, 64, radius);
   ctx.clip();
-  ctx.fillStyle = safe ? mark.background : "#2563eb";
+  ctx.fillStyle = validColors ? mark.background : "#2563eb";
   ctx.fillRect(0, 0, 64, 64);
   const asset =
     brand.design.favicon.mode === "image"
@@ -96,11 +121,21 @@ export async function brandingFavicon(brand, theme) {
     } else failed = true;
   }
   const count = markCount(mark, brand.design.favicon.mode !== "logo", failed);
+  const letters = markLetters(brand, mark).slice(0, count);
+  const font = `700 ${markFontSize(count, 64)}px ${brandingFontFamily(brand.design.font_preset)}`;
+  // Canvas does not trigger a later repaint when a bundled font finishes loading.
+  // Wait only for this document's family and actual glyphs; page rendering stays async.
+  if (brand.design.font_preset !== "system" && document.fonts?.load) {
+    try {
+      await document.fonts.load(font, letters.join(""));
+    } catch {
+      // A failed font resource retains the same CSS fallback as the visible mark.
+    }
+  }
   ctx.fillStyle = foreground;
-  ctx.font = `700 ${brand.design.favicon.mode === "logo" ? markFontSize(count, 64) : count === 2 ? 24 : 36}px sans-serif`;
+  ctx.font = font;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  const letters = markLetters(brand, mark).slice(0, count);
   if (count === 4) {
     letters.forEach((letter, index) => {
       const offset = fourLetterOffset(index, 64);
@@ -121,6 +156,7 @@ export function paintBrandingMark(element, branding, theme) {
   const size = element.getBoundingClientRect().width || 40;
   element.style.background = mark.background;
   element.style.color = mark.foreground;
+  element.style.fontFamily = brandingFontFamily(branding.design.font_preset);
   element.style.borderRadius =
     mark.shape === "circle"
       ? "50%"
@@ -132,12 +168,13 @@ export function paintBrandingMark(element, branding, theme) {
   element.style.overflow = "hidden";
   element.setAttribute("role", "img");
   element.setAttribute("aria-label", "Знак платформы");
-  const letters = () => {
+  const letters = (failed = false) => {
+    const count = markCount(mark, false, failed);
     const grid = doc.createElement("span");
-    grid.style.fontSize = markFontSize(mark.count, size) + "px";
+    grid.style.fontSize = markFontSize(count, size) + "px";
     grid.style.fontWeight = "700";
     grid.style.lineHeight = "1";
-    if (mark.count === 4) {
+    if (count === 4) {
       Object.assign(grid.style, {
         display: "grid",
         width: "100%",
@@ -162,9 +199,7 @@ export function paintBrandingMark(element, branding, theme) {
           grid.appendChild(cell);
         });
     } else
-      grid.textContent = markLetters(branding, mark)
-        .slice(0, mark.count)
-        .join("");
+      grid.textContent = markLetters(branding, mark).slice(0, count).join("");
     element.replaceChildren(grid);
   };
   if (mark.kind === "image" && mark.image) {
@@ -175,7 +210,7 @@ export function paintBrandingMark(element, branding, theme) {
       height: "100%",
       objectFit: mark.fit,
     });
-    image.onerror = letters;
+    image.onerror = () => letters(true);
     image.src = mark.image.url;
     element.replaceChildren(image);
   } else if (mark.kind === "icon") {

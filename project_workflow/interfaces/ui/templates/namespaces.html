@@ -1,8 +1,14 @@
 {% extends "base.html" %}
+{% from "namespace_card.html" import namespace_card %}
 
 {% block title %}Профессии — Workflow Engine{% endblock %}
 {% block header_title %}Профессии{% endblock %}
-{% block header_actions %}{% if can_administer and not create_mode %}<a class="btn btn-primary" id="namespaceCreateLink" href="{{ ui_base_path() }}/namespaces/new{% if selected_namespace %}?profession_id={{ selected_namespace.id }}{% endif %}" title="Создать профессию" aria-label="Создать профессию">+ Новая профессия</a>{% endif %}{% endblock %}
+{% block header_actions %}
+{% if can_administer and not create_mode %}
+{% set create_href = ui_base_path() ~ '/namespaces/new' ~ ('?profession_id=' ~ selected_namespace.id if selected_namespace else '') %}
+{{ base_ui.button('+ Новая профессия', id='namespaceCreateLink', variant='primary', href=create_href, title='Создать профессию', aria_label='Создать профессию') }}
+{% endif %}
+{% endblock %}
 
 {% block extra_style %}
 .namespace-crud{display:grid;grid-template-columns:320px minmax(0,1fr);gap:16px;align-items:start}
@@ -11,58 +17,44 @@
 .namespace-picker{display:none}
 .namespace-crud.is-empty{grid-template-columns:minmax(0,760px)}
 .namespace-crud.is-empty .namespace-nav,.namespace-crud.is-empty .namespace-picker{display:none}
-.namespace-mark{width:34px;height:34px;border-radius:8px;background:color-mix(in srgb,var(--namespace-color,var(--accent)) 16%, transparent);border:1px solid var(--namespace-color,var(--accent));color:var(--namespace-color,var(--accent));display:flex;align-items:center;justify-content:center;flex:0 0 auto}
-.namespace-mark svg{width:19px;height:19px}
 .namespace-card-body{min-width:0}
 .namespace-name{display:block}
 .namespace-meta{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}
 .namespace-panel{display:flex;flex-direction:column;gap:16px;max-width:760px;min-width:0}
 .form-stack{display:flex;flex-direction:column;gap:12px}
-.namespace-delete-hint{font-size:var(--base-font-label);color:var(--text-muted);line-height:var(--base-line-body);margin-top:6px}
+.namespace-delete-hint{margin-top:6px}
 .namespace-identity-row{display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px;min-width:0}
 .namespace-identity-row > .base-form-field{flex:1 1 220px;min-width:0}
 .namespace-identity-row > .theme-controls{flex:0 0 auto}
 .theme-controls{display:flex;align-items:flex-start;gap:12px;min-width:0}
 .theme-controls > .base-form-field:first-child{flex:0 1 auto}
 .theme-controls > .base-form-field:last-child{flex:0 0 auto}
-.panel-actions{display:flex;gap:10px;flex-wrap:wrap}
 .namespace-delete{margin-left:auto}
 @media (max-width: 980px){.namespace-crud{grid-template-columns:minmax(0,1fr)}.namespace-nav{display:none}.namespace-picker{display:block}}
 {% endblock %}
 
 {% block content %}
+<template id="namespace-card-template">{{ namespace_card() }}</template>
 <div class="namespace-crud{% if namespaces|length == 0 %} is-empty{% endif %}" id="namespaceCrud">
   <div class="namespace-picker" id="namespacePicker">
-    <label class="base-label" for="namespaceSelect">Профессия</label>
-    <select data-base-choice id="namespaceSelect" onchange="selectNamespace(Number(this.value))">
+    {{ base_ui.label_control("namespaceSelect", "Профессия") }}
+    {% call base_ui.select_control(id="namespaceSelect", attributes={"onchange": "selectNamespace(Number(this.value))"}) %}
       <option value="" disabled {% if create_mode %}selected{% endif %}>{{ 'Новая профессия' if create_mode else 'Выберите профессию' }}</option>
       {% for namespace in namespaces %}
       <option value="{{ namespace.id }}" {% if not create_mode and selected_namespace and selected_namespace.id == namespace.id %}selected{% endif %}>{{ namespace.name }}</option>
       {% endfor %}
-    </select>
+    {% endcall %}
   </div>
   <section class="namespace-nav side-nav-scroll" id="namespaceNav">
     {% for namespace in namespaces %}
-    <button type="button" class="namespace-nav-item base-card base-card-content" data-interactive="true" data-namespace-id="{{ namespace.id }}" aria-controls="namespaceForm" aria-pressed="{{ 'true' if selected_namespace and selected_namespace.id == namespace.id and not create_mode else 'false' }}" onclick="selectNamespace({{ namespace.id }})" style="--namespace-color:{{ namespace.theme_color }}">
-      <span class="namespace-mark" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="{{ project_icon_path(namespace.theme_icon) }}"></path>
-        </svg>
-      </span>
-      <span class="namespace-card-body">
-        <span class="namespace-name base-card-title">{{ namespace.name }}</span>
-        <span class="namespace-meta">
-          {{ base_ui.badge(namespace.task_count | pluralize('задача,задачи,задач'), 'muted', 'inline') }}
-        </span>
-      </span>
-    </button>
+    {{ namespace_card(namespace, selected=selected_namespace and selected_namespace.id == namespace.id and not create_mode) }}
     {% endfor %}
   </section>
 
   <section class="namespace-panel">
 {% if can_administer %}
-    <form id="namespaceForm" data-platform-draft class="base-card base-card-content form-stack" aria-labelledby="namespaceFormMode" onsubmit="event.preventDefault(); submitNamespace();">
-      <div class="base-card-title" id="namespaceFormMode">{{ 'Создание' if create_mode else 'Редактирование' }}</div>
+    {% call base_ui.card(tag="form", padded=true, class_name="form-stack", id="namespaceForm", attributes={"data-platform-draft": true, "aria-labelledby": "namespaceFormMode", "onsubmit": "event.preventDefault(); submitNamespace();"}) %}
+      {{ base_ui.card_title(('Создание' if create_mode else 'Редактирование'), tag='div', id="namespaceFormMode") }}
       <div class="namespace-identity-row">
       {% call base_ui.field('namespaceName', 'Название', required=true) %}
         {{ base_ui.input_control('namespaceName', 'namespaceName', value=edited_namespace.name if edited_namespace else '', required=true) }}
@@ -76,7 +68,7 @@
           {% endcall %}
         {% endcall %}
         {% call base_ui.field('namespaceThemeColor', 'Цвет') %}
-          <input type="color" id="namespaceThemeColor" name="namespaceThemeColor" class="base-control base-input" aria-label="Цвет" title="Цвет" value="{{ edited_namespace.theme_color if edited_namespace else '#5E6AD2' }}" oninput="updateNamespaceThemePreview()">
+          {{ base_ui.input_control(id="namespaceThemeColor", name="namespaceThemeColor", type="color", value=(edited_namespace.theme_color if edited_namespace else '#5E6AD2'), aria_label="Цвет", attributes={"title": "Цвет", "oninput": "updateNamespaceThemePreview()"}) }}
         {% endcall %}
       </div>
       </div>
@@ -87,19 +79,19 @@
       {% call base_ui.field('namespaceDescription', 'Описание') %}
         {{ base_ui.textarea_control('namespaceDescription', 'namespaceDescription', value=edited_namespace.description if edited_namespace else '', rows=2) }}
       {% endcall %}
-      <div class="panel-actions">
-        <button class="btn btn-primary" type="submit" id="namespaceSubmitButton">{{ 'Создать' if create_mode else 'Сохранить' }}</button>
-        <button class="btn btn-secondary" type="button" id="cancelCreateButton" onclick="cancelCreateNamespace()" style="display:none">Отмена</button>
-        <button class="btn btn-secondary namespace-delete" type="button" id="deleteNamespaceButton" onclick="deleteNamespace()"{% if create_mode %} style="display:none"{% endif %}>Удалить</button>
-      </div>
-      <p class="namespace-delete-hint" id="namespaceDeleteHint" hidden>Профессию с задачами нельзя удалить.</p>
-    </form>
+      {% call base_ui.action_group(align='start', class_name='panel-actions') %}
+        {% call base_ui.button(variant="primary", id="namespaceSubmitButton", type="submit") %}{{ 'Создать' if create_mode else 'Сохранить' }}{% endcall %}
+        {% call base_ui.button(id="cancelCreateButton", type="button", attributes={"onclick": "cancelCreateNamespace()", "style": "display:none"}) %}Отмена{% endcall %}
+        {% call base_ui.button(class_name="namespace-delete", id="deleteNamespaceButton", type="button", attributes={"onclick": "deleteNamespace()", "style": ('display:none' if create_mode else none)}) %}Удалить{% endcall %}
+      {% endcall %}
+      {{ base_ui.resource_list_description('Профессию с задачами нельзя удалить.', id='namespaceDeleteHint', tag='p', class_name='namespace-delete-hint', hidden=true) }}
+    {% endcall %}
 {% elif edited_namespace %}
-    <article class="base-card base-card-content form-stack" id="professionSummary">
+    {% call base_ui.card(tag="article", padded=true, class_name="form-stack", id="professionSummary") %}
       <h2 class="base-section-title">{{ edited_namespace.name }}</h2>
       <p>{{ edited_namespace.description or '' }}</p>
       <p>CLI-команда: <code>{{ edited_namespace.cli_command }}</code></p>
-    </article>
+    {% endcall %}
 {% else %}{{ base_ui.state('empty', 'Выберите профессию для просмотра.' if namespaces else 'Пока ничего не создано.') }}{% endif %}
 
   </section>

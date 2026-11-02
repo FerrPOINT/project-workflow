@@ -9,12 +9,10 @@
 .dashboard-panels{display:grid;grid-template-columns:minmax(0,1fr) minmax(220px,280px);gap:24px;align-items:start}
 .dashboard-section{min-width:0}
 
-.dashboard-row{display:block;color:inherit}
-.dashboard-row:hover{color:inherit;text-decoration:none}
-.list-title{font-size:var(--base-font-body);font-weight:600;line-height:var(--base-line-body);color:var(--text);margin-bottom:3px;overflow-wrap:anywhere}
-.list-meta{display:flex;gap:4px 10px;flex-wrap:wrap;font-size:var(--base-font-label);color:var(--text-dim)}
-.code{font-family:var(--base-font-mono);color:var(--accent-readable)}
-.dashboard-section-footer{margin-top:8px;font-size:var(--base-font-label);color:var(--text-muted)}
+.dashboard-row{display:block}
+.list-title{margin-bottom:3px}
+.list-meta{display:flex;gap:4px 10px;flex-wrap:wrap}
+.dashboard-section-footer{margin-top:8px}
 @media(max-width:780px){.dashboard-panels{grid-template-columns:minmax(0,1fr);gap:20px}}
 @media(max-width:930px){.header .dashboard-action{display:none}}
 @media(max-width:640px){.dashboard-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
@@ -40,19 +38,20 @@
     {% set tasks_link = ui_base_path() ~ '/tasks' ~ ('?profession_id=' ~ active_namespace_id if active_namespace_id else '') %}
     {{ base_ui.section_header('Незавершённые задачи · ' ~ (open_tasks|length), heading_id='dashboardTasksTitle', actions=base_ui.text_link('Все задачи', tasks_link)) }}
     {% if open_tasks %}
-    <div class="base-resource-list" data-variant="plain" data-density="normal">
+    {% call base_ui.resource_list() %}
       {% for task in open_tasks[:8] %}
-      <a href="{{ ui_base_path() }}/task/{{ task.task_key }}{% if task.namespace_id %}?profession_id={{ task.namespace_id }}{% endif %}" class="dashboard-row base-resource-list-row" data-interactive="true" data-task-key="{{ task.task_key }}">
-        <div class="list-title"><span class="code">{{ task.task_key }}</span>{% if task.title %} — {{ task.title }}{% endif %}</div>
+      {% set row_href %}{{ ui_base_path() }}/task/{{ task.task_key }}{% if task.namespace_id %}?profession_id={{ task.namespace_id }}{% endif %}{% endset %}{% call base_ui.resource_list_row(href=row_href, class_name='dashboard-row', attributes={"data-task-key": (task.task_key)}) %}
+        {% set task_title %}{{ base_ui.resource_list_title(task.task_key, technical=true, tone='accent') }}{% if task.title %} — {{ task.title }}{% endif %}{% endset %}
+        <div class="list-title">{{ base_ui.resource_list_title(task_title) }}</div>
         <div class="list-meta">
-          <span>{{ task.namespace_name }}</span>
-          {% if task.workflow_name %}<span>{{ task.workflow_name }}</span>{% endif %}
-          <span>{{ task.status_label }}</span>
+          {{ base_ui.resource_list_description(task.namespace_name) }}
+          {% if task.workflow_name %}{{ base_ui.resource_list_description(task.workflow_name) }}{% endif %}
+          {{ base_ui.resource_list_description(task.status_label) }}
         </div>
-      </a>
+      {% endcall %}
       {% endfor %}
-    </div>
-    {% if open_tasks|length > 8 %}<div class="dashboard-section-footer">Показано 8 из {{ open_tasks|length }}</div>{% endif %}
+    {% endcall %}
+    {% if open_tasks|length > 8 %}{{ base_ui.resource_list_description('Показано 8 из ' ~ (open_tasks|length), tag='div', class_name='dashboard-section-footer') }}{% endif %}
     {% else %}
     {{ base_ui.state('empty', 'Незавершённых задач нет.') }}
     {% endif %}
@@ -61,17 +60,17 @@
   <section class="dashboard-section" data-dashboard-namespaces aria-labelledby="dashboardNamespacesTitle">
     {{ base_ui.section_header('Профессии · ' ~ (namespaces|length), heading_id='dashboardNamespacesTitle', actions=base_ui.text_link('Все профессии', ui_base_path() ~ '/namespaces')) }}
     {% if namespaces %}
-    <div class="base-resource-list" data-variant="plain" data-density="normal">
+    {% call base_ui.resource_list() %}
       {% for namespace in namespaces[:6] %}
-      <a href="{{ ui_base_path() }}/namespaces?profession_id={{ namespace.id }}" class="dashboard-row base-resource-list-row" data-interactive="true" data-namespace-id="{{ namespace.id }}">
-        <div class="list-title">{{ namespace.name }}</div>
+      {% set row_href %}{{ ui_base_path() }}/namespaces?profession_id={{ namespace.id }}{% endset %}{% call base_ui.resource_list_row(href=row_href, class_name='dashboard-row', attributes={"data-namespace-id": (namespace.id)}) %}
+        <div class="list-title">{{ base_ui.resource_list_title(namespace.name) }}</div>
         <div class="list-meta">
-          <span>{{ namespace.task_count | pluralize('задача,задачи,задач') }}</span>
+          {{ base_ui.resource_list_description(namespace.task_count | pluralize('задача,задачи,задач')) }}
         </div>
-      </a>
+      {% endcall %}
       {% endfor %}
-    </div>
-    {% if namespaces|length > 6 %}<div class="dashboard-section-footer">Показано 6 из {{ namespaces|length }}</div>{% endif %}
+    {% endcall %}
+    {% if namespaces|length > 6 %}{{ base_ui.resource_list_description('Показано 6 из ' ~ (namespaces|length), tag='div', class_name='dashboard-section-footer') }}{% endif %}
     {% else %}
     {{ base_ui.state('empty', 'Профессий пока нет.') }}
     {% endif %}

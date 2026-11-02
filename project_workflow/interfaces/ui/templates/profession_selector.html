@@ -1,10 +1,11 @@
+{% import "base/macros.html" as base_ui %}
 {% macro profession_selector(id, namespaces, active) -%}
 <div class="namespace-switcher">
-  <select id="{{ id }}" data-base-choice data-namespace-selector aria-label="Выбор профессии" onchange="switchNamespace(this.value)">
+  {% call base_ui.select_control(id=(id), aria_label="Выбор профессии", attributes={"onchange": "switchNamespace(this.value)", "data-namespace-selector": true}) %}
     {% if not active %}<option value="" disabled selected>Каталог воркфлоу</option>{% endif %}
     {% for namespace in namespaces %}
     <option value="{{ namespace.id }}" data-icon="{{ namespace.theme_icon }}" data-color="{{ namespace.theme_color }}"{% if active and active.id == namespace.id %} selected{% endif %}>{{ namespace.name }}</option>
     {% endfor %}
-  </select>
+  {% endcall %}
 </div>
 {% endmacro %}

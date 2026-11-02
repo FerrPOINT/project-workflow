@@ -40,7 +40,10 @@ def test_public_login_uses_configured_callback_and_cookie_path(monkeypatch, pref
         get_settings.cache_clear()
 
 
-@pytest.mark.parametrize("prefix", ["//evil.example", "/workflow/../admin", "/workflow?next=x", "/workflow/nested"])
+@pytest.mark.parametrize("prefix", [
+    "//evil.example", "/workflow/../admin", "/workflow?next=x", "/workflow/nested",
+    '/workflow"><style>', "/workflow';color:red",
+])
 def test_deployment_prefix_rejects_nonlocal_or_ambiguous_paths(prefix):
     with pytest.raises(ValueError):
         Settings(DATABASE_URL="sqlite+pysqlite:///:memory:", UI_BASE_PATH=prefix)

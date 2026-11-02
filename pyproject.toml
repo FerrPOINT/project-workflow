@@ -85,6 +85,7 @@ addopts = "-m 'not integration'"
 
 [tool.coverage.report]
 fail_under = 94
+precision = 4
 exclude_lines = [
     "pragma: no cover",
     "def __repr__",

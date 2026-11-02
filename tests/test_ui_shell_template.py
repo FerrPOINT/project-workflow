@@ -66,6 +66,26 @@ class SharedShellTemplateTests(TestCase):
                 self.assertIn("← К фазам &lt;73&gt;", html)
                 self.assertNotIn("base-state-retry-icon", re.search(r"<main .*?</main>", html, re.S).group())
 
+    def test_workflow_unknown_write_readback_uses_shared_button_without_changing_owner_action(self):
+        for can_administer in [True, False]:
+            with self.subTest(can_administer=can_administer):
+                html = self.render_shell(
+                    [], template="workflows.html", workflows=[],
+                    selected_workflow=None, selected_namespace=None,
+                    phases=[], phase_blocks=[], modes=[], phase_count=0,
+                    can_administer=can_administer,
+                )
+                elements = Elements(html).elements
+                retry = [attrs for tag, attrs in elements
+                         if tag == "button" and attrs.get("onclick") == "retryWorkflowReadback()"]
+                self.assertEqual(len(retry), 1)
+                self.assertEqual(retry[0]["type"], "button")
+                self.assertIn("base-control", retry[0].get("class", "").split())
+                self.assertIn("base-button", retry[0].get("class", "").split())
+                error = next(attrs for _, attrs in elements if attrs.get("id") == "workflowReadbackError")
+                self.assertEqual(error["role"], "alert")
+                self.assertIn("hidden", error)
+
     def test_dashboard_metrics_reuse_base_instead_of_a_product_skin(self):
         source = (Path(__file__).parents[1] / "project_workflow/interfaces/ui/templates/dashboard.html").read_text(
             encoding="utf-8"
@@ -87,11 +107,13 @@ class SharedShellTemplateTests(TestCase):
         self.assertIsNone(re.search(r"\.\b(?:" + retired + r")\b(?![-\w])", css))
         self.assertIsNone(re.search(r"\.(?:page-frame|page-wide|page-detail|page-readable|page-split)\b", css))
         self.assertIn(".timeline-row{", css)
-        self.assertIn(".row-actions{", css)
+        self.assertNotIn(".row-actions{", css)
         html = self.render_shell([])
         elements = Elements(html).elements
         self.assertEqual(sum("page-frame" in attrs.get("class", "").split() for _, attrs in elements), 1)
-        self.assertIn('{% include "base/base-ui.css" %}', source)
+        self.assertIn("{% include 'branding_head.html' %}", source)
+        self.assertIn(".base-button", html)
+        self.assertIn("window.WorkflowBranding=window.PdlcBranding.createBrandingRuntime", html)
 
     def test_home_link_and_page_title_use_the_shared_controls_with_native_semantics(self):
         html = self.render_shell([])
@@ -124,6 +146,37 @@ class SharedShellTemplateTests(TestCase):
         )
         self.assertEqual(sum(attrs.get("data-page-state") == "empty" for _, attrs in elements), 1)
         self.assertIn("Незавершённых задач нет.", html)
+
+    def test_dashboard_resource_text_uses_base_with_escaped_labels_and_distinct_links(self):
+        namespaces = [dict(id=value, name="Same <name>", task_count=value) for value in [7, 9]]
+        tasks = [
+            dict(task_key="WK-7", title="Title <script>text</script>", namespace_id=7,
+                 namespace_name="Same <name>", workflow_name="Flow <7>", status_label="В работе"),
+            dict(task_key="WK-9", title="", namespace_id=9,
+                 namespace_name="Same <name>", workflow_name=None, status_label="Ожидает"),
+        ]
+        html = self.render_shell(
+            namespaces, template="dashboard.html", open_tasks=tasks,
+            stats=dict(namespaces=2, tasks=2, active=1, done=0, verdicts={}),
+        )
+        elements = Elements(html).elements
+        titles = [attrs for _, attrs in elements
+                  if "base-resource-title" in attrs.get("class", "").split()]
+        self.assertEqual(sum(attrs.get("data-technical") != "true" for attrs in titles), 4)
+        keys = [attrs for attrs in titles if attrs.get("data-technical") == "true"]
+        self.assertEqual(len(keys), 2)
+        self.assertEqual([attrs.get("data-tone") for attrs in keys], ["accent", "accent"])
+        self.assertEqual(sum("base-resource-description" in attrs.get("class", "").split()
+                             for _, attrs in elements), 7)
+        links = [attrs["href"] for tag, attrs in elements
+                 if tag == "a" and ("data-task-key" in attrs or "data-namespace-id" in attrs)]
+        self.assertEqual(links, ["/workflow/task/WK-7?profession_id=7",
+                                "/workflow/task/WK-9?profession_id=9",
+                                "/workflow/namespaces?profession_id=7",
+                                "/workflow/namespaces?profession_id=9"])
+        self.assertIn("Title &lt;script&gt;text&lt;/script&gt;", html)
+        self.assertIn("Flow &lt;7&gt;", html)
+        self.assertNotIn("<script>text</script>", html)
 
     def test_instructions_use_one_shared_header_and_exact_namespace_return_url(self):
         for name in ["Phase <name>", "Очень длинное название фазы " * 8]:
@@ -297,7 +350,7 @@ class SharedShellTemplateTests(TestCase):
         self.assertEqual([(tag, attrs["id"]) for tag, attrs in headings],
                          [("h2", "records"), ("h3", "details"), ("h2", "bounded")])
         self.assertIn('class="base-section-context">0</div>', html)
-        self.assertIn('class="base-page-actions">0</div>', html)
+        self.assertIn('class="base-action-group base-page-actions" data-align="start">0</div>', html)
         self.assertIn("&lt;img&gt;Records&lt;/img&gt;", html)
         self.assertFalse(any(tag in ["img", "script"] for tag, _ in Elements(html).elements))
 
@@ -540,6 +593,14 @@ class SharedShellTemplateTests(TestCase):
                     self.assertEqual(item["onclick"], f"selectNamespace({item['data-namespace-id']})")
                 self.assertIn("Same &lt;name&gt;", html)
                 self.assertNotIn(".namespace-nav-item.active", html)
+                create_links = [attrs for tag, attrs in Elements(html).elements
+                                if tag == "a" and attrs.get("id") == "namespaceCreateLink"]
+                self.assertEqual(len(create_links), 0 if create_mode else 1)
+                if create_links:
+                    self.assertEqual(create_links[0]["href"], "/workflow/namespaces/new?profession_id=9")
+                    self.assertEqual(create_links[0]["aria-label"], "Создать профессию")
+                    self.assertIn("base-button", create_links[0]["class"].split())
+                    self.assertNotIn("type", create_links[0])
 
     def test_workflow_form_preserves_required_name_and_explicit_description_height(self):
         html = self.render_shell(
@@ -795,6 +856,10 @@ class SharedShellTemplateTests(TestCase):
                 self.assertTrue({"base-card", "base-card-content"} <= set(picker["class"].split()))
                 self.assertEqual(picker["data-interactive"], "true")
                 self.assertEqual(picker["aria-pressed"], "true")
+                self.assertEqual(sum("base-resource-title" in attrs.get("class", "").split()
+                                     for _, attrs in elements), count)
+                self.assertEqual(sum("base-resource-description" in attrs.get("class", "").split()
+                                     for _, attrs in elements), count)
                 groups = [attrs for tag, attrs in elements
                           if tag == "div" and "phase-card-actions" in attrs.get("class", "").split()]
                 self.assertEqual(len(groups), count)
@@ -825,14 +890,17 @@ class SharedShellTemplateTests(TestCase):
                 )
                 for panel in panels:
                     classes = set(panel["class"].split())
-                    self.assertIn("base-resource-list-row", classes)
-                    self.assertEqual(panel["data-interactive"], "true")
+                    self.assertIn("base-resource-list-row" if count >= 8 else "base-card", classes)
+                    if count >= 8:
+                        self.assertEqual(panel["data-interactive"], "true")
+                    else:
+                        self.assertIn("base-card-content", classes)
                 shells = [attrs for _, attrs in elements
                           if "phase-card-shell" in attrs.get("class", "").split()]
                 self.assertEqual(len(shells), count)
                 for shell in shells:
-                    self.assertEqual("base-card" in shell["class"].split(), count < 8)
-                    self.assertEqual("base-resource-list-row" in shell["class"].split(), count >= 8)
+                    self.assertNotIn("base-card", shell["class"].split())
+                    self.assertNotIn("base-resource-list-row", shell["class"].split())
                 links = re.findall(r'<a[^>]+class="[^"]*timeline-card[^>]*>(.*?)</a>', html, re.S)
                 self.assertTrue(links)
                 self.assertTrue(all("<button" not in link for link in links))

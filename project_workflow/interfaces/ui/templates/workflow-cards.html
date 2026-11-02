@@ -19,7 +19,7 @@
 
 {% macro parallel_group(label) -%}
 {% set group_content = caller() %}
-{% call base_ui.card(class_name='timeline-block timeline-parallel-group workflow-parallel-group base-card-content', label=label) %}{{ group_content }}{% endcall %}
+{% call base_ui.card(padded=true, class_name='timeline-block timeline-parallel-group workflow-parallel-group', label=label) %}{{ group_content }}{% endcall %}
 {%- endmacro %}
 
 {% macro skill_chip(skill, step_num, administrative=false) -%}

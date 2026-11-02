@@ -75,7 +75,8 @@ def test_hosted_ci_covers_quality_and_compose_readiness() -> None:
 
     assert "branches: [master]" in workflow
     assert "pytest -q --timeout=60" in workflow
-    assert "pytest -q -m integration tests/test_postgres_integration.py --timeout=120" in workflow
+    assert "pytest -q -m integration --timeout=120" in workflow
+    assert "WORKFLOW_APPLICATION_CLOCK_TEST_URL" in workflow
     assert "ruff check ." in workflow
     assert "mypy project_workflow scripts" in workflow
     # Fleet CI convention: light pipeline; E2E, coverage thresholds and

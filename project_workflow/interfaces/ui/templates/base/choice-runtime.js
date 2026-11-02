@@ -185,7 +185,13 @@ export function initChoice(control, config = {}) {
   listen(control, 'change', refresh)
   listen(control, 'invalid', event => { event.preventDefault(); validationShown = true; refresh(); trigger.focus() })
   for (const label of control.labels ?? []) listen(label, 'click', event => { if (!wrapper.contains(event.target) && !event.target.closest?.('a, button, input, select, textarea')) { event.preventDefault(); trigger.focus() } })
-  if (control.form) listen(control.form, 'reset', event => queueMicrotask(() => { if (!event.defaultPrevented) { validationShown = false; refresh() } }))
+  if (control.form) listen(control.form, 'reset', event => {
+    // A browser may drain microtasks before applying the reset default action.
+    // Defer past that action and ignore work after cancellation or destroy.
+    win.setTimeout(() => {
+      if (!abort.signal.aborted && !event.defaultPrevented) { validationShown = false; refresh() }
+    }, 0)
+  })
   const controller = { refresh, destroy() {
     close(); abort.abort(); wrapper.remove(); controls.delete(control)
     control.hidden = original.hidden

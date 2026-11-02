@@ -8,8 +8,8 @@
 {% block header_title %}Воркфлоу{% endblock %}
 {% block header_actions %}
 {% if can_administer %}
-  <button type="button" class="btn btn-secondary workflow-header-action" id="editWorkflowButton" data-workflow-edit aria-controls="workflowForm" aria-expanded="false"{% if not selected_workflow %} disabled{% endif %}{% if pm_catalog_read_only %} hidden{% endif %} onclick="startEditWorkflow()">Редактировать воркфлоу</button>
-  <button type="button" class="btn btn-primary workflow-header-action" id="newWorkflowButton" onclick="startCreateWorkflow()">+ Новый воркфлоу</button>
+  {% call base_ui.button(class_name="workflow-header-action", id="editWorkflowButton", type="button", aria_controls="workflowForm", disabled=not selected_workflow, attributes={"data-workflow-edit": true, "aria-expanded": "false", "hidden": pm_catalog_read_only|default(false), "onclick": "startEditWorkflow()"}) %}Редактировать воркфлоу{% endcall %}
+  {% call base_ui.button(variant="primary", class_name="workflow-header-action", id="newWorkflowButton", type="button", attributes={"onclick": "startCreateWorkflow()"}) %}+ Новый воркфлоу{% endcall %}
 {% endif %}
 {% endblock %}
 
@@ -25,7 +25,6 @@
 .form-stack{display:flex;flex-direction:column;gap:12px}
 .workflow-description{min-height:64px}
 #workflowForm[hidden],#workflowSummary[hidden]{display:none}
-.panel-actions{display:flex;gap:10px;flex-wrap:wrap}
 .workflow-delete{margin-left:auto}
 @media (max-width: 980px){
   .workflow-crud,.workflow-crud.is-empty{grid-template-columns:minmax(0,1fr)}
@@ -35,7 +34,7 @@
 }
 #workflowPhases[hidden]{display:none}
 .mode-navigation{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0}
-.mode-tabs{display:flex;align-items:center;gap:6px;min-width:0;overflow-x:auto;padding:2px;scrollbar-width:thin}
+.mode-tabs{min-width:0}
 .mode-picker{display:none;width:100%}
 .mode-picker select{width:100%}
 .workflow-phase-toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;min-width:0}
@@ -47,33 +46,44 @@
 .phase-card-link{display:block;min-width:0}
 .phase-card-footer{padding:0 12px 12px}
 .timeline-parallel-header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
-.timeline-parallel-count{font-size:var(--base-font-label);color:var(--text-dim)}
-.timeline-group-transition{margin:12px 0 0;padding-top:10px;border-top:1px solid var(--border);color:var(--text-secondary);font-size:var(--base-font-label);line-height:var(--base-line-body)}
+.timeline-group-transition{margin:12px 0 0}
 .timeline-parallel-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:10px}
-.timeline.is-compact{gap:0;border-top:1px solid var(--border)}
-.timeline.is-compact > .timeline-block:not(.timeline-parallel-group){border-bottom:1px solid var(--border)}
-.timeline.is-compact > .timeline-parallel-group{margin-block:8px}
-.timeline.is-compact .phase-card-shell{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 12px}
-.timeline.is-compact .phase-card-link{flex:1 1 200px;padding:0}
-.timeline.is-compact .timeline-name{overflow-wrap:anywhere}
+.timeline-connector{height:52px;display:flex;align-items:center;justify-content:center;position:relative}
+.timeline-connector::before,.timeline-connector::after{content:'';position:absolute;left:50%;width:1px;transform:translateX(-50%);background:var(--border-strong)}
+.timeline-connector::before{top:0;bottom:calc(50% + 21px)}
+.timeline-connector::after{top:calc(50% + 21px);bottom:0}
+.phase-add-btn{position:relative;z-index:1}
+.timeline.is-compact .phase-card-shell{min-height:0}
+.timeline.is-compact .timeline-card{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-inline-end:104px}
+.timeline.is-compact .timeline-card .timeline-name{padding-right:0;overflow-wrap:anywhere}
+.timeline.is-compact .phase-card-copy{flex:1 1 auto;min-width:0}
 .timeline.is-compact .timeline-desc{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .timeline.is-compact .phase-card-footer{flex:0 1 auto;padding:0;margin-left:auto}
 .timeline.is-compact .timeline-parallel-header{margin:0}
 .timeline.is-compact .timeline-parallel-grid{display:block}
-.timeline.is-compact .timeline-group-transition{margin:0;padding:8px 12px}
-.timeline.is-compact .timeline-parallel-grid .timeline-item:not(:last-child){border-bottom:1px solid var(--border)}
-@media(max-width:760px){.mode-tabs{display:none}.mode-picker{display:block}.phase-view-controls{width:100%;justify-content:space-between}.phase-jump-select{flex:1 1 180px}.timeline-parallel-grid{grid-template-columns:1fr}.timeline.is-compact .phase-card-link{flex-basis:100%}.timeline.is-compact .timeline-desc{display:none}.timeline.is-compact .phase-card-footer{width:100%}}
+.timeline.is-compact .timeline-group-transition{margin:0}
+.timeline.is-compact .timeline-connector{height:0}
+.timeline.is-compact .timeline-connector::before,.timeline.is-compact .timeline-connector::after{display:none}
+.timeline.is-compact .timeline-connector .phase-add-btn{position:absolute;right:58px;bottom:8px}
+/* A group barrier is content, not a phase row with reserved action space. */
+.timeline.is-compact .timeline-parallel-group + .timeline-connector{height:52px}
+.timeline.is-compact .timeline-parallel-group + .timeline-connector .phase-add-btn{position:static}
+@media(max-width:760px){.mode-tabs{display:none}.mode-picker{display:block}.phase-view-controls{width:100%}.phase-jump-select{flex:1 1 100%}.timeline-parallel-grid{grid-template-columns:1fr}.phase-card-shell{min-height:0}.timeline.is-compact .timeline-card{display:block}.timeline.is-compact .timeline-desc{display:none}.timeline.is-compact .execution-row{width:auto;max-width:none;margin-top:4px;justify-content:flex-start}}
 {% endblock %}
 
-{% macro phase_card(p) -%}
-<div class="timeline-item" id="phase-{{ p.id }}" data-phase-id="{{ p.id }}" data-phase-order="{{ p.phase_num }}" data-execution-type="{{ p.execution_type }}">
-  <div class="phase-card-shell {{ 'base-resource-list-row' if phase_count >= 8 else 'base-card' }}">
+{% macro phase_card(p, divider=false) -%}
+{% call base_ui.content_section(tag='div', dividers='end' if divider and phase_count >= 8 else 'none', inset='none', class_name='timeline-item', attributes={'id':'phase-' ~ p.id, 'data-phase-id':p.id, 'data-phase-order':p.phase_num, 'data-execution-type':p.execution_type, 'data-phase-divider':'end' if divider else none}) %}
+  <div class="phase-card-shell">
+    {% set compact = phase_count >= 8 %}
+    {% set render_panel = base_ui.resource_list_row if compact else base_ui.card %}
     {% set phase_href = ui_base_path() ~ '/phase/' ~ p.id ~ ('?profession_id=' ~ selected_namespace.id if selected_namespace else '') ~ phase_scope_suffix %}
-    {% call base_ui.resource_list_row(href=phase_href, class_name='timeline-card phase-card-link') %}
+    {% set panel_options = {'href': phase_href, 'class_name': 'timeline-card'} %}
+    {% if not compact %}{% set panel_options = dict(panel_options, padded=true) %}{% endif %}
+    {% call render_panel(**panel_options) %}
       <div class="phase-card-copy">
-        <div class="timeline-name">{{ p.name }}</div>
+        <div class="timeline-name">{{ base_ui.resource_list_title(p.name) }}</div>
         {% set description = p.description | default('') %}
-        {% if description %}<div class="timeline-desc">{{ description[:120] }}{% if description|length > 120 %}...{% endif %}</div>{% endif %}
+        {% if description %}<div class="timeline-desc">{{ base_ui.resource_list_description(description[:120] ~ ('...' if description|length > 120 else '')) }}</div>{% endif %}
       </div>
     {% endcall %}
     <div class="workflow-card-footer phase-card-footer">
@@ -83,17 +93,17 @@
 {% endif %}
     </div>
   </div>
-</div>
+{% endcall %}
 {%- endmacro %}
 
 {% macro workflow_nav_item(workflow) -%}
-<button type="button" class="base-card base-card-content workflow-nav-item {% if selected_workflow and selected_workflow.id == workflow.id %}active{% endif %}" data-interactive="true" data-workflow-id="{{ workflow.id }}" aria-controls="workflowForm" aria-pressed="{{ 'true' if selected_workflow and selected_workflow.id == workflow.id else 'false' }}" onclick="selectWorkflow({{ workflow.id }})">
-      <span class="base-card-title" data-workflow-name>{{ workflow.name }}</span>
+{% call base_ui.card(tag="button", padded=true, class_name="workflow-nav-item " ~ ('active' if selected_workflow and selected_workflow.id == workflow.id else ''), type="button", attributes={"data-workflow-id": (workflow.id), "aria-controls": "workflowForm", "aria-pressed": (true if selected_workflow and selected_workflow.id == workflow.id else false), "onclick": "selectWorkflow(" ~ (workflow.id) ~ ")"}) %}
+      {{ base_ui.card_title((workflow.name), tag='span', attributes={"data-workflow-name": true}) }}
       <span class="workflow-meta">
         {% call base_ui.badge(tone='muted') %}<span data-workflow-namespace-count>{{ workflow.namespace_count | pluralize('профессия,профессии,профессий') }}</span>{% endcall %}
         {% call base_ui.badge(tone='muted') %}<span data-workflow-phase-count>{{ workflow.phase_count | pluralize('фаза,фазы,фаз') }}</span>{% endcall %}
       </span>
-    </button>
+    {% endcall %}
 {%- endmacro %}
 {% block content %}
 {% set empty_workflow_nav %}{{ base_ui.state('empty', 'Воркфлоу пока нет.') }}{% endset %}
@@ -102,16 +112,16 @@
 <script type="application/json" id="workflowEditorState">{{ {"workflows": workflows, "selected_workflow_id": selected_workflow.id if selected_workflow else none, "can_administer": can_administer}|tojson }}</script>
 <div id="workflowReadbackError" role="alert" hidden>
   Изменение могло сохраниться. Обновите состояние перед следующей операцией.
-  <button type="button" class="btn btn-secondary" onclick="retryWorkflowReadback()">Обновить состояние</button>
+  {{ base_ui.button("Обновить состояние", attributes={"onclick": "retryWorkflowReadback()"}) }}
 </div>
   <div class="workflow-picker" id="workflowPicker">
-    <label class="base-label" for="workflowSelect">Воркфлоу</label>
-    <select data-base-choice id="workflowSelect" onchange="selectWorkflow(Number(this.value))">
+    {{ base_ui.label_control("workflowSelect", "Воркфлоу") }}
+    {% call base_ui.select_control(id="workflowSelect", attributes={"onchange": "selectWorkflow(Number(this.value))"}) %}
       <option value="" disabled>Выберите воркфлоу</option>
       {% for workflow in workflows %}
       <option value="{{ workflow.id }}" {% if selected_workflow and selected_workflow.id == workflow.id %}selected{% endif %}>{{ workflow.name }}</option>
       {% endfor %}
-    </select>
+    {% endcall %}
   </div>
   <section class="workflow-nav side-nav-scroll" id="workflowNav">
     {% for workflow in workflows %}
@@ -127,21 +137,21 @@
 {% endif %}
   <section class="workflow-panel">
 {% if can_administer %}
-    <form id="workflowForm" data-platform-draft class="base-card base-card-content form-stack" aria-labelledby="workflowFormMode"{% if selected_workflow %} hidden{% endif %} onsubmit="event.preventDefault(); submitWorkflow();">
-      <div class="base-card-title" id="workflowFormMode">Редактирование воркфлоу</div>
+    {% call base_ui.card(tag="form", padded=true, class_name="form-stack", id="workflowForm", attributes={"data-platform-draft": true, "aria-labelledby": "workflowFormMode", "hidden": (true if selected_workflow else false), "onsubmit": "event.preventDefault(); submitWorkflow();"}) %}
+      {{ base_ui.card_title("Редактирование воркфлоу", tag='div', id="workflowFormMode") }}
       {% call base_ui.field('workflowName', 'Название', required=true) %}
         {{ base_ui.input_control('workflowName', 'workflowName', value=selected_workflow.name if selected_workflow else '', required=true) }}
       {% endcall %}
       {% call base_ui.field('workflowDescription', 'Описание') %}
         {{ base_ui.textarea_control('workflowDescription', 'workflowDescription', value=selected_workflow.description if selected_workflow else '', rows=2, class_name='workflow-description') }}
       {% endcall %}
-      <div class="panel-actions">
-        <button class="btn btn-primary" type="submit" id="workflowSubmitButton">Сохранить</button>
-        <button class="btn btn-secondary" type="button" id="cancelCreateWorkflowButton" onclick="cancelWorkflowForm()" style="display:none">Отмена</button>
-        <button class="btn btn-secondary workflow-delete" type="button" id="deleteWorkflowButton"{% if pm_catalog_read_only %} hidden{% endif %} onclick="deleteWorkflow()">Удалить</button>
-      </div>
+      {% call base_ui.action_group(align='start', class_name='panel-actions') %}
+        {% call base_ui.button(variant="primary", id="workflowSubmitButton", type="submit") %}Сохранить{% endcall %}
+        {% call base_ui.button(id="cancelCreateWorkflowButton", type="button", attributes={"onclick": "cancelWorkflowForm()", "style": "display:none"}) %}Отмена{% endcall %}
+        {% call base_ui.button(class_name="workflow-delete", id="deleteWorkflowButton", type="button", attributes={"hidden": pm_catalog_read_only|default(false), "onclick": "deleteWorkflow()"}) %}Удалить{% endcall %}
+      {% endcall %}
       {% call base_ui.prose(compact=true) %}<p id="workflowDeleteHint" hidden>Воркфлоу по умолчанию нельзя удалить.</p>{% endcall %}
-    </form>
+    {% endcall %}
 {% endif %}
 <section id="workflowPhases" class="base-page-stack" aria-label="Фазы процесса"{% if not selected_workflow %} hidden{% endif %}>
 <div class="workflow-phase-toolbar" data-testid="workflow-phase-toolbar">
@@ -152,61 +162,56 @@
     </div>
 
       {% if phase_count > 1 %}
-      <div class="phase-view-controls">
+      {% call base_ui.action_group(align='between', class_name='phase-view-controls') %}
         {{ base_ui.radio_group('phaseView', 'phase-view', 'Отображение фаз',
             [{'value':'compact', 'label':'Список'}, {'value':'timeline', 'label':'Схема'}],
             value='compact' if phase_count >= 8 else 'timeline', appearance='segmented') }}
         {% if phase_count >= 8 %}
-        <div class="phase-jump-select"><select data-base-choice id="phaseJump" aria-label="Перейти к фазе" onchange="jumpToPhase(this)">
+        <div class="phase-jump-select">{% call base_ui.select_control(id="phaseJump", aria_label="Перейти к фазе", attributes={"onchange": "jumpToPhase(this)"}) %}
           <option value="">Перейти к фазе</option>
           {% for phase in phases %}<option value="{{ phase.id }}">{{ phase.name }}</option>{% endfor %}
-        </select></div>
+        {% endcall %}</div>
         {% endif %}
-      </div>
+      {% endcall %}
       {% endif %}
 </div>
     {% if selected_workflow and modes | length > 1 %}
-    <nav data-workflow-local-navigation class="mode-navigation" aria-label="Режимы воркфлоу" data-testid="workflow-mode-navigation">
+    <div data-workflow-local-navigation class="mode-navigation" data-testid="workflow-mode-navigation">
       <div class="mode-tabs" data-testid="workflow-mode-tabs">
+        {% call base_ui.section_navigation(label='Режимы воркфлоу') %}
         {% for mode in modes %}
-        <a
-          class="base-control base-button mode-tab" data-variant="outline"
-          {% if selected_mode_id == mode.id %}aria-current="page"{% endif %}
-          data-testid="workflow-mode-tab-{{ mode.key }}"
-          data-mode-id="{{ mode.id }}"
-          href="{{ ui_base_path() }}/workflows?workflow_id={{ selected_workflow_id }}&mode_id={{ mode.id }}{% if selected_namespace %}&profession_id={{ selected_namespace.id }}{% endif %}{{ mode_scope_suffix }}"
-        >{{ mode.name }}</a>
+        {% set mode_href %}{{ ui_base_path() }}/workflows?workflow_id={{ selected_workflow_id }}&mode_id={{ mode.id }}{% if selected_namespace %}&profession_id={{ selected_namespace.id }}{% endif %}{{ mode_scope_suffix }}{% endset %}{{ base_ui.section_navigation_item(mode_href, label=mode.name, active=selected_mode_id == mode.id, class_name='mode-tab', attributes={'data-testid':'workflow-mode-tab-' ~ mode.key, 'data-mode-id':mode.id}) }}
         {% endfor %}
+        {% endcall %}
       </div>
       <div class="mode-picker">
-        <label class="base-label" for="modeSelect">Режим</label>
-        <select data-base-choice id="modeSelect" data-testid="workflow-mode-select" aria-label="Режим воркфлоу" onchange="selectMode(this.value)">
+        {{ base_ui.label_control("modeSelect", "Режим") }}
+        {% call base_ui.select_control(id="modeSelect", aria_label="Режим воркфлоу", attributes={"data-testid": "workflow-mode-select", "onchange": "selectMode(this.value)"}) %}
           {% for mode in modes %}
           <option value="{{ mode.id }}" {% if selected_mode_id == mode.id %}selected{% endif %}>{{ mode.name }}</option>
           {% endfor %}
-        </select>
+        {% endcall %}
       </div>
-    </nav>
+    </div>
     {% endif %}
 
-    <div class="timeline{% if phase_count >= 8 %} is-compact{% endif %}" id="phasesTimeline"{% if selected_workflow_id %} data-workflow-id="{{ selected_workflow_id }}"{% endif %}{% if selected_mode_id %} data-mode-id="{{ selected_mode_id }}"{% endif %} data-testid="workflow-mode-phases" aria-live="polite" aria-busy="false">
+    {% call base_ui.content_section(tag='div', dividers='start' if phase_count >= 8 else 'none', inset='none', class_name='timeline' ~ (' is-compact' if phase_count >= 8 else ''), attributes={'id':'phasesTimeline', 'data-workflow-id':selected_workflow_id if selected_workflow_id else none, 'data-mode-id':selected_mode_id if selected_mode_id else none, 'data-testid':'workflow-mode-phases', 'aria-live':'polite', 'aria-busy':'false'}) %}
       {% for block in phase_blocks %}
         {% if block.kind == 'parallel' %}
         {% call workflow_cards.parallel_group('Параллельная группа: ' ~ (block.phases | map(attribute='name') | join(', '))) %}
           <div class="timeline-parallel-header">
             {{ base_ui.badge('Параллельная группа', 'info', class_name='timeline-parallel-label') }}
-            <div class="timeline-parallel-count">{{ block.phases | length }} одновременно</div>
+            {{ base_ui.resource_list_description((block.phases|length) ~ ' одновременно', tag='div', class_name='timeline-parallel-count') }}
           </div>
-          <div class="timeline-parallel-grid">{% for p in block.phases %}{{ phase_card(p) }}{% endfor %}</div>
-          {% if not loop.last %}<p class="timeline-group-transition">Следующий этап — после завершения всех фаз группы.</p>{% endif %}
+          <div class="timeline-parallel-grid">{% for p in block.phases %}{{ phase_card(p, divider=not loop.last) }}{% endfor %}</div>
+          {% if not loop.last %}<div class="timeline-group-transition">{{ base_ui.notice(base_ui.resource_list_description('Следующий этап — после завершения всех фаз группы.'), appearance='inline', separated=true) }}</div>{% endif %}
         {% endcall %}
-        {% else %}<section class="timeline-block">{{ phase_card(block.phases[0]) }}</section>{% endif %}
-
+        {% else %}{% call base_ui.content_section(tag='section', dividers='end' if phase_count >= 8 else 'none', inset='none', class_name='timeline-block', attributes={'data-phase-divider':'end'}) %}{{ phase_card(block.phases[0]) }}{% endcall %}{% endif %}
       {% else %}
         <div data-testid="workflow-mode-empty">{{ base_ui.state('empty', 'В этом режиме фаз пока нет.') }}</div>
-        {% if can_administer and selected_workflow_id and not pm_catalog_read_only %}<div class="panel-actions"><button type="button" class="base-control base-button base-icon-control phase-add-btn" data-variant="outline" data-size="icon" data-after-order="0" onclick="addPhaseAfter(this)" aria-label="Добавить первую фазу">+</button></div>{% endif %}
+        {% if can_administer and selected_workflow_id and not pm_catalog_read_only %}<div class="timeline-connector">{% call base_ui.button(variant="outline", size="icon", class_name="phase-add-btn", type="button", aria_label="Добавить первую фазу", attributes={"data-after-order": "0", "onclick": "addPhaseAfter(this)"}) %}+{% endcall %}</div>{% endif %}
       {% endfor %}
-    </div>
+    {% endcall %}
 
 </section>
   </section>
