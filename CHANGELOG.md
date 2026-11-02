@@ -1,5 +1,19 @@
 # Changelog
 
+## Goal Iteration: Evidence Sufficiency - 2026-11-02
+
+- Hypothesis: global commands/readbacks wording may override the individual
+  criterion's evidence standard. One system sentence replaced in an offline trial;
+  all eight prior users/reports/items/goldens and model settings stayed unchanged.
+- Predeclared24 calls completed without retry or format error. Exact14/24;
+  false PARTIAL2, but contradictory133 received false PASS1/3.170 passed3/3;
+ 171 passed1/3. This variant is rejected: fewer refusals do not justify false PASS.
+- No product prompt, catalog, runtime, credentials or model change was applied.
+  The341 targeted product tests remain evidence for unchanged product3d84a60,
+  not quality evidence for this experimental text. Full release remains open.
+- Next: inspect phase2 result/evidence wording for ambiguous report sufficiency
+  and self-referential readiness; no new layer or case-specific exception.
+
 ## Configured PM Policy Candidate - 2026-11-02
 
 - Implemented, not installed: verified configured PM enrollment selects the short
