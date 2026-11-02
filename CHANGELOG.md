@@ -1,5 +1,26 @@
 # Changelog
 
+## Goal Iteration: Reference Comparison Versus Criterion Meaning - 2026-11-02
+
+- Shared short1095 system, none/low:42 of48 planned calls,41 valid. First
+  inconsistent_pass is atomically recorded as aborted;6 slots not executed.
+  Valid false PASS: none1/21, low2/20. Neither policy is accepted or installed.
+- Lossless reference display,30 paired calls: contradictory133 changes from
+  false PASS3/3 to expected PARTIAL3/3. All9 positive replies per arm remain PASS,
+  including repaired-hash and legitimately older-revision controls. But exact
+  item matching remains9/15 per arm; wrong labels18->11. No product formatter added.
+- Explicit independent-item instruction:15 valid, exact9, wrong items9; not retained.
+  Facts-first existing-six-field policy stops after6/30 calls on an omitted ID.
+  Actual message-first order is observed6/6, but it does not establish correctness.
+- Public explanations expose inconsistent referents for current document versus
+  presentation/confirmation and partial reading of compound checks. Next:
+  independent contract-clarity review preserving all business guarantees, not
+  post-hoc golden changes or another generic strictness instruction.
+- Preserved282 post-comparison calls, including all rejected replies and aborted
+  runs. Hermes/model/credentials/catalog/stand and product3d84a60 remain unchanged.
+  No new build/install or live PM completion is claimed. Detailed manifests,
+  counts and limits are in docs/ADVISOR_DIAGNOSIS_20261101.md.
+
 ## Goal Iteration: Reasoning Parameter Is Not A Complete Fix - 2026-11-02
 
 - Preserved source requests send reasoning_effort=none. Tested exactly this
