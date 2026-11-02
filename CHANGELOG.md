@@ -1,5 +1,25 @@
 # Changelog
 
+## PM: Source Evidence Versus Readiness - 2026-11-03
+
+- PM-DRAFT-02 E2 now asks for an account of owner decisions and unanswered
+  material questions. It no longer independently demands all answers be obtained
+  or a separate resolution narrative; unchanged C1/C2/C3 still require agreement,
+  consistent requirements and resolved material decisions. Counts and API stay fixed.
+- This is an intentional prospective evidence-contract change, not literal
+  equivalence or retrospective scoring. Honest pending input may cover E2 while
+  C2/C3 remain missing. The existing worker reporting instruction is preserved.
+-22 focused tests PASS after integration. A controlled-provider runtime submission
+  plus actual CLI readback verifies that E2 coverage does not complete preparation
+  when C2/C3 are missing. This does not prove model recognition or live PM readiness.
+- Previous high trial:30 evaluations/32 HTTP,26 exact, all verdicts correct;
+  two malformed responses recovered. Old E2 revision:15/15 HTTP,12 exact,
+  all verdicts correct. Both remain failed qualifications, unchanged. The stage
+  ended at47/48 HTTP; subsequent ledger843. High was QA-only, not activated.
+- New contract qualification is prepared with independently reviewable expectations,
+  including a complete document with an expressly omitted owner account. No build,
+  publication, configuration activation or installation; live acceptance remains open.
+
 ## Advisor Documentation Boundary - 2026-11-03
 
 - Corrected the diagnostics guide's stale PM-v2 lead: the current source is
