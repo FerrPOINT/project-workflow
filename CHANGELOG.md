@@ -1,5 +1,74 @@
 # Changelog
 
+## Goal Iteration: Reasoning Parameter Is Not A Complete Fix - 2026-11-02
+
+- Preserved source requests send reasoning_effort=none. Tested exactly this
+  request parameter against low, on unchanged original product PMv1 system and
+  all eight reports/items/goldens. Model/endpoint/credentials and live config
+  remain unchanged. Predeclared48 calls, alternating paired order, no retries.
+- All48 responses are valid HTTP200/stop. none: exact12/24, false PASS1,
+  false PARTIAL6,21 wrong items. low: exact10/24, false PASS0, false PARTIAL5,
+ 23 wrong items. Neither arm passes; low is not activated.
+- API usage reports nonzero reasoning tokens in5/24 low replies versus0/24 none.
+  This does not establish a particular upstream backend or single internal cause.
+  The short936 system combined with low has not been tested; do not transfer
+  results across prompts or claim none alone causes the failures.
+- Harness review found a crash/resume window after an error-slot checkpoint.
+  This run had no errors, interruption or resume. Preserve the frozen runner;
+  future reuse must atomically persist abort and reject an error state.
+- Current post-comparison total:189 bounded calls,0 accepted candidates,0 stand
+  changes. Both live PM acceptance scenarios and release remain open. Next:
+  preregister the missing short-prompt/effort comparison, changing only effort
+  on one fixed short prompt. No new rules, reports or criteria in that comparison.
+
+## Goal Iterations: Reject Unsafe Framings - 2026-11-02
+
+- Cause: preserved inputs contain the FULL documents and identity/readback facts,
+  but advisor still demands extra provenance; other replies overlook contradictory
+  hashes or cover a compound criterion after checking only part of it.
+- Completed141 bounded offline calls after the original48 comparison. Trials:
+  sufficiency24, preparation contract9, role wording24, example order24,
+  readback representation12, criterion-only24, clause/identity validation24.
+  All responses and prior goldens are
+  retained; no format errors. None meets the full positive/negative item-wise gate.
+- Criterion-only936-character system accepts all12 positive replies, but falsely
+  accepts contradictory133 twice; exact15/24,21 wrong item labels. It is rejected,
+  not installed. A full readback JSON also fails to remove extra proof demands;
+  do not add a reporting burden or another provenance layer to PM.
+- Final bounded candidate: same eight reports and goldens,24 calls, a general
+  clause/content/exact-identity rule and explicit existing verdict boundaries.
+  Exact17/24, false PASS3, false PARTIAL1,21 wrong item labels. It is rejected too:
+  requesting character-for-character comparison does not reliably perform it.
+  This whole-system trial does not isolate causality of one sentence.
+- Next: inspect exact reference lengths, occurrences and line escaping without
+  model calls. Do not repeat another strictness rewording or install a failed
+  policy; establish one discriminating input/comparison experiment first.
+- Read-only reference audit completed: seven reports have normal newlines; the
+  absent-context control is intentionally single-line. None has literal escaped
+  newlines.133 has64/50-character values sharing32 initial characters;
+  they are different and not prefix abbreviations. The mismatching receipt control
+  differs at its first character. These facts do not prove a model-internal cause.
+  Next question: can a lossless explicit representation of opaque-value equality
+  remove this comparison error without changing facts or criteria? No new model
+  calls or product normalization are yet accepted for that hypothesis.
+- Product3d84a60, runtime93c14f8, catalog10, PM23, Hermes/model/credentials remain
+  unchanged. No new image, installation or live PM acceptance is claimed.
+  Details and immutable input hashes: docs/ADVISOR_DIAGNOSIS_20261101.md.
+
+## Goal Iteration: Evidence Sufficiency - 2026-11-02
+
+- Hypothesis: global commands/readbacks wording may override the individual
+  criterion's evidence standard. One system sentence replaced in an offline trial;
+  all eight prior users/reports/items/goldens and model settings stayed unchanged.
+- Predeclared24 calls completed without retry or format error. Exact14/24;
+  false PARTIAL2, but contradictory133 received false PASS1/3.170 passed3/3;
+ 171 passed1/3. This variant is rejected: fewer refusals do not justify false PASS.
+- No product prompt, catalog, runtime, credentials or model change was applied.
+  The341 targeted product tests remain evidence for unchanged product3d84a60,
+  not quality evidence for this experimental text. Full release remains open.
+- Next: inspect phase2 result/evidence wording for ambiguous report sufficiency
+  and self-referential readiness; no new layer or case-specific exception.
+
 ## Configured PM Policy Candidate - 2026-11-02
 
 - Implemented, not installed: verified configured PM enrollment selects the short
