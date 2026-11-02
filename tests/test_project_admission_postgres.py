@@ -82,12 +82,13 @@ def test_sql_wait_cannot_extend_original_human_permit(owned):
         token = human_scope.set(proof)
         try:
             with get_session() as session:
+                connection = session.connection()  # installs the original permit for the SQL guard
                 entered.set()
                 with pytest.raises(DBAPIError) as rejected:
-                    session.execute(text(
+                    connection.execute(text(
                         "UPDATE tasks SET title='late row wait' WHERE id=:id /* original-proof-row-wait */"
                     ), {"id": task_id})
-                    session.commit()
+                    connection.commit()
                 assert rejected.value.orig.sqlstate == "42501"
                 session.rollback()
         finally:
