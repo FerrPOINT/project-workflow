@@ -200,7 +200,8 @@ def test_acceptance_is_objectively_testable_not_a_blanket_numeric_requirement(bu
     )
     assert final["checks"][4] == (
         "The FULL document specifies goal, scope and exclusions, scenarios, constraints, any material assumptions "
-        "and acceptance criteria that can be checked objectively as pass or fail."
+        "and acceptance criteria that distinguish pass from fail by the observable results "
+        "of the specified business scenarios."
     )
     assert "any material assumptions" in _instructions(preparation)
 
@@ -222,7 +223,8 @@ def test_final_keeps_real_owner_confirmation_args_and_business_review(business):
     ):
         assert rule in instructions
     assert phase["checks"][0] == (
-        "The report describes a completed presentation of the FULL current specification after preparation, "
+        "The report describes a completed presentation of the FULL latest saved specification "
+        "included in this report after preparation, "
         "not merely a future intention or a summary."
     )
     assert "PM proposals or ordinary discussion are not substituted" in phase["checks"][1]

@@ -186,11 +186,11 @@
             }
           ],
           "checks": [
-            "The report describes a completed presentation of the FULL current specification after preparation, not merely a future intention or a summary.",
+            "The report describes a completed presentation of the FULL latest saved specification included in this report after preparation, not merely a future intention or a summary.",
             "The report accurately describes the owner's decisions and completed approval of the business requirements; PM proposals or ordinary discussion are not substituted for that approval.",
             "Actual feedback is resolved; changed content has fresh owner approval, while unchanged confirmed content is preserved.",
             "There are no unresolved business questions, and no missing answer or pending owner decision is claimed complete.",
-            "The FULL document specifies goal, scope and exclusions, scenarios, constraints, any material assumptions and acceptance criteria that can be checked objectively as pass or fail."
+            "The FULL document specifies goal, scope and exclusions, scenarios, constraints, any material assumptions and acceptance criteria that distinguish pass from fail by the observable results of the specified business scenarios."
           ],
           "evidence": [
             "A complete copy of the saved requirements and a description of presenting their contents to the owner.",

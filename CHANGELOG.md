@@ -1,26 +1,43 @@
 # Changelog
 
-## PM Advisor: Unfinished Work Is Not A Blocker - 2026-11-02
+## PM Advisor: Separate Content, Review And Blockers - 2026-11-02
 
 - Cause: PM-v3 allowed ordinary pending owner input to be both PARTIAL and
   BLOCKED. PM-v4 changes only those two definitions: unfinished phase work,
   including obtaining an owner decision, is PARTIAL; BLOCKED requires an
   obstacle to performing that work. No PASS rule or criterion is weakened.
-- Generic v12, request content and six-field parser are unchanged. Frozen PM-v3
-  receipts remain accepted alongside v1/v2, without regrading or provider calls.
+- Generic v12 and the six-field parser are unchanged. Input still contains only
+  phase, criteria and the current report. Frozen PM-v3 receipts remain accepted
+  alongside v1/v2, without regrading or provider calls.
+- The catalog proposal now separates observable business acceptance outcomes
+  from owner consent, and completed presentation of the latest saved FULL text
+  from subsequent feedback. Same phases/counts/commands; no field-label exceptions.
 - Verification:40 focused prompt/server/history tests PASS; Ruff and mypy166
   PASS. A source digest regression proves no other PM-system wording changed.
-  These are targeted checks, not a new full repository gate.
+  Final catalog publication/CLI checks:20 PASS, targeted Ruff PASS. These are
+  targeted checks, not a new full repository gate.
 - Fixed trial:9 evaluations/9 HTTP,8 exact,0 malformed/unknown/false PASS.
   Realistic fictional API failure:BLOCKED3/3; ordinary owner choice:PARTIAL3/3.
   Complete163:PASS2/3. The remaining C5 refusal treats the field label
   'brief description' as a required length constraint; two independent reviews
-  found no such input-validation rule in the report. Do not claim full acceptance.
-- All663 subsequent HTTP calls remain preserved. One pre-call manifest with
-  stale synthetic provenance was rejected without calls and replaced before
-  approval. No build, catalog publication, activation or installation.
-- Next: resolve the C5 interpretation separately; keep the narrow verdict fix
-  in Draft. Full final gates and two live Backlog / Ready scenarios remain open.
+  found no such input-validation rule in the report.
+- Subsequent frozen C5 and C1 trials retained every report/golden. Final medium
+  phase03 trial:9/9 exact in9 HTTP,0 malformed/false PASS; vague acceptance and
+  pending-owner controls remain rejected. Earlier intermediate trials stay8/9.
+- Same final input under installed none:9 HTTP,5 valid-JSON responses omit C5,
+  4 completed evaluations/3 exact,1 terminal contract error,4 unrun slots.
+  Existing strict recovery stopped normally; no invalid response was promoted.
+  This is not evidence that unrun positives failed. Installed settings unchanged.
+- Cycle used46 of its48 HTTP limit; no further calls. All700 subsequent calls
+  remain preserved separately from the original48. No build, publication or install.
+- Consolidation is not a text-only change: catalog publication preserves counts
+  and requires evidence. Structural catalog work is deferred, not added as a PM
+  release prerequisite. No validator, baseline or parser is relaxed.
+- Next: qualify remaining complete/incomplete cases with the measured compatible
+  existing effort=medium configuration; no new setting or model/key change.
+  Installation would explicitly activate that setting between runs, not around
+  messages. The medium result is narrow, not full PM qualification. Draft, final
+  gates and two live Backlog / Ready scenarios remain open.
 
 ## PM Advisor: Semantic Input Candidate - 2026-11-02
 
