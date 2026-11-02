@@ -49,7 +49,7 @@ def test_generic_output_matches_baseline_bytes(delegate, explicit, digest):
 
 def test_pm_system_is_short_and_has_the_same_six_field_schema():
     prompt = PromptBuilder.PM_SYSTEM_PROMPT
-    assert PromptBuilder.PM_PROMPT_VERSION == "supervisor-evaluator-pm-v3"
+    assert PromptBuilder.PM_PROMPT_VERSION == "supervisor-evaluator-pm-v4"
     assert len(prompt) < len(PromptBuilder.SYSTEM_PROMPT) / 2
     assert re.findall(r'^\s*"([a-z_]+)":', prompt, re.MULTILINE) == [
         "verdict", "covered", "missing", "blockers", "message", "confidence",
@@ -64,13 +64,27 @@ def test_pm_system_is_short_and_has_the_same_six_field_schema():
         "a reference to an earlier report is not FULL content",
         "Classify each listed ID exactly once",
         "PASS: all covered, no blockers",
-        "BLOCKED: a concrete cause prevents progress",
+        "including obtaining an owner decision",
+        "BLOCKED: a reported obstacle prevents carrying out phase work, not merely its incompleteness",
         "DELEGATE: only if allowed",
     ):
         assert rule in prompt
     assert "hash" not in prompt.lower()
     assert "revision" not in prompt.lower()
     assert "receipt" not in prompt.lower()
+
+
+def test_v4_changes_only_the_partial_blocked_boundary():
+    previous = PromptBuilder.PM_SYSTEM_PROMPT.replace(
+        "PARTIAL: unfinished work within this phase, including obtaining an owner decision, "
+        "with no obstacle to carrying out that work. "
+        "BLOCKED: a reported obstacle prevents carrying out phase work, not merely its incompleteness. ",
+        "PARTIAL: specific missing work repairable in this phase, no blockers. "
+        "BLOCKED: a concrete cause prevents progress. ",
+    )
+    assert sha256(previous.encode()).hexdigest() == (
+        "8800c27e1805fef63646249908d234b87fdb0f9656b1180a780f701fdc263dd5"
+    )
 
 
 @pytest.mark.parametrize("delegate", [False, True])

@@ -190,7 +190,7 @@ class PromptBuilder:
 
     PROMPT_VERSION = "supervisor-evaluator-v12"
 
-    PM_PROMPT_VERSION = "supervisor-evaluator-pm-v3"
+    PM_PROMPT_VERSION = "supervisor-evaluator-pm-v4"
     PM_SYSTEM_PROMPT = (
         "Assess whether this PM phase is ready. Evaluate only its listed criteria against the current report. "
         "Compare the actual request and owner decisions with the FULL requirements when required. "
@@ -201,8 +201,10 @@ class PromptBuilder:
         "own acceptance. A summary or a reference to an earlier report is not FULL content.\n"
         "Classify each listed ID exactly once in covered or missing, without duplicates or overlap. "
         "covered requires the entire criterion. PASS: all covered, no blockers. "
-        "PARTIAL: specific missing work repairable in this phase, no blockers. "
-        "BLOCKED: a concrete cause prevents progress. DELEGATE: only if allowed, missing work, no blockers. "
+        "PARTIAL: unfinished work within this phase, including obtaining an owner decision, "
+        "with no obstacle to carrying out that work. "
+        "BLOCKED: a reported obstacle prevents carrying out phase work, not merely its incompleteness. "
+        "DELEGATE: only if allowed, missing work, no blockers. "
         "Keep all fields consistent. Explain the specific deficiency or result in Russian. "
         "Never choose a next phase. Return one JSON object with only these fields:\n"
         "{\n"

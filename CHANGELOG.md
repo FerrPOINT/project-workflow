@@ -1,5 +1,27 @@
 # Changelog
 
+## PM Advisor: Unfinished Work Is Not A Blocker - 2026-11-02
+
+- Cause: PM-v3 allowed ordinary pending owner input to be both PARTIAL and
+  BLOCKED. PM-v4 changes only those two definitions: unfinished phase work,
+  including obtaining an owner decision, is PARTIAL; BLOCKED requires an
+  obstacle to performing that work. No PASS rule or criterion is weakened.
+- Generic v12, request content and six-field parser are unchanged. Frozen PM-v3
+  receipts remain accepted alongside v1/v2, without regrading or provider calls.
+- Verification:40 focused prompt/server/history tests PASS; Ruff and mypy166
+  PASS. A source digest regression proves no other PM-system wording changed.
+  These are targeted checks, not a new full repository gate.
+- Fixed trial:9 evaluations/9 HTTP,8 exact,0 malformed/unknown/false PASS.
+  Realistic fictional API failure:BLOCKED3/3; ordinary owner choice:PARTIAL3/3.
+  Complete163:PASS2/3. The remaining C5 refusal treats the field label
+  'brief description' as a required length constraint; two independent reviews
+  found no such input-validation rule in the report. Do not claim full acceptance.
+- All663 subsequent HTTP calls remain preserved. One pre-call manifest with
+  stale synthetic provenance was rejected without calls and replaced before
+  approval. No build, catalog publication, activation or installation.
+- Next: resolve the C5 interpretation separately; keep the narrow verdict fix
+  in Draft. Full final gates and two live Backlog / Ready scenarios remain open.
+
 ## PM Advisor: Semantic Input Candidate - 2026-11-02
 
 - Cause: the PM contract mixed business review with identity/receipt attestation.
