@@ -176,8 +176,8 @@ def test_preparation_items_separate_agreement_consistency_owner_input_and_full_d
     phase = business["modes"][0]["phases"][1]
     assert phase["checks"] == [
         "The requirements agree with the user request and decisions described in this report.",
-        "Scope, material domain rules and objectively testable acceptance criteria are specified unambiguously, "
-        "without incompatible current rules.",
+        "The requirements document defines clear scope, unambiguous material rules and objectively testable "
+        "acceptance criteria, without contradictions.",
         "The source account contains the owner's current decision for every material business choice needed "
         "for the requirements, with no such choice left unanswered or replaced by a PM assumption.",
         "The current report includes the entire saved requirements document, not a summary, "
@@ -194,11 +194,24 @@ def test_preparation_evidence_records_input_and_gaps_not_document_readiness(busi
     evidence = phase["evidence"][1]
     assert evidence == "A readable account of the owner's decisions and any unanswered material questions."
     assert "agree with the user request and decisions" in phase["checks"][0]
-    assert "without incompatible current rules" in phase["checks"][1]
+    assert "The requirements document defines clear scope" in phase["checks"][1]
+    assert "without contradictions" in phase["checks"][1]
     assert "owner's current decision for every material business choice" in phase["checks"][2]
     assert "no such choice left unanswered or replaced by a PM assumption" in phase["checks"][2]
     assert "consisten" not in evidence.lower()
     assert "how any material clarification or feedback was resolved" in _instructions(phase)
+
+
+def test_preparation_document_content_is_required_in_report_not_as_file_or_special_heading(business):
+    """Static catalog obligations only, not a claim about model interpretation."""
+    phase = business["modes"][0]["phases"][1]
+    assert phase["checks"][1].startswith("The requirements document defines ")
+    assert phase["checks"][3] == (
+        "The current report includes the entire saved requirements document, not a summary, "
+        "inventory of sections or reference to an earlier report."
+    )
+    items = "\n".join([*phase["checks"], *phase["evidence"]])
+    assert not re.search(r"\b(?:file|filename|attachment|heading|header)\b", items, re.IGNORECASE)
 
 
 def test_preparation_source_without_full_document_remains_partial(
