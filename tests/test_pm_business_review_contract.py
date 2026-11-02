@@ -186,9 +186,62 @@ def test_preparation_items_separate_agreement_consistency_owner_input_and_full_d
     assert phase["evidence"] == [
         "A readable summary of the user request and agreed decisions, together with one FULL saved "
         "requirements document in this report.",
-        "The report includes the material choices provided in the request or discussion and how any material "
-        "clarification or feedback was resolved.",
+        "A readable account of the owner's decisions and any unanswered material questions.",
     ]
+
+
+def test_preparation_evidence_records_input_and_gaps_not_document_readiness(business):
+    phase = business["modes"][0]["phases"][1]
+    evidence = phase["evidence"][1]
+    assert evidence == "A readable account of the owner's decisions and any unanswered material questions."
+    assert "agree with the user request and decisions" in phase["checks"][0]
+    assert "without incompatible current rules" in phase["checks"][1]
+    assert "owner input resolves the material decisions" in phase["checks"][2]
+    assert "consisten" not in evidence.lower()
+    assert "how any material clarification or feedback was resolved" in _instructions(phase)
+
+
+def test_preparation_pending_owner_input_with_present_evidence_remains_partial(
+    business, configured, supervisor_llm, monkeypatch,
+):
+    """Controlled provider output tests admission/state mechanics, not model recognition or quality."""
+    client, assignment = configured
+    _publish(client, active(client, _workflow_id(assignment)), business["modes"])
+    enrollment = enroll(configured)
+    supervisor_llm("PASS")
+    context = step(configured, report="Synthetic completed reading of the request and discussion.",
+                   operation_key="pending-preparation-context", expected_version=enrollment["version"])
+    assert context.status_code == 200
+    view = _cli_read(configured, monkeypatch)
+    assert view["phase_code"] == "PM-DRAFT-02"
+    phase = business["modes"][0]["phases"][1]
+    covered = [phase["checks"][0], phase["checks"][3], *phase["evidence"]]
+    missing = phase["checks"][1:3]
+    supervisor_llm("PARTIAL", covered=covered, missing=missing)
+    provider = Mock(side_effect=OpenAICompatibleClient.chat)
+    monkeypatch.setattr(OpenAICompatibleClient, "chat", provider)
+    response = step(
+        configured,
+        report=(
+            "Owner request: a shared task list for two staff members. Owner decisions: both staff can "
+            "create and read tasks. FULL saved working requirements: the shared list persists tasks; "
+            "each task has a nonempty name and description. Both staff see all saved tasks. "
+            "Open material question: must a task have an assignee at creation, or may it be unassigned? "
+            "The owner has not answered; neither alternative is adopted as a default. "
+            "The requirements are not ready while this choice remains unresolved."
+        ),
+        operation_key="pending-preparation-owner-choice", expected_version=view["version"],
+    )
+    assert response.status_code == 200
+    provider.assert_called_once()
+    result = response.json()["result"]
+    assert result["verdict"] == "PARTIAL" and result["complete"] is False
+    assert set(result["covered"]) == set(covered)
+    assert set(result["missing"]) == set(missing)
+    assert result["next_phase_code"] is None and "terminal_receipt" not in result
+    current = _cli_read(configured, monkeypatch)
+    assert current["phase_code"] == "PM-DRAFT-02" and current["complete"] is False
+    assert "terminal_receipt" not in current
 
 
 def test_acceptance_is_objectively_testable_not_a_blanket_numeric_requirement(business):

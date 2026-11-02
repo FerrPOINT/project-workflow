@@ -132,7 +132,7 @@
           ],
           "evidence": [
             "A readable summary of the user request and agreed decisions, together with one FULL saved requirements document in this report.",
-            "The report includes the material choices provided in the request or discussion and how any material clarification or feedback was resolved."
+            "A readable account of the owner's decisions and any unanswered material questions."
           ],
           "parallel_with_phase_code": null,
           "rollback_target_phase_code": null
