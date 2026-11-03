@@ -1,11 +1,13 @@
 """Task history survives independently of the profession's legacy default."""
 
+from unittest.mock import patch
+
 import pytest
 from sqlalchemy import create_engine, delete, inspect, select
 
 from project_workflow.infrastructure.db.models import ProfessionWorkflow
 from project_workflow.infrastructure.db.session import ensure_migrated, run_alembic_command
-from project_workflow.infrastructure.db.single_task_catalog import ensure_single_task_catalog
+from project_workflow.infrastructure.db.single_task_catalog import ensure_single_task_catalog, load_profile
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
 
@@ -34,7 +36,11 @@ def test_populated_upgrade_keeps_task_and_report_and_accepts_another_workflow(tm
 def assert_populated_upgrade_preserves_collection_history(engine):
     run_alembic_command("upgrade", engine, "0020_configured_cli_catalog")
     with SAUnitOfWork(engine) as uow:
-        binding = ensure_single_task_catalog(uow).bindings[0]
+        # Seed the catalog actually published with this predecessor, not a future
+        # catalog behind an older ledger. Production upgrades must still reject drift.
+        predecessor = load_profile("e0cde0c044fe1a38b6fa0f387cc30e0da6e89dedb35b89a893263fd7d2558a40")
+        with patch("project_workflow.infrastructure.db.single_task_catalog.load_profile", return_value=predecessor):
+            binding = ensure_single_task_catalog(uow).bindings[0]
         namespace, workflow = int(binding.namespace_id), int(binding.workflow_id)
         mode = binding.modes[0]
         task = uow.tasks.create(
