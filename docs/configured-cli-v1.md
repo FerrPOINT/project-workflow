@@ -23,6 +23,15 @@ allowing fresh Tracker context to show the automatically queued Analysis.
 This source revision requires coordinated Tracker/Fleet/Base qualification; it is
 not an activation or live acceptance record.
 
+Срез реализации `a32f110d` содержит новый каталог 0027. CLI и сервер должны
+поставляться из согласованного среза: прежняя проверка CLI `bace3fee` / server
+`a002eaf0` не подтверждает совместимость с новым manifest. Полный прогон дал
+3298 passed и три падения тестовых ожиданий; после исправления эти три теста
+прошли отдельно. Покрытие 94.068%, Ruff, mypy, navigation и четыре проверки
+миграции/истории на настоящем PostgreSQL прошли. Текущий PR имеет конфликты с
+изменившимся `master` и остаётся Draft. Версии, проверки и открытые пункты:
+[совместная поставка Base #443](https://github.com/FerrPOINT/services-base/pull/443).
+
 ## Общий контракт
 
 Source-контракт для семи профессий и восьми режимов. Установка, полный gate и
