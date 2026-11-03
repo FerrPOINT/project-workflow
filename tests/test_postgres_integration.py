@@ -1965,10 +1965,10 @@ def _pass_response(user_prompt: str) -> dict:
             item_ids.append(stripped[5:].split('" — ', 1)[0])
     return {
         "verdict": "PASS",
-        "covered": item_ids,
-        "missing": [],
+        "assessments": {
+            item_id: {"covered": True, "reason": "Fixture criterion is satisfied."} for item_id in item_ids
+        },
         "blockers": [],
-        "message": "ok",
         "confidence": 1.0,
     }
 
@@ -1978,12 +1978,11 @@ def _partial_response(user_prompt: str) -> dict:
     response.update(
         {
             "verdict": "PARTIAL",
-            "covered": [],
-            "missing": response["covered"],
-            "message": "work remains",
             "confidence": 0.5,
         }
     )
+    for assessment in response["assessments"].values():
+        assessment.update(covered=False, reason="work remains")
     return response
 
 
@@ -2081,9 +2080,8 @@ def test_concurrent_distinct_partial_reports_do_not_apply_stale_snapshot(pg_url)
     def partial_response(user_prompt: str) -> dict:
         response = _pass_response(user_prompt)
         response["verdict"] = "PARTIAL"
-        response["missing"] = response.pop("covered")
-        response["covered"] = []
-        response["message"] = "partial"
+        for assessment in response["assessments"].values():
+            assessment.update(covered=False, reason="partial")
         return response
 
     def provider(*_args, **kwargs):
