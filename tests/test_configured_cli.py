@@ -16,6 +16,7 @@ from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.single_task_catalog import ensure_single_task_catalog
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.ui.app import create_app
+from tests._report_helpers import report_json
 
 WRITER = {"Authorization": "Bearer sdlc_pat_test-configured-controller"}
 CONTROLLER = "99999999-9999-4999-8999-999999999999"
@@ -187,7 +188,7 @@ def test_professions_share_assignment_step_history_and_terminal(configured, supe
     for version in (1, 2, 3):
         response = step(
             configured,
-            report=f"Actual completed phase {version}",
+            report=report_json(f"Actual completed phase {version}"),
             operation_key=f"phase-{version}",
             expected_version=version,
         )
@@ -240,7 +241,9 @@ def test_professions_share_assignment_step_history_and_terminal(configured, supe
         if value["next_before"] is None:
             break
         agent_query["before_history_id"] = value["next_before"]
-    assert [row["worker_report"] for row in full_rows] == [f"Actual completed phase {i}" for i in (3, 2, 1)]
+    assert [row["worker_report"] for row in full_rows] == [
+        report_json(f"Actual completed phase {i}") for i in (3, 2, 1)
+    ]
     assert len({row["history_id"] for row in full_rows}) == 3
     for invalid in ({"before_history_id": 0}, {"before_history_id": 2**63},
                     {"before_history_id": 1, "operation_key": "phase-1"}):
@@ -272,7 +275,9 @@ def test_professions_share_assignment_step_history_and_terminal(configured, supe
 def test_new_assignment_continues_unfinished_phase_with_compare_and_swap(configured, supervisor_llm):
     enroll(configured)
     supervisor_llm("PASS")
-    first = step(configured, report="Actual first phase", operation_key="first", expected_version=1).json()["result"]
+    first = step(
+        configured, report=report_json("Actual first phase"), operation_key="first", expected_version=1,
+    ).json()["result"]
     client, assignment = configured
     replacement = {
         **assignment,
@@ -290,7 +295,9 @@ def test_new_assignment_continues_unfinished_phase_with_compare_and_swap(configu
     assert result["phase_code"] == first["phase_code"] and result["version"] == first["version"] + 1
     assert result["assignment_ref"] == replacement["assignment_ref"]
     assert result["execution_ref"] != first["execution_ref"]
-    assert step(configured, report="Actual first phase", operation_key="first", expected_version=1).status_code == 409
+    assert step(
+        configured, report=report_json("Actual first phase"), operation_key="first", expected_version=1,
+    ).status_code == 409
     read = step(configured)
     assert read.status_code == 200, read.text
     assert read.json()["result"]["version"] == result["version"]
@@ -304,7 +311,7 @@ def test_rework_preserves_previous_terminal_receipt_and_all_reports(configured, 
     for version in (1, 2, 3):
         response = step(
             configured,
-            report=f"Actual initial work {version}",
+            report=report_json(f"Actual initial work {version}"),
             operation_key=f"initial-{version}",
             expected_version=version,
         )
@@ -339,7 +346,7 @@ def test_rework_preserves_previous_terminal_receipt_and_all_reports(configured, 
     for version in (5, 6, 7):
         response = step(
             configured,
-            report=f"Actual repaired work {version}",
+            report=report_json(f"Actual repaired work {version}"),
             operation_key=f"rework-{version}",
             expected_version=version,
         )
@@ -383,7 +390,9 @@ def test_enrollment_is_once_per_task_without_native_rows(configured):
 def test_enrollment_replay_keeps_original_cursor_after_a_report(configured, supervisor_llm):
     original = enroll(configured)
     supervisor_llm("PASS")
-    response = step(configured, report="Completed first phase", operation_key="phase-1", expected_version=1)
+    response = step(
+        configured, report=report_json("Completed first phase"), operation_key="phase-1", expected_version=1,
+    )
     assert response.status_code == 200, response.text
     assert response.json()["result"]["version"] == 2
     assert enroll(configured) == original
@@ -538,14 +547,18 @@ def test_first_phase_response_evidence_reaches_verifier_without_forcing_pass(
         return original_chat(*args, **kwargs)
 
     monkeypatch.setattr(OpenAICompatibleClient, "chat", chat)
-    response = step(configured, report=report, operation_key="first-report", expected_version=1)
+    response = step(configured, report=report_json(report), operation_key="first-report", expected_version=1)
     assert response.status_code == 200, response.text
     result = response.json()["result"]
-    assert prompts and any(report in prompt and required in prompt for prompt in prompts)
-    assert all(
-        "two execution IDs are intentionally separate and are not required to be equal" in prompt for prompt in prompts
-    )
-    assert all("Actual task/assignment/agent mismatches remain blockers" in prompt for prompt in prompts)
+    assert prompts
+    for prompt in prompts:
+        payload = json.loads(prompt)
+        assert payload["report"] == json.loads(report_json(report))
+        assert required in [item["text"] for item in payload["criteria"]]
+    instructions = observed["result"]["instructions"]
+    assert "two execution IDs are intentionally separate and are not required to be equal" in instructions
+    assert "Actual task/assignment/agent mismatches remain blockers" in instructions
+    assert all("Instructions:" not in prompt for prompt in prompts)
     assert result["verdict"] == "PARTIAL" and required in result["missing"]
     assert result["phase_code"] == "PM-DRAFT-01" and result["version"] == 2
     assert result["complete"] is False and "terminal_receipt" not in result
@@ -554,14 +567,16 @@ def test_first_phase_response_evidence_reaches_verifier_without_forcing_pass(
 def test_exact_report_replay_and_changed_payload_conflict(configured, supervisor_llm):
     enroll(configured)
     supervisor_llm("PASS")
-    command = {"report": "Actual first phase report", "operation_key": "report-a", "expected_version": 1}
+    command = {"report": report_json("Actual first phase report"), "operation_key": "report-a", "expected_version": 1}
     first = step(configured, **command)
     assert first.status_code == 200, first.text
     result = first.json()["result"]
     assert result["version"] == 2 and result["phase_code"] == "PM-DRAFT-02"
     assert step(configured, **command).json() == first.json()
-    assert step(configured, **{**command, "report": "Different report"}).status_code == 409
-    assert step(configured, report="Other report", operation_key="report-b", expected_version=1).status_code == 409
+    assert step(configured, **{**command, "report": report_json("Different report")}).status_code == 409
+    assert step(
+        configured, report=report_json("Other report"), operation_key="report-b", expected_version=1,
+    ).status_code == 409
     with SAUnitOfWork() as uow:
         assert uow.session.scalar(select(func.count()).select_from(m.TaskStepHistoryEntry)) == 1
 
@@ -596,7 +611,9 @@ def test_saved_answer_allows_draft_update_and_preparation_without_final_consent(
     monkeypatch.setattr(configured_cli, "confirmation", absent)
     initial = step(configured).json()["result"]
     assert initial["phase_code"] == "PM-DRAFT-01"
-    first = step(configured, report="Actual first phase evidence", operation_key="first", expected_version=1)
+    first = step(
+        configured, report=report_json("Actual first phase evidence"), operation_key="first", expected_version=1,
+    )
     assert first.status_code == 200, first.text
     assert first.json()["result"]["execution_ref"] == initial["execution_ref"]
     assert configured_cli.PM_CONTINUATION in first.json()["result"]["instructions"]
@@ -618,7 +635,7 @@ def test_saved_answer_allows_draft_update_and_preparation_without_final_consent(
     # Controlled phase report, not a claim that this test published a real Tracker revision.
     response = step(
         configured,
-        report="Saved answer applied to full Draft; preparation only, no owner consent",
+        report=report_json("Saved answer applied to full Draft; preparation only, no owner consent"),
         operation_key="prepare-after-answer",
         expected_version=2,
     )
@@ -633,7 +650,8 @@ def test_saved_answer_allows_draft_update_and_preparation_without_final_consent(
     assert "no final Workflow report is permitted yet" in text
     assert (
         step(
-            configured, report="Feedback is not consent", operation_key="final-without-consent", expected_version=3
+            configured, report=report_json("Feedback is not consent"),
+            operation_key="final-without-consent", expected_version=3,
         ).status_code
         == 503
     )
@@ -648,7 +666,9 @@ def test_known_preparation_partial_requires_corrected_report_not_early_consent(
     enroll(configured)
     supervisor_llm("PASS")
     assert (
-        step(configured, report="Actual first phase evidence", operation_key="first", expected_version=1).status_code
+        step(
+            configured, report=report_json("Actual first phase evidence"), operation_key="first", expected_version=1,
+        ).status_code
         == 200
     )
 
@@ -661,7 +681,7 @@ def test_known_preparation_partial_requires_corrected_report_not_early_consent(
     assert required
     supervisor_llm("PARTIAL", missing=required)
     command = {
-        "report": "Full Draft saved, but report evidence is incomplete",
+        "report": report_json("Full Draft saved, but report evidence is incomplete"),
         "operation_key": "preparation-incomplete",
         "expected_version": 2,
     }
@@ -686,11 +706,11 @@ def test_known_preparation_partial_requires_corrected_report_not_early_consent(
     ):
         assert text in instructions
     assert step(configured, **command).json() == response.json()
-    assert step(configured, **{**command, "report": "Changed body under old key"}).status_code == 409
+    assert step(configured, **{**command, "report": report_json("Changed body under old key")}).status_code == 409
     supervisor_llm("PASS")
     corrected = step(
         configured,
-        report="Controlled corrected report with actual missing phase evidence",
+        report=report_json("Controlled corrected report with actual missing phase evidence"),
         operation_key="preparation-corrected",
         expected_version=partial["version"],
     )
@@ -707,7 +727,7 @@ def test_owner_confirmation_is_required_before_final_report(configured, supervis
     for version in (1, 2):
         response = step(
             configured,
-            report=f"Actual phase report {version}",
+            report=report_json(f"Actual phase report {version}"),
             operation_key=f"phase-{version}",
             expected_version=version,
         )
@@ -717,7 +737,9 @@ def test_owner_confirmation_is_required_before_final_report(configured, supervis
         raise RuntimeError("Controlled missing owner confirmation")
 
     monkeypatch.setattr(configured_cli, "confirmation", absent)
-    assert step(configured, report="Owner said yes", operation_key="final", expected_version=3).status_code == 503
+    assert step(
+        configured, report=report_json("Owner said yes"), operation_key="final", expected_version=3,
+    ).status_code == 503
     assert step(configured).json()["result"]["version"] == 3
 
 
@@ -735,7 +757,7 @@ def test_backlog_ready_pm_can_read_and_replay_but_cannot_submit_new_work(configu
     }
     monkeypatch.setattr(configured_cli, "confirmation", lambda _payload: confirmation)
     for version in (1, 2, 3):
-        command = {"report": f"Actual report {version}", "operation_key": f"settled-{version}",
+        command = {"report": report_json(f"Actual report {version}"), "operation_key": f"settled-{version}",
                    "expected_version": version}
         if version == 3:
             command.update(requirements_revision=2, requirements_sha256="a" * 64)
@@ -755,7 +777,7 @@ def test_backlog_ready_pm_can_read_and_replay_but_cannot_submit_new_work(configu
     read = step(configured)
     assert read.status_code == 200 and read.json()["result"]["complete"] is True
     assert step(configured, **command).json() == accepted.json()
-    assert step(configured, **{**command, "report": "Changed body"}).status_code == 409
+    assert step(configured, **{**command, "report": report_json("Changed body")}).status_code == 409
     assert step(configured, **{**command, "operation_key": "new-work", "expected_version": 4}).status_code == 409
     params = {"interaction_protocol": "configured-cli-v1", "task": request["task"],
               "namespace_id": request["namespace_id"]}
@@ -773,7 +795,8 @@ def test_final_phase_read_and_evaluation_have_no_future_handoff_prerequisite(con
     supervisor_llm("PASS")
     for version in (1, 2):
         response = step(
-            configured, report="Actual preparation", operation_key=f"prepare-{version}", expected_version=version
+            configured, report=report_json("Actual preparation"),
+            operation_key=f"prepare-{version}", expected_version=version,
         )
         assert response.status_code == 200
     observed = step(configured).json()["result"]
@@ -804,7 +827,7 @@ def test_terminal_receipt_and_trusted_readback_survive_replay(configured, superv
     command = {}
     for version in (1, 2, 3):
         command = {
-            "report": f"Actual report {version}",
+            "report": report_json(f"Actual report {version}"),
             "operation_key": f"phase-{version}",
             "expected_version": version,
             **({"requirements_revision": 2, "requirements_sha256": "a" * 64} if version == 3 else {}),
@@ -847,7 +870,9 @@ def test_authority_failure_before_commit_rolls_back_phase_and_receipt(configured
         raise namespace_auth.NamespaceAuthError(403)
 
     monkeypatch.setattr(configured_cli, "finish_history", reject)
-    assert step(configured, report="Actual report", operation_key="phase-1", expected_version=1).status_code == 403
+    assert step(
+        configured, report=report_json("Actual report"), operation_key="phase-1", expected_version=1,
+    ).status_code == 403
     monkeypatch.setattr(configured_cli, "finish_history", original)
     result = step(configured).json()["result"]
     assert result["version"] == 1 and result["phase_code"] == "PM-DRAFT-01"
@@ -876,7 +901,7 @@ def test_report_fence_is_required_and_strict(change):
             interaction_protocol="configured-cli-v1",
             namespace_id=1,
             task="SDLC-1",
-            **({"report": "Report", "operation_key": "report-1", "expected_version": 1} | change),
+            **({"report": report_json("Report"), "operation_key": "report-1", "expected_version": 1} | change),
         )
 
 
@@ -916,7 +941,7 @@ def test_report_interleaving_while_provider_releases_transaction(configured, sup
             nested.append(
                 step(
                     configured,
-                    report="Actual report",
+                    report=report_json("Actual report"),
                     expected_version=1,
                     operation_key="report-a" if same_key else "report-b",
                 )
@@ -924,7 +949,7 @@ def test_report_interleaving_while_provider_releases_transaction(configured, sup
         return evaluate(*args, **kwargs)
 
     monkeypatch.setattr(OpenAICompatibleClient, "chat", chat)
-    response = step(configured, report="Actual report", operation_key="report-a", expected_version=1)
+    response = step(configured, report=report_json("Actual report"), operation_key="report-a", expected_version=1)
     assert nested[0].status_code == 200, nested[0].text
     assert response.status_code == (200 if same_key else 409), response.text
     if same_key:
@@ -938,7 +963,9 @@ def test_changed_confirmation_after_provider_cannot_commit_terminal(configured, 
     supervisor_llm("PASS")
     for version in (1, 2):
         assert (
-            step(configured, report="Actual report", operation_key=f"p-{version}", expected_version=version).status_code
+            step(
+                configured, report=report_json("Actual report"), operation_key=f"p-{version}", expected_version=version,
+            ).status_code
             == 200
         )
     receipt = {"id": str(uuid4()), "revision": 1, "content_hash": "a" * 64, "owner_subject": OWNER, "stage": "Draft"}
@@ -953,7 +980,7 @@ def test_changed_confirmation_after_provider_cannot_commit_terminal(configured, 
     assert (
         step(
             configured,
-            report="Actual final report",
+            report=report_json("Actual final report"),
             operation_key="final",
             expected_version=3,
             requirements_revision=1,
@@ -979,7 +1006,7 @@ def complete(configured, supervisor_llm, monkeypatch):
     for version in (1, 2, 3):
         response = step(
             configured,
-            report=f"Actual report {version}",
+            report=report_json(f"Actual report {version}"),
             operation_key=f"phase-{version}",
             expected_version=version,
             **({"requirements_revision": 7, "requirements_sha256": "a" * 64} if version == 3 else {}),
@@ -1110,7 +1137,8 @@ def test_final_report_requires_exact_requirements_evidence(configured, superviso
     for version in (1, 2):
         assert (
             step(
-                configured, report="Actual report", operation_key=f"phase-{version}", expected_version=version
+                configured, report=report_json("Actual report"),
+                operation_key=f"phase-{version}", expected_version=version,
             ).status_code
             == 200
         )
@@ -1133,7 +1161,8 @@ def test_final_report_requires_exact_requirements_evidence(configured, superviso
     ):
         assert (
             step(
-                configured, report="Actual final report", operation_key="final", expected_version=3, **evidence
+                configured, report=report_json("Actual final report"),
+                operation_key="final", expected_version=3, **evidence,
             ).status_code
             == 409
         )
@@ -1173,7 +1202,8 @@ def test_final_judge_assesses_precommit_facts_not_future_receipts(configured, su
     for version in (1, 2):
         assert (
             step(
-                configured, report="Actual preparation", operation_key=f"prepare-{version}", expected_version=version
+                configured, report=report_json("Actual preparation"),
+                operation_key=f"prepare-{version}", expected_version=version,
             ).status_code
             == 200
         )
@@ -1200,9 +1230,10 @@ def test_final_judge_assesses_precommit_facts_not_future_receipts(configured, su
     def chat(*args, **kwargs):
         prompt = kwargs["user"]
         prompts.append(prompt)
-        assert "PRECOMMIT ASSESSMENT ONLY" in prompt
+        assert "PRECOMMIT ASSESSMENT ONLY" in observed["instructions"]
+        assert "Instructions:" not in prompt
         assert "pm completion submit" not in prompt and "discussion publish" not in prompt
-        assert reports[evidence] in prompt
+        assert json.loads(prompt)["report"] == json.loads(report_json(reports[evidence]))
         with SAUnitOfWork() as uow:
             rows = uow.session.scalars(select(m.TaskStepHistoryEntry)).all()
             assert len(rows) == 2
@@ -1212,7 +1243,7 @@ def test_final_judge_assesses_precommit_facts_not_future_receipts(configured, su
     monkeypatch.setattr(OpenAICompatibleClient, "chat", chat)
     response = step(
         configured,
-        report=reports[evidence],
+        report=report_json(reports[evidence]),
         operation_key="final-precommit",
         expected_version=3,
         requirements_revision=2,
@@ -1238,14 +1269,17 @@ def test_precommit_contract_preserves_custom_security_without_mutating_phase():
 
     from project_workflow.infrastructure.llm import PromptBuilder
     from project_workflow.infrastructure.single_task_delivery_instructions import terminal_instruction
+    from project_workflow.supervisor.contracts import PhaseContractBuilder
     from project_workflow.supervisor.models import Phase, PhaseInstruction
 
     security = "Custom policy: do not disclose credentials or impersonate the owner."
     for role in ("project_manager", "reviewer", "tester", "developer"):
         phase = Phase(code=f"{role}-final", instructions=[PhaseInstruction(terminal_instruction(role) + security)])
         before = deepcopy(phase)
-        prompt = PromptBuilder.build_user_prompt("SDLC-901", phase, "Actual report")
-        assert "PRECOMMIT ASSESSMENT ONLY" in prompt and security in prompt
+        prompt = PromptBuilder.build_user_prompt("SDLC-901", phase, json.loads(report_json("Actual report")))
+        assert "PRECOMMIT ASSESSMENT ONLY" not in prompt and security not in prompt
+        worker_contract = PhaseContractBuilder([phase]).build(phase)
+        assert any("PRECOMMIT ASSESSMENT ONLY" in item and security in item for item in worker_contract.instructions)
         assert "pm completion submit" not in prompt and "discussion publish" not in prompt
         assert phase == before
 
@@ -1342,7 +1376,7 @@ def test_new_assignment_adopts_retired_business_cursor_without_rewriting_history
         assert [row.to_dict() for row in uow.step_history.list(task_id=task_id)] == old_rows
         assert uow.tasks.get_assignment_by_operation_key(old_assignment["operation_key"]).to_dict() == old_assignment
     supervisor_llm("PASS")
-    assert step(configured,report="Completed remaining phase",operation_key="after-adoption",
+    assert step(configured,report=report_json("Completed remaining phase"),operation_key="after-adoption",
                 expected_version=response.json()["result"]["version"]).status_code == 200
 
 

@@ -1,10 +1,106 @@
 # Managed Instruction Publication
 
-This is a separate, next-release source package based on master `620f45cd`.
-The accepted PM catalog works without it. It does not change the installed
-cohort, Fleet assignments/configuration, Hermes, credentials or agent messages.
+## Current Text Publication - 31 October 2026
+
+### Release Follow-Up - 1 November 2026
+
+The repository artifact now has normalized hash
+`ba81253bbb57eb761973d8a08e2a699f914c16fa9e39d91bcae82b237cd156f8`;
+it is a candidate, NOT the active catalog10 below. It keeps FULL context/documents,
+publication/readback data and exact owner consent in corrected reports, without
+republishing unchanged requirements or repeating identical reports.
+
+Source3a85115/v13 passes3220 tests+73subtests,132 real PG tests, coverage
+94.03093868956022%, Ruff and mypy165files. The final v15 candidate7940c47 passes
+132 PG tests but fails the first-step execution-ID context test in its full gate.
+The stale procedure-placement assertion is now corrected with both targeted
+cases passing; CLI identity semantics and non-forced PARTIAL remain tested.
+A passing final full gate is not inferred from that focused correction.
+Real-model replay also retains six independently identified unsupported refusals;
+genuinely incomplete historical reports remain PARTIAL. Medium reasoning is not
+a demonstrated fix. No automatic PASS or hidden history re-evaluation is used.
+
+The installed verifier remains v12. v15 and the new artifact are not activated;
+PM report-grading policy is pending a product decision. Original Hermes, the
+working model, old chats and immutable receipts are unchanged. Tests/builds are
+not evidence of publication, installation or new live PM acceptance.
+
+Catalog10/hash`ae220f915d33987f1ed9b13e39d9a4c3a82ea5d8db133638a6a06f384ae249ef`
+is active. Three phases now focus on context, saved requirements and exact owner
+confirmation; all counts/scopes/skills remain unchanged. Identity/namespace/access
+stay server-enforced, not another model attestation. Text length14632 ->5868
+instruction characters. Seven scoped tests/Ruff pass; no product/image rebuild.
+Full-brief SDLC-22 reaches actual Backlog/Ready with exact req1/hash898f7e7e,
+separate owner receipt853d9814 and terminal PASS135. Independent read-only PG
+verifies the same owner/hash and zero Analyst/Analysis. PM self-corrected final
+PARTIAL132-134 without technical hints; remaining verdict overhead is explicit.
+Sparse SDLC-23 also reaches actual Backlog/Ready: revision3, separate exact owner
+consent and terminal PASS163. Independent PG confirms owner/hash/no Analyst.
+The5/12/8 PARTIAL counts remain a quality gap. Fleet's completed-task initial POST
+replay fix is source-qualified, not yet installed/live-qualified; release is open.
+SDLC-21 on9 stays frozen with its
+PARTIAL128 demand for an extra configured-namespace attestation; no fabricated
+configuration evidence or PM completion was submitted on its behalf.
+
+### Earlier Catalog9
+
+Catalog9/hash`a85f4a78d79aa28efd5e577db24b5eb7a204cccff54b8ad6352a3ee9b37f4209`
+is published through the existing API. The final phase now names its business
+result, "Owner-confirmed requirements"; check5 assesses specification sections,
+not the acceptance of the report currently under evaluation. Other checks,
+FULL document/presentation/owner evidence and postterminal completion commands
+are unchanged. Seven focused publication/CLI tests and Ruff pass; no new image.
+Retained catalog8 SDLC-20 has actual requirements1 and matching owner consent,
+but reports120-125 remain PARTIAL, including renewed circular submission demands.
+Normal Stop is acknowledged and Fleet reads cancelled; no replacement execution
+or repaired verdict is substituted. Catalog9 did not complete live acceptance.
+
+## Current Installed Verifier - 31 October 2026
+
+Catalog7 is published without rebuilding applications. Its real SDLC-18 test
+saved/presented requirements, obtained exact owner consent and corrected several
+reports in the same execution. Final history106 still required the CURRENT
+report's own submission result. This is a reproduced shared-prompt contradiction,
+not a reason to republish/rebind the frozen catalog or execute completion for PM.
+
+Evaluator v12 now excludes only that self-referential submission/readback from
+precommit work. True business commands/results, FULL content, external readbacks
+and owner consent remain required; negative verdicts are not promoted to PASS.
+Frozen v11 receipts remain explicitly accepted under unchanged fingerprint and
+coverage validation. Source `fb983944` is now installed by COMPLETE normal
+Workflow-only Apply `82089f04ed294324a5d4b820a71a4884`; actual container
+`22a64cc5...` reads v12, health/database/schema/catalog are OK and Fleet is unchanged.
+Catalog7/hash0434499 remained active at that update; old SDLC-15 CLI history is byte-equivalent
+at version6. No catalog publication or Hermes change accompanied this update.
+
+Local qualification on that exact source is complete: 159 targeted tests,
+Ruff/mypy165, full non-PG **3193 passed, 73 subtests passed, 15 skipped,
+132 deselected; coverage94.02997164844066%** at required94%, and **132 PostgreSQL
+tests passed with zero skips/failures/errors** using both dedicated databases,
+including the empty clock fixture. Exact-image fresh migration0023/health/OpenAPI
+smoke passes; disposable image-QA/PG resources and scratch are cleaned. Worker
+119 tests and four frozen-proof cases overlap the targeted gate, not extra totals.
+
+Business acceptance remains unaccepted: after the v11 history106 failure,
+acknowledged native cancellation and same-task continuation under v12, SDLC-18
+history115 still required nonexistent Tracker completion-operation readbacks to
+prove absence of postterminal effects. No Tracker Backlog / Ready is claimed.
+Sparse SDLC-19 has a first useful question and no requirements. Both catalog7
+cases/history remain preserved; subsequent catalog8 SDLC-20 and catalog9 trials
+assess new publications, not rewrite these outcomes. Mocked gates and historical assisted PM13
+are not acceptance of the new full/sparse cases or all roles/Kubernetes/rollback.
+Exact image, container and receipts: [installed v12 checkpoint](configured-cli-v1.md#installed-v12-checkpoint-2026-10-31).
+
+The earlier publication-package checkpoints below retain their own source and
+scope; the current v12 local gate and installation are recorded above.
+
+The original publication package was prepared separately from master `620f45cd`.
+That historical source-only boundary is not the current installed status. Its
+publication API is now installed; editor adoption remains a separate gate.
 
 ## Current Source Gate
+
+Historical publication-source qualification; current v12 results are above.
 
 On source23797fbf (production tree156956017cceb3afe3d37f2f53195d12cdf9619d,
 tests tree3b99c068045ae3380876b5957fb77bfa30101fd5), the complete non-PG
@@ -20,7 +116,7 @@ Fresh disposable ComposeHelper v2, 512MiB/0.5CPU, owned database/network/volume,
 evidence is `.local/publication-full-coverage.{log,xml}` and
 `.local/publication160-abf7e8c16b/{result.json,pytest.log,junit.xml,compose/journal.json}`.
 
-Actual normal Build `ec7b4199433f4a10b3ed55fc3b0b6817` now packages source
+The publication producer's normal Build `ec7b4199433f4a10b3ed55fc3b0b6817` packaged source
 `9ce5d5d95776a425bfacb26eb74cafdbebd902d7` with the same production/tests trees.
 Image `sha256:4df018d8d4795ea76050329e796d4482618c00f487b36ea2074a222fed371414`
 passes the real fresh-database Compose readiness check: migration head
@@ -30,9 +126,10 @@ cleaned; no stand, credentials or publication was changed. Original Build
 receipt SHA256 `4be46559212efda0e62e20e9ddefe10fb68e1f2b1ac051e9a4cb02c0b77a326b`;
 readiness result SHA256 `2ece3b3108ea9b250c5ebd6ff7e73b5e7c69b00ab8d3f4f3e8c670fa0a1db8da`.
 
-This supersedes the earlier partial full-gate status below. Editor/client
-adoption, orchestrator-specific deployment and installed/live text publication
-remain open. The PM package on620f45cd does not wait for this API-only feature.
+This superseded that source's earlier partial full-gate status below. Its
+then-remaining image/install/publication steps are historical; current installation
+and local v12 qualification are above. Editor/client adoption, orchestrator-specific
+deployment and full/sparse live business acceptance remain separate boundaries.
 
 ## Boundary
 
@@ -127,6 +224,117 @@ does not acquire publication controls in this package; integrating its editor
 with these explicit JSON operations is separate work, not an implicit save hook.
 This API-only package does **not** constitute accepted text editing in the UI.
 
+## Portable PM Configurations
+
+### PM Default Contract Revision: 31 October 2026
+
+[pm-default-workflow-20261031.json](evidence/pm-default-workflow-20261031.json)
+is the published portable PM text, normalized canonical modes hash
+`bd0e6d6e10b8a8b0ab2942e99dab82d0f3a2651ddd5566956910ba3896fd6878`.
+It keeps the same three phases, instruction/check/evidence counts, scopes and
+skills. Only text changes. Context is phase01; phase02 prepares the FULL saved
+requirements and review packet without future presentation or consent; phase03
+presents the document, obtains exact owner confirmation and reports current work
+before the existing postterminal Tracker completion/readback. No report per
+ordinary message or confirmation request before accepted preparation is required.
+
+The preceding content/hash0434499 was published through the existing API as
+catalog7 on the checked stand. The current artifact is now published as catalog8
+through the existing API, with exact operation/active-content readback. NEW
+full-brief QA is running; sparse and actual Backlog/Ready acceptance remain open.
+Its final check assesses the affirmative business conclusion, not proof
+that postterminal effects are absent. Phase02 accepts actual publication/readback
+data identifying the same revision/hash with the FULL saved document once; it
+does not require duplicate complete raw CLI JSON or independent stdout attestation.
+Actual document, presentation, owner guards and postterminal completion/readback
+instructions are unchanged. No code/image rebuild is needed for this text.
+
+At the catalog7 checkpoint, exact operation readback and active content/hash matched; the old
+SDLC-15 execution/history remain byte-equivalent in the actual CLI readback.
+The same PM runtime was restored after an observed exited container; snapshots
+21==20 and original Hermes/CLI/model are unchanged. Publication itself required
+no application rebuild or runtime action. Source validation and live PM business
+acceptance are separate; full-brief and sparse-input acceptance are in progress.
+Catalog4's full-brief test exposed an invented Workflow project_id requirement;
+the next revision bounded context comparisons to real fields of their own sources.
+Catalog5 then passed preparation but needed repeated reports because conditional
+clarification evidence was treated as missing on a complete brief. Its final
+phase also exposed a circular check: the report had to prove its own future
+Workflow completion. Catalog7 incorporated two explicit input-resolution paths
+and a current-state precommit check; the latter's negative absence condition
+then caused history115. The tracked candidate replaces only that final check
+with a conclusion supported by the existing FULL document/feedback/owner evidence.
+The owner uses the separate application confirmation control, not a chat phrase.
+Earlier failures/PARTIAL reports remain history, not retroactive passes. No
+evaluator or application code was changed for these texts.
+
+On the preceding catalog7 source/snapshot, 18 targeted tests passed (22.14 seconds): portable hash and
+structure, actual API publication and old-execution isolation, source-specific
+context fields, both preparation evidence paths, PARTIAL correction in the same
+execution, final consent guards and terminal completion instructions. Auth,
+Tracker and LLM verdicts in these SQLite/TestClient tests are explicit synthetic
+peers, not live acceptance. Independent text review found no remaining circular
+prerequisite in those scoped fixtures. Actual v11 SDLC-18 history106 nevertheless
+demanded its own future submission result. Installed v12 addresses that shared
+prompt rule without republishing catalog7. Continued SDLC-18 nevertheless reached
+PARTIAL115 on the negative absence check. Catalog7 QA18/19 remain unaccepted;
+catalog8 requires NEW full/sparse acceptance, not reuse of mocked results.
+
+Final-text regression package passes18 scoped tests (33.61 seconds) with unchanged
+application code and explicit synthetic peers. Full sourcefb98394 qualification
+above is reused for unchanged product code; the changed text/input is covered by
+these targeted tests and the separate ongoing live acceptance.
+
+Import uses the same discovery/CAS/draft/publication procedure below. Do not copy
+this stand's catalog version into another installation or edit the sealed v1
+artifacts. The earlier export below remains the historical accepted PM13 text,
+not evidence that the new default has already completed both live scenarios.
+
+### Historical Accepted PM Configuration: 30 October 2026
+
+[pm-instructions-20261030.json](evidence/pm-instructions-20261030.json) exports
+the accepted PM text as operator configuration, not a new sealed default or an
+agent bootstrap/input file. It contains only `workflow_key`, `role_key`, `modes`
+and the canonical normalized-modes hash
+`2cf8ae3d1d7c3f1592eed6329942d7cdaafe0fa98d38a6264e7be4e36b19c382`.
+Stand-specific workflow/mode IDs, catalog version, publisher identity and time
+are intentionally absent. This preserves the text used in the assisted PM13
+acceptance [record](configured-cli-v1.md#scoped-pm13-evidence-2026-10-30), not a
+claim of fresh unassisted acceptance on another machine.
+
+On a compatible fresh installation with the sealed single-task family and
+publication API installed, use the existing verified human administrator access:
+
+1. Discover workflows with `GET /api/workflows`; if filtering by profession,
+   discover its actual ID through `GET /api/namespaces`, then use
+   `GET /api/workflows?namespace_id=<actual-namespace-id>`. Select the actual
+   workflow whose `key` equals export `workflow_key`; retain its real ID `W`.
+   Do not transplant the source stand's numeric IDs or catalog version.
+2. `GET /api/workflows/W/catalog`. Retain returned `revision.catalog_version`
+   and `revision.content_sha256` as the actual base CAS. If its normalized modes
+   and hash already match the export, readback is sufficient; no append is needed.
+3. `POST /api/workflows/W/catalog/drafts` with only
+   `{expected_version: <actual-base-version>, expected_sha256: <actual-base-hash>, modes: <export.modes>}`.
+   Do not POST the export envelope. Retain returned `revision.catalog_version`
+   as draft `D` and `revision.content_sha256` as its hash. Read saved draft
+   `/catalog/drafts/D` and require content/hash equal to the export before publish.
+4. `POST /api/workflows/W/catalog/drafts/D/publication` with
+   `{expected_version: <same-base-version>, expected_sha256: <same-base-hash>, draft_sha256: <returned-draft-hash>, operation_key: <stable-deployment-key>}`.
+   Use one stable key for this exact deployment operation, not a new key per retry.
+   After unknown acceptance, read `/catalog/publications/operations/<same-key>`;
+   do not blindly resend or rewrite the original body/CAS/key. For an unknown
+   draft-save result, read pending/exact drafts and compare complete content/hash;
+   the highest pending draft alone is not proof that it belongs to this import.
+5. Read the publication operation and current catalog; require the selected
+   content/hash to match the export. A stale CAS or mismatch stops the import
+   for review; never automatically overwrite a concurrent publication.
+
+These are deployment-time configuration operations through the existing API,
+not per-message files, a new tool, SQL writes or changes to sealed v1 sources.
+Only new tasks/new cycles select the new text. Existing unfinished executions,
+their assigned modes, reports and receipts remain immutable; this import does
+not adopt or restart them. Normal access/assignment/owner guards are unchanged.
+
 ### Editor Handoff
 
 After Zeno UI's main package: read active snapshot; save text against its exact
@@ -149,11 +357,11 @@ the main UI work is not blocked or altered by this package.
   Existing pre-audit receipts keep null author/time, never an invented identity.
   New application publications always record both. Startup accepts 21 and 22 as
   upgrade predecessors. Published history/authorship prevents destructive downgrade.
-- Integrator order for the **next** release: reconcile the migration slot
+- Historical publication-package rollout order: reconcile the migration slot
   against then-current master; qualify synthetic PostgreSQL/upgrade and API
   gates; install the Workflow server/API package; only then expose publication
   in an editor/client. No Tracker DTO/migration or Fleet/Hermes dependency is
-  introduced. Current installed `620f45cd` PM acceptance continues independently.
+  introduced. That checkpoint used `620f45cd`; current v12 installation is above.
 - No schema-version change to the existing single-task binding DTO: its IDs
   describe sealed baseline v1. Consumers that need the selected text revision
   must use the new catalog API, not reinterpret that baseline hash/version.
@@ -163,7 +371,7 @@ the main UI work is not blocked or altered by this package.
 
 ## Source Verification
 
-Current production subtree `156956017cceb3afe3d37f2f53195d12cdf9619d`
+Historical publication-source production subtree `156956017cceb3afe3d37f2f53195d12cdf9619d`
 and tests subtree `3b99c068045ae3380876b5957fb77bfa30101fd5`:
 
 - **482 passed, 20 deselected**, 337.93 seconds, with ResourceWarning and

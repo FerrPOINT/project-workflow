@@ -9,8 +9,10 @@ from typing import Any
 import requests
 from sqlalchemy.exc import IntegrityError
 
+from .. import config
 from ..domain.configured_cli import ConfiguredCliFence
 from ..domain.exceptions import ConcurrentTransitionError
+from ..domain.phase_report import PhaseReport
 from ..infrastructure.llm import (
     LlmConfigurationError,
     LlmVerdict,
@@ -18,11 +20,11 @@ from ..infrastructure.llm import (
     PromptBuilder,
     ResponseParser,
 )
-from .checks import normalize_text
+from .diagnostics import capture_attempt, evaluation_diagnostic
 from .models import Phase
 from .types import VERDICT_LABELS
 
-_MAX_EVALUATOR_RESPONSE_ATTEMPTS = 3
+_MAX_EVALUATOR_RESPONSE_ATTEMPTS = 2
 
 
 def _contract_fingerprint_state(
@@ -34,10 +36,12 @@ def _contract_fingerprint_state(
     evaluation_items: list[tuple[str, str]],
     previously_covered_ids: set[str],
     transition_routes: dict[str, tuple[str | None, str | None, str | None]],
+    prompt_version: str | None = None,
 ) -> dict[str, Any]:
     contract_data = contract.to_dict()
     return {
-        "prompt_version": PromptBuilder.PROMPT_VERSION,
+        "prompt_version": PromptBuilder.PROMPT_VERSION if prompt_version is None else prompt_version,
+        "evaluator_response_format": config.get_settings().OPENAI_EVALUATOR_RESPONSE_FORMAT,
         "contract": contract_data,
         "evaluation_items": [{"id": item_id, "text": text} for item_id, text in evaluation_items],
         "previously_covered_ids": sorted(previously_covered_ids),
@@ -88,20 +92,28 @@ def _contract_fingerprint(
     *, builder: Any, phase: Phase, group: list[Phase], contract: Any,
     evaluation_items: list[tuple[str, str]], previously_covered_ids: set[str],
     transition_routes: dict[str, tuple[str | None, str | None, str | None]],
+    prompt_version: str | None = None,
 ) -> str:
     return _fingerprint_contract_state(_contract_fingerprint_state(
         builder=builder, phase=phase, group=group, contract=contract, evaluation_items=evaluation_items,
         previously_covered_ids=previously_covered_ids, transition_routes=transition_routes,
+        prompt_version=prompt_version,
     ))
 
 
 def _report_fingerprint(task_id: int, report: str, contract_fingerprint: str) -> str:
-    normalized = normalize_text(report)
-    return hashlib.sha256(f"{task_id}\0{contract_fingerprint}\0{normalized}".encode()).hexdigest()
+    return hashlib.sha256(f"{task_id}\0{contract_fingerprint}\0{report}".encode()).hexdigest()
 
 
-def _blocked(exc: Exception) -> LlmVerdict:
-    if isinstance(exc, LlmConfigurationError):
+def _blocked(exc: Exception, *, provider_outcome: str | None = None) -> LlmVerdict:
+    provider_blockers = {
+        "incomplete": "Ответ проверяющего LLM не завершён: достигнут лимит токенов.",
+        "refusal": "Провайдер проверяющего LLM отказался формировать ответ.",
+        "content_filter": "Ответ проверяющего LLM остановлен фильтром провайдера.",
+    }
+    if provider_outcome is not None and provider_outcome in provider_blockers:
+        blocker = provider_blockers[provider_outcome]
+    elif isinstance(exc, LlmConfigurationError):
         blocker = "Проверяющий LLM не настроен: для OpenRouter требуется OPENAI_API_KEY."
     elif isinstance(exc, (requests.Timeout, TimeoutError)):
         blocker = "Проверяющий LLM не ответил за отведённое время."
@@ -234,33 +246,56 @@ def _evaluate_strict_response(
     client: OpenAICompatibleClient,
     *,
     user: str,
-    item_ids: list[str],
+    evaluation_items: list[tuple[str, str]],
     phase: Phase,
+    attempts: list[dict[str, Any]] | None = None,
+    system: str = PromptBuilder.SYSTEM_PROMPT,
+    response_format: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], LlmVerdict]:
     """Retry only malformed evaluator output and never relax the wire contract."""
-    prompt = user
+    attempt_system = system
     last_error: Exception | None = None
     for attempt_number in range(1, _MAX_EVALUATOR_RESPONSE_ATTEMPTS + 1):
+        raw: dict[str, Any] | None = None
+        error: Exception | None = None
+        submitted_system = attempt_system
         try:
+            format_options = {"response_format": response_format} if response_format is not None else {}
             raw = client.chat(
-                system=PromptBuilder.SYSTEM_PROMPT,
-                user=prompt,
+                system=submitted_system,
+                user=user,
                 temperature=0.1,
+                **format_options,
             )
-            llm = ResponseParser.parse(raw, required_item_ids=item_ids)
+            llm = ResponseParser.parse_assessments(raw, evaluation_items=evaluation_items)
             if llm.verdict == "DELEGATE" and phase.delegate is None:
                 raise ValueError("Для текущей фазы не настроено делегирование")
             return raw, llm
         except (TypeError, ValueError, KeyError, IndexError, AttributeError) as exc:
+            error = exc
             last_error = exc
+            provider_diagnostic = getattr(client, "last_call_diagnostics", None)
+            if (isinstance(provider_diagnostic, dict)
+                    and provider_diagnostic.get("outcome") in {"refusal", "content_filter", "incomplete"}):
+                raise
             if attempt_number == _MAX_EVALUATOR_RESPONSE_ATTEMPTS:
                 raise
-            prompt = (
-                user
+            attempt_system = (
+                system
                 + "\n\nPREVIOUS RESPONSE WAS INVALID. Return a new response that satisfies "
-                "the exact JSON schema and classifies every required item ID exactly once. "
+                "the exact JSON schema and assesses every required criterion exactly once. "
                 "Return only one bare JSON object without Markdown or commentary."
             )
+        except (requests.RequestException, OSError) as exc:
+            error = exc
+            raise
+        finally:
+            if attempts is not None:
+                try:
+                    attempts.append(capture_attempt(client, number=attempt_number, prompt=user,
+                                                    raw=raw, error=error, system=submitted_system))
+                except Exception as diagnostic_error:
+                    attempts.append({"number": attempt_number, "capture_error": type(diagnostic_error).__name__})
     assert last_error is not None
     raise last_error
 
@@ -307,10 +342,11 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
     )
     item_ids = [item_id for item_id, _ in evaluation_items]
     item_text = dict(evaluation_items)
+    configured = engine.runtime_fence if isinstance(engine.runtime_fence, ConfiguredCliFence) else None
+    system = PromptBuilder.SYSTEM_PROMPT
+    prompt_version = PromptBuilder.PROMPT_VERSION
     previously = engine._get_previously_covered(phase.code)
-    previously_ids = {
-        item_id for item_id, text in evaluation_items if item_id in previously or normalize_text(text) in previously
-    }
+    previously_ids = set(item_ids) & previously
     initial_previously_ids = set(previously_ids)
     catalog_error: ValueError | None = None
     try:
@@ -329,9 +365,9 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         evaluation_items=evaluation_items,
         previously_covered_ids=previously_ids,
         transition_routes=transition_routes,
+        prompt_version=prompt_version,
     )
     fingerprint = _report_fingerprint(task_id, report, initial_contract_fingerprint)
-    configured = engine.runtime_fence if isinstance(engine.runtime_fence, ConfiguredCliFence) else None
     if configured is not None:
         fingerprint = configured.operation_fingerprint
     replayed = _replay(engine, task_id, phase_id, fingerprint)
@@ -342,13 +378,15 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
             return _concurrent_result(replayed)
         return replayed
 
+    parsed_report = PhaseReport.parse(report)
     user = PromptBuilder.build_user_prompt(
         engine.task_key,
         evaluation_phase,
-        report,
+        parsed_report.model_dump(mode="json"),
         previously_covered=sorted(previously_ids) or None,
         evaluation_items=evaluation_items,
     )
+    evaluated_items = list(evaluation_items)
 
     # Do not keep a database transaction or workflow row lock open across the provider call.
     engine.db.commit()
@@ -356,6 +394,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
     client: OpenAICompatibleClient | None = None
     raw: dict[str, Any] | None = None
     technical_error = False
+    attempts: list[dict[str, Any]] = []
     try:
         if catalog_error is not None:
             raise catalog_error
@@ -363,8 +402,12 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         raw, llm = _evaluate_strict_response(
             client,
             user=user,
-            item_ids=item_ids,
+            evaluation_items=evaluation_items,
             phase=phase,
+            attempts=attempts,
+            system=system,
+            response_format=(PromptBuilder.response_schema(evaluation_items)
+                             if config.get_settings().OPENAI_EVALUATOR_RESPONSE_FORMAT == "json_schema" else None),
         )
     except (
         requests.RequestException,
@@ -376,7 +419,9 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         AttributeError,
     ) as exc:
         technical_error = True
-        llm = _blocked(exc)
+        provider_diagnostic = getattr(client, "last_call_diagnostics", {})
+        llm = _blocked(exc, provider_outcome=(provider_diagnostic.get("outcome")
+                      if isinstance(provider_diagnostic, dict) else None))
 
     if engine.db.workflows.lock(workflow_id) is None:
         engine.db.rollback()
@@ -412,9 +457,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
     item_ids = [item_id for item_id, _ in evaluation_items]
     item_text = dict(evaluation_items)
     previously = engine._get_previously_covered(phase.code)
-    previously_ids = {
-        item_id for item_id, text in evaluation_items if item_id in previously or normalize_text(text) in previously
-    }
+    previously_ids = set(item_ids) & previously
     try:
         transition_routes = {
             verdict: engine._resolve_transition(phase, verdict, group)
@@ -432,6 +475,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         evaluation_items=evaluation_items,
         previously_covered_ids=previously_ids,
         transition_routes=transition_routes,
+        prompt_version=prompt_version,
     )
     current_contract_fingerprint = _fingerprint_contract_state(current_contract_state)
     current_snapshot_fingerprint = _contract_fingerprint(
@@ -442,6 +486,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         evaluation_items=evaluation_items,
         previously_covered_ids=initial_previously_ids,
         transition_routes=transition_routes,
+        prompt_version=prompt_version,
     )
     if current_snapshot_fingerprint == initial_contract_fingerprint:
         # Another identical evaluation may have committed while this provider
@@ -523,7 +568,18 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         result["next_phase_contract"] = next_phase_contract.to_dict()
 
     next_phase_obj = engine.phase_map.get(next_phase_code) if next_phase_code else None
-    raw_evaluator = llm.raw if technical_error else (raw if raw is not None else llm.raw)
+    raw_evaluator = llm.raw
+    try:
+        diagnostic = evaluation_diagnostic(
+            system=system, user=user, report=report,
+            prompt_version=prompt_version, items=evaluated_items,
+            attempts=attempts, client=client, technical_error=technical_error, decision=raw_evaluator,
+            assessments=llm.assessments if not technical_error else {},
+            aliases=PromptBuilder.item_aliases(evaluated_items),
+        )
+    except Exception as diagnostic_error:
+        diagnostic = {"schema": "evaluator-diagnostics-v1", "availability": "capture_failed",
+                      "error_type": type(diagnostic_error).__name__}
     run_data: dict[str, Any] = {
         "task_id": task_id,
         "mode_id": int(engine.task.get("mode_id") or 0),
@@ -542,7 +598,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
             "phase_name": evaluation_phase.name,
             "model": client.model if client is not None else None,
             "endpoint_mode": "openai-compatible",
-            "prompt_version": PromptBuilder.PROMPT_VERSION,
+            "prompt_version": prompt_version,
             "contract_fingerprint": current_contract_fingerprint,
             "evaluated_contract_fingerprint": initial_contract_fingerprint,
             "contract_fingerprint_state": current_contract_state,
@@ -552,6 +608,9 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
             },
             "covered_item_ids": covered_ids,
             "raw_evaluator": raw_evaluator,
+            "advisor_assessments": llm.assessments if not technical_error else {},
+            "evaluator_item_aliases": PromptBuilder.item_aliases(evaluated_items),
+            "diagnostics": diagnostic,
         },
         "supervisor_response": result,
     }

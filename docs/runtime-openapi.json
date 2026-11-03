@@ -744,11 +744,17 @@
             "name": "n",
             "required": false,
             "schema": {
-              "default": 200,
-              "maximum": 200,
-              "minimum": 1,
-              "title": "N",
-              "type": "integer"
+              "anyOf": [
+                {
+                  "maximum": 200,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "N"
             }
           },
           {
@@ -828,7 +834,10 @@
             "schema": {
               "anyOf": [
                 {
-                  "const": "fleet-summary-v1",
+                  "enum": [
+                    "fleet-summary-v1",
+                    "evaluator-diagnostics-v1"
+                  ],
                   "type": "string"
                 },
                 {

@@ -79,7 +79,9 @@ def assert_populated_catalog_upgrade_preserves_history(engine, monkeypatch, pred
             for name, rows in before.items():
                 assert connection.execute(sa.text(f"SELECT * FROM {name}")).mappings().all() == rows
             assert connection.execute(sa.text("SELECT id,code,mode_id FROM phases ORDER BY id")).all() == phases
-            if revision in {"0024_analyst_research_catalog", "0025_pm_analysis_acceptance"}:
+            if revision in {
+                "0024_analyst_research_catalog", "0025_pm_analysis_acceptance", "0026_analyst_artifact_acceptance"
+            }:
                 # The earlier research migration legitimately adds Analyst checks;
                 # these acceptance corrections change existing text only.
                 assert connection.execute(sa.text("SELECT id,phase_id FROM phase_checks ORDER BY id")).all() == checks

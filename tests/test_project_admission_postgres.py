@@ -75,6 +75,7 @@ def test_sql_wait_cannot_extend_original_human_permit(owned):
     engine = get_engine()
     entered = Event()
     deadlines = []
+    database_deadlines = []
 
     def waiting_write():
         proof = scope((PROJECT_REF,), role="operator", seconds=3)
@@ -82,12 +83,28 @@ def test_sql_wait_cannot_extend_original_human_permit(owned):
         token = human_scope.set(proof)
         try:
             with get_session() as session:
+                connection = session.connection()  # installs the original permit for the SQL guard
+                database_deadline = connection.scalar(text(
+                    "SELECT nullif(current_setting('pdlc.workflow_human', true), '')::jsonb ->> 'deadline'"
+                ))
+                assert database_deadline, "The SQL guard must receive the original admission"
+                database_deadlines.append(float(database_deadline))
+                assert connection.scalar(text(
+                    "SELECT count(*) FROM pg_trigger WHERE tgrelid='tasks'::regclass "
+                    "AND tgname IN ('workflow_human_write', 'workflow_human_commit') AND tgenabled='O'"
+                )) == 2, "Both database admission guards must be active"
                 entered.set()
                 with pytest.raises(DBAPIError) as rejected:
-                    session.execute(text(
+                    changed = connection.execute(text(
                         "UPDATE tasks SET title='late row wait' WHERE id=:id /* original-proof-row-wait */"
                     ), {"id": task_id})
-                    session.commit()
+                    assert changed.rowcount == 1
+                    assert connection.scalar(text(
+                        "SELECT extract(epoch FROM clock_timestamp()) >= "
+                        "(nullif(current_setting('pdlc.workflow_human', true), '')::jsonb "
+                        "->> 'deadline')::double precision"
+                    )), "The original database permit must expire before commit"
+                    connection.commit()
                 assert rejected.value.orig.sqlstate == "42501"
                 session.rollback()
         finally:
@@ -111,7 +128,17 @@ def test_sql_wait_cannot_extend_original_human_permit(owned):
                             break
                         time.sleep(0.01)
                     assert waiting, "The regression must cross an actual PostgreSQL row lock"
-                time.sleep(max(0, deadlines[0] - time.monotonic()) + 0.1)
+                    time.sleep(max(0, deadlines[0] - time.monotonic()) + 0.1)
+                    # Host and database clocks are independent; expire the original SQL permit too.
+                    wait_until = time.monotonic() + 5
+                    while time.monotonic() < wait_until:
+                        expired = observer.scalar(text(
+                            "SELECT extract(epoch FROM clock_timestamp()) >= :deadline"
+                        ), {"deadline": database_deadlines[0]})
+                        if expired:
+                            break
+                        time.sleep(0.01)
+                    assert expired, "The original SQL permit must expire before releasing the row lock"
             finally:
                 lock.rollback()
             pending.result(timeout=10)

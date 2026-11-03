@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from project_workflow.domain.single_task_profile import ROLE_MODES
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
+from tests._report_helpers import report_json
 from tests.test_configured_cli import WRITER, enroll, step
 from tests.test_configured_cli import configured as configured
 
@@ -124,7 +125,7 @@ def test_completed_history_and_active_phase_survive_multiple_publications(config
     enrollment = enroll(configured)
     supervisor_llm("PASS")
     for version in (1, 2, 3):
-        response = step(configured, report=f"Actual old work {version}", operation_key=f"old-{version}",
+        response = step(configured, report=report_json(f"Actual old work {version}"), operation_key=f"old-{version}",
                         expected_version=version)
         assert response.status_code == 200, response.text
     terminal_submit = response.json()
@@ -139,7 +140,7 @@ def test_completed_history_and_active_phase_survive_multiple_publications(config
         saved, _ = draft(client, base)
         assert publication(client, base, saved).status_code == 200
     assert step(configured).json() == terminal
-    assert step(configured, report="Actual old work 3", operation_key="old-3",
+    assert step(configured, report=report_json("Actual old work 3"), operation_key="old-3",
                 expected_version=3).json() == terminal_submit
     assert client.get("/internal/runtime/history", params=params, headers=MACHINE).json() == history
 
@@ -403,7 +404,9 @@ def test_old_active_execution_can_report_after_publication(configured, superviso
     saved, _ = draft(client, base)
     assert publication(client, base, saved).status_code == 200
     supervisor_llm("PASS")
-    response = step(configured, report="Actual old first-phase work", operation_key="old-active", expected_version=1)
+    response = step(
+        configured, report=report_json("Actual old first-phase work"), operation_key="old-active", expected_version=1,
+    )
     assert response.status_code == 200, response.text
     assert response.json()["result"]["execution_ref"] == enrollment["execution_ref"]
     with SAUnitOfWork() as uow:

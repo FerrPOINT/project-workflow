@@ -1,5 +1,7 @@
 """Tests for format_result() human-readable output."""
 
+import copy
+
 import pytest
 
 pytestmark = [pytest.mark.supervisor]
@@ -118,7 +120,8 @@ class TestFormatResult:
         assert "Ты сделал часть, доделай:" not in out
         assert "Сделано" not in out
         assert "Блокеры" not in out
-        assert "Need more" not in out
+        assert "Причина:" in out
+        assert out.count("Need more") == 1
 
     def test_partial_shows_current_instructions(self):
         out = format_result(self._partial())
@@ -149,6 +152,78 @@ class TestFormatResult:
         assert "  · m1" in out
         assert "Причина:" in out
         assert "Blocked msg" in out
+
+    @pytest.mark.parametrize("verdict", ["PARTIAL", "BLOCKED", "DELEGATE"])
+    @pytest.mark.parametrize("checks,evidence,check_count,evidence_count", [
+        (["shared", "shared"], [], 2, 0),
+        ([], ["shared", "shared"], 0, 2),
+        (["shared"], ["shared"], 1, 1),
+        ([], [], 1, 0),
+    ])
+    def test_explicit_missing_text_is_visible_in_single_contract(
+        self, verdict, checks, evidence, check_count, evidence_count,
+    ):
+        result = self._partial()
+        result.update(verdict=verdict, covered=["shared", "covered-only"], missing=["shared"],
+                      blockers=["Dependency unavailable"] if verdict == "BLOCKED" else [],
+                      required_checks=[*checks, "covered-only"],
+                      required_evidence=[*evidence, "covered-only"])
+        before = copy.deepcopy(result)
+
+        out = format_result(result)
+
+        assert out.splitlines().count("  · shared") == check_count + evidence_count
+        for heading, count in (("Чекапы", check_count), ("Доказательства", evidence_count)):
+            if count:
+                assert "\n".join([f"{heading}:", *["  · shared"] * count]) in out
+            else:
+                assert f"{heading}:" not in out
+        assert "covered-only" not in out
+        assert result == before
+
+    @pytest.mark.parametrize("verdict", ["PARTIAL", "BLOCKED", "DELEGATE"])
+    @pytest.mark.parametrize("first_kind,second_kind", [
+        ("required_checks", "required_checks"),
+        ("required_evidence", "required_evidence"),
+        ("required_checks", "required_evidence"),
+        ("required_evidence", "required_checks"),
+    ])
+    def test_explicit_missing_text_is_visible_across_parallel_items(self, verdict, first_kind, second_kind):
+        result = self._partial()
+        result.update(verdict=verdict, covered=["shared", "covered-only"], missing=["shared"],
+                      blockers=["Dependency unavailable"] if verdict == "BLOCKED" else [],
+                      group_details=[
+                          {"phase_name": "First", first_kind: ["shared", "covered-only"]},
+                          {"phase_name": "Second", second_kind: ["shared", "covered-only"]},
+                      ])
+        before = copy.deepcopy(result)
+
+        out = format_result(result)
+
+        for heading, kind in (("Чекапы", "required_checks"), ("Доказательства", "required_evidence")):
+            lines = [f"  · {name}: shared" for name, item_kind in
+                     (("First", first_kind), ("Second", second_kind)) if item_kind == kind]
+            if lines:
+                assert "\n".join([f"{heading}:", *lines]) in out
+            else:
+                assert f"{heading}:" not in out
+        assert "covered-only" not in out
+        assert result == before
+
+    @pytest.mark.parametrize("parallel", [False, True])
+    def test_covered_text_stays_hidden_without_explicit_missing(self, parallel):
+        result = self._blocked()
+        result.update(covered=["covered-only"], missing=[], required_checks=["covered-only"],
+                      required_evidence=["covered-only"])
+        if parallel:
+            result["group_details"] = [{"phase_name": "First", "required_checks": ["covered-only"],
+                                        "required_evidence": ["covered-only"]}]
+
+        out = format_result(result)
+
+        assert "covered-only" not in out
+        assert "Чекапы:" not in out
+        assert "Доказательства:" not in out
 
     # ── PARALLEL GROUP ─────────────────────────────────────────────────
     def _pass_parallel(self):

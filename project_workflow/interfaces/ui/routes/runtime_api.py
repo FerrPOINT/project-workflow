@@ -307,24 +307,29 @@ def runtime_step(
 
 def runtime_history(
     task: str = Query(...),
-    n: int = Query(default=200, ge=1, le=200),
+    n: int | None = Query(default=None, ge=1, le=200),
     authorization: str | None = Header(default=None),
     interaction_protocol: Literal["configured-cli-v1"] = Query(...),
     namespace_id: int = Query(..., gt=0),
     execution_ref: str | None = Query(default=None),
     operation_key: str | None = Query(default=None),
     assignment_operation_key: str | None = Query(default=None, min_length=1, max_length=128),
-    projection: Literal["fleet-summary-v1"] | None = Query(default=None),
+    projection: Literal["fleet-summary-v1", "evaluator-diagnostics-v1"] | None = Query(default=None),
     before_history_id: DatabaseId | None = Query(default=None),
 ) -> dict[str, Any] | JSONResponse:
     """Read configured operations or retained history through the same authority."""
     from . import configured_cli_api
 
-    return configured_cli_api.history(
-        task, namespace_id, authorization, n=n, execution_ref=execution_ref,
+    count = n if n is not None else (1 if projection == "evaluator-diagnostics-v1" else 200)
+    result = configured_cli_api.history(
+        task, namespace_id, authorization, n=count,
+        execution_ref=execution_ref,
         operation_key=operation_key, assignment_operation_key=assignment_operation_key,
         projection=projection, before_history_id=int(before_history_id) if before_history_id is not None else None,
     )
+    if projection == "evaluator-diagnostics-v1" and isinstance(result, dict):
+        return JSONResponse(result, headers={"Cache-Control": "no-store"})
+    return result
 
 
 def runtime_terminal_readback(

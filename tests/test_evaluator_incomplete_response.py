@@ -1,0 +1,28 @@
+"""A parseable prefix must not turn a token-limited completion into acceptance."""
+
+from unittest.mock import Mock
+
+import pytest
+
+from project_workflow.infrastructure.llm import OpenAICompatibleClient
+
+pytestmark = pytest.mark.unit
+
+
+def test_token_limited_json_is_not_a_completed_evaluation(monkeypatch):
+    content = '{"verdict":"PASS"}'
+    response = Mock(status_code=200, headers={})
+    response.json.return_value = {
+        "choices": [{"finish_reason": "length", "message": {"content": content}}],
+        "usage": {"completion_tokens": 4000},
+    }
+    monkeypatch.setattr("project_workflow.infrastructure.llm.requests.post", Mock(return_value=response))
+    client = OpenAICompatibleClient(api_key="test-only", reasoning_effort="high")
+
+    with pytest.raises(ValueError, match="token limit"):
+        client.chat("Evaluate criteria and return JSON", "Report")
+
+    assert client.last_response_content == content
+    assert client.last_call_diagnostics["outcome"] == "incomplete"
+    assert client.last_call_diagnostics["finish_reason"] == "length"
+    assert client.last_call_diagnostics["usage"]["completion_tokens"] == 4000
