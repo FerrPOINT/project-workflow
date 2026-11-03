@@ -1,5 +1,24 @@
 # Changelog
 
+## Live PM: Conflicting Skill Confirmed - 2026-11-03
+
+- Installed Workflow83ff8a5/image8a23f7b7 after exact-image provenance and fresh
+  migration/health/OpenAPI smoke. Only Workflow changed; PM23 and Fleet retained.
+  Activated the tested high setting between runs and published catalog11.
+- New SDLC-26: PM independently saved requirements1 but then asked an unnecessary
+  formatting question. The full-input scenario is not accepted. Report173 received
+  C2/C3 missing; independent review expects only C2 missing (ambiguous document
+  wording), not a missing owner business decision. No manual correction/consent.
+- Actual report173 includes saved_content_hash despite the catalog's omission
+  rule. Effective PM skill explicitly demands revision/hash and server receipts:
+  a confirmed instruction conflict. Earlier hash-free synthetic requests do not
+  prove cleanliness of real PM reports; metadata is not established as the cause
+  of the C3 decision. Original request/response/history are preserved.
+- Added a reproducible corrected PM tool skill: business report/FULL document,
+  machine values only in CLI calls/operation records. No filtering, new report
+  protocol or evaluator change. 27 targeted tests and scoped Ruff pass. Skill
+  activation and the next controlled/live checks remain pending.
+
 ## Advisor: Qualified Results And Remaining Live Acceptance - 2026-11-03
 
 - Final wire inspection found omitted C4 classifications, not injected hashes or
