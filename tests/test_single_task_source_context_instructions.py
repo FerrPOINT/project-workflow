@@ -233,6 +233,9 @@ def test_conditional_pm_brief_and_single_task_inventory_are_pinned(generated):
     text = " ".join(i["description"] for p in pm["phases"] for i in p["instructions"])
     assert instructions.SOURCE_CONTEXT not in text and instructions.FORGE_TASK_WORKSPACE not in text
     assert "Confirmation stays in stage=Draft" in text
-    assert "No automatic Analyst" in " ".join(pm["phases"][-1]["checks"])
+    checks = " ".join(pm["phases"][-1]["checks"])
+    assert "remain owner-confirmed in Draft for this final report" in checks
+    assert "completion queues Analysis automatically" in checks
+    assert "No automatic Analyst" not in checks
     for workflow in catalog["workflows"]:
         assert all(m["key"] not in {"integration", "integration_rework"} for m in workflow["modes"])

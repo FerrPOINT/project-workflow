@@ -2,7 +2,7 @@
   "catalog_version": 1,
   "instruction_overlay": {
     "path": "project_workflow/infrastructure/single_task_delivery_instructions.py",
-    "sha256": "be48d7f9b7242929d4d27f1dd4ea3197e70c3ad38526fef1fbc591d969c43ab9"
+    "sha256": "8534bf1b06d155931414d4fac20fc4935d019c3aedd11a096cb5749a1e2b45f3"
   },
   "instruction_profile": "single-task-v1",
   "instruction_source": {
@@ -146,7 +146,7 @@
                 "An actual owner confirmation matches that latest task/revision/hash and owner.",
                 "Actual feedback is resolved; no stale consent or invented questions.",
                 "No unresolved business blockers. Waiting for owner input leaves this phase unfinished.",
-                "Workflow completes in confirmed Draft; only subsequent Tracker completion publishes Backlog / Ready. No automatic Analyst."
+                "The latest requirements remain owner-confirmed in Draft for this final report; no Tracker completion or Analyst launch is claimed before Workflow acceptance. Subsequent Tracker PM completion queues Analysis automatically; the PM does not create an Analysis intent."
               ],
               "code": "PM-DRAFT-03",
               "description": "single-task-v1: project_manager/draft; Owner confirmation before final Workflow report.",

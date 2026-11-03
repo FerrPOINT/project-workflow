@@ -423,8 +423,9 @@ PM_CONFIRMATION_CHECKS = [
     "Actual feedback is resolved; no stale consent or invented questions.",
     "No unresolved business blockers. Waiting for owner input leaves this phase unfinished.",
     (
-        "Workflow completes in confirmed Draft; only subsequent Tracker completion publishes Backlog / "
-        "Ready. No automatic Analyst."
+        "The latest requirements remain owner-confirmed in Draft for this final report; no Tracker "
+        "completion or Analyst launch is claimed before Workflow acceptance. Subsequent Tracker PM "
+        "completion queues Analysis automatically; the PM does not create an Analysis intent."
     ),
 ]
 PM_CONFIRMATION_EVIDENCE = [

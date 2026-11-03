@@ -9,6 +9,7 @@ from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
 
 @pytest.fixture(params=[
+    ("0024_analyst_research_catalog", "332cfd4fb3419d5765008e196cffb508540462ddd89b798ab4e89379ac5b1796"),
     ("0019_pm_terminal_resume_retry", "1535516545520eb5ea489cf1583cfaebc458e5729a94762751515841078671c3"),
     ("0023_catalog_publication_author", "e0cde0c044fe1a38b6fa0f387cc30e0da6e89dedb35b89a893263fd7d2558a40"),
 ])
@@ -16,8 +17,14 @@ def predecessor(request):
     return request.param
 
 
-def test_populated_catalog_upgrade_preserves_task_phase_and_report_history(tmp_path, monkeypatch, predecessor):
+@pytest.mark.parametrize("role", ["project_manager", "developer"])
+def test_populated_catalog_upgrade_preserves_task_phase_and_report_history(tmp_path, monkeypatch, predecessor, role):
     engine = sa.create_engine(f"sqlite:///{tmp_path / 'populated.db'}")
+    assert_populated_catalog_upgrade_preserves_history(engine, monkeypatch, predecessor, role)
+
+
+def assert_populated_catalog_upgrade_preserves_history(engine, monkeypatch, predecessor, role):
+    """The same migration invariant runs on SQLite and real PostgreSQL."""
     try:
         revision, previous = predecessor
         run_alembic_command("upgrade", engine, revision)
@@ -26,9 +33,9 @@ def test_populated_catalog_upgrade_preserves_task_phase_and_report_history(tmp_p
             patch.setattr(catalog, "load_profile", lambda *_args: old)
             with SAUnitOfWork(engine) as uow:
                 installed = catalog.ensure_single_task_catalog(uow)
-                binding = next(b for b in installed.bindings if b.role_key == "developer")
+                binding = next(b for b in installed.bindings if b.role_key == role)
                 mode = binding.modes[0]
-                phase = int(mode.phase_ids[1])
+                phase = int(mode.phase_ids[-1])
                 task = uow.tasks.create(
                     {
                         "project_id": int(binding.namespace_id),
@@ -58,6 +65,7 @@ def test_populated_catalog_upgrade_preserves_task_phase_and_report_history(tmp_p
                 for name in ("tasks", "task_step_history")
             }
             phases = connection.execute(sa.text("SELECT id,code,mode_id FROM phases ORDER BY id")).all()
+            checks = connection.execute(sa.text("SELECT id,phase_id FROM phase_checks ORDER BY id")).all()
         ensure_migrated(engine)
         ensure_migrated(engine)
         with SAUnitOfWork(engine) as uow:
@@ -66,8 +74,12 @@ def test_populated_catalog_upgrade_preserves_task_phase_and_report_history(tmp_p
             for name, rows in before.items():
                 assert connection.execute(sa.text(f"SELECT * FROM {name}")).mappings().all() == rows
             assert connection.execute(sa.text("SELECT id,code,mode_id FROM phases ORDER BY id")).all() == phases
+            if revision == "0024_analyst_research_catalog":
+                # The earlier research migration legitimately adds Analyst checks;
+                # this correction changes only one existing condition's text.
+                assert connection.execute(sa.text("SELECT id,phase_id FROM phase_checks ORDER BY id")).all() == checks
             assert (
-                "0024_analyst_research_catalog"
+                "0025_pm_analysis_acceptance"
                 == connection.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
             )
     finally:

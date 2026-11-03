@@ -103,8 +103,9 @@ def test_repository_has_one_linear_migration_head():
         "0022_catalog_publication.py",
         "0023_catalog_publication_author.py",
         "0024_analyst_research_catalog.py",
+        "0025_pm_analysis_acceptance.py",
     ]
-    assert migration_head() == "0024_analyst_research_catalog"
+    assert migration_head() == "0025_pm_analysis_acceptance"
 
 
 def test_pm_upgrade_preserves_existing_resource_contexts(tmp_path):
@@ -139,7 +140,7 @@ def test_pm_upgrade_preserves_existing_resource_contexts(tmp_path):
         original = connection.execute(text("SELECT * FROM resource_execution_contexts")).mappings().all()
     ensure_migrated(engine)
     ensure_migrated(engine)
-    assert database_revisions(engine) == {"0024_analyst_research_catalog"}
+    assert database_revisions(engine) == {"0025_pm_analysis_acceptance"}
     assert schema_is_ready(engine)
     with engine.connect() as connection:
         assert connection.execute(text("SELECT * FROM resource_execution_contexts")).mappings().all() == original
@@ -194,7 +195,7 @@ def test_fresh_sqlite_migration_matches_orm_metadata(tmp_path):
         }
         assert actual_fks == expected_fks, table_name
 
-    assert database_revisions(engine) == {"0024_analyst_research_catalog"}
+    assert database_revisions(engine) == {"0025_pm_analysis_acceptance"}
     assert schema_is_ready(engine) is True
     with engine.connect() as connection:
         context = MigrationContext.configure(
@@ -304,7 +305,7 @@ def assert_populated_legacy_agent_archive_upgrade(engine):
     assert database_revisions(engine) == {"0001_initial"}
     ensure_migrated(engine)
     ensure_migrated(engine)
-    assert database_revisions(engine) == {"0024_analyst_research_catalog"}
+    assert database_revisions(engine) == {"0025_pm_analysis_acceptance"}
     assert schema_is_ready(engine)
     with engine.connect() as conn:
         if engine.dialect.name == "sqlite":
@@ -470,7 +471,7 @@ def assert_legacy_archive_guard_loss_holds_at_head(engine):
     assert not schema_is_ready(engine)
     with pytest.raises(ValueError, match="Legacy agent metadata preservation refused"):
         ensure_migrated(engine)
-    assert database_revisions(engine) == {"0024_analyst_research_catalog"}
+    assert database_revisions(engine) == {"0025_pm_analysis_acceptance"}
     with engine.connect() as conn:
         assert conn.execute(text("SELECT COUNT(*) FROM legacy_agent_metadata")).scalar_one() == 7
 
@@ -551,7 +552,7 @@ def test_sqlite_supported_additive_upgrade_preserves_legacy_catalog_and_assignme
     assert database_revisions(engine) == {predecessor}
     ensure_migrated(engine)
     ensure_migrated(engine)  # Restart is idempotent and cannot reinterpret historical payloads.
-    assert database_revisions(engine) == {"0024_analyst_research_catalog"}
+    assert database_revisions(engine) == {"0025_pm_analysis_acceptance"}
     assert schema_is_ready(engine)
     with engine.connect() as conn:
         for table, original in frozen.items():
@@ -690,7 +691,7 @@ def test_sqlite_runtime_assignment_rejects_invalid_immutable_bindings(tmp_path, 
         )
 
     ensure_migrated(engine)
-    assert database_revisions(engine) == {"0024_analyst_research_catalog"}
+    assert database_revisions(engine) == {"0025_pm_analysis_acceptance"}
     with engine.connect() as conn:
         preserved = conn.execute(
             text(
@@ -1087,7 +1088,7 @@ def test_head_with_damaged_or_polluted_schema_is_refused(tmp_path, mutation):
     assert schema_is_ready(engine) is False
     with pytest.raises(DatabaseRecreateRequired):
         ensure_migrated(engine)
-    assert database_revisions(engine) == {"0024_analyst_research_catalog"}
+    assert database_revisions(engine) == {"0025_pm_analysis_acceptance"}
     if mutation == "extra":
         with engine.connect() as connection:
             assert connection.execute(text("SELECT id FROM unexpected_table")).scalar_one() == 42

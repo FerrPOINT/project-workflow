@@ -326,8 +326,9 @@ def test_pm_confirmation_precedes_final_report_in_actual_installed_phase(databas
         for retired in ("--runtime-request", "--execution-token-file", "input_receipt", "bind operation"):
             assert retired not in text
         checks = [row["description"] for row in uow.phase_checks.list(phase.id)]
-        assert any("only subsequent Tracker completion publishes Backlog / Ready" in check for check in checks)
-        assert any("No automatic Analyst" in check for check in checks)
+        assert any("remain owner-confirmed in Draft for this final report" in check for check in checks)
+        assert any("completion queues Analysis automatically" in check for check in checks)
+        assert not any("No automatic Analyst" in check for check in checks)
 
 
 def assignment_payload():
