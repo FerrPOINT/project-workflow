@@ -13,14 +13,18 @@
 - Actual CLI and configured fresh/replay output expose the reason. Existing history
   stores private assessments separately from canonical results; legacy reasons are
   not invented. Secrets and bounded diagnostic capture retain their existing guards.
-- Source validation: one full native run plus the two corrected test modules gives
-  3626 passing current parent cases,15 skips and75 passing subtests; coverage94.20%.
+- Final review found and reproduced a CLI display defect: a covered item hid a
+  different missing item with identical text. Explicit missing now wins for display,
+  with single/parallel and check/evidence regressions. Public decisions are unchanged.
+- Source validation: one full native run plus the updated test modules gives
+  3652 passing current parent cases,15 skips and75 passing subtests; coverage94.217928%.
   The original five stale mock/assertion failures remain in the original report.
-  Product files are byte-identical to that full-run candidate after rejecting v15.
+  Only the formatter changed after that full-run candidate; its copied coverage
+  was purged and rebuilt by the entire affected formatter/reason set,58/58 PASS.
   Ruff/mypy166 pass. PG:131 full-run cases pass; the unchanged clock case passes
   separately. Its full-run early expiry remains a timing uncertainty, not a proven
   product defect. Twenty additional receipt/concurrency cases also pass.
-- Model diagnosis used35/36 HTTP calls including two probes; the app-test route
+- Model diagnosis used39/40 HTTP calls including two probes; the app-test route
   ignored json_schema, so explicit JSON mode and strict local validation remain.
   No malformed grading responses or false PASS were observed in this stage.
   The original Analyst matrix was ambiguous; explicit existing links passed.
@@ -28,9 +32,15 @@
   overall candidate decision in one Tester criterion.
   General v15 wording did not fix it and was reverted. A private C2 clarification
   under the original v14 prompt passed4/4, retaining the negative control.
-- Full qualification, installation, autonomous live PM acceptance and merge remain
-  OPEN. The actual catalog, original runtime and working credentials are unchanged.
-  Requests/responses: docs/evidence/advisor-assessment-findings-20261103.json.
+- After the approved narrow clarification, the final prospective model matrix is
+  28/28 exact and126/126 item classifications:24 identical-input reuses plus4 new
+  evaluations. It contains20 expected PASS and8 PARTIAL with no format failures.
+  Earlier failed trials stay failed. The versioned Tester text is not published.
+- Packaging/release gates, installation, autonomous live PM acceptance and merge
+  remain OPEN. The actual catalog, runtime and credentials are unchanged. Final
+  analysis: docs/ADVISOR_DIAGNOSIS_20261101.md; frozen final inputs/responses/reasons:
+  docs/evidence/advisor-v14-final-qualification-20261103.json. Earlier mismatches
+  remain in docs/evidence/advisor-assessment-findings-20261103.json.
 
 ## Universal Advisor: Shared Evaluation And Revisable Coverage - 2026-11-03
 

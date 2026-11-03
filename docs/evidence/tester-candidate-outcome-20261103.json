@@ -1,0 +1,22 @@
+{
+  "workflow_key": "single-task-v1:tester",
+  "role_key": "tester",
+  "status": "approved_source_clarification_not_published",
+  "changes": [
+    {
+      "mode": "delivery",
+      "phase": "TS-TEST-02",
+      "check_index": 1,
+      "before": "passed covers required acceptance; needs_rework includes immutable reproduction and expected/actual results.",
+      "after": "If the report's overall candidate decision is passed, required acceptance checks must pass. If the overall candidate decision is needs_rework, require immutable reproduction with expected and actual results."
+    },
+    {
+      "mode": "delivery",
+      "phase": "TS-TEST-03",
+      "check_index": 1,
+      "before": "passed covers required acceptance; needs_rework includes immutable reproduction and expected/actual results.",
+      "after": "If the report's overall candidate decision is passed, required acceptance checks must pass. If the overall candidate decision is needs_rework, require immutable reproduction with expected and actual results."
+    }
+  ],
+  "activation": "Apply only to a fresh read of the existing catalog through its draft/publication API. Keep every other value and existing execution unchanged."
+}
