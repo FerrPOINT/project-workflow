@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+from tests._report_helpers import report_json
+
 pytestmark = [pytest.mark.supervisor]
 
 from project_workflow.application.task import TaskService
@@ -41,27 +43,27 @@ class TestSupervisorEvaluateEdge:
         TaskService(fresh_db).create_task({"task_key": "RUN-42", "title": "x"})
         engine = _make_engine(fresh_db, "RUN-42")
         supervisor_llm("PASS")
-        result = engine.evaluate("")
+        result = engine.evaluate(report_json(""))
         assert result["verdict"] == "PASS"
 
     def test_evaluate_nonexistent_phase_returns_blocked(self, fresh_db):
         TaskService(fresh_db).create_task({"task_key": "RUN-42", "title": "x"})
         engine = _make_engine(fresh_db, "RUN-42")
         engine.current_phase_code = "nonexistent"
-        result = engine.evaluate("report")
+        result = engine.evaluate(report_json("report"))
         assert result["verdict"] == "BLOCKED"
 
     def test_evaluate_no_history_for_first_phase(self, fresh_db, supervisor_llm):
         TaskService(fresh_db).create_task({"task_key": "RUN-42", "title": "x"})
         engine = _make_engine(fresh_db, "RUN-42")
         supervisor_llm("PARTIAL", missing=["evidence"])
-        result = engine.evaluate("report")
+        result = engine.evaluate(report_json("report"))
         assert result["verdict"] == "PARTIAL"
 
     def test_save_records_assessment(self, fresh_db, supervisor_llm):
         TaskService(fresh_db).create_task({"task_key": "RUN-42", "title": "x"})
         engine = _make_engine(fresh_db, "RUN-42")
         supervisor_llm("PARTIAL")
-        engine.evaluate("report")
+        engine.evaluate(report_json("report"))
         # evaluate() itself records the supervisor run; _store removed as dead code
         assert len(fresh_db.list_step_history(task_id=engine.task["id"])) >= 1

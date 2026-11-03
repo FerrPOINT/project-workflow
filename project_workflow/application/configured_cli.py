@@ -281,6 +281,20 @@ def _evaluation(row: m.TaskStepHistoryEntry) -> dict[str, Any]:
     return value
 
 
+def _diagnostics_page(uow: SAUnitOfWork, task_id: int, n: int, before: int | None) -> dict[str, Any]:
+    from project_workflow.supervisor.diagnostics import history_diagnostic
+
+    rows = _records(uow, task_id, limit=n + 1, before_id=before)
+    records = []
+    for row in rows[:n]:
+        snapshot = json.loads(row.evaluation_snapshot)
+        if not isinstance(snapshot, dict):
+            raise ConflictError("Saved evaluation snapshot is invalid")
+        records.append({"history_id": row.id, "diagnostics": history_diagnostic(row.worker_report, snapshot)})
+    return {"projection": "evaluator-diagnostics-v1", "records": records,
+            "next_before": rows[n - 1].id if len(rows) > n else None}
+
+
 def version(uow: SAUnitOfWork, task_id: int, payload: dict[str, Any]) -> int:
     current = uow.tasks.get_by_id(task_id)
     if current is None:
@@ -343,7 +357,7 @@ def _replay(uow: SAUnitOfWork, fence: ConfiguredCliFence) -> dict[str, Any] | No
 
 
 def step(uow: SAUnitOfWork, command: ConfiguredStep, authorization: str | None) -> dict[str, Any]:
-    from project_workflow.supervisor import SupervisorEngine
+    from project_workflow.supervisor import SupervisorEngine, format_result
 
     principal = _principal(authorization, write=command.report is not None)
     task, assignment, payload = _row(uow, command.task, command.namespace_id, execution=True)
@@ -354,7 +368,7 @@ def step(uow: SAUnitOfWork, command: ConfiguredStep, authorization: str | None) 
     if command.report is not None:
         replay = _replay(uow, fence)
         if replay is not None:
-            return {"ok": True, "exit_code": 0, "result": replay, "output": replay.get("instructions", "")}
+            return {"ok": True, "exit_code": 0, "result": replay, "output": format_result(replay)}
         if command.expected_version != fence.version or task.status == "done":
             raise ConflictError("Configured expected_version does not match current cursor")
     engine = SupervisorEngine(command.task, uow=uow, project_id=task.project_id,
@@ -401,7 +415,7 @@ def step(uow: SAUnitOfWork, command: ConfiguredStep, authorization: str | None) 
         result = replay
     if result.get("interaction_protocol") != PROTOCOL:
         raise ConflictError("Configured step did not commit an operation receipt")
-    return {"ok": True, "exit_code": 0, "output": result.get("instructions", ""), "result": result}
+    return {"ok": True, "exit_code": 0, "output": format_result(result), "result": result}
 
 
 def prepare_history(fence: ConfiguredCliFence, run_data: dict[str, Any]) -> None:
@@ -468,6 +482,11 @@ def history(uow: SAUnitOfWork, task: str, namespace_id: int, authorization: str 
     if (type(n) is not int or not 1 <= n <= 200 or before_history_id is not None
             and (type(before_history_id) is not int or not 1 <= before_history_id <= 2**63 - 1)):
         raise ValueError("Invalid bounded history cursor")
+    diagnostics = projection == "evaluator-diagnostics-v1"
+    if diagnostics:
+        if n != 1 or any(value is not None for value in (execution_ref, operation_key, assignment_operation_key)):
+            raise ConflictError("Invalid diagnostics bounds or selectors")
+        trusted = None
     principal = None if trusted else principal or _principal(authorization, write=False)
     stored = _stored_row(uow, task, namespace_id)
     if stored[2].get("interaction_protocol") != PROTOCOL:
@@ -491,6 +510,9 @@ def history(uow: SAUnitOfWork, task: str, namespace_id: int, authorization: str 
         raise namespace_auth.NamespaceAuthError(403)
     if principal is not None:
         _assignment(principal, payload, allow_completed_read=True)
+    if diagnostics:
+        result = {**cursor(uow, current, payload), **_diagnostics_page(uow, current.id, n, before_history_id)}
+        return {"ok": True, "exit_code": 0, "result": result}
     if projection is not None:
         if (projection != "fleet-summary-v1" or not 1 <= n <= 200
                 or any(value is not None for value in (execution_ref, operation_key, assignment_operation_key))

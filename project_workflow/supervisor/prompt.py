@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from project_workflow.domain.phase_report import PHASE_REPORT_INSTRUCTIONS
+
 from .contracts import PhaseContractBuilder
 
 
@@ -175,17 +177,13 @@ def build_phase_prompt(
         parallel_banner = ""
 
     cli_actor = ctx.get("cli_actor")
-    report_template = ctx.get("report_template")
     if not isinstance(cli_actor, dict) or not all(
         isinstance(cli_actor.get(key), str) and cli_actor[key].strip() for key in ("description", "entrypoint")
     ):
         raise ValueError("Контекст Supervisor не содержит полного описания CLI-исполнителя")
-    if not isinstance(report_template, dict) or not all(
-        isinstance(report_template.get(key), str) and report_template[key].strip()
-        for key in ("summary", "completed", "evidence", "blockers", "next_step")
-    ):
-        raise ValueError("Контекст Supervisor не содержит полного шаблона отчёта")
 
+    contract_text = _format_contract(contract)
+    report_format = f"Формат отчёта:\n{PHASE_REPORT_INSTRUCTIONS}\n"
     return (
         f"Задача: {task_key}\n"
         f"Воркфлоу: {ctx.get('workflow_name') or '-'}\n"
@@ -194,17 +192,12 @@ def build_phase_prompt(
         f"Команда CLI: {cli_actor['entrypoint']}\n\n"
         f"{parallel_banner}"
         f"Контракт текущей фазы:\n"
-        f"{_format_contract(contract)}"
+        f"{contract_text}"
         f"История выполнения:\n"
         f"{_format_history(ctx)}\n\n"
         f"Недавние вердикты:\n"
         f"{_format_verdicts(ctx)}\n\n"
-        f"Формат отчёта:\n"
-        f"- summary: {report_template['summary']}\n"
-        f"- completed: {report_template['completed']}\n"
-        f"- evidence: {report_template['evidence']}\n"
-        f"- blockers: {report_template['blockers']}\n"
-        f"- next_step: {report_template['next_step']}\n"
+        f"{report_format}"
     )
 
 
@@ -229,15 +222,15 @@ def format_current_phase_instructions(
     if is_parallel_target:
         group = cb.get_parallel_group(target_phase)
         contract = cb.build_parallel(group).to_dict()
-        return (
+        instructions = (
             "Выполняй следующие действия параллельно. Отчёт по ним присылай ОДНИМ сообщением.\n\n"
             + _format_parallel_contract_human(contract.get("group_details") or [])
         )
-
-    # Serial phase
-    raw = ctx.get("current_contract")
-    if isinstance(raw, dict):
-        contract = raw
     else:
-        contract = raw.to_dict() if raw else cb.build(target_phase).to_dict()
-    return f"Текущий шаг: {target_phase.name}\n\n{_format_contract(contract, human_only=True)}"
+        raw = ctx.get("current_contract")
+        if isinstance(raw, dict):
+            contract = raw
+        else:
+            contract = raw.to_dict() if raw else cb.build(target_phase).to_dict()
+        instructions = f"Текущий шаг: {target_phase.name}\n\n{_format_contract(contract, human_only=True)}"
+    return instructions + PHASE_REPORT_INSTRUCTIONS + "\n"

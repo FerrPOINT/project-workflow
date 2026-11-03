@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -17,6 +18,7 @@ from project_workflow.infrastructure.llm import (
 from project_workflow.supervisor.contracts import PhaseContractBuilder
 from project_workflow.supervisor.evaluate import evaluate_llm_report
 from project_workflow.supervisor.models import Phase, PhaseDelegate
+from tests._report_helpers import report_json
 
 
 def _make_engine():
@@ -31,7 +33,7 @@ def _make_engine():
     }
     engine.workflow_id = 1
     engine.current_phase_code = "1"
-    engine._get_previously_covered.return_value = []
+    engine._get_previously_covered.return_value = set()
     engine._resolve_transition.return_value = (None, None, None)
     engine.db.record_step.return_value = 42
     engine.db.step_history.get_by_fingerprint.return_value = None
@@ -54,7 +56,7 @@ class TestEvaluateLlmReportVerdicts:
             "project_workflow.supervisor.evaluate.OpenAICompatibleClient",
             side_effect=LlmConfigurationError("secret"),
         ):
-            result = evaluate_llm_report("r", phase, engine)
+            result = evaluate_llm_report(report_json("r"), phase, engine)
 
         assert result["verdict"] == "BLOCKED"
         assert result["retryable"] is True
@@ -84,7 +86,7 @@ class TestEvaluateLlmReportVerdicts:
                 "confidence": 0.7,
             },
         ):
-            result = evaluate_llm_report("r", phase, engine)
+            result = evaluate_llm_report(report_json("r"), phase, engine)
         assert result["verdict"] == "BLOCKED"
         assert result["retryable"] is True
         assert result["blockers"] == ["Проверяющий LLM вернул некорректный ответ."]
@@ -109,7 +111,7 @@ class TestEvaluateLlmReportVerdicts:
                 "confidence": 0.6,
             },
         ):
-            result = evaluate_llm_report("r", phase, engine)
+            result = evaluate_llm_report(report_json("r"), phase, engine)
         assert result["verdict"] == "BLOCKED"
         assert result["retryable"] is True
         assert result["rollback_phase_code"] is None
@@ -131,14 +133,12 @@ class TestEvaluateLlmReportVerdicts:
             "chat",
             return_value={
                 "verdict": "DELEGATE",
-                "covered": [],
-                "missing": [],
+                "assessments": {},
                 "blockers": [],
-                "message": "delegate",
                 "confidence": 0.5,
             },
         ):
-            result = evaluate_llm_report("r", phase, engine)
+            result = evaluate_llm_report(report_json("r"), phase, engine)
         assert result["verdict"] == "DELEGATE"
         engine._record_evaluation.assert_called_once_with(
             phase, "delegate", None, None, 42, commit=False
@@ -155,14 +155,12 @@ class TestEvaluateLlmReportVerdicts:
             "chat",
             return_value={
                 "verdict": "PASS",
-                "covered": [],
-                "missing": [],
+                "assessments": {},
                 "blockers": [],
-                "message": "ok",
                 "confidence": 0.9,
             },
         ):
-            result = evaluate_llm_report("r", phase, engine)
+            result = evaluate_llm_report(report_json("r"), phase, engine)
         assert result["verdict"] == "PASS"
         assert result["next_phase_code"] == "2"
         assert result["next_phase_name"] == "Two"
@@ -183,7 +181,7 @@ class TestEvaluateLlmReportVerdicts:
             ),
             pytest.raises(RuntimeError, match="write failed"),
         ):
-            evaluate_llm_report("r", phase, engine)
+            evaluate_llm_report(report_json("r"), phase, engine)
 
         engine._record_evaluation.assert_not_called()
         engine.db.rollback.assert_called_once_with()
@@ -277,11 +275,12 @@ class TestPromptBuilder:
             checks=[],
             evidence=[],
         )
-        report = "I did it"
+        report = {"source": "Reported facts", "result": {"content": "I did it"}, "unresolved": []}
         prompt = PromptBuilder.build_user_prompt("RUN-1", phase, report)
-        assert "TASK: RUN-1" in prompt
+        assert "TASK:" not in prompt
+        assert "RUN-1" not in prompt
         assert "Phase One" in prompt
-        assert report in prompt
+        assert json.loads(prompt)["report"] == report
 
     def test_build_user_prompt_with_lists(self):
         from project_workflow.supervisor.models import PhaseCheck, PhaseEvidence, PhaseInstruction
@@ -293,11 +292,16 @@ class TestPromptBuilder:
             checks=[PhaseCheck(description="Check A")],
             evidence=[PhaseEvidence(item="Screenshot")],
         )
-        prompt = PromptBuilder.build_user_prompt("RUN-1", phase, "done", previously_covered=["A"])
-        assert "Run tests" in prompt
+        report = {"source": "Reported facts", "result": {"content": "done"}, "unresolved": []}
+        prompt = PromptBuilder.build_user_prompt("RUN-1", phase, report, previously_covered=["1:check:1"])
+        assert "Run tests" not in prompt
         assert "Check A" in prompt
         assert "Screenshot" in prompt
-        assert "A" in prompt
+        assert json.loads(prompt) == {
+            "phase": "Phase One", "allowed_verdicts": ["PASS", "PARTIAL", "BLOCKED"],
+            "criteria": [{"id": "C1", "text": "Check A"}, {"id": "E1", "text": "Screenshot"}],
+            "previously_covered": ["C1"], "report": report,
+        }
 
 
 class TestResponseParser:

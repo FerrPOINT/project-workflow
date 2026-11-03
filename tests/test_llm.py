@@ -1,6 +1,7 @@
 """Tests for OpenAI-compatible evaluation and response parsing."""
 
 import json
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -14,6 +15,11 @@ from project_workflow.infrastructure.llm import (
     PromptBuilder,
     ResponseParser,
 )
+from tests._report_helpers import report_json
+
+
+def _report(text="Reported outcome"):
+    return {"source": "Reported source facts", "result": {"content": text}, "unresolved": []}
 
 
 class FakePhase:
@@ -178,53 +184,59 @@ class TestOpenAICompatibleClient:
 class TestPromptBuilder:
     """Unit tests for prompt assembly."""
 
-    def test_build_user_prompt_includes_task_and_phase(self):
+    def test_build_user_prompt_includes_phase_without_task_metadata(self):
         phase = FakePhase(code="1", name="Preflight", instructions=["Check git"])
-        prompt = PromptBuilder.build_user_prompt("RUN-1", phase, "report text")
-        assert "TASK: RUN-1" in prompt
-        assert "CURRENT PHASE: 1 — Preflight" in prompt
-        assert "report text" in prompt
+        prompt = PromptBuilder.build_user_prompt("RUN-1", phase, _report("report text"))
+        assert "TASK:" not in prompt
+        assert "RUN-1" not in prompt
+        assert json.loads(prompt) == {
+            "phase": "Preflight", "allowed_verdicts": ["PASS", "PARTIAL", "BLOCKED"],
+            "criteria": [], "previously_covered": [], "report": _report("report text"),
+        }
 
-    def test_build_user_prompt_includes_instructions(self):
+    def test_build_user_prompt_excludes_worker_instructions(self):
         phase = FakePhase(instructions=[FakeInstruction("Step one"), FakeInstruction("Step two")])
-        prompt = PromptBuilder.build_user_prompt("T-1", phase, "r")
-        assert "Step one" in prompt
-        assert "Step two" in prompt
+        prompt = PromptBuilder.build_user_prompt("T-1", phase, _report("r"))
+        assert "Step one" not in prompt
+        assert "Step two" not in prompt
+        assert "Instructions:" not in prompt
 
     def test_build_user_prompt_includes_checks_and_evidence(self):
         phase = FakePhase(
             checks=[FakeCheck("Check A")],
             evidence=[FakeEvidence("Screenshot")],
         )
-        prompt = PromptBuilder.build_user_prompt("T-1", phase, "r")
-        assert "Check A" in prompt
-        assert "Screenshot" in prompt
+        prompt = PromptBuilder.build_user_prompt("T-1", phase, _report("r"))
+        assert json.loads(prompt)["criteria"] == [
+            {"id": "C1", "text": "Check A"}, {"id": "E1", "text": "Screenshot"},
+        ]
 
     def test_build_user_prompt_with_previously_covered(self):
-        phase = FakePhase(instructions=[FakeInstruction("Run tests")])
-        prompt = PromptBuilder.build_user_prompt("T-1", phase, "r", previously_covered=["Run tests"])
-        assert "ALREADY COMPLETED" in prompt
-        assert "Run tests" in prompt
+        phase = FakePhase(checks=[FakeCheck("Run tests")])
+        prompt = PromptBuilder.build_user_prompt("T-1", phase, _report("r"), previously_covered=["1:check:1"])
+        assert json.loads(prompt)["previously_covered"] == ["C1"]
+        assert "keep them in covered" not in prompt
 
     def test_build_user_prompt_marks_ids_without_decorative_brackets(self):
         phase = FakePhase()
         prompt = PromptBuilder.build_user_prompt(
             "T-1",
             phase,
-            "done",
+            _report("done"),
             evaluation_items=[("-1:check:1", "Task is clear")],
         )
 
-        assert 'ID: "-1:check:1"' in prompt
+        assert json.loads(prompt)["criteria"] == [{"id": "C1", "text": "Task is clear"}]
+        assert "-1:check:1" not in prompt
         assert "[-1:check:1]" not in prompt
-        assert "REQUIRED ITEM COUNT: 1" in prompt
-        assert "len(covered) + len(missing) MUST equal 1" in prompt
+        assert "REQUIRED ITEM COUNT" not in prompt
+        assert "len(covered)" not in prompt
 
     def test_system_prompt_is_not_empty(self):
-        assert "strict workflow supervisor" in PromptBuilder.SYSTEM_PROMPT
+        assert "Assess whether this phase is ready" in PromptBuilder.SYSTEM_PROMPT
         assert "verdict" in PromptBuilder.SYSTEM_PROMPT
         assert "covered" in PromptBuilder.SYSTEM_PROMPT
-        assert "do not add brackets" in PromptBuilder.SYSTEM_PROMPT
+        assert "Return one assessment per listed label" in PromptBuilder.SYSTEM_PROMPT
         assert "missing" in PromptBuilder.SYSTEM_PROMPT
 
 
@@ -336,7 +348,7 @@ class TestSupervisorEngineEvaluateLLM:
 
     def test_evaluate_llm_pass(self, engine, supervisor_llm):
         supervisor_llm("PASS")
-        result = engine.evaluate_llm("I checked git", engine._get_current_phase_obj())
+        result = engine.evaluate_llm(report_json("I checked git"), engine._get_current_phase_obj())
         assert result["verdict"] == "PASS"
         assert result["phase_code"] == "1.INTAKE"
         assert result["covered"]
@@ -344,16 +356,41 @@ class TestSupervisorEngineEvaluateLLM:
 
     def test_evaluate_llm_blocked(self, engine, supervisor_llm):
         supervisor_llm("BLOCKED", blockers=["No access"])
-        result = engine.evaluate_llm("Cannot access", engine._get_current_phase_obj())
+        result = engine.evaluate_llm(report_json("Cannot access"), engine._get_current_phase_obj())
         assert result["verdict"] == "BLOCKED"
         assert result["blockers"] == ["No access"]
+
+    @pytest.mark.parametrize("report", [
+        "Required Workflow command readback is absent; no result is available.",
+        "Actual Workflow readback has namespace_id=3; the assigned namespace_id is 2.",
+        "Presentation contains only a summary; the required full saved document is absent.",
+        "The full saved document was presented, but no saved owner confirmation is available.",
+        "Presented document is revision 2/hash b; saved owner confirmation is for revision 1/hash a.",
+    ])
+    def test_negative_evidence_verdict_is_not_promoted_to_pass(self, engine, supervisor_llm, report):
+        supervisor_llm("PARTIAL")
+        fixture_chat = OpenAICompatibleClient.chat
+        original_phase = engine.current_phase_code
+        with patch("project_workflow.supervisor.evaluate.OpenAICompatibleClient.chat") as chat:
+            chat.side_effect = fixture_chat
+            result = engine.evaluate(report_json(report))
+
+        chat.assert_called_once()
+        assert chat.call_args.kwargs["system"] == PromptBuilder.SYSTEM_PROMPT
+        assert json.loads(chat.call_args.kwargs["user"])["report"] == json.loads(report_json(report))
+        assert result["verdict"] == "PARTIAL"
+        assert result["missing"]
+        assert result["next_phase_code"] is None
+        assert engine.current_phase_code == original_phase
+        assert engine.db.tasks.get_by_id(engine.task["id"]).to_dict()["status"] != "done"
 
     def test_evaluate_llm_fails_closed_on_provider_failure(self, engine):
         with patch(
             "project_workflow.supervisor.evaluate.OpenAICompatibleClient.chat",
             side_effect=requests.ConnectionError("down"),
-        ):
-            result = engine.evaluate("")
+        ) as chat:
+            result = engine.evaluate(report_json(""))
+        chat.assert_called_once()
         assert result["verdict"] == "BLOCKED"
         assert result["next_phase_code"] is None
         assert result["retryable"] is True
@@ -365,19 +402,23 @@ class TestSupervisorEngineEvaluateLLM:
         assert run["verdict"] == "blocked"
         assert run["replay_fingerprint"] is None
 
-    def test_evaluate_llm_uses_previously_covered(self, engine, supervisor_llm):
-        """LLM prompt includes previously covered items."""
+    def test_evaluate_llm_sends_compact_prompt(self, engine, supervisor_llm):
+        """The provider receives phase criteria and the report, not task metadata."""
         supervisor_llm("PASS")
         fixture_chat = OpenAICompatibleClient.chat
+        phase = engine._get_current_phase_obj()
+        items = engine.contract_builder.build_evaluation_items(phase)
         with patch("project_workflow.supervisor.evaluate.OpenAICompatibleClient.chat") as mock_chat:
             mock_chat.side_effect = fixture_chat
-            engine.evaluate_llm("Report", engine._get_current_phase_obj())
+            engine.evaluate_llm(report_json("Report"), phase)
             _, kwargs = mock_chat.call_args
-            # The prompt builder does NOT include previously covered items
-            # unless they were passed as previously_covered param.
-            # Here we just verify the prompt was built and sent.
-            assert "Report" in kwargs["user"]
-            assert "RUN-1001" in kwargs["user"]
+            payload = json.loads(kwargs["user"])
+            assert payload["report"] == json.loads(report_json("Report"))
+            assert payload["criteria"] == [
+                {"id": label, "text": dict(items)[item_id]}
+                for label, item_id in PromptBuilder.item_aliases(items).items()
+            ]
+            assert "RUN-1001" not in kwargs["user"]
 
 
 class TestSupervisorEngineMandatoryLLM:
@@ -452,28 +493,30 @@ class TestPromptBuilderEdgeCases:
 
     def test_empty_phase_contract(self):
         phase = FakePhase(code="99", name="Empty", instructions=[], checks=[], evidence=[])
-        prompt = PromptBuilder.build_user_prompt("T-99", phase, "done")
-        assert "T-99" in prompt
-        assert "99 — Empty" in prompt
-        assert "done" in prompt
+        prompt = PromptBuilder.build_user_prompt("T-99", phase, _report("done"))
+        assert "T-99" not in prompt
+        assert json.loads(prompt) == {
+            "phase": "Empty", "allowed_verdicts": ["PASS", "PARTIAL", "BLOCKED"],
+            "criteria": [], "previously_covered": [], "report": _report("done"),
+        }
 
     def test_missing_instructions_skips_section(self):
         phase = FakePhase(code="1", checks=[FakeCheck("Check X")])
-        prompt = PromptBuilder.build_user_prompt("T-1", phase, "r")
+        prompt = PromptBuilder.build_user_prompt("T-1", phase, _report("r"))
         assert "Instructions:" not in prompt
         assert "Check X" in prompt
 
-    def test_previously_covered_empty_list_omitted(self):
+    def test_previously_covered_empty_list(self):
         phase = FakePhase(instructions=[FakeInstruction("Step 1")])
-        prompt = PromptBuilder.build_user_prompt("T-1", phase, "r", previously_covered=[])
-        assert "ALREADY COMPLETED" not in prompt
+        prompt = PromptBuilder.build_user_prompt("T-1", phase, _report("r"), previously_covered=[])
+        assert json.loads(prompt)["previously_covered"] == []
 
     def test_multiple_evidence_items(self):
         phase = FakePhase(evidence=[FakeEvidence("A"), FakeEvidence("B"), FakeEvidence("C")])
-        prompt = PromptBuilder.build_user_prompt("T-1", phase, "r")
-        assert "  • A" in prompt
-        assert "  • B" in prompt
-        assert "  • C" in prompt
+        prompt = PromptBuilder.build_user_prompt("T-1", phase, _report("r"))
+        assert json.loads(prompt)["criteria"] == [
+            {"id": "E1", "text": "A"}, {"id": "E2", "text": "B"}, {"id": "E3", "text": "C"},
+        ]
 
 
 class TestSupervisorEngineLLMIntegrationDB:
@@ -487,27 +530,27 @@ class TestSupervisorEngineLLMIntegrationDB:
 
     def test_supervisor_run_recorded_after_llm_evaluate(self, engine, supervisor_llm):
         supervisor_llm("PASS")
-        engine.evaluate("Report")
+        engine.evaluate(report_json("Report"))
 
         runs = engine.db.list_step_history(task_key="RUN-1003", limit=5)
         assert len(runs) == 1
         run = runs[0]
         assert run["verdict"] == "pass"
-        assert run["worker_report"] == "Report"
+        assert run["worker_report"] == report_json("Report")
         assert run["covered_item_ids"]
         assert run["missing_item_ids"] == []
         assert run["replay_fingerprint"]
 
     def test_task_phase_advanced_after_llm_pass(self, engine, supervisor_llm):
         supervisor_llm("PASS")
-        engine.evaluate("Report")
+        engine.evaluate(report_json("Report"))
 
         task = engine.db.tasks.get_by_id(engine.task["id"]).to_dict()
         assert task["current_phase_code"] == "2.REQUIREMENTS"
 
     def test_task_blocked_after_llm_blocked(self, engine, supervisor_llm):
         supervisor_llm("BLOCKED", blockers=["No access"])
-        engine.evaluate("Report")
+        engine.evaluate(report_json("Report"))
 
         task = engine.db.tasks.get_by_id(engine.task["id"]).to_dict()
         assert task["current_phase_code"] == "1.INTAKE"
@@ -515,7 +558,7 @@ class TestSupervisorEngineLLMIntegrationDB:
 
     def test_rollback_without_config_is_retryable_and_blocks_current_phase(self, engine, supervisor_llm):
         supervisor_llm("ROLLBACK")
-        result = engine.evaluate("Report")
+        result = engine.evaluate(report_json("Report"))
 
         assert result["verdict"] == "BLOCKED"
         assert result["retryable"] is True
@@ -535,7 +578,7 @@ class TestSupervisorEngineLLMIntegrationDB:
 
         supervisor_llm("PASS")
         with pytest.raises(RuntimeError, match="supervisor write failed"):
-            engine.evaluate("Report")
+            engine.evaluate(report_json("Report"))
 
         persisted = engine.db.tasks.get_by_id(task_id).to_dict()
         assert persisted["current_phase_id"] == original_task["current_phase_id"]
@@ -564,60 +607,222 @@ class TestOpenAICompatibleClientOverrides:
         assert client.timeout == 300
 
 
-class TestEvaluatorV10PromptContract:
-    """The live provider receives explicit contradiction and chronology rules."""
+class TestEvaluatorV15PromptContract:
+    """The controlled provider receives the universal criteria-only contract."""
 
-    def test_prompt_version_invalidates_the_old_backtracking_policy(self):
-        assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v10"
+    def test_prompt_version_invalidates_the_old_evidence_policy(self):
+        assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v15"
+
+    def test_report_106_submission_circularity_reaches_provider_with_explicit_protocol_boundary(self):
+        """Reproduce the saved PARTIAL reason, not a real model's semantic acceptance."""
+        from project_workflow.infrastructure.db.managed_catalog import ManagedMode
+        from project_workflow.infrastructure.db.schema import _phase_item_to_supervisor
+        from project_workflow.supervisor.contracts import PhaseContractBuilder
+        from project_workflow.supervisor.evaluate import _evaluate_strict_response
+
+        export = json.loads((Path(__file__).resolve().parents[1]
+                             / "docs/evidence/pm-default-workflow-20261031.json").read_text(encoding="utf-8"))
+        phase = _phase_item_to_supervisor(ManagedMode.model_validate(export["modes"][0]).phases[-1])
+        items = PhaseContractBuilder([phase]).build_evaluation_items(phase)
+        ids = [item_id for item_id, _ in items]
+        report = (
+            "Synthetic report106-shaped packet: FULL saved document, exact revision/hash, concrete "
+            "full presentation account and matching authorized owner confirmation readback. "
+            "Current task remains Draft; no postterminal operations were performed."
+        )
+        report = _report(report)
+        prompt = PromptBuilder.build_user_prompt("SYNTHETIC-PM", phase, report, evaluation_items=items)
+        user_data = json.loads(prompt)
+        assert len(items) == 7
+        assert user_data == {
+            "phase": phase.name, "allowed_verdicts": ["PASS", "PARTIAL", "BLOCKED"],
+            "criteria": [{"id": label, "text": dict(items)[item_id]}
+                         for label, item_id in PromptBuilder.item_aliases(items).items()],
+            "previously_covered": [], "report": report,
+        }
+        assert all(item.step not in prompt for item in phase.instructions)
+        assert "send ONE self-contained final report using project-workflow --json step" not in prompt
+        assert "Inspect the result" not in prompt
+        assert [criterion["text"] for criterion in user_data["criteria"]] == [text for _, text in items]
+        missing = [ids[0], ids[4]]
+        raw = {
+            "verdict": "PARTIAL", "assessments": {label: {"covered": item_id not in missing,
+                "reason": "The report lacks proof of sending this final report through project-workflow "
+                          "and reading its result." if item_id in missing else "Reported fact present"}
+                for label, item_id in PromptBuilder.item_aliases(items).items()},
+            "blockers": [], "confidence": 0.99,
+        }
+        client = OpenAICompatibleClient(api_key="", base_url="https://provider.example/v1")
+        with patch("project_workflow.infrastructure.llm.requests.post") as post:
+            post.return_value.json.return_value = {"choices": [{"message": {"content": json.dumps(raw)}}]}
+            returned_raw, parsed = _evaluate_strict_response(client, user=prompt, evaluation_items=items, phase=phase)
+
+        post.assert_called_once()
+        payload = post.call_args.kwargs["json"]
+        assert payload["messages"] == [
+            {"role": "system", "content": PromptBuilder.SYSTEM_PROMPT}, {"role": "user", "content": prompt},
+        ]
+        assert payload["response_format"] == {"type": "json_object"}
+        assert returned_raw == raw
+        assert "assessments" not in parsed.raw
+        assert parsed.verdict == "PARTIAL" and parsed.missing == missing
+
+    def test_protocol_boundary_preserves_required_business_work_and_evidence(self):
+        system = PromptBuilder.SYSTEM_PROMPT
+        for rule in (
+            "using only its listed criteria and supplied facts",
+            "this report's own acceptance as prerequisites",
+            "covered is a boolean for the entire criterion",
+            "Reject missing required content",
+            "When FULL content is required, a summary or reference alone cannot supply it",
+            "Server-enforced identity, access and approvals are not yours to certify",
+        ):
+            assert rule in system
+
+    def test_phase_actual_readback_sufficiency_reaches_the_evaluator(self):
+        instruction = (
+            "Copy the actual top-level stdout fields and compare task/assignment/agent identities. "
+            "The saved actual response plus these identity checks and task/context/input readbacks "
+            "are sufficient; do not demand additional proof that a genuine stdout is genuine."
+        )
+        evidence = "Actual first Workflow step response and task/input references."
+        phase = FakePhase(code="PM-DRAFT-01", instructions=[FakeInstruction(instruction)])
+        report = (
+            "Actual first Workflow step response (copied stdout): interaction_protocol=configured-cli-v1; "
+            "task=SDLC-13; namespace_id=2; phase_code=PM-DRAFT-01; version=1; status=active; "
+            "concrete_agent_ref=00000000-0000-4000-8000-000000000001; "
+            "assignment_ref=00000000-0000-4000-8000-000000000002; "
+            "execution_ref=00000000-0000-4000-8000-000000000003; "
+            "business_task_ref=00000000-0000-4000-8000-000000000004.\n"
+            "Tracker context readback: task_id=root_task_id=00000000-0000-4000-8000-000000000004; "
+            "assignment.assignment_id=00000000-0000-4000-8000-000000000002; "
+            "assignment.agent_id=00000000-0000-4000-8000-000000000001; workflow_task_key=SDLC-13; "
+            "stage=Draft; status=Ready. These identities match the Workflow readback.\n"
+            "Input readback: same task/root; snapshot_ref=00000000-0000-4000-8000-000000000005; "
+            "title=Synthetic brief; description=One browser task list.\n"
+            "Discussion readback: comments=[]; snapshot=null; next_after=null."
+        )
+        report = _report(report)
+        prompt = PromptBuilder.build_user_prompt(
+            "SDLC-13", phase, report,
+            evaluation_items=[("PM-DRAFT-01:evidence:143", evidence)],
+        )
+
+        assert instruction not in prompt
+        assert evidence in prompt
+        assert json.loads(prompt)["report"] == report
+        assert json.loads(prompt)["criteria"] == [{"id": "E1", "text": evidence}]
+        assert "PM-DRAFT-01:evidence:143" not in prompt
+        system = PromptBuilder.SYSTEM_PROMPT
+        assert "using only its listed criteria and supplied facts" in system
+        assert "Do not add independent attestation" in system
+
+    def test_readback_sufficiency_does_not_excuse_missing_or_mismatched_evidence(self):
+        prompt = PromptBuilder.SYSTEM_PROMPT
+        assert "Reject missing required content" in prompt
+        assert "contradictory current facts" in prompt
+        assert "covered is a boolean for the entire criterion" in prompt
+
+    def test_reported_full_presentation_and_matching_owner_consent_reach_the_evaluator(self):
+        instruction = (
+            "Present the FULL latest saved requirements document with exact revision/content_hash "
+            "and request explicit human owner confirmation. Never confirm as owner."
+        )
+        check = "The full latest saved requirements document and exact revision/hash were presented to owner."
+        evidence = "Full saved document, exact revision/hash and actual owner confirmation receipt."
+        phase = FakePhase(code="PM-DRAFT-03", instructions=[FakeInstruction(instruction)])
+        document = {
+            "goal": "A personal browser task list",
+            "scope": ["Add, complete and delete tasks"],
+            "exclusions": ["Accounts and server synchronization"],
+            "scenarios": ["Add a task and reload the browser"],
+            "acceptance_criteria": ["The saved task survives reload"],
+            "constraints": ["One user; browser-local storage"],
+            "dependencies": [],
+            "assumptions": ["Browser storage is available"],
+            "checklist": ["verify-reload"],
+            "prerequisites": ["browser-available"],
+        }
+        saved_document = json.dumps(document, sort_keys=True, indent=2)
+        digest = "a" * 64
+        report = (
+            f"# FULL saved document\nTask=synthetic-task; revision=1; content_hash={digest}\n"
+            f"{saved_document}\n"
+            "# Actual presentation\nIn the prior assistant message in this conversation, I displayed "
+            "this entire saved document with revision 1 and its exact content_hash to the owner. "
+            "The owner reviewed that full document before confirming it.\n"
+            f"# Saved authorized owner confirmation\nTask=synthetic-task; revision=1; content_hash={digest}; "
+            "owner_subject=synthetic-owner; confirmation_id=synthetic-consent; stage=Draft."
+        )
+        report = _report(report)
+        prompt = PromptBuilder.build_user_prompt(
+            "SDLC-13", phase, report,
+            evaluation_items=[("PM-DRAFT-03:check:217", check), ("PM-DRAFT-03:evidence:1", evidence)],
+        )
+
+        assert instruction not in prompt
+        assert check in prompt
+        assert evidence in prompt
+        assert json.loads(prompt)["report"] == report
+        assert saved_document in json.loads(prompt)["report"]["result"]["content"]
+        assert json.loads(prompt)["criteria"] == [{"id": "C1", "text": check}, {"id": "E1", "text": evidence}]
+        system = PromptBuilder.SYSTEM_PROMPT
+        assert "using only its listed criteria and supplied facts" in system
+        assert "Do not add independent attestation" in system
+        assert "When FULL content is required, a summary or reference alone cannot supply it" in system
+        assert "covered is a boolean for the entire criterion" in system
 
     def test_contradictory_current_facts_prohibit_pass(self):
         prompt = PromptBuilder.SYSTEM_PROMPT
 
-        assert "Mutually exclusive CURRENT facts" in prompt
-        assert "prohibit PASS" in prompt
-        assert "return PARTIAL" in prompt
-        assert "return BLOCKED" in prompt
-        assert "outside the current phase" in prompt
-        assert "explain the required work" in prompt
+        assert (
+            "Reject missing required content, unresolved required decisions and contradictory current facts" in prompt
+        )
+        assert "PARTIAL: unfinished phase work with no obstacle to carrying it out" in prompt
+        assert "BLOCKED: a reported obstacle prevents carrying out phase work" in prompt
 
     def test_build_user_prompt_does_not_expose_retired_target(self):
         phase = FakePhase(rollback_target_phase_code="8.IMPLEMENT")
 
-        prompt = PromptBuilder.build_user_prompt("RUN-1", phase, "reviewed")
+        prompt = PromptBuilder.build_user_prompt("RUN-1", phase, _report("reviewed"))
 
         assert "ROLLBACK TARGET:" not in prompt
-        assert "ALLOWED VERDICTS: PASS, PARTIAL, BLOCKED" in prompt
+        assert json.loads(prompt)["allowed_verdicts"] == ["PASS", "PARTIAL", "BLOCKED"]
         assert "ROLLBACK" not in prompt
         assert "verdict = ROLLBACK" not in PromptBuilder.SYSTEM_PROMPT
 
-    def test_evidence_placement_is_defined_by_the_contract(self):
+    def test_no_extra_artifact_or_placement_obligations_are_added(self):
         prompt = PromptBuilder.SYSTEM_PROMPT
-        assert "worker report does not have to be copied into SUMMARY.md" in prompt
-        assert "unless the contract explicitly requires it there" in prompt
+        assert "using only its listed criteria and supplied facts" in prompt
+        assert "SUMMARY.md" not in prompt
 
-    def test_equivalent_encoding_flag_does_not_change_the_required_tests(self):
-        prompt = PromptBuilder.SYSTEM_PROMPT
-        assert "unless exact invocation is itself an explicit contract obligation" in prompt
-        assert "python -B -X utf8 -m unittest -v test_calculator.py" in prompt
-        assert "Still require actual execution and its result" in prompt
-        assert "not equivalent success" in prompt
+    def test_command_obligations_are_supplied_as_criteria_not_system_examples(self):
+        criterion = "Execute the required tests and report their actual result."
+        prompt = PromptBuilder.build_user_prompt(
+            "T-1", FakePhase(), _report("python -B -X utf8 -m unittest: all passed"),
+            evaluation_items=[("test-result", criterion)],
+        )
+        assert criterion in prompt
+        assert "python -B -X utf8 -m unittest: all passed" in prompt
+        assert "test_calculator.py" not in PromptBuilder.SYSTEM_PROMPT
+        assert "covered is a boolean for the entire criterion" in PromptBuilder.SYSTEM_PROMPT
 
     def test_coverage_requires_the_whole_evidence_item_and_a_consistent_message(self):
         prompt = PromptBuilder.SYSTEM_PROMPT
-        assert "ENTIRE item is supported by actual evidence" in prompt
-        assert "any required part is absent" in prompt
-        assert "never describe evidence as absent while marking its required item covered" in prompt
+        assert "covered is a boolean for the entire criterion" in prompt
+        assert "Keep verdict and assessments consistent" in prompt
 
-    def test_chronological_state_change_requires_timestamped_action_evidence(self):
+    def test_explicit_later_changes_are_respected_without_extra_timestamp_rules(self):
         prompt = PromptBuilder.SYSTEM_PROMPT
 
-        assert "first open, then merged" in prompt
-        assert "timestamps and action evidence" in prompt
+        assert "respect explicit later changes" in prompt
+        assert "Do not invent facts" in prompt
+        assert "first open, then merged" not in prompt
 
     def test_normal_complete_report_contract_still_allows_pass(self):
-        assert "verdict = PASS" in PromptBuilder.SYSTEM_PROMPT
-        assert "all items done, no blockers, no regressions" in PromptBuilder.SYSTEM_PROMPT
+        assert "PASS: all covered, no blockers" in PromptBuilder.SYSTEM_PROMPT
+        assert "covered is a boolean for the entire criterion" in PromptBuilder.SYSTEM_PROMPT
 
     def test_output_must_be_bare_json_without_markdown_fences(self):
         assert "one bare JSON object" in PromptBuilder.SYSTEM_PROMPT
-        assert "Never wrap it in Markdown or code fences" in PromptBuilder.SYSTEM_PROMPT
+        assert "exactly verdict, assessments, blockers and confidence" in PromptBuilder.SYSTEM_PROMPT

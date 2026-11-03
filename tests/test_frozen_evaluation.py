@@ -14,6 +14,7 @@ from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.infrastructure.llm import PromptBuilder
 from project_workflow.supervisor.evaluate import _fingerprint_contract_state, _report_fingerprint
 from project_workflow.supervisor.evidence import validate_frozen_evaluation
+from tests._report_helpers import report_json
 from tests.test_configured_cli import WRITER, enroll
 from tests.test_configured_cli import configured as configured
 from tests.test_configured_cli import step as submit
@@ -36,7 +37,7 @@ def accepted(configured, supervisor_llm):
     enroll(configured)
     supervisor_llm("PASS")
     for version in (1, 2, 3):
-        command = {"report": f"Actual evidence {version}", "operation_key": f"frozen-proof-{version}",
+        command = {"report": report_json(f"Actual evidence {version}"), "operation_key": f"frozen-proof-{version}",
                    "expected_version": version}
         response = submit(configured, **command)
         assert response.status_code == 200, response.text
@@ -68,7 +69,10 @@ def test_actual_supervisor_freezes_full_existing_fingerprint_inputs(accepted):
     assert step["replay_fingerprint"] == operation_fingerprint()
 
 
-@pytest.mark.parametrize("prompt_version", ["supervisor-evaluator-v9", "supervisor-evaluator-v8-no-backtracking"])
+@pytest.mark.parametrize("prompt_version", [
+    "supervisor-evaluator-v9", "supervisor-evaluator-v8-no-backtracking", "supervisor-evaluator-v11",
+    "supervisor-evaluator-v12", "supervisor-evaluator-pm-v4",
+])
 def test_prompt_upgrade_keeps_frozen_terminal_readback_and_replay(
     configured, supervisor_llm, monkeypatch, prompt_version,
 ):

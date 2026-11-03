@@ -11,6 +11,7 @@ from project_workflow.domain.configured_cli import (
     ConfiguredTerminalReadback,
 )
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
+from project_workflow.domain.phase_report import PhaseReportFormatError
 from project_workflow.infrastructure import base_auth
 from project_workflow.infrastructure.db.single_task_catalog import runtime_catalog_read
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
@@ -20,6 +21,9 @@ _REQUEST_ERRORS = (NamespaceAuthError, NotFoundError, ConflictError, ValueError,
 
 
 def error(exc: Exception) -> JSONResponse:
+    if isinstance(exc, PhaseReportFormatError):
+        return JSONResponse({"ok": False, "exit_code": 1, "error_code": "invalid-phase-report",
+                             "error": str(exc)}, status_code=422, headers={"Cache-Control": "no-store"})
     if isinstance(exc, NamespaceAuthError):
         status = exc.status
     elif isinstance(exc, NotFoundError):
@@ -60,7 +64,8 @@ def history(task: str, namespace_id: int | None, authorization: str | None, *, n
         if type(namespace_id) is not int or namespace_id <= 0:
             raise ValueError("Explicit namespace required")
         principal = configured_cli._principal(authorization, write=False)
-        trusted = base_auth.registered_subjects().get(principal.subject)
+        trusted = (None if projection == "evaluator-diagnostics-v1"
+                   else base_auth.registered_subjects().get(principal.subject))
         with SAUnitOfWork() as uow, runtime_catalog_read(uow):
             return configured_cli.history(uow, task, namespace_id, authorization, n=n,
                 execution_ref=execution_ref, operation_key=operation_key, trusted=trusted,

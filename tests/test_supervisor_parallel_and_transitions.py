@@ -5,6 +5,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from tests._report_helpers import report_json
+
 pytestmark = [pytest.mark.supervisor]
 
 from project_workflow.domain.exceptions import ConcurrentTransitionError
@@ -395,7 +397,7 @@ class TestEvaluateEdgeCases:
                 "workflow_id": 1,
             }
             engine.db = MagicMock()
-            result = engine.evaluate("report")
+            result = engine.evaluate(report_json("report"))
         assert result["verdict"] == "BLOCKED"
         assert result["blockers"] == ["phase-not-configured"]
 
@@ -429,7 +431,7 @@ class TestEvaluateEdgeCases:
             engine._reload_evaluation_state = MagicMock()
             engine._refresh_task_state = MagicMock()
             supervisor_llm("PASS", covered=["deploy"])
-            result = engine.evaluate("deploy done")
+            result = engine.evaluate(report_json("deploy done"))
         assert result["verdict"] == "PASS"
         assert "deploy" in result["covered"]
 
@@ -487,7 +489,7 @@ class TestEvaluateEdgeCases:
             engine._reload_evaluation_state = MagicMock()
             engine._refresh_task_state = MagicMock()
             supervisor_llm("PASS", covered=["check-a", "check-b"])
-            result = engine.evaluate("check-a done and check-b complete")
+            result = engine.evaluate(report_json("check-a done and check-b complete"))
         assert result["verdict"] == "PASS"
         assert result["phase_name"] == "Параллельная группа: 1, 2"
 
@@ -545,7 +547,7 @@ class TestEvaluateEdgeCases:
             engine._reload_evaluation_state = MagicMock()
             engine._refresh_task_state = MagicMock()
             supervisor_llm("PARTIAL", covered=["deploy microservice"], missing=["write unit tests"])
-            result = engine.evaluate("microservice deployed")
+            result = engine.evaluate(report_json("microservice deployed"))
         assert result["verdict"] == "PARTIAL"
         assert result["next_phase_code"] is None  # non-pass: stay on group
         assert "write unit tests" in result["missing"]

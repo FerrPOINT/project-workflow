@@ -15,6 +15,10 @@ from project_workflow.interfaces.cli import (
 from project_workflow.interfaces.cli.core import cli
 
 
+def report_json(text):
+    return json.dumps({"source": "", "result": {"document": text}, "unresolved": []})
+
+
 @pytest.fixture
 def agent_env(monkeypatch):
     monkeypatch.setenv("FLEET_CLI_PROTOCOL", "configured-cli-v1")
@@ -67,10 +71,12 @@ def test_existing_commands_use_configured_runtime_routes(agent_env, monkeypatch,
 def test_report_stdin_preserves_exact_key_version_and_text(agent_env, monkeypatch):
     calls = fake_transport(monkeypatch)
     result = CliRunner().invoke(cli, ["--json", "step", "--task", "SDLC-31", "--report", "-",
-                                    "--operation-key", "report-a", "--expected-version", "4"], input="Real report\n")
+                                    "--operation-key", "report-a", "--expected-version", "4"],
+                               input=report_json("Real report\n"))
     assert result.exit_code == 0, result.output
     body = calls[0][1]["json"]
-    assert body["report"] == "Real report\n" and body["operation_key"] == "report-a" and body["expected_version"] == 4
+    assert body["report"] == report_json("Real report\n")
+    assert body["operation_key"] == "report-a" and body["expected_version"] == 4
     assert "hermes_run_ref" not in body and "execution_token" not in body
 
 
@@ -91,7 +97,7 @@ def test_final_report_flags_preserve_exact_requirements_evidence(agent_env, monk
     calls = fake_transport(monkeypatch)
     result = CliRunner().invoke(cli, ["--json", "step", "--task", "SDLC-31", "--report", "-",
         "--operation-key", "final", "--expected-version", "3", "--requirements-revision", "7",
-        "--requirements-sha256", "a" * 64], input="Actual final report\n")
+        "--requirements-sha256", "a" * 64], input=report_json("Actual final report\n"))
     assert result.exit_code == 0, result.output
     body = calls[0][1]["json"]
     assert body["requirements_revision"] == 7 and body["requirements_sha256"] == "a" * 64
@@ -126,11 +132,27 @@ def test_http_status_is_preserved_without_private_body_or_retry(agent_env, monke
 
 def test_unknown_post_has_no_retry_or_db_fallback(agent_env, monkeypatch):
     calls = fake_transport(monkeypatch, exception=requests.Timeout("private credential must not leak"))
-    result = CliRunner().invoke(cli, ["--json", "step", "--task", "SDLC-31", "--report", "actual report",
+    result = CliRunner().invoke(cli, ["--json", "step", "--task", "SDLC-31", "--report", report_json("actual report"),
                                     "--operation-key", "key", "--expected-version", "1"])
     assert result.exit_code == 1 and len(calls) == 1
     assert json.loads(result.output)["acceptance_unknown"] is True
     assert "private credential" not in result.output
+
+
+@pytest.mark.parametrize("json_mode", [False, True])
+def test_malformed_report_has_safe_field_error_without_http_or_unknown_acceptance(agent_env, monkeypatch, json_mode):
+    calls = fake_transport(monkeypatch)
+    args = (["--json"] if json_mode else []) + ["step", "--task", "SDLC-31", "--report", "-",
+        "--operation-key", "new-report", "--expected-version", "1"]
+    value = '{"source":"private-source","result":[],"unresolved":[]}'
+    result = CliRunner().invoke(cli, args, input=value)
+    assert result.exit_code == 1 and calls == []
+    assert "Invalid phase report at result" in result.output
+    assert "private-source" not in result.output
+    if json_mode:
+        error = json.loads(result.output)
+        assert error["error_code"] == "invalid-phase-report"
+        assert error["acceptance_unknown"] is False
 
 
 @pytest.mark.parametrize("command", ["step", "history"])

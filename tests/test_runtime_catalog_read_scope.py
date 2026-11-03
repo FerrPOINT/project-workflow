@@ -10,6 +10,7 @@ from starlette.testclient import TestClient
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db import single_task_catalog as catalog
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
+from tests._report_helpers import report_json
 from tests.test_catalog_batched_reads import installed as installed
 from tests.test_configured_cli import WRITER, enroll, step
 from tests.test_configured_cli import configured as configured
@@ -171,7 +172,7 @@ def test_configured_step_bounds_full_validations_per_runtime_uow(
     try:
         cursor = enroll(configured)
         supervisor_llm("PASS")
-        response = step(configured, report="Actual phase work", operation_key="catalog-scoped-report",
+        response = step(configured, report=report_json("Actual phase work"), operation_key="catalog-scoped-report",
                         expected_version=cursor["version"])
         assert response.status_code == 200, response.text
         client, assignment = configured

@@ -233,15 +233,13 @@ class SupervisorContextBuilder:
                 "и отправляет report по текущей фазе. Supervisor не предполагает конкретную модель, "
                 "OpenAI-compatible провайдера."
             ),
-            "entrypoint": f"{cli_command} step --task {self.task_key} [--report TEXT]",
+            "entrypoint": f"{cli_command} step --task {self.task_key} [--report -]",
         }
 
     @staticmethod
-    def _report_template() -> dict[str, str]:
+    def _report_template() -> dict[str, Any]:
         return {
-            "summary": "Что достигнуто на этой фазе.",
-            "completed": "Список выполненных пунктов контракта.",
-            "evidence": "Конкретные подтверждения, полученные на этой фазе.",
-            "blockers": "Явные блокеры или 'нет'.",
-            "next_step": "Одно рекомендуемое следующее действие.",
+            "source": "",
+            "result": {},
+            "unresolved": [],
         }

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -91,12 +92,8 @@ def supervisor_llm(monkeypatch):
         blockers: list[str] | None = None,
     ) -> None:
         def chat(*_args, **kwargs):
-            items: list[tuple[str, str]] = []
-            for line in str(kwargs.get("user", "")).splitlines():
-                stripped = line.strip()
-                if stripped.startswith('ID: "') and '" — ' in stripped:
-                    item_id, text = stripped[5:].split('" — ', 1)
-                    items.append((item_id, text))
+            payload = json.loads(kwargs["user"])
+            items = [(item["id"], item["text"]) for item in payload["criteria"]]
             ids = [item_id for item_id, _ in items]
             by_text = {text: item_id for item_id, text in items}
 
@@ -124,10 +121,12 @@ def supervisor_llm(monkeypatch):
 
             return {
                 "verdict": verdict,
-                "covered": covered_ids,
-                "missing": missing_ids,
+                "assessments": {
+                    item_id: {"covered": item_id in covered_ids,
+                              "reason": f"Test Supervisor criterion: {by_id_text}"}
+                    for item_id, by_id_text in items
+                },
                 "blockers": blockers or (["Test blocker"] if verdict == "BLOCKED" else []),
-                "message": f"Test Supervisor verdict: {verdict}",
                 "confidence": 1.0,
             }
 

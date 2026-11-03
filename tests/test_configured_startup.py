@@ -32,7 +32,7 @@ with SAUnitOfWork() as uow:
         "phases": uow.session.scalar(select(func.count()).select_from(m.Phase))}))
 """
     result = subprocess.run([sys.executable, "-X", "utf8", "-c", code], cwd=tmp_path,
-                            env=environment, capture_output=True, text=True, timeout=45)
+                            env=environment, capture_output=True, text=True, encoding="utf-8", timeout=45)
     assert result.returncode == 0, result.stdout + result.stderr
     value = json.loads(result.stdout.splitlines()[-1])
     assert value["variant"] == (variant or "single-task-v1")

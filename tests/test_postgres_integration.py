@@ -52,6 +52,7 @@ from project_workflow.infrastructure.db.session import (
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.infrastructure.llm import OpenAICompatibleClient
 from project_workflow.interfaces.ui.app import create_app
+from tests._report_helpers import report_json
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -1756,7 +1757,7 @@ class TestPostgresUoW:
             uow = SAUnitOfWork(pg_url)
             try:
                 with patch.object(OpenAICompatibleClient, "chat", side_effect=provider):
-                    return SupervisorEngine("RUN-90002", uow=uow).evaluate("done")
+                    return SupervisorEngine("RUN-90002", uow=uow).evaluate(report_json("done"))
             finally:
                 uow.close()
 
@@ -1828,7 +1829,7 @@ class TestPostgresUoW:
             uow = SAUnitOfWork(pg_url)
             try:
                 with patch.object(OpenAICompatibleClient, "chat", side_effect=provider):
-                    return SupervisorEngine("RUN-90003", uow=uow).evaluate("still working")
+                    return SupervisorEngine("RUN-90003", uow=uow).evaluate(report_json("still working"))
             finally:
                 uow.close()
 
@@ -1871,7 +1872,7 @@ class TestPostgresUoW:
         try:
             with patch.object(OpenAICompatibleClient, "chat") as replay_provider:
                 replay = SupervisorEngine("RUN-90003", uow=replay_uow).evaluate(
-                    "still working"
+                    report_json("still working")
                 )
         finally:
             replay_uow.close()
@@ -1958,17 +1959,13 @@ class TestPostgresUoW:
 
 
 def _pass_response(user_prompt: str) -> dict:
-    item_ids = []
-    for line in user_prompt.splitlines():
-        stripped = line.strip()
-        if stripped.startswith('ID: "') and '" — ' in stripped:
-            item_ids.append(stripped[5:].split('" — ', 1)[0])
+    item_ids = [item["id"] for item in json.loads(user_prompt)["criteria"]]
     return {
         "verdict": "PASS",
-        "covered": item_ids,
-        "missing": [],
+        "assessments": {
+            item_id: {"covered": True, "reason": "Fixture criterion is satisfied."} for item_id in item_ids
+        },
         "blockers": [],
-        "message": "ok",
         "confidence": 1.0,
     }
 
@@ -1978,12 +1975,11 @@ def _partial_response(user_prompt: str) -> dict:
     response.update(
         {
             "verdict": "PARTIAL",
-            "covered": [],
-            "missing": response["covered"],
-            "message": "work remains",
             "confidence": 0.5,
         }
     )
+    for assessment in response["assessments"].values():
+        assessment.update(covered=False, reason="work remains")
     return response
 
 
@@ -2040,7 +2036,7 @@ def test_concurrent_reports_create_one_transition_and_run(pg_url, same_report):
         engine = SupervisorEngine(task_key, uow=uow, create_if_missing=False)
         barrier.wait()
         try:
-            return engine.evaluate(report)
+            return engine.evaluate(report_json(report))
         finally:
             uow.close()
 
@@ -2081,9 +2077,8 @@ def test_concurrent_distinct_partial_reports_do_not_apply_stale_snapshot(pg_url)
     def partial_response(user_prompt: str) -> dict:
         response = _pass_response(user_prompt)
         response["verdict"] = "PARTIAL"
-        response["missing"] = response.pop("covered")
-        response["covered"] = []
-        response["message"] = "partial"
+        for assessment in response["assessments"].values():
+            assessment.update(covered=False, reason="partial")
         return response
 
     def provider(*_args, **kwargs):
@@ -2095,7 +2090,7 @@ def test_concurrent_distinct_partial_reports_do_not_apply_stale_snapshot(pg_url)
         try:
             engine = SupervisorEngine(task_key, uow=uow, create_if_missing=False)
             start.wait(timeout=10)
-            return engine.evaluate(report)
+            return engine.evaluate(report_json(report))
         finally:
             uow.close()
 

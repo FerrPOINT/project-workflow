@@ -83,6 +83,24 @@ def test_hosted_ci_covers_quality_and_compose_readiness() -> None:
     # compose readiness checks run locally via make quality / make compose.
 
 
+def test_quality_gate_supplies_qualified_cli_source_independently_of_sdk() -> None:
+    revision = "278be4a2eb0b3ce49dac2cd14ea7e2871f2ffe1d"
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    script = (ROOT / "scripts/quality.ps1").read_text(encoding="utf-8")
+    guide = (ROOT / "docs/quality-gate.md").read_text(encoding="utf-8")
+    assert "sha=$(cat .base-revision)" in workflow
+    assert "ref: ${{ steps.base-sdk.outputs.sha }}" in workflow
+    assert "path: workflow-cli-base" in workflow and f"ref: {revision}" in workflow
+    assert "PYTHONPATH: ${{ github.workspace }}/workflow-cli-base/base-modules/python/cli-core" in workflow
+    for text in (script, guide):
+        assert revision in text and "WORKFLOW_CLI_BASE" in text
+        assert "base-modules/python/cli-core" in text and "PYTHONPATH" in text
+        assert "--porcelain --untracked-files=all" in text
+    assert "[IO.Path]::PathSeparator" in script
+    assert '"test", "test-integration", "coverage", "quality", "warnings"' in script
+    assert "test_configured_cli_transport.py" in guide
+
+
 def test_readme_cli_examples_use_configured_wrapper_commands() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
 

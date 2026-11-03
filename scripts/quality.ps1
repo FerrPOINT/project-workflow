@@ -1,6 +1,7 @@
 param(
     [ValidateSet("test", "test-integration", "coverage", "lint", "quality", "warnings", "compose-ready")]
-    [string]$Target = "quality"
+    [string]$Target = "quality",
+    [string]$CliBase = $env:WORKFLOW_CLI_BASE
 )
 
 $ErrorActionPreference = "Stop"
@@ -13,6 +14,22 @@ function Invoke-Checked {
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
     }
+}
+
+function Initialize-SharedCli {
+    if (-not $CliBase) {
+        $CliBase = Join-Path $PSScriptRoot "../../workflow-cli-base"
+    }
+    $Revision = & git -C $CliBase rev-parse HEAD
+    if ($LASTEXITCODE -ne 0 -or $Revision -ne "278be4a2eb0b3ce49dac2cd14ea7e2871f2ffe1d") {
+        throw "CLI Base must be the qualified checkout; set WORKFLOW_CLI_BASE or -CliBase (see docs/quality-gate.md)."
+    }
+    $Changes = & git -C $CliBase status --porcelain --untracked-files=all
+    if ($LASTEXITCODE -ne 0 -or $Changes) {
+        throw "CLI Base checkout must be clean."
+    }
+    $Core = (Resolve-Path -LiteralPath (Join-Path $CliBase "base-modules/python/cli-core")).Path
+    $env:PYTHONPATH = (@($Core, $env:PYTHONPATH) | Where-Object { $_ }) -join [IO.Path]::PathSeparator
 }
 
 function Invoke-Test {
@@ -49,6 +66,10 @@ function Invoke-Warnings {
 function Invoke-ComposeReady {
     Invoke-Checked @("docker", "compose", "up", "--build", "-d", "--wait")
     Invoke-Checked @("curl.exe", "--fail", "http://127.0.0.1:8812/health")
+}
+
+if ($Target -in @("test", "test-integration", "coverage", "quality", "warnings")) {
+    Initialize-SharedCli
 }
 
 switch ($Target) {

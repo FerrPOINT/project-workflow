@@ -7,6 +7,7 @@ import pytest
 from project_workflow.application import configured_cli
 from project_workflow.domain.exceptions import ConflictError
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
+from tests._report_helpers import report_json
 from tests.test_configured_cli import MACHINE, WRITER, enroll, step
 from tests.test_configured_cli import configured as configured
 
@@ -37,7 +38,7 @@ def test_assigned_custom_workflow_reads_and_advances_its_own_phases(configured, 
     assert read.status_code == 200, read.text
     assert "Actual file instruction 1" in read.json()["result"]["instructions"]
     supervisor_llm("PASS")
-    response = step(configured, report="Files checked", operation_key="custom-first",
+    response = step(configured, report=report_json("Files checked"), operation_key="custom-first",
                     expected_version=cursor["version"])
     assert response.status_code == 200, response.text
     assert response.json()["result"]["phase_code"] == "FILE-2"
@@ -47,7 +48,7 @@ def test_assigned_custom_workflow_reads_and_advances_its_own_phases(configured, 
         "namespace_id": assignment["namespace_id"],
     })
     assert history.status_code == 200, history.text
-    assert history.json()["result"]["records"][0]["worker_report"] == "Files checked"
+    assert history.json()["result"]["records"][0]["worker_report"] == report_json("Files checked")
 
 
 def test_custom_workflow_outside_profession_is_not_enrolled(configured):
@@ -64,7 +65,7 @@ def test_detached_workflow_history_is_readable_but_cannot_execute(configured, su
     workflow = add_workflow(assignment)
     enroll(configured)
     supervisor_llm("PASS")
-    assert step(configured, report="First files checked", operation_key="before-unlink",
+    assert step(configured, report=report_json("First files checked"), operation_key="before-unlink",
                 expected_version=1).status_code == 200
     from sqlalchemy import delete
 
@@ -73,14 +74,14 @@ def test_detached_workflow_history_is_readable_but_cannot_execute(configured, su
     with SAUnitOfWork() as uow:
         uow.session.execute(delete(ProfessionWorkflow).where(ProfessionWorkflow.workflow_id == workflow))
     assert step(configured).status_code == 409
-    assert step(configured, report="Must not advance", operation_key="after-unlink",
+    assert step(configured, report=report_json("Must not advance"), operation_key="after-unlink",
                 expected_version=2).status_code == 409
     history = client.get("/internal/runtime/history", headers=MACHINE, params={
         "interaction_protocol": "configured-cli-v1", "task": assignment["task"],
         "namespace_id": assignment["namespace_id"],
     })
     assert history.status_code == 200, history.text
-    assert [row["worker_report"] for row in history.json()["result"]["records"]] == ["First files checked"]
+    assert [row["worker_report"] for row in history.json()["result"]["records"]] == [report_json("First files checked")]
 
 
 def test_custom_pm_terminal_requires_exact_owner_confirmation(configured, supervisor_llm, monkeypatch):
@@ -89,7 +90,7 @@ def test_custom_pm_terminal_requires_exact_owner_confirmation(configured, superv
     enroll(configured)
     supervisor_llm("PASS")
     for version in (1, 2):
-        assert step(configured, report="Files checked", operation_key=f"file-{version}",
+        assert step(configured, report=report_json("Files checked"), operation_key=f"file-{version}",
                     expected_version=version).status_code == 200
     assert step(configured).json()["result"]["report_parameters"] == [
         "--requirements-revision", "--requirements-sha256"]
@@ -98,7 +99,7 @@ def test_custom_pm_terminal_requires_exact_owner_confirmation(configured, superv
         raise ConflictError("No real owner confirmation")
 
     monkeypatch.setattr(configured_cli, "confirmation", absent)
-    final = {"report": "All files verified", "operation_key": "file-final", "expected_version": 3,
+    final = {"report": report_json("All files verified"), "operation_key": "file-final", "expected_version": 3,
              "requirements_revision": 4, "requirements_sha256": "a" * 64}
     assert step(configured, **final).status_code == 409
     assert step(configured).json()["result"]["version"] == 3
@@ -131,7 +132,9 @@ def test_membership_revoked_during_model_call_cannot_commit_progress(configured,
         return evaluate(*args, **kwargs)
 
     monkeypatch.setattr(OpenAICompatibleClient, "chat", revoke)
-    result = step(configured, report="Files checked", operation_key="revoked-during-model", expected_version=1)
+    result = step(
+        configured, report=report_json("Files checked"), operation_key="revoked-during-model", expected_version=1,
+    )
     assert result.status_code == 409, result.text
     history = client.get("/internal/runtime/history", headers=MACHINE, params={
         "interaction_protocol": "configured-cli-v1", "task": assignment["task"],
