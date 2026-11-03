@@ -184,8 +184,9 @@ def test_preparation_items_separate_agreement_consistency_owner_input_and_full_d
         "The requirements agree with the user request and decisions described in this report.",
         "The requirements document defines clear scope, unambiguous material rules and objectively testable "
         "acceptance criteria, without contradictions.",
-        "The source account contains the owner's current decision for every material business choice needed "
-        "for the requirements, with no such choice left unanswered or replaced by a PM assumption.",
+        "The source account provides the current owner decisions needed for the requested business scope. "
+        "Mark missing only for an identified unresolved business choice in that scope or absent source information, "
+        "not for a defect or extra assumption introduced in the requirements.",
         "The current report includes the entire saved requirements document, not a summary, "
         "inventory of sections or reference to an earlier report.",
     ]
@@ -202,10 +203,19 @@ def test_preparation_evidence_records_input_and_gaps_not_document_readiness(busi
     assert "agree with the user request and decisions" in phase["checks"][0]
     assert "The requirements document defines clear scope" in phase["checks"][1]
     assert "without contradictions" in phase["checks"][1]
-    assert "owner's current decision for every material business choice" in phase["checks"][2]
-    assert "no such choice left unanswered or replaced by a PM assumption" in phase["checks"][2]
+    assert "current owner decisions needed for the requested business scope" in phase["checks"][2]
+    assert "identified unresolved business choice in that scope or absent source information" in phase["checks"][2]
     assert "consisten" not in evidence.lower()
     assert "how any material clarification or feedback was resolved" in _instructions(phase)
+
+
+def test_preparation_source_account_completeness_is_distinct_from_document_quality(business):
+    """Static responsibilities only; no claim that a model follows this distinction."""
+    checks = business["modes"][0]["phases"][1]["checks"]
+    assert "not for a defect or extra assumption introduced in the requirements" in checks[2]
+    assert "The requirements agree with the user request and decisions" in checks[0]
+    assert "The requirements document defines clear scope" in checks[1]
+    assert "without contradictions" in checks[1]
 
 
 def test_preparation_document_content_is_required_in_report_not_as_file_or_special_heading(business):
