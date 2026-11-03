@@ -127,7 +127,7 @@
           "checks": [
             "The requirements agree with the user request and decisions described in this report.",
             "The requirements document defines clear scope, unambiguous material rules and objectively testable acceptance criteria, without contradictions.",
-            "The source account provides the current owner decisions needed for the requested business scope. Mark missing only for an identified unresolved business choice in that scope or absent source information, not for a defect or extra assumption introduced in the requirements.",
+            "The source account contains the owner's current decision for every material business choice needed for the requirements, with no such choice left unanswered or replaced by a PM assumption.",
             "The current report includes the entire saved requirements document, not a summary, inventory of sections or reference to an earlier report."
           ],
           "evidence": [
