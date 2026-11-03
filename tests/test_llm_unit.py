@@ -279,7 +279,8 @@ class TestPromptBuilder:
         )
         report = "I did it"
         prompt = PromptBuilder.build_user_prompt("RUN-1", phase, report)
-        assert "TASK: RUN-1" in prompt
+        assert "TASK:" not in prompt
+        assert "RUN-1" not in prompt
         assert "Phase One" in prompt
         assert report in prompt
 
@@ -293,11 +294,11 @@ class TestPromptBuilder:
             checks=[PhaseCheck(description="Check A")],
             evidence=[PhaseEvidence(item="Screenshot")],
         )
-        prompt = PromptBuilder.build_user_prompt("RUN-1", phase, "done", previously_covered=["A"])
-        assert "Run tests" in prompt
+        prompt = PromptBuilder.build_user_prompt("RUN-1", phase, "done", previously_covered=["1:check:1"])
+        assert "Run tests" not in prompt
         assert "Check A" in prompt
         assert "Screenshot" in prompt
-        assert "A" in prompt
+        assert "PRIOR COVERED IDS (revisable, not permanent): 1:check:1" in prompt
 
 
 class TestResponseParser:

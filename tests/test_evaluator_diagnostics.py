@@ -30,7 +30,8 @@ def test_saved_diagnostic_is_read_only_and_does_not_repair_partial(supervisor_ll
         diagnostic = history_diagnostic(entry.worker_report, entry.evaluation_snapshot)
     assert diagnostic["availability"] == "captured"
     assert diagnostic["prompt_version"] == PromptBuilder.PROMPT_VERSION
-    assert diagnostic["user"]["text"].endswith("Evaluate this report and return strict JSON.")
+    assert diagnostic["user"]["text"].endswith('WORKER REPORT:\n"""Prepared document; not yet confirmed"""')
+    assert "RUN-940" not in diagnostic["user"]["text"]
     assert diagnostic["decision"]["verdict"] == result["verdict"] == "PARTIAL"
     assert any(item["classification"] == "missing" for item in diagnostic["criteria"])
     assert diagnostic["attempts"][0]["error"] is None
@@ -207,8 +208,8 @@ def test_invalid_annotations_are_flagged_without_changing_business_decision(expl
     assert len(diagnostic["criteria"]) == 1
 
 
-def test_diagnostics_preserve_baseline_prompt_without_requesting_new_explanations():
-    assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v12"
+def test_diagnostics_use_universal_prompt_without_requesting_new_explanations():
+    assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v13"
     assert "item_explanations" not in PromptBuilder.SYSTEM_PROMPT
     assert set(ResponseParser.parse({
         "verdict": "PARTIAL", "covered": [], "missing": ["1"], "blockers": [],

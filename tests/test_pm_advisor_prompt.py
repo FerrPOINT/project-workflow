@@ -1,8 +1,7 @@
-"""Opt-in PM prompts preserve the generic evaluator and strict response contract."""
+"""Legacy PM entry points use the universal prompt and unchanged wire contract."""
 
 import json
 import re
-from hashlib import sha256
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -30,64 +29,25 @@ def _phase(delegate=False):
     )
 
 
-@pytest.mark.parametrize(
-    "delegate,explicit,digest",
-    [
-        (False, False, "5af0039ae4d47d80fc1e292dbfce60e6f22be840747000d45611d9da1d9cbf9f"),
-        (False, True, "15462f85343f581d165694e7e47a5e46cac8341ca40a183d8ae5b12c8f77a7a1"),
-        (True, False, "97256ad51bc6fb3a91328c95c943d251a9af9f063db3690cb4ee7b85fbe953a8"),
-        (True, True, "3e5ecfa04499a77b48da4607c267e36c4f671f6ffbf3b97a3e934ff13fdb6381"),
-    ],
-)
-def test_generic_output_matches_baseline_bytes(delegate, explicit, digest):
+@pytest.mark.parametrize("delegate", [False, True])
+@pytest.mark.parametrize("explicit", [False, True])
+def test_legacy_pm_flag_does_not_select_a_policy(delegate, explicit):
     args = ("CASE-1", _phase(delegate), "Current report\nFULL document", ["check:1"], ITEMS if explicit else None)
     default = PromptBuilder.build_user_prompt(*args)
-    assert sha256(default.encode()).hexdigest() == digest
     assert PromptBuilder.build_user_prompt(*args, pm_evaluation=False) == default
-    assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v12"
-    assert sha256(PromptBuilder.SYSTEM_PROMPT.encode()).hexdigest() == (
-        "6ce207784c01f42fa4a08030f9f7dd0d98776d926f4c464025fe0ad15e26b058"
-    )
+    assert PromptBuilder.build_user_prompt(*args, pm_evaluation=True) == default
+    assert PromptBuilder.PM_PROMPT_VERSION == PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v13"
 
 
-def test_pm_system_is_short_and_has_the_same_six_field_schema():
+def test_pm_system_alias_has_the_same_six_field_schema():
     prompt = PromptBuilder.PM_SYSTEM_PROMPT
-    assert PromptBuilder.PM_PROMPT_VERSION == "supervisor-evaluator-pm-v4"
-    assert len(prompt) < len(PromptBuilder.SYSTEM_PROMPT) / 2
+    assert prompt is PromptBuilder.SYSTEM_PROMPT
     assert re.findall(r'^\s*"([a-z_]+)":', prompt, re.MULTILINE) == [
         "verdict", "covered", "missing", "blockers", "message", "confidence",
     ]
-    for rule in (
-        "only its listed criteria",
-        "FULL requirements",
-        "Do not invent owner decisions",
-        "Identity, access and saved owner consent are enforced by the server",
-        "Do not require technical dumps, independent authorship attestation",
-        "unresolved business questions and contradictory current business rules",
-        "a reference to an earlier report is not FULL content",
-        "Classify each listed ID exactly once",
-        "PASS: all covered, no blockers",
-        "including obtaining an owner decision",
-        "BLOCKED: a reported obstacle prevents carrying out phase work, not merely its incompleteness",
-        "DELEGATE: only if allowed",
-    ):
-        assert rule in prompt
     assert "hash" not in prompt.lower()
     assert "revision" not in prompt.lower()
     assert "receipt" not in prompt.lower()
-
-
-def test_v4_changes_only_the_partial_blocked_boundary():
-    previous = PromptBuilder.PM_SYSTEM_PROMPT.replace(
-        "PARTIAL: unfinished work within this phase, including obtaining an owner decision, "
-        "with no obstacle to carrying out that work. "
-        "BLOCKED: a reported obstacle prevents carrying out phase work, not merely its incompleteness. ",
-        "PARTIAL: specific missing work repairable in this phase, no blockers. "
-        "BLOCKED: a concrete cause prevents progress. ",
-    )
-    assert sha256(previous.encode()).hexdigest() == (
-        "8800c27e1805fef63646249908d234b87fdb0f9656b1180a780f701fdc263dd5"
-    )
 
 
 @pytest.mark.parametrize("delegate", [False, True])
@@ -98,22 +58,18 @@ def test_pm_contains_only_phase_criteria_and_complete_business_report(delegate):
     args = ("CASE-1", phase, report, ["check:1"], semantic_items)
     generic = PromptBuilder.build_user_prompt(*args)
     pm = PromptBuilder.build_user_prompt(*args, pm_evaluation=True)
-    instruction_block = "Instructions:\n  \u2022 Read owner answers\n  \u2022 Submit and inspect result\n"
-    assert generic.count(instruction_block) == 1
-    assert len(pm) < len(generic)
+    assert pm == generic
     assert pm.endswith('WORKER REPORT:\n"""' + report + '"""')
     for item_id, description in semantic_items:
         assert f'ID: "{item_id}" \u2014 {description}' in pm
-    assert "ALREADY COMPLETED IDS: check:1" in pm
+    assert "PRIOR COVERED IDS (revisable, not permanent): check:1" in pm
     for unwanted in ("TASK:", "Instructions:", "CASE-1", "hash", "revision", "receipt", "PM_REF", "SUM", "MUST equal"):
         assert unwanted not in pm
     allowed = "ALLOWED VERDICTS: PASS, PARTIAL, BLOCKED" + (", DELEGATE" if delegate else "")
     assert allowed in pm.splitlines()
 
 
-def test_pm_requires_explicit_items_without_legacy_fallback():
-    with pytest.raises(ValueError, match="requires explicit evaluation_items"):
-        PromptBuilder.build_user_prompt("CASE-1", _phase(), "report", pm_evaluation=True)
+def test_pm_explicit_empty_items_do_not_fall_back_to_phase_contents():
     prompt = PromptBuilder.build_user_prompt("CASE-1", _phase(), "report", evaluation_items=[], pm_evaluation=True)
     assert "REQUIRED CRITERIA:" in prompt
     assert "Saved FULL document" not in prompt

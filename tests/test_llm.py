@@ -179,18 +179,20 @@ class TestOpenAICompatibleClient:
 class TestPromptBuilder:
     """Unit tests for prompt assembly."""
 
-    def test_build_user_prompt_includes_task_and_phase(self):
+    def test_build_user_prompt_includes_phase_without_task_metadata(self):
         phase = FakePhase(code="1", name="Preflight", instructions=["Check git"])
         prompt = PromptBuilder.build_user_prompt("RUN-1", phase, "report text")
-        assert "TASK: RUN-1" in prompt
+        assert "TASK:" not in prompt
+        assert "RUN-1" not in prompt
         assert "CURRENT PHASE: 1 — Preflight" in prompt
         assert "report text" in prompt
 
-    def test_build_user_prompt_includes_instructions(self):
+    def test_build_user_prompt_excludes_worker_instructions(self):
         phase = FakePhase(instructions=[FakeInstruction("Step one"), FakeInstruction("Step two")])
         prompt = PromptBuilder.build_user_prompt("T-1", phase, "r")
-        assert "Step one" in prompt
-        assert "Step two" in prompt
+        assert "Step one" not in prompt
+        assert "Step two" not in prompt
+        assert "Instructions:" not in prompt
 
     def test_build_user_prompt_includes_checks_and_evidence(self):
         phase = FakePhase(
@@ -202,10 +204,10 @@ class TestPromptBuilder:
         assert "Screenshot" in prompt
 
     def test_build_user_prompt_with_previously_covered(self):
-        phase = FakePhase(instructions=[FakeInstruction("Run tests")])
-        prompt = PromptBuilder.build_user_prompt("T-1", phase, "r", previously_covered=["Run tests"])
-        assert "ALREADY COMPLETED" in prompt
-        assert "Run tests" in prompt
+        phase = FakePhase(checks=[FakeCheck("Run tests")])
+        prompt = PromptBuilder.build_user_prompt("T-1", phase, "r", previously_covered=["1:check:1"])
+        assert "PRIOR COVERED IDS (revisable, not permanent): 1:check:1" in prompt
+        assert "keep them in covered" not in prompt
 
     def test_build_user_prompt_marks_ids_without_decorative_brackets(self):
         phase = FakePhase()
@@ -218,14 +220,15 @@ class TestPromptBuilder:
 
         assert 'ID: "-1:check:1"' in prompt
         assert "[-1:check:1]" not in prompt
-        assert "REQUIRED ITEM COUNT: 1" in prompt
-        assert "len(covered) + len(missing) MUST equal 1" in prompt
+        assert "REQUIRED CRITERIA:" in prompt
+        assert "REQUIRED ITEM COUNT" not in prompt
+        assert "len(covered)" not in prompt
 
     def test_system_prompt_is_not_empty(self):
-        assert "strict workflow supervisor" in PromptBuilder.SYSTEM_PROMPT
+        assert "Assess whether this phase is ready" in PromptBuilder.SYSTEM_PROMPT
         assert "verdict" in PromptBuilder.SYSTEM_PROMPT
         assert "covered" in PromptBuilder.SYSTEM_PROMPT
-        assert "do not add brackets" in PromptBuilder.SYSTEM_PROMPT
+        assert "Classify each listed ID exactly once" in PromptBuilder.SYSTEM_PROMPT
         assert "missing" in PromptBuilder.SYSTEM_PROMPT
 
 
@@ -390,19 +393,17 @@ class TestSupervisorEngineEvaluateLLM:
         assert run["verdict"] == "blocked"
         assert run["replay_fingerprint"] is None
 
-    def test_evaluate_llm_uses_previously_covered(self, engine, supervisor_llm):
-        """LLM prompt includes previously covered items."""
+    def test_evaluate_llm_sends_compact_prompt(self, engine, supervisor_llm):
+        """The provider receives phase criteria and the report, not task metadata."""
         supervisor_llm("PASS")
         fixture_chat = OpenAICompatibleClient.chat
         with patch("project_workflow.supervisor.evaluate.OpenAICompatibleClient.chat") as mock_chat:
             mock_chat.side_effect = fixture_chat
             engine.evaluate_llm("Report", engine._get_current_phase_obj())
             _, kwargs = mock_chat.call_args
-            # The prompt builder does NOT include previously covered items
-            # unless they were passed as previously_covered param.
-            # Here we just verify the prompt was built and sent.
             assert "Report" in kwargs["user"]
-            assert "RUN-1001" in kwargs["user"]
+            assert "REQUIRED CRITERIA:" in kwargs["user"]
+            assert "RUN-1001" not in kwargs["user"]
 
 
 class TestSupervisorEngineMandatoryLLM:
@@ -478,7 +479,7 @@ class TestPromptBuilderEdgeCases:
     def test_empty_phase_contract(self):
         phase = FakePhase(code="99", name="Empty", instructions=[], checks=[], evidence=[])
         prompt = PromptBuilder.build_user_prompt("T-99", phase, "done")
-        assert "T-99" in prompt
+        assert "T-99" not in prompt
         assert "99 — Empty" in prompt
         assert "done" in prompt
 
@@ -491,14 +492,14 @@ class TestPromptBuilderEdgeCases:
     def test_previously_covered_empty_list_omitted(self):
         phase = FakePhase(instructions=[FakeInstruction("Step 1")])
         prompt = PromptBuilder.build_user_prompt("T-1", phase, "r", previously_covered=[])
-        assert "ALREADY COMPLETED" not in prompt
+        assert "PRIOR COVERED IDS" not in prompt
 
     def test_multiple_evidence_items(self):
         phase = FakePhase(evidence=[FakeEvidence("A"), FakeEvidence("B"), FakeEvidence("C")])
         prompt = PromptBuilder.build_user_prompt("T-1", phase, "r")
-        assert "  • A" in prompt
-        assert "  • B" in prompt
-        assert "  • C" in prompt
+        assert 'ID: "1:evidence:1" — A' in prompt
+        assert 'ID: "1:evidence:2" — B' in prompt
+        assert 'ID: "1:evidence:3" — C' in prompt
 
 
 class TestSupervisorEngineLLMIntegrationDB:
@@ -589,11 +590,11 @@ class TestOpenAICompatibleClientOverrides:
         assert client.timeout == 300
 
 
-class TestEvaluatorV12PromptContract:
-    """The live provider receives explicit contradiction and chronology rules."""
+class TestEvaluatorV13PromptContract:
+    """The controlled provider receives the universal criteria-only contract."""
 
     def test_prompt_version_invalidates_the_old_evidence_policy(self):
-        assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v12"
+        assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v13"
 
     def test_report_106_submission_circularity_reaches_provider_with_explicit_protocol_boundary(self):
         """Reproduce the saved PARTIAL reason, not a real model's semantic acceptance."""
@@ -614,10 +615,10 @@ class TestEvaluatorV12PromptContract:
         )
         prompt = PromptBuilder.build_user_prompt("SYNTHETIC-PM", phase, report, evaluation_items=items)
         assert len(items) == 7 and prompt.count('  ID: "') == len(items)
-        assert all(item.step in prompt for item in phase.instructions)
-        assert "send ONE self-contained final report using project-workflow --json step" in prompt
-        assert "Inspect the result" in prompt
-        assert "without its own future terminal receipt, verdict or Backlog transition" in prompt
+        assert all(item.step not in prompt for item in phase.instructions)
+        assert "send ONE self-contained final report using project-workflow --json step" not in prompt
+        assert "Inspect the result" not in prompt
+        assert all(description in prompt for _, description in items)
         assert f'WORKER REPORT:\n"""{report}"""' in prompt
         missing = [ids[0], ids[4]]
         raw = {
@@ -643,15 +644,12 @@ class TestEvaluatorV12PromptContract:
     def test_protocol_boundary_preserves_required_business_work_and_evidence(self):
         system = PromptBuilder.SYSTEM_PROMPT
         for rule in (
-            "The report currently being evaluated has already been submitted to this supervisor",
-            "readback are submission protocol, not work or evidence that can precede this verdict",
-            "Evaluate the stated checks and evidence from present facts",
-            "instructions must not add this circular prerequisite",
-            "This exception applies only to the current report's own submission protocol",
-            "Still require the phase's actual business commands/results, required external readbacks, FULL content",
-            "and matching saved owner confirmation; never infer PASS merely because a report exists",
-            "A summary cannot replace required FULL content",
-            "absent or mismatched owner confirmation remains missing evidence",
+            "using only its listed criteria and supplied facts",
+            "this report's own acceptance as prerequisites",
+            "covered requires the entire criterion",
+            "Reject missing required content",
+            "When FULL content is required, a summary or reference alone cannot supply it",
+            "Server-enforced identity, access and approvals are not yours to certify",
         ):
             assert rule in system
 
@@ -683,21 +681,19 @@ class TestEvaluatorV12PromptContract:
             evaluation_items=[("PM-DRAFT-01:evidence:143", evidence)],
         )
 
-        assert instruction in prompt
+        assert instruction not in prompt
         assert evidence in prompt
         assert f'WORKER REPORT:\n"""{report}"""' in prompt
         assert 'ID: "PM-DRAFT-01:evidence:143"' in prompt
         system = PromptBuilder.SYSTEM_PROMPT
-        assert "The phase contract defines the required evidence format and sufficiency" in system
-        assert "When it accepts copied command readbacks and identity comparisons as sufficient" in system
-        assert "do not require an additional command transcript, execution attestation" in system
-        assert "unless the contract explicitly requires it" in system
+        assert "using only its listed criteria and supplied facts" in system
+        assert "Do not add independent attestation" in system
 
     def test_readback_sufficiency_does_not_excuse_missing_or_mismatched_evidence(self):
         prompt = PromptBuilder.SYSTEM_PROMPT
-        assert "does not excuse absent required readbacks, failed commands, mismatched identities" in prompt
-        assert "or contradictory results" in prompt
-        assert "Use only the stated phase obligations" in prompt
+        assert "Reject missing required content" in prompt
+        assert "contradictory current facts" in prompt
+        assert "covered requires the entire criterion" in prompt
 
     def test_reported_full_presentation_and_matching_owner_consent_reach_the_evaluator(self):
         instruction = (
@@ -735,29 +731,25 @@ class TestEvaluatorV12PromptContract:
             evaluation_items=[("PM-DRAFT-03:check:217", check), ("PM-DRAFT-03:evidence:1", evidence)],
         )
 
-        assert instruction in prompt
+        assert instruction not in prompt
         assert check in prompt
         assert evidence in prompt
         assert f'WORKER REPORT:\n"""{report}"""' in prompt
         assert saved_document in prompt
         system = PromptBuilder.SYSTEM_PROMPT
-        assert "when the contract does not require an independent presentation receipt or transcript" in system
-        assert "FULL saved document, matching saved confirmation from the authorized owner" in system
-        assert "concrete account of the actual presentation can be sufficient evidence" in system
-        assert "Do not demand an extra attestation or the earlier message itself" in system
-        assert "An intention to present is not a completed presentation" in system
-        assert "A summary cannot replace required FULL content" in system
-        assert "absent or mismatched owner confirmation remains missing evidence" in system
+        assert "using only its listed criteria and supplied facts" in system
+        assert "Do not add independent attestation" in system
+        assert "When FULL content is required, a summary or reference alone cannot supply it" in system
+        assert "covered requires the entire criterion" in system
 
     def test_contradictory_current_facts_prohibit_pass(self):
         prompt = PromptBuilder.SYSTEM_PROMPT
 
-        assert "Mutually exclusive CURRENT facts" in prompt
-        assert "prohibit PASS" in prompt
-        assert "return PARTIAL" in prompt
-        assert "return BLOCKED" in prompt
-        assert "outside the current phase" in prompt
-        assert "explain the required work" in prompt
+        assert (
+            "Reject missing required content, unresolved required decisions and contradictory current facts" in prompt
+        )
+        assert "PARTIAL: unfinished phase work with no obstacle to carrying it out" in prompt
+        assert "BLOCKED: a reported obstacle prevents carrying out phase work" in prompt
 
     def test_build_user_prompt_does_not_expose_retired_target(self):
         phase = FakePhase(rollback_target_phase_code="8.IMPLEMENT")
@@ -769,34 +761,38 @@ class TestEvaluatorV12PromptContract:
         assert "ROLLBACK" not in prompt
         assert "verdict = ROLLBACK" not in PromptBuilder.SYSTEM_PROMPT
 
-    def test_evidence_placement_is_defined_by_the_contract(self):
+    def test_no_extra_artifact_or_placement_obligations_are_added(self):
         prompt = PromptBuilder.SYSTEM_PROMPT
-        assert "worker report does not have to be copied into SUMMARY.md" in prompt
-        assert "unless the contract explicitly requires it there" in prompt
+        assert "using only its listed criteria and supplied facts" in prompt
+        assert "SUMMARY.md" not in prompt
 
-    def test_equivalent_encoding_flag_does_not_change_the_required_tests(self):
-        prompt = PromptBuilder.SYSTEM_PROMPT
-        assert "unless exact invocation is itself an explicit contract obligation" in prompt
-        assert "python -B -X utf8 -m unittest -v test_calculator.py" in prompt
-        assert "Still require actual execution and its result" in prompt
-        assert "not equivalent success" in prompt
+    def test_command_obligations_are_supplied_as_criteria_not_system_examples(self):
+        criterion = "Execute the required tests and report their actual result."
+        prompt = PromptBuilder.build_user_prompt(
+            "T-1", FakePhase(), "python -B -X utf8 -m unittest: all passed",
+            evaluation_items=[("test-result", criterion)],
+        )
+        assert criterion in prompt
+        assert "python -B -X utf8 -m unittest: all passed" in prompt
+        assert "test_calculator.py" not in PromptBuilder.SYSTEM_PROMPT
+        assert "covered requires the entire criterion" in PromptBuilder.SYSTEM_PROMPT
 
     def test_coverage_requires_the_whole_evidence_item_and_a_consistent_message(self):
         prompt = PromptBuilder.SYSTEM_PROMPT
-        assert "ENTIRE item is supported by actual evidence" in prompt
-        assert "any required part is absent" in prompt
-        assert "never describe evidence as absent while marking its required item covered" in prompt
+        assert "covered requires the entire criterion" in prompt
+        assert "Keep all fields consistent" in prompt
 
-    def test_chronological_state_change_requires_timestamped_action_evidence(self):
+    def test_explicit_later_changes_are_respected_without_extra_timestamp_rules(self):
         prompt = PromptBuilder.SYSTEM_PROMPT
 
-        assert "first open, then merged" in prompt
-        assert "timestamps and action evidence" in prompt
+        assert "respect explicit later changes" in prompt
+        assert "Do not invent facts" in prompt
+        assert "first open, then merged" not in prompt
 
     def test_normal_complete_report_contract_still_allows_pass(self):
-        assert "verdict = PASS" in PromptBuilder.SYSTEM_PROMPT
-        assert "all items done, no blockers, no regressions" in PromptBuilder.SYSTEM_PROMPT
+        assert "PASS: all covered, no blockers" in PromptBuilder.SYSTEM_PROMPT
+        assert "covered requires the entire criterion" in PromptBuilder.SYSTEM_PROMPT
 
     def test_output_must_be_bare_json_without_markdown_fences(self):
         assert "one bare JSON object" in PromptBuilder.SYSTEM_PROMPT
-        assert "Never wrap it in Markdown or code fences" in PromptBuilder.SYSTEM_PROMPT
+        assert "with only these fields" in PromptBuilder.SYSTEM_PROMPT
