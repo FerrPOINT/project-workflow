@@ -1,7 +1,7 @@
 {
   "instruction_overlay": {
     "path": "project_workflow/infrastructure/single_task_delivery_instructions.py",
-    "sha256": "fc5a2db53ac0da72e6ea10da800865268560b1a759561038a2cbe6745a179d21"
+    "sha256": "be48d7f9b7242929d4d27f1dd4ea3197e70c3ad38526fef1fbc591d969c43ab9"
   },
   "instruction_profile": "single-task-v1",
   "instruction_source": {
@@ -13,7 +13,7 @@
     },
     "path": "project_workflow/infrastructure/single_task_catalog.py",
     "repository": "https://github.com/FerrPOINT/project-workflow.git",
-    "sha256": "e11f970ba34111aee13ed81f2d7f73da619f2b7cb0a75f3023ee7b2271ded90a"
+    "sha256": "140275878054d126fbc6bb44c2c7b0259832a273801edec24356826443132d6c"
   },
   "inventory": {
     "modes": 8,
@@ -35,7 +35,7 @@
       "namespace_cli_command": "workflow-single-task-analyst",
       "namespace_name": "single-task-analyst",
       "profile": "single-task-v1-analyst",
-      "role_instructions_sha256": "906a9d762df9a43231289060c92f5e1fd2d27e9794eec6e4c169070d7233d1f2",
+      "role_instructions_sha256": "6674e9fbdff8b2a3a5d186096d95dab5c54f8fa3298c9ddf9f6e080dddc7b9d8",
       "workflow_key": "single-task-v1:analyst"
     },
     "architect": {
@@ -90,7 +90,7 @@
       "namespace_cli_command": "workflow-single-task-project-manager",
       "namespace_name": "single-task-project-manager",
       "profile": "single-task-v1-project-manager",
-      "role_instructions_sha256": "477de89a3518fdad8d37914667d479ec5d254b54734540dcb3ad52a4a58f7d79",
+      "role_instructions_sha256": "59562ad9038399d4070506b9981f30ba40f86ca5edb288be63bf1b79377ab7dd",
       "workflow_key": "single-task-v1:project_manager"
     },
     "reviewer": {
@@ -129,7 +129,7 @@
   "workflow_catalog": {
     "artifact": "project_workflow/references/single_task_catalog_v1.json",
     "hash_encoding": "utf-8-lf-no-bom-with-final-newline",
-    "sha256": "7bc022089b08b246fbb04fb03fa374940cc4a6c0a023bc1e310e260e4f04f67e",
+    "sha256": "233528769c0d64d7397734cd4c8ba17cf9e2306b41328eb7ddbcc93250c0f2a8",
     "version": 1
   }
 }

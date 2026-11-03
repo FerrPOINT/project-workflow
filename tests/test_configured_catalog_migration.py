@@ -7,14 +7,21 @@ from project_workflow.infrastructure.db import single_task_catalog as catalog
 from project_workflow.infrastructure.db.session import ensure_migrated, run_alembic_command
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
-PREVIOUS = "1535516545520eb5ea489cf1583cfaebc458e5729a94762751515841078671c3"
+
+@pytest.fixture(params=[
+    ("0019_pm_terminal_resume_retry", "1535516545520eb5ea489cf1583cfaebc458e5729a94762751515841078671c3"),
+    ("0023_catalog_publication_author", "e0cde0c044fe1a38b6fa0f387cc30e0da6e89dedb35b89a893263fd7d2558a40"),
+])
+def predecessor(request):
+    return request.param
 
 
-def test_populated_catalog_upgrade_preserves_task_phase_and_report_history(tmp_path, monkeypatch):
+def test_populated_catalog_upgrade_preserves_task_phase_and_report_history(tmp_path, monkeypatch, predecessor):
     engine = sa.create_engine(f"sqlite:///{tmp_path / 'populated.db'}")
     try:
-        run_alembic_command("upgrade", engine, "0019_pm_terminal_resume_retry")
-        old = catalog.load_profile(PREVIOUS)
+        revision, previous = predecessor
+        run_alembic_command("upgrade", engine, revision)
+        old = catalog.load_profile(previous)
         with monkeypatch.context() as patch:
             patch.setattr(catalog, "load_profile", lambda *_args: old)
             with SAUnitOfWork(engine) as uow:
@@ -54,23 +61,23 @@ def test_populated_catalog_upgrade_preserves_task_phase_and_report_history(tmp_p
         ensure_migrated(engine)
         ensure_migrated(engine)
         with SAUnitOfWork(engine) as uow:
-            assert catalog.observe_installation(uow).instruction_manifest_sha256 != PREVIOUS
+            assert catalog.observe_installation(uow).instruction_manifest_sha256 == catalog.MANIFEST_SHA256
         with engine.connect() as connection:
             for name, rows in before.items():
                 assert connection.execute(sa.text(f"SELECT * FROM {name}")).mappings().all() == rows
             assert connection.execute(sa.text("SELECT id,code,mode_id FROM phases ORDER BY id")).all() == phases
             assert (
-                "0023_catalog_publication_author"
+                "0024_analyst_research_catalog"
                 == connection.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
             )
     finally:
         engine.dispose()
 
 
-def test_empty_predecessor_receives_current_catalog_after_upgrade(tmp_path):
+def test_empty_predecessor_receives_current_catalog_after_upgrade(tmp_path, predecessor):
     engine = sa.create_engine(f"sqlite:///{tmp_path / 'fresh.db'}")
     try:
-        run_alembic_command("upgrade", engine, "0019_pm_terminal_resume_retry")
+        run_alembic_command("upgrade", engine, predecessor[0])
         ensure_migrated(engine)
         with SAUnitOfWork(engine) as uow:
             assert catalog.ensure_single_task_catalog(uow).modes == 8
@@ -79,11 +86,12 @@ def test_empty_predecessor_receives_current_catalog_after_upgrade(tmp_path):
 
 
 @pytest.mark.parametrize("drift", ["instruction", "missing_profession", "phase_check"])
-def test_upgrade_refuses_customized_catalog_without_changing_data_or_ledger(tmp_path, monkeypatch, drift):
+def test_upgrade_refuses_customized_catalog_without_changing_data_or_ledger(tmp_path, monkeypatch, drift, predecessor):
     engine = sa.create_engine(f"sqlite:///{tmp_path / 'customized.db'}")
     try:
-        run_alembic_command("upgrade", engine, "0019_pm_terminal_resume_retry")
-        old = catalog.load_profile(PREVIOUS)
+        revision, previous = predecessor
+        run_alembic_command("upgrade", engine, revision)
+        old = catalog.load_profile(previous)
         with monkeypatch.context() as patch:
             patch.setattr(catalog, "load_profile", lambda *_args: old)
             with SAUnitOfWork(engine) as uow:

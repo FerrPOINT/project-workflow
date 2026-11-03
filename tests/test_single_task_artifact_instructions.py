@@ -118,15 +118,15 @@ def test_pm_selected_review_and_exact_owner_consent_precede_handoff(generated):
     assert "task-tracker attachment download" not in ordinary
     for required in ("NEW human owner confirmation", "critical_review.blocker_id",
                      "original technical assignment/execution/role", "No native checkpoint",
-                     "Backlog / Ready atomically"):
+                     "Analysis / Ready atomically"):
         assert required in text
     final = phase_text(phases[-1])
     assert "human owner's confirmation" in final and "exact task/revision/hash/owner in Draft" in final
     assert "future final comment" in final and "--report - --requirements-revision" in final
     after = instructions.completion_instruction("project_manager")
     assert after.index("discussion publish") < after.index("pm completion submit")
-    assert "server-to-server" in after and "Stop at Backlog / Ready" in after
-    assert "do not create Analysis intent" in after and "native/lease fields" in after
+    assert "server-to-server" in after and "the system owns Analysis intent and dispatch" in after
+    assert "queues Analysis atomically" in after and "native/lease fields" in after
 
 
 def test_generator_keeps_single_task_inventory_architecture_rework_and_devops_boundaries(generated):

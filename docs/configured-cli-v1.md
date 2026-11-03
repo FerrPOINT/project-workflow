@@ -10,8 +10,10 @@ facts or material contradictions use the existing critical business review.
 
 The Analyst allowlist additionally permits wiki-operator and forge-operator from
 the reviewed Base package. The identity donor and its historical catalog are not
-rewritten. Text publication uses the existing managed catalog revision/activation
-flow between runs, with old revisions retained. Other professions keep their modes
+rewritten. Migration `0024_analyst_research_catalog` upgrades an exact sealed native
+catalog and keeps task IDs, phase IDs, reports and previous profile artifacts.
+Partial or customized catalogs fail transactionally instead of being overwritten.
+Published migrations remain unchanged. Other professions keep their modes
 and allowlists. PM instructions verify the immutable Backlog/Ready completion while
 allowing fresh Tracker context to show the automatically queued Analysis.
 

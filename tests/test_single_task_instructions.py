@@ -68,7 +68,7 @@ def test_phase_evaluation_requires_current_work_while_completion_commands_are_po
     assert "discussion publish" in after and "Editing or deleting" in after
     if role == "project_manager":
         assert "pm completion submit" in after and "Backlog / Ready" in after
-        assert "do not create Analysis intent" in after
+        assert "the system owns Analysis intent and dispatch" in after
     else:
         assert "sdlc result propose" in after and "delivery-result:<assignment_id>" in after
         assert after.index("discussion publish") < after.index("sdlc result propose")
@@ -146,7 +146,7 @@ def test_pm_business_review_uses_selected_context_and_the_same_completion_path(c
                      "<critical_review.blocker_id>", "permanently configured service identity",
                      "original technical assignment/execution/role", "NEW human owner confirmation",
                      "No native checkpoint, bind, token file or execution lease",
-                     "Backlog / Ready atomically", "PM does not dispatch Analyst"):
+                     "Analysis / Ready atomically", "the system dispatches Analyst"):
         assert required in first
     for obsolete in ("live PM lease", "current own-task PM grant", "null/null checkpoints",
                      "typed checkpoint/feedback"):
