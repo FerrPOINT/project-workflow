@@ -16,7 +16,8 @@ def format_result(result: dict) -> str:
     """
     verdict = str(result.get("verdict", "UNKNOWN")).upper()
     covered = result.get("covered", []) or []
-    covered_set = {str(i) for i in covered}
+    # Distinct items can share text; explicit missing wins for display.
+    covered_set = {str(i) for i in covered} - {str(i) for i in (result.get("missing") or [])}
     is_pass = verdict == "PASS"
 
     if is_pass:
