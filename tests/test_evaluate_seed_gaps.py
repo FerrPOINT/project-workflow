@@ -16,6 +16,7 @@ from project_workflow.infrastructure.llm import LlmConfigurationError
 from project_workflow.supervisor.contracts import PhaseContractBuilder
 from project_workflow.supervisor.evaluate import evaluate_llm_report
 from project_workflow.supervisor.models import Phase
+from tests._report_helpers import report_json
 
 
 def _phase(**overrides) -> Phase:
@@ -93,7 +94,7 @@ class TestEvaluateGaps:
         engine = self._engine()
         ph = _phase()
         self._set_phases(engine, ph)
-        result = evaluate_llm_report("bad", ph, engine)
+        result = evaluate_llm_report(report_json("bad"), ph, engine)
         assert result["verdict"] == "BLOCKED"
         assert result["blockers"] == ["blocked"]
 
@@ -108,7 +109,7 @@ class TestEvaluateGaps:
         rollback_phase = _phase(id=2, code="0", name="Previous")
         self._set_phases(engine, ph, rollback_phase)
         engine._resolve_transition.return_value = (None, None, "0")
-        result = evaluate_llm_report("rollback", ph, engine)
+        result = evaluate_llm_report(report_json("rollback"), ph, engine)
         assert result["verdict"] == "BLOCKED"
         assert result["retryable"] is True
         assert result["rollback_phase_code"] is None
@@ -124,7 +125,7 @@ class TestEvaluateGaps:
         next_ph = _phase(id=5, code="2", name="Next")
         self._set_phases(engine, ph, next_ph)
         engine._resolve_transition.return_value = ("2", "Next", None)
-        result = evaluate_llm_report("ok", ph, engine)
+        result = evaluate_llm_report(report_json("ok"), ph, engine)
         assert result["next_phase_code"] == "2"
 
     @pytest.mark.parametrize(
@@ -145,7 +146,7 @@ class TestEvaluateGaps:
         engine = self._engine()
         phase = _phase()
         self._set_phases(engine, phase)
-        result = evaluate_llm_report("report", phase, engine)
+        result = evaluate_llm_report(report_json("report"), phase, engine)
         assert result["verdict"] == "BLOCKED"
         assert result["retryable"] is True
         assert result["next_phase_code"] is None
@@ -163,7 +164,7 @@ class TestEvaluateGaps:
         engine = self._engine()
         phase = _phase()
         self._set_phases(engine, phase)
-        result = evaluate_llm_report("report", phase, engine)
+        result = evaluate_llm_report(report_json("report"), phase, engine)
         assert result["verdict"] == "BLOCKED"
         assert result["retryable"] is True
         assert result["next_phase_code"] is None
@@ -181,10 +182,10 @@ class TestEvaluateGaps:
         engine.db.workflows.lock.side_effect = [None] if point == "before" else [object(), None]
         if point == "before":
             with pytest.raises(ConcurrentTransitionError):
-                evaluate_llm_report("report", phase, engine)
+                evaluate_llm_report(report_json("report"), phase, engine)
             mock_client.assert_not_called()
         else:
-            result = evaluate_llm_report("report", phase, engine)
+            result = evaluate_llm_report(report_json("report"), phase, engine)
             assert result["verdict"] == "BLOCKED"
             assert result["retryable"] is True
             engine.db.rollback.assert_called_once()
@@ -208,7 +209,7 @@ class TestEvaluateGaps:
             return {}
 
         mock_client.return_value.chat.side_effect = delete_phase
-        result = evaluate_llm_report("report", phase, engine)
+        result = evaluate_llm_report(report_json("report"), phase, engine)
         assert result["verdict"] == "BLOCKED"
         engine.db.record_step.assert_not_called()
         engine._record_evaluation.assert_not_called()
@@ -227,9 +228,9 @@ class TestEvaluateGaps:
             engine.phase_map = {}
         if state == "phase-unsaved":
             with pytest.raises(ValueError, match="не сохранена"):
-                evaluate_llm_report("report", phase, engine)
+                evaluate_llm_report(report_json("report"), phase, engine)
         else:
-            result = evaluate_llm_report("report", phase, engine)
+            result = evaluate_llm_report(report_json("report"), phase, engine)
             assert result["verdict"] == "BLOCKED"
             engine.db.rollback.assert_called_once()
         mock_client.assert_not_called()
@@ -247,7 +248,7 @@ class TestEvaluateGaps:
             "injected history uniqueness race", {}, Exception("conflict")
         )
         with pytest.raises(IntegrityError):
-            evaluate_llm_report("report", phase, engine)
+            evaluate_llm_report(report_json("report"), phase, engine)
         engine.db.rollback.assert_called_once()
         engine._record_evaluation.assert_not_called()
 
@@ -277,7 +278,7 @@ class TestEvaluateGaps:
 
         mock_client.return_value.chat.side_effect = peer_completes
         engine._refresh_task_state.side_effect = refresh_task
-        result = evaluate_llm_report("same report", phase, engine)
+        result = evaluate_llm_report(report_json("same report"), phase, engine)
         if task_disappears:
             assert result["verdict"] == "BLOCKED"
             assert result["retryable"] is True
@@ -302,7 +303,7 @@ class TestEvaluateGaps:
             return {}
 
         mock_client.return_value.chat.side_effect = peer_completes
-        result = evaluate_llm_report("stale report", phase, engine)
+        result = evaluate_llm_report(report_json("stale report"), phase, engine)
         assert result["verdict"] == "BLOCKED"
         assert result["retryable"] is True
         engine.db.rollback.assert_called_once()

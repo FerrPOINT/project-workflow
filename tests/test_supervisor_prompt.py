@@ -6,7 +6,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from project_workflow.supervisor.prompt import _format_parallel_contract_human, build_phase_prompt
+from project_workflow.domain.phase_report import PHASE_REPORT_INSTRUCTIONS
+from project_workflow.supervisor.context import SupervisorContextBuilder
+from project_workflow.supervisor.prompt import (
+    _format_parallel_contract_human,
+    build_phase_prompt,
+    format_current_phase_instructions,
+)
 
 
 def _phase(code, execution_type="sync", name="N"):
@@ -21,13 +27,7 @@ def _ctx() -> dict:
     return {
         "workflow_name": "W",
         "cli_actor": {"description": "D", "entrypoint": "E"},
-        "report_template": {
-            "summary": "S",
-            "completed": "C",
-            "evidence": "E",
-            "blockers": "B",
-            "next_step": "N",
-        },
+        "report_template": SupervisorContextBuilder._report_template(),
     }
 
 
@@ -66,6 +66,30 @@ def test_prompt_for_current_phase():
     )
     assert "T-1" in result
     assert "p1 — N" in result
+    assert result.count(PHASE_REPORT_INSTRUCTIONS) == 1
+
+
+@pytest.mark.parametrize("template", [None, {"summary": "obsolete report format"}])
+def test_prompt_does_not_restore_a_legacy_context_report_template(template):
+    phase = _phase("p1")
+    context = _ctx()
+    context["report_template"] = template
+    result = build_phase_prompt("T-1", {"p1": phase}, [], "p1", context)
+    assert PHASE_REPORT_INSTRUCTIONS in result
+    assert "obsolete report format" not in result
+    assert "- summary:" not in result
+
+
+@pytest.mark.parametrize("execution_type", ["sync", "parallel"])
+def test_current_cli_instructions_include_the_canonical_report_format(execution_type):
+    phase = _phase("p1", execution_type)
+    with patch_contract_builder():
+        result = format_current_phase_instructions("T-1", {"p1": phase}, [], "p1", _ctx())
+    assert result.count(PHASE_REPORT_INSTRUCTIONS) == 1
+    if execution_type == "sync":
+        assert "i1" in result and "c1" in result and "e1" in result
+    else:
+        assert "ОДНИМ сообщением" in result
 
 
 def test_evaluation_prompt_keeps_recent_rework_and_bounds_older_context():

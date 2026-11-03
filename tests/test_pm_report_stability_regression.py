@@ -42,6 +42,7 @@ from project_workflow.supervisor.evaluate import (
     _report_fingerprint,
 )
 from project_workflow.supervisor.evidence import validate_frozen_evaluation
+from tests._report_helpers import report_json
 
 pytestmark = pytest.mark.unit
 ROOT = Path(__file__).resolve().parents[1]
@@ -232,25 +233,26 @@ def frozen_step():
 def test_actual_evaluator_receives_full_report_and_exact_pm_obligations(pm_phases, case):
     phase = pm_phases[case["phase"]]
     items = PhaseContractBuilder(list(pm_phases.values())).build_evaluation_items(phase)
-    prompt = PromptBuilder.build_user_prompt(WORKFLOW_TASK_KEY, phase, case["report"], evaluation_items=items)
+    prompt = PromptBuilder.build_user_prompt(WORKFLOW_TASK_KEY, phase,
+        json.loads(report_json(case["report"])), evaluation_items=items)
     client = Mock()
     client.chat.side_effect = TimeoutError("Stop before any provider call; no quality verdict supplied")
     with pytest.raises(TimeoutError):
         _evaluate_strict_response(client, user=prompt, evaluation_items=items, phase=phase)
     client.chat.assert_called_once_with(system=PromptBuilder.SYSTEM_PROMPT, user=prompt, temperature=0.1)
     delivered = client.chat.call_args.kwargs["user"]
-    assert delivered.split('WORKER REPORT:\n"""', 1)[1].rsplit('"""', 1)[0] == case["report"]
-    actual_items = [line.strip() for line in delivered.splitlines() if line.strip().startswith('ID: "')]
-    assert actual_items == [f'ID: "{label}" \u2014 {dict(items)[key]}'
-                            for label, key in PromptBuilder.item_aliases(items).items()]
+    data = json.loads(delivered)
+    assert data["report"]["result"]["document"] == case["report"]
+    assert data["criteria"] == [{"id": label, "text": dict(items)[key]}
+                                for label, key in PromptBuilder.item_aliases(items).items()]
     assert "WORKER PROCEDURE" not in delivered
     # Historical report bytes remain intact, but v13 does not add worker procedure.
-    assert "Instructions:" not in delivered.split("WORKER REPORT:", 1)[0]
+    assert "Instructions:" not in json.dumps({key: value for key, value in data.items() if key != "report"})
     # Full packet loss must remain visible to the real evaluator (regression 153).
     if case["id"] == "153":
-        assert json.dumps(DOCUMENT, ensure_ascii=False, sort_keys=True) not in delivered
+        assert json.dumps(DOCUMENT, ensure_ascii=False, sort_keys=True) not in data["report"]["result"]["document"]
     elif phase.code != "PM-DRAFT-01":
-        assert json.dumps(DOCUMENT, ensure_ascii=False, sort_keys=True) in delivered
+        assert json.dumps(DOCUMENT, ensure_ascii=False, sort_keys=True) in data["report"]["result"]["document"]
 
 
 def test_correction_carries_real_obligations_even_when_previous_coverage_is_present(pm_phases):
@@ -259,12 +261,13 @@ def test_correction_carries_real_obligations_even_when_previous_coverage_is_pres
     case = next(case for case in REPLAY_CASES if case["id"] == "153")
     previously = [key for key, _ in items if not key.endswith("check:4")]
     prompt = PromptBuilder.build_user_prompt(
-        WORKFLOW_TASK_KEY, phase, case["report"], evaluation_items=items, previously_covered=previously,
+        WORKFLOW_TASK_KEY, phase, json.loads(report_json(case["report"])),
+        evaluation_items=items, previously_covered=previously,
     )
-    prior_block = prompt.split("PRIOR COVERED MARKS (revisable, not permanent): ", 1)[1].split("\n", 1)[0]
-    assert prior_block == ", ".join(label for label, key in PromptBuilder.item_aliases(items).items()
-                                   if key in previously)
-    assert len([line for line in prompt.splitlines() if line.strip().startswith('ID: "')]) == len(items)
+    data = json.loads(prompt)
+    assert data["previously_covered"] == [label for label, key in PromptBuilder.item_aliases(items).items()
+                                         if key in previously]
+    assert len(data["criteria"]) == len(items)
     assert set(case["required_missing"]) == {key.split(phase.code + ":", 1)[1] for key in previously}
 
 

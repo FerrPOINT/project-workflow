@@ -4,6 +4,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from tests._report_helpers import report_json
+
 pytestmark = [pytest.mark.supervisor]
 
 from project_workflow.supervisor import SupervisorEngine
@@ -123,7 +125,7 @@ class TestRecordTransitionTypes:
                 "message": "ok",
                 "confidence": 1.0,
             }
-            engine.evaluate_llm("report ok", ph)
+            engine.evaluate_llm(report_json("report ok"), ph)
 
         payload = mock_run.call_args.kwargs
         assert isinstance(payload["phase_id"], int), f"phase_id must be int, got {type(payload['phase_id'])}"

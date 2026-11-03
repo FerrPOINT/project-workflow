@@ -12,6 +12,7 @@ from project_workflow.infrastructure.db.session import ensure_schema
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.supervisor import SupervisorEngine
 from tests._db_helpers import phase_by_code
+from tests._report_helpers import report_json
 
 SUPERVISOR_WORKFLOW_NAME = "Supervisor Workflow"
 SUPERVISOR_PHASES = ["sup.intake", "sup.review", "sup.done"]
@@ -109,7 +110,7 @@ def test_supervisor_context_contains_full_path_and_contract(tmp_path: Path, monk
     assert [phase["code"] for phase in ctx["workflow_path"]] == SUPERVISOR_PHASES
     assert ctx["current_contract"]["phase_code"] == "sup.intake"
     assert ctx["current_contract"]["required_evidence"] == ["Plan file attached"]
-    assert "summary" in ctx["report_template"]
+    assert ctx["report_template"] == {"source": "", "result": {}, "unresolved": []}
     assert ctx["cli_actor"]["kind"] == "cli-user"
     assert "любой пользователь" in ctx["cli_actor"]["description"].lower()
 
@@ -134,8 +135,7 @@ def test_supervisor_evaluate_pass_updates_db_state_and_persists_run(
     engine = SupervisorEngine("SUP-2", uow=uow)
     supervisor_llm("PASS", covered=["Plan is documented", "Plan file attached"])
     result = engine.evaluate(
-        "summary: Created implementation plan. completed: Plan is documented. "
-        "evidence: Plan file attached. blockers: none. next_step: move to review."
+        report_json("Created implementation plan. Plan is documented. Plan file attached. Next: move to review.")
     )
 
     assert result["verdict"] == "PASS"
@@ -180,7 +180,10 @@ def test_supervisor_rejects_retired_verdict_without_backtracking(tmp_path: Path,
 
     engine = SupervisorEngine("SUP-3", uow=uow, create_if_missing=False)
     supervisor_llm("ROLLBACK")
-    result = engine.evaluate("Blocked by dependency mismatch. blocker remains and the gate cannot pass.")
+    result = engine.evaluate(report_json(
+        "Blocked by dependency mismatch. blocker remains and the gate cannot pass.",
+        unresolved=["Dependency mismatch"],
+    ))
 
     assert result["verdict"] == "BLOCKED"
     assert result["rollback_phase_code"] is None

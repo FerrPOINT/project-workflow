@@ -6,6 +6,7 @@ from typing import Any
 
 import click
 
+from project_workflow.domain.phase_report import PhaseReportFormatError
 from project_workflow.supervisor.formatting import format_result
 
 from . import configured
@@ -24,7 +25,7 @@ def _output(ctx: click.Context, response: dict[str, Any]) -> None:
 
 @cli.command()
 @click.option("--task", required=True, help="Ключ назначенной задачи Workflow")
-@click.option("--report", default=None, help="Отчёт текстом; - читает stdin")
+@click.option("--report", default=None, help="JSON-отчёт: source, result, unresolved; - читает stdin")
 @click.option("--operation-key", default=None, help="Стабильный ключ операции отправки отчёта")
 @click.option("--expected-version", type=click.IntRange(min=1), default=None,
               help="Версия из последнего ответа Workflow")
@@ -45,6 +46,9 @@ def step_cmd(ctx: click.Context, task: str, report: str | None, operation_key: s
     try:
         response = configured.step(task, report, operation_key, expected_version,
             requirements_revision=requirements_revision, requirements_sha256=requirements_sha256)
+    except PhaseReportFormatError as exc:
+        response = configured.failure("invalid-phase-report")
+        response["result"]["error"] = str(exc)
     except ValueError:
         response = configured.failure("configuration-or-input-invalid")
     _output(ctx, response)

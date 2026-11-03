@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from .. import config
 from ..domain.configured_cli import ConfiguredCliFence
 from ..domain.exceptions import ConcurrentTransitionError
+from ..domain.phase_report import PhaseReport
 from ..infrastructure.llm import (
     LlmConfigurationError,
     LlmVerdict,
@@ -19,7 +20,6 @@ from ..infrastructure.llm import (
     PromptBuilder,
     ResponseParser,
 )
-from .checks import normalize_text
 from .diagnostics import capture_attempt, evaluation_diagnostic
 from .models import Phase
 from .types import VERDICT_LABELS
@@ -102,8 +102,7 @@ def _contract_fingerprint(
 
 
 def _report_fingerprint(task_id: int, report: str, contract_fingerprint: str) -> str:
-    normalized = normalize_text(report)
-    return hashlib.sha256(f"{task_id}\0{contract_fingerprint}\0{normalized}".encode()).hexdigest()
+    return hashlib.sha256(f"{task_id}\0{contract_fingerprint}\0{report}".encode()).hexdigest()
 
 
 def _blocked(exc: Exception, *, provider_outcome: str | None = None) -> LlmVerdict:
@@ -254,17 +253,17 @@ def _evaluate_strict_response(
     response_format: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], LlmVerdict]:
     """Retry only malformed evaluator output and never relax the wire contract."""
-    prompt = user
+    attempt_system = system
     last_error: Exception | None = None
     for attempt_number in range(1, _MAX_EVALUATOR_RESPONSE_ATTEMPTS + 1):
         raw: dict[str, Any] | None = None
         error: Exception | None = None
-        submitted_prompt = prompt
+        submitted_system = attempt_system
         try:
             format_options = {"response_format": response_format} if response_format is not None else {}
             raw = client.chat(
-                system=system,
-                user=prompt,
+                system=submitted_system,
+                user=user,
                 temperature=0.1,
                 **format_options,
             )
@@ -281,8 +280,8 @@ def _evaluate_strict_response(
                 raise
             if attempt_number == _MAX_EVALUATOR_RESPONSE_ATTEMPTS:
                 raise
-            prompt = (
-                user
+            attempt_system = (
+                system
                 + "\n\nPREVIOUS RESPONSE WAS INVALID. Return a new response that satisfies "
                 "the exact JSON schema and assesses every required criterion exactly once. "
                 "Return only one bare JSON object without Markdown or commentary."
@@ -293,8 +292,8 @@ def _evaluate_strict_response(
         finally:
             if attempts is not None:
                 try:
-                    attempts.append(capture_attempt(client, number=attempt_number, prompt=submitted_prompt,
-                                                    raw=raw, error=error))
+                    attempts.append(capture_attempt(client, number=attempt_number, prompt=user,
+                                                    raw=raw, error=error, system=submitted_system))
                 except Exception as diagnostic_error:
                     attempts.append({"number": attempt_number, "capture_error": type(diagnostic_error).__name__})
     assert last_error is not None
@@ -379,10 +378,11 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
             return _concurrent_result(replayed)
         return replayed
 
+    parsed_report = PhaseReport.parse(report)
     user = PromptBuilder.build_user_prompt(
         engine.task_key,
         evaluation_phase,
-        report,
+        parsed_report.model_dump(mode="json"),
         previously_covered=sorted(previously_ids) or None,
         evaluation_items=evaluation_items,
     )

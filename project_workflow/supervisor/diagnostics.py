@@ -164,7 +164,7 @@ def _error(exc: Exception | None) -> dict[str, Any] | None:
 
 
 def capture_attempt(client: Any, *, number: int, prompt: str, raw: dict[str, Any] | None,
-                    error: Exception | None) -> dict[str, Any]:
+                    error: Exception | None, system: str | None = None) -> dict[str, Any]:
     key = getattr(client, "api_key", None)
     secrets = (key,) if isinstance(key, str) and key else ()
     provider = getattr(client, "last_call_diagnostics", None)
@@ -180,6 +180,8 @@ def capture_attempt(client: Any, *, number: int, prompt: str, raw: dict[str, Any
               "omitted_response_counts": omissions}
     if isinstance(raw, dict) and "assessments" in raw:
         result["response_schema"] = "advisor-assessments-v1"
+    if system is not None:
+        result["system"] = text_snapshot(system, secrets)
     if isinstance(content, str):
         # Unknown/invalid output and provider reasoning are not copied to the ledger.
         result["response_content"] = {"sha256": hashlib.sha256(content.encode()).hexdigest(),
@@ -198,6 +200,10 @@ def evaluation_diagnostic(*, system: str, user: str, report: str, prompt_version
         prompt = attempt.get("prompt")
         if isinstance(prompt, dict) and prompt.get("sha256") == hashlib.sha256(user.encode()).hexdigest():
             attempt["prompt"] = {"reference": "user", "sha256": prompt["sha256"]}
+        attempt_system = attempt.get("system")
+        if (isinstance(attempt_system, dict)
+                and attempt_system.get("sha256") == hashlib.sha256(system.encode()).hexdigest()):
+            attempt["system"] = {"reference": "system", "sha256": attempt_system["sha256"]}
     result = {"schema": "evaluator-diagnostics-v1", "availability": "captured",
             "prompt_version": prompt_version, "system": text_snapshot(system, secrets),
             "user": text_snapshot(user, secrets), "report": text_snapshot(report, secrets),

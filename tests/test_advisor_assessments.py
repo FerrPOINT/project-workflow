@@ -1,4 +1,4 @@
-"""Private v14 wire and projection mechanics; all provider responses are mocked."""
+"""Private assessment wire and projection mechanics; all provider responses are mocked."""
 
 import copy
 import json
@@ -20,6 +20,10 @@ ITEMS = [
 ]
 ALIASES = {"C1": ITEMS[0][0], "E1": ITEMS[1][0], "C2": ITEMS[2][0], "E2": ITEMS[3][0]}
 CANONICAL_FIELDS = {"verdict", "covered", "missing", "blockers", "message", "confidence"}
+
+
+def _report(text="Reported outcome"):
+    return {"source": "Reported source facts", "result": {"content": text}, "unresolved": []}
 
 
 @pytest.fixture(autouse=True)
@@ -99,9 +103,11 @@ def test_legacy_arbitrary_ids_use_the_check_counter_without_exposing_ids():
     assert PromptBuilder.item_aliases(items) == {
         "C1": "opaque-id", "C2": "check:7", "E1": "evidence:8", "C3": "arbitrary:kind:value",
     }
-    prompt = PromptBuilder.build_user_prompt("ignored", _phase(), "report", evaluation_items=items)
-    assert '  ID: "C1" \u2014 First' in prompt
-    assert '  ID: "C3" \u2014 Third' in prompt
+    prompt = PromptBuilder.build_user_prompt("ignored", _phase(), _report(), evaluation_items=items)
+    assert json.loads(prompt)["criteria"] == [
+        {"id": "C1", "text": "First"}, {"id": "C2", "text": "Second"},
+        {"id": "E1", "text": "Source"}, {"id": "C3", "text": "Third"},
+    ]
     assert all(item_id not in prompt for item_id, _ in items)
     result = ResponseParser.parse_assessments({
         "verdict": "PASS", "assessments": {
@@ -112,49 +118,52 @@ def test_legacy_arbitrary_ids_use_the_check_counter_without_exposing_ids():
 
 
 @pytest.mark.parametrize("legacy_pm_flag", [False, True])
-def test_prompt_uses_only_phase_name_aliases_and_literal_report_once(legacy_pm_flag):
-    report = 'Current source facts\nFULL artifact: {"scope": ["one", "two"]}'
+def test_prompt_uses_only_phase_name_aliases_and_structured_report_once(legacy_pm_flag):
+    report = {"source": "Current source facts", "result": {"scope": ["one", "two"]}, "unresolved": []}
     prompt = PromptBuilder.build_user_prompt(
         "private-task-id", _phase(), report, [ITEMS[1][0], ITEMS[0][0], "obsolete", ITEMS[0][0]],
         ITEMS, pm_evaluation=legacy_pm_flag,
     )
-    assert prompt.startswith("CURRENT PHASE: Review the result\nALLOWED VERDICTS: PASS, PARTIAL, BLOCKED\n")
-    assert "PRIOR COVERED MARKS (revisable, not permanent): C1, E1\n" in prompt
-    for label, (item_id, text) in zip(ALIASES, ITEMS):
-        assert f'  ID: "{label}" \u2014 {text}' in prompt
-        assert item_id not in prompt
-    assert prompt.endswith('WORKER REPORT:\n"""' + report + '"""')
-    assert prompt.count(report) == 1
+    assert json.loads(prompt) == {
+        "phase": "Review the result",
+        "allowed_verdicts": ["PASS", "PARTIAL", "BLOCKED"],
+        "criteria": [{"id": label, "text": text} for label, (_, text) in zip(ALIASES, ITEMS)],
+        "previously_covered": ["C1", "E1"],
+        "report": report,
+    }
+    assert all(item_id not in prompt for item_id, _ in ITEMS)
+    assert prompt.count("Current source facts") == 1
+    assert prompt.count('"scope":') == 1
     for unwanted in ("private-task-id", "private-phase-code", "Private worker procedure", "obsolete", "hash"):
         assert unwanted not in prompt
 
 
 def test_literal_report_is_not_silently_redacted_or_rewritten_by_aliasing():
-    report = 'The literal worker text includes "first:check:17" and C1.\nEnd.'
+    report = _report('The literal worker text includes "first:check:17" and C1.\nEnd.')
     prompt = PromptBuilder.build_user_prompt("ignored", _phase(), report, evaluation_items=ITEMS)
-    assert prompt.endswith('"""' + report + '"""')
+    assert json.loads(prompt)["report"] == report
 
 
 def test_standalone_fallback_uses_existing_contract_ids_before_aliasing():
     phase = _phase()
     phase.checks = [SimpleNamespace(id=12, description="Actual result")]
     phase.evidence = [SimpleNamespace(id=13, item="Actual source")]
-    fallback = PromptBuilder.build_user_prompt("ignored", phase, "report")
+    fallback = PromptBuilder.build_user_prompt("ignored", phase, _report())
     explicit = PromptBuilder.build_user_prompt(
-        "ignored", phase, "report", evaluation_items=[
+        "ignored", phase, _report(), evaluation_items=[
             ("private-phase-code:check:12", "Actual result"),
             ("private-phase-code:evidence:13", "Actual source"),
         ],
     )
     assert fallback == explicit
-    empty = PromptBuilder.build_user_prompt("ignored", phase, "report", evaluation_items=[])
+    empty = PromptBuilder.build_user_prompt("ignored", phase, _report(), evaluation_items=[])
     assert "Actual result" not in empty and "Actual source" not in empty
 
 
-def test_prompt_keeps_delegate_allowance_and_v14_aliases_without_role_policy():
-    prompt = PromptBuilder.build_user_prompt("ignored", _phase(delegate=object()), "report", evaluation_items=ITEMS)
-    assert "ALLOWED VERDICTS: PASS, PARTIAL, BLOCKED, DELEGATE\n" in prompt
-    assert PromptBuilder.PM_PROMPT_VERSION == PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v14"
+def test_prompt_keeps_delegate_allowance_and_v15_aliases_without_role_policy():
+    prompt = PromptBuilder.build_user_prompt("ignored", _phase(delegate=object()), _report(), evaluation_items=ITEMS)
+    assert json.loads(prompt)["allowed_verdicts"] == ["PASS", "PARTIAL", "BLOCKED", "DELEGATE"]
+    assert PromptBuilder.PM_PROMPT_VERSION == PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v15"
     assert PromptBuilder.PM_SYSTEM_PROMPT is PromptBuilder.SYSTEM_PROMPT
     system = PromptBuilder.SYSTEM_PROMPT
     for rule in (

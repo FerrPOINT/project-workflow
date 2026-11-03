@@ -3,6 +3,7 @@
 from unittest.mock import patch
 
 from project_workflow.infrastructure.llm import OpenAICompatibleClient
+from tests._report_helpers import report_json
 from tests.test_configured_cli import MACHINE, WRITER, enroll, step
 from tests.test_configured_cli import configured as configured
 
@@ -10,7 +11,7 @@ from tests.test_configured_cli import configured as configured
 def test_http_projection_reads_real_saved_trace_without_provider(configured, supervisor_llm):
     enroll(configured)
     supervisor_llm("PARTIAL")
-    assert step(configured, report="Actual report api_key=secret-value", operation_key="diagnostic-report",
+    assert step(configured, report=report_json("Actual report api_key=secret-value"), operation_key="diagnostic-report",
                 expected_version=1).status_code == 200
     client, assignment = configured
     query = {"interaction_protocol": "configured-cli-v1", "namespace_id": assignment["namespace_id"],

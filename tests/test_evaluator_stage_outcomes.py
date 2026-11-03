@@ -1,5 +1,6 @@
 """Phase acceptance differs from the business outcome of an independent review."""
 
+import json
 from unittest.mock import Mock
 
 import pytest
@@ -43,16 +44,22 @@ def review_phases():
 @pytest.mark.parametrize("phase", list(review_phases()))
 def test_independent_rework_result_can_finish_the_role_without_a_workflow_rollback(phase):
     items = PhaseContractBuilder([phase]).build_evaluation_items(phase)
+    report = {
+        "source": "Independent review",
+        "result": {"content": "Independent review completed. Reproducible defects recorded in the sealed report; "
+                   "business verdict=rework. No claim that the candidate is accepted."},
+        "unresolved": [],
+    }
     prompt = PromptBuilder.build_user_prompt(
-        "REVIEW-1", phase,
-        "Independent review completed. Reproducible defects recorded in the sealed report; "
-        "business verdict=rework. No claim that the candidate is accepted.",
-        evaluation_items=items,
+        "REVIEW-1", phase, report, evaluation_items=items,
     )
-    assert "ALLOWED VERDICTS: PASS, PARTIAL, BLOCKED" in prompt
+    assert json.loads(prompt) == {
+        "phase": phase.name, "allowed_verdicts": ["PASS", "PARTIAL", "BLOCKED"],
+        "criteria": [{"id": label, "text": dict(items)[key]}
+                     for label, key in PromptBuilder.item_aliases(items).items()],
+        "previously_covered": [], "report": report,
+    }
     assert "only its listed criteria and supplied facts" in PromptBuilder.SYSTEM_PROMPT
-    assert all(f'ID: "{label}"' in prompt and dict(items)[key] in prompt
-               for label, key in PromptBuilder.item_aliases(items).items())
     client = Mock()
     client.chat.return_value = {
         "verdict": "PASS", "assessments": {label: {"covered": True,
@@ -81,8 +88,10 @@ def test_unconfigured_routing_still_fails_closed_instead_of_becoming_pass(verdic
 
 def test_configured_delegate_remains_available_without_reviving_retained_rollback():
     phase = Phase(code="qa", rollback_target_phase_code="implementation", delegate=PhaseDelegate(agent="qa"))
-    prompt = PromptBuilder.build_user_prompt("QA-1", phase, "Cannot finish checks")
-    assert "ALLOWED VERDICTS: PASS, PARTIAL, BLOCKED, DELEGATE" in prompt
+    report = {"source": "QA facts", "result": {"content": "Cannot finish checks"}, "unresolved": []}
+    prompt = PromptBuilder.build_user_prompt("QA-1", phase, report)
+    assert json.loads(prompt)["allowed_verdicts"] == ["PASS", "PARTIAL", "BLOCKED", "DELEGATE"]
+    assert json.loads(prompt)["report"] == report
     assert "ROLLBACK" not in prompt
 
 

@@ -15,6 +15,11 @@ from project_workflow.infrastructure.llm import (
     PromptBuilder,
     ResponseParser,
 )
+from tests._report_helpers import report_json
+
+
+def _report(text="Reported outcome"):
+    return {"source": "Reported source facts", "result": {"content": text}, "unresolved": []}
 
 
 class FakePhase:
@@ -181,15 +186,17 @@ class TestPromptBuilder:
 
     def test_build_user_prompt_includes_phase_without_task_metadata(self):
         phase = FakePhase(code="1", name="Preflight", instructions=["Check git"])
-        prompt = PromptBuilder.build_user_prompt("RUN-1", phase, "report text")
+        prompt = PromptBuilder.build_user_prompt("RUN-1", phase, _report("report text"))
         assert "TASK:" not in prompt
         assert "RUN-1" not in prompt
-        assert "CURRENT PHASE: Preflight" in prompt
-        assert "report text" in prompt
+        assert json.loads(prompt) == {
+            "phase": "Preflight", "allowed_verdicts": ["PASS", "PARTIAL", "BLOCKED"],
+            "criteria": [], "previously_covered": [], "report": _report("report text"),
+        }
 
     def test_build_user_prompt_excludes_worker_instructions(self):
         phase = FakePhase(instructions=[FakeInstruction("Step one"), FakeInstruction("Step two")])
-        prompt = PromptBuilder.build_user_prompt("T-1", phase, "r")
+        prompt = PromptBuilder.build_user_prompt("T-1", phase, _report("r"))
         assert "Step one" not in prompt
         assert "Step two" not in prompt
         assert "Instructions:" not in prompt
@@ -199,14 +206,15 @@ class TestPromptBuilder:
             checks=[FakeCheck("Check A")],
             evidence=[FakeEvidence("Screenshot")],
         )
-        prompt = PromptBuilder.build_user_prompt("T-1", phase, "r")
-        assert "Check A" in prompt
-        assert "Screenshot" in prompt
+        prompt = PromptBuilder.build_user_prompt("T-1", phase, _report("r"))
+        assert json.loads(prompt)["criteria"] == [
+            {"id": "C1", "text": "Check A"}, {"id": "E1", "text": "Screenshot"},
+        ]
 
     def test_build_user_prompt_with_previously_covered(self):
         phase = FakePhase(checks=[FakeCheck("Run tests")])
-        prompt = PromptBuilder.build_user_prompt("T-1", phase, "r", previously_covered=["1:check:1"])
-        assert "PRIOR COVERED MARKS (revisable, not permanent): C1" in prompt
+        prompt = PromptBuilder.build_user_prompt("T-1", phase, _report("r"), previously_covered=["1:check:1"])
+        assert json.loads(prompt)["previously_covered"] == ["C1"]
         assert "keep them in covered" not in prompt
 
     def test_build_user_prompt_marks_ids_without_decorative_brackets(self):
@@ -214,14 +222,13 @@ class TestPromptBuilder:
         prompt = PromptBuilder.build_user_prompt(
             "T-1",
             phase,
-            "done",
+            _report("done"),
             evaluation_items=[("-1:check:1", "Task is clear")],
         )
 
-        assert 'ID: "C1"' in prompt
+        assert json.loads(prompt)["criteria"] == [{"id": "C1", "text": "Task is clear"}]
         assert "-1:check:1" not in prompt
         assert "[-1:check:1]" not in prompt
-        assert "REQUIRED CRITERIA:" in prompt
         assert "REQUIRED ITEM COUNT" not in prompt
         assert "len(covered)" not in prompt
 
@@ -341,7 +348,7 @@ class TestSupervisorEngineEvaluateLLM:
 
     def test_evaluate_llm_pass(self, engine, supervisor_llm):
         supervisor_llm("PASS")
-        result = engine.evaluate_llm("I checked git", engine._get_current_phase_obj())
+        result = engine.evaluate_llm(report_json("I checked git"), engine._get_current_phase_obj())
         assert result["verdict"] == "PASS"
         assert result["phase_code"] == "1.INTAKE"
         assert result["covered"]
@@ -349,7 +356,7 @@ class TestSupervisorEngineEvaluateLLM:
 
     def test_evaluate_llm_blocked(self, engine, supervisor_llm):
         supervisor_llm("BLOCKED", blockers=["No access"])
-        result = engine.evaluate_llm("Cannot access", engine._get_current_phase_obj())
+        result = engine.evaluate_llm(report_json("Cannot access"), engine._get_current_phase_obj())
         assert result["verdict"] == "BLOCKED"
         assert result["blockers"] == ["No access"]
 
@@ -366,11 +373,11 @@ class TestSupervisorEngineEvaluateLLM:
         original_phase = engine.current_phase_code
         with patch("project_workflow.supervisor.evaluate.OpenAICompatibleClient.chat") as chat:
             chat.side_effect = fixture_chat
-            result = engine.evaluate(report)
+            result = engine.evaluate(report_json(report))
 
         chat.assert_called_once()
         assert chat.call_args.kwargs["system"] == PromptBuilder.SYSTEM_PROMPT
-        assert report in chat.call_args.kwargs["user"]
+        assert json.loads(chat.call_args.kwargs["user"])["report"] == json.loads(report_json(report))
         assert result["verdict"] == "PARTIAL"
         assert result["missing"]
         assert result["next_phase_code"] is None
@@ -381,8 +388,9 @@ class TestSupervisorEngineEvaluateLLM:
         with patch(
             "project_workflow.supervisor.evaluate.OpenAICompatibleClient.chat",
             side_effect=requests.ConnectionError("down"),
-        ):
-            result = engine.evaluate("")
+        ) as chat:
+            result = engine.evaluate(report_json(""))
+        chat.assert_called_once()
         assert result["verdict"] == "BLOCKED"
         assert result["next_phase_code"] is None
         assert result["retryable"] is True
@@ -398,12 +406,18 @@ class TestSupervisorEngineEvaluateLLM:
         """The provider receives phase criteria and the report, not task metadata."""
         supervisor_llm("PASS")
         fixture_chat = OpenAICompatibleClient.chat
+        phase = engine._get_current_phase_obj()
+        items = engine.contract_builder.build_evaluation_items(phase)
         with patch("project_workflow.supervisor.evaluate.OpenAICompatibleClient.chat") as mock_chat:
             mock_chat.side_effect = fixture_chat
-            engine.evaluate_llm("Report", engine._get_current_phase_obj())
+            engine.evaluate_llm(report_json("Report"), phase)
             _, kwargs = mock_chat.call_args
-            assert "Report" in kwargs["user"]
-            assert "REQUIRED CRITERIA:" in kwargs["user"]
+            payload = json.loads(kwargs["user"])
+            assert payload["report"] == json.loads(report_json("Report"))
+            assert payload["criteria"] == [
+                {"id": label, "text": dict(items)[item_id]}
+                for label, item_id in PromptBuilder.item_aliases(items).items()
+            ]
             assert "RUN-1001" not in kwargs["user"]
 
 
@@ -479,28 +493,30 @@ class TestPromptBuilderEdgeCases:
 
     def test_empty_phase_contract(self):
         phase = FakePhase(code="99", name="Empty", instructions=[], checks=[], evidence=[])
-        prompt = PromptBuilder.build_user_prompt("T-99", phase, "done")
+        prompt = PromptBuilder.build_user_prompt("T-99", phase, _report("done"))
         assert "T-99" not in prompt
-        assert "CURRENT PHASE: Empty" in prompt
-        assert "done" in prompt
+        assert json.loads(prompt) == {
+            "phase": "Empty", "allowed_verdicts": ["PASS", "PARTIAL", "BLOCKED"],
+            "criteria": [], "previously_covered": [], "report": _report("done"),
+        }
 
     def test_missing_instructions_skips_section(self):
         phase = FakePhase(code="1", checks=[FakeCheck("Check X")])
-        prompt = PromptBuilder.build_user_prompt("T-1", phase, "r")
+        prompt = PromptBuilder.build_user_prompt("T-1", phase, _report("r"))
         assert "Instructions:" not in prompt
         assert "Check X" in prompt
 
-    def test_previously_covered_empty_list_omitted(self):
+    def test_previously_covered_empty_list(self):
         phase = FakePhase(instructions=[FakeInstruction("Step 1")])
-        prompt = PromptBuilder.build_user_prompt("T-1", phase, "r", previously_covered=[])
-        assert "PRIOR COVERED IDS" not in prompt
+        prompt = PromptBuilder.build_user_prompt("T-1", phase, _report("r"), previously_covered=[])
+        assert json.loads(prompt)["previously_covered"] == []
 
     def test_multiple_evidence_items(self):
         phase = FakePhase(evidence=[FakeEvidence("A"), FakeEvidence("B"), FakeEvidence("C")])
-        prompt = PromptBuilder.build_user_prompt("T-1", phase, "r")
-        assert 'ID: "E1" — A' in prompt
-        assert 'ID: "E2" — B' in prompt
-        assert 'ID: "E3" — C' in prompt
+        prompt = PromptBuilder.build_user_prompt("T-1", phase, _report("r"))
+        assert json.loads(prompt)["criteria"] == [
+            {"id": "E1", "text": "A"}, {"id": "E2", "text": "B"}, {"id": "E3", "text": "C"},
+        ]
 
 
 class TestSupervisorEngineLLMIntegrationDB:
@@ -514,27 +530,27 @@ class TestSupervisorEngineLLMIntegrationDB:
 
     def test_supervisor_run_recorded_after_llm_evaluate(self, engine, supervisor_llm):
         supervisor_llm("PASS")
-        engine.evaluate("Report")
+        engine.evaluate(report_json("Report"))
 
         runs = engine.db.list_step_history(task_key="RUN-1003", limit=5)
         assert len(runs) == 1
         run = runs[0]
         assert run["verdict"] == "pass"
-        assert run["worker_report"] == "Report"
+        assert run["worker_report"] == report_json("Report")
         assert run["covered_item_ids"]
         assert run["missing_item_ids"] == []
         assert run["replay_fingerprint"]
 
     def test_task_phase_advanced_after_llm_pass(self, engine, supervisor_llm):
         supervisor_llm("PASS")
-        engine.evaluate("Report")
+        engine.evaluate(report_json("Report"))
 
         task = engine.db.tasks.get_by_id(engine.task["id"]).to_dict()
         assert task["current_phase_code"] == "2.REQUIREMENTS"
 
     def test_task_blocked_after_llm_blocked(self, engine, supervisor_llm):
         supervisor_llm("BLOCKED", blockers=["No access"])
-        engine.evaluate("Report")
+        engine.evaluate(report_json("Report"))
 
         task = engine.db.tasks.get_by_id(engine.task["id"]).to_dict()
         assert task["current_phase_code"] == "1.INTAKE"
@@ -542,7 +558,7 @@ class TestSupervisorEngineLLMIntegrationDB:
 
     def test_rollback_without_config_is_retryable_and_blocks_current_phase(self, engine, supervisor_llm):
         supervisor_llm("ROLLBACK")
-        result = engine.evaluate("Report")
+        result = engine.evaluate(report_json("Report"))
 
         assert result["verdict"] == "BLOCKED"
         assert result["retryable"] is True
@@ -562,7 +578,7 @@ class TestSupervisorEngineLLMIntegrationDB:
 
         supervisor_llm("PASS")
         with pytest.raises(RuntimeError, match="supervisor write failed"):
-            engine.evaluate("Report")
+            engine.evaluate(report_json("Report"))
 
         persisted = engine.db.tasks.get_by_id(task_id).to_dict()
         assert persisted["current_phase_id"] == original_task["current_phase_id"]
@@ -591,11 +607,11 @@ class TestOpenAICompatibleClientOverrides:
         assert client.timeout == 300
 
 
-class TestEvaluatorV14PromptContract:
+class TestEvaluatorV15PromptContract:
     """The controlled provider receives the universal criteria-only contract."""
 
     def test_prompt_version_invalidates_the_old_evidence_policy(self):
-        assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v14"
+        assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v15"
 
     def test_report_106_submission_circularity_reaches_provider_with_explicit_protocol_boundary(self):
         """Reproduce the saved PARTIAL reason, not a real model's semantic acceptance."""
@@ -614,13 +630,20 @@ class TestEvaluatorV14PromptContract:
             "full presentation account and matching authorized owner confirmation readback. "
             "Current task remains Draft; no postterminal operations were performed."
         )
+        report = _report(report)
         prompt = PromptBuilder.build_user_prompt("SYNTHETIC-PM", phase, report, evaluation_items=items)
-        assert len(items) == 7 and prompt.count('  ID: "') == len(items)
+        user_data = json.loads(prompt)
+        assert len(items) == 7
+        assert user_data == {
+            "phase": phase.name, "allowed_verdicts": ["PASS", "PARTIAL", "BLOCKED"],
+            "criteria": [{"id": label, "text": dict(items)[item_id]}
+                         for label, item_id in PromptBuilder.item_aliases(items).items()],
+            "previously_covered": [], "report": report,
+        }
         assert all(item.step not in prompt for item in phase.instructions)
         assert "send ONE self-contained final report using project-workflow --json step" not in prompt
         assert "Inspect the result" not in prompt
-        assert all(description in prompt for _, description in items)
-        assert f'WORKER REPORT:\n"""{report}"""' in prompt
+        assert [criterion["text"] for criterion in user_data["criteria"]] == [text for _, text in items]
         missing = [ids[0], ids[4]]
         raw = {
             "verdict": "PARTIAL", "assessments": {label: {"covered": item_id not in missing,
@@ -679,6 +702,7 @@ class TestEvaluatorV14PromptContract:
             "title=Synthetic brief; description=One browser task list.\n"
             "Discussion readback: comments=[]; snapshot=null; next_after=null."
         )
+        report = _report(report)
         prompt = PromptBuilder.build_user_prompt(
             "SDLC-13", phase, report,
             evaluation_items=[("PM-DRAFT-01:evidence:143", evidence)],
@@ -686,8 +710,8 @@ class TestEvaluatorV14PromptContract:
 
         assert instruction not in prompt
         assert evidence in prompt
-        assert f'WORKER REPORT:\n"""{report}"""' in prompt
-        assert 'ID: "E1"' in prompt
+        assert json.loads(prompt)["report"] == report
+        assert json.loads(prompt)["criteria"] == [{"id": "E1", "text": evidence}]
         assert "PM-DRAFT-01:evidence:143" not in prompt
         system = PromptBuilder.SYSTEM_PROMPT
         assert "using only its listed criteria and supplied facts" in system
@@ -730,6 +754,7 @@ class TestEvaluatorV14PromptContract:
             f"# Saved authorized owner confirmation\nTask=synthetic-task; revision=1; content_hash={digest}; "
             "owner_subject=synthetic-owner; confirmation_id=synthetic-consent; stage=Draft."
         )
+        report = _report(report)
         prompt = PromptBuilder.build_user_prompt(
             "SDLC-13", phase, report,
             evaluation_items=[("PM-DRAFT-03:check:217", check), ("PM-DRAFT-03:evidence:1", evidence)],
@@ -738,8 +763,9 @@ class TestEvaluatorV14PromptContract:
         assert instruction not in prompt
         assert check in prompt
         assert evidence in prompt
-        assert f'WORKER REPORT:\n"""{report}"""' in prompt
-        assert saved_document in prompt
+        assert json.loads(prompt)["report"] == report
+        assert saved_document in json.loads(prompt)["report"]["result"]["content"]
+        assert json.loads(prompt)["criteria"] == [{"id": "C1", "text": check}, {"id": "E1", "text": evidence}]
         system = PromptBuilder.SYSTEM_PROMPT
         assert "using only its listed criteria and supplied facts" in system
         assert "Do not add independent attestation" in system
@@ -758,10 +784,10 @@ class TestEvaluatorV14PromptContract:
     def test_build_user_prompt_does_not_expose_retired_target(self):
         phase = FakePhase(rollback_target_phase_code="8.IMPLEMENT")
 
-        prompt = PromptBuilder.build_user_prompt("RUN-1", phase, "reviewed")
+        prompt = PromptBuilder.build_user_prompt("RUN-1", phase, _report("reviewed"))
 
         assert "ROLLBACK TARGET:" not in prompt
-        assert "ALLOWED VERDICTS: PASS, PARTIAL, BLOCKED" in prompt
+        assert json.loads(prompt)["allowed_verdicts"] == ["PASS", "PARTIAL", "BLOCKED"]
         assert "ROLLBACK" not in prompt
         assert "verdict = ROLLBACK" not in PromptBuilder.SYSTEM_PROMPT
 
@@ -773,7 +799,7 @@ class TestEvaluatorV14PromptContract:
     def test_command_obligations_are_supplied_as_criteria_not_system_examples(self):
         criterion = "Execute the required tests and report their actual result."
         prompt = PromptBuilder.build_user_prompt(
-            "T-1", FakePhase(), "python -B -X utf8 -m unittest: all passed",
+            "T-1", FakePhase(), _report("python -B -X utf8 -m unittest: all passed"),
             evaluation_items=[("test-result", criterion)],
         )
         assert criterion in prompt

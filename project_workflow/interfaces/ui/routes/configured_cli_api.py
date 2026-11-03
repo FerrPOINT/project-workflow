@@ -11,6 +11,7 @@ from project_workflow.domain.configured_cli import (
     ConfiguredTerminalReadback,
 )
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
+from project_workflow.domain.phase_report import PhaseReportFormatError
 from project_workflow.infrastructure import base_auth
 from project_workflow.infrastructure.db.single_task_catalog import runtime_catalog_read
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
@@ -20,6 +21,9 @@ _REQUEST_ERRORS = (NamespaceAuthError, NotFoundError, ConflictError, ValueError,
 
 
 def error(exc: Exception) -> JSONResponse:
+    if isinstance(exc, PhaseReportFormatError):
+        return JSONResponse({"ok": False, "exit_code": 1, "error_code": "invalid-phase-report",
+                             "error": str(exc)}, status_code=422, headers={"Cache-Control": "no-store"})
     if isinstance(exc, NamespaceAuthError):
         status = exc.status
     elif isinstance(exc, NotFoundError):

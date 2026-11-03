@@ -4,6 +4,8 @@ from unittest.mock import patch
 
 import pytest
 
+from tests._report_helpers import report_json
+
 pytestmark = [pytest.mark.supervisor]
 
 from project_workflow.supervisor import SupervisorEngine
@@ -39,11 +41,11 @@ class TestSupervisorEvaluate:
             "evaluate_llm",
             return_value={"verdict": "PASS", "next_phase_code": "1"},
         ) as llm:
-            result = engine.evaluate("report ok")
+            result = engine.evaluate(report_json("report ok"))
 
         assert result["verdict"] == "PASS"
         assert result["next_phase_code"] == "1"
-        llm.assert_called_once_with("report ok", ph)
+        llm.assert_called_once_with(report_json("report ok"), ph)
 
     def test_evaluate_partial_when_items_missing(self):
         engine = SupervisorEngine("RUN-1")
@@ -58,7 +60,7 @@ class TestSupervisorEvaluate:
             "evaluate_llm",
             return_value={"verdict": "PARTIAL", "missing": ["check"]},
         ):
-            result = engine.evaluate("report bad")
+            result = engine.evaluate(report_json("report bad"))
 
         assert result["verdict"] == "PARTIAL"
         assert result["missing"] == ["check"]
@@ -78,7 +80,7 @@ class TestSupervisorEvaluate:
         }
 
         with patch.object(engine, "evaluate_llm") as llm:
-            result = engine.evaluate("new report after completion")
+            result = engine.evaluate(report_json("new report after completion"))
 
         llm.assert_not_called()
         assert result["verdict"] == "PASS"
@@ -101,7 +103,7 @@ class TestSupervisorEvaluate:
         }
 
         with patch.object(engine, "evaluate_llm") as llm:
-            result = engine.evaluate("new report after completion")
+            result = engine.evaluate(report_json("new report after completion"))
 
         llm.assert_not_called()
         assert result["verdict"] == "BLOCKED"

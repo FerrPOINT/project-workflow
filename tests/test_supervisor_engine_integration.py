@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+from tests._report_helpers import report_json
+
 pytestmark = [pytest.mark.supervisor]
 
 from project_workflow import config
@@ -73,7 +75,7 @@ class TestSupervisorEngineIntegration:
 
         engine = SupervisorEngine("AAT-903")
         supervisor_llm("PARTIAL", covered=["started"], missing=["finish"])
-        result = engine.evaluate("some progress but not everything")
+        result = engine.evaluate(report_json("some progress but not everything"))
         assert result["verdict"] == "PARTIAL"
 
     def test_evaluate_blocker_detected(self, supervisor_db, supervisor_llm):
@@ -89,7 +91,7 @@ class TestSupervisorEngineIntegration:
 
         engine = SupervisorEngine("AAT-904")
         supervisor_llm("BLOCKED", blockers=["no api key"])
-        result = engine.evaluate("blocked by missing api key")
+        result = engine.evaluate(report_json("blocked by missing api key"))
         assert result["verdict"] == "BLOCKED"
 
     def test_format_result_pass(self):

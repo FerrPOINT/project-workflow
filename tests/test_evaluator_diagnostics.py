@@ -16,6 +16,7 @@ from project_workflow.supervisor.diagnostics import (
     history_diagnostic,
     text_snapshot,
 )
+from tests._report_helpers import report_json
 
 pytestmark = pytest.mark.supervisor
 
@@ -23,14 +24,15 @@ pytestmark = pytest.mark.supervisor
 def test_saved_diagnostic_is_read_only_and_does_not_repair_partial(supervisor_llm):
     engine = SupervisorEngine("RUN-940")
     supervisor_llm("PARTIAL")
-    result = engine.evaluate("Prepared document; not yet confirmed")
+    result = engine.evaluate(report_json("Prepared document; not yet confirmed"))
     entry = engine.db.step_history.list(task_key=engine.task_key)[0]
     before = json.dumps(entry.evaluation_snapshot, sort_keys=True)
     with patch.object(OpenAICompatibleClient, "chat", side_effect=AssertionError("read cannot call model")):
         diagnostic = history_diagnostic(entry.worker_report, entry.evaluation_snapshot)
     assert diagnostic["availability"] == "captured"
     assert diagnostic["prompt_version"] == PromptBuilder.PROMPT_VERSION
-    assert diagnostic["user"]["text"].endswith('WORKER REPORT:\n"""Prepared document; not yet confirmed"""')
+    assert json.loads(diagnostic["user"]["text"])["report"] == json.loads(
+        report_json("Prepared document; not yet confirmed"))
     assert "RUN-940" not in diagnostic["user"]["text"]
     assert diagnostic["decision"]["verdict"] == result["verdict"] == "PARTIAL"
     assert any(item["classification"] == "missing" for item in diagnostic["criteria"])
@@ -51,7 +53,7 @@ def test_invalid_attempts_and_repair_prompts_are_preserved(supervisor_llm):
         return {"verdict": "PASS"} if calls == 1 else valid(*args, **kwargs)
 
     with patch.object(OpenAICompatibleClient, "chat", side_effect=chat):
-        engine.evaluate("Complete phase report")
+        engine.evaluate(report_json("Complete phase report"))
     entry = engine.db.step_history.list(task_key=engine.task_key)[0]
     attempts = entry.evaluation_snapshot["diagnostics"]["attempts"]
     assert len(attempts) == 2
@@ -59,14 +61,15 @@ def test_invalid_attempts_and_repair_prompts_are_preserved(supervisor_llm):
     assert attempts[0]["error"]["category"] == "response_contract"
     assert attempts[0]["error"]["fields"]
     assert attempts[0]["prompt"]["reference"] == "user"
-    assert "PREVIOUS RESPONSE WAS INVALID" in attempts[1]["prompt"]["text"]
+    assert attempts[1]["prompt"]["reference"] == "user"
+    assert "PREVIOUS RESPONSE WAS INVALID" in attempts[1]["system"]["text"]
     assert attempts[1]["error"] is None
 
 
 def test_transport_failure_is_not_a_business_rejection():
     engine = SupervisorEngine("RUN-942")
     with patch.object(OpenAICompatibleClient, "chat", side_effect=requests.Timeout("private credential")):
-        result = engine.evaluate("Actual document")
+        result = engine.evaluate(report_json("Actual document"))
     entry = engine.db.step_history.list(task_key=engine.task_key)[0]
     diagnostic = entry.evaluation_snapshot["diagnostics"]
     assert result["retryable"] is True
@@ -209,7 +212,7 @@ def test_invalid_annotations_are_flagged_without_changing_business_decision(expl
 
 
 def test_diagnostics_use_universal_prompt_with_explicit_item_reasons():
-    assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v14"
+    assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v15"
     assert "item_explanations" not in PromptBuilder.SYSTEM_PROMPT
     assert set(ResponseParser.parse({
         "verdict": "PARTIAL", "covered": [], "missing": ["1"], "blockers": [],
@@ -234,7 +237,7 @@ def test_capture_error_never_changes_a_business_verdict_or_persistence(target, s
     engine = SupervisorEngine("RUN-943")
     supervisor_llm("PASS")
     with patch("project_workflow.supervisor.evaluate." + target, side_effect=RuntimeError("private failure")):
-        assert engine.evaluate("actual completed report")["verdict"] == "PASS"
+        assert engine.evaluate(report_json("actual completed report"))["verdict"] == "PASS"
     entry = engine.db.step_history.list(task_key=engine.task_key)[0]
     diagnostic = entry.evaluation_snapshot["diagnostics"]
     assert "private failure" not in json.dumps(diagnostic)

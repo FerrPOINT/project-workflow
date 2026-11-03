@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+from tests._report_helpers import report_json
+
 pytestmark = [pytest.mark.supervisor]
 
 from project_workflow.supervisor import SupervisorEngine
@@ -114,7 +116,7 @@ class TestEvaluateAccumulationEndToEnd:
 
         # First report: covers only check 1
         supervisor_llm("PARTIAL", covered=["tests run"], missing=["code fixed"])
-        result1 = engine.evaluate("I ran tests first")
+        result1 = engine.evaluate(report_json("I ran tests first"))
         assert result1["verdict"] == "PARTIAL"
         assert "tests run" in result1["covered"]
         assert "code fixed" in result1["missing"]
@@ -124,7 +126,7 @@ class TestEvaluateAccumulationEndToEnd:
 
         # Second report: covers check 2 (with accumulated coverage from first run)
         supervisor_llm("PASS", covered=["tests run", "code fixed"])
-        result2 = engine.evaluate("I fixed failing code")
+        result2 = engine.evaluate(report_json("I fixed failing code"))
         assert result2["verdict"] == "PASS", f"Expected pass with accumulated coverage, got {result2['verdict']}"
         assert "tests run" in result2["covered"], "Previously covered item should persist"
         assert "code fixed" in result2["covered"], "Current report item should be covered"

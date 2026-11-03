@@ -15,6 +15,7 @@ from project_workflow.domain.runtime_assignment import payload_sha256
 from project_workflow.infrastructure.db.single_task_catalog import load_profile
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.infrastructure.llm import OpenAICompatibleClient
+from tests._report_helpers import report_json
 from tests.test_catalog_publication import active, publication
 from tests.test_catalog_publication import verified_catalog_administrator as verified_catalog_administrator
 from tests.test_configured_cli import MACHINE, enroll, step
@@ -228,7 +229,7 @@ def test_preparation_source_without_full_document_remains_partial(
     _publish(client, active(client, _workflow_id(assignment)), business["modes"])
     enrollment = enroll(configured)
     supervisor_llm("PASS")
-    context = step(configured, report="Synthetic completed reading of the request and discussion.",
+    context = step(configured, report=report_json("Synthetic completed reading of the request and discussion."),
                    operation_key="source-only-context", expected_version=enrollment["version"])
     assert context.status_code == 200
     view = _cli_read(configured, monkeypatch)
@@ -244,13 +245,13 @@ def test_preparation_source_without_full_document_remains_partial(
     response = step(
         configured,
         report=(
-            "Owner request: a shared persistent task list for two staff members. Current owner decisions: "
+            report_json("Owner request: a shared persistent task list for two staff members. Current owner decisions: "
             "separate accounts with equal access; manual creation; a nonempty trimmed name and description; "
             "an assignee chosen from those two staff is mandatory. Both staff see all tasks after refresh "
             "or later sign-in. Editing, deletion, statuses and integrations are excluded. "
             "All material choices have owner answers; no unanswered questions or PM assumptions remain. "
             "The FULL saved requirements document is not included in this report. "
-            "Document preparation is not claimed complete."
+            "Document preparation is not claimed complete.")
         ),
         operation_key="source-only-preparation", expected_version=view["version"],
     )
@@ -274,7 +275,7 @@ def test_preparation_pending_owner_input_with_present_evidence_remains_partial(
     _publish(client, active(client, _workflow_id(assignment)), business["modes"])
     enrollment = enroll(configured)
     supervisor_llm("PASS")
-    context = step(configured, report="Synthetic completed reading of the request and discussion.",
+    context = step(configured, report=report_json("Synthetic completed reading of the request and discussion."),
                    operation_key="pending-preparation-context", expected_version=enrollment["version"])
     assert context.status_code == 200
     view = _cli_read(configured, monkeypatch)
@@ -288,12 +289,12 @@ def test_preparation_pending_owner_input_with_present_evidence_remains_partial(
     response = step(
         configured,
         report=(
-            "Owner request: a shared task list for two staff members. Owner decisions: both staff can "
+            report_json("Owner request: a shared task list for two staff members. Owner decisions: both staff can "
             "create and read tasks. FULL saved working requirements: the shared list persists tasks; "
             "each task has a nonempty name and description. Both staff see all saved tasks. "
             "Open material question: must a task have an assignee at creation, or may it be unassigned? "
             "The owner has not answered; neither alternative is adopted as a default. "
-            "The requirements are not ready while this choice remains unresolved."
+            "The requirements are not ready while this choice remains unresolved.")
         ),
         operation_key="pending-preparation-owner-choice", expected_version=view["version"],
     )
@@ -402,7 +403,7 @@ def test_fixture_publication_and_actual_cli_deliver_all_three_contracts_verbatim
         assert view["complete"] is False
         assert "terminal_receipt" not in view
         if index < 2:
-            response = step(configured, report=f"Synthetic completed business phase {index + 1}",
+            response = step(configured, report=report_json(f"Synthetic completed business phase {index + 1}"),
                             operation_key=f"business-phase-{index + 1}", expected_version=view["version"])
             assert response.status_code == 200
     # No final submission: receipt admission and business quality are separate contracts.
@@ -419,7 +420,7 @@ def test_business_publication_preserves_historical_catalog_execution_history_and
     assert previous["content_sha256"] == historic["content_sha256"]
     enrollment = enroll(configured)
     supervisor_llm("PASS")
-    assert step(configured, report="Synthetic historical context", operation_key="historical-context",
+    assert step(configured, report=report_json("Synthetic historical context"), operation_key="historical-context",
                 expected_version=enrollment["version"]).status_code == 200
     old_view = _cli_read(configured, monkeypatch)
     history_params = {"interaction_protocol": assignment["interaction_protocol"], "task": assignment["task"],
@@ -464,7 +465,7 @@ def test_pending_owner_question_remains_partial_despite_valid_saved_consent(
     enrollment = enroll(configured)
     supervisor_llm("PASS")
     for version in (1, 2):
-        assert step(configured, report=f"Synthetic completed phase {version}",
+        assert step(configured, report=report_json(f"Synthetic completed phase {version}"),
                     operation_key=f"prior-{version}", expected_version=version).status_code == 200
     assert enrollment["version"] == 1
     _, _, reader = tracker_confirmation(configured, monkeypatch)
@@ -473,7 +474,8 @@ def test_pending_owner_question_remains_partial_despite_valid_saved_consent(
                    missing=[final["checks"][3]])
     provider = Mock(side_effect=OpenAICompatibleClient.chat)
     monkeypatch.setattr(OpenAICompatibleClient, "chat", provider)
-    response = step(configured, report="Synthetic FULL packet; a new material owner choice remains pending.",
+    response = step(configured,
+                    report=report_json("Synthetic FULL packet; a new material owner choice remains pending."),
                     operation_key="pending-owner-choice", expected_version=3,
                     requirements_revision=7, requirements_sha256="a" * 64)
     assert response.status_code == 200

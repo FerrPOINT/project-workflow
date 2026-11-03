@@ -1,6 +1,7 @@
 """Trusted confirmation context uses real guards and controlled provider responses."""
 
 import copy
+import json
 from unittest.mock import Mock
 from uuid import uuid4
 
@@ -12,6 +13,7 @@ from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.infrastructure.llm import OpenAICompatibleClient, PromptBuilder
 from project_workflow.supervisor.evidence import validate_frozen_evaluation
+from tests._report_helpers import report_json
 from tests.test_configured_cli import WRITER, complete, enroll, step
 from tests.test_configured_cli import configured as configured
 from tests.test_pm_advisor_policy import latest_evaluation
@@ -29,7 +31,7 @@ def advance(configured, supervisor_llm, phase_number):
     enroll(configured)
     supervisor_llm("PASS")
     for version in range(1, phase_number):
-        response = step(configured, report="Controlled prior phase", operation_key=f"before-{version}",
+        response = step(configured, report=report_json("Controlled prior phase"), operation_key=f"before-{version}",
                         expected_version=version)
         assert response.status_code == 200, response.text
 
@@ -53,7 +55,7 @@ def tracker_confirmation(configured, monkeypatch):
 
 
 def final_command():
-    return {"report": FAKE_REPORT, "operation_key": "verified-final", "expected_version": 3,
+    return {"report": report_json(FAKE_REPORT), "operation_key": "verified-final", "expected_version": 3,
             "requirements_revision": 7, "requirements_sha256": "a" * 64}
 
 
@@ -79,16 +81,16 @@ def test_machine_confirmation_stays_on_server_not_in_provider_context(
     monkeypatch.setattr(OpenAICompatibleClient, "chat", provider)
     is_pm = configured[1]["role_key"] == "project_manager"
     trusted = is_pm and phase_number == 3
-    command = {"report": FAKE_REPORT, "operation_key": "current-report", "expected_version": phase_number}
+    command = {"report": report_json(FAKE_REPORT), "operation_key": "current-report", "expected_version": phase_number}
     if trusted:
         command.update(requirements_revision=7, requirements_sha256="a" * 64)
     response = step(configured, **command)
     assert response.status_code == 200, response.text
     provider.assert_called_once()
     user = provider.call_args.kwargs["user"]
-    prefix, worker = user.split("WORKER REPORT:", 1)
-    assert TRUSTED not in prefix
-    assert FAKE_REPORT in worker
+    payload = json.loads(user)
+    assert payload["report"]["result"]["document"] == FAKE_REPORT
+    assert TRUSTED not in json.dumps({key: value for key, value in payload.items() if key != "report"})
     for value in ("a" * 64, configured[1]["owner_subject"], configured[1]["tracker_task_id"],
                   configured[1]["assignment_ref"]):
         assert value not in user
@@ -147,7 +149,8 @@ def test_confirmation_changed_during_provider_call_cannot_commit(
     controlled_chat = OpenAICompatibleClient.chat
 
     def changed(*args, **kwargs):
-        assert TRUSTED not in kwargs["user"].split("WORKER REPORT:", 1)[0]
+        payload = json.loads(kwargs["user"])
+        assert TRUSTED not in json.dumps({key: value for key, value in payload.items() if key != "report"})
         result = controlled_chat(*args, **kwargs)
         receipt["owner_subject" if change == "owner" else "id"] = str(uuid4())
         return result
@@ -173,16 +176,17 @@ def test_old_pm_frozen_proof_replays_unchanged_after_business_review_upgrade(
     current_builder = PromptBuilder.build_user_prompt
 
     def old_user(*args, **kwargs):
-        user = current_builder(*args, **kwargs)
-        return (TRUSTED + " Historical owner receipt context.\n" + user
-                if old_version == "supervisor-evaluator-pm-v2" else user)
+        user = json.loads(current_builder(*args, **kwargs))
+        if old_version == "supervisor-evaluator-pm-v2":
+            user["historical_confirmation_context"] = TRUSTED + " Historical owner receipt context."
+        return json.dumps(user, ensure_ascii=False)
 
     # Reproduce the previous prompt boundary while letting Supervisor create its own frozen proof.
     with monkeypatch.context() as old:
         old.setattr(PromptBuilder, "PROMPT_VERSION", old_version)
         old.setattr(PromptBuilder, "build_user_prompt", staticmethod(old_user))
         selector, result = complete(configured, supervisor_llm, old)
-    assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v14"
+    assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v15"
     history_id = result["terminal_receipt"]["history_id"]
     with SAUnitOfWork() as uow:
         record = uow.step_history.get_by_id(history_id).to_dict()
@@ -197,7 +201,7 @@ def test_old_pm_frozen_proof_replays_unchanged_after_business_review_upgrade(
     readback = configured[0].post("/internal/runtime/terminal-receipt/readback", headers=WRITER, json=selector)
     assert readback.status_code == 200, readback.text
     assert readback.json()["receipt"] == result["terminal_receipt"]
-    replay = step(configured, report="Actual report 3", operation_key="phase-3", expected_version=3,
+    replay = step(configured, report=report_json("Actual report 3"), operation_key="phase-3", expected_version=3,
                   requirements_revision=7, requirements_sha256="a" * 64)
     assert replay.status_code == 200, replay.text
     assert replay.json()["result"] == result

@@ -8,6 +8,7 @@ from sqlalchemy import select
 from project_workflow import config
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
+from tests._report_helpers import report_json
 from tests._retained_pm_history import retained_pm
 from tests.test_configured_cli import MACHINE, enroll, step
 from tests.test_configured_cli import configured as configured
@@ -43,7 +44,7 @@ def test_same_key_in_legacy_and_configured_namespaces_keeps_history_separate(
         supervisor_llm("PASS")
         response = step(
             configured,
-            report="New namespace's own report",
+            report=report_json("New namespace's own report"),
             operation_key="namespace-separated",
             expected_version=cursor["version"],
         )
@@ -59,7 +60,7 @@ def test_same_key_in_legacy_and_configured_namespaces_keeps_history_separate(
         )
         assert history.status_code == 200, history.text
         assert len(history.json()["result"]["records"]) == 1
-        assert history.json()["result"]["records"][0]["worker_report"] == "New namespace's own report"
+        assert history.json()["result"]["records"][0]["worker_report"] == report_json("New namespace's own report")
         with SAUnitOfWork() as uow:
             new = uow.tasks.get_by_key(assignment["task"], project_id=assignment["namespace_id"])
             assert new.id != old_id and new.project_id != old_namespace

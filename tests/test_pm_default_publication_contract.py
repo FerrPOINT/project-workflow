@@ -19,6 +19,7 @@ from project_workflow.application import catalog_publication, configured_cli
 from project_workflow.domain.runtime_assignment import payload_sha256
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
+from tests._report_helpers import report_json
 from tests.test_catalog_publication import active, publication
 from tests.test_catalog_publication import verified_catalog_administrator as verified_catalog_administrator
 from tests.test_configured_cli import MACHINE, enroll, step
@@ -218,7 +219,8 @@ def test_pm_default_publication_changes_checks_evidence_and_new_cli_but_not_old_
     previous = _publish(client, active(client, workflow_id), _accepted_v3()["modes"])
     enrollment = enroll(configured)
     supervisor_llm("PASS")  # Synthetic phase-1 cursor setup, not requirements quality evidence.
-    response = step(configured, report="Synthetic first-phase fixture context", operation_key="old-context",
+    response = step(configured, report=report_json("Synthetic first-phase fixture context"),
+                    operation_key="old-context",
                     expected_version=enrollment["version"])
     assert response.status_code == 200, response.text
     old_view = _cli_read(configured, monkeypatch)
@@ -239,7 +241,8 @@ def test_pm_default_publication_changes_checks_evidence_and_new_cli_but_not_old_
     next_assignment["tracker_task_id"] = next_assignment["business_task_ref"]
     new_fixture = client, next_assignment
     fresh = enroll(new_fixture)
-    response = step(new_fixture, report="Synthetic new first-phase fixture context", operation_key="new-context",
+    response = step(new_fixture, report=report_json("Synthetic new first-phase fixture context"),
+                    operation_key="new-context",
                     expected_version=fresh["version"])
     assert response.status_code == 200, response.text
     current = _cli_read(new_fixture, monkeypatch)
@@ -270,14 +273,14 @@ def test_pm_default_preparation_cursor_never_requires_confirmation_before_final_
     confirmation = Mock(side_effect=RuntimeError("Synthetic absent owner confirmation"))
     monkeypatch.setattr(configured_cli, "confirmation", confirmation)
     supervisor_llm("PASS")  # Controlled cursor transition only; not a live PASS.
-    first = step(configured, report="Synthetic first-phase context fixture", operation_key="phase-one",
+    first = step(configured, report=report_json("Synthetic first-phase context fixture"), operation_key="phase-one",
                  expected_version=enrollment["version"])
     assert first.status_code == 200, first.text
     prepared = _cli_read(configured, monkeypatch)
     assert prepared["phase_code"] == "PM-DRAFT-02"
     required = prepared["phase_contract"]["required_evidence"]
     supervisor_llm(verdict, missing=required if verdict == "PARTIAL" else None)
-    result = step(configured, report="Synthetic FULL saved Draft and prepared review packet; no consent",
+    result = step(configured, report=report_json("Synthetic FULL saved Draft and prepared review packet; no consent"),
                   operation_key="prepare-packet", expected_version=prepared["version"])
     assert result.status_code == 200, result.text
     body = result.json()["result"]
@@ -290,7 +293,8 @@ def test_pm_default_preparation_cursor_never_requires_confirmation_before_final_
         assert current["version"] == body["version"]
         supervisor_llm("PASS")  # Corrected synthetic evidence exercises the same execution cursor.
         corrected = step(
-            configured, report="Synthetic corrected FULL saved Draft, exact receipt and complete owner-review packet",
+            configured,
+            report=report_json("Synthetic corrected FULL saved Draft, exact receipt and complete owner-review packet"),
             operation_key="prepare-packet-corrected", expected_version=body["version"],
         )
         assert corrected.status_code == 200, corrected.text
@@ -306,7 +310,7 @@ def test_pm_default_preparation_cursor_never_requires_confirmation_before_final_
             assert uow.session.scalar(select(func.count()).select_from(m.WorkflowCatalogPublication)) == 1
     else:
         assert current["phase_code"] == "PM-DRAFT-03"
-        refusal = step(configured, report="Synthetic final report with no owner consent",
+        refusal = step(configured, report=report_json("Synthetic final report with no owner consent"),
                        operation_key="final-without-consent", expected_version=current["version"])
         assert refusal.status_code == 503, refusal.text
         assert confirmation.called
@@ -320,7 +324,8 @@ def test_pm_default_preparation_cursor_never_requires_confirmation_before_final_
         confirmation.return_value = confirmed
         supervisor_llm("PASS")  # Synthetic exact consent and verdict, not human/live acceptance.
         finished = step(
-            configured, report="Synthetic FULL saved document, matching receipt and actual presentation account",
+            configured,
+            report=report_json("Synthetic FULL saved document, matching receipt and actual presentation account"),
             operation_key="final-with-matching-consent", expected_version=current["version"],
             requirements_revision=7, requirements_sha256="c" * 64,
         )

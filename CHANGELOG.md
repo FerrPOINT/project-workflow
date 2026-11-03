@@ -1,6 +1,37 @@
 # Changelog
 
-## Private Assessments And Refusal Reasons - 2026-11-03
+## Structured Phase Reports - 2026-11-03 (In Progress)
+
+- Cause: the phase report crossed the CLI/Workflow boundary as opaque text. Source
+  facts, actual artifacts and unresolved work had no enforced structural boundary.
+- New writes use one JSON report: source:string, result:object, unresolved:string[].
+  The CLI and server validate structure, not business keywords. Advisor v15 receives
+  a single JSON data object with the report nested once, current criteria and marks.
+- Format errors do not call the provider or advance history. Historical authorized
+  readback precedes new-report validation; old receipts retain their saved algorithm.
+  New report identity preserves case, whitespace and punctuation. Identity/confirmation
+  checks remain server-owned and independent of worker claims or model confidence.
+- One format repair keeps user data unchanged and updates only the system instruction;
+  diagnostics capture the actual system for each attempt. No alternate model, provider,
+  report format, keyword-based acceptance or automatic verdict correction is added.
+- Fresh model qualification: 28/28 decisions and 126/126 criterion classifications
+  match the frozen labels; 28 HTTP calls, no format repair or semantic retry. Real
+  request bodies and responses are saved in advisor-v15-structured-qualification-20261103.json.
+  This limited matrix is not live PM acceptance or acceptance of seven professions.
+- Source validation: full native run, 341 affected cases and 101 boundary checks give
+  3779 unique passing cases, 15 skips and no remaining failures; coverage 94.271647%.
+  The original 47 failures and 45 setup errors remain in their saved XML; only fresh
+  plaintext submissions were migrated. Changed Unicode-validator coverage was purged
+  and rebuilt. PG: 129 initial passes plus all three corrected fixture cases, 132/132.
+  Ruff, mypy167, pinned namespace export and Git hygiene pass. Independent review found
+  no blocking issue. Skipped browser/private-source checks are not acceptance evidence.
+- Installed Workflow CLI already forwards structured reports and exposes refusal
+  reasons with --json. Its local validator and ordinary text-output upgrade remain
+  a separate delivery gap, not a prerequisite for live PM testing. Base is unchanged.
+- Installation, two live PM scenarios and merge remain OPEN. The earlier v14 results
+  below are historical, not qualification of this changed request.
+
+## Historical: Private Assessments And Refusal Reasons - 2026-11-03
 
 - Cause: the model independently generated covered/missing lists; phase refusals
   had only a global explanation, which the ordinary CLI did not display for PARTIAL.

@@ -5,6 +5,7 @@ import pytest
 pytestmark = [pytest.mark.supervisor]
 
 from project_workflow import supervisor
+from project_workflow.supervisor.context import SupervisorContextBuilder
 
 
 class TestSupervisorFullContext:
@@ -33,12 +34,19 @@ class TestSupervisorFullContext:
         assert ctx["task_key"] == "RUN-987654"
         assert ctx["namespace_cli_command"] == "workflow-run"
         assert ctx["cli_actor"]["entrypoint"] == (
-            "workflow-run step --task RUN-987654 [--report TEXT]"
+            "workflow-run step --task RUN-987654 [--report -]"
         )
 
         prompt = engine.get_phase_prompt()
-        assert "workflow-run step --task RUN-987654 [--report TEXT]" in prompt
+        assert "workflow-run step --task RUN-987654 [--report -]" in prompt
         assert "RUN-42" not in prompt
+
+    def test_report_template_is_the_generic_structured_envelope(self):
+        ctx = supervisor.SupervisorEngine("RUN-1").get_full_context()
+        assert ctx["report_template"] == {"source": "", "result": {}, "unresolved": []}
+        ctx["report_template"]["result"]["document"] = "Profession-specific work"
+        ctx["report_template"]["unresolved"].append("Actual gap")
+        assert SupervisorContextBuilder._report_template() == {"source": "", "result": {}, "unresolved": []}
 
     def test_all_phases_present(self):
         engine = supervisor.SupervisorEngine("RUN-1")

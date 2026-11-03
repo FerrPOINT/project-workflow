@@ -18,6 +18,7 @@ from project_workflow.infrastructure.single_task_catalog import (
 from project_workflow.infrastructure.single_task_delivery_instructions import completion_instruction
 from project_workflow.interfaces.cli import ui
 from project_workflow.interfaces.cli.core import cli
+from tests._report_helpers import report_json
 
 
 @pytest.fixture
@@ -118,13 +119,13 @@ def test_report_command_uses_the_same_existing_step_and_namespace(professions, m
         text = " ".join(i["description"] for i in mode["phases"][-1]["instructions"])
         assert "--report -" in text and "--operation-key" in text and "--expected-version" in text
         result = CliRunner().invoke(cli,["--json","step","--task","RUN-17","--report","-",
-            "--operation-key","original-report","--expected-version","3"], input="actual evidence")
+            "--operation-key","original-report","--expected-version","3"], input=report_json("actual evidence"))
         assert result.exit_code == 0, result.output
     assert len(calls) == 8
     assert all(call[:3] == ("POST","step","RUN-17") for call in calls)
     for call in calls:
         body = call[3]["body"]
-        assert body["namespace_id"] == 17 and body["report"] == "actual evidence"
+        assert body["namespace_id"] == 17 and body["report"] == report_json("actual evidence")
         assert body["operation_key"] == "original-report" and body["expected_version"] == 3
 
 

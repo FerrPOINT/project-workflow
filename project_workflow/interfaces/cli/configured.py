@@ -9,6 +9,7 @@ from urllib.parse import urlsplit
 
 from project_workflow.domain.configured_cli import PROTOCOL, ConfiguredStep
 from project_workflow.domain.namespace_ownership import canonical_uuid
+from project_workflow.domain.phase_report import PhaseReport
 from project_workflow.infrastructure.platform_namespace import is_personal_token
 
 
@@ -77,6 +78,8 @@ def step(task: str, report: str | None, operation_key: str | None, expected_vers
     _, _, _, namespace = environment()
     if report == "-":
         report = sys.stdin.read(32_001)
+    if report is not None:
+        PhaseReport.parse(report)
     command = ConfiguredStep(interaction_protocol=PROTOCOL, task=task, namespace_id=namespace,
                              report=report, operation_key=operation_key, expected_version=expected_version,
                              requirements_revision=requirements_revision, requirements_sha256=requirements_sha256)

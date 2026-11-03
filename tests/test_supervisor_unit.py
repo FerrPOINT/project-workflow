@@ -8,6 +8,7 @@ pytestmark = [pytest.mark.supervisor]
 
 from project_workflow.infrastructure.db.session import ensure_schema
 from project_workflow.supervisor import SupervisorEngine
+from project_workflow.supervisor.context import SupervisorContextBuilder
 from project_workflow.supervisor.models import Phase
 
 
@@ -40,13 +41,7 @@ class TestSupervisor:
                 "workflow_name": "W",
                 "current_contract": {},
                 "cli_actor": {"description": "d", "entrypoint": "e"},
-                "report_template": {
-                    "summary": "s",
-                    "completed": "c",
-                    "evidence": "e",
-                    "blockers": "b",
-                    "next_step": "n",
-                },
+                "report_template": SupervisorContextBuilder._report_template(),
             }
         )
         prompt = engine.get_phase_prompt("0")
@@ -80,13 +75,7 @@ class TestSupervisor:
                 "workflow_name": "W",
                 "current_contract": {},
                 "cli_actor": {"description": "d", "entrypoint": "e"},
-                "report_template": {
-                    "summary": "s",
-                    "completed": "c",
-                    "evidence": "e",
-                    "blockers": "b",
-                    "next_step": "n",
-                },
+                "report_template": SupervisorContextBuilder._report_template(),
             }
         )
         prompt = engine.get_phase_prompt("parallel-a")
@@ -121,7 +110,7 @@ class TestPromptAndModels:
             "workflow_name": "W",
             "current_contract": None,
             "cli_actor": {"description": "d", "entrypoint": "e"},
-            "report_template": {"summary": "s", "completed": "c", "evidence": "e", "blockers": "b", "next_step": "n"},
+            "report_template": SupervisorContextBuilder._report_template(),
         }
         result = build_phase_prompt("RUN-1", {"2": phase}, [phase], "1", ctx, phase_code="2")
         assert "Two" in result
@@ -146,7 +135,7 @@ class TestPromptAndModels:
             "workflow_name": "W",
             "current_contract": contract,
             "cli_actor": {"description": "d", "entrypoint": "e"},
-            "report_template": {"summary": "s", "completed": "c", "evidence": "e", "blockers": "b", "next_step": "n"},
+            "report_template": SupervisorContextBuilder._report_template(),
         }
         result = build_phase_prompt("RUN-1", {"1": phase}, [phase], "1", ctx)
         assert "I1" in result

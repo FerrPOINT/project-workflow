@@ -16,6 +16,7 @@ from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces import ui as ui_package
 from project_workflow.interfaces.ui import state as ui_state
 from tests import test_configured_cli as protocol
+from tests._report_helpers import report_json
 from tests.test_postgres_integration import pg_url as pg_url
 
 pytestmark = pytest.mark.integration
@@ -86,7 +87,7 @@ def test_all_professions_persist_three_phases_and_exact_replays(configured, supe
     monkeypatch.setattr(configured_cli, "confirmation", lambda _payload: confirmation)
     for version in (1, 2, 3):
         command = {
-            "report": f"Controlled completed phase {version}",
+            "report": report_json(f"Controlled completed phase {version}"),
             "operation_key": f"pg-report-{version}", "expected_version": version,
         }
         if pm and version == 3:
@@ -121,7 +122,7 @@ def test_concurrent_reports_have_one_committed_transition(configured, supervisor
     monkeypatch.setattr(OpenAICompatibleClient, "chat", chat)
 
     def submit(index):
-        return protocol.step(configured, report="One exact report", expected_version=1,
+        return protocol.step(configured, report=report_json("One exact report"), expected_version=1,
                              operation_key="same" if same_key else f"distinct-{index}")
 
     with ThreadPoolExecutor(max_workers=2) as pool:
@@ -150,7 +151,7 @@ def test_assignment_changed_during_evaluation_cannot_publish_old_report(configur
 
     monkeypatch.setattr(OpenAICompatibleClient, "chat", chat)
     with ThreadPoolExecutor(max_workers=1) as pool:
-        future = pool.submit(protocol.step, configured, report="Old assignment report",
+        future = pool.submit(protocol.step, configured, report=report_json("Old assignment report"),
                              operation_key="old-report", expected_version=1)
         try:
             assert entered.wait(timeout=15)
@@ -240,8 +241,8 @@ def test_cli_process_http_and_postgres_keep_one_report_and_no_workflow_files(
                      "--expected-version", str(version)]
         if configured[1]["role_key"] == "project_manager" and version == 3:
             arguments += ["--requirements-revision", "7", "--requirements-sha256", "a" * 64]
-        accepted = cli(*arguments, report=f"Отчёт subprocess №{version}")
-        assert cli(*arguments, report=f"Отчёт subprocess №{version}") == accepted
+        accepted = cli(*arguments, report=report_json(f"Отчёт subprocess №{version}"))
+        assert cli(*arguments, report=report_json(f"Отчёт subprocess №{version}")) == accepted
     assert accepted["complete"] is True
     assert accepted["execution_ref"] == initial["execution_ref"]
     records = cli("history", *base)["records"]
@@ -251,5 +252,5 @@ def test_cli_process_http_and_postgres_keep_one_report_and_no_workflow_files(
         assert uow.session.scalar(select(func.count()).select_from(m.TaskStepHistoryEntry)) == 3
         assert list(uow.session.scalars(
             select(m.TaskStepHistoryEntry.worker_report).order_by(m.TaskStepHistoryEntry.id)
-        )) == [f"Отчёт subprocess №{version}" for version in (1, 2, 3)]
+        )) == [report_json(f"Отчёт subprocess №{version}") for version in (1, 2, 3)]
         assert uow.session.scalar(select(func.count()).select_from(m.PMRun)) == 0

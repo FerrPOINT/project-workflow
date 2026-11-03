@@ -10,6 +10,7 @@ from click.testing import CliRunner
 from project_workflow.interfaces.cli import ui
 from project_workflow.interfaces.cli.core import cli
 from project_workflow.supervisor.formatting import format_result
+from tests._report_helpers import report_json
 from tests.test_configured_cli import configured as configured
 from tests.test_configured_cli import enroll, step
 
@@ -120,7 +121,7 @@ def test_configured_api_reason_reaches_actual_cli_on_fresh_and_frozen_replay(
 
     def request(task, report, operation_key, expected_version, **kwargs):
         assert task == configured[1]["task"]
-        response = step(configured, report=report, operation_key=operation_key,
+        response = step(configured, report=report_json(report), operation_key=operation_key,
                         expected_version=expected_version, **kwargs)
         assert response.status_code == 200, response.text
         return response.json()

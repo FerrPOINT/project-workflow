@@ -8,6 +8,7 @@ import pytest
 from project_workflow.infrastructure.llm import OpenAICompatibleClient, PromptBuilder
 from project_workflow.supervisor import SupervisorEngine
 from project_workflow.supervisor.diagnostics import history_diagnostic
+from tests._report_helpers import report_json
 
 pytestmark = pytest.mark.supervisor
 
@@ -17,7 +18,7 @@ def test_private_assessments_are_saved_beside_canonical_public_response(supervis
     provider = Mock(side_effect=OpenAICompatibleClient.chat)
     monkeypatch.setattr(OpenAICompatibleClient, "chat", provider)
     engine = SupervisorEngine("RUN-9411")
-    result = engine.evaluate("The required result has not been prepared.")
+    result = engine.evaluate(report_json("The required result has not been prepared."))
     assert result["verdict"] == "PARTIAL" and not result["retryable"]
     assert "Test Supervisor criterion" in result["message"]
     entry = engine.db.step_history.list(task_key=engine.task_key)[0]
@@ -47,7 +48,7 @@ def test_provider_format_is_explicit_and_frozen(supervisor_llm, monkeypatch, mod
     provider = Mock(side_effect=OpenAICompatibleClient.chat)
     monkeypatch.setattr(OpenAICompatibleClient, "chat", provider)
     engine = SupervisorEngine("RUN-9412")
-    result = engine.evaluate("Complete phase result")
+    result = engine.evaluate(report_json("Complete phase result"))
     assert result["verdict"] == "PASS", result
     snapshot = engine.db.step_history.list(task_key=engine.task_key)[0].evaluation_snapshot
     assert snapshot["contract_fingerprint_state"]["evaluator_response_format"] == mode
@@ -58,19 +59,23 @@ def test_provider_format_is_explicit_and_frozen(supervisor_llm, monkeypatch, mod
         assert "response_format" not in provider.call_args.kwargs
 
 
-def test_v13_frozen_history_does_not_require_new_assessments():
+@pytest.mark.parametrize("policy", ["supervisor-evaluator-v13", "supervisor-evaluator-v14"])
+def test_historical_frozen_history_does_not_require_new_assessments(policy):
+    from project_workflow.supervisor.checks import normalize_text
     from project_workflow.supervisor.evaluate import _fingerprint_contract_state, _report_fingerprint
     from project_workflow.supervisor.evidence import validate_frozen_evaluation
 
     items = [{"id": "phase:check:7", "text": "Prepared result"}]
     contract = {"phase_code": "phase"}
-    state = {"prompt_version": "supervisor-evaluator-v13", "contract": contract,
+    state = {"prompt_version": policy, "contract": contract,
              "evaluation_items": items, "previously_covered_ids": [], "delegation_allowed": False,
              "group": ["phase"], "transition_routes": {}, "phase_graph": []}
+    if policy == "supervisor-evaluator-v14":
+        state["evaluator_response_format"] = "json_object"
     fingerprint = _fingerprint_contract_state(state)
     step = {"task_id": 7, "worker_report": "Prepared result", "covered_item_ids": [items[0]["id"]],
-            "replay_fingerprint": _report_fingerprint(7, "Prepared result", fingerprint)}
-    snapshot = {"prompt_version": "supervisor-evaluator-v13", "contract_snapshot": {
+            "replay_fingerprint": _report_fingerprint(7, normalize_text("Prepared result"), fingerprint)}
+    snapshot = {"prompt_version": policy, "contract_snapshot": {
         **contract, "evaluation_items": items}, "contract_fingerprint": fingerprint,
         "evaluated_contract_fingerprint": fingerprint, "contract_fingerprint_state": state,
         "covered_item_ids": [items[0]["id"]], "raw_evaluator": {"verdict": "PASS",
@@ -93,7 +98,7 @@ def test_provider_stop_is_not_retried_as_a_format_repair(monkeypatch, outcome, r
         raise ValueError("Provider stopped the response")
 
     monkeypatch.setattr(OpenAICompatibleClient, "chat", stopped)
-    result = SupervisorEngine("RUN-9413").evaluate("Actual phase report")
+    result = SupervisorEngine("RUN-9413").evaluate(report_json("Actual phase report"))
     assert result["verdict"] == "BLOCKED" and result["retryable"]
     assert reason in " ".join(result["blockers"])
     assert len(calls) == 1

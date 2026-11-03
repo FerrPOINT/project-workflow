@@ -14,6 +14,10 @@ pytestmark = pytest.mark.unit
 ITEMS = [("check:1", "Saved FULL document"), ("evidence:1", "Exact revision/content_hash")]
 
 
+def _report(text="Reported outcome"):
+    return {"source": "Reported source facts", "result": {"content": text}, "unresolved": []}
+
+
 def _phase(delegate=False):
     return SimpleNamespace(
         code="PM-DRAFT-02",
@@ -31,11 +35,12 @@ def _phase(delegate=False):
 @pytest.mark.parametrize("delegate", [False, True])
 @pytest.mark.parametrize("explicit", [False, True])
 def test_legacy_pm_flag_does_not_select_a_policy(delegate, explicit):
-    args = ("CASE-1", _phase(delegate), "Current report\nFULL document", ["check:1"], ITEMS if explicit else None)
+    args = ("CASE-1", _phase(delegate), _report("Current report\nFULL document"),
+            ["check:1"], ITEMS if explicit else None)
     default = PromptBuilder.build_user_prompt(*args)
     assert PromptBuilder.build_user_prompt(*args, pm_evaluation=False) == default
     assert PromptBuilder.build_user_prompt(*args, pm_evaluation=True) == default
-    assert PromptBuilder.PM_PROMPT_VERSION == PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v14"
+    assert PromptBuilder.PM_PROMPT_VERSION == PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v15"
 
 
 def test_pm_system_alias_uses_the_same_assessment_contract():
@@ -49,27 +54,35 @@ def test_pm_system_alias_uses_the_same_assessment_contract():
 
 @pytest.mark.parametrize("delegate", [False, True])
 def test_pm_contains_only_phase_criteria_and_complete_business_report(delegate):
-    report = 'Owner answers\nFULL saved document: {"scope": ["all facts"], "title_limit": 200}'
+    report = {
+        "source": "Owner answers",
+        "result": {"document": {"scope": ["all facts"], "title_limit": 200}},
+        "unresolved": [],
+    }
     phase = _phase(delegate)
     semantic_items = [("check:1", "Saved FULL document"), ("evidence:1", "Owner decisions and their resolution")]
     args = ("CASE-1", phase, report, ["check:1"], semantic_items)
     generic = PromptBuilder.build_user_prompt(*args)
     pm = PromptBuilder.build_user_prompt(*args, pm_evaluation=True)
     assert pm == generic
-    assert pm.endswith('WORKER REPORT:\n"""' + report + '"""')
-    for label, item_id in PromptBuilder.item_aliases(semantic_items).items():
-        assert f'ID: "{label}" \u2014 {dict(semantic_items)[item_id]}' in pm
-        assert item_id not in pm
-    assert "PRIOR COVERED MARKS (revisable, not permanent): C1" in pm
+    assert json.loads(pm) == {
+        "phase": phase.name,
+        "allowed_verdicts": ["PASS", "PARTIAL", "BLOCKED"] + (["DELEGATE"] if delegate else []),
+        "criteria": [
+            {"id": "C1", "text": "Saved FULL document"},
+            {"id": "E1", "text": "Owner decisions and their resolution"},
+        ],
+        "previously_covered": ["C1"],
+        "report": report,
+    }
+    assert all(item_id not in pm for item_id, _ in semantic_items)
     for unwanted in ("TASK:", "Instructions:", "CASE-1", "hash", "revision", "receipt", "PM_REF", "SUM", "MUST equal"):
         assert unwanted not in pm
-    allowed = "ALLOWED VERDICTS: PASS, PARTIAL, BLOCKED" + (", DELEGATE" if delegate else "")
-    assert allowed in pm.splitlines()
 
 
 def test_pm_explicit_empty_items_do_not_fall_back_to_phase_contents():
-    prompt = PromptBuilder.build_user_prompt("CASE-1", _phase(), "report", evaluation_items=[], pm_evaluation=True)
-    assert "REQUIRED CRITERIA:" in prompt
+    prompt = PromptBuilder.build_user_prompt("CASE-1", _phase(), _report(), evaluation_items=[], pm_evaluation=True)
+    assert json.loads(prompt)["criteria"] == []
     assert "Saved FULL document" not in prompt
     assert "Instructions:" not in prompt
 
@@ -86,7 +99,7 @@ def test_business_catalog_http_request_contains_only_the_current_evaluation(monk
         for field, kind in (("checks", "check"), ("evidence", "evidence"))
         for index, text in enumerate(definition[field], 1)
     ]
-    report = "Current owner request and decisions. Complete current business document."
+    report = _report("Current owner request and decisions. Complete current business document.")
     prompt = PromptBuilder.build_user_prompt(
         "private-task-identifier", phase, report, evaluation_items=items, pm_evaluation=True,
     )
@@ -112,14 +125,19 @@ def test_business_catalog_http_request_contains_only_the_current_evaluation(monk
         {"role": "system", "content": PromptBuilder.PM_SYSTEM_PROMPT},
         {"role": "user", "content": prompt},
     ]
-    assert prompt.count(report) == 1
-    assert all(prompt.count(f'ID: "{label}"') == 1 for label in PromptBuilder.item_aliases(items))
+    user_data = json.loads(prompt)
+    assert user_data["report"] == report
+    assert prompt.count(report["result"]["content"]) == 1
+    assert user_data["criteria"] == [
+        {"id": label, "text": dict(items)[item_id]} for label, item_id in PromptBuilder.item_aliases(items).items()
+    ]
+    assert user_data["previously_covered"] == []
     for instruction in definition["instructions"]:
         assert instruction["description"] not in prompt
     wire_context = json.dumps(payload["messages"])
     for unwanted in (
         "private-task-identifier", "test-only-key", "fingerprint", "sha256", "receipt",
-        "previously_covered", "source_tree", "native_attempts", "task-tracker", "project-workflow",
+        "source_tree", "native_attempts", "task-tracker", "project-workflow",
     ):
         assert unwanted not in wire_context
     assert ResponseParser.parse(actual, required_item_ids=[item_id for item_id, _ in items]).raw == response
@@ -127,13 +145,13 @@ def test_business_catalog_http_request_contains_only_the_current_evaluation(monk
 
 def test_pm_option_is_keyword_only():
     with pytest.raises(TypeError):
-        PromptBuilder.build_user_prompt("CASE-1", _phase(), "report", None, ITEMS, True)
+        PromptBuilder.build_user_prompt("CASE-1", _phase(), _report(), None, ITEMS, True)
 
 
 def test_builder_no_longer_accepts_machine_confirmation_context():
     with pytest.raises(TypeError, match="verified_confirmation_revision"):
         PromptBuilder.build_user_prompt(
-            "CASE-1", _phase(), "report", evaluation_items=ITEMS,
+            "CASE-1", _phase(), _report(), evaluation_items=ITEMS,
             pm_evaluation=True, verified_confirmation_revision=3,
         )
 
