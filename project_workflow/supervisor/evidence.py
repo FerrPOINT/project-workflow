@@ -52,7 +52,7 @@ def validate_frozen_evaluation(
         or state["prompt_version"] not in (
             "supervisor-evaluator-v9", "supervisor-evaluator-v8-no-backtracking",
             "supervisor-evaluator-v11", "supervisor-evaluator-pm-v1", "supervisor-evaluator-pm-v2",
-            "supervisor-evaluator-pm-v3",
+            "supervisor-evaluator-pm-v3", "supervisor-evaluator-pm-v4", "supervisor-evaluator-v12",
             PromptBuilder.PROMPT_VERSION, PromptBuilder.PM_PROMPT_VERSION,
         )
         or state["contract"] != {key: value for key, value in contract.items() if key != "evaluation_items"}

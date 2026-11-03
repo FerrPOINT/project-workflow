@@ -328,14 +328,10 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
     item_ids = [item_id for item_id, _ in evaluation_items]
     item_text = dict(evaluation_items)
     configured = engine.runtime_fence if isinstance(engine.runtime_fence, ConfiguredCliFence) else None
-    pm_evaluation = configured is not None and configured.enrollment["request"]["role_key"] == "project_manager"
-    system = PromptBuilder.PM_SYSTEM_PROMPT if pm_evaluation else PromptBuilder.SYSTEM_PROMPT
-    prompt_version = PromptBuilder.PM_PROMPT_VERSION if pm_evaluation else PromptBuilder.PROMPT_VERSION
-    current_report_only = pm_evaluation and phase.code in ("PM-DRAFT-02", "PM-DRAFT-03")
-    previously = set() if current_report_only else engine._get_previously_covered(phase.code)
-    previously_ids = {
-        item_id for item_id, text in evaluation_items if item_id in previously or normalize_text(text) in previously
-    }
+    system = PromptBuilder.SYSTEM_PROMPT
+    prompt_version = PromptBuilder.PROMPT_VERSION
+    previously = engine._get_previously_covered(phase.code)
+    previously_ids = set(item_ids) & previously
     initial_previously_ids = set(previously_ids)
     catalog_error: ValueError | None = None
     try:
@@ -373,7 +369,6 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         report,
         previously_covered=sorted(previously_ids) or None,
         evaluation_items=evaluation_items,
-        pm_evaluation=pm_evaluation,
     )
     evaluated_items = list(evaluation_items)
 
@@ -441,10 +436,8 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
     )
     item_ids = [item_id for item_id, _ in evaluation_items]
     item_text = dict(evaluation_items)
-    previously = set() if current_report_only else engine._get_previously_covered(phase.code)
-    previously_ids = {
-        item_id for item_id, text in evaluation_items if item_id in previously or normalize_text(text) in previously
-    }
+    previously = engine._get_previously_covered(phase.code)
+    previously_ids = set(item_ids) & previously
     try:
         transition_routes = {
             verdict: engine._resolve_transition(phase, verdict, group)

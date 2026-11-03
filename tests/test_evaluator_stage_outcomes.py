@@ -51,8 +51,8 @@ def test_independent_rework_result_can_finish_the_role_without_a_workflow_rollba
         evaluation_items=items,
     )
     assert "ALLOWED VERDICTS: PASS, PARTIAL, BLOCKED" in prompt
-    assert "phase completion is not candidate approval" in PromptBuilder.SYSTEM_PROMPT
-    assert "documented rework outcome" in PromptBuilder.SYSTEM_PROMPT
+    assert "only its listed criteria and supplied facts" in PromptBuilder.SYSTEM_PROMPT
+    assert all(f'ID: "{key}"' in prompt and text in prompt for key, text in items)
     client = Mock()
     client.chat.return_value = {
         "verdict": "PASS", "covered": item_ids, "missing": [], "blockers": [],
@@ -85,7 +85,8 @@ def test_configured_delegate_remains_available_without_reviving_retained_rollbac
 
 def test_missing_review_work_is_not_excused_by_a_business_rework_verdict():
     prompt = PromptBuilder.SYSTEM_PROMPT
-    assert "Never use a business outcome to excuse missing phase obligations" in prompt
+    assert "covered requires the entire criterion" in prompt
+    assert "PASS: all covered, no blockers" in prompt
     phase = Phase(code="review", name="Independent review")
     client = Mock()
     client.chat.return_value = {

@@ -97,8 +97,8 @@ def test_machine_confirmation_stays_on_server_not_in_provider_context(
     else:
         reader.assert_not_called()
     evaluation = latest_evaluation()
-    version = "supervisor-evaluator-pm-v4" if is_pm else PromptBuilder.PROMPT_VERSION
-    system = PromptBuilder.PM_SYSTEM_PROMPT if is_pm else PromptBuilder.SYSTEM_PROMPT
+    version = PromptBuilder.PROMPT_VERSION
+    system = PromptBuilder.SYSTEM_PROMPT
     assert provider.call_args.kwargs["system"] == system
     assert evaluation["prompt_version"] == version
     assert evaluation["contract_fingerprint_state"]["prompt_version"] == version
@@ -165,6 +165,7 @@ def test_confirmation_changed_during_provider_call_cannot_commit(
 
 @pytest.mark.parametrize("old_version", [
     "supervisor-evaluator-pm-v1", "supervisor-evaluator-pm-v2", "supervisor-evaluator-pm-v3",
+    "supervisor-evaluator-pm-v4",
 ])
 def test_old_pm_frozen_proof_replays_unchanged_after_business_review_upgrade(
     configured, supervisor_llm, monkeypatch, old_version,
@@ -178,20 +179,10 @@ def test_old_pm_frozen_proof_replays_unchanged_after_business_review_upgrade(
 
     # Reproduce the previous prompt boundary while letting Supervisor create its own frozen proof.
     with monkeypatch.context() as old:
-        old.setattr(PromptBuilder, "PM_PROMPT_VERSION", old_version)
+        old.setattr(PromptBuilder, "PROMPT_VERSION", old_version)
         old.setattr(PromptBuilder, "build_user_prompt", staticmethod(old_user))
-        if old_version == "supervisor-evaluator-pm-v3":
-            previous_system = PromptBuilder.PM_SYSTEM_PROMPT.replace(
-                "PARTIAL: unfinished work within this phase, including obtaining an owner decision, "
-                "with no obstacle to carrying out that work. "
-                "BLOCKED: a reported obstacle prevents carrying out phase work, not merely its incompleteness. ",
-                "PARTIAL: specific missing work repairable in this phase, no blockers. "
-                "BLOCKED: a concrete cause prevents progress. ",
-            )
-            assert len(previous_system) == 1390
-            old.setattr(PromptBuilder, "PM_SYSTEM_PROMPT", previous_system)
         selector, result = complete(configured, supervisor_llm, old)
-    assert PromptBuilder.PM_PROMPT_VERSION == "supervisor-evaluator-pm-v4"
+    assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v13"
     history_id = result["terminal_receipt"]["history_id"]
     with SAUnitOfWork() as uow:
         record = uow.step_history.get_by_id(history_id).to_dict()

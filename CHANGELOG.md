@@ -1,5 +1,37 @@
 # Changelog
 
+## Universal Advisor: Shared Evaluation And Revisable Coverage - 2026-11-03
+
+- Approved one role-neutral evaluator instead of generic-v12/PM-v4 branches,
+  without changing phases, criteria, public API or the six-field response.
+  Worker procedures and unrelated examples are not evaluator input.
+- Correct the union of all historical coverage: the latest substantive decision
+  per unchanged item wins; later missing revokes older covered. Retryable technical
+  failures preserve progress. Both full reports and supplements remain supported.
+- Installed PM skill24 no longer requests machine metadata in business reports;
+  its effective file and unchanged original runtime image were verified. SDLC-26
+  remains unaccepted. C3-only wording was tested, rejected and reverted, not published.
+- v13 source is implemented; bounded model qualification failed, not installed or accepted.
+  Preserve historical v12/PM-v4 receipts and actual model responses. Model stays
+  app-test/high; frozen matrix:14 cases x2, at most36 HTTP including format repair.
+- Frozen v13 model trial stopped at16 evaluations/17 HTTP:15 exact final,0 false
+  PASS,1 malformed response recovered by the existing native helper. Analyst r2
+  required an external-looking source locator despite inline input content; the
+  evidence criterion does not explicitly prescribe an external URL/ID. All14 PM
+  fixture evaluations matched, but12 slots remain unrun and qualified=false.
+  No installation, semantic retry, relabeling, model change or merge follows.
+- PostgreSQL132/132 pass,53 dependency pins, dedicated clock fixture supplied;
+  all owned Compose resources cleaned. Subsequent native-only test updates keep
+  product/SQL/integration sources identical, so this PG result is reused.
+- Native evidence combines the completed full run and56 passing cases from the
+  two updated test modules:3513 current cases pass,15 skip,75 subtests pass,
+  no remaining failures; coverage94.110196%. Original15 stale assertions remain
+  recorded in the original XML, not rewritten as a clean full run. Stop/length
+  diagnostics and review-with-rework obligations retain explicit regressions.
+- Portable synthetic request/response evidence is retained in
+  docs/evidence/advisor-universal-v13-regressions-20261103.json. Model qualification
+  remains false independently of source test results; no new build or installation.
+
 ## Live PM: Conflicting Skill Confirmed - 2026-11-03
 
 - Installed Workflow83ff8a5/image8a23f7b7 after exact-image provenance and fresh

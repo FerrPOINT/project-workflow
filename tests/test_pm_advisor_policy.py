@@ -1,4 +1,4 @@
-"""Configured PM policy uses verified enrollment, not worker-supplied role claims."""
+"""All enrolled professions use the same policy while server fences remain authoritative."""
 
 import json
 from unittest.mock import Mock
@@ -40,7 +40,7 @@ def test_verified_role_selects_actual_prompt_version_and_diagnostics(configured,
     expected_version = PromptBuilder.PM_PROMPT_VERSION if pm else PromptBuilder.PROMPT_VERSION
     assert call["system"] == expected_system
     assert report in call["user"]
-    assert ("Instructions:" in call["user"]) is not pm
+    assert "Instructions:" not in call["user"]
     evaluation = latest_evaluation()
     assert evaluation["prompt_version"] == expected_version
     assert evaluation["contract_fingerprint_state"]["prompt_version"] == expected_version
@@ -68,7 +68,7 @@ def test_pm_receipt_replay_reads_frozen_new_policy_without_provider(configured, 
 
 @pytest.mark.parametrize("phase_number", [2, 3])
 @pytest.mark.parametrize("outcome", ["semantic", "transport", "format"])
-def test_new_report_has_no_inherited_pm_document_coverage(
+def test_pm_report_can_revoke_marks_but_technical_failure_preserves_them(
     configured, supervisor_llm, monkeypatch, phase_number, outcome,
 ):
     enroll(configured)
@@ -104,16 +104,17 @@ def test_new_report_has_no_inherited_pm_document_coverage(
     assert response.status_code == 200, response.text
     result = response.json()["result"]
     assert result["verdict"] == ("PARTIAL" if outcome == "semantic" else "BLOCKED")
-    assert result["covered"] == [] and required[0] in result["missing"]
+    assert result["covered"] == ([] if outcome == "semantic" else [required[0]])
+    assert (required[0] in result["missing"]) is (outcome == "semantic")
     assert result["retryable"] is (outcome != "semantic")
     assert provider.call_count == (3 if outcome == "format" else 1)
     for call in provider.call_args_list:
         assert call.kwargs["system"] == PromptBuilder.PM_SYSTEM_PROMPT
-        assert "ALREADY COMPLETED IDS" not in call.kwargs["user"]
+        assert "PRIOR COVERED IDS" in call.kwargs["user"]
     evaluation = latest_evaluation()
     assert evaluation["prompt_version"] == PromptBuilder.PM_PROMPT_VERSION
-    assert evaluation["contract_fingerprint_state"]["previously_covered_ids"] == []
-    assert evaluation["covered_item_ids"] == []
+    assert len(evaluation["contract_fingerprint_state"]["previously_covered_ids"]) == 1
+    assert bool(evaluation["covered_item_ids"]) is (outcome != "semantic")
     assert evaluation["diagnostics"]["prompt_version"] == PromptBuilder.PM_PROMPT_VERSION
 
 
@@ -129,5 +130,5 @@ def test_pm_context_retains_existing_cumulative_coverage(configured, supervisor_
     monkeypatch.setattr(OpenAICompatibleClient, "chat", provider)
     second = step(configured, report="Rechecked context", operation_key="context-two", expected_version=2)
     assert second.status_code == 200, second.text
-    assert "ALREADY COMPLETED IDS" in provider.call_args.kwargs["user"]
+    assert "PRIOR COVERED IDS" in provider.call_args.kwargs["user"]
     assert latest_evaluation()["contract_fingerprint_state"]["previously_covered_ids"]

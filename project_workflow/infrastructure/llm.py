@@ -167,6 +167,9 @@ class OpenAICompatibleClient:
             content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
             if isinstance(content, str):
                 self.last_response_content = content
+            if diagnostics.get("finish_reason") == "length":
+                diagnostics["outcome"] = "incomplete"
+                raise ValueError("Evaluator response reached the token limit")
             if not content.strip():
                 diagnostics["outcome"] = "empty"
                 raise ValueError("Empty content from LLM")
@@ -195,7 +198,8 @@ class PromptBuilder:
         "An artifact defect does not itself mean a source decision is absent. "
         "Reject missing required content, unresolved required decisions and contradictory current facts; "
         "respect explicit later changes. Do not invent facts.\n"
-        "Accept a full corrected report or a supplement to retained facts. Prior covered marks are revisable: "
+        "Accept a full corrected report or a supplement. Prior covered marks are earlier assessments, "
+        "not source facts. Prior covered marks are revisable: keep them for unchanged work, but "
         "latest reported facts override them, including contradictions. Unchanged materials need not be repeated; "
         "their omission alone is not missing evidence. When FULL content is required, a summary or reference "
         "alone cannot supply it.\n"

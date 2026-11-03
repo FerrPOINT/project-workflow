@@ -219,7 +219,7 @@ class SupervisorEngine:
         return self.phase_map.get(self.current_phase_code)
 
     def _get_previously_covered(self, phase_code: str) -> set[str]:
-        """Return items already covered in previous supervisor runs for this phase."""
+        """Read the latest substantive decision per unchanged criterion."""
         previously: set[str] = set()
         if not self.task:
             return previously
@@ -239,17 +239,47 @@ class SupervisorEngine:
                 limit=None,
             )
         ]
+        builder = self.contract_builder
+        group = builder.get_parallel_group(phase) if phase.execution_type == "parallel" else [phase]
+        items = dict(builder.build_parallel_evaluation_items(group))
+        by_text: dict[str, list[str]] = {}
+        for item_id, text in items.items():
+            by_text.setdefault(text, []).append(item_id)
+        decided: set[str] = set()
+        # The repository returns newest first. Missing revokes older coverage;
+        # retryable failures did not evaluate the report and must not revoke it.
         for run in runs:
-            covered = run.get("covered_item_ids", [])
-            for item in covered:
-                if isinstance(item, str):
-                    from .checks import normalize_text
-
-                    previously.add(normalize_text(item))
+            response = run.get("supervisor_response", {})
             snapshot = run.get("evaluation_snapshot", {})
-            if isinstance(snapshot, dict):
-                for item_id in snapshot.get("covered_item_ids", []):
-                    if isinstance(item_id, str):
+            diagnostics = snapshot.get("diagnostics")
+            if (response.get("retryable") is True
+                    or isinstance(diagnostics, dict) and diagnostics.get("outcome") == "technical_failure"):
+                continue
+            contract = snapshot.get("contract_snapshot")
+            saved_items = contract.get("evaluation_items") if isinstance(contract, dict) else None
+            if saved_items is not None and not isinstance(saved_items, list):
+                continue
+            saved_text = {
+                item["id"]: item["text"] for item in saved_items or []
+                if isinstance(item, dict) and isinstance(item.get("id"), str) and isinstance(item.get("text"), str)
+            }
+            for covered, values in ((False, run.get("missing_item_ids", [])),
+                                    (True, run.get("covered_item_ids", []))):
+                for value in values:
+                    if value in items:
+                        item_id = value
+                        matches = saved_text.get(item_id) == items[item_id]
+                    else:
+                        # Older records used checklist text instead of IDs.
+                        candidates = by_text.get(value, []) if saved_items is None else []
+                        if len(candidates) != 1:
+                            continue
+                        item_id = candidates[0]
+                        matches = True
+                    if item_id in decided:
+                        continue
+                    decided.add(item_id)
+                    if covered and matches:
                         previously.add(item_id)
         return previously
 

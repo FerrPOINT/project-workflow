@@ -243,8 +243,8 @@ def test_actual_evaluator_receives_full_report_and_exact_pm_obligations(pm_phase
     actual_items = [line.strip() for line in delivered.splitlines() if line.strip().startswith('ID: "')]
     assert actual_items == [f'ID: "{key}" \u2014 {value}' for key, value in items]
     assert "WORKER PROCEDURE" not in delivered
-    # Baseline v12 includes worker instructions; diagnostics must not remove them.
-    assert all(instruction.step in delivered for instruction in phase.instructions)
+    # Historical report bytes remain intact, but v13 does not add worker procedure.
+    assert "Instructions:" not in delivered.split("WORKER REPORT:", 1)[0]
     # Full packet loss must remain visible to the real evaluator (regression 153).
     if case["id"] == "153":
         assert json.dumps(DOCUMENT, ensure_ascii=False, sort_keys=True) not in delivered
@@ -260,8 +260,8 @@ def test_correction_carries_real_obligations_even_when_previous_coverage_is_pres
     prompt = PromptBuilder.build_user_prompt(
         WORKFLOW_TASK_KEY, phase, case["report"], evaluation_items=items, previously_covered=previously,
     )
-    prior_block = prompt.split("ALREADY COMPLETED IDS (keep them in covered):\n", 1)[1].split("\n\n", 1)[0]
-    assert prior_block.splitlines() == [f"  \u2713 {key}" for key in previously]
+    prior_block = prompt.split("PRIOR COVERED IDS (revisable, not permanent): ", 1)[1].split("\n", 1)[0]
+    assert prior_block == ", ".join(previously)
     assert len([line for line in prompt.splitlines() if line.strip().startswith('ID: "')]) == len(items)
     assert set(case["required_missing"]) == {key.split(phase.code + ":", 1)[1] for key in previously}
 

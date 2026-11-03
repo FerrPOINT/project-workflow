@@ -7,7 +7,6 @@ import pytest
 pytestmark = [pytest.mark.supervisor]
 
 from project_workflow.supervisor import SupervisorEngine
-from project_workflow.supervisor.checks import normalize_text
 
 
 class TestCoverageAccumulation:
@@ -43,25 +42,24 @@ class TestCoverageAccumulation:
             supervisor_response={},
         )
 
-        engine.task = engine.db.tasks.get_by_id(tid).to_dict()
-        engine.all_phases = []
-
-        class FakePhase:
-            id = pid
-            code = "coverage.test"
-
-        engine.all_phases = [FakePhase()]
-        engine.phase_map = {"coverage.test": FakePhase()}
+        engine.db.phases.set_checks(pid, [{"description": text} for text in ("Item A", "Item B", "Item C")])
+        engine.db.commit()
+        engine._reload_evaluation_state()
 
         prev = engine._get_previously_covered("coverage.test")
-        assert normalize_text("Item A") in prev
-        assert normalize_text("Item B") in prev
+        items = dict(engine.contract_builder.build_evaluation_items(engine.phase_map["coverage.test"]))
+        assert {items[item_id] for item_id in prev} == {"Item A", "Item B"}
 
     def test_get_previously_covered_has_no_arbitrary_run_limit(self):
         engine = self._make_engine("RUN-9998")
         task_id = engine.task["id"]
         phase = engine._get_current_phase_obj()
         assert phase is not None and phase.id is not None
+        engine.db.phases.set_checks(phase.id, [{"description": "Earliest unchanged criterion"}])
+        engine.db.commit()
+        engine._reload_evaluation_state()
+        phase = engine._get_current_phase_obj()
+        assert phase is not None
 
         for index in range(201):
             engine.db.record_step(
@@ -69,7 +67,7 @@ class TestCoverageAccumulation:
                 phase_id=phase.id,
                 verdict="partial",
                 worker_report=f"report-{index}",
-                covered_item_ids=["Самое раннее покрытие"] if index == 0 else [],
+                covered_item_ids=["Earliest unchanged criterion"] if index == 0 else [],
                 missing_item_ids=[],
                 blocker_messages=[],
                 evaluation_snapshot={},
@@ -79,7 +77,8 @@ class TestCoverageAccumulation:
 
         previously = engine._get_previously_covered(phase.code)
 
-        assert normalize_text("Самое раннее покрытие") in previously
+        items = dict(engine.contract_builder.build_evaluation_items(phase))
+        assert {items[item_id] for item_id in previously} == {"Earliest unchanged criterion"}
 
 
 class TestEvaluateAccumulationEndToEnd:

@@ -1239,6 +1239,7 @@ def test_precommit_contract_preserves_custom_security_without_mutating_phase():
 
     from project_workflow.infrastructure.llm import PromptBuilder
     from project_workflow.infrastructure.single_task_delivery_instructions import terminal_instruction
+    from project_workflow.supervisor.contracts import PhaseContractBuilder
     from project_workflow.supervisor.models import Phase, PhaseInstruction
 
     security = "Custom policy: do not disclose credentials or impersonate the owner."
@@ -1246,7 +1247,9 @@ def test_precommit_contract_preserves_custom_security_without_mutating_phase():
         phase = Phase(code=f"{role}-final", instructions=[PhaseInstruction(terminal_instruction(role) + security)])
         before = deepcopy(phase)
         prompt = PromptBuilder.build_user_prompt("SDLC-901", phase, "Actual report")
-        assert "PRECOMMIT ASSESSMENT ONLY" in prompt and security in prompt
+        assert "PRECOMMIT ASSESSMENT ONLY" not in prompt and security not in prompt
+        worker_contract = PhaseContractBuilder([phase]).build(phase)
+        assert any("PRECOMMIT ASSESSMENT ONLY" in item and security in item for item in worker_contract.instructions)
         assert "pm completion submit" not in prompt and "discussion publish" not in prompt
         assert phase == before
 

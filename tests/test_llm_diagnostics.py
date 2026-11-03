@@ -133,20 +133,35 @@ def test_http_failure_keeps_status_and_safe_id_without_reading_body(client, prov
 ])
 def test_content_failures_keep_usage_and_finish_without_reasoning(client, provider, content, outcome, error):
     post, _, data = provider
-    data["choices"][0]["finish_reason"] = "length"
     data["choices"][0]["message"]["content"] = content
     with pytest.raises(error):
         client.chat("sys", "usr")
     post.assert_called_once()
     diagnostics = client.last_call_diagnostics
     assert diagnostics["outcome"] == outcome and diagnostics["latency_ms"] == 25
-    assert diagnostics["finish_reason"] == "length" and diagnostics["returned_model"] == "provider/returned-model"
+    assert diagnostics["finish_reason"] == "stop" and diagnostics["returned_model"] == "provider/returned-model"
     assert diagnostics["usage"] == {
         "prompt_tokens": 11, "completion_tokens": 7, "total_tokens": 18, "reasoning_tokens": 3,
     }
     assert client.last_response_content == (content if isinstance(content, str) else None)
     assert "private-reasoning-secret" not in json.dumps(diagnostics)
     assert "reasoning_content" not in json.dumps(diagnostics)
+
+
+@pytest.mark.parametrize("content", ["", " \n ", "not-json-secret", "[]", "null", None, 42, '{}'])
+def test_truncated_content_is_incomplete_before_json_parsing(client, provider, content):
+    post, _, data = provider
+    data["choices"][0]["finish_reason"] = "length"
+    data["choices"][0]["message"]["content"] = content
+    with pytest.raises(ValueError, match="token limit"):
+        client.chat("sys", "usr")
+    post.assert_called_once()
+    diagnostics = client.last_call_diagnostics
+    assert diagnostics["outcome"] == "incomplete" and diagnostics["latency_ms"] == 25
+    assert diagnostics["finish_reason"] == "length"
+    assert diagnostics["usage"]["reasoning_tokens"] == 3
+    assert client.last_response_content == (content if isinstance(content, str) else None)
+    assert "private-reasoning-secret" not in json.dumps(diagnostics)
 
 
 @pytest.mark.parametrize("data,error", [(None, AttributeError), ([], AttributeError), ({"choices": []}, IndexError)])

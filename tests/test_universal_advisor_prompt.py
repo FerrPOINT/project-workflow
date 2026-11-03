@@ -55,7 +55,8 @@ def test_system_separates_source_facts_from_the_artifact_under_review():
 
 def test_system_accepts_supplements_without_making_prior_coverage_permanent():
     system = PromptBuilder.SYSTEM_PROMPT
-    assert "a full corrected report or a supplement to retained facts" in system
+    assert "a full corrected report or a supplement" in system
+    assert "earlier assessments, not source facts" in system
     assert "Prior covered marks are revisable" in system
     assert "latest reported facts override them, including contradictions" in system
     assert "Unchanged materials need not be repeated" in system

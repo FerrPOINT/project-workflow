@@ -31,7 +31,7 @@ def _make_engine():
     }
     engine.workflow_id = 1
     engine.current_phase_code = "1"
-    engine._get_previously_covered.return_value = []
+    engine._get_previously_covered.return_value = set()
     engine._resolve_transition.return_value = (None, None, None)
     engine.db.record_step.return_value = 42
     engine.db.step_history.get_by_fingerprint.return_value = None
