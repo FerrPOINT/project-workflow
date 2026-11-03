@@ -9,7 +9,7 @@ def format_result(result: dict) -> str:
     """CLI evaluate → человекочитаемый вывод.
 
     Основные секции: Инструкции, Чекапы, Доказательства.
-    BLOCKED дополнительно показывает причину блокировки.
+    PARTIAL/BLOCKED/DELEGATE показывают сохранённую причину решения.
     PASS: показываем контракт следующей фазы со статусом pending (·).
     Не-PASS: показываем только недоделанные пункты текущей фазы.
     Для parallel групп перечисляем все фазы и их исполнителей.
@@ -49,18 +49,18 @@ def format_result(result: dict) -> str:
     if is_pass and not result.get("next_phase_code"):
         lines.append("Воркфлоу завершён: задача уже прошла все фазы.")
 
-    if verdict == "BLOCKED":
-        reasons = [str(item) for item in (result.get("blockers") or []) if str(item).strip()]
+    if verdict in {"PARTIAL", "BLOCKED", "DELEGATE"}:
+        reasons = list(dict.fromkeys(str(item).strip() for item in (result.get("blockers") or [])
+                                     if str(item).strip()))
         message = str(result.get("message") or "").strip()
         if message and message not in reasons:
             reasons.insert(0, message)
         lines.append("Причина:")
-        for reason in reasons or ["Проверка отчёта заблокирована."]:
+        for reason in reasons or ["Причина решения недоступна."]:
             lines.append(f"  · {reason}")
 
     if verdict == "DELEGATE":
-        message = str(result.get("message") or "").strip()
-        instructions.insert(0, message or "Передай выполнение настроенному агенту.")
+        instructions.insert(0, "Передай выполнение настроенному агенту.")
 
     # PASS: first instruction becomes the actionable next step.
     if is_pass:

@@ -15,7 +15,8 @@ from project_workflow.infrastructure.llm import LlmConfigurationError
 
 _TEXT_LIMIT = 64_000
 _BUDGET_BYTES = 750_000
-_WIRE_FIELDS = ("verdict", "covered", "missing", "blockers", "message", "confidence")
+_DECISION_FIELDS = ("verdict", "covered", "missing", "blockers", "message", "confidence")
+_WIRE_FIELDS = (*_DECISION_FIELDS, "assessments")
 _CREDENTIAL = re.compile(
     r"(?i)((?<![A-Za-z0-9])(?:api[-_]?(?:server[-_])?key|api[-_]?token|access[-_]?token|"
     r"refresh[-_]?token|password|authorization|secret)"
@@ -53,7 +54,9 @@ def _safe(value: Any, secrets: tuple[str, ...] = (), depth: int = 0) -> Any:
     if isinstance(value, str):
         return _redact(value, secrets)[:_TEXT_LIMIT]
     if isinstance(value, dict):
-        return {str(key): _safe(item, secrets, depth + 1) for key, item in list(value.items())[:200]
+        return {_redact(str(key), secrets)[:_TEXT_LIMIT]:
+                "[REDACTED]" if _CREDENTIAL.search(f"{key}=value") else _safe(item, secrets, depth + 1)
+                for key, item in list(value.items())[:200]
                 if str(key) not in ("reasoning", "reasoning_content", "thinking", "api_key", "headers")}
     if isinstance(value, list):
         return [_safe(item, secrets, depth + 1) for item in value[:200]]
@@ -99,7 +102,8 @@ def _limit_budget(result: dict[str, Any]) -> dict[str, Any]:
         if isinstance(prompt, dict) and "text" in prompt:
             prompt.update(text="", truncated=True, omitted=True)
             omitted.append(f"attempt:{attempt.get('number')}:prompt_text")
-    for key in ("criteria", "items", "decision", "user", "system", "report"):
+    for key in ("advisor_assessments", "evaluator_item_aliases", "criteria", "items", "decision",
+                "user", "system", "report"):
         if not oversized():
             return result
         if key not in result:
@@ -169,11 +173,13 @@ def capture_attempt(client: Any, *, number: int, prompt: str, raw: dict[str, Any
     omissions = {}
     if response is not None:
         omissions = {key: len(value) - 200 for key, value in response.items()
-                     if isinstance(value, list) and len(value) > 200}
+                     if isinstance(value, (dict, list)) and len(value) > 200}
     result = {"number": number, "prompt": text_snapshot(prompt, secrets),
               "provider": _safe(provider, secrets) if isinstance(provider, dict) else None,
               "response": _safe(response, secrets), "error": _error(error),
               "omitted_response_counts": omissions}
+    if isinstance(raw, dict) and "assessments" in raw:
+        result["response_schema"] = "advisor-assessments-v1"
     if isinstance(content, str):
         # Unknown/invalid output and provider reasoning are not copied to the ledger.
         result["response_content"] = {"sha256": hashlib.sha256(content.encode()).hexdigest(),
@@ -183,24 +189,34 @@ def capture_attempt(client: Any, *, number: int, prompt: str, raw: dict[str, Any
 
 def evaluation_diagnostic(*, system: str, user: str, report: str, prompt_version: str,
                           items: list[tuple[str, str]], attempts: list[dict[str, Any]],
-                          client: Any, technical_error: bool, decision: dict[str, Any] | None = None) -> dict[str, Any]:
+                          client: Any, technical_error: bool, decision: dict[str, Any] | None = None,
+                          assessments: dict[str, Any] | None = None,
+                          aliases: dict[str, str] | None = None) -> dict[str, Any]:
     key = getattr(client, "api_key", None)
     secrets = (key,) if isinstance(key, str) and key else ()
     for attempt in attempts:
         prompt = attempt.get("prompt")
         if isinstance(prompt, dict) and prompt.get("sha256") == hashlib.sha256(user.encode()).hexdigest():
             attempt["prompt"] = {"reference": "user", "sha256": prompt["sha256"]}
-    return _limit_budget({"schema": "evaluator-diagnostics-v1", "availability": "captured",
+    result = {"schema": "evaluator-diagnostics-v1", "availability": "captured",
             "prompt_version": prompt_version, "system": text_snapshot(system, secrets),
             "user": text_snapshot(user, secrets), "report": text_snapshot(report, secrets),
             "items": [{"id": item_id, "text": _redact(text, secrets)[:2000],
                        "text_truncated": len(_redact(text, secrets)) > 2000} for item_id, text in items[:200]],
             "items_omitted": max(0, len(items) - 200),
-            "decision": _safe({key: decision[key] for key in _WIRE_FIELDS if key in decision}, secrets)
+            "decision": _safe({key: decision[key] for key in _DECISION_FIELDS if key in decision}, secrets)
             if decision is not None else None,
             "attempts": attempts, "outcome": "technical_failure" if technical_error else "model_decision",
             "explanation_source": "model_message_only",
-            "limitation": "Model explanations are claims, not proof; missing rationale is reported as unavailable."})
+            "limitation": "Model explanations are claims, not proof; missing rationale is reported as unavailable."}
+    if assessments is not None:
+        result.update(assessment_schema="advisor-assessments-v1",
+                      advisor_assessments=_safe(assessments, secrets),
+                      evaluator_item_aliases=_safe(aliases, secrets),
+                      assessments_omitted=max(0, len(assessments) - 200),
+                      aliases_omitted=max(0, len(aliases or {}) - 200),
+                      explanation_source="model_item_assessments")
+    return _limit_budget(result)
 
 
 def history_diagnostic(worker_report: str, evaluation_snapshot: dict[str, Any]) -> dict[str, Any]:
@@ -219,10 +235,6 @@ def history_diagnostic(worker_report: str, evaluation_snapshot: dict[str, Any]) 
     raw = raw if isinstance(raw, dict) else {}
     decision = result.get("decision") if result.get("availability") == "captured" else raw
     decision = decision if isinstance(decision, dict) else {}
-    attempts = result.get("attempts")
-    if (result.get("outcome") == "model_decision" and isinstance(attempts, list) and attempts
-            and not attempts[-1].get("error") and isinstance(attempts[-1].get("response"), dict)):
-        decision = attempts[-1]["response"]
     contract = evaluation_snapshot.get("contract_snapshot")
     contract = contract if isinstance(contract, dict) else {}
     items = (result.get("items", []) if result.get("availability") == "captured"
@@ -240,18 +252,29 @@ def history_diagnostic(worker_report: str, evaluation_snapshot: dict[str, Any]) 
                                               "missing" if item["id"] in missing else "unclassified")}
                           for item in items[:200] if isinstance(item, dict) and isinstance(item.get("id"), str)
                           and isinstance(item.get("text"), str)]
-    result["decision"] = _safe({key: decision[key] for key in _WIRE_FIELDS if key in decision})
+    result["decision"] = _safe({key: decision[key] for key in _DECISION_FIELDS if key in decision})
     if result.get("outcome") == "technical_failure":
         result["decision"] = {"verdict": "BLOCKED", "source": "server_technical_failure"}
     explanations, invalid_annotations = _annotations(decision.get("item_explanations"), covered + missing)
     result["invalid_annotations"] = invalid_annotations
     report_text = result.get("report", {}).get("text", "")
+    # Captured metadata has already had the active credential redacted. Never
+    # replace an omitted/failed capture with an unredacted snapshot fallback.
+    assessments = (result.get("advisor_assessments") if result.get("availability") == "captured"
+                   else _safe(evaluation_snapshot.get("advisor_assessments")))
+    assessments = assessments if isinstance(assessments, dict) else {}
+    if result.get("outcome") == "technical_failure":
+        assessments = {}
     for item in result["criteria"]:
         explanation = next((value for value in explanations if isinstance(value, dict)
                             and value.get("id") == item["id"]), {})
         quote = explanation.get("quote")
         quote = quote if isinstance(quote, str) else None
         item["reason"] = _safe(explanation.get("reason"))
+        assessment = assessments.get(item["id"])
+        if (isinstance(assessment, dict) and type(assessment.get("covered")) is bool
+                and isinstance(assessment.get("reason"), str) and assessment["reason"].strip()):
+            item["reason"] = _safe(assessment["reason"])
         item["quote"] = _safe(quote)
         item["quote_status"] = (
             "not_supplied" if not quote else "found_in_captured_text" if quote in report_text else

@@ -6,6 +6,8 @@ from typing import Any
 
 import click
 
+from project_workflow.supervisor.formatting import format_result
+
 from . import configured
 from .core import cli, console, out_json
 
@@ -15,7 +17,8 @@ def _output(ctx: click.Context, response: dict[str, Any]) -> None:
     if ctx.obj.get("json_mode", False):
         out_json(result, exit_code=code)
         return
-    console.print(str(result.get("instructions", result)))
+    output = format_result(result) if "verdict" in result else str(result.get("instructions", result))
+    console.print(output, markup=False, highlight=False)
     raise click.exceptions.Exit(code)
 
 
