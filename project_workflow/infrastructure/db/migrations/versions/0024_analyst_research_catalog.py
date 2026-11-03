@@ -87,4 +87,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    raise RuntimeError("Configured phase history is forward-only")
+    # An unseeded schema has no instruction state to restore. Materialized catalogs
+    # remain forward-only so a rollback cannot rewrite active or historical rules.
+    installed = op.get_bind().execute(
+        select(m.Workflow.id).where(m.Workflow.key.like("single-task-v1:%")).limit(1)
+    ).first()
+    if installed:
+        raise RuntimeError("Configured catalog is forward-only")

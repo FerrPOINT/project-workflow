@@ -90,7 +90,8 @@ def assert_populated_upgrade_preserves_collection_history(engine):
                 "status": "active",
             }
         )
-    with pytest.raises(RuntimeError, match="history prevents downgrade"):
+    # The current catalog barrier rejects before older membership migrations run.
+    with pytest.raises(RuntimeError, match="Configured catalog is forward-only"):
         run_alembic_command("downgrade", engine, "0020_configured_cli_catalog")
     with SAUnitOfWork(engine) as uow:
         assert [row.to_dict() for row in uow.step_history.list(task_id=task)] == before
