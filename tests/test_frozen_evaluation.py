@@ -69,7 +69,8 @@ def test_actual_supervisor_freezes_full_existing_fingerprint_inputs(accepted):
 
 
 @pytest.mark.parametrize("prompt_version", [
-    "supervisor-evaluator-v10", "supervisor-evaluator-v9", "supervisor-evaluator-v8-no-backtracking",
+    "supervisor-evaluator-v11", "supervisor-evaluator-v10",
+    "supervisor-evaluator-v9", "supervisor-evaluator-v8-no-backtracking",
 ])
 def test_prompt_upgrade_keeps_frozen_terminal_readback_and_replay(
     configured, supervisor_llm, monkeypatch, prompt_version,

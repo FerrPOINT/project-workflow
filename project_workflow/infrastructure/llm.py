@@ -112,7 +112,7 @@ class OpenAICompatibleClient:
 class PromptBuilder:
     """Build prompts from phase contracts + task context."""
 
-    PROMPT_VERSION = "supervisor-evaluator-v11"
+    PROMPT_VERSION = "supervisor-evaluator-v12"
 
     SYSTEM_PROMPT = (
         "You are a strict workflow supervisor. "
@@ -164,6 +164,14 @@ class PromptBuilder:
         "actual prior reads, actions and results required by the current phase. Evidence of an "
         "earlier operation's result remains mandatory when the contract requires it; missing, failed "
         "or mismatched prior work must still prevent PASS.\n"
+        "20. Keep a prohibition within its stated actor and execution scope. A rule that this worker "
+        "must not create additional tasks concerns this execution's actual actions and results; "
+        "it does not require absence of unrelated tasks or actions by other actors. Evaluate the "
+        "supplied scoped action records and outcomes. Do not invent project-wide inventory, "
+        "proof about unobserved execution channels, or a separate audit endpoint unless the phase "
+        "contract explicitly requires it. An explicit inventory obligation still needs its real "
+        "authorized result. Actual prohibited mutations, unexplained possible writes, truncated "
+        "required evidence, or an unsupported promise still prevent PASS.\n"
         "The Supervisor never chooses the next phase.\n\n"
         "Output STRICT JSON with these keys:\n"
         "{\n"

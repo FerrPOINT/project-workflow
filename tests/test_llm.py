@@ -568,7 +568,7 @@ class TestEvaluatorPromptContract:
     """The live provider receives the current evidence and chronology rules."""
 
     def test_prompt_version_invalidates_the_previous_evaluation_policy(self):
-        assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v11"
+        assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v12"
 
     def test_contradictory_current_facts_prohibit_pass(self):
         prompt = PromptBuilder.SYSTEM_PROMPT
