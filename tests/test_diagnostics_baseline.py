@@ -1,6 +1,7 @@
-"""The opt-in PM policy keeps the installed strict response acceptance."""
+"""Historical canonical response validation stays unchanged by the private model format."""
 
 import ast
+import copy
 import hashlib
 from pathlib import Path
 
@@ -20,13 +21,17 @@ def isolate_ui_runtime_state():
 
 
 def test_response_acceptance_is_identical_to_installed_v12():
-    # Generic PromptBuilder bytes are covered by test_pm_advisor_prompt; the class
-    # intentionally adds an opt-in policy without changing that legacy output.
+    # Only the newly added private-to-canonical entry point is outside this
+    # historical contract; the six-field model and parser remain byte-identical AST.
     root = Path(__file__).resolve().parents[1]
     tree = ast.parse((root / "project_workflow/infrastructure/llm.py").read_text(encoding="utf-8"))
-    actual = {
-        node.name: hashlib.sha256(ast.dump(node, include_attributes=False).encode()).hexdigest()
-        for node in tree.body
-        if isinstance(node, ast.ClassDef) and node.name in BASELINE_POLICY
-    }
+    actual = {}
+    for node in tree.body:
+        if not isinstance(node, ast.ClassDef) or node.name not in BASELINE_POLICY:
+            continue
+        legacy = copy.deepcopy(node)
+        if legacy.name == "ResponseParser":
+            legacy.body = [member for member in legacy.body
+                           if not isinstance(member, ast.FunctionDef) or member.name != "parse_assessments"]
+        actual[node.name] = hashlib.sha256(ast.dump(legacy, include_attributes=False).encode()).hexdigest()
     assert actual == BASELINE_POLICY

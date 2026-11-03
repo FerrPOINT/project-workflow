@@ -57,6 +57,7 @@ class MockLlmResponse:
         self.message = message
         self.confidence = confidence
         self.raw = {}
+        self.assessments = {}
 
 
 class TestEvaluateGaps:
@@ -87,7 +88,7 @@ class TestEvaluateGaps:
     @patch("project_workflow.supervisor.evaluate.OpenAICompatibleClient")
     @patch("project_workflow.supervisor.evaluate.ResponseParser")
     def test_evaluate_blocked_default_blocker(self, mock_parser, mock_client):
-        mock_parser.parse.return_value = MockLlmResponse(verdict="BLOCKED", blockers=["blocked"])
+        mock_parser.parse_assessments.return_value = MockLlmResponse(verdict="BLOCKED", blockers=["blocked"])
         mock_client.return_value.chat.return_value = {}
         engine = self._engine()
         ph = _phase()
@@ -116,7 +117,7 @@ class TestEvaluateGaps:
     @patch("project_workflow.supervisor.evaluate.OpenAICompatibleClient")
     @patch("project_workflow.supervisor.evaluate.ResponseParser")
     def test_evaluate_pass_next_phase_int(self, mock_parser, mock_client):
-        mock_parser.parse.return_value = MockLlmResponse(verdict="PASS", next_phase="2")
+        mock_parser.parse_assessments.return_value = MockLlmResponse(verdict="PASS", next_phase="2")
         mock_client.return_value.chat.return_value = {}
         engine = self._engine()
         ph = _phase()
@@ -167,13 +168,13 @@ class TestEvaluateGaps:
         assert result["retryable"] is True
         assert result["next_phase_code"] is None
         assert result["rollback_phase_code"] is None
-        assert mock_client.return_value.chat.call_count == 3
+        assert mock_client.return_value.chat.call_count == 2
 
     @pytest.mark.parametrize("point", ["before", "during"])
     @patch("project_workflow.supervisor.evaluate.OpenAICompatibleClient")
     @patch("project_workflow.supervisor.evaluate.ResponseParser")
     def test_deleted_workflow_cannot_commit_an_evaluation(self, mock_parser, mock_client, point):
-        mock_parser.parse.return_value = MockLlmResponse()
+        mock_parser.parse_assessments.return_value = MockLlmResponse()
         engine = self._engine()
         phase = _phase()
         self._set_phases(engine, phase)
@@ -194,7 +195,7 @@ class TestEvaluateGaps:
     @patch("project_workflow.supervisor.evaluate.OpenAICompatibleClient")
     @patch("project_workflow.supervisor.evaluate.ResponseParser")
     def test_phase_deleted_during_provider_call_cannot_write_history(self, mock_parser, mock_client, moved):
-        mock_parser.parse.return_value = MockLlmResponse()
+        mock_parser.parse_assessments.return_value = MockLlmResponse()
         engine = self._engine()
         phase = _phase()
         self._set_phases(engine, phase)
@@ -237,7 +238,7 @@ class TestEvaluateGaps:
     @patch("project_workflow.supervisor.evaluate.OpenAICompatibleClient")
     @patch("project_workflow.supervisor.evaluate.ResponseParser")
     def test_history_write_conflict_without_durable_response_rolls_back_and_propagates(self, mock_parser, mock_client):
-        mock_parser.parse.return_value = MockLlmResponse()
+        mock_parser.parse_assessments.return_value = MockLlmResponse()
         mock_client.return_value.chat.return_value = {}
         engine = self._engine()
         phase = _phase()
@@ -256,7 +257,7 @@ class TestEvaluateGaps:
     def test_identical_report_committed_during_provider_call_replays_without_second_write(
         self, mock_parser, mock_client, task_disappears
     ):
-        mock_parser.parse.return_value = MockLlmResponse()
+        mock_parser.parse_assessments.return_value = MockLlmResponse()
         engine = self._engine()
         phase = _phase()
         self._set_phases(engine, phase)
@@ -291,7 +292,7 @@ class TestEvaluateGaps:
     @patch("project_workflow.supervisor.evaluate.OpenAICompatibleClient")
     @patch("project_workflow.supervisor.evaluate.ResponseParser")
     def test_different_report_committed_during_provider_call_blocks_stale_evaluation(self, mock_parser, mock_client):
-        mock_parser.parse.return_value = MockLlmResponse()
+        mock_parser.parse_assessments.return_value = MockLlmResponse()
         engine = self._engine()
         phase = _phase()
         self._set_phases(engine, phase)

@@ -124,10 +124,12 @@ def supervisor_llm(monkeypatch):
 
             return {
                 "verdict": verdict,
-                "covered": covered_ids,
-                "missing": missing_ids,
+                "assessments": {
+                    item_id: {"covered": item_id in covered_ids,
+                              "reason": f"Test Supervisor criterion: {by_id_text}"}
+                    for item_id, by_id_text in items
+                },
                 "blockers": blockers or (["Test blocker"] if verdict == "BLOCKED" else []),
-                "message": f"Test Supervisor verdict: {verdict}",
                 "confidence": 1.0,
             }
 

@@ -131,10 +131,8 @@ class TestEvaluateLlmReportVerdicts:
             "chat",
             return_value={
                 "verdict": "DELEGATE",
-                "covered": [],
-                "missing": [],
+                "assessments": {},
                 "blockers": [],
-                "message": "delegate",
                 "confidence": 0.5,
             },
         ):
@@ -155,10 +153,8 @@ class TestEvaluateLlmReportVerdicts:
             "chat",
             return_value={
                 "verdict": "PASS",
-                "covered": [],
-                "missing": [],
+                "assessments": {},
                 "blockers": [],
-                "message": "ok",
                 "confidence": 0.9,
             },
         ):
@@ -298,7 +294,7 @@ class TestPromptBuilder:
         assert "Run tests" not in prompt
         assert "Check A" in prompt
         assert "Screenshot" in prompt
-        assert "PRIOR COVERED IDS (revisable, not permanent): 1:check:1" in prompt
+        assert "PRIOR COVERED MARKS (revisable, not permanent): C1" in prompt
 
 
 class TestResponseParser:

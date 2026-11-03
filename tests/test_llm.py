@@ -184,7 +184,7 @@ class TestPromptBuilder:
         prompt = PromptBuilder.build_user_prompt("RUN-1", phase, "report text")
         assert "TASK:" not in prompt
         assert "RUN-1" not in prompt
-        assert "CURRENT PHASE: 1 — Preflight" in prompt
+        assert "CURRENT PHASE: Preflight" in prompt
         assert "report text" in prompt
 
     def test_build_user_prompt_excludes_worker_instructions(self):
@@ -206,7 +206,7 @@ class TestPromptBuilder:
     def test_build_user_prompt_with_previously_covered(self):
         phase = FakePhase(checks=[FakeCheck("Run tests")])
         prompt = PromptBuilder.build_user_prompt("T-1", phase, "r", previously_covered=["1:check:1"])
-        assert "PRIOR COVERED IDS (revisable, not permanent): 1:check:1" in prompt
+        assert "PRIOR COVERED MARKS (revisable, not permanent): C1" in prompt
         assert "keep them in covered" not in prompt
 
     def test_build_user_prompt_marks_ids_without_decorative_brackets(self):
@@ -218,7 +218,8 @@ class TestPromptBuilder:
             evaluation_items=[("-1:check:1", "Task is clear")],
         )
 
-        assert 'ID: "-1:check:1"' in prompt
+        assert 'ID: "C1"' in prompt
+        assert "-1:check:1" not in prompt
         assert "[-1:check:1]" not in prompt
         assert "REQUIRED CRITERIA:" in prompt
         assert "REQUIRED ITEM COUNT" not in prompt
@@ -228,7 +229,7 @@ class TestPromptBuilder:
         assert "Assess whether this phase is ready" in PromptBuilder.SYSTEM_PROMPT
         assert "verdict" in PromptBuilder.SYSTEM_PROMPT
         assert "covered" in PromptBuilder.SYSTEM_PROMPT
-        assert "Classify each listed ID exactly once" in PromptBuilder.SYSTEM_PROMPT
+        assert "Return one assessment per listed label" in PromptBuilder.SYSTEM_PROMPT
         assert "missing" in PromptBuilder.SYSTEM_PROMPT
 
 
@@ -480,7 +481,7 @@ class TestPromptBuilderEdgeCases:
         phase = FakePhase(code="99", name="Empty", instructions=[], checks=[], evidence=[])
         prompt = PromptBuilder.build_user_prompt("T-99", phase, "done")
         assert "T-99" not in prompt
-        assert "99 — Empty" in prompt
+        assert "CURRENT PHASE: Empty" in prompt
         assert "done" in prompt
 
     def test_missing_instructions_skips_section(self):
@@ -497,9 +498,9 @@ class TestPromptBuilderEdgeCases:
     def test_multiple_evidence_items(self):
         phase = FakePhase(evidence=[FakeEvidence("A"), FakeEvidence("B"), FakeEvidence("C")])
         prompt = PromptBuilder.build_user_prompt("T-1", phase, "r")
-        assert 'ID: "1:evidence:1" — A' in prompt
-        assert 'ID: "1:evidence:2" — B' in prompt
-        assert 'ID: "1:evidence:3" — C' in prompt
+        assert 'ID: "E1" — A' in prompt
+        assert 'ID: "E2" — B' in prompt
+        assert 'ID: "E3" — C' in prompt
 
 
 class TestSupervisorEngineLLMIntegrationDB:
@@ -590,11 +591,11 @@ class TestOpenAICompatibleClientOverrides:
         assert client.timeout == 300
 
 
-class TestEvaluatorV13PromptContract:
+class TestEvaluatorV14PromptContract:
     """The controlled provider receives the universal criteria-only contract."""
 
     def test_prompt_version_invalidates_the_old_evidence_policy(self):
-        assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v13"
+        assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v14"
 
     def test_report_106_submission_circularity_reaches_provider_with_explicit_protocol_boundary(self):
         """Reproduce the saved PARTIAL reason, not a real model's semantic acceptance."""
@@ -622,15 +623,16 @@ class TestEvaluatorV13PromptContract:
         assert f'WORKER REPORT:\n"""{report}"""' in prompt
         missing = [ids[0], ids[4]]
         raw = {
-            "verdict": "PARTIAL", "covered": [item_id for item_id in ids if item_id not in missing],
-            "missing": missing, "blockers": [], "confidence": 0.99,
-            "message": "The report lacks proof of sending this final report through project-workflow "
-                       "and reading its result.",
+            "verdict": "PARTIAL", "assessments": {label: {"covered": item_id not in missing,
+                "reason": "The report lacks proof of sending this final report through project-workflow "
+                          "and reading its result." if item_id in missing else "Reported fact present"}
+                for label, item_id in PromptBuilder.item_aliases(items).items()},
+            "blockers": [], "confidence": 0.99,
         }
         client = OpenAICompatibleClient(api_key="", base_url="https://provider.example/v1")
         with patch("project_workflow.infrastructure.llm.requests.post") as post:
             post.return_value.json.return_value = {"choices": [{"message": {"content": json.dumps(raw)}}]}
-            returned_raw, parsed = _evaluate_strict_response(client, user=prompt, item_ids=ids, phase=phase)
+            returned_raw, parsed = _evaluate_strict_response(client, user=prompt, evaluation_items=items, phase=phase)
 
         post.assert_called_once()
         payload = post.call_args.kwargs["json"]
@@ -638,7 +640,8 @@ class TestEvaluatorV13PromptContract:
             {"role": "system", "content": PromptBuilder.SYSTEM_PROMPT}, {"role": "user", "content": prompt},
         ]
         assert payload["response_format"] == {"type": "json_object"}
-        assert returned_raw == parsed.raw == raw
+        assert returned_raw == raw
+        assert "assessments" not in parsed.raw
         assert parsed.verdict == "PARTIAL" and parsed.missing == missing
 
     def test_protocol_boundary_preserves_required_business_work_and_evidence(self):
@@ -646,7 +649,7 @@ class TestEvaluatorV13PromptContract:
         for rule in (
             "using only its listed criteria and supplied facts",
             "this report's own acceptance as prerequisites",
-            "covered requires the entire criterion",
+            "covered is a boolean for the entire criterion",
             "Reject missing required content",
             "When FULL content is required, a summary or reference alone cannot supply it",
             "Server-enforced identity, access and approvals are not yours to certify",
@@ -684,7 +687,8 @@ class TestEvaluatorV13PromptContract:
         assert instruction not in prompt
         assert evidence in prompt
         assert f'WORKER REPORT:\n"""{report}"""' in prompt
-        assert 'ID: "PM-DRAFT-01:evidence:143"' in prompt
+        assert 'ID: "E1"' in prompt
+        assert "PM-DRAFT-01:evidence:143" not in prompt
         system = PromptBuilder.SYSTEM_PROMPT
         assert "using only its listed criteria and supplied facts" in system
         assert "Do not add independent attestation" in system
@@ -693,7 +697,7 @@ class TestEvaluatorV13PromptContract:
         prompt = PromptBuilder.SYSTEM_PROMPT
         assert "Reject missing required content" in prompt
         assert "contradictory current facts" in prompt
-        assert "covered requires the entire criterion" in prompt
+        assert "covered is a boolean for the entire criterion" in prompt
 
     def test_reported_full_presentation_and_matching_owner_consent_reach_the_evaluator(self):
         instruction = (
@@ -740,7 +744,7 @@ class TestEvaluatorV13PromptContract:
         assert "using only its listed criteria and supplied facts" in system
         assert "Do not add independent attestation" in system
         assert "When FULL content is required, a summary or reference alone cannot supply it" in system
-        assert "covered requires the entire criterion" in system
+        assert "covered is a boolean for the entire criterion" in system
 
     def test_contradictory_current_facts_prohibit_pass(self):
         prompt = PromptBuilder.SYSTEM_PROMPT
@@ -775,12 +779,12 @@ class TestEvaluatorV13PromptContract:
         assert criterion in prompt
         assert "python -B -X utf8 -m unittest: all passed" in prompt
         assert "test_calculator.py" not in PromptBuilder.SYSTEM_PROMPT
-        assert "covered requires the entire criterion" in PromptBuilder.SYSTEM_PROMPT
+        assert "covered is a boolean for the entire criterion" in PromptBuilder.SYSTEM_PROMPT
 
     def test_coverage_requires_the_whole_evidence_item_and_a_consistent_message(self):
         prompt = PromptBuilder.SYSTEM_PROMPT
-        assert "covered requires the entire criterion" in prompt
-        assert "Keep all fields consistent" in prompt
+        assert "covered is a boolean for the entire criterion" in prompt
+        assert "Keep verdict and assessments consistent" in prompt
 
     def test_explicit_later_changes_are_respected_without_extra_timestamp_rules(self):
         prompt = PromptBuilder.SYSTEM_PROMPT
@@ -791,8 +795,8 @@ class TestEvaluatorV13PromptContract:
 
     def test_normal_complete_report_contract_still_allows_pass(self):
         assert "PASS: all covered, no blockers" in PromptBuilder.SYSTEM_PROMPT
-        assert "covered requires the entire criterion" in PromptBuilder.SYSTEM_PROMPT
+        assert "covered is a boolean for the entire criterion" in PromptBuilder.SYSTEM_PROMPT
 
     def test_output_must_be_bare_json_without_markdown_fences(self):
         assert "one bare JSON object" in PromptBuilder.SYSTEM_PROMPT
-        assert "with only these fields" in PromptBuilder.SYSTEM_PROMPT
+        assert "exactly verdict, assessments, blockers and confidence" in PromptBuilder.SYSTEM_PROMPT

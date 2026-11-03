@@ -357,7 +357,7 @@ def _replay(uow: SAUnitOfWork, fence: ConfiguredCliFence) -> dict[str, Any] | No
 
 
 def step(uow: SAUnitOfWork, command: ConfiguredStep, authorization: str | None) -> dict[str, Any]:
-    from project_workflow.supervisor import SupervisorEngine
+    from project_workflow.supervisor import SupervisorEngine, format_result
 
     principal = _principal(authorization, write=command.report is not None)
     task, assignment, payload = _row(uow, command.task, command.namespace_id, execution=True)
@@ -368,7 +368,7 @@ def step(uow: SAUnitOfWork, command: ConfiguredStep, authorization: str | None) 
     if command.report is not None:
         replay = _replay(uow, fence)
         if replay is not None:
-            return {"ok": True, "exit_code": 0, "result": replay, "output": replay.get("instructions", "")}
+            return {"ok": True, "exit_code": 0, "result": replay, "output": format_result(replay)}
         if command.expected_version != fence.version or task.status == "done":
             raise ConflictError("Configured expected_version does not match current cursor")
     engine = SupervisorEngine(command.task, uow=uow, project_id=task.project_id,
@@ -415,7 +415,7 @@ def step(uow: SAUnitOfWork, command: ConfiguredStep, authorization: str | None) 
         result = replay
     if result.get("interaction_protocol") != PROTOCOL:
         raise ConflictError("Configured step did not commit an operation receipt")
-    return {"ok": True, "exit_code": 0, "output": result.get("instructions", ""), "result": result}
+    return {"ok": True, "exit_code": 0, "output": format_result(result), "result": result}
 
 
 def prepare_history(fence: ConfiguredCliFence, run_data: dict[str, Any]) -> None:

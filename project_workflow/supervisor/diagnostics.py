@@ -216,6 +216,8 @@ def evaluation_diagnostic(*, system: str, user: str, report: str, prompt_version
                       assessments_omitted=max(0, len(assessments) - 200),
                       aliases_omitted=max(0, len(aliases or {}) - 200),
                       explanation_source="model_item_assessments")
+    if technical_error:
+        result["explanation_source"] = "server_technical_failure"
     return _limit_budget(result)
 
 

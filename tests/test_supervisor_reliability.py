@@ -184,11 +184,9 @@ def test_same_report_uses_provider_again_after_accumulated_coverage_changes():
         assert len(item_ids) >= 3
         covered = item_ids[: min(calls + 1, 2)]
         calls += 1
-        return _wire(
-            "PARTIAL",
-            covered,
-            [item_id for item_id in item_ids if item_id not in covered],
-        )
+        return {"verdict": "PARTIAL", "assessments": {
+            item_id: {"covered": item_id in covered, "reason": "Проверен текущий результат"}
+            for item_id in item_ids}, "blockers": [], "confidence": 0.5}
 
     with patch.object(OpenAICompatibleClient, "chat", side_effect=partial_progress) as chat:
         first = engine.evaluate("повторяемый отчёт")
@@ -483,7 +481,7 @@ def test_invalid_evaluator_contract_stays_fail_closed_after_bounded_retries():
 
     assert result["verdict"] == "BLOCKED"
     assert result["retryable"] is True
-    assert chat.call_count == 3
+    assert chat.call_count == 2
     runs = engine.db.list_step_history(task_key=engine.task_key, limit=10)
     assert len(runs) == 1
     assert runs[0]["replay_fingerprint"] is None

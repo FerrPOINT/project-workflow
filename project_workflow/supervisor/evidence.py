@@ -34,11 +34,17 @@ def validate_frozen_evaluation(
     state = evaluation.get("contract_fingerprint_state")
     if any(not isinstance(value, str) or re.fullmatch(r"[a-f0-9]{64}", value) is None for value in fingerprints):
         raise ConflictError("Terminal frozen contract fingerprints are missing or invalid")
-    if not isinstance(state, dict) or set(state) != {
+    state_keys = {
         "prompt_version", "contract", "evaluation_items", "previously_covered_ids",
         "delegation_allowed", "group", "transition_routes", "phase_graph",
-    }:
+    }
+    if not isinstance(state, dict) or set(state) not in (state_keys, state_keys | {"evaluator_response_format"}):
         raise ConflictError("Terminal frozen fingerprint inputs are missing or invalid")
+    if ("evaluator_response_format" in state
+            and state["evaluator_response_format"] not in ("json_object", "json_schema")):
+        raise ConflictError("Terminal frozen evaluator format is invalid")
+    if state.get("prompt_version") == "supervisor-evaluator-v14" and "evaluator_response_format" not in state:
+        raise ConflictError("Terminal frozen evaluator format is missing")
     try:
         parsed = ResponseParser.parse(evaluator, required_item_ids=item_ids)
         fingerprint = _fingerprint_contract_state(state)
@@ -53,6 +59,7 @@ def validate_frozen_evaluation(
             "supervisor-evaluator-v9", "supervisor-evaluator-v8-no-backtracking",
             "supervisor-evaluator-v11", "supervisor-evaluator-pm-v1", "supervisor-evaluator-pm-v2",
             "supervisor-evaluator-pm-v3", "supervisor-evaluator-pm-v4", "supervisor-evaluator-v12",
+            "supervisor-evaluator-v13",
             PromptBuilder.PROMPT_VERSION, PromptBuilder.PM_PROMPT_VERSION,
         )
         or state["contract"] != {key: value for key, value in contract.items() if key != "evaluation_items"}

@@ -182,7 +182,7 @@ def test_old_pm_frozen_proof_replays_unchanged_after_business_review_upgrade(
         old.setattr(PromptBuilder, "PROMPT_VERSION", old_version)
         old.setattr(PromptBuilder, "build_user_prompt", staticmethod(old_user))
         selector, result = complete(configured, supervisor_llm, old)
-    assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v13"
+    assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v14"
     history_id = result["terminal_receipt"]["history_id"]
     with SAUnitOfWork() as uow:
         record = uow.step_history.get_by_id(history_id).to_dict()
@@ -228,4 +228,4 @@ def test_verified_context_does_not_relax_current_parser(configured, supervisor_l
     result = response.json()["result"]
     assert result["verdict"] == "BLOCKED" and result["retryable"] is True
     assert result["complete"] is False and "terminal_receipt" not in result
-    assert provider.call_count == 3
+    assert provider.call_count == 2

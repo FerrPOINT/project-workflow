@@ -1,5 +1,37 @@
 # Changelog
 
+## Private Assessments And Refusal Reasons - 2026-11-03
+
+- Cause: the model independently generated covered/missing lists; phase refusals
+  had only a global explanation, which the ordinary CLI did not display for PARTIAL.
+  v14 now returns one boolean and reason per local criterion label. The server
+  validates the decision and projects the existing public six-field response.
+- Keep current-phase revisable marks, exact owner confirmation, assignment/version
+  fences, historical receipts and the public API. Reject duplicate JSON keys and
+  inconsistent verdicts. Format repair is bounded to one retry; provider refusal,
+  filtering and truncation are technical stops, not unfinished business work.
+- Actual CLI and configured fresh/replay output expose the reason. Existing history
+  stores private assessments separately from canonical results; legacy reasons are
+  not invented. Secrets and bounded diagnostic capture retain their existing guards.
+- Source validation: one full native run plus the two corrected test modules gives
+  3626 passing current parent cases,15 skips and75 passing subtests; coverage94.20%.
+  The original five stale mock/assertion failures remain in the original report.
+  Product files are byte-identical to that full-run candidate after rejecting v15.
+  Ruff/mypy166 pass. PG:131 full-run cases pass; the unchanged clock case passes
+  separately. Its full-run early expiry remains a timing uncertainty, not a proven
+  product defect. Twenty additional receipt/concurrency cases also pass.
+- Model diagnosis used35/36 HTTP calls including two probes; the app-test route
+  ignored json_schema, so explicit JSON mode and strict local validation remain.
+  No malformed grading responses or false PASS were observed in this stage.
+  The original Analyst matrix was ambiguous; explicit existing links passed.
+  Advisor interpreted passed as individual successful test cases rather than the
+  overall candidate decision in one Tester criterion.
+  General v15 wording did not fix it and was reverted. A private C2 clarification
+  under the original v14 prompt passed4/4, retaining the negative control.
+- Full qualification, installation, autonomous live PM acceptance and merge remain
+  OPEN. The actual catalog, original runtime and working credentials are unchanged.
+  Requests/responses: docs/evidence/advisor-assessment-findings-20261103.json.
+
 ## Universal Advisor: Shared Evaluation And Revisable Coverage - 2026-11-03
 
 - Approved one role-neutral evaluator instead of generic-v12/PM-v4 branches,

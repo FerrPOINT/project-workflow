@@ -236,12 +236,13 @@ def test_actual_evaluator_receives_full_report_and_exact_pm_obligations(pm_phase
     client = Mock()
     client.chat.side_effect = TimeoutError("Stop before any provider call; no quality verdict supplied")
     with pytest.raises(TimeoutError):
-        _evaluate_strict_response(client, user=prompt, item_ids=[key for key, _ in items], phase=phase)
+        _evaluate_strict_response(client, user=prompt, evaluation_items=items, phase=phase)
     client.chat.assert_called_once_with(system=PromptBuilder.SYSTEM_PROMPT, user=prompt, temperature=0.1)
     delivered = client.chat.call_args.kwargs["user"]
     assert delivered.split('WORKER REPORT:\n"""', 1)[1].rsplit('"""', 1)[0] == case["report"]
     actual_items = [line.strip() for line in delivered.splitlines() if line.strip().startswith('ID: "')]
-    assert actual_items == [f'ID: "{key}" \u2014 {value}' for key, value in items]
+    assert actual_items == [f'ID: "{label}" \u2014 {dict(items)[key]}'
+                            for label, key in PromptBuilder.item_aliases(items).items()]
     assert "WORKER PROCEDURE" not in delivered
     # Historical report bytes remain intact, but v13 does not add worker procedure.
     assert "Instructions:" not in delivered.split("WORKER REPORT:", 1)[0]
@@ -260,8 +261,9 @@ def test_correction_carries_real_obligations_even_when_previous_coverage_is_pres
     prompt = PromptBuilder.build_user_prompt(
         WORKFLOW_TASK_KEY, phase, case["report"], evaluation_items=items, previously_covered=previously,
     )
-    prior_block = prompt.split("PRIOR COVERED IDS (revisable, not permanent): ", 1)[1].split("\n", 1)[0]
-    assert prior_block == ", ".join(previously)
+    prior_block = prompt.split("PRIOR COVERED MARKS (revisable, not permanent): ", 1)[1].split("\n", 1)[0]
+    assert prior_block == ", ".join(label for label, key in PromptBuilder.item_aliases(items).items()
+                                   if key in previously)
     assert len([line for line in prompt.splitlines() if line.strip().startswith('ID: "')]) == len(items)
     assert set(case["required_missing"]) == {key.split(phase.code + ":", 1)[1] for key in previously}
 

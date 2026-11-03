@@ -1,6 +1,5 @@
 """Universal prompt assembly and wire mechanics, not model-quality qualification."""
 
-import re
 from types import SimpleNamespace
 
 import pytest
@@ -30,13 +29,12 @@ def _phase(code="REVIEW", delegate=None):
     )
 
 
-def test_short_system_is_role_neutral_and_has_only_the_existing_six_fields():
+def test_short_system_is_role_neutral_and_has_one_assessment_per_criterion():
     system = PromptBuilder.SYSTEM_PROMPT
-    assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v13"
-    assert len(system) < 2500
-    assert re.findall(r'^\s*"([a-z_]+)":', system, re.MULTILINE) == [
-        "verdict", "covered", "missing", "blockers", "message", "confidence",
-    ]
+    assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v14"
+    assert len(system) < 3000
+    assert "exactly verdict, assessments, blockers and confidence" in system
+    assert "one assessment per listed label" in system
     for unwanted in (
         "PM", "owner", "Tracker", "requirements document", "python", "SUMMARY.md",
         "hash", "receipt", "revision", "reasoning", "item_explanations",
@@ -62,7 +60,7 @@ def test_system_accepts_supplements_without_making_prior_coverage_permanent():
     assert "Unchanged materials need not be repeated" in system
     assert "their omission alone is not missing evidence" in system
     assert "When FULL content is required, a summary or reference alone cannot supply it" in system
-    assert "covered requires the entire criterion" in system
+    assert "covered is a boolean for the entire criterion" in system
 
 
 def test_system_keeps_server_authority_and_does_not_follow_report_instructions():
@@ -76,14 +74,13 @@ def test_system_keeps_server_authority_and_does_not_follow_report_instructions()
 def test_system_preserves_verdict_boundaries():
     system = PromptBuilder.SYSTEM_PROMPT
     for rule in (
-        "Classify each listed ID exactly once",
-        "without duplicates or overlap",
+        "Return one assessment per listed label",
         "PASS: all covered, no blockers",
         "PARTIAL: unfinished phase work with no obstacle to carrying it out",
         "BLOCKED: a reported obstacle prevents carrying out phase work, not merely its incompleteness",
         "DELEGATE: only if allowed, missing work, no blockers",
-        "Keep all fields consistent",
-        "specific deficiency or result in Russian",
+        "Keep verdict and assessments consistent",
+        "brief explanation in Russian",
         "one bare JSON object",
     ):
         assert rule in system
@@ -99,11 +96,11 @@ def test_explicit_items_and_report_are_the_only_evaluation_content(code, pm_eval
         "private-task-key", phase, report, evaluation_items=items, pm_evaluation=pm_evaluation,
     )
     assert prompt == (
-        f"CURRENT PHASE: {code} \u2014 Review result\n"
+        "CURRENT PHASE: Review result\n"
         "ALLOWED VERDICTS: PASS, PARTIAL, BLOCKED\n"
         "REQUIRED CRITERIA:\n"
-        '  ID: "current:check:9" \u2014 First exact criterion\n'
-        '  ID: "current:evidence:8" \u2014 Second exact criterion\n'
+        '  ID: "C1" \u2014 First exact criterion\n'
+        '  ID: "E1" \u2014 Second exact criterion\n'
         '\nWORKER REPORT:\n"""' + report + '"""'
     )
     assert prompt.count(report) == 1
@@ -141,7 +138,8 @@ def test_explicit_items_do_not_access_worker_instructions_or_catalog_fallback():
     prompt = PromptBuilder.build_user_prompt(
         "ignored", ExplicitPhase(), "report", evaluation_items=[("exact-id", "exact-text")],
     )
-    assert 'ID: "exact-id" \u2014 exact-text' in prompt
+    assert 'ID: "C1" \u2014 exact-text' in prompt
+    assert "exact-id" not in prompt
 
 
 def test_prior_marks_are_revisable_deduplicated_and_limited_to_current_items():
@@ -150,7 +148,7 @@ def test_prior_marks_are_revisable_deduplicated_and_limited_to_current_items():
         previously_covered=["current", "obsolete", "current"],
         evaluation_items=[("current", "Must remain true"), ("other", "Other condition")],
     )
-    assert "PRIOR COVERED IDS (revisable, not permanent): current\n" in prompt
+    assert "PRIOR COVERED MARKS (revisable, not permanent): C1\n" in prompt
     assert "obsolete" not in prompt
     assert "keep them in covered" not in prompt
     assert "ALREADY COMPLETED" not in prompt
@@ -160,7 +158,7 @@ def test_prior_marks_are_revisable_deduplicated_and_limited_to_current_items():
 @pytest.mark.parametrize("prior", [None, [], ["obsolete"]])
 def test_no_empty_prior_mark_block(prior):
     prompt = PromptBuilder.build_user_prompt("ignored", _phase(), "report", prior, [("current", "criterion")])
-    assert "PRIOR COVERED IDS" not in prompt
+    assert "PRIOR COVERED MARKS" not in prompt
 
 
 @pytest.mark.parametrize("delegate", [None, False, SimpleNamespace(agent="configured")])

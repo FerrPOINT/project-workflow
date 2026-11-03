@@ -9,6 +9,7 @@ from typing import Any
 import requests
 from sqlalchemy.exc import IntegrityError
 
+from .. import config
 from ..domain.configured_cli import ConfiguredCliFence
 from ..domain.exceptions import ConcurrentTransitionError
 from ..infrastructure.llm import (
@@ -23,7 +24,7 @@ from .diagnostics import capture_attempt, evaluation_diagnostic
 from .models import Phase
 from .types import VERDICT_LABELS
 
-_MAX_EVALUATOR_RESPONSE_ATTEMPTS = 3
+_MAX_EVALUATOR_RESPONSE_ATTEMPTS = 2
 
 
 def _contract_fingerprint_state(
@@ -40,6 +41,7 @@ def _contract_fingerprint_state(
     contract_data = contract.to_dict()
     return {
         "prompt_version": PromptBuilder.PROMPT_VERSION if prompt_version is None else prompt_version,
+        "evaluator_response_format": config.get_settings().OPENAI_EVALUATOR_RESPONSE_FORMAT,
         "contract": contract_data,
         "evaluation_items": [{"id": item_id, "text": text} for item_id, text in evaluation_items],
         "previously_covered_ids": sorted(previously_covered_ids),
@@ -104,8 +106,15 @@ def _report_fingerprint(task_id: int, report: str, contract_fingerprint: str) ->
     return hashlib.sha256(f"{task_id}\0{contract_fingerprint}\0{normalized}".encode()).hexdigest()
 
 
-def _blocked(exc: Exception) -> LlmVerdict:
-    if isinstance(exc, LlmConfigurationError):
+def _blocked(exc: Exception, *, provider_outcome: str | None = None) -> LlmVerdict:
+    provider_blockers = {
+        "incomplete": "Ответ проверяющего LLM не завершён: достигнут лимит токенов.",
+        "refusal": "Провайдер проверяющего LLM отказался формировать ответ.",
+        "content_filter": "Ответ проверяющего LLM остановлен фильтром провайдера.",
+    }
+    if provider_outcome is not None and provider_outcome in provider_blockers:
+        blocker = provider_blockers[provider_outcome]
+    elif isinstance(exc, LlmConfigurationError):
         blocker = "Проверяющий LLM не настроен: для OpenRouter требуется OPENAI_API_KEY."
     elif isinstance(exc, (requests.Timeout, TimeoutError)):
         blocker = "Проверяющий LLM не ответил за отведённое время."
@@ -238,10 +247,11 @@ def _evaluate_strict_response(
     client: OpenAICompatibleClient,
     *,
     user: str,
-    item_ids: list[str],
+    evaluation_items: list[tuple[str, str]],
     phase: Phase,
     attempts: list[dict[str, Any]] | None = None,
     system: str = PromptBuilder.SYSTEM_PROMPT,
+    response_format: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], LlmVerdict]:
     """Retry only malformed evaluator output and never relax the wire contract."""
     prompt = user
@@ -251,24 +261,30 @@ def _evaluate_strict_response(
         error: Exception | None = None
         submitted_prompt = prompt
         try:
+            format_options = {"response_format": response_format} if response_format is not None else {}
             raw = client.chat(
                 system=system,
                 user=prompt,
                 temperature=0.1,
+                **format_options,
             )
-            llm = ResponseParser.parse(raw, required_item_ids=item_ids)
+            llm = ResponseParser.parse_assessments(raw, evaluation_items=evaluation_items)
             if llm.verdict == "DELEGATE" and phase.delegate is None:
                 raise ValueError("Для текущей фазы не настроено делегирование")
             return raw, llm
         except (TypeError, ValueError, KeyError, IndexError, AttributeError) as exc:
             error = exc
             last_error = exc
+            provider_diagnostic = getattr(client, "last_call_diagnostics", None)
+            if (isinstance(provider_diagnostic, dict)
+                    and provider_diagnostic.get("outcome") in {"refusal", "content_filter", "incomplete"}):
+                raise
             if attempt_number == _MAX_EVALUATOR_RESPONSE_ATTEMPTS:
                 raise
             prompt = (
                 user
                 + "\n\nPREVIOUS RESPONSE WAS INVALID. Return a new response that satisfies "
-                "the exact JSON schema and classifies every required item ID exactly once. "
+                "the exact JSON schema and assesses every required criterion exactly once. "
                 "Return only one bare JSON object without Markdown or commentary."
             )
         except (requests.RequestException, OSError) as exc:
@@ -386,10 +402,12 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         raw, llm = _evaluate_strict_response(
             client,
             user=user,
-            item_ids=item_ids,
+            evaluation_items=evaluation_items,
             phase=phase,
             attempts=attempts,
             system=system,
+            response_format=(PromptBuilder.response_schema(evaluation_items)
+                             if config.get_settings().OPENAI_EVALUATOR_RESPONSE_FORMAT == "json_schema" else None),
         )
     except (
         requests.RequestException,
@@ -401,7 +419,9 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         AttributeError,
     ) as exc:
         technical_error = True
-        llm = _blocked(exc)
+        provider_diagnostic = getattr(client, "last_call_diagnostics", {})
+        llm = _blocked(exc, provider_outcome=(provider_diagnostic.get("outcome")
+                      if isinstance(provider_diagnostic, dict) else None))
 
     if engine.db.workflows.lock(workflow_id) is None:
         engine.db.rollback()
@@ -548,12 +568,14 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         result["next_phase_contract"] = next_phase_contract.to_dict()
 
     next_phase_obj = engine.phase_map.get(next_phase_code) if next_phase_code else None
-    raw_evaluator = llm.raw if technical_error else (raw if raw is not None else llm.raw)
+    raw_evaluator = llm.raw
     try:
         diagnostic = evaluation_diagnostic(
             system=system, user=user, report=report,
             prompt_version=prompt_version, items=evaluated_items,
             attempts=attempts, client=client, technical_error=technical_error, decision=raw_evaluator,
+            assessments=llm.assessments if not technical_error else {},
+            aliases=PromptBuilder.item_aliases(evaluated_items),
         )
     except Exception as diagnostic_error:
         diagnostic = {"schema": "evaluator-diagnostics-v1", "availability": "capture_failed",
@@ -586,6 +608,8 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
             },
             "covered_item_ids": covered_ids,
             "raw_evaluator": raw_evaluator,
+            "advisor_assessments": llm.assessments if not technical_error else {},
+            "evaluator_item_aliases": PromptBuilder.item_aliases(evaluated_items),
             "diagnostics": diagnostic,
         },
         "supervisor_response": result,

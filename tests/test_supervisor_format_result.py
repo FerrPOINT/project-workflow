@@ -118,7 +118,8 @@ class TestFormatResult:
         assert "Ты сделал часть, доделай:" not in out
         assert "Сделано" not in out
         assert "Блокеры" not in out
-        assert "Need more" not in out
+        assert "Причина:" in out
+        assert out.count("Need more") == 1
 
     def test_partial_shows_current_instructions(self):
         out = format_result(self._partial())

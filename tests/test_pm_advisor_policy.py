@@ -107,10 +107,10 @@ def test_pm_report_can_revoke_marks_but_technical_failure_preserves_them(
     assert result["covered"] == ([] if outcome == "semantic" else [required[0]])
     assert (required[0] in result["missing"]) is (outcome == "semantic")
     assert result["retryable"] is (outcome != "semantic")
-    assert provider.call_count == (3 if outcome == "format" else 1)
+    assert provider.call_count == (2 if outcome == "format" else 1)
     for call in provider.call_args_list:
         assert call.kwargs["system"] == PromptBuilder.PM_SYSTEM_PROMPT
-        assert "PRIOR COVERED IDS" in call.kwargs["user"]
+        assert "PRIOR COVERED MARKS" in call.kwargs["user"]
     evaluation = latest_evaluation()
     assert evaluation["prompt_version"] == PromptBuilder.PM_PROMPT_VERSION
     assert len(evaluation["contract_fingerprint_state"]["previously_covered_ids"]) == 1
@@ -130,5 +130,5 @@ def test_pm_context_retains_existing_cumulative_coverage(configured, supervisor_
     monkeypatch.setattr(OpenAICompatibleClient, "chat", provider)
     second = step(configured, report="Rechecked context", operation_key="context-two", expected_version=2)
     assert second.status_code == 200, second.text
-    assert "PRIOR COVERED IDS" in provider.call_args.kwargs["user"]
+    assert "PRIOR COVERED MARKS" in provider.call_args.kwargs["user"]
     assert latest_evaluation()["contract_fingerprint_state"]["previously_covered_ids"]

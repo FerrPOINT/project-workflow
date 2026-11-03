@@ -1,7 +1,6 @@
 """Legacy PM entry points use the universal prompt and unchanged wire contract."""
 
 import json
-import re
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -36,15 +35,13 @@ def test_legacy_pm_flag_does_not_select_a_policy(delegate, explicit):
     default = PromptBuilder.build_user_prompt(*args)
     assert PromptBuilder.build_user_prompt(*args, pm_evaluation=False) == default
     assert PromptBuilder.build_user_prompt(*args, pm_evaluation=True) == default
-    assert PromptBuilder.PM_PROMPT_VERSION == PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v13"
+    assert PromptBuilder.PM_PROMPT_VERSION == PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v14"
 
 
-def test_pm_system_alias_has_the_same_six_field_schema():
+def test_pm_system_alias_uses_the_same_assessment_contract():
     prompt = PromptBuilder.PM_SYSTEM_PROMPT
     assert prompt is PromptBuilder.SYSTEM_PROMPT
-    assert re.findall(r'^\s*"([a-z_]+)":', prompt, re.MULTILINE) == [
-        "verdict", "covered", "missing", "blockers", "message", "confidence",
-    ]
+    assert "exactly verdict, assessments, blockers and confidence" in prompt
     assert "hash" not in prompt.lower()
     assert "revision" not in prompt.lower()
     assert "receipt" not in prompt.lower()
@@ -60,9 +57,10 @@ def test_pm_contains_only_phase_criteria_and_complete_business_report(delegate):
     pm = PromptBuilder.build_user_prompt(*args, pm_evaluation=True)
     assert pm == generic
     assert pm.endswith('WORKER REPORT:\n"""' + report + '"""')
-    for item_id, description in semantic_items:
-        assert f'ID: "{item_id}" \u2014 {description}' in pm
-    assert "PRIOR COVERED IDS (revisable, not permanent): check:1" in pm
+    for label, item_id in PromptBuilder.item_aliases(semantic_items).items():
+        assert f'ID: "{label}" \u2014 {dict(semantic_items)[item_id]}' in pm
+        assert item_id not in pm
+    assert "PRIOR COVERED MARKS (revisable, not permanent): C1" in pm
     for unwanted in ("TASK:", "Instructions:", "CASE-1", "hash", "revision", "receipt", "PM_REF", "SUM", "MUST equal"):
         assert unwanted not in pm
     allowed = "ALLOWED VERDICTS: PASS, PARTIAL, BLOCKED" + (", DELEGATE" if delegate else "")
@@ -115,7 +113,7 @@ def test_business_catalog_http_request_contains_only_the_current_evaluation(monk
         {"role": "user", "content": prompt},
     ]
     assert prompt.count(report) == 1
-    assert all(prompt.count(f'ID: "{item_id}"') == 1 for item_id, _ in items)
+    assert all(prompt.count(f'ID: "{label}"') == 1 for label in PromptBuilder.item_aliases(items))
     for instruction in definition["instructions"]:
         assert instruction["description"] not in prompt
     wire_context = json.dumps(payload["messages"])

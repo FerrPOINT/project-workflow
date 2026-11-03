@@ -131,6 +131,6 @@ def test_configured_api_reason_reaches_actual_cli_on_fresh_and_frozen_replay(
     for _ in range(2):
         output = CliRunner().invoke(cli, args)
         assert output.exit_code == 0, output.output
-        assert "Test Supervisor verdict: PARTIAL" in output.output
+        assert "Test Supervisor criterion:" in " ".join(output.output.split())
         assert "Причина:" in output.output
     provider.assert_called_once()
