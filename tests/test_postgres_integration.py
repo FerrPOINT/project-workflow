@@ -57,7 +57,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.mark.integration
-@pytest.mark.parametrize("role", ["project_manager", "developer"])
+@pytest.mark.parametrize("role", ["project_manager", "analyst", "developer"])
 def test_pm_analysis_acceptance_preserves_populated_history_on_postgres(pg_url, monkeypatch, role):
     from tests.test_configured_catalog_migration import assert_populated_catalog_upgrade_preserves_history
 
@@ -268,7 +268,7 @@ def test_pm_ownership_catalog_lock_order_and_incomplete_schema(pg_url, winner):
     assert not schema_is_ready(engine)
     with pytest.raises(DatabaseRecreateRequired):
         ensure_migrated(engine)
-    assert database_revisions(engine) == {"0025_pm_analysis_acceptance"}
+    assert database_revisions(engine) == {"0026_analyst_artifact_acceptance"}
 
 
 @pytest.mark.integration
@@ -499,7 +499,7 @@ class TestPostgresInitialMigration:
             version = conn.execute(
                 text("SELECT version_num FROM project_workflow.alembic_version")
             ).scalar_one()
-        assert version == migration_head() == "0025_pm_analysis_acceptance"
+        assert version == migration_head() == "0026_analyst_artifact_acceptance"
         assert schema_is_ready(engine) is True
 
     def test_managed_bootstrap_serializes_with_public_catalog_creation(self, pg_url):

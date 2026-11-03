@@ -9,6 +9,7 @@ from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
 
 @pytest.fixture(params=[
+    ("0025_pm_analysis_acceptance", "d76ecbb632b1ceebf33bf78e8e0dedaec278538227d653aa9fd3c998e19ea694"),
     ("0024_analyst_research_catalog", "332cfd4fb3419d5765008e196cffb508540462ddd89b798ab4e89379ac5b1796"),
     ("0019_pm_terminal_resume_retry", "1535516545520eb5ea489cf1583cfaebc458e5729a94762751515841078671c3"),
     ("0023_catalog_publication_author", "e0cde0c044fe1a38b6fa0f387cc30e0da6e89dedb35b89a893263fd7d2558a40"),
@@ -17,7 +18,7 @@ def predecessor(request):
     return request.param
 
 
-@pytest.mark.parametrize("role", ["project_manager", "developer"])
+@pytest.mark.parametrize("role", ["project_manager", "analyst", "developer"])
 def test_populated_catalog_upgrade_preserves_task_phase_and_report_history(tmp_path, monkeypatch, predecessor, role):
     engine = sa.create_engine(f"sqlite:///{tmp_path / 'populated.db'}")
     assert_populated_catalog_upgrade_preserves_history(engine, monkeypatch, predecessor, role)
@@ -66,6 +67,9 @@ def assert_populated_catalog_upgrade_preserves_history(engine, monkeypatch, pred
             }
             phases = connection.execute(sa.text("SELECT id,code,mode_id FROM phases ORDER BY id")).all()
             checks = connection.execute(sa.text("SELECT id,phase_id FROM phase_checks ORDER BY id")).all()
+            evidence = connection.execute(sa.text(
+                "SELECT id,phase_id FROM phase_evidence_requirements ORDER BY id"
+            )).all()
         ensure_migrated(engine)
         ensure_migrated(engine)
         with SAUnitOfWork(engine) as uow:
@@ -74,12 +78,15 @@ def assert_populated_catalog_upgrade_preserves_history(engine, monkeypatch, pred
             for name, rows in before.items():
                 assert connection.execute(sa.text(f"SELECT * FROM {name}")).mappings().all() == rows
             assert connection.execute(sa.text("SELECT id,code,mode_id FROM phases ORDER BY id")).all() == phases
-            if revision == "0024_analyst_research_catalog":
+            if revision in {"0024_analyst_research_catalog", "0025_pm_analysis_acceptance"}:
                 # The earlier research migration legitimately adds Analyst checks;
-                # this correction changes only one existing condition's text.
+                # these acceptance corrections change existing text only.
                 assert connection.execute(sa.text("SELECT id,phase_id FROM phase_checks ORDER BY id")).all() == checks
+                assert connection.execute(sa.text(
+                    "SELECT id,phase_id FROM phase_evidence_requirements ORDER BY id"
+                )).all() == evidence
             assert (
-                "0025_pm_analysis_acceptance"
+                "0026_analyst_artifact_acceptance"
                 == connection.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
             )
     finally:

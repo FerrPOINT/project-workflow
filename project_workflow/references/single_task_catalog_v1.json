@@ -14,7 +14,7 @@
     },
     "path": "project_workflow/infrastructure/single_task_catalog.py",
     "repository": "https://github.com/FerrPOINT/project-workflow.git",
-    "sha256": "140275878054d126fbc6bb44c2c7b0259832a273801edec24356826443132d6c"
+    "sha256": "bed7a26eade1b212fe8c313ed5e030f24106a05378cfc2edecc1451f9c61db60"
   },
   "schema": "single-task-sdlc/workflow-catalog/v1",
   "workflows": [
@@ -321,7 +321,7 @@
               "description": "single-task-v1: analyst/analysis; Initial specification and Tracker handoff.",
               "evidence": [
                 "One analysis.md: approved revision/hash, source register, initial specification, requirement/source/verification coverage and limitations.",
-                "Tracker analysis artifact receipt and final comment reference."
+                "Tracker analysis artifact receipt with exact file SHA-256 and producing assignment."
               ],
               "instructions": [
                 {

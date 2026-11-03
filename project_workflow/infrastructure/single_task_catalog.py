@@ -258,7 +258,8 @@ def load_single_task_professions() -> list[dict[str, Any]]:
                      [specification, REPORT, artifact_instruction(role), terminal_instruction(role)],
                      ROLE_CHECKS[role] + ["One saved analysis.md covers the approved requirements "
                                           "and blocks on missing mandatory facts."],
-                     ROLE_EVIDENCE[role] + ["Tracker analysis artifact receipt and final comment reference."]),
+                     ROLE_EVIDENCE[role] + ["Tracker analysis artifact receipt with exact file SHA-256 "
+                                            "and producing assignment."]),
                 ]
             else:
                 contents = [
