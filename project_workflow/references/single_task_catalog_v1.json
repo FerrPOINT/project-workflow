@@ -14,7 +14,7 @@
     },
     "path": "project_workflow/infrastructure/single_task_catalog.py",
     "repository": "https://github.com/FerrPOINT/project-workflow.git",
-    "sha256": "bed7a26eade1b212fe8c313ed5e030f24106a05378cfc2edecc1451f9c61db60"
+    "sha256": "e515475ad72fb569eee3a29cd5313d9ebf0d357af1b11a7de76e3ae3272afab3"
   },
   "schema": "single-task-sdlc/workflow-catalog/v1",
   "workflows": [
@@ -287,14 +287,7 @@
               ],
               "instructions": [
                 {
-                  "description": "Analyze actors, glossary, scenarios, business rules, data, integrations, dependencies and permissions. Map every approved requirement to sources and measurable positive, negative, boundary and failure acceptance cases. Work independently without a second PM questionnaire or owner approval of the analysis. Return material business contradictions or missing mandatory facts through the existing critical PM review; do not rewrite confirmed requirements or choose the Architect's implementation.",
-                  "skills": [
-                    "project-workflow-executor",
-                    "tracker-operator"
-                  ]
-                },
-                {
-                  "description": "Decide routine technical details within approved requirements; Review/Test defects use normal rework. Only requirements_contradiction or missing_business_decision that prevents safe progress requires PM business review. Read the current task-tracker sdlc context and lifecycle. Publish and read back sealed evidence for this actual assignment/execution/role using the authorized attachment commands. Submit the strict SubmitCriticalBlocker body with fence, current requirement_revision/content_hash, kind, question, rationale, options, recommendation, evidence and idempotency_key using task-tracker sdlc critical-blocker submit --task <task-uuid> --from-file -. Pass JSON on stdin. Its stable key is fleet-critical-blocker:<current-Tracker-assignment-uuid>, taken from the verified context assignment_id, never from a native run or another role result. Keep question <=4096 bytes, rationale <=8192 bytes, at most 8 options and 1..16 sealed evidence entries. A recommendation references an actual option_id. Missing current fence/evidence/access is a blocker; do not borrow an identity or fabricate proof. Read the original operation using task-tracker sdlc critical-blocker operation --task <task-uuid> --key <exact-original-key>. Verify task/root/project/owner, assignment/execution/agent, role, requirements revision/hash and blocker ID/hash. Unknown acceptance requires original-key readback; retain the same exact body/key, without a blind resend or a new key. A held receipt is not a completed stage, PM return or Workflow completion. Leave the phase unfinished, report the held receipt or unresolved uncertainty and finish the native run. Fleet and Tracker own actual termination, release and guarded return; the agent never calls scheduler commands or invents terminal proof. Missing producer capability is an operator dependency, not permission for a generic status change. ",
+                  "description": "Analyze actors, glossary, scenarios, business rules, data, integrations, dependencies and permissions. Map every approved requirement to sources and measurable positive, negative, boundary and failure acceptance cases. Work independently without a second PM questionnaire or owner approval of the analysis. Never return the task to PM or invoke critical PM review. Record contradictions and missing mandatory facts in this task's analysis; missing mandatory facts keep analysis unfinished. Do not rewrite confirmed requirements or choose the Architect's implementation.",
                   "skills": [
                     "project-workflow-executor",
                     "tracker-operator"

@@ -13,7 +13,7 @@
     },
     "path": "project_workflow/infrastructure/single_task_catalog.py",
     "repository": "https://github.com/FerrPOINT/project-workflow.git",
-    "sha256": "bed7a26eade1b212fe8c313ed5e030f24106a05378cfc2edecc1451f9c61db60"
+    "sha256": "e515475ad72fb569eee3a29cd5313d9ebf0d357af1b11a7de76e3ae3272afab3"
   },
   "inventory": {
     "modes": 8,
@@ -35,7 +35,7 @@
       "namespace_cli_command": "workflow-single-task-analyst",
       "namespace_name": "single-task-analyst",
       "profile": "single-task-v1-analyst",
-      "role_instructions_sha256": "ad1740d48e786bf54e84b96c8edab44b562f83a20b938680a121b3cf84d1426d",
+      "role_instructions_sha256": "9db31da8bc11632c1189b1d2cee427d02533aa6d2ac1ef1628ea9113f6f83836",
       "workflow_key": "single-task-v1:analyst"
     },
     "architect": {
@@ -129,7 +129,7 @@
   "workflow_catalog": {
     "artifact": "project_workflow/references/single_task_catalog_v1.json",
     "hash_encoding": "utf-8-lf-no-bom-with-final-newline",
-    "sha256": "1ebab36fd92e0feb319c772b65f4e8f09132cf56fdce4f6a4887024ef0e2236a",
+    "sha256": "6a1decb0b088eabc34951a0f4892fab7ea0b7b25906af5c3f2855b68b85446cb",
     "version": 1
   }
 }

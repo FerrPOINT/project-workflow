@@ -186,3 +186,15 @@ def test_defects_return_through_review_and_testing_and_deployment_requires_proof
         criteria = " ".join(phase["checks"] + phase["evidence"]).lower()
         for required in ("artifact", "deployment receipt", "health", "acceptance"):
             assert required in criteria
+
+
+def test_analyst_records_gaps_in_place_without_critical_pm_review(professions):
+    analyst = professions["analyst"]["modes"][0]
+    steps = [i["description"] for p in analyst["phases"] for i in p["instructions"]]
+    text = " ".join(steps)
+    assert "Never return the task to PM" in text
+    assert "missing mandatory facts keep analysis unfinished" in text
+    assert "task-tracker sdlc critical-blocker" not in text
+    architect = professions["architect"]["modes"][0]
+    assert any("task-tracker sdlc critical-blocker" in i["description"]
+               for p in architect["phases"] for i in p["instructions"])

@@ -9,6 +9,7 @@ from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
 
 @pytest.fixture(params=[
+    ("0026_analyst_artifact_acceptance", "ab182b9bc6f7182c6250ba20cc322749f6fbae28ddc183765fbd888a658900e6"),
     ("0025_pm_analysis_acceptance", "d76ecbb632b1ceebf33bf78e8e0dedaec278538227d653aa9fd3c998e19ea694"),
     ("0024_analyst_research_catalog", "332cfd4fb3419d5765008e196cffb508540462ddd89b798ab4e89379ac5b1796"),
     ("0019_pm_terminal_resume_retry", "1535516545520eb5ea489cf1583cfaebc458e5729a94762751515841078671c3"),
@@ -86,7 +87,7 @@ def assert_populated_catalog_upgrade_preserves_history(engine, monkeypatch, pred
                     "SELECT id,phase_id FROM phase_evidence_requirements ORDER BY id"
                 )).all() == evidence
             assert (
-                "0026_analyst_artifact_acceptance"
+                "0027_analyst_no_pm_return"
                 == connection.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
             )
     finally:

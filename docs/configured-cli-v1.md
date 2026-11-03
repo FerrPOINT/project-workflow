@@ -5,14 +5,17 @@
 The single-task Analyst still has three phases: research approved PM input and
 internal/public sources; analyze rules/scenarios/acceptance; produce one analysis.md
 and use the existing accepted-report/comment/proposal sequence. It does not conduct
-a second PM interview or request owner consent for the analysis. Missing mandatory
-facts or material contradictions use the existing critical business review.
+a second PM interview or request owner consent for the analysis. It never returns
+the task to PM. Contradictions and missing facts stay in this task's analysis;
+missing mandatory facts keep the analysis unfinished.
 
 The Analyst allowlist additionally permits wiki-operator and forge-operator from
 the reviewed Base package. The identity donor and its historical catalog are not
 rewritten. Migration `0024_analyst_research_catalog` upgrades an exact sealed native
 catalog and keeps task IDs, phase IDs, reports and previous profile artifacts.
 Partial or customized catalogs fail transactionally instead of being overwritten.
+Migration `0027_analyst_no_pm_return` removes the Analyst PM-review instruction
+without rewriting saved tasks, reports or historical profile artifacts.
 Published migrations remain unchanged. Other professions keep their modes
 and allowlists. PM instructions verify the immutable Backlog/Ready completion while
 allowing fresh Tracker context to show the automatically queued Analysis.
@@ -156,17 +159,21 @@ Tracker assignment version и Workflow cursor version — разные счёт�
 сохранённый Workflow receipt server-to-server через существующий
 `POST /internal/runtime/terminal-receipt/readback`, а не доверяет вставленному JSON.
 
-PM вызывает `sdlc pm completion submit` и заканчивает в Backlog / Ready, без
-автоматического Analyst. Техническая роль публикует typed result с ключом
+PM вызывает `sdlc pm completion submit`; исторический receipt сохраняет
+Backlog / Ready. Для включённого single-task проекта Tracker атомарно ставит
+Analyst в очередь Analysis / Ready; актуальную стадию читают из context задачи.
+Техническая роль публикует typed result с ключом
 `delivery-result:<assignment_id>` и завершает run; Fleet проверяет реальный
 terminal и ресурсные доказательства перед Tracker Complete. Исправленный кандидат
 повторно проходит Review и Testing. Ни принятый отчёт, ни proposal сами не переходят стадию.
 
-При критическом бизнес-возврате PM читает `critical_review` из актуального context
+Analyst не возвращает задачу PM. При критическом бизнес-возврате другой роли
+PM читает `critical_review` из актуального context
 Tracker и сверяет выбранный blocker, его версию/hash и исходную редакцию.
 Используются те же фазы, CLI и точное новое подтверждение владельца. Обычное
 системное сообщение Fleet не содержит второй копии инструкций. Завершение
-атомарно разрешает blocker и возвращает Backlog / Ready; Analyst не запускается.
+атомарно разрешает blocker; дальнейший переход определяет Tracker по актуальной
+конфигурации проекта.
 Этот путь требует PostgreSQL и живой квалификации вместе с остальным кандидатом.
 
 Отдельный [ручной сценарий и бизнес-оракул](../manual/configured-workflow-proof/README.md)

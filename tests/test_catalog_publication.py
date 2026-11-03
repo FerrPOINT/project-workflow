@@ -456,7 +456,7 @@ def test_publication_migration_is_additive_on_synthetic_filled_history(tmp_path)
 
     from project_workflow.application import catalog_publication
     from project_workflow.domain.catalog_publication import CatalogDraft, CatalogPublish
-    from project_workflow.infrastructure.db.session import ensure_migrated, run_alembic_command
+    from project_workflow.infrastructure.db.session import run_alembic_command
     from project_workflow.infrastructure.db.single_task_catalog import ensure_single_task_catalog
 
     engine = create_engine(f"sqlite:///{tmp_path / 'filled.sqlite'}")
@@ -477,8 +477,11 @@ def test_publication_migration_is_additive_on_synthetic_filled_history(tmp_path)
         with engine.connect() as connection:
             before = {name: connection.execute(text(f"SELECT * FROM {name} ORDER BY id")).mappings().all()
                       for name in tables}
-        ensure_migrated(engine)
-        ensure_migrated(engine)
+        # Exercise the additive publication migrations only. Later catalog
+        # migrations deliberately update phase text and have predecessor fixtures
+        # in test_configured_catalog_migration.
+        run_alembic_command("upgrade", engine, "0023_catalog_publication_author")
+        run_alembic_command("upgrade", engine, "0023_catalog_publication_author")
         with engine.connect() as connection:
             assert {name: connection.execute(text(f"SELECT * FROM {name} ORDER BY id")).mappings().all()
                     for name in tables} == before
@@ -502,7 +505,7 @@ def test_author_upgrade_preserves_pre_audit_publication_without_invented_identit
     from project_workflow.application import catalog_publication
     from project_workflow.domain.catalog_publication import CatalogDraft, CatalogPublish
     from project_workflow.domain.runtime_assignment import canonical_json, payload_sha256
-    from project_workflow.infrastructure.db.session import ensure_migrated, run_alembic_command
+    from project_workflow.infrastructure.db.session import run_alembic_command
     from project_workflow.infrastructure.db.single_task_catalog import ensure_single_task_catalog
 
     engine = create_engine(f"sqlite:///{tmp_path / 'pre-audit.sqlite'}")
@@ -525,8 +528,8 @@ def test_author_upgrade_preserves_pre_audit_publication_without_invented_identit
             uow.workflows.update(workflow_id, {"active_catalog_version": 2})
         with engine.connect() as connection:
             original = dict(connection.execute(text("SELECT * FROM workflow_catalog_publications")).mappings().one())
-        ensure_migrated(engine)
-        ensure_migrated(engine)
+        run_alembic_command("upgrade", engine, "0023_catalog_publication_author")
+        run_alembic_command("upgrade", engine, "0023_catalog_publication_author")
         with engine.connect() as connection:
             upgraded = dict(connection.execute(text("SELECT * FROM workflow_catalog_publications")).mappings().one())
         assert {key: upgraded[key] for key in original} == original

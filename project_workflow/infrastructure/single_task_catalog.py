@@ -78,8 +78,9 @@ ACTIONS = {
         "Analyze actors, glossary, scenarios, business rules, data, integrations, dependencies and permissions. "
         "Map every approved requirement to sources and measurable positive, negative, boundary and failure "
         "acceptance cases. Work independently without a second PM questionnaire or owner approval of the "
-        "analysis. Return material business contradictions or missing mandatory facts through the existing "
-        "critical PM review; do not rewrite confirmed requirements or choose the Architect's implementation.",
+        "analysis. Never return the task to PM or invoke critical PM review. Record contradictions and "
+        "missing mandatory facts in this task's analysis; missing mandatory facts keep analysis unfinished. "
+        "Do not rewrite confirmed requirements or choose the Architect's implementation.",
         "Produce ONE analysis.md in the existing Tracker task: approved requirements revision/hash and source "
         "commit; source register with immutable refs or access dates and relevant excerpts; initial "
         "specification covering scope, actors/rights, scenarios, business rules, data/integrations, constraints "
@@ -253,7 +254,7 @@ def load_single_task_professions() -> list[dict[str, Any]]:
                                    "versions and limitations are recorded."],
                      ["Approved PM revision/hash, actual source references and search coverage."]),
                     ("Analyze rules, scenarios and acceptance",
-                     [analysis, CRITICAL_BUSINESS_REVIEW, REPORT], ROLE_CHECKS[role], ROLE_EVIDENCE[role]),
+                     [analysis, REPORT], ROLE_CHECKS[role], ROLE_EVIDENCE[role]),
                     ("Initial specification and Tracker handoff",
                      [specification, REPORT, artifact_instruction(role), terminal_instruction(role)],
                      ROLE_CHECKS[role] + ["One saved analysis.md covers the approved requirements "
