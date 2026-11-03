@@ -1,6 +1,6 @@
 # Changelog
 
-## Structured Phase Reports - 2026-11-03 (In Progress)
+## Structured Phase Reports - 2026-11-03 (PM Accepted, UI Open)
 
 - Cause: the phase report crossed the CLI/Workflow boundary as opaque text. Source
   facts, actual artifacts and unresolved work had no enforced structural boundary.
@@ -28,8 +28,22 @@
 - Installed Workflow CLI already forwards structured reports and exposes refusal
   reasons with --json. Its local validator and ordinary text-output upgrade remain
   a separate delivery gap, not a prerequisite for live PM testing. Base is unchanged.
-- Installation, two live PM scenarios and merge remain OPEN. The earlier v14 results
-  below are historical, not qualification of this changed request.
+- Installed source b33a813/image79976adb; image migration/health/API smoke passed,
+  disposable QA cleaned, Fleet unchanged. Catalog12 and report skill25 were explicitly
+  activated between runs on the same PM; original Hermes image/model/credentials kept.
+- Live: SDLC-28 (complete brief) and SDLC-29 (sparse brief, two clarifications, feedback,
+  revision2) independently reached Backlog/Ready after separate QA-owner confirmation.
+  Six real phase evaluations passed on their first attempt; no operator phase reports
+  or completion commands. Direct Tracker reads retain the PM assignment; no Analyst run.
+  Replayed initial requests keep task/chat/run/message IDs; changed payload and stale
+  confirmation are rejected409. SDLC-27 history is byte-identical across install and
+  the normal skill-activation runtime replacement.
+- Browser checks are NOT passed: all three engines report a separate Fleet UI hex
+  ReferenceError. Captured chat/requirements/stage screenshots do not establish a clean
+  UI gate. Persisted-confirmation display and installed CLI human output remain separate
+  delivery gaps. No Fleet/Base/Hermes source changes are added to this package.
+- Real live model inputs/responses and outcome: docs/evidence/advisor-v15-live-pm-20261103.json.
+  The earlier v14 results below remain historical, not qualification of this request.
 
 ## Historical: Private Assessments And Refusal Reasons - 2026-11-03
 
