@@ -1,5 +1,26 @@
 # Changelog
 
+## Follow-Up Workflow / Advisor Audit - 2026-11-03
+
+- Reviewed the report, prompt, response, coverage, persistence, transition and CLI
+  chain. Four mechanical P2 edges are documented with local repros; none is a
+  demonstrated security bypass. Source-only findings are not claimed as live incidents.
+- Three new Fleet cases SDLC-30/31/32 reached Backlog/Ready on the same PM/config25
+  and catalog12. The PM performed all requirements/report/completion operations.
+  Eleven actual evaluations:9 PASS,2 PARTIAL, one provider attempt each, no format repair.
+- Cause of an extra cycle: PM omitted an earlier owner decision from source in190;
+  the builder did not lose it. PM restored it in191 without republishing requirements.
+  A separate incorrect E2-covered mark in189 remains a confirmed model item error;
+  the overall PARTIAL was correct. No blanket error-free Advisor claim is made.
+- All three initial-operation replays retain IDs/messages/runs; stale consent is409.
+  Direct Tracker reads retain PM assignment1. Chromium/Firefox/WebKit show complete
+  requirements and Backlog/Ready; prior-message loading preserves the conversation.
+  Auth hex, persisted-confirmation display and misleading null-state UI remain open.
+  Fleet#162 already contains confirmation readback; do not implement it twice.
+- No application rebuild, install, credential change or Hermes modification was
+  needed for this audit. Existing code gates are reused, not presented as new runs.
+  Full findings, limits and next narrow package: docs/ADVISOR_AUDIT_20261103.md.
+
 ## Structured Phase Reports - 2026-11-03 (PM Accepted, UI Open)
 
 - Cause: the phase report crossed the CLI/Workflow boundary as opaque text. Source
@@ -38,8 +59,10 @@
   Replayed initial requests keep task/chat/run/message IDs; changed payload and stale
   confirmation are rejected409. SDLC-27 history is byte-identical across install and
   the normal skill-activation runtime replacement.
-- Browser checks are NOT passed: all three engines report a separate Fleet UI hex
-  ReferenceError. Captured chat/requirements/stage screenshots do not establish a clean
+- Browser checks are NOT passed: all three engines report a hex ReferenceError while
+  logging into Fleet. Follow-up stack identifies Auth /oidc/authorize normalizeBranding,
+  not Fleet or Advisor. Base e4f73d8 already fixes the lost SSR import alias; its
+  delivery to the installed Auth remains separate. Captured screenshots do not establish a clean
   UI gate. Persisted-confirmation display and installed CLI human output remain separate
   delivery gaps. No Fleet/Base/Hermes source changes are added to this package.
 - Real live model inputs/responses and outcome: docs/evidence/advisor-v15-live-pm-20261103.json.
