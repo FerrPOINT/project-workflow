@@ -204,8 +204,8 @@ ROLE_IMAGE_BUILD = {
 ROLE_SOURCE_EVIDENCE = {
     "analyst": (
         "In the single sealed analysis.md artifact retain the source register, initial specification "
-        "and verified approved source coordinates and immutable "
-        "requirements/source snapshot references, distinguishing observed facts from missing inputs. "
+        "and approved requirements revision/hash, Tracker source binding, exact repository commit/path "
+        "and published document revisions or access dates, distinguishing observed facts from missing inputs. "
     ),
     "architect": (
         "In the sealed design artifact retain the same verified source coordinates and analysis references, "
@@ -260,44 +260,48 @@ ROLE_SOURCE_EVIDENCE = {
     ),
 }
 
-SEALED_ARTIFACTS = (
-    "Use sealed assignment artifacts for technical evidence under the current configured assignment "
-    "and project rights. Ordinary comments carry discussion and the final handoff; they do not replace "
-    "sealed artifacts. Do not borrow owner/scheduler credentials, use a human token or broaden "
-    "permissions. Read permitted own artifacts and accepted predecessor references using task-tracker"
-    " attachment list --issue <task-uuid> and task-tracker attachment download <attachment-uuid> "
-    "--out <private-artifact-path>. Match issue_id to task=root and the exact supplied "
-    "reference/hash; match expected assignment_id, execution_id and role from artifact.binding to the"
-    " actual producer/predecessor, not a guessed current assignment for old evidence. Verify SHA256 "
-    "of the raw downloaded bytes; CLI download success alone is not an ArtifactReceipt. After role "
-    "work and BEFORE the FINAL Workflow phase report, publish the actual structured JSON role "
-    "reports/checks/deployment evidence through task-tracker attachment upload --issue <task-uuid> "
-    "--file <role-artifact.json> --content-type application/json. Use only the current supplied "
-    "assignment/execution/agent/fence and run context. Tracker enforces exact routing, "
-    "Running/InProgress and a live lease; the lease holder is the scheduler, not the agent. Do not "
-    "renew it as scheduler or set status yourself. Preserve the exact uploaded bytes, filename and "
-    "MIME for replay. Use the actual server-returned artifact.receipt {reference,sha256}, with "
-    "reference=tracker-attachment:<UUID> and SHA256 of raw bytes, and artifact.binding "
-    "{assignment_id,execution_id,role}. Read the saved metadata back with attachment list, download "
-    "by the actual attachment UUID and verify raw SHA256 and size against that receipt. New role "
-    "outputs must match this current task/assignment/execution/role, including Developer rework. "
-    "Never fabricate an attachment UUID, reference, SHA or a receipt from a local path, comment, "
-    "Forge URL/job ID or Workflow terminal hash. Workflow terminal receipt and role artifact contents"
-    " are separate evidence. Unknown upload acceptance requires authorized metadata/byte readback: "
-    "locate the actual saved entry by exact current binding, filename, MIME, size and raw SHA; if "
-    "found, download its returned UUID and retain the verified receipt without another upload. If no "
-    "matching saved entry exists, only an exact-file replay with the original filename/MIME under the"
-    " still-current assignment and project rights is permitted; never overwrite sealed bytes, delete "
-    "evidence, change identity/fence or declare success from uncertainty. 404/403, missing artifact "
-    "capability, stale binding, checksum mismatch or unavailable readback is a concrete blocker: "
-    "leave the phase unfinished, report it and do not fake Workflow/business completion. "
-)
+def sealed_artifacts_instruction(role: str) -> str:
+    report = "analysis.md document" if role == "analyst" else "structured JSON role reports/checks/deployment evidence"
+    upload = ("--file analysis.md --content-type text/markdown" if role == "analyst" else
+              "--file <role-artifact.json> --content-type application/json")
+    return (
+        "Use sealed assignment artifacts for technical evidence under the current configured assignment "
+        "and project rights. Ordinary comments carry discussion and the final handoff; they do not replace "
+        "sealed artifacts. Do not borrow owner/scheduler credentials, use a human token or broaden "
+        "permissions. Read permitted own artifacts and accepted predecessor references using task-tracker"
+        " attachment list --issue <task-uuid> and task-tracker attachment download <attachment-uuid> "
+        "--out <private-artifact-path>. Match issue_id to task=root and the exact supplied "
+        "reference/hash; match expected assignment_id, execution_id and role from artifact.binding to the"
+        " actual producer/predecessor, not a guessed current assignment for old evidence. Verify SHA256 "
+        "of the raw downloaded bytes; CLI download success alone is not an ArtifactReceipt. After role "
+        f"work and BEFORE the FINAL Workflow phase report, publish the actual {report} "
+        "through task-tracker attachment upload --issue <task-uuid> "
+        f"{upload}. Use only the current supplied "
+        "assignment/execution/agent/fence and run context. Tracker enforces exact routing, "
+        "Running/InProgress and a live lease; the lease holder is the scheduler, not the agent. Do not "
+        "renew it as scheduler or set status yourself. Preserve the exact uploaded bytes, filename and "
+        "MIME for replay. Use the actual server-returned artifact.receipt {reference,sha256}, with "
+        "reference=tracker-attachment:<UUID> and SHA256 of raw bytes, and artifact.binding "
+        "{assignment_id,execution_id,role}. Read the saved metadata back with attachment list, download "
+        "by the actual attachment UUID and verify raw SHA256 and size against that receipt. New role "
+        "outputs must match this current task/assignment/execution/role, including Developer rework. "
+        "Never fabricate an attachment UUID, reference, SHA or a receipt from a local path, comment, "
+        "Forge URL/job ID or Workflow terminal hash. Workflow terminal receipt and role artifact contents"
+        " are separate evidence. Unknown upload acceptance requires authorized metadata/byte readback: "
+        "locate the actual saved entry by exact current binding, filename, MIME, size and raw SHA; if "
+        "found, download its returned UUID and retain the verified receipt without another upload. If no "
+        "matching saved entry exists, only an exact-file replay with the original filename/MIME under the"
+        " still-current assignment and project rights is permitted; never overwrite sealed bytes, delete "
+        "evidence, change identity/fence or declare success from uncertainty. 404/403, missing artifact "
+        "capability, stale binding, checksum mismatch or unavailable readback is a concrete blocker: "
+        "leave the phase unfinished, report it and do not fake Workflow/business completion. "
+    )
 
 
 def artifact_instruction(role: str) -> str:
     return (
         ROLE_SOURCE_EVIDENCE[role]
-        + SEALED_ARTIFACTS
+        + sealed_artifacts_instruction(role)
         + (
             ("Prepare ")
             + f"{RESULTS[role]}"
@@ -321,6 +325,21 @@ def context_instruction(role: str) -> str:
         return common + (
             "Read task-tracker sdlc input and questions for this task. An absent requirements "
             "revision is normal before the first real document."
+        )
+    if role == "analyst":
+        return common + (
+            "Read the approved requirements revision/hash and source binding from this Tracker task's "
+            "context/input/requirements/source. Match task=root, Tracker instance and project UUID. "
+            "Resolve the bound repository UUID with cicd-cli repository get --id <repository-id>; verify "
+            "its id and use its public_name with repository tree/blob --git-ref <exact-commit> from the "
+            "binding. These are the research source coordinates; do not guess a name or substitute main. "
+            "Research reads do not require a Forge delivery configuration, pipeline, checkout or workspace. "
+            "Do not run CI or prepare Task workspaces for analysis. The approved revision/hash and source "
+            "binding are the input authority; no separate PM confirmation read or DevOps snapshot is required. "
+            "Report the actual work of this phase as one JSON object with source, result and unresolved on "
+            "stdin. The initial specification and its sealed artifact belong to the final phase, not to "
+            "this first research report. Missing mandatory business facts remain explicit and prevent "
+            "completion; optional unavailable material and Architect implementation choices are limitations. "
         )
     return common + SOURCE_CONTEXT + FORGE_TASK_WORKSPACE + ROLE_IMAGE_BUILD.get(role, "") + artifact_instruction(role)
 

@@ -34,6 +34,16 @@ def test_profile_matches_actual_source_and_committed_artifact_hashes():
             ManagedMode.model_validate(mode)
 
 
+def test_analyst_read_scope_keeps_other_profession_instructions_unchanged():
+    _, current_bytes = render()
+    current = json.loads(current_bytes)
+    previous = json.loads((ROOT / "project_workflow/references/retained" /
+                           "9384121a0c1bc9c869a25fcdf11cab4064a0491ebcf329a6310229874ab835d0" /
+                           "single_task_manifest_v1.json").read_bytes())
+    changed = {role for role, definition in current["roles"].items() if definition != previous["roles"][role]}
+    assert changed == {"analyst"}
+
+
 def test_new_profile_identities_cannot_impersonate_legacy_or_base_metadata():
     catalog_bytes, manifest_bytes = render()
     catalog, manifest = json.loads(catalog_bytes), json.loads(manifest_bytes)

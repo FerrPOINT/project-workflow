@@ -51,9 +51,13 @@ Installed binding не является runtime admission или Tracker transit
 и `single_task_manifest_v1.json`, проверяемые по фактическим UTF-8/LF bytes:
 
 ```text
-catalog:  86e6c983b7aa6a2c99da11d1d4b1f1b4563ff913262236903a19bc86bdec2d67
-manifest: 652a38c0f7bdb48a569aa3fcd5c2e81e153db6e22b5201cfb6ce15c988dd57f3
+catalog:  43d4293fae89e9aac1cc61aef78d46c421010e308e92a34dc966045e2c369ef5
+manifest: 62762bf58f337d9e063226aef58ea6c89cdfb2e87159056f1a6b2b6c4d1ddf3a
 ```
+
+Текущая миграция0028 уточняет read-only контекст Analyst. Старые catalog/manifest
+сохранены как исторические данные; новые назначения используют текущую семью.
+Task/step history и исходные hashes прежних receipts не переписываются.
 
 16October typed backend image-build instructions change sealed content/hashes, not role IDs or
 profile/protocol versions. Existing installation with an older manifest is drift:

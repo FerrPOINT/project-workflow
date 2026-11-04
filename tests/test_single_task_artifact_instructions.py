@@ -15,6 +15,7 @@ UPLOAD = (
     "task-tracker attachment upload --issue <task-uuid> "
     "--file <role-artifact.json> --content-type application/json"
 )
+ANALYSIS_UPLOAD = "task-tracker attachment upload --issue <task-uuid> --file analysis.md --content-type text/markdown"
 LIST = "task-tracker attachment list --issue <task-uuid>"
 DOWNLOAD = "task-tracker attachment download <attachment-uuid> --out <private-artifact-path>"
 PROPOSE = "sdlc result propose --task <task-uuid> --from-file -"
@@ -42,14 +43,16 @@ def test_configured_artifacts_keep_current_authority_and_original_provenance(gen
     selected = mode_for(catalog, role, mode)
     context = selected["phases"][0]["instructions"][1]["description"]
     assert context == instructions.context_instruction(role)
+    authority = phase_text(selected["phases"][-1]) if role == "analyst" else context
+    upload = ANALYSIS_UPLOAD if role == "analyst" else UPLOAD
     for required in (
-        LIST, DOWNLOAD, UPLOAD, "current configured assignment", "project rights",
+        LIST, DOWNLOAD, upload, "current configured assignment", "project rights",
         "Ordinary comments carry discussion", "do not replace sealed artifacts",
         "Do not borrow owner/scheduler credentials", "human token", "task=root", "artifact.binding",
         "actual producer/predecessor", "Running/InProgress", "live lease",
         "lease holder is the scheduler, not the agent", "Do not renew it as scheduler",
     ):
-        assert required in context
+        assert required in authority
     assert selected["phases"][0]["instructions"][0]["description"] == instructions.FIRST_STEP
     assert "server-issued workflow_task_key" in instructions.FIRST_STEP
     assert "before any Tracker read" not in instructions.FIRST_STEP  # Context discovers the actual key.
@@ -69,7 +72,8 @@ def test_evidence_precedes_report_and_business_effects_follow_acceptance(generat
         "PRECOMMIT ASSESSMENT ONLY", "own future terminal receipt",
     ):
         assert required in final
-    assert final.index(UPLOAD) < final.index("Read the saved metadata back")
+    upload = ANALYSIS_UPLOAD if role == "analyst" else UPLOAD
+    assert final.index(upload) < final.index("Read the saved metadata back")
     assert instructions.TARGETS[role] in after
     assert after.index("AFTER accepted Workflow complete=true") < after.index("discussion publish")
     assert after.index("discussion publish") < after.index(PROPOSE) < after.index("finish the run")

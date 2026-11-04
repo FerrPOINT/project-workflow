@@ -13,6 +13,7 @@ MODES = [
     ("analyst", "analysis"), ("architect", "decomposition"), ("developer", "initial"),
     ("developer", "rework"), ("reviewer", "delivery"), ("tester", "delivery"), ("devops", "delivery"),
 ]
+WORKSPACE_MODES = [pair for pair in MODES if pair[0] != "analyst"]
 TRIGGER = (
     "cicd-cli pipeline run --project <approved-forge-project-uuid> --git-ref <exact-source-sha> "
     "--idempotency-key <assignment-uuid> --task-intent -"
@@ -35,7 +36,23 @@ def mode_for(catalog, role, mode):
     return next(m for m in workflow["modes"] if m["key"] == mode)
 
 
-@pytest.mark.parametrize("role,mode", MODES)
+def test_analyst_research_uses_bound_read_sources_without_build_or_workspace(generated):
+    catalog, _ = generated
+    text = " ".join(instruction_text(p) for p in mode_for(catalog, "analyst", "analysis")["phases"])
+    assert "cicd-cli repository get --id" in text
+    assert "approved requirements revision/hash" in text
+    assert "source binding" in text and "--git-ref <exact-commit>" in text
+    assert instructions.FORGE_TASK_WORKSPACE not in text
+    assert instructions.SOURCE_CONTEXT not in text
+    for forbidden in ("pipeline run --project", "TaskWorkspaceIntent", "selected Forge delivery configuration UUID"):
+        assert forbidden not in text
+    assert "task-tracker attachment upload" in text
+    first = instruction_text(mode_for(catalog, "analyst", "analysis")["phases"][0])
+    assert "task-tracker attachment upload" not in first
+    assert "one JSON object with source, result and unresolved" in first
+
+
+@pytest.mark.parametrize("role,mode", WORKSPACE_MODES)
 def test_source_context_is_supplied_after_first_step_not_automatically_resolved(generated, role, mode):
     catalog, _ = generated
     phase = mode_for(catalog, role, mode)["phases"][0]
@@ -58,7 +75,7 @@ def test_source_context_is_supplied_after_first_step_not_automatically_resolved(
         assert required in context
 
 
-@pytest.mark.parametrize("role,mode", MODES)
+@pytest.mark.parametrize("role,mode", WORKSPACE_MODES)
 def test_first_workspace_uses_actual_task_trigger_and_real_server_allocated_receipt(generated, role, mode):
     catalog, _ = generated
     context = mode_for(catalog, role, mode)["phases"][0]["instructions"][1]["description"]
@@ -145,7 +162,7 @@ def test_first_step_and_role_specific_final_handoffs_are_pinned(generated, role,
 
 
 
-@pytest.mark.parametrize("role,mode", MODES)
+@pytest.mark.parametrize("role,mode", WORKSPACE_MODES)
 def test_workspace_keys_are_business_assignment_keys_without_native_guidance(generated, role, mode):
     catalog, _ = generated
     context = mode_for(catalog, role, mode)["phases"][0]["instructions"][1]["description"]
