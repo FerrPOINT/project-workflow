@@ -2,6 +2,14 @@
 
 ## Unreleased — Typed Advisor V18 Checkpoints
 
+- Base #458 is merged at6868579e without runtime activation. Shared rules now
+  explicitly prohibit weakening accepted regression expectations to pass a candidate.
+  Workflow is consolidated with master9c199ee but remains Draft: review confirms
+  an unfinished consumer/active-history/configuration cutover, not safe transparent
+  upgrade. No legacy execution fallback or guessed history authority was added.
+  Consolidation checks pass236, production tree is unchanged. Workflow master now
+  requires PRs and forbids force-push/deletion, including admins; Actions are disabled,
+  so these branch guards are not a claim of automated qualification.
 - One typed report contract, complete current-phase/group reports and latest compatible
   assessments. Original group provenance survives concurrent catalog changes; exact
   context is rechecked after inference. Technical failures preserve prior assessments.

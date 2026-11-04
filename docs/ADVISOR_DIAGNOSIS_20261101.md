@@ -4,6 +4,20 @@
 
 ### Текущее Состояние
 
+Base #458 влит в main как6868579e: общие правила, loopback SDK и source skills
+сохранены без активации runtime. Workflow #164 остаётся Draft, не релизом.
+Предмержевый review не выявил нового core-дефекта, но подтвердил обязательный
+cutover: новые submit требуют typed report; активная история прежнего формата
+не содержит evaluated_phase_group; старый catalog env legacy/base отклоняется.
+Клиенты, активные исполнения и явная конфигурация должны перейти согласованно,
+без восстановления scope по догадке, старого execution fallback или переписывания
+принятых решений. Этот переход ещё не выполнен; один source merge его не заменяет.
+Для master включена GitHub branch protection: только PR, запрет force-push и
+удаления, enforce_admins и закрытие review conversations. Обязательных approvals0;
+Actions отключены, поэтому это не автоматическая проверка качества. Для приватного
+Base серверная защита недоступна на текущем тарифе (GitHub403). Гарантия «никто
+никогда не испортит» не заявляется: регрессии и явная приёмка остаются обязательными.
+
 Native с coverage на b200f21:4296 PASS,75 subtests PASS,15 skipped,
 132 PostgreSQL deselected,94.0675% при пороге94%. Продуктовый baseline сохранён.
 PostgreSQL16.15:68 PASS, затем устаревшая auth/mode fixture; все собственные
