@@ -110,7 +110,10 @@ def test_supervisor_context_contains_full_path_and_contract(tmp_path: Path, monk
     assert [phase["code"] for phase in ctx["workflow_path"]] == SUPERVISOR_PHASES
     assert ctx["current_contract"]["phase_code"] == "sup.intake"
     assert ctx["current_contract"]["required_evidence"] == ["Plan file attached"]
-    assert ctx["report_template"] == {"source": "", "result": {}, "unresolved": []}
+    assert ctx["report_template"] == {
+        "source": {"request": "", "decisions": []},
+        "result": {"artifacts": [], "assumptions": []}, "unresolved": [],
+    }
     assert ctx["cli_actor"]["kind"] == "cli-user"
     assert "любой пользователь" in ctx["cli_actor"]["description"].lower()
 

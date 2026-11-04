@@ -23,7 +23,7 @@ from project_workflow.supervisor.diagnostics import capture_attempt, text_snapsh
 
 ROOT = Path(__file__).resolve().parents[1]
 LABELS = ROOT / "docs/evidence/advisor-v18-qualification-cases-20261104.json"
-LABELS_SHA256 = "acd66201eb070b6279334f77ed0723f33f8ae92efcf33d92e95a11affc262d6e"
+LABELS_SHA256 = "8760d23053bd8a7f328e9d5b08d8bbf299dacf6c46b8aed8db71a6c17341b857"
 POLICY = "supervisor-evaluator-v18"
 MAX_CALLS = 36
 
@@ -105,10 +105,14 @@ def checkpoint(stream: TextIO, journal: dict) -> None:
 def execute(output: Path, artifact: dict, cases: dict[str, dict], slots: list[dict]) -> dict:
     if not slots or len(slots) > MAX_CALLS:
         raise ValueError("Qualification requires between 1 and 36 predeclared calls")
+    budget = artifact["http_budget"]
+    remaining = budget["campaign_limit"] - budget["campaign_already_attempted"]
+    if len(slots) > min(remaining, budget["new_call_limit"]):
+        raise ValueError("Planned calls exceed the remaining campaign budget")
     system = PromptBuilder.SYSTEM_PROMPT
     journal: dict[str, Any] = {
         "schema": "clean-advisor-qualification-v1", "policy": POLICY, "status": "prepared",
-        "schedule": "reviewed-candidate:17-cases-twice-plus-retention-samples-3-and-4",
+        "schedule": [{"case_id": slot["case_id"], "sample": slot["sample"]} for slot in slots],
         "max_http_calls": len(slots), "attempted_calls": 0, "qualified": False,
         "manual_reason_review": "pending_independent_review_against_frozen_reason_basis",
         "source_sha256": {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()

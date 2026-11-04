@@ -15,8 +15,8 @@
 - Current targeted packages pass449 tests plus72 LLM and39 state-fixture checks;
   Base skills package a25c4ef4 passes39 tests and no longer requests hashes in
   Advisor reports. These are source checks, not a green full release gate.
-- The model campaign has used20/48 calls. All raw requests/responses are
-  retained. The first new response identified the source gap but incorrectly treated
+- The model campaign has used24/48 calls. All raw requests/responses are
+  retained. The first new response rejected C3 but incorrectly treated
   its own C3 finding as E2 report evidence; subsequent responses matched neither frozen
   negative190 label nor its old rationale. No retry, installation or credentials change.
 - Independent adversarial review then found189/190 ambiguous as mandatory negatives:
@@ -34,7 +34,26 @@
   Tester then exposed a confirmed branch-selection error: its needs_rework result
   has reproduction and expected/actual facts, but C2 imports passed-only coverage.
   The prompt candidate is not qualified. A changed system invalidates exact reuse;
-  a new34-call qualification would exceed the remaining28-call campaign budget.
+  a new34-call qualification would exceed the remaining24-call campaign budget.
+- One conditional-rule replacement used the correct needs_rework branch, then
+  correctly rejected an undisclosed untested case under C1. Independent review
+  corrected its own earlier oracle analysis. The old all-true Tester fixture is
+  preserved; its prospective replacement discloses the untested case without
+  inventing execution. No further prompt addition or repeat-to-PASS followed.
+- The corrected prospective report passed twice; the unchanged private-access
+  contradiction was rejected. Independent review confirmed all14 assessment
+  reasons and required_change values in these3 responses. This validates only
+  the limited experiment, not the entire candidate or live PM operation.
+- Direct Python Settings now defaults to reasoning high, matching Compose and
+  the published environment example; explicitly configured experiments stay unchanged.
+  Focused prompt/client/runner checks pass135; affected client/config/stage checks
+  pass118; the rechecked prior-failure set passed445 with one stale literal
+  assertion subsequently corrected (all10 stage checks pass). Counts overlap.
+- Review reproduced phase-group scope contamination when a parallel member changes
+  during inference. New records preserve the original evaluated_phase_group;
+  context never substitutes the post-call catalog group. Missing/malformed scope
+  fails explicitly before inference, without an archived-metadata fallback.
+  The focused phase-history suite passes61 regressions, including the concurrent split.
 - The redundant experiment branch was removed after verifying its commit is an
   ancestor of this branch. All source/evidence remains reachable at f34bbbe.
   Candidate policy v18 is not qualified, installed, merged or accepted live.

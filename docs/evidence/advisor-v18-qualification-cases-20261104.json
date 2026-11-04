@@ -2,7 +2,7 @@
   "schema": "advisor-v18-typed-qualification-v1",
   "status": "prospective_not_run",
   "policy": "supervisor-evaluator-v18",
-  "system_sha256": "95f558095cd62b01deed27e3bda9e53f71b5229e8a14ab3ab144e72b438c9583",
+  "system_sha256": "e56940d00a5078a782834987c94be686261e882094e033637a91125f3a82d10d",
   "settings": {
     "model": "app-test",
     "reasoning_effort": "high",
@@ -44,7 +44,8 @@
     "actual-pm-190",
     "analyst-role-work-complete",
     "incremental-remaining-analysis-complete",
-    "architect-role-work-complete"
+    "architect-role-work-complete",
+    "tester-role-work-complete"
   ],
   "cases": [
     {
@@ -1117,7 +1118,7 @@
       }
     },
     {
-      "id": "tester-role-work-complete",
+      "id": "tester-needs-rework-explicit-untested",
       "role": "tester",
       "mode": "delivery",
       "phase": "TS-TEST-02",
@@ -1126,7 +1127,7 @@
           "id": "TS-TEST-02:check:1",
           "text": "Results identify actual candidate/environment and executed, failed and untested acceptance cases.",
           "expected": "covered",
-          "basis": "Матрица содержит candidate/environment, все исполненные кейсы, fail и отсутствие untested."
+          "basis": "Матрица явно перечисляет исполненные A1–A4, FAIL A4 и непроверенный trim непустого названия с пробелами по краям; candidate и среда указаны. Это раскрытие непроверенного случая, не утверждение полного успешного acceptance."
         },
         {
           "id": "TS-TEST-02:check:2",
@@ -1196,7 +1197,7 @@
               },
               {
                 "name": "acceptance_matrix",
-                "content": "Выполнена acceptance matrix: A1 название «A» -> сохранено «A», статус «Новая», PASS; A2 200 символов -> сохранено, PASS; A3 201 символ -> 422 без строки, PASS; A4 три пробела -> ожидалось 422 без строки, фактически 201 и создана пустая строка, FAIL. Неисполненных обязательных случаев нет. Команда python -m pytest -q tests/test_acceptance.py: 1 failed, 3 passed in 0.10s."
+                "content": "Выполнена acceptance matrix: A1 название «A» -> сохранено «A», статус «Новая», PASS; A2 200 символов -> сохранено, PASS; A3 201 символ -> 422 без строки, PASS; A4 три пробела -> ожидалось 422 без строки, фактически 201 и создана пустая строка, FAIL. Неисполненный acceptance-кейс: trim непустого названия с пробелами по краям; выполнение и результат этого случая не заявляются. Команда python -m pytest -q tests/test_acceptance.py: 1 failed, 3 passed in 0.10s."
               },
               {
                 "name": "candidate_decision_and_frozen_defect",
@@ -1222,7 +1223,7 @@
       "expected_assessments": {
         "C1": {
           "covered": true,
-          "reason_basis": "Матрица содержит candidate/environment, все исполненные кейсы, fail и отсутствие untested."
+          "reason_basis": "Матрица явно перечисляет исполненные A1–A4, FAIL A4 и непроверенный trim непустого названия с пробелами по краям; candidate и среда указаны. Это раскрытие непроверенного случая, не утверждение полного успешного acceptance."
         },
         "C2": {
           "covered": true,
@@ -1237,20 +1238,29 @@
           "reason_basis": "Acceptance matrix, среда, результаты и зафиксированный дефект включены."
         }
       },
-      "user_payload_sha256": "e35392f753ba4f21dbbe7e40413a7a3aef3b1ebc3ab69be41ac7408f6597b9b3",
-      "labels_sha256": "e9939834278f51ff64bf7322a1fdc10badafb0b642c9a66c32daa89dc74dc9ba",
+      "user_payload_sha256": "a07d5c7717fbf1dc7e16b2ecb8b317650cbf224409ee5b86945340bafc828abb",
+      "labels_sha256": "c14fc76f1cc73387b666852b75b47beb6162cc510cb9d1e8ae225464163cf25f",
       "provenance": {
         "original": {
+          "synthetic": true,
+          "timing": "Prospective corrected QA report and C1/C2/C3/E1=true expectations fixed before any calls on tester-needs-rework-explicit-untested; no old result or oracle is relabelled.",
+          "baseline": {
+            "git_commit": "7f7f89f0a8e249066cb08f8ad2c7c3dda07d173f",
+            "file": "docs/evidence/advisor-v18-qualification-cases-20261104.json",
+            "file_sha256": "acd66201eb070b6279334f77ed0723f33f8ae92efcf33d92e95a11affc262d6e",
+            "case_id": "tester-role-work-complete",
+            "user_payload_sha256": "e35392f753ba4f21dbbe7e40413a7a3aef3b1ebc3ab69be41ac7408f6597b9b3",
+            "labels_sha256": "e9939834278f51ff64bf7322a1fdc10badafb0b642c9a66c32daa89dc74dc9ba",
+            "quarantine_reason": "The old positive C1 oracle relied on a false no-unexecuted-cases claim while successful trim of a nonempty title with surrounding spaces was neither demonstrated nor disclosed as untested. Old report, gold and actual responses remain archived unchanged."
+          },
           "source_case_index": 7,
           "source_report_pointer": "/cases/7/report",
           "original_report_sha256": "ce3f858542fac4063b6684887132ab26f3565a3838f832690c3f7a25aa6aed92",
-          "supplied_report_sha256": "ce3f858542fac4063b6684887132ab26f3565a3838f832690c3f7a25aa6aed92",
-          "supplied_user_sha256": "656234b6f4d4abf9ebfec2c91f71c0b40c06fe18ba386fae33d570703ceb2e1f",
           "source_file": "docs/evidence/advisor-v15-structured-inputs-20261103.json",
           "source_file_sha256": "69ed80d1dbb8f01a708a879d2b33f19b00ef366839368ef72c78011d8eb41384",
           "source_case_pointer": "/cases/7",
           "source_case_sha256": "ea0e1a0dc97b6ed9d77669b3d204f7d96e524013ad564fe13a463328a3fbb681",
-          "actual_report_facts_changed": false,
+          "actual_report_facts_changed": true,
           "criterion_source": {
             "file": "project_workflow/references/single_task_catalog_v1.json",
             "sha256": "7bc022089b08b246fbb04fb03fa374940cc4a6c0a023bc1e310e260e4f04f67e",
@@ -1272,13 +1282,13 @@
             },
             "selection": "Original published workflow 7 catalog version 1 read by the integrator; exact checks/evidence match sealed and retained sources plus unactivated change.before."
           },
-          "allowed_change": "Restore only Tester C2 from private clarification to the original sealed catalog criterion; report and expected outcome unchanged."
+          "allowed_change": "Replace only the false no-unexecuted-cases sentence with explicit untested trim disclosure. Source, exact criterion IDs/texts, candidate/environment, executed A1–A4, FAIL, command/totals, frozen T1, history and expected booleans/verdict remain unchanged. No execution or successful result for the untested case is invented. C1 basis now requires honest executed/failed/untested disclosure; C2 applies the needs_rework branch."
         },
         "qualification_adaptation": {
           "source": "Frozen report account copied verbatim into source.request",
           "source_spans": null,
           "decision_artifact_move": null,
-          "result": "One artifact per old field; embedded assumptions retained, not duplicated outside",
+          "result": "Prospective Tester correction changes only one disclosure sentence in acceptance_matrix; all other artifact contents remain verbatim.",
           "unresolved": "Exact original texts, question kind; no external obstacle inferred",
           "previous_assessments": {
             "synthetic": true,
@@ -3193,12 +3203,12 @@
       "labels_sha256": "31bd4fe73de3d4f5c3492999a2a459fa022505a6941af919b4171f9cbe61dddf"
     },
     {
-      "case_id": "tester-role-work-complete",
+      "case_id": "tester-needs-rework-explicit-untested",
       "sample": 1,
       "policy": "supervisor-evaluator-v18",
       "status": "not_run",
-      "user_payload_sha256": "e35392f753ba4f21dbbe7e40413a7a3aef3b1ebc3ab69be41ac7408f6597b9b3",
-      "labels_sha256": "e9939834278f51ff64bf7322a1fdc10badafb0b642c9a66c32daa89dc74dc9ba"
+      "user_payload_sha256": "a07d5c7717fbf1dc7e16b2ecb8b317650cbf224409ee5b86945340bafc828abb",
+      "labels_sha256": "c14fc76f1cc73387b666852b75b47beb6162cc510cb9d1e8ae225464163cf25f"
     },
     {
       "case_id": "devops-role-work-complete",
@@ -3329,12 +3339,12 @@
       "labels_sha256": "31bd4fe73de3d4f5c3492999a2a459fa022505a6941af919b4171f9cbe61dddf"
     },
     {
-      "case_id": "tester-role-work-complete",
+      "case_id": "tester-needs-rework-explicit-untested",
       "sample": 2,
       "policy": "supervisor-evaluator-v18",
       "status": "not_run",
-      "user_payload_sha256": "e35392f753ba4f21dbbe7e40413a7a3aef3b1ebc3ab69be41ac7408f6597b9b3",
-      "labels_sha256": "e9939834278f51ff64bf7322a1fdc10badafb0b642c9a66c32daa89dc74dc9ba"
+      "user_payload_sha256": "a07d5c7717fbf1dc7e16b2ecb8b317650cbf224409ee5b86945340bafc828abb",
+      "labels_sha256": "c14fc76f1cc73387b666852b75b47beb6162cc510cb9d1e8ae225464163cf25f"
     },
     {
       "case_id": "devops-role-work-complete",
@@ -3427,36 +3437,11 @@
   ],
   "http_budget": {
     "campaign_limit": 48,
-    "campaign_already_attempted": 16,
-    "reused_exact_successful_evaluations": 4,
-    "new_call_limit": 32,
+    "campaign_already_attempted": 24,
+    "reused_exact_successful_evaluations": 0,
+    "new_call_limit": 24,
     "qualified_slots_if_all_match": 36
   },
-  "reuse": [
-    {
-      "case_id": "pm-context-164",
-      "sample": 1,
-      "file": "advisor-v18-reviewed-qualification-20261104.json",
-      "slot": 0
-    },
-    {
-      "case_id": "pm-preparation-search-defined",
-      "sample": 1,
-      "file": "advisor-v18-reviewed-qualification-20261104.json",
-      "slot": 1
-    },
-    {
-      "case_id": "pm-final-163",
-      "sample": 1,
-      "file": "advisor-v18-approval-mapping-results-20261104.json",
-      "slot": 0
-    },
-    {
-      "case_id": "analyst-explicit-source-complete",
-      "sample": 1,
-      "file": "advisor-v18-analysis-qualification-20261104.json",
-      "slot": 0
-    }
-  ],
+  "reuse": [],
   "acceptance": "Every criterion and its reasons must match the independently frozen basis. Reuse only byte-identical prompts and settings. No automatic retries, relabels or model/provider switches; this dataset does not certify the quarantined old corpus."
 }

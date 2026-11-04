@@ -20,7 +20,9 @@ from project_workflow.infrastructure.llm import PromptBuilder, ResponseParser
 from scripts import qualify_clean_advisor as runner
 
 pytestmark = pytest.mark.unit
-ACTIVE_SHA256 = "acd66201eb070b6279334f77ed0723f33f8ae92efcf33d92e95a11affc262d6e"
+ACTIVE_SHA256 = "8760d23053bd8a7f328e9d5b08d8bbf299dacf6c46b8aed8db71a6c17341b857"
+BASELINE = "7f7f89f0a8e249066cb08f8ad2c7c3dda07d173f"
+BASELINE_SHA256 = "acd66201eb070b6279334f77ed0723f33f8ae92efcf33d92e95a11affc262d6e"
 ARCHIVES = {
     "clean-workflow-case-labels-20261104.json": "0fbc357de5ec2f26d1636f319025c5f20aab61250fc396be353537e0475eefce",
     "advisor-v16-case-labels-20261103.json": "1ef1f4590b1242a35c6423189c8774ed844e15fec98821248d7c9631d0bfdeb3",
@@ -32,12 +34,13 @@ ARCHIVES = {
 }
 QUARANTINED = {
     "actual-pm-189", "actual-pm-190", "analyst-role-work-complete", "incremental-remaining-analysis-complete",
-    "architect-role-work-complete",
+    "architect-role-work-complete", "tester-role-work-complete",
 }
 PM_CONTROLS = ("pm-unresolved-retention-policy", "pm-private-access-contradiction")
 ANALYST_CONTROLS = ("analyst-explicit-source-complete", "incremental-explicit-source-analysis-complete")
 ARCHITECT_CONTROL = "architect-direct-dataflow-complete"
-SYNTHETIC = {*PM_CONTROLS, *ANALYST_CONTROLS, ARCHITECT_CONTROL}
+TESTER_CONTROL = "tester-needs-rework-explicit-untested"
+SYNTHETIC = {*PM_CONTROLS, *ANALYST_CONTROLS, ARCHITECT_CONTROL, TESTER_CONTROL}
 
 
 @pytest.fixture(autouse=True)
@@ -79,7 +82,7 @@ def test_one_flat_file_preserves_original_gold_and_exact_inventory(loaded, archi
     assert len(cases) == len(artifact["cases"]) == len(historical) == 17
     assert set(artifact["quarantined_archived_cases"]) == QUARANTINED
     retained = set(historical) - QUARANTINED
-    assert len(retained) == 12 and set(cases) == retained | SYNTHETIC
+    assert len(retained) == 11 and set(cases) == retained | SYNTHETIC
     for source in artifact["frozen_sources"]:
         assert source["sha256"] == ARCHIVES[Path(source["file"]).name]
     for case_id, frozen in historical.items():
@@ -225,11 +228,11 @@ def test_163_confirmation_is_moved_verbatim_once_with_full_document_and_presenta
     assert case["user_payload_sha256"] == "75ddcee21a285d3b48fb637a09f301f678e348c088cf021179b38328aa2ff195"
 
 
-def test_all_five_new_controls_equal_frozen_typed_reports_history_labels_and_provenance(loaded, archives):
+def test_five_archived_controls_keep_exact_typed_reports_history_labels_and_provenance(loaded, archives):
     _, cases = loaded
     controls = {case["id"]: case for name, manifest in archives.items()
                 if name.startswith("advisor-v18-") for case in manifest["cases"]}
-    assert set(controls) == SYNTHETIC
+    assert set(controls) == SYNTHETIC - {TESTER_CONTROL}
     for case_id, declared in controls.items():
         case = cases[case_id]
         payload = case["user_payload"]
@@ -287,7 +290,60 @@ def test_architect_direct_flow_keeps_exact_source_and_four_positive_items(loaded
     assert case["user_payload_sha256"] == "cf8710b3212c25ae7b4ce610f09a80024abc0d7ef538de3a37ca2bd290365830"
 
 
-def test_exact_36_slot_plan_and_four_reuse_inputs_keep_32_call_campaign_budget(loaded):
+def test_prospective_tester_changes_only_untested_disclosure_not_executions_or_old_gold(loaded, historical):
+    _, cases = loaded
+    old = historical["tester-role-work-complete"]
+    before = copy.deepcopy(old)
+    evidence = json.loads((runner.ROOT / "docs/evidence/advisor-v18-final-qualification-20261104.json")
+                          .read_text(encoding="utf-8"))
+    slot = evidence["slots"][3]
+    assert slot["case_id"] == old["id"] and slot["sample"] == 1
+    old_payload = json.loads(slot["diagnostics"]["prompt"]["text"])
+    assert runner.digest(old_payload) == slot["user_payload_sha256"]
+    assert slot["labels_sha256"] == old["labels_sha256"]
+    case = cases[TESTER_CONTROL]
+    assert old["id"] not in cases
+    expected_payload = copy.deepcopy(old_payload)
+    matrix = expected_payload["report"]["result"]["artifacts"][1]
+    assert matrix["name"] == "acceptance_matrix"
+    false_claim = "Неисполненных обязательных случаев нет."
+    disclosure = (
+        "Неисполненный acceptance-кейс: trim непустого названия с пробелами по краям; "
+        "выполнение и результат этого случая не заявляются."
+    )
+    assert matrix["content"].count(false_claim) == 1
+    matrix["content"] = matrix["content"].replace(false_claim, disclosure)
+    assert case["user_payload"] == expected_payload
+    assert case["expected"] == old["expected"]
+    assert case["expected"]["verdict"] == "PASS"
+    assert {label: item["covered"] for label, item in case["expected_assessments"].items()} == {
+        label: item["covered"] for label, item in old["expected_assessments"].items()
+    } == {"C1": True, "C2": True, "C3": True, "E1": True}
+    expected_assessments = copy.deepcopy(old["expected_assessments"])
+    expected_assessments["C1"]["reason_basis"] = case["expected_assessments"]["C1"]["reason_basis"]
+    assert case["expected_assessments"] == expected_assessments
+    expected_criteria = copy.deepcopy(old["criteria"])
+    expected_criteria[0]["basis"] = case["expected_assessments"]["C1"]["reason_basis"]
+    assert case["criteria"] == expected_criteria
+    assert case["aliases"] == old["aliases"]
+    provenance = case["provenance"]["original"]
+    assert provenance["synthetic"] is True and provenance["actual_report_facts_changed"] is True
+    assert provenance["baseline"] == {
+        "git_commit": BASELINE, "file": "docs/evidence/advisor-v18-qualification-cases-20261104.json",
+        "file_sha256": BASELINE_SHA256, "case_id": old["id"],
+        "user_payload_sha256": slot["user_payload_sha256"], "labels_sha256": old["labels_sha256"],
+        "quarantine_reason": provenance["baseline"]["quarantine_reason"],
+    }
+    assert provenance["baseline"]["quarantine_reason"]
+    assert provenance["criterion_source"] == old["provenance"]["criterion_source"]
+    assert provenance["original_report_sha256"] == old["provenance"]["original_report_sha256"]
+    assert case["user_payload_sha256"] == "a07d5c7717fbf1dc7e16b2ecb8b317650cbf224409ee5b86945340bafc828abb"
+    assert case["labels_sha256"] == "c14fc76f1cc73387b666852b75b47beb6162cc510cb9d1e8ae225464163cf25f"
+    assert case["user_payload_sha256"] != slot["user_payload_sha256"]
+    assert old == before
+
+
+def test_changed_system_invalidates_reuse_and_full_plan_cannot_exceed_campaign_budget(loaded, tmp_path):
     artifact, cases = loaded
     slots = runner.plan(cases)
     pairs = [(slot["case_id"], slot["sample"]) for slot in slots]
@@ -302,22 +358,15 @@ def test_exact_36_slot_plan_and_four_reuse_inputs_keep_32_call_campaign_budget(l
         assert slot["labels_sha256"] == cases[slot["case_id"]]["labels_sha256"]
     budget = artifact["http_budget"]
     assert budget == {
-        "campaign_limit": 48, "campaign_already_attempted": 16, "reused_exact_successful_evaluations": 4,
-        "new_call_limit": 32, "qualified_slots_if_all_match": 36,
+        "campaign_limit": 48, "campaign_already_attempted": 24, "reused_exact_successful_evaluations": 0,
+        "new_call_limit": 24, "qualified_slots_if_all_match": 36,
     }
-    assert len(artifact["reuse"]) == 4
-    for reuse in artifact["reuse"]:
-        saved = json.loads((runner.ROOT / "docs/evidence" / reuse["file"]).read_text(encoding="utf-8"))
-        slot = saved["slots"][reuse["slot"]]
-        assert (slot["case_id"], slot["sample"]) == (reuse["case_id"], reuse["sample"])
-        assert slot["status"] == "matched" and slot["matches"] is True
-        assert slot["user_payload_sha256"] == cases[reuse["case_id"]]["user_payload_sha256"]
-        assert slot["labels_sha256"] == cases[reuse["case_id"]]["labels_sha256"]
-        assert json.loads(slot["diagnostics"]["prompt"]["text"]) == cases[reuse["case_id"]]["user_payload"]
-        assert saved["settings"] == artifact["settings"]
-        assert saved["system"]["text"] == PromptBuilder.SYSTEM_PROMPT
-        assert saved["system"]["sha256"] == artifact["system_sha256"]
-        assert not slot["diagnostics"]["prompt"]["truncated"] and not saved["system"]["truncated"]
+    assert artifact["reuse"] == []
+    output = tmp_path / "must-not-start.json"
+    with pytest.raises(ValueError, match="remaining campaign budget"):
+        runner.execute(output, artifact, cases, slots)
+    assert not output.exists()
+    runner.OpenAICompatibleClient.assert_not_called()
 
 
 @pytest.mark.parametrize("tamper", ["policy", "payload", "labels", "inventory"])

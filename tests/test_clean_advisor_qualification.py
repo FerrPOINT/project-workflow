@@ -37,6 +37,8 @@ def isolate_ui_runtime_state(monkeypatch):
 @pytest.fixture
 def frozen():
     artifact, cases = runner.load_cases()
+    # These transport tests use only mocked responses and their own synthetic budget.
+    artifact["http_budget"].update(campaign_already_attempted=0, new_call_limit=36)
     return artifact, cases, runner.plan(cases)
 
 
@@ -200,7 +202,8 @@ def test_correct_verdict_with_wrong_item_mark_still_stops(frozen, tmp_path, monk
     post.assert_called_once()
 
 
-def test_execute_flag_writes_safe_summary_and_stops_on_first_invalid_response(tmp_path, monkeypatch, capsys):
+def test_execute_flag_writes_safe_summary_and_stops_on_first_invalid_response(frozen, tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(runner, "load_cases", lambda: frozen[:2])
     post = Mock(return_value=response({"private": "private-qualification-secret"}))
     monkeypatch.setattr("project_workflow.infrastructure.llm.requests.post", post)
     output = tmp_path / "cli.json"

@@ -3,12 +3,10 @@
 import hashlib
 import json
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
-from project_workflow.domain.phase_report import PhaseReport
-from project_workflow.infrastructure.llm import PromptBuilder, ResponseParser
+from project_workflow.infrastructure.llm import ResponseParser
 
 pytestmark = pytest.mark.unit
 
@@ -202,11 +200,15 @@ def test_saved_v15_requests_and_item_results_keep_the_historical_contract():
         assert (call["case_id"], call["round"]) == (slot["case_id"], slot["round"])
         assert (evaluation["case_id"], evaluation["round"]) == (slot["case_id"], slot["round"])
         items = [tuple(item) for item in case["items"]]
-        report = PhaseReport.parse(json.dumps(case["structured_report"], ensure_ascii=False))
-        phase = SimpleNamespace(name=case["phase_name"], code=case["phase"],
-                                delegate=object() if "DELEGATE" in case["allowed_verdicts"] else None)
-        user = PromptBuilder.build_user_prompt("not-transmitted", phase, report.model_dump(mode="json"),
-            evaluation_items=items, previously_covered=case["previously_covered"])
+        aliases = case["aliases"]
+        labels = {item_id: label for label, item_id in aliases.items()}
+        user = call["body"]["messages"][1]["content"]
+        assert json.loads(user) == {
+            "phase": case["phase_name"], "allowed_verdicts": case["allowed_verdicts"],
+            "criteria": [{"id": labels[item_id], "text": text} for item_id, text in items],
+            "previously_covered": sorted(labels[item_id] for item_id in case["previously_covered"]),
+            "report": case["structured_report"],
+        }
         assert call["http_status"] == 200 and call["status"] == "returned"
         assert call["body"] == {
             "model": "app-test", "temperature": 0.1, "max_tokens": 4000, "reasoning_effort": "high",
@@ -218,7 +220,28 @@ def test_saved_v15_requests_and_item_results_keep_the_historical_contract():
         attempt = evaluation["attempts"][0]
         assert attempt["provider"]["finish_reason"] == "stop"
         assert attempt["prompt"]["text"] == user
-        parsed = ResponseParser.parse_assessments(attempt["response"], evaluation_items=items)
-        assert parsed.raw == evaluation["actual"] and parsed.assessments == evaluation["assessments"]
+        assert attempt["prompt"]["characters"] == len(user)
+        assert attempt["prompt"]["sha256"] == hashlib.sha256(user.encode("utf-8")).hexdigest()
+        assert not attempt["prompt"]["redacted"] and not attempt["prompt"]["truncated"]
+        assert attempt["error"] is None
+        wire = attempt["response"]
+        assert set(wire) == {"verdict", "assessments", "blockers", "confidence"}
+        assert set(wire["assessments"]) == set(aliases)
+        assert all(set(value) == {"covered", "reason"} and type(value["covered"]) is bool
+                   and isinstance(value["reason"], str) and value["reason"].strip()
+                   for value in wire["assessments"].values())
+        assessments = {item_id: wire["assessments"][label] for label, item_id in aliases.items()}
+        assert assessments == evaluation["assessments"]
+        covered = [item_id for item_id, _ in items if assessments[item_id]["covered"]]
+        missing = [item_id for item_id, _ in items if not assessments[item_id]["covered"]]
+        parts = [f"{text}: {assessments[item_id]['reason']}" for item_id, text in items if item_id in missing]
+        parts.extend(f"Блокировка: {blocker}" for blocker in wire["blockers"])
+        if wire["verdict"] == "DELEGATE":
+            parts.insert(0, "Требуется делегирование.")
+        assert evaluation["actual"] == {
+            "verdict": wire["verdict"], "covered": covered, "missing": missing, "blockers": wire["blockers"],
+            "message": "\n".join(parts) or "Все критерии выполнены.", "confidence": wire["confidence"],
+        }
+        parsed = ResponseParser.parse(evaluation["actual"], required_item_ids=[item_id for item_id, _ in items])
         for field in ("verdict", "covered", "missing", "blockers"):
             assert getattr(parsed, field) == case["expected"][field]

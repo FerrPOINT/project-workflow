@@ -73,7 +73,7 @@ class TestOpenAICompatibleClient:
         assert client.timeout == 1200
         assert client.max_tokens == 4000
         assert client.api_key == ""
-        assert client.reasoning_effort == "none"
+        assert client.reasoning_effort == "high"
 
     def test_env_overrides(self, monkeypatch):
         from project_workflow.config import get_settings
@@ -123,7 +123,7 @@ class TestOpenAICompatibleClient:
         assert client.timeout == 35
         assert client.max_tokens == 900
         assert client.api_key == "dotenv-secret"
-        assert client.reasoning_effort == "none"
+        assert client.reasoning_effort == "high"
 
     def test_chat_parses_json_response(self):
         client = OpenAICompatibleClient(api_key="test-key", base_url="https://ollama.com/v1")
@@ -154,7 +154,7 @@ class TestOpenAICompatibleClient:
             assert payload["model"] == "test-model"
             assert payload["temperature"] == 0.5
             assert payload["max_tokens"] == 4000
-            assert payload["reasoning_effort"] == "none"
+            assert payload["reasoning_effort"] == "high"
             assert payload["response_format"] == {"type": "json_object"}
             assert len(payload["messages"]) == 2
             assert payload["messages"][0]["role"] == "system"
@@ -697,7 +697,7 @@ class TestEvaluatorV18PromptContract:
         for rule in (
             "using only its listed criteria and supplied facts",
             "this report's own acceptance as prerequisites",
-            "judging the whole criterion and only its applicable branch",
+            "Evaluate a conditional requirement only when its condition holds for the reported work outcome",
             "Reject missing required content",
             "When FULL content is required, a summary or reference alone cannot supply it",
             "Server-enforced identity, access and approvals are not yours to certify",
@@ -746,7 +746,7 @@ class TestEvaluatorV18PromptContract:
         prompt = PromptBuilder.SYSTEM_PROMPT
         assert "Reject missing required content" in prompt
         assert "contradictory current facts" in prompt
-        assert "judging the whole criterion and only its applicable branch" in prompt
+        assert "do not import obligations from another outcome branch" in prompt
 
     def test_reported_full_presentation_and_matching_owner_consent_reach_the_evaluator(self):
         instruction = (
@@ -798,7 +798,7 @@ class TestEvaluatorV18PromptContract:
         assert "using only its listed criteria and supplied facts" in system
         assert "Do not add independent attestation" in system
         assert "When FULL content is required, a summary or reference alone cannot supply it" in system
-        assert "judging the whole criterion and only its applicable branch" in system
+        assert "do not import obligations from another outcome branch" in system
 
     def test_contradictory_current_facts_prohibit_pass(self):
         prompt = PromptBuilder.SYSTEM_PROMPT
@@ -833,11 +833,11 @@ class TestEvaluatorV18PromptContract:
         assert criterion in prompt
         assert "python -B -X utf8 -m unittest: all passed" in prompt
         assert "test_calculator.py" not in PromptBuilder.SYSTEM_PROMPT
-        assert "judging the whole criterion and only its applicable branch" in PromptBuilder.SYSTEM_PROMPT
+        assert "do not import obligations from another outcome branch" in PromptBuilder.SYSTEM_PROMPT
 
     def test_coverage_requires_the_whole_evidence_item_and_a_consistent_message(self):
         prompt = PromptBuilder.SYSTEM_PROMPT
-        assert "judging the whole criterion and only its applicable branch" in prompt
+        assert "do not import obligations from another outcome branch" in prompt
         assert "Derive verdict from these marks" in prompt
         assert "without contradicting other reasons" in prompt
 
@@ -850,7 +850,7 @@ class TestEvaluatorV18PromptContract:
 
     def test_normal_complete_report_contract_still_allows_pass(self):
         assert "PASS requires all true and no blockers" in PromptBuilder.SYSTEM_PROMPT
-        assert "judging the whole criterion and only its applicable branch" in PromptBuilder.SYSTEM_PROMPT
+        assert "do not import obligations from another outcome branch" in PromptBuilder.SYSTEM_PROMPT
 
     def test_output_must_be_bare_json_without_markdown_fences(self):
         assert "one bare JSON object" in PromptBuilder.SYSTEM_PROMPT

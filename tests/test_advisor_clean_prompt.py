@@ -57,7 +57,7 @@ def test_v18_uses_one_role_neutral_assessment_contract():
     assert not hasattr(PromptBuilder, "PM_SYSTEM_PROMPT")
     assert not hasattr(PromptBuilder, "PM_PROMPT_VERSION")
     for rule in (
-        "judging the whole criterion and only its applicable branch",
+        "do not import obligations from another outcome branch",
         "a source decision cannot be supplied by the artifact, a prior mark or a claim of completeness",
         "the exact missing required fact in the supplied material",
         "do not substitute another requirement or prescribe a new design",

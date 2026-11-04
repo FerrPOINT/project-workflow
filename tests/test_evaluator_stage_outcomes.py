@@ -102,7 +102,7 @@ def test_explicit_phase_delegate_remains_available_without_reviving_retained_rol
 
 def test_missing_review_work_is_not_excused_by_a_business_rework_verdict():
     prompt = PromptBuilder.SYSTEM_PROMPT
-    assert "judging the whole criterion and only its applicable branch" in prompt
+    assert "do not import obligations from another outcome branch" in prompt
     assert "PASS requires all true and no blockers" in prompt
     phase = Phase(code="review", name="Independent review")
     client = Mock()

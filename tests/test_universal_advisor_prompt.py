@@ -67,7 +67,8 @@ def test_system_accepts_supplements_without_making_prior_coverage_permanent():
     assert "Unchanged materials need not be repeated" in system
     assert "their omission alone is not missing evidence" in system
     assert "When FULL content is required, a summary or reference alone cannot supply it" in system
-    assert "judging the whole criterion and only its applicable branch" in system
+    assert "Evaluate a conditional requirement only when its condition holds for the reported work outcome" in system
+    assert "do not import obligations from another outcome branch" in system
     assert '"covered": boolean' in system
     assert '"required_change": string or null' in system
 

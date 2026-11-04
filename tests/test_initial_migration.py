@@ -867,10 +867,12 @@ def test_sqlite_unversioned_nonempty_database_is_refused(tmp_path):
         assert conn.execute(text("SELECT value FROM keep_me WHERE id = 1")).scalar_one() == "сохранить"
 
 
+@pytest.mark.parametrize("execution_mode", ["standalone", "platform"])
 def test_init_db_restarts_populated_versioned_legacy_catalog_without_rewriting_history(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, execution_mode,
 ):
     from project_workflow.config import get_settings
+    from project_workflow.domain.single_task_profile import PROFILE, ROLE_MODES
     from project_workflow.infrastructure.db.session import reset_engine
     from scripts.init_db import main
 
@@ -926,6 +928,10 @@ def test_init_db_restarts_populated_versioned_legacy_catalog_without_rewriting_h
         original_events = [item.to_dict() for item in uow.tasks.list_phase_events(task_id)]
 
     monkeypatch.setenv("DATABASE_URL", database_url)
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", execution_mode)
+    monkeypatch.setenv("AUTH_ISSUER", "https://auth.fixture.invalid")
+    monkeypatch.setenv("AUTH_INTERNAL_BASE_URL", "https://auth.fixture.invalid")
+    monkeypatch.setenv("AUTH_SESSION_SECRET", "initial-migration-fixture-session-secret-32-characters")
     get_settings.cache_clear()
     reset_engine()
     try:
@@ -945,7 +951,10 @@ def test_init_db_restarts_populated_versioned_legacy_catalog_without_rewriting_h
                 workflow.key
                 for workflow in restarted.workflows.list()
                 if workflow.key in MANAGED_WORKFLOW_KEYS
-            } == MANAGED_WORKFLOW_KEYS
+            } == set()
+            expected = {f"{PROFILE}:{role}" for role in ROLE_MODES} if execution_mode == "platform" else set()
+            assert {workflow.key for workflow in restarted.workflows.list()
+                    if workflow.key.startswith(PROFILE + ":")} == expected
     finally:
         get_settings.cache_clear()
         reset_engine()
@@ -1040,6 +1049,7 @@ def test_init_db_configures_output_encoding(monkeypatch):
 
 def test_init_db_reports_invalid_managed_catalog_without_traceback(tmp_path, monkeypatch, capsys):
     from project_workflow import config
+    from project_workflow.infrastructure.db import single_task_catalog
     from project_workflow.infrastructure.db.session import reset_engine
     from scripts import init_db
 
@@ -1053,15 +1063,22 @@ def test_init_db_reports_invalid_managed_catalog_without_traceback(tmp_path, mon
             super().close()
 
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'invalid-seed.db'}")
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "platform")
+    monkeypatch.setenv("AUTH_ISSUER", "https://auth.fixture.invalid")
+    monkeypatch.setenv("AUTH_INTERNAL_BASE_URL", "https://auth.fixture.invalid")
+    monkeypatch.setenv("AUTH_SESSION_SECRET", "invalid-catalog-fixture-session-secret-32-characters")
     monkeypatch.setattr(init_db, "SAUnitOfWork", TrackingUoW)
-    monkeypatch.setattr(
-        init_db,
-        "ensure_managed_catalog",
-        lambda _uow: (_ for _ in ()).throw(ValueError("Некорректный managed каталог: phase.code")),
-    )
     config.get_settings.cache_clear()
     reset_engine()
     try:
+        assert init_db.main() == 0
+        capsys.readouterr()
+        closed = False
+        monkeypatch.setattr(
+            single_task_catalog,
+            "ensure_single_task_catalog",
+            lambda _uow: (_ for _ in ()).throw(ValueError("Некорректный managed каталог: phase.code")),
+        )
         assert init_db.main() == 1
         stderr = capsys.readouterr().err
         assert "Некорректный managed каталог: phase.code" in stderr

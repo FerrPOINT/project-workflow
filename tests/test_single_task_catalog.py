@@ -79,6 +79,7 @@ def test_identity_donor_and_legacy_modes_are_preserved_and_not_aliased(professio
 
 
 def test_every_first_operation_is_an_existing_cli_step_before_role_work(professions, monkeypatch):
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "platform")
     monkeypatch.setenv("PROJECT_WORKFLOW_API_TOKEN", "sdlc_pat_test-configured")
     monkeypatch.setenv("PROJECT_WORKFLOW_URL", "https://workflow.test")
     monkeypatch.setenv("FLEET_AGENT_ID", str(uuid4()))
@@ -104,6 +105,7 @@ def test_every_first_operation_is_an_existing_cli_step_before_role_work(professi
 
 
 def test_report_command_uses_the_same_existing_step_and_namespace(professions, monkeypatch):
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "platform")
     monkeypatch.setenv("PROJECT_WORKFLOW_API_TOKEN", "sdlc_pat_test-configured")
     monkeypatch.setenv("PROJECT_WORKFLOW_URL", "https://workflow.test")
     monkeypatch.setenv("FLEET_AGENT_ID", str(uuid4()))
