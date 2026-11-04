@@ -238,6 +238,10 @@ def runtime_catalog(
         or any(isinstance(item, dict) and str(item.get("cli_command", "")).startswith("workflow-single-task-")
                for item in namespace_items)):
         try:
+            namespace_themes = {
+                item["id"]: {key: item[key] for key in ("theme_icon", "theme_icon_path", "theme_color")}
+                for item in namespace_items
+            }
             with SAUnitOfWork() as uow:
                 installation = observe_installation(uow)
                 return {
@@ -245,6 +249,7 @@ def runtime_catalog(
                     "namespaces": [
                         {"id": int(binding.namespace_id), "name": binding.namespace_name,
                          "cli_command": binding.namespace_cli_command, "launch_profile": binding.profile,
+                         **namespace_themes[int(binding.namespace_id)],
                          "workflow_id": int(binding.workflow_id)}
                         for binding in installation.bindings
                     ],
@@ -254,7 +259,7 @@ def runtime_catalog(
                         for binding in installation.bindings
                     ],
                 }
-        except ValueError:
+        except (ValueError, KeyError):
             return _error("Single-task installation missing or divergent", 503)
         except (RuntimeError, OSError, SQLAlchemyError):
             return _error("Single-task installation observation unavailable", 503)
