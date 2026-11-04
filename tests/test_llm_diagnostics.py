@@ -2,14 +2,55 @@
 
 import json
 from itertools import count
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
 import requests
 
 from project_workflow.infrastructure import llm
+from project_workflow.supervisor.evaluate import _evaluate_strict_response
 
 pytestmark = pytest.mark.unit
+
+
+@pytest.mark.parametrize("boundary", ["envelope", "content"])
+@pytest.mark.parametrize("recover", [False, True])
+def test_deep_provider_json_has_one_bounded_format_retry(client, monkeypatch, boundary, recover):
+    valid = {"verdict": "PASS", "assessments": {
+        "C1": {"covered": True, "reason": "The required result is supplied"},
+    }, "blockers": [], "confidence": 0.9}
+    deep = '{"nested":' + '[' * 3000 + '0' + ']' * 3000 + '}'
+
+    def response(bad):
+        value = Mock(status_code=200, headers={})
+        if bad and boundary == "envelope":
+            value.json.side_effect = RecursionError("private provider content")
+        else:
+            value.json.return_value = {"choices": [{"finish_reason": "stop", "message": {
+                "content": deep if bad else json.dumps(valid),
+            }}]}
+        return value
+
+    post = Mock(side_effect=[response(True), response(not recover)])
+    monkeypatch.setattr(llm.requests, "post", post)
+    attempts = []
+    arguments = dict(client=client, user='{"actual":"unchanged report"}',
+                     evaluation_items=[("P:check:1", "Required result")],
+                     phase=SimpleNamespace(delegate=None), attempts=attempts)
+    if recover:
+        _, parsed = _evaluate_strict_response(**arguments)
+        assert parsed.verdict == "PASS"
+    else:
+        with pytest.raises(ValueError, match="nesting") as failure:
+            _evaluate_strict_response(**arguments)
+        assert "private provider content" not in str(failure.value)
+    assert post.call_count == len(attempts) == 2
+    bodies = [call.kwargs["json"] for call in post.call_args_list]
+    assert bodies[0]["messages"][1] == bodies[1]["messages"][1]
+    assert bodies[0]["messages"][0] != bodies[1]["messages"][0]
+    assert attempts[0]["error"]["category"] == "response_contract"
+    assert all(attempt["provider"]["outcome"] == "invalid_json" for attempt in attempts[:1])
 
 
 @pytest.fixture

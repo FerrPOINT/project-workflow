@@ -72,6 +72,7 @@ def test_actual_supervisor_freezes_full_existing_fingerprint_inputs(accepted):
 @pytest.mark.parametrize("prompt_version", [
     "supervisor-evaluator-v9", "supervisor-evaluator-v8-no-backtracking", "supervisor-evaluator-v11",
     "supervisor-evaluator-v12", "supervisor-evaluator-pm-v4",
+    "supervisor-evaluator-v15",
 ])
 def test_prompt_upgrade_keeps_frozen_terminal_readback_and_replay(
     configured, supervisor_llm, monkeypatch, prompt_version,
@@ -79,6 +80,10 @@ def test_prompt_upgrade_keeps_frozen_terminal_readback_and_replay(
     with monkeypatch.context() as previous:
         previous.setattr(PromptBuilder, "PROMPT_VERSION", prompt_version)
         command, selector, result, record = accepted.__wrapped__(configured, supervisor_llm)
+    def forbidden_evaluation(*args, **kwargs):
+        pytest.fail("Historical readback/replay must not call the evaluator")
+
+    monkeypatch.setattr("project_workflow.infrastructure.llm.OpenAICompatibleClient.chat", forbidden_evaluation)
     before = copy.deepcopy(record["evaluation_snapshot"])
     assert before["prompt_version"] == prompt_version != PromptBuilder.PROMPT_VERSION
     assert validate(record, before) == record["covered_item_ids"]

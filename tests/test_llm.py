@@ -611,7 +611,7 @@ class TestEvaluatorV15PromptContract:
     """The controlled provider receives the universal criteria-only contract."""
 
     def test_prompt_version_invalidates_the_old_evidence_policy(self):
-        assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v15"
+        assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v16"
 
     def test_report_106_submission_circularity_reaches_provider_with_explicit_protocol_boundary(self):
         """Reproduce the saved PARTIAL reason, not a real model's semantic acceptance."""
@@ -810,7 +810,7 @@ class TestEvaluatorV15PromptContract:
     def test_coverage_requires_the_whole_evidence_item_and_a_consistent_message(self):
         prompt = PromptBuilder.SYSTEM_PROMPT
         assert "covered is a boolean for the entire criterion" in prompt
-        assert "Keep verdict and assessments consistent" in prompt
+        assert "keep verdict and assessments consistent" in prompt
 
     def test_explicit_later_changes_are_respected_without_extra_timestamp_rules(self):
         prompt = PromptBuilder.SYSTEM_PROMPT

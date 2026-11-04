@@ -40,7 +40,7 @@ def test_legacy_pm_flag_does_not_select_a_policy(delegate, explicit):
     default = PromptBuilder.build_user_prompt(*args)
     assert PromptBuilder.build_user_prompt(*args, pm_evaluation=False) == default
     assert PromptBuilder.build_user_prompt(*args, pm_evaluation=True) == default
-    assert PromptBuilder.PM_PROMPT_VERSION == PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v15"
+    assert PromptBuilder.PM_PROMPT_VERSION == PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v16"
 
 
 def test_pm_system_alias_uses_the_same_assessment_contract():

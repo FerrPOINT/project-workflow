@@ -186,7 +186,7 @@ def test_old_pm_frozen_proof_replays_unchanged_after_business_review_upgrade(
         old.setattr(PromptBuilder, "PROMPT_VERSION", old_version)
         old.setattr(PromptBuilder, "build_user_prompt", staticmethod(old_user))
         selector, result = complete(configured, supervisor_llm, old)
-    assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v15"
+    assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v16"
     history_id = result["terminal_receipt"]["history_id"]
     with SAUnitOfWork() as uow:
         record = uow.step_history.get_by_id(history_id).to_dict()

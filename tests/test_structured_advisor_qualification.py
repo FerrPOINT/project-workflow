@@ -185,13 +185,17 @@ def test_failed_acceptance_and_frozen_defect_remain_actual_result_evidence():
     assert case["expected"]["verdict"] == "PASS"
 
 
-def test_all_saved_http_requests_and_item_results_match_the_current_contract():
+def test_saved_v15_requests_and_item_results_keep_the_historical_contract():
     observed = json.loads(ARTIFACT.with_name(
         "advisor-v15-structured-qualification-20261103.json",
     ).read_text(encoding="utf-8"))
     assert observed["qualified"] and observed["status"] == "passed"
     assert observed["reused_calls"] == 0 and observed["frozen_inputs_unchanged"]
     assert len(observed["http_calls"]) == len(observed["evaluations"]) == 28
+    historical_system = observed["http_calls"][0]["body"]["messages"][0]["content"]
+    assert hashlib.sha256(historical_system.encode()).hexdigest() == (
+        "235acc601ba65d7fa8314a945a47a957bcd11820b9de190e15804bc323888830"
+    )
     for slot, call, evaluation in zip(FIXTURE["planned_calls"], observed["http_calls"],
                                       observed["evaluations"], strict=True):
         case = CASES[slot["case_id"]]
@@ -207,7 +211,7 @@ def test_all_saved_http_requests_and_item_results_match_the_current_contract():
         assert call["body"] == {
             "model": "app-test", "temperature": 0.1, "max_tokens": 4000, "reasoning_effort": "high",
             "response_format": {"type": "json_object"}, "messages": [
-                {"role": "system", "content": PromptBuilder.SYSTEM_PROMPT}, {"role": "user", "content": user},
+                {"role": "system", "content": historical_system}, {"role": "user", "content": user},
             ],
         }
         assert len(evaluation["attempts"]) == 1

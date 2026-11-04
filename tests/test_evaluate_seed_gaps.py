@@ -15,7 +15,7 @@ from project_workflow.domain.exceptions import ConcurrentTransitionError
 from project_workflow.infrastructure.llm import LlmConfigurationError
 from project_workflow.supervisor.contracts import PhaseContractBuilder
 from project_workflow.supervisor.evaluate import evaluate_llm_report
-from project_workflow.supervisor.models import Phase
+from project_workflow.supervisor.models import Phase, PhaseCheck
 from tests._report_helpers import report_json
 
 
@@ -25,7 +25,7 @@ def _phase(**overrides) -> Phase:
         code="1",
         name="T",
         description="",
-        checks=[],
+        checks=[PhaseCheck(id=1, description="Required phase result")],
         evidence=[],
         instructions=[],
         delegate=None,

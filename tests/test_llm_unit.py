@@ -17,7 +17,7 @@ from project_workflow.infrastructure.llm import (
 )
 from project_workflow.supervisor.contracts import PhaseContractBuilder
 from project_workflow.supervisor.evaluate import evaluate_llm_report
-from project_workflow.supervisor.models import Phase, PhaseDelegate
+from project_workflow.supervisor.models import Phase, PhaseCheck, PhaseDelegate
 from tests._report_helpers import report_json
 
 
@@ -50,7 +50,8 @@ def _set_phase(engine, phase: Phase, *extra: Phase) -> None:
 class TestEvaluateLlmReportVerdicts:
     def test_invalid_client_configuration_is_fail_closed(self):
         engine = _make_engine()
-        phase = Phase(code="1", name="One", instructions=[], checks=[], evidence=[])
+        phase = Phase(code="1", name="One", instructions=[],
+                      checks=[PhaseCheck(description="Required result")], evidence=[])
         _set_phase(engine, phase)
         with patch(
             "project_workflow.supervisor.evaluate.OpenAICompatibleClient",
@@ -72,7 +73,8 @@ class TestEvaluateLlmReportVerdicts:
 
     def test_invalid_blocked_is_retryable_and_records_blocked_transition(self):
         engine = _make_engine()
-        phase = Phase(code="1", name="One", instructions=[], checks=[], evidence=[])
+        phase = Phase(code="1", name="One", instructions=[],
+                      checks=[PhaseCheck(description="Required result")], evidence=[])
         _set_phase(engine, phase)
         with patch.object(
             OpenAICompatibleClient,
@@ -97,7 +99,8 @@ class TestEvaluateLlmReportVerdicts:
     def test_retired_rollback_is_rejected_even_with_a_saved_target(self):
         engine = _make_engine()
         engine._resolve_transition.return_value = (None, None, "0")
-        phase = Phase(code="1", name="One", instructions=[], checks=[], evidence=[], rollback_target_phase_code="0")
+        phase = Phase(code="1", name="One", instructions=[], checks=[PhaseCheck(description="Required result")],
+                      evidence=[], rollback_target_phase_code="0")
         _set_phase(engine, phase)
         with patch.object(
             OpenAICompatibleClient,
@@ -123,7 +126,7 @@ class TestEvaluateLlmReportVerdicts:
             code="1",
             name="One",
             instructions=[],
-            checks=[],
+            checks=[PhaseCheck(description="Required result")],
             evidence=[],
             delegate=PhaseDelegate(agent="reviewer"),
         )
@@ -133,7 +136,7 @@ class TestEvaluateLlmReportVerdicts:
             "chat",
             return_value={
                 "verdict": "DELEGATE",
-                "assessments": {},
+                "assessments": {"C1": {"covered": False, "reason": "Required phase work remains"}},
                 "blockers": [],
                 "confidence": 0.5,
             },
@@ -148,14 +151,15 @@ class TestEvaluateLlmReportVerdicts:
         engine = _make_engine()
         engine._resolve_transition.return_value = ("2", "Two", None)
         next_phase = Phase(code="2", name="Two", instructions=[], checks=[], evidence=[])
-        phase = Phase(code="1", name="One", instructions=[], checks=[], evidence=[])
+        phase = Phase(code="1", name="One", instructions=[],
+                      checks=[PhaseCheck(description="Required result")], evidence=[])
         _set_phase(engine, phase, next_phase)
         with patch.object(
             OpenAICompatibleClient,
             "chat",
             return_value={
                 "verdict": "PASS",
-                "assessments": {},
+                "assessments": {"C1": {"covered": True, "reason": "Required result supplied"}},
                 "blockers": [],
                 "confidence": 0.9,
             },
@@ -168,15 +172,17 @@ class TestEvaluateLlmReportVerdicts:
     def test_persistence_failure_rolls_back_transaction(self):
         engine = _make_engine()
         engine.db.record_step.side_effect = RuntimeError("write failed")
-        phase = Phase(code="1", name="One", instructions=[], checks=[], evidence=[])
+        phase = Phase(code="1", name="One", instructions=[],
+                      checks=[PhaseCheck(description="Required result")], evidence=[])
         _set_phase(engine, phase)
         with (
             patch.object(
                 OpenAICompatibleClient,
                 "chat",
                 return_value={
-                    "verdict": "PASS", "covered": [], "missing": [], "blockers": [],
-                    "message": "ok", "confidence": 0.9,
+                    "verdict": "PASS", "assessments": {
+                        "C1": {"covered": True, "reason": "Required result supplied"},
+                    }, "blockers": [], "confidence": 0.9,
                 },
             ),
             pytest.raises(RuntimeError, match="write failed"),

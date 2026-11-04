@@ -37,7 +37,7 @@ def _phase(code="REVIEW", delegate=None):
 
 def test_short_system_is_role_neutral_and_has_one_assessment_per_criterion():
     system = PromptBuilder.SYSTEM_PROMPT
-    assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v15"
+    assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v16"
     assert len(system) < 3000
     assert "exactly verdict, assessments, blockers and confidence" in system
     assert "one assessment per listed label" in system
@@ -86,11 +86,19 @@ def test_system_preserves_verdict_boundaries():
         "PARTIAL: unfinished phase work with no obstacle to carrying it out",
         "BLOCKED: a reported obstacle prevents carrying out phase work, not merely its incompleteness",
         "DELEGATE: only if allowed, missing work, no blockers",
-        "Keep verdict and assessments consistent",
+        "keep verdict and assessments consistent",
         "brief explanation in Russian",
         "one bare JSON object",
     ):
         assert rule in system
+
+
+def test_each_assessment_accounts_for_gaps_found_under_other_criteria():
+    system = PromptBuilder.SYSTEM_PROMPT
+    assert "Assess each criterion against all supplied facts" in system
+    assert "including gaps identified under other criteria" in system
+    assert "A report's claim that nothing is unresolved is not proof" in system
+    assert "Reasons for different criteria must not contradict one another" in system
 
 
 @pytest.mark.parametrize("code", ["PM-DRAFT-02", "IMPLEMENT", "QA", "UNFAMILIAR"])

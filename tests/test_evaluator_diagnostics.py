@@ -212,7 +212,7 @@ def test_invalid_annotations_are_flagged_without_changing_business_decision(expl
 
 
 def test_diagnostics_use_universal_prompt_with_explicit_item_reasons():
-    assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v15"
+    assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v16"
     assert "item_explanations" not in PromptBuilder.SYSTEM_PROMPT
     assert set(ResponseParser.parse({
         "verdict": "PARTIAL", "covered": [], "missing": ["1"], "blockers": [],
