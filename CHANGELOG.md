@@ -1,5 +1,41 @@
 # Changelog
 
+## Advisor V16 Candidate - 2026-11-04 (Rejected; Not Installed)
+
+- Cause: evaluation189 accepted E2 despite a source gap identified under C3;
+  report190 independently omitted an earlier owner decision. These are different
+  causes, not a JSON-builder data-loss defect. FLEETQA-30/31/32 remain the baseline.
+- The universal prompt now requires cross-criterion consistency over all supplied
+  facts. PM reporting instructions retain relevant earlier decisions and embed the
+  saved document unchanged; confirmation reports contain the business fact only.
+- Four mechanical fixes: configured agents cannot DELEGATE; parallel groups use
+  one delegation permission for prompt/schema/parser/fingerprint; empty rubrics
+  fail technically before client creation; deeply nested provider JSON becomes a
+  bounded format error. Historical v15 proofs retain exact raw-report identity.
+- Frozen comparison completed:17 cases,38 evaluations,39 HTTP /40 cap. v15:
+  16/19 matching classifications,2 false PASS,1 false PARTIAL. v16:18/19 final
+  classifications match, but189/sample3 is a false PASS and Tester needed one
+  format repair (PARTIAL with all criteria covered). The candidate is rejected.
+- Independent review of all93 final candidate item assessments also found wrong
+  reasons behind matching marks in190 and an unestablished extra closure demand
+  in189/sample2. Aggregate classification improvement is not release acceptance.
+- All39 responses are HTTP200/finish=stop; max completion1310 of4000 tokens.
+  Safe GET /model/info identifies three configured chatgpt/gpt-6-luna/high routes;
+  this is configuration metadata, not proof of per-request upstream execution.
+- Code validation:3830 native cases (3827 suite cases plus3 evidence checks) pass
+  after correcting two obsolete empty-rubric fixture sets;15 skips and75 subtests
+  remain explicit. Coverage94.2788%, PG132/132
+  with dedicated clock fixture and cleanup, Ruff/mypy/namespace checks pass.
+  Original failed XML and both full-run outcomes are retained; no product assertions
+  or negative guards were relaxed. Model requests/answers and rejected status are
+  preserved in docs/evidence/advisor-v16-comparison-20261103.json.
+- No installation, instruction activation, new live PM cases or merge: quality gate
+  failed. FLEETQA-30/31/32 remain unchanged. Image/readiness release gate is not yet
+  claimed. No Hermes/Fleet/model/credentials/phases/criteria changes.
+- Next hypothesis only: replace repeated assessment prose with criterion -> supplied
+  fact -> mark/reason -> verdict, requiring the exact missing fact without substituting
+  another obligation. It needs a separately controlled test; no extra model series ran.
+
 ## Follow-Up Workflow / Advisor Audit - 2026-11-03
 
 - Reviewed the report, prompt, response, coverage, persistence, transition and CLI
