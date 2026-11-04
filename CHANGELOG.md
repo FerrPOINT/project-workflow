@@ -32,7 +32,11 @@
   returned403. Temporary resources were cleaned. Fix9505bb6 makes modes explicit
   and updates current response/history fixtures. Retake passed103 cases, then exposed
   an obsolete unbound-workflow phase-delete expectation. Its test-only correction
-  retains namespace protection; only the29 failed/unrun cases are retaken next.
+  retains namespace protection. All29 failed/unrun cases then passed with0 skips.
+  Verified PG coverage is132 unique cases (103 reused+29 retested), with identical
+  production trees and disjoint JUnit identities. Original failed invocations remain
+  recorded as failures; this is not claimed as a single132-case successful invocation.
+  Every temporary container/network/volume and retake scratch was removed.
 - Base skills a25c4ef4 pass39 offline tests and use typed business facts, without
   service hashes/receipts in Advisor reports. README documents HTTP-only CLI setup.
 - Changes stay in this PR; the redundant experiment branch is removed, source and

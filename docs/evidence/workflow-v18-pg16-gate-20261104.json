@@ -1,0 +1,50 @@
+{
+  "schema": "workflow-pg16-verified-cases-v1",
+  "status": "verified_by_reuse_and_targeted_retake",
+  "complete_single_invocation_passed": false,
+  "product_tree": "e51d7090998b04bca27c4ec8c56e2c150faa6aad",
+  "source_heads": [
+    "dda58fa4936a1de13effbc434236156a900f43e4",
+    "29d95cc1a23c05a12a03a38b1390e91387a9cd68"
+  ],
+  "postgres_image": "sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea",
+  "postgres_version": "16.15",
+  "case_counts": {
+    "expected": 132,
+    "reused_successes": 103,
+    "targeted_successes": 29,
+    "verified_unique": 132,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "reuse_basis": "Production tree is byte-identical; only one stale test expectation changed. JUnit identities are disjoint and cover the actual collection.",
+  "clock_fixture_supplied": true,
+  "temporary_resources_cleaned": true,
+  "artifacts": [
+    {
+      "path": "C:\\git\\azhukov\\sdlc\\.local\\single-task-sdlc-20261013\\phased-agent-release-20261029\\pm-runtime-recovery-20261030\\workflow-v18-pg16-dda58fa-20261104\\pg.json",
+      "sha256": "0bf1aee66618792f7a96de61ffacbb8f9eddd9e49ed06ab70f9215056611bbac"
+    },
+    {
+      "path": "C:\\git\\azhukov\\sdlc\\.local\\single-task-sdlc-20261013\\phased-agent-release-20261029\\pm-runtime-recovery-20261030\\workflow-v18-pg16-dda58fa-20261104\\pg-junit.xml",
+      "sha256": "0d1cb0060bf42351ad9573b199c10a07685f515f35b26c98a2d6149941938332"
+    },
+    {
+      "path": "C:\\git\\azhukov\\sdlc\\.local\\single-task-sdlc-20261013\\phased-agent-release-20261029\\pm-runtime-recovery-20261030\\workflow-v18-pg16-dda58fa-20261104\\postgres.log",
+      "sha256": "977589fea024c6afbcae69b0f0753aa45d47a8ee739f015c90750bc112119ce5"
+    },
+    {
+      "path": "C:\\git\\azhukov\\sdlc\\.local\\single-task-sdlc-20261013\\phased-agent-release-20261029\\pm-runtime-recovery-20261030\\workflow-v18-pg16-29d95cc-tail-20261104\\pg.json",
+      "sha256": "3208b23abc00e52c3257df7b6a7f09d53db24aaa239a56f3c9c8cae600ad23b5"
+    },
+    {
+      "path": "C:\\git\\azhukov\\sdlc\\.local\\single-task-sdlc-20261013\\phased-agent-release-20261029\\pm-runtime-recovery-20261030\\workflow-v18-pg16-29d95cc-tail-20261104\\pg-junit.xml",
+      "sha256": "46482ec7d3bedc300c912e6f337c1c09af2a52a40500727773a0fd621380d96b"
+    },
+    {
+      "path": "C:\\git\\azhukov\\sdlc\\.local\\single-task-sdlc-20261013\\phased-agent-release-20261029\\pm-runtime-recovery-20261030\\workflow-v18-pg16-29d95cc-tail-20261104\\postgres.log",
+      "sha256": "cdb8a1ad4f8b92cae2c4975995085edd6e8b6c3b51dda907834c2e2f94e8b3d6"
+    }
+  ]
+}

@@ -7,7 +7,14 @@
 Native с coverage на b200f21:4296 PASS,75 subtests PASS,15 skipped,
 132 PostgreSQL deselected,94.0675% при пороге94%. Продуктовый baseline сохранён.
 PostgreSQL16.15:68 PASS, затем устаревшая auth/mode fixture; все собственные
-containers/network/volume удалены. Fixture исправлена в9505bb6; повтор ещё не принят.
+containers/network/volume удалены. Первый fixture-дефект исправлен в9505bb6.
+Последующая проверка103 PASS и адресный retake29 PASS/0 skipped покрывают все132
+уникальных PostgreSQL cases. Tree `project_workflow` между срезами побайтно совпадает;
+JUnit identities не пересекаются, selection сверена с collection.
+`evidence/workflow-v18-pg16-gate-20261104.json` сохраняет основания reuse и hashes
+исходных результатов. Прежние failed invocations не переименованы в full PASS.
+Temporary resources и scratch убраны. Остаются модельная квалификация, image/update,
+браузеры и два новых PM live-сценария; установленный PM не менялся.
 
 Система e56940d0 проверена на17 уникальных случаях/18 оценках:85 marks и их причины
 поддержаны входом. Единственное несовпадение verdict — owner question как BLOCKED
@@ -43,7 +50,7 @@ namespace binding, а не из-за собственных дочерних ф�
 ожидание и проверяется cascade без ослабления namespace/row-lock guards.
 По JUnit и реальной collection подготовлены ровно29 failed/unrun nodeids;
 103 неизменённых успешных проверки переиспользуются. Ресурсы обоих PG-прогонов
-и scratch второго удалены, новая проверка хвоста пока не принята.
+и scratch второго удалены; последующий29-case retake завершён успешно и описан выше.
 
 ### История Проверки В Существующем PR
 
