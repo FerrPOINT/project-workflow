@@ -1,0 +1,2083 @@
+{
+  "schema": "advisor-v18-checkpoint-labels-v1",
+  "settings": {
+    "model": "app-test",
+    "reasoning_effort": "high",
+    "max_tokens": 4000,
+    "temperature": 0.1,
+    "timeout": 1200,
+    "response_format": {
+      "type": "json_object"
+    },
+    "max_model_calls_per_evaluation": 1,
+    "format_retry": false,
+    "transport_retry": false,
+    "semantic_retry": false
+  },
+  "cp1": [
+    {
+      "id": "actual-pm-189",
+      "old_payload": {
+        "phase": "Requirements preparation",
+        "allowed_verdicts": [
+          "PASS",
+          "PARTIAL",
+          "BLOCKED"
+        ],
+        "criteria": [
+          {
+            "id": "C1",
+            "text": "The requirements agree with the user request and decisions described in this report."
+          },
+          {
+            "id": "C2",
+            "text": "The requirements document defines clear scope, unambiguous material rules and objectively testable acceptance criteria, without contradictions."
+          },
+          {
+            "id": "C3",
+            "text": "The source account contains the owner's current decision for every material business choice needed for the requirements, with no such choice left unanswered or replaced by a PM assumption."
+          },
+          {
+            "id": "C4",
+            "text": "The current report includes the entire saved requirements document, not a summary, inventory of sections or reference to an earlier report."
+          },
+          {
+            "id": "E1",
+            "text": "A readable summary of the user request."
+          },
+          {
+            "id": "E2",
+            "text": "A readable account of the owner's decisions and any unanswered material questions."
+          }
+        ],
+        "previously_covered": [],
+        "report": {
+          "source": "Владелец хочет простой обычный список заявок для личного использования. Заявки поступают по телефону и в Telegram; владелец вносит их вручную. В основном списке должны быть только незакрытые. Обязательны контакт клиента и суть обращения; источник выбирается из «Телефон» и «Telegram». Дата создания автоматическая. Статусы ровно «Нужно ответить» и «Закрыта». Нет необходимости в напоминаниях или интеграциях.",
+          "result": {
+            "document": {
+              "goal": "Предоставить одному пользователю простой список для ручного учёта клиентских заявок, чтобы видеть незакрытые обращения и не терять их.",
+              "scope": [
+                "Создание и просмотр заявок в одном обычном списке.",
+                "Ручной ввод заявок, поступивших по телефону или в Telegram.",
+                "Обязательные поля заявки: контакт клиента, суть обращения, источник.",
+                "Дата создания проставляется автоматически.",
+                "Статусы заявки: «Нужно ответить» и «Закрыта».",
+                "Основной список по умолчанию показывает только незакрытые заявки."
+              ],
+              "exclusions": [
+                "Напоминания и уведомления.",
+                "Интеграции с телефонией, Telegram или другими сервисами; заявки вносятся вручную.",
+                "Совместная работа нескольких пользователей.",
+                "Дополнительные статусы, кроме «Нужно ответить» и «Закрыта»."
+              ],
+              "scenarios": [
+                "Пользователь вручную добавляет поступившее по телефону обращение, указывает контакт клиента и суть обращения; источник отмечает как «Телефон». Дата создания устанавливается автоматически, статус новой заявки — «Нужно ответить».",
+                "Пользователь вручную добавляет обращение из Telegram с обязательными данными и источником «Telegram»; дата создания устанавливается автоматически, статус новой заявки — «Нужно ответить».",
+                "Пользователь открывает основной список и видит незакрытые заявки, но не заявки со статусом «Закрыта».",
+                "После ответа пользователь меняет статус заявки на «Закрыта»; она больше не отображается в основном списке незакрытых заявок."
+              ],
+              "acceptance_criteria": [
+                "При создании заявки контакт клиента, суть обращения и источник обязательны; без любого из этих значений заявка не сохраняется.",
+                "Для источника доступны значения «Телефон» и «Telegram».",
+                "При создании дата создания проставляется автоматически без ручного ввода.",
+                "Для статуса доступны ровно два значения: «Нужно ответить» и «Закрыта»; новая заявка получает статус «Нужно ответить».",
+                "Основной список отображает заявки со статусом «Нужно ответить» и исключает заявки со статусом «Закрыта».",
+                "Пользователь может изменить статус заявки с «Нужно ответить» на «Закрыта»; после изменения заявка исключается из основного списка."
+              ],
+              "constraints": [
+                "Решение рассчитано на одного пользователя.",
+                "Ввод заявок выполняется вручную.",
+                "В рамках запроса не предусматриваются напоминания и интеграции."
+              ],
+              "dependencies": [],
+              "assumptions": [
+                "Пользователь сам определяет, когда обращение считается закрытым, и вручную меняет статус на «Закрыта».",
+                "Формат хранения и конкретная платформа не заданы; требования описывают поведение списка, а не конкретную реализацию."
+              ],
+              "checklist": [
+                "Проверить ручное создание заявки с полным набором обязательных полей и автоматической датой.",
+                "Проверить допустимые значения источника и статуса, а также начальный статус новой заявки.",
+                "Проверить фильтрацию основного списка: незакрытые отображаются, закрытые скрыты.",
+                "Проверить, что перевод заявки в «Закрыта» убирает её из основного списка."
+              ],
+              "prerequisites": [
+                "Пользователь вручную заносит в список сведения о полученном обращении."
+              ]
+            },
+            "clarification": "Уточнения владельца полностью определили аудиторию, каналы, ручной ввод, поля, дату, статусы и исключения; дополнительные вопросы не требуются."
+          },
+          "unresolved": []
+        }
+      },
+      "new_payload": {
+        "phase": "Requirements preparation",
+        "allowed_verdicts": [
+          "PASS",
+          "PARTIAL",
+          "BLOCKED"
+        ],
+        "criteria": [
+          {
+            "id": "C1",
+            "text": "The requirements agree with the user request and decisions described in this report."
+          },
+          {
+            "id": "C2",
+            "text": "The requirements document defines clear scope, unambiguous material rules and objectively testable acceptance criteria, without contradictions."
+          },
+          {
+            "id": "C3",
+            "text": "The source account contains the owner's current decision for every material business choice needed for the requirements, with no such choice left unanswered or replaced by a PM assumption."
+          },
+          {
+            "id": "C4",
+            "text": "The current report includes the entire saved requirements document, not a summary, inventory of sections or reference to an earlier report."
+          },
+          {
+            "id": "E1",
+            "text": "A readable summary of the user request."
+          },
+          {
+            "id": "E2",
+            "text": "A readable account of the owner's decisions and any unanswered material questions."
+          }
+        ],
+        "previously_covered": [],
+        "report": {
+          "source": {
+            "request": "Владелец хочет простой обычный список заявок для личного использования. Заявки поступают по телефону и в Telegram; владелец вносит их вручную. В основном списке должны быть только незакрытые. Обязательны контакт клиента и суть обращения; источник выбирается из «Телефон» и «Telegram». Дата создания автоматическая. Статусы ровно «Нужно ответить» и «Закрыта». Нет необходимости в напоминаниях или интеграциях.",
+            "decisions": []
+          },
+          "result": {
+            "artifacts": [
+              {
+                "name": "document",
+                "content": {
+                  "goal": "Предоставить одному пользователю простой список для ручного учёта клиентских заявок, чтобы видеть незакрытые обращения и не терять их.",
+                  "scope": [
+                    "Создание и просмотр заявок в одном обычном списке.",
+                    "Ручной ввод заявок, поступивших по телефону или в Telegram.",
+                    "Обязательные поля заявки: контакт клиента, суть обращения, источник.",
+                    "Дата создания проставляется автоматически.",
+                    "Статусы заявки: «Нужно ответить» и «Закрыта».",
+                    "Основной список по умолчанию показывает только незакрытые заявки."
+                  ],
+                  "exclusions": [
+                    "Напоминания и уведомления.",
+                    "Интеграции с телефонией, Telegram или другими сервисами; заявки вносятся вручную.",
+                    "Совместная работа нескольких пользователей.",
+                    "Дополнительные статусы, кроме «Нужно ответить» и «Закрыта»."
+                  ],
+                  "scenarios": [
+                    "Пользователь вручную добавляет поступившее по телефону обращение, указывает контакт клиента и суть обращения; источник отмечает как «Телефон». Дата создания устанавливается автоматически, статус новой заявки — «Нужно ответить».",
+                    "Пользователь вручную добавляет обращение из Telegram с обязательными данными и источником «Telegram»; дата создания устанавливается автоматически, статус новой заявки — «Нужно ответить».",
+                    "Пользователь открывает основной список и видит незакрытые заявки, но не заявки со статусом «Закрыта».",
+                    "После ответа пользователь меняет статус заявки на «Закрыта»; она больше не отображается в основном списке незакрытых заявок."
+                  ],
+                  "acceptance_criteria": [
+                    "При создании заявки контакт клиента, суть обращения и источник обязательны; без любого из этих значений заявка не сохраняется.",
+                    "Для источника доступны значения «Телефон» и «Telegram».",
+                    "При создании дата создания проставляется автоматически без ручного ввода.",
+                    "Для статуса доступны ровно два значения: «Нужно ответить» и «Закрыта»; новая заявка получает статус «Нужно ответить».",
+                    "Основной список отображает заявки со статусом «Нужно ответить» и исключает заявки со статусом «Закрыта».",
+                    "Пользователь может изменить статус заявки с «Нужно ответить» на «Закрыта»; после изменения заявка исключается из основного списка."
+                  ],
+                  "constraints": [
+                    "Решение рассчитано на одного пользователя.",
+                    "Ввод заявок выполняется вручную.",
+                    "В рамках запроса не предусматриваются напоминания и интеграции."
+                  ],
+                  "dependencies": [],
+                  "assumptions": [
+                    "Пользователь сам определяет, когда обращение считается закрытым, и вручную меняет статус на «Закрыта».",
+                    "Формат хранения и конкретная платформа не заданы; требования описывают поведение списка, а не конкретную реализацию."
+                  ],
+                  "checklist": [
+                    "Проверить ручное создание заявки с полным набором обязательных полей и автоматической датой.",
+                    "Проверить допустимые значения источника и статуса, а также начальный статус новой заявки.",
+                    "Проверить фильтрацию основного списка: незакрытые отображаются, закрытые скрыты.",
+                    "Проверить, что перевод заявки в «Закрыта» убирает её из основного списка."
+                  ],
+                  "prerequisites": [
+                    "Пользователь вручную заносит в список сведения о полученном обращении."
+                  ]
+                }
+              },
+              {
+                "name": "clarification",
+                "content": "Уточнения владельца полностью определили аудиторию, каналы, ручной ввод, поля, дату, статусы и исключения; дополнительные вопросы не требуются."
+              }
+            ],
+            "assumptions": [
+              "Пользователь сам определяет, когда обращение считается закрытым, и вручную меняет статус на «Закрыта».",
+              "Формат хранения и конкретная платформа не заданы; требования описывают поведение списка, а не конкретную реализацию."
+            ]
+          },
+          "unresolved": []
+        }
+      },
+      "expected_assessments": {
+        "C1": {
+          "covered": true,
+          "reason_basis": "Reported source and document agree on the requested manual personal list, channels, fields, dates and allowable statuses. An unsupported initial default is a missing owner choice under C3, not an explicit contrary owner decision."
+        },
+        "C2": {
+          "covered": true,
+          "reason_basis": "The entire document states clear scope, explicit status/default rules and testable acceptance criteria without an internal contradiction. Missing owner authority for the default is evaluated under C3."
+        },
+        "C3": {
+          "covered": false,
+          "reason_basis": "Source names allowable statuses but supplies no owner decision for the initial status. The artifact assigns the initial status without that source decision; this material business choice remains unanswered."
+        },
+        "C4": {
+          "covered": true,
+          "reason_basis": "The complete structured requirements document is present in result.document, including its scenarios, acceptance criteria, constraints and checklist."
+        },
+        "E1": {
+          "covered": true,
+          "reason_basis": "Source is a readable substantive summary of the user request and its relevant scope."
+        },
+        "E2": {
+          "covered": false,
+          "reason_basis": "The material initial-status question identified under C3 is not included in the account. Instead clarification denies further questions and unresolved is empty. A claim that no questions remain does not satisfy the account of any unanswered material questions."
+        }
+      },
+      "expected_verdict": "PARTIAL",
+      "blockers": [],
+      "items": [
+        [
+          "PM-DRAFT-02:check:312",
+          "The requirements agree with the user request and decisions described in this report."
+        ],
+        [
+          "PM-DRAFT-02:check:313",
+          "The requirements document defines clear scope, unambiguous material rules and objectively testable acceptance criteria, without contradictions."
+        ],
+        [
+          "PM-DRAFT-02:check:314",
+          "The source account contains the owner's current decision for every material business choice needed for the requirements, with no such choice left unanswered or replaced by a PM assumption."
+        ],
+        [
+          "PM-DRAFT-02:check:315",
+          "The current report includes the entire saved requirements document, not a summary, inventory of sections or reference to an earlier report."
+        ],
+        [
+          "PM-DRAFT-02:evidence:189",
+          "A readable summary of the user request."
+        ],
+        [
+          "PM-DRAFT-02:evidence:190",
+          "A readable account of the owner's decisions and any unanswered material questions."
+        ]
+      ],
+      "aliases": {
+        "C1": "PM-DRAFT-02:check:312",
+        "C2": "PM-DRAFT-02:check:313",
+        "C3": "PM-DRAFT-02:check:314",
+        "C4": "PM-DRAFT-02:check:315",
+        "E1": "PM-DRAFT-02:evidence:189",
+        "E2": "PM-DRAFT-02:evidence:190"
+      },
+      "original_report": null,
+      "original_segmentation": null,
+      "provenance": {
+        "file": "docs/evidence/clean-workflow-case-labels-20261104.json",
+        "case_id": "actual-pm-189",
+        "origin": {
+          "source_file": "docs/evidence/workflow-advisor-audit-live-20261103.json",
+          "source_file_sha256": "aef4bd99fe0bc5d2b91cbc7dc0f6c7159fcf3244e8636dd0f7989bdccdc9b5c0",
+          "source_pointer": "/cases/2/evaluations/1",
+          "history_id": 189,
+          "captured_request_sha256": "856b52c3ca7dc597955fd5caa737ba6eaec7acbe061c68674bf2eac0b17687ab",
+          "captured_model_verdict": "PARTIAL",
+          "actual_report_facts_changed": false,
+          "user_override": {
+            "field": "allowed_verdicts",
+            "before": [
+              "PASS",
+              "PARTIAL",
+              "BLOCKED",
+              "DELEGATE"
+            ],
+            "after": [
+              "PASS",
+              "PARTIAL",
+              "BLOCKED"
+            ],
+            "reason": "Configured runtime forbids DELEGATE in v16. Both policy systems must receive exactly the same frozen user payload; no report, criterion, alias or prior mark changes."
+          },
+          "label_authority": "Independent human counterreview frozen before new calls; historical model output is not the expected-item oracle."
+        }
+      },
+      "mapping_notes": [
+        "Old payload is the exact frozen case user_payload; outside report old/new payloads are identical.",
+        "Source is copied verbatim with exhaustive Unicode-character offsets. Only the explicitly listed owner-attributed sentences become decision values; subjects are literal substrings of those sentences.",
+        "The complete original source account stays in request; decisions is empty, so the transformation invents no owner attribution.",
+        "Each original result field becomes one artifact, name unchanged and content deep-equal. The complete document, including its embedded assumptions, is unchanged.",
+        "The outer assumptions array mirrors the existing document.assumptions; it adds no fact and does not remove the originals.",
+        "Unresolved texts are unchanged. kind=question labels incomplete material, not an asserted external obstacle; it must not mechanically force BLOCKED.",
+        "Expected marks are independent frozen product truth for both variants, not historical model verdicts. A known old mismatch must not rewrite these labels."
+      ],
+      "mapping": {
+        "source_parts": [
+          {
+            "start": 0,
+            "end": 408,
+            "to": "/source/request"
+          }
+        ],
+        "subject_parts": [],
+        "result_fields": [
+          {
+            "from": "/result/document",
+            "to": "/result/artifacts/0/content",
+            "name": "document"
+          },
+          {
+            "from": "/result/clarification",
+            "to": "/result/artifacts/1/content",
+            "name": "clarification"
+          }
+        ],
+        "assumptions": {
+          "from": "/result/document/assumptions",
+          "to": "/result/assumptions",
+          "mode": "mirror_without_removing_from_document"
+        },
+        "unresolved": []
+      }
+    },
+    {
+      "id": "actual-pm-190",
+      "old_payload": {
+        "phase": "Requirements preparation",
+        "allowed_verdicts": [
+          "PASS",
+          "PARTIAL",
+          "BLOCKED"
+        ],
+        "criteria": [
+          {
+            "id": "C1",
+            "text": "The requirements agree with the user request and decisions described in this report."
+          },
+          {
+            "id": "C2",
+            "text": "The requirements document defines clear scope, unambiguous material rules and objectively testable acceptance criteria, without contradictions."
+          },
+          {
+            "id": "C3",
+            "text": "The source account contains the owner's current decision for every material business choice needed for the requirements, with no such choice left unanswered or replaced by a PM assumption."
+          },
+          {
+            "id": "C4",
+            "text": "The current report includes the entire saved requirements document, not a summary, inventory of sections or reference to an earlier report."
+          },
+          {
+            "id": "E1",
+            "text": "A readable summary of the user request."
+          },
+          {
+            "id": "E2",
+            "text": "A readable account of the owner's decisions and any unanswered material questions."
+          }
+        ],
+        "previously_covered": [
+          "C1",
+          "C2",
+          "C4",
+          "E1",
+          "E2"
+        ],
+        "report": {
+          "source": "Владелец подтвердил, что новая заявка получает статус «Нужно ответить». Дополнительно запросил статус «Жду ответа клиента» с включением таких заявок в список незакрытых и сохранение всех заявок и статусов после закрытия сервиса и повторного запуска. Сохраняются прежние решения: один пользователь, ручной ввод заявок из телефона и Telegram, обязательные контакт и суть обращения, источник телефон/Telegram, автоматическая дата создания, без напоминаний и интеграций.",
+          "result": {
+            "document": {
+              "goal": "Предоставить одному пользователю простой список для ручного учёта клиентских заявок, чтобы видеть незакрытые обращения и не терять их.",
+              "scope": [
+                "Создание и просмотр заявок в одном обычном списке.",
+                "Ручной ввод заявок, поступивших по телефону или в Telegram.",
+                "Обязательные поля заявки: контакт клиента, суть обращения, источник.",
+                "Дата создания проставляется автоматически.",
+                "Статусы заявки: «Нужно ответить», «Жду ответа клиента» и «Закрыта».",
+                "Основной список показывает только незакрытые заявки: «Нужно ответить» и «Жду ответа клиента».",
+                "Сохранение всех заявок и их статусов после закрытия сервиса и его последующего повторного запуска."
+              ],
+              "exclusions": [
+                "Напоминания и уведомления.",
+                "Интеграции с телефонией, Telegram или другими сервисами; заявки вносятся вручную.",
+                "Совместная работа нескольких пользователей.",
+                "Дополнительные статусы, кроме «Нужно ответить», «Жду ответа клиента» и «Закрыта»."
+              ],
+              "scenarios": [
+                "Пользователь вручную добавляет поступившее по телефону обращение, указывает контакт клиента и суть обращения; источник отмечает как «Телефон». Дата создания устанавливается автоматически, статус новой заявки — «Нужно ответить».",
+                "Пользователь вручную добавляет обращение из Telegram с обязательными данными и источником «Telegram»; дата создания устанавливается автоматически, статус новой заявки — «Нужно ответить».",
+                "Пользователь открывает основной список и видит заявки со статусом «Нужно ответить» и «Жду ответа клиента», но не заявки со статусом «Закрыта».",
+                "Пользователь ожидает ответа клиента и меняет статус заявки на «Жду ответа клиента»; заявка остаётся в основном списке незакрытых.",
+                "После завершения обращения пользователь меняет статус на «Закрыта»; заявка больше не отображается в основном списке незакрытых.",
+                "Пользователь закрывает сервис и запускает его повторно; все ранее созданные заявки и их текущие статусы сохранены."
+              ],
+              "acceptance_criteria": [
+                "При создании заявки контакт клиента, суть обращения и источник обязательны; без любого из этих значений заявка не сохраняется.",
+                "Для источника доступны значения «Телефон» и «Telegram».",
+                "При создании дата создания проставляется автоматически без ручного ввода.",
+                "Для статуса доступны ровно три значения: «Нужно ответить», «Жду ответа клиента» и «Закрыта»; новая заявка получает статус «Нужно ответить».",
+                "Основной список отображает заявки со статусами «Нужно ответить» и «Жду ответа клиента» и исключает заявки со статусом «Закрыта».",
+                "Пользователь может изменить статус на «Жду ответа клиента»; такая заявка остаётся в основном списке.",
+                "Пользователь может изменить статус на «Закрыта»; такая заявка исключается из основного списка.",
+                "После закрытия сервиса и повторного запуска все созданные заявки с их статусами доступны без потери или сброса данных."
+              ],
+              "constraints": [
+                "Решение рассчитано на одного пользователя.",
+                "Ввод заявок выполняется вручную.",
+                "В рамках запроса не предусматриваются напоминания и интеграции.",
+                "Хранение данных должно переживать закрытие и повторный запуск сервиса."
+              ],
+              "dependencies": [],
+              "assumptions": [
+                "Пользователь сам определяет, когда заявка переходит между статусами, и вручную меняет статус.",
+                "Формат хранения и конкретная платформа не заданы; требования описывают поведение, а не конкретную реализацию."
+              ],
+              "checklist": [
+                "Проверить ручное создание заявки с полным набором обязательных полей и автоматической датой.",
+                "Проверить допустимые значения источника и статуса, а также начальный статус новой заявки.",
+                "Проверить, что заявки со статусами «Нужно ответить» и «Жду ответа клиента» отображаются, а «Закрыта» скрыта.",
+                "Проверить, что перевод заявки в «Жду ответа клиента» оставляет её в основном списке.",
+                "Проверить, что перевод заявки в «Закрыта» убирает её из основного списка.",
+                "Создать заявки с разными статусами, закрыть и повторно запустить сервис; проверить сохранность всех заявок и статусов."
+              ],
+              "prerequisites": [
+                "Пользователь вручную заносит в список сведения о полученном обращении.",
+                "Сервис сохраняет данные между запусками."
+              ]
+            },
+            "clarification": "Владелец подтвердил начальный статус и внес новые требования: третий статус «Жду ответа клиента» остаётся в незакрытом списке, а сохранённые заявки и статусы переживают перезапуск сервиса."
+          },
+          "unresolved": []
+        }
+      },
+      "new_payload": {
+        "phase": "Requirements preparation",
+        "allowed_verdicts": [
+          "PASS",
+          "PARTIAL",
+          "BLOCKED"
+        ],
+        "criteria": [
+          {
+            "id": "C1",
+            "text": "The requirements agree with the user request and decisions described in this report."
+          },
+          {
+            "id": "C2",
+            "text": "The requirements document defines clear scope, unambiguous material rules and objectively testable acceptance criteria, without contradictions."
+          },
+          {
+            "id": "C3",
+            "text": "The source account contains the owner's current decision for every material business choice needed for the requirements, with no such choice left unanswered or replaced by a PM assumption."
+          },
+          {
+            "id": "C4",
+            "text": "The current report includes the entire saved requirements document, not a summary, inventory of sections or reference to an earlier report."
+          },
+          {
+            "id": "E1",
+            "text": "A readable summary of the user request."
+          },
+          {
+            "id": "E2",
+            "text": "A readable account of the owner's decisions and any unanswered material questions."
+          }
+        ],
+        "previously_covered": [
+          "C1",
+          "C2",
+          "C4",
+          "E1",
+          "E2"
+        ],
+        "report": {
+          "source": {
+            "request": "Сохраняются прежние решения: один пользователь, ручной ввод заявок из телефона и Telegram, обязательные контакт и суть обращения, источник телефон/Telegram, автоматическая дата создания, без напоминаний и интеграций.",
+            "decisions": [
+              {
+                "subject": "Нужно ответить",
+                "value": "Владелец подтвердил, что новая заявка получает статус «Нужно ответить»."
+              },
+              {
+                "subject": "Жду ответа клиента",
+                "value": "Дополнительно запросил статус «Жду ответа клиента» с включением таких заявок в список незакрытых и сохранение всех заявок и статусов после закрытия сервиса и повторного запуска."
+              }
+            ]
+          },
+          "result": {
+            "artifacts": [
+              {
+                "name": "document",
+                "content": {
+                  "goal": "Предоставить одному пользователю простой список для ручного учёта клиентских заявок, чтобы видеть незакрытые обращения и не терять их.",
+                  "scope": [
+                    "Создание и просмотр заявок в одном обычном списке.",
+                    "Ручной ввод заявок, поступивших по телефону или в Telegram.",
+                    "Обязательные поля заявки: контакт клиента, суть обращения, источник.",
+                    "Дата создания проставляется автоматически.",
+                    "Статусы заявки: «Нужно ответить», «Жду ответа клиента» и «Закрыта».",
+                    "Основной список показывает только незакрытые заявки: «Нужно ответить» и «Жду ответа клиента».",
+                    "Сохранение всех заявок и их статусов после закрытия сервиса и его последующего повторного запуска."
+                  ],
+                  "exclusions": [
+                    "Напоминания и уведомления.",
+                    "Интеграции с телефонией, Telegram или другими сервисами; заявки вносятся вручную.",
+                    "Совместная работа нескольких пользователей.",
+                    "Дополнительные статусы, кроме «Нужно ответить», «Жду ответа клиента» и «Закрыта»."
+                  ],
+                  "scenarios": [
+                    "Пользователь вручную добавляет поступившее по телефону обращение, указывает контакт клиента и суть обращения; источник отмечает как «Телефон». Дата создания устанавливается автоматически, статус новой заявки — «Нужно ответить».",
+                    "Пользователь вручную добавляет обращение из Telegram с обязательными данными и источником «Telegram»; дата создания устанавливается автоматически, статус новой заявки — «Нужно ответить».",
+                    "Пользователь открывает основной список и видит заявки со статусом «Нужно ответить» и «Жду ответа клиента», но не заявки со статусом «Закрыта».",
+                    "Пользователь ожидает ответа клиента и меняет статус заявки на «Жду ответа клиента»; заявка остаётся в основном списке незакрытых.",
+                    "После завершения обращения пользователь меняет статус на «Закрыта»; заявка больше не отображается в основном списке незакрытых.",
+                    "Пользователь закрывает сервис и запускает его повторно; все ранее созданные заявки и их текущие статусы сохранены."
+                  ],
+                  "acceptance_criteria": [
+                    "При создании заявки контакт клиента, суть обращения и источник обязательны; без любого из этих значений заявка не сохраняется.",
+                    "Для источника доступны значения «Телефон» и «Telegram».",
+                    "При создании дата создания проставляется автоматически без ручного ввода.",
+                    "Для статуса доступны ровно три значения: «Нужно ответить», «Жду ответа клиента» и «Закрыта»; новая заявка получает статус «Нужно ответить».",
+                    "Основной список отображает заявки со статусами «Нужно ответить» и «Жду ответа клиента» и исключает заявки со статусом «Закрыта».",
+                    "Пользователь может изменить статус на «Жду ответа клиента»; такая заявка остаётся в основном списке.",
+                    "Пользователь может изменить статус на «Закрыта»; такая заявка исключается из основного списка.",
+                    "После закрытия сервиса и повторного запуска все созданные заявки с их статусами доступны без потери или сброса данных."
+                  ],
+                  "constraints": [
+                    "Решение рассчитано на одного пользователя.",
+                    "Ввод заявок выполняется вручную.",
+                    "В рамках запроса не предусматриваются напоминания и интеграции.",
+                    "Хранение данных должно переживать закрытие и повторный запуск сервиса."
+                  ],
+                  "dependencies": [],
+                  "assumptions": [
+                    "Пользователь сам определяет, когда заявка переходит между статусами, и вручную меняет статус.",
+                    "Формат хранения и конкретная платформа не заданы; требования описывают поведение, а не конкретную реализацию."
+                  ],
+                  "checklist": [
+                    "Проверить ручное создание заявки с полным набором обязательных полей и автоматической датой.",
+                    "Проверить допустимые значения источника и статуса, а также начальный статус новой заявки.",
+                    "Проверить, что заявки со статусами «Нужно ответить» и «Жду ответа клиента» отображаются, а «Закрыта» скрыта.",
+                    "Проверить, что перевод заявки в «Жду ответа клиента» оставляет её в основном списке.",
+                    "Проверить, что перевод заявки в «Закрыта» убирает её из основного списка.",
+                    "Создать заявки с разными статусами, закрыть и повторно запустить сервис; проверить сохранность всех заявок и статусов."
+                  ],
+                  "prerequisites": [
+                    "Пользователь вручную заносит в список сведения о полученном обращении.",
+                    "Сервис сохраняет данные между запусками."
+                  ]
+                }
+              },
+              {
+                "name": "clarification",
+                "content": "Владелец подтвердил начальный статус и внес новые требования: третий статус «Жду ответа клиента» остаётся в незакрытом списке, а сохранённые заявки и статусы переживают перезапуск сервиса."
+              }
+            ],
+            "assumptions": [
+              "Пользователь сам определяет, когда заявка переходит между статусами, и вручную меняет статус.",
+              "Формат хранения и конкретная платформа не заданы; требования описывают поведение, а не конкретную реализацию."
+            ]
+          },
+          "unresolved": []
+        }
+      },
+      "expected_assessments": {
+        "C1": {
+          "covered": true,
+          "reason_basis": "Reported new decisions on initial status, waiting status and persistence are reflected in the document. The omitted Closed source decision is not replaced by an explicit contrary owner decision; completeness is the C3/E2 defect."
+        },
+        "C2": {
+          "covered": true,
+          "reason_basis": "The document provides coherent scope, explicit status behavior, persistence and testable acceptance criteria. No internal document contradiction is identified by this case."
+        },
+        "C3": {
+          "covered": false,
+          "reason_basis": "This actual report source omits the owner decision about Closed while the document uses Closed. Prior marks are assessments, not the missing source facts; current source completeness is not established. The omission is in the PM report, not an extraction loss by the builder."
+        },
+        "C4": {
+          "covered": true,
+          "reason_basis": "The full structured document is included in result.document; its source-account omission does not negate document presence."
+        },
+        "E1": {
+          "covered": true,
+          "reason_basis": "Source readably summarizes the request and the new waiting-status/persistence feedback."
+        },
+        "E2": {
+          "covered": false,
+          "reason_basis": "The owner decision on Closed is absent from the current account and is not listed as an unanswered material question. unresolved is empty. The prior E2 mark must be revoked rather than accepted as a substitute for current facts."
+        }
+      },
+      "expected_verdict": "PARTIAL",
+      "blockers": [],
+      "items": [
+        [
+          "PM-DRAFT-02:check:312",
+          "The requirements agree with the user request and decisions described in this report."
+        ],
+        [
+          "PM-DRAFT-02:check:313",
+          "The requirements document defines clear scope, unambiguous material rules and objectively testable acceptance criteria, without contradictions."
+        ],
+        [
+          "PM-DRAFT-02:check:314",
+          "The source account contains the owner's current decision for every material business choice needed for the requirements, with no such choice left unanswered or replaced by a PM assumption."
+        ],
+        [
+          "PM-DRAFT-02:check:315",
+          "The current report includes the entire saved requirements document, not a summary, inventory of sections or reference to an earlier report."
+        ],
+        [
+          "PM-DRAFT-02:evidence:189",
+          "A readable summary of the user request."
+        ],
+        [
+          "PM-DRAFT-02:evidence:190",
+          "A readable account of the owner's decisions and any unanswered material questions."
+        ]
+      ],
+      "aliases": {
+        "C1": "PM-DRAFT-02:check:312",
+        "C2": "PM-DRAFT-02:check:313",
+        "C3": "PM-DRAFT-02:check:314",
+        "C4": "PM-DRAFT-02:check:315",
+        "E1": "PM-DRAFT-02:evidence:189",
+        "E2": "PM-DRAFT-02:evidence:190"
+      },
+      "original_report": null,
+      "original_segmentation": null,
+      "provenance": {
+        "file": "docs/evidence/clean-workflow-case-labels-20261104.json",
+        "case_id": "actual-pm-190",
+        "origin": {
+          "source_file": "docs/evidence/workflow-advisor-audit-live-20261103.json",
+          "source_file_sha256": "aef4bd99fe0bc5d2b91cbc7dc0f6c7159fcf3244e8636dd0f7989bdccdc9b5c0",
+          "source_pointer": "/cases/2/evaluations/2",
+          "history_id": 190,
+          "captured_request_sha256": "18f836f15d08369278e8e6d03b800526dec8b7974660d6d744e3ed51066e4b9c",
+          "captured_model_verdict": "PARTIAL",
+          "actual_report_facts_changed": false,
+          "user_override": {
+            "field": "allowed_verdicts",
+            "before": [
+              "PASS",
+              "PARTIAL",
+              "BLOCKED",
+              "DELEGATE"
+            ],
+            "after": [
+              "PASS",
+              "PARTIAL",
+              "BLOCKED"
+            ],
+            "reason": "Configured runtime forbids DELEGATE in v16. Both policy systems must receive exactly the same frozen user payload; no report, criterion, alias or prior mark changes."
+          },
+          "label_authority": "Independent human counterreview frozen before new calls; historical model output is not the expected-item oracle."
+        }
+      },
+      "mapping_notes": [
+        "Old payload is the exact frozen case user_payload; outside report old/new payloads are identical.",
+        "Source is copied verbatim with exhaustive Unicode-character offsets. Only the explicitly listed owner-attributed sentences become decision values; subjects are literal substrings of those sentences.",
+        "Extraction is manually limited to the first two explicit owner-decision sentences. Remaining source account stays in request, including any omissions.",
+        "Each original result field becomes one artifact, name unchanged and content deep-equal. The complete document, including its embedded assumptions, is unchanged.",
+        "The outer assumptions array mirrors the existing document.assumptions; it adds no fact and does not remove the originals.",
+        "Unresolved texts are unchanged. kind=question labels incomplete material, not an asserted external obstacle; it must not mechanically force BLOCKED.",
+        "Expected marks are independent frozen product truth for both variants, not historical model verdicts. A known old mismatch must not rewrite these labels."
+      ],
+      "mapping": {
+        "source_parts": [
+          {
+            "start": 0,
+            "end": 71,
+            "to": "/source/decisions/0/value"
+          },
+          {
+            "start": 71,
+            "end": 72,
+            "literal": " "
+          },
+          {
+            "start": 72,
+            "end": 249,
+            "to": "/source/decisions/1/value"
+          },
+          {
+            "start": 249,
+            "end": 250,
+            "literal": " "
+          },
+          {
+            "start": 250,
+            "end": 466,
+            "to": "/source/request"
+          }
+        ],
+        "subject_parts": [
+          {
+            "start": 55,
+            "end": 69,
+            "to": "/source/decisions/0/subject"
+          },
+          {
+            "start": 103,
+            "end": 121,
+            "to": "/source/decisions/1/subject"
+          }
+        ],
+        "result_fields": [
+          {
+            "from": "/result/document",
+            "to": "/result/artifacts/0/content",
+            "name": "document"
+          },
+          {
+            "from": "/result/clarification",
+            "to": "/result/artifacts/1/content",
+            "name": "clarification"
+          }
+        ],
+        "assumptions": {
+          "from": "/result/document/assumptions",
+          "to": "/result/assumptions",
+          "mode": "mirror_without_removing_from_document"
+        },
+        "unresolved": []
+      }
+    },
+    {
+      "id": "actual-pm-191",
+      "old_payload": {
+        "phase": "Requirements preparation",
+        "allowed_verdicts": [
+          "PASS",
+          "PARTIAL",
+          "BLOCKED"
+        ],
+        "criteria": [
+          {
+            "id": "C1",
+            "text": "The requirements agree with the user request and decisions described in this report."
+          },
+          {
+            "id": "C2",
+            "text": "The requirements document defines clear scope, unambiguous material rules and objectively testable acceptance criteria, without contradictions."
+          },
+          {
+            "id": "C3",
+            "text": "The source account contains the owner's current decision for every material business choice needed for the requirements, with no such choice left unanswered or replaced by a PM assumption."
+          },
+          {
+            "id": "C4",
+            "text": "The current report includes the entire saved requirements document, not a summary, inventory of sections or reference to an earlier report."
+          },
+          {
+            "id": "E1",
+            "text": "A readable summary of the user request."
+          },
+          {
+            "id": "E2",
+            "text": "A readable account of the owner's decisions and any unanswered material questions."
+          }
+        ],
+        "previously_covered": [
+          "C1",
+          "C2",
+          "C4",
+          "E1"
+        ],
+        "report": {
+          "source": "Владелец изначально прямо указал статусы «Нужно ответить» и «Закрыта», а основной список только незакрытых. Позже подтвердил статус новой заявки «Нужно ответить» и добавил третий статус «Жду ответа клиента», который также остаётся в списке незакрытых, плюс сохранение данных после перезапуска. Поэтому решение о статусе «Закрыта» уже задано владельцем и остаётся в документе. Остальные решения: один пользователь, ручное внесение заявок из телефона и Telegram, обязательные контакт и суть обращения, источник телефон/Telegram, автоматическая дата создания, без напоминаний и интеграций.",
+          "result": {
+            "document": {
+              "goal": "Предоставить одному пользователю простой список для ручного учёта клиентских заявок, чтобы видеть незакрытые обращения и не терять их.",
+              "scope": [
+                "Создание и просмотр заявок в одном обычном списке.",
+                "Ручной ввод заявок, поступивших по телефону или в Telegram.",
+                "Обязательные поля заявки: контакт клиента, суть обращения, источник.",
+                "Дата создания проставляется автоматически.",
+                "Статусы заявки: «Нужно ответить», «Жду ответа клиента» и «Закрыта». Необходимость статуса «Закрыта» была указана владельцем в исходном запросе о статусах.",
+                "Основной список показывает только незакрытые заявки: «Нужно ответить» и «Жду ответа клиента».",
+                "Сохранение всех заявок и их статусов после закрытия сервиса и его последующего повторного запуска."
+              ],
+              "exclusions": [
+                "Напоминания и уведомления.",
+                "Интеграции с телефонией, Telegram или другими сервисами; заявки вносятся вручную.",
+                "Совместная работа нескольких пользователей.",
+                "Дополнительные статусы, кроме «Нужно ответить», «Жду ответа клиента» и «Закрыта»."
+              ],
+              "scenarios": [
+                "Пользователь вручную добавляет поступившее по телефону обращение, указывает контакт клиента и суть обращения; источник отмечает как «Телефон». Дата создания устанавливается автоматически, статус новой заявки — «Нужно ответить».",
+                "Пользователь вручную добавляет обращение из Telegram с обязательными данными и источником «Telegram»; дата создания устанавливается автоматически, статус новой заявки — «Нужно ответить».",
+                "Пользователь открывает основной список и видит заявки со статусом «Нужно ответить» и «Жду ответа клиента», но не заявки со статусом «Закрыта».",
+                "Пользователь ожидает ответа клиента и меняет статус заявки на «Жду ответа клиента»; заявка остаётся в основном списке незакрытых.",
+                "После завершения обращения пользователь меняет статус на «Закрыта»; заявка больше не отображается в основном списке незакрытых.",
+                "Пользователь закрывает сервис и запускает его повторно; все ранее созданные заявки и их текущие статусы сохранены."
+              ],
+              "acceptance_criteria": [
+                "При создании заявки контакт клиента, суть обращения и источник обязательны; без любого из этих значений заявка не сохраняется.",
+                "Для источника доступны значения «Телефон» и «Telegram».",
+                "При создании дата создания проставляется автоматически без ручного ввода.",
+                "Для статуса доступны ровно три значения: «Нужно ответить», «Жду ответа клиента» и «Закрыта»; новая заявка получает статус «Нужно ответить».",
+                "Основной список отображает заявки со статусами «Нужно ответить» и «Жду ответа клиента» и исключает заявки со статусом «Закрыта».",
+                "Пользователь может изменить статус на «Жду ответа клиента»; такая заявка остаётся в основном списке.",
+                "Пользователь может изменить статус на «Закрыта»; такая заявка исключается из основного списка.",
+                "После закрытия сервиса и повторного запуска все созданные заявки с их статусами доступны без потери или сброса данных."
+              ],
+              "constraints": [
+                "Решение рассчитано на одного пользователя.",
+                "Ввод заявок выполняется вручную.",
+                "В рамках запроса не предусматриваются напоминания и интеграции.",
+                "Хранение данных должно переживать закрытие и повторный запуск сервиса."
+              ],
+              "dependencies": [],
+              "assumptions": [
+                "Пользователь сам определяет, когда заявка переходит между статусами, и вручную меняет статус.",
+                "Формат хранения и конкретная платформа не заданы; требования описывают поведение, а не конкретную реализацию."
+              ],
+              "checklist": [
+                "Проверить ручное создание заявки с полным набором обязательных полей и автоматической датой.",
+                "Проверить допустимые значения источника и статуса, а также начальный статус новой заявки.",
+                "Проверить, что заявки со статусами «Нужно ответить» и «Жду ответа клиента» отображаются, а «Закрыта» скрыта.",
+                "Проверить, что перевод заявки в «Жду ответа клиента» оставляет её в основном списке.",
+                "Проверить, что перевод заявки в «Закрыта» убирает её из основного списка.",
+                "Создать заявки с разными статусами, закрыть и повторно запустить сервис; проверить сохранность всех заявок и статусов."
+              ],
+              "prerequisites": [
+                "Пользователь вручную заносит в список сведения о полученном обращении.",
+                "Сервис сохраняет данные между запусками."
+              ]
+            },
+            "clarification": "Владелец уже задал статус «Закрыта» в исходном запросе. Он подтвердил начальный статус новой заявки и добавил третий статус, правила отображения незакрытых заявок и сохранность данных при перезапуске."
+          },
+          "unresolved": []
+        }
+      },
+      "new_payload": {
+        "phase": "Requirements preparation",
+        "allowed_verdicts": [
+          "PASS",
+          "PARTIAL",
+          "BLOCKED"
+        ],
+        "criteria": [
+          {
+            "id": "C1",
+            "text": "The requirements agree with the user request and decisions described in this report."
+          },
+          {
+            "id": "C2",
+            "text": "The requirements document defines clear scope, unambiguous material rules and objectively testable acceptance criteria, without contradictions."
+          },
+          {
+            "id": "C3",
+            "text": "The source account contains the owner's current decision for every material business choice needed for the requirements, with no such choice left unanswered or replaced by a PM assumption."
+          },
+          {
+            "id": "C4",
+            "text": "The current report includes the entire saved requirements document, not a summary, inventory of sections or reference to an earlier report."
+          },
+          {
+            "id": "E1",
+            "text": "A readable summary of the user request."
+          },
+          {
+            "id": "E2",
+            "text": "A readable account of the owner's decisions and any unanswered material questions."
+          }
+        ],
+        "previously_covered": [
+          "C1",
+          "C2",
+          "C4",
+          "E1"
+        ],
+        "report": {
+          "source": {
+            "request": "Поэтому решение о статусе «Закрыта» уже задано владельцем и остаётся в документе. Остальные решения: один пользователь, ручное внесение заявок из телефона и Telegram, обязательные контакт и суть обращения, источник телефон/Telegram, автоматическая дата создания, без напоминаний и интеграций.",
+            "decisions": [
+              {
+                "subject": "Закрыта",
+                "value": "Владелец изначально прямо указал статусы «Нужно ответить» и «Закрыта», а основной список только незакрытых."
+              },
+              {
+                "subject": "Жду ответа клиента",
+                "value": "Позже подтвердил статус новой заявки «Нужно ответить» и добавил третий статус «Жду ответа клиента», который также остаётся в списке незакрытых, плюс сохранение данных после перезапуска."
+              }
+            ]
+          },
+          "result": {
+            "artifacts": [
+              {
+                "name": "document",
+                "content": {
+                  "goal": "Предоставить одному пользователю простой список для ручного учёта клиентских заявок, чтобы видеть незакрытые обращения и не терять их.",
+                  "scope": [
+                    "Создание и просмотр заявок в одном обычном списке.",
+                    "Ручной ввод заявок, поступивших по телефону или в Telegram.",
+                    "Обязательные поля заявки: контакт клиента, суть обращения, источник.",
+                    "Дата создания проставляется автоматически.",
+                    "Статусы заявки: «Нужно ответить», «Жду ответа клиента» и «Закрыта». Необходимость статуса «Закрыта» была указана владельцем в исходном запросе о статусах.",
+                    "Основной список показывает только незакрытые заявки: «Нужно ответить» и «Жду ответа клиента».",
+                    "Сохранение всех заявок и их статусов после закрытия сервиса и его последующего повторного запуска."
+                  ],
+                  "exclusions": [
+                    "Напоминания и уведомления.",
+                    "Интеграции с телефонией, Telegram или другими сервисами; заявки вносятся вручную.",
+                    "Совместная работа нескольких пользователей.",
+                    "Дополнительные статусы, кроме «Нужно ответить», «Жду ответа клиента» и «Закрыта»."
+                  ],
+                  "scenarios": [
+                    "Пользователь вручную добавляет поступившее по телефону обращение, указывает контакт клиента и суть обращения; источник отмечает как «Телефон». Дата создания устанавливается автоматически, статус новой заявки — «Нужно ответить».",
+                    "Пользователь вручную добавляет обращение из Telegram с обязательными данными и источником «Telegram»; дата создания устанавливается автоматически, статус новой заявки — «Нужно ответить».",
+                    "Пользователь открывает основной список и видит заявки со статусом «Нужно ответить» и «Жду ответа клиента», но не заявки со статусом «Закрыта».",
+                    "Пользователь ожидает ответа клиента и меняет статус заявки на «Жду ответа клиента»; заявка остаётся в основном списке незакрытых.",
+                    "После завершения обращения пользователь меняет статус на «Закрыта»; заявка больше не отображается в основном списке незакрытых.",
+                    "Пользователь закрывает сервис и запускает его повторно; все ранее созданные заявки и их текущие статусы сохранены."
+                  ],
+                  "acceptance_criteria": [
+                    "При создании заявки контакт клиента, суть обращения и источник обязательны; без любого из этих значений заявка не сохраняется.",
+                    "Для источника доступны значения «Телефон» и «Telegram».",
+                    "При создании дата создания проставляется автоматически без ручного ввода.",
+                    "Для статуса доступны ровно три значения: «Нужно ответить», «Жду ответа клиента» и «Закрыта»; новая заявка получает статус «Нужно ответить».",
+                    "Основной список отображает заявки со статусами «Нужно ответить» и «Жду ответа клиента» и исключает заявки со статусом «Закрыта».",
+                    "Пользователь может изменить статус на «Жду ответа клиента»; такая заявка остаётся в основном списке.",
+                    "Пользователь может изменить статус на «Закрыта»; такая заявка исключается из основного списка.",
+                    "После закрытия сервиса и повторного запуска все созданные заявки с их статусами доступны без потери или сброса данных."
+                  ],
+                  "constraints": [
+                    "Решение рассчитано на одного пользователя.",
+                    "Ввод заявок выполняется вручную.",
+                    "В рамках запроса не предусматриваются напоминания и интеграции.",
+                    "Хранение данных должно переживать закрытие и повторный запуск сервиса."
+                  ],
+                  "dependencies": [],
+                  "assumptions": [
+                    "Пользователь сам определяет, когда заявка переходит между статусами, и вручную меняет статус.",
+                    "Формат хранения и конкретная платформа не заданы; требования описывают поведение, а не конкретную реализацию."
+                  ],
+                  "checklist": [
+                    "Проверить ручное создание заявки с полным набором обязательных полей и автоматической датой.",
+                    "Проверить допустимые значения источника и статуса, а также начальный статус новой заявки.",
+                    "Проверить, что заявки со статусами «Нужно ответить» и «Жду ответа клиента» отображаются, а «Закрыта» скрыта.",
+                    "Проверить, что перевод заявки в «Жду ответа клиента» оставляет её в основном списке.",
+                    "Проверить, что перевод заявки в «Закрыта» убирает её из основного списка.",
+                    "Создать заявки с разными статусами, закрыть и повторно запустить сервис; проверить сохранность всех заявок и статусов."
+                  ],
+                  "prerequisites": [
+                    "Пользователь вручную заносит в список сведения о полученном обращении.",
+                    "Сервис сохраняет данные между запусками."
+                  ]
+                }
+              },
+              {
+                "name": "clarification",
+                "content": "Владелец уже задал статус «Закрыта» в исходном запросе. Он подтвердил начальный статус новой заявки и добавил третий статус, правила отображения незакрытых заявок и сохранность данных при перезапуске."
+              }
+            ],
+            "assumptions": [
+              "Пользователь сам определяет, когда заявка переходит между статусами, и вручную меняет статус.",
+              "Формат хранения и конкретная платформа не заданы; требования описывают поведение, а не конкретную реализацию."
+            ]
+          },
+          "unresolved": []
+        }
+      },
+      "expected_assessments": {
+        "C1": {
+          "covered": true,
+          "reason_basis": "The source explicitly restores the original Closed decision, retains the initial-status decision and adds waiting status and persistence; the document is consistent with those reported decisions."
+        },
+        "C2": {
+          "covered": true,
+          "reason_basis": "The full document states coherent scope, unambiguous status/list/persistence rules and objectively testable acceptance criteria."
+        },
+        "C3": {
+          "covered": true,
+          "reason_basis": "The current source now supplies the owner decisions on all material choices at issue, including Closed and the initial status; no unanswered material choice or substituted PM assumption is identified."
+        },
+        "C4": {
+          "covered": true,
+          "reason_basis": "The complete structured document is included in result.document, not replaced by a reference or section inventory."
+        },
+        "E1": {
+          "covered": true,
+          "reason_basis": "Source contains a readable summary of the original request and subsequent owner feedback."
+        },
+        "E2": {
+          "covered": true,
+          "reason_basis": "The readable account now includes the restored Closed decision together with subsequent decisions. No material unanswered question is identified by the supplied facts; this is a fresh assessment because prior E2 is absent."
+        }
+      },
+      "expected_verdict": "PASS",
+      "blockers": [],
+      "items": [
+        [
+          "PM-DRAFT-02:check:312",
+          "The requirements agree with the user request and decisions described in this report."
+        ],
+        [
+          "PM-DRAFT-02:check:313",
+          "The requirements document defines clear scope, unambiguous material rules and objectively testable acceptance criteria, without contradictions."
+        ],
+        [
+          "PM-DRAFT-02:check:314",
+          "The source account contains the owner's current decision for every material business choice needed for the requirements, with no such choice left unanswered or replaced by a PM assumption."
+        ],
+        [
+          "PM-DRAFT-02:check:315",
+          "The current report includes the entire saved requirements document, not a summary, inventory of sections or reference to an earlier report."
+        ],
+        [
+          "PM-DRAFT-02:evidence:189",
+          "A readable summary of the user request."
+        ],
+        [
+          "PM-DRAFT-02:evidence:190",
+          "A readable account of the owner's decisions and any unanswered material questions."
+        ]
+      ],
+      "aliases": {
+        "C1": "PM-DRAFT-02:check:312",
+        "C2": "PM-DRAFT-02:check:313",
+        "C3": "PM-DRAFT-02:check:314",
+        "C4": "PM-DRAFT-02:check:315",
+        "E1": "PM-DRAFT-02:evidence:189",
+        "E2": "PM-DRAFT-02:evidence:190"
+      },
+      "original_report": null,
+      "original_segmentation": null,
+      "provenance": {
+        "file": "docs/evidence/clean-workflow-case-labels-20261104.json",
+        "case_id": "actual-pm-191",
+        "origin": {
+          "source_file": "docs/evidence/workflow-advisor-audit-live-20261103.json",
+          "source_file_sha256": "aef4bd99fe0bc5d2b91cbc7dc0f6c7159fcf3244e8636dd0f7989bdccdc9b5c0",
+          "source_pointer": "/cases/2/evaluations/3",
+          "history_id": 191,
+          "captured_request_sha256": "c6b2041a4870cfad072f8955520a6735a1e67e8cbc5785f6d5e3e0fb493a49dc",
+          "captured_model_verdict": "PASS",
+          "actual_report_facts_changed": false,
+          "user_override": {
+            "field": "allowed_verdicts",
+            "before": [
+              "PASS",
+              "PARTIAL",
+              "BLOCKED",
+              "DELEGATE"
+            ],
+            "after": [
+              "PASS",
+              "PARTIAL",
+              "BLOCKED"
+            ],
+            "reason": "Configured runtime forbids DELEGATE in v16. Both policy systems must receive exactly the same frozen user payload; no report, criterion, alias or prior mark changes."
+          },
+          "label_authority": "Independent human counterreview frozen before new calls; historical model output is not the expected-item oracle."
+        }
+      },
+      "mapping_notes": [
+        "Old payload is the exact frozen case user_payload; outside report old/new payloads are identical.",
+        "Source is copied verbatim with exhaustive Unicode-character offsets. Only the explicitly listed owner-attributed sentences become decision values; subjects are literal substrings of those sentences.",
+        "Extraction is manually limited to the first two explicit owner-decision sentences. Remaining source account stays in request, including any omissions.",
+        "Each original result field becomes one artifact, name unchanged and content deep-equal. The complete document, including its embedded assumptions, is unchanged.",
+        "The outer assumptions array mirrors the existing document.assumptions; it adds no fact and does not remove the originals.",
+        "Unresolved texts are unchanged. kind=question labels incomplete material, not an asserted external obstacle; it must not mechanically force BLOCKED.",
+        "Expected marks are independent frozen product truth for both variants, not historical model verdicts. A known old mismatch must not rewrite these labels."
+      ],
+      "mapping": {
+        "source_parts": [
+          {
+            "start": 0,
+            "end": 107,
+            "to": "/source/decisions/0/value"
+          },
+          {
+            "start": 107,
+            "end": 108,
+            "literal": " "
+          },
+          {
+            "start": 108,
+            "end": 293,
+            "to": "/source/decisions/1/value"
+          },
+          {
+            "start": 293,
+            "end": 294,
+            "literal": " "
+          },
+          {
+            "start": 294,
+            "end": 586,
+            "to": "/source/request"
+          }
+        ],
+        "subject_parts": [
+          {
+            "start": 61,
+            "end": 68,
+            "to": "/source/decisions/0/subject"
+          },
+          {
+            "start": 187,
+            "end": 205,
+            "to": "/source/decisions/1/subject"
+          }
+        ],
+        "result_fields": [
+          {
+            "from": "/result/document",
+            "to": "/result/artifacts/0/content",
+            "name": "document"
+          },
+          {
+            "from": "/result/clarification",
+            "to": "/result/artifacts/1/content",
+            "name": "clarification"
+          }
+        ],
+        "assumptions": {
+          "from": "/result/document/assumptions",
+          "to": "/result/assumptions",
+          "mode": "mirror_without_removing_from_document"
+        },
+        "unresolved": []
+      }
+    },
+    {
+      "id": "pm-missing-full-153",
+      "old_payload": {
+        "phase": "Requirements preparation",
+        "allowed_verdicts": [
+          "PASS",
+          "PARTIAL",
+          "BLOCKED"
+        ],
+        "criteria": [
+          {
+            "id": "C1",
+            "text": "The requirements agree with the user request and decisions described in this report."
+          },
+          {
+            "id": "C2",
+            "text": "The requirements document defines clear scope, unambiguous material rules and objectively testable acceptance criteria, without contradictions."
+          },
+          {
+            "id": "C3",
+            "text": "The source account contains the owner's current decision for every material business choice needed for the requirements, with no such choice left unanswered or replaced by a PM assumption."
+          },
+          {
+            "id": "C4",
+            "text": "The current report includes the entire saved requirements document, not a summary, inventory of sections or reference to an earlier report."
+          },
+          {
+            "id": "E1",
+            "text": "A readable summary of the user request."
+          },
+          {
+            "id": "E2",
+            "text": "A readable account of the owner's decisions and any unanswered material questions."
+          }
+        ],
+        "previously_covered": [],
+        "report": {
+          "source": "",
+          "result": {
+            "package_inventory": "Требования подготовлены как отдельный, законченный пакет для обзора, а не как тезисы для будущей доработки. Состав пакета: исходный запрос и подтвержденные решения владельца; четкая граница MVP и исключения; 5 сценариев; обязательные поля и автоматическая дата регистрации; согласованные статусы; правила входа двух пользователей и одинаковые права; критерии сохранения/совместного просмотра/редактирования и фильтрации; checklist и prerequisites.",
+            "presentation_intention": "Пакет подготовлен для рассмотрения; показ владельцу будет отдельным последующим шагом."
+          },
+          "unresolved": [
+            "Полная копия документа приведена в предыдущем отчёте, а в этом отчёте отсутствует."
+          ]
+        }
+      },
+      "new_payload": {
+        "phase": "Requirements preparation",
+        "allowed_verdicts": [
+          "PASS",
+          "PARTIAL",
+          "BLOCKED"
+        ],
+        "criteria": [
+          {
+            "id": "C1",
+            "text": "The requirements agree with the user request and decisions described in this report."
+          },
+          {
+            "id": "C2",
+            "text": "The requirements document defines clear scope, unambiguous material rules and objectively testable acceptance criteria, without contradictions."
+          },
+          {
+            "id": "C3",
+            "text": "The source account contains the owner's current decision for every material business choice needed for the requirements, with no such choice left unanswered or replaced by a PM assumption."
+          },
+          {
+            "id": "C4",
+            "text": "The current report includes the entire saved requirements document, not a summary, inventory of sections or reference to an earlier report."
+          },
+          {
+            "id": "E1",
+            "text": "A readable summary of the user request."
+          },
+          {
+            "id": "E2",
+            "text": "A readable account of the owner's decisions and any unanswered material questions."
+          }
+        ],
+        "previously_covered": [],
+        "report": {
+          "source": {
+            "request": "",
+            "decisions": []
+          },
+          "result": {
+            "artifacts": [
+              {
+                "name": "package_inventory",
+                "content": "Требования подготовлены как отдельный, законченный пакет для обзора, а не как тезисы для будущей доработки. Состав пакета: исходный запрос и подтвержденные решения владельца; четкая граница MVP и исключения; 5 сценариев; обязательные поля и автоматическая дата регистрации; согласованные статусы; правила входа двух пользователей и одинаковые права; критерии сохранения/совместного просмотра/редактирования и фильтрации; checklist и prerequisites."
+              },
+              {
+                "name": "presentation_intention",
+                "content": "Пакет подготовлен для рассмотрения; показ владельцу будет отдельным последующим шагом."
+              }
+            ],
+            "assumptions": []
+          },
+          "unresolved": [
+            {
+              "kind": "question",
+              "text": "Полная копия документа приведена в предыдущем отчёте, а в этом отчёте отсутствует."
+            }
+          ]
+        }
+      },
+      "expected_assessments": {
+        "C1": {
+          "covered": false,
+          "reason_basis": "Запрос/решения не приведены содержательно, сравнить согласованность невозможно."
+        },
+        "C2": {
+          "covered": false,
+          "reason_basis": "Документа нет, только inventory; его правила и AC невозможно оценить."
+        },
+        "C3": {
+          "covered": false,
+          "reason_basis": "Текст реальных решений/ответов отсутствует, лишь утверждение наличия."
+        },
+        "C4": {
+          "covered": false,
+          "reason_basis": "Сам отчёт явно говорит, что полный документ находится в другом отчёте."
+        },
+        "E1": {
+          "covered": false,
+          "reason_basis": "Присутствует только название исходного запроса, не readable summary."
+        },
+        "E2": {
+          "covered": false,
+          "reason_basis": "Есть только слова о подтверждённых решениях, но не сами решения/пробелы."
+        }
+      },
+      "expected_verdict": "PARTIAL",
+      "blockers": [],
+      "items": [
+        [
+          "PM-DRAFT-02:check:1",
+          "The requirements agree with the user request and decisions described in this report."
+        ],
+        [
+          "PM-DRAFT-02:check:2",
+          "The requirements document defines clear scope, unambiguous material rules and objectively testable acceptance criteria, without contradictions."
+        ],
+        [
+          "PM-DRAFT-02:check:3",
+          "The source account contains the owner's current decision for every material business choice needed for the requirements, with no such choice left unanswered or replaced by a PM assumption."
+        ],
+        [
+          "PM-DRAFT-02:check:4",
+          "The current report includes the entire saved requirements document, not a summary, inventory of sections or reference to an earlier report."
+        ],
+        [
+          "PM-DRAFT-02:evidence:1",
+          "A readable summary of the user request."
+        ],
+        [
+          "PM-DRAFT-02:evidence:2",
+          "A readable account of the owner's decisions and any unanswered material questions."
+        ]
+      ],
+      "aliases": {
+        "C1": "PM-DRAFT-02:check:1",
+        "C2": "PM-DRAFT-02:check:2",
+        "C3": "PM-DRAFT-02:check:3",
+        "C4": "PM-DRAFT-02:check:4",
+        "E1": "PM-DRAFT-02:evidence:1",
+        "E2": "PM-DRAFT-02:evidence:2"
+      },
+      "original_report": "Требования подготовлены как отдельный, законченный пакет для обзора, а не как тезисы для будущей доработки. Состав пакета: исходный запрос и подтвержденные решения владельца; четкая граница MVP и исключения; 5 сценариев; обязательные поля и автоматическая дата регистрации; согласованные статусы; правила входа двух пользователей и одинаковые права; критерии сохранения/совместного просмотра/редактирования и фильтрации; checklist и prerequisites.\nПолная копия документа приведена в предыдущем отчёте, а в этом отчёте отсутствует. Пакет подготовлен для рассмотрения; показ владельцу будет отдельным последующим шагом.",
+      "original_segmentation": {
+        "method": "manual_case_specific_verbatim_spans",
+        "note": "No actual source request or owner decisions are supplied. Keep source empty, retain the claimed package inventory as a summary, keep the missing-document statement unresolved and preserve the future-only presentation intention. Do not import an earlier document.",
+        "parts": [
+          {
+            "start": 0,
+            "end": 447,
+            "target": "/result/package_inventory"
+          },
+          {
+            "start": 447,
+            "end": 448,
+            "literal": "\n"
+          },
+          {
+            "start": 448,
+            "end": 530,
+            "target": "/unresolved/0"
+          },
+          {
+            "start": 530,
+            "end": 531,
+            "literal": " "
+          },
+          {
+            "start": 531,
+            "end": 617,
+            "target": "/result/presentation_intention"
+          }
+        ]
+      },
+      "provenance": {
+        "file": "docs/evidence/clean-workflow-case-labels-20261104.json",
+        "case_id": "pm-missing-full-153",
+        "origin": {
+          "source_case_index": 9,
+          "source_report_pointer": "/cases/9/report",
+          "original_report_sha256": "522b2245f14f8d97832204c88b302be8ba2aabdeeb8b055ee717f071324e6275",
+          "source_file": "docs/evidence/advisor-v15-structured-inputs-20261103.json",
+          "source_file_sha256": "69ed80d1dbb8f01a708a879d2b33f19b00ef366839368ef72c78011d8eb41384",
+          "source_case_pointer": "/cases/9",
+          "source_case_sha256": "ef0702ba0cc210647f39211549dc31ee652d74a53b6f4e58abbf27785e582d16",
+          "actual_report_facts_changed": false
+        }
+      },
+      "mapping_notes": [
+        "Old payload is the exact frozen case user_payload; outside report old/new payloads are identical.",
+        "Source is copied verbatim with exhaustive Unicode-character offsets. Only the explicitly listed owner-attributed sentences become decision values; subjects are literal substrings of those sentences.",
+        "The complete original source account stays in request; decisions is empty, so the transformation invents no owner attribution.",
+        "Each original result field becomes one artifact, name unchanged and content deep-equal. The complete document, including its embedded assumptions, is unchanged.",
+        "No assumptions are extracted from prose or invented.",
+        "Unresolved texts are unchanged. kind=question labels incomplete material, not an asserted external obstacle; it must not mechanically force BLOCKED.",
+        "Expected marks are independent frozen product truth for both variants, not historical model verdicts. A known old mismatch must not rewrite these labels."
+      ],
+      "mapping": {
+        "source_parts": [
+          {
+            "start": 0,
+            "end": 0,
+            "to": "/source/request"
+          }
+        ],
+        "subject_parts": [],
+        "result_fields": [
+          {
+            "from": "/result/package_inventory",
+            "to": "/result/artifacts/0/content",
+            "name": "package_inventory"
+          },
+          {
+            "from": "/result/presentation_intention",
+            "to": "/result/artifacts/1/content",
+            "name": "presentation_intention"
+          }
+        ],
+        "assumptions": {
+          "value": [],
+          "basis": "No separate assumptions extracted or invented"
+        },
+        "unresolved": [
+          {
+            "from": "/unresolved/0",
+            "to": "/unresolved/0/text",
+            "kind": "question"
+          }
+        ]
+      }
+    }
+  ],
+  "cp2": [
+    {
+      "id": "cp2-analysis-supplement",
+      "status": "proposed_not_bound_for_execution",
+      "origin": {
+        "current_case": "incremental-remaining-analysis-complete",
+        "prior_case": "analyst-role-work-complete",
+        "source": "docs/evidence/clean-workflow-case-labels-20261104.json",
+        "synthetic_history": true
+      },
+      "items": [
+        [
+          "AN-ANALYSIS-02:check:1",
+          "Every approved requirement has a source and positive/negative/boundary verification coverage."
+        ],
+        [
+          "AN-ANALYSIS-02:check:2",
+          "Analysis assumptions and permission/failure cases are explicit; material contradictions are resolved."
+        ],
+        [
+          "AN-ANALYSIS-02:check:3",
+          "Unresolved blockers remain explicit; no additional Tracker tasks were created."
+        ],
+        [
+          "AN-ANALYSIS-02:evidence:1",
+          "Analysis report, input references and requirement/criterion/verification coverage matrix."
+        ]
+      ],
+      "aliases": {
+        "C1": "AN-ANALYSIS-02:check:1",
+        "C2": "AN-ANALYSIS-02:check:2",
+        "C3": "AN-ANALYSIS-02:check:3",
+        "E1": "AN-ANALYSIS-02:evidence:1"
+      },
+      "old_payload": {
+        "phase": "Role work on one task",
+        "allowed_verdicts": [
+          "PASS",
+          "PARTIAL",
+          "BLOCKED"
+        ],
+        "criteria": [
+          {
+            "id": "C1",
+            "text": "Every approved requirement has a source and positive/negative/boundary verification coverage."
+          },
+          {
+            "id": "C2",
+            "text": "Analysis assumptions and permission/failure cases are explicit; material contradictions are resolved."
+          },
+          {
+            "id": "C3",
+            "text": "Unresolved blockers remain explicit; no additional Tracker tasks were created."
+          },
+          {
+            "id": "E1",
+            "text": "Analysis report, input references and requirement/criterion/verification coverage matrix."
+          }
+        ],
+        "previously_covered": [
+          "C1",
+          "E1"
+        ],
+        "report": {
+          "source": {
+            "request": "",
+            "decisions": []
+          },
+          "result": {
+            "artifacts": [
+              {
+                "name": "analysis_supplement",
+                "content": "Материальных предположений нет. Вход разрешён двум сотрудникам с одинаковыми правами; постороннему доступ запрещён. Отказ сохранения не создаёт частичную запись и сохраняет введённые данные для повторной попытки. Эти permission/failure случаи явно включены в анализ; материальных противоречий не осталось. Нерешённых блокеров нет. Дополнительных задач Tracker не создавал."
+              }
+            ],
+            "assumptions": []
+          },
+          "unresolved": []
+        }
+      },
+      "new_payload": {
+        "phase": "Role work on one task",
+        "allowed_verdicts": [
+          "PASS",
+          "PARTIAL",
+          "BLOCKED"
+        ],
+        "criteria": [
+          {
+            "id": "C1",
+            "text": "Every approved requirement has a source and positive/negative/boundary verification coverage."
+          },
+          {
+            "id": "C2",
+            "text": "Analysis assumptions and permission/failure cases are explicit; material contradictions are resolved."
+          },
+          {
+            "id": "C3",
+            "text": "Unresolved blockers remain explicit; no additional Tracker tasks were created."
+          },
+          {
+            "id": "E1",
+            "text": "Analysis report, input references and requirement/criterion/verification coverage matrix."
+          }
+        ],
+        "previously_covered": [
+          "C1",
+          "E1"
+        ],
+        "report": {
+          "source": {
+            "request": "",
+            "decisions": []
+          },
+          "result": {
+            "artifacts": [
+              {
+                "name": "analysis_supplement",
+                "content": "Материальных предположений нет. Вход разрешён двум сотрудникам с одинаковыми правами; постороннему доступ запрещён. Отказ сохранения не создаёт частичную запись и сохраняет введённые данные для повторной попытки. Эти permission/failure случаи явно включены в анализ; материальных противоречий не осталось. Нерешённых блокеров нет. Дополнительных задач Tracker не создавал."
+              }
+            ],
+            "assumptions": []
+          },
+          "unresolved": []
+        },
+        "previous_reports": [
+          {
+            "source": {
+              "request": "Запрос владельца прочитан: в единственном задании нужна форма создания записи с названием после trim длиной 1–200 символов; новая запись получает статус «Новая». Пустые и слишком длинные названия не сохраняются. Других требований нет.",
+              "decisions": []
+            },
+            "result": {
+              "artifacts": [
+                {
+                  "name": "coverage_matrix",
+                  "content": "Матрица анализа:\nR1 — источник: приведённый запрос. Критерий приёмки AC1: название 1–200 после trim. Сопоставление R1 → AC1 → проверки. Положительная проверка: « A » сохраняется как «A». Отрицательные: пробелы и 201 символ отклоняются без сохранения. Границы: 1 и 200 принимаются, 0 и 201 отклоняются.\nR2 — источник: приведённый запрос. Критерий приёмки AC2: начальный статус «Новая». Сопоставление R2 → AC2 → проверки. Положительная проверка: корректная запись появляется со статусом «Новая». Отрицательная: создание с иным начальным статусом отклоняется. Граница: статус нельзя пропустить при сохранении, системное значение — «Новая»."
+                }
+              ],
+              "assumptions": []
+            },
+            "unresolved": []
+          }
+        ]
+      },
+      "expected_verdict": "PASS",
+      "blockers": [],
+      "expected_assessments": {
+        "C1": {
+          "covered": true,
+          "reason_basis": "Сохраняется prior C1 текущей фазы для неизменного критерия; текущий отчёт не сообщает фактов, опровергающих полноту ранее принятой source/positive/negative/boundary coverage. Старая матрица не пересылается."
+        },
+        "C2": {
+          "covered": true,
+          "reason_basis": "Текущий короткий отчёт явно задаёт отсутствие материальных assumptions, permission/failure cases и отсутствие неразрешённых противоречий."
+        },
+        "C3": {
+          "covered": true,
+          "reason_basis": "Текущий отчёт явно указывает отсутствие нерешённых блокеров и дополнительных задач."
+        },
+        "E1": {
+          "covered": true,
+          "reason_basis": "Сохраняется prior E1 текущей фазы: analysis report, input references и matrix уже отмечены covered для того же текста критерия. Их неповторение само по себе не отзывает mark."
+        }
+      },
+      "input_facts": {
+        "old": {
+          "current_report": "old_payload.report",
+          "prior_facts_transmitted": false,
+          "prior_marks": "old_payload.previously_covered"
+        },
+        "new": {
+          "current_report": "new_payload.report",
+          "prior_facts_transmitted": true,
+          "previous_reports": "new_payload.previous_reports",
+          "order": "oldest_to_newest",
+          "scope": "same task/phase/mode/cycle only"
+        }
+      },
+      "original_current_report": {
+        "source": "",
+        "result": {
+          "analysis_supplement": "Материальных предположений нет. Вход разрешён двум сотрудникам с одинаковыми правами; постороннему доступ запрещён. Отказ сохранения не создаёт частичную запись и сохраняет введённые данные для повторной попытки. Эти permission/failure случаи явно включены в анализ; материальных противоречий не осталось. Нерешённых блокеров нет. Дополнительных задач Tracker не создавал."
+        },
+        "unresolved": []
+      },
+      "original_previous_report": {
+        "source": "Запрос владельца прочитан: в единственном задании нужна форма создания записи с названием после trim длиной 1–200 символов; новая запись получает статус «Новая». Пустые и слишком длинные названия не сохраняются. Других требований нет.",
+        "result": {
+          "coverage_matrix": "Матрица анализа:\nR1 — источник: приведённый запрос. Критерий приёмки AC1: название 1–200 после trim. Сопоставление R1 → AC1 → проверки. Положительная проверка: « A » сохраняется как «A». Отрицательные: пробелы и 201 символ отклоняются без сохранения. Границы: 1 и 200 принимаются, 0 и 201 отклоняются.\nR2 — источник: приведённый запрос. Критерий приёмки AC2: начальный статус «Новая». Сопоставление R2 → AC2 → проверки. Положительная проверка: корректная запись появляется со статусом «Новая». Отрицательная: создание с иным начальным статусом отклоняется. Граница: статус нельзя пропустить при сохранении, системное значение — «Новая»."
+        },
+        "unresolved": []
+      },
+      "current_mapping": {
+        "source_parts": [
+          {
+            "start": 0,
+            "end": 0,
+            "to": "/source/request"
+          }
+        ],
+        "subject_parts": [],
+        "result_fields": [
+          {
+            "from": "/result/analysis_supplement",
+            "to": "/result/artifacts/0/content",
+            "name": "analysis_supplement"
+          }
+        ],
+        "assumptions": {
+          "value": [],
+          "basis": "No separate assumptions extracted or invented"
+        },
+        "unresolved": []
+      },
+      "previous_mapping": {
+        "source_parts": [
+          {
+            "start": 0,
+            "end": 234,
+            "to": "/source/request"
+          }
+        ],
+        "subject_parts": [],
+        "result_fields": [
+          {
+            "from": "/result/coverage_matrix",
+            "to": "/result/artifacts/0/content",
+            "name": "coverage_matrix"
+          }
+        ],
+        "assumptions": {
+          "value": [],
+          "basis": "No separate assumptions extracted or invented"
+        },
+        "unresolved": []
+      },
+      "mapping_notes": [
+        "Synthetic prior packet copies only the frozen Analyst source and coverage_matrix; the current supplement adds the exact existing permission/failure/blocker facts. No earlier provider success is claimed.",
+        "This is a separate proposed CP2 history-boundary shape, not part of the eight CP1 calls. Final previous-assessment wiring and payload approval are pending.",
+        "All current/prior report texts and document values originate in the named frozen cases; no synthetic business statement has been added."
+      ]
+    },
+    {
+      "id": "cp2-late-contradiction",
+      "status": "proposed_not_bound_for_execution",
+      "origin": {
+        "current_case": "incremental-explicit-new-document-invalidates-marks",
+        "prior_case": "pm-preparation-search-defined",
+        "source": "docs/evidence/clean-workflow-case-labels-20261104.json",
+        "synthetic_history": true
+      },
+      "items": [
+        [
+          "PM-DRAFT-02:check:1",
+          "The requirements agree with the user request and decisions described in this report."
+        ],
+        [
+          "PM-DRAFT-02:check:2",
+          "The requirements document defines clear scope, unambiguous material rules and objectively testable acceptance criteria, without contradictions."
+        ],
+        [
+          "PM-DRAFT-02:check:3",
+          "The source account contains the owner's current decision for every material business choice needed for the requirements, with no such choice left unanswered or replaced by a PM assumption."
+        ],
+        [
+          "PM-DRAFT-02:check:4",
+          "The current report includes the entire saved requirements document, not a summary, inventory of sections or reference to an earlier report."
+        ],
+        [
+          "PM-DRAFT-02:evidence:1",
+          "A readable summary of the user request."
+        ],
+        [
+          "PM-DRAFT-02:evidence:2",
+          "A readable account of the owner's decisions and any unanswered material questions."
+        ]
+      ],
+      "aliases": {
+        "C1": "PM-DRAFT-02:check:1",
+        "C2": "PM-DRAFT-02:check:2",
+        "C3": "PM-DRAFT-02:check:3",
+        "C4": "PM-DRAFT-02:check:4",
+        "E1": "PM-DRAFT-02:evidence:1",
+        "E2": "PM-DRAFT-02:evidence:2"
+      },
+      "old_payload": {
+        "phase": "Requirements preparation",
+        "allowed_verdicts": [
+          "PASS",
+          "PARTIAL",
+          "BLOCKED"
+        ],
+        "criteria": [
+          {
+            "id": "C1",
+            "text": "The requirements agree with the user request and decisions described in this report."
+          },
+          {
+            "id": "C2",
+            "text": "The requirements document defines clear scope, unambiguous material rules and objectively testable acceptance criteria, without contradictions."
+          },
+          {
+            "id": "C3",
+            "text": "The source account contains the owner's current decision for every material business choice needed for the requirements, with no such choice left unanswered or replaced by a PM assumption."
+          },
+          {
+            "id": "C4",
+            "text": "The current report includes the entire saved requirements document, not a summary, inventory of sections or reference to an earlier report."
+          },
+          {
+            "id": "E1",
+            "text": "A readable summary of the user request."
+          },
+          {
+            "id": "E2",
+            "text": "A readable account of the owner's decisions and any unanswered material questions."
+          }
+        ],
+        "previously_covered": [
+          "C1",
+          "C2",
+          "C3",
+          "C4",
+          "E1",
+          "E2"
+        ],
+        "report": {
+          "source": {
+            "request": "Исходный запрос и решения владельца тоже изменились; прежние условия больше не действуют.",
+            "decisions": []
+          },
+          "result": {
+            "artifacts": [
+              {
+                "name": "document_replacement",
+                "content": "Старый документ заменён новым."
+              }
+            ],
+            "assumptions": []
+          },
+          "unresolved": [
+            {
+              "kind": "question",
+              "text": "Полный текст нового документа, исходный запрос и актуальные решения владельца в этом отчёте не приведены."
+            },
+            {
+              "kind": "question",
+              "text": "Завершение подготовки новых бизнес-требований не заявляю; эти материалы ещё нужно предоставить в текущей фазе."
+            }
+          ]
+        }
+      },
+      "new_payload": {
+        "phase": "Requirements preparation",
+        "allowed_verdicts": [
+          "PASS",
+          "PARTIAL",
+          "BLOCKED"
+        ],
+        "criteria": [
+          {
+            "id": "C1",
+            "text": "The requirements agree with the user request and decisions described in this report."
+          },
+          {
+            "id": "C2",
+            "text": "The requirements document defines clear scope, unambiguous material rules and objectively testable acceptance criteria, without contradictions."
+          },
+          {
+            "id": "C3",
+            "text": "The source account contains the owner's current decision for every material business choice needed for the requirements, with no such choice left unanswered or replaced by a PM assumption."
+          },
+          {
+            "id": "C4",
+            "text": "The current report includes the entire saved requirements document, not a summary, inventory of sections or reference to an earlier report."
+          },
+          {
+            "id": "E1",
+            "text": "A readable summary of the user request."
+          },
+          {
+            "id": "E2",
+            "text": "A readable account of the owner's decisions and any unanswered material questions."
+          }
+        ],
+        "previously_covered": [
+          "C1",
+          "C2",
+          "C3",
+          "C4",
+          "E1",
+          "E2"
+        ],
+        "report": {
+          "source": {
+            "request": "Исходный запрос и решения владельца тоже изменились; прежние условия больше не действуют.",
+            "decisions": []
+          },
+          "result": {
+            "artifacts": [
+              {
+                "name": "document_replacement",
+                "content": "Старый документ заменён новым."
+              }
+            ],
+            "assumptions": []
+          },
+          "unresolved": [
+            {
+              "kind": "question",
+              "text": "Полный текст нового документа, исходный запрос и актуальные решения владельца в этом отчёте не приведены."
+            },
+            {
+              "kind": "question",
+              "text": "Завершение подготовки новых бизнес-требований не заявляю; эти материалы ещё нужно предоставить в текущей фазе."
+            }
+          ]
+        },
+        "previous_reports": [
+          {
+            "source": {
+              "request": "Исходный запрос: «Хочу небольшой сервис, чтобы не терять заявки клиентов.» В ходе обсуждения владелец уточнил: сервисом пользуются два сотрудника мастерской; заявки из телефона и мессенджеров вносятся вручную; общий браузерный список, отдельная учётная запись каждому, серверное сохранение; обязательны имя, телефон и текст обращения; имя и текст непустые после trim, телефон непустая исходная строка; ответственный один из двух сотрудников; оба видят/редактируют все заявки; статусы Новая/В работе/Закрыта, новая создаётся как Новая, закрытую можно вернуть в работу; поиск по имени/телефону, фильтры по статусу и ответственному; сортировка по времени создания от новых к старым вне зависимости от статуса; удаление только после подтверждения, окончательное, без корзины/восстановления. Без уведомлений, интеграций, напоминаний, отчётов и ролей администратора; иных требований к первой версии нет. Это покрывает ключевые сценарии и критерии; дальнейшие уточнения не являются блокирующими.\n\nВладелец дополнительно выбрал следующие правила поиска и фильтрации. Поиск включает заявку тогда и только тогда, когда введённая поисковая строка содержится в имени клиента или сохранённой строке телефона без учёта регистра. Подходит часть или полное значение. Пробелы и знаки сравниваются как сохранены и введены, без удаления или замены. Пустой запрос не ограничивает список. Поиск и выбранные фильтры применяются совместно: заявка должна удовлетворять каждому заданному условию. Незаданный фильтр не ограничивает список.",
+              "decisions": []
+            },
+            "result": {
+              "artifacts": [
+                {
+                  "name": "requirements_document",
+                  "content": "Полный сохранённый документ требований:\ngoal: Создать небольшой браузерный сервис для двух сотрудников мастерской, чтобы вручную регистрировать клиентские заявки, совместно вести их и не терять после обновления страницы или повторного входа.\nscope:\n- Предоставить общий список заявок в браузере с серверным сохранением данных.\n- Обеспечить отдельную учётную запись для каждого из двух сотрудников; оба сотрудника видят и могут редактировать все заявки.\n- Позволить вручную создавать заявку с обязательными именем клиента, телефоном и текстом обращения, а также выбирать ответственного из двух сотрудников.\n- Поддерживать статусы «Новая», «В работе» и «Закрыта»; новые заявки создаются со статусом «Новая», закрытые заявки можно вернуть в работу.\n- Показывать сначала самые недавно созданные заявки независимо от статуса.\n- Поддерживать поиск по имени и телефону и фильтрацию по статусу и ответственному.\n- Позволить удалить заявку после подтверждения, без корзины и восстановления.\nexclusions:\n- Автоматический приём заявок с телефона, сайта, почты или из мессенджеров; интеграции отсутствуют.\n- Уведомления и напоминания.\n- Отчёты.\n- Роли администратора и дополнительные уровни прав.\n- Восстановление окончательно удалённых заявок.\n- Дополнительные сущности, процессы и функции, не указанные в объёме первой версии.\nscenarios:\n- Сотрудник входит под собственной учётной записью и видит общий список заявок.\n- Сотрудник вручную создаёт заявку, вводя имя клиента, телефон, текст обращения и выбирая ответственного; заявка появляется со статусом «Новая».\n- Сотрудник находит заявки по имени или телефону и сужает список фильтрами статуса и ответственного.\n- Любой из двух сотрудников редактирует заявку или меняет её статус; закрытую заявку можно вернуть в работу.\n- Сотрудник подтверждает удаление заявки; она удаляется окончательно и не восстанавливается.\n- После обновления браузера или повторного входа список и изменения остаются сохранёнными на сервере.\nacceptance_criteria:\n- У каждого из двух сотрудников есть отдельная учётная запись; после входа каждый видит и может редактировать все заявки.\n- Создание заявки требует непустого после удаления крайних пробелов имени и текста обращения, а также непустого телефона; телефон хранится как введённая строка без требования к числовому формату.\n- Новая заявка получает статус «Новая»; доступны статусы «Новая», «В работе» и «Закрыта».\n- Закрытую заявку можно перевести обратно в статус «В работе».\n- Ответственный выбирается из двух сотрудников.\n- Список по умолчанию отсортирован по времени создания от более новых заявок к более старым, без приоритета статуса.\n- Поиск позволяет находить заявки по имени клиента и телефону; фильтры позволяют ограничивать список по статусу и ответственному.\n- Поиск включает заявку тогда и только тогда, когда введённая поисковая строка содержится в имени клиента или сохранённой строке телефона без учёта регистра. Подходит часть или полное значение. Пробелы и знаки сравниваются как сохранены и введены, без удаления или замены. Пустой запрос не ограничивает список.\n- Поиск и выбранные фильтры применяются совместно: заявка должна удовлетворять каждому заданному условию. Незаданный фильтр не ограничивает список.\n- Запрос на удаление требует явного подтверждения; после подтверждения заявка окончательно удалена, корзины и восстановления нет.\n- Созданные заявки и изменения переживают обновление страницы и повторный вход, поскольку данные сохраняются на сервере.\n- Функции интеграций, уведомлений, напоминаний, отчётов и администраторских ролей не входят в первую версию.\nconstraints:\n- Первая версия предназначена для небольшой мастерской и двух сотрудников.\n- Заявки поступают по телефону и в мессенджерах и вводятся сотрудниками вручную.\n- Сервис доступен через браузер.\n- Оба сотрудника имеют одинаковые права на просмотр и редактирование всех заявок.\n- Удаление является окончательным после подтверждения.\ndependencies: []\nassumptions: []\nchecklist:\n- Две отдельные учётные записи обеспечивают вход сотрудников в общий сервис.\n- Обязательные поля и правила обработки пробелов применяются при создании заявки.\n- Статусы, назначение ответственного, поиск, фильтры и сортировка соответствуют требованиям.\n- Подтверждённое удаление не оставляет доступной функции восстановления.\n- Данные доступны после перезагрузки страницы и повторной аутентификации.\nprerequisites:\n- Для каждого из двух сотрудников должны быть доступны отдельные учётные данные для входа.\n- Для сохранения заявок сервису необходимо серверное хранилище данных."
+                },
+                {
+                  "name": "preparation_status",
+                  "content": "Подготовка для рассмотрения завершена."
+                }
+              ],
+              "assumptions": []
+            },
+            "unresolved": []
+          }
+        ]
+      },
+      "expected_verdict": "PARTIAL",
+      "blockers": [],
+      "expected_assessments": {
+        "C1": {
+          "covered": false,
+          "reason_basis": "Документ, исходный запрос и решения владельца прямо заменены; прежние условия отозваны. Новый документ и новые source-факты не приведены, поэтому согласованность нового пакета не подтверждена прежним mark."
+        },
+        "C2": {
+          "covered": false,
+          "reason_basis": "Новый документ не приведён; его scope, material rules, testable AC и отсутствие противоречий оценить невозможно. Это явная замена артефакта, а не только неповторение неизменного материала."
+        },
+        "C3": {
+          "covered": false,
+          "reason_basis": "Прежние owner decisions явно отозваны, а актуальные ответы для нового документа прямо не предоставлены; prior C3 не подтверждает current source-completeness."
+        },
+        "C4": {
+          "covered": false,
+          "reason_basis": "Полный текст нового документа явно отсутствует, старый документ заменён; прежний FULL mark относится к заменённому артефакту."
+        },
+        "E1": {
+          "covered": false,
+          "reason_basis": "Прежний исходный запрос явно изменился и больше не действует; актуальный source summary не приведён. Это не простое неповторение неизменного источника."
+        },
+        "E2": {
+          "covered": false,
+          "reason_basis": "Прежние owner decisions явно изменились и больше не действуют; актуальные решения/вопросы не приведены. Поэтому prior E2 не подтверждает текущий account."
+        }
+      },
+      "input_facts": {
+        "old": {
+          "current_report": "old_payload.report",
+          "prior_facts_transmitted": false,
+          "prior_marks": "old_payload.previously_covered"
+        },
+        "new": {
+          "current_report": "new_payload.report",
+          "prior_facts_transmitted": true,
+          "previous_reports": "new_payload.previous_reports",
+          "order": "oldest_to_newest",
+          "scope": "same task/phase/mode/cycle only"
+        }
+      },
+      "original_current_report": {
+        "source": "Исходный запрос и решения владельца тоже изменились; прежние условия больше не действуют.",
+        "result": {
+          "document_replacement": "Старый документ заменён новым."
+        },
+        "unresolved": [
+          "Полный текст нового документа, исходный запрос и актуальные решения владельца в этом отчёте не приведены.",
+          "Завершение подготовки новых бизнес-требований не заявляю; эти материалы ещё нужно предоставить в текущей фазе."
+        ]
+      },
+      "original_previous_report": {
+        "source": "Исходный запрос: «Хочу небольшой сервис, чтобы не терять заявки клиентов.» В ходе обсуждения владелец уточнил: сервисом пользуются два сотрудника мастерской; заявки из телефона и мессенджеров вносятся вручную; общий браузерный список, отдельная учётная запись каждому, серверное сохранение; обязательны имя, телефон и текст обращения; имя и текст непустые после trim, телефон непустая исходная строка; ответственный один из двух сотрудников; оба видят/редактируют все заявки; статусы Новая/В работе/Закрыта, новая создаётся как Новая, закрытую можно вернуть в работу; поиск по имени/телефону, фильтры по статусу и ответственному; сортировка по времени создания от новых к старым вне зависимости от статуса; удаление только после подтверждения, окончательное, без корзины/восстановления. Без уведомлений, интеграций, напоминаний, отчётов и ролей администратора; иных требований к первой версии нет. Это покрывает ключевые сценарии и критерии; дальнейшие уточнения не являются блокирующими.\n\nВладелец дополнительно выбрал следующие правила поиска и фильтрации. Поиск включает заявку тогда и только тогда, когда введённая поисковая строка содержится в имени клиента или сохранённой строке телефона без учёта регистра. Подходит часть или полное значение. Пробелы и знаки сравниваются как сохранены и введены, без удаления или замены. Пустой запрос не ограничивает список. Поиск и выбранные фильтры применяются совместно: заявка должна удовлетворять каждому заданному условию. Незаданный фильтр не ограничивает список.",
+        "result": {
+          "requirements_document": "Полный сохранённый документ требований:\ngoal: Создать небольшой браузерный сервис для двух сотрудников мастерской, чтобы вручную регистрировать клиентские заявки, совместно вести их и не терять после обновления страницы или повторного входа.\nscope:\n- Предоставить общий список заявок в браузере с серверным сохранением данных.\n- Обеспечить отдельную учётную запись для каждого из двух сотрудников; оба сотрудника видят и могут редактировать все заявки.\n- Позволить вручную создавать заявку с обязательными именем клиента, телефоном и текстом обращения, а также выбирать ответственного из двух сотрудников.\n- Поддерживать статусы «Новая», «В работе» и «Закрыта»; новые заявки создаются со статусом «Новая», закрытые заявки можно вернуть в работу.\n- Показывать сначала самые недавно созданные заявки независимо от статуса.\n- Поддерживать поиск по имени и телефону и фильтрацию по статусу и ответственному.\n- Позволить удалить заявку после подтверждения, без корзины и восстановления.\nexclusions:\n- Автоматический приём заявок с телефона, сайта, почты или из мессенджеров; интеграции отсутствуют.\n- Уведомления и напоминания.\n- Отчёты.\n- Роли администратора и дополнительные уровни прав.\n- Восстановление окончательно удалённых заявок.\n- Дополнительные сущности, процессы и функции, не указанные в объёме первой версии.\nscenarios:\n- Сотрудник входит под собственной учётной записью и видит общий список заявок.\n- Сотрудник вручную создаёт заявку, вводя имя клиента, телефон, текст обращения и выбирая ответственного; заявка появляется со статусом «Новая».\n- Сотрудник находит заявки по имени или телефону и сужает список фильтрами статуса и ответственного.\n- Любой из двух сотрудников редактирует заявку или меняет её статус; закрытую заявку можно вернуть в работу.\n- Сотрудник подтверждает удаление заявки; она удаляется окончательно и не восстанавливается.\n- После обновления браузера или повторного входа список и изменения остаются сохранёнными на сервере.\nacceptance_criteria:\n- У каждого из двух сотрудников есть отдельная учётная запись; после входа каждый видит и может редактировать все заявки.\n- Создание заявки требует непустого после удаления крайних пробелов имени и текста обращения, а также непустого телефона; телефон хранится как введённая строка без требования к числовому формату.\n- Новая заявка получает статус «Новая»; доступны статусы «Новая», «В работе» и «Закрыта».\n- Закрытую заявку можно перевести обратно в статус «В работе».\n- Ответственный выбирается из двух сотрудников.\n- Список по умолчанию отсортирован по времени создания от более новых заявок к более старым, без приоритета статуса.\n- Поиск позволяет находить заявки по имени клиента и телефону; фильтры позволяют ограничивать список по статусу и ответственному.\n- Поиск включает заявку тогда и только тогда, когда введённая поисковая строка содержится в имени клиента или сохранённой строке телефона без учёта регистра. Подходит часть или полное значение. Пробелы и знаки сравниваются как сохранены и введены, без удаления или замены. Пустой запрос не ограничивает список.\n- Поиск и выбранные фильтры применяются совместно: заявка должна удовлетворять каждому заданному условию. Незаданный фильтр не ограничивает список.\n- Запрос на удаление требует явного подтверждения; после подтверждения заявка окончательно удалена, корзины и восстановления нет.\n- Созданные заявки и изменения переживают обновление страницы и повторный вход, поскольку данные сохраняются на сервере.\n- Функции интеграций, уведомлений, напоминаний, отчётов и администраторских ролей не входят в первую версию.\nconstraints:\n- Первая версия предназначена для небольшой мастерской и двух сотрудников.\n- Заявки поступают по телефону и в мессенджерах и вводятся сотрудниками вручную.\n- Сервис доступен через браузер.\n- Оба сотрудника имеют одинаковые права на просмотр и редактирование всех заявок.\n- Удаление является окончательным после подтверждения.\ndependencies: []\nassumptions: []\nchecklist:\n- Две отдельные учётные записи обеспечивают вход сотрудников в общий сервис.\n- Обязательные поля и правила обработки пробелов применяются при создании заявки.\n- Статусы, назначение ответственного, поиск, фильтры и сортировка соответствуют требованиям.\n- Подтверждённое удаление не оставляет доступной функции восстановления.\n- Данные доступны после перезагрузки страницы и повторной аутентификации.\nprerequisites:\n- Для каждого из двух сотрудников должны быть доступны отдельные учётные данные для входа.\n- Для сохранения заявок сервису необходимо серверное хранилище данных.",
+          "preparation_status": "Подготовка для рассмотрения завершена."
+        },
+        "unresolved": []
+      },
+      "current_mapping": {
+        "source_parts": [
+          {
+            "start": 0,
+            "end": 89,
+            "to": "/source/request"
+          }
+        ],
+        "subject_parts": [],
+        "result_fields": [
+          {
+            "from": "/result/document_replacement",
+            "to": "/result/artifacts/0/content",
+            "name": "document_replacement"
+          }
+        ],
+        "assumptions": {
+          "value": [],
+          "basis": "No separate assumptions extracted or invented"
+        },
+        "unresolved": [
+          {
+            "from": "/unresolved/0",
+            "to": "/unresolved/0/text",
+            "kind": "question"
+          },
+          {
+            "from": "/unresolved/1",
+            "to": "/unresolved/1/text",
+            "kind": "question"
+          }
+        ]
+      },
+      "previous_mapping": {
+        "source_parts": [
+          {
+            "start": 0,
+            "end": 1513,
+            "to": "/source/request"
+          }
+        ],
+        "subject_parts": [],
+        "result_fields": [
+          {
+            "from": "/result/requirements_document",
+            "to": "/result/artifacts/0/content",
+            "name": "requirements_document"
+          },
+          {
+            "from": "/result/preparation_status",
+            "to": "/result/artifacts/1/content",
+            "name": "preparation_status"
+          }
+        ],
+        "assumptions": {
+          "value": [],
+          "basis": "No separate assumptions extracted or invented"
+        },
+        "unresolved": []
+      },
+      "mapping_notes": [
+        "Synthetic prior packet is the frozen complete PM source/document. The exact current report explicitly withdraws old source decisions and replaces the document; history must not certify the missing new packet.",
+        "This is a separate proposed CP2 history-boundary shape, not part of the eight CP1 calls. Final previous-assessment wiring and payload approval are pending.",
+        "All current/prior report texts and document values originate in the named frozen cases; no synthetic business statement has been added."
+      ]
+    }
+  ],
+  "final_case_source": {
+    "file": "docs/evidence/clean-workflow-case-labels-20261104.json",
+    "sha256": "0fbc357de5ec2f26d1636f319025c5f20aab61250fc396be353537e0475eefce",
+    "cases": 17,
+    "immutable_original": {
+      "file": "docs/evidence/advisor-v16-case-labels-20261103.json",
+      "sha256": "1ef1f4590b1242a35c6423189c8774ed844e15fec98821248d7c9631d0bfdeb3"
+    },
+    "live_source": {
+      "file": "docs/evidence/workflow-advisor-audit-live-20261103.json",
+      "sha256": "aef4bd99fe0bc5d2b91cbc7dc0f6c7159fcf3244e8636dd0f7989bdccdc9b5c0"
+    }
+  },
+  "execution_binding": {
+    "baseline": "09e123d76f6c97554123bc34d571c14e5d8d1046",
+    "checkpoint": "CP1",
+    "system_policy": "supervisor-evaluator-v17",
+    "system_source": "git:09e123d76f6c97554123bc34d571c14e5d8d1046:project_workflow/infrastructure/llm.py:PromptBuilder.SYSTEM_PROMPT",
+    "response_fields": [
+      "verdict",
+      "assessments",
+      "blockers",
+      "confidence"
+    ],
+    "assessment_fields": [
+      "covered",
+      "reason"
+    ],
+    "required_change": false,
+    "executed_calls": 0,
+    "ready_for_model_calls": false,
+    "reason": "Independent tests and integrator mapping review required before any calls"
+  },
+  "qualification_plan": {
+    "cp1": 8,
+    "cp2_reserved": 4,
+    "final_reserved": 36,
+    "max_http_calls": 48,
+    "samples_per_variant": 1,
+    "reused_calls": 0,
+    "retries": 0,
+    "baseline_mismatch": "record then evaluate paired new variant against unchanged product truth",
+    "candidate_mismatch": "stop immediately",
+    "technical_error": "stop immediately on either variant",
+    "journal": "one fixed path, reserve before call, no overwrite or resume"
+  },
+  "planned_evaluations": [
+    {
+      "checkpoint": "CP1",
+      "case_id": "actual-pm-189",
+      "variant": "old",
+      "sample": 1,
+      "expected_verdict": "PARTIAL"
+    },
+    {
+      "checkpoint": "CP1",
+      "case_id": "actual-pm-189",
+      "variant": "new",
+      "sample": 1,
+      "expected_verdict": "PARTIAL"
+    },
+    {
+      "checkpoint": "CP1",
+      "case_id": "actual-pm-190",
+      "variant": "old",
+      "sample": 1,
+      "expected_verdict": "PARTIAL"
+    },
+    {
+      "checkpoint": "CP1",
+      "case_id": "actual-pm-190",
+      "variant": "new",
+      "sample": 1,
+      "expected_verdict": "PARTIAL"
+    },
+    {
+      "checkpoint": "CP1",
+      "case_id": "actual-pm-191",
+      "variant": "old",
+      "sample": 1,
+      "expected_verdict": "PASS"
+    },
+    {
+      "checkpoint": "CP1",
+      "case_id": "actual-pm-191",
+      "variant": "new",
+      "sample": 1,
+      "expected_verdict": "PASS"
+    },
+    {
+      "checkpoint": "CP1",
+      "case_id": "pm-missing-full-153",
+      "variant": "old",
+      "sample": 1,
+      "expected_verdict": "PARTIAL"
+    },
+    {
+      "checkpoint": "CP1",
+      "case_id": "pm-missing-full-153",
+      "variant": "new",
+      "sample": 1,
+      "expected_verdict": "PARTIAL"
+    }
+  ]
+}
