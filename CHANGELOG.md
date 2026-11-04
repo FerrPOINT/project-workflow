@@ -2,6 +2,29 @@
 
 ## Unreleased — Typed Advisor V18 Checkpoints
 
+- Current CP1 is stopped on a reproduced provider-contract defect. The active
+  LiteLLM1.109.0 ChatGPT adapter (source1403f0dc2ebd) removes text.format and
+  max_output_tokens after the actual parent transform retained them. Offline
+  reproduction denies network and uses no mocks. High is preserved; temperature
+  is explicitly dropped. The effective added instruction is neutral, not the
+  bundled coding prompt; upstream output-limit support remains unverified.
+- Workflow and Base Compose now forward the explicit evaluator format. Rendered
+  config regressions pass for both settings; defaults and installed profiles are
+  unchanged. Base source fix855eb2e9 is published, not merged or activated.
+- Four route probes were frozen in64e00d2. The current route passed the compliant
+  probe, then returned {"unexpected":42} despite the strict one-field schema.
+  HTTP200/stop, actual prepared bodies and literal assistant replies are retained.
+  Execution stopped after2 calls without retry/downgrade. Campaign72/134; remaining
+  route probes,36 qualification calls and24 live calls were not executed.
+- Fix the existing adapter in its canonical source/release, not by editing the
+  active immutable bundle or weakening Workflow. No image/build/install/PM live
+  acceptance or merge was performed. Current evidence supersedes the older
+  untested-schema hypothesis below without rewriting historical results.
+- Current checks:63 focused Workflow tests,15 Base config-render tests,9 reliability
+  tests with the explicit Base SDK, Ruff and mypy169 PASS. The initial recovery test
+  failed before transport when that SDK was absent; the corrected-input retake did
+  not alter source. Production tree and installed image remain unchanged/healthy.
+
 - Base #458 is merged at6868579e without runtime activation. Shared rules now
   explicitly prohibit weakening accepted regression expectations to pass a candidate.
   Workflow is consolidated with master9c199ee but remains Draft: review confirms

@@ -1,0 +1,154 @@
+{
+  "schema": "advisor-route-contract-v1",
+  "baseline": {
+    "workflow": "91bba72317dc1031eae3b48c29651587b8d00b8e",
+    "base": "6868579ea39dd7ea898f48473d50ce5b963f2c95"
+  },
+  "checkpoint": {
+    "prepared_workflow": "64e00d2",
+    "base_configuration_fix": "855eb2e9",
+    "accepted": false,
+    "reason": "The configured provider route drops the strict output schema; acceptance stopped without downgrade."
+  },
+  "policy": "supervisor-evaluator-v18",
+  "budget": {
+    "campaign_limit": 134,
+    "previous_attempts": 70,
+    "new_attempts": 2,
+    "total_attempts": 72,
+    "route_limit": 4,
+    "route_not_run": 2,
+    "qualification_reserve": 36,
+    "live_reserve": 24
+  },
+  "provider": {
+    "repository": "https://github.com/FerrPOINT/litellm",
+    "endpoint": "http://192.168.10.1:4000/v1",
+    "model_alias": "app-test",
+    "configured_route": "chatgpt/gpt-6-luna",
+    "declared_mode": "responses",
+    "declared_supports_response_schema": true,
+    "verified_upstream_model_identity": false,
+    "service": "litellm.service",
+    "main_pid": 95779,
+    "service_active_since": "2026-10-30 00:14:21 MSK",
+    "version": "1.109.0",
+    "source_commit": "1403f0dc2ebd3112f90aae57badae40b0b36b39d",
+    "source_file": "/opt/litellm-next/releases/litellm-next-1.109.0-1403f0dc2ebd/source/litellm/llms/chatgpt/responses/transformation.py",
+    "source_sha256": "e2f3c3595d202897cc10db286e2bbb5241bce2af84c9c907a963eb8dc3471303",
+    "source_file_modified": "2026-10-30 00:14:20.868890144 +0300",
+    "runtime_pythonpath": "/opt/litellm-next/current/source:/opt/litellm-next/current/source/enterprise:/opt/litellm-next/current/source/litellm-proxy-extras",
+    "current_symlink_modified": "2026-10-29 22:01:32.464377159 +0300"
+  },
+  "offline_transform": {
+    "actual_parent_and_provider_methods": true,
+    "network_denied": true,
+    "parent_mocked": false,
+    "model_calls": 0,
+    "before_keys": [
+      "input",
+      "instructions",
+      "max_output_tokens",
+      "model",
+      "reasoning",
+      "text"
+    ],
+    "after_keys": [
+      "include",
+      "input",
+      "instructions",
+      "model",
+      "reasoning",
+      "store",
+      "stream"
+    ],
+    "schema_before_present": true,
+    "schema_after_present": false,
+    "max_output_tokens_before": 4000,
+    "max_output_tokens_after": null,
+    "reasoning_before": {
+      "effort": "high"
+    },
+    "reasoning_after": {
+      "effort": "high"
+    },
+    "effective_extra_instruction": "Follow the task instructions supplied in the conversation.",
+    "extra_instruction_characters": 58,
+    "coding_prompt_bloat_not_confirmed": true,
+    "temperature_dropped_by_route_config": true,
+    "reproducer": "import os,sys,json,hashlib,socket\nfrom pathlib import Path\nos.environ[\"LITELLM_LOCAL_MODEL_COST_MAP\"]=\"True\"\nsys.path.insert(0,\"/opt/litellm-next/current/source\")\ne=dict(v.split(\"=\",1) for v in Path(\"/proc/95779/environ\").read_text().split(\"\\0\") if \"=\" in v)\nif e.get(\"CHATGPT_DEFAULT_INSTRUCTIONS\"):os.environ[\"CHATGPT_DEFAULT_INSTRUCTIONS\"]=e[\"CHATGPT_DEFAULT_INSTRUCTIONS\"]\ndef denied(*args,**kwargs):raise AssertionError(\"Offline transform cannot use network\")\nsocket.socket.connect=denied\nsocket.create_connection=denied\nfrom litellm.llms.chatgpt.responses.transformation import ChatGPTResponsesAPIConfig\nfrom litellm.llms.openai.responses.transformation import OpenAIResponsesAPIConfig\nfrom litellm.types.router import GenericLiteLLMParams\nobj=ChatGPTResponsesAPIConfig.__new__(ChatGPTResponsesAPIConfig)\nschema={\"type\":\"object\",\"properties\":{\"probe\":{\"type\":\"string\",\"enum\":[\"schema-enforced\"]}},\"required\":[\"probe\"],\"additionalProperties\":False}\noptions={\"text\":{\"format\":{\"type\":\"json_schema\",\"name\":\"probe\",\"strict\":True,\"schema\":schema}},\"max_output_tokens\":4000,\"reasoning\":{\"effort\":\"high\"},\"instructions\":\"Evaluate only the supplied phase criteria.\"}\ninput=[{\"role\":\"user\",\"content\":\"Return JSON\"}]\nparams=GenericLiteLLMParams(model=\"gpt-6-luna\",custom_llm_provider=\"chatgpt\")\nbefore=OpenAIResponsesAPIConfig.transform_responses_api_request(obj,\"gpt-6-luna\",input,options.copy(),params,{})\nafter=obj.transform_responses_api_request(\"gpt-6-luna\",input,options.copy(),params,{})\nprint(json.dumps({\"proof_kind\":\"actual parent and provider transformations; network denied; no mocks\",\"before_keys\":sorted(before),\"after_keys\":sorted(after),\"schema_before\":before.get(\"text\"),\"schema_after\":after.get(\"text\"),\"limit_before\":before.get(\"max_output_tokens\"),\"limit_after\":after.get(\"max_output_tokens\"),\"reasoning_before\":before.get(\"reasoning\"),\"reasoning_after\":after.get(\"reasoning\"),\"instructions_before\":before.get(\"instructions\"),\"instructions_after\":after.get(\"instructions\"),\"model_calls\":0},ensure_ascii=False))\n"
+  },
+  "new_probes": {
+    "protected_journal": "advisor-route-preflight-64e00d2-20261104.json",
+    "journal_sha256": "700b5c14c868a266afe26177caa0d4d2f0302df84efaeb662a5544f0f3fbba08",
+    "actual_prepared_request_bodies_saved": true,
+    "authorization_headers_saved": false,
+    "literal_assistant_responses_saved": true,
+    "response_format": "strict json_schema; object with one required string field probe, enum schema-enforced, no extra properties",
+    "probes": [
+      {
+        "id": "compliant",
+        "status": "matched",
+        "http_status": 200,
+        "finish_reason": "stop",
+        "assistant_text": "{\"probe\": \"schema-enforced\"}"
+      },
+      {
+        "id": "unexpected-field",
+        "status": "failed",
+        "http_status": 200,
+        "finish_reason": "stop",
+        "assistant_text": "{\"unexpected\": 42}"
+      },
+      {
+        "id": "wrong-type-and-extra",
+        "status": "not_run"
+      },
+      {
+        "id": "missing-c4-reproduction",
+        "status": "not_run"
+      }
+    ]
+  },
+  "findings": [
+    "Workflow and Base Compose templates omitted explicit evaluator response format propagation; source mappings and rendered-config tests now fix that omission.",
+    "The actual ChatGPT provider transformation removes text.format after the parent transformation retained it.",
+    "The same transformation removes max_output_tokens. Backend support for forwarding this limit has not been established; do not promise it was enforced.",
+    "The route drops temperature by explicit configuration, but preserves reasoning.effort=high in the inspected transformation.",
+    "Schema mismatch is confirmed for the current route; model-internal reasons for prior semantic grading errors remain unknown.",
+    "The running service overrides the bundled coding prompt with a 58-character neutral instruction; coding-context bloat is not a confirmed cause."
+  ],
+  "references": [
+    "https://github.com/BerriAI/litellm/issues/38085",
+    "https://developers.openai.com/api/docs/guides/structured-outputs"
+  ],
+  "acceptance_stopped": {
+    "qualification_run": false,
+    "workflow_build": false,
+    "workflow_install": false,
+    "pm_live": false,
+    "merge": false,
+    "runtime_mutations": false
+  },
+  "verification": {
+    "focused_workflow_tests": 63,
+    "base_compose_render_tests": 15,
+    "reliability_with_explicit_base_sdk": 9,
+    "initial_reliability_without_sdk": "One CLI recovery test failed because pdlc_cli_core was not importable; configured.py returned shared-transport-unavailable before transport. Retake used the explicit approved Base SDK path, without source changes.",
+    "ruff": "PASS",
+    "mypy": "169 source files PASS",
+    "production_tree_unchanged": "e51d7090998b04bca27c4ec8c56e2c150faa6aad",
+    "installed_workflow_image_unchanged": "sha256:79976adbbe47c1f34ab0daab60ff4869209dcd30d36401a0ada2475a37c9b167",
+    "installed_workflow_health": "healthy"
+  },
+  "minimal_next_package": {
+    "owner": "existing LiteLLM ChatGPT adapter",
+    "change": "Preserve the already-mapped text.format unchanged in the existing request transformation.",
+    "regression": "Run actual parent and provider transforms offline; assert exact strict schema survives. Then qualify the fixed deployed route before semantic evaluation.",
+    "output_limit": "Establish backend support separately before forwarding max_output_tokens; do not silently claim enforcement.",
+    "source_delivery": "Use the canonical source and its release process; do not patch the active immutable release in place.",
+    "no_workflow_workaround": true,
+    "no_new_provider_or_model": true,
+    "no_format_downgrade": true
+  }
+}
