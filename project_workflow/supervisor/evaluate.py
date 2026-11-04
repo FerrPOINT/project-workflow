@@ -27,6 +27,10 @@ from .types import VERDICT_LABELS
 _MAX_EVALUATOR_RESPONSE_ATTEMPTS = 2
 
 
+class PhaseCriteriaConfigurationError(LlmConfigurationError):
+    """An evaluated phase/group has no configured criteria."""
+
+
 def _contract_fingerprint_state(
     *,
     builder: Any,
@@ -37,6 +41,7 @@ def _contract_fingerprint_state(
     previously_covered_ids: set[str],
     transition_routes: dict[str, tuple[str | None, str | None, str | None]],
     prompt_version: str | None = None,
+    delegation_allowed: bool | None = None,
 ) -> dict[str, Any]:
     contract_data = contract.to_dict()
     return {
@@ -45,7 +50,7 @@ def _contract_fingerprint_state(
         "contract": contract_data,
         "evaluation_items": [{"id": item_id, "text": text} for item_id, text in evaluation_items],
         "previously_covered_ids": sorted(previously_covered_ids),
-        "delegation_allowed": phase.delegate is not None,
+        "delegation_allowed": phase.delegate is not None if delegation_allowed is None else delegation_allowed,
         "group": [member.code for member in group],
         "transition_routes": transition_routes,
         "phase_graph": [
@@ -93,11 +98,13 @@ def _contract_fingerprint(
     evaluation_items: list[tuple[str, str]], previously_covered_ids: set[str],
     transition_routes: dict[str, tuple[str | None, str | None, str | None]],
     prompt_version: str | None = None,
+    delegation_allowed: bool | None = None,
 ) -> str:
     return _fingerprint_contract_state(_contract_fingerprint_state(
         builder=builder, phase=phase, group=group, contract=contract, evaluation_items=evaluation_items,
         previously_covered_ids=previously_covered_ids, transition_routes=transition_routes,
         prompt_version=prompt_version,
+        delegation_allowed=delegation_allowed,
     ))
 
 
@@ -113,6 +120,8 @@ def _blocked(exc: Exception, *, provider_outcome: str | None = None) -> LlmVerdi
     }
     if provider_outcome is not None and provider_outcome in provider_blockers:
         blocker = provider_blockers[provider_outcome]
+    elif isinstance(exc, PhaseCriteriaConfigurationError):
+        blocker = "У фазы или параллельной группы не настроены критерии проверки. Настройте checks или evidence."
     elif isinstance(exc, LlmConfigurationError):
         blocker = "Проверяющий LLM не настроен: для OpenRouter требуется OPENAI_API_KEY."
     elif isinstance(exc, (requests.Timeout, TimeoutError)):
@@ -251,9 +260,13 @@ def _evaluate_strict_response(
     attempts: list[dict[str, Any]] | None = None,
     system: str = PromptBuilder.SYSTEM_PROMPT,
     response_format: dict[str, Any] | None = None,
+    delegation_allowed: bool | None = None,
 ) -> tuple[dict[str, Any], LlmVerdict]:
     """Retry only malformed evaluator output and never relax the wire contract."""
     attempt_system = system
+    allowed = PromptBuilder.allowed_verdicts(
+        phase.delegate is not None if delegation_allowed is None else delegation_allowed,
+    )
     last_error: Exception | None = None
     for attempt_number in range(1, _MAX_EVALUATOR_RESPONSE_ATTEMPTS + 1):
         raw: dict[str, Any] | None = None
@@ -268,7 +281,7 @@ def _evaluate_strict_response(
                 **format_options,
             )
             llm = ResponseParser.parse_assessments(raw, evaluation_items=evaluation_items)
-            if llm.verdict == "DELEGATE" and phase.delegate is None:
+            if llm.verdict not in allowed:
                 raise ValueError("Для текущей фазы не настроено делегирование")
             return raw, llm
         except (TypeError, ValueError, KeyError, IndexError, AttributeError) as exc:
@@ -343,6 +356,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
     item_ids = [item_id for item_id, _ in evaluation_items]
     item_text = dict(evaluation_items)
     configured = engine.runtime_fence if isinstance(engine.runtime_fence, ConfiguredCliFence) else None
+    delegation_allowed = configured is None and current_contract.delegate_agent is not None
     system = PromptBuilder.SYSTEM_PROMPT
     prompt_version = PromptBuilder.PROMPT_VERSION
     previously = engine._get_previously_covered(phase.code)
@@ -366,6 +380,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         previously_covered_ids=previously_ids,
         transition_routes=transition_routes,
         prompt_version=prompt_version,
+        delegation_allowed=delegation_allowed,
     )
     fingerprint = _report_fingerprint(task_id, report, initial_contract_fingerprint)
     if configured is not None:
@@ -385,6 +400,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         parsed_report.model_dump(mode="json"),
         previously_covered=sorted(previously_ids) or None,
         evaluation_items=evaluation_items,
+        delegation_allowed=delegation_allowed,
     )
     evaluated_items = list(evaluation_items)
 
@@ -398,6 +414,8 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
     try:
         if catalog_error is not None:
             raise catalog_error
+        if not evaluation_items:
+            raise PhaseCriteriaConfigurationError()
         client = OpenAICompatibleClient()
         raw, llm = _evaluate_strict_response(
             client,
@@ -406,8 +424,9 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
             phase=phase,
             attempts=attempts,
             system=system,
-            response_format=(PromptBuilder.response_schema(evaluation_items)
+            response_format=(PromptBuilder.response_schema(evaluation_items, delegation_allowed=delegation_allowed)
                              if config.get_settings().OPENAI_EVALUATOR_RESPONSE_FORMAT == "json_schema" else None),
+            delegation_allowed=delegation_allowed,
         )
     except (
         requests.RequestException,
@@ -456,6 +475,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
     )
     item_ids = [item_id for item_id, _ in evaluation_items]
     item_text = dict(evaluation_items)
+    current_delegation_allowed = configured is None and current_contract.delegate_agent is not None
     previously = engine._get_previously_covered(phase.code)
     previously_ids = set(item_ids) & previously
     try:
@@ -476,6 +496,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         previously_covered_ids=previously_ids,
         transition_routes=transition_routes,
         prompt_version=prompt_version,
+        delegation_allowed=current_delegation_allowed,
     )
     current_contract_fingerprint = _fingerprint_contract_state(current_contract_state)
     current_snapshot_fingerprint = _contract_fingerprint(
@@ -487,6 +508,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         previously_covered_ids=initial_previously_ids,
         transition_routes=transition_routes,
         prompt_version=prompt_version,
+        delegation_allowed=current_delegation_allowed,
     )
     if current_snapshot_fingerprint == initial_contract_fingerprint:
         # Another identical evaluation may have committed while this provider

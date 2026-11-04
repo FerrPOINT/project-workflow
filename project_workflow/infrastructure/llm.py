@@ -167,7 +167,10 @@ class OpenAICompatibleClient:
             diagnostics["outcome"] = "http"
             resp.raise_for_status()
             diagnostics["outcome"] = "invalid_json"
-            data = resp.json()
+            try:
+                data = resp.json()
+            except RecursionError:
+                raise ValueError("Evaluator JSON exceeds supported nesting") from None
             try:
                 self._capture_response_diagnostics(data)
             except Exception as exc:
@@ -206,7 +209,10 @@ class OpenAICompatibleClient:
                 result[key] = value
             return result
 
-        parsed = json.loads(text, object_pairs_hook=unique_object)
+        try:
+            parsed = json.loads(text, object_pairs_hook=unique_object)
+        except RecursionError:
+            raise ValueError("Evaluator JSON exceeds supported nesting") from None
         if not isinstance(parsed, dict):
             raise ValueError("Supervisor response must be a JSON object")
         return parsed
@@ -215,7 +221,7 @@ class OpenAICompatibleClient:
 class PromptBuilder:
     """Build role-neutral evaluation prompts from phase criteria and reports."""
 
-    PROMPT_VERSION = "supervisor-evaluator-v15"
+    PROMPT_VERSION = "supervisor-evaluator-v16"
     SYSTEM_PROMPT = (
         "Assess whether this phase is ready using only its listed criteria and supplied facts. "
         "Use reported source facts and decisions as the reference for the artifact under review, not the reverse. "
@@ -252,6 +258,10 @@ class PromptBuilder:
     PM_SYSTEM_PROMPT = SYSTEM_PROMPT
 
     @staticmethod
+    def allowed_verdicts(delegation_allowed: bool) -> list[str]:
+        return ["PASS", "PARTIAL", "BLOCKED"] + (["DELEGATE"] if delegation_allowed else [])
+
+    @staticmethod
     def item_aliases(evaluation_items: list[tuple[str, str]]) -> dict[str, str]:
         """Label existing check/evidence IDs locally, across the whole evaluated group."""
         aliases: dict[str, str] = {}
@@ -269,7 +279,9 @@ class PromptBuilder:
         return aliases
 
     @staticmethod
-    def response_schema(evaluation_items: list[tuple[str, str]]) -> dict[str, Any]:
+    def response_schema(
+        evaluation_items: list[tuple[str, str]], *, delegation_allowed: bool = True,
+    ) -> dict[str, Any]:
         """Opt-in provider schema; local strict validation remains authoritative."""
         aliases = PromptBuilder.item_aliases(evaluation_items)
         return {
@@ -280,7 +292,7 @@ class PromptBuilder:
                 "schema": {
                     "type": "object",
                     "properties": {
-                        "verdict": {"type": "string", "enum": ["PASS", "PARTIAL", "BLOCKED", "DELEGATE"]},
+                        "verdict": {"type": "string", "enum": PromptBuilder.allowed_verdicts(delegation_allowed)},
                         "assessments": {
                             "type": "object",
                             "properties": {
@@ -313,6 +325,7 @@ class PromptBuilder:
         evaluation_items: list[tuple[str, str]] | None = None,
         *,
         pm_evaluation: bool = False,
+        delegation_allowed: bool | None = None,
     ) -> str:
         """Serialize a validated report dict; task_key and pm_evaluation are compatibility arguments."""
         if not isinstance(report, dict):
@@ -322,9 +335,9 @@ class PromptBuilder:
             from project_workflow.supervisor.contracts import PhaseContractBuilder
 
             evaluation_items = PhaseContractBuilder([phase]).build_evaluation_items(phase)
-        allowed = ["PASS", "PARTIAL", "BLOCKED"]
-        if getattr(phase, "delegate", None) is not None:
-            allowed.append("DELEGATE")
+        allowed = PromptBuilder.allowed_verdicts(
+            getattr(phase, "delegate", None) is not None if delegation_allowed is None else delegation_allowed,
+        )
         aliases = PromptBuilder.item_aliases(evaluation_items)
         descriptions = dict(evaluation_items)
         return json.dumps({
