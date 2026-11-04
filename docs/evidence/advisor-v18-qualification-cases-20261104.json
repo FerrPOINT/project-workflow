@@ -3564,12 +3564,24 @@
     }
   ],
   "http_budget": {
-    "campaign_limit": 55,
+    "campaign_limit": 100,
     "campaign_already_attempted": 55,
-    "reused_exact_successful_evaluations": 0,
-    "new_call_limit": 0,
+    "reused_exact_successful_evaluations": 15,
+    "new_call_limit": 21,
+    "reserved_live_calls": 24,
     "qualified_slots_if_all_match": 36
   },
-  "reuse": [],
+  "reuse": [
+    {
+      "file": "advisor-v18-verdict-boundary-dda58fa-20261104.json",
+      "sha256": "c42adbb21bd4323ae5c7339a2c8a0609d83fca7fe585c5860460d29a5883316e",
+      "evaluations": 4
+    },
+    {
+      "file": "advisor-v18-approved-budget-controls-a6a7cc3-20261104.json",
+      "sha256": "078e9d61035ad15c7c971f250774b8994a72f6226fccb02b2399beec255d25b3",
+      "evaluations": 11
+    }
+  ],
   "acceptance": "Every criterion and its reasons must match the independently frozen basis. Reuse only byte-identical prompts and settings. No automatic retries, relabels or model/provider switches; this dataset does not certify the quarantined old corpus."
 }

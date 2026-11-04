@@ -20,7 +20,7 @@ from project_workflow.infrastructure.llm import PromptBuilder, ResponseParser
 from scripts import qualify_clean_advisor as runner
 
 pytestmark = pytest.mark.unit
-ACTIVE_SHA256 = "bdeae83e0c5a4577000c9592854f9b407b2b4c8d1346d1b87ac4f8648fd8e7d0"
+ACTIVE_SHA256 = "e27531ce66c13254bdb22c21bc1d7a02d6a015ce2c26e1c889d8be3c3a0f73be"
 ORIGINAL_SEVENTEEN_SHA256 = "efd8e77b7ed1f74443d22822fb0fe8dc6ad85c4bb05d62e71afe792dbe65f88a"
 BASELINE = "7f7f89f0a8e249066cb08f8ad2c7c3dda07d173f"
 BASELINE_SHA256 = "acd66201eb070b6279334f77ed0723f33f8ae92efcf33d92e95a11affc262d6e"
@@ -419,15 +419,54 @@ def test_changed_system_invalidates_reuse_and_exhausted_budget_rejects_every_pla
         assert slot["labels_sha256"] == cases[slot["case_id"]]["labels_sha256"]
     budget = artifact["http_budget"]
     assert budget == {
-        "campaign_limit": 55, "campaign_already_attempted": 55, "reused_exact_successful_evaluations": 0,
-        "new_call_limit": 0, "qualified_slots_if_all_match": 36,
+        "campaign_limit": 100, "campaign_already_attempted": 55, "reused_exact_successful_evaluations": 15,
+        "new_call_limit": 21, "reserved_live_calls": 24, "qualified_slots_if_all_match": 36,
     }
-    assert artifact["reuse"] == []
+    assert sum(source["evaluations"] for source in artifact["reuse"]) == 15
+    artifact = copy.deepcopy(artifact)
+    artifact["http_budget"]["new_call_limit"] = 0
     output = tmp_path / "must-not-start.json"
     with pytest.raises(ValueError, match="remaining campaign budget"):
         runner.execute(output, artifact, cases, slots[:call_count])
     assert not output.exists()
     runner.OpenAICompatibleClient.assert_not_called()
+
+
+def test_qualification_cannot_consume_the_reserved_live_budget(loaded, tmp_path):
+    artifact, cases = loaded
+    assert artifact["http_budget"]["reserved_live_calls"] == 24
+    output = tmp_path / "must-not-spend-live-reserve.json"
+    with pytest.raises(ValueError, match="remaining campaign budget"):
+        runner.execute(output, artifact, cases, runner.plan(cases)[:22])
+    assert not output.exists()
+    runner.OpenAICompatibleClient.assert_not_called()
+
+
+def test_fifteen_reused_slots_match_the_exact_current_contract(loaded):
+    artifact, cases = loaded
+    pairs = set()
+    for source in artifact["reuse"]:
+        path = runner.LABELS.parent / source["file"]
+        assert hashlib.sha256(path.read_bytes()).hexdigest() == source["sha256"]
+        journal = json.loads(path.read_text(encoding="utf-8"))
+        assert journal["settings"] == artifact["settings"]
+        assert journal["system"]["sha256"] == artifact["system_sha256"]
+        assert len(journal["slots"]) == source["evaluations"]
+        for slot in journal["slots"]:
+            case = cases[slot["case_id"]]
+            pair = (slot["case_id"], slot["sample"])
+            assert pair not in pairs
+            pairs.add(pair)
+            assert slot["status"] == "matched"
+            assert slot["user_payload_sha256"] == case["user_payload_sha256"]
+            assert slot["labels_sha256"] == case["labels_sha256"]
+            assert json.loads(slot["diagnostics"]["prompt"]["text"]) == case["user_payload"]
+            raw = slot["diagnostics"]["response"]
+            assert raw["verdict"] == case["expected"]["verdict"]
+            assert {key: value["covered"] for key, value in raw["assessments"].items()} == {
+                key: value["covered"] for key, value in case["expected_assessments"].items()
+            }
+    assert len(pairs) == artifact["http_budget"]["reused_exact_successful_evaluations"] == 15
 
 
 @pytest.mark.parametrize("tamper", ["policy", "payload", "labels", "inventory"])
