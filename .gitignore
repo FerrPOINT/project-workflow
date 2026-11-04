@@ -76,3 +76,12 @@ target-cache*/
 target-stage/
 target-stable/
 *.tsbuildinfo
+
+# Disposable results are not repository inputs.
+.ruff_cache/
+.mypy_cache/
+.gradle/
+playwright-report/
+test-results/
+handoff/workspace-recovery*/
+docs/**/*.log

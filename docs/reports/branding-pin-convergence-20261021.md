@@ -17,8 +17,8 @@ Workflow получает общие SSR-контракты Base #298 и layout 
   scope. Дополнительно проверены границы picker 980/981 px и единая кнопка
   редактирования; удаление собственной профессии сохранило соседние fixtures.
 - Получены 17 скриншотов полного нейтрального каталога. Просмотрены
-  [форма профессии](../screenshots/branding-pin-convergence-20261021/profession-desktop.png)
-  и [mobile settings](../screenshots/branding-pin-convergence-20261021/settings-mobile.png).
+  [форма профессии](https://github.com/FerrPOINT/project-workflow/blob/c715a03265858a027125df43bbb6bcec8334e702/docs/screenshots/branding-pin-convergence-20261021/profession-desktop.png)
+  и [mobile settings](https://github.com/FerrPOINT/project-workflow/blob/c715a03265858a027125df43bbb6bcec8334e702/docs/screenshots/branding-pin-convergence-20261021/settings-mobile.png).
 
 Smoke runners обновлены на действующие контракты: общий platform mark,
 canonical UI profession_id (API namespace_id сохранён), rail 72 px вместо
