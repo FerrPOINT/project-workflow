@@ -7,9 +7,15 @@ from unittest.mock import Mock, call
 
 import pytest
 
+from project_workflow.application import standalone
+from project_workflow.application.phase import PhaseServiceApp
 from project_workflow.domain.phase_report import PhaseReport, PhaseReportFormatError
+from project_workflow.infrastructure.db import models as m
+from project_workflow.infrastructure.llm import OpenAICompatibleClient
 from project_workflow.supervisor.core import SupervisorEngine
 from project_workflow.supervisor.models import Phase, PhaseCheck, PhaseEvidence
+from tests.test_standalone_execution import local_execution as local_execution
+from tests.test_standalone_execution import report
 
 
 def _report(text):
@@ -61,7 +67,8 @@ def _record(engine, history_id, *, phase_id=1, assessments=None, group=None, **c
         "covered_item_ids": [item_id for item_id, _ in items], "missing_item_ids": [],
         "supervisor_response": {"terminal_receipt": {"history_id": history_id, "token": "private-receipt"}},
         "evaluation_snapshot": {
-            "contract_fingerprint_state": {"group": group if group is not None else [p.code for p in current_group]},
+            "evaluated_phase_group": group if group is not None else [p.code for p in current_group],
+            "contract_fingerprint_state": {"group": [p.code for p in current_group]},
             "contract_snapshot": {"evaluation_items": [{"id": item_id, "text": text} for item_id, text in items]},
             "advisor_assessments": assessments if assessments is not None else {
                 item_id: {"covered": True, "reason": f"Actual assessment {history_id}", "required_change": None}
@@ -118,6 +125,7 @@ def test_real_sqlite_repository_does_not_clip_phase_history_to_200():
             task_id=engine.task["id"], phase_id=phase.id, verdict="partial", worker_report=_report(f"Actual {number}"),
             covered_item_ids=[], missing_item_ids=[item_id for item_id, _ in items], blocker_messages=[],
             evaluation_snapshot={
+                "evaluated_phase_group": [member.code for member in group],
                 "contract_fingerprint_state": {"group": [member.code for member in group]},
                 "contract_snapshot": {"evaluation_items": [{"id": item_id, "text": text} for item_id, text in items]},
                 "advisor_assessments": {
@@ -181,25 +189,41 @@ def test_previous_group_membership_is_not_current_context(phase_history, saved_g
 def test_unknown_or_invalid_group_is_an_explicit_format_error(phase_history, saved_group):
     engine, records = phase_history
     record = _record(engine, 1)
-    record["evaluation_snapshot"]["contract_fingerprint_state"]["group"] = saved_group
+    record["evaluation_snapshot"]["evaluated_phase_group"] = saved_group
     records.append(record)
     with pytest.raises(PhaseReportFormatError, match="missing or invalid phase group"):
         engine._get_phase_evaluation_history("P1")
 
 
-@pytest.mark.parametrize("missing", ["group", "state", "snapshot"])
+@pytest.mark.parametrize("missing", ["group", "snapshot", "nonobject_snapshot"])
 def test_missing_group_proof_is_not_inferred_from_the_queried_phase(phase_history, missing):
     engine, records = phase_history
     record = _record(engine, 1)
     if missing == "group":
-        record["evaluation_snapshot"]["contract_fingerprint_state"].pop("group")
-    elif missing == "state":
-        record["evaluation_snapshot"].pop("contract_fingerprint_state")
+        record["evaluation_snapshot"].pop("evaluated_phase_group")
+    elif missing == "nonobject_snapshot":
+        record["evaluation_snapshot"] = []
     else:
         record.pop("evaluation_snapshot")
     records.append(record)
     with pytest.raises(PhaseReportFormatError, match="missing or invalid phase group"):
         engine._get_phase_evaluation_history("P1")
+
+
+@pytest.mark.parametrize("state_group", [None, ["P1", "P2"], ["P2"]])
+def test_evaluated_group_is_authoritative_not_the_current_contract_state(phase_history, state_group):
+    engine, records = phase_history
+    record = _record(engine, 1)
+    snapshot = record["evaluation_snapshot"]
+    if state_group is None:
+        snapshot.pop("contract_fingerprint_state")
+    else:
+        snapshot["contract_fingerprint_state"]["group"] = state_group
+    records.append(record)
+    assert engine._get_phase_evaluation_history("P1")["reports"] == [
+        PhaseReport.parse(record["worker_report"]).model_dump(mode="json"),
+    ]
+    assert engine._get_phase_evaluation_history("P1")["assessments"] == snapshot["advisor_assessments"]
 
 
 @pytest.mark.parametrize("change", ["text", "id", "missing_contract"])
@@ -301,6 +325,7 @@ def test_context_contains_business_reports_and_assessments_not_storage_metadata(
     assert context["reports"] == [PhaseReport.parse(record["worker_report"]).model_dump(mode="json")]
     serialized = json.dumps(context)
     for metadata in ("history_id", "task_id", "phase_id", "mode_id", "cycle_number", "terminal_receipt",
+                     "evaluated_phase_group",
                      "private-receipt", "private-request", "private-assignment", "private-hash"):
         assert metadata not in serialized
     assert context["reports"][0]["source"]["decisions"][0]["value"] is False
@@ -308,3 +333,91 @@ def test_context_contains_business_reports_and_assessments_not_storage_metadata(
     context["assessments"]["P1:check:11"]["reason"] = "Local edit"
     assert records == before
     assert engine._get_phase_evaluation_history("P1")["assessments"]["P1:check:11"]["reason"] == "Actual assessment 1"
+
+
+def test_group_split_during_provider_preserves_report_scope_and_excludes_it_from_next_context(
+    local_execution, monkeypatch,
+):
+    uow, start = local_execution
+    phases = uow.phases.list(start.workflow_id)
+    phase_service = PhaseServiceApp(uow)
+    for phase in phases:
+        phase_service.update_phase(phase.id, {"execution_type": "parallel"})
+    original_group = [phase.code for phase in phases]
+    assert original_group == ["local.1", "local.2"]
+    standalone.step(uow, start)
+    calls = []
+
+    def answer(_self, **kwargs):
+        payload = json.loads(kwargs["user"])
+        calls.append(payload)
+        first = len(calls) == 1
+        if first:
+            phase_service.update_phase(phases[1].id, {"execution_type": "sync"})
+        return {
+            "verdict": "PASS" if first else "PARTIAL",
+            "assessments": {
+                item["id"]: {"covered": first, "reason": "Exact fixture evidence",
+                             "required_change": None if first else "Complete the current phase artifact"}
+                for item in payload["criteria"]
+            },
+            "blockers": [], "confidence": 0.9,
+        }
+
+    monkeypatch.setattr(OpenAICompatibleClient, "chat", answer)
+    original = report(start, 1, key="original-group", document="Full artifact for the original parallel group")
+    blocked = standalone.step(uow, original)["result"]
+    assert len(calls) == 1 and len(calls[0]["criteria"]) == 2
+    assert blocked["verdict"] == "BLOCKED" and blocked["retryable"] is True
+    assert blocked["phase_code"] == "local.1" and not blocked["complete"]
+    task = uow.tasks.get_by_key(start.task, project_id=start.namespace_id)
+    rows = uow.step_history.list(task_id=task.id, limit=None)
+    assert len(rows) == 1
+    saved = rows[0].to_dict()
+    snapshot = saved["evaluation_snapshot"]
+    assert snapshot["raw_evaluator"]["error"] == "PhaseContractChanged"
+    assert snapshot["diagnostics"]["outcome"] == "technical_failure"
+    assert snapshot["contract_fingerprint_state"]["group"] == ["local.1"]
+    assert snapshot["evaluated_phase_group"] == original_group
+    assert snapshot["advisor_assessments"] == {}
+    assert saved["worker_report"] == original.report
+    before = deepcopy(snapshot)
+
+    next_result = standalone.step(uow, report(start, 2, key="current-group"))["result"]
+    assert len(calls) == 2 and len(calls[1]["criteria"]) == 1
+    assert calls[1]["previous_reports"] == []
+    assert all(item["previous_assessment"] is None for item in calls[1]["criteria"])
+    assert next_result["verdict"] == "PARTIAL" and not next_result["retryable"]
+    assert next_result["phase_code"] == "local.1" and not next_result["complete"]
+    assert uow.step_history.get_by_id(saved["id"]).to_dict()["evaluation_snapshot"] == before
+
+
+@pytest.mark.parametrize("group", ["missing", None, [], "local.1", ["local.1", "local.1"]])
+def test_missing_or_malformed_evaluated_group_is_a_technical_failure_without_state_fallback(
+    local_execution, monkeypatch, supervisor_llm, group,
+):
+    uow, start = local_execution
+    standalone.step(uow, start)
+    supervisor_llm("PARTIAL")
+    standalone.step(uow, report(start, 1))
+    row = uow.session.query(m.TaskStepHistoryEntry).one()
+    snapshot = json.loads(row.evaluation_snapshot)
+    assert snapshot["contract_fingerprint_state"]["group"] == ["local.1"]
+    if group == "missing":
+        snapshot.pop("evaluated_phase_group", None)
+    else:
+        snapshot["evaluated_phase_group"] = group
+    row.evaluation_snapshot = json.dumps(snapshot)
+    uow.commit()
+
+    def forbidden_call(*args, **kwargs):
+        pytest.fail("Invalid evaluated group must block before any provider call")
+
+    monkeypatch.setattr(OpenAICompatibleClient, "chat", forbidden_call)
+    result = standalone.step(uow, report(start, 2, key="invalid-evaluated-group"))["result"]
+    assert result["verdict"] == "BLOCKED" and result["retryable"] is True
+    assert result["phase_code"] == "local.1" and not result["complete"]
+    latest = uow.step_history.list(task_id=row.task_id, limit=1)[0].to_dict()["evaluation_snapshot"]
+    assert latest["raw_evaluator"]["error"] == "PhaseReportFormatError"
+    assert latest["diagnostics"]["outcome"] == "technical_failure"
+    assert latest["advisor_assessments"] == {}

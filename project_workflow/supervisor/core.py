@@ -249,8 +249,7 @@ class SupervisorEngine:
         items = dict(builder.build_parallel_evaluation_items(group))
         for run in runs:
             snapshot = run.get("evaluation_snapshot")
-            state = snapshot.get("contract_fingerprint_state") if isinstance(snapshot, dict) else None
-            saved_group = state.get("group") if isinstance(state, dict) else None
+            saved_group = snapshot.get("evaluated_phase_group") if isinstance(snapshot, dict) else None
             if (not isinstance(saved_group, list) or not saved_group
                     or any(not isinstance(code, str) or not code.strip() or code != code.strip()
                            for code in saved_group)

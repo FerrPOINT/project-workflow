@@ -293,6 +293,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
 
     builder = engine.contract_builder
     group = builder.get_parallel_group(phase) if phase.execution_type == "parallel" else [phase]
+    evaluated_phase_group = [member.code for member in group]
     current_contract = builder.build_parallel(group) if len(group) > 1 else builder.build(phase)
     evaluation_phase = phase
     if len(group) > 1:
@@ -601,6 +602,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         "evaluation_snapshot": {
             "phase_code": phase.code,
             "phase_name": evaluation_phase.name,
+            "evaluated_phase_group": evaluated_phase_group,
             "model": client.model if client is not None else None,
             "endpoint_mode": "openai-compatible",
             "prompt_version": prompt_version,

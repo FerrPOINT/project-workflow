@@ -187,6 +187,7 @@ def coverage_run(covered, *, missing=(), items=None, technical=False):
         "supervisor_response": {"retryable": technical},
         "evaluation_snapshot": {
             "contract_fingerprint_state": {"group": ["P"]},
+            "evaluated_phase_group": ["P"],
             "contract_snapshot": {} if items is None else {"evaluation_items": items},
             "advisor_assessments": {
                 item_id: {"covered": item_id in covered, "reason": "Explicit saved fixture assessment",

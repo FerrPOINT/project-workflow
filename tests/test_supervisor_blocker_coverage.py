@@ -47,6 +47,7 @@ class TestCoverageAccumulation:
             blocker_messages=[],
             evaluation_snapshot={
                 "contract_fingerprint_state": {"group": ["coverage.test"]},
+                "evaluated_phase_group": ["coverage.test"],
                 "contract_snapshot": {"evaluation_items": [
                     {"id": item_id, "text": text} for item_id, text in items.items()
                 ]},
@@ -89,6 +90,7 @@ class TestCoverageAccumulation:
                 blocker_messages=[],
                 evaluation_snapshot={
                     "contract_fingerprint_state": {"group": [member.code for member in group]},
+                    "evaluated_phase_group": [member.code for member in group],
                     "contract_snapshot": {"evaluation_items": [
                         {"id": item_id, "text": text} for item_id, text in items.items()
                     ]},

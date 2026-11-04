@@ -36,6 +36,7 @@ def _run(*, run_id=1, covered=(), missing=(), description="x < 5", retryable=Fal
         "supervisor_response": {"retryable": retryable},
         "evaluation_snapshot": {
             "contract_fingerprint_state": {"group": ["CURRENT"]},
+            "evaluated_phase_group": ["CURRENT"],
             "contract_snapshot": {"evaluation_items": [{"id": ITEM, "text": description}]},
             "advisor_assessments": {
                 item_id: {"covered": item_id in covered, "reason": "Exact saved assessment",
