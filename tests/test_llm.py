@@ -807,7 +807,8 @@ class TestEvaluatorV18PromptContract:
             "Reject missing required content, unresolved required decisions and contradictory current facts" in prompt
         )
         assert "PARTIAL requires at least one false and no blockers" in prompt
-        assert "BLOCKED requires a reported obstacle preventing required phase work" in prompt
+        assert "BLOCKED requires an explicitly reported impediment to doing the phase work" in prompt
+        assert "not just its incomplete result or an unanswered question" in prompt
 
     def test_build_user_prompt_does_not_expose_retired_target(self):
         phase = FakePhase(rollback_target_phase_code="8.IMPLEMENT")

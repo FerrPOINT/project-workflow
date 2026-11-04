@@ -2,7 +2,7 @@
   "schema": "advisor-v18-typed-qualification-v1",
   "status": "prospective_not_run",
   "policy": "supervisor-evaluator-v18",
-  "system_sha256": "e56940d00a5078a782834987c94be686261e882094e033637a91125f3a82d10d",
+  "system_sha256": "6e00082f63c0ce05166a751225afd6eb3f2aa9194757b905e175e0089f3b7c9a",
   "settings": {
     "model": "app-test",
     "reasoning_effort": "high",
@@ -3143,6 +3143,134 @@
           "previous_reports": []
         }
       }
+    },
+    {
+      "id": "external-source-access-denied",
+      "role": "project_manager",
+      "mode": "draft",
+      "phase": "PM-DRAFT-01",
+      "criteria": [
+        {
+          "id": "PM-DRAFT-01:check:1",
+          "text": "The assigned business task, source request and existing owner decisions have been read and understood.",
+          "expected": "missing",
+          "basis": "The mandatory source could not be read because its API returned HTTP 403; restore authorized access, read the request and discussion, and report the understood task and owner decisions."
+        },
+        {
+          "id": "PM-DRAFT-01:check:2",
+          "text": "The report concerns that task and states any actual access failure or unavailable required source instead of inventing facts.",
+          "expected": "covered",
+          "basis": "The report concerns the assigned task, states the actual source-access denial within this synthetic scenario and keeps the unread source contents unknown rather than inventing them."
+        },
+        {
+          "id": "PM-DRAFT-01:evidence:1",
+          "text": "A concise description of the read request and any existing discussion or owner decisions relevant to it.",
+          "expected": "missing",
+          "basis": "No readable account of the source request or owner decisions is available; restore source access, read the materials and provide their concise account."
+        }
+      ],
+      "aliases": {
+        "C1": "PM-DRAFT-01:check:1",
+        "C2": "PM-DRAFT-01:check:2",
+        "E1": "PM-DRAFT-01:evidence:1"
+      },
+      "user_payload": {
+        "phase": "Task context",
+        "allowed_verdicts": [
+          "PASS",
+          "PARTIAL",
+          "BLOCKED"
+        ],
+        "criteria": [
+          {
+            "id": "C1",
+            "text": "The assigned business task, source request and existing owner decisions have been read and understood.",
+            "previous_assessment": null
+          },
+          {
+            "id": "C2",
+            "text": "The report concerns that task and states any actual access failure or unavailable required source instead of inventing facts.",
+            "previous_assessment": null
+          },
+          {
+            "id": "E1",
+            "text": "A concise description of the read request and any existing discussion or owner decisions relevant to it.",
+            "previous_assessment": null
+          }
+        ],
+        "previous_reports": [],
+        "report": {
+          "source": {
+            "request": "",
+            "decisions": []
+          },
+          "result": {
+            "artifacts": [
+              {
+                "name": "context_status",
+                "content": "Reading the assigned task context requires the source API. It is the sole mandatory source for the request, discussion and owner decisions. The attempted read returned HTTP 403 Forbidden. Those contents remain unknown and have not been read; no source facts or owner decisions are invented. Further reading cannot proceed until source access is restored."
+              }
+            ],
+            "assumptions": []
+          },
+          "unresolved": [
+            {
+              "kind": "obstacle",
+              "text": "The sole mandatory source API returned HTTP 403 Forbidden. Restore authorized read access so the request, discussion and owner decisions can be read."
+            }
+          ]
+        }
+      },
+      "expected": {
+        "verdict": "BLOCKED",
+        "covered": [
+          "PM-DRAFT-01:check:2"
+        ],
+        "missing": [
+          "PM-DRAFT-01:check:1",
+          "PM-DRAFT-01:evidence:1"
+        ],
+        "blockers": [
+          "Authorized read access to the sole mandatory source API must be restored after HTTP 403 before the task context can be read."
+        ]
+      },
+      "expected_assessments": {
+        "C1": {
+          "covered": false,
+          "reason_basis": "The mandatory source could not be read because its API returned HTTP 403; restore authorized access, read the request and discussion, and report the understood task and owner decisions."
+        },
+        "C2": {
+          "covered": true,
+          "reason_basis": "The report concerns the assigned task, states the actual source-access denial within this synthetic scenario and keeps the unread source contents unknown rather than inventing them."
+        },
+        "E1": {
+          "covered": false,
+          "reason_basis": "No readable account of the source request or owner decisions is available; restore source access, read the materials and provide their concise account."
+        }
+      },
+      "user_payload_sha256": "0ad4f55cce5c782c344294b41293a74fe055f1ffc9f4a7420e3a50e5632b7c52",
+      "labels_sha256": "475e34037640d6bff237b7b77eb764b360922558d609abb55f8bd6cfd097c4c7",
+      "provenance": {
+        "original": {
+          "synthetic": true,
+          "declared_before_model_calls": true,
+          "actual_http_performed": false,
+          "source_case": "pm-context-not-read",
+          "source_user_payload_sha256": "94bfa19227b2b1971d74b3624cbebd04c52c8023aaae6b40ad5cff1ec3d921d9",
+          "scope": "Prospective external-obstacle countercontrol authorized alongside the UI-agent-reviewed sole-source HTTP 403 contract; not live API evidence.",
+          "blocker_comparison": "Require a meaningful external source-access obstacle, not literal agreement with the expected blocker wording."
+        },
+        "qualification_adaptation": {
+          "source": "Empty request and decisions preserve unknown source contents",
+          "result": "Synthetic access-read result only; no request facts or owner decisions supplied",
+          "unresolved": "Explicit obstacle: restore authorized access to the sole mandatory source",
+          "previous_assessments": {
+            "synthetic": false,
+            "item_ids": []
+          },
+          "previous_reports": []
+        }
+      }
     }
   ],
   "planned_evaluations": [
@@ -3283,6 +3411,14 @@
       "labels_sha256": "3cc758af20e1f5b3046a55f58ac8b3da56165f853a03eeb754511ef3af0a92b7"
     },
     {
+      "case_id": "external-source-access-denied",
+      "sample": 1,
+      "policy": "supervisor-evaluator-v18",
+      "status": "not_run",
+      "user_payload_sha256": "0ad4f55cce5c782c344294b41293a74fe055f1ffc9f4a7420e3a50e5632b7c52",
+      "labels_sha256": "475e34037640d6bff237b7b77eb764b360922558d609abb55f8bd6cfd097c4c7"
+    },
+    {
       "case_id": "pm-context-164",
       "sample": 2,
       "policy": "supervisor-evaluator-v18",
@@ -3419,27 +3555,19 @@
       "labels_sha256": "3cc758af20e1f5b3046a55f58ac8b3da56165f853a03eeb754511ef3af0a92b7"
     },
     {
-      "case_id": "pm-unresolved-retention-policy",
-      "sample": 3,
+      "case_id": "external-source-access-denied",
+      "sample": 2,
       "policy": "supervisor-evaluator-v18",
       "status": "not_run",
-      "user_payload_sha256": "36d92c1a6da9b3f2eb313b86a0c00a5b79c52b42bda1871fa3b3857fc06748fc",
-      "labels_sha256": "8da26ffa196386b14fbd6768854ae326fa858d59d9bd95ae3497d85af22d6f7d"
-    },
-    {
-      "case_id": "pm-unresolved-retention-policy",
-      "sample": 4,
-      "policy": "supervisor-evaluator-v18",
-      "status": "not_run",
-      "user_payload_sha256": "36d92c1a6da9b3f2eb313b86a0c00a5b79c52b42bda1871fa3b3857fc06748fc",
-      "labels_sha256": "8da26ffa196386b14fbd6768854ae326fa858d59d9bd95ae3497d85af22d6f7d"
+      "user_payload_sha256": "0ad4f55cce5c782c344294b41293a74fe055f1ffc9f4a7420e3a50e5632b7c52",
+      "labels_sha256": "475e34037640d6bff237b7b77eb764b360922558d609abb55f8bd6cfd097c4c7"
     }
   ],
   "http_budget": {
     "campaign_limit": 48,
-    "campaign_already_attempted": 24,
+    "campaign_already_attempted": 39,
     "reused_exact_successful_evaluations": 0,
-    "new_call_limit": 24,
+    "new_call_limit": 9,
     "qualified_slots_if_all_match": 36
   },
   "reuse": [],

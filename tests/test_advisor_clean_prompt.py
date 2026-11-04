@@ -66,7 +66,8 @@ def test_v18_uses_one_role_neutral_assessment_contract():
         "Derive verdict from these marks",
         "PASS requires all true and no blockers",
         "PARTIAL requires at least one false and no blockers",
-        "BLOCKED requires a reported obstacle preventing required phase work",
+        "BLOCKED requires an explicitly reported impediment to doing the phase work",
+        "not just its incomplete result or an unanswered question",
         "DELEGATE requires permission, missing work and no blockers",
         "required_change names the sufficient correction; for a true mark it is null",
     ):

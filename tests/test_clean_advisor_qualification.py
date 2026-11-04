@@ -66,7 +66,9 @@ def test_default_is_offline_and_prints_only_36_metadata_slots(monkeypatch, capsy
     assert plan["mode"] == "offline" and plan["max_http_calls"] == 36
     assert len(plan["requests"]) == 36
     counts = Counter(slot["case_id"] for slot in plan["requests"])
-    assert len(counts) == 17 and counts.pop("pm-unresolved-retention-policy") == 4 and set(counts.values()) == {2}
+    assert len(counts) == 18 and set(counts.values()) == {2}
+    assert {slot["sample"] for slot in plan["requests"]} == {1, 2}
+    assert len({(slot["case_id"], slot["sample"]) for slot in plan["requests"]}) == 36
     assert {slot["policy"] for slot in plan["requests"]} == {"supervisor-evaluator-v18"}
     assert all(slot["status"] == "not_run" and "report" not in slot for slot in plan["requests"])
     constructor.assert_not_called()
@@ -81,7 +83,8 @@ def test_execute_and_output_are_both_required(arguments):
 
 def test_frozen_hashes_and_exact_alias_mapping_are_checked(frozen):
     _, cases, slots = frozen
-    assert len(slots) == runner.MAX_CALLS
+    assert len(cases) == 18 and len(slots) == runner.MAX_CALLS == 36
+    assert Counter(slot["case_id"] for slot in slots) == dict.fromkeys(cases, 2)
     for case in cases.values():
         assert runner.digest(case["user_payload"]) == case["user_payload_sha256"]
         assert runner.digest(case["expected_assessments"]) == case["labels_sha256"]
@@ -174,6 +177,40 @@ def test_reason_review_is_manual_and_known_secret_is_redacted(frozen, tmp_path, 
     assert reason == "Unsupported reason [REDACTED]"
     assert result["manual_reason_review"].startswith("pending_independent_review")
     assert result["qualified"] is False
+
+
+def test_blocked_control_allows_free_phrasing_but_requires_manual_review(frozen, tmp_path, monkeypatch):
+    artifact, cases, slots = frozen
+    [(case_id, case)] = [(key, value) for key, value in cases.items() if value["expected"]["verdict"] == "BLOCKED"]
+    assert {label: mark["covered"] for label, mark in case["expected_assessments"].items()} == {
+        "C1": False, "C2": True, "E1": False,
+    }
+    assert case["user_payload"]["criteria"] == cases["pm-context-not-read"]["user_payload"]["criteria"]
+    selected = [copy.deepcopy(next(slot for slot in slots if slot["case_id"] == case_id))]
+    raw = wire(case)
+    reasons = {
+        "C1": "Запрос и решения ещё не прочитаны: предоставленный источник недоступен.",
+        "C2": "Указан конкретный отказ чтения по назначенной задаче без подстановки неизвестных фактов.",
+        "E1": "Описание запроса и обсуждения отсутствует, поскольку материалы не получены.",
+    }
+    for label, assessment in raw["assessments"].items():
+        assessment["reason"] = reasons[label]
+        if not assessment["covered"]:
+            assessment["required_change"] = "После восстановления доступа прочитать материалы и описать их содержание."
+    raw["blockers"] = ["Источник не выдаёт содержимое задачи; без восстановления чтения ознакомиться с ним невозможно."]
+    assert raw["blockers"] != case["expected"]["blockers"]
+    post = Mock(return_value=response(raw))
+    monkeypatch.setattr("project_workflow.infrastructure.llm.requests.post", post)
+    output = tmp_path / "blocked-manual.json"
+
+    result = runner.execute(output, artifact, cases, selected)
+
+    post.assert_called_once()
+    assert result["attempted_calls"] == 1 and result["slots"][0]["status"] == "matched"
+    assert result["status"] == "awaiting_independent_reason_review" and result["qualified"] is False
+    assert result["manual_reason_review"] == "pending_independent_review_against_frozen_reason_basis"
+    assert result["slots"][0]["diagnostics"]["response"] == raw
+    assert json.loads(output.read_text(encoding="utf-8")) == result
 
 
 def test_settings_mismatch_stops_before_any_http(frozen, tmp_path, monkeypatch):

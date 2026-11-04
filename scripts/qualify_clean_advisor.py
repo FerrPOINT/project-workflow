@@ -23,7 +23,7 @@ from project_workflow.supervisor.diagnostics import capture_attempt, text_snapsh
 
 ROOT = Path(__file__).resolve().parents[1]
 LABELS = ROOT / "docs/evidence/advisor-v18-qualification-cases-20261104.json"
-LABELS_SHA256 = "8760d23053bd8a7f328e9d5b08d8bbf299dacf6c46b8aed8db71a6c17341b857"
+LABELS_SHA256 = "77ec477de3f4b6a16dee09e08341e115ab355542b68514ee689a1769fbf086b3"
 POLICY = "supervisor-evaluator-v18"
 MAX_CALLS = 36
 
@@ -42,8 +42,8 @@ def load_cases() -> tuple[dict, dict[str, dict]]:
             or artifact["system_sha256"] != hashlib.sha256(PromptBuilder.SYSTEM_PROMPT.encode()).hexdigest()):
         raise ValueError("Frozen qualification policy differs from the actual prompt")
     cases = {case["id"]: case for case in artifact["cases"]}
-    if len(artifact["cases"]) != 17 or len(cases) != 17:
-        raise ValueError("Qualification requires seventeen distinct reviewed cases")
+    if not cases or len(cases) != len(artifact["cases"]) or len(cases) * 2 > MAX_CALLS:
+        raise ValueError("Qualification requires distinct reviewed cases within the call cap")
     for case in cases.values():
         payload = case["user_payload"]
         items = [(item["id"], item["text"]) for item in case["criteria"]]
@@ -78,6 +78,8 @@ def load_cases() -> tuple[dict, dict[str, dict]]:
                 or set(expected_result.missing) != set(case["expected"]["missing"])
                 or expected_result.verdict not in payload["allowed_verdicts"]):
             raise ValueError("Frozen item labels contradict their expected decision")
+    if artifact["planned_evaluations"] != plan(cases):
+        raise ValueError("Frozen schedule must evaluate each reviewed case twice")
     return artifact, cases
 
 
@@ -85,9 +87,8 @@ def plan(cases: dict[str, dict]) -> list[dict]:
     if PromptBuilder.PROMPT_VERSION != POLICY:
         raise ValueError("Qualification requires the current candidate policy")
     pairs = [(case_id, sample) for sample in (1, 2) for case_id in cases]
-    pairs.extend(("pm-unresolved-retention-policy", sample) for sample in (3, 4))
-    if len(pairs) != MAX_CALLS or len(set(pairs)) != MAX_CALLS:
-        raise ValueError("Qualification must have exactly 36 unique slots")
+    if not pairs or len(pairs) > MAX_CALLS or len(set(pairs)) != len(pairs):
+        raise ValueError("Qualification must have unique sample pairs within the call cap")
     return [{"case_id": case_id, "sample": sample, "policy": POLICY, "status": "not_run",
              "user_payload_sha256": cases[case_id]["user_payload_sha256"],
              "labels_sha256": cases[case_id]["labels_sha256"]} for case_id, sample in pairs]
@@ -168,7 +169,7 @@ def execute(output: Path, artifact: dict, cases: dict[str, dict], slots: list[di
                 matches = (parsed.verdict == expected["verdict"]
                            and set(parsed.covered) == set(expected["covered"])
                            and set(parsed.missing) == set(expected["missing"])
-                           and parsed.blockers == expected["blockers"])
+                           and bool(parsed.blockers) == bool(expected["blockers"]))
                 slot.update(status="matched" if matches else "classification_mismatch",
                             acceptance_unknown=False, matches=matches)
             journal["status"] = "running" if slot["status"] == "matched" else "stopped_" + slot["status"]

@@ -20,7 +20,8 @@ from project_workflow.infrastructure.llm import PromptBuilder, ResponseParser
 from scripts import qualify_clean_advisor as runner
 
 pytestmark = pytest.mark.unit
-ACTIVE_SHA256 = "8760d23053bd8a7f328e9d5b08d8bbf299dacf6c46b8aed8db71a6c17341b857"
+ACTIVE_SHA256 = "77ec477de3f4b6a16dee09e08341e115ab355542b68514ee689a1769fbf086b3"
+ORIGINAL_SEVENTEEN_SHA256 = "efd8e77b7ed1f74443d22822fb0fe8dc6ad85c4bb05d62e71afe792dbe65f88a"
 BASELINE = "7f7f89f0a8e249066cb08f8ad2c7c3dda07d173f"
 BASELINE_SHA256 = "acd66201eb070b6279334f77ed0723f33f8ae92efcf33d92e95a11affc262d6e"
 ARCHIVES = {
@@ -40,7 +41,8 @@ PM_CONTROLS = ("pm-unresolved-retention-policy", "pm-private-access-contradictio
 ANALYST_CONTROLS = ("analyst-explicit-source-complete", "incremental-explicit-source-analysis-complete")
 ARCHITECT_CONTROL = "architect-direct-dataflow-complete"
 TESTER_CONTROL = "tester-needs-rework-explicit-untested"
-SYNTHETIC = {*PM_CONTROLS, *ANALYST_CONTROLS, ARCHITECT_CONTROL, TESTER_CONTROL}
+ACCESS_CONTROL = "external-source-access-denied"
+SYNTHETIC = {*PM_CONTROLS, *ANALYST_CONTROLS, ARCHITECT_CONTROL, TESTER_CONTROL, ACCESS_CONTROL}
 
 
 @pytest.fixture(autouse=True)
@@ -79,7 +81,11 @@ def test_one_flat_file_preserves_original_gold_and_exact_inventory(loaded, archi
     assert artifact["policy"] == PromptBuilder.PROMPT_VERSION == runner.POLICY == "supervisor-evaluator-v18"
     assert artifact["system_sha256"] == hashlib.sha256(PromptBuilder.SYSTEM_PROMPT.encode()).hexdigest()
     assert artifact["settings"] == archives["clean-workflow-case-labels-20261104.json"]["settings"]
-    assert len(cases) == len(artifact["cases"]) == len(historical) == 17
+    assert len(cases) == len(artifact["cases"]) == 18
+    assert len(historical) == 17
+    assert runner.digest([case for case in artifact["cases"] if case["id"] != ACCESS_CONTROL]) == (
+        ORIGINAL_SEVENTEEN_SHA256
+    )
     assert set(artifact["quarantined_archived_cases"]) == QUARANTINED
     retained = set(historical) - QUARANTINED
     assert len(retained) == 11 and set(cases) == retained | SYNTHETIC
@@ -232,7 +238,7 @@ def test_five_archived_controls_keep_exact_typed_reports_history_labels_and_prov
     _, cases = loaded
     controls = {case["id"]: case for name, manifest in archives.items()
                 if name.startswith("advisor-v18-") for case in manifest["cases"]}
-    assert set(controls) == SYNTHETIC - {TESTER_CONTROL}
+    assert set(controls) == SYNTHETIC - {TESTER_CONTROL, ACCESS_CONTROL}
     for case_id, declared in controls.items():
         case = cases[case_id]
         payload = case["user_payload"]
@@ -343,6 +349,59 @@ def test_prospective_tester_changes_only_untested_disclosure_not_executions_or_o
     assert old == before
 
 
+def test_external_source_denial_is_synthetic_unknown_context_not_unperformed_work(loaded):
+    _, cases = loaded
+    original = cases["pm-context-not-read"]
+    case = cases[ACCESS_CONTROL]
+    for field in ("role", "mode", "phase", "aliases"):
+        assert case[field] == original[field]
+    assert [(row["id"], row["text"], row["expected"]) for row in case["criteria"]] == [
+        (row["id"], row["text"], row["expected"]) for row in original["criteria"]
+    ]
+    payload = copy.deepcopy(original["user_payload"])
+    payload["report"] = {
+        "source": {"request": "", "decisions": []},
+        "result": {
+            "artifacts": [{
+                "name": "context_status",
+                "content": (
+                    "Reading the assigned task context requires the source API. It is the sole mandatory source "
+                    "for the request, discussion and owner decisions. The attempted read returned HTTP 403 Forbidden. "
+                    "Those contents remain unknown and have not been read; no source facts or owner decisions are "
+                    "invented. Further reading cannot proceed until source access is restored."
+                ),
+            }],
+            "assumptions": [],
+        },
+        "unresolved": [{
+            "kind": "obstacle",
+            "text": (
+                "The sole mandatory source API returned HTTP 403 Forbidden. Restore authorized read access "
+                "so the request, discussion and owner decisions can be read."
+            ),
+        }],
+    }
+    assert case["user_payload"] == payload
+    assert case["expected"]["verdict"] == "BLOCKED"
+    assert case["expected"]["covered"] == original["expected"]["covered"]
+    assert case["expected"]["missing"] == original["expected"]["missing"]
+    assert len(case["expected"]["blockers"]) == 1
+    assert case["expected"]["blockers"][0].strip()
+    assert {label: row["covered"] for label, row in case["expected_assessments"].items()} == {
+        "C1": False, "C2": True, "E1": False,
+    }
+    for row in case["criteria"]:
+        label = next(label for label, item_id in case["aliases"].items() if item_id == row["id"])
+        assert row["basis"] == case["expected_assessments"][label]["reason_basis"]
+        assert row["basis"].strip()
+    provenance = case["provenance"]["original"]
+    assert provenance["synthetic"] is True
+    assert provenance["declared_before_model_calls"] is True
+    assert provenance["actual_http_performed"] is False
+    assert provenance["source_case"] == original["id"]
+    assert provenance["source_user_payload_sha256"] == original["user_payload_sha256"]
+
+
 def test_changed_system_invalidates_reuse_and_full_plan_cannot_exceed_campaign_budget(loaded, tmp_path):
     artifact, cases = loaded
     slots = runner.plan(cases)
@@ -350,7 +409,8 @@ def test_changed_system_invalidates_reuse_and_full_plan_cannot_exceed_campaign_b
     assert pairs == [(slot["case_id"], slot["sample"]) for slot in artifact["planned_evaluations"]]
     assert len(pairs) == len(set(pairs)) == 36
     counts = Counter(case_id for case_id, _ in pairs)
-    assert len(counts) == 17 and counts.pop(PM_CONTROLS[0]) == 4 and set(counts.values()) == {2}
+    assert len(counts) == 18 and set(counts.values()) == {2}
+    assert set(pairs) == {(case_id, sample) for case_id in cases for sample in (1, 2)}
     assert QUARANTINED.isdisjoint(counts)
     for slot in slots:
         assert slot["policy"] == PromptBuilder.PROMPT_VERSION
@@ -358,8 +418,8 @@ def test_changed_system_invalidates_reuse_and_full_plan_cannot_exceed_campaign_b
         assert slot["labels_sha256"] == cases[slot["case_id"]]["labels_sha256"]
     budget = artifact["http_budget"]
     assert budget == {
-        "campaign_limit": 48, "campaign_already_attempted": 24, "reused_exact_successful_evaluations": 0,
-        "new_call_limit": 24, "qualified_slots_if_all_match": 36,
+        "campaign_limit": 48, "campaign_already_attempted": 39, "reused_exact_successful_evaluations": 0,
+        "new_call_limit": 9, "qualified_slots_if_all_match": 36,
     }
     assert artifact["reuse"] == []
     output = tmp_path / "must-not-start.json"

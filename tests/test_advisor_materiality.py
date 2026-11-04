@@ -38,6 +38,10 @@ def test_current_prompt_preserves_checkpoint_outside_reviewed_instructions():
         "Return one assessment per listed label, judging the whole criterion and only its applicable branch. ",
         "Evaluate a conditional requirement only when its condition holds for the reported work outcome; "
         "do not import obligations from another outcome branch. Return one assessment per listed label. ",
+    ).replace(
+        "BLOCKED requires a reported obstacle preventing required phase work; ",
+        "BLOCKED requires an explicitly reported impediment to doing the phase work, "
+        "not just its incomplete result or an unanswered question; ",
     )
     assert PromptBuilder.SYSTEM_PROMPT == expected
     assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v18"

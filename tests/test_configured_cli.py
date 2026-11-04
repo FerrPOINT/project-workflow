@@ -568,6 +568,106 @@ def test_first_phase_response_evidence_reaches_verifier_without_forcing_pass(
     assert result["complete"] is False and "terminal_receipt" not in result
 
 
+def test_valid_blocked_report_allows_continuation_and_preserves_old_readback(configured, supervisor_llm, monkeypatch):
+    """Exercise API mechanics with explicit verdict fixtures, not model semantics."""
+    from unittest.mock import Mock
+
+    from project_workflow.infrastructure.llm import OpenAICompatibleClient
+
+    client, assignment = configured
+    enroll(configured)
+    response = step(configured)
+    assert response.status_code == 200, response.text
+    initial = response.json()["result"]
+    assert initial["phase_code"] == "PM-DRAFT-01" and initial["status"] == "active"
+
+    blocker = "The required context source returned HTTP 403; its contents cannot be read."
+    blocked_report = report_json(blocker, unresolved=[blocker])
+    supervisor_llm("BLOCKED", blockers=[blocker])
+    blocked_model = Mock(wraps=OpenAICompatibleClient.chat)
+    monkeypatch.setattr(OpenAICompatibleClient, "chat", blocked_model)
+    response = step(configured, report=blocked_report, operation_key="context-blocked",
+                    expected_version=initial["version"])
+    assert response.status_code == 200, response.text
+    blocked = response.json()["result"]
+    assert blocked["verdict"] == "BLOCKED" and blocked["retryable"] is False
+    assert blocked["phase_code"] == initial["phase_code"] and blocked["status"] == "blocked"
+    assert blocked["version"] == initial["version"] + 1
+    assert blocked["blockers"] == [blocker] and blocked["next_phase_code"] is None
+    assert blocked["complete"] is False
+    blocked_model.assert_called_once()
+
+    with SAUnitOfWork() as uow:
+        task = uow.session.scalar(select(m.Task).where(
+            m.Task.task_key == assignment["task"], m.Task.project_id == assignment["namespace_id"]))
+        assert task is not None and task.status == "blocked"
+        task_id, first_phase_id = task.id, task.current_phase_id
+        assert uow.phases.get_by_id(first_phase_id).code == "PM-DRAFT-01"
+        assert list(uow.session.scalars(select(m.TaskPhaseEvent.event_type).where(
+            m.TaskPhaseEvent.task_id == task_id).order_by(m.TaskPhaseEvent.id))) == ["entered", "blocked"]
+
+    restored_report = report_json(
+        "Access was restored. The assigned request and existing owner decisions have now been read and understood.",
+        source="The owner requests a private notebook for customer requests.",
+    )
+    supervisor_llm("PASS")
+    restored_model = Mock(wraps=OpenAICompatibleClient.chat)
+    monkeypatch.setattr(OpenAICompatibleClient, "chat", restored_model)
+    response = step(configured, report=restored_report, operation_key="context-restored",
+                    expected_version=blocked["version"])
+    assert response.status_code == 200, response.text
+    advanced = response.json()["result"]
+    assert advanced["verdict"] == "PASS" and advanced["retryable"] is False
+    assert advanced["phase_code"] == "PM-DRAFT-02" and advanced["status"] == "active"
+    assert advanced["version"] == blocked["version"] + 1 and advanced["complete"] is False
+    assert advanced["blockers"] == []
+    assert advanced["execution_ref"] == initial["execution_ref"] == blocked["execution_ref"]
+    assert advanced["assignment_ref"] == initial["assignment_ref"] == blocked["assignment_ref"]
+    restored_model.assert_called_once()
+
+    def persisted_state():
+        with SAUnitOfWork() as uow:
+            task_state = uow.session.execute(select(
+                m.Task.current_phase_id, m.Task.status, m.Task.assignment_operation_key,
+                m.Task.assignment_revision, m.Task.mode_id, m.Task.cycle_number,
+            ).where(m.Task.id == task_id)).one()
+            history = list(uow.session.execute(select(
+                m.TaskStepHistoryEntry.id, m.TaskStepHistoryEntry.worker_report,
+                m.TaskStepHistoryEntry.supervisor_response,
+            ).where(m.TaskStepHistoryEntry.task_id == task_id).order_by(m.TaskStepHistoryEntry.id)))
+            events = list(uow.session.execute(select(
+                m.TaskPhaseEvent.phase_id, m.TaskPhaseEvent.event_type,
+            ).where(m.TaskPhaseEvent.task_id == task_id).order_by(m.TaskPhaseEvent.id)))
+            assignments = list(uow.session.execute(select(
+                m.TaskRuntimeAssignment.operation_key, m.TaskRuntimeAssignment.payload,
+            ).where(m.TaskRuntimeAssignment.task_id == task_id).order_by(m.TaskRuntimeAssignment.id)))
+            return task_state, history, events, assignments
+
+    before_readback = persisted_state()
+    task_state, history, events, assignments = before_readback
+    second_phase_id = task_state[0]
+    assert second_phase_id != first_phase_id
+    assert task_state[1:4] == ("active", assignment["operation_key"], 1)
+    assert [row[1] for row in history] == [blocked_report, restored_report]
+    assert [json.loads(row[2]) for row in history] == [blocked, advanced]
+    assert events == [(first_phase_id, "entered"), (first_phase_id, "blocked"),
+                      (first_phase_id, "resumed"), (first_phase_id, "completed"), (second_phase_id, "entered")]
+    assert len(assignments) == 1 and assignments[0][0] == assignment["operation_key"]
+
+    forbidden_model = Mock(side_effect=AssertionError("Operation readback must not invoke the model"))
+    monkeypatch.setattr(OpenAICompatibleClient, "chat", forbidden_model)
+    response = client.get("/internal/runtime/history", headers=MACHINE, params={
+        "interaction_protocol": "configured-cli-v1", "task": assignment["task"],
+        "namespace_id": assignment["namespace_id"], "operation_key": "context-blocked",
+    })
+    assert response.status_code == 200, response.text
+    records = response.json()["result"]["records"]
+    assert len(records) == 1 and records[0]["worker_report"] == blocked_report
+    assert records[0]["result"] == blocked
+    forbidden_model.assert_not_called()
+    assert persisted_state() == before_readback
+
+
 def test_exact_report_replay_and_changed_payload_conflict(configured, supervisor_llm):
     enroll(configured)
     supervisor_llm("PASS")
