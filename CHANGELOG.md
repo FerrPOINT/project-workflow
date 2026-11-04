@@ -2,71 +2,40 @@
 
 ## Unreleased — Typed Advisor V18 Checkpoints
 
-- Current source resumes in this PR, without a new branch: typed reports, complete
-  scoped phase/group history, latest criterion assessments and required_change.
-  Exact context is frozen/rechecked around the provider call. Technical errors
-  preserve prior assessments; readback never reevaluates or promotes old formats.
-- Independent review closed accepted-archive replay-before-parse and null context
-  fingerprint validation. New regressions cover both, same-ID report/reason mutation,
-  phase isolation and CLI/API/storage data equality. Focused tests pass; Ruff and
-  mypy169 files pass. The completed native diagnostic had3647 passes,535 failures,
-  29 errors and15 skips. Obsolete fixtures are being corrected against the current
-  contract; this run is not a passed gate. PostgreSQL/coverage/image/live remain open.
-- Current targeted packages pass449 tests plus72 LLM and39 state-fixture checks;
-  Base skills package a25c4ef4 passes39 tests and no longer requests hashes in
-  Advisor reports. These are source checks, not a green full release gate.
-- The model campaign has used24/48 calls. All raw requests/responses are
-  retained. The first new response rejected C3 but incorrectly treated
-  its own C3 finding as E2 report evidence; subsequent responses matched neither frozen
-  negative190 label nor its old rationale. No retry, installation or credentials change.
-- Independent adversarial review then found189/190 ambiguous as mandatory negatives:
-  the criteria do not require literal status names or separate approval of every
-  ordinary default. Original labels/results remain unchanged, not relabelled as PASS.
-  New controls must test explicit material gaps/contradictions, not force a missing word.
-- Moving the verbatim reported owner approval into source.decisions, without
-  changing the prompt or document, passed all7 final-phase items. The next refusal
-  exposed unsupported access/failure rules in the Analyst positive fixture; an
-  independent audit found15 consistent and2 invalid positives. Old gold/results
-  remain unchanged; no prompt weakening or installation follows that refusal.
-- New explicit-source Analyst and direct-dataflow Architect controls passed;
-  unsupported fixture facts were removed, not silently accepted by changing gold.
-  Active qualification now reads one frozen typed dataset, without archive adapters.
-  Tester then exposed a confirmed branch-selection error: its needs_rework result
-  has reproduction and expected/actual facts, but C2 imports passed-only coverage.
-  The prompt candidate is not qualified. A changed system invalidates exact reuse;
-  a new34-call qualification would exceed the remaining24-call campaign budget.
-- One conditional-rule replacement used the correct needs_rework branch, then
-  correctly rejected an undisclosed untested case under C1. Independent review
-  corrected its own earlier oracle analysis. The old all-true Tester fixture is
-  preserved; its prospective replacement discloses the untested case without
-  inventing execution. No further prompt addition or repeat-to-PASS followed.
-- The corrected prospective report passed twice; the unchanged private-access
-  contradiction was rejected. Independent review confirmed all14 assessment
-  reasons and required_change values in these3 responses. This validates only
-  the limited experiment, not the entire candidate or live PM operation.
-- Direct Python Settings now defaults to reasoning high, matching Compose and
-  the published environment example; explicitly configured experiments stay unchanged.
-  Focused prompt/client/runner checks pass135; affected client/config/stage checks
-  pass118; the rechecked prior-failure set passed445 with one stale literal
-  assertion subsequently corrected (all10 stage checks pass). Counts overlap.
-- Review reproduced phase-group scope contamination when a parallel member changes
-  during inference. New records preserve the original evaluated_phase_group;
-  context never substitutes the post-call catalog group. Missing/malformed scope
-  fails explicitly before inference, without an archived-metadata fallback.
-  The focused phase-history suite passes61 regressions, including the concurrent split.
-- CLI now accepts the server's explicit archived history projection without
-  inventing an executing agent or weakening cursor/write identity checks.
-  Archive pages are restricted to ordinary platform history with their exact
-  envelope; transport and archive API tests pass109. README no longer advertises
-  local-DB/token-selected CLI paths or plaintext report submissions.
-- Completed native run at2554253:4294 passed,75 subtests passed,15 skipped,
-  132 deselected;2 failures were obsolete literal expectations in the materiality
-  and README tests. Both were aligned to the reviewed prompt/HTTP CLI contract;
-  all18 tests in those files now pass. Product source did not change.
-  This does not rewrite the original nonzero native result as a successful gate.
-- The redundant experiment branch was removed after verifying its commit is an
-  ancestor of this branch. All source/evidence remains reachable at f34bbbe.
-  Candidate policy v18 is not qualified, installed, merged or accepted live.
+- One typed report contract, complete current-phase/group reports and latest compatible
+  assessments. Original group provenance survives concurrent catalog changes; exact
+  context is rechecked after inference. Technical failures preserve prior assessments.
+- Accepted readback precedes new-report parsing and never reexecutes a transition.
+  CLI supports explicit archived history without impersonating an executing agent.
+  Owner authorization and exact confirmation checks remain server-side.
+- Python defaults now match Compose's reasoning high. The configured app-test/high/
+  4000/json_object experiment and installed PM credentials/model are unchanged.
+- Full native plus coverage at b200f21:4296 passed,75 subtests passed,15 skipped,
+  132 PostgreSQL cases deselected; coverage94.0675% against94%. Ruff and mypy169 pass.
+  Later prompt-only changes are checked separately, not misreported as that exact run.
+- Independent model review covered17 cases/18 evaluations of system e56940d0:
+  all85 item assessments were supported. One result exposed an underspecified
+  BLOCKED/PARTIAL boundary, not lost context or a false acceptance.
+- The candidate replaces only that general verdict definition: incomplete phase
+  work or an unanswered question alone is not an external obstacle. No enum/keyword
+  grading, verdict repair, extra model or phase-criterion change was added.
+  Current prompt/client/runner tests pass160.
+- One flat typed qualification dataset retains all17 cases and adds a synthetic
+  mandatory-source HTTP403 counterexample. Its18x2 plan uses36 slots, replacing
+  arbitrary extra retention repeats. Free-form blocker wording requires manual
+  review, not literal sentence matching; automatic matching never sets qualified=true.
+- Campaign39/48 calls are retained, including stopped/ambiguous cases. Four bounded
+  question/real-obstacle evaluations are planned next; no unchanged retry-to-PASS.
+  A changed system invalidates old exact-result reuse.
+- PostgreSQL16.15 initial gate:68 passed, then an obsolete implicit-mode fixture
+  returned403. Temporary resources were cleaned. Fix9505bb6 makes modes explicit
+  and updates current response/history fixtures; the PG gate is not yet accepted.
+- Base skills a25c4ef4 pass39 offline tests and use typed business facts, without
+  service hashes/receipts in Advisor reports. README documents HTTP-only CLI setup.
+- Changes stay in this PR; the redundant experiment branch is removed, source and
+  evidence remain in Git. Installed v15, PM, Hermes and accepted FLEETQA-30/31/32
+  remain unchanged. Qualification, image/update, browser/live acceptance and merge
+  are still open; this is not a release.
 
 ### Historical CP0 And Rejected Representation Experiment
 
