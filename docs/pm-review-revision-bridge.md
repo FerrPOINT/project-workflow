@@ -77,7 +77,7 @@ generated from source with `scripts/export_pm_openapi.py`; clients and installat
 still need their own qualification.
 
 Focused synthetic SQLite/HTTP tests live in
-[test_pm_review_revision_bridge.py](../tests/test_pm_review_revision_bridge.py).
+[test_pm_review_revision_bridge.py](https://github.com/FerrPOINT/project-workflow/blob/fadb61a1da088772f2e2b6d6baa0afe80dcd044f/tests/test_pm_review_revision_bridge.py).
 These are not live Tracker authorization, installed rollout, real native dispatch
 or end-to-end review completion qualification. The earlier PostgreSQL preservation
 result remains scoped to its original source and cases; it does not qualify this
