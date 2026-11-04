@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased — Typed Advisor V18 Checkpoints
+
+- CP0 records source09e123d/Base93bf43c9 and the unchanged healthy installed v15
+  image. Candidate experiments retain app-test/high/4000/json_object and1200s,
+  while the installed v15 still uses120s. Neither runtime configuration was changed.
+- The installed receipt verifier rejects unknown policy versions. A downgrade
+  cannot be assumed compatible with v18 receipts; old-reader/new-history tests
+  remain a pre-install gate. No database rollback is authorized by this work.
+- CP1/CP2/CP3 are not accepted yet. The new campaign is capped at48 model calls:
+  8 format comparisons,4 context comparisons,36 final qualification calls.
+
 ## Unreleased — Clean Workflow Candidate (Not Installed)
 
 - Explicit platform/standalone admission around one evaluator. Standalone uses

@@ -1,0 +1,41 @@
+{
+  "checkpoint": "CP0",
+  "status": "baseline_recorded_not_a_release",
+  "workflow_source": "09e123d76f6c97554123bc34d571c14e5d8d1046",
+  "base_source": "93bf43c94bd9c85fdf39e1be28feebe64f6e92f4",
+  "installed": {
+    "container": "sdlc1-project-workflow-backend-1",
+    "image_id": "sha256:79976adbbe47c1f34ab0daab60ff4869209dcd30d36401a0ada2475a37c9b167",
+    "source_revision": "b33a813926fd7fa1152fb50d341452f6e844064c",
+    "policy": "supervisor-evaluator-v15",
+    "state": "running",
+    "health": "healthy",
+    "model": "app-test",
+    "reasoning_effort": "high",
+    "max_tokens": 4000,
+    "read_timeout_seconds": 120,
+    "response_format": "json_object"
+  },
+  "experiment_settings": {
+    "model": "app-test",
+    "reasoning_effort": "high",
+    "max_tokens": 4000,
+    "temperature": 0.1,
+    "read_timeout_seconds": 1200,
+    "connect_timeout_seconds": 30,
+    "response_format": "json_object"
+  },
+  "previous_evidence": [
+    "docs/evidence/clean-workflow-case-labels-20261104.json",
+    "docs/evidence/clean-advisor-v17-qualification-20261104.json"
+  ],
+  "rollback": {
+    "blind_downgrade_permitted": false,
+    "source_inspection": "The installed b33a813 frozen verifier admits a closed list of policy versions; v18 is absent. Historical receipt authentication cannot be assumed after downgrade.",
+    "ordinary_history_readback": "not_yet_executed_against_v18_records",
+    "required_before_install": "Exercise old-reader/new-history compatibility separately; keep new writes stopped if compatibility is not demonstrated. Never restore a database over new history."
+  },
+  "model_budget": {"maximum_http_calls": 48, "cp1": 8, "cp2": 4, "final": 36, "attempted": 0},
+  "runtime_mutations": [],
+  "secrets_recorded": false
+}
