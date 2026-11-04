@@ -101,15 +101,19 @@ def test_quality_gate_supplies_qualified_cli_source_independently_of_sdk() -> No
     assert "test_configured_cli_transport.py" in guide
 
 
-def test_readme_cli_examples_use_configured_wrapper_commands() -> None:
+def test_readme_cli_examples_use_explicit_http_modes_and_typed_stdin() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
 
-    assert "workflow-run step --task RUN-123" in readme
-    assert "workflow-run history --task RUN-123" in readme
-    assert "workflow-qa step --task RUN-42" in readme
-    assert "workflow-dev history --task RUN-42" in readme
-    assert "project-workflow step --task" not in readme
-    assert "project-workflow history --task" not in readme
+    assert "PROJECT_WORKFLOW_MODE=standalone" in readme
+    assert "PROJECT_WORKFLOW_MODE=platform" in readme
+    assert "PROJECT_WORKFLOW_API_TOKEN=" in readme
+    assert "project-workflow --json step --task LOC-1" in readme
+    assert "--report - --operation-key report-LOC-1-1 --expected-version 1" in readme
+    assert "project-workflow --json history --task LOC-1 --operation-key report-LOC-1-1" in readme
+    assert '"source":{"request":' in readme and '"decisions":[]' in readme
+    assert '"result":{"artifacts":' in readme and '"unresolved":[]' in readme
+    assert 'export DATABASE_URL=' not in readme[readme.index("## 🖥️ CLI"):readme.index('<a name="ui">')]
+    assert 'export SDLC_API_TOKEN=' not in readme
 
 
 def test_compose_and_env_example_forward_runtime_settings() -> None:

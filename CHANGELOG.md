@@ -59,6 +59,11 @@
   Archive pages are restricted to ordinary platform history with their exact
   envelope; transport and archive API tests pass109. README no longer advertises
   local-DB/token-selected CLI paths or plaintext report submissions.
+- Completed native run at2554253:4294 passed,75 subtests passed,15 skipped,
+  132 deselected;2 failures were obsolete literal expectations in the materiality
+  and README tests. Both were aligned to the reviewed prompt/HTTP CLI contract;
+  all18 tests in those files now pass. Product source did not change.
+  This does not rewrite the original nonzero native result as a successful gate.
 - The redundant experiment branch was removed after verifying its commit is an
   ancestor of this branch. All source/evidence remains reachable at f34bbbe.
   Candidate policy v18 is not qualified, installed, merged or accepted live.

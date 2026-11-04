@@ -138,6 +138,13 @@ task/namespace checks; writes, cursor и diagnostics исключены. Пре�
 действующего исполнения сохранён, identities не подставляются. 109 transport/archive
 API tests PASS. README согласован с HTTP-only CLI, typed stdin и явными режимами.
 
+Завершённый полный native на2554253:4294 PASS,75 subtests PASS,15 skipped,
+132 deselected и2 failures за1183,33с. Оба отказа относятся к буквальному сравнению
+текстов: `test_advisor_materiality` ещё не учитывал reviewed conditional-замену,
+`test_docs_quality` требовал прежние wrapper/plaintext примеры README.
+Только эти ожидания обновлены;18 проверок двух файлов PASS. Продуктовые исходники
+не менялись. Прежний nonzero результат не объявляется зелёным full gate.
+
 ### Исторический CP1: Остановлен И Отменён
 
 Выполнено6 из48 разрешённых обращений;42 слота не запускались. Один и тот же

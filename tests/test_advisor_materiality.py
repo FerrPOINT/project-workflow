@@ -10,7 +10,7 @@ from project_workflow.infrastructure.llm import PromptBuilder
 from scripts import qualify_clean_advisor as runner
 
 
-def test_materiality_change_preserves_existing_policy_outside_one_instruction():
+def test_current_prompt_preserves_checkpoint_outside_reviewed_instructions():
     saved = json.loads((Path(__file__).resolve().parents[1]
                         / "docs/evidence/advisor-v18-checkpoints-20261104.json").read_text(encoding="utf-8"))
     original = saved["slots"][0]["diagnostics"]["system"]["text"]
@@ -34,6 +34,10 @@ def test_materiality_change_preserves_existing_policy_outside_one_instruction():
         'assessments maps every listed label to exactly {"covered": boolean, "reason": nonempty string, '
         '"required_change": string or null}. For a false mark, required_change names the sufficient '
         'correction; for a true mark it is null. ',
+    ).replace(
+        "Return one assessment per listed label, judging the whole criterion and only its applicable branch. ",
+        "Evaluate a conditional requirement only when its condition holds for the reported work outcome; "
+        "do not import obligations from another outcome branch. Return one assessment per listed label. ",
     )
     assert PromptBuilder.SYSTEM_PROMPT == expected
     assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v18"
