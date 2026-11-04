@@ -104,36 +104,42 @@ def test_invalid_project_proof_cannot_become_scope(change):
         ProjectAccessV2.model_validate(value)
 
 
-@pytest.mark.parametrize("application_policy", [False, True])
-def test_http_sso_uses_current_project_proof_without_promotion_or_cache_fallback(monkeypatch, pm, application_policy):
+@pytest.mark.parametrize("application_seconds", [15, 60])
+def test_http_sso_uses_current_project_proof_without_promotion_or_cache_fallback(monkeypatch, pm, application_seconds):
+    from datetime import datetime, timedelta, timezone
+
     import httpx
     import jwt
     from fastapi.testclient import TestClient
 
+    from project_workflow import config
     from project_workflow.interfaces.ui import sso
     from project_workflow.interfaces.ui.app import create_app
-    from tests.test_sso import _app
 
-    _, settings = _app(monkeypatch, AUTH_APPLICATION_ACCESS_REQUIRED=application_policy)
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "platform")
+    monkeypatch.setenv("AUTH_ISSUER", "http://auth.test")
+    monkeypatch.setenv("AUTH_INTERNAL_BASE_URL", "http://auth.test")
+    monkeypatch.setenv("AUTH_SESSION_SECRET", "synthetic-test-secret-with-at-least-32-bytes")
+    config.get_settings.cache_clear()
+    settings = config.get_settings()
     monkeypatch.setenv("PROJECT_WORKFLOW_SPACES__ENABLED", "true")
     monkeypatch.setenv("PROJECT_WORKFLOW_SPACES__TRACKER_URL", "http://tracker.test")
     monkeypatch.setenv("PROJECT_WORKFLOW_SPACES__TRACKER_INSTANCE_ID", "tracker:one")
-    current = {"projects": [PROJECT_REF], "role": "member", "unavailable": False,
-               "foreign": False, "apps": ["project-workflow"]}
+    current = {"projects": [PROJECT_REF], "role": "admin", "unavailable": False,
+               "foreign": False, "apps": ["project-workflow"], "application_access": True}
     original_client = httpx.AsyncClient
 
     def upstream(request):
         if request.url.path == "/auth/me":
             identity = {"id": "ordinary-user", "status": "active", "role": current["role"]}
-            if application_policy:
-                from datetime import datetime, timedelta, timezone
-
+            if current["application_access"]:
                 now = datetime.now(timezone.utc)
-                identity["role"] = "admin"  # A profile hint cannot bypass the authoritative user proof.
+                # A profile hint cannot bypass the authoritative user proof.
                 identity["application_access"] = {
                     "schema_version": 1, "issuer": settings.AUTH_ISSUER, "subject": "ordinary-user",
                     "role": "user", "applications": current["apps"], "revision": 3, "enforced": True,
-                    "observed_at": now.isoformat(), "expires_at": (now + timedelta(seconds=15)).isoformat(),
+                    "observed_at": now.isoformat(),
+                    "expires_at": (now + timedelta(seconds=application_seconds)).isoformat(),
                 }
             return httpx.Response(200, json=identity)
         assert request.url.path == "/api/v2/sdlc/project-access"
@@ -157,7 +163,7 @@ def test_http_sso_uses_current_project_proof_without_promotion_or_cache_fallback
         assert opened.headers["cache-control"] == "private, no-store"
         window = client.get("/api/v1/space-admission", headers=headers)
         assert window.status_code == 200, window.text
-        ceiling = 15_000 if application_policy else 30_000
+        ceiling = min(application_seconds, 30) * 1000
         assert window.json()["enforced"] is True and 0 < window.json()["remaining_millis"] <= ceiling
         assert window.headers["cache-control"] == "private, no-store"
         # Ordinary member cannot acquire write through another login or broad session scopes.
@@ -174,13 +180,16 @@ def test_http_sso_uses_current_project_proof_without_promotion_or_cache_fallback
         current["foreign"] = False
         current["unavailable"] = True
         assert client.get("/api/tasks", headers=headers).status_code == 503
-        if application_policy:
-            current["unavailable"] = False
-            current["apps"] = []
-            denied = client.get("/api/tasks", headers=headers)
-            assert denied.status_code == 403 and "location" not in denied.headers
-            current["apps"] = ["project-workflow"]
-            assert client.get("/api/tasks", headers=headers).status_code == 200
+        current["unavailable"] = False
+        current["apps"] = []
+        denied = client.get("/api/tasks", headers=headers)
+        assert denied.status_code == 403 and "location" not in denied.headers
+        current["apps"] = ["project-workflow"]
+        assert client.get("/api/tasks", headers=headers).status_code == 200
+        current["application_access"] = False
+        assert client.get("/api/tasks", headers=headers).status_code == 403
+        current["application_access"] = True
+        assert client.get("/api/tasks", headers=headers).status_code == 200
 
 
 def test_retained_context_does_not_open_a_different_space_of_the_same_project(monkeypatch):

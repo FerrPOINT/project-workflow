@@ -16,14 +16,24 @@ from tests.test_configured_cli import MACHINE, enroll, step
 from tests.test_configured_cli import configured as configured
 
 
-def report(result=None, *, source="Original request", unresolved=None):
-    return json.dumps({"source": source, "result": {} if result is None else result,
-                       "unresolved": [] if unresolved is None else unresolved}, ensure_ascii=False)
+def report(content=None, *, source="Original request", unresolved=None):
+    return json.dumps({
+        "source": {"request": source, "decisions": []},
+        "result": {"artifacts": [] if content is None else [{"name": "document", "content": content}],
+                   "assumptions": []},
+        "unresolved": [{"kind": "question", "text": text} for text in (unresolved or [])],
+    }, ensure_ascii=False)
 
 
-@pytest.mark.parametrize("raw", ["free text", "{}", '{"source":"","result":{},"unresolved":[3]}',
-                                 r'{"source":"\ud800","result":{},"unresolved":[]}',
-                                 '{"source":"","result":{"x":1,"x":2},"unresolved":[]}'])
+@pytest.mark.parametrize("raw", [
+    "free text", "{}",
+    '{"source":{"request":"","decisions":[]},'
+    '"result":{"artifacts":[],"assumptions":[]},"unresolved":[3]}',
+    r'{"source":{"request":"\ud800","decisions":[]},'
+    r'"result":{"artifacts":[],"assumptions":[]},"unresolved":[]}',
+    '{"source":{"request":"","decisions":[]},'
+    '"result":{"artifacts":[{"name":"document","content":{"x":1,"x":2}}],"assumptions":[]},"unresolved":[]}',
+])
 def test_malformed_report_does_not_call_model_or_commit_operation(configured, monkeypatch, raw):
     enroll(configured)
     before = step(configured).json()["result"]
@@ -42,7 +52,7 @@ def test_malformed_report_does_not_call_model_or_commit_operation(configured, mo
 
 def test_structured_report_is_preserved_once_through_evaluation_and_readback(configured, monkeypatch):
     enroll(configured)
-    raw = report({"document": {"title": "Исходный документ", "rules": ["one", "two"], "approved": False}},
+    raw = report({"title": "Исходный документ", "rules": ["one", "two"], "approved": False},
                  unresolved=["Какое ограничение выбрано?"])
     expected = json.loads(raw)
     requests = []
@@ -52,7 +62,8 @@ def test_structured_report_is_preserved_once_through_evaluation_and_readback(con
         requests.append(payload)
         assert payload["report"] == expected
         return {"verdict": "PARTIAL", "assessments": {
-            item["id"]: {"covered": False, "reason": "Нужно указать фактический результат чтения задачи."}
+            item["id"]: {"covered": False, "reason": "Нужно указать фактический результат чтения задачи.",
+                         "required_change": "Укажите фактический результат чтения задачи."}
             for item in payload["criteria"]}, "blockers": [], "confidence": 0.8}
 
     monkeypatch.setattr(OpenAICompatibleClient, "chat", advisor)
@@ -72,7 +83,7 @@ def test_structured_report_is_preserved_once_through_evaluation_and_readback(con
     assert replayed.status_code == 200, replayed.text
     assert replayed.json()["result"] == result
     assert len(requests) == 1
-    changed = step(configured, report=report({"document": "different"}),
+    changed = step(configured, report=report("different"),
                    operation_key="structured-1", expected_version=1)
     assert changed.status_code == 409
     assert len(requests) == 1
@@ -107,7 +118,7 @@ def test_report_identity_never_discards_case_sign_or_punctuation(other):
 def test_authorized_historical_text_readback_is_not_a_new_submission(configured, monkeypatch, supervisor_llm):
     enroll(configured)
     supervisor_llm("PARTIAL")
-    accepted = step(configured, report=report({"document": "Prepared context"}),
+    accepted = step(configured, report=report("Prepared context"),
                     operation_key="historical-operation", expected_version=1)
     assert accepted.status_code == 200, accepted.text
     old_report = "Historical plain-text report; do not reinterpret it."

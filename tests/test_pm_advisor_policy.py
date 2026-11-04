@@ -25,7 +25,7 @@ def latest_evaluation():
 
 
 @pytest.mark.parametrize("configured", [("project_manager", "draft"), ("developer", "initial")], indirect=True)
-def test_verified_role_selects_actual_prompt_version_and_diagnostics(configured, supervisor_llm, monkeypatch):
+def test_verified_roles_share_universal_prompt_version_and_diagnostics(configured, supervisor_llm, monkeypatch):
     enroll(configured)
     supervisor_llm("PARTIAL")
     actual_chat = OpenAICompatibleClient.chat
@@ -36,11 +36,10 @@ def test_verified_role_selects_actual_prompt_version_and_diagnostics(configured,
     assert response.status_code == 200, response.text
     provider.assert_called_once()
     call = provider.call_args.kwargs
-    pm = configured[1]["role_key"] == "project_manager"
-    expected_system = PromptBuilder.PM_SYSTEM_PROMPT if pm else PromptBuilder.SYSTEM_PROMPT
-    expected_version = PromptBuilder.PM_PROMPT_VERSION if pm else PromptBuilder.PROMPT_VERSION
+    expected_system = PromptBuilder.SYSTEM_PROMPT
+    expected_version = PromptBuilder.PROMPT_VERSION
     assert call["system"] == expected_system
-    assert json.loads(call["user"])["report"]["result"]["document"] == report
+    assert json.loads(call["user"])["report"] == json.loads(report_json(report))
     assert "Instructions:" not in call["user"]
     evaluation = latest_evaluation()
     assert evaluation["prompt_version"] == expected_version
@@ -55,7 +54,7 @@ def test_verified_role_selects_actual_prompt_version_and_diagnostics(configured,
 def test_pm_receipt_replay_reads_frozen_new_policy_without_provider(configured, supervisor_llm, monkeypatch):
     selector, saved = complete(configured, supervisor_llm, monkeypatch)
     evaluation = latest_evaluation()
-    assert evaluation["prompt_version"] == PromptBuilder.PM_PROMPT_VERSION
+    assert evaluation["prompt_version"] == PromptBuilder.PROMPT_VERSION
     provider = Mock(side_effect=AssertionError("Frozen replay must not invoke the model"))
     monkeypatch.setattr(OpenAICompatibleClient, "chat", provider)
     response = configured[0].post("/internal/runtime/terminal-receipt/readback", headers=WRITER, json=selector)
@@ -89,6 +88,7 @@ def test_pm_report_can_revoke_marks_but_technical_failure_preserves_them(
                     operation_key="previous-packet", expected_version=phase_number, **final)
     assert previous.status_code == 200, previous.text
     assert required[0] in previous.json()["result"]["covered"]
+    previous_evaluation = latest_evaluation()
     supervisor_llm("PARTIAL")
     actual_chat = OpenAICompatibleClient.chat
     provider = Mock(side_effect=actual_chat)
@@ -109,19 +109,25 @@ def test_pm_report_can_revoke_marks_but_technical_failure_preserves_them(
     assert result["covered"] == ([] if outcome == "semantic" else [required[0]])
     assert (required[0] in result["missing"]) is (outcome == "semantic")
     assert result["retryable"] is (outcome != "semantic")
-    assert provider.call_count == (2 if outcome == "format" else 1)
-    for index, call in enumerate(provider.call_args_list):
-        assert call.kwargs["system"].startswith(PromptBuilder.PM_SYSTEM_PROMPT)
-        assert ("PREVIOUS RESPONSE WAS INVALID" in call.kwargs["system"]) is (index == 1)
-        assert json.loads(call.kwargs["user"])["previously_covered"]
+    provider.assert_called_once()
+    call = provider.call_args
+    assert call.kwargs["system"] == PromptBuilder.SYSTEM_PROMPT
+    assert "PREVIOUS RESPONSE WAS INVALID" not in call.kwargs["system"]
+    payload = json.loads(call.kwargs["user"])
+    assert payload["previous_reports"] == [json.loads(report_json(
+        "FULL document revision=1 content_hash=" + "a" * 64,
+    ))]
+    assert all(item["previous_assessment"] == previous_evaluation["advisor_assessments"][
+        previous_evaluation["evaluator_item_aliases"][item["id"]]
+    ] for item in payload["criteria"])
     evaluation = latest_evaluation()
-    assert evaluation["prompt_version"] == PromptBuilder.PM_PROMPT_VERSION
+    assert evaluation["prompt_version"] == PromptBuilder.PROMPT_VERSION
     assert len(evaluation["contract_fingerprint_state"]["previously_covered_ids"]) == 1
     assert bool(evaluation["covered_item_ids"]) is (outcome != "semantic")
-    assert evaluation["diagnostics"]["prompt_version"] == PromptBuilder.PM_PROMPT_VERSION
+    assert evaluation["diagnostics"]["prompt_version"] == PromptBuilder.PROMPT_VERSION
 
 
-def test_pm_context_retains_existing_cumulative_coverage(configured, supervisor_llm, monkeypatch):
+def test_pm_context_carries_prior_facts_and_revisable_assessments(configured, supervisor_llm, monkeypatch):
     enroll(configured)
     cursor = step(configured).json()["result"]
     first_check = cursor["phase_contract"]["required_checks"][0]
@@ -129,10 +135,16 @@ def test_pm_context_retains_existing_cumulative_coverage(configured, supervisor_
     first = step(configured, report=report_json("Partial context facts"),
                  operation_key="context-one", expected_version=1)
     assert first.status_code == 200, first.text
+    first_evaluation = latest_evaluation()
     supervisor_llm("PARTIAL")
     provider = Mock(side_effect=OpenAICompatibleClient.chat)
     monkeypatch.setattr(OpenAICompatibleClient, "chat", provider)
     second = step(configured, report=report_json("Rechecked context"), operation_key="context-two", expected_version=2)
     assert second.status_code == 200, second.text
-    assert json.loads(provider.call_args.kwargs["user"])["previously_covered"]
+    payload = json.loads(provider.call_args.kwargs["user"])
+    assert payload["previous_reports"] == [json.loads(report_json("Partial context facts"))]
+    assert all(item["previous_assessment"] == first_evaluation["advisor_assessments"][
+        first_evaluation["evaluator_item_aliases"][item["id"]]
+    ] for item in payload["criteria"])
+    assert second.json()["result"]["covered"] == []
     assert latest_evaluation()["contract_fingerprint_state"]["previously_covered_ids"]

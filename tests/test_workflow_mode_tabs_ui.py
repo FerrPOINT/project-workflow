@@ -8,16 +8,23 @@ import pytest
 from fastapi.testclient import TestClient
 
 from project_workflow import config
-from project_workflow.interfaces.ui import _app_state, app
+from project_workflow.interfaces.ui import _app_state
+from project_workflow.interfaces.ui.app import create_app
 from tests.test_ui_shell_template import Elements
 
 pytestmark = [pytest.mark.ui]
 
-client = TestClient(app)
+@pytest.fixture
+def client(monkeypatch):
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "standalone")
+    monkeypatch.setenv("PROJECT_WORKFLOW_STANDALONE_CONTAINER_NETWORK", "false")
+    config.get_settings.cache_clear()
+    with TestClient(create_app(), base_url="http://127.0.0.1", client=("127.0.0.1", 50000)) as browser_client:
+        yield browser_client
 
 
 @pytest.mark.parametrize("mode_key", ["initial", "rework"])
-def test_unified_editor_renders_only_the_selected_workflow_mode(mode_key):
+def test_unified_editor_renders_only_the_selected_workflow_mode(client, mode_key):
     catalog = _developer_catalog()
     with _app_state.get_db() as uow:
         profession = uow.projects.get_by_code(config.DEFAULT_PROJECT_CODE)
@@ -48,7 +55,7 @@ def test_unified_editor_renders_only_the_selected_workflow_mode(mode_key):
 
 
 @pytest.mark.parametrize("mode_id,status", [("invalid", 422), ("999999", 404)])
-def test_unified_editor_rejects_invalid_or_foreign_mode(mode_id, status):
+def test_unified_editor_rejects_invalid_or_foreign_mode(client, mode_id, status):
     response = client.get(f"/workflows?mode_id={mode_id}")
     assert response.status_code == status
     assert 'id="workflowForm"' not in response.text
@@ -124,7 +131,7 @@ def _developer_catalog() -> dict[str, int]:
         uow.close()
 
 
-def test_existing_workflow_opens_default_mode_with_stable_accessible_navigation():
+def test_existing_workflow_opens_default_mode_with_stable_accessible_navigation(client):
     catalog = _developer_catalog()
 
     response = client.get(f"/phases?workflow_id={catalog['workflow_id']}")
@@ -146,7 +153,7 @@ def test_existing_workflow_opens_default_mode_with_stable_accessible_navigation(
     assert "Rework phase" not in response.text
 
 
-def test_workflow_catalog_phase_count_includes_initial_and_rework_modes():
+def test_workflow_catalog_phase_count_includes_initial_and_rework_modes(client):
     catalog = _developer_catalog()
 
     response = client.get("/api/workflows")
@@ -158,7 +165,7 @@ def test_workflow_catalog_phase_count_includes_initial_and_rework_modes():
     assert workflow["phase_count"] == 3
 
 
-def test_developer_initial_and_rework_tabs_scope_phase_content_and_refresh():
+def test_developer_initial_and_rework_tabs_scope_phase_content_and_refresh(client):
     catalog = _developer_catalog()
     initial_url = (
         f"/phases?workflow_id={catalog['workflow_id']}"
@@ -183,7 +190,7 @@ def test_developer_initial_and_rework_tabs_scope_phase_content_and_refresh():
     assert rework.text.index("Default") < rework.text.index("Первичная разработка") < rework.text.index("Доработка")
 
 
-def test_phase_api_filters_and_creates_inside_selected_mode_while_legacy_defaults():
+def test_phase_api_filters_and_creates_inside_selected_mode_while_legacy_defaults(client):
     catalog = _developer_catalog()
 
     created = client.post(
@@ -222,7 +229,7 @@ def test_phase_api_filters_and_creates_inside_selected_mode_while_legacy_default
     ]
 
 
-def test_phase_detail_returns_to_its_mode_and_keeps_mode_local_graph():
+def test_phase_detail_returns_to_its_mode_and_keeps_mode_local_graph(client):
     catalog = _developer_catalog()
 
     response = client.get(f"/phase/{catalog['rework_phase_id']}")
@@ -236,7 +243,7 @@ def test_phase_detail_returns_to_its_mode_and_keeps_mode_local_graph():
 
 
 @pytest.mark.parametrize("raw_mode_id", ["bad", "0", "-1"])
-def test_malformed_mode_deep_link_fails_safely(raw_mode_id: str):
+def test_malformed_mode_deep_link_fails_safely(client, raw_mode_id: str):
     catalog = _developer_catalog()
 
     response = client.get(
@@ -249,7 +256,7 @@ def test_malformed_mode_deep_link_fails_safely(raw_mode_id: str):
     assert "Rework phase" not in response.text
 
 
-def test_deleted_or_foreign_mode_deep_link_does_not_fall_through_to_other_phases():
+def test_deleted_or_foreign_mode_deep_link_does_not_fall_through_to_other_phases(client):
     catalog = _developer_catalog()
     uow = _app_state.get_db()
     try:

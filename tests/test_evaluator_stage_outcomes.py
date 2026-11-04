@@ -12,6 +12,7 @@ from project_workflow.infrastructure.single_task_catalog import IDENTITY_CATALOG
 from project_workflow.supervisor.contracts import PhaseContractBuilder
 from project_workflow.supervisor.evaluate import _evaluate_strict_response
 from project_workflow.supervisor.models import Phase, PhaseDelegate
+from tests._report_helpers import report_json
 
 pytestmark = pytest.mark.unit
 
@@ -44,26 +45,24 @@ def review_phases():
 @pytest.mark.parametrize("phase", list(review_phases()))
 def test_independent_rework_result_can_finish_the_role_without_a_workflow_rollback(phase):
     items = PhaseContractBuilder([phase]).build_evaluation_items(phase)
-    report = {
-        "source": "Independent review",
-        "result": {"content": "Independent review completed. Reproducible defects recorded in the sealed report; "
-                   "business verdict=rework. No claim that the candidate is accepted."},
-        "unresolved": [],
-    }
+    report = json.loads(report_json(
+        "Independent review completed. Reproducible defects recorded in the sealed report; "
+        "business verdict=rework. No claim that the candidate is accepted.", source="Independent review",
+    ))
     prompt = PromptBuilder.build_user_prompt(
         "REVIEW-1", phase, report, evaluation_items=items,
     )
     assert json.loads(prompt) == {
         "phase": phase.name, "allowed_verdicts": ["PASS", "PARTIAL", "BLOCKED"],
-        "criteria": [{"id": label, "text": dict(items)[key]}
+        "criteria": [{"id": label, "text": dict(items)[key], "previous_assessment": None}
                      for label, key in PromptBuilder.item_aliases(items).items()],
-        "previously_covered": [], "report": report,
+        "previous_reports": [], "report": report,
     }
     assert "only its listed criteria and supplied facts" in PromptBuilder.SYSTEM_PROMPT
     client = Mock()
     client.chat.return_value = {
         "verdict": "PASS", "assessments": {label: {"covered": True,
-            "reason": "Проверка выполнена; результат требует доработки."}
+            "reason": "Проверка выполнена; результат требует доработки.", "required_change": None}
             for label in PromptBuilder.item_aliases(items)}, "blockers": [], "confidence": 0.9,
     }
     _, result = _evaluate_strict_response(client, user=prompt, evaluation_items=items, phase=phase)
@@ -76,19 +75,25 @@ def test_unconfigured_routing_still_fails_closed_instead_of_becoming_pass(verdic
     phase = Phase(code="audit", name="Independent audit")
     client = Mock()
     client.chat.return_value = {
-        "verdict": verdict, "assessments": {"C1": {"covered": False, "reason": "Need another role"}},
+        "verdict": verdict, "assessments": {"C1": {
+            "covered": False, "reason": "Need another role", "required_change": "Complete the independent check",
+        }},
         "blockers": [], "confidence": 0.9,
     }
+    items = [("finding", "Independent check")]
+    prompt = PromptBuilder.build_user_prompt(
+        "REVIEW-1", phase, json.loads(report_json("Independent check is incomplete")), items,
+    )
     with pytest.raises(ValueError):
         _evaluate_strict_response(
-            client, user="review", evaluation_items=[("finding", "Independent check")], phase=phase,
+            client, user=prompt, evaluation_items=items, phase=phase,
         )
-    assert client.chat.call_count == 2
+    assert client.chat.call_count == 1
 
 
-def test_configured_delegate_remains_available_without_reviving_retained_rollback():
+def test_explicit_phase_delegate_remains_available_without_reviving_retained_rollback():
     phase = Phase(code="qa", rollback_target_phase_code="implementation", delegate=PhaseDelegate(agent="qa"))
-    report = {"source": "QA facts", "result": {"content": "Cannot finish checks"}, "unresolved": []}
+    report = json.loads(report_json("Cannot finish checks", source="QA facts"))
     prompt = PromptBuilder.build_user_prompt("QA-1", phase, report)
     assert json.loads(prompt)["allowed_verdicts"] == ["PASS", "PARTIAL", "BLOCKED", "DELEGATE"]
     assert json.loads(prompt)["report"] == report
@@ -97,18 +102,21 @@ def test_configured_delegate_remains_available_without_reviving_retained_rollbac
 
 def test_missing_review_work_is_not_excused_by_a_business_rework_verdict():
     prompt = PromptBuilder.SYSTEM_PROMPT
-    assert "covered is a boolean for the entire criterion" in prompt
-    assert "PASS: all covered, no blockers" in prompt
+    assert "judging the whole criterion and only its applicable branch" in prompt
+    assert "PASS requires all true and no blockers" in prompt
     phase = Phase(code="review", name="Independent review")
     client = Mock()
     client.chat.return_value = {
         "verdict": "PARTIAL", "assessments": {"C1": {"covered": False,
-            "reason": "Business verdict=rework, but the independent check was not performed."}},
+            "reason": "Business verdict=rework, but the independent check was not performed.",
+            "required_change": "Perform and report the independent check."}},
         "blockers": [], "confidence": 0.9,
     }
-    _, result = _evaluate_strict_response(
-        client, user="review result=rework", evaluation_items=[("independent-check", "Independent check")], phase=phase,
+    items = [("independent-check", "Independent check")]
+    user = PromptBuilder.build_user_prompt(
+        "REVIEW-1", phase, json.loads(report_json("Business verdict=rework; independent check not performed")), items,
     )
+    _, result = _evaluate_strict_response(client, user=user, evaluation_items=items, phase=phase)
     assert result.verdict == "PARTIAL"
     assert result.missing == ["independent-check"]
     assert client.chat.call_count == 1

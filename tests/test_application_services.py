@@ -307,7 +307,7 @@ class TestWorkflowService:
         assert svc.delete_workflow(1) is None
         uow.workflows.delete.assert_called_once_with(1)
 
-    def test_delete_workflow_reassigns_empty_linked_projects(self):
+    def test_delete_workflow_requires_explicit_reassignment_of_empty_namespace(self):
         uow = _make_uow()
         uow.projects.list.return_value = [FakeProject(1, "P", 3)]
         uow.tasks.list_by_project.return_value = []
@@ -315,7 +315,9 @@ class TestWorkflowService:
         uow.workflows.get_default.return_value = FakeWorkflow(1, "Default", is_default=True)
         uow.phases.list.return_value = []
 
-        WorkflowService(uow).delete_workflow(3)
+        with pytest.raises(ConflictError, match="переназначьте"):
+            WorkflowService(uow).delete_workflow(3)
 
-        uow.projects.update.assert_called_once_with(1, {"workflow_id": 1})
-        uow.workflows.delete.assert_called_once_with(3)
+        uow.projects.update.assert_not_called()
+        uow.workflows.delete.assert_not_called()
+        uow.commit.assert_not_called()

@@ -33,10 +33,11 @@ def _make_engine():
     }
     engine.workflow_id = 1
     engine.current_phase_code = "1"
-    engine._get_previously_covered.return_value = set()
+    engine._get_phase_evaluation_history.return_value = {"reports": [], "assessments": {}}
     engine._resolve_transition.return_value = (None, None, None)
     engine.db.record_step.return_value = 42
     engine.db.step_history.get_by_fingerprint.return_value = None
+    engine.db.step_history.list.return_value = []
     return engine
 
 
@@ -50,7 +51,7 @@ def _set_phase(engine, phase: Phase, *extra: Phase) -> None:
 class TestEvaluateLlmReportVerdicts:
     def test_invalid_client_configuration_is_fail_closed(self):
         engine = _make_engine()
-        phase = Phase(code="1", name="One", instructions=[],
+        phase = Phase(id=1, code="1", name="One", instructions=[],
                       checks=[PhaseCheck(description="Required result")], evidence=[])
         _set_phase(engine, phase)
         with patch(
@@ -73,7 +74,7 @@ class TestEvaluateLlmReportVerdicts:
 
     def test_invalid_blocked_is_retryable_and_records_blocked_transition(self):
         engine = _make_engine()
-        phase = Phase(code="1", name="One", instructions=[],
+        phase = Phase(id=1, code="1", name="One", instructions=[],
                       checks=[PhaseCheck(description="Required result")], evidence=[])
         _set_phase(engine, phase)
         with patch.object(
@@ -81,10 +82,9 @@ class TestEvaluateLlmReportVerdicts:
             "chat",
             return_value={
                 "verdict": "BLOCKED",
-                "covered": [],
-                "missing": ["x"],
+                "assessments": {"C1": {"covered": False, "reason": "Required result is absent",
+                                       "required_change": "Supply the required result"}},
                 "blockers": [],
-                "message": "blocked",
                 "confidence": 0.7,
             },
         ):
@@ -99,7 +99,7 @@ class TestEvaluateLlmReportVerdicts:
     def test_retired_rollback_is_rejected_even_with_a_saved_target(self):
         engine = _make_engine()
         engine._resolve_transition.return_value = (None, None, "0")
-        phase = Phase(code="1", name="One", instructions=[], checks=[PhaseCheck(description="Required result")],
+        phase = Phase(id=1, code="1", name="One", instructions=[], checks=[PhaseCheck(description="Required result")],
                       evidence=[], rollback_target_phase_code="0")
         _set_phase(engine, phase)
         with patch.object(
@@ -107,10 +107,9 @@ class TestEvaluateLlmReportVerdicts:
             "chat",
             return_value={
                 "verdict": "ROLLBACK",
-                "covered": [],
-                "missing": [],
+                "assessments": {"C1": {"covered": False, "reason": "Required result is absent",
+                                       "required_change": "Supply the required result"}},
                 "blockers": [],
-                "message": "rb",
                 "confidence": 0.6,
             },
         ):
@@ -123,6 +122,7 @@ class TestEvaluateLlmReportVerdicts:
     def test_delegate_records_transition(self):
         engine = _make_engine()
         phase = Phase(
+            id=1,
             code="1",
             name="One",
             instructions=[],
@@ -136,7 +136,8 @@ class TestEvaluateLlmReportVerdicts:
             "chat",
             return_value={
                 "verdict": "DELEGATE",
-                "assessments": {"C1": {"covered": False, "reason": "Required phase work remains"}},
+                "assessments": {"C1": {"covered": False, "reason": "Required phase work remains",
+                                       "required_change": "Complete the required phase work"}},
                 "blockers": [],
                 "confidence": 0.5,
             },
@@ -150,8 +151,8 @@ class TestEvaluateLlmReportVerdicts:
     def test_pass_fills_next_phase_from_builder(self):
         engine = _make_engine()
         engine._resolve_transition.return_value = ("2", "Two", None)
-        next_phase = Phase(code="2", name="Two", instructions=[], checks=[], evidence=[])
-        phase = Phase(code="1", name="One", instructions=[],
+        next_phase = Phase(id=2, code="2", name="Two", instructions=[], checks=[], evidence=[])
+        phase = Phase(id=1, code="1", name="One", instructions=[],
                       checks=[PhaseCheck(description="Required result")], evidence=[])
         _set_phase(engine, phase, next_phase)
         with patch.object(
@@ -159,7 +160,7 @@ class TestEvaluateLlmReportVerdicts:
             "chat",
             return_value={
                 "verdict": "PASS",
-                "assessments": {"C1": {"covered": True, "reason": "Required result supplied"}},
+                "assessments": {"C1": {"covered": True, "reason": "Required result supplied", "required_change": None}},
                 "blockers": [],
                 "confidence": 0.9,
             },
@@ -172,7 +173,7 @@ class TestEvaluateLlmReportVerdicts:
     def test_persistence_failure_rolls_back_transaction(self):
         engine = _make_engine()
         engine.db.record_step.side_effect = RuntimeError("write failed")
-        phase = Phase(code="1", name="One", instructions=[],
+        phase = Phase(id=1, code="1", name="One", instructions=[],
                       checks=[PhaseCheck(description="Required result")], evidence=[])
         _set_phase(engine, phase)
         with (
@@ -181,7 +182,7 @@ class TestEvaluateLlmReportVerdicts:
                 "chat",
                 return_value={
                     "verdict": "PASS", "assessments": {
-                        "C1": {"covered": True, "reason": "Required result supplied"},
+                        "C1": {"covered": True, "reason": "Required result supplied", "required_change": None},
                     }, "blockers": [], "confidence": 0.9,
                 },
             ),
@@ -281,7 +282,7 @@ class TestPromptBuilder:
             checks=[],
             evidence=[],
         )
-        report = {"source": "Reported facts", "result": {"content": "I did it"}, "unresolved": []}
+        report = json.loads(report_json("I did it", source="Reported facts"))
         prompt = PromptBuilder.build_user_prompt("RUN-1", phase, report)
         assert "TASK:" not in prompt
         assert "RUN-1" not in prompt
@@ -298,15 +299,20 @@ class TestPromptBuilder:
             checks=[PhaseCheck(description="Check A")],
             evidence=[PhaseEvidence(item="Screenshot")],
         )
-        report = {"source": "Reported facts", "result": {"content": "done"}, "unresolved": []}
-        prompt = PromptBuilder.build_user_prompt("RUN-1", phase, report, previously_covered=["1:check:1"])
+        report = json.loads(report_json("done", source="Reported facts"))
+        assessment = {"covered": True, "reason": "Earlier actual result", "required_change": None}
+        previous_reports = [json.loads(report_json("Earlier actual result", source="Original facts"))]
+        prompt = PromptBuilder.build_user_prompt(
+            "RUN-1", phase, report, previous_assessments={"1:check:1": assessment}, previous_reports=previous_reports,
+        )
         assert "Run tests" not in prompt
         assert "Check A" in prompt
         assert "Screenshot" in prompt
         assert json.loads(prompt) == {
             "phase": "Phase One", "allowed_verdicts": ["PASS", "PARTIAL", "BLOCKED"],
-            "criteria": [{"id": "C1", "text": "Check A"}, {"id": "E1", "text": "Screenshot"}],
-            "previously_covered": ["C1"], "report": report,
+            "criteria": [{"id": "C1", "text": "Check A", "previous_assessment": assessment},
+                         {"id": "E1", "text": "Screenshot", "previous_assessment": None}],
+            "previous_reports": previous_reports, "report": report,
         }
 
 

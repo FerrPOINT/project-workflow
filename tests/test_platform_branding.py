@@ -11,6 +11,8 @@ from project_workflow.interfaces.ui import platform_branding as bridge
 
 
 def test_public_branding_and_fonts_do_not_require_product_identity_or_database(monkeypatch):
+    from importlib import import_module
+
     from fastapi.testclient import TestClient
 
     from project_workflow.config import Settings
@@ -28,7 +30,7 @@ def test_public_branding_and_fonts_do_not_require_product_identity_or_database(m
     )
     monkeypatch.setenv("AUTH_ISSUER", settings.AUTH_ISSUER)
     monkeypatch.setattr(sso, "get_settings", lambda: settings)
-    monkeypatch.setattr("project_workflow.interfaces.ui.app.get_settings", lambda: settings)
+    monkeypatch.setattr(import_module("project_workflow.interfaces.ui.app"), "get_settings", lambda: settings)
     calls = []
 
     def upstream(req):
@@ -167,6 +169,8 @@ def test_registered_route_uses_the_bridge_without_forwarding_browser_credentials
     from project_workflow.interfaces.ui.app import create_app
 
     monkeypatch.setenv("AUTH_ISSUER", "")
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "standalone")
+    monkeypatch.setenv("PROJECT_WORKFLOW_STANDALONE_CONTAINER_NETWORK", "false")
     get_settings.cache_clear()
     calls = []
     factory = httpx.AsyncClient
@@ -180,7 +184,7 @@ def test_registered_route_uses_the_bridge_without_forwarding_browser_credentials
         patch.object(
             bridge.httpx, "AsyncClient", side_effect=lambda **kw: factory(transport=httpx.MockTransport(upstream), **kw)
         ),
-        TestClient(create_app()) as client,
+        TestClient(create_app(), base_url="http://127.0.0.1", client=("127.0.0.1", 50000)) as client,
     ):
         response = client.get(
             "/api/platform/branding", headers={"If-None-Match": '"r1"', "Cookie": "session=fictional-preview"}

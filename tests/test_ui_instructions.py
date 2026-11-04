@@ -7,13 +7,22 @@ from fastapi.testclient import TestClient
 
 pytestmark = [pytest.mark.ui]
 
-from project_workflow.interfaces.ui import app
 from tests._ui_source_helpers import page_source
 
-client = TestClient(app)
+
+@pytest.fixture
+def client(monkeypatch):
+    from project_workflow import config
+    from project_workflow.interfaces.ui.app import create_app
+
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "standalone")
+    monkeypatch.setenv("PROJECT_WORKFLOW_STANDALONE_CONTAINER_NETWORK", "false")
+    config.get_settings.cache_clear()
+    with TestClient(create_app(), base_url="http://127.0.0.1", client=("127.0.0.1", 50000)) as local_client:
+        yield local_client
 
 
-def _seed_phase_id() -> int:
+def _seed_phase_id(client) -> int:
     """Return the first available phase id after setup."""
     response = client.get("/api/phases")
     assert response.status_code == 200
@@ -23,8 +32,8 @@ def _seed_phase_id() -> int:
 
 
 class TestInstructionsApi:
-    def test_reorder_templates_move_rows_and_restore_dom_on_failure(self):
-        phase_id = _seed_phase_id()
+    def test_reorder_templates_move_rows_and_restore_dom_on_failure(self, client):
+        phase_id = _seed_phase_id(client)
         dedicated = page_source(client, client.get(f"/instructions?phase_id={phase_id}"))
         detail = page_source(client, client.get(f"/phase/{phase_id}"))
 
@@ -36,8 +45,8 @@ class TestInstructionsApi:
         assert "if (!await persistInstructionOrder())" in detail
         assert "renderInstructionTimeline(items)" in detail
 
-    def test_instructions_list_returns_phase_and_instructions(self):
-        phase_id = _seed_phase_id()
+    def test_instructions_list_returns_phase_and_instructions(self, client):
+        phase_id = _seed_phase_id(client)
         response = client.get(f"/api/phases/{phase_id}/instructions")
         assert response.status_code == 200
         data = response.json()
@@ -45,13 +54,13 @@ class TestInstructionsApi:
         assert data["phase"]["id"] == phase_id
         assert isinstance(data["instructions"], list)
 
-    def test_instructions_list_404_for_missing_phase(self):
+    def test_instructions_list_404_for_missing_phase(self, client):
         response = client.get("/api/phases/9999999/instructions")
         assert response.status_code == 404
         assert response.json()["ok"] is False
 
-    def test_create_instruction(self):
-        phase_id = _seed_phase_id()
+    def test_create_instruction(self, client):
+        phase_id = _seed_phase_id(client)
         response = client.post(
             "/api/instructions",
             json={"phase_id": phase_id, "description": "New test instruction", "execution_type": "sync"},
@@ -68,12 +77,12 @@ class TestInstructionsApi:
         # Cleanup
         client.delete(f"/api/instructions/{item['id']}")
 
-    def test_create_instruction_requires_phase(self):
+    def test_create_instruction_requires_phase(self, client):
         response = client.post("/api/instructions", json={"description": "orphan"})
         assert response.status_code == 422
 
-    def test_update_instruction_description_and_parallel(self):
-        phase_id = _seed_phase_id()
+    def test_update_instruction_description_and_parallel(self, client):
+        phase_id = _seed_phase_id(client)
         create = client.post(
             "/api/instructions",
             json={"phase_id": phase_id, "description": "before"},
@@ -91,12 +100,12 @@ class TestInstructionsApi:
 
         client.delete(f"/api/instructions/{item['id']}")
 
-    def test_update_instruction_404(self):
+    def test_update_instruction_404(self, client):
         response = client.put("/api/instructions/9999999", json={"description": "x"})
         assert response.status_code == 404
 
-    def test_delete_instruction(self):
-        phase_id = _seed_phase_id()
+    def test_delete_instruction(self, client):
+        phase_id = _seed_phase_id(client)
         create = client.post(
             "/api/instructions",
             json={"phase_id": phase_id, "description": "to delete"},
@@ -106,12 +115,12 @@ class TestInstructionsApi:
         assert response.status_code == 200
         assert response.json()["ok"] is True
 
-    def test_delete_instruction_404(self):
+    def test_delete_instruction_404(self, client):
         response = client.delete("/api/instructions/9999999")
         assert response.status_code == 404
 
-    def test_reorder_instructions(self):
-        phase_id = _seed_phase_id()
+    def test_reorder_instructions(self, client):
+        phase_id = _seed_phase_id(client)
         items = [
             client.post("/api/instructions", json={"phase_id": phase_id, "description": f"i{n}"}).json()["instruction"]
             for n in range(3)
@@ -137,21 +146,21 @@ class TestInstructionsApi:
         for item in items:
             client.delete(f"/api/instructions/{item['id']}")
 
-    def test_reorder_404_for_missing_phase(self):
+    def test_reorder_404_for_missing_phase(self, client):
         response = client.put("/api/phases/9999999/instructions/reorder", json={"instruction_ids": [9999999]})
         assert response.status_code == 404
 
     @pytest.mark.parametrize("instruction_ids", [[], [1, 1], ["1"], [True]])
-    def test_reorder_rejects_malformed_ids(self, instruction_ids):
-        phase_id = _seed_phase_id()
+    def test_reorder_rejects_malformed_ids(self, client, instruction_ids):
+        phase_id = _seed_phase_id(client)
         response = client.put(
             f"/api/phases/{phase_id}/instructions/reorder",
             json={"instruction_ids": instruction_ids},
         )
         assert response.status_code == 422
 
-    def test_reorder_rejects_incomplete_missing_and_cross_phase_ids(self):
-        phase_id = _seed_phase_id()
+    def test_reorder_rejects_incomplete_missing_and_cross_phase_ids(self, client):
+        phase_id = _seed_phase_id(client)
         other_phase_id = client.get("/api/phases").json()["phases"][1]["id"]
         own_ids = [
             item["id"]
@@ -177,8 +186,8 @@ class TestInstructionsApi:
         ).status_code == 409
         client.delete(f"/api/instructions/{foreign['id']}")
 
-    def test_delete_instruction_keeps_contiguous_step_numbers(self):
-        phase_id = _seed_phase_id()
+    def test_delete_instruction_keeps_contiguous_step_numbers(self, client):
+        phase_id = _seed_phase_id(client)
         created = [
             client.post(
                 "/api/instructions",
@@ -191,8 +200,8 @@ class TestInstructionsApi:
             rows = client.get(f"/api/phases/{phase_id}/instructions").json()["instructions"]
             assert [row["step_num"] for row in rows] == list(range(1, len(rows) + 1))
 
-    def test_create_instruction_persists_skills(self):
-        phase_id = _seed_phase_id()
+    def test_create_instruction_persists_skills(self, client):
+        phase_id = _seed_phase_id(client)
         response = client.post(
             "/api/instructions",
             json={"phase_id": phase_id, "description": "with skills", "skills": ["a", "b"]},
@@ -201,8 +210,8 @@ class TestInstructionsApi:
         assert set(item["skills"]) == {"a", "b"}
         client.delete(f"/api/instructions/{item['id']}")
 
-    def test_update_instruction_skills_omitted_null_empty_and_list(self):
-        phase_id = _seed_phase_id()
+    def test_update_instruction_skills_omitted_null_empty_and_list(self, client):
+        phase_id = _seed_phase_id(client)
         create = client.post(
             "/api/instructions",
             json={"phase_id": phase_id, "description": "x", "skills": ["keep"]},
@@ -224,8 +233,8 @@ class TestInstructionsApi:
         assert rejected.status_code == 422
         client.delete(f"/api/instructions/{item['id']}")
 
-    def test_create_instruction_inserts_at_requested_step(self):
-        phase_id = _seed_phase_id()
+    def test_create_instruction_inserts_at_requested_step(self, client):
+        phase_id = _seed_phase_id(client)
         appended = client.post(
             "/api/instructions",
             json={"phase_id": phase_id, "description": "append marker"},
@@ -250,8 +259,8 @@ class TestInstructionsApi:
         client.delete(f"/api/instructions/{inserted['id']}")
         client.delete(f"/api/instructions/{appended['id']}")
 
-    def test_create_instruction_rejects_step_past_end(self):
-        phase_id = _seed_phase_id()
+    def test_create_instruction_rejects_step_past_end(self, client):
+        phase_id = _seed_phase_id(client)
         count = len(client.get(f"/api/phases/{phase_id}/instructions").json()["instructions"])
 
         response = client.post(
@@ -263,19 +272,19 @@ class TestInstructionsApi:
 
 
 class TestInstructionsPage:
-    def test_instructions_page_without_phase_shows_guidance(self):
+    def test_instructions_page_without_phase_shows_guidance(self, client):
         response = client.get("/instructions")
         assert response.status_code == 200
         assert "Выберите фазу" in response.text
         assert "Инструкции открываются из карточки нужной фазы" in response.text
         assert "HTTP 400" not in response.text
 
-    def test_instructions_page_renders_existing_phase(self):
-        phase_id = _seed_phase_id()
+    def test_instructions_page_renders_existing_phase(self, client):
+        phase_id = _seed_phase_id(client)
         response = client.get(f"/instructions?phase_id={phase_id}")
         assert response.status_code == 200
         assert "instructions.html" in response.text or "instruction" in response.text.lower()
 
-    def test_instructions_page_404_for_missing_phase(self):
+    def test_instructions_page_404_for_missing_phase(self, client):
         response = client.get("/instructions?phase_id=9999999")
         assert response.status_code == 404

@@ -199,6 +199,7 @@ def test_sqlite_never_claims_product_fencing(monkeypatch):
 
 def test_actual_router_overall_timeout_never_reaches_effect(monkeypatch):
     from project_workflow.interfaces.ui.routes import identity_deletion_api as route
+    wire(monkeypatch, introspection())
     effects = []
 
     async def delayed_authority(*args):

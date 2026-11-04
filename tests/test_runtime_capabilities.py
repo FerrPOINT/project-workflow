@@ -46,6 +46,11 @@ def manifest():
 
 @pytest.fixture
 def discovery(monkeypatch, tmp_path):
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "platform")
+    monkeypatch.setenv("AUTH_ISSUER", "https://auth.test")
+    monkeypatch.setenv("AUTH_INTERNAL_BASE_URL", "https://auth.test")
+    monkeypatch.setenv("AUTH_SESSION_SECRET", "runtime-capabilities-test-session-secret")
+    monkeypatch.setattr(config, "CATALOG_VARIANT", "single-task-v1")
     monkeypatch.setattr(db_session, "schema_is_ready", lambda _engine: True)
     path = tmp_path / "runtime-build-manifest.json"
     path.write_text(json.dumps(manifest()), encoding="utf-8")
@@ -53,16 +58,21 @@ def discovery(monkeypatch, tmp_path):
     configure(monkeypatch)
     with SAUnitOfWork() as uow:
         ensure_single_task_catalog(uow)
-    with TestClient(create_app()) as client:
+        uow.commit()
+    with TestClient(create_app(), base_url="http://127.0.0.1", client=("127.0.0.1", 50000)) as client:
+        baseline = client.get("/internal/runtime/capabilities", headers=headers(ASSIGNMENT))
+        assert baseline.status_code == 200, baseline.text
+        assert baseline.json()["readiness"] == {"service": "ready", "schema": "ready", "catalog": "ready"}
+        assert baseline.json()["instruction_profile"] == "single-task-v1"
+        assert baseline.json()["instruction_manifest_sha256"] == MANIFEST_SHA256
+        assert baseline.json()["workflow_catalog_sha256"] == CATALOG_SHA256
         yield client, path
 
 
 @pytest.mark.parametrize("role", ROLES)
-@pytest.mark.parametrize("variant", ["base", "single-task-v1"])
-def test_current_capabilities_are_role_scoped_in_both_catalog_images(discovery, monkeypatch, role, variant):
+def test_current_capabilities_are_role_scoped_in_current_catalog(discovery, monkeypatch, role):
     client, _ = discovery
     configure(monkeypatch, role)
-    monkeypatch.setattr(config, "CATALOG_VARIANT", variant)
     response = client.get("/internal/runtime/capabilities", headers=headers(ASSIGNMENT))
     assert response.status_code == 200, response.text
     assert response.json() == {

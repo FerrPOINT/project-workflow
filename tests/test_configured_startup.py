@@ -9,14 +9,18 @@ from pathlib import Path
 import pytest
 
 
-@pytest.mark.parametrize("variant,modes", [(None, 8), ("legacy", 11)])
-def test_cold_initialization_selects_current_default_or_explicit_retained_catalog(tmp_path, variant, modes):
+@pytest.mark.parametrize("mode,professions,modes,phases", [("platform", 7, 8, 24), ("standalone", 0, 0, 0)])
+def test_cold_initialization_uses_explicit_mode_without_retained_catalog_fallback(
+    tmp_path, mode, professions, modes, phases,
+):
     source = Path(__file__).resolve().parents[1]
     environment = dict(os.environ, DATABASE_URL="sqlite:///" + (tmp_path / "startup.sqlite").as_posix(),
                        PYTHONPATH=str(source), PYTHONDONTWRITEBYTECODE="1", PLATFORM_SERVICES_URL="")
     environment.pop("PROJECT_WORKFLOW_CATALOG_VARIANT", None)
-    if variant is not None:
-        environment["PROJECT_WORKFLOW_CATALOG_VARIANT"] = variant
+    environment["PROJECT_WORKFLOW_MODE"] = mode
+    environment.update(AUTH_ISSUER="https://auth.fixture.invalid",
+                       AUTH_INTERNAL_BASE_URL="https://auth.fixture.invalid",
+                       AUTH_SESSION_SECRET="startup-fixture-session-secret-32-characters")
     code = """
 import json
 from project_workflow import config
@@ -35,10 +39,9 @@ with SAUnitOfWork() as uow:
                             env=environment, capture_output=True, text=True, encoding="utf-8", timeout=45)
     assert result.returncode == 0, result.stdout + result.stderr
     value = json.loads(result.stdout.splitlines()[-1])
-    assert value["variant"] == (variant or "single-task-v1")
-    assert value["professions"] == value["workflows"] == 7
+    assert value["variant"] == "single-task-v1"
+    assert value["professions"] == value["workflows"] == professions
     assert value["modes"] == modes
-    if variant is None:
-        assert value["phases"] == 24
+    assert value["phases"] == phases
     assert not list(tmp_path.glob("*.json"))
     assert not (tmp_path / ".fleet-cli").exists()

@@ -14,12 +14,13 @@ from project_workflow.interfaces.ui.app import create_app
 
 
 def _client(tmp_path, monkeypatch):
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "standalone")
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'health.db'}")
     config.get_settings.cache_clear()
     session.reset_engine()
     engine = session.get_engine()
     session.ensure_migrated(engine)
-    return engine, TestClient(create_app())
+    return engine, TestClient(create_app(), base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
 
 
 def test_repeated_health_does_not_repeat_full_schema_reflection(tmp_path, monkeypatch):

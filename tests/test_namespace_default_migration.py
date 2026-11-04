@@ -1,19 +1,21 @@
 """The migration entrypoint installs defaults and preserves populated catalogs."""
 
-import pytest
 from sqlalchemy import create_engine, text
 
 from project_workflow import config
-from project_workflow.infrastructure.db.managed_catalog import ensure_managed_catalog, validate_managed_catalog_state
+from project_workflow.infrastructure.db.managed_catalog import ensure_managed_catalog
 from project_workflow.infrastructure.db.session import reset_engine, run_alembic_command
+from project_workflow.infrastructure.db.single_task_catalog import observe_installation
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from scripts.init_db import main
 
 
-@pytest.mark.parametrize("variant", ["legacy", "base"])
-def test_migration_entrypoint_creates_seven_namespace_defaults_and_is_repeatable(tmp_path, monkeypatch, variant):
-    filename = "hermes_sdlc_catalog_v1.json" if variant == "legacy" else "base_sdlc_catalog_v2.json"
-    monkeypatch.setattr(config, "MANAGED_CATALOG_PATH", config.MANAGED_CATALOG_PATH.with_name(filename))
+def test_migration_entrypoint_creates_current_namespace_defaults_and_is_repeatable(tmp_path, monkeypatch):
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "platform")
+    monkeypatch.setenv("AUTH_ISSUER", "https://auth.fixture.invalid")
+    monkeypatch.setenv("AUTH_INTERNAL_BASE_URL", "https://auth.fixture.invalid")
+    monkeypatch.setenv("AUTH_SESSION_SECRET", "migration-fixture-session-secret-32-characters")
+    monkeypatch.setattr(config, "CATALOG_VARIANT", "single-task-v1")
     url = f"sqlite:///{tmp_path / 'defaults.db'}"
     monkeypatch.setenv("DATABASE_URL", url)
     config.get_settings.cache_clear()
@@ -30,8 +32,12 @@ def test_migration_entrypoint_creates_seven_namespace_defaults_and_is_repeatable
                 assert len(before) == 7
                 assert len({row[2] for row in before}) == 7
                 assert all(row[4] == "Дефолтный" for row in before)
-                assert all(row[1] == "workflow-" + row[3].split(":", 1)[1] for row in before)
+                assert all(row[1] == "workflow-single-task-" + row[3].split(":", 1)[1].replace("_", "-")
+                           for row in before)
                 assert connection.execute(text("SELECT count(*) FROM phases")).scalar_one() > 0
+            with SAUnitOfWork(engine) as uow:
+                installation = observe_installation(uow)
+                assert {int(item.namespace_id) for item in installation.bindings} == {row[0] for row in before}
             assert main() == 0
             with engine.connect() as connection:
                 assert [tuple(row) for row in connection.execute(text(
@@ -39,7 +45,7 @@ def test_migration_entrypoint_creates_seven_namespace_defaults_and_is_repeatable
                     "FROM projects p JOIN workflows w ON w.id=p.workflow_id ORDER BY p.id"
                 ))] == before
             with SAUnitOfWork(engine) as uow:
-                assert validate_managed_catalog_state(uow)
+                assert observe_installation(uow) == installation
         finally:
             engine.dispose()
     finally:

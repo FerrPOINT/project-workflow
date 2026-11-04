@@ -1,6 +1,7 @@
 """Trusted confirmation context uses real guards and controlled provider responses."""
 
 import copy
+import hashlib
 import json
 from unittest.mock import Mock
 from uuid import uuid4
@@ -12,6 +13,7 @@ from project_workflow.infrastructure import configured_cli_tracker
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.infrastructure.llm import OpenAICompatibleClient, PromptBuilder
+from project_workflow.supervisor.evaluate import _fingerprint_contract_state
 from project_workflow.supervisor.evidence import validate_frozen_evaluation
 from tests._report_helpers import report_json
 from tests.test_configured_cli import WRITER, complete, enroll, step
@@ -89,7 +91,8 @@ def test_machine_confirmation_stays_on_server_not_in_provider_context(
     provider.assert_called_once()
     user = provider.call_args.kwargs["user"]
     payload = json.loads(user)
-    assert payload["report"]["result"]["document"] == FAKE_REPORT
+    assert payload["report"] == json.loads(report_json(FAKE_REPORT))
+    assert payload["previous_reports"] == []
     assert TRUSTED not in json.dumps({key: value for key, value in payload.items() if key != "report"})
     for value in ("a" * 64, configured[1]["owner_subject"], configured[1]["tracker_task_id"],
                   configured[1]["assignment_ref"]):
@@ -173,22 +176,29 @@ def test_confirmation_changed_during_provider_call_cannot_commit(
 def test_old_pm_frozen_proof_replays_unchanged_after_business_review_upgrade(
     configured, supervisor_llm, monkeypatch, old_version,
 ):
-    current_builder = PromptBuilder.build_user_prompt
-
-    def old_user(*args, **kwargs):
-        user = json.loads(current_builder(*args, **kwargs))
-        if old_version == "supervisor-evaluator-pm-v2":
-            user["historical_confirmation_context"] = TRUSTED + " Historical owner receipt context."
-        return json.dumps(user, ensure_ascii=False)
-
-    # Reproduce the previous prompt boundary while letting Supervisor create its own frozen proof.
-    with monkeypatch.context() as old:
-        old.setattr(PromptBuilder, "PROMPT_VERSION", old_version)
-        old.setattr(PromptBuilder, "build_user_prompt", staticmethod(old_user))
-        selector, result = complete(configured, supervisor_llm, old)
-    assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v16"
+    selector, result = complete(configured, supervisor_llm, monkeypatch)
+    assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v18"
     history_id = result["terminal_receipt"]["history_id"]
     with SAUnitOfWork() as uow:
+        # Seed a synthetic retained snapshot, never select an old execution policy.
+        row = uow.session.get(m.TaskStepHistoryEntry, history_id)
+        archive = json.loads(row.evaluation_snapshot)
+        archive["prompt_version"] = old_version
+        state = archive["contract_fingerprint_state"]
+        state["prompt_version"] = old_version
+        state.pop("phase_context_fingerprint")
+        fingerprint = _fingerprint_contract_state(state)
+        archive.update(contract_fingerprint=fingerprint, evaluated_contract_fingerprint=fingerprint)
+        archive["diagnostics"]["prompt_version"] = old_version
+        if old_version == "supervisor-evaluator-pm-v2":
+            prompt = archive["diagnostics"]["user"]
+            user = json.loads(prompt["text"])
+            user["historical_confirmation_context"] = TRUSTED + " Historical owner receipt context."
+            prompt["text"] = json.dumps(user, ensure_ascii=False)
+            prompt["characters"] = len(prompt["text"])
+            prompt["sha256"] = hashlib.sha256(prompt["text"].encode("utf-8")).hexdigest()
+        row.evaluation_snapshot = json.dumps(archive, ensure_ascii=False)
+        uow.commit()
         record = uow.step_history.get_by_id(history_id).to_dict()
     frozen = copy.deepcopy(record["evaluation_snapshot"])
     assert frozen["prompt_version"] == old_version
@@ -232,4 +242,4 @@ def test_verified_context_does_not_relax_current_parser(configured, supervisor_l
     result = response.json()["result"]
     assert result["verdict"] == "BLOCKED" and result["retryable"] is True
     assert result["complete"] is False and "terminal_receipt" not in result
-    assert provider.call_count == 2
+    provider.assert_called_once()

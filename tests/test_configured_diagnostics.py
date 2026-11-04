@@ -5,6 +5,7 @@ import sys
 from types import ModuleType
 from unittest.mock import Mock
 
+import httpx
 import pytest
 from click.testing import CliRunner
 
@@ -15,7 +16,9 @@ from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.infrastructure.llm import OpenAICompatibleClient
 from project_workflow.interfaces.cli.core import cli
+from project_workflow.interfaces.ui import sso
 from project_workflow.interfaces.ui.routes import configured_cli_api
+from tests._human_access_helpers import application_access_proof
 from tests.test_configured_cli import CONTROLLER, MACHINE, WRITER, enroll
 from tests.test_configured_cli import configured as configured
 from tests.test_configured_cli_transport import agent_env as agent_env
@@ -166,11 +169,34 @@ def test_renderer_error_cannot_fall_back_to_private_report(history, renderer):
     assert PRIVATE not in response.body.decode()
 
 
-def test_legacy_cli_surface_cannot_expose_diagnostics(history, renderer):
+@pytest.mark.parametrize("actor,status", [("machine", 403), ("human", 404)])
+def test_legacy_cli_surface_cannot_expose_diagnostics(history, renderer, monkeypatch, actor, status):
     (client, assignment), _ = history
-    response = client.get("/api/cli/history", headers=MACHINE, params={
+    assert not any(getattr(route, "path", None) == "/api/cli/history" for route in client.app.routes)
+    headers = MACHINE if actor == "machine" else {"Authorization": "Bearer sdlc_pat_test-human"}
+    original_client = httpx.AsyncClient
+    calls = []
+
+    def introspect(request):
+        calls.append(request)
+        assert str(request.url).startswith("https://auth.test/auth/tokens/introspect?")
+        assert request.headers["authorization"] == headers["Authorization"]
+        identity = {"sub": assignment["machine_subject"] if actor == "machine" else "ordinary-human",
+                    "role": "service_account" if actor == "machine" else "user",
+                    "scopes": ["project-workflow:read"]}
+        if actor == "human":
+            identity["application_access"] = application_access_proof(
+                issuer="https://auth.test", subject="ordinary-human",
+            )
+        return httpx.Response(200, json=identity)
+
+    monkeypatch.setattr(sso.httpx, "AsyncClient", lambda **kwargs: original_client(
+        transport=httpx.MockTransport(introspect), **kwargs,
+    ))
+    response = client.get("/api/cli/history", headers=headers, params={
         "task": assignment["task"], "namespace_id": assignment["namespace_id"], "projection": PROJECTION})
-    assert response.status_code in (404, 405)
+    assert response.status_code == status, response.text
+    assert len(calls) == 1
     assert PRIVATE not in response.text
     renderer.assert_not_called()
 

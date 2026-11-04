@@ -64,7 +64,8 @@ def test_entry_points_lock_workflow_before_task(local_task, monkeypatch, operati
         assert not uow.session.in_transaction()
         payload = json.loads(kwargs["user"])
         return {"verdict": "PARTIAL", "blockers": [], "confidence": 1.0,
-                "assessments": {item["id"]: {"covered": False, "reason": "Fixture incomplete result"}
+                "assessments": {item["id"]: {"covered": False, "reason": "Fixture incomplete result",
+                                           "required_change": "Provide the missing result"}
                                 for item in payload["criteria"]}}
 
     monkeypatch.setattr(uow.workflows, "lock", lock_workflow)

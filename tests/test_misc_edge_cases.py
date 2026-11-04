@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+import json
 
 import pytest
+from click.testing import CliRunner
 
 pytestmark = [pytest.mark.cli]
 
@@ -37,26 +38,21 @@ class TestOutJson:
         assert exc.value.code == 0
 
 
-class TestGetTaskKeyValidator:
-    def test_no_projects_fallback(self, monkeypatch):
-        from project_workflow.interfaces.cli.core import _get_task_key_validator
+@pytest.mark.parametrize("command", ["step", "history"])
+def test_unconfigured_cli_rejects_without_opening_database_or_network(monkeypatch, command):
+    from project_workflow.interfaces.cli import ui  # noqa: F401 -- register commands
+    from project_workflow.interfaces.cli.core import cli
 
-        db = MagicMock()
-        db.get_projects.return_value = []
-        monkeypatch.setattr("project_workflow.infrastructure.db.uow.SAUnitOfWork", lambda: db)
-        validator = _get_task_key_validator()
-        # should not raise and have default patterns
-        assert validator is not None
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Missing CLI configuration must not open a DB or network")
 
-    def test_empty_database_accepts_generic_task_shape(self):
-        from project_workflow.interfaces.cli.core import _get_task_key_validator
-
-        uow = MagicMock()
-        uow.projects.list.return_value = []
-        validator = _get_task_key_validator(uow=uow)
-        result = validator.validate("RUN-1")
-        assert result.is_valid
-        assert result.project is None
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "platform")
+    monkeypatch.delenv("PROJECT_WORKFLOW_URL", raising=False)
+    monkeypatch.setattr("project_workflow.infrastructure.db.uow.SAUnitOfWork.__init__", forbidden)
+    monkeypatch.setattr("requests.Session.request", forbidden)
+    result = CliRunner().invoke(cli, ["--json", command, "--task", "RUN-1"])
+    assert result.exit_code != 0
+    assert json.loads(result.output)["error_code"] == "configuration-or-input-invalid"
 
 
 class TestRequireValidKey:

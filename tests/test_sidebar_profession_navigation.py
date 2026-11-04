@@ -5,12 +5,17 @@ from html.parser import HTMLParser
 import pytest
 from fastapi.testclient import TestClient
 
-from project_workflow.interfaces.ui import _app_state, app
+from project_workflow import config
+from project_workflow.interfaces.ui import _app_state
+from project_workflow.interfaces.ui.app import create_app
 
 
 @pytest.fixture
-def client():
-    with TestClient(app) as browser_client:
+def client(monkeypatch):
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "standalone")
+    monkeypatch.setenv("PROJECT_WORKFLOW_STANDALONE_CONTAINER_NETWORK", "false")
+    config.get_settings.cache_clear()
+    with TestClient(create_app(), base_url="http://127.0.0.1", client=("127.0.0.1", 50000)) as browser_client:
         yield browser_client
 
 
@@ -32,6 +37,7 @@ def sidebar_content(html):
 
 def test_sidebar_keeps_cli_and_has_no_removed_registry(client):
     response = client.get("/settings")
+    assert response.status_code == 200
     sidebar = sidebar_content(response.text)
     links = Links()
     links.feed(sidebar)

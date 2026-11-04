@@ -8,10 +8,18 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from project_workflow import config
 from project_workflow.config import Settings
 from project_workflow.infrastructure.platform_auth import human_access
 from project_workflow.interfaces.ui import sso
 from project_workflow.interfaces.ui.routes import pages
+
+
+@pytest.fixture(autouse=True)
+def platform_mode(monkeypatch):
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "platform")
+    monkeypatch.setenv("AUTH_ISSUER", "https://auth.fixture.invalid")
+    config.get_settings.cache_clear()
 
 
 class Elements(HTMLParser):
@@ -39,7 +47,7 @@ def test_rendered_configuration_controls_follow_current_central_role(monkeypatch
     uow = SAUnitOfWork()
     schema.ensure_phase_catalog(uow)
     uow.close()
-    settings = Settings(AUTH_ISSUER="https://auth.fixture.invalid")
+    settings = Settings(PROJECT_WORKFLOW_MODE="platform", AUTH_ISSUER="https://auth.fixture.invalid")
     monkeypatch.setattr(sso, "get_settings", lambda: settings)
     now = datetime.now(timezone.utc)
     identity = {"role": "admin", "application_access": {
@@ -93,7 +101,8 @@ def test_missing_or_expired_central_authority_cannot_render_administration(monke
 
     from project_workflow.infrastructure.platform_auth import HumanAccess
 
-    monkeypatch.setattr(sso, "get_settings", lambda: Settings(AUTH_ISSUER="https://auth.fixture.invalid"))
+    monkeypatch.setattr(sso, "get_settings", lambda: Settings(
+        PROJECT_WORKFLOW_MODE="platform", AUTH_ISSUER="https://auth.fixture.invalid"))
     request = Request({"type": "http", "method": "GET", "path": "/", "headers": []})
     assert not sso.can_administer(request)
     request.state.central_access = HumanAccess("admin", None, time.monotonic() - 1)
@@ -164,7 +173,8 @@ def test_catalog_is_filtered_per_current_user_without_mutating_the_shared_cache(
         monkeypatch, role, applications, expected):
     from dataclasses import replace
 
-    monkeypatch.setattr(sso, "get_settings", lambda: Settings(AUTH_ISSUER="https://auth.fixture.invalid"))
+    monkeypatch.setattr(sso, "get_settings", lambda: Settings(
+        PROJECT_WORKFLOW_MODE="platform", AUTH_ISSUER="https://auth.fixture.invalid"))
     catalog = [{"key": key, "label": key, "url": "https://fixture.invalid/" + key}
                for key in ("project-workflow", "wiki", "future-app")]
     request = current_access_request(role=role, applications=applications)
@@ -181,15 +191,16 @@ def test_missing_application_authority_is_closed_in_central_mode_and_standalone_
     from project_workflow.interfaces.ui import project_admission
 
     request = Request({"type": "http", "method": "GET", "path": "/", "headers": []})
-    settings = Settings(AUTH_ISSUER="https://auth.fixture.invalid")
+    settings = Settings(PROJECT_WORKFLOW_MODE="platform", AUTH_ISSUER="https://auth.fixture.invalid")
     monkeypatch.setattr(sso, "get_settings", lambda: settings)
-    import project_workflow.config as config
     monkeypatch.setattr(config.get_settings(), "AUTH_ISSUER", settings.AUTH_ISSUER)
     monkeypatch.delenv("PROJECT_WORKFLOW_SPACES__ENABLED", raising=False)
     assert sso.visible_services(request, [{"key": "wiki"}]) == []
     with pytest.raises(SpaceAccessDenied):
         project_admission.display_window(request)
     settings.AUTH_ISSUER = ""
+    settings.PROJECT_WORKFLOW_MODE = "standalone"
     monkeypatch.setattr(config.get_settings(), "AUTH_ISSUER", "")
+    monkeypatch.setattr(config.get_settings(), "PROJECT_WORKFLOW_MODE", "standalone")
     assert sso.visible_services(request, [{"key": "wiki"}]) == [{"key": "wiki"}]
     assert project_admission.display_window(request)["enforced"] is False

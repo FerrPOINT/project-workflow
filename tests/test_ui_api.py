@@ -25,10 +25,13 @@ def client(tmp_path, monkeypatch):
     db_path = tmp_path / "test.db"
     db_url = f"sqlite:///{db_path}"
     monkeypatch.setenv("DATABASE_URL", db_url)
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "standalone")
+    monkeypatch.setenv("PROJECT_WORKFLOW_STANDALONE_CONTAINER_NETWORK", "false")
     from project_workflow import config
 
     config.get_settings.cache_clear()
-    from project_workflow.interfaces.ui import _app_state, app
+    from project_workflow.interfaces.ui import _app_state
+    from project_workflow.interfaces.ui.app import create_app
 
     _app_state.__init__(database_url=db_url)  # type: ignore[misc]
     uow = _app_state.get_db()
@@ -61,7 +64,7 @@ def client(tmp_path, monkeypatch):
             }
         )
     uow.commit()
-    with TestClient(app) as c:
+    with TestClient(create_app(), base_url="http://127.0.0.1", client=("127.0.0.1", 50000)) as c:
         yield c
 
 

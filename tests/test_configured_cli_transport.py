@@ -13,10 +13,7 @@ from project_workflow.interfaces.cli import (
     ui,  # noqa: F401 -- register existing commands
 )
 from project_workflow.interfaces.cli.core import cli
-
-
-def report_json(text):
-    return json.dumps({"source": "", "result": {"document": text}, "unresolved": []})
+from tests._report_helpers import report_json
 
 
 @pytest.fixture
@@ -204,7 +201,7 @@ def test_malformed_report_has_safe_field_error_without_http_or_unknown_acceptanc
     calls = fake_transport(monkeypatch)
     args = (["--json"] if json_mode else []) + ["step", "--task", "SDLC-31", "--report", "-",
         "--operation-key", "new-report", "--expected-version", "1"]
-    value = '{"source":"private-source","result":[],"unresolved":[]}'
+    value = '{"source":{"request":"private-source","decisions":[]},"result":[],"unresolved":[]}'
     result = CliRunner().invoke(cli, args, input=value)
     assert result.exit_code == 1 and calls == []
     assert "Invalid phase report at result" in result.output

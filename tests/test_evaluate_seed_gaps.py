@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -74,6 +75,7 @@ class TestEvaluateGaps:
         }
         engine.workflow_id = 1
         engine.current_phase_code = "1"
+        engine._get_phase_evaluation_history.return_value = {"reports": [], "assessments": {}}
         engine._resolve_transition.return_value = (None, None, None)
         engine.db.step_history.list.return_value = []
         engine.db.step_history.get_by_fingerprint.return_value = None
@@ -101,8 +103,9 @@ class TestEvaluateGaps:
     @patch("project_workflow.supervisor.evaluate.OpenAICompatibleClient")
     def test_evaluate_rejects_retired_rollback_with_a_saved_target(self, mock_client):
         mock_client.return_value.chat.return_value = {
-            "verdict": "ROLLBACK", "covered": [], "missing": [], "blockers": [],
-            "message": "rollback", "confidence": 0.8,
+            "verdict": "ROLLBACK", "assessments": {"C1": {
+                "covered": False, "reason": "Incomplete phase result", "required_change": "Complete the result",
+            }}, "blockers": [], "confidence": 0.8,
         }
         engine = self._engine()
         ph = _phase(rollback_target_phase_code="0")
@@ -158,8 +161,9 @@ class TestEvaluateGaps:
     @patch("project_workflow.supervisor.evaluate.OpenAICompatibleClient")
     def test_provider_cannot_invent_rollback_or_delegate_policy(self, mock_client, verdict):
         mock_client.return_value.chat.return_value = {
-            "verdict": verdict, "covered": [], "missing": [], "blockers": [],
-            "message": "unsupported transition", "confidence": 0.8,
+            "verdict": verdict, "assessments": {"C1": {
+                "covered": False, "reason": "Incomplete phase result", "required_change": "Complete the result",
+            }}, "blockers": [], "confidence": 0.8,
         }
         engine = self._engine()
         phase = _phase()
@@ -169,7 +173,7 @@ class TestEvaluateGaps:
         assert result["retryable"] is True
         assert result["next_phase_code"] is None
         assert result["rollback_phase_code"] is None
-        assert mock_client.return_value.chat.call_count == 2
+        mock_client.return_value.chat.assert_called_once()
 
     @pytest.mark.parametrize("point", ["before", "during"])
     @patch("project_workflow.supervisor.evaluate.OpenAICompatibleClient")
@@ -270,6 +274,12 @@ class TestEvaluateGaps:
             engine.db.step_history.get_by_fingerprint.return_value = run
             engine.db.step_history.list.return_value = [run]
             engine.db.tasks.get_by_id.return_value = SimpleNamespace(current_phase_code="1", status="done")
+            engine._get_phase_evaluation_history.return_value = {
+                "reports": [json.loads(report_json("same report"))],
+                "assessments": {"1:check:1": {
+                    "covered": True, "reason": "Durable peer result", "required_change": None,
+                }},
+            }
             return {}
 
         def refresh_task():
@@ -300,6 +310,9 @@ class TestEvaluateGaps:
 
         def peer_completes(**_kwargs):
             engine.db.step_history.list.return_value = [SimpleNamespace(id=7)]
+            engine._get_phase_evaluation_history.return_value = {
+                "reports": [json.loads(report_json("Different peer report"))], "assessments": {},
+            }
             return {}
 
         mock_client.return_value.chat.side_effect = peer_completes

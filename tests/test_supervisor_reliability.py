@@ -12,10 +12,13 @@ from sqlalchemy import text
 from project_workflow import config
 from project_workflow.application.phase_service import PhaseService
 from project_workflow.domain.exceptions import ConcurrentTransitionError
+from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.infrastructure.llm import OpenAICompatibleClient, PromptBuilder, ResponseParser
 from project_workflow.supervisor import SupervisorEngine
 from tests._db_helpers import phase_by_code
 from tests._report_helpers import report_json
+from tests.test_configured_cli import configured as configured
+from tests.test_configured_cli import enroll, step
 
 pytestmark = [pytest.mark.supervisor]
 
@@ -29,6 +32,14 @@ def _wire(verdict: str, covered: list[str], missing: list[str], blockers: list[s
         "message": "Результат проверки",
         "confidence": 0.5,
     }
+
+
+def _configured_state(fixture):
+    with SAUnitOfWork() as uow:
+        task = uow.tasks.get_by_key(fixture[1]["task"], project_id=fixture[1]["namespace_id"])
+        assert task is not None
+        return (task.to_dict(), uow.list_phase_events(task.id),
+                uow.list_step_history(task_id=task.id, limit=None))
 
 
 class TestStrictEvaluatorContract:
@@ -67,22 +78,28 @@ class TestStrictEvaluatorContract:
 
 
 @pytest.mark.parametrize("verdict", ["PARTIAL", "BLOCKED"])
-def test_valid_report_is_replayed_once(verdict, supervisor_llm):
-    engine = SupervisorEngine(f"RUN-90{['PASS', 'PARTIAL', 'BLOCKED'].index(verdict)}")
+def test_valid_report_is_replayed_once(configured, verdict, supervisor_llm):
+    enroll(configured)
     supervisor_llm(verdict)
     fixture_chat = OpenAICompatibleClient.chat
     with patch.object(OpenAICompatibleClient, "chat", side_effect=fixture_chat) as chat:
-        first = engine.evaluate(report_json(f"report {verdict}"))
-        history_after_first = engine.db.list_phase_events(engine.task["id"])
-        second = engine.evaluate(report_json(f"report {verdict}"))
+        first_response = step(configured, report=report_json(f"report {verdict}"),
+                              operation_key="replayed-report", expected_version=1)
+        assert first_response.status_code == 200, first_response.text
+        first = first_response.json()["result"]
+        history_after_first = _configured_state(configured)
+        second_response = step(configured, report=report_json(f"report {verdict}"),
+                               operation_key="replayed-report", expected_version=1)
+        assert second_response.status_code == 200, second_response.text
+        second = second_response.json()["result"]
 
     assert first["verdict"] == verdict
     assert first["replayed"] is False
     assert second["verdict"] == verdict
-    assert second["replayed"] is True
+    assert second == first
     assert chat.call_count == 1
-    assert len(engine.db.list_step_history(task_key=engine.task_key, limit=10)) == 1
-    assert engine.db.list_phase_events(engine.task["id"]) == history_after_first
+    assert len(history_after_first[2]) == 1
+    assert _configured_state(configured) == history_after_first
 
 
 def test_same_report_uses_provider_again_after_prompt_version_change(supervisor_llm, monkeypatch):
@@ -107,12 +124,8 @@ def test_replay_does_not_return_stale_result_for_deleted_task(supervisor_llm):
     supervisor_llm("PARTIAL")
     engine.evaluate(report_json("report before deletion"))
 
-    def remove_task_from_state() -> None:
-        engine.task = None
-        engine.current_phase_code = ""
-
     with (
-        patch.object(engine, "_reload_task_state", side_effect=remove_task_from_state),
+        patch.object(engine._task_service, "get_task", return_value=None),
         patch.object(OpenAICompatibleClient, "chat", wraps=OpenAICompatibleClient.chat) as chat,
     ):
         result = engine.evaluate(report_json("report before deletion"))
@@ -183,7 +196,8 @@ def test_same_report_uses_provider_again_after_accumulated_coverage_changes():
         covered = item_ids[: min(calls + 1, 2)]
         calls += 1
         return {"verdict": "PARTIAL", "assessments": {
-            item_id: {"covered": item_id in covered, "reason": "Проверен текущий результат"}
+            item_id: {"covered": item_id in covered, "reason": "Проверен текущий результат",
+                      "required_change": None if item_id in covered else "Предоставьте недостающий результат"}
             for item_id in item_ids}, "blockers": [], "confidence": 0.5}
 
     with patch.object(OpenAICompatibleClient, "chat", side_effect=partial_progress) as chat:
@@ -333,7 +347,7 @@ def test_transition_catalog_error_is_recorded_as_retryable_blocker(supervisor_ll
     chat.assert_not_called()
 
 
-def test_same_report_replays_after_noop_phase_aggregate_save(supervisor_llm):
+def test_noop_phase_save_preserves_catalog_but_new_history_context_is_reevaluated(supervisor_llm):
     engine = SupervisorEngine("RUN-919")
     supervisor_llm("PARTIAL")
     fixture_chat = OpenAICompatibleClient.chat
@@ -368,8 +382,15 @@ def test_same_report_replays_after_noop_phase_aggregate_save(supervisor_llm):
         second = engine.evaluate(report_json(report))
 
     assert first["replayed"] is False
-    assert second["replayed"] is True
-    assert chat.call_count == 1
+    assert second["replayed"] is False
+    assert chat.call_count == 2
+    history = engine.db.step_history.list(task_key=engine.task_key)
+    states = [run.evaluation_snapshot["contract_fingerprint_state"] for run in history]
+    assert states[0]["phase_context_fingerprint"] != states[1]["phase_context_fingerprint"]
+    assert {key: value for key, value in states[0].items() if key != "phase_context_fingerprint"} == {
+        key: value for key, value in states[1].items() if key != "phase_context_fingerprint"
+    }
+    assert json.loads(chat.call_args.kwargs["user"])["previous_reports"] == [json.loads(report_json(report))]
 
 
 def test_legacy_parallel_targets_do_not_block_evaluation(supervisor_llm):
@@ -402,26 +423,34 @@ def test_legacy_parallel_targets_do_not_block_evaluation(supervisor_llm):
 
 
 @pytest.mark.parametrize(
-    ("task_number", "invalid_response"),
+    ("task_number", "defect"),
     [
-        (921, {"verdict": "pass", "covered": [], "missing": [], "blockers": [], "message": "ok", "confidence": 0.5}),
-        (
-            922,
-            {
-                "verdict": "PASS", "covered": [], "missing": [], "blockers": [],
-                "message": "ok", "confidence": 0.5, "extra": True,
-            },
-        ),
-        (923, {"verdict": "PASS", "covered": [], "missing": [], "blockers": [], "confidence": 0.5}),
-        (924, {"verdict": "PASS", "covered": [], "missing": [], "blockers": [], "message": 1, "confidence": 0.5}),
-        (925, {"verdict": "PASS", "covered": [], "missing": [], "blockers": [], "message": "ok", "confidence": "high"}),
+        (921, "lowercase-verdict"), (922, "extra-field"), (923, "missing-assessments"),
+        (924, "non-string-reason"), (925, "invalid-confidence"),
     ],
 )
-def test_invalid_evaluator_contract_uses_fail_closed_audit(task_number, invalid_response):
+def test_invalid_evaluator_contract_uses_fail_closed_audit(task_number, defect):
     engine = SupervisorEngine(f"RUN-{task_number}")
     phase_before = engine.current_phase_code
 
-    with patch.object(OpenAICompatibleClient, "chat", return_value=invalid_response):
+    def invalid_response(*_args, **kwargs):
+        raw = {"verdict": "PASS", "assessments": {
+            item["id"]: {"covered": True, "reason": "Actual result", "required_change": None}
+            for item in json.loads(kwargs["user"])["criteria"]
+        }, "blockers": [], "confidence": 0.5}
+        if defect == "lowercase-verdict":
+            raw["verdict"] = "pass"
+        elif defect == "extra-field":
+            raw["extra"] = True
+        elif defect == "missing-assessments":
+            raw.pop("assessments")
+        elif defect == "non-string-reason":
+            next(iter(raw["assessments"].values()))["reason"] = 1
+        else:
+            raw["confidence"] = "high"
+        return raw
+
+    with patch.object(OpenAICompatibleClient, "chat", side_effect=invalid_response) as chat:
         result = engine.evaluate(report_json("Отчёт"))
 
     task = engine.db.tasks.get_by_id(engine.task["id"]).to_dict()
@@ -431,9 +460,12 @@ def test_invalid_evaluator_contract_uses_fail_closed_audit(task_number, invalid_
     assert task["status"] == "blocked"
     assert task["current_phase_code"] == phase_before
     assert run["replay_fingerprint"] is None
+    chat.assert_called_once()
+    assert run["evaluation_snapshot"]["advisor_assessments"] == {}
+    assert run["evaluation_snapshot"]["diagnostics"]["outcome"] == "technical_failure"
 
 
-def test_invalid_evaluator_contract_is_retried_inside_one_evaluation(supervisor_llm):
+def test_invalid_evaluator_contract_is_not_repaired_inside_one_evaluation(supervisor_llm):
     engine = SupervisorEngine("RUN-926")
     supervisor_llm("PASS")
     valid_chat = OpenAICompatibleClient.chat
@@ -444,10 +476,11 @@ def test_invalid_evaluator_contract_is_retried_inside_one_evaluation(supervisor_
         if len(calls) == 1:
             return {
                 "verdict": "pass",
-                "covered": [],
-                "missing": [],
+                "assessments": {
+                    item["id"]: {"covered": True, "reason": "Actual result", "required_change": None}
+                    for item in json.loads(kwargs["user"])["criteria"]
+                },
                 "blockers": [],
-                "message": "ok",
                 "confidence": 0.5,
             }
         return valid_chat(*args, **kwargs)
@@ -455,33 +488,31 @@ def test_invalid_evaluator_contract_is_retried_inside_one_evaluation(supervisor_
     with patch.object(OpenAICompatibleClient, "chat", side_effect=invalid_then_valid):
         result = engine.evaluate(report_json("Отчёт"))
 
-    assert result["verdict"] == "PASS"
-    assert result["retryable"] is False
-    assert len(calls) == 2
-    assert calls[0]["user"] == calls[1]["user"]
-    assert json.loads(calls[1]["user"])["report"] == json.loads(report_json("Отчёт"))
+    assert result["verdict"] == "BLOCKED"
+    assert result["retryable"] is True
+    assert len(calls) == 1
+    assert json.loads(calls[0]["user"])["report"] == json.loads(report_json("Отчёт"))
     assert calls[0]["system"] == PromptBuilder.SYSTEM_PROMPT
-    assert "PREVIOUS RESPONSE WAS INVALID" in calls[1]["system"]
-    assert len(engine.db.list_step_history(task_key=engine.task_key, limit=10)) == 1
+    assert "PREVIOUS RESPONSE WAS INVALID" not in calls[0]["system"]
+    runs = engine.db.list_step_history(task_key=engine.task_key, limit=10)
+    assert len(runs) == 1 and runs[0]["replay_fingerprint"] is None
+    assert runs[0]["evaluation_snapshot"]["diagnostics"]["outcome"] == "technical_failure"
 
 
-def test_invalid_evaluator_contract_stays_fail_closed_after_bounded_retries():
+def test_invalid_evaluator_contract_stays_fail_closed_after_one_attempt():
     engine = SupervisorEngine("RUN-927")
-    invalid = {
-        "verdict": "pass",
-        "covered": [],
-        "missing": [],
-        "blockers": [],
-        "message": "ok",
-        "confidence": 0.5,
-    }
+    def invalid(*_args, **kwargs):
+        return {"verdict": "pass", "assessments": {
+            item["id"]: {"covered": True, "reason": "Actual result", "required_change": None}
+            for item in json.loads(kwargs["user"])["criteria"]
+        }, "blockers": [], "confidence": 0.5}
 
-    with patch.object(OpenAICompatibleClient, "chat", return_value=invalid) as chat:
+    with patch.object(OpenAICompatibleClient, "chat", side_effect=invalid) as chat:
         result = engine.evaluate(report_json("Отчёт"))
 
     assert result["verdict"] == "BLOCKED"
     assert result["retryable"] is True
-    assert chat.call_count == 2
+    assert chat.call_count == 1
     runs = engine.db.list_step_history(task_key=engine.task_key, limit=10)
     assert len(runs) == 1
     assert runs[0]["replay_fingerprint"] is None
@@ -556,44 +587,64 @@ def test_successful_retry_after_provider_error_unblocks_and_transitions(supervis
     assert sum(run.replay_fingerprint is not None for run in runs) == 1
 
 
-def test_stale_partial_replay_restores_cached_success_after_task_becomes_blocked(supervisor_llm):
-    engine = SupervisorEngine("RUN-914")
+def test_stale_partial_replay_does_not_restore_cursor_after_task_becomes_blocked(configured, supervisor_llm):
+    enroll(configured)
     supervisor_llm("PARTIAL")
-    successful_chat = OpenAICompatibleClient.chat
-
-    first = engine.evaluate(report_json("reusable partial report"))
+    first_response = step(configured, report=report_json("reusable partial report"),
+                          operation_key="original-partial", expected_version=1)
+    assert first_response.status_code == 200, first_response.text
+    first = first_response.json()["result"]
     with patch.object(OpenAICompatibleClient, "chat", side_effect=requests.Timeout("provider timeout")):
-        failed = engine.evaluate(report_json("different technical failure"))
-    with patch.object(OpenAICompatibleClient, "chat", side_effect=successful_chat) as chat:
-        retried = engine.evaluate(report_json("reusable partial report"))
+        failed_response = step(configured, report=report_json("different technical failure"),
+                               operation_key="technical-failure", expected_version=2)
+    assert failed_response.status_code == 200, failed_response.text
+    failed = failed_response.json()["result"]
+    before = _configured_state(configured)
+    with patch.object(OpenAICompatibleClient, "chat", side_effect=AssertionError("Replay cannot reevaluate")) as chat:
+        response = step(configured, report=report_json("reusable partial report"),
+                        operation_key="original-partial", expected_version=1)
+    assert response.status_code == 200, response.text
+    retried = response.json()["result"]
 
     assert first["verdict"] == "PARTIAL"
     assert failed["verdict"] == "BLOCKED"
-    assert engine.task["status"] == "active"
+    assert before[0]["status"] == "blocked"
     assert retried["verdict"] == "PARTIAL"
-    assert retried["replayed"] is True
-    assert chat.call_count == 0
+    assert retried == first
+    assert _configured_state(configured) == before
+    chat.assert_not_called()
 
 
-def test_stale_blocked_replay_restores_cached_block_after_partial(supervisor_llm):
-    engine = SupervisorEngine("RUN-915")
+def test_stale_blocked_replay_does_not_restore_cursor_after_partial(configured, supervisor_llm):
+    enroll(configured)
     supervisor_llm("BLOCKED")
-    blocked = engine.evaluate(report_json("reusable blocked report"))
+    blocked_response = step(configured, report=report_json("reusable blocked report"),
+                           operation_key="original-blocked", expected_version=1)
+    assert blocked_response.status_code == 200, blocked_response.text
+    blocked = blocked_response.json()["result"]
     supervisor_llm("PARTIAL")
-    partial = engine.evaluate(report_json("different partial report"))
+    partial_response = step(configured, report=report_json("different partial report"),
+                           operation_key="new-partial", expected_version=2)
+    assert partial_response.status_code == 200, partial_response.text
+    partial = partial_response.json()["result"]
+    before = _configured_state(configured)
 
-    with patch.object(OpenAICompatibleClient, "chat", wraps=OpenAICompatibleClient.chat) as chat:
-        replayed = engine.evaluate(report_json("reusable blocked report"))
+    with patch.object(OpenAICompatibleClient, "chat", side_effect=AssertionError("Replay cannot reevaluate")) as chat:
+        response = step(configured, report=report_json("reusable blocked report"),
+                        operation_key="original-blocked", expected_version=1)
+    assert response.status_code == 200, response.text
+    replayed = response.json()["result"]
 
     assert blocked["verdict"] == "BLOCKED"
     assert partial["verdict"] == "PARTIAL"
     assert replayed["verdict"] == "BLOCKED"
-    assert replayed["replayed"] is True
-    assert engine.task["status"] == "blocked"
-    assert chat.call_count == 0
+    assert replayed == blocked
+    assert before[0]["status"] == "active"
+    assert _configured_state(configured) == before
+    chat.assert_not_called()
 
 
-def test_concurrent_change_during_stale_replay_returns_retryable_block(supervisor_llm, monkeypatch):
+def test_concurrent_change_during_resubmission_returns_retryable_block(supervisor_llm, monkeypatch):
     engine = SupervisorEngine("RUN-916")
     supervisor_llm("PARTIAL")
     engine.evaluate(report_json("cached partial report"))
@@ -610,7 +661,7 @@ def test_concurrent_change_during_stale_replay_returns_retryable_block(superviso
     assert result["replayed"] is False
     assert engine.task["status"] == "blocked"
     assert engine.db.list_phase_events(engine.task["id"]) == history_before
-    assert chat.call_count == 0
+    assert chat.call_count == 1
 
 
 def test_recorded_evaluation_invalidates_supervisor_context_cache(supervisor_llm):

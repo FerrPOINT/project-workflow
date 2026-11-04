@@ -8,6 +8,7 @@ from copy import deepcopy
 from dataclasses import asdict
 from urllib.parse import parse_qs, urlsplit
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -18,8 +19,8 @@ from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.ui import sso
 from project_workflow.interfaces.ui.app import create_app
 from project_workflow.interfaces.ui.controller_assets import controller_source
-from project_workflow.interfaces.ui.routes import pages
 from tests import test_ui_shell_template as shell
+from tests._human_access_helpers import application_access_proof
 
 pytestmark = pytest.mark.ui
 
@@ -118,14 +119,49 @@ def test_effective_sections_clone_public_ssr_heading_and_prose_without_edit_cont
 
 
 @pytest.fixture
-def catalog(monkeypatch):
+def client(monkeypatch):
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "standalone")
+    monkeypatch.setenv("PROJECT_WORKFLOW_STANDALONE_CONTAINER_NETWORK", "false")
+    config.get_settings.cache_clear()
+    with TestClient(create_app(), base_url="http://127.0.0.1", client=("127.0.0.1", 50000)) as browser_client:
+        yield browser_client
+
+
+@pytest.fixture
+def catalog(monkeypatch, client):
     monkeypatch.setattr(config, "CATALOG_VARIANT", "single-task-v1")
     with SAUnitOfWork() as uow:
         installation = single_task_catalog.ensure_single_task_catalog(uow)
         binding = next(item for item in installation.bindings if item.role_key == "project_manager")
         mode = next(item for item in binding.modes if item.key == "draft")
-    with TestClient(create_app()) as client:
-        yield client, installation, binding, mode
+    yield client, installation, binding, mode
+
+
+@pytest.fixture
+def platform_reader(catalog, monkeypatch):
+    issuer = "http://auth.fixture.invalid"
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "platform")
+    monkeypatch.setenv("AUTH_ISSUER", issuer)
+    monkeypatch.setenv("AUTH_INTERNAL_BASE_URL", issuer)
+    monkeypatch.setenv("AUTH_PUBLIC_ORIGIN", "http://127.0.0.1")
+    monkeypatch.setenv("AUTH_SESSION_SECRET", "test-only-secret-with-at-least-thirty-two-bytes")
+    config.get_settings.cache_clear()
+    original_client = httpx.AsyncClient
+
+    def identity(request):
+        assert str(request.url) == issuer + "/auth/me"
+        assert request.headers["authorization"] == "Bearer fixture-reader"
+        return httpx.Response(200, json={
+            "id": "reader",
+            "application_access": application_access_proof(issuer=issuer, subject="reader"),
+        })
+
+    monkeypatch.setattr(sso.httpx, "AsyncClient", lambda **kwargs: original_client(
+        transport=httpx.MockTransport(identity), **kwargs,
+    ))
+    with TestClient(create_app(), base_url="http://127.0.0.1", client=("127.0.0.1", 50000),
+                    headers={"Authorization": "Bearer fixture-reader"}) as browser_client:
+        yield browser_client
 
 
 @pytest.mark.parametrize("suffix", ["", "/instructions"])
@@ -207,26 +243,24 @@ def test_added_security_constraints_survive_the_effective_api(catalog, monkeypat
     assert constraint not in response.json()["phase"]["instructions"][0]["description"]
 
 
-def test_legacy_view_and_admin_editing_are_unchanged():
-    with TestClient(create_app()) as client:
-        phase = client.get("/api/phases").json()["phases"][0]
-        with SAUnitOfWork() as uow:
-            namespace = next(item for item in uow.projects.list()
-                             if item.workflow_id == phase["workflow_id"])
-        for suffix in ("", "/instructions"):
-            path = f'/api/phases/{phase["id"]}{suffix}'
-            raw = client.get(path).json()
-            assert "effective_view" not in raw
-            assert client.get(path, params={"namespace_id": namespace.id}).json() == raw
-        created = client.post("/api/instructions", json={"phase_id": phase["id"], "description": "Legacy edit"})
-        assert created.status_code == 200
-        assert created.json()["instruction"]["description"] == "Legacy edit"
+def test_legacy_view_and_admin_editing_are_unchanged(client):
+    phase = client.get("/api/phases").json()["phases"][0]
+    with SAUnitOfWork() as uow:
+        namespace = next(item for item in uow.projects.list()
+                         if item.workflow_id == phase["workflow_id"])
+    for suffix in ("", "/instructions"):
+        path = f'/api/phases/{phase["id"]}{suffix}'
+        raw = client.get(path).json()
+        assert "effective_view" not in raw
+        assert client.get(path, params={"namespace_id": namespace.id}).json() == raw
+    created = client.post("/api/instructions", json={"phase_id": phase["id"], "description": "Legacy edit"})
+    assert created.status_code == 200
+    assert created.json()["instruction"]["description"] == "Legacy edit"
 
 
-def test_effective_read_does_not_grant_administration(catalog, monkeypatch):
-    client, _, binding, mode = catalog
-    monkeypatch.setattr(sso, "can_administer", lambda request: False)
-    monkeypatch.setattr(pages, "can_administer", lambda request: False)
+def test_effective_read_does_not_grant_administration(catalog, platform_reader):
+    _, _, binding, mode = catalog
+    client = platform_reader
     phase_id = mode.phase_ids[0]
     params = {"namespace_id": binding.namespace_id}
     assert client.get(f"/api/phases/{phase_id}", params=params).status_code == 200

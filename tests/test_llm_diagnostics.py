@@ -10,15 +10,18 @@ import requests
 
 from project_workflow.infrastructure import llm
 from project_workflow.supervisor.evaluate import _evaluate_strict_response
+from tests._report_helpers import report_json
 
 pytestmark = pytest.mark.unit
 
 
 @pytest.mark.parametrize("boundary", ["envelope", "content"])
-@pytest.mark.parametrize("recover", [False, True])
-def test_deep_provider_json_has_one_bounded_format_retry(client, monkeypatch, boundary, recover):
+@pytest.mark.parametrize("queued_valid", [False, True])
+def test_deep_provider_json_fails_without_retry_even_if_next_response_would_be_valid(
+    client, monkeypatch, boundary, queued_valid,
+):
     valid = {"verdict": "PASS", "assessments": {
-        "C1": {"covered": True, "reason": "The required result is supplied"},
+        "C1": {"covered": True, "reason": "The required result is supplied", "required_change": None},
     }, "blockers": [], "confidence": 0.9}
     deep = '{"nested":' + '[' * 3000 + '0' + ']' * 3000 + '}'
 
@@ -32,23 +35,22 @@ def test_deep_provider_json_has_one_bounded_format_retry(client, monkeypatch, bo
             }}]}
         return value
 
-    post = Mock(side_effect=[response(True), response(not recover)])
+    post = Mock(side_effect=[response(True), response(not queued_valid)])
     monkeypatch.setattr(llm.requests, "post", post)
     attempts = []
-    arguments = dict(client=client, user='{"actual":"unchanged report"}',
-                     evaluation_items=[("P:check:1", "Required result")],
-                     phase=SimpleNamespace(delegate=None), attempts=attempts)
-    if recover:
-        _, parsed = _evaluate_strict_response(**arguments)
-        assert parsed.verdict == "PASS"
-    else:
-        with pytest.raises(ValueError, match="nesting") as failure:
-            _evaluate_strict_response(**arguments)
-        assert "private provider content" not in str(failure.value)
-    assert post.call_count == len(attempts) == 2
+    phase = SimpleNamespace(name="Review", delegate=None)
+    items = [("P:check:1", "Required result")]
+    user = llm.PromptBuilder.build_user_prompt(
+        "not-transmitted", phase, json.loads(report_json("Actual unchanged report")), items,
+    )
+    with pytest.raises(ValueError, match="nesting") as failure:
+        _evaluate_strict_response(client, user=user, evaluation_items=items, phase=phase, attempts=attempts)
+    assert "private provider content" not in str(failure.value)
+    assert post.call_count == len(attempts) == 1
     bodies = [call.kwargs["json"] for call in post.call_args_list]
-    assert bodies[0]["messages"][1] == bodies[1]["messages"][1]
-    assert bodies[0]["messages"][0] != bodies[1]["messages"][0]
+    assert bodies[0]["messages"] == [
+        {"role": "system", "content": llm.PromptBuilder.SYSTEM_PROMPT}, {"role": "user", "content": user},
+    ]
     assert attempts[0]["error"]["category"] == "response_contract"
     assert all(attempt["provider"]["outcome"] == "invalid_json" for attempt in attempts[:1])
 
@@ -104,7 +106,7 @@ def test_success_is_bounded_and_preserves_wire_request(client, provider, capsys,
         json={"model": "provider/requested-model", "messages": [
             {"role": "system", "content": "system-secret"}, {"role": "user", "content": "user-secret"},
         ], "temperature": 0.25, "response_format": {"type": "json_object"}, "max_tokens": 650,
-              "reasoning_effort": "low"}, timeout=17,
+              "reasoning_effort": "low"}, timeout=(30, 17), allow_redirects=False,
     )
     metadata = json.dumps(client.last_call_diagnostics, allow_nan=False)
     for secret in (

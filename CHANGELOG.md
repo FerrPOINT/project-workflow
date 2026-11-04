@@ -9,12 +9,13 @@
 - Independent review closed accepted-archive replay-before-parse and null context
   fingerprint validation. New regressions cover both, same-ID report/reason mutation,
   phase isolation and CLI/API/storage data equality. Focused tests pass; Ruff and
-  mypy169 files pass. Full native remains open: the latest bounded diagnostic had
-  459 passes and8 stale fixture failures; PostgreSQL/coverage/image/live are not claimed.
+  mypy169 files pass. The completed native diagnostic had3647 passes,535 failures,
+  29 errors and15 skips. Obsolete fixtures are being corrected against the current
+  contract; this run is not a passed gate. PostgreSQL/coverage/image/live remain open.
 - Current targeted packages pass449 tests plus72 LLM and39 state-fixture checks;
   Base skills package a25c4ef4 passes39 tests and no longer requests hashes in
   Advisor reports. These are source checks, not a green full release gate.
-- New model work used8 calls, campaign total14/48. All raw requests/responses are
+- The model campaign has used20/48 calls. All raw requests/responses are
   retained. The first new response identified the source gap but incorrectly treated
   its own C3 finding as E2 report evidence; subsequent responses matched neither frozen
   negative190 label nor its old rationale. No retry, installation or credentials change.
@@ -27,6 +28,13 @@
   exposed unsupported access/failure rules in the Analyst positive fixture; an
   independent audit found15 consistent and2 invalid positives. Old gold/results
   remain unchanged; no prompt weakening or installation follows that refusal.
+- New explicit-source Analyst and direct-dataflow Architect controls passed;
+  unsupported fixture facts were removed, not silently accepted by changing gold.
+  Active qualification now reads one frozen typed dataset, without archive adapters.
+  Tester then exposed a confirmed branch-selection error: its needs_rework result
+  has reproduction and expected/actual facts, but C2 imports passed-only coverage.
+  The prompt candidate is not qualified. A changed system invalidates exact reuse;
+  a new34-call qualification would exceed the remaining28-call campaign budget.
 - The redundant experiment branch was removed after verifying its commit is an
   ancestor of this branch. All source/evidence remains reachable at f34bbbe.
   Candidate policy v18 is not qualified, installed, merged or accepted live.
