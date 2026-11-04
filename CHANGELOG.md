@@ -24,7 +24,11 @@
   mandatory-source HTTP403 counterexample. Its18x2 plan uses36 slots, replacing
   arbitrary extra retention repeats. Free-form blocker wording requires manual
   review, not literal sentence matching; automatic matching never sets qualified=true.
-- Campaign44/48 calls are retained, including stopped/ambiguous cases. Four bounded
+- The user explicitly extended the campaign limit to55. The journal verifies44
+  attempted calls, leaving11, not the31 stated in the earlier asynchronous question.
+  A bounded11-slot plan prioritizes four negative cases, owner approval and all six
+  other professions; it does not complete the36-slot final qualification.
+- Campaign44/55 calls are retained, including stopped/ambiguous cases. Four bounded
   question/real-obstacle evaluations passed independent reason review; one additional
   single-field kind-mislabel control also passed. No unchanged retry-to-PASS.
   A changed system invalidates old exact-result reuse.
