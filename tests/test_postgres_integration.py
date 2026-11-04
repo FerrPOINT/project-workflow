@@ -1668,14 +1668,16 @@ class TestPostgresUoW:
             assert delete_started_lock.wait(10)
             release_creator.set()
             assert create_result.result(timeout=20) == "created"
-            assert delete_result.result(timeout=20) == "rejected"
+            assert delete_result.result(timeout=20) == ("rejected" if operation == "project" else "deleted")
 
         verify = SAUnitOfWork(pg_url)
-        assert verify.workflows.get_by_id(workflow_id) is not None
         if operation == "project":
-            assert verify.projects.get_by_code("DELETE-RACE") is not None
+            assert verify.workflows.get_by_id(workflow_id) is not None
+            project = verify.projects.get_by_code("DELETE-RACE")
+            assert project is not None and project.workflow_id == workflow_id
         else:
-            assert verify.phases.get_by_code(workflow_id, "delete.race.phase") is not None
+            assert verify.workflows.get_by_id(workflow_id) is None
+            assert verify.phases.get_by_code(workflow_id, "delete.race.phase") is None
         verify.close()
 
     def test_project_move_serializes_with_task_creation(self, pg_url):

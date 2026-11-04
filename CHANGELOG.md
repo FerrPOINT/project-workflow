@@ -24,12 +24,15 @@
   mandatory-source HTTP403 counterexample. Its18x2 plan uses36 slots, replacing
   arbitrary extra retention repeats. Free-form blocker wording requires manual
   review, not literal sentence matching; automatic matching never sets qualified=true.
-- Campaign39/48 calls are retained, including stopped/ambiguous cases. Four bounded
-  question/real-obstacle evaluations are planned next; no unchanged retry-to-PASS.
+- Campaign44/48 calls are retained, including stopped/ambiguous cases. Four bounded
+  question/real-obstacle evaluations passed independent reason review; one additional
+  single-field kind-mislabel control also passed. No unchanged retry-to-PASS.
   A changed system invalidates old exact-result reuse.
 - PostgreSQL16.15 initial gate:68 passed, then an obsolete implicit-mode fixture
   returned403. Temporary resources were cleaned. Fix9505bb6 makes modes explicit
-  and updates current response/history fixtures; the PG gate is not yet accepted.
+  and updates current response/history fixtures. Retake passed103 cases, then exposed
+  an obsolete unbound-workflow phase-delete expectation. Its test-only correction
+  retains namespace protection; only the29 failed/unrun cases are retaken next.
 - Base skills a25c4ef4 pass39 offline tests and use typed business facts, without
   service hashes/receipts in Advisor reports. README documents HTTP-only CLI setup.
 - Changes stay in this PR; the redundant experiment branch is removed, source and

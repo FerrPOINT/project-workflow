@@ -20,7 +20,7 @@ from project_workflow.infrastructure.llm import PromptBuilder, ResponseParser
 from scripts import qualify_clean_advisor as runner
 
 pytestmark = pytest.mark.unit
-ACTIVE_SHA256 = "77ec477de3f4b6a16dee09e08341e115ab355542b68514ee689a1769fbf086b3"
+ACTIVE_SHA256 = "cebf6729193117d72fc015437fcc20f9b267fd5abd5a64da51d41e19ff02ae0b"
 ORIGINAL_SEVENTEEN_SHA256 = "efd8e77b7ed1f74443d22822fb0fe8dc6ad85c4bb05d62e71afe792dbe65f88a"
 BASELINE = "7f7f89f0a8e249066cb08f8ad2c7c3dda07d173f"
 BASELINE_SHA256 = "acd66201eb070b6279334f77ed0723f33f8ae92efcf33d92e95a11affc262d6e"
@@ -418,8 +418,8 @@ def test_changed_system_invalidates_reuse_and_full_plan_cannot_exceed_campaign_b
         assert slot["labels_sha256"] == cases[slot["case_id"]]["labels_sha256"]
     budget = artifact["http_budget"]
     assert budget == {
-        "campaign_limit": 48, "campaign_already_attempted": 39, "reused_exact_successful_evaluations": 0,
-        "new_call_limit": 9, "qualified_slots_if_all_match": 36,
+        "campaign_limit": 48, "campaign_already_attempted": 44, "reused_exact_successful_evaluations": 0,
+        "new_call_limit": 4, "qualified_slots_if_all_match": 36,
     }
     assert artifact["reuse"] == []
     output = tmp_path / "must-not-start.json"
