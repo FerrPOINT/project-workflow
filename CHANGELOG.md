@@ -26,9 +26,16 @@
   review, not literal sentence matching; automatic matching never sets qualified=true.
 - The user explicitly extended the campaign limit to55. The journal verifies44
   attempted calls, leaving11, not the31 stated in the earlier asynchronous question.
-  A bounded11-slot plan prioritizes four negative cases, owner approval and all six
-  other professions; it does not complete the36-slot final qualification.
-- Campaign44/55 calls are retained, including stopped/ambiguous cases. Four bounded
+  The predeclared11-slot plan covers four negative cases, owner approval and all six
+  other professions. All11 matched (7 PASS/4 PARTIAL); independent review accepted
+  all53 assessments,16 required changes and empty blockers. HTTP200/stop throughout,
+  no format/transport failures or retries. Raw evidence is retained unchanged.
+  Campaign55/55 is exhausted; budget guards now reject even one further call.
+  Updated qualification/budget regressions pass38, Ruff passes; no production change.
+  Current-system canonical coverage is15/36 slots across13 cases, with21 unrun.
+  The separate kind-mislabel control is not counted as a canonical slot.
+  This bounded series does not complete qualification or authorize installation.
+- The preceding44 calls are retained, including stopped/ambiguous cases. Four bounded
   question/real-obstacle evaluations passed independent reason review; one additional
   single-field kind-mislabel control also passed. No unchanged retry-to-PASS.
   A changed system invalidates old exact-result reuse.

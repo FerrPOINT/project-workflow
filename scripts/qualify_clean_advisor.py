@@ -23,7 +23,7 @@ from project_workflow.supervisor.diagnostics import capture_attempt, text_snapsh
 
 ROOT = Path(__file__).resolve().parents[1]
 LABELS = ROOT / "docs/evidence/advisor-v18-qualification-cases-20261104.json"
-LABELS_SHA256 = "192765573b0d5f41e194ea72d2594bbafbf79329996324bc10683f8dd6d10bb3"
+LABELS_SHA256 = "bdeae83e0c5a4577000c9592854f9b407b2b4c8d1346d1b87ac4f8648fd8e7d0"
 POLICY = "supervisor-evaluator-v18"
 MAX_CALLS = 36
 
