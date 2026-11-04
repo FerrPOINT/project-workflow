@@ -10,6 +10,25 @@
   remain a pre-install gate. No database rollback is authorized by this work.
 - CP1/CP2/CP3 are not accepted yet. The new campaign is capped at48 model calls:
   8 format comparisons,4 context comparisons,36 final qualification calls.
+- CP1 stopped after6 calls. New189 matches both marks and reason basis;
+  new190 matches marks but cites manual status transitions instead of the missing
+  Closed decision. Old/new191 reject the same assumption against the frozen PASS
+  label; the materiality of that assumption remains disputed, not a proven schema
+  regression. No input loss, truncation, format error or transport error observed.
+- All36 item explanations were independently reviewed. The experiment is rejected:
+  classification alone did not demonstrate the intended improvement.42 slots remain
+  not_run; CP2/CP3, installation and live PM acceptance did not start.
+- Candidate source/tests are retained at f34bbbe on experiment/advisor-v18-cp1-rejected.
+  Explicit reverts5bf3de2/c7d4bf1 return the active source contract to CP0; no second
+  production parser or fallback was retained. Raw requests/responses remain in
+  docs/evidence/advisor-v18-checkpoints-20261104.json; old labels are unchanged.
+- Next analysis: resolve the criterion's boundary between material owner decisions
+  and permitted implementation assumptions before any new model series. Do not
+  relabel191 after the result or prescribe a task-specific status exception.
+- Post-revert validation:79 focused report/archive/qualification/mechanics tests,
+  Ruff and mypy169 files pass. Product source and owner architecture/CLI docs
+  match CP0; installed image/configuration remain unchanged. Full release gates
+  are not newly claimed by these checks.
 
 ## Unreleased — Clean Workflow Candidate (Not Installed)
 
