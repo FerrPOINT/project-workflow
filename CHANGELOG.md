@@ -10,6 +10,10 @@
   remain a pre-install gate. No database rollback is authorized by this work.
 - CP1/CP2/CP3 are not accepted yet. The new campaign is capped at48 model calls:
   8 format comparisons,4 context comparisons,36 final qualification calls.
+- CP1 source candidate defines the strict nested report types and canonical
+  instruction.87 targeted tests pass, including one CLI/API/storage/Advisor
+  roundtrip with a controlled model and a zero-inference operation replay.
+  This is not semantic qualification, CLI rollout or live PM acceptance.
 
 ## Unreleased — Clean Workflow Candidate (Not Installed)
 
