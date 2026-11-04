@@ -38,11 +38,35 @@
   other professions. All11 matched (7 PASS/4 PARTIAL); independent review accepted
   all53 assessments,16 required changes and empty blockers. HTTP200/stop throughout,
   no format/transport failures or retries. Raw evidence is retained unchanged.
-  Campaign55/55 is exhausted; budget guards now reject even one further call.
-  Updated qualification/budget regressions pass38, Ruff passes; no production change.
-  Current-system canonical coverage is15/36 slots across13 cases, with21 unrun.
+  That stage ended at55/55 and froze15/36 canonical slots for exact reuse.
+  Its qualification/budget regressions passed38; no production change.
   The separate kind-mislabel control is not counted as a canonical slot.
   This bounded series does not complete qualification or authorize installation.
+- Reliability checkpoint96ee3a1 accepted an additional45-call Advisor budget:
+  21 qualification calls plus24 reserved for live PM. Exact reuse of15 slots is
+  verified by immutable journal/payload/policy/settings/label checks. The new batch
+  stopped at15 attempts:14 matched, then PM153 sample2 omitted assessmentC4.
+  HTTP200/stop, empty phase history and an untruncated1996-character user prompt
+  do not support context-growth or output-truncation explanations. The five returned
+  assessments were supported, but cannot replace the required sixth assessment.
+  Strict parsing correctly rejected the response; no repair or retry occurred.
+  Independent review accepted all60 assessments of the14 valid new responses.
+  Current coverage is29/36 valid slots, one format error and six not run. Campaign70/100;
+  further qualification is paused, and the24-call live reserve remains unused.
+  Evidence stays in the existing protected QA directory, not a second tracked raw-log archive.
+- Nine new offline regressions cover1/10/100 complete scoped reports, revocation
+  across technical errors, storage failure before COMMIT, lost response after COMMIT,
+  omittedC4 and provider429/500 without retries or advancement. The related suite
+  passes300; the final new file passes9 after adding the two HTTP controls. Counts
+  overlap and are not summed. Updated qualification checks pass40, Ruff/mypy169 pass.
+  Production tree remains identical to the132-case PostgreSQL proof, whose artifacts
+  were reverified; no redundant PG run, image build, install or live PM acceptance.
+- Read-only installed readiness confirms catalog env legacy, old untyped CLI and
+  timeout120 versus the candidate CLI1500. Global active inventory is denied403;
+  permitted readback still shows SDLC26/27 active. Cutover is not ready and no
+  credentials, assignments, runtime or history were changed. The next hypothesis is
+  to verify the existing opt-in provider schema mode against the omitted-label case;
+  provider enforcement is unproven and was not enabled during this qualification.
 - The preceding44 calls are retained, including stopped/ambiguous cases. Four bounded
   question/real-obstacle evaluations passed independent reason review; one additional
   single-field kind-mislabel control also passed. No unchanged retry-to-PASS.

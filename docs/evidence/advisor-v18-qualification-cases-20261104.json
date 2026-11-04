@@ -3565,9 +3565,9 @@
   ],
   "http_budget": {
     "campaign_limit": 100,
-    "campaign_already_attempted": 55,
+    "campaign_already_attempted": 70,
     "reused_exact_successful_evaluations": 15,
-    "new_call_limit": 21,
+    "new_call_limit": 0,
     "reserved_live_calls": 24,
     "qualified_slots_if_all_match": 36
   },

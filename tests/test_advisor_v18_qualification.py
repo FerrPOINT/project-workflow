@@ -20,7 +20,7 @@ from project_workflow.infrastructure.llm import PromptBuilder, ResponseParser
 from scripts import qualify_clean_advisor as runner
 
 pytestmark = pytest.mark.unit
-ACTIVE_SHA256 = "e27531ce66c13254bdb22c21bc1d7a02d6a015ce2c26e1c889d8be3c3a0f73be"
+ACTIVE_SHA256 = "277f399956c59530d59c81137da513e332f9baec2d5cacab6973b60672710e5c"
 ORIGINAL_SEVENTEEN_SHA256 = "efd8e77b7ed1f74443d22822fb0fe8dc6ad85c4bb05d62e71afe792dbe65f88a"
 BASELINE = "7f7f89f0a8e249066cb08f8ad2c7c3dda07d173f"
 BASELINE_SHA256 = "acd66201eb070b6279334f77ed0723f33f8ae92efcf33d92e95a11affc262d6e"
@@ -403,7 +403,7 @@ def test_external_source_denial_is_synthetic_unknown_context_not_unperformed_wor
 
 
 @pytest.mark.parametrize("call_count", [1, 36])
-def test_changed_system_invalidates_reuse_and_exhausted_budget_rejects_every_plan(loaded, tmp_path, call_count):
+def test_frozen_schedule_and_paused_qualification_reject_every_plan(loaded, tmp_path, call_count):
     artifact, cases = loaded
     slots = runner.plan(cases)
     pairs = [(slot["case_id"], slot["sample"]) for slot in slots]
@@ -419,8 +419,8 @@ def test_changed_system_invalidates_reuse_and_exhausted_budget_rejects_every_pla
         assert slot["labels_sha256"] == cases[slot["case_id"]]["labels_sha256"]
     budget = artifact["http_budget"]
     assert budget == {
-        "campaign_limit": 100, "campaign_already_attempted": 55, "reused_exact_successful_evaluations": 15,
-        "new_call_limit": 21, "reserved_live_calls": 24, "qualified_slots_if_all_match": 36,
+        "campaign_limit": 100, "campaign_already_attempted": 70, "reused_exact_successful_evaluations": 15,
+        "new_call_limit": 0, "reserved_live_calls": 24, "qualified_slots_if_all_match": 36,
     }
     assert sum(source["evaluations"] for source in artifact["reuse"]) == 15
     artifact = copy.deepcopy(artifact)
@@ -434,10 +434,15 @@ def test_changed_system_invalidates_reuse_and_exhausted_budget_rejects_every_pla
 
 def test_qualification_cannot_consume_the_reserved_live_budget(loaded, tmp_path):
     artifact, cases = loaded
-    assert artifact["http_budget"]["reserved_live_calls"] == 24
+    artifact = copy.deepcopy(artifact)
+    budget = artifact["http_budget"]
+    assert budget["reserved_live_calls"] == 24
+    remaining = budget["campaign_limit"] - budget["campaign_already_attempted"] - budget["reserved_live_calls"]
+    assert remaining == 6
+    budget["new_call_limit"] = remaining
     output = tmp_path / "must-not-spend-live-reserve.json"
     with pytest.raises(ValueError, match="remaining campaign budget"):
-        runner.execute(output, artifact, cases, runner.plan(cases)[:22])
+        runner.execute(output, artifact, cases, runner.plan(cases)[:remaining + 1])
     assert not output.exists()
     runner.OpenAICompatibleClient.assert_not_called()
 
