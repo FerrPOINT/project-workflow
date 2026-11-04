@@ -54,6 +54,11 @@
   context never substitutes the post-call catalog group. Missing/malformed scope
   fails explicitly before inference, without an archived-metadata fallback.
   The focused phase-history suite passes61 regressions, including the concurrent split.
+- CLI now accepts the server's explicit archived history projection without
+  inventing an executing agent or weakening cursor/write identity checks.
+  Archive pages are restricted to ordinary platform history with their exact
+  envelope; transport and archive API tests pass109. README no longer advertises
+  local-DB/token-selected CLI paths or plaintext report submissions.
 - The redundant experiment branch was removed after verifying its commit is an
   ancestor of this branch. All source/evidence remains reachable at f34bbbe.
   Candidate policy v18 is not qualified, installed, merged or accepted live.

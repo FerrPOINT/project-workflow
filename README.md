@@ -209,53 +209,58 @@ SSO остаются HttpOnly, а namespace-cookie доступна selector JS.
 
 ## 🖥️ CLI
 
-По умолчанию локальный CLI ожидает `DATABASE_URL`:
+`project-workflow step/history` используют только HTTP-контракт
+`configured-cli-v1` и установленный пакет `pdlc-cli-core` из Base.
+`DATABASE_URL` нужен серверу и миграциям, но не CLI; локального DB fallback нет.
+Оператор один раз настраивает CLI под режим сервера, namespace и исполнителя,
+а не устанавливает пакеты или передаёт credentials заново для каждого отчёта.
+
+Standalone полностью работает без Auth, Fleet и Tracker, только через loopback:
 
 ```bash
-export DATABASE_URL=postgresql+psycopg://project_workflow:project_workflow@localhost:5432/project_workflow
+export PROJECT_WORKFLOW_MODE=standalone
+export PROJECT_WORKFLOW_URL=http://127.0.0.1:8812
+export PROJECT_WORKFLOW_NAMESPACE_ID='<namespace ID из UI/API>'
 ```
 
-Платформенный token mode не подключается к БД напрямую. При заданном
-`SDLC_API_TOKEN` команды `step` и `history` используют защищённый HTTP API и
-общий transport package `pdlc-cli-core` (ставится отдельно из
-`services-base/base-modules/python/cli-core`; в standalone-сборку не входит):
+Platform использует отдельный PAT с правами Workflow и UUID исполнителя;
+`SDLC_API_TOKEN` и другие общие токены не подменяют выделенный credential:
 
 ```bash
-export PROJECT_WORKFLOW_URL=http://localhost:8812
-export SDLC_API_TOKEN='<personal token from Admin Panel>'
-workflow-dev step --task RUN-42 --report "Проверил сценарий"
+export PROJECT_WORKFLOW_MODE=platform
+export PROJECT_WORKFLOW_URL=https://workflow.example
+export PROJECT_WORKFLOW_NAMESPACE_ID='<namespace ID из UI/API>'
+export PROJECT_WORKFLOW_API_TOKEN='<dedicated PAT>'
+export FLEET_AGENT_ID='<agent UUID>'
 ```
 
-Central Auth проверяет срок, отзыв и scopes
-`project-workflow:read/write`. Значение токена не передаётся в URL и не
-сохраняется приложением.
-
-Генерация пользовательских wrapper-команд:
+Platform читает уже принятое назначение Tracker, а не создаёт задачу неявно.
+Только standalone допускает явный старт с существующими workflow ID и mode key:
 
 ```bash
-python scripts/install_namespace_clis.py --bin-dir ./.bin
+project-workflow --json step --task LOC-1 --start --workflow-id <workflow-id> --mode-key <mode-key> --operation-key start-LOC-1
 ```
 
-Запуск выбранного workflow через настроенную команду:
+Пример для Bash: сначала прочитать текущий cursor, затем передать полный typed
+JSON через stdin. `expected-version` берётся из фактического ответа `step`
+(ниже показано значение `1`), а не вычисляется исполнителем:
 
 ```bash
-workflow-run step --task RUN-123 --report "Сделал X, проверил Y"
+project-workflow --json step --task LOC-1
+project-workflow --json step --task LOC-1 --report - --operation-key report-LOC-1-1 --expected-version 1 <<'JSON'
+{"source":{"request":"Подготовить документ","decisions":[]},"result":{"artifacts":[{"name":"Документ","content":"Полный текст документа"}],"assumptions":[]},"unresolved":[]}
+JSON
+project-workflow --json history --task LOC-1 --operation-key report-LOC-1-1
+project-workflow --json history --task LOC-1 --n 20
 ```
 
-Чтение истории фаз и supervisor-а того же entrypoint:
-
-```bash
-workflow-run history --task RUN-123 --n 10
-```
-
-Параллельные entrypoints используют собственные настроенные команды:
-
-```bash
-workflow-qa step --task RUN-42 --report "Проверил сценарии"
-workflow-dev history --task RUN-42
-```
-
-Wrapper выставляет `PROJECT_WORKFLOW_NAMESPACE_ID=<id>` и вызывает внутренний `step/history` CLI, поэтому один и тот же внешний task key может существовать независимо в разных namespaces. Исполнитель получает настроенную wrapper-команду в `phase_contract.cli_actor.entrypoint`, а не хардкоженное глобальное имя CLI.
+При неизвестном исходе записи сохранить исходные key/version/report и сверить
+результат через `history --operation-key`, не отправлять изменённый отчёт под
+тем же ключом. Исправленный отчёт требует нового ключа и актуальной версии.
+Обычная platform history может вернуть `archived: true`: это только сохранённая
+страница истории, не исполняемый cursor, не версия и не полномочие на запись.
+Доступ остаётся ограничен namespace и серверной авторизацией читателя.
+Контракт и параметры: [configured-cli-v1](docs/configured-cli-v1.md).
 
 <a name="ui"></a>
 

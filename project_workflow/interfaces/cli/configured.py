@@ -64,6 +64,24 @@ def failure(code: str, *, http_status: int | None = None, unknown: bool = False)
     }}
 
 
+def _archive_page(result: dict[str, Any]) -> bool:
+    if (set(result) != {"interaction_protocol", "task", "namespace_id", "archived", "records", "next_before"}
+            or result["archived"] is not True or type(result["namespace_id"]) is not int
+            or not isinstance(result["records"], list)):
+        return False
+    records = result["records"]
+    for record in records:
+        if (not isinstance(record, dict) or set(record) != {"history_id", "worker_report", "result"}
+                or type(record["history_id"]) is not int or not 0 < record["history_id"] <= 2**63 - 1
+                or not isinstance(record["worker_report"], str) or not isinstance(record["result"], dict)):
+            return False
+    before = result["next_before"]
+    return before is None or (
+        type(before) is int and 0 < before <= 2**63 - 1
+        and bool(records) and before == records[-1]["history_id"]
+    )
+
+
 def request(method: str, route: str, task: str, *, body: dict | None = None, params: dict | None = None) -> dict:
     root, token, agent, namespace = environment()
     local = mode() == "standalone"
@@ -88,9 +106,15 @@ def request(method: str, route: str, task: str, *, body: dict | None = None, par
         result = value.get("result")
         if (not isinstance(result, dict) or value.get("ok") is not True or value.get("exit_code") != 0
                 or result.get("interaction_protocol") != PROTOCOL or result.get("task") != task
-                or result.get("namespace_id") != namespace
-                or (result.get("execution_mode") != "standalone" if local
-                    else result.get("concrete_agent_ref") != agent)):
+                or result.get("namespace_id") != namespace):
+            return failure("response-identity-invalid", unknown=write)
+        if "archived" in result:
+            ordinary_page = (not local and method == "GET" and route == "history" and body is None
+                             and not any(key in (params or {}) for key in (
+                                 "operation_key", "execution_ref", "projection", "assignment_operation_key")))
+            if not ordinary_page or type(value.get("exit_code")) is not int or not _archive_page(result):
+                return failure("response-identity-invalid", unknown=write)
+        elif (result.get("execution_mode") != "standalone" if local else result.get("concrete_agent_ref") != agent):
             return failure("response-identity-invalid", unknown=write)
         return value
     except ApiError as error:
