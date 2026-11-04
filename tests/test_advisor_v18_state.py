@@ -1,0 +1,150 @@
+"""The evaluated phase context is frozen, rechecked and never reconstructed on readback."""
+
+import json
+from copy import deepcopy
+
+import pytest
+
+from project_workflow.application import standalone
+from project_workflow.domain.exceptions import ConflictError
+from project_workflow.domain.standalone import StandaloneFence
+from project_workflow.infrastructure.db import models as m
+from project_workflow.infrastructure.llm import OpenAICompatibleClient
+from project_workflow.supervisor.evidence import validate_frozen_evaluation
+from tests._report_helpers import report_json
+from tests.test_standalone_execution import local_execution as local_execution
+from tests.test_standalone_execution import report
+
+
+def response(payload, covered):
+    return {"verdict": "PASS" if covered else "PARTIAL", "assessments": {
+        item["id"]: {"covered": covered, "reason": "Exact fixture evidence",
+                     "required_change": None if covered else "Supply the complete fixture artifact"}
+        for item in payload["criteria"]}, "blockers": [], "confidence": 0.9}
+
+
+def submit_partial(uow, start, monkeypatch):
+    standalone.step(uow, start)
+    monkeypatch.setattr(OpenAICompatibleClient, "chat",
+                        lambda _self, **kwargs: response(json.loads(kwargs["user"]), False))
+    command = report(start, 1)
+    accepted = standalone.step(uow, command)["result"]
+    assert accepted["verdict"] == "PARTIAL" and not accepted["complete"]
+    return command
+
+
+def test_supplement_gets_exact_phase_facts_and_assessment_then_next_phase_is_empty(
+    local_execution, monkeypatch,
+):
+    uow, start = local_execution
+    original = submit_partial(uow, start, monkeypatch)
+    calls = []
+
+    def answer(_self, **kwargs):
+        payload = json.loads(kwargs["user"])
+        calls.append(payload)
+        return response(payload, True)
+
+    monkeypatch.setattr(OpenAICompatibleClient, "chat", answer)
+    correction = report(start, 2, key="correction", document="Corrected complete artifact")
+    accepted = standalone.step(uow, correction)["result"]
+    assert calls[0]["previous_reports"] == [json.loads(original.report)]
+    assert all(item["previous_assessment"] == {
+        "covered": False, "reason": "Exact fixture evidence",
+        "required_change": "Supply the complete fixture artifact",
+    } for item in calls[0]["criteria"])
+    assert accepted["phase_code"] == "local.2"
+    row = uow.step_history.list(task_id=uow.tasks.list()[0].id, limit=None)[0].to_dict()
+    snapshot = row["evaluation_snapshot"]
+    assert len(snapshot["contract_fingerprint_state"]["phase_context_fingerprint"]) == 64
+    assert validate_frozen_evaluation(
+        row, snapshot, replay_fingerprint=row["replay_fingerprint"],
+    ) == row["covered_item_ids"]
+    prior_snapshot = deepcopy(snapshot)
+    del prior_snapshot["contract_fingerprint_state"]["phase_context_fingerprint"]
+    with pytest.raises(ConflictError, match="phase context"):
+        validate_frozen_evaluation(row, prior_snapshot, replay_fingerprint=row["replay_fingerprint"])
+    invalid = deepcopy(snapshot)
+    invalid["contract_fingerprint_state"]["phase_context_fingerprint"] = None
+    with pytest.raises(ConflictError, match="phase context"):
+        validate_frozen_evaluation(row, invalid, replay_fingerprint=row["replay_fingerprint"])
+    standalone.step(uow, report(start, 3, key="next-phase"))
+    assert calls[1]["previous_reports"] == []
+    assert all(item["previous_assessment"] is None for item in calls[1]["criteria"])
+
+
+@pytest.mark.parametrize("changed", ["report", "reason"])
+def test_in_place_history_mutation_with_same_ids_and_coverage_prevents_transition(
+    local_execution, monkeypatch, changed,
+):
+    uow, start = local_execution
+    original = submit_partial(uow, start, monkeypatch)
+    captured = []
+
+    def answer(_self, **kwargs):
+        payload = json.loads(kwargs["user"])
+        captured.append(payload)
+        row = uow.session.query(m.TaskStepHistoryEntry).one()
+        if changed == "report":
+            row.worker_report = report_json("Changed historical fact", source="New owner decision")
+        else:
+            saved = json.loads(row.evaluation_snapshot)
+            for assessment in saved["advisor_assessments"].values():
+                assessment["reason"] = "Changed saved reason with the same covered flag"
+            row.evaluation_snapshot = json.dumps(saved)
+        uow.commit()
+        return response(payload, True)
+
+    monkeypatch.setattr(OpenAICompatibleClient, "chat", answer)
+    result = standalone.step(uow, report(start, 2, key="concurrent-mutation"))["result"]
+    assert len(captured) == 1 and captured[0]["previous_reports"] == [json.loads(original.report)]
+    assert result["verdict"] == "BLOCKED" and result["retryable"] is True
+    assert result["phase_code"] == "local.1" and not result["complete"]
+    rows = uow.session.query(m.TaskStepHistoryEntry).order_by(m.TaskStepHistoryEntry.id).all()
+    snapshot = json.loads(rows[-1].evaluation_snapshot)
+    assert snapshot["raw_evaluator"]["error"] == "PhaseContractChanged"
+    assert snapshot["diagnostics"]["outcome"] == "technical_failure"
+
+
+def test_incompatible_archive_is_readable_but_cannot_silently_become_new_context(local_execution, monkeypatch):
+    uow, start = local_execution
+    original = submit_partial(uow, start, monkeypatch)
+    row = uow.session.query(m.TaskStepHistoryEntry).one()
+    archived = '{"source":"Archived source","result":{"document":"Old report"},"unresolved":[]}'
+    row.worker_report = archived
+    uow.commit()
+    calls = []
+    monkeypatch.setattr(OpenAICompatibleClient, "chat", lambda *args, **kwargs: calls.append(kwargs))
+    result = standalone.step(uow, report(start, 2, key="new-contract"))["result"]
+    assert calls == []
+    assert result["verdict"] == "BLOCKED" and result["retryable"] is True
+    assert result["phase_code"] == "local.1" and not result["complete"]
+    assert "несовместимый" in " ".join(result["blockers"])
+    saved = standalone.history(uow, start.task, start.namespace_id, operation_key=original.operation_key)
+    assert saved["result"]["records"][0]["worker_report"] == archived
+    assert calls == []
+
+
+def test_exact_archived_operation_replays_before_current_format_validation(local_execution, monkeypatch):
+    uow, start = local_execution
+    original = submit_partial(uow, start, monkeypatch)
+    row = uow.session.query(m.TaskStepHistoryEntry).one()
+    archived = original.model_copy(update={
+        "report": '{"source":"Archive","result":{"document":"Accepted old result"},"unresolved":[]}',
+    })
+    task = uow.tasks.list()[0]
+    fence = StandaloneFence(task.id, task.project_id, task.workflow_id, task.mode_id,
+        task.cycle_number, task.assignment_revision, task.assignment_operation_key,
+        task.current_phase_id, task.status, standalone.version(uow, task), archived)
+    snapshot = json.loads(row.evaluation_snapshot)
+    snapshot["standalone"]["request_sha256"] = fence.request_sha256
+    row.worker_report = archived.report
+    row.evaluation_snapshot = json.dumps(snapshot)
+    expected = json.loads(row.supervisor_response)
+    uow.commit()
+    calls = []
+    monkeypatch.setattr(OpenAICompatibleClient, "chat", lambda *args, **kwargs: calls.append(kwargs))
+    assert standalone.step(uow, archived)["result"] == expected
+    with pytest.raises(ConflictError, match="payload conflict"):
+        standalone.step(uow, archived.model_copy(update={"report": archived.report + " "}))
+    assert calls == []

@@ -11,6 +11,8 @@ def historical_normalize(text: str) -> str:
 
 def report_json(text: str, *, source: str = "", unresolved: list[str] | None = None) -> str:
     return json.dumps(
-        {"source": source, "result": {"document": text}, "unresolved": unresolved if unresolved is not None else []},
+        {"source": {"request": source, "decisions": []},
+         "result": {"artifacts": [{"name": "document", "content": text}], "assumptions": []},
+         "unresolved": [{"kind": "question", "text": value} for value in (unresolved or [])]},
         ensure_ascii=False,
     )

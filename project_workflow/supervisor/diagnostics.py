@@ -283,6 +283,8 @@ def history_diagnostic(worker_report: str, evaluation_snapshot: dict[str, Any]) 
         if (isinstance(assessment, dict) and type(assessment.get("covered")) is bool
                 and isinstance(assessment.get("reason"), str) and assessment["reason"].strip()):
             item["reason"] = _safe(assessment["reason"])
+            if "required_change" in assessment:
+                item["required_change"] = _safe(assessment["required_change"])
         item["quote"] = _safe(quote)
         item["quote_status"] = (
             "not_supplied" if not quote else "found_in_captured_text" if quote in report_text else

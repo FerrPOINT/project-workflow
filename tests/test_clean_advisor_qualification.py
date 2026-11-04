@@ -42,7 +42,8 @@ def frozen():
 
 def wire(case):
     return {"verdict": case["expected"]["verdict"], "assessments": {
-        label: {"covered": value["covered"], "reason": value["reason_basis"]}
+        label: {"covered": value["covered"], "reason": value["reason_basis"],
+                "required_change": None if value["covered"] else value["reason_basis"]}
         for label, value in case["expected_assessments"].items()
     }, "blockers": case["expected"]["blockers"], "confidence": 0.9}
 
@@ -63,8 +64,8 @@ def test_default_is_offline_and_prints_only_36_metadata_slots(monkeypatch, capsy
     assert plan["mode"] == "offline" and plan["max_http_calls"] == 36
     assert len(plan["requests"]) == 36
     counts = Counter(slot["case_id"] for slot in plan["requests"])
-    assert len(counts) == 17 and counts.pop("actual-pm-189") == 4 and set(counts.values()) == {2}
-    assert {slot["policy"] for slot in plan["requests"]} == {"supervisor-evaluator-v17"}
+    assert len(counts) == 17 and counts.pop("pm-unresolved-retention-policy") == 4 and set(counts.values()) == {2}
+    assert {slot["policy"] for slot in plan["requests"]} == {"supervisor-evaluator-v18"}
     assert all(slot["status"] == "not_run" and "report" not in slot for slot in plan["requests"])
     constructor.assert_not_called()
 
@@ -132,6 +133,7 @@ def test_first_failure_stops_without_retry_and_existing_journal_cannot_resume(
     if failure == "classification":
         raw["verdict"] = "PARTIAL"
         raw["assessments"]["C1"]["covered"] = False
+        raw["assessments"]["C1"]["required_change"] = "Supply the missing fixture evidence"
     elif failure == "format":
         raw["verdict"] = "PARTIAL"  # All true: the parser must reject, never repair.
     else:
@@ -184,14 +186,15 @@ def test_settings_mismatch_stops_before_any_http(frozen, tmp_path, monkeypatch):
 
 def test_correct_verdict_with_wrong_item_mark_still_stops(frozen, tmp_path, monkeypatch):
     artifact, cases, slots = frozen
-    index = next(i for i, slot in enumerate(slots) if slot["case_id"] == "actual-pm-189")
+    index = next(i for i, slot in enumerate(slots) if slot["case_id"] == "pm-unresolved-retention-policy")
     slots[0], slots[index] = slots[index], slots[0]
-    raw = wire(cases["actual-pm-189"])
-    raw["assessments"]["E2"]["covered"] = True
+    raw = wire(cases["pm-unresolved-retention-policy"])
+    raw["assessments"]["C3"]["covered"] = True
+    raw["assessments"]["C3"]["required_change"] = None
     post = Mock(return_value=response(raw))
     monkeypatch.setattr("project_workflow.infrastructure.llm.requests.post", post)
     result = runner.execute(tmp_path / "wrong-item.json", artifact, cases, slots)
-    assert raw["verdict"] == cases["actual-pm-189"]["expected"]["verdict"]
+    assert raw["verdict"] == cases["pm-unresolved-retention-policy"]["expected"]["verdict"]
     assert result["status"] == "stopped_classification_mismatch"
     assert result["attempted_calls"] == 1
     post.assert_called_once()

@@ -19,7 +19,9 @@ from tests._report_helpers import report_json
 
 
 def _report(text="Reported outcome"):
-    return {"source": "Reported source facts", "result": {"content": text}, "unresolved": []}
+    return {"source": {"request": "Reported source facts", "decisions": []},
+            "result": {"artifacts": [{"name": "document", "content": text}], "assumptions": []},
+            "unresolved": []}
 
 
 class FakePhase:
@@ -68,7 +70,7 @@ class TestOpenAICompatibleClient:
         client = OpenAICompatibleClient()
         assert client.base_url == "http://192.168.10.1:4000/v1"
         assert client.model == "app-test"
-        assert client.timeout == 120
+        assert client.timeout == 1200
         assert client.max_tokens == 4000
         assert client.api_key == ""
         assert client.reasoning_effort == "none"
@@ -157,6 +159,7 @@ class TestOpenAICompatibleClient:
             assert len(payload["messages"]) == 2
             assert payload["messages"][0]["role"] == "system"
             assert payload["messages"][1]["role"] == "user"
+            assert kwargs["timeout"] == (30, client.timeout)
 
     def test_chat_omits_reasoning_effort_when_disabled(self):
         client = OpenAICompatibleClient(reasoning_effort="", api_key="test-key")
@@ -191,7 +194,7 @@ class TestPromptBuilder:
         assert "RUN-1" not in prompt
         assert json.loads(prompt) == {
             "phase": "Preflight", "allowed_verdicts": ["PASS", "PARTIAL", "BLOCKED"],
-            "criteria": [], "previously_covered": [], "report": _report("report text"),
+            "criteria": [], "previous_reports": [], "report": _report("report text"),
         }
 
     def test_build_user_prompt_excludes_worker_instructions(self):
@@ -208,13 +211,23 @@ class TestPromptBuilder:
         )
         prompt = PromptBuilder.build_user_prompt("T-1", phase, _report("r"))
         assert json.loads(prompt)["criteria"] == [
-            {"id": "C1", "text": "Check A"}, {"id": "E1", "text": "Screenshot"},
+            {"id": "C1", "text": "Check A", "previous_assessment": None},
+            {"id": "E1", "text": "Screenshot", "previous_assessment": None},
         ]
 
-    def test_build_user_prompt_with_previously_covered(self):
+    def test_build_user_prompt_with_previous_reports_and_assessments(self):
         phase = FakePhase(checks=[FakeCheck("Run tests")])
-        prompt = PromptBuilder.build_user_prompt("T-1", phase, _report("r"), previously_covered=["1:check:1"])
-        assert json.loads(prompt)["previously_covered"] == ["C1"]
+        prior_report = _report("Earlier actual result")
+        assessment = {"covered": True, "reason": "Earlier tests passed", "required_change": None}
+        prompt = PromptBuilder.build_user_prompt("T-1", phase, _report("r"),
+            previous_reports=[prior_report], previous_assessments={"1:check:1": assessment, "obsolete": assessment})
+        assert json.loads(prompt) == {
+            "phase": phase.name, "allowed_verdicts": ["PASS", "PARTIAL", "BLOCKED"],
+            "criteria": [{"id": "C1", "text": "Run tests", "previous_assessment": assessment}],
+            "previous_reports": [prior_report], "report": _report("r"),
+        }
+        assert "previously_covered" not in json.loads(prompt)
+        assert "1:check:1" not in prompt and "obsolete" not in prompt
         assert "keep them in covered" not in prompt
 
     def test_build_user_prompt_marks_ids_without_decorative_brackets(self):
@@ -226,7 +239,7 @@ class TestPromptBuilder:
             evaluation_items=[("-1:check:1", "Task is clear")],
         )
 
-        assert json.loads(prompt)["criteria"] == [{"id": "C1", "text": "Task is clear"}]
+        assert json.loads(prompt)["criteria"] == [{"id": "C1", "text": "Task is clear", "previous_assessment": None}]
         assert "-1:check:1" not in prompt
         assert "[-1:check:1]" not in prompt
         assert "REQUIRED ITEM COUNT" not in prompt
@@ -415,9 +428,10 @@ class TestSupervisorEngineEvaluateLLM:
             payload = json.loads(kwargs["user"])
             assert payload["report"] == json.loads(report_json("Report"))
             assert payload["criteria"] == [
-                {"id": label, "text": dict(items)[item_id]}
+                {"id": label, "text": dict(items)[item_id], "previous_assessment": None}
                 for label, item_id in PromptBuilder.item_aliases(items).items()
             ]
+            assert payload["previous_reports"] == []
             assert "RUN-1001" not in kwargs["user"]
 
 
@@ -497,7 +511,7 @@ class TestPromptBuilderEdgeCases:
         assert "T-99" not in prompt
         assert json.loads(prompt) == {
             "phase": "Empty", "allowed_verdicts": ["PASS", "PARTIAL", "BLOCKED"],
-            "criteria": [], "previously_covered": [], "report": _report("done"),
+            "criteria": [], "previous_reports": [], "report": _report("done"),
         }
 
     def test_missing_instructions_skips_section(self):
@@ -506,16 +520,21 @@ class TestPromptBuilderEdgeCases:
         assert "Instructions:" not in prompt
         assert "Check X" in prompt
 
-    def test_previously_covered_empty_list(self):
+    def test_previous_reports_and_assessments_empty(self):
         phase = FakePhase(instructions=[FakeInstruction("Step 1")])
-        prompt = PromptBuilder.build_user_prompt("T-1", phase, _report("r"), previously_covered=[])
-        assert json.loads(prompt)["previously_covered"] == []
+        prompt = PromptBuilder.build_user_prompt("T-1", phase, _report("r"),
+                                                 previous_reports=[], previous_assessments={})
+        assert json.loads(prompt)["previous_reports"] == []
+        assert json.loads(prompt)["criteria"] == []
+        assert "previously_covered" not in json.loads(prompt)
 
     def test_multiple_evidence_items(self):
         phase = FakePhase(evidence=[FakeEvidence("A"), FakeEvidence("B"), FakeEvidence("C")])
         prompt = PromptBuilder.build_user_prompt("T-1", phase, _report("r"))
         assert json.loads(prompt)["criteria"] == [
-            {"id": "E1", "text": "A"}, {"id": "E2", "text": "B"}, {"id": "E3", "text": "C"},
+            {"id": "E1", "text": "A", "previous_assessment": None},
+            {"id": "E2", "text": "B", "previous_assessment": None},
+            {"id": "E3", "text": "C", "previous_assessment": None},
         ]
 
 
@@ -607,11 +626,11 @@ class TestOpenAICompatibleClientOverrides:
         assert client.timeout == 300
 
 
-class TestEvaluatorV15PromptContract:
+class TestEvaluatorV18PromptContract:
     """The controlled provider receives the universal criteria-only contract."""
 
     def test_prompt_version_invalidates_the_old_evidence_policy(self):
-        assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v16"
+        assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v18"
 
     def test_report_106_submission_circularity_reaches_provider_with_explicit_protocol_boundary(self):
         """Reproduce the saved PARTIAL reason, not a real model's semantic acceptance."""
@@ -636,9 +655,9 @@ class TestEvaluatorV15PromptContract:
         assert len(items) == 7
         assert user_data == {
             "phase": phase.name, "allowed_verdicts": ["PASS", "PARTIAL", "BLOCKED"],
-            "criteria": [{"id": label, "text": dict(items)[item_id]}
+            "criteria": [{"id": label, "text": dict(items)[item_id], "previous_assessment": None}
                          for label, item_id in PromptBuilder.item_aliases(items).items()],
-            "previously_covered": [], "report": report,
+            "previous_reports": [], "report": report,
         }
         assert all(item.step not in prompt for item in phase.instructions)
         assert "send ONE self-contained final report using project-workflow --json step" not in prompt
@@ -648,7 +667,8 @@ class TestEvaluatorV15PromptContract:
         raw = {
             "verdict": "PARTIAL", "assessments": {label: {"covered": item_id not in missing,
                 "reason": "The report lacks proof of sending this final report through project-workflow "
-                          "and reading its result." if item_id in missing else "Reported fact present"}
+                          "and reading its result." if item_id in missing else "Reported fact present",
+                "required_change": "Provide submission and result readback evidence." if item_id in missing else None}
                 for label, item_id in PromptBuilder.item_aliases(items).items()},
             "blockers": [], "confidence": 0.99,
         }
@@ -666,13 +686,18 @@ class TestEvaluatorV15PromptContract:
         assert returned_raw == raw
         assert "assessments" not in parsed.raw
         assert parsed.verdict == "PARTIAL" and parsed.missing == missing
+        for label, item_id in PromptBuilder.item_aliases(items).items():
+            assert parsed.assessments[item_id] == raw["assessments"][label]
+            if item_id in missing:
+                assert raw["assessments"][label]["reason"] in parsed.message
+                assert raw["assessments"][label]["required_change"] in parsed.message
 
     def test_protocol_boundary_preserves_required_business_work_and_evidence(self):
         system = PromptBuilder.SYSTEM_PROMPT
         for rule in (
             "using only its listed criteria and supplied facts",
             "this report's own acceptance as prerequisites",
-            "covered is a boolean for the entire criterion",
+            "judging the whole criterion and only its applicable branch",
             "Reject missing required content",
             "When FULL content is required, a summary or reference alone cannot supply it",
             "Server-enforced identity, access and approvals are not yours to certify",
@@ -711,7 +736,7 @@ class TestEvaluatorV15PromptContract:
         assert instruction not in prompt
         assert evidence in prompt
         assert json.loads(prompt)["report"] == report
-        assert json.loads(prompt)["criteria"] == [{"id": "E1", "text": evidence}]
+        assert json.loads(prompt)["criteria"] == [{"id": "E1", "text": evidence, "previous_assessment": None}]
         assert "PM-DRAFT-01:evidence:143" not in prompt
         system = PromptBuilder.SYSTEM_PROMPT
         assert "using only its listed criteria and supplied facts" in system
@@ -721,7 +746,7 @@ class TestEvaluatorV15PromptContract:
         prompt = PromptBuilder.SYSTEM_PROMPT
         assert "Reject missing required content" in prompt
         assert "contradictory current facts" in prompt
-        assert "covered is a boolean for the entire criterion" in prompt
+        assert "judging the whole criterion and only its applicable branch" in prompt
 
     def test_reported_full_presentation_and_matching_owner_consent_reach_the_evaluator(self):
         instruction = (
@@ -764,13 +789,16 @@ class TestEvaluatorV15PromptContract:
         assert check in prompt
         assert evidence in prompt
         assert json.loads(prompt)["report"] == report
-        assert saved_document in json.loads(prompt)["report"]["result"]["content"]
-        assert json.loads(prompt)["criteria"] == [{"id": "C1", "text": check}, {"id": "E1", "text": evidence}]
+        assert saved_document in json.loads(prompt)["report"]["result"]["artifacts"][0]["content"]
+        assert json.loads(prompt)["criteria"] == [
+            {"id": "C1", "text": check, "previous_assessment": None},
+            {"id": "E1", "text": evidence, "previous_assessment": None},
+        ]
         system = PromptBuilder.SYSTEM_PROMPT
         assert "using only its listed criteria and supplied facts" in system
         assert "Do not add independent attestation" in system
         assert "When FULL content is required, a summary or reference alone cannot supply it" in system
-        assert "covered is a boolean for the entire criterion" in system
+        assert "judging the whole criterion and only its applicable branch" in system
 
     def test_contradictory_current_facts_prohibit_pass(self):
         prompt = PromptBuilder.SYSTEM_PROMPT
@@ -778,8 +806,8 @@ class TestEvaluatorV15PromptContract:
         assert (
             "Reject missing required content, unresolved required decisions and contradictory current facts" in prompt
         )
-        assert "PARTIAL: unfinished phase work with no obstacle to carrying it out" in prompt
-        assert "BLOCKED: a reported obstacle prevents carrying out phase work" in prompt
+        assert "PARTIAL requires at least one false and no blockers" in prompt
+        assert "BLOCKED requires a reported obstacle preventing required phase work" in prompt
 
     def test_build_user_prompt_does_not_expose_retired_target(self):
         phase = FakePhase(rollback_target_phase_code="8.IMPLEMENT")
@@ -805,12 +833,13 @@ class TestEvaluatorV15PromptContract:
         assert criterion in prompt
         assert "python -B -X utf8 -m unittest: all passed" in prompt
         assert "test_calculator.py" not in PromptBuilder.SYSTEM_PROMPT
-        assert "covered is a boolean for the entire criterion" in PromptBuilder.SYSTEM_PROMPT
+        assert "judging the whole criterion and only its applicable branch" in PromptBuilder.SYSTEM_PROMPT
 
     def test_coverage_requires_the_whole_evidence_item_and_a_consistent_message(self):
         prompt = PromptBuilder.SYSTEM_PROMPT
-        assert "covered is a boolean for the entire criterion" in prompt
-        assert "keep verdict and assessments consistent" in prompt
+        assert "judging the whole criterion and only its applicable branch" in prompt
+        assert "Derive verdict from these marks" in prompt
+        assert "without contradicting other reasons" in prompt
 
     def test_explicit_later_changes_are_respected_without_extra_timestamp_rules(self):
         prompt = PromptBuilder.SYSTEM_PROMPT
@@ -820,8 +849,8 @@ class TestEvaluatorV15PromptContract:
         assert "first open, then merged" not in prompt
 
     def test_normal_complete_report_contract_still_allows_pass(self):
-        assert "PASS: all covered, no blockers" in PromptBuilder.SYSTEM_PROMPT
-        assert "covered is a boolean for the entire criterion" in PromptBuilder.SYSTEM_PROMPT
+        assert "PASS requires all true and no blockers" in PromptBuilder.SYSTEM_PROMPT
+        assert "judging the whole criterion and only its applicable branch" in PromptBuilder.SYSTEM_PROMPT
 
     def test_output_must_be_bare_json_without_markdown_fences(self):
         assert "one bare JSON object" in PromptBuilder.SYSTEM_PROMPT

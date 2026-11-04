@@ -16,7 +16,6 @@ from sqlalchemy import select
 
 from project_workflow import config
 from project_workflow.domain.exceptions import ConflictError
-from project_workflow.domain.phase_report import PhaseReport
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.infrastructure.llm import OpenAICompatibleClient, PromptBuilder
@@ -60,7 +59,8 @@ def response_for(payload, verdict):
     return {
         "verdict": verdict,
         "assessments": {
-            item["id"]: {"covered": verdict == "PASS", "reason": "Explicit local QA assessment"}
+            item["id"]: {"covered": verdict == "PASS", "reason": "Explicit local QA assessment",
+                         "required_change": None if verdict == "PASS" else "Supply the incomplete phase work."}
             for item in payload["criteria"]
         },
         "blockers": [],
@@ -145,7 +145,7 @@ def test_parallel_runtime_uses_merged_contract_delegation_consistently(
     engine.all_phases = phases
     engine.phase_map = {phase.code: phase for phase in phases}
     engine.contract_builder = PhaseContractBuilder(phases)
-    engine._get_previously_covered.return_value = set()
+    engine._get_phase_evaluation_history.return_value = {"reports": [], "assessments": {}}
     engine._resolve_transition.return_value = (None, None, None)
     engine.db.step_history.get_by_fingerprint.return_value = None
     engine.db.step_history.list.return_value = []
@@ -264,6 +264,8 @@ def frozen_evaluation(policy):
     state = {"prompt_version": policy, "contract": contract, "evaluation_items": items,
              "previously_covered_ids": [], "delegation_allowed": False, "group": ["P"],
              "transition_routes": {}, "phase_graph": [], "evaluator_response_format": "json_object"}
+    if policy == "supervisor-evaluator-v18":
+        state["phase_context_fingerprint"] = _fingerprint_contract_state({"reports": [], "assessments": {}})
     digest = _fingerprint_contract_state(state)
     report = report_json("Owner decision: delta -1; Keep A-B! Preserve Case and punctuation.")
     normalized = historical_normalize(report)
@@ -383,8 +385,13 @@ def test_prospective_labels_freeze_seventeen_cases_and_shared_38_slot_budget():
         payload = case["user_payload"]
         assert set(payload) == {"phase", "allowed_verdicts", "criteria", "previously_covered", "report"}
         assert payload["allowed_verdicts"] == ["PASS", "PARTIAL", "BLOCKED"]
-        assert PhaseReport.parse(json.dumps(payload["report"], ensure_ascii=False)).model_dump(mode="json") == case[
-            "structured_report"]
+        # Frozen v16 evidence keeps its original schema, not the current runtime input contract.
+        saved_report = json.loads(json.dumps(payload["report"], ensure_ascii=False, allow_nan=False))
+        assert set(saved_report) == {"source", "result", "unresolved"}
+        assert type(saved_report["source"]) is str and type(saved_report["result"]) is dict
+        assert type(saved_report["unresolved"]) is list
+        assert all(type(value) is str for value in saved_report["unresolved"])
+        assert saved_report == case["structured_report"]
         assert sha256(payload) == case["user_payload_sha256"]
         assert sha256(case["expected_assessments"]) == case["labels_sha256"]
         assert set(case["expected_assessments"]) == {item["id"] for item in payload["criteria"]}

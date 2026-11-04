@@ -38,8 +38,18 @@ def validate_frozen_evaluation(
         "prompt_version", "contract", "evaluation_items", "previously_covered_ids",
         "delegation_allowed", "group", "transition_routes", "phase_graph",
     }
-    if not isinstance(state, dict) or set(state) not in (state_keys, state_keys | {"evaluator_response_format"}):
+    current_keys = state_keys | {"evaluator_response_format", "phase_context_fingerprint"}
+    if not isinstance(state, dict) or set(state) not in (
+        state_keys, state_keys | {"evaluator_response_format"}, current_keys,
+    ):
         raise ConflictError("Terminal frozen fingerprint inputs are missing or invalid")
+    context_fingerprint = state.get("phase_context_fingerprint")
+    if (state.get("prompt_version") == "supervisor-evaluator-v18" and (
+                set(state) != current_keys or not isinstance(context_fingerprint, str))
+            or "phase_context_fingerprint" in state and (
+                not isinstance(context_fingerprint, str)
+                or re.fullmatch(r"[a-f0-9]{64}", context_fingerprint) is None)):
+        raise ConflictError("Terminal frozen phase context fingerprint is missing or invalid")
     if ("evaluator_response_format" in state
             and state["evaluator_response_format"] not in ("json_object", "json_schema")):
         raise ConflictError("Terminal frozen evaluator format is invalid")

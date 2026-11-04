@@ -18,6 +18,7 @@ from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.cli.core import cli
 from project_workflow.interfaces.ui.app import create_app
 from scripts import init_db
+from tests._report_helpers import report_json
 
 
 @pytest.fixture
@@ -42,8 +43,7 @@ def local_execution(monkeypatch):
 
 def report(command, version, key="report-one", document="Actual result"):
     return StandaloneStep(interaction_protocol="configured-cli-v1", namespace_id=command.namespace_id,
-        task=command.task, report=json.dumps({"source": "Owner request", "result": {"document": document},
-                                           "unresolved": []}),
+        task=command.task, report=report_json(document, source="Owner request"),
         operation_key=key, expected_version=version)
 
 

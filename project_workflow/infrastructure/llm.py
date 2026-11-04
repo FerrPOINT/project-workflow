@@ -224,17 +224,25 @@ class OpenAICompatibleClient:
 class PromptBuilder:
     """Build role-neutral evaluation prompts from phase criteria and reports."""
 
-    PROMPT_VERSION = "supervisor-evaluator-v17"
+    PROMPT_VERSION = "supervisor-evaluator-v18"
     SYSTEM_PROMPT = (
         "Assess whether this phase is ready using only its listed criteria and supplied facts. "
         "Use reported source facts and decisions as the reference for the artifact under review, not the reverse. "
         "An artifact defect does not itself mean a source decision is absent. "
         "Reject missing required content, unresolved required decisions and contradictory current facts; "
         "respect explicit later changes. Do not invent facts.\n"
+        "A reported assumption is not automatically a missing owner decision. Require clarification "
+        "only when an unresolved alternative changes a required outcome, scope, constraint or acceptance "
+        "condition; state that effect. Do not invent a new choice by demanding separate approval of "
+        "routine implementation or usage details consistent with the supplied requirements.\n"
+        "Your assessments are not report evidence: identifying a gap in one reason does not supply "
+        "the missing information required by another criterion.\n"
         "An inline source account is sufficient as a source reference unless the criterion explicitly requires "
         "a locator. Do not add URL or independent attestation requirements.\n"
         "Accept a full corrected report or a supplement. Prior covered marks are earlier assessments, "
-        "not source facts. Prior covered marks are revisable: keep them for unchanged work, but "
+        "not source facts. Use previous reports as earlier facts of this phase only; "
+        "a prior mark alone cannot supply required facts. "
+        "Prior covered marks are revisable: keep them for unchanged work, but "
         "latest reported facts override them, including contradictions. Unchanged materials need not be repeated; "
         "their omission alone is not missing evidence. When FULL content is required, a summary or reference "
         "alone cannot supply it.\n"
@@ -252,7 +260,9 @@ class PromptBuilder:
         "BLOCKED requires a reported obstacle preventing required phase work; DELEGATE requires permission, "
         "missing work and no blockers. Never choose a next phase. "
         "Return one bare JSON object with exactly verdict, assessments, blockers and confidence. "
-        "assessments maps every listed label to exactly {\"covered\": boolean, \"reason\": nonempty string}. "
+        "assessments maps every listed label to exactly {\"covered\": boolean, \"reason\": nonempty string, "
+        "\"required_change\": string or null}. For a false mark, required_change names the sufficient "
+        "correction; for a true mark it is null. "
         "blockers is a list of concrete obstacle descriptions; confidence is a number from 0 to 1. "
         "No extra labels or fields.\n"
     )
@@ -298,8 +308,11 @@ class PromptBuilder:
                             "properties": {
                                 label: {
                                     "type": "object",
-                                    "properties": {"covered": {"type": "boolean"}, "reason": {"type": "string"}},
-                                    "required": ["covered", "reason"],
+                                    "properties": {
+                                        "covered": {"type": "boolean"}, "reason": {"type": "string"},
+                                        "required_change": {"type": ["string", "null"]},
+                                    },
+                                    "required": ["covered", "reason", "required_change"],
                                     "additionalProperties": False,
                                 }
                                 for label in aliases
@@ -321,13 +334,13 @@ class PromptBuilder:
         task_key: str,
         phase: Any,
         report: dict[str, Any],
-        previously_covered: list[str] | None = None,
         evaluation_items: list[tuple[str, str]] | None = None,
         *,
-        pm_evaluation: bool = False,
+        previous_reports: list[dict[str, Any]] | None = None,
+        previous_assessments: dict[str, dict[str, Any]] | None = None,
         delegation_allowed: bool | None = None,
     ) -> str:
-        """Serialize a validated report dict; task_key and pm_evaluation are compatibility arguments."""
+        """Serialize current-phase facts and assessments without changing report content."""
         if not isinstance(report, dict):
             raise TypeError("report must be an already parsed dict")
         if evaluation_items is None:
@@ -343,10 +356,12 @@ class PromptBuilder:
         return json.dumps({
             "phase": phase.name,
             "allowed_verdicts": allowed,
-            "criteria": [{"id": label, "text": descriptions[item_id]} for label, item_id in aliases.items()],
-            "previously_covered": [
-                label for label, item_id in aliases.items() if item_id in (previously_covered or [])
+            "criteria": [
+                {"id": label, "text": descriptions[item_id],
+                 "previous_assessment": (previous_assessments or {}).get(item_id)}
+                for label, item_id in aliases.items()
             ],
+            "previous_reports": previous_reports or [],
             "report": report,
         }, ensure_ascii=False, allow_nan=False)
 
@@ -383,12 +398,22 @@ class _ItemAssessment(BaseModel):
 
     covered: bool
     reason: str = Field(min_length=1)
+    required_change: str | None
 
     @field_validator("reason")
     @classmethod
     def _strict_reason(cls, value: str) -> str:
         if value != value.strip():
             raise ValueError("reason must be nonempty without surrounding whitespace")
+        return value
+
+    @field_validator("required_change")
+    @classmethod
+    def _strict_required_change(cls, value: str | None, info: Any) -> str | None:
+        if info.data.get("covered") is True and value is not None:
+            raise ValueError("Covered assessment requires null required_change")
+        if info.data.get("covered") is False and (value is None or not value.strip()):
+            raise ValueError("Uncovered assessment requires nonblank required_change")
         return value
 
 
@@ -422,7 +447,9 @@ class ResponseParser:
         covered = [item_id for item_id in assessments if assessments[item_id]["covered"]]
         missing = [item_id for item_id in assessments if not assessments[item_id]["covered"]]
         parts = [
-            f"{text}: {assessments[item_id]['reason']}" for item_id, text in evaluation_items if item_id in missing
+            f"{text}: {assessments[item_id]['reason']}\n"
+            f"Требуемое изменение: {assessments[item_id]['required_change'].strip()}"
+            for item_id, text in evaluation_items if item_id in missing
         ]
         parts.extend(f"Блокировка: {blocker}" for blocker in response.blockers)
         if response.verdict == "DELEGATE":

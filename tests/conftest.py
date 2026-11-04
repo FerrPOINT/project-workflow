@@ -128,7 +128,9 @@ def supervisor_llm(monkeypatch):
                 "verdict": verdict,
                 "assessments": {
                     item_id: {"covered": item_id in covered_ids,
-                              "reason": f"Test Supervisor criterion: {by_id_text}"}
+                              "reason": f"Test Supervisor criterion: {by_id_text}",
+                              "required_change": None if item_id in covered_ids else
+                              f"Supply fixture evidence for {by_id_text}"}
                     for item_id, by_id_text in items
                 },
                 "blockers": blockers or (["Test blocker"] if verdict == "BLOCKED" else []),

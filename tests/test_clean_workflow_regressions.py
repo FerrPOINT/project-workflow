@@ -54,7 +54,8 @@ def wire(payload, verdict="PARTIAL", *, covered=False):
     return {
         "verdict": verdict,
         "assessments": {
-            item["id"]: {"covered": covered, "reason": "Explicit fixture evidence, not a semantic heuristic"}
+            item["id"]: {"covered": covered, "reason": "Explicit fixture evidence, not a semantic heuristic",
+                         "required_change": None if covered else "Supply the missing fixture evidence"}
             for item in payload["criteria"]
         },
         "blockers": [],
@@ -172,16 +173,26 @@ def coverage_engine(runs, *, duplicate_text=False):
         checks.append(PhaseCheck(id=42, description="Actual criterion"))
     engine.all_phases = [Phase(id=19, code="P", name="Current", checks=checks)]
     engine.db = MagicMock()
-    engine.db.step_history.list.return_value = [SimpleNamespace(to_dict=lambda row=row: row) for row in runs]
+    engine.db.step_history.list.return_value = [
+        SimpleNamespace(to_dict=lambda row=row, index=index: {**row, "id": len(runs) - index})
+        for index, row in enumerate(runs)
+    ]
     return engine
 
 
 def coverage_run(covered, *, missing=(), items=None, technical=False):
     return {
+        "worker_report": report_json("Saved current-phase fixture"),
         "covered_item_ids": list(covered), "missing_item_ids": list(missing),
         "supervisor_response": {"retryable": technical},
         "evaluation_snapshot": {
+            "contract_fingerprint_state": {"group": ["P"]},
             "contract_snapshot": {} if items is None else {"evaluation_items": items},
+            "advisor_assessments": {
+                item_id: {"covered": item_id in covered, "reason": "Explicit saved fixture assessment",
+                          "required_change": None if item_id in covered else "Supply missing fixture evidence"}
+                for item_id in (*covered, *missing)
+            },
             "diagnostics": {"outcome": "technical_failure" if technical else "success"},
         },
     }

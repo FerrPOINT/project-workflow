@@ -151,8 +151,6 @@ def step(uow: SAUnitOfWork, command: StandaloneStep) -> dict[str, Any]:
     if command.start:
         result = start(uow, command)
         return {"ok": True, "exit_code": 0, "result": result}
-    if command.report is not None:
-        PhaseReport.parse(command.report)
     task = _task(uow, command.task, command.namespace_id)
     if command.report is not None and command.operation_key == task.assignment_operation_key:
         raise ConflictError("Report operation key must differ from the accepted start operation key")
@@ -170,6 +168,7 @@ def step(uow: SAUnitOfWork, command: StandaloneStep) -> dict[str, Any]:
             return {"ok": True, "exit_code": 0, "result": json.loads(saved.supervisor_response)}
         if command.expected_version != fence.version or task.status == "done":
             raise ConflictError("Report requires the current active version")
+        PhaseReport.parse(command.report)
     engine = SupervisorEngine(command.task, uow=uow, create_if_missing=False,
                               project_id=task.project_id, runtime_fence=fence)
     if command.report is None:

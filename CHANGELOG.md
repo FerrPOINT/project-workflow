@@ -2,6 +2,37 @@
 
 ## Unreleased — Typed Advisor V18 Checkpoints
 
+- Current source resumes in this PR, without a new branch: typed reports, complete
+  scoped phase/group history, latest criterion assessments and required_change.
+  Exact context is frozen/rechecked around the provider call. Technical errors
+  preserve prior assessments; readback never reevaluates or promotes old formats.
+- Independent review closed accepted-archive replay-before-parse and null context
+  fingerprint validation. New regressions cover both, same-ID report/reason mutation,
+  phase isolation and CLI/API/storage data equality. Focused tests pass; Ruff and
+  mypy169 files pass. Full native remains open: the latest bounded diagnostic had
+  459 passes and8 stale fixture failures; PostgreSQL/coverage/image/live are not claimed.
+- Current targeted packages pass449 tests plus72 LLM and39 state-fixture checks;
+  Base skills package a25c4ef4 passes39 tests and no longer requests hashes in
+  Advisor reports. These are source checks, not a green full release gate.
+- New model work used8 calls, campaign total14/48. All raw requests/responses are
+  retained. The first new response identified the source gap but incorrectly treated
+  its own C3 finding as E2 report evidence; subsequent responses matched neither frozen
+  negative190 label nor its old rationale. No retry, installation or credentials change.
+- Independent adversarial review then found189/190 ambiguous as mandatory negatives:
+  the criteria do not require literal status names or separate approval of every
+  ordinary default. Original labels/results remain unchanged, not relabelled as PASS.
+  New controls must test explicit material gaps/contradictions, not force a missing word.
+- Moving the verbatim reported owner approval into source.decisions, without
+  changing the prompt or document, passed all7 final-phase items. The next refusal
+  exposed unsupported access/failure rules in the Analyst positive fixture; an
+  independent audit found15 consistent and2 invalid positives. Old gold/results
+  remain unchanged; no prompt weakening or installation follows that refusal.
+- The redundant experiment branch was removed after verifying its commit is an
+  ancestor of this branch. All source/evidence remains reachable at f34bbbe.
+  Candidate policy v18 is not qualified, installed, merged or accepted live.
+
+### Historical CP0 And Rejected Representation Experiment
+
 - CP0 records source09e123d/Base93bf43c9 and the unchanged healthy installed v15
   image. Candidate experiments retain app-test/high/4000/json_object and1200s,
   while the installed v15 still uses120s. Neither runtime configuration was changed.
@@ -18,7 +49,7 @@
 - All36 item explanations were independently reviewed. The experiment is rejected:
   classification alone did not demonstrate the intended improvement.42 slots remain
   not_run; CP2/CP3, installation and live PM acceptance did not start.
-- Candidate source/tests are retained at f34bbbe on experiment/advisor-v18-cp1-rejected.
+- Candidate source/tests are retained at f34bbbe in this branch's history.
   Explicit reverts5bf3de2/c7d4bf1 return the active source contract to CP0; no second
   production parser or fallback was retained. Raw requests/responses remain in
   docs/evidence/advisor-v18-checkpoints-20261104.json; old labels are unchanged.

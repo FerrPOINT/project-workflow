@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from .. import config
 from ..domain.configured_cli import ConfiguredCliFence
 from ..domain.exceptions import ConcurrentTransitionError
-from ..domain.phase_report import PhaseReport
+from ..domain.phase_report import PhaseReport, PhaseReportFormatError
 from ..domain.standalone import StandaloneFence
 from ..infrastructure.llm import (
     LlmConfigurationError,
@@ -41,9 +41,10 @@ def _contract_fingerprint_state(
     transition_routes: dict[str, tuple[str | None, str | None, str | None]],
     prompt_version: str | None = None,
     delegation_allowed: bool | None = None,
+    phase_context_fingerprint: str | None = None,
 ) -> dict[str, Any]:
     contract_data = contract.to_dict()
-    return {
+    state = {
         "prompt_version": PromptBuilder.PROMPT_VERSION if prompt_version is None else prompt_version,
         "evaluator_response_format": config.get_settings().OPENAI_EVALUATOR_RESPONSE_FORMAT,
         "contract": contract_data,
@@ -85,6 +86,9 @@ def _contract_fingerprint_state(
             for item in builder.all_phases
         ],
     }
+    if phase_context_fingerprint is not None:
+        state["phase_context_fingerprint"] = phase_context_fingerprint
+    return state
 
 
 def _fingerprint_contract_state(state: dict[str, Any]) -> str:
@@ -98,12 +102,14 @@ def _contract_fingerprint(
     transition_routes: dict[str, tuple[str | None, str | None, str | None]],
     prompt_version: str | None = None,
     delegation_allowed: bool | None = None,
+    phase_context_fingerprint: str | None = None,
 ) -> str:
     return _fingerprint_contract_state(_contract_fingerprint_state(
         builder=builder, phase=phase, group=group, contract=contract, evaluation_items=evaluation_items,
         previously_covered_ids=previously_covered_ids, transition_routes=transition_routes,
         prompt_version=prompt_version,
         delegation_allowed=delegation_allowed,
+        phase_context_fingerprint=phase_context_fingerprint,
     ))
 
 
@@ -121,6 +127,9 @@ def _blocked(exc: Exception, *, provider_outcome: str | None = None) -> LlmVerdi
         blocker = provider_blockers[provider_outcome]
     elif isinstance(exc, PhaseCriteriaConfigurationError):
         blocker = "У фазы или параллельной группы не настроены критерии проверки. Настройте checks или evidence."
+    elif isinstance(exc, PhaseReportFormatError):
+        blocker = ("История текущей фазы содержит несовместимый отчёт. Оценка не выполнена; "
+                   "требуется явный переход данных на текущий контракт.")
     elif isinstance(exc, LlmConfigurationError):
         blocker = "Проверяющий LLM не настроен: для OpenRouter требуется OPENAI_API_KEY."
     elif isinstance(exc, (requests.Timeout, TimeoutError)):
@@ -313,8 +322,15 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
     delegation_allowed = configured is None and current_contract.delegate_agent is not None
     system = PromptBuilder.SYSTEM_PROMPT
     prompt_version = PromptBuilder.PROMPT_VERSION
-    previously = engine._get_previously_covered(phase.code)
-    previously_ids = set(item_ids) & previously
+    context_error: PhaseReportFormatError | None = None
+    try:
+        phase_context = engine._get_phase_evaluation_history(phase.code)
+    except PhaseReportFormatError as exc:
+        context_error = exc
+        phase_context = {"reports": [], "assessments": {}}
+    initial_phase_context_fingerprint = _fingerprint_contract_state(phase_context)
+    previously_ids = {item_id for item_id, assessment in phase_context["assessments"].items()
+                      if item_id in item_ids and assessment["covered"]}
     initial_previously_ids = set(previously_ids)
     catalog_error: ValueError | None = None
     try:
@@ -335,6 +351,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         transition_routes=transition_routes,
         prompt_version=prompt_version,
         delegation_allowed=delegation_allowed,
+        phase_context_fingerprint=initial_phase_context_fingerprint,
     )
     fingerprint = _report_fingerprint(task_id, report, initial_contract_fingerprint)
     if configured is not None:
@@ -352,7 +369,8 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         engine.task_key,
         evaluation_phase,
         parsed_report.model_dump(mode="json"),
-        previously_covered=sorted(previously_ids) or None,
+        previous_reports=phase_context["reports"],
+        previous_assessments=phase_context["assessments"],
         evaluation_items=evaluation_items,
         delegation_allowed=delegation_allowed,
     )
@@ -366,6 +384,8 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
     technical_error = False
     attempts: list[dict[str, Any]] = []
     try:
+        if context_error is not None:
+            raise context_error
         if catalog_error is not None:
             raise catalog_error
         if not evaluation_items:
@@ -430,8 +450,15 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
     item_ids = [item_id for item_id, _ in evaluation_items]
     item_text = dict(evaluation_items)
     current_delegation_allowed = configured is None and current_contract.delegate_agent is not None
-    previously = engine._get_previously_covered(phase.code)
-    previously_ids = set(item_ids) & previously
+    try:
+        phase_context = engine._get_phase_evaluation_history(phase.code)
+    except PhaseReportFormatError as exc:
+        technical_error = True
+        llm = _blocked(exc)
+        phase_context = {"reports": [], "assessments": {}}
+    phase_context_fingerprint = _fingerprint_contract_state(phase_context)
+    previously_ids = {item_id for item_id, assessment in phase_context["assessments"].items()
+                      if item_id in item_ids and assessment["covered"]}
     try:
         transition_routes = {
             verdict: engine._resolve_transition(phase, verdict, group)
@@ -451,6 +478,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         transition_routes=transition_routes,
         prompt_version=prompt_version,
         delegation_allowed=current_delegation_allowed,
+        phase_context_fingerprint=phase_context_fingerprint,
     )
     current_contract_fingerprint = _fingerprint_contract_state(current_contract_state)
     current_snapshot_fingerprint = _contract_fingerprint(
@@ -463,6 +491,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         transition_routes=transition_routes,
         prompt_version=prompt_version,
         delegation_allowed=current_delegation_allowed,
+        phase_context_fingerprint=initial_phase_context_fingerprint,
     )
     if current_snapshot_fingerprint == initial_contract_fingerprint:
         # Another identical evaluation may have committed while this provider
