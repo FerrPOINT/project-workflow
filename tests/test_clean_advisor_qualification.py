@@ -252,3 +252,93 @@ def test_execute_flag_writes_safe_summary_and_stops_on_first_invalid_response(fr
         runner.main(["--execute", "--output", str(output)])
     assert refused.value.code == 2 and output.read_bytes() == saved
     post.assert_called_once()
+
+
+def test_route_preflight_is_offline_and_freezes_four_probes(frozen, monkeypatch, capsys):
+    monkeypatch.setattr(runner, "load_cases", lambda: frozen[:2])
+    constructor = Mock(side_effect=AssertionError("Offline probes cannot construct a client"))
+    monkeypatch.setattr(runner, "OpenAICompatibleClient", constructor)
+    assert runner.main(["--probe-route"]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["mode"] == "offline-route-preflight" and result["max_http_calls"] == 4
+    assert [p["id"] for p in result["probes"]] == [
+        "compliant", "unexpected-field", "wrong-type-and-extra", "missing-c4-reproduction",
+    ]
+    for probe in result["probes"]:
+        assert probe["response_format"]["type"] == "json_schema"
+        assert probe["response_format"]["json_schema"]["strict"] is True
+    assert result["probes"][3]["system"] == runner.PromptBuilder.SYSTEM_PROMPT
+    constructor.assert_not_called()
+
+
+@pytest.mark.parametrize("bad_probe", [None, 0, 1, 2, 3])
+def test_route_uses_exact_schema_and_stops_at_first_failure(frozen, tmp_path, monkeypatch, bad_probe):
+    artifact, cases, _ = frozen
+    probes = runner.route_probes(cases)
+    output = tmp_path / "route.json"
+    calls = []
+
+    def post(url, **kwargs):
+        saved = json.loads(output.read_text(encoding="utf-8"))
+        index = len(calls)
+        assert saved["attempted_calls"] == index + 1
+        assert saved["probes"][index]["status"] == "call_started"
+        probe = probes[index]
+        payload = kwargs["json"]
+        assert payload["response_format"] == probe["response_format"]
+        assert payload["messages"] == [
+            {"role": "system", "content": probe["system"]}, {"role": "user", "content": probe["user"]},
+        ]
+        assert kwargs["timeout"] == (30, 1200) and kwargs["allow_redirects"] is False
+        calls.append(payload)
+        raw = probe["expected"] if index < 3 else wire(cases["pm-missing-full-153"])
+        return response({"unexpected": 42} if index == bad_probe else raw)
+
+    monkeypatch.setattr("project_workflow.infrastructure.llm.requests.post", post)
+    result = runner.probe_route(output, artifact, cases)
+    assert result["attempted_calls"] == (4 if bad_probe is None else bad_probe + 1)
+    assert result["qualified"] is (bad_probe is None)
+    assert result["status"] == ("route_probes_passed" if bad_probe is None else "stopped_route_failure")
+    saved = output.read_bytes()
+    assert b"private-qualification-secret" not in saved
+    with pytest.raises(FileExistsError):
+        runner.probe_route(output, artifact, cases)
+    assert output.read_bytes() == saved
+
+
+def test_route_settings_mismatch_has_no_model_calls(frozen, tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENAI_TIMEOUT", "120")
+    config.get_settings.cache_clear()
+    post = Mock(side_effect=AssertionError("No request with different settings"))
+    monkeypatch.setattr("project_workflow.infrastructure.llm.requests.post", post)
+    result = runner.probe_route(tmp_path / "route-preflight.json", *frozen[:2])
+    assert result["status"] == "preflight_error" and result["attempted_calls"] == 0
+    post.assert_not_called()
+
+
+def test_route_records_prepared_body_without_authorization(frozen, tmp_path, monkeypatch):
+    artifact, cases, _ = frozen
+
+    def original_send(session, prepared, **kwargs):
+        payload = json.loads(prepared.body)
+        raw = wire(cases["pm-missing-full-153"]) if "criteria" in payload["messages"][1]["content"] else {
+            "probe": "schema-enforced",
+        }
+        return response(raw)
+
+    def post(url, **kwargs):
+        prepared = requests.Request("POST", url, headers=kwargs["headers"], json=kwargs["json"]).prepare()
+        return requests.Session().send(prepared, timeout=kwargs["timeout"], allow_redirects=False)
+
+    monkeypatch.setattr(requests.sessions.Session, "send", original_send)
+    monkeypatch.setattr("project_workflow.infrastructure.llm.requests.post", post)
+    output = tmp_path / "prepared.json"
+    result = runner.probe_route(output, artifact, cases)
+    assert result["qualified"] is True
+    assert result["endpoint"]["text"] == "https://provider.invalid/v1"
+    for probe in result["probes"]:
+        request = probe["wire_request"]
+        assert request["url"]["text"] == "https://provider.invalid/v1/chat/completions"
+        assert request["body"]["response_format"] == probe["response_format"]
+        assert request["body"]["messages"][1]["content"] == probe["user"]
+    assert "private-qualification-secret" not in output.read_text(encoding="utf-8")

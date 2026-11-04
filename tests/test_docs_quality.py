@@ -1,11 +1,24 @@
 """Regression checks for user-facing documentation."""
 
 import importlib.util
+import json
 import struct
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 README_VALIDATOR = ROOT / "scripts" / "verify_readme.py"
+
+
+def test_compose_forwards_explicit_evaluator_response_format(monkeypatch):
+    for response_format in ("json_object", "json_schema"):
+        monkeypatch.setenv("OPENAI_EVALUATOR_RESPONSE_FORMAT", response_format)
+        rendered = subprocess.run(
+            ["docker", "compose", "-f", str(ROOT / "docker-compose.yml"), "config", "--format", "json"],
+            check=True, capture_output=True, text=True,
+        )
+        compose = json.loads(rendered.stdout)
+        assert compose["services"]["api"]["environment"]["OPENAI_EVALUATOR_RESPONSE_FORMAT"] == response_format
 
 
 def _load_readme_validator():

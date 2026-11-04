@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, TextIO
+from unittest.mock import patch
 
 import requests
 
@@ -26,6 +27,105 @@ LABELS = ROOT / "docs/evidence/advisor-v18-qualification-cases-20261104.json"
 LABELS_SHA256 = "277f399956c59530d59c81137da513e332f9baec2d5cacab6973b60672710e5c"
 POLICY = "supervisor-evaluator-v18"
 MAX_CALLS = 36
+ROUTE_PROBE_LIMIT = 4
+
+
+def route_probes(cases: dict[str, dict]) -> list[dict[str, Any]]:
+    """Freeze the approved four route checks without constructing a model client."""
+    probe_format = {"type": "json_schema", "json_schema": {
+        "name": "advisor_route_probe", "strict": True, "schema": {
+            "type": "object", "properties": {"probe": {"type": "string", "enum": ["schema-enforced"]}},
+            "required": ["probe"], "additionalProperties": False,
+        },
+    }}
+    probes: list[dict[str, Any]] = [{"id": name, "system": "Reply in JSON to the user.", "user": user,
+               "response_format": probe_format, "expected": {"probe": "schema-enforced"}}
+              for name, user in (
+                  ("compliant", 'Return JSON {"probe": "schema-enforced"} only.'),
+                  ("unexpected-field", 'Return JSON {"unexpected": 42} only.'),
+                  ("wrong-type-and-extra", 'Return JSON {"probe": false, "extra": "not allowed"} only.'),
+              )]
+    case = cases["pm-missing-full-153"]
+    items = [(row["id"], row["text"]) for row in case["criteria"]]
+    probes.append({"id": "missing-c4-reproduction", "system": PromptBuilder.SYSTEM_PROMPT,
+                   "user": json.dumps(case["user_payload"], ensure_ascii=False, allow_nan=False),
+                   "response_format": PromptBuilder.response_schema(items, delegation_allowed=False),
+                   "expected": case["expected"], "evaluation_items": items})
+    for probe in probes:
+        probe.update(status="not_run", acceptance_unknown=False)
+    return probes
+
+
+def probe_route(output: Path, artifact: dict, cases: dict[str, dict]) -> dict[str, Any]:
+    """One attempt per probe; a failure stops the route checkpoint, never downgrades."""
+    probes = route_probes(cases)
+    journal: dict[str, Any] = {
+        "schema": "advisor-route-preflight-v1", "policy": POLICY,
+        "campaign_limit": 134, "campaign_already_attempted": 70,
+        "qualification_reserve": 36, "live_reserve": 24, "max_http_calls": ROUTE_PROBE_LIMIT,
+        "attempted_calls": 0, "qualified": False, "status": "prepared", "probes": probes,
+        "source_sha256": {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
+                          for path in (LABELS, Path(__file__), ROOT / "project_workflow/infrastructure/llm.py")},
+    }
+    with output.open("x", encoding="utf-8") as stream:
+        checkpoint(stream, journal)
+        client = OpenAICompatibleClient()
+        expected = artifact["settings"]
+        if (client.model != expected["model"] or client.timeout != expected["timeout"]
+                or client.max_tokens != expected["max_tokens"]
+                or client.reasoning_effort != expected["reasoning_effort"]):
+            journal.update(status="preflight_error")
+            checkpoint(stream, journal)
+            return journal
+        journal["settings"] = {**expected, "response_format": "per-probe strict json_schema"}
+        journal["endpoint"] = text_snapshot(client.base_url, (client.api_key,))
+        for probe in probes:
+            probe.update(status="call_started", acceptance_unknown=True)
+            journal["attempted_calls"] += 1
+            checkpoint(stream, journal)
+            raw, error = None, None
+            try:
+                send = requests.sessions.Session.send
+
+                def capture_wire(session, prepared, **kwargs):
+                    if prepared.url != f"{client.base_url}/chat/completions":
+                        raise ValueError("Route probe cannot send to an unexpected endpoint")
+                    probe["wire_request"] = {
+                        "method": prepared.method, "url": text_snapshot(prepared.url, (client.api_key,)),
+                        "body": json.loads(prepared.body), "timeout": kwargs.get("timeout"),
+                    }
+                    checkpoint(stream, journal)
+                    return send(session, prepared, **kwargs)
+
+                with patch.object(requests.sessions.Session, "send", capture_wire):
+                    raw = client.chat(system=probe["system"], user=probe["user"], temperature=0.1,
+                                      response_format=probe["response_format"])
+                if "evaluation_items" not in probe:
+                    if raw != probe["expected"]:
+                        raise ValueError("Provider route did not enforce the required schema")
+                else:
+                    parsed = ResponseParser.parse_assessments(raw, evaluation_items=probe["evaluation_items"])
+                    expected_result = probe["expected"]
+                    if (parsed.verdict != expected_result["verdict"]
+                            or set(parsed.covered) != set(expected_result["covered"])
+                            or set(parsed.missing) != set(expected_result["missing"])
+                            or bool(parsed.blockers) != bool(expected_result["blockers"])):
+                        raise ValueError("C4 reproduction differs from the frozen classification")
+            except Exception as exc:
+                error = exc
+            probe["diagnostics"] = capture_attempt(client, number=1, prompt=probe["user"], raw=raw,
+                                                   error=error, system=probe["system"])
+            if isinstance(client.last_response_content, str):
+                probe["raw_message_content"] = text_snapshot(client.last_response_content, (client.api_key,))
+            unknown = isinstance(error, (requests.RequestException, OSError))
+            probe.update(status="matched" if error is None else "failed", acceptance_unknown=unknown)
+            journal["status"] = "running" if error is None else "stopped_route_failure"
+            checkpoint(stream, journal)
+            if error is not None:
+                return journal
+        journal.update(status="route_probes_passed", qualified=True)
+        checkpoint(stream, journal)
+    return journal
 
 
 def digest(value: Any) -> str:
@@ -185,11 +285,20 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--execute", action="store_true", help="Explicitly allow up to 36 model HTTP calls")
     parser.add_argument("--output", type=Path, help="New evidence JSON file; existing files are refused")
+    parser.add_argument("--probe-route", action="store_true", help="Only the four approved strict-schema route probes")
     args = parser.parse_args(argv)
     if args.execute != (args.output is not None):
         parser.error("--execute and --output must be supplied together")
     try:
         artifact, cases = load_cases()
+        if args.probe_route:
+            if not args.execute:
+                print(json.dumps({"mode": "offline-route-preflight", "max_http_calls": ROUTE_PROBE_LIMIT,
+                                  "probes": route_probes(cases)}, ensure_ascii=False, indent=2))
+                return 0
+            journal = probe_route(args.output, artifact, cases)
+            print(json.dumps({key: journal[key] for key in ("status", "attempted_calls", "qualified")}))
+            return 0 if journal["qualified"] else 1
         slots = plan(cases)
         if not args.execute:
             print(json.dumps({"mode": "offline", "policy": POLICY, "max_http_calls": MAX_CALLS,
