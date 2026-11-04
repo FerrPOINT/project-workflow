@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
 import pytest
+
+# Importing the ASGI app uses a real, explicit configuration, never an implicit no-auth fallback.
+os.environ["PROJECT_WORKFLOW_MODE"] = "standalone"
+os.environ.setdefault("DATABASE_URL", "sqlite://")
 
 from project_workflow import config
 from project_workflow.infrastructure.db.uow import SAUnitOfWork

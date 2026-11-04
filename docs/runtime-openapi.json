@@ -556,6 +556,102 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "StandaloneStep": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_version": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Version"
+          },
+          "interaction_protocol": {
+            "const": "configured-cli-v1",
+            "title": "Interaction Protocol",
+            "type": "string"
+          },
+          "mode_key": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mode Key"
+          },
+          "namespace_id": {
+            "exclusiveMinimum": 0.0,
+            "title": "Namespace Id",
+            "type": "integer"
+          },
+          "operation_key": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operation Key"
+          },
+          "report": {
+            "anyOf": [
+              {
+                "maxLength": 32000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Report"
+          },
+          "start": {
+            "default": false,
+            "title": "Start",
+            "type": "boolean"
+          },
+          "task": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Task",
+            "type": "string"
+          },
+          "workflow_id": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Id"
+          }
+        },
+        "required": [
+          "interaction_protocol",
+          "task",
+          "namespace_id"
+        ],
+        "title": "StandaloneStep",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -931,7 +1027,15 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ConfiguredStep"
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ConfiguredStep"
+                  },
+                  {
+                    "$ref": "#/components/schemas/StandaloneStep"
+                  }
+                ],
+                "title": "Payload"
               }
             }
           },

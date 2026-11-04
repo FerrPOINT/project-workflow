@@ -26,6 +26,10 @@ SUBJECT, AGENT, OWNER, TRACKER_TASK = (str(uuid4()) for _ in range(4))
 
 @pytest.fixture
 def configured(monkeypatch, request):
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "platform")
+    monkeypatch.setenv("AUTH_ISSUER", "https://auth.test")
+    monkeypatch.setenv("AUTH_INTERNAL_BASE_URL", "https://auth.test")
+    monkeypatch.setenv("AUTH_SESSION_SECRET", "configured-cli-unit-session-secret-only")
     role, mode = getattr(request, "param", ("project_manager", "draft"))
     monkeypatch.setattr(config, "CATALOG_VARIANT", "single-task-v1")
     monkeypatch.setenv("PROJECT_WORKFLOW_BASE_READER_SUBJECTS_JSON", json.dumps({CONTROLLER: role}))
@@ -1343,7 +1347,7 @@ def retired_assignment(configured):
     ("developer", "initial"), ("developer", "rework"), ("reviewer", "delivery"),
     ("tester", "delivery"), ("devops", "delivery"),
 ], indirect=True)
-def test_new_assignment_adopts_retired_business_cursor_without_rewriting_history(configured, supervisor_llm):
+def test_retired_business_cursor_is_archive_and_cannot_be_adopted(configured, supervisor_llm):
     client, assignment = configured
     task_id, phase_id, old_rows, old_assignment = retired_assignment(configured)
     query={"interaction_protocol":"configured-cli-v1","task":assignment["task"],"namespace_id":assignment["namespace_id"]}
@@ -1351,7 +1355,8 @@ def test_new_assignment_adopts_retired_business_cursor_without_rewriting_history
     historical=client.get("/internal/runtime/history",headers=WRITER,params=query)
     assert historical.status_code == 200, historical.text
     cursor=historical.json()["result"]
-    assert cursor["legacy_read_only"] is True and cursor["records"][0]["worker_report"] == "Retained old report"
+    assert cursor["archived"] is True and "version" not in cursor
+    assert cursor["records"][0]["worker_report"] == "Retained old report"
     summary = client.get("/internal/runtime/history", headers=WRITER,
                          params={**query, "projection": "fleet-summary-v1", "n": 1})
     assert summary.status_code == 200, summary.text
@@ -1359,25 +1364,23 @@ def test_new_assignment_adopts_retired_business_cursor_without_rewriting_history
     assert client.get("/internal/runtime/history",headers=WRITER,
         params={**query,"assignment_operation_key":assignment["operation_key"]}).status_code == 404
     assert client.post("/internal/runtime/assign",headers=WRITER,
-        json={**assignment,"expected_version":cursor["version"]-1}).status_code == 409
+        json={**assignment,"expected_version":1}).status_code == 409
     foreign_task = str(uuid4())
     for invalid in ({"assignment_ref": old_assignment["assignment_ref"]},
                     {"business_task_ref": foreign_task, "tracker_task_id": foreign_task},
                     {"mode_key": "rework"} if assignment["mode_key"] == "initial" else {"expected_version": 0}):
         rejected = client.post("/internal/runtime/assign", headers=WRITER,
-                               json={**assignment, "expected_version": cursor["version"], **invalid})
+                               json={**assignment, "expected_version": 2, **invalid})
         assert rejected.status_code == 409, rejected.text
     response=client.post("/internal/runtime/assign",headers=WRITER,
-        json={**assignment,"expected_version":cursor["version"]})
-    assert response.status_code == 200, response.text
-    assert response.json()["result"]["version"] == cursor["version"]+1
+        json={**assignment,"expected_version":2})
+    assert response.status_code == 409, response.text
     with SAUnitOfWork() as uow:
         assert uow.tasks.get_by_id(task_id).current_phase_id == phase_id
         assert [row.to_dict() for row in uow.step_history.list(task_id=task_id)] == old_rows
         assert uow.tasks.get_assignment_by_operation_key(old_assignment["operation_key"]).to_dict() == old_assignment
-    supervisor_llm("PASS")
-    assert step(configured,report=report_json("Completed remaining phase"),operation_key="after-adoption",
-                expected_version=response.json()["result"]["version"]).status_code == 200
+    assert step(configured,report=report_json("Must not resume a retired execution"),operation_key="after-adoption",
+                expected_version=2).status_code == 409
 
 
 @pytest.mark.parametrize("corruption", ["payload", "custody", "unknown_family"])
@@ -1402,7 +1405,9 @@ def test_retired_history_and_adoption_refuse_unknown_or_tampered_assignment(conf
         uow.commit()
     query = {"interaction_protocol": "configured-cli-v1", "task": assignment["task"],
              "namespace_id": assignment["namespace_id"]}
-    assert client.get("/internal/runtime/history", headers=WRITER, params=query).status_code == 409
+    archived = client.get("/internal/runtime/history", headers=WRITER, params=query)
+    assert archived.status_code == 200 and archived.json()["result"]["archived"] is True
+    assert "version" not in archived.json()["result"]
     assert client.post("/internal/runtime/assign", headers=WRITER,
                        json={**assignment, "expected_version": 2}).status_code == 409
     with SAUnitOfWork() as uow:

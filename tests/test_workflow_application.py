@@ -5,11 +5,21 @@ import re
 import pytest
 from fastapi.testclient import TestClient
 
+from project_workflow import config
 from project_workflow.interfaces.ui import app
 from tests.test_workflow_incremental import editor_url
 
 pytestmark = pytest.mark.ui
-client = TestClient(app)
+client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
+
+
+@pytest.fixture(autouse=True)
+def standalone_mode(isolate_ui_runtime_state, monkeypatch):
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "standalone")
+    monkeypatch.setenv("PROJECT_WORKFLOW_STANDALONE_CONTAINER_NETWORK", "false")
+    config.get_settings.cache_clear()
+    yield
+    config.get_settings.cache_clear()
 
 
 @pytest.mark.parametrize("path", ["/", "/namespaces", "/namespaces/new", "/workflows", "/tasks", "/settings"])

@@ -5,9 +5,19 @@ import subprocess
 
 import pytest
 
+from project_workflow import config
 from project_workflow.interfaces.ui.controller_assets import controller_source
 
 pytestmark = pytest.mark.ui
+
+
+@pytest.fixture(autouse=True)
+def standalone_mode(isolate_ui_runtime_state, monkeypatch):
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "standalone")
+    monkeypatch.setenv("PROJECT_WORKFLOW_STANDALONE_CONTAINER_NETWORK", "false")
+    config.get_settings.cache_clear()
+    yield
+    config.get_settings.cache_clear()
 
 
 @pytest.mark.parametrize("mode", ["edit", "create"])

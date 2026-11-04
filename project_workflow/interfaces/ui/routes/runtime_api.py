@@ -8,6 +8,7 @@ from typing import Any, Literal
 
 from fastapi import Header, Query
 from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 
 from project_workflow import config
@@ -26,6 +27,7 @@ from project_workflow.domain.runtime_assignment import (
     MANAGED_ROLE_MODE_SCOPES,
     MANAGED_WORKFLOW_KEYS,
 )
+from project_workflow.domain.standalone import StandaloneStep
 from project_workflow.infrastructure import base_auth, namespace_auth
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.infrastructure.platform_namespace import is_personal_token
@@ -297,11 +299,30 @@ def runtime_assign(
 
 
 def runtime_step(
-    payload: ConfiguredStep,
+    payload: ConfiguredStep | StandaloneStep,
     authorization: str | None = Header(default=None),
 ) -> dict[str, Any] | JSONResponse:
-    from . import configured_cli_api
+    from project_workflow.config import get_settings
 
+    from . import configured_cli_api
+    if get_settings().PROJECT_WORKFLOW_MODE == "standalone":
+        from project_workflow.application import standalone
+        from project_workflow.infrastructure.db.uow import SAUnitOfWork
+
+        try:
+            command = StandaloneStep.model_validate(payload.model_dump(exclude_unset=True))
+            with SAUnitOfWork() as uow:
+                return standalone.step(uow, command)
+        except ValidationError as exc:
+            details = [{"field": str(e["loc"][0]) if e["loc"]
+                        and e["loc"][0] in StandaloneStep.model_fields else "$", "code": e["type"]}
+                       for e in exc.errors(include_input=False)]
+            return JSONResponse({"ok": False, "error_code": "invalid-standalone-input",
+                                 "details": details}, status_code=422)
+        except configured_cli_api._REQUEST_ERRORS as exc:
+            return configured_cli_api.error(exc)
+    if not isinstance(payload, ConfiguredStep):
+        return JSONResponse({"ok": False, "error": "Standalone input is not enabled"}, status_code=422)
     return configured_cli_api.step(payload, authorization)
 
 
@@ -318,8 +339,24 @@ def runtime_history(
     before_history_id: DatabaseId | None = Query(default=None),
 ) -> dict[str, Any] | JSONResponse:
     """Read configured operations or retained history through the same authority."""
+    from project_workflow.config import get_settings
+
     from . import configured_cli_api
 
+    if get_settings().PROJECT_WORKFLOW_MODE == "standalone":
+        from project_workflow.application import standalone
+        from project_workflow.infrastructure.db.uow import SAUnitOfWork
+
+        if execution_ref is not None or assignment_operation_key is not None or projection is not None:
+            return JSONResponse({"ok": False, "error": "Platform history selectors are not local selectors"},
+                                status_code=422)
+        try:
+            with SAUnitOfWork() as uow:
+                return standalone.history(uow, task, namespace_id, n=n or 200,
+                    operation_key=operation_key,
+                    before_history_id=int(before_history_id) if before_history_id is not None else None)
+        except configured_cli_api._REQUEST_ERRORS as exc:
+            return configured_cli_api.error(exc)
     count = n if n is not None else (1 if projection == "evaluator-diagnostics-v1" else 200)
     result = configured_cli_api.history(
         task, namespace_id, authorization, n=count,

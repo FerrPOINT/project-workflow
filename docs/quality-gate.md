@@ -41,7 +41,9 @@ Optional HTTP transport должен поддерживать `max_response_byte
 содержит этот baseline; SDK/UI/skills pins ради окружения не меняются.
 
 Для тестов configured CLI нужен отдельный квалифицированный Base producer
-`278be4a2eb0b3ce49dac2cd14ea7e2871f2ffe1d` (`workflow-cli-base-source`).
+`25b0b2aafaa9feaa854ca86f11043ff825842229` (`workflow-cli-base-source`).
+Этот producer добавляет явный token-free loopback transport для standalone;
+платформенный transport по-прежнему требует PAT.
 SDK checkout по `.base-revision` остаётся независимым: его старый `ApiClient`
 не поддерживает `max_response_bytes`. Глобально установленный `pdlc_cli_core`
 не является воспроизводимой зависимостью isolated uv-окружения.
@@ -49,10 +51,10 @@ SDK checkout по `.base-revision` остаётся независимым: ег
 
 ```bash
 git clone --no-checkout --depth 1 https://github.com/FerrPOINT/services-base.git ../workflow-cli-base
-git -C ../workflow-cli-base fetch --depth 1 origin 278be4a2eb0b3ce49dac2cd14ea7e2871f2ffe1d
-git -C ../workflow-cli-base checkout --detach 278be4a2eb0b3ce49dac2cd14ea7e2871f2ffe1d
+git -C ../workflow-cli-base fetch --depth 1 origin 25b0b2aafaa9feaa854ca86f11043ff825842229
+git -C ../workflow-cli-base checkout --detach 25b0b2aafaa9feaa854ca86f11043ff825842229
 export WORKFLOW_CLI_BASE="$(cd ../workflow-cli-base && pwd)"
-test "$(git -C "$WORKFLOW_CLI_BASE" rev-parse HEAD)" = 278be4a2eb0b3ce49dac2cd14ea7e2871f2ffe1d
+test "$(git -C "$WORKFLOW_CLI_BASE" rev-parse HEAD)" = 25b0b2aafaa9feaa854ca86f11043ff825842229
 test -z "$(git -C "$WORKFLOW_CLI_BASE" status --porcelain --untracked-files=all)"
 export PYTHONPATH="$WORKFLOW_CLI_BASE/base-modules/python/cli-core${PYTHONPATH:+:$PYTHONPATH}"
 ```

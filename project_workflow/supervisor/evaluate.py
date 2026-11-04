@@ -13,6 +13,7 @@ from .. import config
 from ..domain.configured_cli import ConfiguredCliFence
 from ..domain.exceptions import ConcurrentTransitionError
 from ..domain.phase_report import PhaseReport
+from ..domain.standalone import StandaloneFence
 from ..infrastructure.llm import (
     LlmConfigurationError,
     LlmVerdict,
@@ -23,8 +24,6 @@ from ..infrastructure.llm import (
 from .diagnostics import capture_attempt, evaluation_diagnostic
 from .models import Phase
 from .types import VERDICT_LABELS
-
-_MAX_EVALUATOR_RESPONSE_ATTEMPTS = 2
 
 
 class PhaseCriteriaConfigurationError(LlmConfigurationError):
@@ -171,7 +170,6 @@ def _replay(
     *,
     after_run_id: int | None = None,
 ) -> dict[str, Any] | None:
-    runtime_fence = getattr(engine, "runtime_fence", None)
     run = engine.db.step_history.get_by_fingerprint(
         task_id, phase_id, fingerprint, mode_id=int(engine.task.get("mode_id") or 0),
         cycle_number=int(engine.task.get("cycle_number") or 0),
@@ -202,27 +200,9 @@ def _replay(
     current_status = str(getattr(task, "status", "") or "")
     if (current_phase_code, current_status) == (expected_phase, expected_status):
         return result
-    if runtime_fence is not None:
-        raise ConcurrentTransitionError(
-            "Сохранённый runtime step не совпадает с текущим cursor задачи"
-        )
-    if current_phase_code != evaluated_phase or run_id is None:
-        return None
-    phase = engine.phase_map.get(evaluated_phase)
-    if phase is None:
-        return None
-    try:
-        engine._record_evaluation(
-            phase,
-            verdict,
-            next_phase_code,
-            None,
-            int(run_id),
-        )
-    except ConcurrentTransitionError:
-        engine.db.rollback()
-        return _concurrent_result(result)
-    return result
+    raise ConcurrentTransitionError(
+        "Сохранённый step не совпадает с текущим cursor задачи; replay не изменяет состояние"
+    )
 
 
 def _latest_run_id(engine: Any, task_id: int) -> int | None:
@@ -262,55 +242,28 @@ def _evaluate_strict_response(
     response_format: dict[str, Any] | None = None,
     delegation_allowed: bool | None = None,
 ) -> tuple[dict[str, Any], LlmVerdict]:
-    """Retry only malformed evaluator output and never relax the wire contract."""
-    attempt_system = system
+    """Evaluate exactly once; malformed output is a technical failure."""
     allowed = PromptBuilder.allowed_verdicts(
         phase.delegate is not None if delegation_allowed is None else delegation_allowed,
     )
-    last_error: Exception | None = None
-    for attempt_number in range(1, _MAX_EVALUATOR_RESPONSE_ATTEMPTS + 1):
-        raw: dict[str, Any] | None = None
-        error: Exception | None = None
-        submitted_system = attempt_system
-        try:
-            format_options = {"response_format": response_format} if response_format is not None else {}
-            raw = client.chat(
-                system=submitted_system,
-                user=user,
-                temperature=0.1,
-                **format_options,
-            )
-            llm = ResponseParser.parse_assessments(raw, evaluation_items=evaluation_items)
-            if llm.verdict not in allowed:
-                raise ValueError("Для текущей фазы не настроено делегирование")
-            return raw, llm
-        except (TypeError, ValueError, KeyError, IndexError, AttributeError) as exc:
-            error = exc
-            last_error = exc
-            provider_diagnostic = getattr(client, "last_call_diagnostics", None)
-            if (isinstance(provider_diagnostic, dict)
-                    and provider_diagnostic.get("outcome") in {"refusal", "content_filter", "incomplete"}):
-                raise
-            if attempt_number == _MAX_EVALUATOR_RESPONSE_ATTEMPTS:
-                raise
-            attempt_system = (
-                system
-                + "\n\nPREVIOUS RESPONSE WAS INVALID. Return a new response that satisfies "
-                "the exact JSON schema and assesses every required criterion exactly once. "
-                "Return only one bare JSON object without Markdown or commentary."
-            )
-        except (requests.RequestException, OSError) as exc:
-            error = exc
-            raise
-        finally:
-            if attempts is not None:
-                try:
-                    attempts.append(capture_attempt(client, number=attempt_number, prompt=user,
-                                                    raw=raw, error=error, system=submitted_system))
-                except Exception as diagnostic_error:
-                    attempts.append({"number": attempt_number, "capture_error": type(diagnostic_error).__name__})
-    assert last_error is not None
-    raise last_error
+    raw: dict[str, Any] | None = None
+    error: Exception | None = None
+    try:
+        format_options = {"response_format": response_format} if response_format is not None else {}
+        raw = client.chat(system=system, user=user, temperature=0.1, **format_options)
+        llm = ResponseParser.parse_assessments(raw, evaluation_items=evaluation_items)
+        if llm.verdict not in allowed:
+            raise ValueError("Для текущей фазы не настроено делегирование")
+        return raw, llm
+    except (TypeError, ValueError, KeyError, IndexError, AttributeError, requests.RequestException, OSError) as exc:
+        error = exc
+        raise
+    finally:
+        if attempts is not None:
+            try:
+                attempts.append(capture_attempt(client, number=1, prompt=user, raw=raw, error=error, system=system))
+            except Exception as diagnostic_error:
+                attempts.append({"number": 1, "capture_error": type(diagnostic_error).__name__})
 
 
 def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any]:
@@ -355,7 +308,8 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
     )
     item_ids = [item_id for item_id, _ in evaluation_items]
     item_text = dict(evaluation_items)
-    configured = engine.runtime_fence if isinstance(engine.runtime_fence, ConfiguredCliFence) else None
+    configured = (engine.runtime_fence
+                  if isinstance(engine.runtime_fence, (ConfiguredCliFence, StandaloneFence)) else None)
     delegation_allowed = configured is None and current_contract.delegate_agent is not None
     system = PromptBuilder.SYSTEM_PROMPT
     prompt_version = PromptBuilder.PROMPT_VERSION
@@ -641,6 +595,10 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         from ..application.configured_cli import prepare_history
 
         prepare_history(runtime_fence, run_data)
+    elif isinstance(runtime_fence, StandaloneFence):
+        from ..application.standalone import prepare_history as prepare_local_history
+
+        prepare_local_history(runtime_fence, run_data)
 
     try:
         step_history_id = engine.db.record_step(**run_data)
@@ -656,10 +614,14 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
             from ..application.configured_cli import finish_history
 
             finish_history(engine.db, runtime_fence, step_history_id, result)
+        elif isinstance(runtime_fence, StandaloneFence):
+            from ..application.standalone import finish_history as finish_local_history
+
+            finish_local_history(engine.db, runtime_fence, step_history_id, result)
         engine.db.commit()
     except IntegrityError:
         engine.db.rollback()
-        if isinstance(getattr(engine, "runtime_fence", None), ConfiguredCliFence):
+        if isinstance(getattr(engine, "runtime_fence", None), (ConfiguredCliFence, StandaloneFence)):
             raise
         replayed = _replay(engine, task_id, phase_id, fingerprint)
         if replayed is not None:

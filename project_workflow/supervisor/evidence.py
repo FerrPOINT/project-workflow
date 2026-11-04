@@ -4,17 +4,8 @@ import re
 from typing import Any
 
 from project_workflow.domain.exceptions import ConflictError
-from project_workflow.infrastructure.llm import PromptBuilder, ResponseParser
-from project_workflow.supervisor.checks import normalize_text
+from project_workflow.infrastructure.llm import ResponseParser
 from project_workflow.supervisor.evaluate import _fingerprint_contract_state, _report_fingerprint
-
-HISTORICAL_EVALUATOR_VERSIONS = (
-    "supervisor-evaluator-v9", "supervisor-evaluator-v8-no-backtracking",
-    "supervisor-evaluator-v11", "supervisor-evaluator-pm-v1", "supervisor-evaluator-pm-v2",
-    "supervisor-evaluator-pm-v3", "supervisor-evaluator-pm-v4", "supervisor-evaluator-v12",
-    "supervisor-evaluator-v13", "supervisor-evaluator-v14",
-)
-RAW_REPORT_EVALUATOR_VERSIONS = ("supervisor-evaluator-v15", PromptBuilder.PROMPT_VERSION)
 
 
 def _coverage_ids(value: Any) -> list[str]:
@@ -52,15 +43,12 @@ def validate_frozen_evaluation(
     if ("evaluator_response_format" in state
             and state["evaluator_response_format"] not in ("json_object", "json_schema")):
         raise ConflictError("Terminal frozen evaluator format is invalid")
-    if (state.get("prompt_version") in ("supervisor-evaluator-v14", *RAW_REPORT_EVALUATOR_VERSIONS)
-            and "evaluator_response_format" not in state):
+    if "evaluator_response_format" not in state:
         raise ConflictError("Terminal frozen evaluator format is missing")
     try:
         parsed = ResponseParser.parse(evaluator, required_item_ids=item_ids)
         fingerprint = _fingerprint_contract_state(state)
         report = step["worker_report"]
-        if state["prompt_version"] in HISTORICAL_EVALUATOR_VERSIONS:
-            report = normalize_text(report)
         report_fingerprint = (replay_fingerprint if replay_fingerprint is not None
                               else _report_fingerprint(step["task_id"], report, fingerprint))
     except (TypeError, ValueError):
@@ -68,8 +56,7 @@ def validate_frozen_evaluation(
     if (
         fingerprints != [fingerprint, fingerprint] or step.get("replay_fingerprint") != report_fingerprint
         or state["prompt_version"] != evaluation.get("prompt_version")
-        or state["prompt_version"] not in (*HISTORICAL_EVALUATOR_VERSIONS,
-                                           *RAW_REPORT_EVALUATOR_VERSIONS)
+        or not isinstance(state["prompt_version"], str) or not state["prompt_version"].strip()
         or state["contract"] != {key: value for key, value in contract.items() if key != "evaluation_items"}
         or state["evaluation_items"] != items
         or parsed.verdict != "PASS" or parsed.covered != covered

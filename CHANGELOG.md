@@ -1,5 +1,54 @@
 # Changelog
 
+## Unreleased — Clean Workflow Candidate (Not Installed)
+
+- Explicit platform/standalone admission around one evaluator. Standalone uses
+  local namespaces, workflow/mode selection, operation ledger and PostgreSQL,
+  without external identity or Tracker receipts. Direct mode checks loopback
+  bind/peer; container mode explicitly relies on isolated network and loopback publication.
+- One model call per new report; no format/transport/semantic automatic retries.
+  Model wait1200s, connect30s, CLI read1500s. Readback does not repair transitions.
+- Removed textual coverage inheritance, retired assignment adoption, old report
+  normalization authority, default-workflow reassignment and fabricated service links.
+- Base SDK producer25b0b2a supports explicit token-free loopback transport;
+  default authenticated clients are unchanged. Common policy is in Base PR458.
+- Mechanical review additionally closed standalone workflow/task lock inversion,
+  ambiguous start/report keys and history projection/cursor mismatches. Ordinary
+  history has an explicit64MiB CLI transport budget without truncation/retry;
+  step and diagnostics retain1MiB. Internal API errors remain JSON, not UI pages.
+- The ASGI factory and SSO use the same resolved Settings, including .env-only
+  configuration. Platform requires explicit Auth and enforced application access;
+  standalone cannot be selected by missing identity or dependency settings.
+- Checked separately: affected configured/CLI/Advisor suites176 tests; SSO/CLI/local
+  group163; prompt/qualification/local regression group125; current API surface15;
+  installation/publication/editor group59. These overlap and are not a full-suite
+  count. Ruff, mypy169 files and generated OpenAPI check pass. Independent source
+  review of the latest admission/locking/history/API-error changes found no P1/P2.
+- The earlier full native run failed on obsolete fixtures; a subsequent coverage
+  run was interrupted at4% and is not a passed gate. Full native/PostgreSQL/94%
+  coverage/image/browser gates remain open. No Fleet/Hermes rebuild or runtime update.
+- Model qualification stopped after16 calls:15 classifications matched, then
+  case190 falsely passed C3/E2. All75 explanations independently reviewed;
+  case189 additionally requests an unestablished closure decision. V17 rejected;
+  20 planned calls remain not_run. No re-run, installation, live PM acceptance or merge.
+- Context recheck: current task/phase/mode/cycle only; the model receives current
+  marks and report, not the full stored history. Case190 has5739 user characters,
+  1886 provider-reported prompt tokens, finish=stop and no diagnostic truncation.
+  Context overflow is not established. Four focused coverage/scope regressions pass;
+  no new model calls or product-code changes were made for this recheck.
+- Remaining cleanup includes the PDLC/SDLC environment-alias contract and offline
+  seed helpers retained in product source. Unfinished old assignments require an
+  explicit consumer transition before removing their authority readers. Archive
+  data, applied migrations and valid current Auth token prefixes are not garbage.
+- Saved as a source checkpoint at the user's explicit request with the known
+  qualification failure and open mandatory gates. This is not a release candidate
+  accepted for installation or merge. Base is published in Draft PR458; the
+  working installed PM remains unchanged.
+- Checkpoint validation:143 targeted local/CLI/API/Advisor regressions pass;
+  Ruff and mypy169 files pass. This does not replace the open full release gates.
+- Next: qualify one independently justified instruction correction, close the
+  remaining contract cleanup and final gates. No release or merge readiness is claimed.
+
 ## Advisor V16 Candidate - 2026-11-04 (Rejected; Not Installed)
 
 - Cause: evaluation189 accepted E2 despite a source gap identified under C3;

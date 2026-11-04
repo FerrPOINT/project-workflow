@@ -9,7 +9,16 @@ from tests.test_ui_shell_template import Elements
 from tests.test_workflow_mode_tabs_ui import _developer_catalog
 
 pytestmark = pytest.mark.ui
-client = TestClient(app)
+client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
+
+
+@pytest.fixture(autouse=True)
+def standalone_mode(isolate_ui_runtime_state, monkeypatch):
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "standalone")
+    monkeypatch.setenv("PROJECT_WORKFLOW_STANDALONE_CONTAINER_NETWORK", "false")
+    config.get_settings.cache_clear()
+    yield
+    config.get_settings.cache_clear()
 
 
 def editor_url(mode="initial"):

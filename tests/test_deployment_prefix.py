@@ -15,6 +15,7 @@ from project_workflow.interfaces.ui.sso import install_sso
 
 @pytest.mark.parametrize("prefix", ["", "/workflow"])
 def test_public_login_uses_configured_callback_and_cookie_path(monkeypatch, prefix):
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "platform")
     monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
     monkeypatch.setenv("AUTH_ISSUER", "https://dev.example.test")
     monkeypatch.setenv("AUTH_PUBLIC_ORIGIN", "https://dev.example.test")

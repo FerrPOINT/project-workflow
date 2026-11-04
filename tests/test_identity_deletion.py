@@ -44,8 +44,10 @@ def test_original_proof_never_renews(monkeypatch):
 
 
 def wire(monkeypatch, payload, *, status=200, location=None):
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "platform")
     monkeypatch.setenv("AUTH_ISSUER", ISSUER)
     monkeypatch.setenv("AUTH_INTERNAL_BASE_URL", "http://auth.internal.test")
+    monkeypatch.setenv("AUTH_SESSION_SECRET", "identity-unit-session-secret-at-least-32-characters")
     monkeypatch.setenv("PROJECT_WORKFLOW_IDENTITY_DELETION_COORDINATOR_SUBJECTS", COORDINATOR)
     config.get_settings.cache_clear()
     original = httpx.AsyncClient

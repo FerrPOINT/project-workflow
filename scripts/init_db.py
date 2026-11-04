@@ -5,13 +5,8 @@ import sys
 
 from sqlalchemy.exc import SQLAlchemyError
 
-from project_workflow import config
 from project_workflow.config import get_settings
-from project_workflow.infrastructure.db.managed_catalog import (
-    ensure_managed_catalog,
-    load_managed_catalog,
-    localize_managed_professions,
-)
+from project_workflow.domain.exceptions import ConflictError
 from project_workflow.infrastructure.db.session import (
     DatabaseRecreateRequired,
     DatabaseUnavailable,
@@ -41,24 +36,21 @@ def main() -> int:
             ensure_migrated(connection)
             with SAUnitOfWork(connection) as uow:
                 uow.lock_catalog_state()
-                if config.CATALOG_VARIANT == "single-task-v1":
+                if settings.PROJECT_WORKFLOW_MODE == "standalone":
+                    from project_workflow.application.standalone import validate_database
+
+                    validate_database(uow)
+                else:
                     from project_workflow.infrastructure.db.single_task_catalog import ensure_single_task_catalog
 
                     readback = ensure_single_task_catalog(uow)
-                else:
-                    catalog = load_managed_catalog()
-                    managed_keys = {workflow.key for workflow in catalog.workflows}
-                    installed = {workflow.key: workflow.active_catalog_version for workflow in uow.workflows.list()}
-                    if not all(installed.get(key, 0) >= catalog.catalog_version for key in managed_keys):
-                        ensure_managed_catalog(uow)
-                    localize_managed_professions(uow, catalog)
     except DatabaseRecreateRequired as exc:
         print(str(exc), file=sys.stderr)
         return exc.exit_code
     except DatabaseUnavailable as exc:
         print(str(exc), file=sys.stderr)
         return exc.exit_code
-    except (FileNotFoundError, ValueError) as exc:
+    except (ConflictError, FileNotFoundError, ValueError) as exc:
         print(str(exc), file=sys.stderr)
         return 1
     except (SQLAlchemyError, OSError):
@@ -69,7 +61,8 @@ def main() -> int:
         print(readback.model_dump_json(by_alias=True))
     print(f"Alembic обновлён до head для {protocol}")
 
-    print("Начальные каталоги загружены")
+    print("Начальные каталоги загружены" if readback is not None
+          else "Самостоятельная БД готова; каталог создаётся явно")
     return 0
 
 

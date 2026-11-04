@@ -27,6 +27,9 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str
     DB_SCHEMA: str = "project_workflow"
+    PROJECT_WORKFLOW_MODE: Literal["platform", "standalone"] = "platform"
+    # Compose publishes only on host loopback; direct execution must check the peer.
+    PROJECT_WORKFLOW_STANDALONE_CONTAINER_NETWORK: bool = False
 
     UI_HOST: str = "127.0.0.1"
     UI_PORT: int = 8811
@@ -36,18 +39,17 @@ class Settings(BaseSettings):
 
     OPENAI_BASE_URL: str = "http://192.168.10.1:4000/v1"
     OPENAI_MODEL: str = "app-test"
-    OPENAI_TIMEOUT: int = 120
+    OPENAI_TIMEOUT: int = Field(default=1200, gt=0)
     OPENAI_MAX_TOKENS: int = Field(default=4000, gt=0)
     OPENAI_API_KEY: str = ""
     OPENAI_REASONING_EFFORT: str = "none"
     OPENAI_EVALUATOR_RESPONSE_FORMAT: Literal["json_object", "json_schema"] = "json_object"
 
     PLATFORM_BRANDING_URL: str | None = None
-    PLATFORM_SERVICES_URL: str = "http://localhost:7771/api/v1/runtime/services"
+    PLATFORM_SERVICES_URL: str = ""
     UI_PLATFORM_ORIGIN: str = ""
 
     AUTH_ISSUER: str = ""
-    AUTH_APPLICATION_ACCESS_REQUIRED: bool = False
     AUTH_INTERNAL_BASE_URL: str = ""
     AUTH_PUBLIC_ORIGIN: str = "http://localhost:8812"
     AUTH_BROWSER_ORIGINS: list[str] = Field(default_factory=list)
@@ -104,23 +106,11 @@ def get_settings() -> Settings:
     return Settings()  # type: ignore[call-arg]
 
 
-# Bootstrap-only constants.  The managed Hermes catalog is the only source used
-# by application startup.  The legacy single-workflow seed is retained solely
-# for explicit unmanaged compatibility/tests and is never an automatic fallback.
+# One platform bootstrap. Retained seed data below is for offline fixtures only.
 CATALOG_VARIANT = os.environ.get("PROJECT_WORKFLOW_CATALOG_VARIANT", "single-task-v1")
-if CATALOG_VARIANT not in {"legacy", "base", "single-task-v1"}:
-    raise ValueError("Unknown managed catalog variant")
-MANAGED_CATALOG_PATH = (
-    _pkg_dir
-    / "references"
-    / (
-        "single_task_catalog_v1.json"
-        if CATALOG_VARIANT == "single-task-v1"
-        else "base_sdlc_catalog_v2.json"
-        if CATALOG_VARIANT == "base"
-        else "hermes_sdlc_catalog_v1.json"
-    )
-)
+if CATALOG_VARIANT != "single-task-v1":
+    raise ValueError("Unsupported catalog variant; use the current platform catalog or standalone mode")
+MANAGED_CATALOG_PATH = _pkg_dir / "references" / "single_task_catalog_v1.json"
 LEGACY_UNMANAGED_SEED_PATH = _pkg_dir / "references" / "legacy_unmanaged_seed.json"
 MANAGED_NAMESPACE_WORKFLOW_NAME = "Дефолтный"
 LEGACY_UNMANAGED_WORKFLOW_NAME = "sdlc-business-tech-v1"

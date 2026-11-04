@@ -71,10 +71,7 @@ def immutable_git_snapshot(root: Path, revision: str) -> GitSourceSnapshot:
     )
 
 
-CATALOG_PATH = "project_workflow/references/hermes_sdlc_catalog_v1.json"
-BASE_CATALOG_PATH = "project_workflow/references/base_sdlc_catalog_v2.json"
 COMPATIBILITY_PATH = "runtime-compatibility.json"
-SKILLS_MANIFEST_PATH = "runtime-skills-manifest.json"
 
 
 def _json_bytes(value: object) -> bytes:
@@ -82,53 +79,18 @@ def _json_bytes(value: object) -> bytes:
 
 
 def derive_compatibility(root: Path) -> dict[str, object]:
+    if os.environ.get("PROJECT_WORKFLOW_CATALOG_VARIANT", "single-task-v1") != "single-task-v1":
+        raise BuildProvenanceError("Only single-task-v1 catalog variant is supported")
     # Imported only after package installation; verify-manifest stays stdlib-only.
-    from project_workflow.infrastructure.db.managed_catalog import (
-        export_runtime_catalog,
-        load_managed_catalog,
-    )
+    from project_workflow.build_provenance import configured_runtime_compatibility
+    from project_workflow.domain.single_task_profile import CATALOG_SHA256, MANIFEST_SHA256
 
-    variant = os.environ.get("PROJECT_WORKFLOW_CATALOG_VARIANT", "single-task-v1")
-    if variant == "single-task-v1":
-        from project_workflow.build_provenance import configured_runtime_compatibility
-        from project_workflow.domain.single_task_profile import CATALOG_SHA256, MANIFEST_SHA256
-
-        for filename, expected in (("single_task_catalog_v1.json", CATALOG_SHA256),
-                                   ("single_task_manifest_v1.json", MANIFEST_SHA256)):
-            if hashlib.sha256((root / "project_workflow/references" / filename).read_bytes()).hexdigest() != expected:
-                raise BuildProvenanceError("Configured Workflow profile differs from immutable inputs")
-        provenance = load_build_provenance(root / "runtime-build-manifest.json")
-        return configured_runtime_compatibility(provenance)
-    catalog_path = BASE_CATALOG_PATH if variant == "base" else CATALOG_PATH
-    catalog = load_managed_catalog(root / catalog_path)
-    if variant not in {"legacy", "base"} or catalog.catalog_version != (4 if variant == "base" else 2):
-        raise BuildProvenanceError("Compatible image requires canonical catalog version 2")
-    manifest = json.loads((root / SKILLS_MANIFEST_PATH).read_bytes())
-    if manifest.get("schema") != catalog.skills_source.manifest_schema:
-        raise BuildProvenanceError("Native skills manifest schema differs from canonical pin")
+    for filename, expected in (("single_task_catalog_v1.json", CATALOG_SHA256),
+                               ("single_task_manifest_v1.json", MANIFEST_SHA256)):
+        if hashlib.sha256((root / "project_workflow/references" / filename).read_bytes()).hexdigest() != expected:
+            raise BuildProvenanceError("Configured Workflow profile differs from immutable inputs")
     provenance = load_build_provenance(root / "runtime-build-manifest.json")
-    if variant == "base":
-        if catalog.skills_source.repository != "https://github.com/FerrPOINT/services-base.git":
-            raise BuildProvenanceError("Base catalog requires the canonical Base package")
-        for workflow in catalog.workflows:
-            if set(manifest["roles"][workflow.role_key]["physicalSkills"]) != set(workflow.skill_allowlist):
-                raise BuildProvenanceError("Base physical allowlist differs from catalog")
-        def digest(value: object) -> str:
-            return hashlib.sha256(_json_bytes(value)).hexdigest()
-        return {
-            "catalogVersion": catalog.catalog_version,
-            "catalogRevision": provenance.source_revision,
-            "catalogSha256": digest(catalog.model_dump(mode="json", by_alias=True)),
-            "skillsRevision": catalog.skills_source.revision,
-            "skillsManifestSha256": digest(manifest),
-            "capabilityRevision": "base-workflow-controlplane/v1",
-            "capabilitySha256": digest({"catalogRead": True, "assignedExecution": False}),
-        }
-    exported, _ = export_runtime_catalog(
-        catalog, manifest=manifest, workflow_revision=provenance.source_revision,
-        skills_revision=catalog.skills_source.revision, source_artifacts={},
-    )
-    return exported["runtimeCompatibility"]
+    return configured_runtime_compatibility(provenance)
 
 
 def verify_compatibility(root: Path) -> None:
@@ -154,43 +116,12 @@ def _add_context_files(context: bytes, files: dict[str, bytes]) -> bytes:
 
 def compatible_build_context(snapshot: GitSourceSnapshot, skills_root: Path | None,
                              catalog_variant: str = "single-task-v1") -> bytes:
-    if catalog_variant not in {"legacy", "base", "single-task-v1"}:
-        raise BuildProvenanceError("Unknown catalog variant")
-    catalog_path = BASE_CATALOG_PATH if catalog_variant == "base" else CATALOG_PATH
+    if catalog_variant != "single-task-v1":
+        raise BuildProvenanceError("Only single-task-v1 catalog variant is supported")
+    if skills_root is not None:
+        raise BuildProvenanceError("Configured catalog has no native skills build input")
     context = docker_context_with_manifest(snapshot.archive, snapshot.provenance)
-    with tarfile.open(fileobj=io.BytesIO(context)) as source:
-        catalog_file = source.extractfile(catalog_path) if catalog_variant != "single-task-v1" else None
-        if catalog_file is None and catalog_variant != "single-task-v1":
-            raise BuildProvenanceError("Canonical catalog missing from immutable archive")
-        catalog = json.load(catalog_file) if catalog_file else None
-    if catalog_variant == "single-task-v1":
-        if skills_root is not None:
-            raise BuildProvenanceError("Configured catalog has no native skills build input")
-        # Instructions are sealed Workflow artifacts, not a native skill bootstrap.
-        return _derive_context_descriptor(context, catalog_variant)
-    if not isinstance(catalog, dict):
-        raise BuildProvenanceError("Native catalog must be a JSON object")
-    if skills_root is None:
-        raise BuildProvenanceError("Native catalog build requires an explicit skills checkout")
-    pin = catalog["skills_source"]
-    if catalog_variant == "base":
-        from project_workflow.infrastructure.db.managed_catalog import CatalogSource
-        from scripts.verify_base_sdlc_candidate import load_pinned_package
-        load_pinned_package(skills_root / "agent-skills", CatalogSource.model_validate(pin))
-    revision = pin["revision"]
-    manifest_path = pin["manifest_path"]
-    path = PurePosixPath(manifest_path)
-    if (len(revision) != 40 or any(ch not in "0123456789abcdef" for ch in revision)
-            or path.is_absolute() or ".." in path.parts
-            or str(path) != manifest_path or "\\" in manifest_path):
-        raise BuildProvenanceError("Invalid canonical skills source pin")
-    entry = str(_run_git(skills_root, "ls-tree", revision, "--", manifest_path)).strip()
-    if not entry.startswith(("100644 blob ", "100755 blob ")) or "\n" in entry:
-        raise BuildProvenanceError("Pinned native skills manifest must be a regular Git blob")
-    manifest = _run_git(skills_root, "show", f"{revision}:{manifest_path}", text=False)
-    if not isinstance(manifest, bytes):
-        raise BuildProvenanceError("Native skills manifest is unavailable")
-    context = _add_context_files(context, {SKILLS_MANIFEST_PATH: manifest})
+    # Instructions are sealed Workflow artifacts, not a native skill bootstrap.
     return _derive_context_descriptor(context, catalog_variant)
 
 
@@ -243,6 +174,10 @@ def build_resource_args() -> list[str]:
 def build_image(root: Path, image: str, docker: str, revision: str = "HEAD",
                 *, skills_root: Path | None = None, catalog_variant: str = "single-task-v1") -> None:
     resources = build_resource_args()
+    if catalog_variant != "single-task-v1":
+        raise BuildProvenanceError("Only single-task-v1 catalog variant is supported")
+    if skills_root is not None:
+        raise BuildProvenanceError("Configured catalog has no native skills build input")
     snapshot = immutable_git_snapshot(root, revision)
     provenance = snapshot.provenance
     context = compatible_build_context(snapshot, skills_root, catalog_variant)
@@ -286,7 +221,7 @@ def main(argv: list[str] | None = None) -> int:
     build.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
     build.add_argument("--revision", default="HEAD")
     build.add_argument("--skills-root", type=Path)
-    build.add_argument("--catalog-variant", choices=("legacy", "base", "single-task-v1"), default="single-task-v1")
+    build.add_argument("--catalog-variant", choices=("single-task-v1",), default="single-task-v1")
 
     for name in ("derive-compatibility", "verify-compatibility"):
         subparsers.add_parser(name).add_argument("--root", type=Path, required=True)

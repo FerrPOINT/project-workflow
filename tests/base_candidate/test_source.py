@@ -28,6 +28,10 @@ RUNTIME_TOKEN = "source-runtime-" + "r" * 32
 
 @pytest.fixture
 def source(monkeypatch, tmp_path):
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "platform")
+    monkeypatch.setenv("AUTH_ISSUER", "https://auth.test")
+    monkeypatch.setenv("AUTH_INTERNAL_BASE_URL", "https://auth.test")
+    monkeypatch.setenv("AUTH_SESSION_SECRET", "source-catalog-unit-session-secret-only")
     catalog = load_managed_catalog(base_source.CANDIDATE_PATH)
     manifest = {"roles": {
         workflow.role_key: {

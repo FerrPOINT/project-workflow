@@ -160,19 +160,20 @@ def test_standalone_fallback_uses_existing_contract_ids_before_aliasing():
     assert "Actual result" not in empty and "Actual source" not in empty
 
 
-def test_prompt_keeps_delegate_allowance_and_v15_aliases_without_role_policy():
+def test_prompt_keeps_delegate_allowance_without_old_role_aliases():
     prompt = PromptBuilder.build_user_prompt("ignored", _phase(delegate=object()), _report(), evaluation_items=ITEMS)
     assert json.loads(prompt)["allowed_verdicts"] == ["PASS", "PARTIAL", "BLOCKED", "DELEGATE"]
-    assert PromptBuilder.PM_PROMPT_VERSION == PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v16"
-    assert PromptBuilder.PM_SYSTEM_PROMPT is PromptBuilder.SYSTEM_PROMPT
+    assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v17"
+    assert not hasattr(PromptBuilder, "PM_SYSTEM_PROMPT")
+    assert not hasattr(PromptBuilder, "PM_PROMPT_VERSION")
     system = PromptBuilder.SYSTEM_PROMPT
     for rule in (
         "source facts and decisions as the reference for the artifact under review, not the reverse",
         "An artifact defect does not itself mean a source decision is absent",
         "inline source account is sufficient as a source reference unless the criterion explicitly requires a locator",
         "prior covered marks are earlier assessments",
-        "what would suffice under that criterion",
-        "Do not invent new evidence for prior marks",
+        "the exact missing required fact in the supplied material",
+        "a source decision cannot be supplied by the artifact, a prior mark or a claim of completeness",
         "No extra labels or fields",
     ):
         assert rule.lower() in system.lower()

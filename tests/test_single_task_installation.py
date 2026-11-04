@@ -26,6 +26,15 @@ from project_workflow.interfaces.ui.schemas import RuntimeAssignmentRequest, Sin
 from scripts import build_single_task_profile, init_db
 
 
+@pytest.fixture(autouse=True)
+def platform_installation(monkeypatch):
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "platform")
+    monkeypatch.setenv("AUTH_ISSUER", "https://auth.installation.test")
+    monkeypatch.setenv("AUTH_INTERNAL_BASE_URL", "https://auth.installation.test")
+    monkeypatch.setenv("AUTH_SESSION_SECRET", "installation-unit-session-secret-only")
+    config.get_settings.cache_clear()
+
+
 @pytest.fixture
 def database(tmp_path):
     engine = create_engine(f"sqlite:///{tmp_path / 'profile.db'}")
@@ -57,6 +66,7 @@ def test_real_bootstrap_repeats_with_exact_persisted_ids(database, monkeypatch, 
 
 def test_config_selector_runs_real_bootstrap_subprocess_twice(tmp_path):
     environment = dict(os.environ, PROJECT_WORKFLOW_CATALOG_VARIANT="single-task-v1",
+                       PROJECT_WORKFLOW_MODE="platform",
                        DATABASE_URL=f"sqlite:///{(tmp_path / 'subprocess.db').as_posix()}")
     results = []
     for _ in range(2):

@@ -3,13 +3,15 @@
 from copy import deepcopy
 from uuid import uuid4
 
+import httpx
 import pytest
-from fastapi import Request
+from httpx import AsyncClient
 from sqlalchemy import func, select
 
 from project_workflow.domain.single_task_profile import ROLE_MODES
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
+from tests._human_access_helpers import application_access_proof
 from tests._report_helpers import report_json
 from tests.test_configured_cli import WRITER, enroll, step
 from tests.test_configured_cli import configured as configured
@@ -18,23 +20,34 @@ PUBLISHER_SUBJECT = "catalog-test-admin"
 
 
 @pytest.fixture(autouse=True)
-def verified_catalog_administrator(request):
-    """Explicit synthetic Auth peer; the real SSO boundary is tested separately."""
+def verified_catalog_administrator(request, monkeypatch):
+    """Controlled current Auth proof through the real platform SSO middleware."""
     fixture = "migrated_configured" if "migrated_configured" in request.fixturenames else "configured"
     if fixture not in request.fixturenames:
         yield
         return
     client, _ = request.getfixturevalue(fixture)
-    from project_workflow.interfaces.ui.sso import require_administrator
+    settings = client.app.state.workflow_settings
+    authorization = "Bearer catalog-publication-unit-session"
 
-    def verified(request: Request):
-        request.state.central_subject = PUBLISHER_SUBJECT
+    def identity(request):
+        assert str(request.url) == settings.AUTH_INTERNAL_BASE_URL.rstrip("/") + "/auth/me"
+        assert request.headers["Authorization"] == authorization
+        return httpx.Response(200, json={
+            "id": PUBLISHER_SUBJECT, "role": "admin", "status": "active",
+            "application_access": application_access_proof(
+                issuer=settings.AUTH_ISSUER, subject=PUBLISHER_SUBJECT, role="admin",
+            ),
+        })
 
-    client.app.dependency_overrides[require_administrator] = verified
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: AsyncClient(
+        transport=httpx.MockTransport(identity), **kwargs,
+    ))
+    client.headers["Authorization"] = authorization
     try:
         yield
     finally:
-        client.app.dependency_overrides.pop(require_administrator, None)
+        client.headers.pop("Authorization", None)
 
 
 @pytest.fixture
@@ -47,6 +60,7 @@ def migrated_configured(tmp_path, monkeypatch, request):
     from project_workflow.interfaces.ui import state as ui_state
 
     database_url = f"sqlite:///{tmp_path / 'versioned-publications.sqlite'}"
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "platform")
     monkeypatch.setenv("DATABASE_URL", database_url)
     config.get_settings.cache_clear()
     reset_engine()
@@ -183,7 +197,7 @@ def test_draft_reload_readback_and_save_dedup_do_not_activate_or_append_duplicat
     newer, _ = draft(client, base, text="Another independently saved draft.")
     repeated = client.post(root, json=command)
     assert repeated.status_code == 200 and repeated.json()["revision"] == saved
-    with TestClient(create_app()) as reloaded:
+    with TestClient(create_app(), headers={"Authorization": client.headers["Authorization"]}) as reloaded:
         readback = reloaded.get(root + f"/{saved['catalog_version']}")
         assert readback.status_code == 200, readback.text
         recovered = readback.json()["revision"]
@@ -252,7 +266,7 @@ def test_startup_restart_keeps_v2_and_old_assigned_execution(migrated_configured
     reset_engine()
     assert init_db.main() == 0  # Normal migration/bootstrap entry point on synthetic data.
     assert get_engine() is not original_engine
-    with TestClient(create_app()) as restarted:
+    with TestClient(create_app(), headers={"Authorization": client.headers["Authorization"]}) as restarted:
         assert restarted.get("/health").status_code == 200
         assert active(restarted, enrollment["workflow_id"]) == expected
         assert step((restarted, assignment)).json() == original
@@ -267,12 +281,10 @@ def test_startup_restart_keeps_v2_and_old_assigned_execution(migrated_configured
 
 
 def test_publish_requires_verified_subject_not_a_client_header(configured):
-    from project_workflow.interfaces.ui.sso import require_administrator
-
     client, _ = configured
     base = active(client, enroll(configured)["workflow_id"])
     saved, _ = draft(client, base)
-    verified = client.app.dependency_overrides.pop(require_administrator)
+    authorization = client.headers.pop("Authorization")
     try:
         response = client.post(
             f"/api/workflows/{base['workflow_id']}/catalog/drafts/2/publication",
@@ -281,7 +293,7 @@ def test_publish_requires_verified_subject_not_a_client_header(configured):
                   "draft_sha256": saved["content_sha256"], "operation_key": "no-verified-subject"})
         assert response.status_code == 401, response.text
     finally:
-        client.app.dependency_overrides[require_administrator] = verified
+        client.headers["Authorization"] = authorization
     assert active(client, base["workflow_id"]) == base
     with SAUnitOfWork() as uow:
         assert uow.session.scalar(select(func.count()).select_from(m.WorkflowCatalogPublication)) == 0
@@ -290,19 +302,17 @@ def test_publish_requires_verified_subject_not_a_client_header(configured):
 def test_real_sso_admin_subject_and_server_time_are_retained_on_replay(configured, monkeypatch):
     from datetime import datetime, timedelta, timezone
 
-    import httpx
     from fastapi.testclient import TestClient
 
     from project_workflow.interfaces.ui import sso
     from project_workflow.interfaces.ui.app import create_app
-    from tests.test_sso import _app
 
     client, _ = configured
     base = active(client, enroll(configured)["workflow_id"])
     saved, _ = draft(client, base)
-    _, settings = _app(monkeypatch, AUTH_APPLICATION_ACCESS_REQUIRED=True)
+    settings = client.app.state.workflow_settings
     identity = {"role": "admin", "subject": "verified-admin-A"}
-    original_client = httpx.AsyncClient
+    original_client = AsyncClient
 
     def verified(request):
         assert request.url.path == "/auth/me"

@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 
 from project_workflow.config import Settings
 from project_workflow.interfaces.ui import sso
+from tests._human_access_helpers import application_access_proof
 
 
 @pytest.mark.parametrize("result", ["error", "login-required"])
@@ -47,12 +48,14 @@ def _app(monkeypatch, **overrides):
         AUTH_INTERNAL_BASE_URL="http://auth:7701",
         AUTH_PUBLIC_ORIGIN="http://localhost:8812",
         AUTH_SESSION_SECRET="test-only-secret-with-at-least-thirty-two-bytes",
+        PROJECT_WORKFLOW_MODE="platform",
     )
     settings = settings.model_copy(update=overrides)
     monkeypatch.setenv("AUTH_ISSUER", settings.AUTH_ISSUER)
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", settings.PROJECT_WORKFLOW_MODE)
     monkeypatch.setattr(sso, "get_settings", lambda: settings)
     app = FastAPI()
-    sso.install_sso(app)
+    sso.install_sso(app, settings)
     app.get("/")(lambda: {"ok": True})
     app.get("/api/tasks")(lambda: {"ok": True})
     app.post("/api/tasks")(lambda: {"ok": True})
@@ -140,7 +143,9 @@ def test_cookie_session_checks_identity_and_csrf(monkeypatch, extra, origin, exp
 
     def identity(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/auth/me"
-        return httpx.Response(200, json={"id": "central-user"})
+        return httpx.Response(200, json={"id": "central-user", "application_access": application_access_proof(
+            issuer=settings.AUTH_ISSUER, subject="central-user",
+        )})
 
     monkeypatch.setattr(
         sso.httpx,
@@ -160,9 +165,10 @@ def test_cookie_session_checks_identity_and_csrf(monkeypatch, extra, origin, exp
 
 @pytest.mark.parametrize("prefix", ["sdlc_pat_", "pdlc_pat_"])
 def test_personal_token_scopes_and_invalid_central_responses(monkeypatch, prefix):
-    app, _ = _app(monkeypatch)
+    app, settings = _app(monkeypatch)
     original_client = httpx.AsyncClient
-    response = {"status": 200, "body": {"sub": "user-1", "scopes": ["project-workflow:read"]}}
+    response = {"status": 200, "body": {"sub": "user-1", "scopes": ["project-workflow:read"],
+                "application_access": application_access_proof(issuer=settings.AUTH_ISSUER, subject="user-1")}}
 
     def introspect(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/auth/tokens/introspect"
@@ -178,7 +184,10 @@ def test_personal_token_scopes_and_invalid_central_responses(monkeypatch, prefix
         assert client.get("/api/tasks", headers=headers).status_code == 200
         assert client.post("/api/tasks", headers=headers).status_code == 403
 
-        response["body"] = {"sub": "user-1", "scopes": ["project-workflow:write"]}
+        response["body"] = {"sub": "user-1", "scopes": ["project-workflow:write"],
+                            "application_access": application_access_proof(
+                                issuer=settings.AUTH_ISSUER, subject="user-1",
+                            )}
         assert client.post("/api/tasks", headers=headers).status_code == 200
 
         response.update(status=401, body={})
@@ -210,7 +219,9 @@ def test_callback_exchanges_code_and_sets_encrypted_session(monkeypatch, platfor
                 json={"access_token": "access-token", "id_token": "id-token", "expires_in": 900},
             )
         assert request.url.path == "/auth/me"
-        return httpx.Response(200, json={"id": "central-sub"})
+        return httpx.Response(200, json={"id": "central-sub", "application_access": application_access_proof(
+            issuer=settings.AUTH_ISSUER, subject="central-sub",
+        )})
 
     class SigningKey:
         key = object()
@@ -251,11 +262,14 @@ def test_callback_exchanges_code_and_sets_encrypted_session(monkeypatch, platfor
         assert session["sub"] == "central-sub"
 
 
-def test_sso_is_disabled_without_issuer(monkeypatch):
+@pytest.mark.parametrize("issuer", ["", "http://localhost:7701"])
+def test_sso_is_disabled_only_for_explicit_standalone(monkeypatch, issuer):
     """Standalone mode must keep UI and API available without Central Auth."""
-    monkeypatch.delenv("AUTH_ISSUER", raising=False)
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "standalone")
+    monkeypatch.setenv("PROJECT_WORKFLOW_SPACES__ENABLED", "false")
+    settings = Settings(PROJECT_WORKFLOW_MODE="standalone", AUTH_ISSUER=issuer)
     app = FastAPI()
-    sso.install_sso(app)
+    sso.install_sso(app, settings)
     app.get("/")(lambda: {"ok": True})
     app.get("/api/tasks")(lambda: {"ok": True})
 
@@ -271,6 +285,7 @@ def test_sso_configuration_and_cookie_validation_fail_closed(monkeypatch):
         AUTH_INTERNAL_BASE_URL="",
         AUTH_PUBLIC_ORIGIN="http://localhost:8812",
         AUTH_SESSION_SECRET="short",
+        PROJECT_WORKFLOW_MODE="platform",
     )
     with pytest.raises(RuntimeError, match="at least 32"):
         sso._cipher(settings)
@@ -286,7 +301,7 @@ def test_sso_configuration_and_cookie_validation_fail_closed(monkeypatch):
 
 @pytest.mark.parametrize("prefix", ["sdlc_pat_", "pdlc_pat_"])
 def test_machine_principal_cannot_enter_human_routes_even_with_write_scope(monkeypatch, prefix):
-    app, _ = _app(monkeypatch)
+    app, settings = _app(monkeypatch)
     original_client = httpx.AsyncClient
     identity = {
         "sub": "registered-reader", "role": "admin",
@@ -304,6 +319,7 @@ def test_machine_principal_cannot_enter_human_routes_even_with_write_scope(monke
         assert client.get("/api/tasks", headers=headers).status_code == 403
         assert client.post("/api/tasks", headers=headers).status_code == 403
         identity["sub"] = "human"
+        identity["application_access"] = application_access_proof(issuer=settings.AUTH_ISSUER, subject="human")
         assert client.get("/api/tasks", headers=headers).status_code == 200
         identity["role"] = "service_account"
         assert client.get("/api/tasks", headers=headers).status_code == 403
@@ -363,7 +379,7 @@ def test_current_role_and_apps_apply_to_the_same_open_session(monkeypatch):
     from datetime import datetime, timedelta, timezone
 
     from fastapi import Depends
-    app, settings = _app(monkeypatch, AUTH_APPLICATION_ACCESS_REQUIRED=True)
+    app, settings = _app(monkeypatch)
     app.post("/api/configuration", dependencies=[Depends(sso.require_administrator)])(lambda: {"ok": True})
     from project_workflow.interfaces.ui.project_admission import space_admission
     app.get("/api/v1/space-admission")(space_admission)

@@ -19,6 +19,7 @@ def test_public_branding_and_fonts_do_not_require_product_identity_or_database(m
     from project_workflow.interfaces.ui.app import create_app
 
     settings = Settings(
+        PROJECT_WORKFLOW_MODE="platform",
         DATABASE_URL="postgresql+psycopg://unused@localhost/unused",
         AUTH_ISSUER="http://auth.test",
         AUTH_INTERNAL_BASE_URL="http://auth.test",
@@ -27,6 +28,7 @@ def test_public_branding_and_fonts_do_not_require_product_identity_or_database(m
     )
     monkeypatch.setenv("AUTH_ISSUER", settings.AUTH_ISSUER)
     monkeypatch.setattr(sso, "get_settings", lambda: settings)
+    monkeypatch.setattr("project_workflow.interfaces.ui.app.get_settings", lambda: settings)
     calls = []
 
     def upstream(req):

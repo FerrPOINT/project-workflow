@@ -145,7 +145,7 @@ def run_supervisor(task: str, report: str | None = None) -> tuple[int, dict[str,
         text=True,
         encoding="utf-8",
         env=_supervisor_subprocess_environment(),
-        timeout=300,
+        timeout=3000,
         check=False,
     )
     try:
@@ -169,7 +169,7 @@ def run_history(task: str) -> tuple[int, dict[str, Any], str]:
         text=True,
         encoding="utf-8",
         env=_supervisor_subprocess_environment(),
-        timeout=60,
+        timeout=3000,
         check=False,
     )
     try:

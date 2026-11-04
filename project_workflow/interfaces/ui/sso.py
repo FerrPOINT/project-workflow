@@ -155,7 +155,7 @@ class _SsoMiddleware(BaseHTTPMiddleware):
                     return _auth_error(request, 403, "Недостаточно прав токена")
             access = human_access(identity, issuer=settings.AUTH_ISSUER, subject=subject,
                                   started=started, wall_started=wall_started,
-                                  require_proof=settings.AUTH_APPLICATION_ACCESS_REQUIRED)
+                                  require_proof=True)
             if not access.permits([_CLIENT_ID]):
                 return _auth_error(request, 403, "Нет доступа к приложению Workflow")
             request.state.central_access = access
@@ -228,15 +228,15 @@ class _SsoMiddleware(BaseHTTPMiddleware):
 
 def can_administer(request: Request) -> bool:
     """Use the same current authority for server dependencies and rendered controls."""
-    if not get_settings().AUTH_ISSUER:
-        return True  # Explicit legacy standalone mode.
+    if get_settings().PROJECT_WORKFLOW_MODE == "standalone":
+        return True
     access = getattr(request.state, "central_access", None)
     return isinstance(access, HumanAccess) and access.permits([_CLIENT_ID], administration=True)
 
 
 def visible_services(request: Request, services: list[dict]) -> list[dict]:
     """Filter a per-request view; never cache personal access in the public catalog."""
-    if not get_settings().AUTH_ISSUER:
+    if get_settings().PROJECT_WORKFLOW_MODE == "standalone":
         return list(services)
     access = getattr(request.state, "central_access", None)
     if not isinstance(access, HumanAccess):
@@ -251,17 +251,17 @@ def require_administrator(request: Request) -> None:
         raise HTTPException(status_code=403, detail="Требуются права администратора PDLC")
 
 
-def install_sso(app: FastAPI) -> None:
-    if os.environ.get("PROJECT_WORKFLOW_SPACES__ENABLED") == "true" and not os.environ.get("AUTH_ISSUER"):
-        raise RuntimeError("Shared project policy requires central authentication")
-    if not os.environ.get("AUTH_ISSUER"):
+def install_sso(app: FastAPI, settings: Settings | None = None) -> None:
+    settings = get_settings() if settings is None else settings
+    if settings.PROJECT_WORKFLOW_MODE == "standalone":
+        if os.environ.get("PROJECT_WORKFLOW_SPACES__ENABLED") == "true":
+            raise RuntimeError("Standalone mode conflicts with shared project policy")
         return
-    settings = get_settings()
     if not settings.AUTH_ISSUER:
-        return
-    _cipher(settings)
+        raise RuntimeError("Platform mode requires central authentication (AUTH_ISSUER)")
     if not settings.AUTH_INTERNAL_BASE_URL:
         raise RuntimeError("AUTH_INTERNAL_BASE_URL is required for SSO")
+    _cipher(settings)
     app.add_middleware(_SsoMiddleware, settings=settings)
 
     @app.get("/login", include_in_schema=False)

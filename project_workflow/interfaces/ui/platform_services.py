@@ -1,8 +1,7 @@
 """Base runtime catalog for the native project-workflow service selector.
 
 The UI is server-rendered, so it reads the public Admin Panel catalog on the
-server with a short TTL cache. An unreachable Admin Panel never blocks a page:
-the local fallback is rendered instead.
+server with a short TTL cache. An unavailable catalog returns no invented links.
 """
 
 from __future__ import annotations
@@ -14,21 +13,14 @@ from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 from urllib.request import urlopen
 
-_FALLBACK_SERVICES: list[dict[str, Any]] = [
-    {"key": "admin-panel", "label": "Admin Panel", "url": "http://localhost:7772", "health": "unknown"},
-    {"key": "ci-cd", "label": "CI/CD", "url": "http://localhost:7712", "health": "unknown"},
-    {"key": "task-tracker", "label": "Task Tracker", "url": "http://localhost:7722", "health": "unknown"},
-    {"key": "wiki", "label": "Wiki", "url": "http://localhost:7732", "health": "unknown"},
-    {"key": "fleet-control", "label": "Fleet Control", "url": "http://localhost:7742", "health": "unknown"},
-    {"key": "project-workflow", "label": "Project Workflow", "url": "http://localhost:7751", "health": "unknown"},
-]
 _CURRENT_KEY = "project-workflow"
 _CACHE_TTL_SECONDS = 60.0
 _cached_at = 0.0
 _cached_services: list[dict[str, Any]] = []
 _cached_url: str | None = None
 _VALID_HEALTH = {"healthy", "unreachable", "unknown"}
-_ORDER = {service["key"]: index for index, service in enumerate(_FALLBACK_SERVICES)}
+_ORDER = {key: index for index, key in enumerate(
+    ("admin-panel", "ci-cd", "task-tracker", "wiki", "fleet-control", "project-workflow"))}
 
 
 @dataclass(frozen=True)
@@ -83,7 +75,7 @@ def load_service_catalog(catalog_url: str | None, *, request_url: str | None = N
     """Return UI services, including current health, and the diagnostic source."""
     global _cached_at, _cached_services, _cached_url
     if not catalog_url:
-        return ServiceCatalog(_with_request_host(_FALLBACK_SERVICES, request_url), "fallback-unreachable")
+        return ServiceCatalog([], "disabled")
     now = time.monotonic()
     if _cached_url == catalog_url and _cached_services and now - _cached_at < _CACHE_TTL_SECONDS:
         return ServiceCatalog(_with_request_host(_cached_services, request_url), "runtime")
@@ -92,7 +84,7 @@ def load_service_catalog(catalog_url: str | None, *, request_url: str | None = N
             body = response.read()
     except Exception:
         return ServiceCatalog(
-            _with_request_host(_FALLBACK_SERVICES, request_url), "fallback-unreachable",
+            [], "unavailable",
         )
     try:
         payload = json.loads(body.decode("utf-8"))
@@ -118,12 +110,11 @@ def load_service_catalog(catalog_url: str | None, *, request_url: str | None = N
             services.append(normalized)
     except Exception:
         return ServiceCatalog(
-            _with_request_host(_FALLBACK_SERVICES, request_url), "fallback-invalid",
+            [], "invalid",
         )
     if not services:
         return ServiceCatalog(
-            _with_request_host(_FALLBACK_SERVICES, request_url),
-            "fallback-empty" if not raw_entries else "fallback-invalid",
+            [], "empty" if not raw_entries else "invalid",
         )
     services.sort(key=lambda service: (_ORDER.get(service["key"], len(_ORDER)), service["key"]))
     _cached_services = services

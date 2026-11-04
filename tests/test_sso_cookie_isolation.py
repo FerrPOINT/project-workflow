@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 from project_workflow.interfaces.ui import sso
 from project_workflow.interfaces.ui.cookies import cookie_name
 from project_workflow.interfaces.ui.routes import pages
+from tests._human_access_helpers import application_access_proof
 from tests.test_sso import _app
 
 
@@ -50,7 +51,9 @@ def test_shared_jar_keeps_both_pending_logins_sessions_and_logout_independent(mo
         assert request.url.path == "/auth/me"
         origin = request.headers["authorization"].removeprefix("Bearer ")
         assert origin in settings_by_origin
-        return httpx.Response(200, json={"id": origin})
+        return httpx.Response(200, json={"id": origin, "application_access": application_access_proof(
+            issuer=settings_by_origin[origin].AUTH_ISSUER, subject=origin,
+        )})
 
     monkeypatch.setattr(sso.httpx, "AsyncClient", lambda **kwargs: original_client(
         transport=httpx.MockTransport(central), **kwargs,

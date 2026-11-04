@@ -25,7 +25,7 @@ from tests._ui_source_helpers import page_source as _page_source
 from tests._ui_source_helpers import parallel_groups
 from tests.test_ui_shell_template import Elements
 
-client = TestClient(app)
+client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
 UNKNOWN_NAMESPACE_ID = 999999
 UNKNOWN_WORKFLOW_ID = 999998
 TEMPLATES_DIR = Path(__file__).resolve().parents[1] / "project_workflow" / "interfaces" / "ui" / "templates"
@@ -197,7 +197,16 @@ def test_ui_templates_do_not_use_negative_letter_spacing():
 
 
 @pytest.fixture(autouse=True)
-def setup_db(isolate_ui_runtime_state, request):
+def standalone_mode(isolate_ui_runtime_state, monkeypatch):
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "standalone")
+    monkeypatch.setenv("PROJECT_WORKFLOW_STANDALONE_CONTAINER_NETWORK", "false")
+    config.get_settings.cache_clear()
+    yield
+    config.get_settings.cache_clear()
+
+
+@pytest.fixture(autouse=True)
+def setup_db(isolate_ui_runtime_state, standalone_mode, request):
     """Populate DB with seed.json + sample task before UI tests."""
     from project_workflow.infrastructure.db.schema import ensure_phase_catalog
 
@@ -655,7 +664,13 @@ class TestPhasesPage:
         assert "platform-header-context" in contexts[0]["class"].split()
         assert "data-base-context-home" in contexts[0]
 
-    def test_shell_has_one_service_switcher_and_account_theme_with_mobile_namespace(self):
+    def test_shell_has_one_service_switcher_and_account_theme_with_mobile_namespace(self, monkeypatch):
+        from project_workflow.interfaces.ui.platform_services import ServiceCatalog
+        from project_workflow.interfaces.ui.routes import pages
+
+        monkeypatch.setattr(pages, "load_service_catalog", lambda *_args, **_kwargs: ServiceCatalog([
+            {"key": "project-workflow", "label": "Project Workflow", "url": "http://127.0.0.1", "health": "healthy"},
+        ], "runtime"))
         response = client.get("/namespaces")
 
         assert response.status_code == 200
@@ -704,7 +719,9 @@ class TestPhasesPage:
         assert created.status_code == 200
         workflow_id = created.json()["workflow_id"]
 
-        response = TestClient(app).get(f"/phases?workflow_id={workflow_id}")
+        response = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000)).get(
+            f"/phases?workflow_id={workflow_id}"
+        )
 
         assert response.status_code == 200
         assert 'class="workflow-crud "' in response.text
@@ -1419,7 +1436,7 @@ class TestPhaseDetail:
         finally:
             uow.close()
 
-        with TestClient(app) as isolated_client:
+        with TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000)) as isolated_client:
             workflow = isolated_client.post(
                 "/api/workflows",
                 json={
@@ -1431,7 +1448,7 @@ class TestPhaseDetail:
             workflow_id = workflow.json()["workflow_id"]
             phases = isolated_client.get(f"/api/phases?workflow_id={workflow_id}").json()["phases"]
             phase_id = phases[0]["id"]
-            isolated_client.cookies.set("workflow_namespace_id", str(namespace_id), domain="testserver.local")
+            isolated_client.cookies.set("workflow_namespace_id", str(namespace_id), domain="127.0.0.1")
 
             phases_page = isolated_client.get(f"/phases?workflow_id={workflow_id}")
             response = isolated_client.get(f"/phase/{phase_id}")
@@ -1876,7 +1893,9 @@ class TestPhaseUpdate:
             client.put(phase_api_path, json={"execution_type": "sync"})
 
     def test_api_phase_update_rejects_phase_num_from_detail_editor(self):
-        local_client = TestClient(app, raise_server_exceptions=False)
+        local_client = TestClient(
+            app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000), raise_server_exceptions=False
+        )
 
         resp = local_client.put(
             _phase_api_path("5.PREFLIGHT"),
@@ -3123,6 +3142,7 @@ class TestSettingsPage:
         assert set(step_options) == {
             "--task", "--report", "--operation-key", "--expected-version",
             "--requirements-revision", "--requirements-sha256",
+            "--start", "--workflow-id", "--mode-key",
         }
         assert set(history_options) == {
             "--task", "--n", "--operation-key", "--execution-ref", "--before-history-id", "--diagnostics",
@@ -3296,7 +3316,7 @@ class TestUiNetworkFailures:
         finally:
             uow.close()
 
-        with TestClient(app) as isolated_client:
+        with TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000)) as isolated_client:
             workflow = isolated_client.post(
                 "/api/workflows",
                 json={
@@ -3308,7 +3328,7 @@ class TestUiNetworkFailures:
             workflow_id = workflow.json()["workflow_id"]
             phases = isolated_client.get(f"/api/phases?workflow_id={workflow_id}").json()["phases"]
             phase_id = phases[0]["id"]
-            isolated_client.cookies.set("workflow_namespace_id", str(namespace_id), domain="testserver.local")
+            isolated_client.cookies.set("workflow_namespace_id", str(namespace_id), domain="127.0.0.1")
 
             response = isolated_client.get(f"/instructions?phase_id={phase_id}")
             assert isolated_client.get(

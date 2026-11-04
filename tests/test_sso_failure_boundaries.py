@@ -14,9 +14,11 @@ from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import DBAPIError
 
+from project_workflow.config import Settings
 from project_workflow.infrastructure import platform_auth
 from project_workflow.infrastructure.request_clock import RequestClock
 from project_workflow.interfaces.ui import project_admission, sso
+from tests._human_access_helpers import application_access_proof
 from tests.test_sso import _app
 
 
@@ -51,11 +53,62 @@ def test_unbounded_or_non_string_identity_cannot_reach_a_human_handler(monkeypat
     assert "padding" not in response.text
 
 
+@pytest.mark.parametrize("credential", ["cookie", "bearer", "pat"])
+@pytest.mark.parametrize("proof_case,status", [
+    ("missing", 403), ("null", 403), ("unenforced", 403),
+    ("stale", 503), ("expired", 503), ("foreign_subject", 503),
+    ("foreign_issuer", 503), ("foreign_application", 403), ("invalid_revision", 503),
+])
+def test_platform_requires_current_bound_application_proof_without_opt_in(
+    monkeypatch, credential, proof_case, status,
+):
+    app, settings = _app(monkeypatch)
+    monkeypatch.setenv("PROJECT_WORKFLOW_SPACES__ENABLED", "false")
+    reached = []
+    app.get("/api/protected")(lambda: reached.append(True) or {"private_success": True})
+    subject_key = "sub" if credential == "pat" else "id"
+    identity = {subject_key: "human", "role": "admin", "scopes": ["project-workflow:read"]}
+    proof = application_access_proof(issuer=settings.AUTH_ISSUER, subject="human")
+    if proof_case == "unenforced":
+        proof["enforced"] = False
+    elif proof_case in {"stale", "expired"}:
+        now = datetime.now(timezone.utc)
+        age = 10 if proof_case == "stale" else 61
+        proof = application_access_proof(
+            issuer=settings.AUTH_ISSUER, subject="human", now=now - timedelta(seconds=age),
+        )
+    elif proof_case == "foreign_subject":
+        proof["subject"] = "other-human"
+    elif proof_case == "foreign_issuer":
+        proof["issuer"] = "https://other-auth.example"
+    elif proof_case == "foreign_application":
+        proof["applications"] = ["wiki"]
+    elif proof_case == "invalid_revision":
+        proof["revision"] = 0
+    if proof_case != "missing":
+        identity["application_access"] = None if proof_case == "null" else proof
+    _central(monkeypatch, lambda request: httpx.Response(200, json=identity))
+    with TestClient(app, follow_redirects=False) as client:
+        headers = {}
+        if credential == "cookie":
+            client.cookies.set(sso.cookie_name(settings, "workflow_sso"),
+                               sso._encode_cookie(settings, {"token": "test-session"}))
+        else:
+            token = "sdlc_pat_test" if credential == "pat" else "test-session"
+            headers["Authorization"] = "Bearer " + token
+        response = client.get("/api/protected", headers=headers)
+    assert response.status_code == status
+    assert reached == []
+    assert "private_success" not in response.text
+    assert sso.current_clock.get() is None
+
+
 @pytest.mark.parametrize("sqlstate", ["42501", "40P01"])
 def test_db_denial_restores_original_context_but_unrelated_failure_is_not_authorization(monkeypatch, sqlstate):
     app, settings = _app(monkeypatch)
     monkeypatch.setenv("PROJECT_WORKFLOW_SPACES__ENABLED", "false")
-    _central(monkeypatch, lambda request: httpx.Response(200, json={"id": "human", "role": "user"}))
+    _central(monkeypatch, lambda request: httpx.Response(200, json={"id": "human", "role": "user",
+        "application_access": application_access_proof(issuer=settings.AUTH_ISSUER, subject="human")}))
     request = Request({
         "type": "http", "method": "GET", "scheme": "http", "path": "/api/tasks",
         "query_string": b"", "server": ("localhost", 8812),
@@ -96,7 +149,7 @@ def test_db_denial_restores_original_context_but_unrelated_failure_is_not_author
 
 
 def test_application_proof_expiring_during_handler_cannot_publish_success(monkeypatch):
-    app, settings = _app(monkeypatch, AUTH_APPLICATION_ACCESS_REQUIRED=True)
+    app, settings = _app(monkeypatch)
     monkeypatch.setenv("PROJECT_WORKFLOW_SPACES__ENABLED", "false")
     now = datetime.now(timezone.utc)
     clock = {"now": now}
@@ -132,8 +185,11 @@ def test_application_proof_expiring_during_handler_cannot_publish_success(monkey
     ({"id": "human", "status": "active", "role": 17}, 503),
 ])
 def test_project_policy_requires_active_identity_and_typed_role_before_owner_rpc(monkeypatch, identity, status):
-    app, _ = _app(monkeypatch)
+    app, settings = _app(monkeypatch)
     monkeypatch.setenv("PROJECT_WORKFLOW_SPACES__ENABLED", "true")
+    proof = application_access_proof(issuer=settings.AUTH_ISSUER, subject="human")
+    proof["role"] = identity["role"]
+    identity = {**identity, "application_access": proof}
     _central(monkeypatch, lambda request: httpx.Response(200, json=identity))
 
     async def unexpected(*args, **kwargs):
@@ -147,11 +203,12 @@ def test_project_policy_requires_active_identity_and_typed_role_before_owner_rpc
 
 @pytest.mark.parametrize("clock_case", ["future", "stale", "invalid_observed", "invalid_expiry"])
 def test_pat_project_clock_must_be_fresh_before_owner_rpc(monkeypatch, clock_case):
-    app, _ = _app(monkeypatch)
+    app, settings = _app(monkeypatch)
     monkeypatch.setenv("PROJECT_WORKFLOW_SPACES__ENABLED", "true")
     now = datetime.now(timezone.utc)
     identity = {"sub": "human", "subject_role": "user", "scopes": ["project-workflow:read"],
-                "observed_at": now.isoformat(), "expires_at": (now + timedelta(seconds=30)).isoformat()}
+                "observed_at": now.isoformat(), "expires_at": (now + timedelta(seconds=30)).isoformat(),
+                "application_access": application_access_proof(issuer=settings.AUTH_ISSUER, subject="human")}
     if clock_case == "future":
         identity["observed_at"] = (now + timedelta(seconds=5)).isoformat()
     elif clock_case == "stale":
@@ -178,10 +235,11 @@ def test_pat_project_clock_must_be_fresh_before_owner_rpc(monkeypatch, clock_cas
 
 
 def test_boolean_jwt_expiry_is_not_an_integer_project_permit(monkeypatch):
-    app, _ = _app(monkeypatch)
+    app, settings = _app(monkeypatch)
     monkeypatch.setenv("PROJECT_WORKFLOW_SPACES__ENABLED", "true")
     _central(monkeypatch, lambda request: httpx.Response(
-        200, json={"id": "human", "status": "active", "role": "user"},
+        200, json={"id": "human", "status": "active", "role": "user",
+                   "application_access": application_access_proof(issuer=settings.AUTH_ISSUER, subject="human")},
     ))
 
     async def unexpected(*args, **kwargs):
@@ -232,8 +290,13 @@ def test_oidc_callback_validates_signed_nonce_and_current_subject_before_cookie(
                 "id_token": "not-a-jwt" if failure == "id_token_invalid" else signed, "expires_in": 300})
         assert request.url.path == "/auth/me"
         assert request.headers["authorization"] == "Bearer synthetic-private-access-token"
+        identity = {"id": "other-human" if failure == "wrong_subject" else "human"}
+        if failure == "valid":
+            identity["application_access"] = application_access_proof(
+                issuer=settings.AUTH_ISSUER, subject="human",
+            )
         return httpx.Response(401 if failure == "session_revoked" else 200,
-                              json={"id": "other-human" if failure == "wrong_subject" else "human"})
+                              json=identity)
 
     class LocalJwk:
         def __init__(self, url, **kwargs):
@@ -273,17 +336,84 @@ def test_oidc_callback_validates_signed_nonce_and_current_subject_before_cookie(
 def test_shared_policy_without_auth_refuses_startup(monkeypatch):
     monkeypatch.setenv("PROJECT_WORKFLOW_SPACES__ENABLED", "true")
     monkeypatch.delenv("AUTH_ISSUER", raising=False)
+    settings = Settings(PROJECT_WORKFLOW_MODE="platform", AUTH_ISSUER="")
     app = FastAPI()
     with pytest.raises(RuntimeError, match="requires central authentication"):
+        sso.install_sso(app, settings)
+    assert not app.user_middleware
+
+
+@pytest.mark.parametrize("missing,match", [
+    ({"AUTH_ISSUER": ""}, "AUTH_ISSUER"),
+    ({"AUTH_INTERNAL_BASE_URL": ""}, "AUTH_INTERNAL_BASE_URL"),
+    ({"AUTH_SESSION_SECRET": ""}, "at least 32"),
+    ({"AUTH_SESSION_SECRET": "short"}, "at least 32"),
+])
+def test_incomplete_platform_settings_fail_before_partial_sso_routes(monkeypatch, missing, match):
+    monkeypatch.setenv("PROJECT_WORKFLOW_SPACES__ENABLED", "false")
+    settings = Settings(
+        PROJECT_WORKFLOW_MODE="platform", AUTH_ISSUER="https://auth.fixture.invalid",
+        AUTH_INTERNAL_BASE_URL="https://auth-internal.fixture.invalid",
+        AUTH_SESSION_SECRET="synthetic-secret-with-at-least-thirty-two-bytes",
+    ).model_copy(update=missing)
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "standalone")
+    monkeypatch.setattr(sso, "get_settings", lambda: settings)
+    app = FastAPI()
+    with pytest.raises(RuntimeError, match=match):
         sso.install_sso(app)
     assert not app.user_middleware
+    assert not {"/login", "/sso/callback", "/logout"}.intersection(route.path for route in app.routes)
 
 
-def test_explicit_disabled_settings_do_not_install_partial_sso_routes(monkeypatch):
-    _, settings = _app(monkeypatch)
-    monkeypatch.setenv("PROJECT_WORKFLOW_SPACES__ENABLED", "false")
-    monkeypatch.setattr(sso, "get_settings", lambda: settings.model_copy(update={"AUTH_ISSUER": ""}))
+def test_standalone_refuses_shared_policy_even_with_configured_auth(monkeypatch):
+    monkeypatch.setenv("PROJECT_WORKFLOW_SPACES__ENABLED", "true")
+    settings = Settings(
+        PROJECT_WORKFLOW_MODE="standalone", AUTH_ISSUER="https://auth.fixture.invalid",
+    )
     app = FastAPI()
-    sso.install_sso(app)
+    with pytest.raises(RuntimeError, match="Standalone mode conflicts with shared project policy"):
+        sso.install_sso(app, settings)
     assert not app.user_middleware
     assert not {"/login", "/sso/callback", "/logout"}.intersection(route.path for route in app.routes)
+
+
+@pytest.mark.parametrize("explicit_settings", [False, True])
+@pytest.mark.parametrize("ambient_mode", [None, "standalone"])
+def test_dotenv_platform_settings_never_lose_sso_middleware(
+    tmp_path, monkeypatch, explicit_settings, ambient_mode,
+):
+    for name in ("PROJECT_WORKFLOW_MODE", "AUTH_ISSUER", "AUTH_INTERNAL_BASE_URL", "AUTH_SESSION_SECRET"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("PROJECT_WORKFLOW_SPACES__ENABLED", "false")
+    dotenv = tmp_path / ".env"
+    dotenv.write_text(
+        "PROJECT_WORKFLOW_MODE=platform\nAUTH_ISSUER=https://auth.fixture.invalid\n"
+        "AUTH_INTERNAL_BASE_URL=https://auth-internal.fixture.invalid\n"
+        "AUTH_SESSION_SECRET=synthetic-secret-with-at-least-thirty-two-bytes\n",
+        encoding="utf-8",
+    )
+    settings = Settings(_env_file=dotenv)
+    assert settings.PROJECT_WORKFLOW_MODE == "platform"
+    assert settings.AUTH_ISSUER == "https://auth.fixture.invalid"
+    if ambient_mode is not None:
+        monkeypatch.setenv("PROJECT_WORKFLOW_MODE", ambient_mode)
+    lookups = []
+
+    def resolved_settings():
+        lookups.append(True)
+        return settings
+
+    monkeypatch.setattr(sso, "get_settings", resolved_settings)
+    app = FastAPI()
+    app.get("/api/protected")(lambda: {"private_success": True})
+    sso.install_sso(app, settings if explicit_settings else None)
+    assert lookups == ([] if explicit_settings else [True])
+    assert len(app.user_middleware) == 1
+    assert app.user_middleware[0].cls is sso._SsoMiddleware
+    assert app.user_middleware[0].kwargs["settings"] is settings
+    assert {"/login", "/sso/callback", "/logout"}.issubset(route.path for route in app.routes)
+    with TestClient(app, follow_redirects=False) as client:
+        assert client.get("/api/protected").status_code == 401
+        login = client.get("/login")
+    assert login.status_code == 303
+    assert login.headers["location"].startswith(settings.AUTH_ISSUER + "/oidc/authorize?")

@@ -84,7 +84,7 @@ def test_hosted_ci_covers_quality_and_compose_readiness() -> None:
 
 
 def test_quality_gate_supplies_qualified_cli_source_independently_of_sdk() -> None:
-    revision = "278be4a2eb0b3ce49dac2cd14ea7e2871f2ffe1d"
+    revision = "25b0b2aafaa9feaa854ca86f11043ff825842229"
     workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     script = (ROOT / "scripts/quality.ps1").read_text(encoding="utf-8")
     guide = (ROOT / "docs/quality-gate.md").read_text(encoding="utf-8")
@@ -118,7 +118,7 @@ def test_compose_and_env_example_forward_runtime_settings() -> None:
 
     assert "OPENAI_MODEL: ${OPENAI_MODEL:-app-test}" in compose
     assert (
-        "PLATFORM_SERVICES_URL: ${PLATFORM_SERVICES_URL:-http://host.docker.internal:7771/api/v1/runtime/services}"
+        "PLATFORM_SERVICES_URL: ${PLATFORM_SERVICES_URL:-}"
     ) in compose
     for key in ("PROJECT_WORKFLOW_BASE_READER_SUBJECTS_JSON", "PROJECT_WORKFLOW_CONFIGURED_TRACKER_URL",
                 "PROJECT_WORKFLOW_CONFIGURED_TRACKER_READ_TOKEN"):

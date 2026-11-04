@@ -21,6 +21,7 @@ def report_json(text):
 
 @pytest.fixture
 def agent_env(monkeypatch):
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "platform")
     monkeypatch.setenv("FLEET_CLI_PROTOCOL", "configured-cli-v1")
     monkeypatch.setenv("FLEET_AGENT_ID", str(uuid4()))
     monkeypatch.setenv("PROJECT_WORKFLOW_NAMESPACE_ID", "12")
@@ -64,8 +65,67 @@ def test_existing_commands_use_configured_runtime_routes(agent_env, monkeypatch,
     assert args[1] == "https://workflow.test/workflow/internal/runtime/" + command
     assert kwargs["headers"]["Authorization"] == "Bearer sdlc_pat_configured-only-test"
     assert kwargs["allow_redirects"] is False
-    assert kwargs["stream"] is True and kwargs["timeout"] == (3, 120)
+    assert kwargs["stream"] is True and kwargs["timeout"] == (30, 1500)
     assert "X-Workflow-Execution-Token" not in kwargs["headers"]
+
+
+@pytest.mark.parametrize(("command", "extra", "budget"), [
+    ("step", [], 1024 * 1024),
+    ("history", [], 64 * 1024 * 1024),
+    ("history", ["--diagnostics"], 1024 * 1024),
+])
+def test_response_budget_is_explicit_for_history_only(agent_env, monkeypatch, command, extra, budget):
+    import pdlc_cli_core
+
+    original = pdlc_cli_core.ApiClient
+    limits = []
+
+    def client(*args, **kwargs):
+        limits.append(kwargs["max_response_bytes"])
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(pdlc_cli_core, "ApiClient", client)
+    calls = fake_transport(monkeypatch)
+    result = CliRunner().invoke(cli, ["--json", command, "--task", "SDLC-31", *extra])
+    assert result.exit_code == 0, result.output
+    assert limits == [budget] and len(calls) == 1
+
+
+def test_large_unicode_history_preserves_reports_without_retry(agent_env, monkeypatch):
+    import os
+
+    from project_workflow.interfaces.cli import configured
+
+    document = "Принятое решение владельца. " * 1000
+    report = json.dumps({"source": "", "result": {"document": document}, "unresolved": []}, ensure_ascii=False)
+    assert len(report) < 32_000
+    records = [{"history_id": i, "worker_report": report, "result": {"message": document}}
+               for i in range(20)]
+    payload = {"ok": True, "exit_code": 0, "result": {
+        "interaction_protocol": "configured-cli-v1", "task": "SDLC-31", "namespace_id": 12,
+        "concrete_agent_ref": os.environ["FLEET_AGENT_ID"], "records": records}}
+    encoded = json.dumps(payload, ensure_ascii=False).encode()
+    assert len(encoded) > 1024 * 1024
+    calls = []
+
+    class Response:
+        status_code = 200
+
+        def close(self):
+            pass
+
+        def iter_content(self, **kwargs):
+            for offset in range(0, len(encoded), 65536):
+                yield encoded[offset:offset + 65536]
+
+    def request(*args, **kwargs):
+        calls.append(kwargs)
+        return Response()
+
+    monkeypatch.setattr(requests.Session, "request", request)
+    response = configured.history("SDLC-31", 20, None, None)
+    assert response["ok"] and response["result"]["records"] == records
+    assert len(calls) == 1 and calls[0]["params"]["n"] == 20
 
 
 def test_report_stdin_preserves_exact_key_version_and_text(agent_env, monkeypatch):

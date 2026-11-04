@@ -14,12 +14,13 @@ import threading
 from typing import Any
 
 from project_workflow.domain.configured_cli import ConfiguredCliFence
+from project_workflow.domain.standalone import StandaloneFence
 
 from ..application.project import ProjectService
 from ..application.task import TaskService
 from ..application.workflow import WorkflowService
 from ..domain.exceptions import ConflictError
-from ..domain.runtime_assignment import MANAGED_WORKFLOW_KEYS, RuntimeStepFence
+from ..domain.runtime_assignment import MANAGED_WORKFLOW_KEYS
 from ..domain.single_task_profile import is_single_task_key
 from ..infrastructure.db import schema
 from ..infrastructure.db.uow import SAUnitOfWork
@@ -66,7 +67,7 @@ class SupervisorEngine:
         uow: SAUnitOfWork | None = None,
         create_if_missing: bool = True,
         project_id: int | None = None,
-        runtime_fence: RuntimeStepFence | ConfiguredCliFence | None = None,
+        runtime_fence: ConfiguredCliFence | StandaloneFence | None = None,
     ):
         self.task_key = task_key
         self.create_if_missing = create_if_missing
@@ -242,9 +243,6 @@ class SupervisorEngine:
         builder = self.contract_builder
         group = builder.get_parallel_group(phase) if phase.execution_type == "parallel" else [phase]
         items = dict(builder.build_parallel_evaluation_items(group))
-        by_text: dict[str, list[str]] = {}
-        for item_id, text in items.items():
-            by_text.setdefault(text, []).append(item_id)
         decided: set[str] = set()
         # The repository returns newest first. Missing revokes older coverage;
         # retryable failures did not evaluate the report and must not revoke it.
@@ -270,12 +268,7 @@ class SupervisorEngine:
                         item_id = value
                         matches = saved_text.get(item_id) == items[item_id]
                     else:
-                        # Older records used checklist text instead of IDs.
-                        candidates = by_text.get(value, []) if saved_items is None else []
-                        if len(candidates) != 1:
-                            continue
-                        item_id = candidates[0]
-                        matches = True
+                        continue
                     if item_id in decided:
                         continue
                     decided.add(item_id)
@@ -552,9 +545,9 @@ class SupervisorEngine:
 
     def _assert_runtime_fence(self) -> None:
         """Fail closed when the current task no longer matches the owner-issued run."""
-        if self.runtime_fence is not None and not isinstance(self.runtime_fence, ConfiguredCliFence):
+        if self.runtime_fence is not None and not isinstance(self.runtime_fence, (ConfiguredCliFence, StandaloneFence)):
             raise ConflictError("Retired execution protocol; current configured assignment required")
-        if isinstance(self.runtime_fence, ConfiguredCliFence):
+        if isinstance(self.runtime_fence, (ConfiguredCliFence, StandaloneFence)):
             self.runtime_fence.assert_task(self.task)
             return
         if self.task is not None:
@@ -578,6 +571,10 @@ class SupervisorEngine:
         self.runtime_fence.assert_task(locked_task)
         self.task = locked_task
         self._assert_runtime_fence()
+        if isinstance(self.runtime_fence, StandaloneFence):
+            from project_workflow.application.standalone import check_fence
+
+            check_fence(self._uow, self.runtime_fence)
 
     def evaluate(self, report: str) -> dict:
         phase = self._get_current_phase_obj()

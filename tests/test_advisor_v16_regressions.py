@@ -20,7 +20,6 @@ from project_workflow.domain.phase_report import PhaseReport
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.infrastructure.llm import OpenAICompatibleClient, PromptBuilder
-from project_workflow.supervisor.checks import normalize_text
 from project_workflow.supervisor.contracts import PhaseContractBuilder
 from project_workflow.supervisor.evaluate import (
     _fingerprint_contract_state,
@@ -29,7 +28,7 @@ from project_workflow.supervisor.evaluate import (
 )
 from project_workflow.supervisor.evidence import validate_frozen_evaluation
 from project_workflow.supervisor.models import Phase, PhaseCheck, PhaseDelegate
-from tests._report_helpers import report_json
+from tests._report_helpers import historical_normalize, report_json
 from tests.test_configured_cli import MACHINE, WRITER, enroll, step
 from tests.test_configured_cli import configured as configured
 
@@ -121,8 +120,8 @@ def test_configured_pm_disallows_delegate_in_prompt_schema_parser_and_snapshot(
         assert snapshot["contract_fingerprint_state"]["delegation_allowed"] is False
         assert result["phase_code"] == before["phase_code"]
         if verdict == "DELEGATE":
-            assert_technical(result, row, before, attempts=2)
-            assert client.chat.call_count == 2
+            assert_technical(result, row, before, attempts=1)
+            assert client.chat.call_count == 1
         else:
             assert result["verdict"] == "PARTIAL" and not result["retryable"]
             assert client.chat.call_count == 1
@@ -171,7 +170,7 @@ def test_parallel_runtime_uses_merged_contract_delegation_consistently(
         assert client.chat.call_count == 1
     else:
         assert result["verdict"] == "BLOCKED" and result["retryable"]
-        assert client.chat.call_count == 2
+        assert client.chat.call_count == 1
 
 
 @pytest.mark.parametrize("configured", [("developer", "initial")], indirect=True)
@@ -250,12 +249,12 @@ def test_deep_provider_json_commits_only_structured_technical_failure(configured
     assert submitted.status_code == 200, submitted.text
     with SAUnitOfWork() as uow:
         row = uow.session.scalar(select(m.TaskStepHistoryEntry))
-        snapshot = assert_technical(submitted.json()["result"], row, before, attempts=2)
+        snapshot = assert_technical(submitted.json()["result"], row, before, attempts=1)
         assert snapshot["raw_evaluator"] == {"error": "ValueError"}
         assert all(attempt["error"]["category"] == "response_contract"
                    for attempt in snapshot["diagnostics"]["attempts"])
     factory.assert_called_once()
-    assert client.chat.call_count == 2
+    assert client.chat.call_count == 1
 
 
 def frozen_evaluation(policy):
@@ -267,22 +266,21 @@ def frozen_evaluation(policy):
              "transition_routes": {}, "phase_graph": [], "evaluator_response_format": "json_object"}
     digest = _fingerprint_contract_state(state)
     report = report_json("Owner decision: delta -1; Keep A-B! Preserve Case and punctuation.")
-    normalized = normalize_text(report)
+    normalized = historical_normalize(report)
     assert report != normalized
-    raw_policy = policy in {"supervisor-evaluator-v15", "supervisor-evaluator-v16"}
-    accepted_report, rejected_report = (report, normalized) if raw_policy else (normalized, report)
     frozen = {"prompt_version": policy, "contract_snapshot": {**contract, "evaluation_items": items},
               "contract_fingerprint": digest, "evaluated_contract_fingerprint": digest,
               "contract_fingerprint_state": state, "covered_item_ids": [item_id],
               "raw_evaluator": {"verdict": "PASS", "covered": [item_id], "missing": [],
                                 "blockers": [], "message": "Actual complete result", "confidence": 1.0}}
     entry = {"task_id": 1, "worker_report": report, "covered_item_ids": [item_id],
-             "replay_fingerprint": _report_fingerprint(1, accepted_report, digest)}
-    return entry, frozen, rejected_report, digest
+             "replay_fingerprint": _report_fingerprint(1, report, digest)}
+    return entry, frozen, normalized, digest
 
 
-@pytest.mark.parametrize("policy", ["supervisor-evaluator-v14", "supervisor-evaluator-v15", "supervisor-evaluator-v16"])
-def test_frozen_v15_uses_raw_report_while_legacy_v14_stays_normalized(policy):
+@pytest.mark.parametrize("policy", ["supervisor-evaluator-v14", "supervisor-evaluator-v15",
+                                   "supervisor-evaluator-v16", PromptBuilder.PROMPT_VERSION])
+def test_raw_report_proof_does_not_dispatch_hashing_by_policy_version(policy):
     entry, frozen, rejected_report, digest = frozen_evaluation(policy)
     original = copy.deepcopy((entry, frozen))
     item_id = entry["covered_item_ids"][0]
@@ -293,9 +291,19 @@ def test_frozen_v15_uses_raw_report_while_legacy_v14_stays_normalized(policy):
                                    frozen)
 
 
+def test_normalized_v14_proof_is_refused_as_current_authority_without_rewriting_history():
+    entry, frozen, normalized, digest = frozen_evaluation("supervisor-evaluator-v14")
+    entry["replay_fingerprint"] = _report_fingerprint(1, normalized, digest)
+    original = copy.deepcopy((entry, frozen))
+    with pytest.raises(ConflictError):
+        validate_frozen_evaluation(entry, frozen)
+    assert (entry, frozen) == original
+
+
+@pytest.mark.parametrize("policy", ["supervisor-evaluator-v15", "supervisor-evaluator-v16"])
 @pytest.mark.parametrize(("before", "after"), [("-1", "1"), ("Case", "case"), ("A-B!", "AB")])
-def test_historical_v15_raw_report_tampering_fails_without_fingerprint_override(before, after):
-    entry, frozen, _, _ = frozen_evaluation("supervisor-evaluator-v15")
+def test_historical_raw_report_tampering_fails_without_fingerprint_override(before, after, policy):
+    entry, frozen, _, _ = frozen_evaluation(policy)
     assert validate_frozen_evaluation(entry, frozen) == entry["covered_item_ids"]
     changed = {**entry, "worker_report": entry["worker_report"].replace(before, after)}
     assert changed["worker_report"] != entry["worker_report"]
