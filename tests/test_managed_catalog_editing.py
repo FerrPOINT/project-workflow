@@ -10,7 +10,7 @@ from project_workflow import config
 from project_workflow.infrastructure.db.managed_catalog import ensure_managed_catalog
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.ui.app import create_app
-from tests._human_access_helpers import application_access_proof
+from tests._human_access_helpers import human_identity, human_token
 
 pytestmark = pytest.mark.unit
 
@@ -18,7 +18,7 @@ pytestmark = pytest.mark.unit
 @pytest.fixture(autouse=True)
 def platform_editor(monkeypatch):
     issuer = "https://auth.catalog-editor.test"
-    authorization = "Bearer catalog-editor-unit-session"
+    authorization = "Bearer " + human_token("catalog-editor-admin", issuer=issuer)
     monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "platform")
     monkeypatch.setenv("AUTH_ISSUER", issuer)
     monkeypatch.setenv("AUTH_INTERNAL_BASE_URL", issuer)
@@ -29,12 +29,7 @@ def platform_editor(monkeypatch):
     def identity(request):
         assert str(request.url) == issuer + "/auth/me"
         assert request.headers["Authorization"] == authorization
-        return httpx.Response(200, json={
-            "id": "catalog-editor-admin", "role": "admin", "status": "active",
-            "application_access": application_access_proof(
-                issuer=issuer, subject="catalog-editor-admin", role="admin",
-            ),
-        })
+        return httpx.Response(200, json=human_identity("catalog-editor-admin", role="admin"))
 
     monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: original_client(
         transport=httpx.MockTransport(identity), **kwargs,

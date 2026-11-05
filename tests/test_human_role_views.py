@@ -50,13 +50,9 @@ def test_rendered_configuration_controls_follow_current_central_role(monkeypatch
     settings = Settings(PROJECT_WORKFLOW_MODE="platform", AUTH_ISSUER="https://auth.fixture.invalid")
     monkeypatch.setattr(sso, "get_settings", lambda: settings)
     now = datetime.now(timezone.utc)
-    identity = {"role": "admin", "application_access": {
-        "schema_version": 1, "issuer": settings.AUTH_ISSUER, "subject": "fixture-human",
-        "role": role, "applications": ["project-workflow"], "revision": 1, "enforced": True,
-        "observed_at": now.isoformat(), "expires_at": (now + timedelta(seconds=60)).isoformat(),
-    }}
+    identity = {"role": role, "application_access": {"role": "admin"}}
     access = human_access(identity, issuer=settings.AUTH_ISSUER, subject="fixture-human",
-                          started=time.monotonic(), wall_started=now, require_proof=True)
+                          started=time.monotonic(), wall_started=now, expires_at=now + timedelta(seconds=60))
     app = FastAPI()
 
     @app.middleware("http")
@@ -105,27 +101,25 @@ def test_missing_or_expired_central_authority_cannot_render_administration(monke
         PROJECT_WORKFLOW_MODE="platform", AUTH_ISSUER="https://auth.fixture.invalid"))
     request = Request({"type": "http", "method": "GET", "path": "/", "headers": []})
     assert not sso.can_administer(request)
-    request.state.central_access = HumanAccess("admin", None, time.monotonic() - 1)
+    request.state.central_access = HumanAccess("https://auth.fixture.invalid", "fixture-human", "admin",
+                                               datetime.now(timezone.utc), time.monotonic() - 1)
     assert not sso.can_administer(request)
 
 
-def current_access_request(*, role="user", applications=("project-workflow",), revision=1, seconds=20):
+def current_access_request(*, role="user", issuer="https://auth.fixture.invalid", subject="fixture-human",
+                           seconds=20, application_access=None):
     from starlette.requests import Request
 
     now = datetime.now(timezone.utc)
-    value = {"role": "admin", "application_access": {
-        "schema_version": 1, "issuer": "https://auth.fixture.invalid", "subject": "fixture-human",
-        "role": role, "applications": list(applications), "revision": revision, "enforced": True,
-        "observed_at": now.isoformat(), "expires_at": (now + timedelta(seconds=seconds)).isoformat(),
-    }}
+    value = {"role": role, "application_access": application_access}
     request = Request({"type": "http", "method": "GET", "path": "/", "headers": []})
     request.state.central_access = human_access(
-        value, issuer="https://auth.fixture.invalid", subject="fixture-human",
-        started=time.monotonic(), wall_started=now, require_proof=True)
+        value, issuer=issuer, subject=subject,
+        started=time.monotonic(), wall_started=now, expires_at=now + timedelta(seconds=seconds))
     return request
 
 
-def test_application_display_window_is_independent_and_does_not_hash_a_refreshed_clock(monkeypatch):
+def test_identity_display_window_does_not_hash_clock_or_application_grants(monkeypatch):
     from dataclasses import replace
 
     from project_workflow.domain.project_admission import SpaceAccessDenied
@@ -137,14 +131,15 @@ def test_application_display_window_is_independent_and_does_not_hash_a_refreshed
     assert first["enforced"] and 0 < first["remaining_millis"] <= 20_000
     assert len(first["scope_revision"]) == 64
     assert display_window(current_access_request(seconds=30))["scope_revision"] == first["scope_revision"]
-    for changed in (current_access_request(revision=2), current_access_request(role="admin", applications=()),
-                    current_access_request(applications=("project-workflow", "wiki"))):
+    for ignored in ({"applications": [], "role": "admin"}, {"enforced": False}, "malformed"):
+        assert display_window(current_access_request(application_access=ignored))["scope_revision"] == first[
+            "scope_revision"]
+    for changed in (current_access_request(subject="another-human"), current_access_request(role="admin"),
+                    current_access_request(issuer="https://other-auth.fixture.invalid")):
         assert display_window(changed)["scope_revision"] != first["scope_revision"]
     request.state.central_access = replace(request.state.central_access, _deadline=time.monotonic() - 1)
     with pytest.raises(SpaceAccessDenied):
         display_window(request)
-    with pytest.raises(SpaceAccessDenied):
-        display_window(current_access_request(applications=("wiki",)))
 
 
 def test_application_and_space_display_window_use_the_earliest_original_clock(monkeypatch):
@@ -164,21 +159,18 @@ def test_application_and_space_display_window_use_the_earliest_original_clock(mo
         human_scope.reset(token)
 
 
-@pytest.mark.parametrize("role,applications,expected", [
-    ("user", ("project-workflow", "wiki"), ["project-workflow", "wiki"]),
-    ("user", (), []),
-    ("admin", (), ["project-workflow", "wiki", "future-app"]),
-])
-def test_catalog_is_filtered_per_current_user_without_mutating_the_shared_cache(
-        monkeypatch, role, applications, expected):
+@pytest.mark.parametrize("role", ["user", "admin"])
+@pytest.mark.parametrize("application_access", [None, {"applications": []}, {"applications": ["wiki"]}])
+def test_catalog_uses_current_identity_not_application_grants_or_shared_cache_mutation(
+        monkeypatch, role, application_access):
     from dataclasses import replace
 
     monkeypatch.setattr(sso, "get_settings", lambda: Settings(
         PROJECT_WORKFLOW_MODE="platform", AUTH_ISSUER="https://auth.fixture.invalid"))
     catalog = [{"key": key, "label": key, "url": "https://fixture.invalid/" + key}
                for key in ("project-workflow", "wiki", "future-app")]
-    request = current_access_request(role=role, applications=applications)
-    assert [item["key"] for item in sso.visible_services(request, catalog)] == expected
+    request = current_access_request(role=role, application_access=application_access)
+    assert sso.visible_services(request, catalog) == catalog
     assert len(catalog) == 3
     request.state.central_access = replace(request.state.central_access, _deadline=time.monotonic() - 1)
     assert sso.visible_services(request, catalog) == []

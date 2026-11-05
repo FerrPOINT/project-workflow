@@ -9,7 +9,7 @@ from project_workflow.application.project import ProjectService
 from project_workflow.application.workflow import WorkflowService
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.ui.app import create_app
-from tests._human_access_helpers import application_access_proof
+from tests._human_access_helpers import human_identity, human_token
 from tests.test_managed_catalog_hardening import (
     _bootstrap_global_managed_catalog,
     _install_runtime_credentials,
@@ -28,21 +28,18 @@ def platform_client(monkeypatch):
     monkeypatch.setenv("AUTH_SESSION_SECRET", "test-only-secret-with-at-least-thirty-two-bytes")
     config.get_settings.cache_clear()
     original_client = httpx.AsyncClient
+    authorization = "Bearer " + human_token("administrator", issuer=issuer)
 
     def identity(request):
         assert str(request.url) == issuer + "/auth/me"
-        assert request.headers["authorization"] == "Bearer fixture-admin"
-        return httpx.Response(200, json={
-            "id": "administrator",
-            "application_access": application_access_proof(
-                issuer=issuer, subject="administrator", role="admin"),
-        })
+        assert request.headers["authorization"] == authorization
+        return httpx.Response(200, json=human_identity("administrator", role="admin"))
 
     monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: original_client(
         transport=httpx.MockTransport(identity), **kwargs,
     ))
     return TestClient(create_app(), base_url="http://127.0.0.1", client=("127.0.0.1", 50000),
-                      headers={"Authorization": "Bearer fixture-admin"})
+                      headers={"Authorization": authorization})
 
 
 @pytest.fixture

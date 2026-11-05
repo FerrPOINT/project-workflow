@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 
 from project_workflow.config import Settings
 from project_workflow.interfaces.ui import sso
-from tests._human_access_helpers import application_access_proof
+from tests._human_access_helpers import human_identity, human_token, personal_identity
 
 
 @pytest.mark.parametrize("result", ["error", "login-required"])
@@ -143,9 +143,7 @@ def test_cookie_session_checks_identity_and_csrf(monkeypatch, extra, origin, exp
 
     def identity(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/auth/me"
-        return httpx.Response(200, json={"id": "central-user", "application_access": application_access_proof(
-            issuer=settings.AUTH_ISSUER, subject="central-user",
-        )})
+        return httpx.Response(200, json=human_identity())
 
     monkeypatch.setattr(
         sso.httpx,
@@ -155,7 +153,7 @@ def test_cookie_session_checks_identity_and_csrf(monkeypatch, extra, origin, exp
     with TestClient(app, follow_redirects=False) as client:
         client.cookies.set(
             sso.cookie_name(settings, "workflow_sso"),
-            sso._encode_cookie(settings, {"token": "sso-jwt"}),
+            sso._encode_cookie(settings, {"token": human_token()}),
         )
         assert client.get("/").status_code == 200
         assert client.post("/api/tasks").status_code == 403
@@ -167,8 +165,7 @@ def test_cookie_session_checks_identity_and_csrf(monkeypatch, extra, origin, exp
 def test_personal_token_scopes_and_invalid_central_responses(monkeypatch, prefix):
     app, settings = _app(monkeypatch)
     original_client = httpx.AsyncClient
-    response = {"status": 200, "body": {"sub": "user-1", "scopes": ["project-workflow:read"],
-                "application_access": application_access_proof(issuer=settings.AUTH_ISSUER, subject="user-1")}}
+    response = {"status": 200, "body": personal_identity()}
 
     def introspect(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/auth/tokens/introspect"
@@ -184,10 +181,7 @@ def test_personal_token_scopes_and_invalid_central_responses(monkeypatch, prefix
         assert client.get("/api/tasks", headers=headers).status_code == 200
         assert client.post("/api/tasks", headers=headers).status_code == 403
 
-        response["body"] = {"sub": "user-1", "scopes": ["project-workflow:write"],
-                            "application_access": application_access_proof(
-                                issuer=settings.AUTH_ISSUER, subject="user-1",
-                            )}
+        response["body"] = personal_identity(scopes=["project-workflow:write"])
         assert client.post("/api/tasks", headers=headers).status_code == 200
 
         response.update(status=401, body={})
@@ -219,9 +213,7 @@ def test_callback_exchanges_code_and_sets_encrypted_session(monkeypatch, platfor
                 json={"access_token": "access-token", "id_token": "id-token", "expires_in": 900},
             )
         assert request.url.path == "/auth/me"
-        return httpx.Response(200, json={"id": "central-sub", "application_access": application_access_proof(
-            issuer=settings.AUTH_ISSUER, subject="central-sub",
-        )})
+        return httpx.Response(200, json=human_identity("central-sub"))
 
     class SigningKey:
         key = object()
@@ -303,10 +295,8 @@ def test_sso_configuration_and_cookie_validation_fail_closed(monkeypatch):
 def test_machine_principal_cannot_enter_human_routes_even_with_write_scope(monkeypatch, prefix):
     app, settings = _app(monkeypatch)
     original_client = httpx.AsyncClient
-    identity = {
-        "sub": "registered-reader", "role": "admin",
-        "scopes": ["project-workflow:read", "project-workflow:write"],
-    }
+    identity = personal_identity("registered-reader", role="admin",
+                                 scopes=["project-workflow:read", "project-workflow:write"])
     monkeypatch.setenv("PROJECT_WORKFLOW_NAMESPACE__MACHINE_SUBJECTS", "registered-reader")
     monkeypatch.setattr(
         sso.httpx, "AsyncClient",
@@ -319,7 +309,6 @@ def test_machine_principal_cannot_enter_human_routes_even_with_write_scope(monke
         assert client.get("/api/tasks", headers=headers).status_code == 403
         assert client.post("/api/tasks", headers=headers).status_code == 403
         identity["sub"] = "human"
-        identity["application_access"] = application_access_proof(issuer=settings.AUTH_ISSUER, subject="human")
         assert client.get("/api/tasks", headers=headers).status_code == 200
         identity["role"] = "service_account"
         assert client.get("/api/tasks", headers=headers).status_code == 403
@@ -375,31 +364,22 @@ def test_canonical_loopback_does_not_redirect_to_itself(monkeypatch):
         assert response.headers["location"] == "http://127.0.0.1:8812/phases?namespace_id=7"
 
 
-def test_current_role_and_apps_apply_to_the_same_open_session(monkeypatch):
-    from datetime import datetime, timedelta, timezone
-
+def test_current_role_and_status_apply_to_the_same_open_session(monkeypatch):
     from fastapi import Depends
     app, settings = _app(monkeypatch)
     app.post("/api/configuration", dependencies=[Depends(sso.require_administrator)])(lambda: {"ok": True})
     from project_workflow.interfaces.ui.project_admission import space_admission
     app.get("/api/v1/space-admission")(space_admission)
-    state = {"role": "user", "apps": ["project-workflow"], "proof": True, "enforced": True}
+    state = human_identity()
     original_client = httpx.AsyncClient
 
     def identity(_request):
-        now = datetime.now(timezone.utc)
-        value = {"id": "central-user", "role": state["role"]}
-        if state["proof"]:
-            value["application_access"] = {"schema_version": 1, "issuer": settings.AUTH_ISSUER,
-                "subject": "central-user", "role": state["role"], "applications": state["apps"],
-                "revision": 1, "enforced": state["enforced"], "observed_at": now.isoformat(),
-                "expires_at": (now+timedelta(seconds=60)).isoformat()}
-        return httpx.Response(200, json=value)
+        return httpx.Response(200, json=state)
 
     monkeypatch.setattr(sso.httpx, "AsyncClient", lambda **kwargs: original_client(
         transport=httpx.MockTransport(identity), **kwargs))
     with TestClient(app, follow_redirects=False) as client:
-        headers = {"authorization": "Bearer one-verified-session"}
+        headers = {"authorization": "Bearer " + human_token()}
         assert client.get("/api/tasks", headers=headers).status_code == 200
         display = client.get("/api/v1/space-admission", headers=headers)
         assert display.status_code == 200 and display.json()["enforced"] is True
@@ -410,23 +390,17 @@ def test_current_role_and_apps_apply_to_the_same_open_session(monkeypatch):
         assert client.post("/api/configuration", headers=headers).status_code == 200
         state["role"] = "user"
         assert client.post("/api/configuration", headers=headers).status_code == 403
-        state["apps"] = []
+        state["status"] = "disabled"
         assert client.get("/api/tasks", headers=headers).status_code == 403
         page = client.get("/", headers=headers)
         assert page.status_code == 403
         assert "Нет доступа" in page.text
         assert "Войти через SSO" not in page.text
         assert "location" not in page.headers
-        state["apps"] = ["project-workflow"]
-        state["proof"] = False
-        assert client.get("/api/tasks", headers=headers).status_code == 403
-        state["proof"] = True
-        state["enforced"] = False
-        assert client.get("/api/tasks", headers=headers).status_code == 403
-        state["enforced"] = True
-        state["apps"] = ["wrong/path"]
+        state["status"] = "active"
+        state["role"] = "member"
         assert client.get("/api/tasks", headers=headers).status_code == 503
-        state["apps"] = ["project-workflow"]
+        state["role"] = "user"
         from project_workflow.domain.project_admission import SpaceAccessDenied
 
         def expired_before_dispatch(_access):

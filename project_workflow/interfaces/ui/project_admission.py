@@ -24,8 +24,7 @@ def policy_active() -> bool:
 
 async def confirm(request: Request, *, token: str, issuer: str, subject: str, role: str,
                   original_started: float, token_expiry: float) -> HumanProjectScope:
-    if role not in {"member", "user", "operator", "admin", "platform_admin",
-                    "platform_operator", "editor", "platform_editor"}:
+    if role not in {"user", "admin"}:
         raise SpaceAccessDenied("Confirmed human role required")
     origin = os.environ.get("PROJECT_WORKFLOW_SPACES__TRACKER_URL", "")
     instance = os.environ.get("PROJECT_WORKFLOW_SPACES__TRACKER_INSTANCE_ID", "")
@@ -59,40 +58,36 @@ def display_window(request: Request | None = None) -> dict:
     from project_workflow.infrastructure.platform_auth import HumanAccess
 
     access = getattr(request.state, "central_access", None) if request is not None else None
-    subject = getattr(request.state, "central_subject", None) if request is not None else None
-    app_rights = None
-    app_remaining = 60_000
+    identity_rights = None
+    identity_remaining = 60_000
     if isinstance(access, HumanAccess):
-        if not access.permits(["project-workflow"]):
-            raise SpaceAccessDenied("Original application admission expired or denied")
-        app_remaining = int((access.monotonic_deadline() - time.monotonic()) * 1000)
-        proof = access.proof
-        if proof is not None:
-            app_remaining = min(app_remaining, int((proof.expires_at.timestamp() - time.time()) * 1000))
-        app_rights = {
+        if not access.permits():
+            raise SpaceAccessDenied("Original human identity expired")
+        identity_remaining = int(min(access.monotonic_deadline() - time.monotonic(),
+                                     access.expires_at.timestamp() - time.time()) * 1000)
+        identity_rights = {
             "role": access.role,
-            "subject": proof.subject if proof else subject,
-            "issuer": proof.issuer if proof else get_settings().AUTH_ISSUER,
-            "revision": proof.revision if proof else None,
-            "enforced": proof.enforced if proof else False,
-            "applications": sorted(proof.applications) if proof else [],
+            "subject": access.subject,
+            "issuer": access.issuer,
         }
-    elif request is not None and get_settings().AUTH_ISSUER:
-        raise SpaceAccessDenied("Human application admission required")
+    elif request is not None and get_settings().PROJECT_WORKFLOW_MODE == "platform":
+        raise SpaceAccessDenied("Verified human identity required")
     if not policy_active():
-        if app_rights is None:
+        if identity_rights is None:
             return {"schema_version": 1, "enforced": False, "remaining_millis": None, "scope_revision": None}
-        if not 1 <= app_remaining <= 60_000:
-            raise SpaceAccessDenied("Original application admission expired")
-        revision = hashlib.sha256(json.dumps(app_rights, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
-        return {"schema_version": 1, "enforced": True, "remaining_millis": app_remaining, "scope_revision": revision}
+        if not 1 <= identity_remaining <= 60_000:
+            raise SpaceAccessDenied("Original human identity expired")
+        revision = hashlib.sha256(json.dumps(
+            identity_rights, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        return {"schema_version": 1, "enforced": True,
+                "remaining_millis": identity_remaining, "scope_revision": revision}
     scope = human_scope.get()
     if scope is None:
         raise SpaceAccessDenied("Human owner admission required")
     scope.require_current()
     remaining = int(min(scope.deadline - time.monotonic(),
                         scope.proof.validity.valid_until - time.time()) * 1000)
-    remaining = min(remaining, app_remaining)
+    remaining = min(remaining, identity_remaining)
     if not 1 <= remaining <= 60_000:
         raise SpaceAccessDenied("Original project admission expired")
     rights = scope.proof.model_dump(mode="json", exclude={"validity"})
@@ -100,7 +95,7 @@ def display_window(request: Request | None = None) -> dict:
     for name in ("readable_spaces", "writable_spaces", "project_ids", "writable_project_ids"):
         rights[name] = sorted(rights[name], key=lambda value: json.dumps(value, sort_keys=True))
     rights["product_role"] = scope.product_role
-    rights["application_access"] = app_rights
+    rights["identity"] = identity_rights
     revision = hashlib.sha256(json.dumps(rights, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     return {"schema_version": 1, "enforced": True, "remaining_millis": remaining, "scope_revision": revision}
 

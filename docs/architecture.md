@@ -14,9 +14,12 @@ execution contexts и assignments запрещают запуск такой Б�
 `PROJECT_WORKFLOW_STANDALONE_CONTAINER_NETWORK=true`: приватная Compose-сеть
 является границей доверия, host port публикуется исключительно на loopback.
 Этот параметр нельзя включать для прямого запуска или внешнего ingress.
-В platform human access требует актуальное enforced application_access proof;
-отсутствующее или не enforced решение Auth не считается разрешением приложения.
-Standalone не использует этот механизм и не включается после отказа Auth.
+В platform Auth проверяет credential и подтверждает личность, активную учётную
+запись, роль и срок действия. Отдельный application_access grant для использования
+Workflow не требуется. Это не расширяет предметные права: namespace/project/task
+access, ограничения технических токенов, административная роль и отдельное
+подтверждение владельца проверяются на своих границах. Standalone не использует
+Auth и не включается после его отказа.
 
 Обе команды идут через `POST /internal/runtime/step` и `GET /internal/runtime/history`.
 Для локального старта явно задаются task, namespace, workflow, mode и operation key

@@ -20,7 +20,7 @@ from project_workflow.interfaces.ui import sso
 from project_workflow.interfaces.ui.app import create_app
 from project_workflow.interfaces.ui.controller_assets import controller_source
 from tests import test_ui_shell_template as shell
-from tests._human_access_helpers import application_access_proof
+from tests._human_access_helpers import human_identity, human_token
 
 pytestmark = pytest.mark.ui
 
@@ -147,20 +147,18 @@ def platform_reader(catalog, monkeypatch):
     monkeypatch.setenv("AUTH_SESSION_SECRET", "test-only-secret-with-at-least-thirty-two-bytes")
     config.get_settings.cache_clear()
     original_client = httpx.AsyncClient
+    authorization = "Bearer " + human_token("reader", issuer=issuer)
 
     def identity(request):
         assert str(request.url) == issuer + "/auth/me"
-        assert request.headers["authorization"] == "Bearer fixture-reader"
-        return httpx.Response(200, json={
-            "id": "reader",
-            "application_access": application_access_proof(issuer=issuer, subject="reader"),
-        })
+        assert request.headers["authorization"] == authorization
+        return httpx.Response(200, json=human_identity("reader"))
 
     monkeypatch.setattr(sso.httpx, "AsyncClient", lambda **kwargs: original_client(
         transport=httpx.MockTransport(identity), **kwargs,
     ))
     with TestClient(create_app(), base_url="http://127.0.0.1", client=("127.0.0.1", 50000),
-                    headers={"Authorization": "Bearer fixture-reader"}) as browser_client:
+                    headers={"Authorization": authorization}) as browser_client:
         yield browser_client
 
 

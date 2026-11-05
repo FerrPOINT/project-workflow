@@ -168,8 +168,9 @@ native families remain read-only and cannot use publication to become configured
 
 ## JSON API
 
-All six routes use the existing `require_administrator` dependency, current
-human application admission and DB commit guards. They are not machine-agent
+All six routes use the existing `require_administrator` dependency, verified
+active human identity/credential expiry and DB commit guards. A per-application
+grant is not required; role and resource permissions remain enforced. These are not machine-agent
 runtime endpoints. Responses are `Cache-Control: no-store`.
 
 1. `GET /api/workflows/{workflow_id}/catalog`

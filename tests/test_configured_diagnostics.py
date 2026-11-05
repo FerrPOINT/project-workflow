@@ -18,7 +18,7 @@ from project_workflow.infrastructure.llm import OpenAICompatibleClient
 from project_workflow.interfaces.cli.core import cli
 from project_workflow.interfaces.ui import sso
 from project_workflow.interfaces.ui.routes import configured_cli_api
-from tests._human_access_helpers import application_access_proof
+from tests._human_access_helpers import personal_identity
 from tests.test_configured_cli import CONTROLLER, MACHINE, WRITER, enroll
 from tests.test_configured_cli import configured as configured
 from tests.test_configured_cli_transport import agent_env as agent_env
@@ -181,13 +181,8 @@ def test_legacy_cli_surface_cannot_expose_diagnostics(history, renderer, monkeyp
         calls.append(request)
         assert str(request.url).startswith("https://auth.test/auth/tokens/introspect?")
         assert request.headers["authorization"] == headers["Authorization"]
-        identity = {"sub": assignment["machine_subject"] if actor == "machine" else "ordinary-human",
-                    "role": "service_account" if actor == "machine" else "user",
-                    "scopes": ["project-workflow:read"]}
-        if actor == "human":
-            identity["application_access"] = application_access_proof(
-                issuer="https://auth.test", subject="ordinary-human",
-            )
+        identity = personal_identity(assignment["machine_subject"] if actor == "machine" else "ordinary-human",
+                                     role="service_account" if actor == "machine" else "user")
         return httpx.Response(200, json=identity)
 
     monkeypatch.setattr(sso.httpx, "AsyncClient", lambda **kwargs: original_client(

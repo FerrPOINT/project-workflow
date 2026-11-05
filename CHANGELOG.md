@@ -2,10 +2,21 @@
 
 ## Unreleased — Advisor V19 Candidate, Not Accepted
 
+- Remove Workflow's redundant per-application human admission dependency. Auth
+  still verifies the credential, active account, role and expiry; task/namespace/
+  project ownership, technical-token scopes, administration and exact owner
+  confirmation remain separate requirements. Other products' Auth policy and
+  user grants are not changed. Final native4421/75 subtests and132 real PostgreSQL
+  checks pass; coverage94.0612151667428%, Ruff and mypy169 pass.15 skips remain explicit:
+  3 private opt-ins,1 NTFS mode and11 unavailable browser fixtures. PostgreSQL
+  cleanup is verified. Independent source review finds no new authorization
+  defect. This source follow-up is not yet installed or live-accepted;
+  Advisor v19 inputs, policy and qualification are unchanged.
+
 - Attempt the qualified deployment without new Advisor calls. Fleet6eab59ad is
   installed; Workflow79964f6 boots healthy with explicit platform/single-task-v1,
   app-test/high/1200s/4000/json_schema. Integration is not accepted: human access
-  requires an uncompleted Auth admission migration, and PM CLI activation26 is
+  is blocked by an unnecessary app-grant dependency, and PM CLI activation26 is
   held by missing native provenance in historical runtime generations. Retain PM25,
   credentials and all history; complete explicit image-only Workflow/web rollback
   after confirming unchanged migrations/models and zero new history records.

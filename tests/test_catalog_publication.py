@@ -11,7 +11,7 @@ from sqlalchemy import func, select
 from project_workflow.domain.single_task_profile import ROLE_MODES
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
-from tests._human_access_helpers import application_access_proof
+from tests._human_access_helpers import human_identity, human_token
 from tests._report_helpers import report_json
 from tests.test_configured_cli import WRITER, enroll, step
 from tests.test_configured_cli import configured as configured
@@ -21,24 +21,19 @@ PUBLISHER_SUBJECT = "catalog-test-admin"
 
 @pytest.fixture(autouse=True)
 def verified_catalog_administrator(request, monkeypatch):
-    """Controlled current Auth proof through the real platform SSO middleware."""
+    """Controlled current Auth identity through the real platform SSO middleware."""
     fixture = "migrated_configured" if "migrated_configured" in request.fixturenames else "configured"
     if fixture not in request.fixturenames:
         yield
         return
     client, _ = request.getfixturevalue(fixture)
     settings = client.app.state.workflow_settings
-    authorization = "Bearer catalog-publication-unit-session"
+    authorization = "Bearer " + human_token(PUBLISHER_SUBJECT, issuer=settings.AUTH_ISSUER)
 
     def identity(request):
         assert str(request.url) == settings.AUTH_INTERNAL_BASE_URL.rstrip("/") + "/auth/me"
         assert request.headers["Authorization"] == authorization
-        return httpx.Response(200, json={
-            "id": PUBLISHER_SUBJECT, "role": "admin", "status": "active",
-            "application_access": application_access_proof(
-                issuer=settings.AUTH_ISSUER, subject=PUBLISHER_SUBJECT, role="admin",
-            ),
-        })
+        return httpx.Response(200, json=human_identity(PUBLISHER_SUBJECT, role="admin"))
 
     monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: AsyncClient(
         transport=httpx.MockTransport(identity), **kwargs,
@@ -300,7 +295,7 @@ def test_publish_requires_verified_subject_not_a_client_header(configured):
 
 
 def test_real_sso_admin_subject_and_server_time_are_retained_on_replay(configured, monkeypatch):
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timezone
 
     from fastapi.testclient import TestClient
 
@@ -316,19 +311,15 @@ def test_real_sso_admin_subject_and_server_time_are_retained_on_replay(configure
 
     def verified(request):
         assert request.url.path == "/auth/me"
-        now = datetime.now(timezone.utc)
-        return httpx.Response(200, json={"id": identity["subject"], "role": identity["role"],
-            "application_access": {"schema_version": 1, "issuer": settings.AUTH_ISSUER,
-                "subject": identity["subject"], "role": identity["role"], "applications": ["project-workflow"],
-                "revision": 1, "enforced": True, "observed_at": now.isoformat(),
-                "expires_at": (now + timedelta(seconds=60)).isoformat()}})
+        return httpx.Response(200, json=human_identity(identity["subject"], role=identity["role"]))
 
     monkeypatch.setattr(sso.httpx, "AsyncClient", lambda **kwargs: original_client(
         transport=httpx.MockTransport(verified), **kwargs))
     path = f"/api/workflows/{base['workflow_id']}/catalog/drafts/2/publication"
     command = {"expected_version": 1, "expected_sha256": base["content_sha256"],
                "draft_sha256": saved["content_sha256"], "operation_key": "verified-publish"}
-    headers = {"Authorization": "Bearer verified-human-session", "X-Publisher-Subject": "forged-admin"}
+    headers = {"Authorization": "Bearer " + human_token(identity["subject"], issuer=settings.AUTH_ISSUER),
+               "X-Publisher-Subject": "forged-admin"}
     with TestClient(create_app()) as authenticated:
         assert authenticated.post(path, json={**command, "published_by_subject": "forged"},
                                   headers=headers).status_code == 422
@@ -343,6 +334,8 @@ def test_real_sso_admin_subject_and_server_time_are_retained_on_replay(configure
         identity["role"] = "user"
         assert authenticated.post(path, json=command, headers=headers).status_code == 403
         identity.update(role="admin", subject="verified-admin-B")
+        assert authenticated.post(path, json=command, headers=headers).status_code == 503
+        headers["Authorization"] = "Bearer " + human_token(identity["subject"], issuer=settings.AUTH_ISSUER)
         replay = authenticated.post(path, json=command, headers=headers)
         assert replay.status_code == 200 and replay.json() == first.json()
         operation = authenticated.get(

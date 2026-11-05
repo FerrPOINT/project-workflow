@@ -17,7 +17,7 @@ def test_original_clock_is_a_restriction_and_reset_does_not_grant_authority():
     clock = RequestClock.from_access(access)
     assert 0 < clock.remaining() <= 10
     assert clock.deadline == access.monotonic_deadline()
-    assert clock.expires_at <= access.proof.expires_at.timestamp()
+    assert clock.expires_at <= access.expires_at.timestamp()
     token = current_clock.set(clock)
     try:
         assert current_clock.get() is clock

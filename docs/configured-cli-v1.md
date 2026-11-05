@@ -36,7 +36,9 @@ SDK/UI/skills являются независимыми pins.
 токена. Platform дополнительно требует выделенный `PROJECT_WORKFLOW_API_TOKEN`
 и `FLEET_AGENT_ID`; общий чужой PAT не заменяет отсутствующий credential.
 
-Platform human routes требуют актуальный enforced application_access от Auth.
+Platform human routes требуют проверенный Auth credential, активную учётную запись,
+подтверждённую роль и действующий срок, без отдельного application_access grant.
+Административные и предметные права проверяются отдельно.
 Machine routes проверяют служебную identity, scopes, назначение и владение.
 Standalone не использует Auth и не запускается автоматически после его отказа.
 
