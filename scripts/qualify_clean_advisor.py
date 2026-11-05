@@ -25,7 +25,8 @@ from project_workflow.supervisor.diagnostics import capture_attempt, text_snapsh
 ROOT = Path(__file__).resolve().parents[1]
 LABELS = ROOT / "docs/evidence/advisor-v18-qualification-cases-20261104.json"
 LABELS_SHA256 = "277f399956c59530d59c81137da513e332f9baec2d5cacab6973b60672710e5c"
-POLICY = "supervisor-evaluator-v18"
+POLICY = "supervisor-evaluator-v19"
+SYSTEM_SHA256 = "7ee97ccaa0914fe77b7ce881268b6dbe855ca2fd9e6edbc17df8a42e4b1edd48"
 MAX_CALLS = 36
 ROUTE_PROBE_LIMIT = 4
 
@@ -58,10 +59,14 @@ def route_probes(cases: dict[str, dict]) -> list[dict[str, Any]]:
 
 def probe_route(output: Path, artifact: dict, cases: dict[str, dict]) -> dict[str, Any]:
     """One attempt per probe; a failure stops the route checkpoint, never downgrades."""
+    budget = artifact["http_budget"]
+    remaining = budget["campaign_limit"] - budget["campaign_already_attempted"] - budget["reserved_live_calls"]
+    if ROUTE_PROBE_LIMIT > min(remaining, budget["new_call_limit"]):
+        raise ValueError("Route probes exceed the remaining campaign budget")
     probes = route_probes(cases)
     journal: dict[str, Any] = {
         "schema": "advisor-route-preflight-v1", "policy": POLICY,
-        "campaign_limit": 134, "campaign_already_attempted": 70,
+        "campaign_limit": budget["campaign_limit"], "campaign_already_attempted": budget["campaign_already_attempted"],
         "qualification_reserve": 36, "live_reserve": 24, "max_http_calls": ROUTE_PROBE_LIMIT,
         "attempted_calls": 0, "qualified": False, "status": "prepared", "probes": probes,
         "source_sha256": {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
@@ -138,9 +143,19 @@ def load_cases() -> tuple[dict, dict[str, dict]]:
     if hashlib.sha256(LABELS.read_bytes()).hexdigest() != LABELS_SHA256:
         raise ValueError("Frozen qualification inputs differ from the reviewed artifact")
     artifact = json.loads(LABELS.read_text(encoding="utf-8"))
-    if (artifact["policy"] != POLICY or PromptBuilder.PROMPT_VERSION != POLICY
-            or artifact["system_sha256"] != hashlib.sha256(PromptBuilder.SYSTEM_PROMPT.encode()).hexdigest()):
+    if (artifact["policy"] != "supervisor-evaluator-v18"
+            or artifact["system_sha256"] != "6e00082f63c0ce05166a751225afd6eb3f2aa9194757b905e175e0089f3b7c9a"
+            or PromptBuilder.PROMPT_VERSION != POLICY
+            or SYSTEM_SHA256 != hashlib.sha256(PromptBuilder.SYSTEM_PROMPT.encode()).hexdigest()):
         raise ValueError("Frozen qualification policy differs from the actual prompt")
+    # Reuse immutable inputs and labels, never previous-policy model results.
+    artifact["policy"] = POLICY
+    artifact["system_sha256"] = SYSTEM_SHA256
+    artifact["planned_evaluations"] = [dict(slot, policy=POLICY) for slot in artifact["planned_evaluations"]]
+    artifact["settings"]["response_format"] = {"type": "json_schema"}
+    artifact["reuse"] = []
+    artifact["http_budget"].update(campaign_limit=152, campaign_already_attempted=96,
+                                   new_call_limit=0, reused_exact_successful_evaluations=0)
     cases = {case["id"]: case for case in artifact["cases"]}
     if not cases or len(cases) != len(artifact["cases"]) or len(cases) * 2 > MAX_CALLS:
         raise ValueError("Qualification requires distinct reviewed cases within the call cap")
@@ -207,7 +222,7 @@ def execute(output: Path, artifact: dict, cases: dict[str, dict], slots: list[di
     if not slots or len(slots) > MAX_CALLS:
         raise ValueError("Qualification requires between 1 and 36 predeclared calls")
     budget = artifact["http_budget"]
-    remaining = budget["campaign_limit"] - budget["campaign_already_attempted"]
+    remaining = budget["campaign_limit"] - budget["campaign_already_attempted"] - budget["reserved_live_calls"]
     if len(slots) > min(remaining, budget["new_call_limit"]):
         raise ValueError("Planned calls exceed the remaining campaign budget")
     system = PromptBuilder.SYSTEM_PROMPT

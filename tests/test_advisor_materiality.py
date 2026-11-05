@@ -21,6 +21,10 @@ def test_current_prompt_preserves_checkpoint_outside_reviewed_instructions():
         "routine implementation or usage details consistent with the supplied requirements.\n"
         "Your assessments are not report evidence: identifying a gap in one reason does not supply "
         "the missing information required by another criterion.\n"
+        "Reporting that required material is absent does not supply its contents; it may satisfy a "
+        "criterion asking for its availability. A substantive account of known decisions and any "
+        "specific unanswered material questions can satisfy an account criterion without resolving "
+        "those questions.\n"
     )
     boundary = "respect explicit later changes. Do not invent facts.\n"
     assert original.count(boundary) == 1
@@ -32,8 +36,8 @@ def test_current_prompt_preserves_checkpoint_outside_reviewed_instructions():
     ).replace(
         'assessments maps every listed label to exactly {"covered": boolean, "reason": nonempty string}. ',
         'assessments maps every listed label to exactly {"covered": boolean, "reason": nonempty string, '
-        '"required_change": string or null}. For a false mark, required_change names the sufficient '
-        'correction; for a true mark it is null. ',
+        '"required_change": string or null}. For a false mark, required_change must describe work '
+        'that would satisfy that same criterion, not merely disclose its gap; for a true mark it is null. ',
     ).replace(
         "Return one assessment per listed label, judging the whole criterion and only its applicable branch. ",
         "Evaluate a conditional requirement only when its condition holds for the reported work outcome; "
@@ -44,7 +48,7 @@ def test_current_prompt_preserves_checkpoint_outside_reviewed_instructions():
         "not just its incomplete result or an unanswered question; ",
     )
     assert PromptBuilder.SYSTEM_PROMPT == expected
-    assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v18"
+    assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v19"
 
 
 @pytest.mark.parametrize("size", [0, 37])

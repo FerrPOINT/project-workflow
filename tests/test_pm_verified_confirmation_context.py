@@ -177,7 +177,7 @@ def test_old_pm_frozen_proof_replays_unchanged_after_business_review_upgrade(
     configured, supervisor_llm, monkeypatch, old_version,
 ):
     selector, result = complete(configured, supervisor_llm, monkeypatch)
-    assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v18"
+    assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v19"
     history_id = result["terminal_receipt"]["history_id"]
     with SAUnitOfWork() as uow:
         # Seed a synthetic retained snapshot, never select an old execution policy.

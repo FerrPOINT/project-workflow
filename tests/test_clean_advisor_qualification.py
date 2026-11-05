@@ -70,7 +70,7 @@ def test_default_is_offline_and_prints_only_36_metadata_slots(monkeypatch, capsy
     assert len(counts) == 18 and set(counts.values()) == {2}
     assert {slot["sample"] for slot in plan["requests"]} == {1, 2}
     assert len({(slot["case_id"], slot["sample"]) for slot in plan["requests"]}) == 36
-    assert {slot["policy"] for slot in plan["requests"]} == {"supervisor-evaluator-v18"}
+    assert {slot["policy"] for slot in plan["requests"]} == {"supervisor-evaluator-v19"}
     assert all(slot["status"] == "not_run" and "report" not in slot for slot in plan["requests"])
     constructor.assert_not_called()
 
@@ -273,6 +273,26 @@ def test_route_preflight_is_offline_and_freezes_four_probes(frozen, monkeypatch,
         assert probe["response_format"]["type"] == "json_schema"
         assert probe["response_format"]["json_schema"]["strict"] is True
     assert result["probes"][3]["system"] == runner.PromptBuilder.SYSTEM_PROMPT
+    constructor.assert_not_called()
+
+
+@pytest.mark.parametrize("operation", [runner.execute, runner.probe_route])
+@pytest.mark.parametrize("budget_change", [
+    {"new_call_limit": 0},
+    {"campaign_already_attempted": 110, "campaign_limit": 134, "new_call_limit": 36},
+])
+def test_both_paths_refuse_paused_or_reserved_budget_before_journal_and_client(
+    frozen, tmp_path, monkeypatch, operation, budget_change,
+):
+    artifact, cases, slots = frozen
+    artifact["http_budget"].update(budget_change)
+    constructor = Mock(side_effect=AssertionError("No client while the budget is paused or reserved"))
+    monkeypatch.setattr(runner, "OpenAICompatibleClient", constructor)
+    output = tmp_path / "refused.json"
+    args = [output, artifact, cases] + ([slots[:1]] if operation is runner.execute else [])
+    with pytest.raises(ValueError, match="remaining campaign budget"):
+        operation(*args)
+    assert not output.exists()
     constructor.assert_not_called()
 
 

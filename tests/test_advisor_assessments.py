@@ -185,7 +185,7 @@ def test_standalone_fallback_uses_existing_contract_ids_before_aliasing():
 def test_prompt_keeps_delegate_allowance_without_old_role_aliases():
     prompt = PromptBuilder.build_user_prompt("ignored", _phase(delegate=object()), _report(), evaluation_items=ITEMS)
     assert json.loads(prompt)["allowed_verdicts"] == ["PASS", "PARTIAL", "BLOCKED", "DELEGATE"]
-    assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v18"
+    assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v19"
     assert not hasattr(PromptBuilder, "PM_SYSTEM_PROMPT")
     assert not hasattr(PromptBuilder, "PM_PROMPT_VERSION")
     system = PromptBuilder.SYSTEM_PROMPT

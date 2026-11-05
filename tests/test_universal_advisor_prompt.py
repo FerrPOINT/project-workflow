@@ -38,7 +38,7 @@ def _phase(code="REVIEW", delegate=None):
 
 def test_short_system_is_role_neutral_and_has_one_assessment_per_criterion():
     system = PromptBuilder.SYSTEM_PROMPT
-    assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v18"
+    assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v19"
     assert len(system) < 4096
     assert "exactly verdict, assessments, blockers and confidence" in system
     assert "one assessment per listed label" in system

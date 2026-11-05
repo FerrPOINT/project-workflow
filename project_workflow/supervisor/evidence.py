@@ -44,7 +44,7 @@ def validate_frozen_evaluation(
     ):
         raise ConflictError("Terminal frozen fingerprint inputs are missing or invalid")
     context_fingerprint = state.get("phase_context_fingerprint")
-    if (state.get("prompt_version") == "supervisor-evaluator-v18" and (
+    if (state.get("prompt_version") in ("supervisor-evaluator-v18", "supervisor-evaluator-v19") and (
                 set(state) != current_keys or not isinstance(context_fingerprint, str))
             or "phase_context_fingerprint" in state and (
                 not isinstance(context_fingerprint, str)

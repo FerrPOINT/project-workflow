@@ -41,7 +41,7 @@ def test_pm_phase_uses_the_same_policy_and_payload_as_another_role(delegate, exp
     prompt = PromptBuilder.build_user_prompt("CASE-1", phase, report, ITEMS if explicit else None)
     phase.code = "ANOTHER-ROLE"
     assert PromptBuilder.build_user_prompt("OTHER-TASK", phase, report, ITEMS if explicit else None) == prompt
-    assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v18"
+    assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v19"
     assert not hasattr(PromptBuilder, "PM_PROMPT_VERSION")
 
 

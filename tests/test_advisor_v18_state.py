@@ -2,14 +2,17 @@
 
 import json
 from copy import deepcopy
+from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 
 from project_workflow.application import standalone
 from project_workflow.domain.exceptions import ConflictError
 from project_workflow.domain.standalone import StandaloneFence
 from project_workflow.infrastructure.db import models as m
-from project_workflow.infrastructure.llm import OpenAICompatibleClient
+from project_workflow.infrastructure.llm import OpenAICompatibleClient, PromptBuilder
+from project_workflow.interfaces.ui.app import create_app
 from project_workflow.supervisor.evidence import validate_frozen_evaluation
 from tests._report_helpers import report_json
 from tests.test_standalone_execution import local_execution as local_execution
@@ -33,9 +36,11 @@ def submit_partial(uow, start, monkeypatch):
     return command
 
 
+@pytest.mark.parametrize("policy", ["supervisor-evaluator-v18", "supervisor-evaluator-v19"])
 def test_supplement_gets_exact_phase_facts_and_assessment_then_next_phase_is_empty(
-    local_execution, monkeypatch,
+    local_execution, monkeypatch, policy,
 ):
+    monkeypatch.setattr(PromptBuilder, "PROMPT_VERSION", policy)
     uow, start = local_execution
     original = submit_partial(uow, start, monkeypatch)
     calls = []
@@ -56,10 +61,13 @@ def test_supplement_gets_exact_phase_facts_and_assessment_then_next_phase_is_emp
     assert accepted["phase_code"] == "local.2"
     row = uow.step_history.list(task_id=uow.tasks.list()[0].id, limit=None)[0].to_dict()
     snapshot = row["evaluation_snapshot"]
+    frozen = deepcopy(snapshot)
+    call_count = len(calls)
     assert len(snapshot["contract_fingerprint_state"]["phase_context_fingerprint"]) == 64
     assert validate_frozen_evaluation(
         row, snapshot, replay_fingerprint=row["replay_fingerprint"],
     ) == row["covered_item_ids"]
+    assert snapshot == frozen and len(calls) == call_count
     prior_snapshot = deepcopy(snapshot)
     del prior_snapshot["contract_fingerprint_state"]["phase_context_fingerprint"]
     with pytest.raises(ConflictError, match="phase context"):
@@ -71,6 +79,51 @@ def test_supplement_gets_exact_phase_facts_and_assessment_then_next_phase_is_emp
     standalone.step(uow, report(start, 3, key="next-phase"))
     assert calls[1]["previous_reports"] == []
     assert all(item["previous_assessment"] is None for item in calls[1]["criteria"])
+
+
+def test_v18_result_replays_through_http_after_v19_activation_without_evaluation(local_execution, monkeypatch):
+    uow, start = local_execution
+    calls = []
+    current_system = PromptBuilder.SYSTEM_PROMPT
+    archive = Path(__file__).resolve().parents[1] / "docs/evidence/advisor-v18-verdict-boundary-dda58fa-20261104.json"
+    prior_system = json.loads(archive.read_text(encoding="utf-8"))["system"]
+    assert prior_system["sha256"] == "6e00082f63c0ce05166a751225afd6eb3f2aa9194757b905e175e0089f3b7c9a"
+    assert not prior_system["truncated"] and not prior_system["redacted"]
+
+    def answer(_self, **kwargs):
+        assert kwargs["system"] == prior_system["text"]
+        calls.append(json.loads(kwargs["user"]))
+        return response(calls[-1], True)
+
+    monkeypatch.setattr(PromptBuilder, "PROMPT_VERSION", "supervisor-evaluator-v18")
+    monkeypatch.setattr(PromptBuilder, "SYSTEM_PROMPT", prior_system["text"])
+    monkeypatch.setattr(OpenAICompatibleClient, "chat", answer)
+    with TestClient(create_app(), base_url="http://127.0.0.1", client=("127.0.0.1", 50000)) as client:
+        assert client.post("/internal/runtime/step", json=start.model_dump(mode="json")).status_code == 200
+        command = report(start, 1).model_dump(mode="json")
+        accepted = client.post("/internal/runtime/step", json=command)
+        assert accepted.status_code == 200, accepted.text
+        uow.session.expire_all()
+        task = uow.tasks.get_by_key(start.task, project_id=start.namespace_id)
+        assert task is not None
+        frozen = deepcopy([row.to_dict() for row in uow.step_history.list(task_id=task.id, limit=None)])
+        assert frozen[0]["evaluation_snapshot"]["prompt_version"] == "supervisor-evaluator-v18"
+
+        monkeypatch.setattr(PromptBuilder, "PROMPT_VERSION", "supervisor-evaluator-v19")
+        monkeypatch.setattr(PromptBuilder, "SYSTEM_PROMPT", current_system)
+        monkeypatch.setattr(OpenAICompatibleClient, "chat", lambda *_a, **_kw: pytest.fail("Readback cannot infer"))
+        replay = client.post("/internal/runtime/step", json=command)
+        assert replay.status_code == 200 and replay.json()["ok"] is True
+        assert replay.json()["result"] == accepted.json()["result"]
+        history = client.get("/internal/runtime/history", params={
+            "interaction_protocol": "configured-cli-v1", "namespace_id": start.namespace_id,
+            "task": start.task, "operation_key": command["operation_key"],
+        })
+        assert history.status_code == 200, history.text
+        assert history.json()["result"]["records"][0]["result"] == accepted.json()["result"]
+        uow.session.expire_all()
+        assert [row.to_dict() for row in uow.step_history.list(task_id=task.id, limit=None)] == frozen
+        assert len(calls) == 1
 
 
 @pytest.mark.parametrize("changed", ["report", "reason"])

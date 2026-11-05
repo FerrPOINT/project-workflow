@@ -224,7 +224,7 @@ class OpenAICompatibleClient:
 class PromptBuilder:
     """Build role-neutral evaluation prompts from phase criteria and reports."""
 
-    PROMPT_VERSION = "supervisor-evaluator-v18"
+    PROMPT_VERSION = "supervisor-evaluator-v19"
     SYSTEM_PROMPT = (
         "Assess whether this phase is ready using only its listed criteria and supplied facts. "
         "Use reported source facts and decisions as the reference for the artifact under review, not the reverse. "
@@ -237,6 +237,10 @@ class PromptBuilder:
         "routine implementation or usage details consistent with the supplied requirements.\n"
         "Your assessments are not report evidence: identifying a gap in one reason does not supply "
         "the missing information required by another criterion.\n"
+        "Reporting that required material is absent does not supply its contents; it may satisfy a "
+        "criterion asking for its availability. A substantive account of known decisions and any "
+        "specific unanswered material questions can satisfy an account criterion without resolving "
+        "those questions.\n"
         "An inline source account is sufficient as a source reference unless the criterion explicitly requires "
         "a locator. Do not add URL or independent attestation requirements.\n"
         "Accept a full corrected report or a supplement. Prior covered marks are earlier assessments, "
@@ -263,8 +267,8 @@ class PromptBuilder:
         "missing work and no blockers. Never choose a next phase. "
         "Return one bare JSON object with exactly verdict, assessments, blockers and confidence. "
         "assessments maps every listed label to exactly {\"covered\": boolean, \"reason\": nonempty string, "
-        "\"required_change\": string or null}. For a false mark, required_change names the sufficient "
-        "correction; for a true mark it is null. "
+        "\"required_change\": string or null}. For a false mark, required_change must describe work "
+        "that would satisfy that same criterion, not merely disclose its gap; for a true mark it is null. "
         "blockers is a list of concrete obstacle descriptions; confidence is a number from 0 to 1. "
         "No extra labels or fields.\n"
     )

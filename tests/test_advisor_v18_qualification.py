@@ -78,9 +78,15 @@ def historical(archives):
 def test_one_flat_file_preserves_original_gold_and_exact_inventory(loaded, archives, historical):
     artifact, cases = loaded
     assert hashlib.sha256(runner.LABELS.read_bytes()).hexdigest() == runner.LABELS_SHA256 == ACTIVE_SHA256
-    assert artifact["policy"] == PromptBuilder.PROMPT_VERSION == runner.POLICY == "supervisor-evaluator-v18"
+    assert artifact["policy"] == PromptBuilder.PROMPT_VERSION == runner.POLICY == "supervisor-evaluator-v19"
+    saved = json.loads(runner.LABELS.read_text(encoding="utf-8"))
+    assert saved["policy"] == "supervisor-evaluator-v18"
+    assert saved["system_sha256"] != artifact["system_sha256"]
+    assert saved["cases"] == artifact["cases"]
     assert artifact["system_sha256"] == hashlib.sha256(PromptBuilder.SYSTEM_PROMPT.encode()).hexdigest()
-    assert artifact["settings"] == archives["clean-workflow-case-labels-20261104.json"]["settings"]
+    settings = copy.deepcopy(archives["clean-workflow-case-labels-20261104.json"]["settings"])
+    settings["response_format"] = {"type": "json_schema"}
+    assert artifact["settings"] == settings
     assert len(cases) == len(artifact["cases"]) == 18
     assert len(historical) == 17
     assert runner.digest([case for case in artifact["cases"] if case["id"] != ACCESS_CONTROL]) == (
@@ -419,10 +425,10 @@ def test_frozen_schedule_and_paused_qualification_reject_every_plan(loaded, tmp_
         assert slot["labels_sha256"] == cases[slot["case_id"]]["labels_sha256"]
     budget = artifact["http_budget"]
     assert budget == {
-        "campaign_limit": 100, "campaign_already_attempted": 70, "reused_exact_successful_evaluations": 15,
+        "campaign_limit": 152, "campaign_already_attempted": 96, "reused_exact_successful_evaluations": 0,
         "new_call_limit": 0, "reserved_live_calls": 24, "qualified_slots_if_all_match": 36,
     }
-    assert sum(source["evaluations"] for source in artifact["reuse"]) == 15
+    assert artifact["reuse"] == []
     artifact = copy.deepcopy(artifact)
     artifact["http_budget"]["new_call_limit"] = 0
     output = tmp_path / "must-not-start.json"
@@ -438,7 +444,7 @@ def test_qualification_cannot_consume_the_reserved_live_budget(loaded, tmp_path)
     budget = artifact["http_budget"]
     assert budget["reserved_live_calls"] == 24
     remaining = budget["campaign_limit"] - budget["campaign_already_attempted"] - budget["reserved_live_calls"]
-    assert remaining == 6
+    assert remaining == 32
     budget["new_call_limit"] = remaining
     output = tmp_path / "must-not-spend-live-reserve.json"
     with pytest.raises(ValueError, match="remaining campaign budget"):
@@ -447,8 +453,11 @@ def test_qualification_cannot_consume_the_reserved_live_budget(loaded, tmp_path)
     runner.OpenAICompatibleClient.assert_not_called()
 
 
-def test_fifteen_reused_slots_match_the_exact_current_contract(loaded):
-    artifact, cases = loaded
+def test_fifteen_old_slots_remain_archived_not_reused_by_the_new_policy(loaded):
+    current, cases = loaded
+    artifact = json.loads(runner.LABELS.read_text(encoding="utf-8"))
+    assert current["reuse"] == []
+    assert current["system_sha256"] != artifact["system_sha256"]
     pairs = set()
     for source in artifact["reuse"]:
         path = runner.LABELS.parent / source["file"]
@@ -499,8 +508,7 @@ def test_changed_active_bytes_are_rejected_before_parsing_or_provider(loaded, tm
 
 @pytest.mark.parametrize("tamper", ["policy", "system", "payload_hash", "builder", "expected"])
 def test_inner_policy_payload_builder_and_expected_guards(loaded, tmp_path, monkeypatch, tamper):
-    artifact, _ = loaded
-    changed = copy.deepcopy(artifact)
+    changed = json.loads(runner.LABELS.read_text(encoding="utf-8"))
     case = changed["cases"][0]
     if tamper == "policy":
         changed["policy"] = "unapproved-policy"

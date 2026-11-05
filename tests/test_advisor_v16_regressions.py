@@ -264,7 +264,7 @@ def frozen_evaluation(policy):
     state = {"prompt_version": policy, "contract": contract, "evaluation_items": items,
              "previously_covered_ids": [], "delegation_allowed": False, "group": ["P"],
              "transition_routes": {}, "phase_graph": [], "evaluator_response_format": "json_object"}
-    if policy == "supervisor-evaluator-v18":
+    if policy in ("supervisor-evaluator-v18", "supervisor-evaluator-v19"):
         state["phase_context_fingerprint"] = _fingerprint_contract_state({"reports": [], "assessments": {}})
     digest = _fingerprint_contract_state(state)
     report = report_json("Owner decision: delta -1; Keep A-B! Preserve Case and punctuation.")

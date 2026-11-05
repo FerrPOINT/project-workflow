@@ -630,7 +630,7 @@ class TestEvaluatorV18PromptContract:
     """The controlled provider receives the universal criteria-only contract."""
 
     def test_prompt_version_invalidates_the_old_evidence_policy(self):
-        assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v18"
+        assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v19"
 
     def test_report_106_submission_circularity_reaches_provider_with_explicit_protocol_boundary(self):
         """Reproduce the saved PARTIAL reason, not a real model's semantic acceptance."""

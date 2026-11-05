@@ -53,7 +53,7 @@ def report():
 
 def test_v18_uses_one_role_neutral_assessment_contract():
     system = PromptBuilder.SYSTEM_PROMPT
-    assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v18"
+    assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v19"
     assert not hasattr(PromptBuilder, "PM_SYSTEM_PROMPT")
     assert not hasattr(PromptBuilder, "PM_PROMPT_VERSION")
     for rule in (
@@ -69,7 +69,7 @@ def test_v18_uses_one_role_neutral_assessment_contract():
         "BLOCKED requires an explicitly reported impediment to doing the phase work",
         "not just its incomplete result or an unanswered question",
         "DELEGATE requires permission, missing work and no blockers",
-        "required_change names the sufficient correction; for a true mark it is null",
+        "required_change must describe work that would satisfy that same criterion, not merely disclose its gap",
     ):
         assert system.count(rule) == 1
     for role_or_example in ("PM", "project_manager", "Tester", "189", "190", "C3", "E2"):
