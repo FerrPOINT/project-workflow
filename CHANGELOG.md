@@ -2,6 +2,16 @@
 
 ## Unreleased — Advisor V19 Candidate, Not Accepted
 
+- Attempt the qualified deployment without new Advisor calls. Fleet6eab59ad is
+  installed; Workflow79964f6 boots healthy with explicit platform/single-task-v1,
+  app-test/high/1200s/4000/json_schema. Integration is not accepted: human access
+  requires an uncompleted Auth admission migration, and PM CLI activation26 is
+  held by missing native provenance in historical runtime generations. Retain PM25,
+  credentials and all history; complete explicit image-only Workflow/web rollback
+  after confirming unchanged migrations/models and zero new history records.
+  No new PM acceptance or merge is claimed. Evidence and next scope are recorded
+  in the existing [diagnosis](docs/ADVISOR_DIAGNOSIS_20261101.md).
+
 - Qualify an explicit revised dataset without changing production prompt or old
   evidence:17 unchanged cases plus the predeclared unambiguous storage/access
   control. Retain the original disputed case as unresolved, never relabel its
