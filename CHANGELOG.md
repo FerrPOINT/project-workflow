@@ -2,11 +2,18 @@
 
 ## Unreleased — Typed Advisor V18 Checkpoints
 
+- Strict qualification stopped after13 new single-attempt calls:12 exact matches,
+  one disputed E2 mark on explicit replacement of the old document and source.
+  All13 responses have the complete schema; transport/format errors are absent.
+  Independent review validates56 of57 assessments and isolates E2 sufficiency
+  ambiguity; the overall PARTIAL is correct. Gold and prompt were not changed.
+  Campaign88/134,22 slots unrun and24 live calls still reserved. No Workflow
+  install/merge or new PM acceptance is claimed; no unchanged-series retry occurred.
 - Qualification helper now explicitly requests the current per-case strict schema
   and records prepared HTTP bodies, literal replies and the campaign counter.
   Frozen reports, labels and engine prompt are unchanged. Focused52 tests, Ruff
   and mypy169 PASS; independent preflight accepts the35 remaining slots and the
-  exact reuse of153/sample1. This is preparation, not a qualification result.
+  exact reuse of153/sample1. Preparation is accepted; the series result is above.
 - LiteLLM #3 merged as8fc705e2ab with reviewed head50ccf52. Full local make lint,
   frozen lock, secret scan and coverage5 PASS; existing244 targeted tests and5
   staged-runtime regressions remain applicable. No caps or rules were weakened.
@@ -17,8 +24,8 @@
   UI and inherited runtime fixes are unchanged; both health endpoints return200.
 - Three actual calls match: JSON-mode compatibility, the identical strict request
   that formerly returned unexpected42, and frozen missing-C4/153 with all six
-  assessments, PARTIAL and concrete corrections. Campaign75/134; full Workflow
-  qualification still needs35 slots plus the separate24-call live reserve.
+  assessments, PARTIAL and concrete corrections. Route checkpoint used75/134;
+  the subsequent qualification stop and current budget are recorded above.
   Workflow/Fleet/Hermes and the installed PM were not rebuilt or upgraded.
 
 ### Historical CP1 Before Adapter Activation (2026-11-04)
