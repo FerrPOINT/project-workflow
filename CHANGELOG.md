@@ -2,6 +2,17 @@
 
 ## Unreleased — Typed Advisor V18 Checkpoints
 
+- LiteLLM #3 at50ccf52 preserves the existing text-format field with one
+  production-line change. Independent source reviews found no blockers;
+  244 targeted tests and5 regressions against the staged Octo bundle pass.
+  The bundle preserves deployed overrides, UI and dependencies; independent
+  inventory and manifest verification pass. It is not activated or merged.
+- Full lint/type qualification remains open: hosted dispatch is rejected
+  with HTTP422; local make stops during Prisma/nodeenv provisioning. The
+  locked-Node retake stops on its npm wrapper before make. No source failure
+  or full-gate pass is claimed. Owned QA resources are cleaned; model budget
+  remains72/134. Next is gate completion or an explicit release exception,
+  followed by activation and real JSON-mode/schema/C4 checks.
 - Current CP1 is stopped on a reproduced provider-contract defect. The active
   LiteLLM1.109.0 ChatGPT adapter (source1403f0dc2ebd) removes text.format and
   max_output_tokens after the actual parent transform retained them. Offline
