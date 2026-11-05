@@ -42,7 +42,7 @@ def test_all_modes_use_one_configured_command_and_no_file_bootstrap(catalog, rol
     assert "never use a human token or local database fallback" in first
     assert "ONE Tracker task" in first and "Never create children" in first
     assert "Do not activate integration or integration_rework" in first
-    assert len(selected["phases"]) == 3
+    assert len(selected["phases"]) == (12 if role == "analyst" else 3)
     assert selected["execution_scopes"] == (["business"] if role in
         {"project_manager", "analyst", "architect"} else ["delivery"])
     text = " ".join(instruction_text(p) for p in selected["phases"])
@@ -129,7 +129,7 @@ def test_current_artifacts_have_exact_complete_source_provenance(catalog):
     assert json.loads(raw) == catalog
     assert hashlib.sha256(raw).hexdigest() == CATALOG_SHA256
     assert hashlib.sha256(manifest_bytes).hexdigest() == MANIFEST_SHA256
-    assert manifest["inventory"] == {"namespaces": 7, "workflows": 7, "modes": 8, "phases": 24}
+    assert manifest["inventory"] == {"namespaces": 7, "workflows": 7, "modes": 8, "phases": 33}
     assert manifest["task_identity"] == {"task_equals_root": True, "children": False, "decomposition_barriers": False}
     root = Path(__file__).parents[1]
     for reference in (manifest["instruction_source"], manifest["instruction_overlay"]):

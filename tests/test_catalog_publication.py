@@ -91,7 +91,7 @@ def test_saved_draft_is_not_activation_and_publication_only_changes_new_executio
     workflow_id = enrollment["workflow_id"]
     base = active(client, workflow_id)
     saved, command = draft(client, base)
-    assert saved["published"] is False and saved["active_catalog_version"] == 1
+    assert saved["published"] is False and saved["active_catalog_version"] == base["catalog_version"]
     assert active(client, workflow_id) == base
     assert step(configured).json() == before
     published = publication(client, base, saved)
@@ -113,7 +113,7 @@ def test_saved_draft_is_not_activation_and_publication_only_changes_new_executio
     with SAUnitOfWork() as uow:
         old = uow.tasks.get_by_key(assignment["task"], project_id=assignment["namespace_id"])
         new = uow.tasks.get_by_key(new_request["task"], project_id=assignment["namespace_id"])
-        assert uow.workflows.get_mode(old.mode_id).catalog_version == 1
+        assert uow.workflows.get_mode(old.mode_id).catalog_version == base["catalog_version"]
         assert uow.workflows.get_mode(new.mode_id).catalog_version == saved["catalog_version"]
         assert old.current_phase_id != new.current_phase_id
         assert uow.session.scalar(select(func.count()).select_from(m.WorkflowCatalogPublication)) == 1

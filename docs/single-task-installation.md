@@ -1,8 +1,8 @@
 # Single-Task Workflow Installation
 
 Workflow поддерживает opt-in установку собственного семейства `single-task-v1`,
-catalog version 1: семь namespaces, семь workflows, восемь modes и 24 phases.
-Default остаётся `legacy`. **Установка не активирует live исполнение**:
+catalog version 1: семь namespaces, семь workflows, восемь modes и 33 phases.
+Дефолт source-конфигурации — `single-task-v1`. **Установка не активирует live исполнение**:
 Tracker/Fleet source integration уже реализована; source qualification не является
 разрешением установки/активации на стенде. Exact source и оставшаяся live-граница:
 [Single-Task Instruction Audit](single-task-instruction-audit.md).
@@ -37,7 +37,7 @@ Drift, partial install и foreign collisions отклоняются без repai
 Unknown credential → 401, role runtime/assignment credential → 403,
 missing/divergent installation → 409, dependency unavailable → 503.
 Namespace ID — canonical positive decimal string; unknown ID → 404.
-Даже один binding возвращается только после persisted проверки всех 7/7/8/24.
+Даже один binding возвращается только после persisted проверки всех 7/7/8/33.
 Успешный ответ имеет `Cache-Control: no-store`.
 
 DTO содержит instruction profile/manifest hash, catalog version/hash, actual
@@ -51,11 +51,13 @@ Installed binding не является runtime admission или Tracker transit
 и `single_task_manifest_v1.json`, проверяемые по фактическим UTF-8/LF bytes:
 
 ```text
-catalog:  43d4293fae89e9aac1cc61aef78d46c421010e308e92a34dc966045e2c369ef5
-manifest: 62762bf58f337d9e063226aef58ea6c89cdfb2e87159056f1a6b2b6c4d1ddf3a
+catalog:  976f1272340189178fcab2b778ceead46f6f965be8150281e7b80afe31cb0afe
+manifest: 7aa0e6c758e2c31cd1dd69ce30826aecaf565e25e4f5fcedcdf9215fcddd1075
 ```
 
-Текущая миграция0028 уточняет read-only контекст Analyst. Старые catalog/manifest
+Текущая миграция0029 выбирает новый baseline Analyst2 с 12 фазами,
+сохраняя исходные mode/phase IDs уже запущенных задач.
+[Полный процесс и граница приёмки](analyst-workflow.md). Старые catalog/manifest
 сохранены как исторические данные; новые назначения используют текущую семью.
 Task/step history и исходные hashes прежних receipts не переписываются.
 

@@ -50,7 +50,7 @@ def test_new_profile_identities_cannot_impersonate_legacy_or_base_metadata():
     legacy = json.loads(config.MANAGED_CATALOG_PATH.read_text(encoding="utf-8"))
     assert len(catalog["workflows"]) == len(manifest["roles"]) == 7
     assert sum(len(w["modes"]) for w in catalog["workflows"]) == 8
-    assert sum(len(m["phases"]) for w in catalog["workflows"] for m in w["modes"]) == 24
+    assert sum(len(m["phases"]) for w in catalog["workflows"] for m in w["modes"]) == 33
     assert {w["key"] for w in legacy["workflows"]}.isdisjoint(w["key"] for w in catalog["workflows"])
     codes = set()
     for workflow in catalog["workflows"]:

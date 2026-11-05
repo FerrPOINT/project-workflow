@@ -48,7 +48,7 @@ def test_real_bootstrap_repeats_with_exact_persisted_ids(database, monkeypatch, 
     assert first == second
     assert first["instruction_manifest_sha256"] == MANIFEST_SHA256
     assert first["workflow_catalog_sha256"] == CATALOG_SHA256
-    assert [first[k] for k in ("namespaces", "workflows", "modes", "phases")] == [7, 7, 8, 24]
+    assert [first[k] for k in ("namespaces", "workflows", "modes", "phases")] == [7, 7, 8, 33]
     assert first["runtime_ready"] is first["live_activation_allowed"] is False
     with SAUnitOfWork(database) as uow:
         assert observe_installation(uow).model_dump(mode="json", by_alias=True) == first
@@ -67,7 +67,7 @@ def test_config_selector_runs_real_bootstrap_subprocess_twice(tmp_path):
         results.append(result)
     assert results[0] == results[1]
     assert results[0]["instruction_profile"] == "single-task-v1"
-    assert results[0]["modes"] == 8 and results[0]["phases"] == 24
+    assert results[0]["modes"] == 8 and results[0]["phases"] == 33
     assert results[0]["live_activation_allowed"] is False
 
 

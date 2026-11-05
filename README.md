@@ -1,5 +1,8 @@
 # Project Workflow
 
+Дефолтный [Workflow аналитика](docs/analyst-workflow.md): 12 фаз от исследования
+и проверки гипотез до первичного ТЗ и проверенной публикации `analysis.md`.
+
 <p align="center">
   <img src="docs/assets/project-workflow-banner.jpg" alt="Project Workflow - phased work orchestration" />
 </p>

@@ -76,7 +76,7 @@ def test_seeded_native_history_stays_read_only_without_the_old_image(pg_url, mon
     ("developer", "initial"), ("developer", "rework"), ("reviewer", "delivery"),
     ("tester", "delivery"), ("devops", "delivery"),
 ], indirect=True)
-def test_all_professions_persist_three_phases_and_exact_replays(configured, supervisor_llm, monkeypatch):
+def test_all_professions_persist_selected_phases_and_exact_replays(configured, supervisor_llm, monkeypatch):
     initial = protocol.enroll(configured)
     supervisor_llm("PASS")
     pm = configured[1]["role_key"] == "project_manager"
@@ -85,7 +85,8 @@ def test_all_professions_persist_three_phases_and_exact_replays(configured, supe
         "content_hash": "a" * 64, "owner_subject": protocol.OWNER, "stage": "Draft",
     }
     monkeypatch.setattr(configured_cli, "confirmation", lambda _payload: confirmation)
-    for version in (1, 2, 3):
+    count = 12 if configured[1]["role_key"] == "analyst" else 3
+    for version in range(1, count + 1):
         command = {
             "report": report_json(f"Controlled completed phase {version}"),
             "operation_key": f"pg-report-{version}", "expected_version": version,
@@ -96,11 +97,11 @@ def test_all_professions_persist_three_phases_and_exact_replays(configured, supe
         assert response.status_code == 200, response.text
         assert protocol.step(configured, **command).json() == response.json()
     result = response.json()["result"]
-    assert result["complete"] is True and result["version"] == 4
+    assert result["complete"] is True and result["version"] == count + 1
     assert result["execution_ref"] == initial["execution_ref"]
     assert result["terminal_receipt"]["confirmation_id"] == (confirmation["id"] if pm else None)
     with SAUnitOfWork() as uow:
-        assert uow.session.scalar(select(func.count()).select_from(m.TaskStepHistoryEntry)) == 3
+        assert uow.session.scalar(select(func.count()).select_from(m.TaskStepHistoryEntry)) == count
         assert uow.session.scalar(select(func.count()).select_from(m.PMExecution)) == 0
         assert uow.session.scalar(select(func.count()).select_from(m.PMRun)) == 0
 

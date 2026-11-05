@@ -59,12 +59,16 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 @pytest.mark.integration
 @pytest.mark.parametrize("role", ["project_manager", "analyst", "developer"])
-def test_pm_analysis_acceptance_preserves_populated_history_on_postgres(pg_url, monkeypatch, role):
+@pytest.mark.parametrize("predecessor", [
+    ("0024_analyst_research_catalog", "332cfd4fb3419d5765008e196cffb508540462ddd89b798ab4e89379ac5b1796"),
+    ("0028_analyst_read_sources", "62762bf58f337d9e063226aef58ea6c89cdfb2e87159056f1a6b2b6c4d1ddf3a"),
+])
+def test_pm_analysis_acceptance_preserves_populated_history_on_postgres(pg_url, monkeypatch, role, predecessor):
     from tests.test_configured_catalog_migration import assert_populated_catalog_upgrade_preserves_history
 
     assert_populated_catalog_upgrade_preserves_history(
         get_engine(pg_url), monkeypatch,
-        ("0024_analyst_research_catalog", "332cfd4fb3419d5765008e196cffb508540462ddd89b798ab4e89379ac5b1796"),
+        predecessor,
         role,
     )
 
@@ -136,12 +140,12 @@ def test_current_single_task_family_preserves_legacy_rows_and_history_on_postgre
         first = observe_installation(uow)
         assert first.workflow_catalog_sha256 == sha256(catalog_bytes).hexdigest()
         assert first.instruction_manifest_sha256 == sha256(manifest_bytes).hexdigest()
-        assert [first.namespaces, first.workflows, first.modes, first.phases] == [7, 7, 8, 24]
+        assert [first.namespaces, first.workflows, first.modes, first.phases] == [7, 7, 8, 33]
         assert len({binding.namespace_id for binding in first.bindings}) == 7
         assert len({binding.workflow_id for binding in first.bindings}) == 7
         modes = [mode for binding in first.bindings for mode in binding.modes]
         assert len({mode.mode_id for mode in modes}) == 8
-        assert len({phase_id for mode in modes for phase_id in mode.phase_ids}) == 24
+        assert len({phase_id for mode in modes for phase_id in mode.phase_ids}) == 33
     with SAUnitOfWork(engine) as uow:
         assert ensure_single_task_catalog(uow) == first
         uow.commit()
@@ -269,7 +273,7 @@ def test_pm_ownership_catalog_lock_order_and_incomplete_schema(pg_url, winner):
     assert not schema_is_ready(engine)
     with pytest.raises(DatabaseRecreateRequired):
         ensure_migrated(engine)
-    assert database_revisions(engine) == {"0028_analyst_read_sources"}
+    assert database_revisions(engine) == {"0029_analyst_twelve_phases"}
 
 
 @pytest.mark.integration
@@ -500,7 +504,7 @@ class TestPostgresInitialMigration:
             version = conn.execute(
                 text("SELECT version_num FROM project_workflow.alembic_version")
             ).scalar_one()
-        assert version == migration_head() == "0028_analyst_read_sources"
+        assert version == migration_head() == "0029_analyst_twelve_phases"
         assert schema_is_ready(engine) is True
 
     def test_managed_bootstrap_serializes_with_public_catalog_creation(self, pg_url):

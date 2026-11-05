@@ -48,18 +48,26 @@ def _structure(modes: list[dict]) -> list[dict]:
     return result
 
 
-def _definition(workflow_key: str | None) -> dict:
+def _definition(workflow_key: str | None, version: int | None = None) -> dict:
     from project_workflow.infrastructure.db.single_task_catalog import load_profile
 
     catalog, _ = load_profile()
-    definition = next((item for item in catalog["workflows"] if item["key"] == workflow_key), None)
-    if definition is None:
-        raise ConflictError("Current configured single-task workflow required")
-    return definition
+    visited = set()
+    while True:
+        definition = next((item for item in catalog["workflows"] if item["key"] == workflow_key), None)
+        if definition is None:
+            raise ConflictError("Current configured single-task workflow required")
+        if version is None or version >= definition.get("baseline_catalog_version", 1):
+            return definition
+        previous = definition.get("previous_baseline_manifest_sha256")
+        if not previous or previous in visited:
+            raise ConflictError("Unknown sealed baseline revision")
+        visited.add(previous)
+        catalog, _ = load_profile(previous)
 
 
 def _validate_rows(uow: SAUnitOfWork, workflow: Any, version: int, modes: list[dict]) -> None:
-    definition = _definition(workflow.key)
+    definition = _definition(workflow.key, version)
     baseline = _normalize(definition["modes"])
     if _structure(modes) != _structure(baseline):
         raise ConflictError("Only text may change; role, scopes, skills and phase structure are frozen")
@@ -79,8 +87,10 @@ def read_revision(uow: SAUnitOfWork, workflow: Any, version: int, *, selected: b
             m.WorkflowCatalogPublication.workflow_id == workflow.id))
         if latest is not None and latest != workflow.active_catalog_version:
             raise ConflictError("Active publication pointer changed outside publication")
-    if version == 1:
-        modes = _normalize(_definition(workflow.key)["modes"])
+    definition = _definition(workflow.key, version)
+    baseline_version = definition.get("baseline_catalog_version", 1)
+    if version == baseline_version:
+        modes = _normalize(definition["modes"])
     else:
         receipt = uow.session.get(m.WorkflowCatalogPublication, (workflow.id, version))
         if receipt is None:
@@ -91,7 +101,7 @@ def read_revision(uow: SAUnitOfWork, workflow: Any, version: int, *, selected: b
     _validate_rows(uow, workflow, version, modes)
     result = {"workflow_id": workflow.id, "catalog_version": version,
               "content_sha256": payload_sha256(modes), "modes": modes}
-    if version > 1:
+    if version != baseline_version:
         assert receipt is not None
         published_at = receipt.published_at
         if published_at is not None:
@@ -147,7 +157,8 @@ def read_draft(uow: SAUnitOfWork, workflow_id: int, version: int) -> dict:
     if not modes:
         raise NotFoundError("Saved instruction draft not found")
     _validate_rows(uow, workflow, version, modes)
-    if version == 1 or uow.session.get(m.WorkflowCatalogPublication, (workflow_id, version)) is not None:
+    if (version == _definition(workflow.key, version).get("baseline_catalog_version", 1)
+            or uow.session.get(m.WorkflowCatalogPublication, (workflow_id, version)) is not None):
         return {**read_revision(uow, workflow, version), "published": True,
                 "active_catalog_version": workflow.active_catalog_version}
     return _draft_result(workflow, version, modes)
@@ -162,6 +173,8 @@ def read_pending_draft(uow: SAUnitOfWork, workflow_id: int) -> dict | None:
 
 def save_draft(uow: SAUnitOfWork, workflow_id: int, command: CatalogDraft) -> dict:
     workflow = _locked(uow, workflow_id)
+    if workflow.active_catalog_version < _definition(workflow.key).get("baseline_catalog_version", 1):
+        raise ConflictError("Upgrade the sealed catalog baseline before editing instructions")
     _cas(uow, workflow, command.expected_version, command.expected_sha256)
     modes = _normalize(command.modes)
     if _structure(modes) != _structure(_normalize(_definition(workflow.key)["modes"])):

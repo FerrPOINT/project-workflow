@@ -8,11 +8,13 @@ from project_workflow.domain.base_admission import Sha256
 from project_workflow.domain.base_binding import DatabaseId
 
 PROFILE = "single-task-v1"
-CATALOG_SHA256 = "43d4293fae89e9aac1cc61aef78d46c421010e308e92a34dc966045e2c369ef5"
-MANIFEST_SHA256 = "62762bf58f337d9e063226aef58ea6c89cdfb2e87159056f1a6b2b6c4d1ddf3a"
+CATALOG_SHA256 = "976f1272340189178fcab2b778ceead46f6f965be8150281e7b80afe31cb0afe"
+MANIFEST_SHA256 = "7aa0e6c758e2c31cd1dd69ce30826aecaf565e25e4f5fcedcdf9215fcddd1075"
 RETAINED_CATALOG_SHA256 = "86e6c983b7aa6a2c99da11d1d4b1f1b4563ff913262236903a19bc86bdec2d67"
 RETAINED_MANIFEST_SHA256 = "652a38c0f7bdb48a569aa3fcd5c2e81e153db6e22b5201cfb6ce15c988dd57f3"
 RETAINED_PROFILE_CATALOGS = {
+    "62762bf58f337d9e063226aef58ea6c89cdfb2e87159056f1a6b2b6c4d1ddf3a":
+        "43d4293fae89e9aac1cc61aef78d46c421010e308e92a34dc966045e2c369ef5",
     "9384121a0c1bc9c869a25fcdf11cab4064a0491ebcf329a6310229874ab835d0":
         "6a1decb0b088eabc34951a0f4892fab7ea0b7b25906af5c3f2855b68b85446cb",
     "ab182b9bc6f7182c6250ba20cc322749f6fbae28ddc183765fbd888a658900e6":
@@ -54,7 +56,7 @@ class SingleTaskModeBinding(_Observation):
     mode_id: DatabaseId
     key: str
     execution_scopes: list[Literal["business", "delivery"]]
-    phase_ids: list[DatabaseId] = Field(min_length=3, max_length=3)
+    phase_ids: list[DatabaseId] = Field(min_length=1)
 
 
 class SingleTaskNamespaceBinding(_Observation):
@@ -85,7 +87,7 @@ class SingleTaskInstallation(_Observation):
     namespaces: Literal[7] = 7
     workflows: Literal[7] = 7
     modes: Literal[8] = 8
-    phases: Literal[24] = 24
+    phases: int = Field(ge=1)
     bindings: list[SingleTaskNamespaceBinding] = Field(min_length=7, max_length=7)
     runtime_ready: Literal[False] = False
     live_activation_allowed: Literal[False] = False

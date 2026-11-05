@@ -135,7 +135,7 @@ def test_pm_selected_review_and_exact_owner_consent_precede_handoff(generated):
 
 def test_generator_keeps_single_task_inventory_architecture_rework_and_devops_boundaries(generated):
     catalog, manifest = generated
-    assert manifest["inventory"] == {"namespaces": 7, "workflows": 7, "modes": 8, "phases": 24}
+    assert manifest["inventory"] == {"namespaces": 7, "workflows": 7, "modes": 8, "phases": 33}
     assert manifest["task_identity"] == {"task_equals_root": True, "children": False, "decomposition_barriers": False}
     for workflow in catalog["workflows"]:
         for mode in workflow["modes"]:

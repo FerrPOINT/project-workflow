@@ -167,8 +167,9 @@ def _observe_profile(uow: SAUnitOfWork, catalog: dict, manifest: dict) -> Single
     memberships = uow.workflows.count_professions_by_workflow()
     for definition in catalog["workflows"]:
         role = definition["role_key"]
+        baseline_version = definition.get("baseline_catalog_version", 1)
         workflow = installed_workflows.get(definition["key"])
-        if (workflow is None or workflow.id is None or workflow.active_catalog_version < 1
+        if (workflow is None or workflow.id is None or workflow.active_catalog_version < baseline_version
             or workflow.name != config.MANAGED_NAMESPACE_WORKFLOW_NAME
             or workflow.description != definition["description"]):
             raise ValueError("Single-task installed workflow missing or divergent")
@@ -176,11 +177,13 @@ def _observe_profile(uow: SAUnitOfWork, catalog: dict, manifest: dict) -> Single
             key=definition["key"], name=definition["name"], description=definition["description"], role_key=role,
             modes=[ManagedMode.model_validate(mode) for mode in definition["modes"]],
         )
-        _assert_existing_workflow(uow, workflow, expected, catalog_version=1)
-        if workflow.active_catalog_version > 1:
+        _assert_existing_workflow(uow, workflow, expected, catalog_version=baseline_version)
+        if workflow.active_catalog_version > baseline_version:
             # Baseline provenance is immutable. Text publications have their own
             # receipts; never stamp mutable editor rows with the sealed v1 hash.
-            if manifest_sha256 != MANIFEST_SHA256:
+            predecessors = {item.get("previous_baseline_manifest_sha256")
+                            for item in load_profile()[0]["workflows"]}
+            if manifest_sha256 != MANIFEST_SHA256 and manifest_sha256 not in predecessors:
                 raise ValueError("Retained native catalogs cannot publish configured revisions")
             from project_workflow.application.catalog_publication import read_revision
 
@@ -200,9 +203,9 @@ def _observe_profile(uow: SAUnitOfWork, catalog: dict, manifest: dict) -> Single
             raise ValueError("Single-task installed namespace missing or divergent")
         modes = []
         for mode, source_mode in zip(
-            uow.workflows.list_modes(workflow.id, catalog_version=1), definition["modes"], strict=True,
+            uow.workflows.list_modes(workflow.id, catalog_version=baseline_version), definition["modes"], strict=True,
         ):
-            if mode.id is None or mode.catalog_version != 1 or mode.name != source_mode["name"]:
+            if mode.id is None or mode.catalog_version != baseline_version or mode.name != source_mode["name"]:
                 raise ValueError("Single-task installed mode identity mismatch")
             modes.append({"mode_id": str(mode.id), "key": mode.key, "execution_scopes": mode.execution_scopes,
                           "phase_ids": [str(p.id) for p in uow.phases.list(workflow.id, mode_id=mode.id)]})
@@ -216,7 +219,7 @@ def _observe_profile(uow: SAUnitOfWork, catalog: dict, manifest: dict) -> Single
         })
     return SingleTaskInstallation.model_validate({
         "schema": "single-task-sdlc/installation/v1", "instruction_manifest_sha256": manifest_sha256,
-        "workflow_catalog_sha256": catalog_sha256, "bindings": bindings,
+        "workflow_catalog_sha256": catalog_sha256, "bindings": bindings, **manifest["inventory"],
     })
 
 
@@ -234,14 +237,15 @@ def ensure_single_task_catalog(uow: SAUnitOfWork) -> SingleTaskInstallation:
     has_default = uow.workflows.get_default() is not None
     for definition in catalog["workflows"]:
         role = definition["role_key"]
+        baseline_version = definition.get("baseline_catalog_version", 1)
         workflow_id = uow.workflows.create({
             "key": definition["key"], "name": config.MANAGED_NAMESPACE_WORKFLOW_NAME,
             "description": definition["description"], "is_default": not has_default and role == "project_manager",
-            "active_catalog_version": 1, "create_default_mode": False,
+            "active_catalog_version": baseline_version, "create_default_mode": False,
         })
         for mode in definition["modes"]:
             _persist_mode(uow, workflow_id=workflow_id, role_key=role,
-                          mode=ManagedMode.model_validate(mode), catalog_version=1)
+                          mode=ManagedMode.model_validate(mode), catalog_version=baseline_version)
         namespace = definition["namespace"]
         icon, color = MANAGED_PROFESSION_THEMES[role]
         project_id = uow.projects.create({

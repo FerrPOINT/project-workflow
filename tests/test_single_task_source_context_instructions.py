@@ -240,12 +240,12 @@ def test_tester_and_devops_propagate_accepted_predecessor_reports_not_synthetic_
 
 def test_conditional_pm_brief_and_single_task_inventory_are_pinned(generated):
     catalog, manifest = generated
-    assert manifest["inventory"] == {"namespaces": 7, "workflows": 7, "modes": 8, "phases": 24}
+    assert manifest["inventory"] == {"namespaces": 7, "workflows": 7, "modes": 8, "phases": 33}
     assert manifest["task_identity"] == {"task_equals_root": True, "children": False, "decomposition_barriers": False}
     assert len(manifest["roles"]["project_manager"]["role_instructions_sha256"]) == 64
     assert len(catalog["workflows"]) == 7
     assert sum(len(w["modes"]) for w in catalog["workflows"]) == 8
-    assert sum(len(m["phases"]) for w in catalog["workflows"] for m in w["modes"]) == 24
+    assert sum(len(m["phases"]) for w in catalog["workflows"] for m in w["modes"]) == 33
     pm = mode_for(catalog, "project_manager", "draft")
     text = " ".join(i["description"] for p in pm["phases"] for i in p["instructions"])
     assert instructions.SOURCE_CONTEXT not in text and instructions.FORGE_TASK_WORKSPACE not in text

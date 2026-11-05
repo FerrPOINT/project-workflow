@@ -29,8 +29,8 @@ EXPORT = Path(__file__).resolve().parents[1] / "docs/evidence/pm-business-workfl
 # Published catalog 10's structure, not the stricter historic documentation export.
 BASE_STRUCTURE_SHA256 = "2ec0d49936c7db9bf2434250a26df3f3c0e09be69b030d7f53b8fd9a422ea050"
 BASE_CONTENT_SHA256 = "ae220f915d33987f1ed9b13e39d9a4c3a82ea5d8db133638a6a06f384ae249ef"
-# Current sealed family includes the coordinated Analyst research/no-PM-return revision.
-NON_PM_WORKFLOWS_SHA256 = "f90e25276acd0d51436bd36aca7acaa131c3b808e50015f01f28070b22520e82"
+# Current sealed family includes the coordinated twelve-phase Analyst baseline.
+NON_PM_WORKFLOWS_SHA256 = "ff8abb88e720ed4717fbc693e186951db28316c5701eca104b7a5279328fc7e6"
 
 
 @pytest.fixture

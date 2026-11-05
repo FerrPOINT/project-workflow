@@ -1,5 +1,18 @@
 # Changelog
 
+## Analyst: Twelve-Phase Default - 2026-11-06
+
+- Expand Analyst analysis from three to twelve phases: requirements, hypotheses,
+  internal/public research, evidence synthesis, domain/process, behavior, data,
+  constraints, acceptance, specification and verified artifact publication.
+- Keep autonomy: no user interview, PM return, invented facts or architecture
+  selection. Mandatory gaps block final acceptance, not honest research progress.
+- Forward0029 selects baseline2 without rewriting enrolled mode/phase IDs, task
+  history or receipts. Customized Analyst publications/drafts fail explicitly.
+- Other profession definitions, normal text-only publication structure, skills
+  pins and original Hermes stay unchanged. Installation and live12-phase
+  evaluator acceptance are separate from source qualification.
+
 ## Structured Phase Reports - 2026-11-03 (PM Accepted, UI Open)
 
 - Cause: the phase report crossed the CLI/Workflow boundary as opaque text. Source
