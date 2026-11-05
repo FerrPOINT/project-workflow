@@ -80,6 +80,12 @@ token; `/internal/runtime/catalog` принимает только точный 
 single-task семья, даже если startup selector остаётся `legacy`. Явный selector
 `single-task-v1` также требует её установленного состояния.
 
+Namespace entries также содержат `theme_icon` (canonical editor key),
+`theme_icon_path` (только SVG path `d`, без markup) и `theme_color` (`#RRGGBB`).
+Оформление читается заново по точному namespace ID из сохранённых настроек
+редактора; оно не меняет runtime identities, catalog hashes или назначения.
+Отсутствующий namespace либо его оформление дают `503`, без role fallback.
+
 Перед возвратом семи namespace/workflow пар endpoint вызывает существующий
 `observe_installation`: он проверяет полную сохранённую установку 7 ролей,
 8 modes и 24 фаз, инструкции, membership и исходные namespace identities.
