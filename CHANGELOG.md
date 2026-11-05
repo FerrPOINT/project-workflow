@@ -2,22 +2,22 @@
 
 ## Unreleased — Typed Advisor V18 Checkpoints
 
-- LiteLLM #3 at50ccf52 preserves the existing text-format field with one
-  production-line change. Independent source reviews found no blockers;
-  244 targeted tests and5 regressions against the staged Octo bundle pass.
-  The bundle preserves deployed overrides, UI and dependencies; independent
-  inventory and manifest verification pass. It is not activated or merged.
-- Full lint/type qualification remains open: hosted dispatch is rejected
-  with HTTP422; local make stops during Prisma/nodeenv provisioning. The
-  locked-Node retake stops on its npm wrapper before make. No source failure
-  or full-gate pass is claimed. Owned QA resources are cleaned; model budget
-  remains72/134. The owner requires completion of all checks before release;
-  no exception is authorized. Activation and real JSON-mode/schema/C4 checks
-  remain pending.
-- GitHub's Actions page identifies a fork usage suspension requiring maintainer
-  re-enablement, despite the enabled API setting. Local QA also remains stopped
-  below the required disk reserve,27.2GiB against30GiB. Cleanup audit found no
-  eligible resources of this task; unrelated resources and Octo are untouched.
+- LiteLLM #3 merged as8fc705e2ab with reviewed head50ccf52. Full local make lint,
+  frozen lock, secret scan and coverage5 PASS; existing244 targeted tests and5
+  staged-runtime regressions remain applicable. No caps or rules were weakened.
+  Actions were excluded by the owner, not reported as passing. QA setup failures
+  remain recorded; owned temporary resources were cleaned and external cache retained.
+- Octo now runs the verified immutable schema-forwarding bundle, PID2264636,
+  after confirmed stop and atomic pointer activation. Config/env, dependencies,
+  UI and inherited runtime fixes are unchanged; both health endpoints return200.
+- Three actual calls match: JSON-mode compatibility, the identical strict request
+  that formerly returned unexpected42, and frozen missing-C4/153 with all six
+  assessments, PARTIAL and concrete corrections. Campaign75/134; full Workflow
+  qualification still needs35 slots plus the separate24-call live reserve.
+  Workflow/Fleet/Hermes and the installed PM were not rebuilt or upgraded.
+
+### Historical CP1 Before Adapter Activation (2026-11-04)
+
 - Current CP1 is stopped on a reproduced provider-contract defect. The active
   LiteLLM1.109.0 ChatGPT adapter (source1403f0dc2ebd) removes text.format and
   max_output_tokens after the actual parent transform retained them. Offline
