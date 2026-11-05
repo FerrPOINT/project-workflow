@@ -57,6 +57,8 @@ def test_invalid_experiment_budget_is_rejected_before_creating_a_journal(size, t
 
 def test_two_predeclared_calls_cannot_expand_to_a_full_qualification(tmp_path, monkeypatch):
     artifact, cases = runner.load_cases()
+    artifact["settings"]["response_format"] = {"type": "json_schema"}
+    artifact["http_budget"]["new_call_limit"] = 2
     slots = [{"case_id": key, "sample": 1, "policy": PromptBuilder.PROMPT_VERSION, "status": "not_run"}
              for key in ("pm-unresolved-retention-policy", "actual-pm-191")]
     client = Mock(api_key="", model="app-test", timeout=1200, max_tokens=4000, reasoning_effort="high",

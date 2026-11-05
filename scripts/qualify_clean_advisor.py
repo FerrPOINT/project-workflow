@@ -213,6 +213,8 @@ def execute(output: Path, artifact: dict, cases: dict[str, dict], slots: list[di
     system = PromptBuilder.SYSTEM_PROMPT
     journal: dict[str, Any] = {
         "schema": "clean-advisor-qualification-v1", "policy": POLICY, "status": "prepared",
+        "campaign_limit": budget["campaign_limit"],
+        "campaign_already_attempted": budget["campaign_already_attempted"],
         "schedule": [{"case_id": slot["case_id"], "sample": slot["sample"]} for slot in slots],
         "max_http_calls": len(slots), "attempted_calls": 0, "qualified": False,
         "manual_reason_review": "pending_independent_review_against_frozen_reason_basis",
@@ -231,7 +233,7 @@ def execute(output: Path, artifact: dict, cases: dict[str, dict], slots: list[di
                     or client.max_tokens != settings["max_tokens"]
                     or client.reasoning_effort != settings["reasoning_effort"]
                     or settings["temperature"] != 0.1
-                    or settings["response_format"] != {"type": "json_object"}):
+                    or settings["response_format"] != {"type": "json_schema"}):
                 raise ValueError("Externally configured settings differ from the frozen settings")
             journal["settings"] = settings
             journal["system"] = text_snapshot(system, (client.api_key,))
@@ -245,14 +247,32 @@ def execute(output: Path, artifact: dict, cases: dict[str, dict], slots: list[di
             case = cases[slot["case_id"]]
             user = json.dumps(case["user_payload"], ensure_ascii=False, allow_nan=False)
             items = [(item["id"], item["text"]) for item in case["criteria"]]
+            response_format = PromptBuilder.response_schema(
+                items, delegation_allowed="DELEGATE" in case["user_payload"]["allowed_verdicts"],
+            )
+            slot["response_format"] = response_format
             slot.update(status="call_started", acceptance_unknown=True)
             journal["attempted_calls"] += 1
+            journal["campaign_attempted_after"] = budget["campaign_already_attempted"] + journal["attempted_calls"]
             journal["status"] = "running"
             checkpoint(stream, journal)
             raw, parsed, error = None, None, None
             try:
-                raw = client.chat(system=system, user=user, temperature=0.1,
-                                  response_format={"type": "json_object"})
+                send = requests.sessions.Session.send
+
+                def capture_wire(session, prepared, **kwargs):
+                    if prepared.url != f"{client.base_url}/chat/completions":
+                        raise ValueError("Qualification cannot send to an unexpected endpoint")
+                    slot["wire_request"] = {
+                        "method": prepared.method, "url": text_snapshot(prepared.url, (client.api_key,)),
+                        "body": json.loads(prepared.body), "timeout": kwargs.get("timeout"),
+                    }
+                    checkpoint(stream, journal)
+                    return send(session, prepared, **kwargs)
+
+                with patch.object(requests.sessions.Session, "send", capture_wire):
+                    raw = client.chat(system=system, user=user, temperature=0.1,
+                                      response_format=response_format)
                 parsed = ResponseParser.parse_assessments(raw, evaluation_items=items)
                 if parsed.verdict not in case["user_payload"]["allowed_verdicts"]:
                     raise ValueError("Disallowed verdict")
@@ -260,6 +280,8 @@ def execute(output: Path, artifact: dict, cases: dict[str, dict], slots: list[di
                 error = exc
             slot["diagnostics"] = capture_attempt(client, number=1, prompt=user, raw=raw,
                                                   error=error, system=system)
+            if isinstance(client.last_response_content, str):
+                slot["raw_message_content"] = text_snapshot(client.last_response_content, (client.api_key,))
             if error is not None:
                 unknown = isinstance(error, (requests.RequestException, OSError))
                 slot.update(status="transport_error" if unknown else "format_error", acceptance_unknown=unknown)

@@ -37,6 +37,7 @@ def isolate_ui_runtime_state(monkeypatch):
 @pytest.fixture
 def frozen():
     artifact, cases = runner.load_cases()
+    artifact["settings"]["response_format"] = {"type": "json_schema"}
     # These transport tests use only mocked responses and their own synthetic budget.
     artifact["http_budget"].update(campaign_already_attempted=0, new_call_limit=36)
     return artifact, cases, runner.plan(cases)
@@ -111,7 +112,11 @@ def test_all_36_calls_use_verbatim_payload_and_persist_pending_before_transport(
             {"role": "system", "content": runner.PromptBuilder.SYSTEM_PROMPT},
             {"role": "user", "content": json.dumps(case["user_payload"], ensure_ascii=False, allow_nan=False)},
         ]
-        assert payload["response_format"] == {"type": "json_object"}
+        items = [(item["id"], item["text"]) for item in case["criteria"]]
+        assert payload["response_format"] == runner.PromptBuilder.response_schema(
+            items, delegation_allowed="DELEGATE" in case["user_payload"]["allowed_verdicts"],
+        )
+        assert journal["slots"][index]["response_format"] == payload["response_format"]
         assert (payload["model"], payload["reasoning_effort"], payload["max_tokens"], payload["temperature"]) == (
             "app-test", "high", 4000, 0.1,
         )

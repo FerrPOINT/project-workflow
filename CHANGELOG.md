@@ -2,6 +2,11 @@
 
 ## Unreleased — Typed Advisor V18 Checkpoints
 
+- Qualification helper now explicitly requests the current per-case strict schema
+  and records prepared HTTP bodies, literal replies and the campaign counter.
+  Frozen reports, labels and engine prompt are unchanged. Focused52 tests, Ruff
+  and mypy169 PASS; independent preflight accepts the35 remaining slots and the
+  exact reuse of153/sample1. This is preparation, not a qualification result.
 - LiteLLM #3 merged as8fc705e2ab with reviewed head50ccf52. Full local make lint,
   frozen lock, secret scan and coverage5 PASS; existing244 targeted tests and5
   staged-runtime regressions remain applicable. No caps or rules were weakened.
