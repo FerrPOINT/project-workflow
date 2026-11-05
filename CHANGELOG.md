@@ -2,9 +2,20 @@
 
 ## Unreleased — Advisor V19 Candidate, Not Accepted
 
+- Continue cause investigation rather than declaring the earlier inventory complete.
+  Real SDLC-32 inputs prove a prior owner fact was omitted from source190 while v15
+  supplied marks without prior report facts. Add an HTTP/storage regression using
+  preserved historical facts only as explicit typed test fixtures: file8 PASS,
+  Ruff PASS, temporary resources cleaned. Production code/policy remain unchanged.
+- Offline final HTTPX serialization capture passes11 checks: exact system/user,
+  high and schema retained; cap absent. Two real190-derived calls are PASS/PASS,
+  non-discriminating. Four predeclared opposite-history controls demonstrate CSV2/2
+  PASS and JSON2/2 PARTIAL with sufficient corrections, not full qualification.
+  Six new calls bring the campaign to132/156 after explicit owner approval;24 live
+  calls stay reserved. No image/update/merge or new PM live acceptance.
 - Consolidate all18 qualification cases/36 slots, the four counterfactual controls
   and historical discrepancies in [the case report](docs/ADVISOR_CASE_REPORT_20261105.md).
-  All158 received item assessments retain their literal reasons/corrections;
+  The original158 item assessments retain their literal reasons/corrections;
   unknown and unrun slots remain explicit. Documentation only, no new inference.
 - Two universal content-versus-availability sentences correct the disputed E2
   interpretation without changing phase criteria, report shape or parser.

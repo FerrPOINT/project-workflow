@@ -1,5 +1,31 @@
 {
   "schema": "advisor-route-contract-v1",
+  "latest_cause_investigation_20261105": {
+    "summary": "advisor-cause-investigation-followup-20261105.json",
+    "summary_sha256": "da0f04d9862dcff7269c55f213d8135811b44d280527b5e4130f4320b0d73cc0",
+    "campaign_used": 132,
+    "campaign_limit": 156,
+    "owner_budget_approval": "Explicit approval to increase to 156, preserving 24 live calls",
+    "live_reserved": 24,
+    "new_calls": 6,
+    "runtime_or_prompt_changed": false,
+    "confirmed_input_loss": "SDLC-32 source189 contains the owner's Closed choice; source190 omits it and v15 sends prior marks but no prior reports. No owner revocation occurred.",
+    "http_storage_regression": "test_same_phase_http_context_keeps_owner_fact_omitted_from_later_report; file8 PASS, Ruff PASS, owned temporary resources cleaned; mocked Advisor, no runtime conversion",
+    "inline_copy_boundary": "191 adds one scope sentence; 192 again equals saved rev2 when evaluating the already confirmed requirements. Not proof of receipt on another document; C4 checks completeness, not byte identity.",
+    "final_serialization": {
+      "file": "advisor-v19-final-serialization-audit-20261105.json",
+      "sha256": "b6a7ec3fe84098a1927f149187b6295389e562b6179f48be6cf97b07a35ffba9",
+      "checks_passed": 11,
+      "request_bytes": 12616,
+      "real_upstream_http_calls": 0,
+      "scope": "Offline serialized HTTPX Request with exact system/user/high/schema, no temperature/output cap. Not historical upstream capture."
+    },
+    "real190_pair": "Two current-policy inputs without/with prior report both PASS; non-discriminating, no full gold or historical cause claimed.",
+    "history_discriminator": "Only prior owner format changes CSV/JSON, same current CSV artifact: CSV2/2 PASS, JSON2/2 PARTIAL with sufficient JSON corrections. Each reply reviewed before next; sensitive to history in this control, not universal reliability.",
+    "qualification_completed": false,
+    "pm_live_accepted": false,
+    "installed_or_merged": false
+  },
   "current_followup_20261105": {
     "policy": "supervisor-evaluator-v19",
     "product_changed": false,

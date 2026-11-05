@@ -126,6 +126,50 @@ def test_v18_result_replays_through_http_after_v19_activation_without_evaluation
         assert len(calls) == 1
 
 
+def test_same_phase_http_context_keeps_owner_fact_omitted_from_later_report(local_execution, monkeypatch):
+    source = Path(__file__).resolve().parents[1] / "docs/evidence/workflow-advisor-audit-live-20261103.json"
+    audit = json.loads(source.read_text(encoding="utf-8"))
+    case = next(item for item in audit["cases"] if item["task_key"] == "SDLC-32")
+    saved = {item["history_id"]: item["request"]["report"] for item in case["evaluations"]}
+
+    # Explicit test projection preserves old facts; runtime accepts only the current format.
+    reports = [{
+        "source": {"request": saved[number]["source"], "decisions": []},
+        "result": {"artifacts": [
+            {"name": name, "content": content} for name, content in saved[number]["result"].items()
+        ], "assumptions": []},
+        "unresolved": saved[number]["unresolved"],
+    } for number in (189, 190)]
+    assert "\u00ab\u0417\u0430\u043a\u0440\u044b\u0442\u0430\u00bb" in reports[0]["source"]["request"]
+    assert "\u00ab\u0417\u0430\u043a\u0440\u044b\u0442\u0430\u00bb" not in reports[1]["source"]["request"]
+    calls = []
+
+    def answer(_self, **kwargs):
+        payload = json.loads(kwargs["user"])
+        calls.append(payload)
+        return response(payload, False)
+
+    monkeypatch.setattr(OpenAICompatibleClient, "chat", answer)
+    uow, start = local_execution
+    with TestClient(create_app(), base_url="http://127.0.0.1", client=("127.0.0.1", 50000)) as client:
+        assert client.post("/internal/runtime/step", json=start.model_dump(mode="json")).status_code == 200
+        for version, payload in enumerate(reports, start=1):
+            command = report(start, version, key=f"source-facts-{version}").model_copy(update={
+                "report": json.dumps(payload, ensure_ascii=False),
+            })
+            accepted = client.post("/internal/runtime/step", json=command.model_dump(mode="json"))
+            assert accepted.status_code == 200, accepted.text
+            assert accepted.json()["result"]["verdict"] == "PARTIAL"
+        assert len(calls) == 2
+        assert calls[0]["previous_reports"] == []
+        assert calls[1]["previous_reports"] == [reports[0]]
+        assert calls[1]["report"] == reports[1]
+        uow.session.expire_all()
+        task = uow.tasks.get_by_key(start.task, project_id=start.namespace_id)
+        rows = uow.step_history.list(task_id=task.id, limit=None)
+        assert [json.loads(row.worker_report) for row in reversed(rows)] == reports
+
+
 @pytest.mark.parametrize("changed", ["report", "reason"])
 def test_in_place_history_mutation_with_same_ids_and_coverage_prevents_transition(
     local_execution, monkeypatch, changed,
