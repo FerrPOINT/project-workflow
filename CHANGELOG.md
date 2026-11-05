@@ -2,6 +2,20 @@
 
 ## Unreleased — Advisor V19 Candidate, Not Accepted
 
+- Qualify an explicit revised dataset without changing production prompt or old
+  evidence:17 unchanged cases plus the predeclared unambiguous storage/access
+  control. Retain the original disputed case as unresolved, never relabel its
+  result. Two fixture regressions pass; qualification contract file29 PASS,
+  Ruff PASS. No new evaluator, retry or keyword grading.
+- Seven prospective single-attempt calls, each independently reviewed before the
+  next, complete revised qualification36/36:168 assessments and44 corrections
+  accepted;22 PASS/12 PARTIAL/2 BLOCKED. Raw/wire/schema/settings are exact.
+  Reuse28 accepted old replies and exact D2sample1; the old series is not completed.
+  Campaign139/163 leaves24 live calls. This is model qualification, not PM live.
+- Human API inventory succeeds:30 tasks,11 done/19 active. Owner explicitly
+  selects updates for new tasks while preserving incompatible old executions
+  read-only in effect: no continuation, automatic close or rebind. No runtime
+  install or business transition follows from that decision alone.
 - Apply the approved release-admission gate before spending the seven remaining
   qualification calls. Two independent reviews cover all29 replies,134 assessments
   and30 corrections:28 replies fully accepted; one C2 correction remains ambiguous,
