@@ -13,13 +13,21 @@
   explicit v19 metadata and strict schema, with no reuse of old-policy responses.
   Its paused budget now also blocks route probes and protects the live reserve.
 - Qualification stopped on independent semantic review after26 new attempts:
-  25 complete replies match all115 marks, but one C2 reason/correction wrongly
-  treats unspecified stored-value trimming as forbidden. The real access defect
-  still justifies PARTIAL. No gold change, automatic repair or retry occurred.
+  25 complete replies match all115 marks, but one C2 reason/correction was
+  disputed. Later red-team review found the original trimming wording ambiguous;
+  calling it a proven forbidden-versus-unspecified error was too categorical.
+  The real access defect still justifies PARTIAL. No gold change, repair or retry.
   Together with four controls,29/36 evaluations and134 marks were reviewed;
   one interrupted response is unknown and six slots were not called.
-- Campaign limit152 was explicitly approved;122 calls are counted, including
-  the interrupted call. Workflow install/merge and new PM live acceptance remain
+- Four predeclared counterfactual cells keep product prompt/schema/settings
+  unchanged and explicitly allow/forbid trimmed storage, independently toggling
+  an access contradiction. All24 marks are grounded; six corrections suffice in
+  their response context. Wording caveats remain recorded, not hidden. One sample
+  per cell does not establish the original internal cause or complete qualification.
+  Source/constraint policy is changed together; history is empty. No new fix follows.
+- Campaign limit152 was explicitly approved;126 calls are counted, including
+  the interrupted call and four diagnostics. Reserve24 remains untouched, with
+  two further slots unused. Workflow install/merge and new PM live acceptance remain
   blocked. LiteLLM stays fixed on Octo; installed Workflow79976adb stays healthy.
   Native4326 PASS plus75 subtests, coverage94.0751%;15 skips are explicit:
   private opt-in3, NTFS executable-mode1, missing Playwright11. PostgreSQL132

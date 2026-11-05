@@ -1,5 +1,33 @@
 {
   "schema": "advisor-route-contract-v1",
+  "current_followup_20261105": {
+    "policy": "supervisor-evaluator-v19",
+    "product_changed": false,
+    "installed_or_merged": false,
+    "campaign_used": 126,
+    "campaign_limit": 152,
+    "live_reserved": 24,
+    "unreserved_unused": 2,
+    "plan": "advisor-v19-storage-access-diagnostic-plan-20261105.json",
+    "plan_sha256": "ed254f7feb34ac11c4c81b5d59ddc1a4e8834695d8ea6d4cdd26294dd5e9d8dc",
+    "summary": "advisor-v19-storage-access-diagnostic-summary-20261105.json",
+    "summary_sha256": "61e0b0dcbc64311237ecc934ddee65d1b7356297da7d0a3817653a858b75eeb5",
+    "new_calls": 4,
+    "grounded_marks": 24,
+    "sufficient_corrections_in_response_context": 6,
+    "results": ["PASS", "PARTIAL", "PARTIAL", "PARTIAL"],
+    "original_trim_error": "Earlier classification as a proven extra obligation was too categorical: original storage wording is ambiguous. Original marks/gold remain justified by access contradiction; hidden cause remains unknown.",
+    "limitations": [
+      "One sample per cell; no history; source and matching document constraint vary together.",
+      "Cell1 C1 correction is weaker standalone; C2 and remaining owner-only rules prohibit stranger access. No new sharing flow is proven.",
+      "Two reasons loosely locate the no-questions statement in source rather than clarification; the statement exists in the report.",
+      "Installed source preserves system instructions, reasoning and schema, but filters temperature and output cap. Final upstream HTTP body and effective backend settings were not captured.",
+      "No causal link from those parameter differences to the examined semantic judgments is proven."
+    ],
+    "full_qualification_accepted": false,
+    "new_pm_live_acceptance": false,
+    "next": "No new prompt/code fix justified by these controls. Resolve disputed expectations and remaining qualification/cutover gates; do not resume the stopped journal or repeat to a desired answer."
+  },
   "baseline": {
     "workflow": "91bba72317dc1031eae3b48c29651587b8d00b8e",
     "base": "6868579ea39dd7ea898f48473d50ce5b963f2c95"
