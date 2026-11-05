@@ -51,12 +51,14 @@ Installed binding не является runtime admission или Tracker transit
 и `single_task_manifest_v1.json`, проверяемые по фактическим UTF-8/LF bytes:
 
 ```text
-catalog:  976f1272340189178fcab2b778ceead46f6f965be8150281e7b80afe31cb0afe
-manifest: 7aa0e6c758e2c31cd1dd69ce30826aecaf565e25e4f5fcedcdf9215fcddd1075
+catalog:  9db2e982d93ead86a16c0b88785cbb9a5e1306e74cd56dc929ab7f7d1342f605
+manifest: 2f16635c0f588d1f285393b4ad8c163119b4dba4b9918335c821f295e88a4f64
 ```
 
-Текущая миграция0029 выбирает новый baseline Analyst2 с 12 фазами,
-сохраняя исходные mode/phase IDs уже запущенных задач.
+Миграции0029/0030 публикуют дефолт Analyst с 12 фазами через существующий
+журнал версий. Занятые пользовательские номера не переиспользуются; исходные
+mode/phase IDs, черновики, публикации и история задач сохраняются.
+0030 также обрабатывает уже применённый исходный0029 без перезаписи его строк.
 [Полный процесс и граница приёмки](analyst-workflow.md). Старые catalog/manifest
 сохранены как исторические данные; новые назначения используют текущую семью.
 Task/step history и исходные hashes прежних receipts не переписываются.

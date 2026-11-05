@@ -13,14 +13,12 @@ from uuid import uuid4
 
 import pytest
 from click.testing import CliRunner
-from sqlalchemy import func, select
 
 from project_workflow.application import catalog_publication, configured_cli
 from project_workflow.domain.runtime_assignment import payload_sha256
-from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from tests._report_helpers import report_json
-from tests.test_catalog_publication import active, publication
+from tests.test_catalog_publication import active, operator_publication_count, publication
 from tests.test_catalog_publication import verified_catalog_administrator as verified_catalog_administrator
 from tests.test_configured_cli import MACHINE, enroll, step
 from tests.test_configured_cli import configured as configured
@@ -260,7 +258,7 @@ def test_pm_default_publication_changes_checks_evidence_and_new_cli_but_not_old_
         assert uow.workflows.get_mode(old.mode_id).catalog_version == previous["catalog_version"]
         assert uow.workflows.get_mode(new.mode_id).catalog_version == saved["catalog_version"]
         assert old.current_phase_id != new.current_phase_id
-        assert uow.session.scalar(select(func.count()).select_from(m.WorkflowCatalogPublication)) == 2
+        assert operator_publication_count(uow) == 2
 
 
 @pytest.mark.parametrize("verdict", ["PARTIAL", "PASS"])
@@ -307,7 +305,7 @@ def test_pm_default_preparation_cursor_never_requires_confirmation_before_final_
         assert advanced["execution_ref"] == corrected_body["execution_ref"] == enrollment["execution_ref"]
         confirmation.assert_not_called()
         with SAUnitOfWork() as uow:
-            assert uow.session.scalar(select(func.count()).select_from(m.WorkflowCatalogPublication)) == 1
+            assert operator_publication_count(uow) == 1
     else:
         assert current["phase_code"] == "PM-DRAFT-03"
         refusal = step(configured, report=report_json("Synthetic final report with no owner consent"),

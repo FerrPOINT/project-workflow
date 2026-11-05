@@ -3,8 +3,8 @@
 from alembic import op
 from sqlalchemy import select
 
+from project_workflow.application.catalog_publication import publish_baseline
 from project_workflow.infrastructure.db import models as m
-from project_workflow.infrastructure.db.managed_catalog import ManagedMode, _persist_mode
 from project_workflow.infrastructure.db.single_task_catalog import _observe_profile, load_profile
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
@@ -34,16 +34,7 @@ def upgrade() -> None:
             raise ValueError("Cannot replace a partial or customized single-task catalog") from None
         binding = next(b for b in installed.bindings if b.role_key == "analyst")
         workflow_id = int(binding.workflow_id)
-        versions = uow.session.scalars(select(m.WorkflowMode.catalog_version).where(
-            m.WorkflowMode.workflow_id == workflow_id)).all()
-        if any(version != 1 for version in versions):
-            raise ValueError("Cannot replace customized Analyst publications or drafts")
-        definition = next(w for w in target["workflows"] if w["role_key"] == "analyst")
-        baseline_version = definition["baseline_catalog_version"]
-        for mode in definition["modes"]:
-            _persist_mode(uow, workflow_id=workflow_id, role_key="analyst",
-                          mode=ManagedMode.model_validate(mode), catalog_version=baseline_version)
-        uow.workflows.update(workflow_id, {"active_catalog_version": baseline_version})
+        publish_baseline(uow, uow.workflows.get_by_id(workflow_id), TARGET)
         uow.session.flush()
         _observe_profile(uow, target, manifest)
     finally:

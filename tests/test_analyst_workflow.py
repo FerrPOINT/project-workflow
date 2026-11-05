@@ -28,6 +28,7 @@ def test_research_contract_covers_hypotheses_primary_sources_and_disconfirmation
     assert "web_search" in public and "web_extract" in public
     assert "snippets and tables of contents are not proof" in public
     assert "internal identifiers, filenames" in public and "credentials" in public
+    assert "skip external calls" in public and "non-applicability" in str(phases[3]["checks"])
     assert "reject or leave each material hypothesis" in synthesis
 
 
@@ -86,7 +87,10 @@ def test_partial_research_and_mandatory_gap_do_not_complete_or_lose_history(conf
     assert len(history.json()["result"]["records"]) == 14
 
 
-def test_enrolled_analyst_continues_original_three_phases_after_structural_upgrade(monkeypatch, supervisor_llm):
+@pytest.mark.parametrize("customized", [False, True])
+def test_enrolled_analyst_continues_original_three_phases_after_structural_upgrade(
+    monkeypatch, supervisor_llm, customized,
+):
     import importlib
     from types import SimpleNamespace
     from uuid import uuid4
@@ -105,11 +109,27 @@ def test_enrolled_analyst_continues_original_three_phases_after_structural_upgra
     try:
         # Reproduce the installed predecessor, not a hand-edited current task.
         with monkeypatch.context() as old_runtime:
-            old_runtime.setattr(catalog, "load_profile", lambda *_args: (old_catalog, old_manifest))
+            reader = catalog.load_profile
+            old_runtime.setattr(catalog, "load_profile",
+                                lambda digest=None: reader(digest) if digest else (old_catalog, old_manifest))
             old_runtime.setattr(configured_cli, "MANIFEST_SHA256", previous)
             old_runtime.setattr(configured_cli, "CATALOG_SHA256", old_manifest["workflow_catalog"]["sha256"])
             fixture = protocol.configured.__wrapped__(monkeypatch, SimpleNamespace(param=("analyst", "analysis")))
             context = next(fixture)
+            if customized:
+                from project_workflow.application import catalog_publication as editor
+                from project_workflow.domain.catalog_publication import CatalogDraft, CatalogPublish
+
+                with SAUnitOfWork() as uow:
+                    project = uow.projects.get_by_id(context[1]["namespace_id"])
+                    base = editor.read_active(uow, project.workflow_id)
+                    base["modes"][0]["phases"][0]["instructions"][0]["description"] += " Operator clarification."
+                    saved = editor.save_draft(uow, project.workflow_id, CatalogDraft(
+                        expected_version=1, expected_sha256=base["content_sha256"], modes=base["modes"]))
+                    editor.publish(uow, project.workflow_id, saved["catalog_version"], CatalogPublish(
+                        expected_version=1, expected_sha256=base["content_sha256"],
+                        draft_sha256=saved["content_sha256"], operation_key="operator-before-upgrade"),
+                        publisher_subject="qa-administrator")
             original = enroll(context)
             supervisor_llm("PASS")
             command = dict(report=report_json("Original completed research"), operation_key="old-research",
@@ -121,6 +141,9 @@ def test_enrolled_analyst_continues_original_three_phases_after_structural_upgra
         with get_engine().begin() as connection:
             with Operations.context(MigrationContext.configure(connection)):
                 migration.upgrade()
+                importlib.import_module(
+                    "project_workflow.infrastructure.db.migrations.versions.0030_analyst_baseline_ledger"
+                ).upgrade()
         assert step(context).json() == before
         assert step(context, **command).json() == accepted
         for version in (2, 3):

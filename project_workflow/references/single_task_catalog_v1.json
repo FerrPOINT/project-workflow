@@ -14,7 +14,7 @@
     },
     "path": "project_workflow/infrastructure/single_task_catalog.py",
     "repository": "https://github.com/FerrPOINT/project-workflow.git",
-    "sha256": "55385194f72af10b48fbdc670e4aea7dfe80adf5b1b79832ea09b237fa7d9f82"
+    "sha256": "aaabbcdef6a80f9d73ce98d0b0101477d3c6fb9fcbd9df1bc7e1196c4d915101"
   },
   "schema": "single-task-sdlc/workflow-catalog/v1",
   "workflows": [
@@ -213,7 +213,6 @@
       "workflow_order": 1
     },
     {
-      "baseline_catalog_version": 2,
       "description": "single-task-v1: analyst for one Tracker task; opt-in instructions.",
       "key": "single-task-v1:analyst",
       "modes": [
@@ -356,13 +355,13 @@
             },
             {
               "checks": [
-                "Targeted and exploratory research address material questions, or actual unavailability is documented.",
+                "The need for public research is assessed: relevant searches were performed, or non-applicability or actual unavailability is justified.",
                 "Public conclusions are supported by passages actually read; private information was not submitted."
               ],
               "code": "AN-ANALYSIS-04",
               "description": "single-task-v1: analyst/analysis; Public and exploratory research.",
               "evidence": [
-                "Actual generic queries, read primary-source references, relevant findings and search limitations."
+                "Actual generic queries, read primary-source references and findings, or justified non-applicability; honest search limitations."
               ],
               "instructions": [
                 {
@@ -373,7 +372,7 @@
                   ]
                 },
                 {
-                  "description": "Use web_search for both targeted answers and exploratory research: primary standards, official integration documentation, comparable business approaches, known limitations and failure cases that may expose overlooked aspects. Search to disprove as well as support hypotheses. Read relevant pages with web_extract; snippets and tables of contents are not proof. Follow the native saved full page/search/pagination when the relevant passage is truncated. Record relevance, versions/access dates and excerpts. Never send private task text, client names, internal identifiers, filenames or credentials to external search/extraction. External examples do not authorize scope expansion.",
+                  "description": "Assess which material questions benefit from public sources. If internal evidence already gives adequate coverage and public research adds no material value, record that justification and skip external calls. Otherwise use web_search for targeted answers and exploratory research: primary standards, official integration documentation, comparable business approaches, known limitations and failure cases that may expose overlooked aspects. Search to disprove as well as support hypotheses. Read relevant pages with web_extract; snippets and tables of contents are not proof. Follow the native saved full page/search/pagination when the relevant passage is truncated. Record relevance, versions/access dates and excerpts. Never send private task text, client names, internal identifiers, filenames or credentials to external search/extraction. External examples do not authorize scope expansion.",
                   "skills": [
                     "project-workflow-executor",
                     "tracker-operator"
@@ -703,7 +702,7 @@
         "launch_profile": "single-task-v1-analyst",
         "name": "single-task-analyst"
       },
-      "previous_baseline_manifest_sha256": "62762bf58f337d9e063226aef58ea6c89cdfb2e87159056f1a6b2b6c4d1ddf3a",
+      "previous_baseline_manifest_sha256": "7aa0e6c758e2c31cd1dd69ce30826aecaf565e25e4f5fcedcdf9215fcddd1075",
       "role_key": "analyst",
       "skill_names": [
         "domain-modeling",

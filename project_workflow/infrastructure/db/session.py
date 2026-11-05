@@ -461,6 +461,7 @@ def ensure_migrated(engine: Engine | Connection | None = None) -> None:
         "0026_analyst_artifact_acceptance",
         "0027_analyst_no_pm_return",
         "0028_analyst_read_sources",
+        "0029_analyst_twelve_phases",
     }
     incompatible_revision = bool(revisions) and not revisions.issubset(compatible_upgrade_revisions)
     _validate_legacy_archives(target)

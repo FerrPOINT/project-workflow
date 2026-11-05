@@ -12,7 +12,7 @@ from project_workflow.infrastructure.single_task_catalog import load_single_task
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_COMMIT = "SELF"
 SOURCE_PATH = "project_workflow/infrastructure/single_task_catalog.py"
-SOURCE_SHA256 = "55385194f72af10b48fbdc670e4aea7dfe80adf5b1b79832ea09b237fa7d9f82"
+SOURCE_SHA256 = "aaabbcdef6a80f9d73ce98d0b0101477d3c6fb9fcbd9df1bc7e1196c4d915101"
 DONOR_PATH = "project_workflow/references/base_sdlc_catalog_cli_v4.json"
 DONOR_SHA256 = "d6d18f98b55f14210a3f0e12404074705495d535aa8ba29ae449624b845668c9"
 CATALOG_PATH = "project_workflow/references/single_task_catalog_v1.json"
@@ -62,8 +62,7 @@ def render() -> tuple[bytes, bytes]:
             "skill_names": original["skill_allowlist"],
             "modes": original["modes"],
         }
-        if "baseline_catalog_version" in original:
-            workflow["baseline_catalog_version"] = original["baseline_catalog_version"]
+        if "previous_baseline_manifest_sha256" in original:
             workflow["previous_baseline_manifest_sha256"] = original["previous_baseline_manifest_sha256"]
         workflows.append(workflow)
         roles[role] = {

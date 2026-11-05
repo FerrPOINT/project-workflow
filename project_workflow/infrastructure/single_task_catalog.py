@@ -163,8 +163,7 @@ ROLE_EVIDENCE = {
 
 
 
-ANALYST_BASELINE_VERSION = 2
-ANALYST_PREVIOUS_MANIFEST = "62762bf58f337d9e063226aef58ea6c89cdfb2e87159056f1a6b2b6c4d1ddf3a"
+ANALYST_PREVIOUS_MANIFEST = "7aa0e6c758e2c31cd1dd69ce30826aecaf565e25e4f5fcedcdf9215fcddd1075"
 ANALYST_RULES = (
     "Work independently on this approved PM scope. Never interview the user, request analysis consent, "
     "return the task to PM or invoke critical PM review. Do not rewrite approved requirements or choose "
@@ -211,16 +210,21 @@ ANALYST_PHASES = [
     ),
     (
         "Public and exploratory research",
-        "Use web_search for both targeted answers and exploratory research: primary standards, official "
+        "Assess which material questions benefit from public sources. If internal evidence already gives "
+        "adequate coverage and public research adds no material value, record that justification and skip "
+        "external calls. Otherwise use web_search for targeted answers and exploratory research: primary "
+        "standards, official "
         "integration documentation, comparable business approaches, known limitations and failure cases "
         "that may expose overlooked aspects. Search to disprove as well as support hypotheses. Read relevant "
         "pages with web_extract; snippets and tables of contents are not proof. Follow the native saved full "
         "page/search/pagination when the relevant passage is truncated. Record relevance, versions/access "
         "dates and excerpts. Never send private task text, client names, internal identifiers, filenames "
         "or credentials to external search/extraction. External examples do not authorize scope expansion.",
-        ["Targeted and exploratory research address material questions, or actual unavailability is documented.",
+        ["The need for public research is assessed: relevant searches were performed, or non-applicability "
+         "or actual unavailability is justified.",
          "Public conclusions are supported by passages actually read; private information was not submitted."],
-        ["Actual generic queries, read primary-source references, relevant findings and search limitations."],
+        ["Actual generic queries, read primary-source references and findings, or justified non-applicability; "
+         "honest search limitations."],
     ),
     (
         "Evidence synthesis and hypothesis review",
@@ -376,7 +380,6 @@ def load_single_task_professions() -> list[dict[str, Any]]:
                      PM_CONFIRMATION_CHECKS, PM_CONFIRMATION_EVIDENCE),
                 ]
             elif role == "analyst":
-                workflow["baseline_catalog_version"] = ANALYST_BASELINE_VERSION
                 workflow["previous_baseline_manifest_sha256"] = ANALYST_PREVIOUS_MANIFEST
                 prototype = copy.deepcopy(mode["phases"][0])
                 mode["phases"] = [dict(copy.deepcopy(prototype), code=f"AN-ANALYSIS-{number:02}",

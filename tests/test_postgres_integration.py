@@ -58,6 +58,36 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize("published", [False, True])
+def test_source_baselines_preserve_unchanged_operator_revisions_on_postgres(pg_url, monkeypatch, published):
+    from tests.test_catalog_baselines import (
+        test_unchanged_operator_revision_survives_migration_and_remains_discoverable,
+    )
+
+    test_unchanged_operator_revision_survives_migration_and_remains_discoverable(
+        get_engine(pg_url), monkeypatch, published,
+    )
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("rollback", [1, 2])
+def test_source_baseline_pointer_drift_fails_on_postgres(pg_url, rollback):
+    from tests.test_catalog_baselines import (
+        test_selected_pointer_drift_never_relabels_installation_as_an_older_family,
+    )
+
+    test_selected_pointer_drift_never_relabels_installation_as_an_older_family(get_engine(pg_url), rollback)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("drift", [False, True])
+def test_applied_source_baseline_is_sealed_without_overwriting_rows_on_postgres(pg_url, monkeypatch, drift):
+    from tests.test_catalog_baselines import test_already_applied_0029_is_sealed_without_rewriting_its_modes
+
+    test_already_applied_0029_is_sealed_without_rewriting_its_modes(get_engine(pg_url), monkeypatch, drift)
+
+
+@pytest.mark.integration
 @pytest.mark.parametrize("role", ["project_manager", "analyst", "developer"])
 @pytest.mark.parametrize("predecessor", [
     ("0024_analyst_research_catalog", "332cfd4fb3419d5765008e196cffb508540462ddd89b798ab4e89379ac5b1796"),
@@ -273,7 +303,7 @@ def test_pm_ownership_catalog_lock_order_and_incomplete_schema(pg_url, winner):
     assert not schema_is_ready(engine)
     with pytest.raises(DatabaseRecreateRequired):
         ensure_migrated(engine)
-    assert database_revisions(engine) == {"0029_analyst_twelve_phases"}
+    assert database_revisions(engine) == {"0030_analyst_baseline_ledger"}
 
 
 @pytest.mark.integration
@@ -504,7 +534,7 @@ class TestPostgresInitialMigration:
             version = conn.execute(
                 text("SELECT version_num FROM project_workflow.alembic_version")
             ).scalar_one()
-        assert version == migration_head() == "0029_analyst_twelve_phases"
+        assert version == migration_head() == "0030_analyst_baseline_ledger"
         assert schema_is_ready(engine) is True
 
     def test_managed_bootstrap_serializes_with_public_catalog_creation(self, pg_url):
