@@ -367,3 +367,59 @@ def test_route_records_prepared_body_without_authorization(frozen, tmp_path, mon
         assert request["body"]["response_format"] == probe["response_format"]
         assert request["body"]["messages"][1]["content"] == probe["user"]
     assert "private-qualification-secret" not in output.read_text(encoding="utf-8")
+
+
+def test_explicit_storage_revision_preserves_criteria_and_access_negative(frozen):
+    _, cases, _ = frozen
+    revision = json.loads((runner.ROOT / "docs/evidence/advisor-v19-qualification-revision-20261105.json").read_text(
+        encoding="utf-8",
+    ))
+    original = cases[revision["supersedes"]["case_id"]]
+    replacement = revision["replacement"]
+    assert revision["base_cases"]["sha256"] == runner.LABELS_SHA256
+    assert revision["system_sha256"] == runner.SYSTEM_SHA256
+    assert revision["policy"] == runner.POLICY
+    for name in ("criteria", "aliases", "expected"):
+        assert replacement[name] == original[name]
+    assert runner.digest(replacement["user_payload"]) == replacement["user_payload_sha256"]
+    assert runner.digest(replacement["expected_assessments"]) == replacement["labels_sha256"]
+    before = original["user_payload"]["report"]
+    after = replacement["user_payload"]["report"]
+    assert after["source"]["request"] == before["source"]["request"]
+    assert after["source"]["decisions"][:2] == before["source"]["decisions"]
+    assert len(after["source"]["decisions"]) == len(before["source"]["decisions"]) + 1
+    old_document = before["result"]["artifacts"][0]["content"]
+    new_document = after["result"]["artifacts"][0]["content"]
+    assert new_document["acceptance_criteria"][6] == old_document["acceptance_criteria"][6]
+    assert new_document["scope"] == old_document["scope"]
+    assert new_document["exclusions"] == old_document["exclusions"]
+    assert new_document["constraints"][-1] == after["source"]["decisions"][-1]["value"]
+    assert after["unresolved"] == before["unresolved"] == []
+
+
+def test_explicit_storage_revision_has_exact_typed_wire_and_seven_new_samples(frozen):
+    _, cases, _ = frozen
+    revision = json.loads((runner.ROOT / "docs/evidence/advisor-v19-qualification-revision-20261105.json").read_text(
+        encoding="utf-8",
+    ))
+    replacement = revision["replacement"]
+    cases.pop(revision["supersedes"]["case_id"])
+    cases[replacement["id"]] = replacement
+    assert len(cases) == 18
+    scheduled = {(item["case_id"], item["sample"]) for item in revision["schedule"]}
+    assert len(scheduled) == len(revision["schedule"]) == 7
+    assert all(key in cases and sample == 2 for key, sample in scheduled)
+    assert (replacement["id"], 2) in scheduled
+    assert revision["reused_samples"]["base_accepted_excluding_superseded"] == 28
+    budget = revision["budget"]
+    assert budget["campaign_already_attempted"] + len(scheduled) + budget["reserved_live_calls"] == 163
+    assert budget["campaign_limit"] == 163 and budget["new_call_limit"] == 7
+    payload = replacement["user_payload"]
+    for report in [*payload["previous_reports"], payload["report"]]:
+        assert runner.PhaseReport.parse(json.dumps(report)).model_dump(mode="json") == report
+    items = [(item["id"], item["text"]) for item in replacement["criteria"]]
+    actual = runner.PromptBuilder.build_user_prompt(
+        replacement["id"], type("Phase", (), {"name": payload["phase"]})(), payload["report"],
+        evaluation_items=items, previous_reports=payload["previous_reports"], delegation_allowed=False,
+    )
+    assert json.loads(actual) == payload

@@ -1,0 +1,275 @@
+{
+  "schema": "advisor-qualification-revision-v1",
+  "policy": "supervisor-evaluator-v19",
+  "system_sha256": "7ee97ccaa0914fe77b7ce881268b6dbe855ca2fd9e6edbc17df8a42e4b1edd48",
+  "base_cases": {
+    "path": "docs/evidence/advisor-v18-qualification-cases-20261104.json",
+    "sha256": "277f399956c59530d59c81137da513e332f9baec2d5cacab6973b60672710e5c"
+  },
+  "supersedes": {
+    "case_id": "pm-private-access-contradiction",
+    "reason": "The old case does not define stored whitespace behavior; one correction cannot be accepted unambiguously. Preserve its original input, gold and disputed result. This revision is not a pass for that original case.",
+    "original_payload_sha256": "7a5db2fc62e1ce4d80899b063e9d2c15187069b41957a9a3a30b969e68279782"
+  },
+  "replacement": {
+    "id": "diagnostic-storage-allow-access-contradictory",
+    "role": "project_manager",
+    "mode": "draft",
+    "phase": "PM-DRAFT-02",
+    "criteria": [
+      {
+        "id": "PM-DRAFT-02:check:312",
+        "text": "The requirements agree with the user request and decisions described in this report."
+      },
+      {
+        "id": "PM-DRAFT-02:check:313",
+        "text": "The requirements document defines clear scope, unambiguous material rules and objectively testable acceptance criteria, without contradictions."
+      },
+      {
+        "id": "PM-DRAFT-02:check:314",
+        "text": "The source account contains the owner's current decision for every material business choice needed for the requirements, with no such choice left unanswered or replaced by a PM assumption."
+      },
+      {
+        "id": "PM-DRAFT-02:check:315",
+        "text": "The current report includes the entire saved requirements document, not a summary, inventory of sections or reference to an earlier report."
+      },
+      {
+        "id": "PM-DRAFT-02:evidence:189",
+        "text": "A readable summary of the user request."
+      },
+      {
+        "id": "PM-DRAFT-02:evidence:190",
+        "text": "A readable account of the owner's decisions and any unanswered material questions."
+      }
+    ],
+    "aliases": {
+      "C1": "PM-DRAFT-02:check:312",
+      "C2": "PM-DRAFT-02:check:313",
+      "C3": "PM-DRAFT-02:check:314",
+      "C4": "PM-DRAFT-02:check:315",
+      "E1": "PM-DRAFT-02:evidence:189",
+      "E2": "PM-DRAFT-02:evidence:190"
+    },
+    "user_payload": {
+      "phase": "Requirements preparation",
+      "allowed_verdicts": [
+        "PASS",
+        "PARTIAL",
+        "BLOCKED"
+      ],
+      "criteria": [
+        {
+          "id": "C1",
+          "text": "The requirements agree with the user request and decisions described in this report.",
+          "previous_assessment": null
+        },
+        {
+          "id": "C2",
+          "text": "The requirements document defines clear scope, unambiguous material rules and objectively testable acceptance criteria, without contradictions.",
+          "previous_assessment": null
+        },
+        {
+          "id": "C3",
+          "text": "The source account contains the owner's current decision for every material business choice needed for the requirements, with no such choice left unanswered or replaced by a PM assumption.",
+          "previous_assessment": null
+        },
+        {
+          "id": "C4",
+          "text": "The current report includes the entire saved requirements document, not a summary, inventory of sections or reference to an earlier report.",
+          "previous_assessment": null
+        },
+        {
+          "id": "E1",
+          "text": "A readable summary of the user request.",
+          "previous_assessment": null
+        },
+        {
+          "id": "E2",
+          "text": "A readable account of the owner's decisions and any unanswered material questions.",
+          "previous_assessment": null
+        }
+      ],
+      "previous_reports": [],
+      "report": {
+        "source": {
+          "request": "The owner requests v1 of a personal browser notebook for customer requests, used by one owner. Only that owner may view, create, edit or close records; strangers may neither read nor write them. Each record contains contact and request text, both required after trimming leading and trailing whitespace; reject an empty field without saving and preserve the entered values for correction. The owner manually creates and edits records. The only statuses are Open and Closed; creation sets Open. Show Open records in the working list, newest-created first; editing must not change creation order. Closing a request is required in v1. Preserve every record that still exists, its text, status and creation order across browser restart; restarting alone must not delete or close anything. There are no notifications, integrations, shared users or automatic closure in v1.",
+          "decisions": [
+            {
+              "subject": "Private owner-only access",
+              "value": "Only the owner may view, create, edit or close records. Strangers have no read or write access."
+            },
+            {
+              "subject": "Selected v1 archive policy",
+              "value": "In v1, closing an Open request sets its status to Closed and retains its complete record in an archive that the owner can view. It is removed from the Open working list, not irreversibly deleted. Archived records remain saved across browser restart."
+            },
+            {
+              "subject": "Selected successful-storage whitespace policy",
+              "value": "On successful creation or editing, trim leading and trailing whitespace from contact and request text before storing. Validation rejects values empty after trimming; on rejection do not save and preserve the entered values for correction."
+            }
+          ]
+        },
+        "result": {
+          "artifacts": [
+            {
+              "name": "requirements_document",
+              "content": {
+                "goal": "Give one owner a private personal browser notebook for manually recording and tracking customer requests.",
+                "scope": [
+                  "Create and edit customer-request records manually with contact and request text.",
+                  "Require both fields to be nonempty after trimming; reject invalid input without saving and preserve entered values for correction.",
+                  "Use exactly Open and Closed statuses; every new record starts Open.",
+                  "Show only Open records in the working list, newest-created first; editing does not change creation order.",
+                  "Provide the v1 action for closing an Open request.",
+                  "Allow only the owner to view, create, edit or close records; deny read and write access to strangers.",
+                  "Preserve the fields, status and creation order of every existing record across browser restart; restarting is not a closure or deletion action.",
+                  "In v1, closing an Open request sets its status to Closed and retains its complete record in an archive that the owner can view. It is removed from the Open working list, not irreversibly deleted. Archived records remain saved across browser restart."
+                ],
+                "exclusions": [
+                  "Notifications, integrations, shared users and automatic closure.",
+                  "Status values other than Open and Closed."
+                ],
+                "scenarios": [
+                  "On successful creation or editing, trim leading and trailing whitespace from contact and request text and store the trimmed values. Creation sets status Open and places the record first in the working list; editing does not change creation order.",
+                  "The owner submits an empty contact or request text after trimming. No record is saved and the entered values remain available for correction.",
+                  "The owner edits an existing record's contact or request text using the same validation; its original creation order is unchanged.",
+                  "A stranger attempts to read or modify a record. Owner-only access denies both attempts.",
+                  "The owner restarts the browser. Every record that still exists keeps its text, status and creation order; the restart itself neither closes nor deletes records.",
+                  "The owner closes an Open request. It becomes Closed, leaves the working list and remains available to the owner in the retained archive, including after browser restart."
+                ],
+                "acceptance_criteria": [
+                  "Only the owner can read, create, edit or close records. Every stranger read or write attempt is denied.",
+                  "Creating or editing requires contact and request text nonempty after trimming. On success, store both trimmed values; on an empty field, do not save and preserve the entered values for correction.",
+                  "Each newly created record has status Open; the only allowed status values are Open and Closed.",
+                  "The working list contains Open records only, ordered newest-created first. Editing does not change their creation order.",
+                  "After browser restart, every existing record retains its text, status and creation order. Restart alone does not close or delete a record.",
+                  "Closing an Open request changes its status to Closed, removes it from the working list and retains its full record in an owner-visible archive across browser restart.",
+                  "A public unauthenticated stranger can edit the contact and request text of any saved record without the owner's approval."
+                ],
+                "constraints": [
+                  "One owner uses the v1 notebook; strangers may neither read nor write records.",
+                  "Data persistence across browser restart is distinct from a deliberate request-closing action.",
+                  "Only the source-defined manual actions and the two declared statuses are in v1.",
+                  "On successful creation or editing, trim leading and trailing whitespace from contact and request text before storing. Validation rejects values empty after trimming; on rejection do not save and preserve the entered values for correction."
+                ],
+                "dependencies": [],
+                "assumptions": [],
+                "checklist": [
+                  "Check valid creation, rejected empty fields and preservation of invalid input.",
+                  "Check Open as the initial status, working-list filtering and stable creation order on edit.",
+                  "Check that strangers cannot read or modify records.",
+                  "Restart the browser and verify existing record contents, statuses and order.",
+                  "Close a request and verify retained owner-visible archive contents, working-list removal and persistence."
+                ],
+                "prerequisites": [],
+                "unresolved_questions": []
+              }
+            },
+            {
+              "name": "clarification",
+              "content": "The owner has explicitly selected archive retention and owner-only access for v1. No owner question is pending."
+            }
+          ],
+          "assumptions": []
+        },
+        "unresolved": []
+      }
+    },
+    "expected": {
+      "verdict": "PARTIAL",
+      "covered": [
+        "PM-DRAFT-02:check:314",
+        "PM-DRAFT-02:check:315",
+        "PM-DRAFT-02:evidence:189",
+        "PM-DRAFT-02:evidence:190"
+      ],
+      "missing": [
+        "PM-DRAFT-02:check:312",
+        "PM-DRAFT-02:check:313"
+      ],
+      "blockers": []
+    },
+    "expected_assessments": {
+      "C1": {
+        "covered": false,
+        "reason_basis": "The source, scope and first access criterion prohibit stranger access, while the final criterion permits stranger editing."
+      },
+      "C2": {
+        "covered": false,
+        "reason_basis": "The source, scope and first access criterion prohibit stranger access, while the final criterion permits stranger editing."
+      },
+      "C3": {
+        "covered": true,
+        "reason_basis": "All material owner decisions, including successful-storage whitespace policy, owner-only access and retained archive, are explicitly supplied; document defects do not remove those decisions."
+      },
+      "C4": {
+        "covered": true,
+        "reason_basis": "The complete current requirements document is included with all sections. Its deliberately contradictory acceptance criterion does not negate full-document presence."
+      },
+      "E1": {
+        "covered": true,
+        "reason_basis": "Source request gives a readable substantive account of the personal request notebook and its v1 rules and exclusions."
+      },
+      "E2": {
+        "covered": true,
+        "reason_basis": "All material owner decisions, including successful-storage whitespace policy, owner-only access and retained archive, are explicitly supplied; document defects do not remove those decisions."
+      }
+    },
+    "user_payload_sha256": "4cb9a11e133e30b6ca9287438e11987cd0d3cb1163e7358675c4d59251e7e94e",
+    "labels_sha256": "90ec76cd69b3f66634afbc2993e690caf41227e4b5c1fde4c39461d520d0fc53",
+    "provenance": {
+      "synthetic": true,
+      "original_payload_sha256": "7a5db2fc62e1ce4d80899b063e9d2c15187069b41957a9a3a30b969e68279782",
+      "changes": "Explicit stored-value wording in scenario0/AC1 common to all cells; source decision and matching document constraint select policy; access AC6 independently toggles one contradiction.",
+      "limits": "Mirrored source/constraint policy does not separate source-agreement from internal-consistency checks. One sample per cell cannot establish original internal cause or reliability."
+    }
+  },
+  "prospective_labels_source": {
+    "plan": "advisor-v19-storage-access-diagnostic-plan-20261105.json",
+    "sha256": "ed254f7feb34ac11c4c81b5d59ddc1a4e8834695d8ea6d4cdd26294dd5e9d8dc",
+    "note": "Exact cell2, frozen before its original model call. No changes to its payload, criteria or labels after observing the response."
+  },
+  "reused_samples": {
+    "base_accepted_excluding_superseded": 28,
+    "replacement_sample": 1,
+    "replacement_result": "advisor-v19-storage-access-diagnostic-result-1-20261105.json",
+    "replacement_result_sha256": "70a23326966eb88f266f2d0c6cdd3c314c5914f5b75283077f63e33704328750",
+    "note": "Reuse requires exact prompt, typed input, strict schema, settings, literal answer and independent reason review. Historical qualification remains incomplete."
+  },
+  "budget": {
+    "campaign_already_attempted": 132,
+    "campaign_limit": 163,
+    "new_call_limit": 7,
+    "reserved_live_calls": 24
+  },
+  "schedule": [
+    {
+      "case_id": "pm-context-not-read",
+      "sample": 2
+    },
+    {
+      "case_id": "incremental-explicit-source-analysis-complete",
+      "sample": 2
+    },
+    {
+      "case_id": "incremental-explicit-new-document-invalidates-marks",
+      "sample": 2
+    },
+    {
+      "case_id": "actual-pm-191",
+      "sample": 2
+    },
+    {
+      "case_id": "pm-unresolved-retention-policy",
+      "sample": 2
+    },
+    {
+      "case_id": "diagnostic-storage-allow-access-contradictory",
+      "sample": 2
+    },
+    {
+      "case_id": "external-source-access-denied",
+      "sample": 2
+    }
+  ],
+  "acceptance": "Every mark, reason and correction must be grounded in the exact input. One call per new sample, independent review before the next. No automatic retries, old journal resume, verdict repair or weakening of the access-negative control."
+}
