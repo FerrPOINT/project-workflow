@@ -40,10 +40,23 @@ Platform human routes требуют актуальный enforced application_a
 Machine routes проверяют служебную identity, scopes, назначение и владение.
 Standalone не использует Auth и не запускается автоматически после его отказа.
 
-Advisor использует явно настроенные Base URL, key и model. Текущий выпуск
-проверяется с app-test/high/4000/json_object. Model read timeout —1200 секунд,
-connect —30, CLI read —1500. Короткие health/Auth/Tracker-проверки имеют отдельные
-бюджеты. Ни отсутствие ключа, ни ошибка модели не выбирают другой provider.
+Advisor использует явно настроенные Base URL, key и model. Кандидат v19
+квалифицируется с app-test/high/4000 и явной настройкой
+`OPENAI_EVALUATOR_RESPONSE_FORMAT=json_schema`. Она должна пройти через упаковку
+до фактического запроса; наличие настройки в исходниках не означает её активацию.
+В Base Compose используются `SDLC_PROJECT_WORKFLOW_OPENAI_EVALUATOR_RESPONSE_FORMAT=json_schema`
+и `SDLC_PROJECT_WORKFLOW_OPENAI_REASONING_EFFORT=high`: Base передаёт их серверу
+как `OPENAI_*`. В собственном Compose Workflow задаются непосредственно
+`OPENAI_EVALUATOR_RESPONSE_FORMAT=json_schema` и `OPENAI_REASONING_EFFORT=high`.
+Это два способа установки, не последовательные слои. Base default reasoning=none
+не заменяет явный high кандидата; Workflow default сам по себе его не перекрывает.
+Default `json_object` не переключается автоматически после отказа schema.
+4000 является настройкой Workflow, а не доказанным upstream-лимитом ответа:
+проверенный ChatGPT-адаптер исключает output cap. Это не основание менять адаптер
+без проверки поддержки его backend.
+Model read timeout —1200 секунд, connect —30, CLI read —1500. Короткие
+health/Auth/Tracker-проверки имеют отдельные бюджеты. Ни отсутствие ключа,
+ни ошибка модели не выбирают другой provider.
 
 Обычная история читает до 200 записей с полными отчётами и сохранёнными
 результатами; полный внутренний snapshot не дублируется в этом ответе.

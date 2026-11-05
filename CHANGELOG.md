@@ -2,6 +2,21 @@
 
 ## Unreleased — Advisor V19 Candidate, Not Accepted
 
+- Apply the approved release-admission gate before spending the seven remaining
+  qualification calls. Two independent reviews cover all29 replies,134 assessments
+  and30 corrections:28 replies fully accepted; one C2 correction remains ambiguous,
+  not a proven evaluator defect. Matching marks do not accept an unresolved reason.
+  No new model calls, prompt/product changes, install or merge. Campaign132/163;
+  seven qualification and24 live calls remain unused. Preserve old inputs/gold.
+  Verify reusable gate artifacts by SHA and unchanged production/runner/config
+  sources; do not describe this as a fresh full run. Correct the CLI contract's
+  stale format description: candidate qualification explicitly selects json_schema,
+  without activating the installed runtime or changing defaults. Document both
+  direct Workflow and Base-prefixed environment settings, including explicit high:
+  Base's none default otherwise overrides Workflow's high default. Historical
+  qualification requests already used high; no semantic cause is attributed to this.
+  Offline preflight validates all18 frozen cases/36 slots against exact typed
+  reports, label digests and production builder; no model client or HTTP call.
 - Continue cause investigation rather than declaring the earlier inventory complete.
   Real SDLC-32 inputs prove a prior owner fact was omitted from source190 while v15
   supplied marks without prior report facts. Add an HTTP/storage regression using
