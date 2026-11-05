@@ -26,6 +26,7 @@ from project_workflow.interfaces.ui.schemas import (
 )
 from project_workflow.interfaces.ui.services import _load_phase_detail, _load_tasks
 from project_workflow.interfaces.ui.state import _app_state
+from project_workflow.interfaces.ui.templates import PROJECT_ICON_PATHS
 
 PositivePathId = Annotated[int, Path(gt=0)]
 PositiveQueryId = Annotated[int | None, Query(gt=0)]
@@ -54,6 +55,7 @@ def _with_namespace_aliases(item: dict[str, Any]) -> dict[str, Any]:
         "workflow_id": item.get("workflow_id"),
         "workflow_name": item.get("workflow_name"),
         "theme_icon": theme_icon,
+        "theme_icon_path": PROJECT_ICON_PATHS[theme_icon],
         "namespace_theme_icon": theme_icon,
         "theme_color": theme_color,
         "namespace_theme_color": theme_color,

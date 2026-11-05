@@ -266,6 +266,15 @@ namespace NAME against the canonical source definition. Fleet may represent an
 ID as an opaque string, but must preserve that value, never replace it with a
 label. Its separate `WorkflowBinding.namespace_name` is the symbol comparison.
 
+Для single-task projection namespace entries дополнительно содержат `theme_icon`
+(ключ из редактора), `theme_icon_path` (только SVG path `d`, без markup) и
+`theme_color` (`#RRGGBB`). Поля читаются заново по точному namespace ID через
+существующую нормализацию редактора. Они не входят в runtime identity, catalog
+hashes или assignments. Отсутствующий namespace либо неполная проекция этих
+полей дают `503`; роль не используется для подбора другого оформления.
+Legacy consumers читают прежние ID/name/workflow_id и игнорируют дополнительные
+поля. Отображение оформления в Fleet поставляется отдельным consumer change.
+
 The legacy installed directory does NOT return `hermes_profile` and continues to
 validate accepted default v2. The source-only exporter does not open a DB and
 cannot allocate or report installed namespace/workflow IDs.
