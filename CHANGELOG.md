@@ -2,6 +2,10 @@
 
 ## Unreleased — Advisor V19 Candidate, Not Accepted
 
+- Consolidate all18 qualification cases/36 slots, the four counterfactual controls
+  and historical discrepancies in [the case report](docs/ADVISOR_CASE_REPORT_20261105.md).
+  All158 received item assessments retain their literal reasons/corrections;
+  unknown and unrun slots remain explicit. Documentation only, no new inference.
 - Two universal content-versus-availability sentences correct the disputed E2
   interpretation without changing phase criteria, report shape or parser.
   A first four-call experiment matched19 marks but exposed one insufficient
