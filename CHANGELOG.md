@@ -1,6 +1,35 @@
 # Changelog
 
-## Unreleased — Typed Advisor V18 Checkpoints
+## Unreleased — Advisor V19 Candidate, Not Accepted
+
+- Two universal content-versus-availability sentences correct the disputed E2
+  interpretation without changing phase criteria, report shape or parser.
+  A first four-call experiment matched19 marks but exposed one insufficient
+  correction. The final candidate explicitly binds required_change to satisfying
+  that same criterion. Its four controls pass independent review of all19 marks,
+  reasons and corrections; this is not full qualification.
+- Preserve mandatory phase-context proof for both v18 and v19 readback.
+  Frozen v18 inputs/labels remain byte-identical; the existing QA runner selects
+  explicit v19 metadata and strict schema, with no reuse of old-policy responses.
+  Its paused budget now also blocks route probes and protects the live reserve.
+- Qualification stopped on independent semantic review after26 new attempts:
+  25 complete replies match all115 marks, but one C2 reason/correction wrongly
+  treats unspecified stored-value trimming as forbidden. The real access defect
+  still justifies PARTIAL. No gold change, automatic repair or retry occurred.
+  Together with four controls,29/36 evaluations and134 marks were reviewed;
+  one interrupted response is unknown and six slots were not called.
+- Campaign limit152 was explicitly approved;122 calls are counted, including
+  the interrupted call. Workflow install/merge and new PM live acceptance remain
+  blocked. LiteLLM stays fixed on Octo; installed Workflow79976adb stays healthy.
+  Native4326 PASS plus75 subtests, coverage94.0751%;15 skips are explicit:
+  private opt-in3, NTFS executable-mode1, missing Playwright11. PostgreSQL132
+  PASS without skips; owned Compose resources cleaned. HTTP history regression
+  adds one unique PASS: v18 replay/readback after v19 uses no inference and leaves
+  saved data unchanged. Ruff and mypy169 PASS on pinned dependencies. Own native
+  temporary files were retained after cleanup was rejected by execution policy;
+  no alternate deletion was attempted. This is not full release readiness.
+
+### Historical V18 Checkpoint Before Prompt Clarification
 
 - Strict qualification stopped after13 new single-attempt calls:12 exact matches,
   one disputed E2 mark on explicit replacement of the old document and source.

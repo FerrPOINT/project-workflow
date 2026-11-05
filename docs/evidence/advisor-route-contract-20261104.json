@@ -257,5 +257,124 @@
     "new_prompt_or_criterion_change": false,
     "workflow_install_or_merge": false,
     "minimal_next_step": "Resolve factual-account sufficiency and freeze one discriminating follow-up plan; no C3-to-E2 rule, keyword grading or repeated unchanged series"
+  },
+  "v19_qualification_20261105": {
+    "policy": "supervisor-evaluator-v19",
+    "system_sha256": "7ee97ccaa0914fe77b7ce881268b6dbe855ca2fd9e6edbc17df8a42e4b1edd48",
+    "status": "stopped_by_independent_semantic_review",
+    "qualified": false,
+    "changes": [
+      "Two general content-versus-availability sentences",
+      "required_change must satisfy the same failed criterion",
+      "Preserve v18/v19 context-fingerprint validation; no parser/schema/criteria changes"
+    ],
+    "frozen_labels_sha256": "277f399956c59530d59c81137da513e332f9baec2d5cacab6973b60672710e5c",
+    "first_experiment": {
+      "calls": 4,
+      "matching_marks": 19,
+      "sufficient_required_changes": 18,
+      "total_assessments": 19,
+      "accepted": false
+    },
+    "accepted_final_controls": {
+      "calls": 4,
+      "matching_assessments": 19,
+      "grounded_assessments": 19,
+      "primary": "advisor-v19-correction-controls-results-20261105.json",
+      "sha256": "c0e9e8a874fbc318424a7adb5418f32ab9214a9b7104e82212d8de7e8747dbfd"
+    },
+    "qualification": {
+      "planned_new_calls": 32,
+      "attempted_calls": 26,
+      "complete_responses": 25,
+      "matching_classifications": 25,
+      "unknown_responses": 1,
+      "unrun": 6,
+      "primary": "advisor-v19-qualification-results-20261105.json",
+      "primary_sha256": "8c6d7748436e7a796d96f7d0e9c27a3d2251f52afd7a3f44bc5a68f02ac55b59",
+      "primary_not_rewritten": true,
+      "raw_status_at_interrupt": "running",
+      "stop_record": "advisor-v19-qualification-stop-20261105.json"
+    },
+    "review": {
+      "completed_evaluations_including_controls": 29,
+      "reviewed_assessments": 134,
+      "matching_marks": 134,
+      "grounded_assessments": 133,
+      "nonempty_required_changes": 30,
+      "sufficient_required_changes": 29,
+      "blocked_controls_grounded": true,
+      "complete_reply_format_errors": 0
+    },
+    "failure": {
+      "case_id": "pm-private-access-contradiction",
+      "sample": 1,
+      "assessment": {
+        "covered": false,
+        "reason": "Документ содержит противоречие: область действия и другие критерии запрещают посторонним доступ, но последний критерий приёмки разрешает незнакомцу редактировать записи. Сценарий также утверждает, что оба значения обрезаются, тогда как источник задаёт обрезку для проверки непустоты, но не требует менять сохраняемые значения.",
+        "required_change": "Устранить противоречивый критерий приёмки и уточнить сценарий создания так, чтобы он проверял непустоту после обрезки, не вводя неподтверждённое требование менять сохраняемые значения."
+      },
+      "item": "C2",
+      "interpretation": "The actual owner-only versus public-edit contradiction supports C2=false. The source does not forbid storing trimmed values, so an additional mandatory trimming correction is not justified.",
+      "independent_reviews": 2,
+      "gold_changed": false,
+      "server_repair": false
+    },
+    "budget": {
+      "campaign_used": 122,
+      "campaign_limit": 152,
+      "owner_approved_limit_increase": true,
+      "unknown_attempt_counted": true,
+      "live_reserve_unspent": 24,
+      "automatic_retries": 0
+    },
+    "workflow_installed": false,
+    "workflow_merged": false,
+    "new_pm_live_scenarios_run": false,
+    "code_gates": {
+      "status": "mechanical_checks_passed_with_explicit_skips",
+      "native": {
+        "passed": 4326,
+        "skipped": 15,
+        "postgres_deselected": 132,
+        "subtests_passed": 75,
+        "seconds": 1480.66
+      },
+      "coverage": {
+        "version": "7.15.4",
+        "covered_lines": 12353,
+        "statements": 13131,
+        "percent": 94.07508948290305,
+        "threshold": 94
+      },
+      "postgres": {
+        "passed": 132,
+        "skipped": 0,
+        "owned_compose_resources_cleaned": true
+      },
+      "additional_http_history_regression": {
+        "file_cases_passed": 7,
+        "new_unique_case": 1,
+        "provider": "mocked; not a live PM acceptance"
+      },
+      "lint": "passed",
+      "types": {
+        "passed": true,
+        "source_files": 169
+      },
+      "skips": {
+        "private_opt_in": 3,
+        "ntfs_executable_modes": 1,
+        "playwright_not_installed": 11
+      },
+      "artifact_hashes": {
+        "advisor-v19-final-native-20261105.xml": "092e5aa231a0c81a42f7ab22cfef7c99528ab054982cb0ed53488f5063a4e40b",
+        "advisor-v19-final-coverage-20261105.json": "de0dcc1c979816cb4805e23847d77c1356d1e20bdbcf18f15d0faca6688995aa",
+        "advisor-v19-history-http-frozen-20261105.xml": "8fc39751a8ee85559543f590c8696bc2a4161ae771a0eedf3be9a7adf0253e6d",
+        "workflow-v19-pg16-20261105/result.json": "84b9b4430be78a62f19b67d9aaa389eb819358747d4faf2a3c80dc3c618b8130"
+      },
+      "native_temp_cleanup": "Blocked by execution policy after explicit ownership/path checks; retained, no alternate deletion attempted."
+    },
+    "next": "Keep candidate unaccepted. Distinguish 'not required' from 'forbidden' in a separately predeclared follow-up, without keyword grading, answer repair, altered gold or another unchanged series."
   }
 }
