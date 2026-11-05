@@ -11,8 +11,13 @@
   with HTTP422; local make stops during Prisma/nodeenv provisioning. The
   locked-Node retake stops on its npm wrapper before make. No source failure
   or full-gate pass is claimed. Owned QA resources are cleaned; model budget
-  remains72/134. Next is gate completion or an explicit release exception,
-  followed by activation and real JSON-mode/schema/C4 checks.
+  remains72/134. The owner requires completion of all checks before release;
+  no exception is authorized. Activation and real JSON-mode/schema/C4 checks
+  remain pending.
+- GitHub's Actions page identifies a fork usage suspension requiring maintainer
+  re-enablement, despite the enabled API setting. Local QA also remains stopped
+  below the required disk reserve,27.2GiB against30GiB. Cleanup audit found no
+  eligible resources of this task; unrelated resources and Octo are untouched.
 - Current CP1 is stopped on a reproduced provider-contract defect. The active
   LiteLLM1.109.0 ChatGPT adapter (source1403f0dc2ebd) removes text.format and
   max_output_tokens after the actual parent transform retained them. Offline
