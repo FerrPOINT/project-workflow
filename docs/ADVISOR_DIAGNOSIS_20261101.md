@@ -1,5 +1,35 @@
 # Advisor: сквозной диагноз и границы выпуска
 
+## 2026-11-06: Причина Отказа Native Readback Установлена
+
+Read-only проба на фактическом Fleet backend22dd и четырёх проверенных по pin
+установленных Base exports завершила `current_namespace_witness` и проверку
+исходного acknowledged running launch. Первая нарушенная граница —
+`attached_membership`: `Retained controller attachment is disconnected`.
+Это конкретная причина ранее непрозрачного `native_readback/unavailable`;
+не ошибка JSON, Advisor, документа или размера контекста.
+
+Цепочка отказа: configured presentation сохранил completed SDLC-33 без
+`hermes.run.terminal_verified`; замена backend потеряла его endpoint в private
+сети PM; strong readback требует этот endpoint; native recovery сначала требует
+сохранённое terminal proof. Следовательно, на текущей установке имеющиеся
+предпосылки образуют цикл. Свидетельство Docker о живом процессе не доказывает
+завершение его бизнес-запуска. Статус completed не заменяет native-ответ.
+
+Новый ручной host connect не выполнялся: он создаст Unclaimed attachment и
+потребует обратных операторских действий вместо исправления источника. Нельзя
+создавать proof из UI-статуса, ослаблять known-ACK или повторять работу PM.
+Безопасный следующий пакет проверяет native/history admission до остановки
+прежнего контроллера. Он предотвращает повторение дефекта, но сам по себе
+не восстанавливает уже потерянную связь. Если поддерживаемый readback не может
+получить доказательство, активация и выпуск остаются остановлены; отдельный
+изменённый контракт восстановления требует review до применения.
+
+Evidence: `report-configured-native-boundary-20261106.json` вместе с предыдущими
+known-ACK и reconcile-run результатами. Проба использует read-only Engine wrapper,
+не выполняет native POST, DB-записи и модельные вызовы. Advisor141/163,
+резерв22, PM26 и SDLC-33 неизменны. Живые финалы, браузеры и мерж не приняты.
+
 ## 2026-11-06: Workflow Установлен, PM Live Ещё Не Принят
 
 Текущий пакет ошибок320f9670 установлен штатно: Buildd97a01bd/Applyc684c1b2,

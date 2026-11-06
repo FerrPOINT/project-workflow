@@ -28,6 +28,12 @@
 - Live transition blocker is isolated to Fleet: SDLC-33's completed UI run has
   zero verified native terminal observations; known-ACK recovery rejects it with
   SQLSTATE23514. Existing one-shot reconcile-run returns native_readback/unavailable.
+  Exact installed-export read-only diagnosis now resolves that refusal: original
+  namespace/start checks pass; attached_membership fails because the replacement
+  backend is disconnected from the retained PM network. Recovery needs the native
+  proof before attachment, while strong readback needs that missing connection.
+  A pre-stop admission guard prevents repetition but does not repair this already
+  disconnected runtime. No host-connect workaround or weaker custody is accepted.
   No proof is fabricated and no recovery POST or replacement task is issued.
   Both PM finals and browser acceptance remain open; Advisor stays141/163.
 - Normal Apply729, journal de836101, is complete: exact Workflow936a4b80 and
