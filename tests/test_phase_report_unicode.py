@@ -37,7 +37,11 @@ def test_escaped_unpaired_surrogates_are_rejected_without_echo_or_repair(value, 
     assert "\\ud" in raw
     with pytest.raises(PhaseReportFormatError) as raised:
         PhaseReport.parse(raw)
-    assert str(raised.value) == "Invalid phase report at $: invalid Unicode string"
+    assert str(raised.value) == (
+        "Invalid phase report at $: invalid Unicode string. "
+        "Build the report as an object and serialize it with a standard JSON library; "
+        "do not hand-write or shorten the document to fix its format."
+    )
     assert "private" not in str(raised.value)
     assert json.loads(raw) == payload
 

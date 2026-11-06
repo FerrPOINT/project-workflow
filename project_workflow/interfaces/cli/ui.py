@@ -18,7 +18,11 @@ def _output(ctx: click.Context, response: dict[str, Any]) -> None:
     if ctx.obj.get("json_mode", False):
         out_json(result, exit_code=code)
         return
-    output = format_result(result) if "verdict" in result else str(result.get("instructions", result))
+    if (result.get("error_code") == "invalid-phase-report" and result.get("http_status") is None
+            and result.get("acceptance_unknown") is False):
+        output = "Отчёт не отправлен: локальная ошибка формата\n" + result["error"]
+    else:
+        output = format_result(result) if "verdict" in result else str(result.get("instructions", result))
     console.print(output, markup=False, highlight=False)
     raise click.exceptions.Exit(code)
 
