@@ -49,7 +49,7 @@ def validate_frozen_evaluation(
     if not isinstance(state, dict) or set(state) not in (state_keys, state_keys | {"evaluator_response_format"}):
         raise ConflictError("Terminal frozen fingerprint inputs are missing or invalid")
     if ("evaluator_response_format" in state
-            and state["evaluator_response_format"] not in ("json_object", "json_schema")):
+            and state["evaluator_response_format"] not in ("json_object", "json_schema", "responses-json_schema")):
         raise ConflictError("Terminal frozen evaluator format is invalid")
     if (state.get("prompt_version") in ("supervisor-evaluator-v14", PromptBuilder.PROMPT_VERSION)
             and "evaluator_response_format" not in state):

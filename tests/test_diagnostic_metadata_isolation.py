@@ -6,7 +6,8 @@ import pytest
 import requests
 
 from project_workflow import config
-from project_workflow.infrastructure.llm import OpenAICompatibleClient
+from project_workflow.infrastructure.llm import OpenAICompatibleClient, PromptBuilder
+from tests._report_helpers import response_body
 
 pytestmark = pytest.mark.unit
 
@@ -24,10 +25,10 @@ def test_response_metadata_failure_does_not_change_success_or_retry():
     response = Mock(spec=requests.Response)
     response.status_code = 200
     response.headers = {}
-    response.json.return_value = {"choices": [{"message": {"content": "{}"}}]}
+    response.json.return_value = response_body("{}")
     with patch("project_workflow.infrastructure.llm.requests.post", return_value=response) as post:
         with patch.object(client, "_capture_response_diagnostics", side_effect=ValueError("private-secret")):
-            assert client.chat("system", "report") == {}
+            assert client.respond("system", "report", response_format=PromptBuilder.response_schema([])) == {}
     post.assert_called_once()
     assert client.last_call_diagnostics["outcome"] == "success"
     assert client.last_call_diagnostics["metadata_error"] == "ValueError"
@@ -39,8 +40,8 @@ def test_response_metadata_failure_does_not_hide_content_error():
     response = Mock(spec=requests.Response)
     response.status_code = 200
     response.headers = {}
-    response.json.return_value = {"choices": [{"message": {"content": ""}}]}
+    response.json.return_value = response_body("")
     with patch("project_workflow.infrastructure.llm.requests.post", return_value=response):
         with patch.object(client, "_capture_response_diagnostics", side_effect=ValueError("private-secret")):
             with pytest.raises(ValueError, match="Empty content from LLM"):
-                client.chat("system", "report")
+                client.respond("system", "report", response_format=PromptBuilder.response_schema([]))

@@ -7,6 +7,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from tests._report_helpers import response_body
+
 pytestmark = [pytest.mark.unit]
 
 from project_workflow.infrastructure.llm import (
@@ -60,15 +62,11 @@ class TestEvaluateLlmReportVerdicts:
 
         assert result["verdict"] == "BLOCKED"
         assert result["retryable"] is True
-        assert result["blockers"] == [
-            "Проверяющий LLM не настроен: для OpenRouter требуется OPENAI_API_KEY."
-        ]
+        assert result["blockers"] == ["Проверяющий LLM не настроен или настроен неверно."]
         run_data = engine.db.record_step.call_args.kwargs
         assert run_data["replay_fingerprint"] is None
         assert run_data["evaluation_snapshot"]["model"] is None
-        assert run_data["evaluation_snapshot"]["raw_evaluator"] == {
-            "error": "LlmConfigurationError"
-        }
+        assert run_data["evaluation_snapshot"]["raw_evaluator"] == {"error": "LlmConfigurationError"}
 
     def test_invalid_blocked_is_retryable_and_records_blocked_transition(self):
         engine = _make_engine()
@@ -76,7 +74,7 @@ class TestEvaluateLlmReportVerdicts:
         _set_phase(engine, phase)
         with patch.object(
             OpenAICompatibleClient,
-            "chat",
+            "respond",
             return_value={
                 "verdict": "BLOCKED",
                 "covered": [],
@@ -90,9 +88,7 @@ class TestEvaluateLlmReportVerdicts:
         assert result["verdict"] == "BLOCKED"
         assert result["retryable"] is True
         assert result["blockers"] == ["Проверяющий LLM вернул некорректный ответ."]
-        engine._record_evaluation.assert_called_once_with(
-            phase, "blocked", None, None, 42, commit=False
-        )
+        engine._record_evaluation.assert_called_once_with(phase, "blocked", None, None, 42, commit=False)
 
     def test_retired_rollback_is_rejected_even_with_a_saved_target(self):
         engine = _make_engine()
@@ -101,7 +97,7 @@ class TestEvaluateLlmReportVerdicts:
         _set_phase(engine, phase)
         with patch.object(
             OpenAICompatibleClient,
-            "chat",
+            "respond",
             return_value={
                 "verdict": "ROLLBACK",
                 "covered": [],
@@ -130,7 +126,7 @@ class TestEvaluateLlmReportVerdicts:
         _set_phase(engine, phase)
         with patch.object(
             OpenAICompatibleClient,
-            "chat",
+            "respond",
             return_value={
                 "verdict": "DELEGATE",
                 "assessments": {},
@@ -140,9 +136,7 @@ class TestEvaluateLlmReportVerdicts:
         ):
             result = evaluate_llm_report(report_json("r"), phase, engine)
         assert result["verdict"] == "DELEGATE"
-        engine._record_evaluation.assert_called_once_with(
-            phase, "delegate", None, None, 42, commit=False
-        )
+        engine._record_evaluation.assert_called_once_with(phase, "delegate", None, None, 42, commit=False)
 
     def test_pass_fills_next_phase_from_builder(self):
         engine = _make_engine()
@@ -152,7 +146,7 @@ class TestEvaluateLlmReportVerdicts:
         _set_phase(engine, phase, next_phase)
         with patch.object(
             OpenAICompatibleClient,
-            "chat",
+            "respond",
             return_value={
                 "verdict": "PASS",
                 "assessments": {},
@@ -173,10 +167,14 @@ class TestEvaluateLlmReportVerdicts:
         with (
             patch.object(
                 OpenAICompatibleClient,
-                "chat",
+                "respond",
                 return_value={
-                    "verdict": "PASS", "covered": [], "missing": [], "blockers": [],
-                    "message": "ok", "confidence": 0.9,
+                    "verdict": "PASS",
+                    "covered": [],
+                    "missing": [],
+                    "blockers": [],
+                    "message": "ok",
+                    "confidence": 0.9,
                 },
             ),
             pytest.raises(RuntimeError, match="write failed"),
@@ -193,11 +191,14 @@ class TestEvaluateLlmReportVerdicts:
 class TestOpenAICompatibleClientChatErrors:
     def test_openrouter_without_key_is_rejected_before_network(self):
         client = OpenAICompatibleClient(base_url="https://openrouter.ai/api/v1", api_key="   ")
-        with patch("requests.post") as post, pytest.raises(
-            LlmConfigurationError,
-            match="OPENAI_API_KEY",
+        with (
+            patch("requests.post") as post,
+            pytest.raises(
+                LlmConfigurationError,
+                match="OPENAI_API_KEY",
+            ),
         ):
-            client.chat("sys", "user")
+            client.respond("sys", "user", response_format=PromptBuilder.response_schema([]))
 
         post.assert_not_called()
 
@@ -205,9 +206,9 @@ class TestOpenAICompatibleClientChatErrors:
         client = OpenAICompatibleClient(base_url="http://provider.internal/v1", api_key="")
         response = MagicMock()
         response.raise_for_status.return_value = None
-        response.json.return_value = {"choices": [{"message": {"content": "{}"}}]}
+        response.json.return_value = response_body("{}")
         with patch("requests.post", return_value=response) as post:
-            assert client.chat("sys", "user") == {}
+            assert client.respond("sys", "user", response_format=PromptBuilder.response_schema([])) == {}
 
         assert "Authorization" not in post.call_args.kwargs["headers"]
 
@@ -215,7 +216,7 @@ class TestOpenAICompatibleClientChatErrors:
         with patch("requests.post", side_effect=TimeoutError("slow")):
             client = OpenAICompatibleClient(api_key="test-key")
             with pytest.raises(TimeoutError):
-                client.chat("sys", "user")
+                client.respond("sys", "user", response_format=PromptBuilder.response_schema([]))
 
     def test_http_error(self):
         resp = MagicMock()
@@ -223,25 +224,25 @@ class TestOpenAICompatibleClientChatErrors:
         with patch("requests.post", return_value=resp):
             client = OpenAICompatibleClient(api_key="test-key")
             with pytest.raises(Exception, match="bad"):
-                client.chat("sys", "user")
+                client.respond("sys", "user", response_format=PromptBuilder.response_schema([]))
 
     def test_empty_content(self):
         resp = MagicMock()
         resp.raise_for_status.return_value = None
-        resp.json.return_value = {"choices": [{"message": {"content": ""}}]}
+        resp.json.return_value = response_body("")
         with patch("requests.post", return_value=resp):
             client = OpenAICompatibleClient(api_key="test-key")
             with pytest.raises(ValueError, match="Empty content"):
-                client.chat("sys", "user")
+                client.respond("sys", "user", response_format=PromptBuilder.response_schema([]))
 
     def test_whitespace_content(self):
         resp = MagicMock()
         resp.raise_for_status.return_value = None
-        resp.json.return_value = {"choices": [{"message": {"content": "  "}}]}
+        resp.json.return_value = response_body("  ")
         with patch("requests.post", return_value=resp):
             client = OpenAICompatibleClient(base_url="https://provider.example/v1")
             with pytest.raises(ValueError, match="Empty content"):
-                client.chat("sys", "user")
+                client.respond("sys", "user", response_format=PromptBuilder.response_schema([]))
 
 
 class TestExtractJson:

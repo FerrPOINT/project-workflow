@@ -1802,7 +1802,7 @@ class TestPostgresUoW:
         def evaluate() -> dict:
             uow = SAUnitOfWork(pg_url)
             try:
-                with patch.object(OpenAICompatibleClient, "chat", side_effect=provider):
+                with patch.object(OpenAICompatibleClient, "respond", side_effect=provider):
                     return SupervisorEngine("RUN-90002", uow=uow).evaluate(report_json("done"))
             finally:
                 uow.close()
@@ -1874,7 +1874,7 @@ class TestPostgresUoW:
         def evaluate() -> dict:
             uow = SAUnitOfWork(pg_url)
             try:
-                with patch.object(OpenAICompatibleClient, "chat", side_effect=provider):
+                with patch.object(OpenAICompatibleClient, "respond", side_effect=provider):
                     return SupervisorEngine("RUN-90003", uow=uow).evaluate(report_json("still working"))
             finally:
                 uow.close()
@@ -1916,7 +1916,7 @@ class TestPostgresUoW:
 
         replay_uow = SAUnitOfWork(pg_url)
         try:
-            with patch.object(OpenAICompatibleClient, "chat") as replay_provider:
+            with patch.object(OpenAICompatibleClient, "respond") as replay_provider:
                 replay = SupervisorEngine("RUN-90003", uow=replay_uow).evaluate(
                     report_json("still working")
                 )
@@ -2089,7 +2089,7 @@ def test_concurrent_reports_create_one_transition_and_run(pg_url, same_report):
     reports = ["same report", "same report" if same_report else "different report"]
     with (
         patch(
-            "project_workflow.supervisor.evaluate.OpenAICompatibleClient.chat",
+            "project_workflow.supervisor.evaluate.OpenAICompatibleClient.respond",
             side_effect=lambda *_args, **kwargs: _pass_response(kwargs["user"]),
         ),
         ThreadPoolExecutor(max_workers=2) as pool,
@@ -2141,7 +2141,7 @@ def test_concurrent_distinct_partial_reports_do_not_apply_stale_snapshot(pg_url)
             uow.close()
 
     with (
-        patch("project_workflow.supervisor.evaluate.OpenAICompatibleClient.chat", side_effect=provider),
+        patch("project_workflow.supervisor.evaluate.OpenAICompatibleClient.respond", side_effect=provider),
         ThreadPoolExecutor(max_workers=2) as pool,
     ):
         results = list(pool.map(evaluate, ["first partial", "second partial"]))

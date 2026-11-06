@@ -7,6 +7,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
+from tests._report_helpers import response_body
+
 pytestmark = [pytest.mark.unit]
 
 from project_workflow.infrastructure.llm import (
@@ -129,13 +131,13 @@ class TestOpenAICompatibleClient:
         with patch("project_workflow.infrastructure.llm.requests.post") as mock_post:
             mock_post.return_value = MagicMock(
                 status_code=200,
-                json=lambda: {"choices": [{"message": {"content": json.dumps(expected)}}]},
+                json=lambda: response_body(json.dumps(expected)),
                 raise_for_status=lambda: None,
             )
-            result = client.chat("system text", "user text")
+            result = client.respond("system text", "user text", response_format=PromptBuilder.response_schema([]))
         assert result == expected
         mock_post.assert_called_once()
-        assert mock_post.call_args.args[0] == "https://ollama.com/v1/chat/completions"
+        assert mock_post.call_args.args[0] == "https://ollama.com/v1/responses"
         assert mock_post.call_args.kwargs["headers"]["Authorization"] == "Bearer test-key"
 
     def test_chat_payload_structure(self):
@@ -143,42 +145,41 @@ class TestOpenAICompatibleClient:
         with patch("project_workflow.infrastructure.llm.requests.post") as mock_post:
             mock_post.return_value = MagicMock(
                 status_code=200,
-                json=lambda: {"choices": [{"message": {"content": "{}"}}]},
+                json=lambda: response_body("{}"),
                 raise_for_status=lambda: None,
             )
-            client.chat("sys", "usr", temperature=0.5)
+            client.respond("sys", "usr", response_format=PromptBuilder.response_schema([]))
             _, kwargs = mock_post.call_args
             payload = kwargs["json"]
             assert payload["model"] == "test-model"
-            assert payload["temperature"] == 0.5
-            assert payload["max_tokens"] == 4000
-            assert payload["reasoning_effort"] == "none"
-            assert payload["response_format"] == {"type": "json_object"}
-            assert len(payload["messages"]) == 2
-            assert payload["messages"][0]["role"] == "system"
-            assert payload["messages"][1]["role"] == "user"
+            assert "temperature" not in payload
+            assert payload["max_output_tokens"] == 4000
+            assert payload["reasoning"] == {"effort": "none"}
+            assert payload["text"]["format"] == PromptBuilder.response_schema([])
+            assert payload["instructions"] == "sys"
+            assert payload["input"] == [{"role": "user", "content": "usr"}]
 
     def test_chat_omits_reasoning_effort_when_disabled(self):
         client = OpenAICompatibleClient(reasoning_effort="", api_key="test-key")
         with patch("project_workflow.infrastructure.llm.requests.post") as mock_post:
             mock_post.return_value = MagicMock(
-                json=lambda: {"choices": [{"message": {"content": "{}"}}]},
+                json=lambda: response_body("{}"),
                 raise_for_status=lambda: None,
             )
-            client.chat("sys", "usr")
+            client.respond("sys", "usr", response_format=PromptBuilder.response_schema([]))
 
-        assert "reasoning_effort" not in mock_post.call_args.kwargs["json"]
+        assert "reasoning" not in mock_post.call_args.kwargs["json"]
 
     def test_chat_empty_content_raises(self):
         client = OpenAICompatibleClient(api_key="test-key")
         with patch("project_workflow.infrastructure.llm.requests.post") as mock_post:
             mock_post.return_value = MagicMock(
                 status_code=200,
-                json=lambda: {"choices": [{"message": {"content": ""}}]},
+                json=lambda: response_body(""),
                 raise_for_status=lambda: None,
             )
             with pytest.raises(ValueError, match="Empty content"):
-                client.chat("sys", "usr")
+                client.respond("sys", "usr", response_format=PromptBuilder.response_schema([]))
 
 
 class TestPromptBuilder:
@@ -360,24 +361,27 @@ class TestSupervisorEngineEvaluateLLM:
         assert result["verdict"] == "BLOCKED"
         assert result["blockers"] == ["No access"]
 
-    @pytest.mark.parametrize("report", [
-        "Required Workflow command readback is absent; no result is available.",
-        "Actual Workflow readback has namespace_id=3; the assigned namespace_id is 2.",
-        "Presentation contains only a summary; the required full saved document is absent.",
-        "The full saved document was presented, but no saved owner confirmation is available.",
-        "Presented document is revision 2/hash b; saved owner confirmation is for revision 1/hash a.",
-    ])
+    @pytest.mark.parametrize(
+        "report",
+        [
+            "Required Workflow command readback is absent; no result is available.",
+            "Actual Workflow readback has namespace_id=3; the assigned namespace_id is 2.",
+            "Presentation contains only a summary; the required full saved document is absent.",
+            "The full saved document was presented, but no saved owner confirmation is available.",
+            "Presented document is revision 2/hash b; saved owner confirmation is for revision 1/hash a.",
+        ],
+    )
     def test_negative_evidence_verdict_is_not_promoted_to_pass(self, engine, supervisor_llm, report):
         supervisor_llm("PARTIAL")
-        fixture_chat = OpenAICompatibleClient.chat
+        fixture_chat = OpenAICompatibleClient.respond
         original_phase = engine.current_phase_code
-        with patch("project_workflow.supervisor.evaluate.OpenAICompatibleClient.chat") as chat:
-            chat.side_effect = fixture_chat
+        with patch("project_workflow.supervisor.evaluate.OpenAICompatibleClient.respond") as respond:
+            respond.side_effect = fixture_chat
             result = engine.evaluate(report_json(report))
 
-        chat.assert_called_once()
-        assert chat.call_args.kwargs["system"] == PromptBuilder.SYSTEM_PROMPT
-        assert json.loads(chat.call_args.kwargs["user"])["report"] == json.loads(report_json(report))
+        respond.assert_called_once()
+        assert respond.call_args.kwargs["system"] == PromptBuilder.SYSTEM_PROMPT
+        assert json.loads(respond.call_args.kwargs["user"])["report"] == json.loads(report_json(report))
         assert result["verdict"] == "PARTIAL"
         assert result["missing"]
         assert result["next_phase_code"] is None
@@ -386,11 +390,11 @@ class TestSupervisorEngineEvaluateLLM:
 
     def test_evaluate_llm_fails_closed_on_provider_failure(self, engine):
         with patch(
-            "project_workflow.supervisor.evaluate.OpenAICompatibleClient.chat",
+            "project_workflow.supervisor.evaluate.OpenAICompatibleClient.respond",
             side_effect=requests.ConnectionError("down"),
-        ) as chat:
+        ) as respond:
             result = engine.evaluate(report_json(""))
-        chat.assert_called_once()
+        respond.assert_called_once()
         assert result["verdict"] == "BLOCKED"
         assert result["next_phase_code"] is None
         assert result["retryable"] is True
@@ -405,10 +409,10 @@ class TestSupervisorEngineEvaluateLLM:
     def test_evaluate_llm_sends_compact_prompt(self, engine, supervisor_llm):
         """The provider receives phase criteria and the report, not task metadata."""
         supervisor_llm("PASS")
-        fixture_chat = OpenAICompatibleClient.chat
+        fixture_chat = OpenAICompatibleClient.respond
         phase = engine._get_current_phase_obj()
         items = engine.contract_builder.build_evaluation_items(phase)
-        with patch("project_workflow.supervisor.evaluate.OpenAICompatibleClient.chat") as mock_chat:
+        with patch("project_workflow.supervisor.evaluate.OpenAICompatibleClient.respond") as mock_chat:
             mock_chat.side_effect = fixture_chat
             engine.evaluate_llm(report_json("Report"), phase)
             _, kwargs = mock_chat.call_args
@@ -620,8 +624,11 @@ class TestEvaluatorV15PromptContract:
         from project_workflow.supervisor.contracts import PhaseContractBuilder
         from project_workflow.supervisor.evaluate import _evaluate_strict_response
 
-        export = json.loads((Path(__file__).resolve().parents[1]
-                             / "docs/evidence/pm-default-workflow-20261031.json").read_text(encoding="utf-8"))
+        export = json.loads(
+            (Path(__file__).resolve().parents[1] / "docs/evidence/pm-default-workflow-20261031.json").read_text(
+                encoding="utf-8"
+            )
+        )
         phase = _phase_item_to_supervisor(ManagedMode.model_validate(export["modes"][0]).phases[-1])
         items = PhaseContractBuilder([phase]).build_evaluation_items(phase)
         ids = [item_id for item_id, _ in items]
@@ -635,10 +642,14 @@ class TestEvaluatorV15PromptContract:
         user_data = json.loads(prompt)
         assert len(items) == 7
         assert user_data == {
-            "phase": phase.name, "allowed_verdicts": ["PASS", "PARTIAL", "BLOCKED"],
-            "criteria": [{"id": label, "text": dict(items)[item_id]}
-                         for label, item_id in PromptBuilder.item_aliases(items).items()],
-            "previously_covered": [], "report": report,
+            "phase": phase.name,
+            "allowed_verdicts": ["PASS", "PARTIAL", "BLOCKED"],
+            "criteria": [
+                {"id": label, "text": dict(items)[item_id]}
+                for label, item_id in PromptBuilder.item_aliases(items).items()
+            ],
+            "previously_covered": [],
+            "report": report,
         }
         assert all(item.step not in prompt for item in phase.instructions)
         assert "send ONE self-contained final report using project-workflow --json step" not in prompt
@@ -646,23 +657,36 @@ class TestEvaluatorV15PromptContract:
         assert [criterion["text"] for criterion in user_data["criteria"]] == [text for _, text in items]
         missing = [ids[0], ids[4]]
         raw = {
-            "verdict": "PARTIAL", "assessments": {label: {"covered": item_id not in missing,
-                "reason": "The report lacks proof of sending this final report through project-workflow "
-                          "and reading its result." if item_id in missing else "Reported fact present"}
-                for label, item_id in PromptBuilder.item_aliases(items).items()},
-            "blockers": [], "confidence": 0.99,
+            "verdict": "PARTIAL",
+            "assessments": {
+                label: {
+                    "covered": item_id not in missing,
+                    "reason": "The report lacks proof of sending this final report through project-workflow "
+                    "and reading its result."
+                    if item_id in missing
+                    else "Reported fact present",
+                }
+                for label, item_id in PromptBuilder.item_aliases(items).items()
+            },
+            "blockers": [],
+            "confidence": 0.99,
         }
         client = OpenAICompatibleClient(api_key="", base_url="https://provider.example/v1")
         with patch("project_workflow.infrastructure.llm.requests.post") as post:
-            post.return_value.json.return_value = {"choices": [{"message": {"content": json.dumps(raw)}}]}
-            returned_raw, parsed = _evaluate_strict_response(client, user=prompt, evaluation_items=items, phase=phase)
+            post.return_value.json.return_value = response_body(json.dumps(raw))
+            returned_raw, parsed = _evaluate_strict_response(
+                client,
+                user=prompt,
+                evaluation_items=items,
+                phase=phase,
+                response_format=PromptBuilder.response_schema([]),
+            )
 
         post.assert_called_once()
         payload = post.call_args.kwargs["json"]
-        assert payload["messages"] == [
-            {"role": "system", "content": PromptBuilder.SYSTEM_PROMPT}, {"role": "user", "content": prompt},
-        ]
-        assert payload["response_format"] == {"type": "json_object"}
+        assert payload["instructions"] == PromptBuilder.SYSTEM_PROMPT
+        assert payload["input"] == [{"role": "user", "content": prompt}]
+        assert payload["text"]["format"] == PromptBuilder.response_schema([])
         assert returned_raw == raw
         assert "assessments" not in parsed.raw
         assert parsed.verdict == "PARTIAL" and parsed.missing == missing

@@ -90,7 +90,7 @@ class TestEvaluateGaps:
     @patch("project_workflow.supervisor.evaluate.ResponseParser")
     def test_evaluate_blocked_default_blocker(self, mock_parser, mock_client):
         mock_parser.parse_assessments.return_value = MockLlmResponse(verdict="BLOCKED", blockers=["blocked"])
-        mock_client.return_value.chat.return_value = {}
+        mock_client.return_value.respond.return_value = {}
         engine = self._engine()
         ph = _phase()
         self._set_phases(engine, ph)
@@ -100,7 +100,7 @@ class TestEvaluateGaps:
 
     @patch("project_workflow.supervisor.evaluate.OpenAICompatibleClient")
     def test_evaluate_rejects_retired_rollback_with_a_saved_target(self, mock_client):
-        mock_client.return_value.chat.return_value = {
+        mock_client.return_value.respond.return_value = {
             "verdict": "ROLLBACK", "covered": [], "missing": [], "blockers": [],
             "message": "rollback", "confidence": 0.8,
         }
@@ -119,7 +119,7 @@ class TestEvaluateGaps:
     @patch("project_workflow.supervisor.evaluate.ResponseParser")
     def test_evaluate_pass_next_phase_int(self, mock_parser, mock_client):
         mock_parser.parse_assessments.return_value = MockLlmResponse(verdict="PASS", next_phase="2")
-        mock_client.return_value.chat.return_value = {}
+        mock_client.return_value.respond.return_value = {}
         engine = self._engine()
         ph = _phase()
         next_ph = _phase(id=5, code="2", name="Next")
@@ -142,7 +142,7 @@ class TestEvaluateGaps:
     )
     @patch("project_workflow.supervisor.evaluate.OpenAICompatibleClient")
     def test_provider_failure_keeps_phase_blocked_retryable_and_redacts_details(self, mock_client, error):
-        mock_client.return_value.chat.side_effect = error
+        mock_client.return_value.respond.side_effect = error
         engine = self._engine()
         phase = _phase()
         self._set_phases(engine, phase)
@@ -157,7 +157,7 @@ class TestEvaluateGaps:
     @pytest.mark.parametrize("verdict", ["ROLLBACK", "DELEGATE"])
     @patch("project_workflow.supervisor.evaluate.OpenAICompatibleClient")
     def test_provider_cannot_invent_rollback_or_delegate_policy(self, mock_client, verdict):
-        mock_client.return_value.chat.return_value = {
+        mock_client.return_value.respond.return_value = {
             "verdict": verdict, "covered": [], "missing": [], "blockers": [],
             "message": "unsupported transition", "confidence": 0.8,
         }
@@ -169,7 +169,7 @@ class TestEvaluateGaps:
         assert result["retryable"] is True
         assert result["next_phase_code"] is None
         assert result["rollback_phase_code"] is None
-        assert mock_client.return_value.chat.call_count == 2
+        assert mock_client.return_value.respond.call_count == 2
 
     @pytest.mark.parametrize("point", ["before", "during"])
     @patch("project_workflow.supervisor.evaluate.OpenAICompatibleClient")
@@ -208,7 +208,7 @@ class TestEvaluateGaps:
                 engine.current_phase_code = "2"
             return {}
 
-        mock_client.return_value.chat.side_effect = delete_phase
+        mock_client.return_value.respond.side_effect = delete_phase
         result = evaluate_llm_report(report_json("report"), phase, engine)
         assert result["verdict"] == "BLOCKED"
         engine.db.record_step.assert_not_called()
@@ -240,7 +240,7 @@ class TestEvaluateGaps:
     @patch("project_workflow.supervisor.evaluate.ResponseParser")
     def test_history_write_conflict_without_durable_response_rolls_back_and_propagates(self, mock_parser, mock_client):
         mock_parser.parse_assessments.return_value = MockLlmResponse()
-        mock_client.return_value.chat.return_value = {}
+        mock_client.return_value.respond.return_value = {}
         engine = self._engine()
         phase = _phase()
         self._set_phases(engine, phase)
@@ -276,7 +276,7 @@ class TestEvaluateGaps:
             if task_disappears:
                 engine.task = {}
 
-        mock_client.return_value.chat.side_effect = peer_completes
+        mock_client.return_value.respond.side_effect = peer_completes
         engine._refresh_task_state.side_effect = refresh_task
         result = evaluate_llm_report(report_json("same report"), phase, engine)
         if task_disappears:
@@ -302,7 +302,7 @@ class TestEvaluateGaps:
             engine.db.step_history.list.return_value = [SimpleNamespace(id=7)]
             return {}
 
-        mock_client.return_value.chat.side_effect = peer_completes
+        mock_client.return_value.respond.side_effect = peer_completes
         result = evaluate_llm_report(report_json("stale report"), phase, engine)
         assert result["verdict"] == "BLOCKED"
         assert result["retryable"] is True

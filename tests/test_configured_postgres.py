@@ -113,14 +113,14 @@ def test_concurrent_reports_have_one_committed_transition(configured, supervisor
 
     protocol.enroll(configured)
     supervisor_llm("PASS")
-    evaluate = OpenAICompatibleClient.chat
+    evaluate = OpenAICompatibleClient.respond
     barrier = Barrier(2)
 
-    def chat(*args, **kwargs):
+    def respond(*args, **kwargs):
         barrier.wait(timeout=15)
         return evaluate(*args, **kwargs)
 
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", chat)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", respond)
 
     def submit(index):
         return protocol.step(configured, report=report_json("One exact report"), expected_version=1,
@@ -142,15 +142,15 @@ def test_assignment_changed_during_evaluation_cannot_publish_old_report(configur
 
     protocol.enroll(configured)
     supervisor_llm("PASS")
-    evaluate = OpenAICompatibleClient.chat
+    evaluate = OpenAICompatibleClient.respond
     entered, release = Event(), Event()
 
-    def chat(*args, **kwargs):
+    def respond(*args, **kwargs):
         entered.set()
         assert release.wait(timeout=15)
         return evaluate(*args, **kwargs)
 
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", chat)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", respond)
     with ThreadPoolExecutor(max_workers=1) as pool:
         future = pool.submit(protocol.step, configured, report=report_json("Old assignment report"),
                              operation_key="old-report", expected_version=1)
@@ -202,7 +202,7 @@ def cli_server(configured):
 
 @pytest.mark.parametrize("configured", [("project_manager", "draft"), ("developer", "rework")], indirect=True)
 def test_cli_process_http_and_postgres_keep_one_report_and_no_workflow_files(
-    configured, cli_server, supervisor_llm, monkeypatch, tmp_path,
+    configured, cli_server, responses_provider, monkeypatch, tmp_path,
 ):
     import importlib.util
     import json
@@ -213,7 +213,7 @@ def test_cli_process_http_and_postgres_keep_one_report_and_no_workflow_files(
 
     assert importlib.util.find_spec("pdlc_cli_core"), "Install the qualified Base cli-core package before this gate"
     initial = protocol.enroll(configured)
-    supervisor_llm("PASS")
+    probes, control = responses_provider
     confirmation = {"id": str(uuid4()), "task_id": protocol.TRACKER_TASK, "revision": 7,
                     "content_hash": "a" * 64, "owner_subject": protocol.OWNER, "stage": "Draft"}
     monkeypatch.setattr(configured_cli, "confirmation", lambda _: confirmation)
@@ -245,6 +245,7 @@ def test_cli_process_http_and_postgres_keep_one_report_and_no_workflow_files(
         accepted = cli(*arguments, report=report_json(f"Отчёт subprocess №{version}"))
         assert cli(*arguments, report=report_json(f"Отчёт subprocess №{version}")) == accepted
     assert accepted["complete"] is True
+    assert len(probes) == 3 and control["http"] == 200
     assert accepted["execution_ref"] == initial["execution_ref"]
     records = cli("history", *base)["records"]
     assert len(records) == 3
@@ -255,3 +256,77 @@ def test_cli_process_http_and_postgres_keep_one_report_and_no_workflow_files(
             select(m.TaskStepHistoryEntry.worker_report).order_by(m.TaskStepHistoryEntry.id)
         )) == [report_json(f"Отчёт subprocess №{version}") for version in (1, 2, 3)]
         assert uow.session.scalar(select(func.count()).select_from(m.PMRun)) == 0
+
+
+@pytest.fixture
+def responses_provider(monkeypatch):
+    """Real evaluator HTTP peer; semantic decisions are explicit test fixtures."""
+    import json
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from threading import Thread
+
+    from tests._report_helpers import response_body
+
+    probes, control = [], {"http": 200, "output_tokens": 7}
+
+    class Provider(BaseHTTPRequestHandler):
+        def do_POST(self):
+            payload = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            probes.append((self.path, payload))
+            assert self.path == "/v1/responses"
+            fmt = payload["text"]["format"]
+            assert fmt["type"] == "json_schema" and fmt["strict"] is True
+            labels = fmt["schema"]["properties"]["assessments"]["properties"]
+            verdict = {"verdict":"PASS", "assessments":{
+                label:{"covered":True, "reason":"Explicit test fixture"} for label in labels
+            }, "blockers":[], "confidence":1.0}
+            body = response_body(json.dumps(verdict))
+            body["usage"] = {"output_tokens":control["output_tokens"]}
+            data = json.dumps(body).encode()
+            self.send_response(control["http"])
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def log_message(self, *_args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Provider)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    monkeypatch.setenv("OPENAI_BASE_URL", f"http://127.0.0.1:{server.server_port}/v1")
+    monkeypatch.setenv("OPENAI_MAX_TOKENS", "16")
+    config.get_settings.cache_clear()
+    try:
+        yield probes, control
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+        assert not thread.is_alive()
+
+
+def test_provider_http_failure_and_ignored_limit_preserve_phase_in_postgres(configured, responses_provider):
+    import json
+
+    probes, control = responses_provider
+    protocol.enroll(configured)
+    initial = protocol.step(configured).json()["result"]
+    control["http"] = 500
+    failed = protocol.step(configured, report=report_json("Current work"),
+        operation_key="provider-http-failed", expected_version=1).json()["result"]
+    assert failed["verdict"] == "BLOCKED" and failed["retryable"] is True
+    assert failed["phase_code"] == initial["phase_code"]
+    control.update(http=200, output_tokens=179)
+    exceeded = protocol.step(configured, report=report_json("Current work"),
+        operation_key="provider-limit-failed", expected_version=failed["version"]).json()["result"]
+    assert exceeded["verdict"] == "BLOCKED" and exceeded["retryable"] is True
+    assert exceeded["phase_code"] == initial["phase_code"]
+    assert "лимит токенов" in exceeded["blockers"][0]
+    assert len(probes) == 2
+    with SAUnitOfWork() as uow:
+        entries = list(uow.session.scalars(select(m.TaskStepHistoryEntry).order_by(m.TaskStepHistoryEntry.id)))
+        assert len(entries) == 2
+        first, second = (json.loads(e.evaluation_snapshot)["diagnostics"]["attempts"][0]["provider"] for e in entries)
+        assert first["http_status"] == 500 and first["outcome"] == "http"
+        assert second["http_status"] == 200 and second["outcome"] == "limit_exceeded"

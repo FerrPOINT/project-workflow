@@ -9,7 +9,6 @@ from typing import Any
 import requests
 from sqlalchemy.exc import IntegrityError
 
-from .. import config
 from ..domain.configured_cli import ConfiguredCliFence
 from ..domain.exceptions import ConcurrentTransitionError
 from ..domain.phase_report import PhaseReport
@@ -41,7 +40,7 @@ def _contract_fingerprint_state(
     contract_data = contract.to_dict()
     return {
         "prompt_version": PromptBuilder.PROMPT_VERSION if prompt_version is None else prompt_version,
-        "evaluator_response_format": config.get_settings().OPENAI_EVALUATOR_RESPONSE_FORMAT,
+        "evaluator_response_format": "responses-json_schema",
         "contract": contract_data,
         "evaluation_items": [{"id": item_id, "text": text} for item_id, text in evaluation_items],
         "previously_covered_ids": sorted(previously_covered_ids),
@@ -108,13 +107,14 @@ def _report_fingerprint(task_id: int, report: str, contract_fingerprint: str) ->
 def _blocked(exc: Exception, *, provider_outcome: str | None = None) -> LlmVerdict:
     provider_blockers = {
         "incomplete": "Ответ проверяющего LLM не завершён: достигнут лимит токенов.",
+        "limit_exceeded": "Провайдер проверяющего LLM превысил заданный лимит токенов.",
         "refusal": "Провайдер проверяющего LLM отказался формировать ответ.",
         "content_filter": "Ответ проверяющего LLM остановлен фильтром провайдера.",
     }
     if provider_outcome is not None and provider_outcome in provider_blockers:
         blocker = provider_blockers[provider_outcome]
     elif isinstance(exc, LlmConfigurationError):
-        blocker = "Проверяющий LLM не настроен: для OpenRouter требуется OPENAI_API_KEY."
+        blocker = "Проверяющий LLM не настроен или настроен неверно."
     elif isinstance(exc, (requests.Timeout, TimeoutError)):
         blocker = "Проверяющий LLM не ответил за отведённое время."
     elif isinstance(exc, requests.HTTPError):
@@ -250,7 +250,7 @@ def _evaluate_strict_response(
     phase: Phase,
     attempts: list[dict[str, Any]] | None = None,
     system: str = PromptBuilder.SYSTEM_PROMPT,
-    response_format: dict[str, Any] | None = None,
+    response_format: dict[str, Any],
 ) -> tuple[dict[str, Any], LlmVerdict]:
     """Retry only malformed evaluator output and never relax the wire contract."""
     attempt_system = system
@@ -260,12 +260,10 @@ def _evaluate_strict_response(
         error: Exception | None = None
         submitted_system = attempt_system
         try:
-            format_options = {"response_format": response_format} if response_format is not None else {}
-            raw = client.chat(
+            raw = client.respond(
                 system=submitted_system,
                 user=user,
-                temperature=0.1,
-                **format_options,
+                response_format=response_format,
             )
             llm = ResponseParser.parse_assessments(raw, evaluation_items=evaluation_items)
             if llm.verdict == "DELEGATE" and phase.delegate is None:
@@ -276,7 +274,8 @@ def _evaluate_strict_response(
             last_error = exc
             provider_diagnostic = getattr(client, "last_call_diagnostics", None)
             if (isinstance(provider_diagnostic, dict)
-                    and provider_diagnostic.get("outcome") in {"refusal", "content_filter", "incomplete"}):
+                    and provider_diagnostic.get("outcome") in {
+                        "refusal", "content_filter", "incomplete", "limit_exceeded"}):
                 raise
             if attempt_number == _MAX_EVALUATOR_RESPONSE_ATTEMPTS:
                 raise
@@ -406,8 +405,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
             phase=phase,
             attempts=attempts,
             system=system,
-            response_format=(PromptBuilder.response_schema(evaluation_items)
-                             if config.get_settings().OPENAI_EVALUATOR_RESPONSE_FORMAT == "json_schema" else None),
+            response_format=PromptBuilder.response_schema(evaluation_items),
         )
     except (
         requests.RequestException,
