@@ -4,6 +4,17 @@
 
 ### Current Status (2026-11-06)
 
+- Fleet f8/imageb07 handoff is installed and genuine native recovery completed;
+  the same PM now uses revision27/qualified CLI699 and generated serializer skill.
+  Live preparation195 passes with the exact saved document; independent review
+  confirms all criteria. Consent1 is saved separately. PARTIAL196 is valid and PM
+  prepared its own correction. A failed/not-dispatched terminal approval remains
+  pending after verified native failure and blocks Fleet settlement/upgrade.
+  This is not an Advisor format defect. Preserve its evidence and do not bypass
+  admission. Campaign143/163,20 remain; both business finals and release are open.
+
+### Historical Delivery Evidence Before PM27
+
 - Report-construction follow-up: local syntax errors now include the standard
   decoder reason and EOF location; schema errors name declared nested fields,
   expected types and received types without exposing report values or unknown
