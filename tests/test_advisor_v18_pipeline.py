@@ -27,14 +27,14 @@ def test_cli_api_storage_and_advisor_keep_one_typed_report(local_execution, monk
     raw = json.dumps(report, ensure_ascii=False)
     model_requests = []
 
-    def chat(_client, *, system, user, **kwargs):
+    def respond(_client, *, system, user, **kwargs):
         payload = json.loads(user)
         model_requests.append(payload)
         return {"verdict": "PASS", "assessments": {
             item["id"]: {"covered": True, "reason": "Test result satisfies this criterion", "required_change": None}
             for item in payload["criteria"]}, "blockers": [], "confidence": 0.9}
 
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", chat)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", respond)
     monkeypatch.setenv("PROJECT_WORKFLOW_URL", "http://127.0.0.1")
     monkeypatch.setenv("PROJECT_WORKFLOW_NAMESPACE_ID", str(start.namespace_id))
     with TestClient(create_app(), base_url="http://127.0.0.1", client=("127.0.0.1", 50000)) as http:

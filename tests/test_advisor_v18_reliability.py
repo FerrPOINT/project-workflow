@@ -88,7 +88,7 @@ def test_complete_typed_history_reaches_prompt_without_foreign_scope_or_truncati
         prompts.append(payload)
         return response(payload, False)
 
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", answer)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", answer)
     current = report_json("Current full artifact", source="Current owner request")
     result = engine.evaluate(current)
     assert result["verdict"] == "PARTIAL" and result["retryable"] is False
@@ -127,7 +127,7 @@ def test_late_explicit_contradiction_revokes_marks_and_technical_failures_do_not
                          required_change="Replace irreversible deletion with the owner's selected archive behavior")
         return value
 
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", answer)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", answer)
     documents = [
         "Owner chose irreversible deletion; the artifact implements irreversible deletion",
         "Technical attempt retains the same reported facts",
@@ -176,7 +176,7 @@ def test_storage_failure_after_response_before_commit_rolls_back_history_and_tra
         calls.append(payload)
         return response(payload, True)
 
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", answer)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", answer)
     finish = standalone.finish_history
 
     def arm_storage_failure(db, fence, history_id, result):
@@ -252,7 +252,7 @@ def test_one_omitted_criterion_is_a_single_call_technical_failure_without_autofi
         replies.append(deepcopy(value))
         return value
 
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", answer)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", answer)
     result = standalone.step(uow, report(start, 1, document="Full artifact is still missing"))["result"]
     assert len(replies) == 1 and set(replies[0]["assessments"]) == {"C1", "C2", "C3", "E1", "E2"}
     assert all(item["covered"] is False for item in replies[0]["assessments"].values())
@@ -283,7 +283,7 @@ def test_lost_http_response_after_commit_is_read_back_without_another_model_call
         prompts.append(payload)
         return response(payload, True)
 
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", answer)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", answer)
     with TestClient(create_app(), base_url="http://127.0.0.1", client=("127.0.0.1", 50000)) as http:
         def request(_session, method, url, **options):
             transport_calls.append((method, url))

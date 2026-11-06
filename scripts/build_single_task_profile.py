@@ -12,7 +12,7 @@ from project_workflow.infrastructure.single_task_catalog import load_single_task
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_COMMIT = "SELF"
 SOURCE_PATH = "project_workflow/infrastructure/single_task_catalog.py"
-SOURCE_SHA256 = "e11f970ba34111aee13ed81f2d7f73da619f2b7cb0a75f3023ee7b2271ded90a"
+SOURCE_SHA256 = "aaabbcdef6a80f9d73ce98d0b0101477d3c6fb9fcbd9df1bc7e1196c4d915101"
 DONOR_PATH = "project_workflow/references/base_sdlc_catalog_cli_v4.json"
 DONOR_SHA256 = "d6d18f98b55f14210a3f0e12404074705495d535aa8ba29ae449624b845668c9"
 CATALOG_PATH = "project_workflow/references/single_task_catalog_v1.json"
@@ -62,6 +62,8 @@ def render() -> tuple[bytes, bytes]:
             "skill_names": original["skill_allowlist"],
             "modes": original["modes"],
         }
+        if "previous_baseline_manifest_sha256" in original:
+            workflow["previous_baseline_manifest_sha256"] = original["previous_baseline_manifest_sha256"]
         workflows.append(workflow)
         roles[role] = {
             "workflow_key": workflow["key"],
@@ -96,7 +98,8 @@ def render() -> tuple[bytes, bytes]:
             "hash_encoding": "utf-8-lf-no-bom-with-final-newline",
         },
         "role_hash_encoding": "utf-8-json-sort-keys-compact-no-final-newline",
-        "inventory": {"namespaces": 7, "workflows": 7, "modes": 8, "phases": 24},
+        "inventory": {"namespaces": 7, "workflows": 7, "modes": 8,
+                      "phases": sum(len(mode["phases"]) for workflow in workflows for mode in workflow["modes"])},
         "task_identity": {"task_equals_root": True, "children": False, "decomposition_barriers": False},
         "roles": roles,
     }

@@ -35,7 +35,7 @@ def renderer(monkeypatch):
     render = Mock(return_value={"availability": "legacy"})
     module.history_diagnostic = render
     monkeypatch.setitem(sys.modules, module.__name__, module)
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", Mock(side_effect=AssertionError("No provider on reads")))
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", Mock(side_effect=AssertionError("No provider on reads")))
     return render
 
 

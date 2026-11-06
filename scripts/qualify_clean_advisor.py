@@ -33,12 +33,12 @@ ROUTE_PROBE_LIMIT = 4
 
 def route_probes(cases: dict[str, dict]) -> list[dict[str, Any]]:
     """Freeze the approved four route checks without constructing a model client."""
-    probe_format = {"type": "json_schema", "json_schema": {
+    probe_format = {"type": "json_schema",
         "name": "advisor_route_probe", "strict": True, "schema": {
             "type": "object", "properties": {"probe": {"type": "string", "enum": ["schema-enforced"]}},
             "required": ["probe"], "additionalProperties": False,
         },
-    }}
+    }
     probes: list[dict[str, Any]] = [{"id": name, "system": "Reply in JSON to the user.", "user": user,
                "response_format": probe_format, "expected": {"probe": "schema-enforced"}}
               for name, user in (
@@ -93,7 +93,7 @@ def probe_route(output: Path, artifact: dict, cases: dict[str, dict]) -> dict[st
                 send = requests.sessions.Session.send
 
                 def capture_wire(session, prepared, **kwargs):
-                    if prepared.url != f"{client.base_url}/chat/completions":
+                    if prepared.url != f"{client.base_url}/responses":
                         raise ValueError("Route probe cannot send to an unexpected endpoint")
                     probe["wire_request"] = {
                         "method": prepared.method, "url": text_snapshot(prepared.url, (client.api_key,)),
@@ -103,8 +103,8 @@ def probe_route(output: Path, artifact: dict, cases: dict[str, dict]) -> dict[st
                     return send(session, prepared, **kwargs)
 
                 with patch.object(requests.sessions.Session, "send", capture_wire):
-                    raw = client.chat(system=probe["system"], user=probe["user"], temperature=0.1,
-                                      response_format=probe["response_format"])
+                    raw = client.respond(system=probe["system"], user=probe["user"],
+                                         response_format=probe["response_format"])
                 if "evaluation_items" not in probe:
                     if raw != probe["expected"]:
                         raise ValueError("Provider route did not enforce the required schema")
@@ -276,7 +276,7 @@ def execute(output: Path, artifact: dict, cases: dict[str, dict], slots: list[di
                 send = requests.sessions.Session.send
 
                 def capture_wire(session, prepared, **kwargs):
-                    if prepared.url != f"{client.base_url}/chat/completions":
+                    if prepared.url != f"{client.base_url}/responses":
                         raise ValueError("Qualification cannot send to an unexpected endpoint")
                     slot["wire_request"] = {
                         "method": prepared.method, "url": text_snapshot(prepared.url, (client.api_key,)),
@@ -286,8 +286,7 @@ def execute(output: Path, artifact: dict, cases: dict[str, dict], slots: list[di
                     return send(session, prepared, **kwargs)
 
                 with patch.object(requests.sessions.Session, "send", capture_wire):
-                    raw = client.chat(system=system, user=user, temperature=0.1,
-                                      response_format=response_format)
+                    raw = client.respond(system=system, user=user, response_format=response_format)
                 parsed = ResponseParser.parse_assessments(raw, evaluation_items=items)
                 if parsed.verdict not in case["user_payload"]["allowed_verdicts"]:
                     raise ValueError("Disallowed verdict")

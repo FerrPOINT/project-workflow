@@ -24,7 +24,7 @@ def local_task(monkeypatch):
     config.get_settings.cache_clear()
     forbidden = Mock(side_effect=AssertionError("Real model calls are forbidden"))
     monkeypatch.setattr(requests.Session, "request", forbidden)
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", forbidden)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", forbidden)
     with SAUnitOfWork() as uow:
         workflow = uow.workflows.create({"name": "Locking fixture", "key": "local-locking-fixture"})
         namespace = uow.projects.create({"workflow_id": workflow, "name": "Local", "code": "LCK"})
@@ -60,7 +60,7 @@ def test_entry_points_lock_workflow_before_task(local_task, monkeypatch, operati
         locks.append("task")
         return task_lock(task_id)
 
-    def chat(*_args, **kwargs):
+    def respond(*_args, **kwargs):
         assert not uow.session.in_transaction()
         payload = json.loads(kwargs["user"])
         return {"verdict": "PARTIAL", "blockers": [], "confidence": 1.0,
@@ -70,8 +70,8 @@ def test_entry_points_lock_workflow_before_task(local_task, monkeypatch, operati
 
     monkeypatch.setattr(uow.workflows, "lock", lock_workflow)
     monkeypatch.setattr(uow.tasks, "lock", lock_task)
-    model = Mock(side_effect=chat)
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", model)
+    model = Mock(side_effect=respond)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", model)
     if operation == "history":
         standalone.history(uow, start.task, start.namespace_id)
     elif operation == "report":

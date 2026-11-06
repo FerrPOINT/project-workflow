@@ -1,5 +1,51 @@
 # Advisor: сквозной диагноз и границы выпуска
 
+## 2026-11-06: Native Responses Integrated With V19
+
+The existing PR164 is reconciled with master d0ec576c. Only the useful protocol
+change from PR171 is retained in the current evaluator: one native Responses POST
+with strict text.format, unchanged v19 system text, typed report, previous reports
+of the current phase and required_change. The prompt digest remains
+7ee97ccaa0914fe77b7ce881268b6dbe855ca2fd9e6edbc17df8a42e4b1edd48.
+Reasoning high, 4000 output tokens, connect30s/read1200s, CLI1500s and redirect
+refusal are preserved. There is no Chat client, format selector or format retry.
+
+New fingerprints record responses-json_schema; old json_object/json_schema
+fingerprints remain read-only evidence. Archive reads do not invoke the model
+or acquire new authority. Refusal, incomplete response, excessive reported output
+usage, malformed JSON and transport errors remain technical failures.
+Provider reasoning is not included in the verdict or stored as hidden reasoning.
+
+Source integration is not installation or full model qualification. The earlier
+36/36 belongs to the old HTTP route; it cannot qualify the changed transport alone.
+One explicitly approved real call uses the frozen negative153 input and exact
+production schema/system: HTTP200/completed, all6 false, PARTIAL and no blockers.
+Independent review accepts every reason and required_change. Wire evidence confirms
+one Responses POST, high/4000, connect30/read1200 and redirects disabled.
+Input1410/output706/reasoning253 tokens,15.004s. Alias app-test does not identify
+the upstream model. Campaign144/163 leaves19 calls for the live PM scenarios.
+
+Local qualification: PostgreSQL157/157, no skips, owned cleanup and unchanged
+source verified. Full native run:4615 PASS,2 FAIL,15 explicit skips,
+75 subtests PASS; measured coverage94.1034%. Both failures are incoming namespace
+theme tests writing anonymously in explicit platform mode, correctly denied401.
+They now use the existing controlled human-identity fixture mechanism and retain
+an anonymous401 assertion; the installation/SSO/editor follow-up passes73/73.
+Only test code changed after the full run: production and runner bytes are
+identical, so unaffected results and coverage are reused explicitly, not reported
+as a fresh all-green full run. Ruff, mypy176 and index hygiene pass.
+The skips are3 private opt-in checks,1 NTFS executable-mode limitation and11
+missing Python Playwright checks. They are not accepted tests; packaged Linux and
+live three-browser verification remain distinct evidence.
+Image qualification, installation and both PM business finals remain separate.
+
+The exact Fleet eae18fd3/image7f4ba770 passed canonical Compose smoke with cleanup.
+After a pre-effect common-lock refusal, its unchanged image/receipt was installed
+by normal Applybe4e6abc once that resource was released. One PM27 recovery POST403
+had a saved pending intent; original-key GETs confirm adoption without POST resend.
+Separate read-only proof confirms the original container, exact CLI699/skill and
+two stable readiness results. No Hermes change, business redispatch or model call.
+
 ## 2026-11-06: Responses Transport Is Not A Replacement For V19
 
 Read-only comparison of merged PR171 (`f76abbfa`, merge `d0ec576c`) and the
@@ -65,17 +111,19 @@ Fleet f8f329de/imageb07 установлен штатно; native handoff при
   совпадает с прежним. Backend не перезапускался, команда не отправлялась повторно.
   Проверка текущего поколения до083 воспроизводит тот же known-ACK отказ; после
   него неизменённый guard допускает состояние в обеих lineages. Новый Fleet backend
-  ещё не установлен; штатное обновление и бизнес-финалы остаются открытыми.
+  установлен через Applybe4e6abc; original-key recovery принят, readiness и CLI699
+  того же PM проверены. Бизнес-финалы остаются открытыми.
 - **Readiness / Fleet:** HTTP500 и `fleet_request_authority_expired` подтверждены.
   Отдельный health успешен за57.496с. Подготовлен единый scoped health/toolset
   readback и отмена запроса по исходному authority deadline, без повышения TTL.
-  Это проверенный исходниковый checkpoint, не установленное исправление.
+  Исправление установлено; отдельное чтение подтверждает readiness того же PM27.
 
 Evidence вне Git: `pm27-sdlc33-advisor-195-diagnostics-20261106.json`,
 `pm27-sdlc33-workflow-after-confirm-20261106.json`,
 `pm27-sdlc33-approval-original-readback-20261106.json`,
 `pm27-sdlc33-native-approval-final-20261106.json`, результаты readiness QA.
-Новая квалификационная серия не запускалась. Расход Advisor143/163, резерв20.
+Новая полная серия не запускалась. Один Responses route sample принят отдельно;
+расход Advisor144/163, резерв19.
 Backlog/Ready, второй сценарий, браузеры и мерж пока не приняты. Исправление
 terminal settlement сохраняет failed decision и подлинные proofs;
 ослабление guard, ручная запись SQL и повтор approval не являются решением.

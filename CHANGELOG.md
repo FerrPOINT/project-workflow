@@ -4,14 +4,34 @@
 
 ### Current Status (2026-11-06)
 
+- Reconcile master d0ec576c and native Responses with v19, without importing
+  the v15 report/prompt/retry contract. Keep typed reports, current-phase facts,
+  required_change, one call, high, connect30/read1200 and redirect refusal.
+  The strict response schema is mandatory; there is no format selector or Chat
+  fallback. New fingerprint format is responses-json_schema; historical results
+  stay read-only. Source integration is not installation or new model acceptance.
+  The previous36/36 does not independently qualify the changed HTTP transport.
+  One approved real Responses call matches all6 negative153 marks and independent
+  reason/correction review: HTTP200/completed, high/4000, one POST,15.004s.
+  PostgreSQL157 passes without skips, with cleanup. Full native4615 PASS/2 FAIL,
+  15 explicit skips/75 subtests, coverage94.1034%. Both failures are anonymous
+  platform theme-edit fixtures; after adding controlled human Auth and retaining
+  anonymous401,73 installation/SSO/editor tests pass. Production bytes are unchanged;
+  unaffected full-run results are explicitly reused, not presented as a new full run.
+  Ruff, mypy176 and hygiene pass. Image/install/live gates remain separate.
 - Fleet f8/imageb07 handoff is installed and genuine native recovery completed;
   the same PM now uses revision27/qualified CLI699 and generated serializer skill.
   Live preparation195 passes with the exact saved document; independent review
   confirms all criteria. Consent1 is saved separately. PARTIAL196 is valid and PM
-  prepared its own correction. A failed/not-dispatched terminal approval remains
-  pending after verified native failure and blocks Fleet settlement/upgrade.
-  This is not an Advisor format defect. Preserve its evidence and do not bypass
-  admission. Campaign143/163,20 remain; both business finals and release are open.
+  prepared its own correction. The failed/not-dispatched terminal approval was
+  cancelled by registered083 after972 unit/32 scoped PG tests, binary checks
+  and independent review. Original decision/history are unchanged; no command
+  was resent. Actual known-ACK/retained-inventory preflight now passes. The new
+  Fleet image passed canonical Compose smoke/cleanup and normal Applybe4e6abc
+  after the common resource was released. Original-key recovery confirms adoption;
+  separate proof verifies stable readiness and unchanged PM27/CLI699/skill.
+  Campaign144/163,19 remain; both
+  business finals and release are open.
 
 ### Historical Delivery Evidence Before PM27
 
@@ -457,6 +477,32 @@
 - No application rebuild, install, credential change or Hermes modification was
   needed for this audit. Existing code gates are reused, not presented as new runs.
   Full findings, limits and next narrow package: docs/ADVISOR_AUDIT_20261103.md.
+## Analyst: Baseline Publication And Conditional Research - 2026-11-06
+
+- Source baselines append to the existing publication ledger at a free revision.
+  Operator drafts/publications, existing mode/phase IDs and receipts are preserved.
+- Correct unmerged migration `0029` so operator revision 2 no longer prevents upgrade.
+  Forward migration `0030` seals the exact already-applied original `0029` baseline
+  and publishes the current source without rewriting old rows. No new tables,
+  DTOs or execution protocol.
+- Check the active pointer against the ledger and the selected source against its
+  baseline receipt; old templates cannot mask drift in the live configuration.
+- Public research may be skipped with a supported non-applicability explanation.
+  Instructions, checks and evidence all use the same rule.
+
+## Analyst: Twelve-Phase Default - 2026-11-06
+
+- Expand Analyst analysis from three to twelve phases: requirements, hypotheses,
+  internal/public research, evidence synthesis, domain/process, behavior, data,
+  constraints, acceptance, specification and verified artifact publication.
+- Keep autonomy: no user interview, PM return, invented facts or architecture
+  selection. Mandatory gaps block final acceptance, not honest research progress.
+- Original `0029` selected fixed baseline 2 and refused operator drafts/publications.
+  The corrective entry above replaces that restriction; historical task/step IDs
+  and receipts remain unchanged.
+- Other profession definitions, normal text-only publication structure, skills
+  pins and original Hermes stay unchanged. Installation and live 12-phase
+  evaluator acceptance are separate from source qualification.
 
 ## Structured Phase Reports - 2026-11-03 (PM Accepted, UI Open)
 

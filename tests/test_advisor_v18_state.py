@@ -28,7 +28,7 @@ def response(payload, covered):
 
 def submit_partial(uow, start, monkeypatch):
     standalone.step(uow, start)
-    monkeypatch.setattr(OpenAICompatibleClient, "chat",
+    monkeypatch.setattr(OpenAICompatibleClient, "respond",
                         lambda _self, **kwargs: response(json.loads(kwargs["user"]), False))
     command = report(start, 1)
     accepted = standalone.step(uow, command)["result"]
@@ -50,7 +50,7 @@ def test_supplement_gets_exact_phase_facts_and_assessment_then_next_phase_is_emp
         calls.append(payload)
         return response(payload, True)
 
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", answer)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", answer)
     correction = report(start, 2, key="correction", document="Corrected complete artifact")
     accepted = standalone.step(uow, correction)["result"]
     assert calls[0]["previous_reports"] == [json.loads(original.report)]
@@ -97,7 +97,7 @@ def test_v18_result_replays_through_http_after_v19_activation_without_evaluation
 
     monkeypatch.setattr(PromptBuilder, "PROMPT_VERSION", "supervisor-evaluator-v18")
     monkeypatch.setattr(PromptBuilder, "SYSTEM_PROMPT", prior_system["text"])
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", answer)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", answer)
     with TestClient(create_app(), base_url="http://127.0.0.1", client=("127.0.0.1", 50000)) as client:
         assert client.post("/internal/runtime/step", json=start.model_dump(mode="json")).status_code == 200
         command = report(start, 1).model_dump(mode="json")
@@ -111,7 +111,7 @@ def test_v18_result_replays_through_http_after_v19_activation_without_evaluation
 
         monkeypatch.setattr(PromptBuilder, "PROMPT_VERSION", "supervisor-evaluator-v19")
         monkeypatch.setattr(PromptBuilder, "SYSTEM_PROMPT", current_system)
-        monkeypatch.setattr(OpenAICompatibleClient, "chat", lambda *_a, **_kw: pytest.fail("Readback cannot infer"))
+        monkeypatch.setattr(OpenAICompatibleClient, "respond", lambda *_a, **_kw: pytest.fail("Readback cannot infer"))
         replay = client.post("/internal/runtime/step", json=command)
         assert replay.status_code == 200 and replay.json()["ok"] is True
         assert replay.json()["result"] == accepted.json()["result"]
@@ -149,7 +149,7 @@ def test_same_phase_http_context_keeps_owner_fact_omitted_from_later_report(loca
         calls.append(payload)
         return response(payload, False)
 
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", answer)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", answer)
     uow, start = local_execution
     with TestClient(create_app(), base_url="http://127.0.0.1", client=("127.0.0.1", 50000)) as client:
         assert client.post("/internal/runtime/step", json=start.model_dump(mode="json")).status_code == 200
@@ -192,7 +192,7 @@ def test_in_place_history_mutation_with_same_ids_and_coverage_prevents_transitio
         uow.commit()
         return response(payload, True)
 
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", answer)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", answer)
     result = standalone.step(uow, report(start, 2, key="concurrent-mutation"))["result"]
     assert len(captured) == 1 and captured[0]["previous_reports"] == [json.loads(original.report)]
     assert result["verdict"] == "BLOCKED" and result["retryable"] is True
@@ -211,7 +211,7 @@ def test_incompatible_archive_is_readable_but_cannot_silently_become_new_context
     row.worker_report = archived
     uow.commit()
     calls = []
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", lambda *args, **kwargs: calls.append(kwargs))
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", lambda *args, **kwargs: calls.append(kwargs))
     result = standalone.step(uow, report(start, 2, key="new-contract"))["result"]
     assert calls == []
     assert result["verdict"] == "BLOCKED" and result["retryable"] is True
@@ -240,7 +240,7 @@ def test_exact_archived_operation_replays_before_current_format_validation(local
     expected = json.loads(row.supervisor_response)
     uow.commit()
     calls = []
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", lambda *args, **kwargs: calls.append(kwargs))
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", lambda *args, **kwargs: calls.append(kwargs))
     assert standalone.step(uow, archived)["result"] == expected
     with pytest.raises(ConflictError, match="payload conflict"):
         standalone.step(uow, archived.model_copy(update={"report": archived.report + " "}))

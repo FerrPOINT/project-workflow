@@ -58,6 +58,52 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize("published", [False, True])
+def test_source_baselines_preserve_unchanged_operator_revisions_on_postgres(pg_url, monkeypatch, published):
+    from tests.test_catalog_baselines import (
+        test_unchanged_operator_revision_survives_migration_and_remains_discoverable,
+    )
+
+    test_unchanged_operator_revision_survives_migration_and_remains_discoverable(
+        get_engine(pg_url), monkeypatch, published,
+    )
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("rollback", [1, 2])
+def test_source_baseline_pointer_drift_fails_on_postgres(pg_url, rollback):
+    from tests.test_catalog_baselines import (
+        test_selected_pointer_drift_never_relabels_installation_as_an_older_family,
+    )
+
+    test_selected_pointer_drift_never_relabels_installation_as_an_older_family(get_engine(pg_url), rollback)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("drift", [False, True])
+def test_applied_source_baseline_is_sealed_without_overwriting_rows_on_postgres(pg_url, monkeypatch, drift):
+    from tests.test_catalog_baselines import test_already_applied_0029_is_sealed_without_rewriting_its_modes
+
+    test_already_applied_0029_is_sealed_without_rewriting_its_modes(get_engine(pg_url), monkeypatch, drift)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("role", ["project_manager", "analyst", "developer"])
+@pytest.mark.parametrize("predecessor", [
+    ("0024_analyst_research_catalog", "332cfd4fb3419d5765008e196cffb508540462ddd89b798ab4e89379ac5b1796"),
+    ("0028_analyst_read_sources", "62762bf58f337d9e063226aef58ea6c89cdfb2e87159056f1a6b2b6c4d1ddf3a"),
+])
+def test_pm_analysis_acceptance_preserves_populated_history_on_postgres(pg_url, monkeypatch, role, predecessor):
+    from tests.test_configured_catalog_migration import assert_populated_catalog_upgrade_preserves_history
+
+    assert_populated_catalog_upgrade_preserves_history(
+        get_engine(pg_url), monkeypatch,
+        predecessor,
+        role,
+    )
+
+
+@pytest.mark.integration
 def test_postgres_legacy_agent_archives_preserve_seven_agents_and_nineteen_links(pg_url):
     from tests.test_initial_migration import assert_populated_legacy_agent_archive_upgrade
 
@@ -124,12 +170,12 @@ def test_current_single_task_family_preserves_legacy_rows_and_history_on_postgre
         first = observe_installation(uow)
         assert first.workflow_catalog_sha256 == sha256(catalog_bytes).hexdigest()
         assert first.instruction_manifest_sha256 == sha256(manifest_bytes).hexdigest()
-        assert [first.namespaces, first.workflows, first.modes, first.phases] == [7, 7, 8, 24]
+        assert [first.namespaces, first.workflows, first.modes, first.phases] == [7, 7, 8, 33]
         assert len({binding.namespace_id for binding in first.bindings}) == 7
         assert len({binding.workflow_id for binding in first.bindings}) == 7
         modes = [mode for binding in first.bindings for mode in binding.modes]
         assert len({mode.mode_id for mode in modes}) == 8
-        assert len({phase_id for mode in modes for phase_id in mode.phase_ids}) == 24
+        assert len({phase_id for mode in modes for phase_id in mode.phase_ids}) == 33
     with SAUnitOfWork(engine) as uow:
         assert ensure_single_task_catalog(uow) == first
         uow.commit()
@@ -257,7 +303,7 @@ def test_pm_ownership_catalog_lock_order_and_incomplete_schema(pg_url, winner):
     assert not schema_is_ready(engine)
     with pytest.raises(DatabaseRecreateRequired):
         ensure_migrated(engine)
-    assert database_revisions(engine) == {"0023_catalog_publication_author"}
+    assert database_revisions(engine) == {"0030_analyst_baseline_ledger"}
 
 
 @pytest.mark.integration
@@ -489,7 +535,7 @@ class TestPostgresInitialMigration:
             version = conn.execute(
                 text("SELECT version_num FROM project_workflow.alembic_version")
             ).scalar_one()
-        assert version == migration_head() == "0023_catalog_publication_author"
+        assert version == migration_head() == "0030_analyst_baseline_ledger"
         assert schema_is_ready(engine) is True
 
     def test_managed_bootstrap_serializes_with_public_catalog_creation(self, pg_url):
@@ -1769,7 +1815,7 @@ class TestPostgresUoW:
         def evaluate() -> dict:
             uow = SAUnitOfWork(pg_url)
             try:
-                with patch.object(OpenAICompatibleClient, "chat", side_effect=provider):
+                with patch.object(OpenAICompatibleClient, "respond", side_effect=provider):
                     return SupervisorEngine("RUN-90002", uow=uow).evaluate(report_json("done"))
             finally:
                 uow.close()
@@ -1844,7 +1890,7 @@ class TestPostgresUoW:
         def evaluate() -> dict:
             uow = SAUnitOfWork(pg_url)
             try:
-                with patch.object(OpenAICompatibleClient, "chat", side_effect=provider) as first_provider:
+                with patch.object(OpenAICompatibleClient, "respond", side_effect=provider) as first_provider:
                     result = SupervisorEngine("RUN-90003", uow=uow).evaluate(report)
                     first_provider.assert_called_once()
                     return result
@@ -1887,7 +1933,7 @@ class TestPostgresUoW:
             result = result_future.result(timeout=20)
 
         with SAUnitOfWork(pg_url) as repeat_uow:
-            with patch.object(OpenAICompatibleClient, "chat", side_effect=provider) as repeat_provider:
+            with patch.object(OpenAICompatibleClient, "respond", side_effect=provider) as repeat_provider:
                 repeated = SupervisorEngine("RUN-90003", uow=repeat_uow).evaluate(report)
             repeat_provider.assert_called_once()
             runs = repeat_uow.step_history.list(task_key="RUN-90003", limit=None)
@@ -2074,7 +2120,7 @@ def test_concurrent_reports_create_one_transition_and_run(pg_url, same_report):
     reports = ["same report", "same report" if same_report else "different report"]
     with (
         patch(
-            "project_workflow.supervisor.evaluate.OpenAICompatibleClient.chat",
+            "project_workflow.supervisor.evaluate.OpenAICompatibleClient.respond",
             side_effect=lambda *_args, **kwargs: _pass_response(kwargs["user"]),
         ),
         ThreadPoolExecutor(max_workers=2) as pool,
@@ -2126,7 +2172,7 @@ def test_concurrent_distinct_partial_reports_do_not_apply_stale_snapshot(pg_url)
             uow.close()
 
     with (
-        patch("project_workflow.supervisor.evaluate.OpenAICompatibleClient.chat", side_effect=provider),
+        patch("project_workflow.supervisor.evaluate.OpenAICompatibleClient.respond", side_effect=provider),
         ThreadPoolExecutor(max_workers=2) as pool,
     ):
         results = list(pool.map(evaluate, ["first partial", "second partial"]))

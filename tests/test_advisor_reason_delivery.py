@@ -116,8 +116,8 @@ def test_configured_api_reason_reaches_actual_cli_on_fresh_and_frozen_replay(
     supervisor_llm("PARTIAL")
     from project_workflow.infrastructure.llm import OpenAICompatibleClient
 
-    provider = Mock(wraps=OpenAICompatibleClient.chat)
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", provider)
+    provider = Mock(wraps=OpenAICompatibleClient.respond)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", provider)
 
     def request(task, report, operation_key, expected_version, **kwargs):
         assert task == configured[1]["task"]

@@ -4,6 +4,11 @@
 причины отказов описываются отдельно в CHANGELOG и ADVISOR_DIAGNOSIS_20261101.md.
 Этот документ не подтверждает установку или приёмку кандидата.
 
+Опубликованные изменения остальных профессий описаны в
+[Analyst Workflow](analyst-workflow.md) и
+[Managed Catalog Publication](managed-catalog-publication.md).
+Их наличие в исходниках не активирует следующие назначения тестового PM-проекта.
+
 ## Два Режима, Одно Ядро
 
 `PROJECT_WORKFLOW_MODE=platform|standalone` выбирается явно, default — platform.
@@ -42,20 +47,18 @@ Platform human routes требуют проверенный Auth credential, а�
 Machine routes проверяют служебную identity, scopes, назначение и владение.
 Standalone не использует Auth и не запускается автоматически после его отказа.
 
-Advisor использует явно настроенные Base URL, key и model. Кандидат v19
-квалифицируется с app-test/high/4000 и явной настройкой
-`OPENAI_EVALUATOR_RESPONSE_FORMAT=json_schema`. Она должна пройти через упаковку
-до фактического запроса; наличие настройки в исходниках не означает её активацию.
-В Base Compose используются `SDLC_PROJECT_WORKFLOW_OPENAI_EVALUATOR_RESPONSE_FORMAT=json_schema`
-и `SDLC_PROJECT_WORKFLOW_OPENAI_REASONING_EFFORT=high`: Base передаёт их серверу
-как `OPENAI_*`. В собственном Compose Workflow задаются непосредственно
-`OPENAI_EVALUATOR_RESPONSE_FORMAT=json_schema` и `OPENAI_REASONING_EFFORT=high`.
-Это два способа установки, не последовательные слои. Base default reasoning=none
-не заменяет явный high кандидата; Workflow default сам по себе его не перекрывает.
-Default `json_object` не переключается автоматически после отказа schema.
+Advisor использует явно настроенные Base URL, key и model. Единственный транспорт
+— native Responses: `POST <OPENAI_BASE_URL>/responses`, обязательная строгая
+`text.format=json_schema` из текущих критериев. Выбора JSON mode или Chat Completions
+нет; прежняя `OPENAI_EVALUATOR_RESPONSE_FORMAT` больше не управляет исполнением.
+Для v19 сохраняются app-test/high/4000. В Base Compose явно задаётся
+`SDLC_PROJECT_WORKFLOW_OPENAI_REASONING_EFFORT=high`; в собственном Compose —
+`OPENAI_REASONING_EFFORT=high`. Это два способа установки, не последовательные слои.
+Base default reasoning=none не заменяет явный high кандидата.
 4000 является настройкой Workflow, а не доказанным upstream-лимитом ответа:
-проверенный ChatGPT-адаптер исключает output cap. Это не основание менять адаптер
-без проверки поддержки его backend.
+провайдер может не соблюдать output cap. Ответ с usage выше настроенного предела
+отклоняется как техническая ошибка, но уже понесённый внешний расход не отменяется.
+Наличие строгой схемы не доказывает правильность смысловой оценки.
 Model read timeout —1200 секунд, connect —30, CLI read —1500. Короткие
 health/Auth/Tracker-проверки имеют отдельные бюджеты. Ни отсутствие ключа,
 ни ошибка модели не выбирают другой provider.

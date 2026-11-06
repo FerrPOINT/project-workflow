@@ -19,7 +19,7 @@ from project_workflow import config
 from project_workflow.domain.exceptions import ConcurrentTransitionError
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
-from project_workflow.infrastructure.llm import OpenAICompatibleClient
+from project_workflow.infrastructure.llm import OpenAICompatibleClient, PromptBuilder
 from project_workflow.supervisor import SupervisorEngine
 from project_workflow.supervisor.evaluate import _replay
 from project_workflow.supervisor.models import Phase, PhaseCheck
@@ -76,13 +76,11 @@ def database_proof():
         }
 
 
-@pytest.mark.parametrize("wire_format", ["json_object", "json_schema"])
 @pytest.mark.parametrize("outcome", ["invalid_json", "invalid_schema", "inconsistent_partial",
                                      "timeout", "connection_error", "partial"])
 def test_configured_evaluation_calls_once_and_saved_history_replay_calls_zero(
-    configured, monkeypatch, wire_format, outcome,
+    configured, monkeypatch, outcome,
 ):
-    monkeypatch.setenv("OPENAI_EVALUATOR_RESPONSE_FORMAT", wire_format)
     config.get_settings.cache_clear()
     enroll(configured)
     before = step(configured).json()["result"]
@@ -102,14 +100,14 @@ def test_configured_evaluation_calls_once_and_saved_history_replay_calls_zero(
         return wire(payload)
 
     client = Mock(model="fixture-only", api_key="", last_call_diagnostics={}, last_response_content=None)
-    client.chat.side_effect = answer
+    client.respond.side_effect = answer
     factory = Mock(return_value=client)
     monkeypatch.setattr("project_workflow.supervisor.evaluate.OpenAICompatibleClient", factory)
     arguments = {"report": report_json("Actual incomplete result; no invented owner decisions"),
                  "operation_key": "clean-single-call", "expected_version": before["version"]}
     submitted = step(configured, **arguments)
     assert submitted.status_code == 200, submitted.text
-    assert client.chat.call_count == 1, "No format, transport or semantic retry is allowed"
+    assert client.respond.call_count == 1, "No format, transport or semantic retry is allowed"
     factory.assert_called_once()
     result = submitted.json()["result"]
     assert result["phase_code"] == before["phase_code"]
@@ -128,9 +126,9 @@ def test_configured_evaluation_calls_once_and_saved_history_replay_calls_zero(
         assert snapshot["diagnostics"]["outcome"] == "technical_failure"
         assert snapshot["advisor_assessments"] == {}
 
-    client.chat.reset_mock()
+    client.respond.reset_mock()
     factory.reset_mock()
-    client.chat.side_effect = AssertionError("History and exact operation replay must never evaluate")
+    client.respond.side_effect = AssertionError("History and exact operation replay must never evaluate")
     readback = configured[0].get("/internal/runtime/history", headers=MACHINE, params={
         "interaction_protocol": "configured-cli-v1", "task": configured[1]["task"],
         "namespace_id": configured[1]["namespace_id"], "operation_key": arguments["operation_key"], "n": 1,
@@ -140,16 +138,16 @@ def test_configured_evaluation_calls_once_and_saved_history_replay_calls_zero(
     replay = step(configured, **arguments)
     assert replay.status_code == 200 and replay.json()["result"] == result
     factory.assert_not_called()
-    client.chat.assert_not_called()
+    client.respond.assert_not_called()
     assert database_proof() == proof
 
 
 @pytest.mark.parametrize("failure", ["invalid_json", "timeout", "connection_error"])
 def test_actual_provider_transport_does_not_retry(monkeypatch, failure):
+    from tests._report_helpers import response_body
+
     response = Mock(status_code=200, headers={})
-    response.json.return_value = {
-        "choices": [{"finish_reason": "stop", "message": {"content": '{"verdict":'}}],
-    }
+    response.json.return_value = response_body('{"verdict":')
     post = Mock(return_value=response)
     if failure == "timeout":
         post.side_effect = requests.Timeout("Fixture timeout")
@@ -158,8 +156,52 @@ def test_actual_provider_transport_does_not_retry(monkeypatch, failure):
     monkeypatch.setattr(requests, "post", post)
     client = OpenAICompatibleClient(base_url="https://fixture.invalid/v1", model="fixture", api_key="", timeout=1)
     with pytest.raises((ValueError, requests.RequestException)):
-        client.chat("Fixture policy", "{}", response_format={"type": "json_object"})
+        client.respond("Fixture policy", "{}", response_format=PromptBuilder.response_schema([]))
     post.assert_called_once()
+
+
+@pytest.mark.parametrize("failure", ["duplicate_envelope", "malformed_usage"])
+def test_invalid_responses_envelope_never_advances_and_replay_calls_zero(configured, monkeypatch, failure):
+    from tests._report_helpers import response_body
+
+    enroll(configured)
+    before = step(configured).json()["result"]
+
+    def provider(*args, **kwargs):
+        payload = json.loads(kwargs["json"]["input"][0]["content"])
+        data = response_body(json.dumps(wire(payload, verdict="PASS", covered=True)))
+        if failure == "malformed_usage":
+            data["usage"] = {"output_tokens": True}
+        raw = json.dumps(data)
+        if failure == "duplicate_envelope":
+            raw = raw[:-1] + ',"status":"completed"}'
+        response = requests.Response()
+        response.status_code = 200
+        response.encoding = "utf-8"
+        response._content = raw.encode("utf-8")
+        return response
+
+    post = Mock(side_effect=provider)
+    monkeypatch.setattr(requests, "post", post)
+    arguments = {"report": report_json("Actual result"), "operation_key": failure,
+                 "expected_version": before["version"]}
+    submitted = step(configured, **arguments)
+    assert submitted.status_code == 200, submitted.text
+    result = submitted.json()["result"]
+    assert result["verdict"] == "BLOCKED" and result["retryable"] is True
+    assert result["phase_code"] == before["phase_code"]
+    assert result["next_phase_code"] is None and result["complete"] is False
+    assert "terminal_receipt" not in result
+    post.assert_called_once()
+    proof = database_proof()
+    snapshot = json.loads(proof["row"][2])
+    assert len(snapshot["diagnostics"]["attempts"]) == 1
+    assert snapshot["diagnostics"]["outcome"] == "technical_failure"
+    assert snapshot["advisor_assessments"] == {}
+    assert not any(event["event_type"] == "completed" for event in proof["events"])
+    assert step(configured, **arguments).json()["result"] == result
+    post.assert_called_once()
+    assert database_proof() == proof
 
 
 def coverage_engine(runs, *, duplicate_text=False):

@@ -9,7 +9,6 @@ from typing import Any
 import requests
 from sqlalchemy.exc import IntegrityError
 
-from .. import config
 from ..domain.configured_cli import ConfiguredCliFence
 from ..domain.exceptions import ConcurrentTransitionError
 from ..domain.phase_report import PhaseReport, PhaseReportFormatError
@@ -46,7 +45,7 @@ def _contract_fingerprint_state(
     contract_data = contract.to_dict()
     state = {
         "prompt_version": PromptBuilder.PROMPT_VERSION if prompt_version is None else prompt_version,
-        "evaluator_response_format": config.get_settings().OPENAI_EVALUATOR_RESPONSE_FORMAT,
+        "evaluator_response_format": "responses-json_schema",
         "contract": contract_data,
         "evaluation_items": [{"id": item_id, "text": text} for item_id, text in evaluation_items],
         "previously_covered_ids": sorted(previously_covered_ids),
@@ -119,7 +118,8 @@ def _report_fingerprint(task_id: int, report: str, contract_fingerprint: str) ->
 
 def _blocked(exc: Exception, *, provider_outcome: str | None = None) -> LlmVerdict:
     provider_blockers = {
-        "incomplete": "Ответ проверяющего LLM не завершён: достигнут лимит токенов.",
+        "incomplete": "Ответ проверяющего LLM не завершён провайдером.",
+        "limit_exceeded": "Провайдер превысил настроенный лимит ответа проверяющего LLM.",
         "refusal": "Провайдер проверяющего LLM отказался формировать ответ.",
         "content_filter": "Ответ проверяющего LLM остановлен фильтром провайдера.",
     }
@@ -131,7 +131,7 @@ def _blocked(exc: Exception, *, provider_outcome: str | None = None) -> LlmVerdi
         blocker = ("История текущей фазы содержит несовместимый отчёт. Оценка не выполнена; "
                    "требуется явный переход данных на текущий контракт.")
     elif isinstance(exc, LlmConfigurationError):
-        blocker = "Проверяющий LLM не настроен: для OpenRouter требуется OPENAI_API_KEY."
+        blocker = "Проверяющий LLM не настроен или настроен неверно."
     elif isinstance(exc, (requests.Timeout, TimeoutError)):
         blocker = "Проверяющий LLM не ответил за отведённое время."
     elif isinstance(exc, requests.HTTPError):
@@ -248,7 +248,7 @@ def _evaluate_strict_response(
     phase: Phase,
     attempts: list[dict[str, Any]] | None = None,
     system: str = PromptBuilder.SYSTEM_PROMPT,
-    response_format: dict[str, Any] | None = None,
+    response_format: dict[str, Any],
     delegation_allowed: bool | None = None,
 ) -> tuple[dict[str, Any], LlmVerdict]:
     """Evaluate exactly once; malformed output is a technical failure."""
@@ -258,8 +258,7 @@ def _evaluate_strict_response(
     raw: dict[str, Any] | None = None
     error: Exception | None = None
     try:
-        format_options = {"response_format": response_format} if response_format is not None else {}
-        raw = client.chat(system=system, user=user, temperature=0.1, **format_options)
+        raw = client.respond(system=system, user=user, response_format=response_format)
         llm = ResponseParser.parse_assessments(raw, evaluation_items=evaluation_items)
         if llm.verdict not in allowed:
             raise ValueError("Для текущей фазы не настроено делегирование")
@@ -399,8 +398,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
             phase=phase,
             attempts=attempts,
             system=system,
-            response_format=(PromptBuilder.response_schema(evaluation_items, delegation_allowed=delegation_allowed)
-                             if config.get_settings().OPENAI_EVALUATOR_RESPONSE_FORMAT == "json_schema" else None),
+            response_format=PromptBuilder.response_schema(evaluation_items, delegation_allowed=delegation_allowed),
             delegation_allowed=delegation_allowed,
         )
     except (

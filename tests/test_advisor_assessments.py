@@ -10,6 +10,7 @@ import requests
 
 from project_workflow.domain.phase_report import PhaseReport
 from project_workflow.infrastructure.llm import OpenAICompatibleClient, PromptBuilder, ResponseParser
+from tests._report_helpers import response_body
 
 pytestmark = pytest.mark.unit
 
@@ -66,18 +67,27 @@ def _client_response(monkeypatch, *, content=None, finish="stop", refusal=None):
     if content is None:
         content = json.dumps(_response())
     data = {
-        "choices": [{"finish_reason": finish, "message": {
-            "content": content, "refusal": refusal, "reasoning_content": "private-reasoning-secret",
-        }}],
-        "usage": {"prompt_tokens": 11, "completion_tokens": 7, "total_tokens": 18},
+        **response_body(
+            content,
+            status=("incomplete" if finish in ("length", "content_filter") else "completed"),
+            reason=(
+                "max_output_tokens" if finish == "length" else "content_filter" if finish == "content_filter" else None
+            ),
+            refusal=refusal,
+        ),
+        "usage": {"input_tokens": 11, "output_tokens": 7, "total_tokens": 18},
     }
     response = Mock(spec=requests.Response, status_code=200, headers={})
     response.json.return_value = data
     post = Mock(return_value=response)
     monkeypatch.setattr("project_workflow.infrastructure.llm.requests.post", post)
     client = OpenAICompatibleClient(
-        base_url="https://provider.invalid/v1", api_key="private-key-secret", model="synthetic",
-        timeout=17, max_tokens=650, reasoning_effort="none",
+        base_url="https://provider.invalid/v1",
+        api_key="private-key-secret",
+        model="synthetic",
+        timeout=17,
+        max_tokens=650,
+        reasoning_effort="none",
     )
     return client, post
 
@@ -336,12 +346,19 @@ def test_duplicate_json_keys_are_rejected_at_every_object_level(text):
 
 def test_response_schema_is_opt_in_fixed_alias_shape_and_contains_no_internal_ids():
     result = PromptBuilder.response_schema(ITEMS)
-    assert result["type"] == "json_schema" and result["json_schema"]["strict"] is True
-    schema = result["json_schema"]["schema"]
+    assert result["type"] == "json_schema" and result["strict"] is True
+    schema = result["schema"]
     assert schema["type"] == "object" and schema["additionalProperties"] is False
-    assert set(schema["properties"]) == set(schema["required"]) == {
-        "verdict", "assessments", "blockers", "confidence",
-    }
+    assert (
+        set(schema["properties"])
+        == set(schema["required"])
+        == {
+            "verdict",
+            "assessments",
+            "blockers",
+            "confidence",
+        }
+    )
     assessments = schema["properties"]["assessments"]
     assert assessments["type"] == "object" and assessments["additionalProperties"] is False
     assert list(assessments["properties"]) == assessments["required"] == list(ALIASES)
@@ -354,50 +371,61 @@ def test_response_schema_is_opt_in_fixed_alias_shape_and_contains_no_internal_id
             "required": ["covered", "reason", "required_change"], "additionalProperties": False,
         }
     assert not any(internal in json.dumps(result) for internal in ALIASES.values())
-    assert PromptBuilder.response_schema([])["json_schema"]["schema"]["properties"]["assessments"]["required"] == []
+    assert PromptBuilder.response_schema([])["schema"]["properties"]["assessments"]["required"] == []
 
 
-@pytest.mark.parametrize("explicit", [None, {}, {"type": "json_object"}, "schema"])
-def test_chat_preserves_default_json_mode_and_explicit_response_format(monkeypatch, explicit):
+def test_respond_preserves_explicit_strict_schema(monkeypatch):
     client, post = _client_response(monkeypatch)
-    response_format = PromptBuilder.response_schema(ITEMS) if explicit == "schema" else explicit
-    before = copy.deepcopy(response_format)
-    result = client.chat("system", "report", response_format=response_format)
+    fmt = PromptBuilder.response_schema(ITEMS)
+    before = copy.deepcopy(fmt)
+    assert client.respond("system", "report", response_format=fmt) == _response()
     post.assert_called_once()
-    assert result == _response() and response_format == before
     payload = post.call_args.kwargs["json"]
-    assert payload["response_format"] == (response_format if response_format is not None else {"type": "json_object"})
-    assert payload["messages"] == [{"role": "system", "content": "system"}, {"role": "user", "content": "report"}]
-    assert (payload["reasoning_effort"], payload["max_tokens"], payload["temperature"]) == ("none", 650, 0.1)
+    assert payload["text"]["format"] == fmt == before
+    assert payload["instructions"] == "system"
+    assert payload["input"] == [{"role": "user", "content": "report"}]
+    assert payload["reasoning"] == {"effort": "none"} and payload["max_output_tokens"] == 650
 
 
-@pytest.mark.parametrize("finish,refusal,outcome", [
-    ("length", None, "incomplete"), ("content_filter", None, "content_filter"),
-    ("stop", "private-provider-refusal-secret", "refusal"), ("stop", "", "refusal"),
-])
+@pytest.mark.parametrize(
+    "finish,refusal,outcome",
+    [
+        ("length", None, "incomplete"),
+        ("content_filter", None, "content_filter"),
+        ("stop", "private-provider-refusal-secret", "refusal"),
+        ("stop", "", "refusal"),
+    ],
+)
 def test_provider_incomplete_filter_and_refusal_fail_closed_even_with_valid_json(
-    monkeypatch, capsys, caplog, finish, refusal, outcome,
+    monkeypatch,
+    capsys,
+    caplog,
+    finish,
+    refusal,
+    outcome,
 ):
     content = json.dumps(_response())
     client, post = _client_response(monkeypatch, content=content, finish=finish, refusal=refusal)
     with pytest.raises(ValueError) as raised:
-        client.chat("system", "report")
+        client.respond("system", "report", response_format=PromptBuilder.response_schema([]))
     post.assert_called_once()
-    assert client.last_response_content == content
+    assert client.last_response_content == (content if refusal is None and finish == "stop" else None)
     assert client.last_call_diagnostics["outcome"] == outcome
     assert client.last_call_diagnostics["http_status"] == 200
-    assert client.last_call_diagnostics["finish_reason"] == finish
+    assert client.last_call_diagnostics["finish_reason"] == (
+        "max_output_tokens" if finish == "length" else "content_filter" if finish == "content_filter" else "completed"
+    )
     assert client.last_call_diagnostics["usage"]["total_tokens"] == 18
     for secret in ("private-key-secret", "private-reasoning-secret", "private-provider-refusal-secret"):
         assert secret not in str(raised.value)
         assert secret not in json.dumps(client.last_call_diagnostics)
-        assert secret not in client.last_response_content
+        assert secret not in (client.last_response_content or "")
     assert capsys.readouterr().out == "" and not caplog.records
 
 
 def test_duplicate_keys_from_provider_fail_without_client_retry(monkeypatch):
     client, post = _client_response(monkeypatch, content='{"assessments":{"C1":{},"C1":{}}}')
     with pytest.raises(ValueError, match="duplicate object keys"):
-        client.chat("system", "report")
+        client.respond("system", "report", response_format=PromptBuilder.response_schema([]))
     post.assert_called_once()
     assert client.last_call_diagnostics["outcome"] == "invalid_json"

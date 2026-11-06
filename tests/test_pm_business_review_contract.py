@@ -29,7 +29,8 @@ EXPORT = Path(__file__).resolve().parents[1] / "docs/evidence/pm-business-workfl
 # Published catalog 10's structure, not the stricter historic documentation export.
 BASE_STRUCTURE_SHA256 = "2ec0d49936c7db9bf2434250a26df3f3c0e09be69b030d7f53b8fd9a422ea050"
 BASE_CONTENT_SHA256 = "ae220f915d33987f1ed9b13e39d9a4c3a82ea5d8db133638a6a06f384ae249ef"
-NON_PM_WORKFLOWS_SHA256 = "926ea97712d67afba5b9fcb5807665ab345c5238403b27f6e187de0837c3b3df"
+# Current sealed family includes the coordinated twelve-phase Analyst baseline.
+NON_PM_WORKFLOWS_SHA256 = "5cf3f2a6ff3d62e1d18a49877b6df268e239656a56ca2180fb2d5d3185e46f3c"
 
 
 @pytest.fixture
@@ -240,8 +241,8 @@ def test_preparation_source_without_full_document_remains_partial(
     covered = [phase["checks"][2], *phase["evidence"]]
     missing = [phase["checks"][0], phase["checks"][1], phase["checks"][3]]
     supervisor_llm("PARTIAL", covered=covered, missing=missing)
-    provider = Mock(side_effect=OpenAICompatibleClient.chat)
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", provider)
+    provider = Mock(side_effect=OpenAICompatibleClient.respond)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", provider)
     response = step(
         configured,
         report=(
@@ -284,8 +285,8 @@ def test_preparation_pending_owner_input_with_present_evidence_remains_partial(
     covered = [phase["checks"][0], phase["checks"][3], *phase["evidence"]]
     missing = phase["checks"][1:3]
     supervisor_llm("PARTIAL", covered=covered, missing=missing)
-    provider = Mock(side_effect=OpenAICompatibleClient.chat)
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", provider)
+    provider = Mock(side_effect=OpenAICompatibleClient.respond)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", provider)
     response = step(
         configured,
         report=(
@@ -472,8 +473,8 @@ def test_pending_owner_question_remains_partial_despite_valid_saved_consent(
     final = business["modes"][0]["phases"][2]
     supervisor_llm("PARTIAL", covered=[*final["checks"][:3], final["checks"][4], *final["evidence"]],
                    missing=[final["checks"][3]])
-    provider = Mock(side_effect=OpenAICompatibleClient.chat)
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", provider)
+    provider = Mock(side_effect=OpenAICompatibleClient.respond)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", provider)
     response = step(configured,
                     report=report_json("Synthetic FULL packet; a new material owner choice remains pending."),
                     operation_key="pending-owner-choice", expected_version=3,

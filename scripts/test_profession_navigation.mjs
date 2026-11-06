@@ -58,8 +58,8 @@ test('invalid legacy profession is not silently converted into all projects', ()
 });
 
 test('loading stored profession fields resets the leave guard after the form is populated', () => {
-  const template = readFileSync(new URL('../project_workflow/interfaces/ui/templates/namespaces.html', import.meta.url), 'utf8');
-  const fill = template.match(/function fillNamespaceForm\(namespace\)\{([\s\S]*?)\n\}/)[1];
+  const controller = readFileSync(new URL('../project_workflow/interfaces/ui/templates/controllers/namespaces.js', import.meta.url), 'utf8');
+  const fill = controller.match(/function fillNamespaceForm\(namespace\)\{([\s\S]*?)\r?\n\}/)[1];
   const fields = new Map(['namespaceThemeIcon', 'namespaceName', 'namespaceCliCommand', 'namespaceDescription', 'namespaceLaunchProfile', 'namespaceThemeColor', 'namespaceForm'].map(id => [id, {}]));
   const saved = [];
   const context = { document: { getElementById: id => fields.get(id), querySelectorAll: () => [] }, window: { SdlcPlatformNavigation: { saved: form => saved.push({ form, name: fields.get('namespaceName').value, icon: fields.get('namespaceThemeIcon').value, color: fields.get('namespaceThemeColor').value }) } }, updateNamespaceThemePreview() {}, defaultNamespaceThemeIcon: 'folder', defaultNamespaceThemeColor: '#000' };

@@ -237,17 +237,19 @@ def test_managed_bootstrap_rejects_namespace_identity_drift(empty_uow, field, va
 def test_catalog_rejects_a_fortieth_phase(tmp_path: Path):
     raw = json.loads(config.MANAGED_CATALOG_PATH.read_text(encoding="utf-8"))
     mode = raw["workflows"][0]["modes"][0]
-    extra_phase = copy.deepcopy(mode["phases"][-1])
+    extra_phase = copy.deepcopy(mode["phases"][0])
     extra_phase.update(
         {
-            "code": "pm-extra-terminal",
-            "name": "Extra terminal phase",
-            "phase_order": 4,
+            "code": "pm-extra-analysis",
+            "name": "Extra analysis phase",
+            "phase_order": 3,
         }
     )
-    mode["phases"].append(extra_phase)
+    # Keep the terminal action valid, so only the phase-count rule rejects it.
+    mode["phases"][-1]["phase_order"] = 4
+    mode["phases"].insert(-1, extra_phase)
 
-    with pytest.raises(ValueError, match="at most 3"):
+    with pytest.raises(ValueError, match="exactly three phases"):
         load_managed_catalog(_write_catalog(tmp_path, raw))
 
 

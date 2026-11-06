@@ -180,7 +180,7 @@ def test_cli_human_and_json_explain_same_local_error_without_http_or_model(agent
     http = Mock(side_effect=AssertionError("Invalid report cannot reach HTTP"))
     advisor = Mock(side_effect=AssertionError("Invalid report cannot reach Advisor"))
     monkeypatch.setattr(requests.Session, "request", http)
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", advisor)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", advisor)
     raw = missing_source_close(length)
     expected = reason(raw)
     args = ["step", "--task", "SDLC-33", "--report", "-",
@@ -204,7 +204,7 @@ def test_configured_http_422_preserves_same_safe_error_without_model_or_transiti
     enroll(configured)
     before = step(configured).json()["result"]
     advisor = Mock(side_effect=AssertionError("Invalid report cannot reach Advisor"))
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", advisor)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", advisor)
     raw = missing_source_close(4424)
     response = step(configured, report=raw, operation_key="invalid-diagnostic", expected_version=before["version"])
     assert response.status_code == 422
@@ -262,6 +262,8 @@ def test_published_python_example_serializes_supplied_objects_without_mutation()
 
 
 def test_worker_format_instructions_do_not_change_actual_advisor_prepared_request(monkeypatch):
+    from tests._report_helpers import response_body
+
     captured = []
     answer = {"verdict": "PASS", "assessments": {"C1": {
         "covered": True, "reason": "Документ содержит исходные факты.", "required_change": None}},
@@ -269,13 +271,12 @@ def test_worker_format_instructions_do_not_change_actual_advisor_prepared_reques
 
     def send(session, prepared, **kwargs):
         assert isinstance(prepared, requests.PreparedRequest)
-        assert prepared.method == "POST" and prepared.url == "https://advisor.invalid/chat/completions"
+        assert prepared.method == "POST" and prepared.url == "https://advisor.invalid/responses"
         captured.append(prepared.body)
         response = requests.Response()
         response.status_code = 200
         response.request = prepared
-        response._content = json.dumps({"choices": [{"finish_reason": "stop", "message": {
-            "content": json.dumps(answer, ensure_ascii=False)}}]}).encode()
+        response._content = json.dumps(response_body(json.dumps(answer, ensure_ascii=False))).encode()
         return response
 
     monkeypatch.setattr(requests.Session, "send", send)
@@ -293,12 +294,12 @@ def test_worker_format_instructions_do_not_change_actual_advisor_prepared_reques
             timeout=1200, max_tokens=4000, reasoning_effort="high")
         before = len(captured)
         schema = PromptBuilder.response_schema(items, delegation_allowed=False)
-        assert client.chat(PromptBuilder.SYSTEM_PROMPT, user, response_format=schema) == answer
+        assert client.respond(PromptBuilder.SYSTEM_PROMPT, user, response_format=schema) == answer
         assert len(captured) == before + 1
         body = json.loads(captured[-1])
-        actual = json.loads(body["messages"][1]["content"])
+        actual = json.loads(body["input"][0]["content"])
         assert actual["report"] == parsed and actual["previous_reports"] == history
-        assert body["model"] == "app-test" and body["reasoning_effort"] == "high"
-        assert body["max_tokens"] == 4000 and body["response_format"] == schema
+        assert body["model"] == "app-test" and body["reasoning"] == {"effort": "high"}
+        assert body["max_output_tokens"] == 4000 and body["text"]["format"] == schema
         assert worker_text not in captured[-1].decode()
     assert len(captured) == 2 and captured[0] == captured[1]

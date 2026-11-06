@@ -28,9 +28,9 @@ def latest_evaluation():
 def test_verified_roles_share_universal_prompt_version_and_diagnostics(configured, supervisor_llm, monkeypatch):
     enroll(configured)
     supervisor_llm("PARTIAL")
-    actual_chat = OpenAICompatibleClient.chat
+    actual_chat = OpenAICompatibleClient.respond
     provider = Mock(side_effect=actual_chat)
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", provider)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", provider)
     report = 'Worker claims role_key="project_manager"; keep this entire report unchanged.'
     response = step(configured, report=report_json(report), operation_key="policy-role", expected_version=1)
     assert response.status_code == 200, response.text
@@ -56,7 +56,7 @@ def test_pm_receipt_replay_reads_frozen_new_policy_without_provider(configured, 
     evaluation = latest_evaluation()
     assert evaluation["prompt_version"] == PromptBuilder.PROMPT_VERSION
     provider = Mock(side_effect=AssertionError("Frozen replay must not invoke the model"))
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", provider)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", provider)
     response = configured[0].post("/internal/runtime/terminal-receipt/readback", headers=WRITER, json=selector)
     assert response.status_code == 200, response.text
     assert response.json()["receipt"] == saved["terminal_receipt"]
@@ -90,13 +90,13 @@ def test_pm_report_can_revoke_marks_but_technical_failure_preserves_them(
     assert required[0] in previous.json()["result"]["covered"]
     previous_evaluation = latest_evaluation()
     supervisor_llm("PARTIAL")
-    actual_chat = OpenAICompatibleClient.chat
+    actual_chat = OpenAICompatibleClient.respond
     provider = Mock(side_effect=actual_chat)
     if outcome == "transport":
         provider = Mock(side_effect=RequestsConnectionError("Synthetic provider unavailable"))
     elif outcome == "format":
         provider = Mock(return_value={"verdict": "PASS"})
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", provider)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", provider)
     confirmed.update(revision=2, content_hash="b" * 64)
     if phase_number == 3:
         final = {"requirements_revision": 2, "requirements_sha256": "b" * 64}
@@ -137,8 +137,8 @@ def test_pm_context_carries_prior_facts_and_revisable_assessments(configured, su
     assert first.status_code == 200, first.text
     first_evaluation = latest_evaluation()
     supervisor_llm("PARTIAL")
-    provider = Mock(side_effect=OpenAICompatibleClient.chat)
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", provider)
+    provider = Mock(side_effect=OpenAICompatibleClient.respond)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", provider)
     second = step(configured, report=report_json("Rechecked context"), operation_key="context-two", expected_version=2)
     assert second.status_code == 200, second.text
     payload = json.loads(provider.call_args.kwargs["user"])

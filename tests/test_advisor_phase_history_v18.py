@@ -364,7 +364,7 @@ def test_group_split_during_provider_preserves_report_scope_and_excludes_it_from
             "blockers": [], "confidence": 0.9,
         }
 
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", answer)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", answer)
     original = report(start, 1, key="original-group", document="Full artifact for the original parallel group")
     blocked = standalone.step(uow, original)["result"]
     assert len(calls) == 1 and len(calls[0]["criteria"]) == 2
@@ -413,7 +413,7 @@ def test_missing_or_malformed_evaluated_group_is_a_technical_failure_without_sta
     def forbidden_call(*args, **kwargs):
         pytest.fail("Invalid evaluated group must block before any provider call")
 
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", forbidden_call)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", forbidden_call)
     result = standalone.step(uow, report(start, 2, key="invalid-evaluated-group"))["result"]
     assert result["verdict"] == "BLOCKED" and result["retryable"] is True
     assert result["phase_code"] == "local.1" and not result["complete"]

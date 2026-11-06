@@ -52,10 +52,10 @@ def wire(case):
 
 
 def response(raw):
+    from tests._report_helpers import response_body
+
     result = Mock(spec=requests.Response, status_code=200, headers={})
-    result.json.return_value = {"choices": [{"finish_reason": "stop", "message": {
-        "content": json.dumps(raw, ensure_ascii=False),
-    }}]}
+    result.json.return_value = response_body(json.dumps(raw, ensure_ascii=False))
     return result
 
 
@@ -108,18 +108,19 @@ def test_all_36_calls_use_verbatim_payload_and_persist_pending_before_transport(
         assert all(s["status"] == "matched" for s in journal["slots"][:index])
         case = cases[slot["case_id"]]
         payload = kwargs["json"]
-        assert payload["messages"] == [
-            {"role": "system", "content": runner.PromptBuilder.SYSTEM_PROMPT},
+        assert payload["instructions"] == runner.PromptBuilder.SYSTEM_PROMPT
+        assert payload["input"] == [
             {"role": "user", "content": json.dumps(case["user_payload"], ensure_ascii=False, allow_nan=False)},
         ]
         items = [(item["id"], item["text"]) for item in case["criteria"]]
-        assert payload["response_format"] == runner.PromptBuilder.response_schema(
+        assert payload["text"]["format"] == runner.PromptBuilder.response_schema(
             items, delegation_allowed="DELEGATE" in case["user_payload"]["allowed_verdicts"],
         )
-        assert journal["slots"][index]["response_format"] == payload["response_format"]
-        assert (payload["model"], payload["reasoning_effort"], payload["max_tokens"], payload["temperature"]) == (
-            "app-test", "high", 4000, 0.1,
+        assert journal["slots"][index]["response_format"] == payload["text"]["format"]
+        assert (payload["model"], payload["reasoning"], payload["max_output_tokens"]) == (
+            "app-test", {"effort": "high"}, 4000,
         )
+        assert "temperature" not in payload
         calls.append(payload)
         return response(wire(case))
 
@@ -271,7 +272,7 @@ def test_route_preflight_is_offline_and_freezes_four_probes(frozen, monkeypatch,
     ]
     for probe in result["probes"]:
         assert probe["response_format"]["type"] == "json_schema"
-        assert probe["response_format"]["json_schema"]["strict"] is True
+        assert probe["response_format"]["strict"] is True
     assert result["probes"][3]["system"] == runner.PromptBuilder.SYSTEM_PROMPT
     constructor.assert_not_called()
 
@@ -310,10 +311,9 @@ def test_route_uses_exact_schema_and_stops_at_first_failure(frozen, tmp_path, mo
         assert saved["probes"][index]["status"] == "call_started"
         probe = probes[index]
         payload = kwargs["json"]
-        assert payload["response_format"] == probe["response_format"]
-        assert payload["messages"] == [
-            {"role": "system", "content": probe["system"]}, {"role": "user", "content": probe["user"]},
-        ]
+        assert payload["text"]["format"] == probe["response_format"]
+        assert payload["instructions"] == probe["system"]
+        assert payload["input"] == [{"role": "user", "content": probe["user"]}]
         assert kwargs["timeout"] == (30, 1200) and kwargs["allow_redirects"] is False
         calls.append(payload)
         raw = probe["expected"] if index < 3 else wire(cases["pm-missing-full-153"])
@@ -346,7 +346,7 @@ def test_route_records_prepared_body_without_authorization(frozen, tmp_path, mon
 
     def original_send(session, prepared, **kwargs):
         payload = json.loads(prepared.body)
-        raw = wire(cases["pm-missing-full-153"]) if "criteria" in payload["messages"][1]["content"] else {
+        raw = wire(cases["pm-missing-full-153"]) if "criteria" in payload["input"][0]["content"] else {
             "probe": "schema-enforced",
         }
         return response(raw)
@@ -363,9 +363,9 @@ def test_route_records_prepared_body_without_authorization(frozen, tmp_path, mon
     assert result["endpoint"]["text"] == "https://provider.invalid/v1"
     for probe in result["probes"]:
         request = probe["wire_request"]
-        assert request["url"]["text"] == "https://provider.invalid/v1/chat/completions"
-        assert request["body"]["response_format"] == probe["response_format"]
-        assert request["body"]["messages"][1]["content"] == probe["user"]
+        assert request["url"]["text"] == "https://provider.invalid/v1/responses"
+        assert request["body"]["text"]["format"] == probe["response_format"]
+        assert request["body"]["input"][0]["content"] == probe["user"]
     assert "private-qualification-secret" not in output.read_text(encoding="utf-8")
 
 

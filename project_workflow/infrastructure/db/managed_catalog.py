@@ -77,7 +77,7 @@ class ManagedMode(_CatalogModel):
     name: str
     mode_order: int = Field(gt=0)
     execution_scopes: list[Literal["business", "delivery", "aggregate"]] = Field(min_length=1)
-    phases: list[_SeedPhase] = Field(min_length=3, max_length=3)
+    phases: list[_SeedPhase] = Field(min_length=1)
 
     @field_validator("key", "name")
     @classmethod
@@ -303,6 +303,8 @@ class ManagedCatalog(_CatalogModel):
         mode_count = sum(len(workflow.modes) for workflow in self.workflows)
         if mode_count != 11:
             raise ValueError("Managed catalog must contain exactly eleven modes")
+        if any(len(mode.phases) != 3 for workflow in self.workflows for mode in workflow.modes):
+            raise ValueError("This managed catalog generation requires exactly three phases per mode")
         phase_count = sum(
             len(mode.phases)
             for workflow in self.workflows

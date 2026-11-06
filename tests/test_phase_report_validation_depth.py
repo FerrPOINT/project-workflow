@@ -64,7 +64,7 @@ def test_local_cli_depth_error_is_safe_and_never_sent(agent_env, monkeypatch, fi
     http = Mock(side_effect=AssertionError("Validation depth cannot reach HTTP"))
     advisor = Mock(side_effect=AssertionError("Validation depth cannot reach Advisor"))
     monkeypatch.setattr(requests.Session, "request", http)
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", advisor)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", advisor)
     raw = json.dumps(nested_report(field, 400), ensure_ascii=False)
     result = CliRunner().invoke(cli, ["--json", "step", "--task", "SDLC-33", "--report", "-",
         "--operation-key", "depth-rejected", "--expected-version", "1"], input=raw)
@@ -84,7 +84,7 @@ def test_api_depth_error_keeps_state_and_does_not_call_advisor(configured, monke
     http = Mock(side_effect=AssertionError("Synthetic API case cannot use external HTTP"))
     advisor = Mock(side_effect=AssertionError("Validation depth cannot reach Advisor"))
     monkeypatch.setattr(requests.Session, "send", http)
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", advisor)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", advisor)
     raw = json.dumps(nested_report(field, 400), ensure_ascii=False)
     response = step(configured, report=raw, operation_key="depth-rejected", expected_version=before["version"])
     assert response.status_code == 422

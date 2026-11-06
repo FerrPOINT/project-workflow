@@ -51,7 +51,7 @@ def validate_frozen_evaluation(
                 or re.fullmatch(r"[a-f0-9]{64}", context_fingerprint) is None)):
         raise ConflictError("Terminal frozen phase context fingerprint is missing or invalid")
     if ("evaluator_response_format" in state
-            and state["evaluator_response_format"] not in ("json_object", "json_schema")):
+            and state["evaluator_response_format"] not in ("json_object", "json_schema", "responses-json_schema")):
         raise ConflictError("Terminal frozen evaluator format is invalid")
     if "evaluator_response_format" not in state:
         raise ConflictError("Terminal frozen evaluator format is missing")

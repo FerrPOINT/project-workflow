@@ -4,8 +4,10 @@ import json
 import os
 import subprocess
 import sys
+from copy import deepcopy
 from pathlib import Path
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
@@ -21,9 +23,11 @@ from project_workflow.infrastructure.db.session import ensure_migrated
 from project_workflow.infrastructure.db.single_task_catalog import ensure_single_task_catalog, observe_installation
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.ui.app import create_app
-from project_workflow.interfaces.ui.routes import runtime_api
+from project_workflow.interfaces.ui.routes import api, runtime_api
 from project_workflow.interfaces.ui.schemas import RuntimeAssignmentRequest, SingleTaskAssignmentRequest
+from project_workflow.interfaces.ui.templates import PROJECT_ICON_PATHS
 from scripts import build_single_task_profile, init_db
+from tests._human_access_helpers import human_identity, human_token
 
 
 @pytest.fixture(autouse=True)
@@ -57,7 +61,7 @@ def test_real_bootstrap_repeats_with_exact_persisted_ids(database, monkeypatch, 
     assert first == second
     assert first["instruction_manifest_sha256"] == MANIFEST_SHA256
     assert first["workflow_catalog_sha256"] == CATALOG_SHA256
-    assert [first[k] for k in ("namespaces", "workflows", "modes", "phases")] == [7, 7, 8, 24]
+    assert [first[k] for k in ("namespaces", "workflows", "modes", "phases")] == [7, 7, 8, 33]
     assert first["runtime_ready"] is first["live_activation_allowed"] is False
     with SAUnitOfWork(database) as uow:
         assert observe_installation(uow).model_dump(mode="json", by_alias=True) == first
@@ -77,7 +81,7 @@ def test_config_selector_runs_real_bootstrap_subprocess_twice(tmp_path):
         results.append(result)
     assert results[0] == results[1]
     assert results[0]["instruction_profile"] == "single-task-v1"
-    assert results[0]["modes"] == 8 and results[0]["phases"] == 24
+    assert results[0]["modes"] == 8 and results[0]["phases"] == 33
     assert results[0]["live_activation_allowed"] is False
 
 
@@ -212,7 +216,12 @@ def test_runtime_catalog_reads_installed_single_task_with_legacy_selector(monkey
     assert payload["namespaces"] == [
         {"id": int(binding.namespace_id), "name": binding.namespace_name,
          "cli_command": binding.namespace_cli_command, "launch_profile": binding.profile,
-         "workflow_id": int(binding.workflow_id)}
+         "workflow_id": int(binding.workflow_id),
+         "theme_icon": next(row["theme_icon"] for row in before["projects"] if row["id"] == int(binding.namespace_id)),
+         "theme_icon_path": PROJECT_ICON_PATHS[next(row["theme_icon"] for row in before["projects"]
+                                                  if row["id"] == int(binding.namespace_id))],
+         "theme_color": next(row["theme_color"] for row in before["projects"]
+                             if row["id"] == int(binding.namespace_id))}
         for binding in installation.bindings
     ]
     assert payload["workflows"] == [
@@ -220,6 +229,82 @@ def test_runtime_catalog_reads_installed_single_task_with_legacy_selector(monkey
          "name": config.MANAGED_NAMESPACE_WORKFLOW_NAME}
         for binding in installation.bindings
     ]
+    with SAUnitOfWork() as uow:
+        assert {name: rows(uow, table) for name, table in m.Base.metadata.tables.items()} == before
+
+
+@pytest.mark.parametrize("with_managed_legacy", [False, True])
+def test_runtime_catalog_reflects_editor_theme_without_changing_runtime_identity(monkeypatch, with_managed_legacy):
+    monkeypatch.setenv("PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN", "c" * 32)
+    config.get_settings.cache_clear()
+    with SAUnitOfWork() as uow:
+        if with_managed_legacy:
+            ensure_managed_catalog(uow)
+        installation = ensure_single_task_catalog(uow)
+        uow.commit()
+        before = {name: rows(uow, table) for name, table in m.Base.metadata.tables.items()}
+    namespace_id = int(installation.bindings[-1].namespace_id)
+    headers = {"Authorization": "Bearer " + "c" * 32}
+    issuer = config.get_settings().AUTH_ISSUER
+    editor = {"Authorization": "Bearer " + human_token("installation-theme-admin", issuer=issuer)}
+    original_client = httpx.AsyncClient
+
+    def identity(request):
+        assert str(request.url) == issuer + "/auth/me"
+        if request.headers.get("Authorization") != editor["Authorization"]:
+            return httpx.Response(401)
+        return httpx.Response(200, json=human_identity("installation-theme-admin", role="admin"))
+
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: original_client(
+        transport=httpx.MockTransport(identity), **kwargs,
+    ))
+    with TestClient(create_app()) as client:
+        original = client.get("/internal/runtime/catalog", headers=headers).json()
+        denied = client.put(f"/api/namespaces/{namespace_id}", json={"theme_icon": "palette"})
+        assert denied.status_code == 401
+        for icon, color in (("palette", "#D2608E"), ("heart", "22c55e")):
+            edited = client.put(f"/api/namespaces/{namespace_id}", headers=editor,
+                                json={"theme_icon": icon, "theme_color": color})
+            assert edited.status_code == 200, edited.text
+            response = client.get("/internal/runtime/catalog", headers=headers)
+            assert response.status_code == 200, response.text
+            actual = response.json()
+            expected = deepcopy(original)
+            namespace = next(item for item in expected["namespaces"] if item["id"] == namespace_id)
+            namespace.update(theme_icon=icon, theme_icon_path=PROJECT_ICON_PATHS[icon],
+                             theme_color="#" + color.removeprefix("#").upper())
+            assert actual == expected
+            assert {key: edited.json()["namespace"][key] for key in
+                    ("theme_icon", "theme_icon_path", "theme_color")} == {
+                        key: namespace[key] for key in ("theme_icon", "theme_icon_path", "theme_color")}
+            with SAUnitOfWork() as uow:
+                assert observe_installation(uow) == installation
+                after = {name: rows(uow, table) for name, table in m.Base.metadata.tables.items()}
+            expected_rows = deepcopy(before)
+            project = next(row for row in expected_rows["projects"] if row["id"] == namespace_id)
+            project.update(theme_icon=icon, theme_color=namespace["theme_color"])
+            assert after == expected_rows
+
+
+@pytest.mark.parametrize("missing", ["namespace", "theme_icon_path"])
+def test_runtime_catalog_rejects_missing_namespace_theme_without_writes(monkeypatch, missing):
+    monkeypatch.setenv("PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN", "c" * 32)
+    config.get_settings.cache_clear()
+    with SAUnitOfWork() as uow:
+        installation = ensure_single_task_catalog(uow)
+        uow.commit()
+        before = {name: rows(uow, table) for name, table in m.Base.metadata.tables.items()}
+    namespaces = api.api_namespaces()
+    namespace_id = int(installation.bindings[0].namespace_id)
+    if missing == "namespace":
+        namespaces["namespaces"] = [item for item in namespaces["namespaces"] if item["id"] != namespace_id]
+    else:
+        next(item for item in namespaces["namespaces"] if item["id"] == namespace_id).pop(missing)
+    monkeypatch.setattr(api, "api_namespaces", lambda: namespaces)
+    with TestClient(create_app()) as client:
+        response = client.get("/internal/runtime/catalog", headers={"Authorization": "Bearer " + "c" * 32})
+    assert response.status_code == 503
+    assert response.json() == {"ok": False, "error": "Single-task installation missing or divergent"}
     with SAUnitOfWork() as uow:
         assert {name: rows(uow, table) for name, table in m.Base.metadata.tables.items()} == before
 
@@ -336,8 +421,9 @@ def test_pm_confirmation_precedes_final_report_in_actual_installed_phase(databas
         for retired in ("--runtime-request", "--execution-token-file", "input_receipt", "bind operation"):
             assert retired not in text
         checks = [row["description"] for row in uow.phase_checks.list(phase.id)]
-        assert any("only subsequent Tracker completion publishes Backlog / Ready" in check for check in checks)
-        assert any("No automatic Analyst" in check for check in checks)
+        assert any("remain owner-confirmed in Draft for this final report" in check for check in checks)
+        assert any("completion queues Analysis automatically" in check for check in checks)
+        assert not any("No automatic Analyst" in check for check in checks)
 
 
 def assignment_payload():

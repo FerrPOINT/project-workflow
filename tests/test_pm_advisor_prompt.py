@@ -8,7 +8,7 @@ from unittest.mock import Mock
 import pytest
 
 from project_workflow.infrastructure.llm import OpenAICompatibleClient, PromptBuilder, ResponseParser
-from tests._report_helpers import report_json
+from tests._report_helpers import report_json, response_body
 
 pytestmark = pytest.mark.unit
 
@@ -94,9 +94,11 @@ def test_pm_explicit_empty_items_do_not_fall_back_to_phase_contents():
 
 @pytest.mark.parametrize("phase_index", range(3))
 def test_business_catalog_http_request_contains_only_the_current_evaluation(monkeypatch, phase_index):
-    catalog = json.loads((
-        Path(__file__).resolve().parents[1] / "docs/evidence/pm-business-workflow-20261102.json"
-    ).read_text(encoding="utf-8"))
+    catalog = json.loads(
+        (Path(__file__).resolve().parents[1] / "docs/evidence/pm-business-workflow-20261102.json").read_text(
+            encoding="utf-8"
+        )
+    )
     definition = catalog["modes"][0]["phases"][phase_index]
     phase = SimpleNamespace(**definition, delegate=None)
     items = [
@@ -114,24 +116,36 @@ def test_business_catalog_http_request_contains_only_the_current_evaluation(monk
             for label in PromptBuilder.item_aliases(items)
         }, "blockers": [], "confidence": 0.9,
     }
-    post = Mock(return_value=Mock(
-        status_code=200, headers={},
-        json=Mock(return_value={"choices": [{"message": {"content": json.dumps(response)}}]}),
-    ))
+    post = Mock(
+        return_value=Mock(
+            status_code=200,
+            headers={},
+            json=Mock(return_value=response_body(json.dumps(response))),
+        )
+    )
     monkeypatch.setattr("project_workflow.infrastructure.llm.requests.post", post)
     client = OpenAICompatibleClient(
-        base_url="https://model.invalid/v1", model="test-model", api_key="test-only-key",
-        timeout=10, max_tokens=1000, reasoning_effort="none",
+        base_url="https://model.invalid/v1",
+        model="test-model",
+        api_key="test-only-key",
+        timeout=10,
+        max_tokens=1000,
+        reasoning_effort="none",
     )
-    actual = client.chat(PromptBuilder.SYSTEM_PROMPT, prompt)
+    actual = client.respond(PromptBuilder.SYSTEM_PROMPT, prompt, response_format=PromptBuilder.response_schema(items))
     payload = post.call_args.kwargs["json"]
     assert set(payload) == {
-        "model", "messages", "temperature", "response_format", "max_tokens", "reasoning_effort",
+        "model",
+        "instructions",
+        "input",
+        "text",
+        "max_output_tokens",
+        "reasoning",
+        "store",
+        "stream",
     }
-    assert payload["messages"] == [
-        {"role": "system", "content": PromptBuilder.SYSTEM_PROMPT},
-        {"role": "user", "content": prompt},
-    ]
+    assert payload["instructions"] == PromptBuilder.SYSTEM_PROMPT
+    assert payload["input"] == [{"role": "user", "content": prompt}]
     user_data = json.loads(prompt)
     assert user_data["report"] == report
     assert prompt.count(report["result"]["artifacts"][0]["content"]) == 1
@@ -142,10 +156,17 @@ def test_business_catalog_http_request_contains_only_the_current_evaluation(monk
     assert user_data["previous_reports"] == []
     for instruction in definition["instructions"]:
         assert instruction["description"] not in prompt
-    wire_context = json.dumps(payload["messages"])
+    wire_context = json.dumps([payload["instructions"], payload["input"]])
     for unwanted in (
-        "private-task-identifier", "test-only-key", "fingerprint", "sha256", "receipt",
-        "source_tree", "native_attempts", "task-tracker", "project-workflow",
+        "private-task-identifier",
+        "test-only-key",
+        "fingerprint",
+        "sha256",
+        "receipt",
+        "source_tree",
+        "native_attempts",
+        "task-tracker",
+        "project-workflow",
     ):
         assert unwanted not in wire_context
     parsed = ResponseParser.parse_assessments(actual, evaluation_items=items)

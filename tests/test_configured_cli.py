@@ -189,7 +189,8 @@ def test_professions_share_assignment_step_history_and_terminal(configured, supe
     supervisor_llm("PASS")
     assert step(configured).status_code == 200
     client, assignment = configured
-    for version in (1, 2, 3):
+    count = 12 if assignment["role_key"] == "analyst" else 3
+    for version in range(1, count + 1):
         response = step(
             configured,
             report=report_json(f"Actual completed phase {version}"),
@@ -198,7 +199,7 @@ def test_professions_share_assignment_step_history_and_terminal(configured, supe
         )
         assert response.status_code == 200, response.text
     result = response.json()["result"]
-    assert result["complete"] is True and result["version"] == 4
+    assert result["complete"] is True and result["version"] == count + 1
     assert result["terminal_receipt"]["confirmation_id"] is None
     selector = {
         key: result["terminal_receipt"][key]
@@ -233,7 +234,7 @@ def test_professions_share_assignment_step_history_and_terminal(configured, supe
             "execution_ref": enrollment["execution_ref"],
         },
     )
-    assert history.status_code == 200 and len(history.json()["result"]["records"]) == 3
+    assert history.status_code == 200 and len(history.json()["result"]["records"]) == count
     full_rows = []
     agent_query = {"interaction_protocol": "configured-cli-v1", "task": assignment["task"],
                    "namespace_id": assignment["namespace_id"], "n": 1}
@@ -246,9 +247,9 @@ def test_professions_share_assignment_step_history_and_terminal(configured, supe
             break
         agent_query["before_history_id"] = value["next_before"]
     assert [row["worker_report"] for row in full_rows] == [
-        report_json(f"Actual completed phase {i}") for i in (3, 2, 1)
+        report_json(f"Actual completed phase {i}") for i in range(count, 0, -1)
     ]
-    assert len({row["history_id"] for row in full_rows}) == 3
+    assert len({row["history_id"] for row in full_rows}) == count
     for invalid in ({"before_history_id": 0}, {"before_history_id": 2**63},
                     {"before_history_id": 1, "operation_key": "phase-1"}):
         assert client.get("/internal/runtime/history", headers=MACHINE,
@@ -265,8 +266,8 @@ def test_professions_share_assignment_step_history_and_terminal(configured, supe
         if body["result"]["next_before"] is None:
             break
         query["before_history_id"] = body["result"]["next_before"]
-    assert [row["step_operation_key"] for row in rows] == ["phase-3", "phase-2", "phase-1"]
-    assert len({row["history_id"] for row in rows}) == 3
+    assert [row["step_operation_key"] for row in rows] == [f"phase-{i}" for i in range(count, 0, -1)]
+    assert len({row["history_id"] for row in rows}) == count
     assert all(row["verdict"] == "pass" for row in rows)
     assert client.get("/internal/runtime/history", headers=WRITER,
                       params={**query, "namespace_id": assignment["namespace_id"] + 100}).status_code != 200
@@ -543,14 +544,14 @@ def test_first_phase_response_evidence_reaches_verifier_without_forcing_pass(
         assert evidence["execution_ref"] != configured[1]["tracker_execution_id"]
     required = "Actual first Workflow step response and task/input references."
     supervisor_llm("PARTIAL", missing=[required])
-    original_chat = OpenAICompatibleClient.chat
+    original_chat = OpenAICompatibleClient.respond
     prompts = []
 
-    def chat(*args, **kwargs):
+    def respond(*args, **kwargs):
         prompts.append(kwargs["user"])
         return original_chat(*args, **kwargs)
 
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", chat)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", respond)
     response = step(configured, report=report_json(report), operation_key="first-report", expected_version=1)
     assert response.status_code == 200, response.text
     result = response.json()["result"]
@@ -584,8 +585,8 @@ def test_valid_blocked_report_allows_continuation_and_preserves_old_readback(con
     blocker = "The required context source returned HTTP 403; its contents cannot be read."
     blocked_report = report_json(blocker, unresolved=[blocker])
     supervisor_llm("BLOCKED", blockers=[blocker])
-    blocked_model = Mock(wraps=OpenAICompatibleClient.chat)
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", blocked_model)
+    blocked_model = Mock(wraps=OpenAICompatibleClient.respond)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", blocked_model)
     response = step(configured, report=blocked_report, operation_key="context-blocked",
                     expected_version=initial["version"])
     assert response.status_code == 200, response.text
@@ -611,8 +612,8 @@ def test_valid_blocked_report_allows_continuation_and_preserves_old_readback(con
         source="The owner requests a private notebook for customer requests.",
     )
     supervisor_llm("PASS")
-    restored_model = Mock(wraps=OpenAICompatibleClient.chat)
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", restored_model)
+    restored_model = Mock(wraps=OpenAICompatibleClient.respond)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", restored_model)
     response = step(configured, report=restored_report, operation_key="context-restored",
                     expected_version=blocked["version"])
     assert response.status_code == 200, response.text
@@ -655,7 +656,7 @@ def test_valid_blocked_report_allows_continuation_and_preserves_old_readback(con
     assert len(assignments) == 1 and assignments[0][0] == assignment["operation_key"]
 
     forbidden_model = Mock(side_effect=AssertionError("Operation readback must not invoke the model"))
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", forbidden_model)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", forbidden_model)
     response = client.get("/internal/runtime/history", headers=MACHINE, params={
         "interaction_protocol": "configured-cli-v1", "task": assignment["task"],
         "namespace_id": assignment["namespace_id"], "operation_key": "context-blocked",
@@ -877,7 +878,7 @@ def test_backlog_ready_pm_can_read_and_replay_but_cannot_submit_new_work(configu
     monkeypatch.setattr(configured_cli_tracker, "assignment", check_tracker_assignment)
     monkeypatch.setattr(configured_cli_tracker, "read", lambda _request, suffix: context)
     provider = Mock(side_effect=AssertionError("completed work must not be evaluated again"))
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", provider)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", provider)
     read = step(configured)
     assert read.status_code == 200 and read.json()["result"]["complete"] is True
     assert step(configured, **command).json() == accepted.json()
@@ -1034,11 +1035,11 @@ def test_report_interleaving_while_provider_releases_transaction(configured, sup
 
     enroll(configured)
     supervisor_llm("PASS")
-    evaluate = OpenAICompatibleClient.chat
+    evaluate = OpenAICompatibleClient.respond
     entered = False
     nested = []
 
-    def chat(*args, **kwargs):
+    def respond(*args, **kwargs):
         nonlocal entered
         if not entered:
             entered = True
@@ -1052,7 +1053,7 @@ def test_report_interleaving_while_provider_releases_transaction(configured, sup
             )
         return evaluate(*args, **kwargs)
 
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", chat)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", respond)
     response = step(configured, report=report_json("Actual report"), operation_key="report-a", expected_version=1)
     assert nested[0].status_code == 200, nested[0].text
     assert response.status_code == (200 if same_key else 409), response.text
@@ -1328,10 +1329,10 @@ def test_final_judge_assesses_precommit_facts_not_future_receipts(configured, su
         "mislabelled-future-completion": "Backlog Ready claimed as current, but actual Tracker readback is Draft.",
     }
     supervisor_llm("PASS" if evidence == "valid" else "PARTIAL", missing=[] if evidence == "valid" else [checks[0]])
-    original_chat = OpenAICompatibleClient.chat
+    original_chat = OpenAICompatibleClient.respond
     prompts = []
 
-    def chat(*args, **kwargs):
+    def respond(*args, **kwargs):
         prompt = kwargs["user"]
         prompts.append(prompt)
         assert "PRECOMMIT ASSESSMENT ONLY" in observed["instructions"]
@@ -1344,7 +1345,7 @@ def test_final_judge_assesses_precommit_facts_not_future_receipts(configured, su
             assert all("terminal_receipt" not in json.loads(row.supervisor_response) for row in rows)
         return original_chat(*args, **kwargs)
 
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", chat)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", respond)
     response = step(
         configured,
         report=report_json(reports[evidence]),

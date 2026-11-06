@@ -170,8 +170,8 @@ def test_parser_rejects_partial_with_all_true_without_correcting_verdict():
 
 def test_response_schema_keeps_the_same_fields_and_exact_assessment_shape():
     response_format = PromptBuilder.response_schema(ITEMS, delegation_allowed=False)
-    schema = response_format["json_schema"]["schema"]
-    assert response_format["type"] == "json_schema" and response_format["json_schema"]["strict"] is True
+    schema = response_format["schema"]
+    assert response_format["type"] == "json_schema" and response_format["strict"] is True
     assert schema["required"] == ["verdict", "assessments", "blockers", "confidence"]
     assert schema["additionalProperties"] is False
     assert schema["properties"]["verdict"]["enum"] == ["PASS", "PARTIAL", "BLOCKED"]
@@ -186,29 +186,29 @@ def test_response_schema_keeps_the_same_fields_and_exact_assessment_shape():
     } for label in ("C1", "E1")}
 
 
-def test_actual_client_request_keeps_json_object_and_exact_prompt_and_response(monkeypatch):
+def test_actual_client_request_keeps_strict_schema_and_exact_prompt_and_response(monkeypatch):
     raw = {"verdict": "PASS", "assessments": {
         label: {"covered": True, "reason": "Literal reason: Case, -1, A-B!", "required_change": None}
         for label in ("C1", "E1")
     }, "blockers": [], "confidence": 0.9}
     response = Mock(spec=requests.Response, status_code=200, headers={})
-    response.json.return_value = {"choices": [{"finish_reason": "stop", "message": {
-        "content": json.dumps(raw, ensure_ascii=False),
-    }}]}
+    from tests._report_helpers import response_body
+
+    response.json.return_value = response_body(json.dumps(raw, ensure_ascii=False))
     post = Mock(return_value=response)
     monkeypatch.setattr("project_workflow.infrastructure.llm.requests.post", post)
     client = OpenAICompatibleClient(base_url="https://provider.invalid/v1", model="synthetic", api_key="",
                                     timeout=17, max_tokens=650, reasoning_effort="none")
     user = PromptBuilder.build_user_prompt("private-task", phase(), report(), evaluation_items=ITEMS)
-    assert client.chat(PromptBuilder.SYSTEM_PROMPT, user) == raw
+    assert client.respond(PromptBuilder.SYSTEM_PROMPT, user, response_format=PromptBuilder.response_schema([])) == raw
     post.assert_called_once()
     assert post.call_args.kwargs["allow_redirects"] is False
     assert post.call_args.kwargs["timeout"] == (30, 17)
     assert post.call_args.kwargs["json"] == {
-        "model": "synthetic", "messages": [
-            {"role": "system", "content": PromptBuilder.SYSTEM_PROMPT}, {"role": "user", "content": user},
-        ], "temperature": 0.1, "response_format": {"type": "json_object"},
-        "max_tokens": 650, "reasoning_effort": "none",
+        "model": "synthetic", "instructions": PromptBuilder.SYSTEM_PROMPT,
+        "input": [{"role": "user", "content": user}],
+        "text": {"format": PromptBuilder.response_schema([])},
+        "max_output_tokens": 650, "reasoning": {"effort": "none"}, "store": False, "stream": False,
     }
 
 
@@ -218,6 +218,6 @@ def test_provider_redirect_is_not_an_alternative_model_route(monkeypatch):
     monkeypatch.setattr("project_workflow.infrastructure.llm.requests.post", post)
     client = OpenAICompatibleClient(base_url="https://provider.invalid/v1", model="synthetic", api_key="")
     with pytest.raises(requests.HTTPError, match="redirects"):
-        client.chat("system", "report")
+        client.respond("system", "report", response_format=PromptBuilder.response_schema([]))
     assert post.call_count == 1 and post.call_args.kwargs["allow_redirects"] is False
     response.json.assert_not_called()

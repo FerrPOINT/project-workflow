@@ -15,8 +15,8 @@ pytestmark = pytest.mark.supervisor
 
 def test_private_assessments_are_saved_beside_canonical_public_response(supervisor_llm, monkeypatch):
     supervisor_llm("PARTIAL")
-    provider = Mock(side_effect=OpenAICompatibleClient.chat)
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", provider)
+    provider = Mock(side_effect=OpenAICompatibleClient.respond)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", provider)
     engine = SupervisorEngine("RUN-9411")
     result = engine.evaluate(report_json("The required result has not been prepared."))
     assert result["verdict"] == "PARTIAL" and not result["retryable"]
@@ -24,13 +24,17 @@ def test_private_assessments_are_saved_beside_canonical_public_response(supervis
     entry = engine.db.step_history.list(task_key=engine.task_key)[0]
     snapshot = entry.evaluation_snapshot
     assert set(snapshot["raw_evaluator"]) == {
-        "verdict", "covered", "missing", "blockers", "message", "confidence",
+        "verdict",
+        "covered",
+        "missing",
+        "blockers",
+        "message",
+        "confidence",
     }
     assert snapshot["advisor_assessments"]
     aliases = snapshot["evaluator_item_aliases"]
     assert set(aliases.values()) == set(snapshot["advisor_assessments"])
-    assert all(value["covered"] is False and value["reason"]
-               for value in snapshot["advisor_assessments"].values())
+    assert all(value["covered"] is False and value["reason"] for value in snapshot["advisor_assessments"].values())
     assert snapshot["diagnostics"]["attempts"][0]["response"]["assessments"]
     assert all(internal_id not in provider.call_args.kwargs["user"] for internal_id in aliases.values())
     diagnostic = history_diagnostic(entry.worker_report, snapshot)
@@ -38,25 +42,17 @@ def test_private_assessments_are_saved_beside_canonical_public_response(supervis
     assert diagnostic["decision"]["verdict"] == "PARTIAL"
 
 
-@pytest.mark.parametrize("mode", ["json_object", "json_schema"])
-def test_provider_format_is_explicit_and_frozen(supervisor_llm, monkeypatch, mode):
-    from project_workflow import config
-
-    monkeypatch.setenv("OPENAI_EVALUATOR_RESPONSE_FORMAT", mode)
-    config.get_settings.cache_clear()
+def test_provider_format_is_explicit_and_frozen(supervisor_llm, monkeypatch):
     supervisor_llm("PASS")
-    provider = Mock(side_effect=OpenAICompatibleClient.chat)
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", provider)
+    provider = Mock(side_effect=OpenAICompatibleClient.respond)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", provider)
     engine = SupervisorEngine("RUN-9412")
     result = engine.evaluate(report_json("Complete phase result"))
     assert result["verdict"] == "PASS", result
     snapshot = engine.db.step_history.list(task_key=engine.task_key)[0].evaluation_snapshot
-    assert snapshot["contract_fingerprint_state"]["evaluator_response_format"] == mode
-    if mode == "json_schema":
-        wire_format = provider.call_args.kwargs["response_format"]
-        assert wire_format["type"] == mode and wire_format["json_schema"]["strict"] is True
-    else:
-        assert "response_format" not in provider.call_args.kwargs
+    assert snapshot["contract_fingerprint_state"]["evaluator_response_format"] == "responses-json_schema"
+    wire_format = provider.call_args.kwargs["response_format"]
+    assert wire_format["type"] == "json_schema" and wire_format["strict"] is True
 
 
 @pytest.mark.parametrize("policy", ["supervisor-evaluator-v13", "supervisor-evaluator-v14"])
@@ -87,9 +83,14 @@ def test_historical_normalized_proof_is_refused_without_rewriting_history(policy
     assert PromptBuilder.PROMPT_VERSION != snapshot["prompt_version"]
 
 
-@pytest.mark.parametrize(("outcome", "reason"), [
-    ("incomplete", "лимит токенов"), ("refusal", "отказался"), ("content_filter", "фильтром"),
-])
+@pytest.mark.parametrize(
+    ("outcome", "reason"),
+    [
+        ("incomplete", "не завершён провайдером"),
+        ("refusal", "отказался"),
+        ("content_filter", "фильтром"),
+    ],
+)
 def test_provider_stop_is_not_retried_as_a_format_repair(monkeypatch, outcome, reason):
     calls = []
 
@@ -98,7 +99,7 @@ def test_provider_stop_is_not_retried_as_a_format_repair(monkeypatch, outcome, r
         client.last_call_diagnostics = {"outcome": outcome}
         raise ValueError("Provider stopped the response")
 
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", stopped)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", stopped)
     result = SupervisorEngine("RUN-9413").evaluate(report_json("Actual phase report"))
     assert result["verdict"] == "BLOCKED" and result["retryable"]
     assert reason in " ".join(result["blockers"])

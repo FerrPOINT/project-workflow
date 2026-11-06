@@ -50,7 +50,10 @@ def test_independent_rework_result_can_finish_the_role_without_a_workflow_rollba
         "business verdict=rework. No claim that the candidate is accepted.", source="Independent review",
     ))
     prompt = PromptBuilder.build_user_prompt(
-        "REVIEW-1", phase, report, evaluation_items=items,
+        "REVIEW-1",
+        phase,
+        report,
+        evaluation_items=items,
     )
     assert json.loads(prompt) == {
         "phase": phase.name, "allowed_verdicts": ["PASS", "PARTIAL", "BLOCKED"],
@@ -60,21 +63,23 @@ def test_independent_rework_result_can_finish_the_role_without_a_workflow_rollba
     }
     assert "only its listed criteria and supplied facts" in PromptBuilder.SYSTEM_PROMPT
     client = Mock()
-    client.chat.return_value = {
+    client.respond.return_value = {
         "verdict": "PASS", "assessments": {label: {"covered": True,
             "reason": "Проверка выполнена; результат требует доработки.", "required_change": None}
             for label in PromptBuilder.item_aliases(items)}, "blockers": [], "confidence": 0.9,
     }
-    _, result = _evaluate_strict_response(client, user=prompt, evaluation_items=items, phase=phase)
+    _, result = _evaluate_strict_response(
+        client, user=prompt, evaluation_items=items, phase=phase, response_format=PromptBuilder.response_schema(items)
+    )
     assert result.verdict == "PASS"
-    assert client.chat.call_count == 1
+    assert client.respond.call_count == 1
 
 
 @pytest.mark.parametrize("verdict", ["ROLLBACK", "DELEGATE"])
 def test_unconfigured_routing_still_fails_closed_instead_of_becoming_pass(verdict):
     phase = Phase(code="audit", name="Independent audit")
     client = Mock()
-    client.chat.return_value = {
+    client.respond.return_value = {
         "verdict": verdict, "assessments": {"C1": {
             "covered": False, "reason": "Need another role", "required_change": "Complete the independent check",
         }},
@@ -87,8 +92,9 @@ def test_unconfigured_routing_still_fails_closed_instead_of_becoming_pass(verdic
     with pytest.raises(ValueError):
         _evaluate_strict_response(
             client, user=prompt, evaluation_items=items, phase=phase,
+            response_format=PromptBuilder.response_schema(items),
         )
-    assert client.chat.call_count == 1
+    assert client.respond.call_count == 1
 
 
 def test_explicit_phase_delegate_remains_available_without_reviving_retained_rollback():
@@ -106,7 +112,7 @@ def test_missing_review_work_is_not_excused_by_a_business_rework_verdict():
     assert "PASS requires all true and no blockers" in prompt
     phase = Phase(code="review", name="Independent review")
     client = Mock()
-    client.chat.return_value = {
+    client.respond.return_value = {
         "verdict": "PARTIAL", "assessments": {"C1": {"covered": False,
             "reason": "Business verdict=rework, but the independent check was not performed.",
             "required_change": "Perform and report the independent check."}},
@@ -116,7 +122,10 @@ def test_missing_review_work_is_not_excused_by_a_business_rework_verdict():
     user = PromptBuilder.build_user_prompt(
         "REVIEW-1", phase, json.loads(report_json("Business verdict=rework; independent check not performed")), items,
     )
-    _, result = _evaluate_strict_response(client, user=user, evaluation_items=items, phase=phase)
+    _, result = _evaluate_strict_response(
+        client, user=user, evaluation_items=items, phase=phase,
+        response_format=PromptBuilder.response_schema(items),
+    )
     assert result.verdict == "PARTIAL"
     assert result.missing == ["independent-check"]
-    assert client.chat.call_count == 1
+    assert client.respond.call_count == 1

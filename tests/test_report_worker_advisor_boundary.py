@@ -8,6 +8,7 @@ import requests
 from project_workflow import config
 from project_workflow.domain import phase_report
 from project_workflow.supervisor import prompt
+from tests._report_helpers import response_body
 from tests.test_configured_cli import configured as configured
 from tests.test_configured_cli import enroll, step
 
@@ -20,7 +21,6 @@ def test_worker_instruction_change_preserves_actual_engine_advisor_http_body(con
         "OPENAI_REASONING_EFFORT": "high",
         "OPENAI_MAX_TOKENS": "4000",
         "OPENAI_TIMEOUT": "1200",
-        "OPENAI_EVALUATOR_RESPONSE_FORMAT": "json_schema",
     }.items():
         monkeypatch.setenv(name, value)
     config.get_settings.cache_clear()
@@ -30,13 +30,13 @@ def test_worker_instruction_change_preserves_actual_engine_advisor_http_body(con
     def send(session, prepared, **kwargs):
         assert isinstance(prepared, requests.PreparedRequest)
         assert prepared.method == "POST"
-        assert prepared.url == "https://advisor.invalid/chat/completions"
+        assert prepared.url == "https://advisor.invalid/responses"
         assert kwargs["timeout"] == (30, 1200)
         assert kwargs["allow_redirects"] is False
         assert isinstance(prepared.body, bytes)
         captured.append(prepared.body)
         body = json.loads(prepared.body)
-        payload = json.loads(body["messages"][1]["content"])
+        payload = json.loads(body["input"][0]["content"])
         wire_payloads.append(payload)
         answer = {
             "verdict": "PASS",
@@ -51,8 +51,7 @@ def test_worker_instruction_change_preserves_actual_engine_advisor_http_body(con
         response = requests.Response()
         response.status_code = 200
         response.request = prepared
-        response._content = json.dumps({"choices": [{"finish_reason": "stop", "message": {
-            "content": json.dumps(answer, ensure_ascii=False)}}]}).encode()
+        response._content = json.dumps(response_body(json.dumps(answer, ensure_ascii=False))).encode()
         return response
 
     monkeypatch.setattr(requests.Session, "send", send)
@@ -100,9 +99,9 @@ def test_worker_instruction_change_preserves_actual_engine_advisor_http_body(con
         assert len(captured) == index + 1
         actual = json.loads(captured[-1])
         assert actual["model"] == "app-test"
-        assert actual["reasoning_effort"] == "high" and actual["max_tokens"] == 4000
-        assert actual["response_format"]["type"] == "json_schema"
-        assert actual["response_format"]["json_schema"]["strict"] is True
+        assert actual["reasoning"] == {"effort": "high"} and actual["max_output_tokens"] == 4000
+        assert actual["text"]["format"]["type"] == "json_schema"
+        assert actual["text"]["format"]["strict"] is True
         assert wire_payloads[-1]["report"] == report
         assert wire_payloads[-1]["previous_reports"] == []
         assert all(item["previous_assessment"] is None for item in wire_payloads[-1]["criteria"])

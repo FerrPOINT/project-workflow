@@ -42,7 +42,7 @@ def test_all_modes_use_one_configured_command_and_no_file_bootstrap(catalog, rol
     assert "never use a human token or local database fallback" in first
     assert "ONE Tracker task" in first and "Never create children" in first
     assert "Do not activate integration or integration_rework" in first
-    assert len(selected["phases"]) == 3
+    assert len(selected["phases"]) == (12 if role == "analyst" else 3)
     assert selected["execution_scopes"] == (["business"] if role in
         {"project_manager", "analyst", "architect"} else ["delivery"])
     text = " ".join(instruction_text(p) for p in selected["phases"])
@@ -68,7 +68,7 @@ def test_phase_evaluation_requires_current_work_while_completion_commands_are_po
     assert "discussion publish" in after and "Editing or deleting" in after
     if role == "project_manager":
         assert "pm completion submit" in after and "Backlog / Ready" in after
-        assert "do not create Analysis intent" in after
+        assert "the system owns Analysis intent and dispatch" in after
     else:
         assert "sdlc result propose" in after and "delivery-result:<assignment_id>" in after
         assert after.index("discussion publish") < after.index("sdlc result propose")
@@ -111,7 +111,7 @@ def test_role_work_keeps_architecture_rework_independent_review_and_deployment_p
         assert all(word in criteria for word in ("artifact", "deployment receipt", "health", "acceptance"))
 
 
-@pytest.mark.parametrize("role,mode", MODES[1:])
+@pytest.mark.parametrize("role,mode", [(role, mode) for role, mode in MODES[1:] if role != "analyst"])
 def test_critical_hold_uses_actual_sealed_evidence_and_assignment_key_without_false_completion(catalog, role, mode):
     text = instruction_text(mode_for(catalog, role, mode)["phases"][1])
     for required in ("requirements_contradiction", "missing_business_decision", "sealed evidence",
@@ -129,7 +129,7 @@ def test_current_artifacts_have_exact_complete_source_provenance(catalog):
     assert json.loads(raw) == catalog
     assert hashlib.sha256(raw).hexdigest() == CATALOG_SHA256
     assert hashlib.sha256(manifest_bytes).hexdigest() == MANIFEST_SHA256
-    assert manifest["inventory"] == {"namespaces": 7, "workflows": 7, "modes": 8, "phases": 24}
+    assert manifest["inventory"] == {"namespaces": 7, "workflows": 7, "modes": 8, "phases": 33}
     assert manifest["task_identity"] == {"task_equals_root": True, "children": False, "decomposition_barriers": False}
     root = Path(__file__).parents[1]
     for reference in (manifest["instruction_source"], manifest["instruction_overlay"]):
@@ -146,7 +146,7 @@ def test_pm_business_review_uses_selected_context_and_the_same_completion_path(c
                      "<critical_review.blocker_id>", "permanently configured service identity",
                      "original technical assignment/execution/role", "NEW human owner confirmation",
                      "No native checkpoint, bind, token file or execution lease",
-                     "Backlog / Ready atomically", "PM does not dispatch Analyst"):
+                     "Analysis / Ready atomically", "the system dispatches Analyst"):
         assert required in first
     for obsolete in ("live PM lease", "current own-task PM grant", "null/null checkpoints",
                      "typed checkpoint/feedback"):

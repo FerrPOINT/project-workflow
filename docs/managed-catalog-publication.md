@@ -1,5 +1,25 @@
 # Managed Instruction Publication
 
+## Architect Structure Revisions — 6 November 2026
+
+Architect may save and publish a new ordered sequence of synchronous phases
+through the existing draft/publication API. Mode keys, order, scopes and role
+permissions remain fixed; instructions use the existing role skill allowlist
+and include the executor. Each phase requires instructions, checks and evidence.
+The frozen native catalog and its three-phase validation remain unchanged.
+Other roles retain text-only publication.
+
+Drafts do not activate execution. Publication checks the existing version/hash
+CAS and original operation key; unknown outcomes use its readback. New phases
+have new database identities in an appended catalog revision. Existing tasks,
+completed history, assignment recovery and replay keep their pinned revision.
+New assignments use the selected published revision. No migration, direct SQL
+editing, automatic reassignment or new phase executor is required.
+
+The five-phase default is described in
+[Architect workflow](proposals/architect-default-workflow.md). Installation,
+explicit publication and a real agent run are separate acceptance steps.
+
 ## Current Text Publication - 31 October 2026
 
 ### Release Follow-Up - 1 November 2026

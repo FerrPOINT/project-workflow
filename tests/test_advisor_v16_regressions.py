@@ -70,7 +70,7 @@ def response_for(payload, verdict):
 
 def local_client(monkeypatch, answer):
     client = Mock(model="qa-only", api_key="", last_call_diagnostics={}, last_response_content=None)
-    client.chat.side_effect = answer
+    client.respond.side_effect = answer
     factory = Mock(return_value=client)
     monkeypatch.setattr("project_workflow.supervisor.evaluate.OpenAICompatibleClient", factory)
     return factory, client
@@ -90,12 +90,10 @@ def assert_technical(result, row, before, *, attempts):
     return snapshot
 
 
-@pytest.mark.parametrize("wire_format", ["json_object", "json_schema"])
 @pytest.mark.parametrize("verdict", ["PARTIAL", "DELEGATE"])
 def test_configured_pm_disallows_delegate_in_prompt_schema_parser_and_snapshot(
-    configured, monkeypatch, wire_format, verdict,
+    configured, monkeypatch, verdict,
 ):
-    monkeypatch.setenv("OPENAI_EVALUATOR_RESPONSE_FORMAT", wire_format)
     config.get_settings.cache_clear()
     enroll(configured)
     before = step(configured).json()["result"]
@@ -104,9 +102,8 @@ def test_configured_pm_disallows_delegate_in_prompt_schema_parser_and_snapshot(
     def answer(**kwargs):
         payload = json.loads(kwargs["user"])
         assert payload["allowed_verdicts"] == ["PASS", "PARTIAL", "BLOCKED"]
-        if wire_format == "json_schema":
-            schema = kwargs["response_format"]["json_schema"]["schema"]
-            assert schema["properties"]["verdict"]["enum"] == payload["allowed_verdicts"]
+        schema = kwargs["response_format"]["schema"]
+        assert schema["properties"]["verdict"]["enum"] == payload["allowed_verdicts"]
         return response_for(payload, verdict)
 
     factory, client = local_client(monkeypatch, answer)
@@ -121,19 +118,17 @@ def test_configured_pm_disallows_delegate_in_prompt_schema_parser_and_snapshot(
         assert result["phase_code"] == before["phase_code"]
         if verdict == "DELEGATE":
             assert_technical(result, row, before, attempts=1)
-            assert client.chat.call_count == 1
+            assert client.respond.call_count == 1
         else:
             assert result["verdict"] == "PARTIAL" and not result["retryable"]
-            assert client.chat.call_count == 1
+            assert client.respond.call_count == 1
     factory.assert_called_once()
 
 
-@pytest.mark.parametrize("wire_format", ["json_object", "json_schema"])
 @pytest.mark.parametrize("delegated_member", [0, 1, None])
 def test_parallel_runtime_uses_merged_contract_delegation_consistently(
-    monkeypatch, wire_format, delegated_member,
+    monkeypatch, delegated_member,
 ):
-    monkeypatch.setenv("OPENAI_EVALUATOR_RESPONSE_FORMAT", wire_format)
     config.get_settings.cache_clear()
     phases = [Phase(id=i + 1, code=f"P{i}", name=f"Parallel {i}", execution_type="parallel",
                     checks=[PhaseCheck(id=i + 1, description=f"Actual criterion {i}")]) for i in range(2)]
@@ -155,9 +150,8 @@ def test_parallel_runtime_uses_merged_contract_delegation_consistently(
     def answer(**kwargs):
         payload = json.loads(kwargs["user"])
         assert ("DELEGATE" in payload["allowed_verdicts"]) is allowed
-        if wire_format == "json_schema":
-            schema = kwargs["response_format"]["json_schema"]["schema"]
-            assert schema["properties"]["verdict"]["enum"] == payload["allowed_verdicts"]
+        schema = kwargs["response_format"]["schema"]
+        assert schema["properties"]["verdict"]["enum"] == payload["allowed_verdicts"]
         return response_for(payload, "DELEGATE")
 
     _, client = local_client(monkeypatch, answer)
@@ -167,10 +161,10 @@ def test_parallel_runtime_uses_merged_contract_delegation_consistently(
     assert result["next_phase_code"] is None
     if allowed:
         assert result["verdict"] == "DELEGATE" and not result["retryable"]
-        assert client.chat.call_count == 1
+        assert client.respond.call_count == 1
     else:
         assert result["verdict"] == "BLOCKED" and result["retryable"]
-        assert client.chat.call_count == 1
+        assert client.respond.call_count == 1
 
 
 @pytest.mark.parametrize("configured", [("developer", "initial")], indirect=True)
@@ -209,7 +203,7 @@ def test_empty_final_rubric_is_configuration_failure_before_client_and_never_adv
         assert snapshot["model"] is None
         assert not any(event["event_type"] == "completed" for event in uow.list_phase_events(row.task_id))
     factory.assert_not_called()
-    client.chat.assert_not_called()
+    client.respond.assert_not_called()
     replay = step(configured, **arguments)
     assert replay.status_code == 200 and replay.json()["result"] == result
     factory.assert_not_called()
@@ -231,7 +225,7 @@ def test_deep_provider_envelope_is_normalized_to_a_response_contract_error(monke
     monkeypatch.setattr(requests, "post", post)
     client = OpenAICompatibleClient(base_url="https://evaluator.invalid/v1", model="qa-only", api_key="")
     with pytest.raises(ValueError, match="nesting"):
-        client.chat("System", "{}", response_format={"type": "json_object"})
+        client.respond("System", "{}", response_format=PromptBuilder.response_schema([]))
     assert client.last_call_diagnostics["outcome"] == "invalid_json"
     post.assert_called_once()
 
@@ -254,7 +248,7 @@ def test_deep_provider_json_commits_only_structured_technical_failure(configured
         assert all(attempt["error"]["category"] == "response_contract"
                    for attempt in snapshot["diagnostics"]["attempts"])
     factory.assert_called_once()
-    assert client.chat.call_count == 1
+    assert client.respond.call_count == 1
 
 
 def frozen_evaluation(policy):
@@ -341,8 +335,8 @@ def test_configured_v15_terminal_readback_and_replay_keep_frozen_bytes_without_h
     original = retained_rows()
     monkeypatch.setattr(PromptBuilder, "PROMPT_VERSION", current_policy)
     factory.reset_mock()
-    client.chat.reset_mock()
-    client.chat.side_effect = AssertionError("Historical reads and replay cannot re-evaluate")
+    client.respond.reset_mock()
+    client.respond.side_effect = AssertionError("Historical reads and replay cannot re-evaluate")
     selector = {key: result["terminal_receipt"][key] for key in (
         "interaction_protocol", "task", "namespace_id", "execution_ref", "operation_key",
         "concrete_agent_ref", "assignment_ref", "result_version",
@@ -365,7 +359,7 @@ def test_configured_v15_terminal_readback_and_replay_keep_frozen_bytes_without_h
         assert conflict.status_code == 409
     assert retained_rows() == original
     factory.assert_not_called()
-    client.chat.assert_not_called()
+    client.respond.assert_not_called()
 
 
 def test_prospective_labels_freeze_seventeen_cases_and_shared_38_slot_budget():

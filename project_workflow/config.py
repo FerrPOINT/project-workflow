@@ -43,7 +43,6 @@ class Settings(BaseSettings):
     OPENAI_MAX_TOKENS: int = Field(default=4000, gt=0)
     OPENAI_API_KEY: str = ""
     OPENAI_REASONING_EFFORT: str = "high"
-    OPENAI_EVALUATOR_RESPONSE_FORMAT: Literal["json_object", "json_schema"] = "json_object"
 
     PLATFORM_BRANDING_URL: str | None = None
     PLATFORM_SERVICES_URL: str = ""

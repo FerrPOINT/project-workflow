@@ -32,7 +32,7 @@ def modes(professions):
             yield workflow, mode
 
 
-def test_opt_in_has_seven_professions_eight_modes_and_24_executable_phases(professions):
+def test_opt_in_has_seven_professions_eight_modes_and_33_executable_phases(professions):
     assert PROFILE_KEY == "single-task-v1"
     assert {role: tuple(m["key"] for m in w["modes"]) for role, w in professions.items()} == {
         "project_manager": ("draft",), "analyst": ("analysis",), "architect": ("decomposition",),
@@ -54,7 +54,7 @@ def test_opt_in_has_seven_professions_eight_modes_and_24_executable_phases(profe
             assert all(set(i.skills) <= set(workflow["skill_allowlist"]) for i in executable.instructions)
             assert any("--report -" in i.step for i in executable.instructions)
             codes.append(executable.code)
-    assert len(codes) == len(set(codes)) == 24
+    assert len(codes) == len(set(codes)) == 33
 
 
 def test_identity_donor_and_legacy_modes_are_preserved_and_not_aliased(professions):
@@ -63,11 +63,18 @@ def test_identity_donor_and_legacy_modes_are_preserved_and_not_aliased(professio
     ManagedCatalog.model_validate(donor)
     for original in donor["workflows"]:
         current = professions[original["role_key"]]
-        for field in ("key", "workflow_order", "hermes_namespace", "hermes_profile", "skill_allowlist"):
+        for field in ("key", "workflow_order", "hermes_namespace", "hermes_profile"):
             assert current[field] == original[field]
+        expected_skills = set(original["skill_allowlist"])
+        if original["role_key"] == "analyst":
+            expected_skills |= {"wiki-operator", "forge-operator"}
+        assert set(current["skill_allowlist"]) == expected_skills
         original_modes = {m["key"]: m for m in original["modes"]}
         for mode in current["modes"]:
-            assert [p["code"] for p in mode["phases"]] == [p["code"] for p in original_modes[mode["key"]]["phases"]]
+            expected_codes = ([f"AN-ANALYSIS-{n:02}" for n in range(1, 13)]
+                              if original["role_key"] == "analyst" else
+                              [p["code"] for p in original_modes[mode["key"]]["phases"]])
+            assert [p["code"] for p in mode["phases"]] == expected_codes
     professions["developer"]["modes"][0]["phases"][0]["instructions"].clear()
     professions["developer"]["modes"][0]["phases"][1]["evidence"].clear()
     assert load_single_task_professions()[3]["modes"][0]["phases"][0]["instructions"]
@@ -185,3 +192,15 @@ def test_defects_return_through_review_and_testing_and_deployment_requires_proof
         criteria = " ".join(phase["checks"] + phase["evidence"]).lower()
         for required in ("artifact", "deployment receipt", "health", "acceptance"):
             assert required in criteria
+
+
+def test_analyst_records_gaps_in_place_without_critical_pm_review(professions):
+    analyst = professions["analyst"]["modes"][0]
+    steps = [i["description"] for p in analyst["phases"] for i in p["instructions"]]
+    text = " ".join(steps)
+    assert "return the task to PM" in text
+    assert "leave Workflow unfinished" in text
+    assert "task-tracker sdlc critical-blocker" not in text
+    architect = professions["architect"]["modes"][0]
+    assert any("task-tracker sdlc critical-blocker" in i["description"]
+               for p in architect["phases"] for i in p["instructions"])

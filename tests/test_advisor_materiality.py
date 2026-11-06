@@ -67,7 +67,7 @@ def test_two_predeclared_calls_cannot_expand_to_a_full_qualification(tmp_path, m
              for key in ("pm-unresolved-retention-policy", "actual-pm-191")]
     client = Mock(api_key="", model="app-test", timeout=1200, max_tokens=4000, reasoning_effort="high",
                   last_call_diagnostics={}, last_response_content=None)
-    client.chat.side_effect = [{
+    client.respond.side_effect = [{
         "verdict": cases[slot["case_id"]]["expected"]["verdict"],
         "assessments": {label: {"covered": assessment["covered"], "reason": assessment["reason_basis"],
                                "required_change": None if assessment["covered"] else assessment["reason_basis"]}
@@ -77,11 +77,11 @@ def test_two_predeclared_calls_cannot_expand_to_a_full_qualification(tmp_path, m
     monkeypatch.setattr(runner, "OpenAICompatibleClient", Mock(return_value=client))
     output = tmp_path / "bounded.json"
     result = runner.execute(output, artifact, cases, slots)
-    assert result["max_http_calls"] == result["attempted_calls"] == client.chat.call_count == 2
+    assert result["max_http_calls"] == result["attempted_calls"] == client.respond.call_count == 2
     assert result["status"] == "awaiting_independent_reason_review"
     assert result["qualified"] is False
-    for call, slot in zip(client.chat.call_args_list, slots, strict=True):
+    for call, slot in zip(client.respond.call_args_list, slots, strict=True):
         assert json.loads(call.kwargs["user"]) == cases[slot["case_id"]]["user_payload"]
     with pytest.raises(FileExistsError):
         runner.execute(output, artifact, cases, slots)
-    assert client.chat.call_count == 2
+    assert client.respond.call_count == 2

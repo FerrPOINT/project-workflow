@@ -91,8 +91,9 @@ CLI использует общий HTTP-клиент Base. Ошибка HTTP н
 
 ## Граница Advisor
 
-Контракт формы ответа должен сохраняться от настроек до провайдера, включая
-преобразование Chat Completions `response_format` в Responses `text.format`.
+Единственный транспорт Advisor — native Responses со строгой `text.format`:
+без преобразования Chat Completions, выбора JSON mode и автоматического повтора.
+Сохраняются текущая политика v19, reasoning high, модель и бюджет ответа.
 Схема строится из того же множества критериев, которое проверяет сервер.
 HTTP200, корректный JSON и provider metadata не подтверждают соблюдение схемы.
 Перед смысловой квалификацией нужны маршрутные проверки фактических ограничений;
@@ -101,7 +102,7 @@ HTTP200, корректный JSON и provider metadata не подтвержд�
 полей и независимую проверку смысла. Нельзя объявлять применёнными upstream
 reasoning или лимиты только по параметрам исходящего запроса Workflow.
 
-Кандидат v18 имеет один типизированный контракт:
+Действующий контракт v19 типизирован:
 `source:{request,decisions:[{subject,value}]}`,
 `result:{artifacts:[{name,content}],assumptions:string[]}`,
 `unresolved:[{kind:question|obstacle,text}]`. Поля обязательны, типы строгие;

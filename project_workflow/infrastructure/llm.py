@@ -1,4 +1,4 @@
-"""OpenAI-compatible LLM adapter for Supervisor evaluation.
+"""Native Responses API adapter for Supervisor evaluation.
 
 Octo LiteLLM route ``app-test`` is the runtime default. The adapter stays
 OpenAI-compatible and does not implement a fallback evaluator.
@@ -42,7 +42,7 @@ class LlmVerdict:
 
 
 class OpenAICompatibleClient:
-    """Small Chat Completions client for any OpenAI-compatible provider."""
+    """Native Responses API client for the configured evaluator."""
 
     def __init__(
         self,
@@ -82,39 +82,39 @@ class OpenAICompatibleClient:
     def _capture_response_diagnostics(self, data: Any) -> None:
         if not isinstance(data, dict):
             return
-        self.last_call_diagnostics["returned_model"] = self._diagnostic_text(data.get("model"))
-        choices = data.get("choices")
-        if isinstance(choices, list) and choices and isinstance(choices[0], dict):
-            self.last_call_diagnostics["finish_reason"] = self._diagnostic_text(choices[0].get("finish_reason"))
+        diagnostics = self.last_call_diagnostics
+        diagnostics["returned_model"] = self._diagnostic_text(data.get("model"))
+        diagnostics["finish_reason"] = self._diagnostic_text(data.get("status"))
+        details = data.get("incomplete_details")
+        if isinstance(details, dict):
+            diagnostics["finish_reason"] = self._diagnostic_text(details.get("reason"))
         usage = data.get("usage")
         if isinstance(usage, dict):
-            saved = self.last_call_diagnostics["usage"]
-            for key in ("prompt_tokens", "completion_tokens", "total_tokens", "reasoning_tokens"):
+            saved = diagnostics["usage"]
+            for key in ("input_tokens", "output_tokens", "total_tokens"):
                 value = self._diagnostic_number(usage.get(key))
                 if value is not None and value >= 0:
                     saved[key] = value
-            details = usage.get("completion_tokens_details")
+            details = usage.get("output_tokens_details")
             if isinstance(details, dict):
                 value = self._diagnostic_number(details.get("reasoning_tokens"))
                 if value is not None and value >= 0:
                     saved["reasoning_tokens"] = value
 
-    def chat(
+    def respond(
         self,
         system: str,
         user: str,
-        temperature: float = 0.1,
         *,
-        response_format: dict[str, Any] | None = None,
+        response_format: dict[str, Any],
     ) -> dict[str, Any]:
-        """Send chat request, return parsed JSON content."""
+        """Evaluate through native Responses with a system-owned strict schema."""
         self.last_response_content = None
         diagnostics = self.last_call_diagnostics = {
             "model": self._diagnostic_text(self.model),
             "timeout": self._diagnostic_number(self.timeout),
             "max_tokens": self._diagnostic_number(self.max_tokens),
             "reasoning_effort": self._diagnostic_text(self.reasoning_effort),
-            "temperature": self._diagnostic_number(temperature),
             "latency_ms": 0.0,
             "http_status": None,
             "returned_model": None,
@@ -125,38 +125,31 @@ class OpenAICompatibleClient:
         }
         started = perf_counter()
         try:
+            if response_format.get("type") != "json_schema" or response_format.get("strict") is not True:
+                diagnostics["outcome"] = "configuration"
+                raise LlmConfigurationError("Evaluator requires a strict JSON schema")
             if urlsplit(self.base_url).hostname == "openrouter.ai" and not self.api_key:
                 diagnostics["outcome"] = "configuration"
                 raise LlmConfigurationError("Для OpenRouter требуется OPENAI_API_KEY")
-
-            headers = {
-                "Content-Type": "application/json",
-            }
+            headers = {"Content-Type": "application/json"}
             if self.api_key:
                 headers["Authorization"] = f"Bearer {self.api_key}"
-
             payload: dict[str, Any] = {
                 "model": self.model,
-                "messages": [
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
-                "temperature": temperature,
-                "response_format": response_format if response_format is not None else {"type": "json_object"},
-                # Reasoning-capable OpenAI-compatible models may spend part of this
-                # budget before emitting the small JSON verdict.
-                "max_tokens": self.max_tokens,
+                "instructions": system,
+                "input": [{"role": "user", "content": user}],
+                "text": {"format": response_format},
+                "max_output_tokens": self.max_tokens,
+                "store": False,
+                "stream": False,
             }
             if self.reasoning_effort:
-                payload["reasoning_effort"] = self.reasoning_effort
-
+                payload["reasoning"] = {"effort": self.reasoning_effort}
             resp = requests.post(
-                f"{self.base_url}/chat/completions",
-                headers=headers,
-                json=payload,
-                timeout=(30, self.timeout),
-                allow_redirects=False,
+                f"{self.base_url}/responses", headers=headers, json=payload,
+                timeout=(30, self.timeout), allow_redirects=False,
             )
+            diagnostics["outcome"] = "http"
             status = getattr(resp, "status_code", None)
             if type(status) is int and 100 <= status <= 599:
                 diagnostics["http_status"] = status
@@ -167,31 +160,35 @@ class OpenAICompatibleClient:
                 request_id = response_headers.get("x-request-id")
                 if isinstance(request_id, str) and re.fullmatch(r"[A-Za-z0-9._-]{1,128}", request_id):
                     diagnostics["request_id"] = request_id
-            diagnostics["outcome"] = "http"
             resp.raise_for_status()
             diagnostics["outcome"] = "invalid_json"
             try:
-                data = resp.json()
+                data = resp.json(object_pairs_hook=self._unique_object)
             except RecursionError:
                 raise ValueError("Evaluator JSON exceeds supported nesting") from None
             try:
                 self._capture_response_diagnostics(data)
             except Exception as exc:
                 diagnostics["metadata_error"] = type(exc).__name__
-            choice = data.get("choices", [{}])[0]
-            message = choice.get("message", {})
-            content = message.get("content", "")
-            if isinstance(content, str):
-                self.last_response_content = content
-            if diagnostics.get("finish_reason") == "length":
+            response_status = data.get("status") if isinstance(data, dict) else None
+            if response_status == "incomplete":
+                details = data.get("incomplete_details") or {}
+                if details.get("reason") == "content_filter":
+                    diagnostics["outcome"] = "content_filter"
+                    raise ValueError("Evaluator response was filtered")
                 diagnostics["outcome"] = "incomplete"
-                raise ValueError("Evaluator response reached the token limit")
-            if choice.get("finish_reason") == "content_filter":
-                diagnostics["outcome"] = "content_filter"
-                raise ValueError("Evaluator response was filtered")
-            if message.get("refusal") is not None:
-                diagnostics["outcome"] = "refusal"
-                raise ValueError("Evaluator provider refused the response")
+                raise ValueError("Evaluator response is incomplete")
+            if response_status != "completed" or data.get("error") is not None or data.get("incomplete_details"):
+                raise ValueError("Evaluator response is not completed")
+            content = self._response_text(data)
+            self.last_response_content = content
+            usage = data.get("usage")
+            if isinstance(usage, dict) and "output_tokens" in usage:
+                if type(usage["output_tokens"]) is not int or usage["output_tokens"] < 0:
+                    raise ValueError("Invalid evaluator output token usage")
+                if usage["output_tokens"] > self.max_tokens:
+                    diagnostics["outcome"] = "limit_exceeded"
+                    raise ValueError("Evaluator provider exceeded the output token limit")
             if not content.strip():
                 diagnostics["outcome"] = "empty"
                 raise ValueError("Empty content from LLM")
@@ -201,19 +198,46 @@ class OpenAICompatibleClient:
         finally:
             diagnostics["latency_ms"] = max(0.0, round((perf_counter() - started) * 1000, 3))
 
+    def _response_text(self, data: Any) -> str:
+        if not isinstance(data, dict) or not isinstance(data.get("output"), list):
+            raise ValueError("Invalid Responses envelope")
+        parts: list[str] = []
+        for item in data["output"]:
+            if not isinstance(item, dict):
+                raise ValueError("Invalid Responses output item")
+            if item.get("type") == "reasoning":
+                continue
+            if item.get("type") != "message" or item.get("role") != "assistant":
+                raise ValueError("Unexpected evaluator output item")
+            if item.get("status") not in ("completed", "incomplete") or not isinstance(item.get("content"), list):
+                raise ValueError("Invalid evaluator message")
+            if data.get("status") == "completed" and item["status"] != "completed":
+                raise ValueError("Evaluator message is not completed")
+            for part in item["content"]:
+                if not isinstance(part, dict):
+                    raise ValueError("Invalid evaluator content")
+                if part.get("type") == "refusal":
+                    self.last_call_diagnostics["outcome"] = "refusal"
+                    raise ValueError("Evaluator provider refused the response")
+                if part.get("type") != "output_text" or not isinstance(part.get("text"), str):
+                    raise ValueError("Invalid evaluator text")
+                parts.append(part["text"])
+        return "".join(parts)
+
+    @staticmethod
+    def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError("Evaluator JSON contains duplicate object keys")
+            result[key] = value
+        return result
+
     @staticmethod
     def _extract_json(text: str) -> dict[str, Any]:
         """Parse one JSON object without repairing free-form model output."""
-        def unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-            result: dict[str, Any] = {}
-            for key, value in pairs:
-                if key in result:
-                    raise ValueError("Evaluator JSON contains duplicate object keys")
-                result[key] = value
-            return result
-
         try:
-            parsed = json.loads(text, object_pairs_hook=unique_object)
+            parsed = json.loads(text, object_pairs_hook=OpenAICompatibleClient._unique_object)
         except RecursionError:
             raise ValueError("Evaluator JSON exceeds supported nesting") from None
         if not isinstance(parsed, dict):
@@ -298,40 +322,38 @@ class PromptBuilder:
     def response_schema(
         evaluation_items: list[tuple[str, str]], *, delegation_allowed: bool = True,
     ) -> dict[str, Any]:
-        """Opt-in provider schema; local strict validation remains authoritative."""
+        """Build the mandatory Responses schema from the frozen phase criteria."""
         aliases = PromptBuilder.item_aliases(evaluation_items)
         return {
             "type": "json_schema",
-            "json_schema": {
-                "name": "advisor_assessments",
-                "strict": True,
-                "schema": {
-                    "type": "object",
-                    "properties": {
-                        "verdict": {"type": "string", "enum": PromptBuilder.allowed_verdicts(delegation_allowed)},
-                        "assessments": {
-                            "type": "object",
-                            "properties": {
-                                label: {
-                                    "type": "object",
-                                    "properties": {
-                                        "covered": {"type": "boolean"}, "reason": {"type": "string"},
-                                        "required_change": {"type": ["string", "null"]},
-                                    },
-                                    "required": ["covered", "reason", "required_change"],
-                                    "additionalProperties": False,
-                                }
-                                for label in aliases
-                            },
-                            "required": list(aliases),
-                            "additionalProperties": False,
+            "name": "advisor_assessments",
+            "strict": True,
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "verdict": {"type": "string", "enum": PromptBuilder.allowed_verdicts(delegation_allowed)},
+                    "assessments": {
+                        "type": "object",
+                        "properties": {
+                            label: {
+                                "type": "object",
+                                "properties": {
+                                    "covered": {"type": "boolean"}, "reason": {"type": "string"},
+                                    "required_change": {"type": ["string", "null"]},
+                                },
+                                "required": ["covered", "reason", "required_change"],
+                                "additionalProperties": False,
+                            }
+                            for label in aliases
                         },
-                        "blockers": {"type": "array", "items": {"type": "string"}},
-                        "confidence": {"type": "number"},
+                        "required": list(aliases),
+                        "additionalProperties": False,
                     },
-                    "required": ["verdict", "assessments", "blockers", "confidence"],
-                    "additionalProperties": False,
+                    "blockers": {"type": "array", "items": {"type": "string"}},
+                    "confidence": {"type": "number"},
                 },
+                "required": ["verdict", "assessments", "blockers", "confidence"],
+                "additionalProperties": False,
             },
         }
 

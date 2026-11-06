@@ -117,7 +117,7 @@ class TestRecordTransitionTypes:
             patch.object(engine.db, "get_task", return_value=engine.task),
             patch.object(engine, "_record_transition"),
         ):
-            mock_client.return_value.chat.return_value = {
+            mock_client.return_value.respond.return_value = {
                 "verdict": "PASS",
                 "covered": [],
                 "missing": [],

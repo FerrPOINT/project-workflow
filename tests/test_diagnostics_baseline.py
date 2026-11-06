@@ -22,7 +22,7 @@ def isolate_ui_runtime_state():
 
 def test_response_acceptance_is_identical_to_installed_v12():
     # Only the newly added private-to-canonical entry point is outside this
-    # historical contract; the six-field model and parser remain byte-identical AST.
+    # historical contract; the six-field model and parser retain the baseline AST.
     root = Path(__file__).resolve().parents[1]
     tree = ast.parse((root / "project_workflow/infrastructure/llm.py").read_text(encoding="utf-8"))
     actual = {}
@@ -33,5 +33,11 @@ def test_response_acceptance_is_identical_to_installed_v12():
         if legacy.name == "ResponseParser":
             legacy.body = [member for member in legacy.body
                            if not isinstance(member, ast.FunctionDef) or member.name != "parse_assessments"]
+        # The original baseline uses Python 3.14's omission of empty/None fields.
+        # Normalize serializer bookkeeping only; retain all actual AST values.
+        for member in ast.walk(legacy):
+            member._fields = tuple(field for field, value in ast.iter_fields(member)
+                                   if value != [] and not (
+                                       value is None and getattr(type(member), field, ...) is None))
         actual[node.name] = hashlib.sha256(ast.dump(legacy, include_attributes=False).encode()).hexdigest()
     assert actual == BASELINE_POLICY
