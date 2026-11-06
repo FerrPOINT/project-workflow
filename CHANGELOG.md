@@ -4,6 +4,21 @@
 
 ### Current Status (2026-11-06)
 
+- Candidate image20ad7dd0/source4bf3f926 is installed through normal Workflow-only
+  migration/Apply. All31 tasks,196 history rows and12 PM publications (active13) with
+  their physical rows were preserved; no Fleet/Hermes rebuild or DB rollback.
+  The changed sealed catalog makes PM27's prepared binding stale, despite
+  unchanged PM13. Explicit config28 refresh preserves every other snapshot
+  field and is active/effective with verified runtime readiness, unchanged CLI
+  and generated skill. Same SDLC33 now completes autonomously: report197 PASS,
+  exact saved document/confirmation, Workflow done and fresh Tracker Backlog/Ready;
+  initial create replay preserves all IDs/messages/runs. Fresh sparse SDLC34
+  context198 also passes, but its final is open. Creation403/readiness delays
+  and transient Fleet presentation holds are recorded separately, not masked
+  by Advisor changes. The documented request continuation recovered the same
+  partial creation operation, without another create or duplicate.
+  Diagnosis separates local report errors, intentional
+  probe194, justified195/196 decisions and the unresolved native timeout cause.
 - Real installed-CLI standalone acceptance on image20ad7dd0/source4bf3f926
   completed three phases with native Responses and no Fleet/Hermes: six calls,
   three intended PARTIALs and three PASSes, done/version7. Independent review

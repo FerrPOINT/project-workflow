@@ -1,5 +1,118 @@
 # Advisor: сквозной диагноз и границы выпуска
 
+## 2026-11-06: Установка Кандидата И Продолжение PM
+
+После прямой приёмки установлен тот же image20ad7dd0, source4bf3f926,
+Basec153c5c6. Штатная миграция0023→0030 и Workflow-only Apply завершились.
+Read-only before/after digest одинаков для31 tasks,196 history rows,
+32 assignments,120 events; отдельно совпадают все12 опубликованных PM receipts,
+их mode/phase/instruction/check/evidence rows и active PM13. Fleet и образ
+Hermes не пересобирались. БД/история не откатывались, stamp не использовался.
+
+После установки readiness PM27 вернул409: Workflow single-task binding changed
+since preparation. Actual wire diff подтвердил ровно три изменённых digest:
+instruction_manifest_sha256, workflow_catalog_sha256, role_instructions_sha256.
+Последний относится к sealed baseline PM, не опубликованной PM13. Namespace,
+workflow, mode/phase IDs остались прежними. Это конфигурационный release-переход,
+не ошибка модели и не основание перепривязывать задачу.
+
+Существующим API явно подготовлена config28 с CAS27, выполнена validation и
+однократно запрошена activation с пустым image-change intent. Полный snapshot
+совпадает с27 после замены только binding: SOUL, skills, env/model/settings
+не менялись. Активация завершена: config28 active/effective, draining=false,
+runtime_healthy/ready_for_sdlc=true, blockers=[]. Фактический image699, CLI modules
+и generated skill совпадают с прежними; Hermes bbaf7af5 не менялся. Тот же SDLC33
+продолжен обычным сообщением без технических подсказок и завершён самим PM:
+report197 PASS, Workflow done/version6/complete=true, свежий Tracker Backlog/Ready,
+waiting_reason=null, native run completed/error=null. Требования остались rev1.
+Независимые проверки приняли7/7 assessments и точное равенство10 business fields
+сохранённому документу; presentation13:07:32Z предшествует confirmation13:08:59Z.
+Новый report business-only, без hashes/receipts/readback-прозы; единственный
+previous_report196 сохранён без изменений. Один actual Responses request,
+3827 input/551 output tokens,10.535s. Точный повтор начального create вернул
+те же IDs,4 runs и60 messages, без нового запуска или сообщения.
+Отдельные длительности native-проверок не записаны: нельзя доказательно отнести
+задержку конкретной операции. Длительная
+проверка Fleet/Base не является длительностью inference Advisor.
+
+Разбор сохранённого SDLC33 разделяет разные источники отказов:
+
+| Событие | Подтверждённый слой и основание | Ограничение |
+|---|---|---|
+| Пять локальных JSON refusals | Ручная сборка некорректного JSON до Advisor; стандартный разбор подтверждает ошибку | Новую serializer-инструкцию ещё надо проверить на PM |
+| Probe194 PARTIAL | Намеренный диагностический отчёт без фактов/документа, отказ обоснован | Это не автономный ошибочный отчёт PM |
+| Report195 PASS | Полные source и сохранённый документ проходят подготовку | Не означает завершение Workflow |
+| Report196 PARTIAL | Нет account состоявшегося показа полного документа; сам документ и согласие есть | Не требуется повторное согласование или перепубликация |
+| Report197 PASS | PM сам дополнил account показа, сохранил полный документ и согласие rev1 | Workflow и Tracker completion подтверждены раздельно |
+| Approval/run64ed | Решение failed/NotDispatched; run имеет native failed/Request timed out | Первичная причина native timeout остаётся неизвестной |
+
+SDLC33 принят как продолжение прежнего полного запроса, не как новый сценарий
+с нуля на новом HTTP transport. Новой скудной задаче SDLC34 ещё требуется финал.
+
+### Новый Sparse И Обнаруженные Границы Fleet
+
+Первый create preflight получил403; отдельный readiness GET дал503 Current
+namespace recovery remains held. Следующий GET после64.13s вернул generic403.
+Контроль одним token: config/revisions200 за2.061s, readiness200/ready за39.059s,
+config/revisions200 за2.056s. Истечение human-request deadline согласуется
+с наблюдением и существующим middleware, но конкретная ветка403 не доказана.
+Ancestor recovery lease в проверенном срезе была действительна с обоими ACK:
+объявлять её истечение причиной нельзя.
+
+Повторный create после здорового readback дошёл до POST, но также вернул403.
+GET исходной operation7448afd7 показал incomplete/next_step=draft с пустыми
+локальными task/session receipts. Это не доказывает отсутствие результата
+в Tracker. Один существующий continue{} сначала читает Tracker по исходному
+ключу и довёл ту же operation до task SDLC34 и sessioncb00f4b5, без нового create.
+Никакой SQL repair, новый ключ, повтор inference или fallback не применялся.
+Создание с такой ручной recovery не считается безотказным happy path.
+
+Первый run кратковременно отражался в Fleet как waiting с Configured accepted
+context changed, тогда как native продолжал работу. Текущий read-only SELECT
+точного presentation context позднее вернул строку; проверенные predicates
+и оба recovery ACK были верны. SQL зависит от наличия lease ACK, временно
+очищаемого heartbeat; это проверяемая гипотеза гонки, не установленная причина
+того исторического отказа. Последующий обычный readback импортировал ответ и
+завершил run без ошибки. Повторный turn имел такое же временное отображение.
+
+Report198 корректно принял только фазу контекста:3/3 marks,1080 input/339 output,
+7.885s, previous_reports=[] и previous assessments=null. Чужая SDLC33 не попала
+во вход. PM спросил о каналах и числе пользователей, затем предложил поля/статусы,
+не выдавая предложение за решение владельца. Тестовый владелец выбрал три статуса
+и явные правила полей. Во время обсуждения фаза2 ещё не объявлена выполненной;
+фиктивных PARTIAL по каждой реплике нет.
+
+Отдельное наблюдение: после вопросов Tracker остаётся Draft/Ready,
+waiting_for_pm, persisted clarifications нет, хотя PM ждёт ответа владельца.
+Нужна проверка контрактного владельца status/waiting, не изменение Advisor.
+Нельзя считать промежуточные context/runs snapshots атомарным состоянием.
+
+### Контекст Advisor И Контекст PM — Разные Величины
+
+bbaf INFO и run status подтверждают8 model calls за полное продолжение SDLC33:
+input45179/49317/52686/53650/54309/54750/56057/58755, сумма424703, output2351.
+Это накопление внутри одного run, не один prompt424k. Model latency суммарно
+59.6s при92.9s native run. Отдельный внешний Advisor197 в этот счёт не входит.
+Метрики прочитаны без hidden reasoning и без изменения Hermes.
+
+Read-only SQLite metadata старого диалога: до run31 terminal messages/125133
+символа; за run ещё7/40956. Доминируют сохранённые terminal outputs, но это не
+точный расклад wire tokens по ролям. В новой sparse-сессии первые7 input sizes:
+3363/3862/6824/6880/7201/7446/8886. Это опровергает перенос размера старого
+тестового диалога на каждый новый PM prompt и не доказывает лишний system prompt.
+Оптимизацию routine readback следует обсуждать по фактическим tool outputs,
+не удалять исходные документы и не менять фазовую историю Advisor наугад.
+
+Report199 также принят независимо по6/6 assessments: точные10 business fields
+сохранённой rev1, три выбранных статуса вместо отвергнутых пяти, явные limits
+и исключения. Один request2273 input/687 output,13.065s, без future confirmation
+как условия подготовки. PM показал полный документ в чате и запросил отдельное
+согласие владельца, не завершив фазу3 без него. Проверяется замечание владельца:
+note limit2000→1000 при неизменном остальном документе.
+
+Кампания153/163 на момент report199,10 остаётся. Полный выпуск, sparse-финал
+и три браузера ещё не приняты; standalone и SDLC33 не подменяют эти gates.
+
 ## 2026-11-06: Прямой Полный Цикл Через CLI И Настоящий Advisor
 
 Кандидат4bf3f926, image20ad7dd0: явный standalone, собственная временная
