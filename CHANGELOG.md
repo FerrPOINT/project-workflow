@@ -12,9 +12,18 @@
   W899 production qualification remains applicable; this documentation update
   changes no production source. Native4421/75 subtests, PostgreSQL132, Ruff and
   mypy169 passed; coverage94.0612151667428%,15 explicit skips, PG cleanup verified.
-- Fleet999/b75 remains installed. Migration080 candidate7ad01840 has7 focused
-  PASS; the remaining PostgreSQL gate exposed two successor fixture failures,
-  still under diagnosis. Clippy and F080 installation remain pending.
+- Fleet6c/image9a0f is installed through normal Build32d82/Applyc52, complete
+  with controller refresh and PM bridge. All67 PG qualification checks are closed
+  (43 reused,24 new), with Clippy passed. Witness GET200 confirms original start
+  ACK for the same ce8e generation/effective25. One recovery POST with key
+  workflow-delivery-080-recover-pm11-20261106 returned generic503; exact-key
+  readback is NotRequested, with no accepted intent. PG reports42501
+  fleet_request_authority_expired at COMMIT; the fixed60s human scope is unchanged.
+- NativeState readback (84 runs/1.09MiB) takes23.125s; the state query spends19.6
+  of21.3s on2345 validator calls, unnecessarily validating other audit rows.
+  Read-only query comparison: old35 calls/325.931ms versus exact-target MATERIALIZED
+  1 call/47.757ms. Migration081 implements only that selection change; qualification
+  and installation are pending, without Auth weakening, caching or new layers.
   PM remains effective25 with26 pending. No new QA tasks or model calls:
   campaign139/163,24 reserved for live. Advisor v19 inputs, policy and accepted
   revised qualification36/36 are unchanged; PM live acceptance remains pending.

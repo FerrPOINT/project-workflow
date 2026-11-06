@@ -13,10 +13,20 @@ Advisor input/policy/response code не менялись. Revised qualification3
 переиспользуется без новых модельных вызовов: расход139/163,24 зарезервированы
 для live. Новые QA-задачи не создавались.
 
-Fleet пока фактически999/b75, без установки080. Кандидат7ad01840 имеет7 focused
-PASS; оставшийся PG gate обнаружил два отказа successor fixtures, причины
-проверяются. Clippy не завершён. PM остаётся на effective25,
-26 pending; переход Fleet и новые PM live-сценарии ещё не приняты.
+Fleet6c/image9a0f установлен штатными Build32d82/Applyc52: Apply, controller
+refresh и PM bridge завершены. Квалификация67 PG закрыта (43 reuse +24 новых),
+Clippy PASS. Новый witness GET200 подтверждает OriginalStartAck=true для того же
+поколения ce8e, effective25. Единственный recovery POST с ключом
+`workflow-delivery-080-recover-pm11-20261106` вернул generic503; readback этого
+ключа — NotRequested, intent не принят. PG evidence:42501
+`fleet_request_authority_expired` на COMMIT. Исходный human scope60s сохранён.
+
+Профиль NativeState:84 запуска/1.09MiB,23.125s. Из21.3s state query19.6s уходят
+на2345 вызовов validator, включая чужие audit rows до target binding.
+Read-only сравнение SELECT: прежний35 вызовов/325.931ms против MATERIALIZED
+exact-target1 вызов/47.757ms. Адресная081 реализована, но ещё не квалифицирована
+и не установлена; Auth guards не ослаблены, кэши и новые слои не добавлены.
+PM остаётся на effective25,26 pending; новые PM live-сценарии ещё не приняты.
 
 ### Исторический Инцидент 2026-11-05: Два Блокера Перехода
 
