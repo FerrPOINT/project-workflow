@@ -2,16 +2,24 @@
 
 ## Unreleased — Advisor V19 Candidate, Not Accepted
 
-- Remove Workflow's redundant per-application human admission dependency. Auth
-  still verifies the credential, active account, role and expiry; task/namespace/
-  project ownership, technical-token scopes, administration and exact owner
-  confirmation remain separate requirements. Other products' Auth policy and
-  user grants are not changed. Final native4421/75 subtests and132 real PostgreSQL
-  checks pass; coverage94.0612151667428%, Ruff and mypy169 pass.15 skips remain explicit:
-  3 private opt-ins,1 NTFS mode and11 unavailable browser fixtures. PostgreSQL
-  cleanup is verified. Independent source review finds no new authorization
-  defect. This source follow-up is not yet installed or live-accepted;
-  Advisor v19 inputs, policy and qualification are unchanged.
+### Current Status (2026-11-06)
+
+- Normal Apply729, journal de836101, is complete: exact Workflow936a4b80 and
+  web1e264d20 are installed. Human admin catalog GET returns200 without changes
+  to Auth application grants; catalog revision12 exactly matches the baseline.
+  Actual container get_settings confirms app-test/high/1200s/4000/json_schema
+  and platform. Auth identity, subject rights and machine scopes remain enforced.
+  W899 production qualification remains applicable; this documentation update
+  changes no production source. Native4421/75 subtests, PostgreSQL132, Ruff and
+  mypy169 passed; coverage94.0612151667428%,15 explicit skips, PG cleanup verified.
+- Fleet999/b75 remains installed. Migration080 candidate7ad01840 has7 focused
+  PASS; the remaining PostgreSQL gate exposed two successor fixture failures,
+  still under diagnosis. Clippy and F080 installation remain pending.
+  PM remains effective25 with26 pending. No new QA tasks or model calls:
+  campaign139/163,24 reserved for live. Advisor v19 inputs, policy and accepted
+  revised qualification36/36 are unchanged; PM live acceptance remains pending.
+
+### Historical Deployment Attempt (2026-11-05)
 
 - Attempt the qualified deployment without new Advisor calls. Fleet6eab59ad is
   installed; Workflow79964f6 boots healthy with explicit platform/single-task-v1,
