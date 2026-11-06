@@ -16,7 +16,7 @@ def test_http_projection_reads_real_saved_trace_without_provider(configured, sup
     client, assignment = configured
     query = {"interaction_protocol": "configured-cli-v1", "namespace_id": assignment["namespace_id"],
              "task": assignment["task"], "projection": "evaluator-diagnostics-v1"}
-    with patch.object(OpenAICompatibleClient, "chat", side_effect=AssertionError("No model on history")):
+    with patch.object(OpenAICompatibleClient, "respond", side_effect=AssertionError("No model on history")):
         response = client.get("/internal/runtime/history", headers=MACHINE, params=query)
         denied = client.get("/internal/runtime/history", headers=WRITER, params=query)
     assert response.status_code == 200, response.text

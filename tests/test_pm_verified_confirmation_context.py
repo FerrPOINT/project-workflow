@@ -77,8 +77,8 @@ def test_machine_confirmation_stays_on_server_not_in_provider_context(
     advance(configured, supervisor_llm, phase_number)
     _, _, reader = tracker_confirmation(configured, monkeypatch)
     supervisor_llm(verdict)
-    provider = Mock(side_effect=OpenAICompatibleClient.chat)
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", provider)
+    provider = Mock(side_effect=OpenAICompatibleClient.respond)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", provider)
     is_pm = configured[1]["role_key"] == "project_manager"
     trusted = is_pm and phase_number == 3
     command = {"report": report_json(FAKE_REPORT), "operation_key": "current-report", "expected_version": phase_number}
@@ -129,7 +129,7 @@ def test_unverified_confirmation_cannot_reach_provider_despite_worker_claim(
         receipt.update({"owner": {"owner_subject": str(uuid4())}, "task": {"task_id": str(uuid4())},
                         "revision": {"revision": 6}, "hash": {"content_hash": "b" * 64}}[defect])
     provider = Mock(side_effect=AssertionError("Invalid consent must fail before provider access"))
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", provider)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", provider)
     before = history_count()
     response = step(configured, **command)
     assert response.status_code == 409, response.text
@@ -146,7 +146,7 @@ def test_confirmation_changed_during_provider_call_cannot_commit(
     advance(configured, supervisor_llm, 3)
     _, receipt, _ = tracker_confirmation(configured, monkeypatch)
     supervisor_llm("PASS")
-    controlled_chat = OpenAICompatibleClient.chat
+    controlled_chat = OpenAICompatibleClient.respond
 
     def changed(*args, **kwargs):
         payload = json.loads(kwargs["user"])
@@ -156,7 +156,7 @@ def test_confirmation_changed_during_provider_call_cannot_commit(
         return result
 
     provider = Mock(side_effect=changed)
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", provider)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", provider)
     before = history_count()
     response = step(configured, **final_command())
     assert response.status_code == 409, response.text
@@ -197,7 +197,7 @@ def test_old_pm_frozen_proof_replays_unchanged_after_business_review_upgrade(
         record["covered_item_ids"]
     )
     provider = Mock(side_effect=AssertionError("Frozen v1 replay must not call provider"))
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", provider)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", provider)
     readback = configured[0].post("/internal/runtime/terminal-receipt/readback", headers=WRITER, json=selector)
     assert readback.status_code == 200, readback.text
     assert readback.json()["receipt"] == result["terminal_receipt"]
@@ -215,7 +215,7 @@ def test_verified_context_does_not_relax_current_parser(configured, supervisor_l
     advance(configured, supervisor_llm, 3)
     tracker_confirmation(configured, monkeypatch)
     supervisor_llm("PARTIAL")
-    controlled_chat = OpenAICompatibleClient.chat
+    controlled_chat = OpenAICompatibleClient.respond
 
     def invalid(*args, **kwargs):
         result = controlled_chat(*args, **kwargs)
@@ -226,7 +226,7 @@ def test_verified_context_does_not_relax_current_parser(configured, supervisor_l
         return result
 
     provider = Mock(side_effect=invalid)
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", provider)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", provider)
     response = step(configured, **final_command())
     assert response.status_code == 200, response.text
     result = response.json()["result"]

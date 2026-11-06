@@ -91,7 +91,7 @@ def supervisor_llm(monkeypatch):
         missing: list[str] | None = None,
         blockers: list[str] | None = None,
     ) -> None:
-        def chat(*_args, **kwargs):
+        def respond(*_args, **kwargs):
             payload = json.loads(kwargs["user"])
             items = [(item["id"], item["text"]) for item in payload["criteria"]]
             ids = [item_id for item_id, _ in items]
@@ -132,8 +132,8 @@ def supervisor_llm(monkeypatch):
 
         monkeypatch.setattr(
             OpenAICompatibleClient,
-            "chat",
-            chat,
+            "respond",
+            respond,
         )
 
     return install

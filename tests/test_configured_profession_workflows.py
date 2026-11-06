@@ -124,14 +124,14 @@ def test_membership_revoked_during_model_call_cannot_commit_progress(configured,
     workflow = add_workflow(assignment)
     enroll(configured)
     supervisor_llm("PASS")
-    evaluate = OpenAICompatibleClient.chat
+    evaluate = OpenAICompatibleClient.respond
 
     def revoke(*args, **kwargs):
         with SAUnitOfWork() as uow:
             uow.session.execute(delete(ProfessionWorkflow).where(ProfessionWorkflow.workflow_id == workflow))
         return evaluate(*args, **kwargs)
 
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", revoke)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", revoke)
     result = step(
         configured, report=report_json("Files checked"), operation_key="revoked-during-model", expected_version=1,
     )

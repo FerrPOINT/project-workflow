@@ -83,9 +83,8 @@ DOCUMENT = {
     "prerequisites": ["Both librarians have access to the same persistent register"],
 }
 DOCUMENT_HASH = payload_sha256(DOCUMENT)
-SAVED = (
-    f"FULL saved document: task_id={BUSINESS_TASK_ID}; revision=3; content_hash={DOCUMENT_HASH}\n"
-    + json.dumps(DOCUMENT, ensure_ascii=False, sort_keys=True)
+SAVED = f"FULL saved document: task_id={BUSINESS_TASK_ID}; revision=3; content_hash={DOCUMENT_HASH}\n" + json.dumps(
+    DOCUMENT, ensure_ascii=False, sort_keys=True
 )
 PUBLICATION = (
     f"Actual publication result: task-tracker sdlc revision publish --task {BUSINESS_TASK_ID} "
@@ -111,7 +110,9 @@ PRESENTATION = (
 # Expectations are for real replay, never supplied as responses to the evaluator.
 REPLAY_CASES = (
     {
-        "id": "136", "phase": "PM-DRAFT-01", "expected_verdict": "PASS",
+        "id": "136",
+        "phase": "PM-DRAFT-01",
+        "expected_verdict": "PASS",
         "report": (
             f"Workflow technical task_key={WORKFLOW_TASK_KEY}; Tracker business task_id={BUSINESS_TASK_ID}; "
             "same current assignment, assigned PM synthetic-pm. I read the assigned "
@@ -122,7 +123,9 @@ REPLAY_CASES = (
         "expectation": "Concise actual task/PM/input reads suffice; no technical identity re-attestation.",
     },
     {
-        "id": "140", "phase": "PM-DRAFT-01", "expected_verdict": "PASS",
+        "id": "140",
+        "phase": "PM-DRAFT-01",
+        "expected_verdict": "PASS",
         "report": (
             "I used existing assignment synthetic-assignment and PM synthetic-pm for "
             f"Tracker business task_id={BUSINESS_TASK_ID}. Tracker context returned "
@@ -136,14 +139,18 @@ REPLAY_CASES = (
         "expectation": "Do not require this report's own stdin submission or future verdict readback.",
     },
     {
-        "id": "142", "phase": "PM-DRAFT-02", "expected_verdict": "PASS",
+        "id": "142",
+        "phase": "PM-DRAFT-02",
+        "expected_verdict": "PASS",
         "report": f"{BRIEF}\n{SAVED}\n{PUBLICATION}\n"
         "These owner answers resolve the material gaps; no structured clarification is needed. "
         "Preparation is complete; this document goes to the next phase for presentation and confirmation.",
         "expectation": "A complete saved review packet needs no extra preparation ceremony or consent.",
     },
     {
-        "id": "150", "phase": "PM-DRAFT-02", "expected_verdict": "PASS",
+        "id": "150",
+        "phase": "PM-DRAFT-02",
+        "expected_verdict": "PASS",
         "report": f"{BRIEF}\n{SAVED}\n{PUBLICATION}\n"
         "Revision 2 is superseded. The current revision 3 reflects all latest owner "
         "answers, resolves the material gaps and is ready for owner review. "
@@ -151,7 +158,9 @@ REPLAY_CASES = (
         "expectation": "Ready-for-review facts suffice without an invented separate preparation action.",
     },
     {
-        "id": "153", "phase": "PM-DRAFT-02", "expected_verdict": "PARTIAL",
+        "id": "153",
+        "phase": "PM-DRAFT-02",
+        "expected_verdict": "PARTIAL",
         "report": f"The review packet is ready in Tracker, revision=3, content_hash={DOCUMENT_HASH}. "
         "It includes the source, scope, scenarios, fields, states, criteria and checklist. "
         "The FULL document and publication/readback were in my previous report. "
@@ -160,32 +169,42 @@ REPLAY_CASES = (
         "expectation": "A corrected report must retain the FULL packet; prior-report references do not suffice.",
     },
     {
-        "id": "160", "phase": "PM-DRAFT-03", "expected_verdict": "PASS",
+        "id": "160",
+        "phase": "PM-DRAFT-03",
+        "expected_verdict": "PASS",
         "report": f"{BRIEF}\n{SAVED}\n{PUBLICATION}\n{PRESENTATION}\n{CONSENT}",
         "expectation": "No independent presentation attestation or copy of the earlier chat message is required.",
     },
     {
-        "id": "162", "phase": "PM-DRAFT-03", "expected_verdict": "PASS",
+        "id": "162",
+        "phase": "PM-DRAFT-03",
+        "expected_verdict": "PASS",
         "report": f"{BRIEF}\n{SAVED}\n{PUBLICATION}\n{PRESENTATION}\n"
         f"In this chat I have also shown the same full document with revision=3/hash={DOCUMENT_HASH}.\n{CONSENT}",
         "expectation": "Presentation account and matching saved receipt suffice without a second witness.",
     },
     {
-        "id": "163", "phase": "PM-DRAFT-03", "expected_verdict": "PASS",
+        "id": "163",
+        "phase": "PM-DRAFT-03",
+        "expected_verdict": "PASS",
         "report": f"{BRIEF}\n{SAVED}\n{PUBLICATION}\n{PRESENTATION}\n"
         "That earlier message began 'Here is the complete saved specification for review', "
         f"and ended 'Revision 3; checksum {DOCUMENT_HASH}'.\n{CONSENT}",
         "expectation": "Keep the positive presentation case accepted; no future completion receipt is needed.",
     },
     {
-        "id": "complete-input", "phase": "PM-DRAFT-02", "expected_verdict": "PASS",
+        "id": "complete-input",
+        "phase": "PM-DRAFT-02",
+        "expected_verdict": "PASS",
         "report": f"The complete initial owner brief was: {BRIEF}\n{SAVED}\n{PUBLICATION}\n"
         "All users, channels, fields, state rules, exclusions and acceptance criteria "
         "were supplied consistently, so no clarification was needed. Ready for review; no consent yet.",
         "expectation": "The complete-input path needs no fabricated questions or owner answers.",
     },
     {
-        "id": "future-presentation", "phase": "PM-DRAFT-03", "expected_verdict": "PARTIAL",
+        "id": "future-presentation",
+        "phase": "PM-DRAFT-03",
+        "expected_verdict": "PARTIAL",
         "report": f"{BRIEF}\n{SAVED}\n{PUBLICATION}\n{CONSENT}\n"
         "The owner confirmed in the application, but I have not shown the document "
         "in chat yet. I will present it after this report is accepted.",
@@ -193,7 +212,9 @@ REPLAY_CASES = (
         "expectation": "Intended presentation cannot stand in for completed presentation.",
     },
     {
-        "id": "no-saved-consent", "phase": "PM-DRAFT-03", "expected_verdict": "PARTIAL",
+        "id": "no-saved-consent",
+        "phase": "PM-DRAFT-03",
+        "expected_verdict": "PARTIAL",
         "report": f"{BRIEF}\n{SAVED}\n{PUBLICATION}\n{PRESENTATION}\n"
         "Correction: the owner only replied 'agreed' in chat; confirmation read "
         "returned no saved receipt. I have not confirmed for the owner.",
@@ -201,10 +222,13 @@ REPLAY_CASES = (
         "expectation": "Chat agreement cannot replace the saved human owner receipt.",
     },
     {
-        "id": "mismatched-consent", "phase": "PM-DRAFT-03", "expected_verdict": "PARTIAL",
+        "id": "mismatched-consent",
+        "phase": "PM-DRAFT-03",
+        "expected_verdict": "PARTIAL",
         "report": f"{BRIEF}\n{SAVED}\n{PUBLICATION}\n{PRESENTATION}\n"
         "Correction: confirmation read actually returned revision=2 and content_hash="
-        + "0" * 64 + "; it does not match the latest saved revision 3. Fresh consent is pending.",
+        + "0" * 64
+        + "; it does not match the latest saved revision 3. Fresh consent is pending.",
         "required_missing": ("check:2", "evidence:2"),
         "expectation": "Old consent does not authorize a changed document, even with a presentation account.",
     },
@@ -233,18 +257,24 @@ def frozen_step():
 def test_actual_evaluator_receives_full_report_and_exact_pm_obligations(pm_phases, case):
     phase = pm_phases[case["phase"]]
     items = PhaseContractBuilder(list(pm_phases.values())).build_evaluation_items(phase)
-    prompt = PromptBuilder.build_user_prompt(WORKFLOW_TASK_KEY, phase,
-        json.loads(report_json(case["report"])), evaluation_items=items)
+    prompt = PromptBuilder.build_user_prompt(
+        WORKFLOW_TASK_KEY, phase, json.loads(report_json(case["report"])), evaluation_items=items
+    )
     client = Mock()
-    client.chat.side_effect = TimeoutError("Stop before any provider call; no quality verdict supplied")
+    client.respond.side_effect = TimeoutError("Stop before any provider call; no quality verdict supplied")
     with pytest.raises(TimeoutError):
-        _evaluate_strict_response(client, user=prompt, evaluation_items=items, phase=phase)
-    client.chat.assert_called_once_with(system=PromptBuilder.SYSTEM_PROMPT, user=prompt, temperature=0.1)
-    delivered = client.chat.call_args.kwargs["user"]
+        _evaluate_strict_response(
+            client, user=prompt, evaluation_items=items, phase=phase, response_format=PromptBuilder.response_schema([])
+        )
+    client.respond.assert_called_once_with(
+        system=PromptBuilder.SYSTEM_PROMPT, user=prompt, response_format=PromptBuilder.response_schema([])
+    )
+    delivered = client.respond.call_args.kwargs["user"]
     data = json.loads(delivered)
     assert data["report"]["result"]["document"] == case["report"]
-    assert data["criteria"] == [{"id": label, "text": dict(items)[key]}
-                                for label, key in PromptBuilder.item_aliases(items).items()]
+    assert data["criteria"] == [
+        {"id": label, "text": dict(items)[key]} for label, key in PromptBuilder.item_aliases(items).items()
+    ]
     assert "WORKER PROCEDURE" not in delivered
     # Historical report bytes remain intact, but v13 does not add worker procedure.
     assert "Instructions:" not in json.dumps({key: value for key, value in data.items() if key != "report"})

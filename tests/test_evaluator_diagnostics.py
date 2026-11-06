@@ -27,7 +27,7 @@ def test_saved_diagnostic_is_read_only_and_does_not_repair_partial(supervisor_ll
     result = engine.evaluate(report_json("Prepared document; not yet confirmed"))
     entry = engine.db.step_history.list(task_key=engine.task_key)[0]
     before = json.dumps(entry.evaluation_snapshot, sort_keys=True)
-    with patch.object(OpenAICompatibleClient, "chat", side_effect=AssertionError("read cannot call model")):
+    with patch.object(OpenAICompatibleClient, "respond", side_effect=AssertionError("read cannot call model")):
         diagnostic = history_diagnostic(entry.worker_report, entry.evaluation_snapshot)
     assert diagnostic["availability"] == "captured"
     assert diagnostic["prompt_version"] == PromptBuilder.PROMPT_VERSION
@@ -44,15 +44,15 @@ def test_saved_diagnostic_is_read_only_and_does_not_repair_partial(supervisor_ll
 def test_invalid_attempts_and_repair_prompts_are_preserved(supervisor_llm):
     engine = SupervisorEngine("RUN-941")
     supervisor_llm("PASS")
-    valid = OpenAICompatibleClient.chat
+    valid = OpenAICompatibleClient.respond
     calls = 0
 
-    def chat(*args, **kwargs):
+    def respond(*args, **kwargs):
         nonlocal calls
         calls += 1
         return {"verdict": "PASS"} if calls == 1 else valid(*args, **kwargs)
 
-    with patch.object(OpenAICompatibleClient, "chat", side_effect=chat):
+    with patch.object(OpenAICompatibleClient, "respond", side_effect=respond):
         engine.evaluate(report_json("Complete phase report"))
     entry = engine.db.step_history.list(task_key=engine.task_key)[0]
     attempts = entry.evaluation_snapshot["diagnostics"]["attempts"]
@@ -68,7 +68,7 @@ def test_invalid_attempts_and_repair_prompts_are_preserved(supervisor_llm):
 
 def test_transport_failure_is_not_a_business_rejection():
     engine = SupervisorEngine("RUN-942")
-    with patch.object(OpenAICompatibleClient, "chat", side_effect=requests.Timeout("private credential")):
+    with patch.object(OpenAICompatibleClient, "respond", side_effect=requests.Timeout("private credential")):
         result = engine.evaluate(report_json("Actual document"))
     entry = engine.db.step_history.list(task_key=engine.task_key)[0]
     diagnostic = entry.evaluation_snapshot["diagnostics"]

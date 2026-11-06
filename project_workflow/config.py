@@ -6,7 +6,6 @@ import os
 import re
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
 from urllib.parse import urlsplit
 
 from pydantic import Field, field_validator
@@ -40,7 +39,6 @@ class Settings(BaseSettings):
     OPENAI_MAX_TOKENS: int = Field(default=4000, gt=0)
     OPENAI_API_KEY: str = ""
     OPENAI_REASONING_EFFORT: str = "none"
-    OPENAI_EVALUATOR_RESPONSE_FORMAT: Literal["json_object", "json_schema"] = "json_object"
 
     PLATFORM_BRANDING_URL: str | None = None
     PLATFORM_SERVICES_URL: str = "http://localhost:7771/api/v1/runtime/services"

@@ -28,7 +28,7 @@ def test_malformed_report_does_not_call_model_or_commit_operation(configured, mo
     enroll(configured)
     before = step(configured).json()["result"]
     model = Mock(side_effect=AssertionError("Malformed report must not reach Advisor"))
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", model)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", model)
     response = step(configured, report=raw, operation_key="invalid-report", expected_version=before["version"])
     assert response.status_code == 422, response.text
     assert response.json()["error_code"] == "invalid-phase-report"
@@ -55,7 +55,7 @@ def test_structured_report_is_preserved_once_through_evaluation_and_readback(con
             item["id"]: {"covered": False, "reason": "Нужно указать фактический результат чтения задачи."}
             for item in payload["criteria"]}, "blockers": [], "confidence": 0.8}
 
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", advisor)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", advisor)
     submitted = step(configured, report=raw, operation_key="structured-1", expected_version=1)
     assert submitted.status_code == 200, submitted.text
     result = submitted.json()["result"]
@@ -82,7 +82,7 @@ def test_invalid_wire_unicode_is_rejected_before_report_processing(configured, m
     enroll(configured)
     before = step(configured).json()["result"]
     provider = Mock(side_effect=AssertionError("Invalid Unicode cannot reach Advisor"))
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", provider)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", provider)
     command = {"interaction_protocol": "configured-cli-v1", "task": configured[1]["task"],
                "namespace_id": configured[1]["namespace_id"], "report": report(source=chr(0xD800)),
                "operation_key": "invalid-unicode", "expected_version": before["version"]}
@@ -123,7 +123,7 @@ def test_authorized_historical_text_readback_is_not_a_new_submission(configured,
         row.worker_report = old_report
         uow.commit()
     provider = Mock(side_effect=AssertionError("Historical readback cannot reevaluate"))
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", provider)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", provider)
     replay = step(configured, report=old_report, operation_key="historical-operation", expected_version=1)
     assert replay.status_code == 200, replay.text
     assert replay.json()["result"] == accepted.json()["result"]
@@ -140,7 +140,7 @@ def test_authorized_historical_text_readback_is_not_a_new_submission(configured,
 def test_untrusted_caller_cannot_use_report_errors_to_read_task_state(configured, monkeypatch):
     enroll(configured)
     provider = Mock(side_effect=AssertionError("Unauthorized caller cannot evaluate"))
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", provider)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", provider)
     request = {"interaction_protocol": "configured-cli-v1", "task": configured[1]["task"],
                "namespace_id": configured[1]["namespace_id"], "report": "bad report",
                "operation_key": "unauthorized", "expected_version": 1}

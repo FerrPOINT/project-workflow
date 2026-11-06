@@ -540,14 +540,14 @@ def test_first_phase_response_evidence_reaches_verifier_without_forcing_pass(
         assert evidence["execution_ref"] != configured[1]["tracker_execution_id"]
     required = "Actual first Workflow step response and task/input references."
     supervisor_llm("PARTIAL", missing=[required])
-    original_chat = OpenAICompatibleClient.chat
+    original_chat = OpenAICompatibleClient.respond
     prompts = []
 
-    def chat(*args, **kwargs):
+    def respond(*args, **kwargs):
         prompts.append(kwargs["user"])
         return original_chat(*args, **kwargs)
 
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", chat)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", respond)
     response = step(configured, report=report_json(report), operation_key="first-report", expected_version=1)
     assert response.status_code == 200, response.text
     result = response.json()["result"]
@@ -774,7 +774,7 @@ def test_backlog_ready_pm_can_read_and_replay_but_cannot_submit_new_work(configu
     monkeypatch.setattr(configured_cli_tracker, "assignment", check_tracker_assignment)
     monkeypatch.setattr(configured_cli_tracker, "read", lambda _request, suffix: context)
     provider = Mock(side_effect=AssertionError("completed work must not be evaluated again"))
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", provider)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", provider)
     read = step(configured)
     assert read.status_code == 200 and read.json()["result"]["complete"] is True
     assert step(configured, **command).json() == accepted.json()
@@ -931,11 +931,11 @@ def test_report_interleaving_while_provider_releases_transaction(configured, sup
 
     enroll(configured)
     supervisor_llm("PASS")
-    evaluate = OpenAICompatibleClient.chat
+    evaluate = OpenAICompatibleClient.respond
     entered = False
     nested = []
 
-    def chat(*args, **kwargs):
+    def respond(*args, **kwargs):
         nonlocal entered
         if not entered:
             entered = True
@@ -949,7 +949,7 @@ def test_report_interleaving_while_provider_releases_transaction(configured, sup
             )
         return evaluate(*args, **kwargs)
 
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", chat)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", respond)
     response = step(configured, report=report_json("Actual report"), operation_key="report-a", expected_version=1)
     assert nested[0].status_code == 200, nested[0].text
     assert response.status_code == (200 if same_key else 409), response.text
@@ -1225,10 +1225,10 @@ def test_final_judge_assesses_precommit_facts_not_future_receipts(configured, su
         "mislabelled-future-completion": "Backlog Ready claimed as current, but actual Tracker readback is Draft.",
     }
     supervisor_llm("PASS" if evidence == "valid" else "PARTIAL", missing=[] if evidence == "valid" else [checks[0]])
-    original_chat = OpenAICompatibleClient.chat
+    original_chat = OpenAICompatibleClient.respond
     prompts = []
 
-    def chat(*args, **kwargs):
+    def respond(*args, **kwargs):
         prompt = kwargs["user"]
         prompts.append(prompt)
         assert "PRECOMMIT ASSESSMENT ONLY" in observed["instructions"]
@@ -1241,7 +1241,7 @@ def test_final_judge_assesses_precommit_facts_not_future_receipts(configured, su
             assert all("terminal_receipt" not in json.loads(row.supervisor_response) for row in rows)
         return original_chat(*args, **kwargs)
 
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", chat)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", respond)
     response = step(
         configured,
         report=report_json(reports[evidence]),

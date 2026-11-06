@@ -241,8 +241,8 @@ def test_preparation_source_without_full_document_remains_partial(
     covered = [phase["checks"][2], *phase["evidence"]]
     missing = [phase["checks"][0], phase["checks"][1], phase["checks"][3]]
     supervisor_llm("PARTIAL", covered=covered, missing=missing)
-    provider = Mock(side_effect=OpenAICompatibleClient.chat)
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", provider)
+    provider = Mock(side_effect=OpenAICompatibleClient.respond)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", provider)
     response = step(
         configured,
         report=(
@@ -285,8 +285,8 @@ def test_preparation_pending_owner_input_with_present_evidence_remains_partial(
     covered = [phase["checks"][0], phase["checks"][3], *phase["evidence"]]
     missing = phase["checks"][1:3]
     supervisor_llm("PARTIAL", covered=covered, missing=missing)
-    provider = Mock(side_effect=OpenAICompatibleClient.chat)
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", provider)
+    provider = Mock(side_effect=OpenAICompatibleClient.respond)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", provider)
     response = step(
         configured,
         report=(
@@ -473,8 +473,8 @@ def test_pending_owner_question_remains_partial_despite_valid_saved_consent(
     final = business["modes"][0]["phases"][2]
     supervisor_llm("PARTIAL", covered=[*final["checks"][:3], final["checks"][4], *final["evidence"]],
                    missing=[final["checks"][3]])
-    provider = Mock(side_effect=OpenAICompatibleClient.chat)
-    monkeypatch.setattr(OpenAICompatibleClient, "chat", provider)
+    provider = Mock(side_effect=OpenAICompatibleClient.respond)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", provider)
     response = step(configured,
                     report=report_json("Synthetic FULL packet; a new material owner choice remains pending."),
                     operation_key="pending-owner-choice", expected_version=3,
