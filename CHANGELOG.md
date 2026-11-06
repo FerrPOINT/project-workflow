@@ -4,6 +4,19 @@
 
 ### Current Status (2026-11-06)
 
+- Native Responses image93af2ee5 was built and passed exact-image Compose smoke,
+  including synthetic archive preservation and standalone mechanics. Normal
+  Workflow-only Apply stopped at schema readiness: live database0023 was not
+  migrated to the image's0030. Incoming0024 selects an operator-published PM's
+  active rows instead of its baseline; the archive-only fixture does not qualify
+  this transition. The original Workflow image was restored by normal image-only
+  rollback, with healthy service, unchanged DB/Fleet and ready PM27. No new model
+  call or business transition occurred. Source is published; installation and
+  live acceptance remain blocked, not complete. A new regression with genuine
+  PM publications up to revision13, an unfinished task and nonempty history
+  reproduces0024 refusal on SQLite and PostgreSQL; full snapshots and publication
+  readback remain unchanged. PG1/1 passes with zero skips and verified cleanup.
+  Safe refusal is not successful-upgrade acceptance.
 - Reconcile master d0ec576c and native Responses with v19, without importing
   the v15 report/prompt/retry contract. Keep typed reports, current-phase facts,
   required_change, one call, high, connect30/read1200 and redirect refusal.

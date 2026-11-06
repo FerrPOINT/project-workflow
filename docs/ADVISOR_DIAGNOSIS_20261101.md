@@ -1,5 +1,46 @@
 # Advisor: сквозной диагноз и границы выпуска
 
+## 2026-11-06: Native Responses Installation Rolled Back, Catalog Upgrade Blocked
+
+The qualified image93af2ee5 (source dcfbe636, Base4a32bf97) was built once and
+passed exact-image Compose smoke. The synthetic upgrade from imageb4b11d7b
+preserved19 archive rows byte-for-byte and reached0030; platform authorization,
+standalone start/replay/history and owned cleanup passed. That fixture did not
+contain an operator-published PM revision and is not proof of its preservation.
+
+Normal Workflow-only Apply ea5e75bcecb84473b23147fcdc3b0e54 published the new image,
+then stopped at readiness: database connectivity was healthy, but the live
+revision remained0023_catalog_publication_author while the image required0030.
+The installer did not execute the product migration command. No new evaluation,
+catalog publication or database migration was performed on the live database.
+
+Read-only inspection confirms PM revision13 is a valid operator publication
+(content614c39c7); all other professions remain at revision1. The predecessor
+profile e0cde0 matches. The newer profiles do not match the old baseline; that
+fact alone does not prove a corrupted or invalid operator publication.
+Migration0024 selects list_modes without an explicit catalog_version, which
+selects the active publication. It consequently targets the operator's rows,
+while its final observer expects a changed baseline. Loosening that observer
+would risk accepting modified rows under an unchanged publication receipt.
+This is a catalog-upgrade defect, not a Responses/Advisor judgment failure.
+The regression now creates twelve real editor publications up to revision13
+above the canonical0023 predecessor, plus an unfinished task and nonempty history
+bound to that mode. SQLite and real PostgreSQL each reproduce the0024 refusal
+and prove complete table-snapshot equality, head0023, valid publication readback
+and unchanged task/history after transaction rollback. PostgreSQL passes1/1 with
+zero skips, verified owned cleanup and unchanged source. This tests safe refusal,
+not a successful upgrade; the synthetic archive-only smoke missed that case.
+
+The existing operator rollback completed against the same sealed update journal:
+only the Workflow image returned to b4b11d7b; health is restored, database0023 and
+Fleet are unchanged. The same PM remains ready at revision27 with CLI699.
+SDLC-33 remains Draft/InProgress with requirements1 and its existing confirmation;
+no replacement task, automatic completion, history rewrite or rebinding occurred.
+The campaign is still144/163 with19 calls reserved. Native Responses remains
+published source, not an installed or live-accepted release. Do not repeat Apply,
+stamp the database, overwrite the PM catalog or rewrite applied migrations to
+make this candidate pass. A supported preservation path is a separate open gate.
+
 ## 2026-11-06: Native Responses Integrated With V19
 
 The existing PR164 is reconciled with master d0ec576c. Only the useful protocol
