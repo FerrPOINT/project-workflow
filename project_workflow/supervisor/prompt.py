@@ -233,4 +233,10 @@ def format_current_phase_instructions(
         else:
             contract = raw.to_dict() if raw else cb.build(target_phase).to_dict()
         instructions = f"Текущий шаг: {target_phase.name}\n\n{_format_contract(contract, human_only=True)}"
+    if contract.get("skills"):
+        instructions = (
+            "Before doing this phase, read the installed files for phase_contract.skills through the terminal, "
+            "using your executor's configured skills directory. A missing required skill is a configuration error: "
+            "do not substitute another name or install skills during the conversation.\n\n"
+        ) + instructions
     return instructions + PHASE_REPORT_INSTRUCTIONS + "\n"

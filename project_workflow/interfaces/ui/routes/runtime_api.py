@@ -161,10 +161,13 @@ def runtime_capabilities(
     }
 
 
-def _single_task_observation(authorization: str | None) -> Any:
+def _single_task_observation(authorization: str | None, *, namespace_id: str | None = None) -> Any:
     """Existing catalog credential; persisted observation only, no new registry."""
-    from project_workflow.domain.single_task_profile import SingleTaskInstallationResponse
-    from project_workflow.infrastructure.db.single_task_catalog import observe_installation
+    from pydantic import TypeAdapter
+
+    from project_workflow.domain.exceptions import ConflictError
+    from project_workflow.domain.single_task_profile import SingleTaskBindingResponse, SingleTaskInstallationResponse
+    from project_workflow.infrastructure.db.single_task_catalog import observe_installation, selected_required_skills
 
     try:
         credential = _authorized_service_credential(authorization)
@@ -174,10 +177,21 @@ def _single_task_observation(authorization: str | None) -> Any:
             return _error("Catalog credential required", 403)
         with SAUnitOfWork() as uow:
             result = observe_installation(uow)
+            if namespace_id is not None:
+                try:
+                    namespace_id = TypeAdapter(DatabaseId).validate_python(namespace_id)
+                except ValidationError:
+                    return _error("Canonical namespace ID required", 422)
+                binding = next((b for b in result.bindings if b.namespace_id == namespace_id), None)
+                if binding is None:
+                    return _error("Single-task namespace not found", 404)
+                return SingleTaskBindingResponse(
+                    binding=binding, required_skills=selected_required_skills(uow, binding),
+                )
         return SingleTaskInstallationResponse(installation=result)
     except namespace_auth.NamespaceAuthError as exc:
         return _error("Catalog service authorization refused", exc.status)
-    except ValueError:
+    except (ValueError, ConflictError):
         return _error("Single-task installation missing or divergent", 409)
     except (RuntimeError, OSError, SQLAlchemyError):
         return _error("Single-task installation observation unavailable", 503)
@@ -191,23 +205,10 @@ def single_task_installation(authorization: str | None = Header(default=None)) -
 
 
 def single_task_namespace_binding(namespace_id: str, authorization: str | None = Header(default=None)) -> Any:
-    from project_workflow.domain.base_binding import DatabaseId
-    from project_workflow.domain.single_task_profile import SingleTaskBindingResponse
-
-    result = _single_task_observation(authorization)
+    result = _single_task_observation(authorization, namespace_id=namespace_id)
     if isinstance(result, JSONResponse):
         return result
-    from pydantic import TypeAdapter, ValidationError
-
-    try:
-        namespace_id = TypeAdapter(DatabaseId).validate_python(namespace_id)
-    except ValidationError:
-        return _error("Canonical namespace ID required", 422)
-    binding = next((b for b in result.installation.bindings if b.namespace_id == namespace_id), None)
-    if binding is None:
-        return _error("Single-task namespace not found", 404)
-    response = SingleTaskBindingResponse(binding=binding)
-    return JSONResponse(response.model_dump(mode="json", by_alias=True), headers={"Cache-Control": "no-store"})
+    return JSONResponse(result.model_dump(mode="json", by_alias=True), headers={"Cache-Control": "no-store"})
 
 
 def runtime_catalog(

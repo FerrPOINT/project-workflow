@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from project_workflow.domain.base_admission import Sha256
 from project_workflow.domain.base_binding import DatabaseId
@@ -103,3 +103,14 @@ class SingleTaskInstallationResponse(_Observation):
 class SingleTaskBindingResponse(_Observation):
     ok: Literal[True] = True
     binding: SingleTaskNamespaceBinding
+    required_skills: list[str]
+
+    @field_validator("required_skills")
+    @classmethod
+    def _safe_sorted_skills(cls, value: list[str]) -> list[str]:
+        if value != sorted(set(value)) or any(
+            not name or any(not (char.isascii() and (char.isalnum() or char in "-_")) for char in name)
+            for name in value
+        ):
+            raise ValueError("Required skills must be sorted unique safe directory names")
+        return value

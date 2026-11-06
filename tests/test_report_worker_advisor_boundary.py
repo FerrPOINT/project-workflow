@@ -92,6 +92,7 @@ def test_worker_instruction_change_preserves_actual_engine_advisor_http_body(con
         before = step(fixture).json()["result"]
         worker_instructions.append(before["instructions"])
         assert worker_text in before["instructions"]
+        assert "read the installed files for phase_contract.skills" in before["instructions"]
         assert len(captured) == index
         submitted = step(fixture, report=raw, operation_key="same-business-report", expected_version=before["version"])
         assert submitted.status_code == 200, submitted.text
@@ -107,6 +108,7 @@ def test_worker_instruction_change_preserves_actual_engine_advisor_http_body(con
         assert all(item["previous_assessment"] is None for item in wire_payloads[-1]["criteria"])
         assert sentinel not in captured[-1].decode()
         assert original_instructions not in captured[-1].decode()
+        assert "phase_contract.skills" not in captured[-1].decode()
 
     assert worker_instructions[0] != worker_instructions[1]
     for name in ("task", "assignment_ref", "tracker_execution_id", "business_task_ref"):

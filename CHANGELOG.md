@@ -2,7 +2,26 @@
 
 ## Unreleased — Advisor V19 Candidate, Not Accepted
 
-### Current Status (2026-11-06)
+### Current Status (2026-11-07)
+
+- PM29 explicitly activated only the reviewed TaskTracker serializer skill from
+  Base1c37b2f1; physical files, image699, CLI, SOUL and other settings were verified.
+  Live continuation was not accepted: one successful terminal call read context,
+  step and requirements, without publish or a new409, yet PM claimed a repeated
+  publication refusal. No Advisor call occurred;153/163 campaign budget is used.
+- Confirmed delivery gap: Workflow requires canonical names that are absent on
+  PM, while Fleet readiness checks its own defaults. Candidate internal binding
+  response exposes required_skills from the selected publication beside the
+  unchanged authority binding. Matching Fleet preparation/readiness checks this
+  set; no aliases, new routes, tables, model changes or new tools are introduced.
+  Worker-only guidance explicitly requests reading the installed skill files;
+  captured HTTP regression confirms it does not enter the Advisor request.
+- Source checks include136 targeted Workflow tests and the actual HTTP boundary;
+  full local gates, coordinated installation, SDLC34 amendment/consent/completion
+  and three browsers remain open. Current runtime remains Workflow4bf/image20ad
+  and Fleet eae18fd3/image7f4; this candidate is not installed or accepted live.
+
+### Historical Checkpoint (2026-11-06)
 
 - Candidate image20ad7dd0/source4bf3f926 is installed through normal Workflow-only
   migration/Apply. All31 tasks,196 history rows and12 PM publications (active13) with

@@ -22,6 +22,7 @@ from project_workflow.domain.single_task_profile import (
     ROLE_MODES,
     SUPPORTED_MANIFESTS,
     SingleTaskInstallation,
+    SingleTaskNamespaceBinding,
     is_single_task_key,
 )
 from project_workflow.infrastructure.db import models as m
@@ -167,6 +168,22 @@ def observe_installation(uow: SAUnitOfWork) -> SingleTaskInstallation:
         except ValueError as exc:
             failures.append(exc)
     raise failures[0]
+
+
+def selected_required_skills(uow: SAUnitOfWork, binding: SingleTaskNamespaceBinding) -> list[str]:
+    """Read selected published instructions without changing the sealed source binding."""
+    from project_workflow.application.catalog_publication import read_revision
+
+    workflow = uow.workflows.get_by_id(int(binding.workflow_id))
+    if workflow is None or workflow.key != binding.workflow_key:
+        raise ValueError("Single-task workflow changed during observation")
+    revision = read_revision(uow, workflow, workflow.active_catalog_version, selected=True)
+    modes = revision["modes"]
+    if (len(modes) != len(binding.modes)
+            or {mode["key"] for mode in modes} != {mode.key for mode in binding.modes}):
+        raise ValueError("Selected publication modes differ from the installed binding")
+    return sorted({skill for mode in modes for phase in mode["phases"]
+                   for instruction in phase["instructions"] for skill in instruction["skills"]})
 
 
 def _observe_profile(uow: SAUnitOfWork, catalog: dict, manifest: dict) -> SingleTaskInstallation:
