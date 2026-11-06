@@ -22,7 +22,7 @@ def isolate_ui_runtime_state():
 
 def test_response_acceptance_is_identical_to_installed_v12():
     # Only the newly added private-to-canonical entry point is outside this
-    # historical contract; the six-field model and parser remain byte-identical AST.
+    # historical contract; the six-field model and parser retain the baseline AST.
     root = Path(__file__).resolve().parents[1]
     tree = ast.parse((root / "project_workflow/infrastructure/llm.py").read_text(encoding="utf-8"))
     actual = {}

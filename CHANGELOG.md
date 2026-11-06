@@ -1,5 +1,32 @@
 # Changelog
 
+## Analyst: Baseline Publication And Conditional Research - 2026-11-06
+
+- Source baselines append to the existing publication ledger at a free revision.
+  Operator drafts/publications, existing mode/phase IDs and receipts are preserved.
+- Correct unmerged migration `0029` so operator revision 2 no longer prevents upgrade.
+  Forward migration `0030` seals the exact already-applied original `0029` baseline
+  and publishes the current source without rewriting old rows. No new tables,
+  DTOs or execution protocol.
+- Check the active pointer against the ledger and the selected source against its
+  baseline receipt; old templates cannot mask drift in the live configuration.
+- Public research may be skipped with a supported non-applicability explanation.
+  Instructions, checks and evidence all use the same rule.
+
+## Analyst: Twelve-Phase Default - 2026-11-06
+
+- Expand Analyst analysis from three to twelve phases: requirements, hypotheses,
+  internal/public research, evidence synthesis, domain/process, behavior, data,
+  constraints, acceptance, specification and verified artifact publication.
+- Keep autonomy: no user interview, PM return, invented facts or architecture
+  selection. Mandatory gaps block final acceptance, not honest research progress.
+- Original `0029` selected fixed baseline 2 and refused operator drafts/publications.
+  The corrective entry above replaces that restriction; historical task/step IDs
+  and receipts remain unchanged.
+- Other profession definitions, normal text-only publication structure, skills
+  pins and original Hermes stay unchanged. Installation and live 12-phase
+  evaluator acceptance are separate from source qualification.
+
 ## Structured Phase Reports - 2026-11-03 (PM Accepted, UI Open)
 
 - Cause: the phase report crossed the CLI/Workflow boundary as opaque text. Source

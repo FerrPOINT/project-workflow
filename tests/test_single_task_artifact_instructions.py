@@ -15,6 +15,7 @@ UPLOAD = (
     "task-tracker attachment upload --issue <task-uuid> "
     "--file <role-artifact.json> --content-type application/json"
 )
+ANALYSIS_UPLOAD = "task-tracker attachment upload --issue <task-uuid> --file analysis.md --content-type text/markdown"
 LIST = "task-tracker attachment list --issue <task-uuid>"
 DOWNLOAD = "task-tracker attachment download <attachment-uuid> --out <private-artifact-path>"
 PROPOSE = "sdlc result propose --task <task-uuid> --from-file -"
@@ -42,14 +43,16 @@ def test_configured_artifacts_keep_current_authority_and_original_provenance(gen
     selected = mode_for(catalog, role, mode)
     context = selected["phases"][0]["instructions"][1]["description"]
     assert context == instructions.context_instruction(role)
+    authority = phase_text(selected["phases"][-1]) if role == "analyst" else context
+    upload = ANALYSIS_UPLOAD if role == "analyst" else UPLOAD
     for required in (
-        LIST, DOWNLOAD, UPLOAD, "current configured assignment", "project rights",
+        LIST, DOWNLOAD, upload, "current configured assignment", "project rights",
         "Ordinary comments carry discussion", "do not replace sealed artifacts",
         "Do not borrow owner/scheduler credentials", "human token", "task=root", "artifact.binding",
         "actual producer/predecessor", "Running/InProgress", "live lease",
         "lease holder is the scheduler, not the agent", "Do not renew it as scheduler",
     ):
-        assert required in context
+        assert required in authority
     assert selected["phases"][0]["instructions"][0]["description"] == instructions.FIRST_STEP
     assert "server-issued workflow_task_key" in instructions.FIRST_STEP
     assert "before any Tracker read" not in instructions.FIRST_STEP  # Context discovers the actual key.
@@ -69,7 +72,8 @@ def test_evidence_precedes_report_and_business_effects_follow_acceptance(generat
         "PRECOMMIT ASSESSMENT ONLY", "own future terminal receipt",
     ):
         assert required in final
-    assert final.index(UPLOAD) < final.index("Read the saved metadata back")
+    upload = ANALYSIS_UPLOAD if role == "analyst" else UPLOAD
+    assert final.index(upload) < final.index("Read the saved metadata back")
     assert instructions.TARGETS[role] in after
     assert after.index("AFTER accepted Workflow complete=true") < after.index("discussion publish")
     assert after.index("discussion publish") < after.index(PROPOSE) < after.index("finish the run")
@@ -118,20 +122,20 @@ def test_pm_selected_review_and_exact_owner_consent_precede_handoff(generated):
     assert "task-tracker attachment download" not in ordinary
     for required in ("NEW human owner confirmation", "critical_review.blocker_id",
                      "original technical assignment/execution/role", "No native checkpoint",
-                     "Backlog / Ready atomically"):
+                     "Analysis / Ready atomically"):
         assert required in text
     final = phase_text(phases[-1])
     assert "human owner's confirmation" in final and "exact task/revision/hash/owner in Draft" in final
     assert "future final comment" in final and "--report - --requirements-revision" in final
     after = instructions.completion_instruction("project_manager")
     assert after.index("discussion publish") < after.index("pm completion submit")
-    assert "server-to-server" in after and "Stop at Backlog / Ready" in after
-    assert "do not create Analysis intent" in after and "native/lease fields" in after
+    assert "server-to-server" in after and "the system owns Analysis intent and dispatch" in after
+    assert "queues Analysis atomically" in after and "native/lease fields" in after
 
 
 def test_generator_keeps_single_task_inventory_architecture_rework_and_devops_boundaries(generated):
     catalog, manifest = generated
-    assert manifest["inventory"] == {"namespaces": 7, "workflows": 7, "modes": 8, "phases": 24}
+    assert manifest["inventory"] == {"namespaces": 7, "workflows": 7, "modes": 8, "phases": 33}
     assert manifest["task_identity"] == {"task_equals_root": True, "children": False, "decomposition_barriers": False}
     for workflow in catalog["workflows"]:
         for mode in workflow["modes"]:

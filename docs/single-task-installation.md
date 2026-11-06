@@ -1,8 +1,8 @@
 # Single-Task Workflow Installation
 
 Workflow поддерживает opt-in установку собственного семейства `single-task-v1`,
-catalog version 1: семь namespaces, семь workflows, восемь modes и 24 phases.
-Default остаётся `legacy`. **Установка не активирует live исполнение**:
+catalog version 1: семь namespaces, семь workflows, восемь modes и 33 phases.
+Дефолт source-конфигурации — `single-task-v1`. **Установка не активирует live исполнение**:
 Tracker/Fleet source integration уже реализована; source qualification не является
 разрешением установки/активации на стенде. Exact source и оставшаяся live-граница:
 [Single-Task Instruction Audit](single-task-instruction-audit.md).
@@ -37,7 +37,7 @@ Drift, partial install и foreign collisions отклоняются без repai
 Unknown credential → 401, role runtime/assignment credential → 403,
 missing/divergent installation → 409, dependency unavailable → 503.
 Namespace ID — canonical positive decimal string; unknown ID → 404.
-Даже один binding возвращается только после persisted проверки всех 7/7/8/24.
+Даже один binding возвращается только после persisted проверки всех 7/7/8/33.
 Успешный ответ имеет `Cache-Control: no-store`.
 
 DTO содержит instruction profile/manifest hash, catalog version/hash, actual
@@ -51,9 +51,17 @@ Installed binding не является runtime admission или Tracker transit
 и `single_task_manifest_v1.json`, проверяемые по фактическим UTF-8/LF bytes:
 
 ```text
-catalog:  86e6c983b7aa6a2c99da11d1d4b1f1b4563ff913262236903a19bc86bdec2d67
-manifest: 652a38c0f7bdb48a569aa3fcd5c2e81e153db6e22b5201cfb6ce15c988dd57f3
+catalog:  9db2e982d93ead86a16c0b88785cbb9a5e1306e74cd56dc929ab7f7d1342f605
+manifest: 2f16635c0f588d1f285393b4ad8c163119b4dba4b9918335c821f295e88a4f64
 ```
+
+Миграции0029/0030 публикуют дефолт Analyst с 12 фазами через существующий
+журнал версий. Занятые пользовательские номера не переиспользуются; исходные
+mode/phase IDs, черновики, публикации и история задач сохраняются.
+0030 также обрабатывает уже применённый исходный0029 без перезаписи его строк.
+[Полный процесс и граница приёмки](analyst-workflow.md). Старые catalog/manifest
+сохранены как исторические данные; новые назначения используют текущую семью.
+Task/step history и исходные hashes прежних receipts не переписываются.
 
 16October typed backend image-build instructions change sealed content/hashes, not role IDs or
 profile/protocol versions. Existing installation with an older manifest is drift:

@@ -30,7 +30,7 @@ component passes do not close those newly identified cases.
 Bounded opt-in execution uses the existing assignment/bind/step/history bridge,
 Supervisor, PM continuation endpoints and repositories/locks. No routing DTO,
 second queue, native-runtime proof, Hermes change or additional readback service.
-Installed family remains 7 namespaces / 7 workflows / 8 modes / 24 phases.
+Installed family remains 7 namespaces / 7 workflows / 8 modes / 33 phases (Analyst12; остальные режимы по3).
 The runtime packet did not change instruction bytes. The subsequent
 [instruction audit](single-task-instruction-audit.md) records current source hashes
 and grant-aware PM/context corrections; runtime DTOs and producer behavior are unchanged.

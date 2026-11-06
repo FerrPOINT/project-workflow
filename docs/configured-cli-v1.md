@@ -1,5 +1,52 @@
 # Единый CLI/API Workflow
 
+## Analyst Research: coordinated instruction revision
+
+The single-task Analyst still has three phases: research approved PM input and
+internal/public sources; analyze rules/scenarios/acceptance; produce one analysis.md
+and use the existing accepted-report/comment/proposal sequence. It does not conduct
+a second PM interview or request owner consent for the analysis. It never returns
+the task to PM. Contradictions and missing facts stay in this task's analysis;
+missing mandatory facts keep the analysis unfinished.
+
+The Analyst allowlist additionally permits wiki-operator and forge-operator from
+the reviewed Base package. The identity donor and its historical catalog are not
+rewritten. Migration `0024_analyst_research_catalog` upgrades an exact sealed native
+catalog and keeps task IDs, phase IDs, reports and previous profile artifacts.
+Partial or customized catalogs fail transactionally instead of being overwritten.
+Migration `0027_analyst_no_pm_return` removes the Analyst PM-review instruction
+without rewriting saved tasks, reports or historical profile artifacts.
+Published migrations remain unchanged. Other professions keep their modes
+and allowlists. PM instructions verify the immutable Backlog/Ready completion while
+allowing fresh Tracker context to show the automatically queued Analysis.
+
+This source revision requires coordinated Tracker/Fleet/Base qualification; it is
+not an activation or live acceptance record.
+
+Срез реализации `a32f110d` содержит новый каталог 0027. CLI и сервер должны
+поставляться из согласованного среза: прежняя проверка CLI `bace3fee` / server
+`a002eaf0` не подтверждает совместимость с новым manifest. Полный прогон дал
+3298 passed и три падения тестовых ожиданий; после исправления эти три теста
+прошли отдельно. Покрытие 94.068%, Ruff, mypy, navigation и четыре проверки
+миграции/истории на настоящем PostgreSQL прошли. Это результаты прежнего среза.
+При последующем совмещении с `master` (`c715a032`) сохранены evaluator v15,
+структурированный отчёт `source`/`result`/`unresolved` и историческое чтение v10
+наряду с остальными поддержанными версиями. Клиент и сервер поставляются вместе;
+старый plain-text отчёт не заменяет требуемый JSON. Проверка миграции теперь явно
+охватывает сохранение checks/evidence IDs при переходе 0026 → 0027.
+PR остаётся Draft, живая приёмка учитывается отдельно. Версии и открытые пункты:
+[совместная поставка Base #443](https://github.com/FerrPOINT/services-base/pull/443).
+
+В объединённом offline-прогоне прошли 3840 tests; два падения ожиданий исправлены
+и перепроверены по затронутым файлам: 24 PM-contract tests и один AST-baseline test.
+Прежние контрольные хеши canonical parser сохранены: нормализованы только пустые
+поля AST, представление которых зависит от версии Python. Baseline шести non-PM
+workflows учитывает согласованный каталог Analyst. Покрытие 94.2912%, Ruff, mypy
+(171 source files) и navigation прошли. PostgreSQL, реальные агенты и модель
+в этой доработке не запускались.
+
+## Общий контракт
+
 Source-контракт для семи профессий и восьми режимов. Установка, полный gate и
 живая приёмка подтверждаются отдельно. До переключения должны быть удалены
 оставшиеся старые исполняющие маршруты и завершены прежние активные попытки.
@@ -244,17 +291,21 @@ report protocol, а не работой/evidence до этого verdict. Это
 сохранённый Workflow receipt server-to-server через существующий
 `POST /internal/runtime/terminal-receipt/readback`, а не доверяет вставленному JSON.
 
-PM вызывает `sdlc pm completion submit` и заканчивает в Backlog / Ready, без
-автоматического Analyst. Техническая роль публикует typed result с ключом
+PM вызывает `sdlc pm completion submit`; исторический receipt сохраняет
+Backlog / Ready. Для включённого single-task проекта Tracker атомарно ставит
+Analyst в очередь Analysis / Ready; актуальную стадию читают из context задачи.
+Техническая роль публикует typed result с ключом
 `delivery-result:<assignment_id>` и завершает run; Fleet проверяет реальный
 terminal и ресурсные доказательства перед Tracker Complete. Исправленный кандидат
 повторно проходит Review и Testing. Ни принятый отчёт, ни proposal сами не переходят стадию.
 
-При критическом бизнес-возврате PM читает `critical_review` из актуального context
+Analyst не возвращает задачу PM. При критическом бизнес-возврате другой роли
+PM читает `critical_review` из актуального context
 Tracker и сверяет выбранный blocker, его версию/hash и исходную редакцию.
 Используются те же фазы, CLI и точное новое подтверждение владельца. Обычное
 системное сообщение Fleet не содержит второй копии инструкций. Завершение
-атомарно разрешает blocker и возвращает Backlog / Ready; Analyst не запускается.
+атомарно разрешает blocker; дальнейший переход определяет Tracker по актуальной
+конфигурации проекта.
 Этот путь требует PostgreSQL и живой квалификации вместе с остальным кандидатом.
 
 Отдельный [ручной сценарий и бизнес-оракул](../manual/configured-workflow-proof/README.md)

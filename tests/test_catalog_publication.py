@@ -99,6 +99,22 @@ def test_architect_structure_keeps_identity_and_permission_guards(configured, in
         assert not uow.workflows.list_modes(base["workflow_id"], catalog_version=2)
 
 
+def operator_publication_count(uow):
+    return uow.session.scalar(select(func.count()).select_from(m.WorkflowCatalogPublication).where(
+        ~m.WorkflowCatalogPublication.operation_key.startswith("@catalog-baseline:")))
+
+
+def seed_pre_publication_catalog(uow):
+    from unittest.mock import patch
+
+    from project_workflow.infrastructure.db import single_task_catalog as catalog
+
+    reader = catalog.load_profile
+    old = reader("62762bf58f337d9e063226aef58ea6c89cdfb2e87159056f1a6b2b6c4d1ddf3a")
+    with patch.object(catalog, "load_profile", lambda digest=None: reader(digest) if digest else old):
+        return catalog.ensure_single_task_catalog(uow)
+
+
 @pytest.fixture(autouse=True)
 def verified_catalog_administrator(request):
     """Explicit synthetic Auth peer; the real SSO boundary is tested separately."""
@@ -173,7 +189,7 @@ def test_saved_draft_is_not_activation_and_publication_only_changes_new_executio
     workflow_id = enrollment["workflow_id"]
     base = active(client, workflow_id)
     saved, command = draft(client, base)
-    assert saved["published"] is False and saved["active_catalog_version"] == 1
+    assert saved["published"] is False and saved["active_catalog_version"] == base["catalog_version"]
     assert active(client, workflow_id) == base
     assert step(configured).json() == before
     published = publication(client, base, saved)
@@ -195,10 +211,10 @@ def test_saved_draft_is_not_activation_and_publication_only_changes_new_executio
     with SAUnitOfWork() as uow:
         old = uow.tasks.get_by_key(assignment["task"], project_id=assignment["namespace_id"])
         new = uow.tasks.get_by_key(new_request["task"], project_id=assignment["namespace_id"])
-        assert uow.workflows.get_mode(old.mode_id).catalog_version == 1
+        assert uow.workflows.get_mode(old.mode_id).catalog_version == base["catalog_version"]
         assert uow.workflows.get_mode(new.mode_id).catalog_version == saved["catalog_version"]
         assert old.current_phase_id != new.current_phase_id
-        assert uow.session.scalar(select(func.count()).select_from(m.WorkflowCatalogPublication)) == 1
+        assert operator_publication_count(uow) == 1
 
 
 @pytest.mark.parametrize("configured", [("developer", "initial")], indirect=True)
@@ -247,7 +263,7 @@ def test_publication_replay_conflicts_and_stale_saves(configured):
     assert publication(client, base, saved, draft_sha256="0" * 64).status_code == 409
     assert client.post(f"/api/workflows/{base['workflow_id']}/catalog/drafts", json=command).status_code == 409
     with SAUnitOfWork() as uow:
-        assert uow.session.scalar(select(func.count()).select_from(m.WorkflowCatalogPublication)) == 1
+        assert operator_publication_count(uow) == 1
 
 
 def test_draft_reload_readback_and_save_dedup_do_not_activate_or_append_duplicates(configured):
@@ -278,7 +294,7 @@ def test_draft_reload_readback_and_save_dedup_do_not_activate_or_append_duplicat
         versions = uow.session.scalars(select(m.WorkflowMode.catalog_version).where(
             m.WorkflowMode.workflow_id == base["workflow_id"])).all()
         assert sorted(versions) == [1, 2, 3]
-        assert uow.session.scalar(select(func.count()).select_from(m.WorkflowCatalogPublication)) == 0
+        assert operator_publication_count(uow) == 0
     # Publish only the persisted version/hash recovered by GET, not the local JSON.
     published = publication(client, base, recovered)
     assert published.status_code == 200, published.text
@@ -366,7 +382,7 @@ def test_publish_requires_verified_subject_not_a_client_header(configured):
         client.app.dependency_overrides[require_administrator] = verified
     assert active(client, base["workflow_id"]) == base
     with SAUnitOfWork() as uow:
-        assert uow.session.scalar(select(func.count()).select_from(m.WorkflowCatalogPublication)) == 0
+        assert operator_publication_count(uow) == 0
 
 
 def test_real_sso_admin_subject_and_server_time_are_retained_on_replay(configured, monkeypatch):
@@ -424,7 +440,7 @@ def test_real_sso_admin_subject_and_server_time_are_retained_on_replay(configure
         receipt = uow.session.get(m.WorkflowCatalogPublication, (base["workflow_id"], 2))
         assert receipt.published_by_subject == "verified-admin-A"
         assert receipt.published_at is not None
-        assert uow.session.scalar(select(func.count()).select_from(m.WorkflowCatalogPublication)) == 1
+        assert operator_publication_count(uow) == 1
 
 
 @pytest.mark.parametrize("change", ["skill", "scope", "phase-code", "phase-order", "mode-key", "check-count"])
@@ -526,14 +542,14 @@ def test_published_pm_phase_read_matches_selected_snapshot_without_effects(confi
         new_mode = uow.workflows.list_modes(workflow_id)[0]
         old_phase = uow.phases.list(workflow_id, mode_id=old_mode.id)[0].id
         new_phase = uow.phases.list(workflow_id, mode_id=new_mode.id)[0].id
-        before = uow.session.scalar(select(func.count()).select_from(m.WorkflowCatalogPublication))
+        before = operator_publication_count(uow)
     for phase_id in (old_phase, new_phase):
         read = client.get(f"/api/phases/{phase_id}", params={"namespace_id": assignment["namespace_id"]})
         assert read.status_code == 200, read.text
         text = str(read.json())
         assert ("Published text-only clarification." in text) == (phase_id == new_phase)
     with SAUnitOfWork() as uow:
-        assert uow.session.scalar(select(func.count()).select_from(m.WorkflowCatalogPublication)) == before
+        assert operator_publication_count(uow) == before
 
 
 def test_publication_migration_is_additive_on_synthetic_filled_history(tmp_path):
@@ -541,14 +557,13 @@ def test_publication_migration_is_additive_on_synthetic_filled_history(tmp_path)
 
     from project_workflow.application import catalog_publication
     from project_workflow.domain.catalog_publication import CatalogDraft, CatalogPublish
-    from project_workflow.infrastructure.db.session import ensure_migrated, run_alembic_command
-    from project_workflow.infrastructure.db.single_task_catalog import ensure_single_task_catalog
+    from project_workflow.infrastructure.db.session import run_alembic_command
 
     engine = create_engine(f"sqlite:///{tmp_path / 'filled.sqlite'}")
     try:
         run_alembic_command("upgrade", engine, "0021_profession_task_workflows")
         with SAUnitOfWork(engine) as uow:
-            binding = ensure_single_task_catalog(uow).bindings[0]
+            binding = seed_pre_publication_catalog(uow).bindings[0]
             workflow_id = int(binding.workflow_id)
             mode = binding.modes[0]
             task_id = uow.tasks.create({"task_key": "FILLED-1", "project_id": int(binding.namespace_id),
@@ -562,8 +577,11 @@ def test_publication_migration_is_additive_on_synthetic_filled_history(tmp_path)
         with engine.connect() as connection:
             before = {name: connection.execute(text(f"SELECT * FROM {name} ORDER BY id")).mappings().all()
                       for name in tables}
-        ensure_migrated(engine)
-        ensure_migrated(engine)
+        # Exercise the additive publication migrations only. Later catalog
+        # migrations deliberately update phase text and have predecessor fixtures
+        # in test_configured_catalog_migration.
+        run_alembic_command("upgrade", engine, "0023_catalog_publication_author")
+        run_alembic_command("upgrade", engine, "0023_catalog_publication_author")
         with engine.connect() as connection:
             assert {name: connection.execute(text(f"SELECT * FROM {name} ORDER BY id")).mappings().all()
                     for name in tables} == before
@@ -587,14 +605,13 @@ def test_author_upgrade_preserves_pre_audit_publication_without_invented_identit
     from project_workflow.application import catalog_publication
     from project_workflow.domain.catalog_publication import CatalogDraft, CatalogPublish
     from project_workflow.domain.runtime_assignment import canonical_json, payload_sha256
-    from project_workflow.infrastructure.db.session import ensure_migrated, run_alembic_command
-    from project_workflow.infrastructure.db.single_task_catalog import ensure_single_task_catalog
+    from project_workflow.infrastructure.db.session import run_alembic_command
 
     engine = create_engine(f"sqlite:///{tmp_path / 'pre-audit.sqlite'}")
     try:
         run_alembic_command("upgrade", engine, "0022_catalog_publication")
         with SAUnitOfWork(engine) as uow:
-            workflow_id = int(ensure_single_task_catalog(uow).bindings[0].workflow_id)
+            workflow_id = int(seed_pre_publication_catalog(uow).bindings[0].workflow_id)
             base = catalog_publication.read_active(uow, workflow_id)
             saved = catalog_publication.save_draft(uow, workflow_id, CatalogDraft(
                 expected_version=1, expected_sha256=base["content_sha256"], modes=base["modes"]))
@@ -610,8 +627,8 @@ def test_author_upgrade_preserves_pre_audit_publication_without_invented_identit
             uow.workflows.update(workflow_id, {"active_catalog_version": 2})
         with engine.connect() as connection:
             original = dict(connection.execute(text("SELECT * FROM workflow_catalog_publications")).mappings().one())
-        ensure_migrated(engine)
-        ensure_migrated(engine)
+        run_alembic_command("upgrade", engine, "0023_catalog_publication_author")
+        run_alembic_command("upgrade", engine, "0023_catalog_publication_author")
         with engine.connect() as connection:
             upgraded = dict(connection.execute(text("SELECT * FROM workflow_catalog_publications")).mappings().one())
         assert {key: upgraded[key] for key in original} == original

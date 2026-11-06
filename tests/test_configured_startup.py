@@ -39,6 +39,6 @@ with SAUnitOfWork() as uow:
     assert value["professions"] == value["workflows"] == 7
     assert value["modes"] == modes
     if variant is None:
-        assert value["phases"] == 24
+        assert value["phases"] == 33
     assert not list(tmp_path.glob("*.json"))
     assert not (tmp_path / ".fleet-cli").exists()

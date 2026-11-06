@@ -10,7 +10,7 @@ from project_workflow.supervisor.evaluate import _fingerprint_contract_state, _r
 
 HISTORICAL_EVALUATOR_VERSIONS = (
     "supervisor-evaluator-v9", "supervisor-evaluator-v8-no-backtracking",
-    "supervisor-evaluator-v11", "supervisor-evaluator-pm-v1", "supervisor-evaluator-pm-v2",
+    "supervisor-evaluator-v10", "supervisor-evaluator-v11", "supervisor-evaluator-pm-v1", "supervisor-evaluator-pm-v2",
     "supervisor-evaluator-pm-v3", "supervisor-evaluator-pm-v4", "supervisor-evaluator-v12",
     "supervisor-evaluator-v13", "supervisor-evaluator-v14",
 )

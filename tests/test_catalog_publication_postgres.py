@@ -4,12 +4,13 @@ from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import select
 
 from project_workflow.domain.single_task_profile import ROLE_MODES
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from tests import test_catalog_publication as publication
+from tests.test_catalog_publication import operator_publication_count
 from tests.test_catalog_publication import verified_catalog_administrator as verified_catalog_administrator
 from tests.test_configured_postgres import configured as configured
 from tests.test_configured_postgres import pg_url as pg_url
@@ -76,7 +77,7 @@ def test_concurrent_identical_saves_reuse_one_unpublished_version(configured):
     with SAUnitOfWork() as uow:
         assert sorted(uow.session.scalars(select(m.WorkflowMode.catalog_version).where(
             m.WorkflowMode.workflow_id == base["workflow_id"]))) == [1, 2]
-        assert uow.session.scalar(select(func.count()).select_from(m.WorkflowCatalogPublication)) == 0
+        assert operator_publication_count(uow) == 0
 
 
 @pytest.mark.parametrize("same_operation", [False, True])
@@ -97,4 +98,4 @@ def test_publication_catalog_lock_serializes_cas_and_exact_replay(configured, sa
     if same_operation:
         assert responses[0].json() == responses[1].json()
     with SAUnitOfWork() as uow:
-        assert uow.session.scalar(select(func.count()).select_from(m.WorkflowCatalogPublication)) == 1
+        assert operator_publication_count(uow) == 1
