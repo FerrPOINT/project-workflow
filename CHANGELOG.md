@@ -4,14 +4,26 @@
 
 ### Current Status (2026-11-06)
 
+- Report-construction follow-up: local syntax errors now include the standard
+  decoder reason and EOF location; schema errors name declared nested fields,
+  expected types and received types without exposing report values or unknown
+  keys. Human CLI explicitly marks a local report as not sent. Canonical worker
+  instructions and generated runtime skill show object serialization and exact
+  readback reuse, not hand-written nested JSON or placeholder probes. Report/API
+  schema, Advisor v19, successful evaluation requests and historical decisions
+  are unchanged. Targeted284, engine-boundary1, Ruff and mypy169 pass. Isolated
+  PostgreSQL132 passes with zero skips and verified Compose cleanup; full
+  native/coverage is running. CLI imagec02b52f9 passes the existing qualification,
+  retaining Hermes and other CLI bytes. This package is not yet installed or
+  accepted live.
 - Normal Apply729, journal de836101, is complete: exact Workflow936a4b80 and
   web1e264d20 are installed. Human admin catalog GET returns200 without changes
   to Auth application grants. Catalog12 matched the baseline before explicit
   publication13 of the prepared report instructions; phase criteria are unchanged.
   Actual container get_settings confirms app-test/high/1200s/4000/json_schema
   and platform. Auth identity, subject rights and machine scopes remain enforced.
-  W899 production qualification remains applicable; this documentation update
-  changes no production source. Native4421/75 subtests, PostgreSQL132, Ruff and
+  W899 production qualification describes the installed baseline, before the
+  report-construction follow-up. Native4421/75 subtests, PostgreSQL132, Ruff and
   mypy169 passed; coverage94.0612151667428%,15 explicit skips, PG cleanup verified.
 - Previous Fleet6c/image9a0f was installed through normal Build32d82/Applyc52, complete
   with controller refresh and PM bridge. All67 PG qualification checks are closed
@@ -37,10 +49,17 @@
   complete; same PM11 is healthy/ready at effective26 with qualified CLI150f650c.
   Basec4be9860 passes19 release tests/15 subtests. One full QA task is reserved,
   but chat/dispatch did not occur: PG55P03 on the operation UPDATE proves a Fleet
-  producer lock-order defect. Its parent-first repair is under focused PG testing;
-  resume the same operation, not another task. An earlier readiness500 is still
-  unexplained. No new Advisor or Hermes business calls:
-  campaign139/163,24 reserved for live. Advisor v19 inputs, policy and accepted
+  producer lock-order defect. Its parent-first repair passes4 new PG/2 fence/1 CLI/
+  5 API replay and full Clippy/fmt. Fleet3a2feea6/image56304d14 is installed through
+  normal Build76e4/Applyb15a after exact-image smoke. One recovery POST saves both
+  ACKs; worker/readback reaches adopted after HTTP503, without bridge or resend.
+  Same PM26 is healthy/ready; original creation continues in10.984s with the same
+  task and one chat/run. SDLC-33 context PASS193 consumes the first new Advisor
+  call; valid incomplete probe194 makes141/163,22 left. Five manually composed
+  full reports fail local JSON parsing before HTTP, reproduced at identical error
+  positions; no transport loss or Advisor error is established. A one-paragraph
+  serializer skill change passes39 package tests and exact document roundtrip,
+  but is not activated yet. Earlier readiness500 remains unexplained. Advisor v19 policy and accepted
   revised qualification36/36 are unchanged; PM live acceptance remains pending.
 
 ### Historical Deployment Attempt (2026-11-05)
