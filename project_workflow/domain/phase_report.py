@@ -162,7 +162,9 @@ def _validation_error(error: Mapping[str, Any], data: Any) -> PhaseReportFormatE
         else:
             break
     code = error["type"]
-    if code == "extra_forbidden":
+    if code == "recursion_loop":
+        detail = "JSON nesting exceeds supported validation depth"
+    elif code == "extra_forbidden":
         detail = "unexpected field; only declared fields are allowed"
     elif code == "missing":
         detail = f"required field is missing; expected {_expected_type(annotation)}"
@@ -203,5 +205,6 @@ class PhaseReport(BaseModel):
         try:
             return cls.model_validate(data)
         except ValidationError as exc:
-            error = exc.errors(include_input=False, include_url=False, include_context=False)[0]
+            errors = exc.errors(include_input=False, include_url=False, include_context=False)
+            error = next((item for item in errors if item["type"] == "recursion_loop"), errors[0])
             raise _validation_error(error, data) from None
