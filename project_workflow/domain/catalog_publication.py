@@ -1,4 +1,4 @@
-"""Explicit text-only publication commands; editor saves are not activation."""
+"""Explicit revision publication commands; editor saves are not activation."""
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -10,7 +10,7 @@ class CatalogDraft(BaseModel):
 
     expected_version: int = Field(ge=1)
     expected_sha256: Sha256
-    # Validated against the installed mode/phase structure by the application.
+    # The application preserves role permissions and validates revision structure.
     modes: list[dict] = Field(min_length=1, max_length=2)
 
 

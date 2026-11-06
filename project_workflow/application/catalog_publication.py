@@ -1,4 +1,4 @@
-"""Publish text using existing versioned modes, never another execution engine."""
+"""Publish instruction revisions without changing existing execution snapshots."""
 
 from __future__ import annotations
 
@@ -144,11 +144,36 @@ def publish_baseline(uow: SAUnitOfWork, workflow: Any, manifest: str, *, existin
     return version
 
 
+def _validate_modes(workflow: Any, modes: list[dict], definition: dict) -> None:
+    baseline = _normalize(definition["modes"])
+    if workflow.key != "single-task-v1:architect":
+        if _structure(modes) != _structure(baseline):
+            raise ConflictError("Only text may change; role, scopes, skills and phase structure are frozen")
+        return
+    def identity(items: list[dict]) -> list[tuple]:
+        return [(item["key"], item["mode_order"], item["execution_scopes"]) for item in items]
+    if identity(modes) != identity(baseline):
+        raise ConflictError("Architect mode identity and scopes are immutable")
+    allowed = {skill for mode in baseline for phase in mode["phases"]
+               for instruction in phase["instructions"] for skill in instruction["skills"]}
+    for mode in modes:
+        for phase in mode["phases"]:
+            if (phase["code"] != f"AR-DECOMP-{phase['phase_order']:02d}"
+                    or phase["execution_type"] != "sync"
+                    or phase["parallel_with_phase_code"] is not None
+                    or phase["rollback_target_phase_code"] is not None
+                    or not phase["instructions"] or not phase["checks"] or not phase["evidence"]):
+                raise ConflictError("Architect phases require ordered synchronous work, checks and evidence")
+            for instruction in phase["instructions"]:
+                skills = set(instruction["skills"])
+                if (instruction["execution_type"] != "sync" or "project-workflow-executor" not in skills
+                        or not skills <= allowed):
+                    raise ConflictError("Architect instructions must use the existing synchronous role skills")
+
+
 def _validate_rows(uow: SAUnitOfWork, workflow: Any, version: int, modes: list[dict]) -> None:
     definition, _ = sealed_baseline(uow, workflow, version)
-    baseline = _normalize(definition["modes"])
-    if _structure(modes) != _structure(baseline):
-        raise ConflictError("Only text may change; role, scopes, skills and phase structure are frozen")
+    _validate_modes(workflow, modes, definition)
     expected = _ArchivedWorkflowDefinition(
         key=workflow.key, name=definition["name"], description=definition["description"],
         role_key=definition["role_key"], modes=[ManagedMode.model_validate(mode) for mode in modes],
@@ -258,8 +283,7 @@ def save_draft(uow: SAUnitOfWork, workflow_id: int, command: CatalogDraft) -> di
         raise ConflictError("Upgrade the sealed catalog baseline before editing instructions")
     _cas(uow, workflow, command.expected_version, command.expected_sha256)
     modes = _normalize(command.modes)
-    if _structure(modes) != _structure(_normalize(_definition(workflow.key)["modes"])):
-        raise ConflictError("Only text may change; role, scopes, skills and phase structure are frozen")
+    _validate_modes(workflow, modes, _definition(workflow.key))
     # Reconcile an unknown save result under the same catalog lock. Drafts use
     # existing version rows, not a second journal or a client-supplied identity.
     pending = uow.session.scalars(select(m.WorkflowMode.catalog_version).where(

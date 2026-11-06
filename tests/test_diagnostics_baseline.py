@@ -33,11 +33,11 @@ def test_response_acceptance_is_identical_to_installed_v12():
         if legacy.name == "ResponseParser":
             legacy.body = [member for member in legacy.body
                            if not isinstance(member, ast.FunctionDef) or member.name != "parse_assessments"]
-        # ast.dump omits empty list fields on newer Python versions. Canonicalize
-        # only those defaults, retaining every nonempty field and the original hashes.
+        # The original baseline uses Python 3.14's omission of empty/None fields.
+        # Normalize serializer bookkeeping only; retain all actual AST values.
         for member in ast.walk(legacy):
-            for name, value in list(ast.iter_fields(member)):
-                if value == []:
-                    delattr(member, name)
+            member._fields = tuple(field for field, value in ast.iter_fields(member)
+                                   if value != [] and not (
+                                       value is None and getattr(type(member), field, ...) is None))
         actual[node.name] = hashlib.sha256(ast.dump(legacy, include_attributes=False).encode()).hexdigest()
     assert actual == BASELINE_POLICY
