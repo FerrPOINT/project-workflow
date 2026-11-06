@@ -185,7 +185,8 @@ def test_professions_share_assignment_step_history_and_terminal(configured, supe
     supervisor_llm("PASS")
     assert step(configured).status_code == 200
     client, assignment = configured
-    for version in (1, 2, 3):
+    count = 12 if assignment["role_key"] == "analyst" else 3
+    for version in range(1, count + 1):
         response = step(
             configured,
             report=report_json(f"Actual completed phase {version}"),
@@ -194,7 +195,7 @@ def test_professions_share_assignment_step_history_and_terminal(configured, supe
         )
         assert response.status_code == 200, response.text
     result = response.json()["result"]
-    assert result["complete"] is True and result["version"] == 4
+    assert result["complete"] is True and result["version"] == count + 1
     assert result["terminal_receipt"]["confirmation_id"] is None
     selector = {
         key: result["terminal_receipt"][key]
@@ -229,7 +230,7 @@ def test_professions_share_assignment_step_history_and_terminal(configured, supe
             "execution_ref": enrollment["execution_ref"],
         },
     )
-    assert history.status_code == 200 and len(history.json()["result"]["records"]) == 3
+    assert history.status_code == 200 and len(history.json()["result"]["records"]) == count
     full_rows = []
     agent_query = {"interaction_protocol": "configured-cli-v1", "task": assignment["task"],
                    "namespace_id": assignment["namespace_id"], "n": 1}
@@ -242,9 +243,9 @@ def test_professions_share_assignment_step_history_and_terminal(configured, supe
             break
         agent_query["before_history_id"] = value["next_before"]
     assert [row["worker_report"] for row in full_rows] == [
-        report_json(f"Actual completed phase {i}") for i in (3, 2, 1)
+        report_json(f"Actual completed phase {i}") for i in range(count, 0, -1)
     ]
-    assert len({row["history_id"] for row in full_rows}) == 3
+    assert len({row["history_id"] for row in full_rows}) == count
     for invalid in ({"before_history_id": 0}, {"before_history_id": 2**63},
                     {"before_history_id": 1, "operation_key": "phase-1"}):
         assert client.get("/internal/runtime/history", headers=MACHINE,
@@ -261,8 +262,8 @@ def test_professions_share_assignment_step_history_and_terminal(configured, supe
         if body["result"]["next_before"] is None:
             break
         query["before_history_id"] = body["result"]["next_before"]
-    assert [row["step_operation_key"] for row in rows] == ["phase-3", "phase-2", "phase-1"]
-    assert len({row["history_id"] for row in rows}) == 3
+    assert [row["step_operation_key"] for row in rows] == [f"phase-{i}" for i in range(count, 0, -1)]
+    assert len({row["history_id"] for row in rows}) == count
     assert all(row["verdict"] == "pass" for row in rows)
     assert client.get("/internal/runtime/history", headers=WRITER,
                       params={**query, "namespace_id": assignment["namespace_id"] + 100}).status_code != 200

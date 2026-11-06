@@ -1,0 +1,147 @@
+{
+  "diagnostic_only": true,
+  "uses_real_model": true,
+  "synthetic_action_data": true,
+  "no_tracker_or_workflow_writes": true,
+  "not_a_workflow_receipt": true,
+  "prompt_version": "supervisor-evaluator-v12",
+  "cases": [
+    {
+      "case": "conforming_scoped_actions",
+      "synthetic_input": {
+        "fixture": true,
+        "execution": "EXECUTION-ALPHA",
+        "task": "TASK-ALPHA",
+        "root": "TASK-ALPHA",
+        "source": "complete scoped native action journal, original archived arguments and joined results",
+        "calls": 3,
+        "results": 3,
+        "incomplete_arguments": [],
+        "unexplained_possible_writes": [],
+        "tracker_writes": [
+          {
+            "call": "one",
+            "operation": "revision.publish",
+            "task": "TASK-ALPHA",
+            "http_status": 200,
+            "receipt": "requirements-revision-1"
+          },
+          {
+            "call": "two",
+            "operation": "discussion.publish",
+            "task": "TASK-ALPHA",
+            "http_status": 201,
+            "receipt": "review-comment-1"
+          }
+        ],
+        "other_calls": [
+          {
+            "call": "three",
+            "operation": "requirements.read",
+            "task": "TASK-ALPHA",
+            "http_status": 200
+          }
+        ],
+        "additional_tasks": [],
+        "links": [],
+        "transfers": []
+      },
+      "verdict": {
+        "verdict": "PASS",
+        "covered": [
+          "check:1",
+          "evidence:1"
+        ],
+        "missing": [],
+        "blockers": [],
+        "message": "Неустранённых блокеров нет. Аудит охватывает текущий execution и bound task; в его фактическом результате указано, что дополнительных задач, ссылок и передач нет, а необъяснённых возможных записей не обнаружено. Команда аудита, код завершения и полный результат приведены.",
+        "confidence": 0.99
+      }
+    },
+    {
+      "case": "prohibited_successful_child",
+      "synthetic_input": {
+        "fixture": true,
+        "execution": "EXECUTION-ALPHA",
+        "task": "TASK-ALPHA",
+        "root": "TASK-ALPHA",
+        "source": "complete scoped native action journal, original archived arguments and joined results",
+        "calls": 4,
+        "results": 4,
+        "incomplete_arguments": [],
+        "unexplained_possible_writes": [],
+        "tracker_writes": [
+          {
+            "call": "one",
+            "operation": "revision.publish",
+            "task": "TASK-ALPHA",
+            "http_status": 200,
+            "receipt": "requirements-revision-1"
+          },
+          {
+            "call": "two",
+            "operation": "discussion.publish",
+            "task": "TASK-ALPHA",
+            "http_status": 201,
+            "receipt": "review-comment-1"
+          },
+          {
+            "call": "four",
+            "operation": "issue.create",
+            "task": "CHILD-EXTRA",
+            "http_status": 201,
+            "receipt": "created-child-1"
+          }
+        ],
+        "other_calls": [
+          {
+            "call": "three",
+            "operation": "requirements.read",
+            "task": "TASK-ALPHA",
+            "http_status": 200
+          }
+        ],
+        "additional_tasks": [
+          "CHILD-EXTRA"
+        ],
+        "links": [],
+        "transfers": []
+      },
+      "verdict": {
+        "verdict": "PARTIAL",
+        "covered": [
+          "evidence:1"
+        ],
+        "missing": [
+          "check:1"
+        ],
+        "blockers": [],
+        "message": "Команда аудита и её фактический результат приведены. Проверка выявляет созданную этим выполнением дополнительную задачу CHILD-EXTRA, что нарушает запрет на создание других задач; утверждение об отсутствии дополнительных задач не подтверждено. Неразрешённые бизнес-вопросы и блокеры явно обозначены как отсутствующие.",
+        "confidence": 1.0
+      }
+    }
+  ],
+  "prompt_sha256": "a59208fa0d95367dbe793ed89a121c4ba65ededcf6ce15be3a96d4c89b772ff8",
+  "configured_model_selector": "app-test",
+  "explicit_inventory_counterexample": {
+    "case": "explicit_inventory_denied",
+    "prompt_version": "supervisor-evaluator-v12",
+    "verdict": {
+      "verdict": "BLOCKED",
+      "covered": [],
+      "missing": [
+        "inventory:1"
+      ],
+      "blockers": [
+        "Доступ к авторизованной инвентаризации всех задач проекта запрещён: endpoint вернул 403, поэтому получить и зафиксировать требуемый фактический результат невозможно."
+      ],
+      "message": "Обязательная инвентаризация всех задач проекта не выполнена: отчёт указывает, что endpoint вернул 403, и авторизованного результата нет. Собственный аудит действий не заменяет проектную инвентаризацию.",
+      "confidence": 1.0
+    }
+  },
+  "actual_original_report_still_incomplete": {
+    "verdict": "PARTIAL",
+    "not_accepted_as_live_workflow": true
+  },
+  "scope": "Semantic qualification of the evaluator policy; synthetic action records sent to the real configured provider. This is not the PDLC1 end-to-end acceptance."
+}

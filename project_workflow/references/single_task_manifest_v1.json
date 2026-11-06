@@ -1,7 +1,7 @@
 {
   "instruction_overlay": {
     "path": "project_workflow/infrastructure/single_task_delivery_instructions.py",
-    "sha256": "fc5a2db53ac0da72e6ea10da800865268560b1a759561038a2cbe6745a179d21"
+    "sha256": "fa5a0d41e83b7b47376db2ee4d8058825265dc2d53aade1536b6630cfb6b6566"
   },
   "instruction_profile": "single-task-v1",
   "instruction_source": {
@@ -13,12 +13,12 @@
     },
     "path": "project_workflow/infrastructure/single_task_catalog.py",
     "repository": "https://github.com/FerrPOINT/project-workflow.git",
-    "sha256": "e11f970ba34111aee13ed81f2d7f73da619f2b7cb0a75f3023ee7b2271ded90a"
+    "sha256": "aaabbcdef6a80f9d73ce98d0b0101477d3c6fb9fcbd9df1bc7e1196c4d915101"
   },
   "inventory": {
     "modes": 8,
     "namespaces": 7,
-    "phases": 24,
+    "phases": 33,
     "workflows": 7
   },
   "profile_version": 1,
@@ -35,7 +35,7 @@
       "namespace_cli_command": "workflow-single-task-analyst",
       "namespace_name": "single-task-analyst",
       "profile": "single-task-v1-analyst",
-      "role_instructions_sha256": "906a9d762df9a43231289060c92f5e1fd2d27e9794eec6e4c169070d7233d1f2",
+      "role_instructions_sha256": "a2694e8a33182a406d9562dfeebd4d02ea32a06ee7ec8c13e40b86e9f9b689c8",
       "workflow_key": "single-task-v1:analyst"
     },
     "architect": {
@@ -90,7 +90,7 @@
       "namespace_cli_command": "workflow-single-task-project-manager",
       "namespace_name": "single-task-project-manager",
       "profile": "single-task-v1-project-manager",
-      "role_instructions_sha256": "477de89a3518fdad8d37914667d479ec5d254b54734540dcb3ad52a4a58f7d79",
+      "role_instructions_sha256": "f434303e0bdd67ae3f4942c7709296fa31e89ccb85e45c0faa9417bbb35b3061",
       "workflow_key": "single-task-v1:project_manager"
     },
     "reviewer": {
@@ -129,7 +129,7 @@
   "workflow_catalog": {
     "artifact": "project_workflow/references/single_task_catalog_v1.json",
     "hash_encoding": "utf-8-lf-no-bom-with-final-newline",
-    "sha256": "7bc022089b08b246fbb04fb03fa374940cc4a6c0a023bc1e310e260e4f04f67e",
+    "sha256": "9db2e982d93ead86a16c0b88785cbb9a5e1306e74cd56dc929ab7f7d1342f605",
     "version": 1
   }
 }

@@ -1,5 +1,35 @@
 # Single-Task Instruction Audit
 
+## Analyst: 12 фаз, 6 ноября 2026
+
+Текущий дефолт расширяет Analyst до 12 фаз с отдельными внутренним и
+интернет-исследованием, проверкой гипотез, моделированием, анализом данных,
+ограничениями, приёмкой и первичным ТЗ. Миграция0029 сохраняет прежние
+назначения и историю. Исправление версий и forward0030 используют существующий
+журнал публикаций: черновики не блокируют обновление, а активная редакция
+не определяется подбором исторического шаблона. Интернет-поиск можно обоснованно
+пропустить при достаточных внутренних материалах.
+[Контракт и границы проверки](analyst-workflow.md).
+
+## Исторический Analyst Source Scope: 4 November 2026
+
+Analyst получает revision/hash требований и закреплённые координаты источника
+из Tracker; UUID репозитория разрешается через `cicd-cli repository get --id`,
+документы читаются на точном commit. Исследование не требует Forge delivery
+configuration, pipeline, checkout или TaskWorkspaceIntent. Эти требования
+ошибочно попадали в Analyst из общего контекста технических ролей.
+
+Три фазы сохранены. Первое исследование не требует будущего ТЗ: Markdown
+`analysis.md` с MIME `text/markdown` сохраняется перед финальным отчётом.
+Источник отчёта — фактические reads; JSON report содержит source/result/unresolved.
+Отдельные PM confirmation/preflight и DevOps snapshot не нужны аналитику.
+
+Forward migration `0028_analyst_read_sources` изменяет только тексты инструкций
+Analyst, сохраняя IDs, задачи и историю. Прочие профессии имеют прежние hashes;
+исторический manifest9384 сохранён для чтения прежних receipts. Проверены
+переход с 0027 на SQLite и PostgreSQL, повтор и сохранение истории. Проверка
+новых инструкций настоящим Hermes — отдельный этап от этих source/DB checks.
+
 ## Configured CLI Content Review: 27 October 2026
 
 Source7d0576d corrects retained652a preparation wording, checks and evidence:

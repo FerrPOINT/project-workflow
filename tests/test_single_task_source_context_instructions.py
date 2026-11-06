@@ -13,6 +13,7 @@ MODES = [
     ("analyst", "analysis"), ("architect", "decomposition"), ("developer", "initial"),
     ("developer", "rework"), ("reviewer", "delivery"), ("tester", "delivery"), ("devops", "delivery"),
 ]
+WORKSPACE_MODES = [pair for pair in MODES if pair[0] != "analyst"]
 TRIGGER = (
     "cicd-cli pipeline run --project <approved-forge-project-uuid> --git-ref <exact-source-sha> "
     "--idempotency-key <assignment-uuid> --task-intent -"
@@ -35,7 +36,23 @@ def mode_for(catalog, role, mode):
     return next(m for m in workflow["modes"] if m["key"] == mode)
 
 
-@pytest.mark.parametrize("role,mode", MODES)
+def test_analyst_research_uses_bound_read_sources_without_build_or_workspace(generated):
+    catalog, _ = generated
+    text = " ".join(instruction_text(p) for p in mode_for(catalog, "analyst", "analysis")["phases"])
+    assert "cicd-cli repository get --id" in text
+    assert "approved requirements revision/hash" in text
+    assert "source binding" in text and "--git-ref <exact-commit>" in text
+    assert instructions.FORGE_TASK_WORKSPACE not in text
+    assert instructions.SOURCE_CONTEXT not in text
+    for forbidden in ("pipeline run --project", "TaskWorkspaceIntent", "selected Forge delivery configuration UUID"):
+        assert forbidden not in text
+    assert "task-tracker attachment upload" in text
+    first = instruction_text(mode_for(catalog, "analyst", "analysis")["phases"][0])
+    assert "task-tracker attachment upload" not in first
+    assert "one JSON object with source, result and unresolved" in first
+
+
+@pytest.mark.parametrize("role,mode", WORKSPACE_MODES)
 def test_source_context_is_supplied_after_first_step_not_automatically_resolved(generated, role, mode):
     catalog, _ = generated
     phase = mode_for(catalog, role, mode)["phases"][0]
@@ -58,7 +75,7 @@ def test_source_context_is_supplied_after_first_step_not_automatically_resolved(
         assert required in context
 
 
-@pytest.mark.parametrize("role,mode", MODES)
+@pytest.mark.parametrize("role,mode", WORKSPACE_MODES)
 def test_first_workspace_uses_actual_task_trigger_and_real_server_allocated_receipt(generated, role, mode):
     catalog, _ = generated
     context = mode_for(catalog, role, mode)["phases"][0]["instructions"][1]["description"]
@@ -145,7 +162,7 @@ def test_first_step_and_role_specific_final_handoffs_are_pinned(generated, role,
 
 
 
-@pytest.mark.parametrize("role,mode", MODES)
+@pytest.mark.parametrize("role,mode", WORKSPACE_MODES)
 def test_workspace_keys_are_business_assignment_keys_without_native_guidance(generated, role, mode):
     catalog, _ = generated
     context = mode_for(catalog, role, mode)["phases"][0]["instructions"][1]["description"]
@@ -223,16 +240,19 @@ def test_tester_and_devops_propagate_accepted_predecessor_reports_not_synthetic_
 
 def test_conditional_pm_brief_and_single_task_inventory_are_pinned(generated):
     catalog, manifest = generated
-    assert manifest["inventory"] == {"namespaces": 7, "workflows": 7, "modes": 8, "phases": 24}
+    assert manifest["inventory"] == {"namespaces": 7, "workflows": 7, "modes": 8, "phases": 33}
     assert manifest["task_identity"] == {"task_equals_root": True, "children": False, "decomposition_barriers": False}
     assert len(manifest["roles"]["project_manager"]["role_instructions_sha256"]) == 64
     assert len(catalog["workflows"]) == 7
     assert sum(len(w["modes"]) for w in catalog["workflows"]) == 8
-    assert sum(len(m["phases"]) for w in catalog["workflows"] for m in w["modes"]) == 24
+    assert sum(len(m["phases"]) for w in catalog["workflows"] for m in w["modes"]) == 33
     pm = mode_for(catalog, "project_manager", "draft")
     text = " ".join(i["description"] for p in pm["phases"] for i in p["instructions"])
     assert instructions.SOURCE_CONTEXT not in text and instructions.FORGE_TASK_WORKSPACE not in text
     assert "Confirmation stays in stage=Draft" in text
-    assert "No automatic Analyst" in " ".join(pm["phases"][-1]["checks"])
+    checks = " ".join(pm["phases"][-1]["checks"])
+    assert "remain owner-confirmed in Draft for this final report" in checks
+    assert "completion queues Analysis automatically" in checks
+    assert "No automatic Analyst" not in checks
     for workflow in catalog["workflows"]:
         assert all(m["key"] not in {"integration", "integration_rework"} for m in workflow["modes"])
