@@ -1,6 +1,41 @@
 # Advisor: сквозной диагноз и границы выпуска
 
-## 2026-11-06: Реальный Отчёт PM27 И Текущий Блокер Fleet
+## 2026-11-06: Responses Transport Is Not A Replacement For V19
+
+Read-only comparison of merged PR171 (`f76abbfa`, merge `d0ec576c`) and the
+installed containers confirms two different baselines:
+
+| Contract | SDLC1 / qualified v19 candidate | SDLC2 / PR171 installation |
+| --- | --- | --- |
+| Evaluator policy | v19 | v15 |
+| HTTP protocol | Chat Completions + strict JSON schema | Responses + strict JSON schema |
+| Report | typed source/result/unresolved | source string/result object/unresolved strings |
+| Previous phase reports | supplied | absent |
+| Assessment correction | required_change | absent |
+| Model calls per new report | one | up to two on invalid response format |
+| Configured reasoning | high | none |
+| Default model timeout | 1200s; connect30s | scalar120s |
+
+Both installations target the same configured gateway. Native Responses removes
+the Chat-to-Responses conversion; it does not bypass that gateway or establish a
+different upstream model. Strict schema and protocol selection are independent:
+SDLC1 already uses a strict schema. The PR171 statement that phase/report meaning
+was unchanged is relative to its v15 parent, not proof of equivalence with v19.
+
+Recommendation: retain the useful native Responses transport, but integrate it
+into v19 without replacing typed reports, phase history, required_change, the
+one-call rule, timeout/connect limits or redirect refusal. Read-only inspection
+also found PR171 uses Requests' default redirect handling. Archive readback must
+remain separate from new evaluation. Do not install the entire SDLC2 artifact in
+SDLC1 or reuse v19 model qualification as proof of an altered HTTP request.
+
+No model calls, provider/configuration changes or Workflow installation were
+performed for this comparison. Evidence: PR171 source and read-only AST/config
+inspection of SDLC1 imageb4b11d7b and SDLC2 imagef5046c2b. Response schema guarantees
+shape, not correct judgments. Provider capability/limit enforcement needs its own
+evidence; a client-side rejection cannot undo already incurred inference usage.
+
+## 2026-11-06: Реальный Отчёт PM27 И Восстановление Fleet
 
 Fleet f8f329de/imageb07 установлен штатно; native handoff принят чтением исходной
 операции, прежний запуск SDLC-33 получил настоящее terminal proof. На том же PM
@@ -24,6 +59,13 @@ Fleet f8f329de/imageb07 установлен штатно; native handoff при
   strict known-ACK воспроизводимо отказывает. Это подтверждённый lifecycle gap.
   Причина исходного approval503 и конкретный источник generic timeout ещё не
   установлены; их нельзя приписывать Advisor, JSON или размеру контекста.
+  После 972 unit, 32 адресных PG-проверок, Clippy/fmt, проверки бинарника и
+  независимого review применена зарегистрированная миграция083 (`eae18fd3`).
+  Approval теперь cancelled/system; решение пользователя через API полностью
+  совпадает с прежним. Backend не перезапускался, команда не отправлялась повторно.
+  Проверка текущего поколения до083 воспроизводит тот же known-ACK отказ; после
+  него неизменённый guard допускает состояние в обеих lineages. Новый Fleet backend
+  ещё не установлен; штатное обновление и бизнес-финалы остаются открытыми.
 - **Readiness / Fleet:** HTTP500 и `fleet_request_authority_expired` подтверждены.
   Отдельный health успешен за57.496с. Подготовлен единый scoped health/toolset
   readback и отмена запроса по исходному authority deadline, без повышения TTL.
@@ -35,7 +77,7 @@ Evidence вне Git: `pm27-sdlc33-advisor-195-diagnostics-20261106.json`,
 `pm27-sdlc33-native-approval-final-20261106.json`, результаты readiness QA.
 Новая квалификационная серия не запускалась. Расход Advisor143/163, резерв20.
 Backlog/Ready, второй сценарий, браузеры и мерж пока не приняты. Исправление
-terminal settlement должно сохранять failed decision и подлинные proofs;
+terminal settlement сохраняет failed decision и подлинные proofs;
 ослабление guard, ручная запись SQL и повтор approval не являются решением.
 
 ## Историческая Диагностика До Handoff - 2026-11-06
