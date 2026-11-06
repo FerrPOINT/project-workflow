@@ -4,19 +4,21 @@
 
 Штатный Apply729, journal de836101, завершён: установлены точные образы
 Workflow936a4b80 и web1e264d20. Human admin catalog GET возвращает200 без
-изменения application grants Auth; редакция12 каталога точно совпадает
-с baseline. Фактический get_settings контейнера подтверждает
+изменения application grants Auth. Редакция12 совпадала с baseline; затем штатно
+опубликована подготовленная13 с инструкцией отчёта, без изменения критериев.
+Фактический get_settings контейнера подтверждает
 app-test/high/1200s/4000/json_schema/platform.
 
 Квалификация production W899 сохраняется: эта правка только документационная,
 Advisor input/policy/response code не менялись. Revised qualification36/36
 переиспользуется без новых модельных вызовов: расход139/163,24 зарезервированы
-для live. Новые QA-задачи не создавались.
+для live. Теперь зарезервирована одна новая полная QA-задача; chat/dispatch ещё нет,
+новых вызовов Advisor или бизнес-запусков Hermes не было.
 
-Fleet6c/image9a0f установлен штатными Build32d82/Applyc52: Apply, controller
+Предыдущий Fleet6c/image9a0f установлен штатными Build32d82/Applyc52: Apply, controller
 refresh и PM bridge завершены. Квалификация67 PG закрыта (43 reuse +24 новых),
 Clippy PASS. Новый witness GET200 подтверждает OriginalStartAck=true для того же
-поколения ce8e, effective25. Единственный recovery POST с ключом
+поколения ce8e, effective25. До081 recovery POST с ключом
 `workflow-delivery-080-recover-pm11-20261106` вернул generic503; readback этого
 ключа — NotRequested, intent не принят. PG evidence:42501
 `fleet_request_authority_expired` на COMMIT. Исходный human scope60s сохранён.
@@ -24,9 +26,35 @@ Clippy PASS. Новый witness GET200 подтверждает OriginalStartAck
 Профиль NativeState:84 запуска/1.09MiB,23.125s. Из21.3s state query19.6s уходят
 на2345 вызовов validator, включая чужие audit rows до target binding.
 Read-only сравнение SELECT: прежний35 вызовов/325.931ms против MATERIALIZED
-exact-target1 вызов/47.757ms. Адресная081 реализована, но ещё не квалифицирована
-и не установлена; Auth guards не ослаблены, кэши и новые слои не добавлены.
-PM остаётся на effective25,26 pending; новые PM live-сценарии ещё не приняты.
+exact-target1 вызов/47.757ms.081/sourcee4d59e7f установлена как imagef3e1fa5e:
+штатные Build227b/Applye9f4 и refresh завершены, exact-image smoke PASS/cleanup.
+Migration108, diagnostics2, scoped PG11, fmt/Clippy PASS; усиленная planner PG2
+в обеих lineages воспроизводит19 прежних проверок против1 с равными пакетами.
+58 неизменённых PG результатов переиспользованы. Auth guards не ослаблены.
+
+Новый witness GET200 занимает10.804s. Первый POST теперь сохраняет recovery intent
+и настоящие native/lease ACKs, но позднее истечение HTTP authority оставляет
+публикацию pending. Это не NotRequested. Одно явное продолжение с исходными key/body
+дошло до attach_controller/utility_exit. Read-only проба фактически установленных
+exports с заблокированными writer/connect доказала Unclaimed controller attachment:
+native-журнала attachment нет, claim не вызывался. Причина — лишний ручной host
+bridge уже подключил backend; native корректно запрещает принимать подключение
+без своего claim. До attach этот recovery использует Docker/SQLite, не RPC к PM.
+Из процедуры убирается предварительный host bridge; снять можно только его
+доказанно собственное подключение по sealed scope, не переписывая журнал.
+Далее используется обычный native claim-before-connect, без поддельных ACK и
+ослабления guard. Это дефект поставки, не ошибка модели или размера её контекста.
+Штатное снятие точного host-подключения и настоящий native handoff завершены:
+Basec4be9860,19 тестов/15 subtests; повторного disconnect и поддельного ACK нет.
+Тот же PM11 явно активирован на effective26, healthy/ready, CLI150f650c проверен.
+При первом новом полном запросе операцияf6788e20 сохранила задачу, но не чат.
+PG55P03 на UPDATE операции доказывает неверный порядок блокировок producer:
+строка операции берётся раньше агента, тогда как существующий fence требует
+обратный порядок. Кто исторически держал блокировку, не установлено. Минимальная
+правка берёт agent первым, не снимая NOWAIT/права/проверки; адресные PG-тесты идут.
+Продолжать нужно эту же операцию после установки. Более ранний readiness500
+остаётся отдельно не объяснённым; последующий200 не доказывает его исправление.
+Это не ошибка Advisor или контекста фазы; live-приёмка ещё открыта.
 
 ### Исторический Инцидент 2026-11-05: Два Блокера Перехода
 

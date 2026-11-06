@@ -6,25 +6,40 @@
 
 - Normal Apply729, journal de836101, is complete: exact Workflow936a4b80 and
   web1e264d20 are installed. Human admin catalog GET returns200 without changes
-  to Auth application grants; catalog revision12 exactly matches the baseline.
+  to Auth application grants. Catalog12 matched the baseline before explicit
+  publication13 of the prepared report instructions; phase criteria are unchanged.
   Actual container get_settings confirms app-test/high/1200s/4000/json_schema
   and platform. Auth identity, subject rights and machine scopes remain enforced.
   W899 production qualification remains applicable; this documentation update
   changes no production source. Native4421/75 subtests, PostgreSQL132, Ruff and
   mypy169 passed; coverage94.0612151667428%,15 explicit skips, PG cleanup verified.
-- Fleet6c/image9a0f is installed through normal Build32d82/Applyc52, complete
+- Previous Fleet6c/image9a0f was installed through normal Build32d82/Applyc52, complete
   with controller refresh and PM bridge. All67 PG qualification checks are closed
   (43 reused,24 new), with Clippy passed. Witness GET200 confirms original start
-  ACK for the same ce8e generation/effective25. One recovery POST with key
+  ACK for the same ce8e generation/effective25. Before081, a recovery POST with key
   workflow-delivery-080-recover-pm11-20261106 returned generic503; exact-key
   readback is NotRequested, with no accepted intent. PG reports42501
   fleet_request_authority_expired at COMMIT; the fixed60s human scope is unchanged.
 - NativeState readback (84 runs/1.09MiB) takes23.125s; the state query spends19.6
   of21.3s on2345 validator calls, unnecessarily validating other audit rows.
   Read-only query comparison: old35 calls/325.931ms versus exact-target MATERIALIZED
-  1 call/47.757ms. Migration081 implements only that selection change; qualification
-  and installation are pending, without Auth weakening, caching or new layers.
-  PM remains effective25 with26 pending. No new QA tasks or model calls:
+  1 call/47.757ms.081/sourcee4d59e7f is installed as imagef3e1fa5e through normal
+  Build227b/Applye9f4. Migration108, diagnostics2, scoped PG11, fmt/Clippy and
+  exact-image smoke pass. Final planner PG2 proves19-to1/equal packets in both
+  lineages;58 unchanged PG results reused. New witness200 takes10.804s; recovery
+  now saves the intent and genuine native/lease ACKs, but late HTTP-authority expiry
+  leaves publication pending. An explicit original-key/body resume reaches
+  attach_controller/utility_exit. A write-blocked exact-export probe proves
+  Unclaimed controller attachment before native claim: the unnecessary host bridge
+  pre-connected the backend. Remove that release step; release only its sealed
+  owned connection, then use normal native claim-before-connect. No fabricated
+  native receipt or weakened guard. Owned release and genuine native handoff are
+  complete; same PM11 is healthy/ready at effective26 with qualified CLI150f650c.
+  Basec4be9860 passes19 release tests/15 subtests. One full QA task is reserved,
+  but chat/dispatch did not occur: PG55P03 on the operation UPDATE proves a Fleet
+  producer lock-order defect. Its parent-first repair is under focused PG testing;
+  resume the same operation, not another task. An earlier readiness500 is still
+  unexplained. No new Advisor or Hermes business calls:
   campaign139/163,24 reserved for live. Advisor v19 inputs, policy and accepted
   revised qualification36/36 are unchanged; PM live acceptance remains pending.
 
