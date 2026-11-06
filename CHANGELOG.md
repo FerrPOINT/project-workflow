@@ -4,6 +4,28 @@
 
 ### Current Status (2026-11-06)
 
+- With explicit owner approval,0024/0027 select their already verified predecessor
+  bindings rather than active operator publications. Migration identities,
+  catalog locks, target validation and drift rejection remain intact. Independent
+  source review and65 existing catalog checks pass. Final PostgreSQL160 passes
+  without skips, with verified cleanup/source integrity; image/live remain open.
+  New role-neutral HTTP regressions cover7 professions/8 modes:8 PASS,105 with
+  existing prompt/history/profession checks. They verify one call, strict schema,
+  retained assessments on technical refusal, phase isolation and exact replay;
+  they do not claim live semantic qualification of every role. No model call,
+  prompt, model, criterion, credential or installed runtime change.
+- Separate archive read integrity from new-publication structural admission.
+  Older Analyst publications differed in instruction/check counts and failed
+  readback before migration when compared with a later source policy. Retain
+  exact saved-content/row checks, trusted mode identity/scopes, role/workspace
+  restrictions, hashes and selected pointer. Explicitly validate current policy
+  for a new publish after replay and before writing authority; never guess origin
+  or reinterpret an accepted publication. Five initial preservation cases and
+  four new tampered-draft negatives pass, including a correct recomputed hash.
+  Final374 targeted native and15 docs cases pass. All three changed production
+  modules were purged from prior coverage before117-case remeasurement:
+  12842/13652=94.0668%; unchanged production matches the earlier full baseline.
+  Ruff, mypy176, hygiene and independent review pass. Installation is unchanged.
 - Зафиксировано разделение Tracker stage/status и Workflow completion.
   PM завершает исполнение профессии; дальнейшая Analysis относится к Tracker.
   Текущий source lifecycle выставляет InProgress при подтверждённом bind_run,
