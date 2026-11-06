@@ -19,6 +19,13 @@
   partial creation operation, without another create or duplicate.
   Diagnosis separates local report errors, intentional
   probe194, justified195/196 decisions and the unresolved native timeout cause.
+- Sparse amendment exposed a separate Tracker tool-call defect before Advisor:
+  PM copied task_id into execution_id, while actual assignment metadata remained
+  correct. Tracker correctly refused409 and retained revision1; no new evaluation
+  or false completion occurred. The installed skill states the right mapping but
+  lacks an executable fence-copy example; the generic stale-fence error obscures
+  the mismatched field. Diagnosis records the minimal instruction/error package.
+  Revision2, stale-confirm rejection and the sparse final remain open.
 - Real installed-CLI standalone acceptance on image20ad7dd0/source4bf3f926
   completed three phases with native Responses and no Fleet/Hermes: six calls,
   three intended PARTIALs and three PASSes, done/version7. Independent review
