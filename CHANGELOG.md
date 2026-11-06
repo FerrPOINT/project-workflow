@@ -4,6 +4,15 @@
 
 ### Current Status (2026-11-06)
 
+- Real installed-CLI standalone acceptance on image20ad7dd0/source4bf3f926
+  completed three phases with native Responses and no Fleet/Hermes: six calls,
+  three intended PARTIALs and three PASSes, done/version7. Independent review
+  accepted all34 criterion assessments and corrections. Supplement history,
+  revocation of covered, exact replay, changed-payload409 and restart preservation
+  passed; owned QA resources were cleaned. Phase-local inputs grew to5489 tokens
+  and reset at the next phase, without truncation or retries. This single
+  Developer/initial scenario does not qualify all roles or live PM. CLI409
+  details and standalone actor metadata remain separate findings; see diagnosis.
 - With explicit owner approval,0024/0027 select their already verified predecessor
   bindings rather than active operator publications. Migration identities,
   catalog locks, target validation and drift rejection remain intact. Independent
