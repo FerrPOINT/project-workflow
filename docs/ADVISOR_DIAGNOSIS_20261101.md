@@ -2,6 +2,50 @@
 
 ## 2026-11-06: Workflow Установлен, PM Live Ещё Не Принят
 
+Текущий пакет ошибок320f9670 установлен штатно: Buildd97a01bd/Applyc684c1b2,
+imageb4b11d7b, контейнер healthy. Фактический parse в этом контейнере возвращает
+причину стандартного decoder, line/column и end of input; новых вызовов модели нет.
+Перед установкой exact-image smoke подтвердил platform/standalone и сохранность
+19 синтетических архивных записей; временные Compose-ресурсы очищены. CLI699b79eb
+квалифицирован и опубликован default, но PM26 пока использует прежний150f650c.
+Причина задержки активации — восстановление native controller после смены
+backend, не оценка Advisor и не разбор отчёта. Новая инструкция ещё не активирована.
+
+### Текущий Блокер Перехода PM26
+
+Configuration refresh81354d43 опубликовал CLI699b79eb, сохранив Fleet image56304d14.
+Backend CID22dd5ef0 стартовал до истечения последнего неподтверждённого heartbeat
+прежнего контроллера. Это реальное ограничение native successor, но не доказанная
+единственная причина503: server проверяет known-ACK историю раньше этой границы.
+После истечения аренды штатный pinned-runtime Stop/Start сохранил CID/image,
+конфигурацию и исходный bootstrap. Source60f45e98 допускает последующий запуск
+того же контейнера только в новом CLI-only reader; native admission не изменён.
+Оба целевых restart-reader теста и независимое review PASS.
+
+Фактический `fleet_known_ack_state` вызван диагностически в транзакции с rollback:
+SQLSTATE23514, `Known ACK Hermes history lacks verified native terminal provenance`.
+Для единственного запуска текущего поколения — SDLC-33/d308d780 — Fleet хранит
+`completed`, исходный accepted native run и ноль `hermes.run.terminal_verified`
+записей. Pending approvals нет. SQL reader намеренно не принимает такой результат
+за native proof текущего поколения. Это не нехватка документа, не ошибка Advisor
+и не основание подставить успешный receipt.
+
+Producer `ConfiguredPresentation` в Fleet сохраняет terminal UI-результат через
+`commit_hermes_terminal`, сознательно без native observation. Recovery reader
+требует проверенный native результат. Неполнота этой границы подтверждена
+на фактической записи; отсутствие proof само по себе не доказывает, почему
+автоматический attested readback не был выполнен до смены controller.
+Один существующий `fleet-control-server reconcile-run d308d780-…` выполнен
+в фактическом backend без изменения environment и без модели. Он вернул
+`native_readback/unavailable`; новый proof не создан. Детальная причина этого
+отдельного отказа ещё не установлена. Recovery POST не выполнялся, новую задачу
+вместо SDLC-33 не создавали, историю и требования не меняли.
+
+Следующий пакет должен закрыть producer/readback/recovery контракт Fleet,
+не ослабляя native guard и не меняя Hermes/Advisor. Текущий пакет Workflow
+реализован и установлен, но новая инструкция PM, оба бизнес-финала, три браузера
+и мерж остаются непройденными gates. Расход Advisor141/163, резерв22 сохранён.
+
 Штатный Apply729, journal de836101, завершён: установлены точные образы
 Workflow936a4b80 и web1e264d20. Human admin catalog GET возвращает200 без
 изменения application grants Auth. Редакция12 совпадала с baseline; затем штатно
@@ -70,15 +114,25 @@ stdin. Уже подготовленный skill требует именно э�
 Адресные284 проверки и отдельная engine-boundary регрессия5e7e370f проходят.
 Два настоящих PreparedRequest через engine побайтно равны при разных worker
 instructions; реальные модельные вызовы не выполнялись. Base40 package tests
-и83 packaging tests проходят; текущий pin526325b6 одинаков в producer/Compose.
-Полный native/coverage пока не принят: первые прогоны native/PG отказали из-за
+и83 packaging tests проходят. Итоговый pin320f9670 одинаков в producer/Compose.
+Первые прогоны native/PG отказали из-за
 удалённых временных pytest-каталогов, а не бизнес-assertion. Для keep=0 в
 pytest9.1.1 нет lock, общий numbered-temp cleanup допускает такую гонку;
 конкретный deleting PID не записан. Повторные gates используют независимые
-basetemp, исходные отказы сохранены. Coverage canary35 проходит с data/JSON/XML;
-отсутствующее измерение первого full-run не засчитывается. Изолированный PG
-закрыл132 tests без skips за866.26s, Compose resources очищены. Новый CLI
-образc02b52f9 квалифицирован штатно: прежний Hermes и прочие CLI не изменены.
+basetemp, исходные отказы сохранены. Отсутствующее измерение первого full-run
+не засчитывается. Изолированный native:4457 PASS,15 явно отмеченных skips,
+75 subtests; PG:132 PASS без skips за866.26s, Compose resources очищены.
+Затем320f9670 уточняет только причину предела вложенности, не меняя приём:
+8 новых depth tests и итоговые258 адресных проверок PASS. Для финального coverage
+сохранён полный baseline, измерение единственного изменённого production module
+заменено182 адресными проверками; остальные production files побайтно прежние.
+Итог94.0823913208406%,780 missing из13181 statements. Это не новый полный прогон
+на320. Ruff/mypy169 PASS. Первый CLIc02b52f9 не устанавливался и superseded;
+итоговый699b79eb квалифицирован из320f9670, Hermes и прочие CLI побайтно сохранены.
+Base37c8b88f позволяет его публикацию существующим configuration refresh без
+пересборки Fleet backend. Строгие private inputs, before/after и first-start
+guards сохранены; journal не изображает Build. Source tests/review пройдены,
+публикация выполняется отдельно от явной активации конфигурации PM.
 
 Новая инструкция ещё не активирована. История193/194, invalid payload и исходный
 документ сохранены. Расход141/163,22 live-вызова остаются. Два бизнес-финала

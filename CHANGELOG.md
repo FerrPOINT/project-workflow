@@ -11,11 +11,25 @@
   instructions and generated runtime skill show object serialization and exact
   readback reuse, not hand-written nested JSON or placeholder probes. Report/API
   schema, Advisor v19, successful evaluation requests and historical decisions
-  are unchanged. Targeted284, engine-boundary1, Ruff and mypy169 pass. Isolated
-  PostgreSQL132 passes with zero skips and verified Compose cleanup; full
-  native/coverage is running. CLI imagec02b52f9 passes the existing qualification,
-  retaining Hermes and other CLI bytes. This package is not yet installed or
-  accepted live.
+  are unchanged. Isolated native4457/75 subtests and PostgreSQL132 pass;15 native
+  skips are explicit, PG cleanup is verified. Final320f9670 adds8 depth/error
+  regressions without changing accepted input or limits;258 targeted checks,
+  Ruff and mypy169 pass. Incremental coverage94.0823913208406% reuses unchanged
+  production measurements and remeasures the changed module with182 cases.
+  Final CLI699b79eb passes qualification, retaining Hermes and other CLI bytes;
+  earlierc02b52f9 is uninstalled and superseded. Base37c8b88f supports publication
+  through existing configuration refresh without rebuilding Fleet. Publication,
+  PM activation and both business finals remain separate acceptance steps.
+  CLI default publication81354d43 and Workflow Buildd97/Applyc684 are complete;
+  imageb4b11d7b is healthy and its actual decoder error is verified. Image smoke
+  preserves19 synthetic historical records and passes platform/standalone with
+  cleanup. Same PM26 still uses150f650c; native controller recovery delays its
+  explicit activation. No new Advisor calls or accepted business finals yet.
+- Live transition blocker is isolated to Fleet: SDLC-33's completed UI run has
+  zero verified native terminal observations; known-ACK recovery rejects it with
+  SQLSTATE23514. Existing one-shot reconcile-run returns native_readback/unavailable.
+  No proof is fabricated and no recovery POST or replacement task is issued.
+  Both PM finals and browser acceptance remain open; Advisor stays141/163.
 - Normal Apply729, journal de836101, is complete: exact Workflow936a4b80 and
   web1e264d20 are installed. Human admin catalog GET returns200 without changes
   to Auth application grants. Catalog12 matched the baseline before explicit
