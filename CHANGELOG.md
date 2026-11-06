@@ -4,6 +4,13 @@
 
 ### Current Status (2026-11-06)
 
+- Зафиксировано разделение Tracker stage/status и Workflow completion.
+  PM завершает исполнение профессии; дальнейшая Analysis относится к Tracker.
+  Текущий source lifecycle выставляет InProgress при подтверждённом bind_run,
+  а не командой первой фазы; дублирующий status patch не добавлен.
+  Историческая PM-only приёмка сохранена.89 CLI/confirmation/docs checks проходят,
+  включая две новые регрессии внешнего read-only состояния и допуска Analyst.
+  Model/prompt/runtime не менялись; безопасный catalog upgrade остаётся открытым.
 - Native Responses image93af2ee5 was built and passed exact-image Compose smoke,
   including synthetic archive preservation and standalone mechanics. Normal
   Workflow-only Apply stopped at schema readiness: live database0023 was not
