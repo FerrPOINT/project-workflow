@@ -144,15 +144,17 @@ def publish_baseline(uow: SAUnitOfWork, workflow: Any, manifest: str, *, existin
     return version
 
 
+def _mode_identity(modes: list[dict]) -> list[tuple]:
+    return [(mode["key"], mode["mode_order"], mode["execution_scopes"]) for mode in modes]
+
+
 def _validate_modes(workflow: Any, modes: list[dict], definition: dict) -> None:
     baseline = _normalize(definition["modes"])
     if workflow.key != "single-task-v1:architect":
         if _structure(modes) != _structure(baseline):
             raise ConflictError("Only text may change; role, scopes, skills and phase structure are frozen")
         return
-    def identity(items: list[dict]) -> list[tuple]:
-        return [(item["key"], item["mode_order"], item["execution_scopes"]) for item in items]
-    if identity(modes) != identity(baseline):
+    if _mode_identity(modes) != _mode_identity(baseline):
         raise ConflictError("Architect mode identity and scopes are immutable")
     allowed = {skill for mode in baseline for phase in mode["phases"]
                for instruction in phase["instructions"] for skill in instruction["skills"]}
@@ -173,7 +175,9 @@ def _validate_modes(workflow: Any, modes: list[dict], definition: dict) -> None:
 
 def _validate_rows(uow: SAUnitOfWork, workflow: Any, version: int, modes: list[dict]) -> None:
     definition, _ = sealed_baseline(uow, workflow, version)
-    _validate_modes(workflow, modes, definition)
+    # Readback validates saved content, not a later policy for publishing new content.
+    if _mode_identity(modes) != _mode_identity(definition["modes"]):
+        raise ConflictError("Published mode identity and scopes changed")
     expected = _ArchivedWorkflowDefinition(
         key=workflow.key, name=definition["name"], description=definition["description"],
         role_key=definition["role_key"], modes=[ManagedMode.model_validate(mode) for mode in modes],
@@ -343,6 +347,7 @@ def publish(uow: SAUnitOfWork, workflow_id: int, draft_version: int, command: Ca
     if draft_version <= workflow.active_catalog_version:
         raise ConflictError("Publication must append a newer revision")
     modes = _draft_modes(uow, workflow_id, draft_version)
+    _validate_modes(workflow, modes, _definition(workflow.key))
     _validate_rows(uow, workflow, draft_version, modes)
     digest = payload_sha256(modes)
     if digest != command.draft_sha256:

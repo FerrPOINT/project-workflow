@@ -674,3 +674,49 @@ def test_raw_save_and_administration_guards_are_not_bypassed(configured, monkeyp
         assert publication(client, base, {"catalog_version": 2, "content_sha256": "0" * 64}).status_code == 403
     finally:
         client.app.dependency_overrides.clear()
+
+
+@pytest.mark.parametrize("change", ["scopes", "skills", "instruction-count", "check-count"])
+def test_publish_revalidates_stored_draft_policy_even_with_correct_content_hash(configured, change):
+    from project_workflow.application import catalog_publication
+    from project_workflow.domain.runtime_assignment import payload_sha256
+
+    client, _ = configured
+    base = active(client, enroll(configured)["workflow_id"])
+    saved, _ = draft(client, base)
+    changed = deepcopy(saved["modes"])
+    changed_mode = changed[0]
+    changed_phase = changed_mode["phases"][0]
+    with SAUnitOfWork() as uow:
+        mode = uow.workflows.list_modes(base["workflow_id"], catalog_version=saved["catalog_version"])[0]
+        phase = uow.phases.list(base["workflow_id"], mode_id=mode.id)[0]
+        instruction = uow.phase_instructions.list(phase.id)[0]
+        if change == "scopes":
+            changed_mode["execution_scopes"] = ["delivery"]
+            uow.session.get(m.WorkflowMode, mode.id).execution_scopes = ["delivery"]
+        elif change == "skills":
+            changed_phase["instructions"][0]["skills"] = ["unauthorized"]
+            uow.phase_instructions.update(instruction["id"], {"skills": ["unauthorized"]})
+        elif change == "instruction-count":
+            extra = deepcopy(changed_phase["instructions"][0])
+            changed_phase["instructions"].append(extra)
+            uow.phase_instructions.create(phase.id, extra)
+        else:
+            changed_phase["checks"].append("Additional structural check")
+            uow.phase_checks.create(phase.id, {"description": "Additional structural check"})
+        uow.session.flush()
+        assert catalog_publication._draft_modes(uow, base["workflow_id"], saved["catalog_version"]) == changed
+        assert uow.session.get(m.WorkflowCatalogPublication, (base["workflow_id"], saved["catalog_version"])) is None
+        publications_before = operator_publication_count(uow)
+
+    changed_hash = payload_sha256(changed)
+    assert changed_hash != saved["content_sha256"]
+    response = publication(client, base, saved, draft_sha256=changed_hash)
+    assert response.status_code == 409, response.text
+    assert "Only text may change" in response.json()["error"]
+    assert active(client, base["workflow_id"]) == base
+    with SAUnitOfWork() as uow:
+        assert operator_publication_count(uow) == publications_before
+        assert uow.session.get(m.WorkflowCatalogPublication, (base["workflow_id"], saved["catalog_version"])) is None
+        assert uow.workflows.get_by_id(base["workflow_id"]).active_catalog_version == base["catalog_version"]
+        assert catalog_publication._draft_modes(uow, base["workflow_id"], saved["catalog_version"]) == changed
