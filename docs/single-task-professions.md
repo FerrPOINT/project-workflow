@@ -57,6 +57,12 @@ Workflow task key и canonical Tracker task UUID различаются; mapping
 
 ## Роли И Передачи
 
+Пятифазный [проект дефолта Architect](proposals/architect-default-workflow.md)
+охватывает изучение задачи и системы, выбор решения, проработку затронутых
+аспектов, проверку решения/внедрения и постоянную декомпозицию с передачей.
+Документы создаются по содержательной необходимости. Это проект новой структуры; установленный трёхфазный
+каталог и его редакции он не заменяет.
+
 | Профессия | Mode | Работа | Разрешённая следующая stage / status |
 | --- | --- | --- | --- |
 | PM | draft | Brainstorming, clarification, requirements review внутри Draft | Exact owner confirmation: Backlog / Ready; затем Tracker pickup: Analysis / Ready |
