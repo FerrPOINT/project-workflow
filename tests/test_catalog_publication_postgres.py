@@ -17,6 +17,19 @@ from tests.test_configured_postgres import pg_url as pg_url
 pytestmark = pytest.mark.integration
 
 
+@pytest.mark.parametrize("configured", [("architect", "decomposition")], indirect=True)
+def test_architect_structural_revision_preserves_execution_and_replay(configured, supervisor_llm):
+    publication.test_architect_five_phase_publication_preserves_old_execution(configured, supervisor_llm)
+
+
+@pytest.mark.parametrize("configured", [("architect", "decomposition")], indirect=True)
+@pytest.mark.parametrize("invalid", [
+    "scope", "mode", "skill", "executor", "parallel", "checks", "instructions", "empty", "duplicate", "order",
+])
+def test_architect_structural_revision_keeps_authority_guards(configured, invalid):
+    publication.test_architect_structure_keeps_identity_and_permission_guards(configured, invalid)
+
+
 @pytest.mark.parametrize("configured", [(role, mode) for role, modes in ROLE_MODES.items() for mode in modes],
                          indirect=True)
 def test_publication_adopts_new_snapshot_without_rewriting_active_execution(configured):
@@ -44,11 +57,13 @@ def test_pending_draft_readback_and_dedup_retain_saved_content(configured):
     publication.test_draft_reload_readback_and_save_dedup_do_not_activate_or_append_duplicates(configured)
 
 
+@pytest.mark.parametrize("configured", [("project_manager", "draft"), ("architect", "decomposition")], indirect=True)
 def test_concurrent_identical_saves_reuse_one_unpublished_version(configured):
     client, _ = configured
     base = publication.active(client, publication.enroll(configured)["workflow_id"])
     barrier = Barrier(2)
-    command = {"expected_version": 1, "expected_sha256": base["content_sha256"], "modes": base["modes"]}
+    modes = publication.architect_modes() if configured[1]["role_key"] == "architect" else base["modes"]
+    command = {"expected_version": 1, "expected_sha256": base["content_sha256"], "modes": modes}
 
     def save(_index):
         barrier.wait(timeout=15)

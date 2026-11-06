@@ -1,6 +1,8 @@
 """Synthetic publication + actual configured HTTP execution; no live services."""
 
+import json
 from copy import deepcopy
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
@@ -15,6 +17,86 @@ from tests.test_configured_cli import WRITER, enroll, step
 from tests.test_configured_cli import configured as configured
 
 PUBLISHER_SUBJECT = "catalog-test-admin"
+
+
+def architect_modes():
+    path = Path(__file__).resolve().parents[1] / "docs/proposals/architect-default-modes.json"
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize("configured", [("architect", "decomposition")], indirect=True)
+def test_architect_five_phase_publication_preserves_old_execution(configured, supervisor_llm):
+    client, assignment = configured
+    base = active(client, enroll(configured)["workflow_id"])
+    before = step(configured).json()
+    command = {"expected_version": base["catalog_version"], "expected_sha256": base["content_sha256"],
+               "modes": architect_modes()}
+    root = f"/api/workflows/{base['workflow_id']}/catalog/drafts"
+    response = client.post(root, json=command)
+    assert response.status_code == 200, response.text
+    saved = response.json()["revision"]
+    assert len(saved["modes"][0]["phases"]) == 5
+    assert client.get(root + f"/{saved['catalog_version']}").json()["revision"] == saved
+    assert client.post(root, json=command).json()["revision"] == saved
+    assert active(client, base["workflow_id"]) == base
+    published = publication(client, base, saved)
+    assert published.status_code == 200, published.text
+    assert active(client, base["workflow_id"])["modes"] == saved["modes"]
+    assert step(configured).json() == before
+    new = {**assignment, "task": "SDLC-905", "operation_key": "enroll-905",
+           "business_task_ref": str(uuid4()), "assignment_ref": str(uuid4()),
+           "tracker_execution_id": str(uuid4())}
+    new["tracker_task_id"] = new["business_task_ref"]
+    response = client.post("/internal/runtime/assign", headers=WRITER, json=new)
+    assert response.status_code == 200, response.text
+    supervisor_llm("PASS")
+    for index, phase in enumerate(saved["modes"][0]["phases"], start=1):
+        current = step((client, new)).json()["result"]
+        assert current["phase_code"] == phase["code"] and current["complete"] is False
+        response = step((client, new), report=report_json(f"Synthetic completed phase {index}"),
+                        operation_key=f"five-{index}", expected_version=index)
+        assert response.status_code == 200, response.text
+        assert response.json()["result"]["complete"] is (index == 5)
+    assert step(configured).json() == before
+    assert publication(client, base, saved).json() == published.json()
+
+
+@pytest.mark.parametrize("configured", [("architect", "decomposition")], indirect=True)
+@pytest.mark.parametrize("invalid", [
+    "scope", "mode", "skill", "executor", "parallel", "checks", "instructions", "empty", "duplicate", "order",
+])
+def test_architect_structure_keeps_identity_and_permission_guards(configured, invalid):
+    client, _ = configured
+    base = active(client, enroll(configured)["workflow_id"])
+    modes = architect_modes()
+    phase = modes[0]["phases"][0]
+    if invalid == "scope":
+        modes[0]["execution_scopes"] = ["delivery"]
+    elif invalid == "mode":
+        modes[0]["key"] = "other"
+    elif invalid == "skill":
+        phase["instructions"][0]["skills"].append("candidate-publisher")
+    elif invalid == "executor":
+        phase["instructions"][0]["skills"] = ["tracker-operator"]
+    elif invalid == "parallel":
+        phase["execution_type"] = "parallel"
+    elif invalid == "checks":
+        phase["checks"] = []
+    elif invalid == "instructions":
+        phase["instructions"] = []
+    elif invalid == "empty":
+        modes[0]["phases"] = []
+    elif invalid == "duplicate":
+        modes[0]["phases"][1]["code"] = phase["code"]
+    else:
+        phase["phase_order"] = 2
+    response = client.post(f"/api/workflows/{base['workflow_id']}/catalog/drafts", json={
+        "expected_version": base["catalog_version"], "expected_sha256": base["content_sha256"], "modes": modes})
+    assert response.status_code == 409, response.text
+    assert active(client, base["workflow_id"]) == base
+    with SAUnitOfWork() as uow:
+        assert len(uow.workflows.list_modes(base["workflow_id"], catalog_version=1)) == 1
+        assert not uow.workflows.list_modes(base["workflow_id"], catalog_version=2)
 
 
 @pytest.fixture(autouse=True)

@@ -42,19 +42,27 @@ def test_original_application_clock_survives_wait_inside_real_postgres_commit(mo
             connection.execute(text("CREATE SEQUENCE qa_commit_entered"))
             connection.execute(text("""
                 CREATE FUNCTION qa_delay_commit() RETURNS trigger LANGUAGE plpgsql AS $$
+                DECLARE
+                  until_text text := nullif(current_setting('pdlc.workflow_request_until', true), '');
                 BEGIN
-                  PERFORM nextval('qa_commit_entered');
-                  PERFORM pg_sleep(0.45);
+                  IF NEW.key = 'expires-during-commit' THEN
+                    PERFORM nextval('qa_commit_entered');
+                    PERFORM pg_sleep(greatest(0, until_text::double precision
+                        - extract(epoch FROM clock_timestamp()) + 0.1));
+                  END IF;
                   RETURN NEW;
                 END; $$
             """))
             connection.execute(text(
                 "CREATE CONSTRAINT TRIGGER a_qa_commit_delay AFTER INSERT ON workflows "
                 "DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION qa_delay_commit()"))
-        token = current_clock.set(RequestClock(time.monotonic() + 0.3, time.time() + 0.3))
+        # Initialize ORM state before the fixture's admission window starts.
+        # The deferred trigger waits past that original deadline, not a fixed sleep.
         uow = SAUnitOfWork(engine)
+        expired = m.Workflow(key="expires-during-commit", name="Must roll back")
+        token = current_clock.set(RequestClock(time.monotonic() + 3, time.time() + 3))
         try:
-            uow.session.add(m.Workflow(key="expires-during-commit", name="Must roll back"))
+            uow.session.add(expired)
             with pytest.raises(DBAPIError) as rejected:
                 uow.commit()
             assert getattr(rejected.value.orig, "sqlstate", None) == "42501"
