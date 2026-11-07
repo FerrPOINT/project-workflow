@@ -1,5 +1,18 @@
 # Advisor: сквозной диагноз и границы выпуска
 
+## 2026-11-07: Опубликована Worker-Инструкция PM14
+
+Через штатный catalog CAS опубликована PM14 из source `a2c4b2d8`;
+content SHA256 `8b16196492ec0510c13d9e93412a63abb4cef697517490aa209ccc8ec08377d7`.
+Локальный receipt `Q/pm-default-receipt-completion-20261107/publication.json`
+точно совпадает с committed `docs/evidence/pm-receipt-completion-20261107.json`.
+От frozen13 изменён только `modes[0].phases[2].instructions[4].description`:
+Backlog / Ready проверяется в immutable PM receipt; текущая стадия уже может
+быть Analysis. Чтение context следующей профессии не требуется; PM не dispatch Analyst.
+PM13 и её исторические artifacts/исполнения сохранены; config31/binding, image699,
+skills и Advisor criteria/system/schema не менялись, вызовов Advisor нет.
+Это публикация worker-текста, не исправление create403 и не новая live-приёмка PM.
+
 ## 2026-11-07: Активация PM31 И Отказ До Advisor
 
 На прежнем PM штатно активирован Basef8e375: config31 effective/desired,
@@ -19,8 +32,8 @@ Tracker creation-key readback404; новых task/chat/run и вызовов Adv
 | Runtime | Последующий readiness GET200/58508ms на сервере; same-controller endpoint отдельно прошёл за2.442s/46 engine reads. | Один endpoint не объясняет весь GET и не доказывает место остановки create. |
 | Advisor | Нового запроса/ответа в этом сценарии нет; политика v19 не менялась. | Приёмка новых общих/PM инструкций ещё не выполнена. |
 
-Следующий пакет Fleet — безопасные stage/time/outcome логи, включая прерванный
-await; guards, authority и таймауты сохраняются. Он ещё не установлен.
+Диагностический пакет Fleet792 со stage/time/outcome логами, включая прерванный
+await, собран и квалифицирован, но ещё не установлен; guards, authority и таймауты сохраняются.
 После локализации исправлять конкретную границу; не увеличивать окно прав,
 не обходить проверки и не создавать новый механизм исполнения.
 

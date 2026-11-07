@@ -4,17 +4,23 @@
 
 ### Current Status (2026-11-07)
 
-- Prepared a one-field PM worker-instruction publication separating the immutable
+- Published PM worker instruction revision14 through the existing catalog CAS,
+  from source a2c4b2d8, separating the immutable
   completion receipt (Backlog / Ready) from the system's current stage, which may
-  already be Analysis. All phase criteria, IDs, skills and Advisor policy remain
-  unchanged;18 reporting-instruction tests and independent review passed. This
-  source artifact is not yet published and does not resolve Fleet admission403.
+  already be Analysis. Receipt content SHA256 is
+  `8b16196492ec0510c13d9e93412a63abb4cef697517490aa209ccc8ec08377d7`;
+  its modes exactly match the committed artifact with only the final worker
+  description changed from frozen13. Historical13 is preserved. Config31/binding,
+  image699, skills and Advisor criteria/policy are unchanged;18 reporting-instruction
+  tests and independent review passed. Publication made no Advisor calls and is
+  neither a fix for Fleet admission403 nor new PM live acceptance.
 
 - Canonical Basef8e375 instructions are now active on the same PM31, with physical
-  SOUL/four-skill and readiness proof; image699/CLI/Hermes/model/credentials/PM13
-  are unchanged. New full QA stopped before PM/Advisor: create and one explicit
+  SOUL/four-skill and readiness proof; image699/CLI/Hermes/model/credentials
+  are unchanged. Catalog13 was retained at activation; publication14 is recorded
+  above. New full QA stopped before PM/Advisor: create and one explicit
   continue403 around60s, one incomplete operation, Tracker original-key404.
-  No Advisor calls;156/163 used. Fleet diagnostic timing is a source candidate,
+  No Advisor calls;156/163 used. Fleet792 diagnostic timing is built and qualified,
   not installed. The exact interrupted await and live acceptance remain open.
 
 - Current operational documentation is aligned with native Responses/v19,
