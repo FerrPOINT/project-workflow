@@ -46,8 +46,12 @@
   native state; completed is intentionally excluded, including in a regression.
   Explicit reconciliation's alternative accepts uncertain decisions, not this
   failed one. The lifecycle gap is distinct from the unresolved original503.
-  A verified-terminal settlement change remains a separate, unimplemented package;
-  historical083 and the failed decision are not rewritten.
+  Fleet736807bd implements the shared verified-terminal settlement with its
+  original proof/audit guards. The core package passed869 unit/14 real PG,
+  Clippy/fmt and independent review with cleanup. It is not installed. Actual
+  current-generation Known ACK still refuses23514 on the retained pending request;
+  registered084 requires separate upgrade/ELF qualification before backend Apply.
+  Historical083 and the failed decision are not rewritten; Advisor is unchanged.
 - Native trace has19 terminal calls:4 empty-object calls refused before command
   execution and1 read_file shell127, followed by successful recovery. Raw wire is
   missing, so neither model nor adapter data loss is established; the conditional

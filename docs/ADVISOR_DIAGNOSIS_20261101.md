@@ -70,7 +70,14 @@ lifecycle-контракта, не причина исходного503 и не 
 Минимальный следующий пакет — общий settlement для доказанно terminal native
 с точным never-dispatched audit; сохранить decision, отсутствие delivery/ACK,
 exact binding и отрицательные guards. Историческую083 не переписывать; изменение
-семантики и регрессии ещё не реализованы и не установлены.
+семантики принято отдельным source-пакетом Fleet736807bd: общий predicate теперь
+допускает completed/failed/cancelled, сохраняя exact native proof, audit и decision.
+На tree03faa12c прошли869 unit,14 real PG, Clippy/fmt, независимое review и cleanup.
+Он ещё не установлен. Read-only проверка действующих данных подтвердила exact
+binding/no-send/native proof, но current-generation KnownACK вернул23514.
+Поэтому до backend Apply нужен адресный registered084 для уже сохранённых
+completed/cancelled ожиданий. SQL/Rust084 сохраняют guards083; старая083 не меняется.
+Upgrade/ELF квалификация идёт отдельно. Advisor и формат его запроса не менялись.
 
 В первом native run177s записано19 terminal calls:1907/1913/1921/1927 имеют
 arguments `{}` и отказ до выполнения command;1915 передал read_file в shell и
