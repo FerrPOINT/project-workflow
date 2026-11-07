@@ -33,7 +33,7 @@ class RunPytestTests(unittest.TestCase):
                 receipt = json.loads(paths[0].read_text(encoding='utf-8'))
                 self.assertEqual((receipt['status'], receipt['cleanup'], receipt['exit_code']),
                                  ('finished', 'complete', expected))
-                self.assertEqual(list(paths[0].parent.rglob('*.db')), [])
+                self.assertFalse(Path(receipt['scratch']).exists())
                 self.assertEqual((paths[0].parent / 'junit.xml').is_file(), expected != 0)
 
     def test_process_loss_preserves_active_receipt_and_owned_fixture(self):
@@ -63,7 +63,8 @@ class RunPytestTests(unittest.TestCase):
             self.assertEqual(receipt['status'], 'active')
             self.assertNotIn('exit_code', receipt)
             scratch = Path(receipt['scratch'])
-            self.assertEqual(scratch.parent, paths[0].parent)
+            self.assertEqual(scratch.parent, root.resolve() / '.local' / 'p')
+            self.assertEqual(scratch.name, f'wf-{receipt["operation"][:12]}')
             fixtures = list(scratch.rglob('fixture.db'))
             self.assertEqual(len(fixtures), 1)
             self.assertEqual(fixtures[0].read_bytes(), b'fixture')

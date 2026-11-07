@@ -45,18 +45,22 @@ def terminate(_signum, _frame):
 def run(arguments: list[str], workspace: Path) -> int:
     if any(arg.split('=', 1)[0] in ('--basetemp', '--junitxml', '--junit-xml') for arg in arguments):
         raise ValueError('The Workflow runner owns pytest scratch and diagnostic output')
-    base = workspace.resolve()
-    for name in ('.local', 'pytest-runs'):
-        base /= name
-        base.mkdir(exist_ok=True)
-        info = base.lstat()
+    local = workspace.resolve() / '.local'
+    receipts = local / 'pytest-runs'
+    fixtures = local / 'p'
+    for directory in (local, receipts, fixtures):
+        directory.mkdir(exist_ok=True)
+        info = directory.lstat()
         if not stat.S_ISDIR(info.st_mode) or getattr(info, 'st_file_attributes', 0) & 0x400:
             raise ValueError('Workflow run storage must be a plain directory')
     operation = uuid.uuid4().hex
-    directory = base / operation
+    directory = receipts / operation
     directory.mkdir(mode=0o700)
-    parent = scratch_parent(directory)
-    scratch = parent / ('pytest' if parent == directory else f'workflow-pytest-{operation}')
+    parent = scratch_parent(fixtures)
+    # Leave room for nested Git and catalog fixtures on Windows without changing
+    # the full operation identity recorded in the receipt.
+    scratch = parent / f'wf-{operation[:12]}'
+    scratch.mkdir()
     report = directory / 'junit.xml'
     receipt = directory / 'result.json'
     record = {'schema': 'workflow-pytest-run/v1', 'operation': operation,
