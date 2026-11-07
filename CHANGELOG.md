@@ -4,6 +4,31 @@
 
 ### Current Status (2026-11-07)
 
+- Fleet792 diagnostic timing is now installed by normal Apply, journal156ed66f,
+  imagec85; smoke completed with cleanup. That Apply retained PM CID0966/image699/config31.
+  Receipt: `Q/readiness-timing-fleet-apply-792b963d-20261107.json`, phase=complete,
+  model_calls=0. The first readiness GET returned503 UNAVAILABLE in3.047s:
+  `original Docker operation requires reconciliation; no automatic resend`.
+  Stages: lock0/config47/binding447/launch7/health2416ms. PM31 subsequently adopted;
+  its prior readiness returned200 in17981ms, not proof of current config32 readiness.
+  A transient Fleet accepted-context read failure
+  self-recovered without an established native execution hold. SDLC36 proceeded
+  on the saved operation: reports203/204/205 PASS, Workflow done/version4, saved
+  requirements rev1 fully presented and separately confirmed by the owner.
+  All16 marks/reasons were reviewed;203/C1 has imprecise absence-of-decisions wording,
+  and204/205 duplicate the full document without losing facts. The final native run
+  completed, but Tracker completion read.current=null; business completion is not
+  implied by Workflow/native done. Explicit user policy now grants autonomous
+  technical operations without human popup, retaining necessary PM clarification
+  and exact owner requirements confirmation. Canonical Basead7dddb8 is published,
+  with52 offline tests PASS; server rights, pipeline gates and data/history guards
+  remain. Config32 approvals.mode=off is validated but NOT effective: activation
+  held at PREPLAN because original-operation evidence is unavailable. No new stop
+  is proven; policy activation/readiness32 are not claimed. Workflow core, criteria
+  and Advisor are unchanged. Budget159/163,
+  remaining4; diagnostic installation itself made no model calls. The exact await
+  and cause of the historical60s403 remain unproven; no cause fix is claimed.
+
 - Published PM worker instruction revision14 through the existing catalog CAS,
   from source a2c4b2d8, separating the immutable
   completion receipt (Backlog / Ready) from the system's current stage, which may
@@ -18,10 +43,11 @@
 - Canonical Basef8e375 instructions are now active on the same PM31, with physical
   SOUL/four-skill and readiness proof; image699/CLI/Hermes/model/credentials
   are unchanged. Catalog13 was retained at activation; publication14 is recorded
-  above. New full QA stopped before PM/Advisor: create and one explicit
-  continue403 around60s, one incomplete operation, Tracker original-key404.
-  No Advisor calls;156/163 used. Fleet792 diagnostic timing is built and qualified,
-  not installed. The exact interrupted await and live acceptance remain open.
+  above. Initially, full QA stopped before PM/Advisor: create and one explicit
+  continue403 around60s, an incomplete operation, Tracker original-key404;
+  budget was156/163. That historical slice is preserved, not the current status
+  of the subsequently resumed SDLC36 operation. Fleet792 is installed as recorded
+  above; the historical interrupted await and complete business acceptance remain open.
 
 - Current operational documentation is aligned with native Responses/v19,
   typed reports, current-phase history and identity-based human admission.

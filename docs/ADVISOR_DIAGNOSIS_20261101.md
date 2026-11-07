@@ -1,5 +1,47 @@
 # Advisor: сквозной диагноз и границы выпуска
 
+## 2026-11-07: Текущий Статус SDLC36, Tracker Completion Pending
+
+Штатный Apply Fleet `792b963d` завершён: journal `156ed66fdd914ad3bede823343859957`,
+image `c85a410d4e8a739ea91c26fb568f86a207150706a968a007bd1c3e12f4a34eea`.
+Receipt: `Q/readiness-timing-fleet-apply-792b963d-20261107.json`, phase=complete;
+smoke complete, cleanup подтверждён. Этот Apply сохранил PM CID0966/image699/config31.
+
+Первый readiness GET нового контроллера вернул503 `UNAVAILABLE` за3.047s,
+message: `original Docker operation requires reconciliation; no automatic resend`.
+Request13503d63: lock0ms, config47ms, binding447ms, launch7ms, health2416ms.
+После штатного recovery PM31 adopted; прежний readiness config31 вернул200 за17981ms.
+Это readback того adoption, не доказательство текущей готовности config32.
+Первый503 остаётся фактом отдельного readback, не причиной исторических60s403.
+Временный отказ Fleet-чтения `Configured accepted context changed` восстановился
+самостоятельно; фактической остановки native Hermes по нему не установлено.
+
+На сохранённой операции создан SDLC36: reports203/204/205 получили PASS на фазах1/2/3,
+Workflow done/version4. Требования rev1 сохранены, полностью показаны владельцу и
+подтверждены отдельным owner-действием; report205 содержит exact saved business doc
+и account показа/согласия. Diagnostics всех трёх оценок без усечения; независимый
+review всех16 marks завершён. Остаточные замечания: reason203/C1 неточно говорит об
+отсутствии решений, хотя они есть в request; reports204/205 дублируют документ,
+но факты не потеряны. Эти замечания не выданы за отсутствие owner choices или falsePASS.
+
+Финальный native run config31 completed, но Tracker completion read.current=null:
+Workflow done и native completion не равны завершению бизнес-цикла.
+
+Пользователь явно разрешил агентам автономные технические операции без human popup;
+необходимые бизнес-уточнения PM и exact owner confirmation требований сохраняются.
+Канонический Base policy-пакет `ad7dddb8` опубликован,52 offline tests PASS;
+серверные права, pipeline gates и сохранность данных/истории не отменены.
+Config32 с `approvals.mode="off"` validated, но NOT effective: activation held в PREPLAN
+из-за недоступного evidence исходной операции. Новый stop не доказан; готовность32
+и активация policy не объявлены. Source Workflow core/criteria/Advisor не менялись.
+
+Бюджет159/163, осталось4: три новых Advisor-вызова относятся к203/204/205,
+не к диагностической установке (её model_calls=0). Точный await прежних60s403 и
+его cause fix не доказаны. Изменение документации не выполняет бизнес-команд.
+Evidence: `Q/pm-default-clean-instructions-20261107/full/workflow-history.json`,
+`sparse-pm-readback-20261031.json`, `case.json`, `advisor-diagnostics-cli-203.json`,
+`advisor-diagnostics-cli-204.json`, `advisor-diagnostics-cli-205.json` в том же full.
+
 ## 2026-11-07: Опубликована Worker-Инструкция PM14
 
 Через штатный catalog CAS опубликована PM14 из source `a2c4b2d8`;
@@ -10,10 +52,12 @@ content SHA256 `8b16196492ec0510c13d9e93412a63abb4cef697517490aa209ccc8ec08377d7
 Backlog / Ready проверяется в immutable PM receipt; текущая стадия уже может
 быть Analysis. Чтение context следующей профессии не требуется; PM не dispatch Analyst.
 PM13 и её исторические artifacts/исполнения сохранены; config31/binding, image699,
-skills и Advisor criteria/system/schema не менялись, вызовов Advisor нет.
+skills и Advisor criteria/system/schema не менялись; сама публикация Advisor не вызывала.
 Это публикация worker-текста, не исправление create403 и не новая live-приёмка PM.
 
-## 2026-11-07: Активация PM31 И Отказ До Advisor
+## 2026-11-07: Активация PM31 И Первоначальный Отказ До Advisor
+
+Ниже сохранён первоначальный срез до последующего исполнения SDLC36, описанного выше.
 
 На прежнем PM штатно активирован Basef8e375: config31 effective/desired,
 draining=false; физически совпадают SOUL и четыре включённых skill. Image699,
@@ -33,7 +77,7 @@ Tracker creation-key readback404; новых task/chat/run и вызовов Adv
 | Advisor | Нового запроса/ответа в этом сценарии нет; политика v19 не менялась. | Приёмка новых общих/PM инструкций ещё не выполнена. |
 
 Диагностический пакет Fleet792 со stage/time/outcome логами, включая прерванный
-await, собран и квалифицирован, но ещё не установлен; guards, authority и таймауты сохраняются.
+await, теперь установлен (результат выше); guards, authority и таймауты сохраняются.
 После локализации исправлять конкретную границу; не увеличивать окно прав,
 не обходить проверки и не создавать новый механизм исполнения.
 
