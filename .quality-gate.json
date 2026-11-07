@@ -145,6 +145,7 @@
         "**"
       ],
       "cacheable": false,
+      "execution_slot": "none",
       "test_tier": "unit"
     },
     {
