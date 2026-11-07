@@ -4,6 +4,13 @@
 
 ### Current Status (2026-11-07)
 
+- Initial instruction admission now accepts the exact assigned agent in Ready
+  for all seven professions. Reports and the precommit authority check require
+  InProgress; later active-phase reads cannot reuse Ready, including PM. Exact
+  historical readback remains read-only.185 targeted tests, Ruff and mypy pass
+  after independent review. Advisor, criteria and model settings are unchanged.
+  This is a source checkpoint, not installation or complete handoff acceptance.
+
 - Owner clarified the stage/status contract for every profession: the agent
   explicitly starts with InProgress and finishes with Completed; the application
   alone advances the stage, resets status to Ready and hands off to the next agent.
@@ -19,7 +26,8 @@
   fb6ce930/tree1d6ee432 passed4690 native tests plus75 subtests and160 PostgreSQL
   tests; coverage94.0992%, Ruff/mypy/namespace export passed. The15 native skips
   (11 Playwright unavailable,3 private-source opt-ins,1 NTFS executable bit)
-  are not passes. Image smoke, installation and live acceptance remain pending.
+  are not passes. A separately built ef7b82e2 image passed18 image-smoke stages;
+  installation and live acceptance remain pending.
   Base standards and
   local engineering guidance now require justified limits and behavioral
   completeness regressions rather than silent truncation or replacement caps.

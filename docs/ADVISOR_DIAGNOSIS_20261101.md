@@ -1,5 +1,21 @@
 # Advisor: сквозной диагноз и границы выпуска
 
+## 2026-11-07: Проверен Допуск Первой Инструкции До Start
+
+Source-checkpoint поверх dc1b89b7: Ready допускает чтение первой инструкции
+точного текущего назначения во всех восьми режимах семи профессий. Новый отчёт
+и повторная проверка перед commit требуют InProgress; поздние step/history
+активной фазы не используют Ready, включая PM. Снято старое PM-исключение;
+identity/fences и точный исторический readback сохранены. Нового archive-допуска
+после передачи другой профессии этот пакет не добавляет.
+
+185 targeted PASS,0 failures/errors/skips; Ruff и mypy двух файлов PASS.
+Evidence: `Q/workflow-cp1-current-ready-fix-20261107-60223222/cp1-result.json`
+и JUnit рядом. Контролируемый Tracker HTTP peer и disposable SQLite не являются
+живой интеграцией Start. Advisor prompt, criteria, policy и модель не менялись;
+новых модельных вызовов нет. Установка и полная приёмка нового статусного
+контракта остаются открытыми; неподготовленный cohort не активируется.
+
 ## 2026-11-07: Владелец Уточнил Статус И Стадию
 
 Целевой контракт относится ко всем профессиям: агент сам первым действием ставит
@@ -41,7 +57,9 @@ Evidence: `Q/workflow-combined-cap-input-full-20261107-mw6a4jra/full.json`,
 JUnit/coverage рядом, `Q/workflow-completeness-postgres-20261107/result.json`.
 Девять независимых регрессий передают документы33k/51k/>1MiB через CLI/API,
 Advisor HTTP payload, историю и replay; обе HTTP-границы управляемые, не live.
-Image smoke, установка и новая модельная/PM-приёмка пока не выполнены.
+Image smoke отдельно завершён на ef7b82e2:18 стадий PASS, cleanup verified,
+`Q/workflow-complete-reports-image-smoke-20261107/result.json`. Он не проверяет
+новый статусный контракт; установка и новая модельная/PM-приёмка не выполнены.
 
 Сохранённые реальные ответы203/204/205 проверены отдельно от offline gates:
 

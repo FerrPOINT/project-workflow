@@ -153,7 +153,7 @@ def enroll(uow: SAUnitOfWork, request: ConfiguredAssignment) -> dict[str, Any]:
         if not isinstance(original, dict):
             raise ConflictError("Historical enrollment has no original cursor; use history readback")
         return original
-    configured_cli_tracker.assignment(request_data)
+    configured_cli_tracker.assignment(request_data, purpose="initial_read")
     phases = list(uow.phases.list(workflow.id, mode_id=mode.id))
     if not phases:
         raise ConflictError("Assigned mode has no initial phase")
@@ -293,14 +293,15 @@ def _principal(authorization: str | None, *, write: bool) -> namespace_auth.Name
 
 
 def _assignment(principal: namespace_auth.NamespacePrincipal, payload: dict[str, Any], *,
-                allow_completed_read: bool = False) -> None:
+                allow_completed_read: bool = False,
+                purpose: configured_cli_tracker.AssignmentPurpose = "current") -> None:
     if principal.subject != payload["request"]["machine_subject"]:
         raise namespace_auth.NamespaceAuthError(403)
-    configured_cli_tracker.assignment(payload["request"], allow_completed_read=allow_completed_read)
+    configured_cli_tracker.assignment(payload["request"], allow_completed_read=allow_completed_read, purpose=purpose)
 
 
 def authorize(authorization: str | None, payload: dict[str, Any], *, write: bool) -> None:
-    _assignment(_principal(authorization, write=write), payload)
+    _assignment(_principal(authorization, write=write), payload, purpose="report" if write else "current")
 
 
 def _replay(uow: SAUnitOfWork, fence: ConfiguredCliFence) -> dict[str, Any] | None:
@@ -325,7 +326,12 @@ def step(uow: SAUnitOfWork, command: ConfiguredStep, authorization: str | None) 
 
     principal = _principal(authorization, write=command.report is not None)
     task, assignment, payload = _row(uow, command.task, command.namespace_id, execution=True)
-    _assignment(principal, payload, allow_completed_read=task.status == "done")
+    purpose: configured_cli_tracker.AssignmentPurpose = "current"
+    if command.report is not None and task.status != "done":
+        purpose = "report"
+    elif task.status == "active" and version(uow, task.id, payload) == payload["initial_version"]:
+        purpose = "initial_read"
+    _assignment(principal, payload, allow_completed_read=task.status == "done", purpose=purpose)
     fence = ConfiguredCliFence(task.id, task.project_id, task.workflow_id, task.mode_id, task.cycle_number,
         task.assignment_revision, task.assignment_operation_key, payload_sha256(payload), task.current_phase_id,
         task.status, version(uow, task.id, payload), command, payload, authorization or "")
