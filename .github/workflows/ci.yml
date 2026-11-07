@@ -21,7 +21,7 @@ jobs:
         working-directory: project-workflow
     services:
       postgres:
-        image: postgres:16-alpine
+        image: ${{ github.event_name == 'workflow_dispatch' && 'postgres:16-alpine' || '' }}
         env:
           POSTGRES_USER: project_workflow
           POSTGRES_PASSWORD: project_workflow
@@ -34,11 +34,6 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      PGHOST: 127.0.0.1
-      PGPORT: "5432"
-      PGUSER: project_workflow
-      PGPASSWORD: project_workflow
-      PGDATABASE: project_workflow
       PYTHONPATH: ${{ github.workspace }}/workflow-cli-base/base-modules/python/cli-core
     steps:
       - uses: actions/checkout@v4
@@ -84,6 +79,11 @@ jobs:
       - name: PostgreSQL integration tests
         if: github.event_name == 'workflow_dispatch'
         env:
+          PGHOST: 127.0.0.1
+          PGPORT: "5432"
+          PGUSER: project_workflow
+          PGPASSWORD: project_workflow
+          PGDATABASE: project_workflow
           WORKFLOW_APPLICATION_CLOCK_TEST_URL: postgresql+psycopg://project_workflow:project_workflow@127.0.0.1:5432/request_clock_fixture
         run: |
           psql --no-psqlrc -d "$PGDATABASE" -v ON_ERROR_STOP=1 -c 'CREATE DATABASE request_clock_fixture'

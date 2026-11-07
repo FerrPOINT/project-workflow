@@ -33,60 +33,25 @@
 `docs/quality-gate.md`; цели `Makefile` и `scripts/quality.ps1` повторяют эти
 команды через `uv`, `constraints.txt` и текущий marker contract.
 
-После любого изменения SQLAlchemy-слоя, application services, состояния UI или
-Supervisor Engine перед commit выполнить следующие проверки:
+При работе в PDLC прочитать `docs/BUILD_PERFORMANCE.md` и `docs/TESTING.md`
+из Base quality tooling, закреплённого в `source-workspace.json` рабочего
+пространства. Во время разработки запускать проверки затронутых компонентов
+через `check-workspace.ps1 -Profile Fast -Repository project-workflow`.
+Fast, Unit и Build выбирают четыре быстрых backend unit-файла и проверку
+навигации по затронутому компоненту.
 
-1. **Tests**
-   ```bash
-   pytest -q --timeout=60
-   ```
-   Ожидается 0 падений и 0 ошибок. PostgreSQL integration tests здесь намеренно
-   исключены и запускаются отдельно.
-
-2. **PostgreSQL integration**
-   ```bash
-   pytest -q -m integration --timeout=120
-   ```
-   Ожидается 0 падений и 0 ошибок. Набор включает реальный путь CLI subprocess →
-   PostgreSQL → тестовый OpenAI-compatible HTTP endpoint. Два multi-process E2E
-   теста имеют собственный timeout 240 секунд.
-   Маркер охватывает также admission/COMMIT regressions. Для application-clock
-   case нужна отдельная пустая QA-база `request_clock_fixture` через
-   `WORKFLOW_APPLICATION_CLOCK_TEST_URL`; без неё skip не подтверждает этот gate.
-
-3. **Coverage**
-   ```bash
-   pytest --cov=project_workflow --cov-report=term --timeout=60
-   ```
-   Ожидается общее покрытие не ниже текущего локального baseline 94%.
-
-4. **Lint**
-   ```bash
-   ruff check .
-   ```
-   Ожидается `All checks passed!`.
-
-5. **Type check**
-   ```bash
-   mypy project_workflow scripts
-   ```
-   Ожидается `Success: no issues found`.
-
-6. **Readiness локального Compose**
-   ```bash
-   docker compose up --build -d --wait
-   curl --fail http://127.0.0.1:8812/health
-   ```
-   Ожидается HTTP `200` и `database=ok`, `schema=ok`.
-
-7. **Браузерная проверка** для изменений UI
-   - Открыть `http://127.0.0.1:8812/` и `http://127.0.0.1:8812/phases`.
-   - Сохранить скриншот.
+На ручной релизной вехе `make quality` или `scripts/quality.ps1 quality`
+выполняют полный Unit/UI один раз вместе с coverage 94%, затем PostgreSQL
+integration отдельно. Для application-clock integration нужна отдельная пустая
+QA-база `request_clock_fixture` через `WORKFLOW_APPLICATION_CLOCK_TEST_URL`.
+Readiness Compose и браузерная приёмка UI выполняются отдельно по
+`docs/quality-gate.md`.
 
 ## Примечания
 
-- Для стандартного полного набора использовать `pytest -q --timeout=60`.
-  `--forked` не требуется; при нём отчёт coverage некорректен.
+- Для самостоятельного запуска тестов использовать `make test` или
+  `scripts/quality.ps1 test`. Оба входа сохраняют квитанцию и очищают
+  принадлежащее прогону временное дерево. `--forked` искажает отчёт coverage.
 - `DATABASE_URL` обязателен в runtime. SQLite используется только в изолированных тестах.
 - `project-workflow` хранит имена skills. Действующий legacy-каталог сохраняет
   свой source; отдельный [Base candidate](docs/base-sdlc-candidate.md) закрепляет

@@ -2,10 +2,11 @@
 
 Этот файл фиксирует обязательный локальный quality gate для `project-workflow`.
 GitHub Actions в `.github/workflows/ci.yml` сохранён как опциональное зеркало:
-job `quality` запускает тесты и статический анализ с PostgreSQL 16, а
-`compose-smoke` собирает стек и проверяет `/health`. Для локального выпуска
+job `quality` запускает быстрые проверки при push и pull request. Ручной запуск
+добавляет полный Unit/UI с coverage, PostgreSQL 16 integration и
+`compose-smoke` с проверкой `/health`. Для локального выпуска
 результаты оплачиваемых hosted jobs не требуются; `[skip ci]` предотвращает
-их запуск на push/PR. Перед commit и merge проверки ниже выполняются локально.
+их запуск на push/PR. Локальный профиль выбирают по изменённым компонентам.
 
 Общий лимит hosted job `quality` — 35 минут: он покрывает последовательные
 unit/UI и PostgreSQL наборы со статическими проверками. Индивидуальные таймауты
@@ -82,7 +83,7 @@ job `PYTHONPATH` всем isolated uv-процессам, включая integra
 Целевая проверка настройки без полного gate:
 
 ```bash
-uv run --isolated --with-requirements constraints.txt --all-extras pytest -q tests/test_configured_cli_transport.py --timeout=60
+uv run --isolated --with-requirements constraints.txt --all-extras python -B -m scripts.run_pytest -q tests/test_configured_cli_transport.py --timeout=60
 ```
 
 ```bash
@@ -197,7 +198,7 @@ dev и production не использовались. Authenticated browser-пр�
 lifecycle или CLI session lifecycle дополнительно запускать:
 
 ```bash
-uv run --isolated --with-requirements constraints.txt --all-extras pytest -q --timeout=60 -W error::ResourceWarning -W error::pytest.PytestUnraisableExceptionWarning
+uv run --isolated --with-requirements constraints.txt --all-extras python -B -m scripts.run_pytest -q --timeout=60 -W error::ResourceWarning -W error::pytest.PytestUnraisableExceptionWarning
 ```
 
 Этот прогон должен проходить без SQLite connection warnings, включая
