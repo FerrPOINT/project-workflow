@@ -4,6 +4,13 @@
 
 ### Current Status (2026-11-07)
 
+- Canonical Basef8e375 instructions are now active on the same PM31, with physical
+  SOUL/four-skill and readiness proof; image699/CLI/Hermes/model/credentials/PM13
+  are unchanged. New full QA stopped before PM/Advisor: create and one explicit
+  continue403 around60s, one incomplete operation, Tracker original-key404.
+  No Advisor calls;156/163 used. Fleet diagnostic timing is a source candidate,
+  not installed. The exact interrupted await and live acceptance remain open.
+
 - Current operational documentation is aligned with native Responses/v19,
   typed reports, current-phase history and identity-based human admission.
   Obsolete diagnostic setup is retained through historical evidence/Git, not
@@ -17,7 +24,8 @@
   requirements method shared with PM into the existing Analyst role. Phase order
   and completion belong to Workflow, not duplicated role routes. Inventory,
   allowlists and executable examples are preserved;51 offline tests and independent
-  review passed. Source is published, not activated on PM30; no Advisor change.
+  review passed. This was source-only on PM30; activation31 is recorded above.
+  No Advisor change.
 - Architecture now separates common agent instructions/skills, profession-specific
   instructions/skills and independently configured Workflow phases/criteria.
   Skills explain tools, not business routing or server authority.
