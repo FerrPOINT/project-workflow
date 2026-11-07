@@ -97,6 +97,17 @@ jobs:
         run: uv run --isolated --with-requirements constraints.txt --all-extras python -B -m scripts.run_pytest -q tests/test_docs_quality.py --timeout=60
       - name: Diff hygiene
         run: git diff --check
+      - name: Preserve scoped pytest evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: workflow-pytest-evidence
+          path: |
+            project-workflow/.local/pytest-runs/*/result.json
+            project-workflow/.local/pytest-runs/*/junit.xml
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 14
   compose-smoke:
     if: github.event_name == 'workflow_dispatch' && (github.actor != 'dependabot[bot]')
     runs-on: ubuntu-latest
