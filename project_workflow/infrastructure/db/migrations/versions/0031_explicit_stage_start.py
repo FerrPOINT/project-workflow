@@ -18,7 +18,7 @@ down_revision = "0030_analyst_baseline_ledger"
 branch_labels = None
 depends_on = None
 PREVIOUS = "2f16635c0f588d1f285393b4ad8c163119b4dba4b9918335c821f295e88a4f64"
-TARGET = "e502e0e1bed9f4a16e08423a4ac1f0162e5ef6b006d9a9a7540137ac0ec5c08f"
+TARGET = "852e0647ad8645c9c6280b21c1595b9efa6ff87754d07df8dcc92bcb04f76381"
 
 
 def upgrade() -> None:

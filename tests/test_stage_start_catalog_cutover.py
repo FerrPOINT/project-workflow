@@ -241,12 +241,16 @@ def test_exact_target_operator_publication_is_sealed_without_overriding_content(
     assert snapshot(engine) == after
 
 
-def test_almost_target_publication_is_not_silently_replaced(predecessor, monkeypatch):
+@pytest.mark.parametrize("publication", ["operator_text", "previous_first_step"])
+def test_almost_target_publication_is_not_silently_replaced(predecessor, monkeypatch, publication):
     engine, installed = predecessor
     binding = next(binding for binding in installed.bindings if binding.role_key == "project_manager")
     workflow_id = int(binding.workflow_id)
-    modes = editor._normalize(editor._definition(binding.workflow_key)["modes"])
-    modes[0]["phases"][-1]["instructions"][-1]["description"] += " Keep this deliberate operator text."
+    manifest = ("e502e0e1bed9f4a16e08423a4ac1f0162e5ef6b006d9a9a7540137ac0ec5c08f"
+                if publication == "previous_first_step" else None)
+    modes = editor._normalize(editor._definition(binding.workflow_key, manifest)["modes"])
+    if publication == "operator_text":
+        modes[0]["phases"][-1]["instructions"][-1]["description"] += " Keep this deliberate operator text."
     reader = catalog.load_profile
     with monkeypatch.context() as old_runtime, SAUnitOfWork(engine) as uow:
         old_runtime.setattr(catalog, "load_profile", lambda digest=None: reader(digest or PREVIOUS))

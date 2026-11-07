@@ -21,6 +21,92 @@ from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from tests import test_configured_cli as protocol
 from tests import test_single_task_installation as installation
 
+PREVIOUS_FIRST_STEP = "e502e0e1bed9f4a16e08423a4ac1f0162e5ef6b006d9a9a7540137ac0ec5c08f"
+
+
+def test_first_step_profile_changes_only_opening_worker_description():
+    from copy import deepcopy
+
+    previous, _ = catalog.load_profile(PREVIOUS_FIRST_STEP)
+    current, _ = catalog.load_profile()
+    expected = deepcopy(previous)
+    changed = 0
+    for old_workflow, new_workflow in zip(expected["workflows"], current["workflows"], strict=True):
+        for old_mode, new_mode in zip(old_workflow["modes"], new_workflow["modes"], strict=True):
+            old = old_mode["phases"][0]["instructions"][0]
+            new = new_mode["phases"][0]["instructions"][0]
+            assert old["description"] != new["description"]
+            old["description"] = new["description"]
+            changed += 1
+    expected["instruction_overlay"] = current["instruction_overlay"]
+    assert changed == 8
+    assert expected == current
+
+
+def test_previous_first_step_terminal_receipt_replays_without_rebinding(monkeypatch, supervisor_llm):
+    from unittest.mock import Mock
+
+    from project_workflow.application import configured_cli
+    from project_workflow.infrastructure import configured_cli_tracker
+    from project_workflow.infrastructure.llm import OpenAICompatibleClient
+    from tests._report_helpers import report_json
+
+    fixture = None
+    reader = catalog.load_profile
+    try:
+        with monkeypatch.context() as old_runtime:
+            old_runtime.setattr(catalog, "load_profile", lambda digest=PREVIOUS_FIRST_STEP: reader(digest))
+            old_runtime.setattr(configured_cli, "MANIFEST_SHA256", PREVIOUS_FIRST_STEP)
+            old_runtime.setattr(configured_cli, "CATALOG_SHA256", RETAINED_PROFILE_CATALOGS[PREVIOUS_FIRST_STEP])
+            fixture = protocol.configured.__wrapped__(monkeypatch, SimpleNamespace(param=("developer", "initial")))
+            context = next(fixture)
+            enrolled = protocol.enroll(context)
+            supervisor_llm("PASS")
+            for version in range(1, 4):
+                command = {"report": report_json(f"Saved verified work {version}"),
+                           "operation_key": f"saved-phase-{version}", "expected_version": version}
+                response = protocol.step(context, **command)
+                assert response.status_code == 200, response.text
+            accepted = response.json()
+            result = accepted["result"]
+            assert result["complete"] is True
+        with SAUnitOfWork() as uow:
+            before = all_rows(uow)
+            original = catalog.observe_installation(uow)
+            assert original.instruction_manifest_sha256 == PREVIOUS_FIRST_STEP
+        no_peer = Mock(side_effect=AssertionError("Archive readback must not contact Tracker or Advisor"))
+        monkeypatch.setattr(configured_cli_tracker, "assignment", no_peer)
+        monkeypatch.setattr(OpenAICompatibleClient, "respond", no_peer)
+        assert protocol.enroll(context) == enrolled
+        assert protocol.step(context, **command).status_code == 409
+        client, assignment = context
+        receipt = client.post("/internal/runtime/terminal-receipt/readback", headers=protocol.WRITER, json={
+            "interaction_protocol": "configured-cli-v1", "workflow_receipt": result["workflow_receipt"],
+        })
+        assert receipt.status_code == 200, receipt.text
+        assert receipt.json()["receipt"] == result["terminal_receipt"]
+        selectors = {
+            "interaction_protocol": "configured-cli-v1", "task": assignment["task"],
+            "namespace_id": assignment["namespace_id"], "execution_ref": enrolled["execution_ref"],
+        }
+        operation = client.get("/internal/runtime/history", headers=protocol.WRITER,
+                               params={**selectors, "operation_key": command["operation_key"]})
+        assert operation.status_code == 200, operation.text
+        assert len(operation.json()["result"]["records"]) == 1
+        saved = operation.json()["result"]["records"][0]
+        assert saved["result"] == accepted["result"]
+        assert saved["worker_report"] == command["report"]
+        history = client.get("/internal/runtime/history", headers=protocol.WRITER, params=selectors)
+        assert history.status_code == 200, history.text
+        assert len(history.json()["result"]["records"]) == 3
+        with SAUnitOfWork() as uow:
+            assert catalog.ensure_single_task_catalog(uow) == original
+            assert all_rows(uow) == before
+        no_peer.assert_not_called()
+    finally:
+        if fixture is not None:
+            fixture.close()
+
 
 def install_retained(monkeypatch, manifest=RETAINED_MANIFEST_SHA256):
     # Seed the exact published family as a7 did, then restore the current loader.

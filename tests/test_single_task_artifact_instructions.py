@@ -40,6 +40,29 @@ def phase_text(phase):
     return " ".join(item["description"] for item in phase["instructions"])
 
 
+@pytest.mark.parametrize("role,mode", [("project_manager", "draft"), *TECHNICAL_MODES])
+def test_first_step_validates_readbacks_without_technical_report_copy(generated, role, mode):
+    catalog, _ = generated
+    first = mode_for(catalog, role, mode)["phases"][0]["instructions"][0]["description"]
+    assert first == instructions.FIRST_STEP
+    for required in (
+        "inspect the actual scalar fields", "parsed stdout JSON", "fields at top level",
+        "Tracker context.assignment.assignment_id equals Workflow assignment_ref",
+        "Tracker context.assignment.agent_id equals Workflow concrete_agent_ref",
+        "Tracker context.task_id and root_task_id equal Workflow business_task_ref",
+        "Tracker workflow_task_key equals Workflow task",
+        "two execution IDs are intentionally separate and are not required to be equal",
+        "validate each against its own authority", "Actual task/assignment/agent mismatches remain blockers",
+        "not a future PASS verdict", "Never invent response values",
+        "Do not copy the technical stdout envelope, identity fields, counters or receipts into the substantive report",
+        "project-workflow-executor skill for reporting business inputs and verified phase work",
+        "command fences remain separate metadata",
+    ):
+        assert required in first
+    assert "include an 'Actual first Workflow step response' block" not in first
+    assert "copy the actual scalar fields" not in first
+
+
 @pytest.mark.parametrize("role,mode", TECHNICAL_MODES)
 def test_configured_artifacts_keep_current_authority_and_original_provenance(generated, role, mode):
     catalog, _ = generated

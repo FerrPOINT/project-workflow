@@ -4,6 +4,15 @@
 
 ### Current Status (2026-11-07)
 
+- Source FIRST_STEP no longer requires copying the technical CLI response into the
+  substantive report. Actual structured readbacks, authority-specific identity
+  comparisons and mismatch refusal remain mandatory; reporting mechanics belong
+  to the common executor skill. Criteria and Advisor construction are unchanged.
+  Catalog/manifest are regenerated; the previous profile is retained byte-exact
+  for binding/receipt readback. Uninstalled0031 targets the new manifest without
+  changing its frozen0030 predecessor or cutover guards. Publication and live
+  installation are not performed here; external build pins are unchanged.
+
 - Coordinated Start/Completed instructions now cover all seven professions and
   all33 phases, without changing phase criteria, Advisor policy or model inputs.
   Registered0031 appends the new source baseline atomically and retains saved

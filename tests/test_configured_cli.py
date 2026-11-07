@@ -449,7 +449,7 @@ def test_instruction_and_history_do_not_require_execution_files_or_native_proof(
     assert history.status_code == 200 and history.json()["result"]["records"] == []
 
 
-def test_first_phase_names_actual_response_evidence_without_changing_checks(configured, monkeypatch):
+def test_first_phase_validates_actual_response_without_copying_it_into_report(configured, monkeypatch):
     from click.testing import CliRunner
 
     from project_workflow.interfaces.cli import configured as transport
@@ -469,7 +469,10 @@ def test_first_phase_names_actual_response_evidence_without_changing_checks(conf
     assert result == response["result"]
     assert not {"ok", "result", "exit_code"} & result.keys()
     instructions = result["instructions"]
-    assert "Actual first Workflow step response" in instructions
+    assert "inspect the actual scalar fields" in instructions
+    assert "include an 'Actual first Workflow step response' block" not in instructions
+    assert "Do not copy the technical stdout envelope, identity fields, counters or receipts" in instructions
+    assert "project-workflow-executor skill for reporting business inputs and verified phase work" in instructions
     assert "parsed stdout JSON" in instructions and "fields at top level" in instructions
     for field in (
         "interaction_protocol",
@@ -488,7 +491,7 @@ def test_first_phase_names_actual_response_evidence_without_changing_checks(conf
         assert "result." + field not in instructions
     assert "not a future PASS verdict" in instructions
     assert "Never invent response values" in instructions
-    assert "Tracker task/root UUID, stage/status and actual input references" in instructions
+    assert "using the Tracker task/root UUID, stage/status and actual input references" in instructions
     assignment = configured[1]
     assert result["execution_ref"] != assignment["tracker_execution_id"]
     assert result["assignment_ref"] == assignment["assignment_ref"]

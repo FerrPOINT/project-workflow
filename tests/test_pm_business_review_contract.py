@@ -29,8 +29,8 @@ EXPORT = Path(__file__).resolve().parents[1] / "docs/evidence/pm-business-workfl
 # Published catalog 10's structure, not the stricter historic documentation export.
 BASE_STRUCTURE_SHA256 = "2ec0d49936c7db9bf2434250a26df3f3c0e09be69b030d7f53b8fd9a422ea050"
 BASE_CONTENT_SHA256 = "ae220f915d33987f1ed9b13e39d9a4c3a82ea5d8db133638a6a06f384ae249ef"
-# Current sealed family includes the coordinated Start cutover for all professions.
-NON_PM_WORKFLOWS_SHA256 = "d5addbad3b80a1c146ace461aef906bdfc1c42e408deec7a84bec499a1da9d0b"
+# Current sealed family includes Start and shared business-only report boundaries.
+NON_PM_WORKFLOWS_SHA256 = "ce55e2e37d16cfbdc27db05a0d2eb4e665494d88c76f62d2143fc5f61633a0aa"
 
 
 @pytest.fixture
