@@ -19,13 +19,51 @@
 - Historical direct real CLI acceptance:6 calls,34 assessments, all three phases
   completed, including intended PARTIAL/correction and history revocation.
   This qualifies only Developer/initial, not all seven professions or live PM.
-- Canonical skills use Basee308. PM30 normal config-only activation is accepted
-  at plan stage; effective configuration remains29 pending physical proof.
+- Canonical skills use Basee308. PM30 is active/effective, generationf19,
+  CID0846 on unchanged image699; physical skill/SOUL files match the snapshot.
   A private operator's mistaken image intent699→699 was rejected before selection;
   after proof it was corrected to the normal `{}` request, without Workflow or
-  Advisor changes. SDLC34 amendment/consent/completion, a new full PM case and
-  three browsers remain open. PM live acceptance is not declared. Advisor budget:
-  153/163 used,10 remaining; historical failures and unknown causes are retained.
+  Advisor changes.
+- Resolved native prompt snapshots prove old SDLC34 retained old SOUL guidance
+  (hash490), while fresh SDLC35 uses the new guidance (hashc12). Raw system_prompt
+  NULL alone hid this distinction; the snapshots require hash resolution and are
+  not captured provider HTTP. No supported in-place native prompt refresh API
+  preserving context/history was found; the user's explicit choice remains open,
+  without aliases, DB surgery or hidden session rotation.
+- Fresh full SDLC35 saved revision1 matching all10 document fields, without
+  artificial questions. Advisor200/201 PASS covers9 assessments, not9 flawless
+  reasons:200 C1/E1 inaccurately says owner decisions are absent, although choices
+  are present in the request and only the separate decisions array is empty.
+  Reports contain no hash; final message1941 adds an unnecessary SHA. Owner
+  confirmation31ec84 was saved separately at00:55:16Z. Native run33e2 completed
+  at01:01:48.742Z with error=null, not business completion:1946 records human
+  approval timeout before command execution;1947 accurately reports that block.
+  Task35 remains Draft/InProgress, waiting_workflow_completion, with no report202.
+  Planned stop read already_terminal[completed,completed]; no stop POST or
+  cancellation occurred. Subsequent GET approvals still returns a82389 pending,
+  resolved_at=null, with failed NotDispatched decision75f98 unchanged after the
+  terminal run. Source review confirms the shared settlement requires failed
+  native state; completed is intentionally excluded, including in a regression.
+  Explicit reconciliation's alternative accepts uncertain decisions, not this
+  failed one. The lifecycle gap is distinct from the unresolved original503.
+  A verified-terminal settlement change remains a separate, unimplemented package;
+  historical083 and the failed decision are not rewritten.
+- Native trace has19 terminal calls:4 empty-object calls refused before command
+  execution and1 read_file shell127, followed by successful recovery. Raw wire is
+  missing, so neither model nor adapter data loss is established; the conditional
+  streaming risk is not a patch justification. Create403 recovered through the
+  existing same-operation continue to task35; its cause remains unknown. A
+  transient accepted-context hold also resolved without a product change.
+  SDLC34, full PM completion and complete UI acceptance remain open; PM live is not
+  accepted. Advisor budget155/163 used,8 remaining. Historical evidence is retained.
+- Chromium/Firefox/WebKit read the accepted SDLC33 baseline:7 business messages,
+  full document1, saved confirmation and Backlog/Ready match the real API.
+  This does not accept SDLC35 or raw grouped tool-event details. All three remain
+  overall FAIL: the settled login returns `/` instead of the chat; page_error
+  and a visible Request timed out remain, with their source not yet established.
+  An initial QA guard wrongly blocked catalog GETs on7771. After allowing only
+  those two read endpoints, blocked requests are0; the symptoms persist.
+  No business writes, HTTP mocks or response substitutions were used.
 
 ### Historical Checkpoint (2026-11-06)
 

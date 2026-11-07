@@ -22,18 +22,96 @@ Base host guard имеет49 финальных targeted PASS; supplementary274 
 включая ожидаемые PARTIAL, исправления, supplement/revocation и exact replay.
 Это только **Developer/initial**, не семь профессий и не приёмка живого PM.
 
-Канонические skills подготовлены из Basee308. Обычная config-only активация
-PM30 принята на стадии plan; effective пока29. Физический readback ещё ожидается.
+Канонические skills подготовлены из Basee308. PM30 **active/effective**, generation
+f19e6ad8, CID0846d5ec, на прежнем image699. Физические skill/SOUL files совпадают
+со snapshot; config-only активация не меняла образ или Advisor.
 Ошибочный image intent699→699 приватного оператора был отклонён до выбора образа;
 после проверки он исправлен на нормальный запрос `{}`. Workflow и Advisor ради
-этого не менялись. Далее открыты SDLC34 (только note2000→1000, rev2, полный показ,
-отказ старого подтверждения, новое согласие и финал), новый full PM case и три
-браузера. **PM live не принят.** Бюджет Advisor153/163, осталось10.
+этого не менялись.
+
+### Реальные Prompts И Новый Full SDLC35
+
+Q/pm30-native-resolved-prompt-comparison-20261107.json разрешает stored hash через
+сохранённый native snapshot: старый SDLC34 использует prompt490fb897 с прежним
+SOUL guidance, свежий SDLC35 — c12c15ab с новым. Оба raw system_prompt равны NULL;
+без hash join это не доказательство отсутствующего prompt. Это подтверждённая
+причина сохранения старой инструкции в resumed session, **не доказательство
+внутренней причины ответа модели** и не захват provider HTTP. Read-only проверка
+текущих исходников не нашла поддерживаемого native API для in-place обновления
+prompt с сохранением context/history. Решение пользователя ещё ожидается;
+aliases, DB surgery и скрытая ротация session не выполняются.
+
+Свежий full SDLC35 сохранил rev1 с точным совпадением всех10 полей документа и
+без искусственных вопросов. Advisor200/201 дали PASS, всего9 assessments.
+Это не9 безупречных reasons:200 C1/E1 неточно говорят об отсутствии решений
+владельца, хотя выборы находятся в request; пуст лишь отдельный список decisions. Отчёты
+не содержат hash; финальное сообщение1941 добавило ненужный SHA.
+
+Отдельное owner confirmation31ec84 сохранено в00:55:16Z. Финальный native
+run33e2 **completed в01:01:48.742Z, error=null**, а не остаётся running/waiting.
+Tool result1946 сообщает timeout ожидания human approval: report command не
+выполнялась. Финальный ответ1947 точно сообщает, что подтверждение прочитано,
+но заключительный отчёт не отправлен. Task35 остаётся Draft/InProgress,
+waiting_workflow_completion; Report202 и business complete отсутствуют.
+Планируемый stop вернул already_terminal[completed,completed]: **stop POST не
+выполнялся, cancellation не было**. Один рассмотренный approval attempt ранее
+вернул503, decision75f98 имеет failed; это не отменяется terminal-статусом run.
+Причина этого503 не установлена: timeout из1946 сам по себе её не доказывает.
+Последующий GET approvals подтверждает a82389 **pending, resolved_at=null** после
+completed/error=null native и terminal Fleet run; failed NotDispatched decision75f98
+не изменилась. Причина pending-after-terminal подтверждена по действующему
+source: общий FAILED_NOT_DISPATCHED в approval_decisions.rs требует
+`r.state='failed'`; completed-native исключён даже при настоящем terminal proof.
+Explicit reconcile затем попадает в uncertain-observation, где требуется
+`d.state='uncertain'`, а данное решение failed. Тест
+`failed_not_dispatched_completed_and_cancelled_runs_keep_pending_approvals`
+явно закрепляет это поведение;083 тоже ограничена failed-native. Это разрыв
+lifecycle-контракта, не причина исходного503 и не ошибка Advisor.
+Минимальный следующий пакет — общий settlement для доказанно terminal native
+с точным never-dispatched audit; сохранить decision, отсутствие delivery/ACK,
+exact binding и отрицательные guards. Историческую083 не переписывать; изменение
+семантики и регрессии ещё не реализованы и не установлены.
+
+В первом native run177s записано19 terminal calls:1907/1913/1921/1927 имеют
+arguments `{}` и отказ до выполнения command;1915 передал read_file в shell и
+получил127. Позже PM прочитал канонические файлы, опубликовал требования и получил
+два PASS. Исходный provider wire отсутствует: Hermes умеет нормализовать пустые
+args в `{}`, поэтому ни ответ модели с literal `{}`, ни потеря адаптером не
+доказаны. Условный риск streaming mapper при args только в done, без deltas,
+не означает, что такой поток был здесь; патч по этой гипотезе не выполнялся.
+
+Create403 восстановлен существующим continue той же операции до task35, без
+повторного create; точная причина403 неизвестна. Transient accepted-context hold
+разрешился автоматически и не доказывает постоянную блокировку модели.
+Открыты SDLC34 (только note2000→1000, rev2, полный показ, отказ старого подтверждения,
+новое согласие и финал), завершение нового full PM case и полноценная UI-приёмка.
+**PM live не принят.** Бюджет Advisor155/163, осталось8.
+
+Chromium/Firefox/WebKit прочитали существующий принятый SDLC33: все7 business
+messages после загрузки2 страниц, полный документ1, сохранённое подтверждение
+и Backlog/Ready совпадают с API. Это read-only проверка baseline33, не приёмка35;
+raw tool-event details отдельно не квалифицированы. Overall FAIL во всех трёх:
+после завершённого SSO callback открывается `/` вместо исходного чата, остаются
+page_error и видимый `Request timed out.`. Источник этих двух последних ошибок
+не установлен. Helper явно переходит в чат только для независимой проверки чтения,
+не скрывая lost deep link. Первый guard ошибочно блокировал GET каталога
+на7771; это дефект QA. После точечного разрешения только двух GET endpoints
+повтор имеет0 blocked requests, но указанные продуктовые симптомы сохраняются.
+Никакие бизнес-записи, HTTP mocks или подмены ответов не использовались.
 
 Evidence: Q/workflow-required-skills-native-long-20261107/full.json,
 Q/workflow-required-skills-pg-20261107/result.json,
 Q/workflow-required-skills-pg-connect-diagnostic-20261107/result.json,
-Q/workflow-required-skills-pg-remaining-20261107/result.json.
+Q/workflow-required-skills-pg-remaining-20261107/result.json,
+Q/pm-canonical-required-skills-20261107-v2/runtime-proof.json,
+Q/pm30-native-resolved-prompt-comparison-20261107.json,
+Q/pm30-sdlc35-native-tools-20261107.json,
+Q/pm30-sdlc35-confirmation-native-tools-20261107.json,
+Q/pm-default-required-skills-20261107/full/workflow-history.json,
+Q/pm-default-required-skills-20261107/full/context-diagnostics.json,
+Q/pm-default-required-skills-20261107/full/preparation-diagnostics.json,
+Q/pm-business-browser-catalog-readonly-20261107.log,
+Q/pm-business-browser-authenticated-shell-20261107.log.
 
 ## Исторический Checkpoint PM29: Исправленный Skill Не Равен Публикации
 
@@ -53,7 +131,7 @@ requirements. Exit0/error=null; свежий правильный assignment и 
 прочитаны успешно. **Новой команды publish,409 и чтения skill нет.** Последний
 ответ PM «Tracker снова отклонил публикацию» не подтверждён выполненными действиями.
 Это ошибочный отчёт PM о новой попытке, не новый отказ Tracker и не ошибка Advisor.
-Report после199 отсутствует; бюджет Advisor остаётся153/163.
+На этом историческом checkpoint report после199 отсутствовал; бюджет был153/163.
 
 На checkpoint PM29 выявлен отдельный механический разрыв подготовки:
 
@@ -66,11 +144,11 @@ Report после199 отсутствует; бюджет Advisor остаётс
 | Discovery в original bbaf | Без skills tools индекс и auto-load блоки не строятся; доступ к файлу через terminal сам по себе не загружает текст |
 | Подготовка/readiness Fleet | Проверяет собственные defaults, а не требуемые имена опубликованных фаз |
 
-System prompt и tool_names в существующей native session имеют значение null.
-Поэтому найденная в исходниках возможность восстановления cached prompt **не
-доказывает её применение здесь**. Actual HTTP prompt этого turn не захвачен.
+На этом checkpoint raw system_prompt и tool_names читались как null, а hash-
+referenced prompt ещё не был разрешён. Последующее сравнение сохранённых
+snapshots указано выше; actual HTTP prompt этого turn по-прежнему не захвачен.
 Внутренняя причина ложного заявления PM не установлена; механический разрыв
-имён/доставки воспроизведён отдельно и не выдаётся за единственную причину модели.
+имён/доставки не выдаётся за единственную причину модели.
 
 Подготовленный тогда пакет устранял именно этот разрыв: существующий внутренний response
 binding дополняется списком required_skills из выбранной публикации; сам binding,
