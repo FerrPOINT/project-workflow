@@ -6,7 +6,8 @@
 
 - Owner clarified the stage/status contract for every profession: the agent
   explicitly starts with InProgress and finishes with Completed; the application
-  alone advances the stage and hands off to the next agent. Architecture and
+  alone advances the stage, resets status to Ready and hands off to the next agent.
+  The next agent starts InProgress; the final stage stays Completed. Architecture and
   developer instructions now state this target without calling Ready a completion.
   Installed BindRun-driven start and PM Backlog/Ready completion differ from it;
   these are open implementation gaps, not fixed or activated by documentation.
